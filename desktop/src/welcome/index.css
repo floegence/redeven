@@ -160,9 +160,9 @@ body {
 }
 
 /*
- * floe-webapp Card 组件在 children 外层包裹了一个 <div class="relative z-10">
- * 容器。该容器必须参与 flex 布局，否则 CardFooter 的 mt-auto 无法将 footer
- * 推到卡片底部。
+ * floe-webapp Card wraps children in a <div class="relative z-10"> container.
+ * That wrapper must participate in the flex layout so CardFooter's mt-auto can
+ * push the footer to the bottom of the card.
  */
 .redeven-environment-card > .relative {
   display: flex;

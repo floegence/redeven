@@ -47,10 +47,10 @@ import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '
 import {
   normalizeThreadTodosView,
   todoStatusBadgeClass,
-  todoStatusLabel,
   type SubagentView,
   type ThreadTodoItem,
   type ThreadTodosView,
+  type TodoStatus,
 } from './aiDataNormalizers';
 import { hasRWXPermissions } from './aiPermissions';
 import type { AskFlowerIntent } from './askFlowerIntent';
@@ -91,6 +91,8 @@ import { createAIContextTelemetryController } from './createAIContextTelemetryCo
 import { CompactContextSummary } from './AIContextSummary';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+import { useI18n, type I18nHelpers } from '../i18n';
+import type { EnvAppTranslationKey } from '../i18n/locales';
 
 type ExecutionMode = 'act' | 'plan';
 type FlowerThreadRevealPhase = 'idle' | 'loading' | 'committing' | 'visible';
@@ -145,15 +147,10 @@ type PendingDraftLoad = {
   followup: FollowupItem;
 };
 
-const queuedTurnTimeFormatter = new Intl.DateTimeFormat('en-US', {
-  hour: 'numeric',
-  minute: '2-digit',
-});
-
-function formatQueuedTurnTime(unixMs: number | null | undefined): string {
+function formatQueuedTurnTime(unixMs: number | null | undefined, formatDateTime: I18nHelpers['formatDateTime']): string {
   const value = Number(unixMs ?? 0);
   if (!Number.isFinite(value) || value <= 0) return '';
-  return queuedTurnTimeFormatter.format(new Date(value));
+  return formatDateTime(new Date(value), { hour: 'numeric', minute: '2-digit' });
 }
 
 function activityTimelineHasSuccessfulTool(block: unknown, toolName: string): boolean {
@@ -198,6 +195,7 @@ const AIChatInput: Component<{
 }> = (props) => {
   const ctx = useChatContext();
   const notify = useNotification();
+  const i18n = useI18n();
   const [text, setText] = createSignal('');
   const [isFocused, setIsFocused] = createSignal(false);
   const [isComposing, setIsComposing] = createSignal(false);
@@ -214,7 +212,7 @@ const AIChatInput: Component<{
     uploadMode: 'deferred',
   });
 
-  const placeholder = () => props.placeholder || ctx.config().placeholder || 'Type a message...';
+  const placeholder = () => props.placeholder || ctx.config().placeholder || i18n.t('flowerChat.composer.typeMessagePlaceholder');
   const currentText = () => readLiveTextValue(textareaRef, text());
   const syncTextFromTextarea = () => syncLiveTextValue(textareaRef, setText, text());
   const hasDraftPayload = () => currentText().trim().length > 0 || attachments.attachments().length > 0;
@@ -306,7 +304,10 @@ const AIChatInput: Component<{
         const firstError = upload.failed
           .map((attachment) => String(attachment.error ?? '').trim())
           .find((message) => message.length > 0);
-        notify.error('Attachment upload failed', firstError || 'Remove failed attachments and try again.');
+        notify.error(
+          i18n.t('flowerChat.notifications.attachmentUploadFailedTitle'),
+          firstError || i18n.t('flowerChat.notifications.removeFailedAttachmentsMessage'),
+        );
         return;
       }
 
@@ -417,7 +418,7 @@ const AIChatInput: Component<{
       <Show when={attachments.isDragging()}>
         <div class="chat-input-drop-overlay">
           <UploadIcon />
-          <span>Drop files here</span>
+          <span>{i18n.t('flowerChat.composer.dropFilesHere')}</span>
         </div>
       </Show>
 
@@ -467,10 +468,10 @@ const AIChatInput: Component<{
               )}
               onClick={() => void handleSend()}
               disabled={!canSend()}
-              title={props.waitingForUser ? 'Reply now' : 'Send message'}
+              title={props.waitingForUser ? i18n.t('flowerChat.composer.replyNow') : i18n.t('flowerChat.composer.sendMessage')}
             >
               <Show when={props.waitingForUser}>
-                <span class="chat-input-send-btn-label">Reply</span>
+                <span class="chat-input-send-btn-label">{i18n.t('flowerChat.composer.reply')}</span>
               </Show>
               <SendIcon />
             </button>
@@ -478,7 +479,7 @@ const AIChatInput: Component<{
         </div>
 
         <div class="flower-chat-input-meta">
-          <div class="flower-chat-input-meta-rail" role="toolbar" aria-label="Chat input secondary actions">
+          <div class="flower-chat-input-meta-rail" role="toolbar" aria-label={i18n.t('flowerChat.composer.secondaryActionsLabel')}>
             <Show when={props.onPickWorkingDir}>
               <button
                 type="button"
@@ -492,10 +493,10 @@ const AIChatInput: Component<{
                   if (!canPickWorkingDir()) return;
                   props.onPickWorkingDir?.();
                 }}
-                title={String(props.workingDirTitle ?? '').trim() || String(props.workingDirLabel ?? '').trim() || 'Working dir'}
+                title={String(props.workingDirTitle ?? '').trim() || String(props.workingDirLabel ?? '').trim() || i18n.t('flowerChat.workingDir.label')}
               >
                 <FolderIcon />
-                <span class="flower-chat-working-dir-chip-label">{String(props.workingDirLabel ?? '').trim() || 'Working dir'}</span>
+                <span class="flower-chat-working-dir-chip-label">{String(props.workingDirLabel ?? '').trim() || i18n.t('flowerChat.workingDir.label')}</span>
                 <Show when={!!props.workingDirLocked}>
                   <LockIcon />
                 </Show>
@@ -507,7 +508,7 @@ const AIChatInput: Component<{
                 type="button"
                 class="flower-chat-meta-btn"
                 onClick={attachments.openFilePicker}
-                title="Add attachments"
+                title={i18n.t('flowerChat.composer.addAttachments')}
               >
                 <PaperclipIcon />
               </button>
@@ -519,9 +520,9 @@ const AIChatInput: Component<{
                 class="flower-chat-chip flower-chat-secondary-chip"
                 onClick={() => void handleSend('queue_after_waiting_user')}
                 disabled={!canSend()}
-                title="Queue for later"
+                title={i18n.t('flowerChat.followups.queueForLater')}
               >
-                Queue for later
+                {i18n.t('flowerChat.followups.queueForLater')}
               </button>
             </Show>
           </div>
@@ -607,6 +608,7 @@ function ExecutionModeToggle(props: {
   disabled?: boolean;
   onChange: (mode: ExecutionMode) => void;
 }) {
+  const i18n = useI18n();
   const btnClass = (active: boolean) => {
     const base = 'px-2.5 py-1 text-[11px] font-medium rounded-md transition-all duration-150 cursor-pointer';
     if (active) return `${base} bg-background text-foreground shadow-sm border border-border`;
@@ -619,17 +621,17 @@ function ExecutionModeToggle(props: {
         type="button"
         class={btnClass(props.value === 'plan')}
         onClick={() => props.onChange('plan')}
-        title="Read-only planning mode: mutating actions are blocked; switch to Act for edits"
+        title={i18n.t('flowerChat.executionMode.planTitle')}
       >
-        Plan
+        {i18n.t('flowerChat.executionMode.plan')}
       </button>
       <button
         type="button"
         class={btnClass(props.value === 'act')}
         onClick={() => props.onChange('act')}
-        title="Execution-first mode for direct tool actions"
+        title={i18n.t('flowerChat.executionMode.actTitle')}
       >
-        Act
+        {i18n.t('flowerChat.executionMode.act')}
       </button>
     </div>
   );
@@ -645,11 +647,27 @@ function CompactTasksSummary(props: {
   todosView: ThreadTodosView | null;
   todoUpdatedLabel: string;
 }) {
+  const i18n = useI18n();
   const [expanded, setExpanded] = createSignal(false);
   let containerRef: HTMLDivElement | undefined;
   const doneCount = createMemo(() => props.todos.filter((item) => item.status === 'completed').length);
   const inProgressCount = createMemo(() => props.todos.filter((item) => item.status === 'in_progress').length);
-  const progressLabel = createMemo(() => `${doneCount()} done/${props.todos.length} total`);
+  const progressLabel = createMemo(() => i18n.t('flowerChat.tasks.progressLabel', {
+    done: i18n.formatNumber(doneCount()),
+    total: i18n.formatNumber(props.todos.length),
+  }));
+  const taskStatusLabel = (status: TodoStatus): string => {
+    switch (status) {
+      case 'in_progress':
+        return i18n.t('flowerChat.tasks.status.inProgress');
+      case 'completed':
+        return i18n.t('flowerChat.tasks.status.completed');
+      case 'cancelled':
+        return i18n.t('flowerChat.tasks.status.cancelled');
+      default:
+        return i18n.t('flowerChat.tasks.status.pending');
+    }
+  };
 
   // Close the popover when clicking outside.
   createEffect(() => {
@@ -716,7 +734,7 @@ function CompactTasksSummary(props: {
             <div class="flex items-center justify-between gap-3">
               <div class="flex items-center gap-2">
                 <CheckCircle class="w-3.5 h-3.5 text-emerald-500/70" />
-                <span class="text-[13px] font-semibold text-foreground tracking-tight">Tasks</span>
+                <span class="text-[13px] font-semibold text-foreground tracking-tight">{i18n.t('flowerChat.tasks.title')}</span>
                 <span class="text-[10px] font-semibold tabular-nums text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-px leading-none">
                   {props.todos.length}
                 </span>
@@ -724,12 +742,12 @@ function CompactTasksSummary(props: {
               <div class="flex items-center gap-1.5">
                 <Show when={props.unresolvedCount > 0}>
                   <span class="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-1.5 py-px">
-                    {props.unresolvedCount} open
+                    {i18n.t('flowerChat.tasks.openCount', { count: i18n.formatNumber(props.unresolvedCount) })}
                   </span>
                 </Show>
                 <Show when={doneCount() > 0}>
                   <span class="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-1.5 py-px">
-                    {doneCount()} done
+                    {i18n.t('flowerChat.tasks.doneCount', { count: i18n.formatNumber(doneCount()) })}
                   </span>
                 </Show>
               </div>
@@ -738,18 +756,18 @@ function CompactTasksSummary(props: {
 
           <Show when={props.executionMode === 'plan' && props.unresolvedCount > 0}>
             <div class="px-3.5 py-1.5 border-b border-border/40 bg-amber-500/5 text-[10.5px] text-amber-600 dark:text-amber-400">
-              Switch to Act to execute these tasks
+              {i18n.t('flowerChat.tasks.switchToActHint')}
             </div>
           </Show>
 
           <Show when={!props.todosLoading || props.todos.length > 0} fallback={
-            <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">Loading tasks...</div>
+            <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">{i18n.t('flowerChat.tasks.loading')}</div>
           }>
             <Show when={!props.todosError} fallback={
               <div class="px-3.5 py-3 text-[11px] text-error">{props.todosError}</div>
             }>
               <Show when={props.todos.length > 0} fallback={
-                <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">No tasks yet.</div>
+                <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">{i18n.t('flowerChat.tasks.empty')}</div>
               }>
                 <div class="max-h-56 overflow-auto">
                   <div class="flex flex-col gap-1.5 p-2.5">
@@ -772,7 +790,7 @@ function CompactTasksSummary(props: {
                                 'inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold shrink-0 mt-px',
                                 todoStatusBadgeClass(item.status),
                               )}>
-                                {todoStatusLabel(item.status)}
+                                {taskStatusLabel(item.status)}
                               </span>
                               <div class="min-w-0 flex-1">
                                 <span class={cn(
@@ -801,7 +819,7 @@ function CompactTasksSummary(props: {
               {/* Footer */}
               <div class="flex items-center justify-between px-3.5 py-1.5 border-t border-border/40 bg-muted/15 text-[10px] text-muted-foreground/70">
                 <span>v{props.todosView?.version ?? 0}</span>
-                <span>{props.todoUpdatedLabel ? `Updated ${props.todoUpdatedLabel}` : ''}</span>
+                <span>{props.todoUpdatedLabel ? i18n.t('flowerChat.tasks.updatedAt', { time: props.todoUpdatedLabel }) : ''}</span>
               </div>
             </Show>
           </Show>
@@ -811,25 +829,25 @@ function CompactTasksSummary(props: {
   );
 }
 
-function subagentStatusLabel(status: string): string {
+function subagentStatusLabel(status: string, t: I18nHelpers['t']): string {
   const normalized = String(status ?? '').trim().toLowerCase();
   switch (normalized) {
     case 'queued':
-      return 'Queued';
+      return t('flowerChat.subagents.status.queued');
     case 'running':
-      return 'Running';
+      return t('flowerChat.subagents.status.running');
     case 'waiting_input':
-      return 'Waiting input';
+      return t('flowerChat.subagents.status.waitingInput');
     case 'completed':
-      return 'Completed';
+      return t('flowerChat.subagents.status.completed');
     case 'failed':
-      return 'Failed';
+      return t('flowerChat.subagents.status.failed');
     case 'canceled':
-      return 'Canceled';
+      return t('flowerChat.subagents.status.canceled');
     case 'timed_out':
-      return 'Timed out';
+      return t('flowerChat.subagents.status.timedOut');
     default:
-      return 'Unknown';
+      return t('flowerChat.subagents.status.unknown');
   }
 }
 
@@ -852,11 +870,9 @@ function subagentStatusBadgeClass(status: string): string {
   }
 }
 
-const subagentIntegerFormatter = new Intl.NumberFormat('en-US');
-
-function formatSubagentInteger(value: number): string {
+function formatSubagentInteger(value: number, formatNumber: I18nHelpers['formatNumber']): string {
   if (!Number.isFinite(value) || value <= 0) return '0';
-  return subagentIntegerFormatter.format(Math.round(value));
+  return formatNumber(Math.round(value));
 }
 
 function formatSubagentElapsed(elapsedMs: number): string {
@@ -879,6 +895,7 @@ function CompactSubagentsSummary(props: {
   subagents: SubagentView[];
   updatedLabel: string;
 }) {
+  const i18n = useI18n();
   const [expanded, setExpanded] = createSignal(false);
   const [promptDialogOpen, setPromptDialogOpen] = createSignal(false);
   const [promptDialogItem, setPromptDialogItem] = createSignal<SubagentView | null>(null);
@@ -898,10 +915,10 @@ function CompactSubagentsSummary(props: {
   );
   const promptDialogTitle = createMemo(() => {
     const item = promptDialogItem();
-    if (!item) return 'Subagent Prompt';
+    if (!item) return i18n.t('flowerChat.subagents.promptDialogTitle');
     const title = String(item.title ?? '').trim();
-    if (title) return `Subagent Prompt · ${title}`;
-    return `Subagent Prompt · ${item.subagentId}`;
+    if (title) return i18n.t('flowerChat.subagents.promptDialogTitleWithName', { name: title });
+    return i18n.t('flowerChat.subagents.promptDialogTitleWithName', { name: item.subagentId });
   });
 
   const openPromptDialog = (item: SubagentView) => {
@@ -946,7 +963,7 @@ function CompactSubagentsSummary(props: {
         )}
       >
         <Settings class="w-3.5 h-3.5" />
-        <span>{runningCount()} running</span>
+        <span>{i18n.t('flowerChat.subagents.runningCount', { count: i18n.formatNumber(runningCount()) })}</span>
         <ChevronUp class={cn('w-3 h-3 transition-transform duration-200', expanded() ? '' : 'rotate-180')} />
       </button>
 
@@ -964,7 +981,7 @@ function CompactSubagentsSummary(props: {
             <div class="flex items-center justify-between gap-3">
               <div class="flex items-center gap-2">
                 <Settings class="w-3.5 h-3.5 text-primary/70" />
-                <span class="text-[13px] font-semibold text-foreground tracking-tight">Subagents</span>
+                <span class="text-[13px] font-semibold text-foreground tracking-tight">{i18n.t('flowerChat.subagents.title')}</span>
                 <span class="text-[10px] font-semibold tabular-nums text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-px leading-none">
                   {props.subagents.length}
                 </span>
@@ -977,22 +994,22 @@ function CompactSubagentsSummary(props: {
               <Show when={runningCount() > 0}>
                 <span class="inline-flex items-center gap-1 text-[10px] font-medium text-blue-600 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-1.5 py-px">
                   <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                  {runningCount()} running
+                  {i18n.t('flowerChat.subagents.runningCount', { count: i18n.formatNumber(runningCount()) })}
                 </span>
               </Show>
               <Show when={waitingCount() > 0}>
                 <span class="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-1.5 py-px">
-                  {waitingCount()} waiting
+                  {i18n.t('flowerChat.subagents.waitingCount', { count: i18n.formatNumber(waitingCount()) })}
                 </span>
               </Show>
               <Show when={completedCount() > 0}>
                 <span class="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-1.5 py-px">
-                  {completedCount()} completed
+                  {i18n.t('flowerChat.subagents.completedCount', { count: i18n.formatNumber(completedCount()) })}
                 </span>
               </Show>
               <Show when={failedCount() > 0}>
                 <span class="inline-flex items-center gap-1 text-[10px] font-medium text-error bg-error/10 border border-error/20 rounded-full px-1.5 py-px">
-                  {failedCount()} failed
+                  {i18n.t('flowerChat.subagents.failedCount', { count: i18n.formatNumber(failedCount()) })}
                 </span>
               </Show>
             </div>
@@ -1000,7 +1017,7 @@ function CompactSubagentsSummary(props: {
 
           {/* Subagent list */}
           <Show when={props.subagents.length > 0} fallback={
-            <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">No subagents yet.</div>
+            <div class="px-3.5 py-4 text-[11px] text-muted-foreground text-center">{i18n.t('flowerChat.subagents.empty')}</div>
           }>
             <div class="max-h-72 overflow-auto">
             <div class="flex flex-col gap-2 p-2.5">
@@ -1026,9 +1043,9 @@ function CompactSubagentsSummary(props: {
                           'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0',
                           subagentStatusBadgeClass(item.status),
                         )}>
-                          {subagentStatusLabel(item.status)}
+                          {subagentStatusLabel(item.status, i18n.t)}
                         </span>
-                        <span class="text-[11px] font-medium text-foreground/80">{item.agentType || 'subagent'}</span>
+                        <span class="text-[11px] font-medium text-foreground/80">{item.agentType || i18n.t('flowerChat.subagents.defaultAgentType')}</span>
                         <span class="ml-auto text-[10px] font-mono tabular-nums text-muted-foreground">{formatSubagentElapsed(item.stats.elapsedMs)}</span>
                       </div>
 
@@ -1044,19 +1061,19 @@ function CompactSubagentsSummary(props: {
                         {/* Stats grid */}
                         <div class="grid grid-cols-4 gap-1">
                           <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
-                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Steps</div>
-                            <div class="text-[11px] font-semibold tabular-nums text-foreground/85">{formatSubagentInteger(item.stats.steps)}</div>
+                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">{i18n.t('flowerChat.subagents.steps')}</div>
+                            <div class="text-[11px] font-semibold tabular-nums text-foreground/85">{formatSubagentInteger(item.stats.steps, i18n.formatNumber)}</div>
                           </div>
                           <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
-                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Tools</div>
-                            <div class="text-[11px] font-semibold tabular-nums text-foreground/85">{formatSubagentInteger(item.stats.toolCalls)}</div>
+                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">{i18n.t('flowerChat.subagents.tools')}</div>
+                            <div class="text-[11px] font-semibold tabular-nums text-foreground/85">{formatSubagentInteger(item.stats.toolCalls, i18n.formatNumber)}</div>
                           </div>
                           <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
-                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">Tokens</div>
-                            <div class="text-[11px] font-semibold tabular-nums text-foreground/85">{formatSubagentInteger(item.stats.tokens)}</div>
+                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">{i18n.t('flowerChat.subagents.tokens')}</div>
+                            <div class="text-[11px] font-semibold tabular-nums text-foreground/85">{formatSubagentInteger(item.stats.tokens, i18n.formatNumber)}</div>
                           </div>
                           <div class="rounded-md bg-muted/40 px-1.5 py-1 text-center">
-                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">ID</div>
+                            <div class="text-[9px] font-medium text-muted-foreground/70 uppercase tracking-wider">{i18n.t('flowerChat.subagents.id')}</div>
                             <div class="text-[10px] font-mono text-foreground/70 truncate">{String(item.subagentId).slice(-6)}</div>
                           </div>
                         </div>
@@ -1073,8 +1090,8 @@ function CompactSubagentsSummary(props: {
                             onClick={() => openPromptDialog(item)}
                           >
                             <div class="flex items-center justify-between gap-1.5">
-                              <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">Prompt</span>
-                              <span class="text-[10px] font-medium text-primary/70 group-hover:text-primary transition-colors">View</span>
+                              <span class="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">{i18n.t('flowerChat.subagents.promptLabel')}</span>
+                              <span class="text-[10px] font-medium text-primary/70 group-hover:text-primary transition-colors">{i18n.t('flowerChat.subagents.viewPrompt')}</span>
                             </div>
                             <p class="mt-0.5 text-[10.5px] text-foreground/75 leading-relaxed line-clamp-2 m-0">
                               {summarizeSubagentText(String(item.delegationPromptMarkdown ?? ''), 120)}
@@ -1085,7 +1102,7 @@ function CompactSubagentsSummary(props: {
                         {/* Trigger reason */}
                         <Show when={item.triggerReason}>
                           <p class="text-[10px] text-muted-foreground/70 leading-snug m-0">
-                            <span class="font-semibold uppercase tracking-wider">Trigger</span>{' '}
+                            <span class="font-semibold uppercase tracking-wider">{i18n.t('flowerChat.subagents.trigger')}</span>{' '}
                             {summarizeSubagentText(item.triggerReason, 108)}
                           </p>
                         </Show>
@@ -1123,39 +1140,39 @@ function CompactSubagentsSummary(props: {
               {/* Meta cards */}
               <div class="grid gap-2 sm:grid-cols-3">
                 <div class="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
-                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60">Subagent</div>
+                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60">{i18n.t('flowerChat.subagents.subagentLabel')}</div>
                   <div class="mt-1 text-[11.5px] font-mono text-foreground/90 break-all leading-snug">{item().subagentId}</div>
                 </div>
                 <div class="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
-                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60">Status</div>
+                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60">{i18n.t('flowerChat.subagents.statusLabel')}</div>
                   <div class="mt-1">
                     <span class={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold', subagentStatusBadgeClass(item().status))}>
-                      {subagentStatusLabel(item().status)}
+                      {subagentStatusLabel(item().status, i18n.t)}
                     </span>
                   </div>
                 </div>
                 <div class="rounded-lg border border-border/60 bg-muted/25 px-3 py-2">
-                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60">Type</div>
-                  <div class="mt-1 text-[11.5px] font-medium text-foreground/90">{item().agentType || 'subagent'}</div>
+                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60">{i18n.t('flowerChat.subagents.typeLabel')}</div>
+                  <div class="mt-1 text-[11.5px] font-medium text-foreground/90">{item().agentType || i18n.t('flowerChat.subagents.defaultAgentType')}</div>
                 </div>
               </div>
 
               <Show when={item().objective}>
                 <div>
-                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1.5">Objective</div>
+                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1.5">{i18n.t('flowerChat.subagents.objectiveLabel')}</div>
                   <p class="text-[12.5px] text-foreground leading-relaxed m-0">{item().objective}</p>
                 </div>
               </Show>
 
               <Show when={item().triggerReason}>
                 <div>
-                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1.5">Trigger reason</div>
+                  <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1.5">{i18n.t('flowerChat.subagents.triggerReasonLabel')}</div>
                   <p class="text-[12.5px] text-foreground leading-relaxed m-0">{item().triggerReason}</p>
                 </div>
               </Show>
 
               <div>
-                <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1.5">Delegation prompt</div>
+                <div class="text-[9.5px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1.5">{i18n.t('flowerChat.subagents.delegationPromptLabel')}</div>
                 <pre class="max-h-[52vh] overflow-auto rounded-lg border border-border/60 bg-background/90 px-3.5 py-2.5 text-[11.5px] leading-[1.6] whitespace-pre-wrap break-words text-foreground/90 m-0">
                   {String(item().delegationPromptMarkdown ?? '').trim()}
                 </pre>
@@ -1171,16 +1188,16 @@ function CompactSubagentsSummary(props: {
 // Suggestion item for empty chat state
 interface SuggestionItem {
   icon: Component<{ class?: string }>;
-  title: string;
-  description: string;
+  titleKey: EnvAppTranslationKey;
+  descriptionKey: EnvAppTranslationKey;
   prompt: string;
 }
 
 const SUGGESTIONS: SuggestionItem[] = [
   {
     icon: Terminal,
-    title: 'Weather Check',
-    description: 'Toronto now, forecast, and outfit tips',
+    titleKey: 'flowerChat.suggestions.weather.title',
+    descriptionKey: 'flowerChat.suggestions.weather.description',
     prompt: [
       'Check the latest weather for Toronto, Canada. Include:',
       '- current conditions',
@@ -1193,8 +1210,8 @@ const SUGGESTIONS: SuggestionItem[] = [
   },
   {
     icon: CheckCircle,
-    title: 'Trip Planner',
-    description: 'Guided Q&A to choose your destination',
+    titleKey: 'flowerChat.suggestions.trip.title',
+    descriptionKey: 'flowerChat.suggestions.trip.description',
     prompt: [
       'Help me choose a travel destination through guided Q&A.',
       'Use ask_user one question at a time with concise explicit choices (best choice first).',
@@ -1204,8 +1221,8 @@ const SUGGESTIONS: SuggestionItem[] = [
   },
   {
     icon: FileText,
-    title: 'Project Intro',
-    description: 'Understand what this repo does',
+    titleKey: 'flowerChat.suggestions.project.title',
+    descriptionKey: 'flowerChat.suggestions.project.description',
     prompt: [
       'Analyze the current repository and provide:',
       '1) a concise project introduction (what it does and who it is for)',
@@ -1216,8 +1233,8 @@ const SUGGESTIONS: SuggestionItem[] = [
   },
   {
     icon: Code,
-    title: 'Tech Route',
-    description: 'Map key architecture and flows',
+    titleKey: 'flowerChat.suggestions.techRoute.title',
+    descriptionKey: 'flowerChat.suggestions.techRoute.description',
     prompt: [
       'Analyze this project\'s key technical routes and output:',
       '- authentication flow',
@@ -1262,6 +1279,7 @@ const FlowerHeroBadge: Component<FlowerHeroBadgeProps> = (props) => (
 );
 
 const EmptyChat: Component<EmptyChatProps> = (props) => {
+  const i18n = useI18n();
   return (
     <div class="flower-empty-chat-state">
       {/* Welcome section */}
@@ -1280,11 +1298,10 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
         />
 
         <h2 class="text-xl font-semibold text-foreground mb-3">
-          Hello! I'm Flower
+          {i18n.t('flowerChat.emptyChat.title')}
         </h2>
         <p class="text-sm text-muted-foreground leading-relaxed">
-          I'm your AI assistant. I can help you with code, files, commands, and more.
-          Just type a message below or choose from the suggestions.
+          {i18n.t('flowerChat.emptyChat.description')}
         </p>
       </Motion.div>
 
@@ -1311,10 +1328,10 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
               </div>
               <div class="min-w-0 flex-1">
                 <div class="text-sm font-medium text-foreground mb-0.5">
-                  {item.title}
+                  {i18n.t(item.titleKey)}
                 </div>
                 <div class="text-xs text-muted-foreground leading-relaxed">
-                  {item.description}
+                  {i18n.t(item.descriptionKey)}
                 </div>
               </div>
             </Motion.button>
@@ -1331,11 +1348,11 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
       >
         <span class="flex items-center gap-1.5">
           <kbd class="px-1.5 py-0.5 rounded bg-muted/50 font-mono text-[10px] border border-border/50">Enter</kbd>
-          <span>send</span>
+          <span>{i18n.t('flowerChat.emptyChat.sendHint')}</span>
         </span>
         <span class="flex items-center gap-1.5">
           <kbd class="px-1.5 py-0.5 rounded bg-muted/50 font-mono text-[10px] border border-border/50">Shift+Enter</kbd>
-          <span>newline</span>
+          <span>{i18n.t('flowerChat.emptyChat.newlineHint')}</span>
         </span>
       </Motion.div>
     </div>
@@ -1391,6 +1408,7 @@ export function EnvAIPage() {
   const rpc = useRedevenRpc();
   const notify = useNotification();
   const ai = useAIChatContext();
+  const i18n = useI18n();
 
   const [renameOpen, setRenameOpen] = createSignal(false);
   const [renameTitle, setRenameTitle] = createSignal('');
@@ -1692,7 +1710,7 @@ export function EnvAIPage() {
             applyContextCompactionPayload(rid, eventType, payload, { eventId: eventID, atUnixMs });
           }
 
-          if (eventID > pageMaxEventID) {
+      if (eventID > pageMaxEventID) {
             pageMaxEventID = eventID;
           }
         }
@@ -1763,14 +1781,14 @@ export function EnvAIPage() {
     if (!latest || latest.updatedAtUnixMs <= 0) return '';
     const date = new Date(latest.updatedAtUnixMs);
     if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return i18n.formatDateTime(date, { hour: '2-digit', minute: '2-digit' });
   });
   const todoUpdatedLabel = createMemo(() => {
     const updatedAt = Number(threadTodos()?.updated_at_unix_ms ?? 0);
     if (!updatedAt) return '';
     const date = new Date(updatedAt);
     if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return i18n.formatDateTime(date, { hour: '2-digit', minute: '2-digit' });
   });
   const shouldShowContextSummary = createMemo(() => {
     if (!ai.activeThreadId()) {
@@ -1819,9 +1837,15 @@ export function EnvAIPage() {
   });
   const queuedTurnHint = createMemo(() =>
     followupsPausedReason() === 'waiting_user'
-      ? 'Paused until waiting input is resolved.'
-      : 'Flower will send these automatically after the current run finishes.',
+      ? i18n.t('flowerChat.followups.pausedUntilInputResolved')
+      : i18n.t('flowerChat.followups.autoSendHint'),
   );
+  const attachmentCountLabel = (count: number): string => i18n.tn('flowerChat.followups.attachmentCount', count);
+  const followupExecutionModeLabel = (modeRaw: unknown): string => {
+    const mode = String(modeRaw ?? '').trim().toLowerCase();
+    return mode === 'plan' ? i18n.t('flowerChat.executionMode.plan') : mode === 'act' ? i18n.t('flowerChat.executionMode.act') : '';
+  };
+  const followupFallbackText = (): string => i18n.t('flowerChat.followups.attachmentOnly');
   const hasBottomDockPanels = createMemo(() => draftFollowups().length > 0 || shouldShowQueuedTurnsPanel());
   const executionMode = createMemo<ExecutionMode>(() => {
     const tid = String(ai.activeThreadId() ?? '').trim();
@@ -1912,16 +1936,16 @@ export function EnvAIPage() {
   const selectedHeaderModelOption = createMemo(() => modelOptionById().get(selectedHeaderModelId()) ?? null);
   const selectedHeaderModelLabel = createMemo(() => formatModelLabel(selectedHeaderModelId()));
   const showRemoteModelTag = createMemo(() => selectedHeaderModelOption()?.source === 'desktop_model_source');
-  const remoteModelTooltip = 'AI requests are handled by your Desktop. Files, terminal, Git, and workspace actions still run in this environment.';
+  const remoteModelTooltip = () => i18n.t('flowerChat.model.remoteTooltip');
   const remoteModelTag = () => (
     <Show when={showRemoteModelTag()}>
-      <Tooltip content={remoteModelTooltip} placement="bottom" delay={0}>
+      <Tooltip content={remoteModelTooltip()} placement="bottom" delay={0}>
         <span
           data-testid="ai-remote-model-tag"
           tabIndex={0}
           class="inline-flex h-6 shrink-0 cursor-help items-center rounded-full border border-amber-500/30 bg-amber-500/10 px-2 text-[10px] font-semibold uppercase tracking-[0.08em] text-amber-700 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-amber-500/30 dark:text-amber-300"
         >
-          REMOTE
+          {i18n.t('flowerChat.model.remoteTag')}
         </span>
       </Tooltip>
     </Show>
@@ -1929,10 +1953,10 @@ export function EnvAIPage() {
   const selectedModelCapabilityTag = () => {
     const option = selectedHeaderModelOption();
     if (!option) return null;
-    const label = option.supportsImageInput ? 'IMAGE' : 'TEXT';
+    const label = option.supportsImageInput ? i18n.t('flowerChat.model.imageTag') : i18n.t('flowerChat.model.textTag');
     const tooltip = option.supportsImageInput
-      ? 'This model accepts text and image input.'
-      : 'This model is configured for text input only. Image attachments will be converted before the run.';
+      ? i18n.t('flowerChat.model.imageTooltip')
+      : i18n.t('flowerChat.model.textTooltip');
     return (
       <Tooltip content={tooltip} placement="bottom" delay={0}>
         <span
@@ -1955,41 +1979,41 @@ export function EnvAIPage() {
   const noUsableModelMessage = createMemo(() => {
     const missing = desktopModelSourceMissingKeys();
     if (desktopModelSourceConnected() && missing.length > 0) {
-      return `Desktop model providers need API keys: ${missing.join(', ')}.`;
+      return i18n.t('flowerChat.model.desktopProvidersNeedKeys', { providers: missing.join(', ') });
     }
     if (desktopModelSourceConnected()) {
-      return 'Desktop is connected, but no usable model is available.';
+      return i18n.t('flowerChat.model.desktopNoUsableModel');
     }
-    return 'Configure an AI provider in Runtime Settings to start using Flower.';
+    return i18n.t('flowerChat.model.configureProviderToStart');
   });
   const ensureRWX = (): boolean => {
     if (!permissionReady()) {
-      notify.error('Not ready', 'Loading environment permissions...');
+      notify.error(i18n.t('flowerChat.notifications.notReadyTitle'), i18n.t('flowerChat.permissions.loading'));
       return false;
     }
     if (!canRWX()) {
-      notify.error('Permission denied', 'Read/write/execute permission required.');
+      notify.error(i18n.t('flowerChat.notifications.permissionDeniedTitle'), i18n.t('flowerChat.permissions.rwxRequired'));
       return false;
     }
     return true;
   };
   const chatInputPlaceholder = createMemo((): string => {
     if (!ai.aiEnabled()) {
-      return 'Configure AI in settings to start...';
+      return i18n.t('flowerChat.composer.configureAIPlaceholder');
     }
     if (ai.modelsReady() && ai.modelOptions().length === 0) {
-      return 'Configure a usable model to start...';
+      return i18n.t('flowerChat.composer.configureModelPlaceholder');
     }
     if (!permissionReady()) {
-      return 'Loading permissions...';
+      return i18n.t('flowerChat.composer.loadingPermissionsPlaceholder');
     }
     if (!canRWX()) {
-      return 'Read/write/execute permission required to send messages.';
+      return i18n.t('flowerChat.composer.rwxRequiredPlaceholder');
     }
     if (activeThreadWaitingUser()) {
-      return 'Flower is waiting for your reply. Continue with details or pick the next action.';
+      return i18n.t('flowerChat.composer.waitingForReplyPlaceholder');
     }
-    return 'Type a message...';
+    return i18n.t('flowerChat.composer.typeMessagePlaceholder');
   });
   const waitingUserComposerSendBlockReason = (content: string, attachments: Attachment[]): string | null => {
     if (!activeThreadWaitingUser()) return null;
@@ -2001,7 +2025,7 @@ export function EnvAIPage() {
     const tid = String(ai.activeThreadId() ?? '').trim();
     const promptId = String(waitingPrompt?.promptId ?? '').trim();
     if (!tid || !promptId) {
-      return 'The pending input request is no longer available.';
+      return i18n.t('flowerChat.structuredInput.pendingUnavailable');
     }
 
     const plan = buildStructuredComposerSendPlan({
@@ -2058,14 +2082,14 @@ export function EnvAIPage() {
 
     if (suggestedWorkingDirAbs) {
       if (workingDirLocked()) {
-        notify.info('Working directory locked', `Suggested: ${suggestedWorkingDirAbs}`);
+        notify.info(i18n.t('flowerChat.notifications.workingDirLockedTitle'), i18n.t('flowerChat.notifications.suggestedWorkingDir', { path: suggestedWorkingDirAbs }));
       } else {
         ai.setDraftWorkingDir(suggestedWorkingDirAbs);
       }
     }
 
     if (intent.notes.length > 0) {
-      notify.info('Ask Flower', intent.notes.join('\n'));
+      notify.info(i18n.t('filePreview.askFlower'), intent.notes.join('\n'));
     }
 
     inputApi.focusInput();
@@ -2110,7 +2134,7 @@ export function EnvAIPage() {
       ai.bumpThreadsSeq();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to update execution mode', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.notifications.updateExecutionModeFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
       setThreadExecutionModeOverrideById((prev) => {
         if (!prev[tid]) return prev;
         const out = { ...prev };
@@ -2216,7 +2240,7 @@ export function EnvAIPage() {
       if (reqNo !== lastMessagesReq) return;
       if (!threadRevealMatches(tid, opts?.revealRequestSeq)) return;
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to load chat', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.notifications.loadChatFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
       if (opts?.revealRequestSeq !== undefined) {
         markThreadRevealVisible(tid, opts.revealRequestSeq);
       }
@@ -2307,12 +2331,12 @@ export function EnvAIPage() {
       const msg = e instanceof Error ? e.message : String(e);
       if (!silent) {
         setThreadTodosIfChanged(null);
-        setTodosError(msg || 'Request failed.');
+        setTodosError(msg || i18n.t('flowerChat.errors.requestFailed'));
       } else if (!threadTodos()) {
-        setTodosError(msg || 'Request failed.');
+        setTodosError(msg || i18n.t('flowerChat.errors.requestFailed'));
       }
       if (!silent && notifyError) {
-        notify.error('Failed to load tasks', msg || 'Request failed.');
+        notify.error(i18n.t('flowerChat.notifications.loadTasksFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
       }
     } finally {
       if (!silent) {
@@ -2519,7 +2543,7 @@ export function EnvAIPage() {
       setDraftFollowups([]);
       setFollowupsRevision(null);
       setFollowupsPausedReason('');
-      setFollowupsError(msg || 'Request failed.');
+      setFollowupsError(msg || i18n.t('flowerChat.errors.requestFailed'));
     } finally {
       if (reqNo === lastFollowupsReq && !silent) {
         setFollowupsLoading(false);
@@ -2554,7 +2578,7 @@ export function EnvAIPage() {
       ai.bumpThreadsSeq();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to update follow-up', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.notifications.updateFollowupFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
     } finally {
       setFollowupEditSaving(false);
     }
@@ -2580,7 +2604,7 @@ export function EnvAIPage() {
       ai.bumpThreadsSeq();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to remove follow-up', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.notifications.removeFollowupFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
     } finally {
       setFollowupDeletingID((current) => (current === followupID ? null : current));
     }
@@ -2612,7 +2636,7 @@ export function EnvAIPage() {
       applyFollowupList(lane, previousItems);
       void loadFollowups(tid, { silent: true });
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to reorder follow-ups', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.notifications.reorderFollowupsFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
     } finally {
       setFollowupReorderingLane((current) => (current === lane ? null : current));
       setDraggingFollowupID('');
@@ -2688,13 +2712,13 @@ export function EnvAIPage() {
       if (inputApi && shouldAutoloadRecoveredFollowup(recovered, inputApi.snapshotDraft())) {
         loadFollowupIntoComposer(recovered[0]);
       } else if (recovered.length > 0) {
-        notify.info('Run stopped', recovered.length === 1 ? 'Recovered 1 queued follow-up.' : `Recovered ${recovered.length} queued follow-ups.`);
+        notify.info(i18n.t('flowerChat.notifications.runStoppedTitle'), i18n.tn('flowerChat.notifications.recoveredQueuedFollowups', recovered.length));
       }
       await loadFollowups(tid, { silent: true });
       ai.bumpThreadsSeq();
     }).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to stop run', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.notifications.stopRunFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
     });
   };
 
@@ -2885,7 +2909,7 @@ export function EnvAIPage() {
       const runError = String(event.runError ?? '').trim();
       if (status === 'failed' && runError && runId && !failureNotifiedRuns.has(runId)) {
         failureNotifiedRuns.add(runId);
-        notify.error('AI failed', runError);
+        notify.error(i18n.t('flowerChat.notifications.aiFailedTitle'), runError);
       }
     });
 
@@ -3011,7 +3035,7 @@ export function EnvAIPage() {
 
   const uploadAttachment = async (file: File): Promise<string> => {
     if (!canRWXReady()) {
-      throw new Error('Read/write/execute permission required.');
+      throw new Error(i18n.t('flowerChat.permissions.rwxRequired'));
     }
     return uploadGatewayFile(file);
   };
@@ -3098,8 +3122,8 @@ export function EnvAIPage() {
     if (!promptId) {
       return {
         kind: 'error',
-        title: 'Input required',
-        description: 'The pending input request is no longer available.',
+        title: i18n.t('flowerChat.structuredInput.inputRequiredTitle'),
+        description: i18n.t('flowerChat.structuredInput.pendingUnavailable'),
       };
     }
 
@@ -3122,15 +3146,15 @@ export function EnvAIPage() {
       if (question.isSecret) {
         return {
           kind: 'error',
-          title: 'Input required',
-          description: 'Use the inline input card to answer secret requests.',
+          title: i18n.t('flowerChat.structuredInput.inputRequiredTitle'),
+          description: i18n.t('flowerChat.structuredInput.useInlineSecretCard'),
         };
       }
       if (!questionCanAutofillFromComposer(question, currentDraft)) {
         return {
           kind: 'error',
-          title: 'Input required',
-          description: 'Select one of the requested options before replying.',
+          title: i18n.t('flowerChat.structuredInput.inputRequiredTitle'),
+          description: i18n.t('flowerChat.structuredInput.selectRequestedOption'),
         };
       }
       answers[questionId] = {
@@ -3141,8 +3165,8 @@ export function EnvAIPage() {
     } else if (composerText && unanswered.length > 1) {
       return {
         kind: 'error',
-        title: 'Input required',
-        description: 'Resolve all requested input fields before replying.',
+        title: i18n.t('flowerChat.structuredInput.inputRequiredTitle'),
+        description: i18n.t('flowerChat.structuredInput.resolveAllFields'),
       };
     }
 
@@ -3151,10 +3175,10 @@ export function EnvAIPage() {
       const secretOnly = remaining.every((question) => Boolean(question.isSecret));
       return {
         kind: 'error',
-        title: 'Input required',
+        title: i18n.t('flowerChat.structuredInput.inputRequiredTitle'),
         description: secretOnly
-          ? 'Use the inline input card to answer the pending secret request.'
-          : 'Resolve the pending input request before replying.',
+          ? i18n.t('flowerChat.structuredInput.useInlinePendingSecretCard')
+          : i18n.t('flowerChat.structuredInput.resolvePendingRequest'),
       };
     }
 
@@ -3178,7 +3202,7 @@ export function EnvAIPage() {
     const promptId = String(waitingPrompt?.promptId ?? '').trim();
     if (!tid || !promptId) {
       rollbackRejectedComposerSend(context);
-      throw new Error('The pending input request is no longer available.');
+      throw new Error(i18n.t('flowerChat.structuredInput.pendingUnavailable'));
     }
 
     const plan = buildStructuredComposerSendPlan({
@@ -3236,10 +3260,10 @@ export function EnvAIPage() {
     } catch (error) {
       rollbackRejectedComposerSend(context);
       const msg = error instanceof Error ? error.message : String(error);
-      notify.error('AI failed', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.notifications.aiFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
       void loadThreadMessages(tid);
       void loadFollowups(tid, { silent: true });
-      throw error instanceof Error ? error : new Error(msg || 'Request failed.');
+      throw error instanceof Error ? error : new Error(msg || i18n.t('flowerChat.errors.requestFailed'));
     }
   };
 
@@ -3251,31 +3275,31 @@ export function EnvAIPage() {
       hasOptimisticMessage: Boolean(String(opts.userMessageId ?? '').trim()),
     };
     if (!chat) {
-      notify.error('AI unavailable', 'Chat is not ready.');
+      notify.error(i18n.t('flowerChat.notifications.aiUnavailableTitle'), i18n.t('flowerChat.notifications.chatNotReadyMessage'));
       rollbackRejectedComposerSend(context);
-      throw new Error('Chat is not ready.');
+      throw new Error(i18n.t('flowerChat.notifications.chatNotReadyMessage'));
     }
     if (!ensureRWX()) {
       rollbackRejectedComposerSend(context);
-      throw new Error('Read/write/execute permission required.');
+      throw new Error(i18n.t('flowerChat.permissions.rwxRequired'));
     }
     if (!ai.aiEnabled()) {
-      notify.error('AI not configured', 'Configure a model in Runtime Settings or open this SSH Host through Desktop with an available Desktop model source.');
+      notify.error(i18n.t('flowerChat.notifications.aiNotConfiguredTitle'), i18n.t('flowerChat.notifications.configureModelOrDesktopMessage'));
       rollbackRejectedComposerSend(context);
-      throw new Error('AI is not configured.');
+      throw new Error(i18n.t('flowerChat.notifications.aiNotConfiguredMessage'));
     }
     if (ai.models.error) {
       const msg = ai.models.error instanceof Error ? ai.models.error.message : String(ai.models.error);
-      notify.error('AI unavailable', msg || 'Failed to load models.');
+      notify.error(i18n.t('flowerChat.notifications.aiUnavailableTitle'), msg || i18n.t('flowerChat.notifications.loadModelsFailedMessage'));
       rollbackRejectedComposerSend(context);
-      throw new Error(msg || 'Failed to load models.');
+      throw new Error(msg || i18n.t('flowerChat.notifications.loadModelsFailedMessage'));
     }
 
     const model = ai.selectedSendModel().trim();
     if (!model) {
-      notify.error('Missing model', 'Please select a model.');
+      notify.error(i18n.t('flowerChat.notifications.missingModelTitle'), i18n.t('flowerChat.notifications.selectModelMessage'));
       rollbackRejectedComposerSend(context);
-      throw new Error('Please select a model.');
+      throw new Error(i18n.t('flowerChat.notifications.selectModelMessage'));
     }
 
     const userMessageId = String(opts.userMessageId ?? '').trim();
@@ -3297,7 +3321,7 @@ export function EnvAIPage() {
     }
     if (!tid) {
       rollbackRejectedComposerSend(context);
-      throw new Error('Send was not started.');
+      throw new Error(i18n.t('flowerChat.notifications.sendNotStartedMessage'));
     }
 
     const userText = String(content ?? '').trim();
@@ -3354,8 +3378,8 @@ export function EnvAIPage() {
       } else if (waitingPromptId && sendIntent !== 'queue_after_waiting_user') {
         ai.clearThreadPendingRun(tid);
         rollbackRejectedComposerSend(context);
-        notify.error('Input required', 'Resolve the requested input before sending a new message.');
-        throw new ComposerSendRejectedError('Resolve the requested input before sending a new message.');
+        notify.error(i18n.t('flowerChat.structuredInput.inputRequiredTitle'), i18n.t('flowerChat.structuredInput.resolveBeforeNewMessage'));
+        throw new ComposerSendRejectedError(i18n.t('flowerChat.structuredInput.resolveBeforeNewMessage'));
       }
       const appliedExecutionModeRaw = String(resp.appliedExecutionMode ?? '').trim();
       if (appliedExecutionModeRaw) {
@@ -3389,10 +3413,10 @@ export function EnvAIPage() {
       }
       rollbackRejectedComposerSend(context);
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('AI failed', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.notifications.aiFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
       void loadThreadMessages(tid);
       void loadFollowups(tid, { silent: true });
-      throw e instanceof Error ? e : new Error(msg || 'Request failed.');
+      throw e instanceof Error ? e : new Error(msg || i18n.t('flowerChat.errors.requestFailed'));
     } finally {
       setSendPending(false);
     }
@@ -3430,12 +3454,12 @@ export function EnvAIPage() {
       const context = consumePendingSendContext(userMessageId);
       if (protocol.status() !== 'connected') {
         rollbackRejectedComposerSend(context);
-        notify.error('Not connected', 'Connecting to runtime...');
-        throw new Error('Connecting to runtime...');
+        notify.error(i18n.t('flowerChat.notifications.notConnectedTitle'), i18n.t('flowerChat.notifications.connectingRuntimeMessage'));
+        throw new Error(i18n.t('flowerChat.notifications.connectingRuntimeMessage'));
       }
       if (!ensureRWX()) {
         rollbackRejectedComposerSend(context);
-        throw new Error('Read/write/execute permission required.');
+        throw new Error(i18n.t('flowerChat.permissions.rwxRequired'));
       }
 
       const activeThreadId = String(ai.activeThreadId() ?? '').trim();
@@ -3482,7 +3506,7 @@ export function EnvAIPage() {
       setRenameOpen(false);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to rename chat', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.notifications.renameChatFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
     } finally {
       setRenaming(false);
     }
@@ -3512,7 +3536,7 @@ export function EnvAIPage() {
         }
         throw new Error(String(data?.error ?? `HTTP ${resp.status}`));
       }
-      if (data?.ok === false) throw new Error(String(data?.error ?? 'Request failed'));
+      if (data?.ok === false) throw new Error(String(data?.error ?? i18n.t('flowerChat.errors.requestFailed')));
 
       setDeleteOpen(false);
       setDeleteForce(false);
@@ -3523,7 +3547,7 @@ export function EnvAIPage() {
       ai.bumpThreadsSeq();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to delete chat', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.notifications.deleteChatFailedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
     } finally {
       setDeleting(false);
     }
@@ -3538,12 +3562,12 @@ export function EnvAIPage() {
   const headerMoreItems = createMemo<DropdownItem[]>(() => {
     const items: DropdownItem[] = [];
     if (ai.activeThreadId() && canRWXReady() && !activeThreadRunning()) {
-      items.push({ id: 'rename', label: 'Rename chat' });
+      items.push({ id: 'rename', label: i18n.t('flowerChat.header.renameChat') });
     }
     if (ai.activeThreadId() && canRWXReady()) {
-      items.push({ id: 'delete', label: 'Delete chat' });
+      items.push({ id: 'delete', label: i18n.t('flowerChat.header.deleteChat') });
     }
-    items.push({ id: 'settings', label: 'AI settings' });
+    items.push({ id: 'settings', label: i18n.t('flowerChat.header.aiSettings') });
     return items;
   });
 
@@ -3570,30 +3594,30 @@ export function EnvAIPage() {
       return {
         visible: true,
         surface: 'page' as const,
-        eyebrow: 'Runtime',
+        eyebrow: i18n.t('flowerChat.loading.runtimeEyebrow'),
         message: env.connectionOverlayMessage(),
       };
     }
     if (ai.settings.loading && protocol.status() === 'connected') {
-      return { visible: true, surface: undefined, eyebrow: 'Flower', message: 'Loading settings...' };
+      return { visible: true, surface: undefined, eyebrow: i18n.t('aiChrome.flowerTitle'), message: i18n.t('flowerChat.loading.settings') };
     }
     if (ai.models.loading && ai.aiEnabled()) {
-      return { visible: true, surface: undefined, eyebrow: 'Flower', message: 'Loading models...' };
+      return { visible: true, surface: undefined, eyebrow: i18n.t('aiChrome.flowerTitle'), message: i18n.t('flowerChat.loading.models') };
     }
     if (ai.threads.loading && ai.aiEnabled() && !ai.threads()) {
-      return { visible: true, surface: undefined, eyebrow: 'Flower', message: 'Loading chats...' };
+      return { visible: true, surface: undefined, eyebrow: i18n.t('aiChrome.flowerTitle'), message: i18n.t('flowerChat.loading.chats') };
     }
     if ((messagesLoading() || transcriptRevealPending()) && ai.aiEnabled() && !activeThreadRunning()) {
-      return { visible: true, surface: undefined, eyebrow: 'Flower', message: 'Loading chat...' };
+      return { visible: true, surface: undefined, eyebrow: i18n.t('aiChrome.flowerTitle'), message: i18n.t('flowerChat.loading.chat') };
     }
-    return { visible: false, surface: undefined, eyebrow: 'Flower', message: '' };
+    return { visible: false, surface: undefined, eyebrow: i18n.t('aiChrome.flowerTitle'), message: '' };
   });
 
   return (
     <div class="h-full min-h-0 overflow-hidden relative">
       <ChatProvider
         config={{
-          placeholder: 'Describe what you want to do...',
+          placeholder: i18n.t('flowerChat.composer.describePlaceholder'),
           assistantAvatar: FlowerAssistantAvatar,
           showListWorkingIndicator: false,
           renderMessageOrnament: (props) => (
@@ -3618,7 +3642,7 @@ export function EnvAIPage() {
           when={permissionReady()}
           fallback={
             <div class="flex flex-col items-center justify-center h-full p-8 text-center">
-              <div class="text-sm text-muted-foreground">Loading environment permissions...</div>
+              <div class="text-sm text-muted-foreground">{i18n.t('flowerChat.permissions.loading')}</div>
             </div>
           }
         >
@@ -3636,9 +3660,9 @@ export function EnvAIPage() {
                   shellClass="border border-primary/20"
                   testId="flower-disabled-badge-shell"
                 />
-                <div class="text-lg font-semibold text-foreground mb-2">Flower is disabled</div>
+                <div class="text-lg font-semibold text-foreground mb-2">{i18n.t('flowerChat.emptyStates.disabledTitle')}</div>
                 <div class="text-sm text-muted-foreground mb-6 max-w-[360px]">
-                  Read/write/execute permission required to use Flower.
+                  {i18n.t('flowerChat.emptyStates.disabledDescription')}
                 </div>
               </Motion.div>
             }
@@ -3664,13 +3688,13 @@ export function EnvAIPage() {
                         shellClass="border border-primary/20"
                         testId="flower-not-configured-badge-shell"
                       />
-                      <div class="text-lg font-semibold text-foreground mb-2">Flower is not configured</div>
+                      <div class="text-lg font-semibold text-foreground mb-2">{i18n.t('flowerChat.emptyStates.notConfiguredTitle')}</div>
                       <div class="text-sm text-muted-foreground mb-6 max-w-[320px]">
-                        Configure a remote provider in Runtime Settings, or reconnect Redeven Desktop with an available Desktop model source.
+                        {i18n.t('flowerChat.emptyStates.notConfiguredDescription')}
                       </div>
                       <Button size="md" variant="default" onClick={() => env.openSettings('ai')}>
                         <Settings class="w-4 h-4 mr-2" />
-                        Open Runtime Settings
+                        {i18n.t('flowerChat.emptyStates.openRuntimeSettings')}
                       </Button>
                     </Motion.div>
                   }
@@ -3691,13 +3715,13 @@ export function EnvAIPage() {
                         </svg>
                       </div>
                     </div>
-                    <div class="text-lg font-semibold text-foreground mb-2">Failed to load settings</div>
+                    <div class="text-lg font-semibold text-foreground mb-2">{i18n.t('flowerChat.emptyStates.settingsFailedTitle')}</div>
                     <div class="text-sm text-muted-foreground mb-6 max-w-[360px]">
                       {ai.settings.error instanceof Error ? ai.settings.error.message : String(ai.settings.error)}
                     </div>
                     <Button size="md" variant="default" onClick={() => env.openSettings('ai')}>
                       <Settings class="w-4 h-4 mr-2" />
-                      Open Runtime Settings
+                      {i18n.t('flowerChat.emptyStates.openRuntimeSettings')}
                     </Button>
                   </Motion.div>
                 </Show>
@@ -3720,7 +3744,7 @@ export function EnvAIPage() {
                             class="flower-chat-model-control inline-flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2 rounded-full border border-border/70 bg-muted/20 px-2 py-1"
                           >
                             <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                              MODEL
+                              {i18n.t('flowerChat.model.label')}
                             </span>
                             <Select
                               value={hasActiveThread() ? ai.selectedThreadModel() : ai.selectedCurrentModel()}
@@ -3733,7 +3757,7 @@ export function EnvAIPage() {
                                 ai.selectCurrentModel(next);
                               }}
                               options={ai.modelOptions()}
-                              placeholder="Select model..."
+                              placeholder={i18n.t('flowerChat.model.selectPlaceholder')}
                               disabled={hasActiveThread() ? threadModelControlDisabled() : currentModelControlDisabled()}
                               class="ai-model-select-trigger flower-chat-model-select min-w-[120px] max-w-[160px] sm:min-w-[140px] sm:max-w-[200px] h-7 text-[11px]"
                             />
@@ -3748,17 +3772,17 @@ export function EnvAIPage() {
                           title={ai.selectedThreadModel()}
                         >
                           <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">
-                            MODEL
+                            {i18n.t('flowerChat.model.label')}
                           </span>
-                          <span class="min-w-0 max-w-[160px] truncate font-medium text-foreground">{selectedHeaderModelLabel() || activeThreadModelLabel() || 'Unknown model'}</span>
-                          <span class="shrink-0 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">Locked</span>
+                          <span class="min-w-0 max-w-[160px] truncate font-medium text-foreground">{selectedHeaderModelLabel() || activeThreadModelLabel() || i18n.t('flowerChat.model.unknown')}</span>
+                          <span class="shrink-0 text-[10px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{i18n.t('flowerChat.model.locked')}</span>
                           {remoteModelTag()}
                         </div>
                       </Show>
                     </Show>
 
                     <Show when={activeThreadRunning()}>
-                      <Tooltip content="Stop generation" placement="bottom" delay={0}>
+                      <Tooltip content={i18n.t('flowerChat.header.stopGeneration')} placement="bottom" delay={0}>
                         <Button
                           size="sm"
                           variant="ghost"
@@ -3767,7 +3791,7 @@ export function EnvAIPage() {
                           disabled={!canRWXReady()}
                           class="flower-chat-stop-button h-7 px-2.5 text-error"
                         >
-                          Stop
+                          {i18n.t('flowerChat.header.stop')}
                         </Button>
                       </Tooltip>
                     </Show>
@@ -3777,8 +3801,8 @@ export function EnvAIPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          aria-label="More actions"
-                          title="More actions"
+                          aria-label={i18n.t('aiChrome.moreActions')}
+                          title={i18n.t('aiChrome.moreActions')}
                           class="flower-chat-header-more-trigger"
                         >
                           <MoreVerticalIcon class="w-4 h-4" />
@@ -3797,7 +3821,7 @@ export function EnvAIPage() {
                       <div class="mx-3 mt-3 px-4 py-3 text-xs rounded-xl shadow-sm bg-warning/5 border border-warning/25">
                         <div class="flex items-center gap-2 font-medium text-foreground">
                           <Settings class="w-4 h-4 shrink-0 text-warning" />
-                          No usable Flower model
+                          {i18n.t('flowerChat.model.noUsableTitle')}
                         </div>
                         <div class="mt-1 text-muted-foreground pl-6">
                           {noUsableModelMessage()}
@@ -3815,7 +3839,7 @@ export function EnvAIPage() {
                                 <line x1="12" y1="8" x2="12" y2="12" />
                                 <line x1="12" y1="16" x2="12.01" y2="16" />
                               </svg>
-                              Runtime Settings are not available
+                              {i18n.t('flowerChat.banners.runtimeSettingsUnavailable')}
                             </div>
                             <div class="mt-1 text-muted-foreground pl-6">
                               {ai.settings.error instanceof Error ? ai.settings.error.message : String(ai.settings.error)}
@@ -3832,7 +3856,7 @@ export function EnvAIPage() {
                                 <line x1="12" y1="8" x2="12" y2="12" />
                                 <line x1="12" y1="16" x2="12.01" y2="16" />
                               </svg>
-                              AI is not available
+                              {i18n.t('flowerChat.banners.aiUnavailable')}
                             </div>
                             <div class="mt-1 text-muted-foreground pl-6">
                               {ai.models.error instanceof Error ? ai.models.error.message : String(ai.models.error)}
@@ -3910,7 +3934,7 @@ export function EnvAIPage() {
                                 />
                               </Show>
                               <Show when={!ai.activeThreadId() || (activeThreadTodos().length === 0 && activeThreadSubagents().length === 0 && !shouldShowContextSummary())}>
-                                <span class="text-[11px] text-muted-foreground">Execution mode</span>
+                                <span class="text-[11px] text-muted-foreground">{i18n.t('flowerChat.executionMode.label')}</span>
                               </Show>
                             </div>
                             <div class="flower-chat-toolbar-mode">
@@ -3935,24 +3959,21 @@ export function EnvAIPage() {
                               <div class="flower-queued-turns-panel flower-followups-drafts-panel">
                                 <div class="flower-queued-turns-header">
                                   <div class="flower-queued-turns-header-main">
-                                    <span class="flower-queued-turns-title">Draft follow-ups</span>
+                                    <span class="flower-queued-turns-title">{i18n.t('flowerChat.followups.draftTitle')}</span>
                                     <span class="flower-queued-turns-count">{draftFollowups().length}</span>
                                   </div>
-                                  <div class="flower-queued-turns-hint">These stay under your control until you load them or queue them later.</div>
+                                  <div class="flower-queued-turns-hint">{i18n.t('flowerChat.followups.draftHint')}</div>
                                 </div>
                                 <div class="flower-queued-turns-list">
                                   <For each={draftFollowups()}>
                                     {(item, index) => {
                                       const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
                                       const attachmentCount = () => attachments().length;
-                                      const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
-                                      const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
-                                      const executionModeLabel = () => {
-                                        const mode = String(item.execution_mode ?? '').trim().toLowerCase();
-                                        return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
-                                      };
+                                      const attachmentLabel = () => attachmentCountLabel(attachmentCount());
+                                      const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms, i18n.formatDateTime);
+                                      const executionModeLabel = () => followupExecutionModeLabel(item.execution_mode);
                                       const followupID = () => String(item.followup_id ?? '').trim();
-                                      const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
+                                      const messageText = () => String(item.text ?? '').trim() || followupFallbackText();
                                       const deleting = () => followupDeletingID() === followupID();
                                       const isLoaded = () => loadedDraftFollowupID() === followupID();
                                       const reorderDisabled = () => !canInteract() || !!followupReorderingLane() || isLoaded();
@@ -3978,7 +3999,7 @@ export function EnvAIPage() {
                                                 class="flower-followup-drag-handle"
                                                 disabled={reorderDisabled()}
                                                 onMouseDown={(e) => e.preventDefault()}
-                                                title="Drag to reorder"
+                                                title={i18n.t('flowerChat.followups.dragToReorder')}
                                               >
                                                 ⋮⋮
                                               </button>
@@ -4001,7 +4022,7 @@ export function EnvAIPage() {
                                                   <span class="flower-queued-turn-chip">{attachmentLabel()}</span>
                                                 </Show>
                                                 <Show when={isLoaded()}>
-                                                  <span class="flower-followup-state-chip">Loaded</span>
+                                                  <span class="flower-followup-state-chip">{i18n.t('flowerChat.followups.loaded')}</span>
                                                 </Show>
                                               </div>
                                               <p class="flower-queued-turn-text" title={messageText()}>{messageText()}</p>
@@ -4011,7 +4032,7 @@ export function EnvAIPage() {
                                             <Button
                                               size="icon"
                                               variant="ghost"
-                                              title="Move up"
+                                              title={i18n.t('flowerChat.followups.moveUp')}
                                               onClick={() => moveFollowup('draft', index(), -1)}
                                               disabled={reorderDisabled() || index() === 0}
                                             >
@@ -4020,7 +4041,7 @@ export function EnvAIPage() {
                                             <Button
                                               size="icon"
                                               variant="ghost"
-                                              title="Move down"
+                                              title={i18n.t('flowerChat.followups.moveDown')}
                                               onClick={() => moveFollowup('draft', index(), 1)}
                                               disabled={reorderDisabled() || index() === draftFollowups().length - 1}
                                             >
@@ -4029,27 +4050,27 @@ export function EnvAIPage() {
                                             <Button
                                               size="sm"
                                               variant={isLoaded() ? 'outline' : 'ghost'}
-                                              title={isLoaded() ? 'Draft already loaded' : 'Load into editor'}
+                                              title={isLoaded() ? i18n.t('flowerChat.followups.draftAlreadyLoaded') : i18n.t('flowerChat.followups.loadIntoEditor')}
                                               onClick={() => requestLoadFollowup(item)}
                                               disabled={deleting()}
                                             >
-                                              {isLoaded() ? 'Loaded' : 'Load'}
+                                              {isLoaded() ? i18n.t('flowerChat.followups.loaded') : i18n.t('flowerChat.followups.load')}
                                             </Button>
                                             <Show when={activeThreadWaitingUser() && !isLoaded()}>
                                               <Button
                                                 size="sm"
                                                 variant="outline"
-                                                title="Queue for later"
+                                                title={i18n.t('flowerChat.followups.queueForLater')}
                                                 onClick={() => void queueDraftForLater(item)}
                                                 disabled={!canInteract() || deleting() || followupReorderingLane() === 'draft'}
                                               >
-                                                Queue
+                                                {i18n.t('flowerChat.followups.queue')}
                                               </Button>
                                             </Show>
                                             <Button
                                               size="icon"
                                               variant="ghost"
-                                              title="Edit draft follow-up"
+                                              title={i18n.t('flowerChat.followups.editDraft')}
                                               onClick={() => openFollowupEditor(item)}
                                               disabled={!canInteract() || deleting() || isLoaded()}
                                             >
@@ -4058,7 +4079,7 @@ export function EnvAIPage() {
                                             <Button
                                               size="icon"
                                               variant="ghost"
-                                              title="Remove draft follow-up"
+                                              title={i18n.t('flowerChat.followups.removeDraft')}
                                               onClick={() => void deleteFollowup(item)}
                                               disabled={!canInteract() || deleting() || isLoaded()}
                                             >
@@ -4077,10 +4098,10 @@ export function EnvAIPage() {
                               <div class="flower-queued-turns-panel">
                                 <div class="flower-queued-turns-header">
                                   <div class="flower-queued-turns-header-main">
-                                    <span class="flower-queued-turns-title">Queued follow-ups</span>
+                                    <span class="flower-queued-turns-title">{i18n.t('flowerChat.followups.queuedTitle')}</span>
                                     <span class="flower-queued-turns-count">{activeQueuedTurnCount()}</span>
                                     <Show when={followupsPausedReason() === 'waiting_user'}>
-                                      <span class="flower-followup-state-chip">Paused</span>
+                                      <span class="flower-followup-state-chip">{i18n.t('flowerChat.followups.paused')}</span>
                                     </Show>
                                   </div>
                                   <div class="flower-queued-turns-hint">{queuedTurnHint()}</div>
@@ -4090,20 +4111,17 @@ export function EnvAIPage() {
                                     <div class="flower-queued-turns-empty">{followupsError()}</div>
                                   </Show>
                                   <Show when={followupsLoading() && queuedFollowups().length === 0 && !followupsError()}>
-                                    <div class="flower-queued-turns-empty">Loading queued follow-ups...</div>
+                                    <div class="flower-queued-turns-empty">{i18n.t('flowerChat.followups.loadingQueued')}</div>
                                   </Show>
                                   <For each={queuedFollowups()}>
                                     {(item, index) => {
                                       const attachments = () => Array.isArray(item.attachments) ? item.attachments : [];
                                       const attachmentCount = () => attachments().length;
-                                      const attachmentLabel = () => attachmentCount() === 1 ? '1 attachment' : `${attachmentCount()} attachments`;
-                                      const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms);
-                                      const executionModeLabel = () => {
-                                        const mode = String(item.execution_mode ?? '').trim().toLowerCase();
-                                        return mode === 'plan' ? 'Plan' : mode === 'act' ? 'Act' : '';
-                                      };
+                                      const attachmentLabel = () => attachmentCountLabel(attachmentCount());
+                                      const createdAtLabel = () => formatQueuedTurnTime(item.created_at_unix_ms, i18n.formatDateTime);
+                                      const executionModeLabel = () => followupExecutionModeLabel(item.execution_mode);
                                       const followupID = () => String(item.followup_id ?? '').trim();
-                                      const messageText = () => String(item.text ?? '').trim() || 'Attachment-only follow-up';
+                                      const messageText = () => String(item.text ?? '').trim() || followupFallbackText();
                                       const deleting = () => followupDeletingID() === followupID();
                                       const reorderDisabled = () => !canInteract() || !!followupReorderingLane();
                                       return (
@@ -4128,7 +4146,7 @@ export function EnvAIPage() {
                                                 class="flower-followup-drag-handle"
                                                 disabled={reorderDisabled()}
                                                 onMouseDown={(e) => e.preventDefault()}
-                                                title="Drag to reorder"
+                                                title={i18n.t('flowerChat.followups.dragToReorder')}
                                               >
                                                 ⋮⋮
                                               </button>
@@ -4158,7 +4176,7 @@ export function EnvAIPage() {
                                             <Button
                                               size="icon"
                                               variant="ghost"
-                                              title="Move up"
+                                              title={i18n.t('flowerChat.followups.moveUp')}
                                               onClick={() => moveFollowup('queued', index(), -1)}
                                               disabled={reorderDisabled() || index() === 0}
                                             >
@@ -4167,7 +4185,7 @@ export function EnvAIPage() {
                                             <Button
                                               size="icon"
                                               variant="ghost"
-                                              title="Move down"
+                                              title={i18n.t('flowerChat.followups.moveDown')}
                                               onClick={() => moveFollowup('queued', index(), 1)}
                                               disabled={reorderDisabled() || index() === queuedFollowups().length - 1}
                                             >
@@ -4176,7 +4194,7 @@ export function EnvAIPage() {
                                             <Button
                                               size="icon"
                                               variant="ghost"
-                                              title="Edit queued follow-up"
+                                              title={i18n.t('flowerChat.followups.editQueued')}
                                               onClick={() => openFollowupEditor(item)}
                                               disabled={!canInteract() || deleting()}
                                             >
@@ -4185,7 +4203,7 @@ export function EnvAIPage() {
                                             <Button
                                               size="icon"
                                               variant="ghost"
-                                              title="Remove queued follow-up"
+                                              title={i18n.t('flowerChat.followups.removeQueued')}
                                               onClick={() => void deleteFollowup(item)}
                                               disabled={!canInteract() || deleting()}
                                             >
@@ -4211,8 +4229,8 @@ export function EnvAIPage() {
                           disabled={!canInteract()}
                           waitingForUser={activeThreadWaitingUser()}
                           placeholder={chatInputPlaceholder()}
-                          workingDirLabel={workingDirLabel() || 'Working dir'}
-                          workingDirTitle={activeWorkingDir() || workingDirLabel() || 'Working dir'}
+                          workingDirLabel={workingDirLabel() || i18n.t('flowerChat.workingDir.label')}
+                          workingDirTitle={activeWorkingDir() || workingDirLabel() || i18n.t('flowerChat.workingDir.label')}
                           workingDirLocked={workingDirLocked()}
                           workingDirDisabled={workingDirDisabled()}
                           onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
@@ -4236,10 +4254,10 @@ export function EnvAIPage() {
               }}
               files={workingDirPicker.files()}
               initialPath={workingDirPickerInitialPath()}
-              homeLabel="Home"
+              homeLabel={i18n.t('flowerChat.workingDir.home')}
               homePath={homePath()}
-              title="Select Working Directory"
-              confirmText="Select"
+              title={i18n.t('flowerChat.workingDir.selectTitle')}
+              confirmText={i18n.t('flowerChat.workingDir.selectConfirm')}
               onExpand={workingDirPicker.expandPath}
               ensurePath={workingDirPicker.ensurePath}
               onSelect={(selectedPath) => {
@@ -4263,7 +4281,7 @@ export function EnvAIPage() {
                 }
                 setFollowupEditOpen(true);
               }}
-              title={followupEditLane() === 'draft' ? 'Edit Draft Follow-up' : 'Edit Queued Follow-up'}
+              title={followupEditLane() === 'draft' ? i18n.t('flowerChat.followups.editDraftTitle') : i18n.t('flowerChat.followups.editQueuedTitle')}
               footer={
                 <div class="flex justify-end gap-2">
                   <Button
@@ -4272,7 +4290,7 @@ export function EnvAIPage() {
                     onClick={() => setFollowupEditOpen(false)}
                     disabled={followupEditSaving()}
                   >
-                    Cancel
+                    {i18n.t('common.actions.cancel')}
                   </Button>
                   <Button
                     size="sm"
@@ -4285,25 +4303,25 @@ export function EnvAIPage() {
                         <InlineButtonSnakeLoading />
                       </span>
                     </Show>
-                    Save
+                    {i18n.t('common.actions.save')}
                   </Button>
                 </div>
               }
             >
               <div class="space-y-3">
                 <div>
-                  <label class="block text-xs font-medium mb-1.5">Message</label>
+                  <label class="block text-xs font-medium mb-1.5">{i18n.t('flowerChat.followups.messageLabel')}</label>
                   <textarea
                     value={followupEditText()}
                     onInput={(e) => setFollowupEditText(e.currentTarget.value)}
                     rows={6}
                     class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/15"
-                    placeholder={followupEditLane() === 'draft' ? 'Edit draft follow-up' : 'Edit queued follow-up'}
+                    placeholder={followupEditLane() === 'draft' ? i18n.t('flowerChat.followups.editDraftPlaceholder') : i18n.t('flowerChat.followups.editQueuedPlaceholder')}
                   />
                   <p class="text-[11px] text-muted-foreground mt-1.5">
                     {followupEditLane() === 'draft'
-                      ? 'This updates the saved draft before you load or queue it again.'
-                      : 'This updates the queued message before Flower sends it.'}
+                      ? i18n.t('flowerChat.followups.editDraftHelp')
+                      : i18n.t('flowerChat.followups.editQueuedHelp')}
                   </p>
                 </div>
               </div>
@@ -4317,16 +4335,16 @@ export function EnvAIPage() {
                   setPendingDraftLoad(null);
                 }
               }}
-              title="Replace Draft?"
-              confirmText="Load Draft"
+              title={i18n.t('flowerChat.followups.replaceDraftTitle')}
+              confirmText={i18n.t('flowerChat.followups.loadDraftConfirm')}
               onConfirm={() => confirmLoadPendingDraft()}
             >
               <div class="space-y-2">
                 <p class="text-sm">
-                  Loading <span class="font-semibold">{String(pendingDraftLoad()?.followup.text ?? '').trim() || 'this draft'}</span> will replace the current composer content.
+                  {i18n.t('flowerChat.followups.loadDraftPrefix')} <span class="font-semibold">{String(pendingDraftLoad()?.followup.text ?? '').trim() || i18n.t('flowerChat.followups.thisDraft')}</span> {i18n.t('flowerChat.followups.loadDraftSuffix')}
                 </p>
                 <p class="text-xs text-muted-foreground">
-                  Your current unsent text and attachments will be discarded.
+                  {i18n.t('flowerChat.followups.unsentDiscardWarning')}
                 </p>
               </div>
             </ConfirmDialog>
@@ -4346,11 +4364,11 @@ export function EnvAIPage() {
             }
             setRenameOpen(true);
           }}
-          title="Rename Chat"
+          title={i18n.t('flowerChat.dialogs.renameChatTitle')}
           footer={
             <div class="flex justify-end gap-2">
               <Button size="sm" variant="outline" onClick={() => setRenameOpen(false)} disabled={renaming()}>
-                Cancel
+                {i18n.t('common.actions.cancel')}
               </Button>
               <Button size="sm" variant="default" onClick={() => void doRename()} disabled={renaming()}>
                 <Show when={renaming()}>
@@ -4358,23 +4376,23 @@ export function EnvAIPage() {
                     <InlineButtonSnakeLoading />
                   </span>
                 </Show>
-                Save
+                {i18n.t('common.actions.save')}
               </Button>
             </div>
           }
         >
           <div class="space-y-3">
             <div>
-              <label class="block text-xs font-medium mb-1.5">Title</label>
+              <label class="block text-xs font-medium mb-1.5">{i18n.t('flowerChat.dialogs.titleLabel')}</label>
               <Input
                 value={renameTitle()}
                 onInput={(e) => setRenameTitle(e.currentTarget.value)}
-                placeholder="New chat"
+                placeholder={i18n.t('flowerChat.dialogs.newChatPlaceholder')}
                 size="sm"
                 class="w-full"
               />
               <p class="text-[11px] text-muted-foreground mt-1.5">
-                This title is visible to everyone in this environment.
+                {i18n.t('flowerChat.dialogs.titleVisibilityHelp')}
               </p>
             </div>
           </div>
@@ -4387,22 +4405,22 @@ export function EnvAIPage() {
             setDeleteOpen(open);
             if (!open) setDeleteForce(false);
           }}
-          title="Delete Chat"
-          confirmText={deleteForce() ? 'Force Delete' : 'Delete'}
+          title={i18n.t('flowerChat.dialogs.deleteChatTitle')}
+          confirmText={deleteForce() ? i18n.t('flowerChat.dialogs.forceDelete') : i18n.t('common.actions.delete')}
           variant="destructive"
           loading={deleting()}
           onConfirm={() => void doDelete()}
         >
           <div class="space-y-2">
             <p class="text-sm">
-              Delete <span class="font-semibold">"{ai.activeThreadTitle()}"</span>?
+              {i18n.t('flowerChat.dialogs.deletePromptPrefix')} <span class="font-semibold">"{ai.activeThreadTitle()}"</span>?
             </p>
             <Show when={deleteForce()}>
               <p class="text-xs text-muted-foreground">
-                This chat is running. Deleting will stop the run and delete the thread.
+                {i18n.t('flowerChat.dialogs.runningDeleteWarning')}
               </p>
             </Show>
-            <p class="text-xs text-muted-foreground">This cannot be undone.</p>
+            <p class="text-xs text-muted-foreground">{i18n.t('flowerChat.dialogs.cannotUndo')}</p>
           </div>
         </ConfirmDialog>
       </ChatProvider>

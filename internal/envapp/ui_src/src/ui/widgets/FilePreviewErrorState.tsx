@@ -13,6 +13,7 @@ import {
 
 import type { FilePreviewErrorType } from './filePreviewErrorUtils';
 import { getFilePreviewErrorMeta } from './filePreviewErrorUtils';
+import { useI18n } from '../i18n';
 
 export type { FilePreviewErrorType } from './filePreviewErrorUtils';
 
@@ -43,8 +44,10 @@ async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
+  const i18n = useI18n();
   const meta = () => getFilePreviewErrorMeta(props.errorType);
-  const resolvedDescription = () => props.description || meta().description;
+  const resolvedTitle = () => i18n.t(meta().titleKey);
+  const resolvedDescription = () => props.description || i18n.t(meta().descriptionKey);
   const resolvedMessage = () => (props.message ?? '').trim();
   const [detailsOpen, setDetailsOpen] = createSignal(false);
   const [copied, setCopied] = createSignal(false);
@@ -55,7 +58,7 @@ export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
   };
 
   const handleCopy = async () => {
-    const text = [meta().title, resolvedMessage() || resolvedDescription()]
+    const text = [resolvedTitle(), resolvedMessage() || resolvedDescription()]
       .filter(Boolean)
       .join(': ');
     const ok = await copyToClipboard(text);
@@ -70,14 +73,14 @@ export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
         {renderIcon()}
       </div>
 
-      <div class="mt-4 text-sm font-semibold">{meta().title}</div>
+      <div class="mt-4 text-sm font-semibold">{resolvedTitle()}</div>
 
       <Show when={resolvedDescription()}>
         <div class="mt-1 max-w-md text-xs text-muted-foreground">{resolvedDescription()}</div>
       </Show>
 
       <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
-        <Show when={resolvedMessage() || meta().title}>
+        <Show when={resolvedMessage() || resolvedTitle()}>
           <button
             type="button"
             class={[
@@ -92,9 +95,9 @@ export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
               when={copied()}
               fallback={<Copy class="h-3 w-3" />}
             >
-              <span class="text-[11px] font-medium text-primary">Copied</span>
+              <span class="text-[11px] font-medium text-primary">{i18n.t('chatChrome.copied')}</span>
             </Show>
-            <span>Copy error details</span>
+            <span>{i18n.t('filePreview.copyErrorDetails')}</span>
           </button>
         </Show>
 
@@ -109,7 +112,7 @@ export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
             ].join(' ')}
             onClick={() => props.onRetry?.()}
           >
-            Retry
+            {i18n.t('chatChrome.retry')}
           </button>
         </Show>
       </div>
@@ -128,7 +131,7 @@ export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
           <Show when={detailsOpen()} fallback={<ChevronRight class="h-3 w-3" />}>
             <ChevronDown class="h-3 w-3" />
           </Show>
-          Technical details
+          {i18n.t('filePreview.technicalDetails')}
         </button>
 
         <Show when={detailsOpen()}>

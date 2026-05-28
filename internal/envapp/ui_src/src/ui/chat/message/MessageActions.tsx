@@ -5,6 +5,7 @@ import type { Component } from 'solid-js';
 import { useChatContext } from '../ChatProvider';
 import type { Message } from '../types';
 import { writeTextToClipboard } from '../../utils/clipboard';
+import { useI18n } from '../../i18n';
 
 export interface MessageActionsProps {
   message: Message;
@@ -40,6 +41,7 @@ function extractTextContent(message: Message): string {
 
 export const MessageActions: Component<MessageActionsProps> = (props) => {
   const ctx = useChatContext();
+  const i18n = useI18n();
   const [copied, setCopied] = createSignal(false);
   let copiedResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
 
@@ -85,8 +87,8 @@ export const MessageActions: Component<MessageActionsProps> = (props) => {
         class="chat-message-action-btn chat-message-action-btn-icon-only chat-message-action-copy"
         classList={{ 'chat-message-action-btn-copied': copied() }}
         onClick={handleCopy}
-        title={copied() ? 'Copied!' : 'Copy'}
-        aria-label={copied() ? 'Copied' : 'Copy message'}
+        title={copied() ? i18n.t('chatChrome.copiedBang') : i18n.t('chatChrome.copy')}
+        aria-label={copied() ? i18n.t('chatChrome.copied') : i18n.t('chatChrome.copyMessage')}
       >
         <Show when={copied()} fallback={<CopyIcon />}>
           <CheckIcon />
@@ -98,8 +100,8 @@ export const MessageActions: Component<MessageActionsProps> = (props) => {
           type="button"
           class="chat-message-action-btn chat-message-action-btn-icon-only chat-message-action-retry"
           onClick={handleRetry}
-          title="Retry"
-          aria-label="Retry message"
+          title={i18n.t('chatChrome.retry')}
+          aria-label={i18n.t('chatChrome.retryMessage')}
         >
           <RetryIcon />
         </button>

@@ -87,6 +87,8 @@ vi.mock('./services/terminalSessions', () => ({
 vi.mock('./services/uiStorage', () => ({
   createUIStorageAdapter: () => ({}),
   isDesktopStateStorageAvailable: () => false,
+  readUIStorageItem: () => null,
+  writeUIStorageItem: vi.fn(),
 }));
 
 vi.mock('./services/desktopTheme', () => ({

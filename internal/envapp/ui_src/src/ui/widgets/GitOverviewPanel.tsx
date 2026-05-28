@@ -6,10 +6,11 @@ import type {
   GitListWorkspaceChangesResponse,
   GitRepoSummaryResponse,
 } from '../protocol/redeven_v1';
-import { branchDisplayName, branchStatusSummary, compareHeadline, describeGitHead, summarizeWorkspaceCount } from '../utils/gitWorkbench';
+import { branchDisplayName, branchStatusSummary, describeGitHead, summarizeWorkspaceCount } from '../utils/gitWorkbench';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { gitCompareTone } from './GitChrome';
 import { GitSection, GitStatStrip, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { useI18n, type I18nHelpers } from '../i18n';
 
 export interface GitOverviewPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
@@ -27,12 +28,23 @@ function summaryValue(value: unknown, fallback = '—'): string {
   return text || fallback;
 }
 
+function compareHeadline(compare: GitGetBranchCompareResponse | null | undefined, i18n: I18nHelpers): string {
+  if (!compare) return i18n.t('git.overview.selectBranchesForCompare');
+  const ahead = Number(compare.targetAheadCount ?? 0);
+  const behind = Number(compare.targetBehindCount ?? 0);
+  if (ahead <= 0 && behind <= 0) return i18n.t('git.overview.compareMatches');
+  if (ahead > 0 && behind <= 0) return i18n.tn('git.overview.compareAhead', ahead);
+  if (behind > 0 && ahead <= 0) return i18n.tn('git.overview.compareBehind', behind);
+  return i18n.t('git.overview.compareDiverged', { ahead, behind });
+}
+
 export function GitOverviewPanel(props: GitOverviewPanelProps) {
+  const i18n = useI18n();
   return (
     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4">
-      <Show when={!props.summaryLoading} fallback={<div class="text-xs text-muted-foreground">Loading repository summary...</div>}>
+      <Show when={!props.summaryLoading} fallback={<div class="text-xs text-muted-foreground">{i18n.t('git.overview.loadingRepositorySummary')}</div>}>
         <Show when={!props.summaryError} fallback={<div class="text-xs break-words text-error">{props.summaryError}</div>}>
-          <Show when={props.repoSummary} fallback={<div class="text-xs text-muted-foreground">Repository summary is unavailable.</div>}>
+          <Show when={props.repoSummary} fallback={<div class="text-xs text-muted-foreground">{i18n.t('git.overview.repositorySummaryUnavailable')}</div>}>
             {(summaryAccessor) => {
               const summary = summaryAccessor();
               const workspaceSummary = props.workspace?.summary ?? summary.workspaceSummary;
@@ -42,49 +54,49 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
               const compareTone = () => gitCompareTone(props.compare?.targetAheadCount, props.compare?.targetBehindCount);
               const headDisplay = describeGitHead(summary);
               const repoSignals = () => [
-                { label: 'Head', value: headDisplay.label, tone: headDisplay.detached ? 'warning' as const : 'brand' as const },
-                headDisplay.detail ? { label: 'Commit', value: headDisplay.detail, tone: 'neutral' as const } : null,
-                summary.upstreamRef ? { label: 'Upstream', value: summary.upstreamRef, tone: 'violet' as const } : null,
+                { label: i18n.t('git.common.head'), value: headDisplay.label, tone: headDisplay.detached ? 'warning' as const : 'brand' as const },
+                headDisplay.detail ? { label: i18n.t('git.common.commit'), value: headDisplay.detail, tone: 'neutral' as const } : null,
+                summary.upstreamRef ? { label: i18n.t('git.common.upstream'), value: summary.upstreamRef, tone: 'violet' as const } : null,
                 summary.isWorktree
-                  ? { label: 'Checkout', value: 'Linked worktree', tone: 'info' as const }
-                  : { label: 'Checkout', value: 'Primary checkout', tone: 'neutral' as const },
-                { label: 'Stashes', value: String(summary.stashCount ?? 0), tone: 'neutral' as const },
-                { label: 'Context', value: summaryValue(props.currentPath, '/'), tone: 'info' as const },
+                  ? { label: i18n.t('git.common.checkout'), value: i18n.t('git.overview.linkedWorktree'), tone: 'info' as const }
+                  : { label: i18n.t('git.common.checkout'), value: i18n.t('git.overview.primaryCheckout'), tone: 'neutral' as const },
+                { label: i18n.t('git.common.stashes'), value: String(summary.stashCount ?? 0), tone: 'neutral' as const },
+                { label: i18n.t('git.common.context'), value: summaryValue(props.currentPath, '/'), tone: 'info' as const },
               ].filter(Boolean) as { label: string; value: string; tone: 'neutral' | 'info' | 'brand' | 'warning' | 'violet' }[];
 
               return (
                 <div class="space-y-1.5 sm:space-y-2">
                   <GitSection
-                    label="Workspace Summary"
-                    description={workspaceCount > 0 ? 'Files need review.' : 'Working tree is clean.'}
-                    aside={workspaceCount > 0 ? `${workspaceCount} open` : 'Clean'}
+                    label={i18n.t('git.overview.workspaceSummary')}
+                    description={workspaceCount > 0 ? i18n.t('git.overview.filesNeedReview') : i18n.t('git.overview.workingTreeClean')}
+                    aside={workspaceCount > 0 ? i18n.tn('git.overview.openCount', workspaceCount) : i18n.t('git.common.clean')}
                     tone={workspaceCount > 0 ? 'warning' : 'success'}
                   >
                     <GitStatStrip
                       columnsClass="grid-cols-2 xl:grid-cols-4"
                       items={[
-                        { label: 'Staged', value: String(workspaceSummary?.stagedCount ?? 0) },
-                        { label: 'Unstaged', value: String(workspaceSummary?.unstagedCount ?? 0) },
-                        { label: 'Untracked', value: String(workspaceSummary?.untrackedCount ?? 0) },
-                        { label: 'Conflicted', value: String(workspaceSummary?.conflictedCount ?? 0) },
+                        { label: i18n.t('git.common.staged'), value: String(workspaceSummary?.stagedCount ?? 0) },
+                        { label: i18n.t('git.common.unstaged'), value: String(workspaceSummary?.unstagedCount ?? 0) },
+                        { label: i18n.t('git.common.untracked'), value: String(workspaceSummary?.untrackedCount ?? 0) },
+                        { label: i18n.t('git.common.conflicted'), value: String(workspaceSummary?.conflictedCount ?? 0) },
                       ]}
                     />
                     <GitSubtleNote class="mt-2">
                       {workspaceCount > 0
-                        ? 'Review staged, unstaged, untracked, and conflicted files from the Git sidebar.'
-                        : 'No workspace changes are blocking the current review flow.'}
+                        ? i18n.t('git.overview.reviewWorkspaceFromSidebar')
+                        : i18n.t('git.overview.noWorkspaceBlockingReview')}
                     </GitSubtleNote>
                   </GitSection>
 
                   <GitSection
-                    label="Selected Branch"
-                    description={props.selectedBranch ? 'Branch context stays visible while you inspect compare details.' : 'Choose a branch from the sidebar to load compare context.'}
+                    label={i18n.t('git.overview.selectedBranch')}
+                    description={props.selectedBranch ? i18n.t('git.overview.branchContextVisible') : i18n.t('git.overview.chooseBranchToLoadCompare')}
                     aside={`↑${summary.aheadCount ?? 0} ↓${summary.behindCount ?? 0}`}
                     tone={props.selectedBranch ? 'violet' : 'neutral'}
                   >
-                    <div class="text-xs font-medium text-foreground">{props.selectedBranch ? branchDisplayName(props.selectedBranch) : 'Choose a branch'}</div>
+                    <div class="text-xs font-medium text-foreground">{props.selectedBranch ? branchDisplayName(props.selectedBranch) : i18n.t('git.overview.chooseBranch')}</div>
                     <div class="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                      {props.selectedBranch ? branchStatusSummary(props.selectedBranch) : 'Branch compare details appear here after you pick a branch from the sidebar.'}
+                      {props.selectedBranch ? branchStatusSummary(props.selectedBranch) : i18n.t('git.overview.branchCompareAppears')}
                     </div>
                     <Show when={props.selectedBranch?.subject}>
                       <GitSubtleNote class="mt-2 text-foreground">{props.selectedBranch?.subject}</GitSubtleNote>
@@ -93,16 +105,16 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                       class="mt-2"
                       columnsClass="grid-cols-2"
                       items={[
-                        { label: 'Local branches', value: String(localBranches) },
-                        { label: 'Remote branches', value: String(remoteBranches) },
+                        { label: i18n.t('git.common.localBranches'), value: String(localBranches) },
+                        { label: i18n.t('git.common.remoteBranches'), value: String(remoteBranches) },
                       ]}
                     />
                   </GitSection>
 
                   <GitSection
-                    label="Repository Signals"
-                    description="Fast repo context without leaving the current view."
-                    aside={`${repoSignals().length} signals`}
+                    label={i18n.t('git.overview.repositorySignals')}
+                    description={i18n.t('git.overview.repositorySignalsDescription')}
+                    aside={i18n.tn('git.common.signalCount', repoSignals().length)}
                     tone="info"
                   >
                     <div class="space-y-0.5 rounded-md bg-muted/[0.12] p-0.5">
@@ -118,22 +130,22 @@ export function GitOverviewPanel(props: GitOverviewPanelProps) {
                   </GitSection>
 
                   <GitSection
-                    label="Compare Snapshot"
-                    description={compareHeadline(props.compare)}
-                    aside={props.compare ? `${props.compare.commits.length} commits · ${props.compare.files.length} files` : undefined}
+                    label={i18n.t('git.overview.compareSnapshot')}
+                    description={compareHeadline(props.compare, i18n)}
+                    aside={props.compare ? `${i18n.tn('git.common.commitCount', props.compare.commits.length)} · ${i18n.tn('git.common.fileCount', props.compare.files.length)}` : undefined}
                     tone={compareTone()}
                   >
-                    <Show when={props.compare} fallback={<div class="text-[11px] text-muted-foreground">Choose a branch from the sidebar to load compare details.</div>}>
+                    <Show when={props.compare} fallback={<div class="text-[11px] text-muted-foreground">{i18n.t('git.overview.chooseBranchToLoadDetails')}</div>}>
                       {(compareAccessor) => {
                         const compare = compareAccessor();
                         return (
                           <GitStatStrip
                             columnsClass="grid-cols-2 lg:grid-cols-4"
                             items={[
-                              { label: 'Base', value: compare.baseRef },
-                              { label: 'Target', value: compare.targetRef },
-                              { label: 'Ahead / Behind', value: `↑${compare.targetAheadCount ?? 0} ↓${compare.targetBehindCount ?? 0}` },
-                              { label: 'Merge base', value: compare.mergeBase ? compare.mergeBase.slice(0, 7) : '—' },
+                              { label: i18n.t('git.common.base'), value: compare.baseRef },
+                              { label: i18n.t('git.common.target'), value: compare.targetRef },
+                              { label: i18n.t('git.common.aheadBehind'), value: `↑${compare.targetAheadCount ?? 0} ↓${compare.targetBehindCount ?? 0}` },
+                              { label: i18n.t('git.common.mergeBase'), value: compare.mergeBase ? compare.mergeBase.slice(0, 7) : '—' },
                             ]}
                           />
                         );

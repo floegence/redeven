@@ -3,6 +3,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Send } from '@floegence/floe-webapp-core/icons';
 import { Select } from '@floegence/floe-webapp-core/ui';
 
+import { useI18n } from '../i18n';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { shouldSubmitOnEnterKeydown } from '../utils/shouldSubmitOnEnterKeydown';
 import {
@@ -12,6 +13,7 @@ import {
 } from './composerController';
 import {
   filterCodexSlashCommands,
+  localizedCodexSlashCommandDescription,
   type CodexSlashCommandSpec,
 } from './composerCommands';
 import {
@@ -95,6 +97,7 @@ function AttachmentCard(props: {
   attachment: CodexComposerAttachmentDraft;
   onRemove: (attachmentID: string) => void;
 }) {
+  const i18n = useI18n();
   return (
     <div class="codex-chat-attachment-card">
       <img
@@ -113,8 +116,8 @@ function AttachmentCard(props: {
         type="button"
         class="codex-chat-attachment-remove"
         onClick={() => props.onRemove(props.attachment.id)}
-        aria-label={`Remove ${props.attachment.name}`}
-        title={`Remove ${props.attachment.name}`}
+        aria-label={i18n.t('codex.composer.removeAttachment', { name: props.attachment.name })}
+        title={i18n.t('codex.composer.removeAttachment', { name: props.attachment.name })}
       >
         ×
       </button>
@@ -126,6 +129,7 @@ function MentionChip(props: {
   mention: CodexComposerMentionDraft;
   onRemove: (mentionID: string) => void;
 }) {
+  const i18n = useI18n();
   return (
     <div class="codex-chat-mention-chip">
       <span class="codex-chat-mention-chip-kicker">@</span>
@@ -137,8 +141,8 @@ function MentionChip(props: {
         type="button"
         class="codex-chat-mention-chip-remove"
         onClick={() => props.onRemove(props.mention.id)}
-        aria-label={`Remove ${props.mention.name}`}
-        title={`Remove ${props.mention.name}`}
+        aria-label={i18n.t('codex.composer.removeMention', { name: props.mention.name })}
+        title={i18n.t('codex.composer.removeMention', { name: props.mention.name })}
       >
         ×
       </button>
@@ -181,6 +185,7 @@ export function CodexComposerShell(props: {
   onQueue: () => void;
   onStop: () => void;
 }) {
+  const i18n = useI18n();
   const rpc = useRedevenRpc();
   const fileIndex = createCodexComposerFileIndex({
     listDirectory: async (path) => {
@@ -386,37 +391,37 @@ export function CodexComposerShell(props: {
   const popupAriaLabel = createMemo(() => {
     switch (popupKind()) {
       case 'file-mentions':
-        return 'File reference suggestions';
+        return i18n.t('codex.composer.fileReferenceSuggestions');
       case 'slash-parameter-options': {
         const control = activeSlashParameterControl();
-        return control ? `${control.label} options` : 'Command parameter options';
+        return control ? i18n.t('codex.composer.optionsForControl', { label: control.label }) : i18n.t('codex.composer.commandParameterOptions');
       }
       case 'slash-commands':
       default:
-        return 'Command suggestions';
+        return i18n.t('codex.composer.commandSuggestions');
     }
   });
 
   const primaryActionAriaLabel = () => (
     props.primaryActionKind === 'stop'
-      ? 'Stop active Codex turn'
+      ? i18n.t('codex.composer.stopActiveTurn')
       : props.primaryActionKind === 'queue'
-      ? 'Queue next Codex turn'
-      : 'Send to Codex'
+      ? i18n.t('codex.composer.queueNextTurn')
+      : i18n.t('codex.composer.sendToCodex')
   );
   const primaryActionIsStop = () => props.primaryActionKind === 'stop';
   const canOpenWorkingDirPicker = () => props.hostAvailable && !props.workingDirDisabled && !props.workingDirLocked;
   const workingDirChipTitle = () => {
-    const absolutePath = String(props.workingDirTitle ?? '').trim() || 'Working directory';
+    const absolutePath = String(props.workingDirTitle ?? '').trim() || i18n.t('codex.common.workingDirectory');
     if (!props.hostAvailable) {
       return statusNote() || absolutePath;
     }
     if (props.workingDirLocked) {
-      return `${absolutePath} (locked to this thread)`;
+      return i18n.t('codex.composer.lockedToThisThread', { path: absolutePath });
     }
     return absolutePath;
   };
-  const workingDirChipLabel = () => String(props.workingDirLabel ?? '').trim() || compactPathLabel(props.workingDirPath, 'Working dir');
+  const workingDirChipLabel = () => String(props.workingDirLabel ?? '').trim() || compactPathLabel(props.workingDirPath, i18n.t('codex.common.workingDir'));
   const slashParameterOptionDetail = (option: CodexComposerControlOption) => {
     const description = String(option.description ?? '').trim();
     if (description) return description;
@@ -427,18 +432,17 @@ export function CodexComposerShell(props: {
   };
   const statusNote = () => {
     if (!props.hostAvailable) {
-      return String(props.hostDisabledReason ?? '').trim() || 'Install `codex` on the host to enable Codex chat.';
+      return String(props.hostDisabledReason ?? '').trim() || i18n.t('codex.composer.installHostToEnable');
     }
     if (props.attachments.length > 0 && !props.supportsImages) {
-      return 'The selected model does not currently accept image input.';
+      return i18n.t('codex.composer.selectedModelNoImages');
     }
     return '';
   };
   const composerPlaceholder = () => {
-    const guidance = props.supportsImages || props.capabilitiesLoading
-      ? 'Use @ for file context, / for commands, or paste an image.'
-      : 'Use @ for file context or / for commands.';
-    return `Ask Codex to review a change, inspect a failure, summarize a diff, or plan the next step. ${guidance}`;
+    return props.supportsImages || props.capabilitiesLoading
+      ? i18n.t('codex.composer.placeholderWithImages')
+      : i18n.t('codex.composer.placeholderTextOnly');
   };
   const primaryActionDisabled = () => props.primaryActionDisabled;
   const primaryActionTitle = () => (
@@ -725,14 +729,14 @@ export function CodexComposerShell(props: {
                         onClick={() => runSlashCommand(command)}
                       >
                         <span class="codex-chat-popup-item-title">{command.title}</span>
-                        <span class="codex-chat-popup-item-detail">{command.description}</span>
+                        <span class="codex-chat-popup-item-detail">{localizedCodexSlashCommandDescription(command, i18n.t)}</span>
                       </button>
                     )}
                   </For>
                 )}>
                   <Show
                     when={slashParameterOptions().length > 0}
-                    fallback={<div class="codex-chat-popup-empty">No options are available for this command.</div>}
+                    fallback={<div class="codex-chat-popup-empty">{i18n.t('codex.composer.noOptionsAvailable')}</div>}
                   >
                     <For each={slashParameterOptions()}>
                       {(option, index) => (
@@ -762,8 +766,8 @@ export function CodexComposerShell(props: {
                   fallback={(
                     <div class="codex-chat-popup-empty">
                       {fileIndexLoading()
-                        ? 'Indexing files in the current working directory...'
-                        : 'No matching files found in the current working directory.'}
+                        ? i18n.t('codex.composer.indexingFiles')
+                        : i18n.t('codex.composer.noMatchingFiles')}
                     </div>
                   )}
                 >
@@ -792,15 +796,15 @@ export function CodexComposerShell(props: {
         </Show>
 
         <div class="codex-chat-input-meta">
-          <div class="codex-chat-input-meta-rail" role="toolbar" aria-label="Codex input controls">
+          <div class="codex-chat-input-meta-rail" role="toolbar" aria-label={i18n.t('codex.composer.inputControls')}>
             <div class="codex-chat-input-meta-group codex-chat-input-meta-group-context">
               <button
                 type="button"
                 class="codex-chat-meta-btn codex-chat-attachment-trigger"
                 onClick={() => fileInputRef?.click()}
                 disabled={!props.hostAvailable || !props.supportsImages}
-                aria-label="Add attachments"
-                title="Add attachments"
+                aria-label={i18n.t('codex.composer.addAttachments')}
+                title={i18n.t('codex.composer.addAttachments')}
               >
                 <PaperclipIcon />
               </button>
@@ -834,7 +838,7 @@ export function CodexComposerShell(props: {
                 }}
                 disabled={props.workingDirDisabled}
                 title={workingDirChipTitle()}
-                aria-label={props.workingDirLocked ? 'Working directory locked' : 'Select working directory'}
+                aria-label={props.workingDirLocked ? i18n.t('codex.composer.workingDirectoryLocked') : i18n.t('codex.composer.selectWorkingDirectory')}
                 aria-disabled={!canOpenWorkingDirPicker()}
                 tabIndex={canOpenWorkingDirPicker() ? 0 : -1}
               >

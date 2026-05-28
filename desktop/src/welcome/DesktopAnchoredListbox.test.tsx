@@ -63,4 +63,18 @@ describe('DesktopAnchoredListbox', () => {
     expect(geometry.placement).toBe('bottom');
     expect(geometry.maxHeight).toBe(122);
   });
+
+  it('can request a wider floating surface than the anchor', () => {
+    const geometry = resolveDesktopAnchoredListboxGeometry({
+      anchorRect: rect(120, 160, 36, 32),
+      overlayHeight: 220,
+      viewportWidth: 900,
+      viewportHeight: 700,
+      maxHeight: 320,
+      width: 288,
+    });
+
+    expect(geometry.width).toBe(288);
+    expect(geometry.left).toBe(120);
+  });
 });

@@ -12,6 +12,7 @@ import { MessageItem } from '../message/MessageItem';
 import type { Message } from '../types';
 import { captureViewportAnchor, resolveViewportAnchorScrollTop, type ViewportAnchor } from './scrollAnchor';
 import type { FollowBottomRequest } from '../scroll/createFollowBottomController';
+import { useI18n } from '../../i18n';
 
 export interface VirtualMessageListProps {
   class?: string;
@@ -81,6 +82,7 @@ const VirtualMessageRow: Component<VirtualMessageRowProps> = (props) => {
 
 export const VirtualMessageList: Component<VirtualMessageListProps> = (props) => {
   const ctx = useChatContext();
+  const i18n = useI18n();
 
   const messages = createMemo(() => ctx.messages());
   const isWorking = ctx.isWorking;
@@ -755,8 +757,10 @@ export const VirtualMessageList: Component<VirtualMessageListProps> = (props) =>
             applyFollowingMode(resolveFollowMotionMode('smooth'));
             ctx.requestScrollToBottom({ source: 'user', behavior: 'smooth', reason: 'manual' });
           }}
-          aria-label="Scroll to bottom"
-          title={pendingMessageCount() > 0 ? `${pendingMessageCount()} new messages` : 'Scroll to bottom'}
+          aria-label={i18n.t('chatActivity.scrollToBottom')}
+          title={pendingMessageCount() > 0
+            ? i18n.tn('chatActivity.newMessages', pendingMessageCount(), { count: pendingMessageCount() })
+            : i18n.t('chatActivity.scrollToBottom')}
         >
           <ChevronDownIcon />
           <Show when={pendingMessageCount() > 0}>

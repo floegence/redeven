@@ -160,11 +160,11 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.textContent).toContain('Browser Editor');
     expect(host.textContent).toContain('Shared runtime root');
     expect(host.textContent).toContain('Refresh');
-    expect(host.textContent).toContain('Update browser editor');
+    expect(host.textContent).toContain('Update Browser Editor');
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
     expect(tooltipContents).toContain('Re-scan the Browser Editor inventory and active runtime.');
-    expect(tooltipContents).toContain('Update the Browser Editor runtime.');
+    expect(tooltipContents).toContain('Download and send the latest Browser Editor package to the connected environment.');
   });
 
   it('shows Browser Editor setup copy when no managed versions are installed', () => {
@@ -189,20 +189,20 @@ describe('CodeRuntimeSettingsCard', () => {
     });
 
     expect(host.textContent).toContain('Browser Editor setup required');
-    expect(host.textContent).toContain('Set up browser editor');
+    expect(host.textContent).toContain('Set up Browser Editor');
   });
 
   it('opens the Browser Editor update confirmation and calls the prepare action', () => {
     const onPrepare = vi.fn(async () => undefined);
     renderCard(host, { onPrepare });
 
-    const prepareButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Update browser editor');
+    const prepareButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Update Browser Editor');
     prepareButton?.click();
 
-    expect(host.textContent).toContain('Update browser editor');
+    expect(host.textContent).toContain('Update Browser Editor');
     expect(host.textContent).toContain('Redeven Desktop will update the Browser Editor');
 
-    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Update browser editor').at(-1);
+    const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Update Browser Editor').at(-1);
     confirmButton?.click();
 
     expect(onPrepare).toHaveBeenCalledTimes(1);

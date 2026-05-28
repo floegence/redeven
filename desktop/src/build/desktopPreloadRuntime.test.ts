@@ -152,6 +152,24 @@ ipcMain.on('redeven-desktop:theme-set-source', (event, nextSource) => {
   event.returnValue = buildThemeSnapshot();
 });
 
+ipcMain.on('redeven-desktop:language-get-snapshot', (event) => {
+  event.returnValue = {
+    preference: 'system',
+    resolved_locale: 'en-US',
+    source: 'fallback',
+    system_candidates: [],
+  };
+});
+
+ipcMain.on('redeven-desktop:language-set-preference', (event, preference) => {
+  event.returnValue = {
+    preference,
+    resolved_locale: preference === 'system' ? 'en-US' : preference,
+    source: preference === 'system' ? 'fallback' : 'explicit',
+    system_candidates: [],
+  };
+});
+
 ipcMain.on('redeven-desktop:window-chrome-get-snapshot', (event) => {
   event.returnValue = {
     mode: 'hidden-inset',
@@ -210,6 +228,10 @@ function snapshotBridgeState() {
       && typeof window.redevenDesktopTheme?.getSnapshot === 'function'
       && typeof window.redevenDesktopTheme?.setSource === 'function'
       && typeof window.redevenDesktopTheme?.subscribe === 'function',
+    hasDesktopLanguageBridge: typeof window.redevenDesktopLanguage === 'object'
+      && typeof window.redevenDesktopLanguage?.getSnapshot === 'function'
+      && typeof window.redevenDesktopLanguage?.setPreference === 'function'
+      && typeof window.redevenDesktopLanguage?.subscribe === 'function',
     hasDesktopWindowChromeBridge: typeof window.redevenDesktopWindowChrome === 'object'
       && typeof window.redevenDesktopWindowChrome?.getSnapshot === 'function'
       && typeof window.redevenDesktopWindowChrome?.subscribe === 'function',
@@ -262,6 +284,7 @@ app.whenReady().then(async () => {
         hasDesktopCodeWorkspaceBridge: boolean;
         hasStateStorageBridge: boolean;
         hasDesktopThemeBridge: boolean;
+        hasDesktopLanguageBridge: boolean;
         hasDesktopWindowChromeBridge: boolean;
       };
       child: {
@@ -274,6 +297,7 @@ app.whenReady().then(async () => {
         hasDesktopCodeWorkspaceBridge: boolean;
         hasStateStorageBridge: boolean;
         hasDesktopThemeBridge: boolean;
+        hasDesktopLanguageBridge: boolean;
         hasDesktopWindowChromeBridge: boolean;
       };
     };
@@ -310,6 +334,7 @@ app.whenReady().then(async () => {
     expect(utility.main.hasDesktopCodeWorkspaceBridge).toBe(false);
     expect(utility.main.hasStateStorageBridge).toBe(true);
     expect(utility.main.hasDesktopThemeBridge).toBe(true);
+    expect(utility.main.hasDesktopLanguageBridge).toBe(true);
     expect(utility.main.hasDesktopWindowChromeBridge).toBe(true);
     expect(utility.child).toEqual(utility.main);
 
@@ -323,6 +348,7 @@ app.whenReady().then(async () => {
     expect(session.main.hasDesktopCodeWorkspaceBridge).toBe(true);
     expect(session.main.hasStateStorageBridge).toBe(true);
     expect(session.main.hasDesktopThemeBridge).toBe(true);
+    expect(session.main.hasDesktopLanguageBridge).toBe(true);
     expect(session.main.hasDesktopWindowChromeBridge).toBe(true);
     expect(session.child).toEqual(session.main);
   }, electronRuntimeIntegrationTimeoutMs);

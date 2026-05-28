@@ -2,6 +2,7 @@ import { Show, createEffect, onCleanup } from 'solid-js';
 import { deferAfterPaint, useViewActivation } from '@floegence/floe-webapp-core';
 
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+import { useI18n } from '../i18n';
 import { useCodexContext } from './CodexProvider';
 import { CodexPageShell } from './CodexPageShell';
 
@@ -19,6 +20,7 @@ function useCodexViewActivation() {
 
 export function CodexPage() {
   const codex = useCodexContext();
+  const i18n = useI18n();
   const viewActivation = useCodexViewActivation();
 
   createEffect(() => {
@@ -46,7 +48,7 @@ export function CodexPage() {
   return (
     <div class="relative flex h-full min-h-0 flex-col">
       <Show when={codex.statusLoading()}>
-        <RedevenLoadingCurtain visible eyebrow="Codex" message="Loading Codex..." />
+        <RedevenLoadingCurtain visible eyebrow={i18n.t('codex.title')} message={i18n.t('codex.loading')} />
       </Show>
       <CodexPageShell />
     </div>

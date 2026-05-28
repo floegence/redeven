@@ -1,6 +1,8 @@
 import {
+  runtimeServiceWorkloadCounts,
   runtimeServiceAllowsOpenAttempt,
   type RuntimeServiceSnapshot,
+  type RuntimeServiceWorkload,
 } from './runtimeService';
 
 export type DesktopRuntimeStatus = 'online' | 'offline';
@@ -28,6 +30,7 @@ export type DesktopRuntimeMaintenanceRequirement = Readonly<{
   can_desktop_restart: boolean;
   has_active_work: boolean;
   active_work_label: string;
+  active_workload?: RuntimeServiceWorkload;
   current_runtime_version?: string;
   target_runtime_version?: string;
   attach_state?: string;
@@ -78,6 +81,13 @@ function compact(value: unknown): string {
 function normalizeOptionalInteger(value: unknown): number | undefined {
   const numberValue = Number(value ?? Number.NaN);
   return Number.isInteger(numberValue) ? numberValue : undefined;
+}
+
+function normalizeOptionalWorkload(value: unknown): RuntimeServiceWorkload | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  return runtimeServiceWorkloadCounts({ active_workload: value } as RuntimeServiceSnapshot);
 }
 
 function normalizeMaintenanceKind(value: unknown): DesktopRuntimeMaintenanceKind | null {
@@ -143,6 +153,7 @@ export function normalizeDesktopRuntimeMaintenanceRequirement(
   const message = compact(record.message);
   const attachState = compact(record.attach_state);
   const failureCode = compact(record.failure_code);
+  const activeWorkload = normalizeOptionalWorkload(record.active_workload);
   return {
     kind,
     required_for: normalizeRequiredFor(record.required_for),
@@ -151,6 +162,7 @@ export function normalizeDesktopRuntimeMaintenanceRequirement(
     can_desktop_restart: record.can_desktop_restart === true,
     has_active_work: record.has_active_work === true,
     active_work_label: activeWorkLabel || 'No active work',
+    ...(activeWorkload ? { active_workload: activeWorkload } : {}),
     current_runtime_version: compact(record.current_runtime_version) || undefined,
     target_runtime_version: compact(record.target_runtime_version) || undefined,
     attach_state: attachState || undefined,
@@ -183,6 +195,7 @@ export function buildDesktopRuntimeMaintenanceRequirement(
     can_desktop_restart?: boolean;
     has_active_work?: boolean;
     active_work_label?: string;
+    active_workload?: RuntimeServiceWorkload;
     current_runtime_version?: string;
     target_runtime_version?: string;
     attach_state?: string;
@@ -206,6 +219,7 @@ export function buildDesktopRuntimeMaintenanceRequirement(
     can_desktop_restart: input.can_desktop_restart === true,
     has_active_work: hasActiveWork,
     active_work_label: activeWorkLabel || (hasActiveWork ? 'Existing runtime work may be active' : 'No active work'),
+    ...(input.active_workload ? { active_workload: runtimeServiceWorkloadCounts({ active_workload: input.active_workload } as RuntimeServiceSnapshot) } : {}),
     current_runtime_version: currentRuntimeVersion || undefined,
     target_runtime_version: targetRuntimeVersion || undefined,
     attach_state: attachState || undefined,

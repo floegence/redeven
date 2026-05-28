@@ -77,6 +77,7 @@ import { createTerminalTabActivityTracker, type TerminalSessionWorkState, type T
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
+import { useI18n } from '../i18n';
 
 type session_loading_state = 'idle' | 'initializing' | 'attaching' | 'loading_history';
 type pending_terminal_session_status = 'creating' | 'failed';
@@ -378,12 +379,12 @@ function buildTerminalSelectionSnapshot(sessionId: string, core: TerminalCore | 
   };
 }
 
-function buildTerminalSessionLabel(session: TerminalSessionInfo, index: number): string {
-  return session.name?.trim() ? session.name.trim() : `Terminal ${index + 1}`;
+function buildTerminalSessionLabel(session: TerminalSessionInfo, fallbackLabel: string): string {
+  return session.name?.trim() ? session.name.trim() : fallbackLabel;
 }
 
-function buildPendingTerminalSessionLabel(session: pending_terminal_session): string {
-  return session.name?.trim() ? session.name.trim() : 'Terminal';
+function buildPendingTerminalSessionLabel(session: pending_terminal_session, fallbackLabel: string): string {
+  return session.name?.trim() ? session.name.trim() : fallbackLabel;
 }
 
 function buildTerminalPanelTitle(session: TerminalSessionInfo | null): string {
@@ -635,6 +636,7 @@ const PendingTerminalTabStatusIcon = (props: { status: pending_terminal_session_
 };
 
 function TerminalCreatingPane() {
+  const i18n = useI18n();
   return (
     <div
       class="redeven-loading-curtain redeven-terminal-loading-curtain"
@@ -645,15 +647,15 @@ function TerminalCreatingPane() {
       data-redeven-loading-curtain-stage="creating"
     >
       <div class="redeven-loading-curtain__panel">
-        <div class="redeven-loading-curtain__eyebrow">Terminal</div>
+        <div class="redeven-loading-curtain__eyebrow">{i18n.t('terminal.creatingEyebrow')}</div>
         <div
           class="redeven-loading-curtain__indicator"
           role="progressbar"
-          aria-label="Creating terminal"
+          aria-label={i18n.t('terminal.creatingAria')}
         >
           <div class="redeven-loading-curtain__indicator-bar" />
         </div>
-        <div class="redeven-loading-curtain__message">Creating terminal...</div>
+        <div class="redeven-loading-curtain__message">{i18n.t('terminal.creatingMessage')}</div>
       </div>
     </div>
   );
@@ -711,6 +713,7 @@ const MoreVerticalIcon = (props: { class?: string }) => (
 );
 
 function TerminalSessionView(props: terminal_session_view_props) {
+  const i18n = useI18n();
   const stableSessionId = props.session.id;
   const sessionId = () => stableSessionId;
   const colors = () => props.themeColors();
@@ -725,14 +728,17 @@ function TerminalSessionView(props: terminal_session_view_props) {
   let loadingDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   const loadingMessage = createMemo(() => {
-    if (loading() === 'initializing') return 'Initializing terminal...';
-    if (loading() === 'attaching') return 'Attaching terminal...';
+    if (loading() === 'initializing') return i18n.t('terminal.initializing');
+    if (loading() === 'attaching') return i18n.t('terminal.attaching');
     if (loading() === 'loading_history') {
       const progress = historyReplayProgress();
       if (progress && progress.totalBytes > 0) {
-        return `Loading history ${formatBytes(Math.min(progress.loadedBytes, progress.totalBytes))} / ${formatBytes(progress.totalBytes)}`;
+        return i18n.t('terminal.loadingHistoryProgress', {
+          loaded: formatBytes(Math.min(progress.loadedBytes, progress.totalBytes)),
+          total: formatBytes(progress.totalBytes),
+        });
       }
-      return 'Loading history...';
+      return i18n.t('terminal.loadingHistory');
     }
     return undefined;
   });
@@ -1313,7 +1319,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
 
       <RedevenLoadingCurtain
         visible={showLoading()}
-        eyebrow="Terminal"
+        eyebrow={i18n.t('terminal.creatingEyebrow')}
         message={loadingMessage()}
         class="redeven-terminal-loading-curtain"
       />
@@ -1334,6 +1340,7 @@ function TerminalSessionView(props: terminal_session_view_props) {
 }
 
 function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
+  const i18n = useI18n();
   const variant: TerminalPanelVariant = props.variant ?? 'panel';
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -2042,7 +2049,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       await filePreview.openPreview(fileItemFromPath(target.resolvedPath));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      notify.error('Failed to open file preview', message || 'Could not open the terminal file reference.');
+      notify.error(i18n.t('terminal.failedToOpenFilePreviewTitle'), message || i18n.t('terminal.couldNotOpenFileReference'));
     }
   };
 
@@ -2122,7 +2129,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     const pending = activePendingSession();
     if (!pending) return '';
-    return pending.status === 'failed' ? 'Creation failed' : 'Creating terminal';
+    return pending.status === 'failed' ? i18n.t('terminal.creationFailedStatus') : i18n.t('terminal.creatingStatus');
   });
 
   const shouldRestoreTerminalFocus = () => {
@@ -2469,7 +2476,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const createPendingSession = (name: string | undefined, workingDir: string): pending_terminal_session => {
     const pendingSession: pending_terminal_session = {
       id: createClientId('pending-terminal'),
-      name: String(name ?? '').trim() || 'Terminal',
+      name: String(name ?? '').trim() || i18n.t('terminal.title'),
       workingDir: normalizeAskFlowerAbsolutePath(String(workingDir ?? '').trim()) || agentHomePathAbs() || '',
       visibleSessionIdsAtCreate: sessions().map((session) => session.id),
       status: 'creating',
@@ -2503,7 +2510,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         return {
           ...session,
           status: 'failed' as const,
-          errorMessage: String(errorMessage ?? '').trim() || 'Terminal session could not be created.',
+          errorMessage: String(errorMessage ?? '').trim() || i18n.t('terminal.sessionCouldNotBeCreated'),
         };
       });
       return updated ? next : previous;
@@ -2537,7 +2544,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (disposed || !pendingTerminalSessionById(pendingSession.id)) return null;
     try {
       const sessionId = await createPanelSession(name, pendingSession.workingDir);
-      if (!sessionId) throw new Error('Invalid create response');
+      if (!sessionId) throw new Error(i18n.t('terminal.invalidCreateResponse'));
       resolvePendingSession(pendingSession.id, sessionId);
       return sessionId;
     } catch (e) {
@@ -2576,7 +2583,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!workingDir) {
       lastHandledOpenSessionRequestId = requestId;
       props.onOpenSessionRequestHandled?.(requestId);
-      setError('Invalid working directory.');
+      setError(i18n.t('terminal.invalidWorkingDirectory'));
       return;
     }
 
@@ -2780,13 +2787,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const tabStates = tabVisualStateBySession();
     const sessionTabs = list.map((s, index) => ({
       id: s.id,
-      label: buildTerminalSessionLabel(s, index),
+      label: buildTerminalSessionLabel(s, i18n.t('terminal.terminalName', { index: index + 1 })),
       icon: <TerminalTabStatusIcon state={tabStates[s.id] ?? 'none'} />,
       closable: true,
     }));
     const pendingTabs = visiblePendingTerminalSessions().map((session) => ({
       id: session.id,
-      label: buildPendingTerminalSessionLabel(session),
+      label: buildPendingTerminalSessionLabel(session, i18n.t('terminal.title')),
       icon: <PendingTerminalTabStatusIcon status={session.status} />,
       closable: session.status === 'failed',
     }));
@@ -3084,14 +3091,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const moreItems = createMemo<DropdownItem[]>(() => {
-    const items: DropdownItem[] = [{ id: 'search', label: 'Search' }];
+    const items: DropdownItem[] = [{ id: 'search', label: i18n.t('terminal.search') }];
     if (isMobileLayout() && mobileInputMode() === 'floe') {
       items.push({
         id: mobileKeyboardVisible() ? 'hide_floe_keyboard' : 'show_floe_keyboard',
-        label: mobileKeyboardVisible() ? 'Hide Floe Keyboard' : 'Show Floe Keyboard',
+        label: mobileKeyboardVisible() ? i18n.t('terminal.hideFloeKeyboard') : i18n.t('terminal.showFloeKeyboard'),
       });
     }
-    items.push({ id: 'settings', label: 'Terminal settings' });
+    items.push({ id: 'settings', label: i18n.t('terminal.terminalSettings') });
     return items;
   });
 
@@ -3164,14 +3171,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const result = await core.copySelection(context.source === 'shortcut' ? 'shortcut' : 'command');
     if (result.copied) return true;
     if (result.reason === 'clipboard_unavailable') {
-      throw new Error('Clipboard is unavailable.');
+      throw new Error(i18n.t('terminal.clipboardUnavailable'));
     }
     return false;
   };
 
   const notifyTerminalCopyFailure = (error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
-    notify.error('Copy failed', message || 'Failed to copy text to clipboard.');
+    notify.error(i18n.t('terminal.copyFailedTitle'), message || i18n.t('terminal.failedToCopyClipboard'));
   };
 
   const handleCopyTerminalSelection = () => {
@@ -3211,10 +3218,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         const attachmentName = `terminal-selection-${Date.now()}.txt`;
         const attachmentBlob = new Blob([trimmedSelection], { type: 'text/plain' });
         if (attachmentBlob.size > ASK_FLOWER_ATTACHMENT_MAX_BYTES) {
-          notes.push('Skipped large terminal selection attachment because it exceeds the 10 MiB upload limit.');
+          notes.push(i18n.t('terminal.largeSelectionSkipped'));
         } else {
           pendingAttachments.push(new File([attachmentBlob], attachmentName, { type: 'text/plain' }));
-          notes.push(`Large terminal selection was attached as "${attachmentName}".`);
+          notes.push(i18n.t('terminal.largeSelectionAttached', { name: attachmentName }));
         }
         contextItems = [
           {
@@ -3235,7 +3242,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         ];
       }
     } else {
-      notes.push('No terminal text selected. Added working directory context only.');
+      notes.push(i18n.t('terminal.noSelectionContextOnly'));
       contextItems = [
         {
           kind: 'terminal_selection',
@@ -3262,7 +3269,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       {
         id: 'ask-flower',
         kind: 'action',
-        label: 'Ask Flower',
+        label: i18n.t('terminal.askFlower'),
         icon: FlowerContextMenuIcon,
         onSelect: askFlowerFromTerminal,
       },
@@ -3271,7 +3278,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       primaryItems.push({
         id: 'browse-files',
         kind: 'action',
-        label: 'Browse files',
+        label: i18n.t('terminal.browseFiles'),
         icon: Folder,
         onSelect: handleBrowseFilesFromTerminal,
       });
@@ -3285,7 +3292,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     items.push({
       id: 'copy-selection',
       kind: 'action',
-      label: 'Copy selection',
+      label: i18n.t('terminal.copySelection'),
       icon: Copy,
       onSelect: handleCopyTerminalSelection,
       disabled: !menu.selection.hasSelection,
@@ -3469,7 +3476,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           when={tabItems().length > 0}
           fallback={
             <Show when={variant === 'panel'}>
-              <div class="text-xs font-medium border-b border-border pb-2">Terminal</div>
+              <div class="text-xs font-medium border-b border-border pb-2">{i18n.t('terminal.title')}</div>
             </Show>
           }
         >
@@ -3499,7 +3506,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               variant="ghost"
               onClick={createSession}
               disabled={!connected()}
-              title="New session"
+              title={i18n.t('terminal.newSession')}
             >
               <PlusIcon class="w-3.5 h-3.5" />
             </Button>
@@ -3510,17 +3517,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             onClick={handleRefresh}
             disabled={!connected() || refreshing()}
             loading={refreshing()}
-            title="Refresh"
+            title={i18n.t('terminal.refresh')}
           >
             <RefreshIcon class="w-3.5 h-3.5" />
           </Button>
           <Show when={tabItems().length > 0}>
-            <Button size="sm" variant="ghost" onClick={clearActive} disabled={!connected() || !activeSessionId()} title="Clear">
+            <Button size="sm" variant="ghost" onClick={clearActive} disabled={!connected() || !activeSessionId()} title={i18n.t('terminal.clear')}>
               <Trash class="w-3.5 h-3.5" />
             </Button>
             <Dropdown
               trigger={
-                <Button size="sm" variant="ghost" disabled={!connected()} title="More options">
+                <Button size="sm" variant="ghost" disabled={!connected()} title={i18n.t('terminal.moreOptions')}>
                   <MoreVerticalIcon class="w-3.5 h-3.5" />
                 </Button>
               }
@@ -3532,7 +3539,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         </div>
       </div>
 
-      <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">Not connected.</div>}>
+      <Show when={connected()} fallback={<div class="p-4 text-xs text-muted-foreground">{i18n.t('terminal.notConnected')}</div>}>
         <div
           ref={setTerminalContextMenuHostEl}
           data-testid="terminal-content"
@@ -3558,7 +3565,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 ref={(n) => (searchInputEl = n)}
                 size="sm"
                 value={searchQuery()}
-                placeholder="Search..."
+                placeholder={i18n.t('terminal.searchPlaceholder')}
                 class="w-[220px] bg-black/20 border-white/20 text-[#e5e7eb] placeholder:text-[#94a3b8] focus:ring-yellow-400 focus:border-yellow-400 shadow-none"
                 onInput={(e) => setSearchQuery(e.currentTarget.value)}
               />
@@ -3571,9 +3578,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
                 onClick={goPrevMatch}
                 disabled={searchResultCount() <= 0}
-                title="Previous"
+                title={i18n.t('terminal.previous')}
               >
-                Prev
+                {i18n.t('terminal.previousShort')}
               </Button>
               <Button
                 size="sm"
@@ -3581,18 +3588,18 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
                 onClick={goNextMatch}
                 disabled={searchResultCount() <= 0}
-                title="Next"
+                title={i18n.t('terminal.next')}
               >
-                Next
+                {i18n.t('terminal.next')}
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 class="text-[#e5e7eb] hover:bg-white/10 hover:text-white"
                 onClick={closeSearch}
-                title="Close"
+                title={i18n.t('terminal.close')}
               >
-                Close
+                {i18n.t('terminal.close')}
               </Button>
             </div>
           </Show>
@@ -3659,9 +3666,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                         <div class="absolute inset-0 flex items-center justify-center p-8">
                           <div class="max-w-sm text-center flex flex-col items-center gap-3">
                             <PendingTerminalTabStatusIcon status="failed" />
-                            <div class="text-sm font-medium">Terminal creation failed</div>
+                            <div class="text-sm font-medium">{i18n.t('terminal.creationFailed')}</div>
                             <div class="text-xs break-words" style={{ color: terminalThemeMutedForeground() }}>
-                              {session().errorMessage || 'Could not create this terminal session.'}
+                              {session().errorMessage || i18n.t('terminal.creationFailedMessage')}
                             </div>
                             <div class="flex items-center justify-center gap-2">
                               <Button
@@ -3674,14 +3681,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                                 }}
                                 disabled={!connected()}
                               >
-                                Retry
+                                {i18n.t('terminal.retry')}
                               </Button>
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => removePendingSession(session().id)}
                               >
-                                Dismiss
+                                {i18n.t('terminal.dismiss')}
                               </Button>
                             </div>
                           </div>
@@ -3697,8 +3704,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           <Show when={sessionsLoading() && sessions().length === 0}>
             <RedevenLoadingCurtain
               visible
-              eyebrow="Terminal"
-              message="Loading sessions..."
+              eyebrow={i18n.t('terminal.creatingEyebrow')}
+              message={i18n.t('terminal.loadingSessions')}
               class="redeven-terminal-loading-curtain"
             />
           </Show>
@@ -3709,9 +3716,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                 <div class="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
                   <Terminal class="w-5 h-5 text-muted-foreground" />
                 </div>
-                <div class="text-sm font-medium text-foreground">No terminal sessions yet</div>
+                <div class="text-sm font-medium text-foreground">{i18n.t('terminal.noSessionsTitle')}</div>
                 <div class="text-xs text-muted-foreground">
-                  Create your first terminal session to start running commands.
+                  {i18n.t('terminal.noSessionsDescription')}
                 </div>
                 <Button
                   size="lg"
@@ -3719,7 +3726,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   onClick={createSession}
                   disabled={!connected()}
                 >
-                  Create session
+                  {i18n.t('terminal.createSession')}
                 </Button>
               </div>
             </div>
@@ -3778,8 +3785,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       </Show>
       <Show when={showTerminalStatusBar()}>
         <div data-testid="terminal-status-bar" class="flex items-center justify-between px-3 py-1 border-t border-border text-[10px] text-muted-foreground">
-          <span>Session: {statusBarSessionLabel()}</span>
-          <span>History: {historyBytes() === null ? '-' : formatBytes(historyBytes() ?? 0)}</span>
+          <span>{i18n.t('terminal.statusSession')}: {statusBarSessionLabel()}</span>
+          <span>{i18n.t('terminal.statusHistory')}: {historyBytes() === null ? '-' : formatBytes(historyBytes() ?? 0)}</span>
         </div>
       </Show>
     </div>
@@ -3795,6 +3802,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 }
 
 export function TerminalPanel(props: TerminalPanelProps = {}) {
+  const i18n = useI18n();
   const protocol = useProtocol();
   const ctx = useEnvContext();
 
@@ -3823,8 +3831,8 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
       fallback={
         <PermissionEmptyState
           variant={props.variant === 'deck' || props.variant === 'workbench' ? 'workbench' : 'panel'}
-          title="Execute permission required"
-          description="Terminal is disabled because execute permission is not granted for this session."
+          title={i18n.t('terminal.executePermissionRequired')}
+          description={i18n.t('terminal.executePermissionDescription')}
         />
       }
     >

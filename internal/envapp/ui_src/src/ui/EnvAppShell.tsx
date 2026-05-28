@@ -121,7 +121,12 @@ import {
   unlockGatewayAccess,
   type GatewayAccessStatus,
 } from './services/gatewayApi';
-import { formatAccessUnlockRetryAfter, getAccessUnlockRetryAfterMs } from './services/accessUnlockError';
+import {
+  AccessUnlockError,
+  formatAccessUnlockRetryAfter,
+  getAccessUnlockRetryAfterMs,
+  isKnownAccessUnlockErrorCode,
+} from './services/accessUnlockError';
 import { clearLocalAccessResumeToken, writeLocalAccessResumeToken } from './services/localAccessAuth';
 import { getSandboxWindowInfo } from './services/sandboxWindowRegistry';
 import { consumeAccessResumeTokenFromWindow } from './accessResume';
@@ -157,6 +162,7 @@ import {
   type EnvWorkbenchHandoffAnchor,
 } from './envViewMode';
 import { EnvWorkbenchPage } from './workbench/EnvWorkbenchPage';
+import { useI18n } from './i18n';
 
 const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
 const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
@@ -195,6 +201,25 @@ function getErrorMessage(error: unknown): string {
     return String(error.message || '').trim();
   }
   return String(error ?? '').trim();
+}
+
+function localizedAccessUnlockErrorMessage(error: unknown, i18n: ReturnType<typeof useI18n>): string {
+  if (error instanceof AccessUnlockError) {
+    const code = String(error.code ?? '').trim().toUpperCase();
+    if (isKnownAccessUnlockErrorCode(code)) {
+      switch (code) {
+        case 'ACCESS_PASSWORD_INVALID':
+          return i18n.t('accessGate.errors.invalidPassword');
+        case 'ACCESS_PASSWORD_RETRY_LATER':
+          return i18n.t('accessGate.errors.retryLater');
+        case 'ACCESS_PASSWORD_REQUIRED':
+          return i18n.t('accessGate.enterPasswordToContinueError');
+        default:
+          break;
+      }
+    }
+  }
+  return getErrorMessage(error);
 }
 
 function trimString(value: unknown): string {
@@ -311,6 +336,7 @@ function AIChatProviderBridge(props: { children: any }) {
 export function EnvAppShell() {
   const layout = useLayout();
   const theme = useTheme();
+  const i18n = useI18n();
   const shellTheme = desktopThemeBridge();
   const toggleThemeWithRenderBoundary = () => {
     requestWorkbenchRenderTransaction('theme');
@@ -331,10 +357,10 @@ export function EnvAppShell() {
     rpc: () => rpc,
     canWrite: () => Boolean(env()?.permissions?.can_write),
     onSaved: (path) => {
-      notify.success('File saved', `${path} saved successfully.`);
+      notify.success(i18n.t('filePreview.savedTitle'), i18n.t('filePreview.savedMessage', { path }));
     },
     onSaveError: (path, message) => {
-      notify.error('Save failed', `${path}: ${message}`);
+      notify.error(i18n.t('filePreview.saveFailedTitle'), i18n.t('filePreview.saveFailedMessage', { path, message }));
     },
   });
   const fileBrowserSurfaceController = createFileBrowserSurfaceController();
@@ -406,6 +432,10 @@ export function EnvAppShell() {
   });
   const accessGateVisible = createMemo(() => accessGatePhase() !== 'ready');
   const accessRecoverable = createMemo(() => accessPasswordRequired() && !accessPending() && !accessLocked());
+  const accessRetryDuration = () => formatAccessUnlockRetryAfter(accessRetryRemainingMs(), {
+    minute: i18n.t('accessGate.minuteAbbreviation'),
+    second: i18n.t('accessGate.secondAbbreviation'),
+  });
 
   const setCurrentAccessPassword = (value: string) => {
     if (isLocalMode()) {
@@ -483,11 +513,11 @@ export function EnvAppShell() {
   const handleAccessRecoveryFailure = (error: unknown) => {
     const message = getErrorMessage(error);
     if (isAccessResumeAuthFailure(error) || message.toLowerCase().includes('access password')) {
-      markCurrentAccessLocked('Access password expired. Enter it again to continue.');
+      markCurrentAccessLocked(i18n.t('accessGate.passwordExpiredError'));
       return;
     }
     if (accessRecoverable()) {
-      setRecoverableAccessError(message || 'Failed to prepare the secure session. Retry connection or reload the page.');
+      setRecoverableAccessError(message || i18n.t('accessGate.prepareSecureSessionFailedError'));
       return;
     }
     if (message) {
@@ -525,7 +555,7 @@ export function EnvAppShell() {
     }
 
     if (status.password_required && !status.unlocked) {
-      markCurrentAccessLocked('Access password expired. Enter it again to continue.');
+      markCurrentAccessLocked(i18n.t('accessGate.passwordExpiredError'));
       return { status: 'online', access: 'locked' };
     }
 
@@ -761,7 +791,7 @@ export function EnvAppShell() {
 
   const openAskFlowerComposer = (intent: AskFlowerIntent, anchor?: AskFlowerComposerAnchor) => {
     if (!canUseFlower()) {
-      notify.error('Permission denied', 'Read/write/execute permission required.');
+      notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
     setAskFlowerComposerIntent(intent);
@@ -779,7 +809,7 @@ export function EnvAppShell() {
   ) => {
     const normalizedWorkingDir = normalizeAbsolutePath(workingDir);
     if (!normalizedWorkingDir) {
-      notify.error('Invalid directory', 'Could not resolve a terminal working directory.');
+      notify.error(i18n.t('shell.notifications.invalidDirectoryTitle'), i18n.t('shell.notifications.invalidTerminalDirectory'));
       return;
     }
 
@@ -821,7 +851,7 @@ export function EnvAppShell() {
   ): Promise<void> => {
     const normalizedPath = normalizeAbsolutePath(path);
     if (!normalizedPath) {
-      notify.error('Browse files unavailable', 'Could not resolve a valid directory path.');
+      notify.error(i18n.t('shell.notifications.browseFilesUnavailableTitle'), i18n.t('shell.notifications.invalidDirectoryPath'));
       return;
     }
 
@@ -858,11 +888,11 @@ export function EnvAppShell() {
   ): Promise<void> => {
     const normalizedPath = normalizeAbsolutePath(item?.path ?? '');
     if (!normalizedPath) {
-      notify.error('Preview unavailable', 'Could not resolve a valid file path.');
+      notify.error(i18n.t('shell.notifications.previewUnavailableTitle'), i18n.t('shell.notifications.invalidFilePath'));
       return;
     }
     if (item?.type && item.type !== 'file') {
-      notify.error('Preview unavailable', 'Only files can be previewed.');
+      notify.error(i18n.t('shell.notifications.previewUnavailableTitle'), i18n.t('shell.notifications.onlyFilesPreviewed'));
       return;
     }
 
@@ -955,17 +985,17 @@ export function EnvAppShell() {
     if (!intent) return;
 
     if (protocol.status() !== 'connected') {
-      notify.error('Not connected', 'Connecting to runtime...');
+      notify.error(i18n.t('shell.notifications.notConnectedTitle'), i18n.t('shell.notifications.connectingToRuntime'));
       return;
     }
     if (!canUseFlower()) {
-      notify.error('Permission denied', 'Read/write/execute permission required.');
+      notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
 
     const trimmedPrompt = String(userPrompt ?? '').trim();
     if (!trimmedPrompt) {
-      notify.error('Missing message', 'Please enter your question before sending.');
+      notify.error(i18n.t('shell.notifications.missingMessageTitle'), i18n.t('shell.notifications.enterQuestionBeforeSending'));
       return;
     }
 
@@ -1022,7 +1052,7 @@ export function EnvAppShell() {
       openSurface('ai', { reason: 'handoff_ask_flower', focus: true, ensureVisible: true });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to send to Flower', msg || 'Request failed.');
+      notify.error(i18n.t('shell.notifications.failedToSendToFlowerTitle'), msg || i18n.t('shell.notifications.requestFailed'));
     }
   };
 
@@ -1066,7 +1096,7 @@ export function EnvAppShell() {
       const status = await withTimeout(
         rpc.access.status(),
         ACCESS_RESUME_TIMEOUT_MS,
-        'Timed out while checking the secure session. Retry connection or reload the page.',
+        i18n.t('accessGate.secureSessionCheckTimedOutError'),
       );
       if (accessRecoverySeq !== attemptKey) return;
       if (!status.passwordRequired || status.unlocked) {
@@ -1079,14 +1109,14 @@ export function EnvAppShell() {
 
       const token = String(accessResumeToken() ?? '').trim();
       if (!token) {
-        markCurrentAccessLocked('Enter the access password to continue.');
+        markCurrentAccessLocked(i18n.t('accessGate.enterPasswordToContinueError'));
         throw new Error('Access password required. Enter it again to continue.');
       }
 
       await withTimeout(
         rpc.access.resume({ token }),
         ACCESS_RESUME_TIMEOUT_MS,
-        'Timed out while preparing the secure session. Retry connection or reload the page.',
+        i18n.t('accessGate.prepareSecureSessionFailedError'),
       );
       if (accessRecoverySeq !== attemptKey) return;
       accessResumeClient = client;
@@ -1283,7 +1313,7 @@ export function EnvAppShell() {
       if (!result) {
         return {
           ok: false,
-          message: 'Runtime restart is only available from Redeven Desktop.',
+          message: i18n.t('shell.notifications.runtimeRestartDesktopOnly'),
         };
       }
       return {
@@ -1306,7 +1336,7 @@ export function EnvAppShell() {
       if (!result) {
         return {
           ok: false,
-          message: 'Runtime update is only available from Redeven Desktop.',
+          message: i18n.t('shell.notifications.runtimeUpdateDesktopOnly'),
         };
       }
       return {
@@ -1369,15 +1399,15 @@ export function EnvAppShell() {
 
     if (reconnectController.phase() === 'waiting_for_runtime') {
       return {
-        title: 'Waiting for runtime',
-        message: reconnectFailure()?.message || 'The runtime is unavailable right now. Retrying automatically.',
+        title: i18n.t('shell.status.waitingForRuntime'),
+        message: reconnectFailure()?.message || i18n.t('shell.status.runtimeUnavailableRetrying'),
       };
     }
 
     const fatalError = manualError();
     if (fatalError) {
       return {
-        title: 'Connection failed',
+        title: i18n.t('shell.status.connectionFailed'),
         message: fatalError,
       };
     }
@@ -1405,30 +1435,30 @@ export function EnvAppShell() {
   const statusLabel = createMemo(() => {
     switch (accessGatePhase()) {
       case 'checking':
-        return 'Checking access';
+        return i18n.t('shell.status.checkingAccess');
       case 'unlock_required':
-        return 'Locked';
+        return i18n.t('shell.status.locked');
       case 'resuming':
-        return 'Preparing secure session';
+        return i18n.t('shell.status.preparingSecureSession');
       case 'resume_blocked':
-        return 'Secure session blocked';
+        return i18n.t('shell.status.secureSessionBlocked');
       default:
         break;
     }
 
     switch (reconnectController.phase()) {
       case 'transport_retry':
-        return 'Retrying connection';
+        return i18n.t('shell.status.retryingConnection');
       case 'waiting_for_runtime':
         if (
           reconnectController.availabilityStatus() === 'offline'
           || reconnectFailure()?.kind === 'runtime_offline'
         ) {
-          return 'Waiting for runtime';
+          return i18n.t('shell.status.waitingForRuntime');
         }
-        return 'Reconnecting soon';
+        return i18n.t('shell.status.reconnectingSoon');
       case 'reconnecting':
-        return 'Reconnecting';
+        return i18n.t('shell.status.reconnecting');
       default:
         return undefined;
     }
@@ -1455,12 +1485,14 @@ export function EnvAppShell() {
   const reconnectLabel = createMemo(() => {
     switch (accessGatePhase()) {
       case 'checking':
-        return 'Checking access';
+        return i18n.t('shell.status.checkingAccess');
       case 'unlock_required':
-        return 'Unlock required';
+        return i18n.t('shell.status.unlockRequired');
       case 'resuming':
       case 'resume_blocked':
-        return accessRecoveryBusy() ? 'Preparing secure session' : 'Retry connection';
+        return accessRecoveryBusy()
+          ? i18n.t('shell.status.preparingSecureSession')
+          : i18n.t('shell.status.retryConnection');
       default:
         break;
     }
@@ -1468,33 +1500,35 @@ export function EnvAppShell() {
     switch (reconnectController.phase()) {
       case 'transport_retry':
       case 'reconnecting':
-        return 'Reconnecting...';
+        return i18n.t('shell.status.reconnectingEllipsis');
       case 'waiting_for_runtime':
-        return 'Retry now';
+        return i18n.t('shell.status.retryNow');
       default:
-        return connecting() ? 'Connecting...' : 'Reconnect';
+        return connecting() ? i18n.t('shell.status.connectingEllipsis') : i18n.t('shell.status.reconnect');
     }
   });
   const connectionOverlayVisible = createMemo(() => !accessGateVisible() && protocol.status() !== 'connected');
   const connectionOverlayMessage = createMemo(() => {
     if (agentMaintenanceController.maintaining()) {
-      return agentMaintenanceController.stage() || 'Runtime restarting...';
+      return agentMaintenanceController.stage() || i18n.t('shell.status.runtimeRestarting');
     }
 
     switch (reconnectController.phase()) {
       case 'transport_retry':
       case 'reconnecting':
-        return 'Reconnecting to runtime...';
+        return i18n.t('shell.status.reconnectingToRuntime');
       case 'waiting_for_runtime':
         if (
           reconnectController.availabilityStatus() === 'offline'
           || reconnectFailure()?.kind === 'runtime_offline'
         ) {
-          return 'Waiting for runtime...';
+          return i18n.t('shell.status.waitingForRuntimeEllipsis');
         }
-        return 'Trying the runtime again soon...';
+        return i18n.t('shell.status.tryingRuntimeSoon');
       default:
-        return isLocalMode() ? 'Connecting to local runtime...' : 'Connecting to runtime...';
+        return isLocalMode()
+          ? i18n.t('shell.status.connectingLocalRuntime')
+          : i18n.t('shell.status.connectingRuntime');
     }
   });
   const connectError = createMemo(() => connectNotice()?.message ?? null);
@@ -1513,7 +1547,7 @@ export function EnvAppShell() {
       const out = isLocalMode() ? await unlockLocalAccess(accessPassword()) : await unlockGatewayAccess(accessPassword());
       const token = String(out?.resume_token ?? '').trim();
       if (!token) {
-        throw new Error('Unlock succeeded but no resume token was returned.');
+        throw new Error(i18n.t('accessGate.missingResumeTokenError'));
       }
 
       setCurrentAccessResumeToken(token);
@@ -1535,10 +1569,10 @@ export function EnvAppShell() {
 
       await connect();
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = localizedAccessUnlockErrorMessage(error, i18n);
       const retryAfterMs = getAccessUnlockRetryAfterMs(error);
       setCurrentAccessRetryUntil(retryAfterMs > 0 ? Date.now() + retryAfterMs : 0);
-      setCurrentAccessError(message || 'Unlock failed.');
+      setCurrentAccessError(message || i18n.t('accessGate.unlockFailedError'));
       queueMicrotask(() => {
         accessPasswordInput?.focus();
         accessPasswordInput?.select();
@@ -1849,7 +1883,7 @@ export function EnvAppShell() {
           );
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          notify.error('Failed to refresh session', msg);
+          notify.error(i18n.t('shell.notifications.failedToRefreshSessionTitle'), msg);
         }
       })();
     };
@@ -1881,15 +1915,15 @@ export function EnvAppShell() {
 
   const components = createMemo<FloeComponent[]>(() => {
     const list: FloeComponent[] = [
-      { id: 'terminal', name: 'Terminal', icon: Terminal, component: EnvTerminalPage, sidebar: { order: 1, fullScreen: true } },
-      { id: 'monitor', name: 'Monitoring', icon: Activity, component: EnvMonitorPage, sidebar: { order: 2, fullScreen: true } },
-      { id: 'files', name: 'File Browser', icon: Files, component: EnvFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
-      { id: 'codespaces', name: 'Codespaces', icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
-      { id: 'ports', name: 'Web Services', icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
+      { id: 'terminal', name: i18n.t('shell.nav.terminal'), icon: Terminal, component: EnvTerminalPage, sidebar: { order: 1, fullScreen: true } },
+      { id: 'monitor', name: i18n.t('shell.nav.monitoring'), icon: Activity, component: EnvMonitorPage, sidebar: { order: 2, fullScreen: true } },
+      { id: 'files', name: i18n.t('shell.nav.fileBrowser'), icon: Files, component: EnvFileBrowserPage, sidebar: { order: 3, fullScreen: true } },
+      { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
+      { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
     ];
-    list.push({ id: 'ai', name: 'Flower', icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 6, fullScreen: false, renderIn: 'main' } });
-    list.push({ id: 'codex', name: 'Codex', icon: CodexNavigationIcon, component: CodexPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
-    list.push({ id: 'settings', name: 'Runtime Settings', icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
+    list.push({ id: 'ai', name: i18n.t('shell.nav.flower'), icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 6, fullScreen: false, renderIn: 'main' } });
+    list.push({ id: 'codex', name: i18n.t('shell.nav.codex'), icon: CodexNavigationIcon, component: CodexPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
+    list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
     return list;
   });
 
@@ -1928,10 +1962,10 @@ export function EnvAppShell() {
     if (surfaceId === 'ai' && !canUseFlower()) {
       if (options?.reason !== 'mode_restore') {
         notify.error(
-          env.state === 'ready' ? 'Permission denied' : 'Not ready',
+          env.state === 'ready' ? i18n.t('shell.notifications.permissionDeniedTitle') : i18n.t('shell.notifications.notReadyTitle'),
           env.state === 'ready'
-            ? 'Read/write/execute permission required.'
-            : 'Loading environment permissions...',
+            ? i18n.t('shell.notifications.rwxPermissionRequired')
+            : i18n.t('shell.notifications.loadingEnvironmentPermissions'),
         );
       }
       return ENV_DEFAULT_SURFACE_ID;
@@ -1939,10 +1973,10 @@ export function EnvAppShell() {
     if (surfaceId === 'codex' && !canUseCodex()) {
       if (options?.reason !== 'mode_restore') {
         notify.error(
-          env.state === 'ready' ? 'Permission denied' : 'Not ready',
+          env.state === 'ready' ? i18n.t('shell.notifications.permissionDeniedTitle') : i18n.t('shell.notifications.notReadyTitle'),
           env.state === 'ready'
-            ? 'Read/write/execute permission required.'
-            : 'Loading environment permissions...',
+            ? i18n.t('shell.notifications.rwxPermissionRequired')
+            : i18n.t('shell.notifications.loadingEnvironmentPermissions'),
         );
       }
       return ENV_DEFAULT_SURFACE_ID;
@@ -2105,13 +2139,13 @@ export function EnvAppShell() {
     const items: ActivityBarItem[] = [];
 
     items.push(
-      { id: 'terminal', icon: Terminal, label: 'Terminal', collapseBehavior: 'preserve' },
-      { id: 'monitor', icon: Activity, label: 'Monitoring', collapseBehavior: 'preserve' },
+      { id: 'terminal', icon: Terminal, label: i18n.t('shell.nav.terminal'), collapseBehavior: 'preserve' },
+      { id: 'monitor', icon: Activity, label: i18n.t('shell.nav.monitoring'), collapseBehavior: 'preserve' },
       layout.isMobile()
         ? {
             id: 'files',
             icon: Files,
-            label: 'File Browser',
+            label: i18n.t('shell.nav.fileBrowser'),
             collapseBehavior: 'preserve',
             onClick: () => {
               const active = layout.sidebarActiveTab() === 'files';
@@ -2123,15 +2157,15 @@ export function EnvAppShell() {
               toggleFilesMobileSidebar();
             },
           }
-        : { id: 'files', icon: Files, label: 'File Browser', collapseBehavior: 'preserve' },
-      { id: 'codespaces', icon: Code, label: 'Codespaces', collapseBehavior: 'preserve' },
-      { id: 'ports', icon: Globe, label: 'Web Services', collapseBehavior: 'preserve' },
+        : { id: 'files', icon: Files, label: i18n.t('shell.nav.fileBrowser'), collapseBehavior: 'preserve' },
+      { id: 'codespaces', icon: Code, label: i18n.t('shell.nav.codespaces'), collapseBehavior: 'preserve' },
+      { id: 'ports', icon: Globe, label: i18n.t('shell.nav.webServices'), collapseBehavior: 'preserve' },
     );
     if (canUseFlower()) {
       items.push({
         id: 'ai',
         icon: FlowerNavigationIcon,
-        label: 'Flower',
+        label: i18n.t('shell.nav.flower'),
         collapseBehavior: 'toggle',
       });
     }
@@ -2139,7 +2173,7 @@ export function EnvAppShell() {
       items.push({
         id: 'codex',
         icon: CodexNavigationIcon,
-        label: 'Codex',
+        label: i18n.t('shell.nav.codex'),
         collapseBehavior: 'toggle',
       });
     }
@@ -2156,7 +2190,7 @@ export function EnvAppShell() {
       items.push({
         id: 'switch-environment',
         icon: ArrowRightLeft,
-        label: 'Switch Environment',
+        label: i18n.t('shell.nav.switchEnvironment'),
         onClick: () => {
           void openConnectionCenter();
         },
@@ -2165,16 +2199,16 @@ export function EnvAppShell() {
     items.push({
       id: 'settings',
       icon: Settings,
-      label: 'Runtime Settings',
+      label: i18n.t('shell.nav.runtimeSettings'),
       onClick: () => openSettings(),
     });
     return items;
   };
 
   const envName = () => {
-    if (accessGateVisible()) return isLocalMode() ? 'Local runtime' : 'Environment';
-    if (env.state !== 'ready') return 'Loading...';
-    return env()?.name || 'Environment';
+    if (accessGateVisible()) return isLocalMode() ? i18n.t('shell.status.localRuntime') : i18n.t('shell.status.environment');
+    if (env.state !== 'ready') return i18n.t('shell.status.loading');
+    return env()?.name || i18n.t('shell.status.environment');
   };
 
   function consoleOrigin(): string {
@@ -2201,8 +2235,8 @@ export function EnvAppShell() {
     }
     if (desktopShellAvailable) {
       notify.error(
-        'Failed to open dashboard',
-        result?.message || 'Desktop could not open the system browser.',
+        i18n.t('shell.notifications.failedToOpenDashboardTitle'),
+        result?.message || i18n.t('shell.notifications.desktopOpenBrowserFailed'),
       );
       return;
     }
@@ -2214,49 +2248,52 @@ export function EnvAppShell() {
   // Note: register commands once per Shell lifecycle to avoid duplicates during HMR/remount.
   createEffect(() => {
     const desktopShellAvailable = desktopShellBridgeAvailable();
+    const commandCategory = i18n.t('shell.commandPalette.categories.navigation');
+    const environmentCategory = i18n.t('shell.commandPalette.categories.environment');
+    const generalCategory = i18n.t('shell.commandPalette.categories.general');
 
     const list: any[] = [
       {
         id: 'redeven.env.switchToDeck',
-        title: 'Switch to Deck Mode',
-        description: 'Open the deck workspace',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.switchToDeckTitle'),
+        description: i18n.t('shell.commandPalette.switchToDeckDescription'),
+        category: commandCategory,
         keybind: 'mod+shift+d',
         icon: LayoutDashboard,
         execute: () => setViewMode('deck', { surfaceId: activeSurface(), focusSurface: true }),
       },
       {
         id: 'redeven.env.switchToActivity',
-        title: 'Switch to Activity Mode',
-        description: 'Show the activity workspace',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.switchToActivityTitle'),
+        description: i18n.t('shell.commandPalette.switchToActivityDescription'),
+        category: commandCategory,
         keybind: 'mod+shift+1',
         icon: Terminal,
         execute: () => setViewMode('activity', { surfaceId: lastActivitySurface() }),
       },
       {
         id: 'redeven.env.switchToWorkbench',
-        title: 'Switch to Workbench Mode',
-        description: 'Open the spatial workbench canvas',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.switchToWorkbenchTitle'),
+        description: i18n.t('shell.commandPalette.switchToWorkbenchDescription'),
+        category: commandCategory,
         keybind: 'mod+shift+2',
         icon: LayoutDashboard,
         execute: () => setViewMode('workbench', { surfaceId: activeSurface(), focusSurface: true }),
       },
       {
         id: 'redeven.env.goToTerminal',
-        title: 'Go to Terminal',
-        description: 'Open the terminal',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.goToTerminalTitle'),
+        description: i18n.t('shell.commandPalette.goToTerminalDescription'),
+        category: commandCategory,
         keybind: 'mod+shift+t',
         icon: Terminal,
         execute: () => openSurface('terminal', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       },
       ...(!layout.isMobile() ? [{
         id: 'redeven.env.newTerminalWindow',
-        title: 'New Terminal Window',
-        description: 'Create a new terminal window in workbench',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.newTerminalWindowTitle'),
+        description: i18n.t('shell.commandPalette.newTerminalWindowDescription'),
+        category: commandCategory,
         icon: Terminal,
         execute: () => openSurfaceInWorkbench('terminal', {
           reason: 'direct_navigation',
@@ -2267,27 +2304,27 @@ export function EnvAppShell() {
       }] : []),
       {
         id: 'redeven.env.goToMonitoring',
-        title: 'Go to Monitoring',
-        description: 'Open monitoring',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.goToMonitoringTitle'),
+        description: i18n.t('shell.commandPalette.goToMonitoringDescription'),
+        category: commandCategory,
         keybind: 'mod+shift+m',
         icon: Activity,
         execute: () => openSurface('monitor', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       },
       {
         id: 'redeven.env.goToFiles',
-        title: 'Go to File Browser',
-        description: 'Browse remote files',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.goToFilesTitle'),
+        description: i18n.t('shell.commandPalette.goToFilesDescription'),
+        category: commandCategory,
         keybind: 'mod+shift+f',
         icon: Files,
         execute: () => openSurface('files', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
       },
       ...(!layout.isMobile() ? [{
         id: 'redeven.env.newFileWindow',
-        title: 'New File Window',
-        description: 'Create a new file window in workbench',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.newFileWindowTitle'),
+        description: i18n.t('shell.commandPalette.newFileWindowDescription'),
+        category: commandCategory,
         icon: Files,
         execute: () => openSurfaceInWorkbench('files', {
           reason: 'direct_navigation',
@@ -2298,9 +2335,9 @@ export function EnvAppShell() {
       }] : []),
       {
         id: 'redeven.env.goToCodespaces',
-        title: 'Go to Codespaces',
-        description: 'Open codespaces',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.goToCodespacesTitle'),
+        description: i18n.t('shell.commandPalette.goToCodespacesDescription'),
+        category: commandCategory,
         keybind: 'mod+shift+c',
         icon: Code,
         execute: () => openSurface('codespaces', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
@@ -2309,9 +2346,9 @@ export function EnvAppShell() {
 
     list.push({
       id: 'redeven.env.goToWebServices',
-      title: 'Go to Web Services',
-      description: 'Open web service registrations',
-      category: 'Navigation',
+      title: i18n.t('shell.commandPalette.goToWebServicesTitle'),
+      description: i18n.t('shell.commandPalette.goToWebServicesDescription'),
+      category: commandCategory,
       keybind: 'mod+shift+o',
       icon: Globe,
       execute: () => openSurface('ports', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
@@ -2320,9 +2357,9 @@ export function EnvAppShell() {
     if (canUseFlower()) {
       list.push({
         id: 'redeven.env.goToFlower',
-        title: 'Go to Flower',
-        description: 'Open Flower',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.goToFlowerTitle'),
+        description: i18n.t('shell.commandPalette.goToFlowerDescription'),
+        category: commandCategory,
         keybind: 'mod+shift+a',
         icon: FlowerNavigationIcon,
         execute: () => openSurface('ai', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
@@ -2331,9 +2368,9 @@ export function EnvAppShell() {
 
     list.push({
       id: 'redeven.env.goToCodex',
-      title: 'Go to Codex',
-      description: 'Open Codex',
-      category: 'Navigation',
+      title: i18n.t('shell.commandPalette.goToCodexTitle'),
+      description: i18n.t('shell.commandPalette.goToCodexDescription'),
+      category: commandCategory,
       keybind: 'mod+shift+x',
       icon: CodexNavigationIcon,
       execute: () => openSurface('codex', { reason: 'direct_navigation', focus: true, ensureVisible: true }),
@@ -2348,25 +2385,36 @@ export function EnvAppShell() {
         if (handled) {
           return;
         }
-        notify.error('Desktop command unavailable', `${actionLabel} is only available in Redeven Desktop.`);
+        notify.error(
+          i18n.t('shell.notifications.desktopCommandUnavailableTitle'),
+          i18n.t('shell.notifications.desktopOnlyMessage', { action: actionLabel }),
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        notify.error(`Failed to open ${actionLabel}`, message || 'Unknown desktop shell error.');
+        notify.error(
+          i18n.t('shell.notifications.failedToOpenDesktopCommandTitle', { action: actionLabel }),
+          message || i18n.t('shell.notifications.unknownDesktopShellError'),
+        );
       }
     };
 
     if (desktopShellAvailable) {
       list.push(...buildDesktopShellCommandPaletteEntries({
-        openEnvironmentLauncher: () => runDesktopShellCommand('Open Environment', openConnectionCenter),
+        labels: {
+          category: i18n.t('shell.commandPalette.categories.desktop'),
+          title: i18n.t('shell.commandPalette.openEnvironmentTitle'),
+          description: i18n.t('shell.commandPalette.openEnvironmentDescription'),
+        },
+        openEnvironmentLauncher: () => runDesktopShellCommand(i18n.t('shell.commandPalette.openEnvironmentTitle'), openConnectionCenter),
       }));
     }
 
     list.push(
       {
         id: 'redeven.env.backToDashboard',
-        title: 'Back to Dashboard',
-        description: 'Return to the console dashboard',
-        category: 'Navigation',
+        title: i18n.t('shell.commandPalette.backToDashboardTitle'),
+        description: i18n.t('shell.commandPalette.backToDashboardDescription'),
+        category: commandCategory,
         keybind: 'mod+shift+e',
         icon: Grid3x3,
         execute: () => {
@@ -2375,18 +2423,26 @@ export function EnvAppShell() {
       },
       {
         id: 'redeven.env.openRuntimeSettings',
-        title: 'Open Runtime Settings',
-        description: 'Open runtime settings',
-        category: 'Environment',
+        title: i18n.t('shell.commandPalette.openRuntimeSettingsTitle'),
+        description: i18n.t('shell.commandPalette.openRuntimeSettingsDescription'),
+        category: environmentCategory,
         keybind: 'mod+,',
         icon: Settings,
         execute: () => openSettings(),
       },
       {
+        id: 'redeven.env.changeLanguage',
+        title: i18n.t('shell.commandPalette.changeLanguageTitle'),
+        description: i18n.t('shell.commandPalette.changeLanguageDescription'),
+        category: i18n.t('settings.interfaceTitle'),
+        icon: Globe,
+        execute: () => openSettings('interface'),
+      },
+      {
         id: 'redeven.env.reconnect',
-        title: 'Reconnect',
-        description: 'Reconnect to the environment tunnel',
-        category: 'Environment',
+        title: i18n.t('shell.commandPalette.reconnectTitle'),
+        description: i18n.t('shell.commandPalette.reconnectDescription'),
+        category: environmentCategory,
         keybind: 'mod+shift+r',
         icon: Refresh,
         execute: () => {
@@ -2395,43 +2451,48 @@ export function EnvAppShell() {
       },
       {
         id: 'redeven.env.copyEnvId',
-        title: 'Copy Environment ID',
-        description: 'Copy the environment id to clipboard',
-        category: 'Environment',
+        title: i18n.t('shell.commandPalette.copyEnvIdTitle'),
+        description: i18n.t('shell.commandPalette.copyEnvIdDescription'),
+        category: environmentCategory,
         icon: Copy,
         execute: async () => {
           const id = envId() || '';
           if (!id) {
-            notify.error('Copy failed', 'Missing environment id');
+            notify.error(i18n.t('shell.notifications.copyFailedTitle'), i18n.t('shell.notifications.missingEnvironmentId'));
             return;
           }
 
           try {
             await navigator.clipboard.writeText(id);
-            notify.success('Copied', 'Environment id copied to clipboard');
+            notify.success(i18n.t('shell.notifications.copiedTitle'), i18n.t('shell.notifications.environmentIdCopied'));
           } catch {
-            notify.error('Copy failed', 'Clipboard permission denied');
+            notify.error(i18n.t('shell.notifications.copyFailedTitle'), i18n.t('shell.notifications.clipboardPermissionDenied'));
           }
         },
       },
       {
         id: 'redeven.env.toggleTheme',
-        title: 'Toggle Theme',
-        description: 'Switch between light and dark theme',
-        category: 'View',
+        title: i18n.t('shell.commandPalette.toggleThemeTitle'),
+        description: i18n.t('shell.commandPalette.toggleThemeDescription'),
+        category: i18n.t('shell.commandPalette.categories.view'),
         keybind: 'mod+shift+l',
         icon: () => (theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />),
         execute: () => {
           toggleThemeWithRenderBoundary();
-          const nextTheme = theme.resolvedTheme() === 'light' ? 'dark' : 'light';
-          notify.info('Theme changed', `Switched to ${nextTheme} theme`);
+          const nextTheme = theme.resolvedTheme() === 'light'
+            ? i18n.t('shell.notifications.darkTheme')
+            : i18n.t('shell.notifications.lightTheme');
+          notify.info(
+            i18n.t('shell.notifications.themeChangedTitle'),
+            i18n.t('shell.notifications.switchedToTheme', { theme: nextTheme }),
+          );
         },
       },
       {
         id: 'redeven.env.savePreviewFile',
-        title: 'Save Preview File',
-        description: 'Save the active preview editor',
-        category: 'File Preview',
+        title: i18n.t('shell.commandPalette.savePreviewFileTitle'),
+        description: i18n.t('shell.commandPalette.savePreviewFileDescription'),
+        category: i18n.t('shell.commandPalette.categories.filePreview'),
         keybind: 'mod+s',
         icon: Files,
         execute: () => {
@@ -2440,9 +2501,9 @@ export function EnvAppShell() {
       },
       {
         id: 'redeven.env.toggleNotesOverlay',
-        title: 'Toggle Notes Overlay',
-        description: 'Open or close the floating notes overlay',
-        category: 'General',
+        title: i18n.t('shell.commandPalette.toggleNotesOverlayTitle'),
+        description: i18n.t('shell.commandPalette.toggleNotesOverlayDescription'),
+        category: generalCategory,
         keybind: NOTES_OVERLAY_KEYBIND,
         allowWhileTyping: true,
         icon: NotesOverlayIcon,
@@ -2450,9 +2511,9 @@ export function EnvAppShell() {
       },
       {
         id: 'redeven.env.openCommandPalette',
-        title: 'Open Command Palette',
-        description: 'Open the command palette',
-        category: 'General',
+        title: i18n.t('shell.commandPalette.openCommandPaletteTitle'),
+        description: i18n.t('shell.commandPalette.openCommandPaletteDescription'),
+        category: generalCategory,
         keybind: 'mod+k',
         icon: Search,
         execute: () => cmd.open(),
@@ -2462,9 +2523,9 @@ export function EnvAppShell() {
     if (canViewAudit()) {
       list.push({
         id: 'redeven.env.openAuditLog',
-        title: 'Open Audit Log',
-        description: 'Review recent environment activity',
-        category: 'Environment',
+        title: i18n.t('shell.commandPalette.openAuditLogTitle'),
+        description: i18n.t('shell.commandPalette.openAuditLogDescription'),
+        category: environmentCategory,
         icon: Activity,
         execute: () => setAuditOpen(true),
       });
@@ -2477,49 +2538,52 @@ export function EnvAppShell() {
   const accessGateTitle = createMemo(() => {
     switch (accessGatePhase()) {
       case 'checking':
-        return 'Preparing secure access';
+        return i18n.t('accessGate.checkingTitle');
       case 'resuming':
-        return 'Preparing secure session';
+        return i18n.t('accessGate.resumingTitle');
       case 'resume_blocked':
-        return 'Secure session needs attention';
+        return i18n.t('accessGate.resumeBlockedTitle');
       case 'unlock_required':
-        return isLocalMode() ? 'Unlock local runtime' : 'Unlock runtime';
+        return isLocalMode() ? i18n.t('accessGate.unlockLocalRuntimeTitle') : i18n.t('accessGate.unlockRuntimeTitle');
       default:
-        return isLocalMode() ? 'Local runtime' : 'Environment';
+        return isLocalMode() ? i18n.t('accessGate.localRuntimeTitle') : i18n.t('accessGate.environmentTitle');
     }
   });
   const accessGateDescription = createMemo(() => {
     switch (accessGatePhase()) {
       case 'checking':
-        return 'Checking whether this page can continue with an existing secure runtime session.';
+        return i18n.t('accessGate.checkingDescription');
       case 'resuming':
-        return 'Verifying the password for this environment page and connecting to the runtime.';
+        return i18n.t('accessGate.resumingDescription');
       case 'resume_blocked':
-        return 'The secure session is still blocked for this environment page. Retry the connection or reload the page.';
+        return i18n.t('accessGate.resumeBlockedDescription');
       case 'unlock_required':
-        return isLocalMode()
-          ? 'Enter the full access password before this browser load can connect to the local runtime.'
-          : 'Enter the full access password before this environment page can connect to the runtime.';
+        return isLocalMode() ? i18n.t('accessGate.unlockLocalDescription') : i18n.t('accessGate.unlockRemoteDescription');
       default:
-        return 'Secure access is ready.';
+        return i18n.t('accessGate.readyDescription');
     }
   });
-  const accessGateCheckingLabel = createMemo(() => 'Checking secure access...');
-  const accessGateResumeHint = createMemo(() => 'The page stays blocked until the direct runtime session confirms the password for this environment page.');
-  const accessGatePasswordLabel = createMemo(() => 'Access password');
+  const accessGateCheckingLabel = createMemo(() => i18n.t('accessGate.checkingLabel'));
+  const accessGateResumeHint = createMemo(() => i18n.t('accessGate.resumeHint'));
+  const accessGatePasswordLabel = createMemo(() => i18n.t('accessGate.passwordLabel'));
   const accessGatePasswordHelp = createMemo(() => {
     const base = isLocalMode()
-      ? 'Use the full Local UI password configured for this local runtime.'
-      : 'Use the full Local UI password configured for this environment page.';
+      ? i18n.t('accessGate.localPasswordHelp')
+      : i18n.t('accessGate.remotePasswordHelp');
     if (accessRetryActive()) {
-      return `${base} Too many incorrect attempts. Try again in ${formatAccessUnlockRetryAfter(accessRetryRemainingMs())}.`;
+      return i18n.t('accessGate.retryPasswordHelp', {
+        base,
+        duration: accessRetryDuration(),
+      });
     }
     return base;
   });
   const accessGateUnlockLabel = createMemo(() => {
-    if (accessUnlocking()) return 'Unlocking...';
-    if (accessRetryActive()) return `Retry in ${formatAccessUnlockRetryAfter(accessRetryRemainingMs())}`;
-    return 'Unlock';
+    if (accessUnlocking()) return i18n.t('accessGate.unlockingAction');
+    if (accessRetryActive()) {
+      return i18n.t('accessGate.retryInAction', { duration: accessRetryDuration() });
+    }
+    return i18n.t('accessGate.unlockAction');
   });
   const accessGateRegionDescribedBy = createMemo(() => {
     const ids: string[] = [ACCESS_GATE_IDS.description, ACCESS_GATE_IDS.notice];
@@ -2565,7 +2629,7 @@ export function EnvAppShell() {
                     id={ACCESS_GATE_IDS.passwordInput}
                     type="password"
                     autocomplete="current-password"
-                    placeholder="Enter access password"
+                    placeholder={i18n.t('accessGate.passwordPlaceholder')}
                     value={accessPassword()}
                     onInput={(event) => setCurrentAccessPassword(event.currentTarget.value)}
                     disabled={accessPending() || accessUnlocking()}
@@ -2606,14 +2670,14 @@ export function EnvAppShell() {
                     onClick={() => void retryAccessConnection()}
                     class="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {accessRecoveryBusy() ? 'Preparing secure session...' : 'Retry connection'}
+                    {accessRecoveryBusy() ? i18n.t('accessGate.preparingSecureSessionAction') : i18n.t('accessGate.retryConnectionAction')}
                   </button>
                   <button
                     type="button"
                     onClick={reloadAccessPage}
                     class="inline-flex h-10 items-center justify-center rounded-md border border-border bg-background px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/50"
                   >
-                    Reload page
+                    {i18n.t('accessGate.reloadPageAction')}
                   </button>
                 </div>
               </>
@@ -2633,7 +2697,7 @@ export function EnvAppShell() {
               id={ACCESS_GATE_IDS.notice}
               class="rounded-md border border-border/70 bg-muted/30 px-3 py-2 text-xs leading-5 text-muted-foreground"
             >
-              Password verification stays inside the runtime-managed session before interactive features continue.
+              {i18n.t('accessGate.notice')}
             </div>
           </section>
         </PanelContent>
@@ -2673,8 +2737,8 @@ export function EnvAppShell() {
 
   const ShellLogo = () => (
     <TopBarBrandButton
-      label="Back to dashboard"
-      tooltip={topBarTooltip('Back to dashboard')}
+      label={i18n.t('shell.topbar.backToDashboard')}
+      tooltip={topBarTooltip(i18n.t('shell.topbar.backToDashboard'))}
       onClick={() => {
         void openDashboard();
       }}
@@ -2697,16 +2761,16 @@ export function EnvAppShell() {
         />
       </Show>
       <TopBarIconButton
-        label="Notes overlay"
-        tooltip={topBarTooltip(`Notes overlay (${notesOverlayShortcutLabel()})`)}
+        label={i18n.t('shell.topbar.notesOverlay')}
+        tooltip={topBarTooltip(i18n.t('shell.topbar.notesOverlayWithShortcut', { shortcut: notesOverlayShortcutLabel() }))}
         onClick={toggleNotesOverlay}
       >
         <NotesOverlayIcon class="w-4 h-4" />
       </TopBarIconButton>
-      <DownloadTaskButton tooltip={topBarTooltip('Downloads')} />
+      <DownloadTaskButton tooltip={topBarTooltip(i18n.t('shell.topbar.downloads'))} />
       <TopBarIconButton
-        label="Toggle theme"
-        tooltip={topBarTooltip('Toggle theme')}
+        label={i18n.t('shell.topbar.toggleTheme')}
+        tooltip={topBarTooltip(i18n.t('shell.topbar.toggleTheme'))}
         onClick={toggleThemeWithRenderBoundary}
       >
         {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
@@ -2756,17 +2820,17 @@ export function EnvAppShell() {
               <span class="truncate">{envName()}</span>
             </BottomBarItem>
             <BottomBarItem class="min-w-0">
-              <span class="truncate">{envId() || '(missing env id)'}</span>
+              <span class="truncate">{envId() || i18n.t('shell.status.missingEnvId')}</span>
             </BottomBarItem>
           </div>
           <div class="flex items-center gap-2">
             <StatusIndicator status={status()} label={statusLabel()} />
-            <Tooltip content={canViewAudit() ? 'Audit log' : 'Admin required'} placement="top" delay={0}>
+            <Tooltip content={canViewAudit() ? i18n.t('shell.status.auditLog') : i18n.t('shell.status.adminRequired')} placement="top" delay={0}>
               <BottomBarItem
                 onClick={canViewAudit() ? () => setAuditOpen(true) : undefined}
                 class={canViewAudit() ? undefined : 'opacity-60 pointer-events-none'}
               >
-                Audit log
+                {i18n.t('shell.status.auditLog')}
               </BottomBarItem>
             </Tooltip>
             <BottomBarItem
@@ -2784,7 +2848,7 @@ export function EnvAppShell() {
           <Panel class="h-auto rounded-none border-0 border-b border-error/40">
             <PanelContent class="p-3 text-xs">
               <div role="alert">
-                <div class="text-error font-medium">{connectNotice()?.title ?? 'Connection failed'}</div>
+                <div class="text-error font-medium">{connectNotice()?.title ?? i18n.t('shell.status.connectionFailed')}</div>
                 <div class="text-muted-foreground break-words">{connectNotice()?.message ?? connectError()}</div>
               </div>
             </PanelContent>

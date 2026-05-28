@@ -1,10 +1,17 @@
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import { createI18nHelpers, type I18nHelpers } from '../i18n/createI18n';
 import { getAskFlowerAttachmentSourcePath } from './askFlowerAttachmentMetadata';
 import {
   buildMonitorProcessSnapshotText,
   formatMonitorProcessBytes,
   monitorProcessDisplayLabel,
 } from './monitorProcessAskFlower';
+
+export type AskFlowerComposerTranslate = I18nHelpers['t'];
+
+export type AskFlowerComposerCopyOptions = Readonly<{
+  t?: AskFlowerComposerTranslate;
+}>;
 
 export type AskFlowerLinkedContextTone =
   | 'file'
@@ -57,10 +64,16 @@ export type AskFlowerComposerCopy = Readonly<{
   contextEntries: AskFlowerLinkedContextChip[];
 }>;
 
-function basenameFromPath(path: string): string {
+const defaultAskFlowerComposerT = createI18nHelpers('en-US').t;
+
+function composerT(options?: AskFlowerComposerCopyOptions): AskFlowerComposerTranslate {
+  return options?.t ?? defaultAskFlowerComposerT;
+}
+
+function basenameFromPath(path: string, t: AskFlowerComposerTranslate): string {
   const normalized = String(path ?? '').replace(/\\/g, '/');
   const parts = normalized.split('/').filter(Boolean);
-  return parts[parts.length - 1] || normalized || 'Context';
+  return parts[parts.length - 1] || normalized || t('askFlowerComposer.contextFallback');
 }
 
 function liveFileAction(path: string): AskFlowerLinkedContextAction {
@@ -91,18 +104,20 @@ function withSecondaryAction(
   };
 }
 
-function buildContextEntries(intent: AskFlowerIntent): AskFlowerLinkedContextChip[] {
+function buildContextEntries(intent: AskFlowerIntent, t: AskFlowerComposerTranslate): AskFlowerLinkedContextChip[] {
   const entries: AskFlowerLinkedContextChip[] = [];
 
   intent.contextItems.forEach((item, index) => {
     if (item.kind === 'file_path') {
-      const label = basenameFromPath(item.path);
+      const label = basenameFromPath(item.path, t);
       entries.push({
         id: `context-${index}-${item.isDirectory ? 'directory' : 'file'}`,
         tone: item.isDirectory ? 'directory' : 'file',
         itemIndex: index,
         label,
-        title: item.isDirectory ? `Browse folder ${item.path}` : `Open live file preview for ${item.path}`,
+        title: item.isDirectory
+          ? t('askFlowerComposer.context.browseFolderTarget', { target: item.path })
+          : t('askFlowerComposer.context.openLiveFilePreviewForTarget', { target: item.path }),
         detail: item.path,
         primaryAction: item.isDirectory ? directoryBrowserAction(item.path) : liveFileAction(item.path),
         secondaryActions: [],
@@ -111,17 +126,17 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerLinkedContextChi
     }
 
     if (item.kind === 'file_selection') {
-      const label = basenameFromPath(item.path);
+      const label = basenameFromPath(item.path, t);
       entries.push({
         id: `context-${index}-selection`,
         tone: 'selection',
         itemIndex: index,
-        label: 'selected content',
-        title: `Preview selected content from ${item.path}`,
+        label: t('askFlowerComposer.context.selectedContent'),
+        title: t('askFlowerComposer.context.previewSelectedContentFromTarget', { target: item.path }),
         detail: label,
         primaryAction: {
           type: 'open_text_context_preview',
-          title: 'Selected content',
+          title: t('askFlowerComposer.context.selectedContentTitle'),
           subtitle: label,
           body: item.selection,
           sourcePath: item.path,
@@ -137,11 +152,11 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerLinkedContextChi
         tone: 'process',
         itemIndex: index,
         label: monitorProcessDisplayLabel({ pid: item.pid, name: item.name }),
-        title: `Preview monitoring snapshot for PID ${item.pid}`,
+        title: t('askFlowerComposer.context.previewMonitoringSnapshotForPid', { pid: item.pid }),
         detail: `${String(item.username ?? '').trim() || 'system'} · ${Number(item.cpuPercent ?? 0).toFixed(1)}% CPU · ${formatMonitorProcessBytes(item.memoryBytes)}`,
         primaryAction: {
           type: 'open_process_snapshot_preview',
-          title: 'Process snapshot',
+          title: t('askFlowerComposer.context.processSnapshot'),
           subtitle: `${String(item.username ?? '').trim() || 'system'} · ${Number(item.cpuPercent ?? 0).toFixed(1)}% CPU · ${formatMonitorProcessBytes(item.memoryBytes)}`,
           body: buildMonitorProcessSnapshotText(item),
           pid: item.pid,
@@ -152,14 +167,14 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerLinkedContextChi
     }
 
     if (item.kind === 'text_snapshot') {
-      const label = String(item.title ?? '').trim() || 'snapshot';
-      const detail = String(item.detail ?? '').trim() || 'Snapshot';
+      const label = String(item.title ?? '').trim() || t('askFlowerComposer.context.snapshotFallback');
+      const detail = String(item.detail ?? '').trim() || t('askFlowerComposer.context.snapshotDetailFallback');
       entries.push({
         id: `context-${index}-snapshot`,
         tone: 'snapshot',
         itemIndex: index,
         label,
-        title: `Preview ${label}`,
+        title: t('askFlowerComposer.context.previewTarget', { target: label }),
         detail,
         primaryAction: {
           type: 'open_text_context_preview',
@@ -177,13 +192,13 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerLinkedContextChi
         id: `context-${index}-terminal-selection`,
         tone: 'terminal',
         itemIndex: index,
-        label: 'selected output',
-        title: 'Preview selected terminal output',
-        detail: item.workingDir || 'Terminal',
+        label: t('askFlowerComposer.context.selectedOutput'),
+        title: t('askFlowerComposer.context.previewSelectedTerminalOutput'),
+        detail: item.workingDir || t('askFlowerComposer.terminalFallback'),
         primaryAction: {
           type: 'open_text_context_preview',
-          title: 'Selected terminal output',
-          subtitle: item.workingDir || 'Terminal',
+          title: t('askFlowerComposer.context.selectedTerminalOutputTitle'),
+          subtitle: item.workingDir || t('askFlowerComposer.terminalFallback'),
           body: item.selection,
           sourcePath: item.workingDir,
         },
@@ -200,7 +215,7 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerLinkedContextChi
         const existingEntry = entries[existingLiveFileIndex];
         entries[existingLiveFileIndex] = withSecondaryAction(existingEntry, {
           type: 'open_attachment_snapshot_preview',
-          title: `${existingEntry.label} snapshot`,
+          title: t('askFlowerComposer.context.attachmentSnapshotTitle', { target: existingEntry.label }),
           subtitle: sourcePath,
           file,
           livePath: sourcePath,
@@ -215,12 +230,12 @@ function buildContextEntries(intent: AskFlowerIntent): AskFlowerLinkedContextChi
       tone: 'attachment',
       itemIndex: null,
       label,
-      title: `Preview attachment ${label}`,
-      detail: 'Queued attachment',
+      title: t('askFlowerComposer.context.previewAttachmentTarget', { target: label }),
+      detail: t('askFlowerComposer.context.queuedAttachment'),
       primaryAction: {
         type: 'open_attachment_snapshot_preview',
         title: label,
-        subtitle: 'Queued attachment',
+        subtitle: t('askFlowerComposer.context.queuedAttachment'),
         file,
       },
       secondaryActions: [],
@@ -245,8 +260,12 @@ function findEntryByItem(
   return entries.find((item) => item.itemIndex === itemIndex && item.tone === tone);
 }
 
-export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerComposerCopy {
-  const contextEntries = buildContextEntries(intent);
+export function buildAskFlowerComposerCopy(
+  intent: AskFlowerIntent,
+  options?: AskFlowerComposerCopyOptions,
+): AskFlowerComposerCopy {
+  const t = composerT(options);
+  const contextEntries = buildContextEntries(intent, t);
   const firstContext = intent.contextItems[0];
   const fileEntries = contextEntries.filter((item) => item.tone === 'file' || item.tone === 'directory');
   const hasDirectories = fileEntries.some((item) => item.tone === 'directory');
@@ -255,8 +274,8 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     const selectionEntry = findEntryByItem(contextEntries, 0, 'selection');
     if (selectionEntry) {
       return {
-        placeholder: 'Ask about this selection, request a change, or describe what you need',
-        question: 'What would you like to understand, change, or verify?',
+        placeholder: t('askFlowerComposer.prompt.selectionPlaceholder'),
+        question: t('askFlowerComposer.prompt.selectionQuestion'),
         contextEntries,
       };
     }
@@ -266,15 +285,15 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     const selectionEntry = findEntryByItem(contextEntries, 0, 'terminal');
     if (selectionEntry) {
       return {
-        placeholder: 'Ask about the output, request a command, or describe the next step',
-        question: 'What would you like me to inspect or do next?',
+        placeholder: t('askFlowerComposer.prompt.terminalOutputPlaceholder'),
+        question: t('askFlowerComposer.prompt.terminalQuestion'),
         contextEntries,
       };
     }
 
     return {
-      placeholder: 'Ask about the terminal context, request a command, or describe the next step',
-      question: 'What would you like me to inspect or do next?',
+      placeholder: t('askFlowerComposer.prompt.terminalContextPlaceholder'),
+      question: t('askFlowerComposer.prompt.terminalQuestion'),
       contextEntries,
     };
   }
@@ -283,8 +302,8 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     const processEntry = findEntryByItem(contextEntries, 0, 'process');
     if (processEntry) {
       return {
-        placeholder: 'Ask why this process is busy, whether it is expected, or what to do next',
-        question: 'What would you like me to inspect or explain?',
+        placeholder: t('askFlowerComposer.prompt.processPlaceholder'),
+        question: t('askFlowerComposer.prompt.inspectExplainQuestion'),
         contextEntries,
       };
     }
@@ -293,15 +312,15 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
   if (firstContext?.kind === 'text_snapshot') {
     if (intent.source === 'git_browser') {
       return {
-        placeholder: 'Ask about this Git context, request a change, or describe what you need',
-        question: 'What should Flower inspect or help with?',
+        placeholder: t('askFlowerComposer.prompt.gitPlaceholder'),
+        question: t('askFlowerComposer.prompt.gitQuestion'),
         contextEntries,
       };
     }
 
     return {
-      placeholder: 'Ask about this context, request a change, or describe what you need',
-      question: 'What would you like me to inspect or explain?',
+      placeholder: t('askFlowerComposer.prompt.contextPlaceholder'),
+      question: t('askFlowerComposer.prompt.inspectExplainQuestion'),
       contextEntries,
     };
   }
@@ -310,8 +329,8 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     const fileEntry = findEntryByTone(contextEntries, 'file');
     if (fileEntry) {
       return {
-        placeholder: 'Ask about this file, request a change, or describe what you need',
-        question: 'What should we focus on?',
+        placeholder: t('askFlowerComposer.prompt.filePlaceholder'),
+        question: t('askFlowerComposer.prompt.focusQuestion'),
         contextEntries,
       };
     }
@@ -322,9 +341,9 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
       const isDirectory = fileEntries[0].tone === 'directory';
       return {
         placeholder: isDirectory
-          ? 'Ask about this folder, the files inside it, or describe what you need'
-          : 'Ask about this file, request a change, or describe what you need',
-        question: isDirectory ? 'What would you like to explore inside it?' : 'What would you like me to help with?',
+          ? t('askFlowerComposer.prompt.folderPlaceholder')
+          : t('askFlowerComposer.prompt.filePlaceholder'),
+        question: isDirectory ? t('askFlowerComposer.prompt.folderQuestion') : t('askFlowerComposer.prompt.fileQuestion'),
         contextEntries,
       };
     }
@@ -332,9 +351,9 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
     if (fileEntries.length > 1) {
       return {
         placeholder: hasDirectories
-          ? 'Ask about these files and folders, compare them, or describe what you need'
-          : 'Ask about these files, compare them, or describe what you need',
-        question: 'What would you like to explore, compare, or change?',
+          ? t('askFlowerComposer.prompt.filesAndFoldersPlaceholder')
+          : t('askFlowerComposer.prompt.filesPlaceholder'),
+        question: t('askFlowerComposer.prompt.filesQuestion'),
         contextEntries,
       };
     }
@@ -343,8 +362,8 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
   const firstFileEntry = fileEntries[0];
   if (firstFileEntry) {
     return {
-      placeholder: 'Ask about this context, request a change, or describe what you need',
-      question: 'What would you like help with?',
+      placeholder: t('askFlowerComposer.prompt.contextPlaceholder'),
+      question: t('askFlowerComposer.prompt.helpQuestion'),
       contextEntries,
     };
   }
@@ -352,15 +371,15 @@ export function buildAskFlowerComposerCopy(intent: AskFlowerIntent): AskFlowerCo
   const attachmentEntry = findEntryByTone(contextEntries, 'attachment');
   if (attachmentEntry) {
     return {
-      placeholder: 'Ask about the attached context or describe what you need',
-      question: 'What would you like me to focus on?',
+      placeholder: t('askFlowerComposer.prompt.attachmentPlaceholder'),
+      question: t('askFlowerComposer.prompt.attachmentQuestion'),
       contextEntries,
     };
   }
 
   return {
-    placeholder: 'Describe what you want to understand, change, or verify',
-    question: 'What would you like to work on?',
+    placeholder: t('askFlowerComposer.prompt.defaultPlaceholder'),
+    question: t('askFlowerComposer.prompt.defaultQuestion'),
     contextEntries,
   };
 }

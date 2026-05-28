@@ -8,6 +8,7 @@ import {
 import { PermissionMatrixTable, PermissionRuleTable } from '../PermissionPolicyTables';
 import { buildPermissionPolicyValue } from '../permissionPolicy';
 import { formatUnknownError } from '../../../maintenance/shared';
+import { useI18n } from '../../../i18n';
 import type { PermissionRow, PermissionSet } from '../types';
 
 const AUTO_SAVE_DELAY_MS = 700;
@@ -21,6 +22,7 @@ function mapToPermissionRows(m: Record<string, PermissionSet> | undefined): Perm
 
 export function PermissionPolicySection() {
   const ctx = useEnvSettingsPage();
+  const i18n = useI18n();
 
   const [viewMode, setViewMode] = createSignal<ViewMode>('ui');
   const [localRead, setLocalRead] = createSignal(true);
@@ -78,7 +80,7 @@ export function PermissionPolicySection() {
         await ctx.saveSettings({ permission_policy: body });
         setSaving(false); setSavedAt(Date.now()); setDirty(false); setError(null);
       } catch (e) {
-        setSaving(false); setError(formatUnknownError(e) || 'Save failed.');
+        setSaving(false); setError(formatUnknownError(e) || i18n.t('permissionPolicy.saveFailed'));
       }
     }, AUTO_SAVE_DELAY_MS);
   });
@@ -90,9 +92,9 @@ export function PermissionPolicySection() {
   return (
     <SettingsCard
       icon={Shield}
-      title="Permission Policy"
-      description="Control read, write, and execute permissions. Saved changes apply after a manual restart."
-      badge="Manual restart required"
+      title={i18n.t('permissionPolicy.title')}
+      description={i18n.t('permissionPolicy.description')}
+      badge={i18n.t('permissionPolicy.manualRestartRequired')}
       badgeVariant="warning"
       error={error()}
       actions={
@@ -113,7 +115,7 @@ export function PermissionPolicySection() {
           </div>
 
           <div class="space-y-3">
-            <SubSectionHeader title="local_max" description="Global permission ceiling for this runtime. User and app rules are clamped to these limits." />
+            <SubSectionHeader title="local_max" description={i18n.t('permissionPolicy.localMaxDescription')} />
             <PermissionMatrixTable
               read={localRead()} write={localWrite()} execute={localExecute()}
               canInteract={ctx.canInteract()}
@@ -122,10 +124,10 @@ export function PermissionPolicySection() {
           </div>
 
           <div class="space-y-3">
-            <SubSectionHeader title="by_user" description="Per-user permission overrides."
-              actions={<Button size="sm" variant="outline" onClick={() => { setByUser((prev) => [...prev, { key: '', read: localRead(), write: localWrite(), execute: localExecute() }]); setDirty(true); }} disabled={!ctx.canInteract()}>Add Rule</Button>} />
-            <PermissionRuleTable rows={byUser()} emptyMessage="No user-specific overrides."
-              keyHeader="User" keyPlaceholder="user_public_id" canInteract={ctx.canInteract()}
+            <SubSectionHeader title="by_user" description={i18n.t('permissionPolicy.byUserDescription')}
+              actions={<Button size="sm" variant="outline" onClick={() => { setByUser((prev) => [...prev, { key: '', read: localRead(), write: localWrite(), execute: localExecute() }]); setDirty(true); }} disabled={!ctx.canInteract()}>{i18n.t('permissionPolicy.addRule')}</Button>} />
+            <PermissionRuleTable rows={byUser()} emptyMessage={i18n.t('permissionPolicy.noUserOverrides')}
+              keyHeader={i18n.t('permissionPolicy.userHeader')} keyPlaceholder="user_public_id" canInteract={ctx.canInteract()}
               readEnabled={localRead()} writeEnabled={localWrite()} executeEnabled={localExecute()}
               onChangeKey={(i, v) => { setByUser((prev) => prev.map((it, idx) => idx === i ? { ...it, key: v } : it)); setDirty(true); }}
               onChangePerm={(i, k, v) => { setByUser((prev) => prev.map((it, idx) => idx === i ? { ...it, [k]: v } : it)); setDirty(true); }}
@@ -133,10 +135,10 @@ export function PermissionPolicySection() {
           </div>
 
           <div class="space-y-3">
-            <SubSectionHeader title="by_app" description="Per-application permission overrides."
-              actions={<Button size="sm" variant="outline" onClick={() => { setByApp((prev) => [...prev, { key: '', read: localRead(), write: localWrite(), execute: localExecute() }]); setDirty(true); }} disabled={!ctx.canInteract()}>Add Rule</Button>} />
-            <PermissionRuleTable rows={byApp()} emptyMessage="No app-specific overrides."
-              keyHeader="App" keyPlaceholder="floe_app identifier" canInteract={ctx.canInteract()}
+            <SubSectionHeader title="by_app" description={i18n.t('permissionPolicy.byAppDescription')}
+              actions={<Button size="sm" variant="outline" onClick={() => { setByApp((prev) => [...prev, { key: '', read: localRead(), write: localWrite(), execute: localExecute() }]); setDirty(true); }} disabled={!ctx.canInteract()}>{i18n.t('permissionPolicy.addRule')}</Button>} />
+            <PermissionRuleTable rows={byApp()} emptyMessage={i18n.t('permissionPolicy.noAppOverrides')}
+              keyHeader={i18n.t('permissionPolicy.appHeader')} keyPlaceholder="floe_app identifier" canInteract={ctx.canInteract()}
               readEnabled={localRead()} writeEnabled={localWrite()} executeEnabled={localExecute()}
               onChangeKey={(i, v) => { setByApp((prev) => prev.map((it, idx) => idx === i ? { ...it, key: v } : it)); setDirty(true); }}
               onChangePerm={(i, k, v) => { setByApp((prev) => prev.map((it, idx) => idx === i ? { ...it, [k]: v } : it)); setDirty(true); }}

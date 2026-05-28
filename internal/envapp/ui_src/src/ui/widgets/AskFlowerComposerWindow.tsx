@@ -5,8 +5,10 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
 import type { AskFlowerComposerAnchor } from '../pages/EnvContext';
 import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import { useI18n } from '../i18n';
 import {
   buildAskFlowerComposerCopy,
+  type AskFlowerComposerTranslate,
   type AskFlowerLinkedContextAction,
   type AskFlowerLinkedContextChip,
 } from '../utils/askFlowerComposerCopy';
@@ -164,32 +166,35 @@ function truncatePath(fullPath: string, maxSegments = 3): string {
   return '.../' + segments.slice(-maxSegments).join('/');
 }
 
-function fileItemForContextPreview(path: string, name?: string): FileItem {
-  const normalizedPath = String(path ?? '').trim() || name || 'Context preview';
+function fileItemForContextPreview(path: string, name: string | undefined, t: AskFlowerComposerTranslate): FileItem {
+  const normalizedPath = String(path ?? '').trim() || name || t('askFlowerComposer.contextPreviewTitle');
   return fileItemFromPath(normalizedPath, String(name ?? '').trim() || basenameFromPath(normalizedPath));
 }
 
-function attachmentSnapshotNoticeForMode(mode: ReturnType<typeof describeFilePreview>['mode']): string {
-  if (mode === 'image') return 'Image snapshots are sent to Flower, but inline image rendering stays in the live file preview.';
-  if (mode === 'pdf') return 'PDF snapshots are sent to Flower, but inline PDF rendering stays in the live file preview.';
-  if (mode === 'docx') return 'Document snapshots are sent to Flower, but inline document rendering stays in the live file preview.';
-  if (mode === 'xlsx') return 'Spreadsheet snapshots are sent to Flower, but inline spreadsheet rendering stays in the live file preview.';
-  return 'This snapshot is sent to Flower, but inline preview is available for text content only.';
+function attachmentSnapshotNoticeForMode(
+  mode: ReturnType<typeof describeFilePreview>['mode'],
+  t: AskFlowerComposerTranslate,
+): string {
+  if (mode === 'image') return t('askFlowerComposer.preview.imageSnapshotNotice');
+  if (mode === 'pdf') return t('askFlowerComposer.preview.pdfSnapshotNotice');
+  if (mode === 'docx') return t('askFlowerComposer.preview.documentSnapshotNotice');
+  if (mode === 'xlsx') return t('askFlowerComposer.preview.spreadsheetSnapshotNotice');
+  return t('askFlowerComposer.preview.genericSnapshotNotice');
 }
 
 function canReadAttachmentSnapshotInline(mode: ReturnType<typeof describeFilePreview>['mode']): boolean {
   return mode === 'text' || mode === 'markdown' || mode === 'binary';
 }
 
-function friendlyAttachmentPreviewError(error: unknown): string {
+function friendlyAttachmentPreviewError(error: unknown, t: AskFlowerComposerTranslate): string {
   const message = error instanceof Error ? String(error.message ?? '').trim() : String(error ?? '').trim();
   if (message.toLowerCase().includes('maximum call stack size exceeded')) {
-    return 'The attachment preview renderer could not open this snapshot. You can still send it to Flower or use the live file preview.';
+    return t('askFlowerComposer.preview.attachmentRendererFailed');
   }
   if (!message) {
-    return 'The attachment snapshot could not be previewed. You can still send it to Flower.';
+    return t('askFlowerComposer.preview.attachmentPreviewFailedShort');
   }
-  return 'The attachment snapshot could not be previewed. You can still send it to Flower or use the live file preview.';
+  return t('askFlowerComposer.preview.attachmentPreviewFailed');
 }
 
 function trimPreviewBody(content: string): { body: string; truncated: boolean } {
@@ -252,20 +257,21 @@ function contextPreviewStateForAttachmentNotice(params: {
   subtitle: string;
   item: FileItem;
   mode: ReturnType<typeof describeFilePreview>['mode'];
+  t: AskFlowerComposerTranslate;
   helper?: string;
   actionLabel?: string;
   onAction?: () => void;
 }): ContextPreviewState {
   const helperParts = [
     params.helper,
-    params.actionLabel ? 'Open the live file preview to inspect the source file.' : undefined,
+    params.actionLabel ? params.t('askFlowerComposer.preview.openLiveFilePreviewHelper') : undefined,
   ].filter((item): item is string => !!String(item ?? '').trim());
 
   return contextPreviewStateForMessage({
     title: params.title,
     subtitle: params.subtitle,
     item: params.item,
-    message: attachmentSnapshotNoticeForMode(params.mode),
+    message: attachmentSnapshotNoticeForMode(params.mode, params.t),
     helper: helperParts.join(' ') || undefined,
     actionLabel: params.actionLabel,
     onAction: params.onAction,
@@ -386,6 +392,7 @@ async function buildFileLikeContextPreview(params: {
   item: FileItem;
   name: string;
   bytes: Uint8Array<ArrayBuffer>;
+  t: AskFlowerComposerTranslate;
   truncated?: boolean;
   helper?: string;
   actionLabel?: string;
@@ -399,10 +406,10 @@ async function buildFileLikeContextPreview(params: {
   if (descriptor.mode === 'text') {
     const preview = trimPreviewBody(new TextDecoder('utf-8', { fatal: false }).decode(params.bytes));
     if (truncated) {
-      helperParts.push('Showing partial content (truncated).');
+      helperParts.push(params.t('askFlowerComposer.preview.showingPartialContent'));
     }
     if (preview.truncated) {
-      helperParts.push('Showing the first part of the content.');
+      helperParts.push(params.t('askFlowerComposer.preview.showingFirstContentPart'));
     }
     return contextPreviewStateForText({
       title: params.title,
@@ -421,7 +428,7 @@ async function buildFileLikeContextPreview(params: {
         title: params.title,
         subtitle: params.subtitle,
         item: params.item,
-        message: 'This image is too large to preview.',
+        message: params.t('askFlowerComposer.preview.imageTooLarge'),
         helper: helperParts.join(' ') || undefined,
         actionLabel: params.actionLabel,
         onAction: params.onAction,
@@ -450,7 +457,7 @@ async function buildFileLikeContextPreview(params: {
         title: params.title,
         subtitle: params.subtitle,
         item: params.item,
-        message: 'This PDF is too large to preview.',
+        message: params.t('askFlowerComposer.preview.pdfTooLarge'),
         helper: helperParts.join(' ') || undefined,
         actionLabel: params.actionLabel,
         onAction: params.onAction,
@@ -476,7 +483,7 @@ async function buildFileLikeContextPreview(params: {
         title: params.title,
         subtitle: params.subtitle,
         item: params.item,
-        message: 'This document is too large to preview.',
+        message: params.t('askFlowerComposer.preview.documentTooLarge'),
         helper: helperParts.join(' ') || undefined,
         actionLabel: params.actionLabel,
         onAction: params.onAction,
@@ -501,7 +508,7 @@ async function buildFileLikeContextPreview(params: {
         title: params.title,
         subtitle: params.subtitle,
         item: params.item,
-        message: 'This spreadsheet is too large to preview.',
+        message: params.t('askFlowerComposer.preview.spreadsheetTooLarge'),
         helper: helperParts.join(' ') || undefined,
         actionLabel: params.actionLabel,
         onAction: params.onAction,
@@ -514,7 +521,7 @@ async function buildFileLikeContextPreview(params: {
         title: params.title,
         subtitle: params.subtitle,
         item: params.item,
-        message: 'No worksheet found in this file.',
+        message: params.t('askFlowerComposer.preview.noWorksheetFound'),
         helper: helperParts.join(' ') || undefined,
         actionLabel: params.actionLabel,
         onAction: params.onAction,
@@ -538,10 +545,10 @@ async function buildFileLikeContextPreview(params: {
   if (isLikelyTextContent(params.bytes)) {
     const preview = trimPreviewBody(new TextDecoder('utf-8', { fatal: false }).decode(params.bytes));
     if (truncated) {
-      helperParts.push('Showing partial content (truncated).');
+      helperParts.push(params.t('askFlowerComposer.preview.showingPartialContent'));
     }
     if (preview.truncated) {
-      helperParts.push('Showing the first part of the content.');
+      helperParts.push(params.t('askFlowerComposer.preview.showingFirstContentPart'));
     }
     return contextPreviewStateForText({
       title: params.title,
@@ -558,7 +565,7 @@ async function buildFileLikeContextPreview(params: {
     title: params.title,
     subtitle: params.subtitle,
     item: params.item,
-    message: 'Preview is not available for this file type.',
+    message: params.t('askFlowerComposer.preview.unavailableFileType'),
     helper: helperParts.join(' ') || undefined,
     actionLabel: params.actionLabel,
     onAction: params.onAction,
@@ -602,10 +609,14 @@ function secondaryActionIcon(action: AskFlowerLinkedContextAction) {
   return <FileText class="size-3.5" />;
 }
 
-function secondaryActionLabel(action: AskFlowerLinkedContextAction, entry: AskFlowerLinkedContextChip): string {
-  if (action.type === 'open_attachment_snapshot_preview') return `Preview attached snapshot for ${entry.label}`;
-  if (action.type === 'open_live_file_preview') return `Open live file preview for ${basenameFromPath(action.path)}`;
-  if (action.type === 'open_directory_browser') return `Browse folder ${entry.label}`;
+function secondaryActionLabel(
+  action: AskFlowerLinkedContextAction,
+  entry: AskFlowerLinkedContextChip,
+  t: AskFlowerComposerTranslate,
+): string {
+  if (action.type === 'open_attachment_snapshot_preview') return t('askFlowerComposer.context.previewAttachedSnapshotForTarget', { target: entry.label });
+  if (action.type === 'open_live_file_preview') return t('askFlowerComposer.context.openLiveFilePreviewForTarget', { target: basenameFromPath(action.path) });
+  if (action.type === 'open_directory_browser') return t('askFlowerComposer.context.browseFolderTarget', { target: entry.label });
   if (action.type === 'open_process_snapshot_preview') return action.title;
   return action.title;
 }
@@ -621,6 +632,7 @@ const FlowerComposerAvatar: Component = () => (
 
 export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
   const filePreview = useFilePreviewContext();
+  const i18n = useI18n();
   const [userPrompt, setUserPrompt] = createSignal('');
   const [validationError, setValidationError] = createSignal('');
   const [isComposing, setIsComposing] = createSignal(false);
@@ -649,7 +661,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
 
   const windowSizing = createMemo(() => resolveWindowSizing(viewport()));
   const position = createMemo(() => toWindowPosition(props.anchor ?? null, windowSizing()));
-  const composerCopy = createMemo(() => (props.intent ? buildAskFlowerComposerCopy(props.intent) : null));
+  const composerCopy = createMemo(() => (props.intent ? buildAskFlowerComposerCopy(props.intent, { t: i18n.t }) : null));
   const canSubmit = createMemo(() => !sending() && userPrompt().trim().length > 0);
 
   const suggestedWorkingDir = createMemo(() => {
@@ -732,7 +744,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     if (sending()) return;
     const trimmedPrompt = syncPromptFromTextarea().trim();
     if (!trimmedPrompt) {
-      setValidationError('Please enter a message for Flower.');
+      setValidationError(i18n.t('askFlowerComposer.validation.emptyMessage'));
       requestAnimationFrame(() => textareaEl?.focus());
       return;
     }
@@ -768,6 +780,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
         subtitle: params.subtitle,
         item: params.item,
         mode: descriptor.mode,
+        t: i18n.t,
         helper: params.helper,
         actionLabel: params.actionLabel,
         onAction: params.onAction,
@@ -779,7 +792,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
       title: params.title,
       subtitle: params.subtitle,
       item: params.item,
-      helper: 'Loading preview...',
+      helper: i18n.t('askFlowerComposer.preview.loadingPreview'),
     }));
 
     try {
@@ -791,6 +804,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
         item: params.item,
         name: params.file.name || params.item.name,
         bytes,
+        t: i18n.t,
         helper: params.helper,
         actionLabel: params.actionLabel,
         onAction: params.onAction,
@@ -803,13 +817,13 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
       updateContextPreview(nextPreview);
     } catch (error) {
       if (seq !== previewRequestSeq) return;
-      const friendlyMessage = friendlyAttachmentPreviewError(error);
+      const friendlyMessage = friendlyAttachmentPreviewError(error, i18n.t);
       updateContextPreview(contextPreviewStateForMessage({
         title: params.title,
         subtitle: params.subtitle,
         item: params.item,
         message: friendlyMessage,
-        helper: params.actionLabel ? 'Open the live file preview to inspect the source file.' : undefined,
+        helper: params.actionLabel ? i18n.t('askFlowerComposer.preview.openLiveFilePreviewHelper') : undefined,
         error: friendlyMessage,
         actionLabel: params.actionLabel,
         onAction: params.onAction,
@@ -822,9 +836,9 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     updateContextPreview(contextPreviewStateForText({
       title: action.title,
       subtitle: action.subtitle,
-      item: fileItemForContextPreview(action.sourcePath || action.subtitle, action.title),
+      item: fileItemForContextPreview(action.sourcePath || action.subtitle, action.title, i18n.t),
       text: preview.body,
-      helper: preview.truncated ? 'Showing the first part of this context.' : undefined,
+      helper: preview.truncated ? i18n.t('askFlowerComposer.preview.showingFirstContextPart') : undefined,
     }));
   };
 
@@ -833,9 +847,9 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     updateContextPreview(contextPreviewStateForText({
       title: action.title,
       subtitle: action.subtitle,
-      item: fileItemForContextPreview(`process://${action.pid}`, action.title),
+      item: fileItemForContextPreview(`process://${action.pid}`, action.title, i18n.t),
       text: preview.body,
-      helper: preview.truncated ? 'Showing the first part of the process snapshot.' : undefined,
+      helper: preview.truncated ? i18n.t('askFlowerComposer.preview.showingFirstProcessSnapshotPart') : undefined,
     }));
   };
 
@@ -843,13 +857,14 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
     action: Extract<AskFlowerLinkedContextAction, { type: 'open_attachment_snapshot_preview' }>,
   ) => {
     const livePath = String(action.livePath ?? '').trim();
+    const queuedAttachmentLabel = i18n.t('askFlowerComposer.context.queuedAttachment');
     await openAttachmentPreview({
       title: action.title,
       subtitle: action.subtitle,
-      item: fileItemForContextPreview(livePath || (action.subtitle === 'Queued attachment' ? action.file.name : action.subtitle), action.file.name),
+      item: fileItemForContextPreview(livePath || (action.subtitle === queuedAttachmentLabel ? action.file.name : action.subtitle), action.file.name, i18n.t),
       file: action.file,
-      helper: livePath ? 'Showing the attached snapshot that Flower will receive.' : 'Queued with your Ask Flower message.',
-      actionLabel: livePath ? 'Open live file preview' : undefined,
+      helper: livePath ? i18n.t('askFlowerComposer.preview.showingAttachedSnapshot') : i18n.t('askFlowerComposer.preview.queuedWithMessage'),
+      actionLabel: livePath ? i18n.t('askFlowerComposer.preview.openLiveFilePreviewAction') : undefined,
       onAction: livePath
         ? () => {
             void openFullFilePreview(livePath);
@@ -896,7 +911,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
               if (sending()) return;
               if (!next) props.onClose();
             }}
-            title="Ask Flower"
+            title={i18n.t('askFlowerComposer.windowTitle')}
             persistenceKey="ask-flower-composer"
             defaultPosition={position()}
             defaultSize={windowSizing().defaultSize}
@@ -911,15 +926,15 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                 <div class="flex min-w-0 flex-1 items-center text-[10px] text-muted-foreground sm:text-[11px]">
                   <span class="inline-flex min-w-0 flex-1 items-center gap-1 rounded-full border border-border/60 bg-muted/28 px-2 py-0.5">
                     <Folder class="size-3 shrink-0" />
-                    <span class="shrink-0 font-medium text-foreground/80">Working dir</span>
-                    <span class="min-w-0 truncate font-mono text-[10px] sm:text-[11px]" title={suggestedWorkingDir() || 'Working directory unavailable'}>
-                      {suggestedWorkingDir() ? truncatePath(suggestedWorkingDir()) : 'Unavailable'}
+                    <span class="shrink-0 font-medium text-foreground/80">{i18n.t('askFlowerComposer.workingDirLabel')}</span>
+                    <span class="min-w-0 truncate font-mono text-[10px] sm:text-[11px]" title={suggestedWorkingDir() || i18n.t('askFlowerComposer.workingDirectoryUnavailable')}>
+                      {suggestedWorkingDir() ? truncatePath(suggestedWorkingDir()) : i18n.t('askFlowerComposer.unavailable')}
                     </span>
                   </span>
                 </div>
-                <span class="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">{sending() ? 'Sending...' : 'Ready'}</span>
+                <span class="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">{sending() ? i18n.t('askFlowerComposer.sending') : i18n.t('common.status.ready')}</span>
                 <Button variant="ghost" size="sm" class="h-7 shrink-0 rounded-md px-2.5 text-[11px] font-medium cursor-pointer sm:h-8" onClick={props.onClose} disabled={sending()}>
-                  Close
+                  {i18n.t('common.actions.close')}
                 </Button>
               </div>
             )}
@@ -940,7 +955,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
 
                         <Show when={(composerCopy()?.contextEntries.length ?? 0) > 0}>
                           <div class="mt-2 border-t border-border/50 pt-2">
-                            <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/65">Linked context</div>
+                            <div class="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground/65">{i18n.t('askFlowerComposer.linkedContextLabel')}</div>
                             <div class="grid grid-cols-1 gap-1 sm:grid-cols-2">
                               <For each={composerCopy()?.contextEntries ?? []}>
                                 {(entry) => (
@@ -963,7 +978,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                                     </button>
                                     <For each={entry.secondaryActions}>
                                       {(action, index) => {
-                                        const label = secondaryActionLabel(action, entry);
+                                        const label = secondaryActionLabel(action, entry, i18n.t);
                                         return (
                                           <button
                                             type="button"
@@ -1012,8 +1027,8 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                       <div class="flower-chat-input-primary-row ask-flower-composer-editor-row">
                         <div class="ask-flower-composer-editor min-w-0 flex-1">
                           <div class="ask-flower-composer-heading mb-0.5 flex items-center justify-between gap-2">
-                            <div class="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/70">You</div>
-                            <span class="text-[11px] text-muted-foreground">{sending() ? 'Sending...' : 'Reply to Flower'}</span>
+                            <div class="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/70">{i18n.t('askFlowerComposer.youLabel')}</div>
+                            <span class="text-[11px] text-muted-foreground">{sending() ? i18n.t('askFlowerComposer.sending') : i18n.t('askFlowerComposer.replyToFlowerLabel')}</span>
                           </div>
 
                           <div data-testid="ask-flower-composer-editor-shell" class="ask-flower-composer-editor-shell">
@@ -1058,8 +1073,8 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
                               class={`chat-input-send-btn flower-chat-input-send-btn ask-flower-composer-send-btn cursor-pointer ${canSubmit() ? 'chat-input-send-btn-active' : ''}`}
                               onClick={() => void submit()}
                               disabled={!canSubmit()}
-                              title="Send message"
-                              aria-label="Send message"
+                              title={i18n.t('askFlowerComposer.sendMessage')}
+                              aria-label={i18n.t('askFlowerComposer.sendMessage')}
                             >
                               <Send class="size-3.5" />
                             </button>
@@ -1078,7 +1093,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             onOpenChange={(open) => {
               if (!open) closeContextBrowser();
             }}
-            title={contextBrowser()?.title || 'Linked context'}
+            title={contextBrowser()?.title || i18n.t('askFlowerComposer.linkedContextTitle')}
             description={contextBrowser()?.subtitle || undefined}
             persistenceKey="ask-flower-context-browser"
             defaultSize={{ width: 760, height: 580 }}
@@ -1104,7 +1119,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             onOpenChange={(open) => {
               if (!open) closeContextPreview();
             }}
-            title={contextPreview()?.title || 'Context preview'}
+            title={contextPreview()?.title || i18n.t('askFlowerComposer.contextPreviewTitle')}
             description={contextPreview()?.subtitle || undefined}
             persistenceKey="ask-flower-context-preview"
             defaultSize={CONTEXT_PREVIEW_DEFAULT_SIZE}
@@ -1115,7 +1130,7 @@ export function AskFlowerComposerWindow(props: AskFlowerComposerWindowProps) {
             footer={(
               <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
                 <Button size="sm" variant="outline" class="cursor-pointer" onClick={closeContextPreview}>
-                  Close
+                  {i18n.t('common.actions.close')}
                 </Button>
                 <Show when={contextPreview()?.actionLabel && contextPreview()?.onAction}>
                   <Button

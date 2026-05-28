@@ -74,13 +74,13 @@ function normalizeAskUserActions(raw: unknown): AskUserAction[] {
   return out;
 }
 
-function defaultWriteLabel(responseMode: AskUserResponseMode, header: string, question: string): string {
-  if (responseMode === 'select_or_write') return 'None of the above';
+function defaultWriteLabel(responseMode: AskUserResponseMode, header: string, question: string): string | undefined {
+  if (responseMode === 'select_or_write') return undefined;
   return header || question || 'Your answer';
 }
 
-function defaultWritePlaceholder(responseMode: AskUserResponseMode): string {
-  return responseMode === 'select_or_write' ? 'Type another answer' : 'Type your answer';
+function defaultWritePlaceholder(responseMode: AskUserResponseMode): string | undefined {
+  return responseMode === 'select_or_write' ? undefined : 'Type your answer';
 }
 
 function normalizeAskUserChoicesArray(raw: unknown): NormalizedChoiceSource {
@@ -95,7 +95,7 @@ function normalizeAskUserChoicesArray(raw: unknown): NormalizedChoiceSource {
   for (const item of raw) {
     if (!item || typeof item !== 'object') continue;
     const kind = normalizeAskUserChoiceKind((item as any).kind);
-    const label = asTrimmedString((item as any).label) || (kind === 'write' ? 'Other' : '');
+    const label = asTrimmedString((item as any).label);
     if (!label) continue;
     const choiceId = asTrimmedString((item as any).choice_id ?? (item as any).choiceId) || `${kind}_${choices.length + 1}`;
     const actions = normalizeAskUserActions((item as any).actions);
@@ -147,18 +147,13 @@ function normalizeLegacyAskUserChoices(raw: unknown, allowOther: boolean): Norma
     };
   }).filter(Boolean);
 
-  if (allowOther) {
-    projected.push({
-      choice_id: 'other',
-      label: 'None of the above',
-      description: 'Type another answer.',
-      kind: 'write',
-      input_placeholder: 'Type another answer',
-      actions: undefined,
-    });
-  }
+  const normalized = normalizeAskUserChoicesArray(projected);
+  if (!allowOther) return normalized;
 
-  return normalizeAskUserChoicesArray(projected);
+  return {
+    ...normalized,
+    hasWritePath: true,
+  };
 }
 
 export function normalizeAskUserQuestions(raw: unknown): AskUserQuestion[] {
@@ -318,7 +313,7 @@ export function questionSupportsAutoSubmit(question: AskUserQuestion, totalQuest
 
 export function questionInputPlaceholder(question: AskUserQuestion, _draft: AskUserDraft | undefined | null): string {
   if (question.isSecret) {
-    return question.writePlaceholder || 'Enter secret value';
+    return question.writePlaceholder || '';
   }
-  return question.writePlaceholder || defaultWritePlaceholder(question.responseMode);
+  return question.writePlaceholder || defaultWritePlaceholder(question.responseMode) || '';
 }

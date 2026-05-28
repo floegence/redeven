@@ -259,9 +259,10 @@ describe('browser workspace layout wiring', () => {
     const changesHeaderLayoutSrc = read('./gitChangesHeaderLayout.ts');
     const primitivesSrc = read('./GitWorkbenchPrimitives.tsx');
 
-    expect(overviewSrc).toContain('Workspace Summary');
-    expect(overviewSrc).toContain('Selected Branch');
-    expect(overviewSrc).toContain('Repository Signals');
+    expect(overviewSrc).toContain("i18n.t('git.overview.workspaceSummary')");
+    expect(overviewSrc).toContain("i18n.t('git.overview.selectedBranch')");
+    expect(overviewSrc).toContain("i18n.t('git.overview.repositorySignals')");
+    expect(overviewSrc).toContain('useI18n');
     expect(overviewSrc).toContain('GitStatStrip');
     expect(overviewSrc).toContain('h-full min-h-0 overflow-auto px-3 py-3 sm:px-4 sm:py-4');
     expect(overviewSrc).toContain('columnsClass="grid-cols-2 xl:grid-cols-4"');
@@ -270,9 +271,10 @@ describe('browser workspace layout wiring', () => {
     expect(overviewSrc).not.toContain('xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]');
     expect(overviewSrc).not.toContain('text-[24px] font-semibold tracking-tight');
 
-    expect(changesSrc).toContain('Commit...');
-    expect(changesSrc).toContain('Path');
-    expect(changesSrc).toContain('Status');
+    expect(changesSrc).toContain("i18n.t('git.changes.commitAction')");
+    expect(changesSrc).toContain("i18n.t('git.common.path')");
+    expect(changesSrc).toContain("i18n.t('git.common.status')");
+    expect(changesSrc).toContain('useI18n');
     expect(changesSrc).toContain('GitCommitDialog');
     expect(changesSrc).toContain('GitDiffDialog');
     expect(changesSrc).toContain('GitChangesBreadcrumb');
@@ -450,11 +452,11 @@ describe('browser workspace layout wiring', () => {
     expect(primitivesSrc).toContain('flex w-full min-h-0 flex-1 items-center justify-center');
     expect(primitivesSrc).toContain('<SnakeLoader size="sm"');
     expect(workspaceSrc).toContain('shellLoadingMessage?: string;');
-    expect(workspaceSrc).toContain('Preparing the active Git view...');
+    expect(workspaceSrc).toContain("i18n.t('git.workspace.preparingActiveView')");
     expect(workspaceSrc).toContain('<GitStatePane loading message={shellLoadingMessage()}');
 
     expect(changesSrc).toContain('GitStatePane');
-    expect(changesSrc).toContain('Loading workspace changes...');
+    expect(changesSrc).toContain("i18n.t('git.changes.loadingWorkspaceChanges')");
 
     expect(branchesSrc).toContain('GitStatePane');
     expect(branchesSrc).toContain('Loading commit history...');
@@ -497,7 +499,7 @@ describe('browser workspace layout wiring', () => {
     expect(patchSrc).toContain("class={cn(");
     expect(patchSrc).toContain("'min-h-0 overflow-auto rounded-md border bg-background p-1 [-webkit-overflow-scrolling:touch] [touch-action:pan-x_pan-y_pinch-zoom]'");
     expect(patchSrc).toContain("redevenSurfaceRoleClass('control')");
-    expect(patchSrc).toContain('Swipe horizontally to inspect long diff lines.');
+    expect(patchSrc).toContain("i18n.t('git.patchViewer.mobileHorizontalHint')");
     expect(patchSrc).toContain('[touch-action:pan-x_pan-y_pinch-zoom]');
     expect(patchSrc).toContain('inline-block min-w-full bg-muted/[0.20] p-px align-top');
     expect(patchSrc).toContain('grid w-max min-w-full');
@@ -520,13 +522,16 @@ describe('browser workspace layout wiring', () => {
     const branchesSrc = read('./GitBranchesPanel.tsx');
     const historySrc = read('./GitHistoryBrowser.tsx');
 
-    expect(changesSrc).toContain('No staged files yet. Stage files from the pending sections, then open the commit dialog.');
-    expect(changesSrc).toContain('No pending files in this repository.');
-    expect(changesHeaderLayoutSrc).toContain("'No pending changes'");
+    expect(changesSrc).toContain("i18n.t('git.changes.noStagedFiles')");
+    expect(changesSrc).toContain("i18n.t('git.changes.noPendingFiles')");
+    expect(changesSrc).toContain("i18n.t('git.changes.noPendingChanges')");
     expect(changesSrc).not.toContain('Choose a file from the staged or pending lists to inspect its patch.');
+    expect(changesHeaderLayoutSrc).toContain('Review the staged snapshot before commit.');
+    expect(changesHeaderLayoutSrc).toContain('Pending changes are clear. Review the staged snapshot and commit when ready.');
+    expect(changesHeaderLayoutSrc).toContain('Stage what you want to keep, then commit.');
 
-    expect(overviewSrc).toContain('Choose a branch from the sidebar to load compare context.');
-    expect(overviewSrc).toContain('Branch compare details appear here after you pick a branch from the sidebar.');
+    expect(overviewSrc).toContain("i18n.t('git.overview.chooseBranchToLoadCompare')");
+    expect(overviewSrc).toContain("i18n.t('git.overview.branchCompareAppears')");
 
     expect(branchesSrc).toContain('Choose a branch from the sidebar to inspect its status or history.');
     expect(branchesSrc).toContain('Choose two branches to inspect file changes.');
@@ -550,11 +555,11 @@ describe('browser workspace layout wiring', () => {
     const commitSrc = read('./GitCommitDialog.tsx');
 
     expect(commitSrc).toContain('GitStatStrip');
-    expect(commitSrc).toContain("label: 'Files Ready'");
-    expect(commitSrc).toContain("label: 'Added Lines'");
-    expect(commitSrc).toContain("label: 'Removed Lines'");
+    expect(commitSrc).toContain("label: i18n.t('git.commitDialog.filesReady')");
+    expect(commitSrc).toContain("label: i18n.t('git.commitDialog.addedLines')");
+    expect(commitSrc).toContain("label: i18n.t('git.commitDialog.removedLines')");
     expect(commitSrc).toContain('props.stagedItems.reduce');
-    expect(commitSrc).toContain('Status');
+    expect(commitSrc).toContain("i18n.t('git.common.status')");
   });
 
 });

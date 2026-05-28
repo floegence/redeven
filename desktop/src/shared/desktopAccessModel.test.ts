@@ -30,7 +30,8 @@ describe('desktopAccessModel', () => {
     expect(model.port_mode).toBe('fixed');
     expect(model.fixed_port_value).toBe('23998');
     expect(model.next_start_address_display).toBe('localhost:23998');
-    expect(model.password_state_label).toBe('No password required');
+    expect(model.next_start_address_kind).toBe('raw');
+    expect(model.password_state_id).toBe('not_required');
   });
 
   it('keeps dynamic loopback binds in local-only mode but describes them as auto-select', () => {
@@ -41,7 +42,8 @@ describe('desktopAccessModel', () => {
     expect(model.access_mode).toBe('local_only');
     expect(model.port_mode).toBe('auto');
     expect(model.fixed_port_value).toBe('23998');
-    expect(model.next_start_address_display).toBe('Auto-select on localhost');
+    expect(model.next_start_address_display).toBe('');
+    expect(model.next_start_address_kind).toBe('auto_loopback');
   });
 
   it('treats wildcard binds as shared-local-network even when the saved fixed port differs from the default', () => {
@@ -53,8 +55,9 @@ describe('desktopAccessModel', () => {
       local_ui_bind: '0.0.0.0:24000',
     }))).toBe('shared_local_network');
     expect(model.fixed_port_value).toBe('24000');
-    expect(model.next_start_address_display).toBe('Your device IP:24000');
-    expect(model.password_state_label).toContain('Password required');
+    expect(model.next_start_address_display).toBe('24000');
+    expect(model.next_start_address_kind).toBe('lan_ip_port');
+    expect(model.password_state_id).toBe('required');
   });
 
   it('treats a write-only kept password as custom exposure on loopback', () => {
@@ -70,7 +73,7 @@ describe('desktopAccessModel', () => {
     const model = deriveDesktopAccessDraftModel(sourceDraft, {
       local_ui_password_configured: true,
     });
-    expect(model.password_state_label).toBe('Password configured');
+    expect(model.password_state_id).toBe('configured');
     expect(model.password_state_tone).toBe('success');
   });
 
@@ -112,7 +115,7 @@ describe('desktopAccessModel', () => {
     expect(items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'visibility',
-        value: 'Local only',
+        value_key: 'settings.localOnlyLabel',
       }),
       expect.objectContaining({
         id: 'next_start_address',
@@ -120,7 +123,7 @@ describe('desktopAccessModel', () => {
       }),
       expect.objectContaining({
         id: 'password_state',
-        value: 'No password required',
+        value_key: 'settings.noPassword',
       }),
     ]));
   });

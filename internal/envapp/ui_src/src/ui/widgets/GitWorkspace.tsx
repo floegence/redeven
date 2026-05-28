@@ -19,6 +19,7 @@ import { GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
+import { useI18n } from '../i18n';
 
 export interface GitWorkspaceProps {
   mode: GitHistoryMode;
@@ -128,6 +129,7 @@ export interface GitWorkspaceProps {
 }
 
 export function GitWorkspace(props: GitWorkspaceProps) {
+  const i18n = useI18n();
   const subviewItems = () => buildGitWorkbenchSubviewItems({
     repoSummary: props.repoSummary,
     workspace: props.workspace,
@@ -135,7 +137,7 @@ export function GitWorkspace(props: GitWorkspaceProps) {
   });
   const shellLoadingMessage = () => String(props.shellLoadingMessage ?? '').trim();
   const shellBlocking = () => shellLoadingMessage().length > 0;
-  const shellSidebarNote = () => 'Preparing the active Git view...';
+  const shellSidebarNote = () => i18n.t('git.workspace.preparingActiveView');
 
   return (
     <BrowserWorkspaceShell

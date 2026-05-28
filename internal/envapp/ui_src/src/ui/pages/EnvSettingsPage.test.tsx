@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvSettingsPage } from './EnvSettingsPage';
@@ -40,6 +41,9 @@ const envContextMocks = vi.hoisted(() => ({
   settingsFocusSection: vi.fn(() => null),
   bumpSettingsSeq: vi.fn(),
 }));
+
+let settingsFocusSeqAccessor: () => number = () => 0;
+let settingsFocusSectionAccessor: () => string | null = () => null;
 
 const runtimeUpdateMocks = vi.hoisted(() => ({
   version: {
@@ -350,12 +354,8 @@ function flushPage(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function findButton(host: HTMLElement, label: string): HTMLButtonElement | undefined {
-  return Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === label);
-}
-
-async function openSettingsSection(host: HTMLElement, label: string): Promise<void> {
-  const button = findButton(host, label);
+async function openSettingsSection(host: HTMLElement, section: string): Promise<void> {
+  const button = host.querySelector(`[data-settings-nav-item="${section}"]`) as HTMLButtonElement | null;
   expect(button).toBeTruthy();
   button?.click();
   await flushPage();
@@ -368,6 +368,10 @@ describe('EnvSettingsPage', () => {
     vi.clearAllMocks();
     protocolMocks.status.mockReturnValue('disconnected');
     settingsResponse = null;
+    settingsFocusSeqAccessor = () => 0;
+    settingsFocusSectionAccessor = () => null;
+    envContextMocks.settingsFocusSeq.mockImplementation(() => settingsFocusSeqAccessor());
+    envContextMocks.settingsFocusSection.mockImplementation(() => settingsFocusSectionAccessor() as any);
     desktopCodeWorkspaceMocks.prepareAvailable.mockReset();
     desktopCodeWorkspaceMocks.prepareAvailable.mockReturnValue(true);
     desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockReset();
@@ -404,6 +408,7 @@ describe('EnvSettingsPage', () => {
 
     const navLabels = SETTINGS_NAV_ITEMS.map((item) => item.label);
     expect(navLabels).toEqual([
+      'Interface',
       'Config File',
       'Connection',
       'Runtime Status',
@@ -422,14 +427,47 @@ describe('EnvSettingsPage', () => {
       .filter((label) => navLabels.includes(label));
     expect(renderedNavLabels).toEqual(navLabels);
 
-    expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
+    expect(host.querySelector('[data-settings-card="Interface"]')?.textContent).toContain('Language preference');
+    expect(host.querySelector('[data-settings-card="Interface"]')?.textContent).toContain('System default');
 
-    await openSettingsSection(host, 'Debug Console');
+    const diagnosticsGroup = host.querySelector('[data-settings-group="diagnostics"]');
+    expect(diagnosticsGroup?.querySelector('[data-settings-nav-item="debug_console"]')).not.toBeNull();
+
+    const codespacesGroup = host.querySelector('[data-settings-group="codespaces_tooling"]');
+    expect(codespacesGroup?.querySelector('[data-settings-nav-item="codespaces"]')).not.toBeNull();
+
+    const runtimeGroup = host.querySelector('[data-settings-group="runtime_configuration"]');
+    expect(runtimeGroup?.querySelector('[data-settings-nav-item="debug_console"]')).toBeNull();
+    expect(runtimeGroup?.querySelector('[data-settings-nav-item="codespaces"]')).toBeNull();
+
+    const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
+    const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-nav-item]') ?? []).map((node) => node.getAttribute('data-settings-nav-item'));
+    expect(aiGroupSections).toEqual(['ai', 'skills', 'codex']);
+
+    await openSettingsSection(host, 'debug_console');
     expect(host.querySelector('[data-settings-card="Debug Console"]')).toBeTruthy();
-    expect(host.querySelector('[data-settings-card="Config File"]')).toBeNull();
+    expect(host.querySelector('[data-settings-card="Interface"]')).toBeNull();
 
-    await openSettingsSection(host, 'Codespaces & Tooling');
+    await openSettingsSection(host, 'codespaces');
     expect(host.querySelector('[data-settings-card="Browser Editor"]')).toBeTruthy();
+  });
+
+  it('honors the shell focus request for the Interface section', async () => {
+    const [focusSeq, setFocusSeq] = createSignal(1);
+    const [focusSection] = createSignal('interface');
+    settingsFocusSeqAccessor = focusSeq;
+    settingsFocusSectionAccessor = focusSection;
+
+    render(() => <EnvSettingsPage />, host);
+    await flushPage();
+
+    await openSettingsSection(host, 'codespaces');
+    expect(host.querySelector('[data-settings-card="Codespaces Ports"]')).toBeTruthy();
+
+    setFocusSeq(2);
+    await flushPage();
+
+    expect(host.querySelector('[data-settings-card="Interface"]')).toBeTruthy();
   });
 
   it('renders Runtime Service identity and live-work rows in Runtime Status', async () => {
@@ -468,6 +506,7 @@ describe('EnvSettingsPage', () => {
     render(() => <EnvSettingsPage />, host);
     await openSettingsSection(host, 'Runtime Status');
     await flushPage();
+    await openSettingsSection(host, 'agent');
 
     const runtimeStatus = host.querySelector('[data-settings-card="Runtime Status"]');
     expect(runtimeStatus?.textContent).toContain('Service owner');
@@ -501,7 +540,7 @@ describe('EnvSettingsPage', () => {
     };
 
     render(() => <EnvSettingsPage />, host);
-    await openSettingsSection(host, 'Flower');
+    await openSettingsSection(host, 'ai');
     await vi.waitFor(() => {
       expect(host.querySelector('[data-settings-card="Flower"]')?.textContent).toContain('Flower is currently disabled.');
     });
@@ -560,7 +599,7 @@ describe('EnvSettingsPage', () => {
     });
 
     render(() => <EnvSettingsPage />, host);
-    await openSettingsSection(host, 'Flower');
+    await openSettingsSection(host, 'ai');
     await vi.waitFor(() => {
       expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith('/_redeven_proxy/api/settings', { method: 'GET' });
     });
@@ -620,7 +659,8 @@ describe('EnvSettingsPage', () => {
     });
 
     render(() => <EnvSettingsPage />, host);
-    await openSettingsSection(host, 'Codespaces & Tooling');
+    await flushPage();
+    await openSettingsSection(host, 'codespaces');
 
     const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Update browser editor'));
     expect(button).toBeTruthy();
@@ -647,7 +687,8 @@ describe('EnvSettingsPage', () => {
     });
 
     render(() => <EnvSettingsPage />, host);
-    await openSettingsSection(host, 'Codespaces & Tooling');
+    await flushPage();
+    await openSettingsSection(host, 'codespaces');
 
     const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Update browser editor'));
     expect(button).toBeTruthy();

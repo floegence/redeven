@@ -1,5 +1,5 @@
 import { getLocalRuntime } from './controlplaneApi';
-import { AccessUnlockError, normalizeRetryAfterMs } from './accessUnlockError';
+import { AccessUnlockError, isKnownAccessUnlockErrorCode, normalizeRetryAfterMs } from './accessUnlockError';
 import { applyLocalAccessResumeHeader } from './localAccessAuth';
 
 export type GatewayAccessStatus = {
@@ -86,7 +86,7 @@ export async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promi
     const message = gatewayErrorMessage(data, resp.status);
     const code = gatewayErrorCode(data) || 'HTTP_ERROR';
     const retryAfterMs = gatewayRetryAfterMs(data);
-    if (retryAfterMs > 0 || code === 'ACCESS_PASSWORD_RETRY_LATER') {
+    if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
       throw new AccessUnlockError({ message, status: resp.status, code, retryAfterMs });
     }
     throw new Error(message);
@@ -95,7 +95,7 @@ export async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promi
     const message = gatewayErrorMessage(data, resp.status || 400);
     const code = gatewayErrorCode(data) || 'REQUEST_FAILED';
     const retryAfterMs = gatewayRetryAfterMs(data);
-    if (retryAfterMs > 0 || code === 'ACCESS_PASSWORD_RETRY_LATER') {
+    if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
       throw new AccessUnlockError({ message, status: resp.status || 400, code, retryAfterMs });
     }
     throw new Error(message);

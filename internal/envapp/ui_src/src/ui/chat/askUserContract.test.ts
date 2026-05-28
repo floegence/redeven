@@ -28,8 +28,8 @@ describe('askUserContract', () => {
       question: 'Choose the closest situation.',
       isSecret: false,
       responseMode: 'select_or_write',
-      writeLabel: 'None of the above',
-      writePlaceholder: 'Type another answer',
+      writeLabel: undefined,
+      writePlaceholder: undefined,
       choices: [
         { choiceId: 'working', label: 'Already working', kind: 'select', description: undefined, actions: undefined },
         { choiceId: 'studying', label: 'Studying full time', kind: 'select', description: undefined, actions: undefined },

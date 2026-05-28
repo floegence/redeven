@@ -19,6 +19,7 @@ import { useChatContext } from '../ChatProvider';
 import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
 import type { ActivityItem } from '../types';
 import { useAIChatContext } from '../../pages/AIChatContext';
+import { useI18n } from '../../i18n';
 import { ActivityDetailPanel } from './ActivityDetailPanel';
 import type { ActivityDetailLoadState } from './activityDetailTypes';
 
@@ -43,8 +44,26 @@ const stopLocalEvent: JSX.EventHandlerUnion<HTMLElement, Event> = (event) => {
   event.stopPropagation();
 };
 
+function localizedQuestionInputPlaceholder(
+  i18n: ReturnType<typeof useI18n>,
+  question: AskUserQuestion,
+  draft: AskUserDraft | undefined | null,
+): string {
+  const fallback = questionInputPlaceholder(question, draft);
+  if (fallback && fallback !== 'Type your answer') {
+    return fallback;
+  }
+  if (question.isSecret) {
+    return i18n.t('chatActivity.enterSecretValue');
+  }
+  return question.responseMode === 'select_or_write'
+    ? i18n.t('chatActivity.typeAnotherAnswer')
+    : i18n.t('chatActivity.typeYourAnswer');
+}
+
 const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem }> = (props) => {
   const ctx = useChatContext();
+  const i18n = useI18n();
   const canApprove = createMemo(() => props.item.requiresApproval === true && props.item.approvalState === 'required');
 
   return (
@@ -58,7 +77,7 @@ const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem
             ctx.approveToolCall(props.messageId, String(props.item.toolId ?? ''), true);
           }}
         >
-          Allow
+          {i18n.t('chatActivity.allow')}
         </button>
         <button
           type="button"
@@ -68,7 +87,7 @@ const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem
             ctx.approveToolCall(props.messageId, String(props.item.toolId ?? ''), false);
           }}
         >
-          Deny
+          {i18n.t('chatActivity.deny')}
         </button>
       </span>
     </Show>
@@ -77,6 +96,7 @@ const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem
 
 const ActivityAskUserItem: Component<{ messageId: string; item: ActivityItem }> = (props) => {
   const ai = useAIChatContext();
+  const i18n = useI18n();
   const [submitting, setSubmitting] = createSignal(false);
   const [submitError, setSubmitError] = createSignal('');
   const activeThreadId = createMemo(() => String(ai.activeThreadId() ?? '').trim());
@@ -189,8 +209,8 @@ const ActivityAskUserItem: Component<{ messageId: string; item: ActivityItem }> 
                         onChange={() => setQuestionDraft(question.id, { choiceId: undefined, text: draft().text, writeSelected: true })}
                       />
                       <span>
-                        <span class="chat-activity-input-option-label">{question.writeLabel ?? 'None of the above'}</span>
-                        <span class="chat-activity-input-option-description">Type another answer.</span>
+                        <span class="chat-activity-input-option-label">{question.writeLabel ?? i18n.t('chatActivity.noneOfTheAbove')}</span>
+                        <span class="chat-activity-input-option-description">{i18n.t('chatActivity.typeAnotherAnswer')}</span>
                       </span>
                     </label>
                   </Show>
@@ -201,7 +221,7 @@ const ActivityAskUserItem: Component<{ messageId: string; item: ActivityItem }> 
                   class="chat-activity-input-text"
                   type={question.isSecret ? 'password' : 'text'}
                   value={draft().text ?? ''}
-                  placeholder={questionInputPlaceholder(question, draft())}
+                  placeholder={localizedQuestionInputPlaceholder(i18n, question, draft())}
                   aria-label={selectedChoice()?.label ? `${question.header} - ${selectedChoice()!.label}` : question.header}
                   disabled={controlsDisabled()}
                   onInput={(event) => setQuestionDraft(question.id, { choiceId: undefined, text: event.currentTarget.value, writeSelected: true })}
@@ -213,17 +233,17 @@ const ActivityAskUserItem: Component<{ messageId: string; item: ActivityItem }> 
       </For>
       <Show
         when={interactiveAllowed()}
-        fallback={<div class="chat-activity-input-resolved">{waitingUnavailable() ? 'Input unavailable' : 'Input resolved'}</div>}
+        fallback={<div class="chat-activity-input-resolved">{waitingUnavailable() ? i18n.t('chatActivity.inputUnavailable') : i18n.t('chatActivity.inputResolved')}</div>}
       >
         <Show when={!questions().some((question) => questionSupportsAutoSubmit(question, questions().length)) || submitError()}>
           <div class="chat-activity-input-submit-row">
             <button type="button" class="chat-activity-input-submit" disabled={!canSubmit()} onClick={() => void submit()}>
-              {submitError() ? 'Retry' : 'Continue'}
+              {submitError() ? i18n.t('common.actions.retry') : i18n.t('chatActivity.continue')}
             </button>
             <span class={cn('chat-activity-input-hint', submitError() && 'chat-activity-input-hint-error')}>
               {submitError() || (unansweredQuestions().length > 0
-                ? `Answer ${unansweredQuestions().length} more question${unansweredQuestions().length === 1 ? '' : 's'}.`
-                : 'Ready to continue.')}
+                ? i18n.tn('chatActivity.answerMoreQuestions', unansweredQuestions().length)
+                : i18n.t('chatActivity.readyToContinue'))}
             </span>
           </div>
         </Show>

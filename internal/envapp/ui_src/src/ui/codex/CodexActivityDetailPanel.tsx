@@ -6,6 +6,7 @@ import { CodexFileChangeDiff } from './CodexFileChangeDiff';
 import { displayStatus, itemText } from './presentation';
 import type { CodexActivityDetailRef } from './transcriptDisplayModel';
 import type { CodexFileChange, CodexTranscriptItem } from './types';
+import { useI18n, type I18nHelpers } from '../i18n';
 
 function normalizeExecutionStatus(status: string | null | undefined, exitCode: number | null | undefined): 'running' | 'success' | 'error' {
   const normalized = String(status ?? '').trim().toLowerCase();
@@ -31,26 +32,32 @@ function reasoningMarkdown(item: CodexTranscriptItem): string {
   return sections.join('\n\n').trim();
 }
 
-function detailTitle(detail: CodexActivityDetailRef, item: CodexTranscriptItem | null): string {
+function detailTitle(
+  i18n: I18nHelpers,
+  detail: CodexActivityDetailRef,
+  item: CodexTranscriptItem | null,
+): string {
   switch (detail.type) {
     case 'file_diff': {
       const change = item?.changes?.[detail.changeIndex];
-      return String(change?.move_path ?? change?.path ?? 'File diff').trim() || 'File diff';
+      const fallback = i18n.t('codexActivity.detail.fileDiff');
+      return String(change?.move_path ?? change?.path ?? fallback).trim() || fallback;
     }
     case 'command_output':
-      return String(item?.command ?? 'Command output').trim() || 'Command output';
+      return String(item?.command ?? i18n.t('codexActivity.detail.commandOutput')).trim()
+        || i18n.t('codexActivity.detail.commandOutput');
     case 'web_search':
-      return 'Search details';
+      return i18n.t('codexActivity.detail.searchDetails');
     case 'reasoning':
-      return 'Reasoning';
+      return i18n.t('codexActivity.detail.reasoning');
     case 'plan':
-      return 'Plan';
+      return i18n.t('codexActivity.detail.plan');
     case 'file_preview':
       return detail.path;
     case 'raw_item':
-      return displayStatus(item?.type, 'Item details');
+      return displayStatus(item?.type, i18n.t('codexActivity.detail.itemDetails'));
     default:
-      return 'Details';
+      return i18n.t('codexActivity.detail.details');
   }
 }
 
@@ -59,7 +66,8 @@ export function CodexActivityDetailPanel(props: {
   item: CodexTranscriptItem | null;
   onClose: () => void;
 }) {
-  const title = createMemo(() => detailTitle(props.detail, props.item));
+  const i18n = useI18n();
+  const title = createMemo(() => detailTitle(i18n, props.detail, props.item));
   const selectedFileChange = createMemo<CodexFileChange | null>(() => {
     if (props.detail.type !== 'file_diff') return null;
     return props.item?.changes?.[props.detail.changeIndex] ?? null;
@@ -70,7 +78,7 @@ export function CodexActivityDetailPanel(props: {
     if (props.detail.type === 'reasoning' || props.detail.type === 'plan') {
       return reasoningMarkdown(item);
     }
-    return itemText(item);
+    return itemText(item, i18n);
   });
 
   return (
@@ -80,15 +88,15 @@ export function CodexActivityDetailPanel(props: {
         <button
           type="button"
           class="codex-activity-detail-close"
-          aria-label="Close activity detail"
+          aria-label={i18n.t('codexActivity.detail.closeAria')}
           onClick={props.onClose}
         >
-          Close
+          {i18n.t('codexActivity.detail.close')}
         </button>
       </div>
       <Show
         when={props.item}
-        fallback={<div class="codex-activity-detail-empty">Details are no longer available.</div>}
+        fallback={<div class="codex-activity-detail-empty">{i18n.t('codexActivity.detail.unavailable')}</div>}
       >
         {(itemAccessor) => {
           const item = () => itemAccessor();
@@ -96,7 +104,7 @@ export function CodexActivityDetailPanel(props: {
             return (
               <Show
                 when={selectedFileChange()}
-                fallback={<div class="codex-activity-detail-empty">No file change details were provided.</div>}
+                fallback={<div class="codex-activity-detail-empty">{i18n.t('codexActivity.detail.noFileChangeDetails')}</div>}
               >
                 {(changeAccessor) => <CodexFileChangeDiff change={changeAccessor()} />}
               </Show>
@@ -105,7 +113,7 @@ export function CodexActivityDetailPanel(props: {
           if (props.detail.type === 'command_output') {
             return (
               <ShellBlock
-                command={item().command || 'Command unavailable'}
+                command={item().command || i18n.t('codexActivity.detail.commandUnavailable')}
                 output={item().aggregated_output}
                 cwd={item().cwd}
                 durationMs={item().duration_ms}
@@ -118,7 +126,7 @@ export function CodexActivityDetailPanel(props: {
           return (
             <Show
               when={markdown()}
-              fallback={<div class="codex-activity-detail-empty">No detail content was provided.</div>}
+              fallback={<div class="codex-activity-detail-empty">{i18n.t('codexActivity.detail.noContent')}</div>}
             >
               {(content) => (
                 <MarkdownBlock

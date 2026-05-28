@@ -1,5 +1,7 @@
 import type { MenuItemConstructorOptions } from 'electron';
 
+import type { DesktopI18n } from '../shared/i18n/desktopI18n';
+
 export type AppMenuActions = Readonly<{
   openConnectionCenter: () => void;
   openAdvancedSettings: () => void;
@@ -14,13 +16,14 @@ function buildViewSubmenu(): MenuItemConstructorOptions[] {
 
 function buildFileMenu(
   actions: AppMenuActions,
+  i18n: DesktopI18n,
   platform: NodeJS.Platform,
 ): MenuItemConstructorOptions {
   if (platform === 'darwin') {
     return {
-      label: 'File',
+      label: i18n.t('nativeMenu.file'),
       submenu: [
-        { label: 'Connect Environment...', accelerator: 'CommandOrControl+Shift+O', click: actions.openConnectionCenter },
+        { label: i18n.t('nativeMenu.connectEnvironment'), accelerator: 'CommandOrControl+Shift+O', click: actions.openConnectionCenter },
         { type: 'separator' },
         { role: 'close' },
       ],
@@ -28,16 +31,16 @@ function buildFileMenu(
   }
 
   return {
-    label: 'File',
+    label: i18n.t('nativeMenu.file'),
     submenu: [
-      { label: 'Connect Environment...', accelerator: 'CommandOrControl+Shift+O', click: actions.openConnectionCenter },
+      { label: i18n.t('nativeMenu.connectEnvironment'), accelerator: 'CommandOrControl+Shift+O', click: actions.openConnectionCenter },
       { type: 'separator' },
-      { label: 'Quit Redeven Desktop', accelerator: 'CommandOrControl+Q', click: actions.requestQuit },
+      { label: i18n.t('nativeMenu.quitDesktop'), accelerator: 'CommandOrControl+Q', click: actions.requestQuit },
     ],
   };
 }
 
-function buildWindowMenu(platform: NodeJS.Platform): MenuItemConstructorOptions {
+function buildWindowMenu(i18n: DesktopI18n, platform: NodeJS.Platform): MenuItemConstructorOptions {
   if (platform === 'darwin') {
     return {
       role: 'windowMenu',
@@ -45,7 +48,7 @@ function buildWindowMenu(platform: NodeJS.Platform): MenuItemConstructorOptions 
   }
 
   return {
-    label: 'Window',
+    label: i18n.t('nativeMenu.window'),
     submenu: [
       { role: 'minimize' },
       { role: 'zoom' },
@@ -84,32 +87,33 @@ function buildEditSubmenu(platform: NodeJS.Platform): MenuItemConstructorOptions
 
 export function buildAppMenuTemplate(
   actions: AppMenuActions,
+  i18n: DesktopI18n,
   platform: NodeJS.Platform = process.platform,
 ): MenuItemConstructorOptions[] {
   const appMenu: MenuItemConstructorOptions | null = platform === 'darwin'
     ? {
-        label: 'Redeven Desktop',
+        label: i18n.t('desktop.title'),
         submenu: [
-          { label: 'Hide Redeven Desktop', role: 'hide' },
-          { label: 'Hide Others', role: 'hideOthers' },
-          { label: 'Show All', role: 'unhide' },
+          { label: i18n.t('nativeMenu.hideDesktop'), role: 'hide' },
+          { label: i18n.t('nativeMenu.hideOthers'), role: 'hideOthers' },
+          { label: i18n.t('nativeMenu.showAll'), role: 'unhide' },
           { type: 'separator' },
-          { label: 'Quit Redeven Desktop', accelerator: 'CommandOrControl+Q', click: actions.requestQuit },
+          { label: i18n.t('nativeMenu.quitDesktop'), accelerator: 'CommandOrControl+Q', click: actions.requestQuit },
         ],
       }
     : null;
 
   return [
     ...(appMenu ? [appMenu] : []),
-    buildFileMenu(actions, platform),
+    buildFileMenu(actions, i18n, platform),
     {
-      label: 'Edit',
+      label: i18n.t('nativeMenu.edit'),
       submenu: buildEditSubmenu(platform),
     },
     {
-      label: 'View',
+      label: i18n.t('nativeMenu.view'),
       submenu: buildViewSubmenu(),
     },
-    buildWindowMenu(platform),
+    buildWindowMenu(i18n, platform),
   ];
 }

@@ -179,6 +179,69 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       singleton: false,
     },
   ],
+  localizedRedevenWorkbenchWidgets: (t: (key: string) => string) => [
+    {
+      type: 'redeven.files',
+      label: t('workbench.widgets.files.label'),
+      icon: () => null,
+      body: (props: any) => (
+        <div>
+          <button
+            type="button"
+            data-testid="widget-files-button"
+            data-selected={String(Boolean(props.selected))}
+            onClick={() => layoutApiState.clicks.push(`files:${String(Boolean(props.selected))}`)}
+          >
+            Files
+          </button>
+          <input
+            aria-label="Files input"
+            data-testid="widget-files-input"
+            data-selected={String(Boolean(props.selected))}
+          />
+        </div>
+      ),
+      defaultTitle: t('workbench.widgets.files.defaultTitle'),
+      defaultSize: { width: 360, height: 240 },
+      singleton: false,
+      renderMode: 'projected_surface',
+    },
+    {
+      type: 'redeven.terminal',
+      label: t('workbench.widgets.terminal.label'),
+      icon: () => null,
+      body: (props: any) => (
+        <div>
+          <button
+            type="button"
+            data-testid="widget-terminal-button"
+            data-selected={String(Boolean(props.selected))}
+            onClick={() => layoutApiState.clicks.push(`terminal:${String(Boolean(props.selected))}`)}
+          >
+            Terminal
+          </button>
+          <input
+            aria-label="Terminal input"
+            data-testid="widget-terminal-input"
+            data-selected={String(Boolean(props.selected))}
+          />
+        </div>
+      ),
+      defaultTitle: t('workbench.widgets.terminal.defaultTitle'),
+      defaultSize: { width: 360, height: 240 },
+      singleton: false,
+      renderMode: 'projected_surface',
+    },
+    {
+      type: 'redeven.preview',
+      label: t('workbench.widgets.preview.label'),
+      icon: () => null,
+      body: () => null,
+      defaultTitle: t('workbench.widgets.preview.defaultTitle'),
+      defaultSize: { width: 360, height: 240 },
+      singleton: false,
+    },
+  ],
   redevenWorkbenchFilterBarWidgetTypes: [],
   redevenWorkbenchInitialCanvasWidgetTypes: [],
 }));

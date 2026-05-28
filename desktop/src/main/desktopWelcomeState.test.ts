@@ -322,7 +322,7 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.surface).toBe('connect_environment');
     expect(snapshot.entry_reason).toBe('switch_environment');
-    expect(snapshot.close_action_label).toBe('Close Launcher');
+    expect(snapshot.close_action).toBe('close_launcher');
     expect(snapshot.action_progress).toEqual([]);
     expect(snapshot.open_windows).toEqual([
       expect.objectContaining({
@@ -348,7 +348,7 @@ describe('desktopWelcomeState', () => {
         tag: 'Open',
         category: 'local',
         is_open: true,
-        open_action_label: 'Focus',
+        open_action: 'focus',
         can_edit: true,
         can_delete: false,
         local_environment_kind: 'local',
@@ -376,7 +376,7 @@ describe('desktopWelcomeState', () => {
         tag: 'Open',
         category: 'saved',
         is_open: true,
-        open_action_label: 'Focus',
+        open_action: 'focus',
         can_edit: true,
         can_delete: true,
       }),
@@ -389,7 +389,7 @@ describe('desktopWelcomeState', () => {
         tag: 'Saved',
         category: 'saved',
         is_open: false,
-        open_action_label: 'Open',
+        open_action: 'open',
         can_edit: true,
         can_delete: true,
       }),
@@ -407,7 +407,7 @@ describe('desktopWelcomeState', () => {
     ]);
     expect(snapshot.suggested_remote_url).toBe('http://192.168.1.99:24000/');
     expect(snapshot.issue?.title).toBe('Unable to open that Environment');
-    expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
+    expect(snapshot.settings_surface.window_title_key).toBe('settings.settingsWindowTitle');
   });
 
   it('carries active launcher action progress in the welcome snapshot', () => {
@@ -641,7 +641,7 @@ describe('desktopWelcomeState', () => {
         local_environment_runtime_url: 'http://127.0.0.1:24001/',
         local_environment_close_behavior: 'detaches',
         window_state: 'closed',
-        open_action_label: 'Open',
+        open_action: 'open',
         runtime_operations: expect.objectContaining({
           stop: expect.objectContaining({ availability: 'available' }),
         }),
@@ -2028,18 +2028,19 @@ describe('desktopWelcomeState', () => {
     });
 
     expect(snapshot.surface).toBe('environment_settings');
-    expect(snapshot.close_action_label).toBe('Quit');
-    expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
-    expect(snapshot.settings_surface.save_label).toBe('Save Local Environment Settings');
+    expect(snapshot.close_action).toBe('quit');
+    expect(snapshot.settings_surface.window_title_key).toBe('settings.settingsWindowTitle');
+    expect(snapshot.settings_surface.save_label_key).toBe('settings.saveEnvironmentSettings');
     expect(snapshot.settings_surface.access_mode).toBe('local_only');
     expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'visibility',
-        value: 'Local only',
+        value_key: 'settings.localOnlyLabel',
       }),
       expect.objectContaining({
         id: 'next_start_address',
-        value: 'Auto-select on localhost',
+        value: '',
+        detail_key: 'settings.autoLoopbackAddressDetail',
       }),
     ]));
     expect(snapshot.settings_surface.draft).toEqual({
@@ -2729,6 +2730,8 @@ describe('desktopWelcomeState', () => {
 
     expect(issue.scope).toBe('local_environment');
     expect(issue.title).toBe('Redeven is already starting elsewhere');
+    expect(issue.title_key).toBe('issue.stateDirLockedAttachTitle');
+    expect(issue.message_key).toBe('issue.stateDirLockedAttachMessage');
     expect(issue.message).toContain('Desktop can attach to it');
     expect(issue.diagnostics_copy).toContain('lock owner pid: 1234');
   });
@@ -2747,6 +2750,8 @@ describe('desktopWelcomeState', () => {
 
     expect(issue.scope).toBe('startup');
     expect(issue.title).toBe('Local Environment startup needs a setting');
+    expect(issue.title_key).toBe('issue.startupInvalidTitle');
+    expect(issue.message_key).toBeUndefined();
     expect(issue.message).toContain('missing flag one bootstrap ticket');
     expect(issue.diagnostics_copy).toContain('config path: /Users/test/.redeven/local-environment/config.json');
     expect(issue.diagnostics_copy).toContain('command: redeven run');
@@ -2763,6 +2768,7 @@ describe('desktopWelcomeState', () => {
     );
 
     expect(issue.title).toBe('Trust the provider certificate');
+    expect(issue.title_key).toBe('issue.providerTlsUntrustedTitle');
     expect(issue.diagnostics_copy).toContain('provider origin: https://dev.redeven.test');
     expect(issue.diagnostics_copy).toContain('http status: 502');
   });

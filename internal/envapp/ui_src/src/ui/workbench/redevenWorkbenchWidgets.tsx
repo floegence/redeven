@@ -8,6 +8,7 @@ import { Show, type JSX } from 'solid-js';
 
 import { CodexWorkbenchIcon } from '../icons/CodexIcon';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
+import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
 import { EnvAIPage } from '../pages/EnvAIPage';
 import { AIChatSidebar } from '../pages/AIChatSidebar';
@@ -147,6 +148,7 @@ function PortsWidget() {
 
 function FlowerWidget(_props: RedevenWorkbenchWidgetBodyProps) {
   const env = useEnvContext();
+  const i18n = useI18n();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
 
   return (
@@ -154,14 +156,14 @@ function FlowerWidget(_props: RedevenWorkbenchWidgetBodyProps) {
       when={available()}
       fallback={(
         <WorkbenchBodyNotice
-          eyebrow="Flower"
-          title="Flower needs read, write, and execute access"
-          description="Grant RWX permission for this environment to use the embedded Flower workspace in workbench mode."
+          eyebrow={i18n.t('aiChrome.flowerTitle')}
+          title={i18n.t('workbench.notices.flowerRwxTitle')}
+          description={i18n.t('workbench.notices.flowerRwxDescription')}
         />
       )}
     >
       <EnvWorkbenchConversationShell
-        railLabel="Flower threads"
+        railLabel={i18n.t('workbench.notices.flowerThreads')}
         rail={<AIChatSidebar />}
         workbench={<EnvAIPage />}
       />
@@ -171,6 +173,7 @@ function FlowerWidget(_props: RedevenWorkbenchWidgetBodyProps) {
 
 function CodexWidget(_props: RedevenWorkbenchWidgetBodyProps) {
   const env = useEnvContext();
+  const i18n = useI18n();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
 
   return (
@@ -178,14 +181,14 @@ function CodexWidget(_props: RedevenWorkbenchWidgetBodyProps) {
       when={available()}
       fallback={(
         <WorkbenchBodyNotice
-          eyebrow="Codex"
-          title="Codex needs read, write, and execute access"
-          description="Grant RWX permission for this environment to use the embedded Codex workspace in workbench mode."
+          eyebrow={i18n.t('aiChrome.codexTitle')}
+          title={i18n.t('workbench.notices.codexRwxTitle')}
+          description={i18n.t('workbench.notices.codexRwxDescription')}
         />
       )}
     >
       <EnvWorkbenchConversationShell
-        railLabel="Codex threads"
+        railLabel={i18n.t('workbench.notices.codexThreads')}
         rail={<CodexSidebarShell />}
         workbench={<CodexPage />}
       />
@@ -348,6 +351,39 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
 ];
+
+function localizedWorkbenchWidgetCopy(
+  type: WorkbenchWidgetType,
+  t: I18nHelpers['t'],
+): Pick<WorkbenchWidgetDefinition, 'label' | 'defaultTitle'> | null {
+  switch (type) {
+    case 'redeven.files':
+      return { label: t('workbench.widgets.files.label'), defaultTitle: t('workbench.widgets.files.defaultTitle') };
+    case 'redeven.terminal':
+      return { label: t('workbench.widgets.terminal.label'), defaultTitle: t('workbench.widgets.terminal.defaultTitle') };
+    case 'redeven.preview':
+      return { label: t('workbench.widgets.preview.label'), defaultTitle: t('workbench.widgets.preview.defaultTitle') };
+    case 'redeven.monitor':
+      return { label: t('workbench.widgets.monitor.label'), defaultTitle: t('workbench.widgets.monitor.defaultTitle') };
+    case 'redeven.codespaces':
+      return { label: t('workbench.widgets.codespaces.label'), defaultTitle: t('workbench.widgets.codespaces.defaultTitle') };
+    case 'redeven.ports':
+      return { label: t('workbench.widgets.ports.label'), defaultTitle: t('workbench.widgets.ports.defaultTitle') };
+    case 'redeven.ai':
+      return { label: t('workbench.widgets.flower.label'), defaultTitle: t('workbench.widgets.flower.defaultTitle') };
+    case 'redeven.codex':
+      return { label: t('workbench.widgets.codex.label'), defaultTitle: t('workbench.widgets.codex.defaultTitle') };
+    default:
+      return null;
+  }
+}
+
+export function localizedRedevenWorkbenchWidgets(t: I18nHelpers['t']): readonly WorkbenchWidgetDefinition[] {
+  return redevenWorkbenchWidgets.map((definition) => ({
+    ...definition,
+    ...(localizedWorkbenchWidgetCopy(definition.type, t) ?? {}),
+  }));
+}
 
 export const redevenWorkbenchFilterBarWidgetTypes: readonly WorkbenchWidgetType[] = [
   'redeven.files',

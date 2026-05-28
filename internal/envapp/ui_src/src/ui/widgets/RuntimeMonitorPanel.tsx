@@ -24,6 +24,7 @@ import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingCon
 import { PermissionEmptyState } from './PermissionEmptyState';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
+import { useI18n } from '../i18n';
 
 export type RuntimeMonitorPanelVariant = 'page' | 'deck' | 'workbench';
 
@@ -63,11 +64,11 @@ function formatTimeLabel(ts: number): string {
   return `${hh}:${mm}:${ss}`;
 }
 
-function formatDateTime(ms: number): string {
+function formatDateTime(ms: number, formatter: (value: Date | number | string) => string): string {
   const v = Number(ms ?? 0);
   if (!Number.isFinite(v) || v <= 0) return '';
   try {
-    return new Date(v).toLocaleString();
+    return formatter(v);
   } catch {
     return String(v);
   }
@@ -81,20 +82,20 @@ function formatSessionPerm(s: ActiveSession): string {
   return parts.length > 0 ? parts.join('') : '-';
 }
 
-function formatAppLabel(floeApp: string): string {
+function formatAppLabel(floeApp: string, i18n: ReturnType<typeof useI18n>): string {
   const v = String(floeApp ?? '').trim();
-  if (v === 'com.floegence.redeven.agent') return 'Runtime';
-  if (v === 'com.floegence.redeven.code') return 'Code';
-  if (v === 'com.floegence.redeven.portforward') return 'Port Forward';
+  if (v === 'com.floegence.redeven.agent') return i18n.t('runtimeMonitor.runtimeApp');
+  if (v === 'com.floegence.redeven.code') return i18n.t('runtimeMonitor.codeApp');
+  if (v === 'com.floegence.redeven.portforward') return i18n.t('runtimeMonitor.portForwardApp');
   return v || '-';
 }
 
-function formatTunnelHost(tunnelURL: string): string {
+function formatTunnelHost(tunnelURL: string, i18n: ReturnType<typeof useI18n>): string {
   const v = String(tunnelURL ?? '').trim();
-  if (!v) return 'Direct (no tunnel)';
+  if (!v) return i18n.t('runtimeMonitor.directNoTunnel');
   try {
     const u = new URL(v);
-    return String(u.host || u.origin || v).trim() || 'Direct (no tunnel)';
+    return String(u.host || u.origin || v).trim() || i18n.t('runtimeMonitor.directNoTunnel');
   } catch {
     return v;
   }
@@ -110,6 +111,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   const rpc = useRedevenRpc();
   const ctx = useEnvContext();
   const notify = useNotification();
+  const i18n = useI18n();
 
   const [sortBy, setSortBy] = createSignal<SysMonitorSortBy>('cpu');
   const [showInternalSessions, setShowInternalSessions] = createSignal(false);
@@ -169,9 +171,9 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     if (!v) return;
     try {
       await navigator.clipboard.writeText(v);
-      notify.success('Copied', `${label} copied to clipboard`);
+      notify.success(i18n.t('runtimeMonitor.copiedTitle'), i18n.t('runtimeMonitor.copiedMessage', { label }));
     } catch {
-      notify.error('Copy failed', 'Clipboard permission denied');
+      notify.error(i18n.t('runtimeMonitor.copyFailedTitle'), i18n.t('runtimeMonitor.clipboardPermissionDenied'));
     }
   };
 
@@ -382,7 +384,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     const pid = normalizeProcessPid(menu.process.pid);
     if (pid === null) {
       setProcessContextMenu(null);
-      notify.error('Kill failed', 'Invalid process PID.');
+      notify.error(i18n.t('runtimeMonitor.killFailedTitle'), i18n.t('runtimeMonitor.invalidProcessPid'));
       return;
     }
     if (killingPid() === pid) {
@@ -397,13 +399,13 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     try {
       const resp = await rpc.monitor.killProcess({ pid });
       if (!resp.ok) {
-        throw new Error(`Kill request for PID ${pid} was not acknowledged.`);
+        throw new Error(i18n.t('runtimeMonitor.killNotAcknowledged', { pid }));
       }
-      notify.success('Process killed', `${label} was killed.`);
+      notify.success(i18n.t('runtimeMonitor.processKilledTitle'), i18n.t('runtimeMonitor.processKilledMessage', { label }));
       await fetchOnce({ silent: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      notify.error('Kill failed', message || `Failed to kill PID ${pid}.`);
+      notify.error(i18n.t('runtimeMonitor.killFailedTitle'), message || i18n.t('runtimeMonitor.killPidFailed', { pid }));
     } finally {
       setKillingPid((current) => (current === pid ? null : current));
     }
@@ -413,7 +415,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     const menu = processContextMenu();
     if (!menu) return;
     setProcessContextMenu(null);
-    await copy('Process name', menu.process.name);
+    await copy(i18n.t('runtimeMonitor.processNameLabel'), menu.process.name);
   };
 
   const handleCopyProcessPid = async () => {
@@ -423,10 +425,10 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     const pid = normalizeProcessPid(menu.process.pid);
     setProcessContextMenu(null);
     if (pid === null) {
-      notify.error('Copy failed', 'Invalid process PID.');
+      notify.error(i18n.t('runtimeMonitor.copyFailedTitle'), i18n.t('runtimeMonitor.invalidProcessPid'));
       return;
     }
-    await copy('Process PID', String(pid));
+    await copy(i18n.t('runtimeMonitor.processPidLabel'), String(pid));
   };
 
   const buildProcessContextMenuItems = (menu: NonNullable<ReturnType<typeof processContextMenu>>): FloatingContextMenuItem[] => [
@@ -434,14 +436,14 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
       {
         id: 'ask-flower',
         kind: 'action',
-        label: 'Ask Flower',
+        label: i18n.t('runtimeMonitor.askFlower'),
         icon: FlowerContextMenuIcon,
         onSelect: handleAskFlowerFromProcess,
       },
       {
         id: 'copy-name',
         kind: 'action',
-        label: 'Copy name',
+        label: i18n.t('runtimeMonitor.copyName'),
         icon: Copy,
         onSelect: () => {
           void handleCopyProcessName();
@@ -450,7 +452,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
       {
         id: 'copy-pid',
         kind: 'action',
-        label: 'Copy PID',
+        label: i18n.t('runtimeMonitor.copyPid'),
         icon: Copy,
         onSelect: () => {
           void handleCopyProcessPid();
@@ -464,7 +466,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     {
       id: 'kill',
       kind: 'action',
-      label: 'Kill',
+      label: i18n.t('runtimeMonitor.kill'),
       icon: Trash,
       onSelect: () => {
         void handleKillProcess();
@@ -509,10 +511,10 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
     return { values: [s.netIn, s.netOut], label: formatTimeLabel(s.ts) };
   };
 
-  const cpuSeries = [{ name: 'CPU Usage', data: [] }];
-  const networkSeries = [
-    { name: 'Download', data: [] },
-    { name: 'Upload', data: [] },
+  const cpuSeries = () => [{ name: i18n.t('runtimeMonitor.cpuUsage'), data: [] }];
+  const networkSeries = () => [
+    { name: i18n.t('runtimeMonitor.download'), data: [] },
+    { name: i18n.t('runtimeMonitor.upload'), data: [] },
   ];
 
   const formatPercent = (value: number) => `${Number(value ?? 0).toFixed(2).replace(/\.?0+$/, '')}%`;
@@ -547,8 +549,8 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
         fallback={
           <PermissionEmptyState
             variant={props.variant === 'deck' || props.variant === 'workbench' ? 'workbench' : 'page'}
-            title="Execute permission required"
-            description="Monitoring is disabled because execute permission is not granted for this session."
+            title={i18n.t('runtimeMonitor.permissionTitle')}
+            description={i18n.t('runtimeMonitor.permissionDescription')}
           />
         }
       >
@@ -556,7 +558,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
           <Show when={error()}>
             <Panel class="border-error/40">
               <PanelContent class="p-3 text-xs">
-                <div class="text-error font-medium">Monitor request failed</div>
+                <div class="text-error font-medium">{i18n.t('runtimeMonitor.monitorRequestFailed')}</div>
                 <div class="text-muted-foreground break-words mt-1">{error()}</div>
               </PanelContent>
             </Panel>
@@ -566,13 +568,13 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
           <Panel class="overflow-hidden">
             <PanelContent class="p-3 space-y-2">
               <div class="flex items-center justify-between gap-3">
-                <div class="text-xs font-medium">CPU Usage</div>
+                <div class="text-xs font-medium">{i18n.t('runtimeMonitor.cpuUsage')}</div>
                 <div class="text-[11px] text-muted-foreground tabular-nums">{cpuSummary()}</div>
               </div>
               <For each={[chartToken()]}>
                 {() => (
                   <MonitoringChart
-                    series={cpuSeries}
+                    series={cpuSeries()}
                     labels={[]}
                     height={140}
                     maxPoints={60}
@@ -595,13 +597,13 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
           <Panel class="overflow-hidden">
             <PanelContent class="p-3 space-y-2">
               <div class="flex items-center justify-between gap-3">
-                <div class="text-xs font-medium">Network Traffic</div>
+                <div class="text-xs font-medium">{i18n.t('runtimeMonitor.networkTraffic')}</div>
                 <div class="text-[11px] text-muted-foreground tabular-nums">{netSummary()}</div>
               </div>
               <For each={[chartToken()]}>
                 {() => (
                   <MonitoringChart
-                    series={networkSeries}
+                    series={networkSeries()}
                     labels={[]}
                     height={140}
                     maxPoints={60}
@@ -626,9 +628,9 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
           <Panel class="flex flex-col flex-1 min-h-[220px] overflow-hidden">
             <PanelContent class="p-3 flex flex-col flex-1 min-h-0">
               <div class="flex items-center justify-between gap-3 mb-2 flex-shrink-0">
-                <div class="text-xs font-medium">Top Processes</div>
+                <div class="text-xs font-medium">{i18n.t('runtimeMonitor.topProcesses')}</div>
                 <div class="flex items-center gap-1">
-                  <span class="text-[11px] text-muted-foreground mr-1">Sort:</span>
+                  <span class="text-[11px] text-muted-foreground mr-1">{i18n.t('runtimeMonitor.sortLabel')}</span>
                   <button
                     type="button"
                     onClick={() => setSortBy('cpu')}
@@ -641,7 +643,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                     onClick={() => setSortBy('memory')}
                     class={`px-2 py-0.5 text-[11px] rounded transition-colors ${sortBy() === 'memory' ? activeSortClass : inactiveSortClass}`}
                   >
-                    Memory
+                    {i18n.t('runtimeMonitor.memory')}
                   </button>
                 </div>
               </div>
@@ -650,18 +652,18 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                 <table class="w-full text-xs relative">
                   <thead class="sticky top-0 bg-background z-10">
                     <tr class="border-b border-border/60">
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">PID</th>
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">Name</th>
-                      <th class="text-right py-2 px-2 font-medium text-muted-foreground">CPU %</th>
-                      <th class="text-right py-2 px-2 font-medium text-muted-foreground">Memory</th>
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">User</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.pid')}</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.name')}</th>
+                      <th class="text-right py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.cpuPercent')}</th>
+                      <th class="text-right py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.memory')}</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.user')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     <Show when={processes().length > 0} fallback={
                       <tr>
                         <td colSpan={5} class="py-6 px-2 text-[11px] text-muted-foreground text-center">
-                          {loading() ? 'Loading...' : 'No process data.'}
+                          {loading() ? i18n.t('runtimeMonitor.loading') : i18n.t('runtimeMonitor.noProcessData')}
                         </td>
                       </tr>
                     }>
@@ -680,7 +682,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                               data-monitor-process-selected={selected() ? 'true' : 'false'}
                               onClick={() => setSelectedProcessPid(pid)}
                               onContextMenu={(event) => openProcessContextMenu(event, proc)}
-                              title="Click to select. Right-click for actions."
+                              title={i18n.t('runtimeMonitor.rowActionsHint')}
                             >
                               <td class="py-2 px-2 font-mono text-[11px] text-muted-foreground">{proc.pid}</td>
                               <td class="py-2 px-2 truncate max-w-[220px]" title={proc.name}>{proc.name}</td>
@@ -713,16 +715,16 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
           <Panel class="flex flex-col flex-1 min-h-[220px] overflow-hidden">
             <PanelContent class="p-3 flex flex-col flex-1 min-h-0">
               <div class="flex items-center justify-between gap-3 mb-2 flex-shrink-0">
-                <div class="text-xs font-medium">Active Sessions</div>
+                <div class="text-xs font-medium">{i18n.t('runtimeMonitor.activeSessions')}</div>
                 <div class="flex items-center gap-2">
                   <Show when={internalSessionsCount() > 0}>
                     <button
                       type="button"
                       onClick={() => setShowInternalSessions((v) => !v)}
                       class={`px-2 py-0.5 text-[11px] rounded transition-colors ${showInternalSessions() ? activeSortClass : inactiveSortClass}`}
-                      title={showInternalSessions() ? 'Hide internal sessions' : 'Show internal sessions'}
+                      title={showInternalSessions() ? i18n.t('runtimeMonitor.hideInternalSessions') : i18n.t('runtimeMonitor.showInternalSessions')}
                     >
-                      {showInternalSessions() ? 'Hide internal' : 'Show internal'} ({internalSessionsCount()})
+                      {showInternalSessions() ? i18n.t('runtimeMonitor.hideInternal') : i18n.t('runtimeMonitor.showInternal')} ({internalSessionsCount()})
                     </button>
                   </Show>
                   <div class="text-[11px] text-muted-foreground tabular-nums">{visibleSessions().length}</div>
@@ -737,20 +739,20 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                 <table class="w-full text-xs relative">
                   <thead class="sticky top-0 bg-background z-10">
                     <tr class="border-b border-border/60">
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">User</th>
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">App</th>
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">Code Space</th>
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">Transport</th>
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">Connected</th>
-                      <th class="text-center py-2 px-2 font-medium text-muted-foreground">Perm</th>
-                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">Channel</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.user')}</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.app')}</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.codeSpace')}</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.transport')}</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.connected')}</th>
+                      <th class="text-center py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.permissionShort')}</th>
+                      <th class="text-left py-2 px-2 font-medium text-muted-foreground">{i18n.t('runtimeMonitor.channel')}</th>
                     </tr>
                   </thead>
                   <tbody>
                     <Show when={visibleSessions().length > 0} fallback={
                       <tr>
                         <td colSpan={7} class="py-6 px-2 text-[11px] text-muted-foreground text-center">
-                          {loading() ? 'Loading...' : 'No active sessions.'}
+                          {loading() ? i18n.t('runtimeMonitor.loading') : i18n.t('runtimeMonitor.noActiveSessions')}
                         </td>
                       </tr>
                     }>
@@ -759,11 +761,11 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                           const email = String(sess.userEmail ?? '').trim();
                           const uid = String(sess.userPublicID ?? '').trim();
                           const userLabel = email || uid || '-';
-                          const appLabel = formatAppLabel(sess.floeApp);
+                          const appLabel = formatAppLabel(sess.floeApp, i18n);
                           const codeSpace = String(sess.codeSpaceID ?? '').trim();
                           const tunnelURL = String(sess.tunnelUrl ?? '').trim();
-                          const tunnelLabel = formatTunnelHost(tunnelURL);
-                          const connected = formatDateTime(sess.connectedAtUnixMs);
+                          const tunnelLabel = formatTunnelHost(tunnelURL, i18n);
+                          const connected = formatDateTime(sess.connectedAtUnixMs, i18n.formatDateTime);
                           return (
                             <tr class="border-b border-border/40 hover:bg-muted/30 transition-colors">
                               <td class="py-2 px-2 min-w-0">
@@ -778,7 +780,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                               <td class="py-2 px-2 font-mono truncate max-w-[160px]" title={codeSpace}>{codeSpace || '-'}</td>
                               <td class="py-2 px-2 font-mono truncate max-w-[240px]" title={tunnelURL}>
                                 <Show when={tunnelURL} fallback={<span>{tunnelLabel}</span>}>
-                                  <button type="button" class="hover:underline" onClick={() => void copy('Tunnel endpoint URL', tunnelURL)}>
+                                  <button type="button" class="hover:underline" onClick={() => void copy(i18n.t('runtimeMonitor.tunnelEndpointUrlLabel'), tunnelURL)}>
                                     {tunnelLabel}
                                   </button>
                                 </Show>
@@ -786,7 +788,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
                               <td class="py-2 px-2 whitespace-nowrap tabular-nums">{connected || '-'}</td>
                               <td class="py-2 px-2 text-center font-mono tabular-nums">{formatSessionPerm(sess)}</td>
                               <td class="py-2 px-2 font-mono truncate max-w-[240px]" title={sess.channelId}>
-                                <button type="button" class="hover:underline" onClick={() => void copy('Channel ID', sess.channelId)}>
+                                <button type="button" class="hover:underline" onClick={() => void copy(i18n.t('runtimeMonitor.channelIdLabel'), sess.channelId)}>
                                   {sess.channelId}
                                 </button>
                               </td>
@@ -801,7 +803,7 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
             </PanelContent>
           </Panel>
         </div>
-          <RedevenLoadingCurtain visible={loading() && !data()} eyebrow="Monitoring" message="Loading monitoring data..." />
+          <RedevenLoadingCurtain visible={loading() && !data()} eyebrow={i18n.t('runtimeMonitor.loadingEyebrow')} message={i18n.t('runtimeMonitor.loadingMessage')} />
         </div>
 
         <Show when={processContextMenu()} keyed>

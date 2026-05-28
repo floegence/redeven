@@ -5,6 +5,7 @@ import type { GitStashSummary } from '../protocol/redeven_v1';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitSubtleNote } from './GitWorkbenchPrimitives';
 import { WindowModal } from './WindowModal';
+import { useI18n, type I18nHelpers } from '../i18n';
 
 export interface GitStashDeleteConfirmDialogProps {
   open: boolean;
@@ -16,12 +17,13 @@ export interface GitStashDeleteConfirmDialogProps {
   onConfirm?: () => void;
 }
 
-function formatStashTime(value?: number): string {
-  if (!value || !Number.isFinite(value)) return 'Unknown time';
-  return new Date(value).toLocaleString();
+function formatStashTime(i18n: I18nHelpers, value?: number): string {
+  if (!value || !Number.isFinite(value)) return i18n.t('git.stashDelete.unknownTime');
+  return i18n.formatDateTime(value);
 }
 
 export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogProps) {
+  const i18n = useI18n();
   const layout = useLayout();
   const outlineControlClass = redevenSurfaceRoleClass('control');
   const stashHeadline = createMemo(() => {
@@ -30,13 +32,13 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
     if (message) return message;
     const ref = String(stash?.ref ?? '').trim();
     if (ref) return ref;
-    return 'Selected stash';
+    return i18n.t('git.stashDelete.selectedStash');
   });
   const stashMeta = createMemo(() => {
     const parts = [
       String(props.stash?.ref ?? '').trim(),
       String(props.stash?.branchName ?? '').trim(),
-      formatStashTime(props.stash?.createdAtUnixMs),
+      formatStashTime(i18n, props.stash?.createdAtUnixMs),
     ].filter(Boolean);
     return parts.join(' • ');
   });
@@ -44,10 +46,10 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
     <div class={cn('border-t px-4 pt-3 pb-4 backdrop-blur', redevenDividerRoleClass('strong'), redevenSurfaceRoleClass('inset'), 'supports-[backdrop-filter]:bg-background/78')}>
       <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
         <Button size="sm" variant="outline" class={cn('w-full sm:w-auto', outlineControlClass)} disabled={props.loading} onClick={props.onClose}>
-          Cancel
+          {i18n.t('common.actions.cancel')}
         </Button>
         <Button size="sm" variant="destructive" class="w-full sm:w-auto" loading={props.loading} disabled={props.loading} onClick={() => props.onConfirm?.()}>
-          Confirm Delete
+          {i18n.t('git.stashDelete.confirmDelete')}
         </Button>
       </div>
     </div>
@@ -64,7 +66,7 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
       </GitSubtleNote>
 
       <GitSubtleNote class="border-warning/25 bg-warning/10 text-foreground">
-        Deleting a stash removes it from the shared stack. These changes will not be applied to the current workspace.
+        {i18n.t('git.stashDelete.warning')}
       </GitSubtleNote>
 
       <Show when={props.reviewError}>
@@ -78,8 +80,8 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
       <WindowModal
         open={props.open}
         host={props.host ?? null}
-        title="Delete Stash"
-        description="Remove this stash entry from the shared stack without applying its changes."
+        title={i18n.t('git.stashDelete.title')}
+        description={i18n.t('git.stashDelete.description')}
         footer={footer}
         class="w-[min(28rem,calc(100%-1rem))]"
         onOpenChange={(open) => {
@@ -97,8 +99,8 @@ export function GitStashDeleteConfirmDialog(props: GitStashDeleteConfirmDialogPr
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
-      title="Delete Stash"
-      description="Remove this stash entry from the shared stack without applying its changes."
+      title={i18n.t('git.stashDelete.title')}
+      description={i18n.t('git.stashDelete.description')}
       footer={footer}
       class={cn(
         'flex max-w-none flex-col overflow-hidden rounded-md p-0',

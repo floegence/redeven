@@ -14,6 +14,7 @@ import type {
 } from '../envViewMode';
 
 export type EnvSettingsSection =
+  | 'interface'
   | 'config'
   | 'connection'
   | 'agent'

@@ -4,7 +4,7 @@ import { assertConnectArtifact, type ConnectArtifact } from '@floegence/flowerse
 import { SESSION_KIND_ENVAPP_RPC, sessionKindForLauncherApp, type LauncherFloeApp } from './floeproxyContract';
 import { appendLocalAccessResumeQuery, applyLocalAccessResumeHeader } from './localAccessAuth';
 import { controlPlaneOriginFromSandboxLocation } from './sandboxOrigins';
-import { AccessUnlockError, normalizeRetryAfterMs } from './accessUnlockError';
+import { AccessUnlockError, isKnownAccessUnlockErrorCode, normalizeRetryAfterMs } from './accessUnlockError';
 
 export interface Environment {
   public_id: string;
@@ -275,7 +275,7 @@ async function fetchJSON<T>(input: RequestInfo | URL, init: RequestInit & { bear
     const msg = asString(data?.error?.message) || `HTTP ${resp.status}`;
     const code = asString(data?.error?.code) || 'HTTP_ERROR';
     const retryAfterMs = retryAfterMsFromErrorPayload(data);
-    if (retryAfterMs > 0 || code === 'ACCESS_PASSWORD_RETRY_LATER') {
+    if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
       throw new AccessUnlockError({
         status: parseStatusCodeBestEffort(resp.status),
         code,
@@ -290,7 +290,7 @@ async function fetchJSON<T>(input: RequestInfo | URL, init: RequestInit & { bear
     const msg = asString(data?.error?.message) || 'Request failed';
     const code = asString(data?.error?.code) || 'REQUEST_FAILED';
     const retryAfterMs = retryAfterMsFromErrorPayload(data);
-    if (retryAfterMs > 0 || code === 'ACCESS_PASSWORD_RETRY_LATER') {
+    if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
       throw new AccessUnlockError({
         status: parseStatusCodeBestEffort(resp.status) || 400,
         code,

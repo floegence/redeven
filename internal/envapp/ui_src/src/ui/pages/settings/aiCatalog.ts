@@ -197,8 +197,12 @@ export function recommendedModelsForProviderType(providerType: AIProviderType): 
 }
 
 export function formatTokenCount(tokenCount: number): string {
+  return formatTokenCountForLocale(tokenCount);
+}
+
+export function formatTokenCountForLocale(tokenCount: number, locale = 'en-US'): string {
   if (!Number.isFinite(tokenCount) || tokenCount <= 0) return 'N/A';
-  return new Intl.NumberFormat('en-US').format(Math.trunc(tokenCount));
+  return new Intl.NumberFormat(locale).format(Math.trunc(tokenCount));
 }
 
 export function normalizePositiveInteger(raw: unknown): number | undefined {

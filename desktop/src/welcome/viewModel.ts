@@ -4,6 +4,7 @@ import type {
   DesktopLocalEnvironmentStateRoute,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
+import type { DesktopI18n } from '../shared/i18n';
 import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import type { DesktopControlPlaneSyncState } from '../shared/providerEnvironmentState';
 import {
@@ -40,7 +41,7 @@ export type DesktopWelcomeShellViewModel = Readonly<{
   surface_title: string;
   connect_heading: 'Connect Environment';
   primary_action_label: 'Open Environment';
-  settings_save_label: string;
+  settings_save_key: string;
 }>;
 
 export type EnvironmentCenterTab = 'environments' | 'control_planes';
@@ -347,25 +348,29 @@ export function surfaceTitle(surface: DesktopLauncherSurface): string {
   return surface === 'environment_settings' ? 'Environment Settings' : 'Connect Environment';
 }
 
-export function shellStatus(snapshot: DesktopWelcomeSnapshot): Readonly<{
+export function shellStatus(snapshot: DesktopWelcomeSnapshot, i18n?: DesktopI18n): Readonly<{
   tone: 'connected' | 'disconnected' | 'connecting' | 'error';
   label: string;
 }> {
   if (snapshot.issue) {
     return {
       tone: 'error',
-      label: snapshot.issue.title,
+      label: i18n && snapshot.issue.title_key ? i18n.t(snapshot.issue.title_key) : snapshot.issue.title,
     };
   }
   if (snapshot.open_windows.length > 0) {
     return {
       tone: 'connected',
-      label: snapshot.open_windows.length === 1 ? '1 environment window open' : `${snapshot.open_windows.length} environment windows open`,
+      label: i18n
+        ? (snapshot.open_windows.length === 1
+          ? i18n.t('launcher.oneEnvironmentWindowOpen')
+          : i18n.t('launcher.environmentWindowsOpen', { count: snapshot.open_windows.length }))
+        : (snapshot.open_windows.length === 1 ? '1 environment window open' : `${snapshot.open_windows.length} environment windows open`),
     };
   }
   return {
     tone: 'disconnected',
-    label: 'No environment windows open',
+    label: i18n ? i18n.t('launcher.noEnvironmentWindowsOpen') : 'No environment windows open',
   };
 }
 
@@ -378,7 +383,7 @@ export function buildDesktopWelcomeShellViewModel(
     surface_title: surfaceTitle(visibleSurface),
     connect_heading: 'Connect Environment',
     primary_action_label: 'Open Environment',
-    settings_save_label: snapshot.settings_surface.save_label,
+    settings_save_key: snapshot.settings_surface.save_label_key,
   };
 }
 

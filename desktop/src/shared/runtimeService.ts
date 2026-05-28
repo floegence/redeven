@@ -504,11 +504,23 @@ export function runtimeServiceProviderLinkMatches(
     && compact(binding.env_public_id) === compact(expected?.env_public_id);
 }
 
+export function runtimeServiceWorkloadCounts(snapshot: RuntimeServiceSnapshot | null | undefined): RuntimeServiceWorkload {
+  const workload = snapshot?.active_workload ?? {
+    terminal_count: 0,
+    session_count: 0,
+    task_count: 0,
+    port_forward_count: 0,
+  };
+  return {
+    terminal_count: normalizeCount(workload.terminal_count),
+    session_count: normalizeCount(workload.session_count),
+    task_count: normalizeCount(workload.task_count),
+    port_forward_count: normalizeCount(workload.port_forward_count),
+  };
+}
+
 export function formatRuntimeServiceWorkload(snapshot: RuntimeServiceSnapshot | null | undefined): string {
-  const workload = snapshot?.active_workload;
-  if (!workload) {
-    return 'No active work';
-  }
+  const workload = runtimeServiceWorkloadCounts(snapshot);
   const parts = [
     workload.terminal_count > 0 ? `${workload.terminal_count} ${workload.terminal_count === 1 ? 'terminal' : 'terminals'}` : '',
     workload.session_count > 0 ? `${workload.session_count} ${workload.session_count === 1 ? 'session' : 'sessions'}` : '',

@@ -161,10 +161,14 @@ export function buildRemoteConnectionIssue(
   code: string,
   message: string,
 ): DesktopWelcomeIssue {
+  const titleKey = code === 'external_target_invalid'
+    ? 'issue.remoteEnvironmentInvalidTitle'
+    : 'issue.remoteEnvironmentOpenTitle';
   return {
     scope: 'remote_environment',
     code,
     title: code === 'external_target_invalid' ? 'Check the Environment URL' : 'Unable to open that Environment',
+    title_key: titleKey,
     message,
     diagnostics_copy: diagnosticsLines([
       'status: blocked',
@@ -185,6 +189,7 @@ export function buildSSHConnectionIssue(
     scope: 'remote_environment',
     code,
     title: 'Unable to open that SSH Environment',
+    title_key: 'issue.sshEnvironmentOpenTitle',
     message,
     diagnostics_copy: diagnosticsLines([
       'status: blocked',
@@ -217,6 +222,21 @@ export function buildControlPlaneIssue(
   return {
     scope: 'startup',
     code,
+    title_key: (() => {
+      if (code === 'control_plane_invalid') {
+        return 'issue.providerInvalidTitle';
+      }
+      if (code === 'provider_tls_untrusted') {
+        return 'issue.providerTlsUntrustedTitle';
+      }
+      if (code === 'provider_dns_failed' || code === 'provider_connection_failed' || code === 'provider_timeout') {
+        return 'issue.providerUnreachableTitle';
+      }
+      if (code === 'provider_invalid_json' || code === 'provider_invalid_response') {
+        return 'issue.providerInvalidResponseTitle';
+      }
+      return 'issue.providerGenericTitle';
+    })(),
     title: (() => {
       if (code === 'control_plane_invalid') {
         return 'Provider configuration is invalid';
@@ -251,7 +271,9 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
         scope: 'local_environment',
         code: report.code,
         title: 'Redeven is already starting elsewhere',
+        title_key: 'issue.stateDirLockedAttachTitle',
         message: 'Another Redeven runtime instance is using the default state directory and appears to provide Local UI. Retry in a moment so Desktop can attach to it.',
+        message_key: 'issue.stateDirLockedAttachMessage',
         diagnostics_copy: formatBlockedLaunchDiagnostics(report),
         target_url: '',
       };
@@ -260,7 +282,9 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
       scope: 'local_environment',
       code: report.code,
       title: 'Redeven is already running',
+      title_key: 'issue.stateDirLockedNoAttachTitle',
       message: 'Another Redeven runtime instance is using the default state directory without an attachable Local UI. Stop that runtime or restart it in a Local UI mode, then try again.',
+      message_key: 'issue.stateDirLockedNoAttachMessage',
       diagnostics_copy: formatBlockedLaunchDiagnostics(report),
       target_url: '',
     };
@@ -270,6 +294,7 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
       scope: 'startup',
       code: report.code,
       title: 'Local Environment startup needs a setting',
+      title_key: 'issue.startupInvalidTitle',
       message: report.message,
       diagnostics_copy: formatBlockedLaunchDiagnostics(report),
       target_url: '',
@@ -280,6 +305,7 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
       scope: 'startup',
       code: report.code,
       title: 'Local Environment startup failed',
+      title_key: 'issue.startupFailedTitle',
       message: report.message,
       diagnostics_copy: formatBlockedLaunchDiagnostics(report),
       target_url: '',
@@ -290,6 +316,7 @@ export function buildBlockedLaunchIssue(report: LaunchBlockedReport): DesktopWel
     scope: 'local_environment',
     code: report.code,
     title: 'Local Environment needs attention',
+    title_key: 'issue.localEnvironmentAttentionTitle',
     message: report.message,
     diagnostics_copy: formatBlockedLaunchDiagnostics(report),
     target_url: '',
@@ -1027,14 +1054,14 @@ function normalizeProviderRuntimeOfflineReasonCode(
 function localEnvironmentOpenActionLabel(input: Readonly<{
   isOpen: boolean;
   isOpening: boolean;
-}>): DesktopEnvironmentEntry['open_action_label'] {
+}>): DesktopEnvironmentEntry['open_action'] {
   if (input.isOpen) {
-    return 'Focus';
+    return 'focus';
   }
   if (input.isOpening) {
-    return 'Opening…';
+    return 'opening';
   }
-  return 'Open';
+  return 'open';
 }
 
 function localEnvironmentRemoteRouteDetails(
@@ -1263,7 +1290,7 @@ function buildLocalEnvironmentEntry(
     auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     open_session_key: localSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(localSession),
-    open_action_label: localEnvironmentOpenActionLabel({
+    open_action: localEnvironmentOpenActionLabel({
       isOpen,
       isOpening,
     }),
@@ -1436,7 +1463,7 @@ function buildProviderEnvironmentEntry(
     runtime_operations: providerRuntimeOperations(effectiveWindowState === 'open' || routeDetails.remoteRouteState === 'ready'),
     open_session_key: effectiveSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(effectiveSession),
-    open_action_label: localEnvironmentOpenActionLabel({
+    open_action: localEnvironmentOpenActionLabel({
       isOpen: effectiveWindowState === 'open',
       isOpening: effectiveWindowState === 'opening',
     }),
@@ -1609,7 +1636,7 @@ function buildSavedEnvironmentEntry(
     auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
-    open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
+    open_action: isOpen ? 'focus' : isOpening ? 'opening' : 'open',
     can_edit: true,
     can_delete: true,
     created_at_ms: environment.created_at_ms,
@@ -1705,7 +1732,7 @@ function buildSavedSSHEnvironmentEntry(
     auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
-    open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
+    open_action: isOpen ? 'focus' : isOpening ? 'opening' : 'open',
     can_edit: true,
     can_delete: true,
     created_at_ms: environment.created_at_ms,
@@ -1844,7 +1871,7 @@ function buildSavedRuntimeTargetEntry(
     ),
     open_session_key: openSession?.session_key ?? '',
     open_session_lifecycle: sessionLifecycle(openSession),
-    open_action_label: isOpen ? 'Focus' : isOpening ? 'Opening…' : 'Open',
+    open_action: isOpen ? 'focus' : isOpening ? 'opening' : 'open',
     can_edit: true,
     can_delete: true,
     created_at_ms: target.created_at_ms,
@@ -1939,7 +1966,7 @@ export function buildDesktopWelcomeSnapshot(
   return {
     surface,
     entry_reason: args.entryReason ?? 'app_launch',
-    close_action_label: openSessions.length > 0 ? 'Close Launcher' : 'Quit',
+    close_action: openSessions.length > 0 ? 'close_launcher' : 'quit',
     open_windows: buildOpenEnvironmentWindows(openSessions),
     environments,
     control_planes: controlPlanes,

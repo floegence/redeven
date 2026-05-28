@@ -5,6 +5,7 @@ import type {
   DesktopLauncherOperationStatus,
   DesktopLauncherOperationSubjectKind,
 } from '../shared/desktopLauncherIPC';
+import type { DesktopTranslationKey } from '../shared/i18n/desktopI18n';
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import type { DesktopOpenConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import type { DesktopRuntimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
@@ -24,12 +25,16 @@ type CreateLauncherOperationInput = Readonly<{
   status?: DesktopLauncherOperationStatus;
   phase: string;
   title: string;
+  title_key?: DesktopTranslationKey;
   detail: string;
+  detail_key?: DesktopTranslationKey;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
   cancelable?: boolean;
   interrupt_label?: string;
+  interrupt_label_key?: DesktopTranslationKey;
   interrupt_detail?: string;
+  interrupt_detail_key?: DesktopTranslationKey;
   interrupt_kind?: DesktopLauncherOperationSnapshot['interrupt_kind'];
   failure?: DesktopOperationFailurePresentation;
   next_actions?: DesktopLauncherOperationSnapshot['next_actions'];
@@ -73,17 +78,118 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     status: snapshot.status,
     phase: snapshot.phase,
     title: snapshot.title,
+    title_key: snapshot.title_key,
     detail: snapshot.detail,
+    detail_key: snapshot.detail_key,
     ...(snapshot.lifecycle_progress ? { lifecycle_progress: snapshot.lifecycle_progress } : {}),
     ...(snapshot.open_progress ? { open_progress: snapshot.open_progress } : {}),
     cancelable: snapshot.cancelable,
     interrupt_label: snapshot.interrupt_label,
+    interrupt_label_key: snapshot.interrupt_label_key,
     interrupt_detail: snapshot.interrupt_detail,
+    interrupt_detail_key: snapshot.interrupt_detail_key,
     interrupt_kind: snapshot.interrupt_kind,
     deleted_subject: snapshot.deleted_subject,
     next_actions: snapshot.next_actions,
     failure: snapshot.failure,
   };
+}
+
+function openProgressTitleKey(open: DesktopOpenConnectionProgress | undefined): DesktopTranslationKey | undefined {
+  switch (open?.phase) {
+    case 'checking_runtime_record':
+      return 'progress.titleCheckingRuntimeStatus';
+    case 'checking_env_app_readiness':
+      return 'progress.titleCheckingAppReadiness';
+    case 'opening_ssh_control':
+      return 'progress.titleOpeningSshConnection';
+    case 'starting_container_bridge':
+    case 'opening_bridge_proxy':
+      return 'progress.titleOpeningContainerBridge';
+    case 'connecting_desktop_model_source':
+      return 'progress.titleConnectingDesktopModelSource';
+    case 'opening_window':
+      return 'progress.titleOpeningEnvironment';
+    case 'open_ready':
+      return 'progress.titleEnvironmentOpen';
+    case 'failed':
+      return 'progress.openFailed';
+    case 'canceled':
+      return 'progress.canceled';
+    default:
+      return undefined;
+  }
+}
+
+function openProgressDetailKey(open: DesktopOpenConnectionProgress | undefined): DesktopTranslationKey | undefined {
+  switch (open?.phase) {
+    case 'checking_runtime_record':
+      return 'progress.detailCheckingRuntimeStatus';
+    case 'checking_env_app_readiness':
+      return 'progress.detailCheckingAppReadiness';
+    case 'opening_ssh_control':
+      return 'progress.detailOpeningSshConnection';
+    case 'starting_container_bridge':
+    case 'opening_bridge_proxy':
+      return 'progress.detailOpeningContainerBridge';
+    case 'connecting_desktop_model_source':
+      return 'progress.detailConnectingDesktopModelSource';
+    case 'opening_window':
+      return 'progress.detailOpeningEnvironment';
+    case 'open_ready':
+      return 'progress.detailEnvironmentOpen';
+    default:
+      return undefined;
+  }
+}
+
+function lifecycleProgressTitleKey(lifecycle: DesktopRuntimeLifecycleProgress | undefined): DesktopTranslationKey | undefined {
+  switch (lifecycle?.phase) {
+    case 'checking_existing_runtime':
+      return 'progress.checkingExistingRuntime';
+    case 'checking_host':
+      return 'progress.checkingHost';
+    case 'checking_container':
+      return 'progress.checkingContainer';
+    case 'detecting_platform':
+      return 'progress.detectingPlatform';
+    case 'checking_runtime_package':
+      return 'progress.checkingRuntimePackage';
+    case 'stopping_runtime_process':
+      return 'progress.stoppingRuntimeProcess';
+    case 'verifying_runtime_stopped':
+      return 'progress.verifyingRuntimeStopped';
+    case 'preparing_runtime_package':
+      return 'progress.preparingRuntimePackage';
+    case 'installing_runtime_package':
+      return 'progress.installingRuntimePackage';
+    case 'starting_runtime_process':
+      return 'progress.startingRuntime';
+    case 'checking_runtime_service':
+      return 'progress.checkingRuntimeService';
+    case 'runtime_ready':
+      return 'progress.titleRuntimeReady';
+    case 'runtime_up_to_date':
+      return 'progress.runtimeUpToDate';
+    case 'runtime_already_stopped':
+      return 'progress.runtimeAlreadyStopped';
+    case 'runtime_stopped':
+      return 'progress.runtimeStopped';
+    default:
+      return undefined;
+  }
+}
+
+function launcherOperationTitleKey(
+  input: Pick<DesktopLauncherOperationSnapshot, 'open_progress' | 'lifecycle_progress' | 'title_key'>,
+): DesktopTranslationKey | undefined {
+  return input.title_key ?? openProgressTitleKey(input.open_progress) ?? lifecycleProgressTitleKey(input.lifecycle_progress);
+}
+
+function launcherOperationDetailKey(
+  input: Pick<DesktopLauncherOperationSnapshot, 'open_progress' | 'detail_key'>,
+): DesktopTranslationKey | undefined {
+  return input.detail_key ?? openProgressDetailKey(input.open_progress);
 }
 
 function operationAttemptMatches(
@@ -98,33 +204,43 @@ function operationAttemptMatches(
 function cancelPhaseForSnapshot(snapshot: DesktopLauncherOperationSnapshot): Readonly<{
   phase: string;
   title: string;
+  titleKey: DesktopTranslationKey;
   detail: string;
+  detailKey: DesktopTranslationKey;
 }> {
   if (snapshot.deleted_subject) {
     return {
       phase: 'canceling_deleted_connection',
       title: 'Connection removed',
+      titleKey: 'progress.connectionRemoved',
       detail: 'Desktop is stopping the startup task for this deleted connection.',
+      detailKey: 'progress.detailCancelingDeletedConnection',
     };
   }
   if (snapshot.lifecycle_progress) {
     return {
       phase: 'runtime_lifecycle_canceling',
       title: 'Stopping runtime startup',
+      titleKey: 'progress.titleStoppingRuntimeStartup',
       detail: 'Desktop is stopping the runtime startup and cleaning up resources already created.',
+      detailKey: 'progress.detailStoppingRuntimeStartup',
     };
   }
   if (snapshot.open_progress) {
     return {
       phase: 'open_connection_canceling',
       title: 'Stopping open',
+      titleKey: 'progress.titleStoppingOpen',
       detail: 'Desktop is stopping the connection setup and cleaning up local resources already created.',
+      detailKey: 'progress.detailStoppingOpen',
     };
   }
   return {
     phase: 'canceling',
     title: 'Stopping operation',
+    titleKey: 'progress.titleStoppingOperation',
     detail: 'Desktop is stopping this background task.',
+    detailKey: 'progress.stopBackgroundTask',
   };
 }
 
@@ -175,12 +291,16 @@ export class LauncherOperationRegistry {
       status: input.status ?? 'running',
       phase: compact(input.phase),
       title: compact(input.title),
+      title_key: input.title_key ?? openProgressTitleKey(input.open_progress) ?? lifecycleProgressTitleKey(input.lifecycle_progress),
       detail: compact(input.detail),
+      detail_key: input.detail_key ?? openProgressDetailKey(input.open_progress),
       ...(input.lifecycle_progress ? { lifecycle_progress: input.lifecycle_progress } : {}),
       ...(input.open_progress ? { open_progress: input.open_progress } : {}),
       cancelable: input.cancelable === true,
       interrupt_label: compact(input.interrupt_label) || undefined,
+      interrupt_label_key: input.interrupt_label_key,
       interrupt_detail: compact(input.interrupt_detail) || undefined,
+      interrupt_detail_key: input.interrupt_detail_key,
       interrupt_kind: input.interrupt_kind,
       deleted_subject: false,
       ...(input.next_actions ? { next_actions: input.next_actions } : {}),
@@ -223,9 +343,14 @@ export class LauncherOperationRegistry {
       ...patch,
       updated_at_unix_ms: Date.now(),
     };
-    this.operationsByKey.set(key, next);
-    this.onChange(next);
-    return next;
+    const patchedNext: DesktopLauncherOperationSnapshot = {
+      ...next,
+      title_key: launcherOperationTitleKey(next),
+      detail_key: launcherOperationDetailKey(next),
+    };
+    this.operationsByKey.set(key, patchedNext);
+    this.onChange(patchedNext);
+    return patchedNext;
   }
 
   updateCurrentAttempt(
@@ -354,7 +479,9 @@ export class LauncherOperationRegistry {
       status: 'canceling',
       phase: cancelPhase.phase,
       title: cancelPhase.title,
+      title_key: cancelPhase.titleKey,
       detail: compact(reason) || cancelPhase.detail,
+      detail_key: compact(reason) ? undefined : cancelPhase.detailKey,
       ...(runtimeLifecycle ? { lifecycle_progress: runtimeLifecycle } : {}),
       ...(openConnection ? { open_progress: openConnection } : {}),
       cancelable: false,

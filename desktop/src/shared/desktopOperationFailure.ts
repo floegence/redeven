@@ -1,3 +1,5 @@
+import type { DesktopTranslationKey } from './i18n/desktopI18n';
+
 export type DesktopFailureSeverity = 'info' | 'warning' | 'error';
 
 export type DesktopFailureCode =
@@ -31,9 +33,13 @@ export type DesktopOperationFailurePresentation = Readonly<{
   code: DesktopFailureCode;
   severity: DesktopFailureSeverity;
   title: string;
+  title_key?: DesktopTranslationKey;
   summary: string;
+  summary_key?: DesktopTranslationKey;
   detail?: string;
+  detail_key?: DesktopTranslationKey;
   recovery_hint?: string;
+  recovery_hint_key?: DesktopTranslationKey;
   target_label?: string;
   diagnostics?: readonly DesktopFailureDiagnostic[];
 }>;
@@ -115,9 +121,13 @@ export function normalizeDesktopOperationFailurePresentation(
     code: normalizeFailureCode(record.code),
     severity: normalizeFailureSeverity(record.severity),
     title,
+    ...(compact(record.title_key) ? { title_key: compact(record.title_key) as DesktopTranslationKey } : {}),
     summary,
+    ...(compact(record.summary_key) ? { summary_key: compact(record.summary_key) as DesktopTranslationKey } : {}),
     ...(compact(record.detail) ? { detail: compact(record.detail) } : {}),
+    ...(compact(record.detail_key) ? { detail_key: compact(record.detail_key) as DesktopTranslationKey } : {}),
     ...(compact(record.recovery_hint) ? { recovery_hint: compact(record.recovery_hint) } : {}),
+    ...(compact(record.recovery_hint_key) ? { recovery_hint_key: compact(record.recovery_hint_key) as DesktopTranslationKey } : {}),
     ...(compact(record.target_label) ? { target_label: compact(record.target_label) } : {}),
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
   };

@@ -11,6 +11,7 @@ import {
   toPickerTreePath,
 } from '../utils/directoryPickerTree';
 import { createDirectoryPickerDataSource } from '../utils/createDirectoryPickerDataSource';
+import { useI18n } from '../i18n';
 import { useCodexContext } from './CodexProvider';
 import { CodexFileBrowserFAB } from './CodexFileBrowserFAB';
 import { CodexComposerShell } from './CodexComposerShell';
@@ -33,10 +34,10 @@ import {
   buildCodexWorkbenchSummary,
   codexAllowedApprovalPolicies,
   codexAllowedSandboxModes,
-  codexApprovalPolicyLabel,
   codexModelLabel,
   codexModelSupportsImages,
-  codexSandboxModeLabel,
+  localizedCodexApprovalPolicyLabel,
+  localizedCodexSandboxModeLabel,
   codexSupportedReasoningEfforts,
   resolveCodexWorkingDir,
 } from './viewModel';
@@ -82,6 +83,7 @@ function fallbackCancelAnimationFrame(): void {
 
 export function CodexPageShell() {
   const codex = useCodexContext();
+  const i18n = useI18n();
   const rpc = useRedevenRpc();
   const followBottomController = createFollowBottomController();
   const transcriptRowHeightCache = createCodexTranscriptRowHeightCache();
@@ -229,6 +231,7 @@ export function CodexPageShell() {
     activeStatus: codex.activeStatus(),
     activeStatusFlags: codex.activeStatusFlags(),
     pendingRequests: codex.pendingRequests(),
+    t: i18n.t,
   }));
   const hasStreamBanner = createMemo(() => {
     const phase = String(codex.streamTransportState().phase ?? '').trim();
@@ -241,13 +244,13 @@ export function CodexPageShell() {
 
   const emptyStateTitle = () => (
     summary().hostReady
-      ? 'Codex'
-      : 'Install Codex on the host'
+      ? i18n.t('codex.empty.readyTitle')
+      : i18n.t('codex.empty.installTitle')
   );
   const emptyStateBody = () => (
     summary().hostReady
-      ? 'Start a Codex conversation with a prompt, paste an image, use @ to reference files, or use / for local composer commands.'
-      : 'Redeven does not install Codex for you. Put the host `codex` binary on PATH, then refresh this page to start a dedicated Codex chat.'
+      ? i18n.t('codex.empty.readyBody')
+      : i18n.t('codex.empty.installBody')
   );
   const modelValue = createMemo(() => String(codex.modelDraft() ?? '').trim());
   const effortValue = createMemo(() => String(codex.effortDraft() ?? '').trim());
@@ -305,7 +308,7 @@ export function CodexPageShell() {
       const normalized = String(value ?? '').trim();
       if (!normalized || seen.has(normalized)) continue;
       seen.add(normalized);
-      out.push({ value: normalized, label: codexApprovalPolicyLabel(normalized) });
+      out.push({ value: normalized, label: localizedCodexApprovalPolicyLabel(normalized, i18n.t) });
     }
     return out;
   });
@@ -316,7 +319,7 @@ export function CodexPageShell() {
       const normalized = String(value ?? '').trim();
       if (!normalized || seen.has(normalized)) continue;
       seen.add(normalized);
-      out.push({ value: normalized, label: codexSandboxModeLabel(normalized) });
+      out.push({ value: normalized, label: localizedCodexSandboxModeLabel(normalized, i18n.t) });
     }
     return out;
   });
@@ -343,8 +346,8 @@ export function CodexPageShell() {
   ));
   const visibleTranscriptLoadingBody = createMemo(() => (
     threadSwitchStagingActive()
-      ? 'Preparing the selected Codex thread.'
-      : 'Loading the selected Codex thread.'
+      ? i18n.t('codex.loadingState.preparingThread')
+      : i18n.t('codex.loadingState.loadingThread')
   ));
   const activeInterruptTurnID = createMemo(() => String(codex.activeInterruptTurnID() ?? '').trim());
   const interruptPending = createMemo(() => (
@@ -356,46 +359,46 @@ export function CodexPageShell() {
     !summary().hostReady
       ? codex.hostDisabledReason()
       : threadArchived()
-        ? 'Archived threads are hidden from the conversation list.'
+        ? i18n.t('codex.disabledReasons.archivedThreadHidden')
         : ''
   ));
   const runtimeControls = createMemo<readonly CodexComposerControlSpec[]>(() => ([
     {
       id: 'model',
-      label: 'Model',
+      label: i18n.t('codex.controls.model'),
       value: modelValue(),
       options: modelOptions(),
-      placeholder: 'Default',
+      placeholder: i18n.t('codex.common.default'),
       disabled: !composerHostAvailable() || modelOptions().length === 0,
       variant: 'value',
       onChange: codex.setModelDraft,
     },
     {
       id: 'effort',
-      label: 'Effort',
+      label: i18n.t('codex.controls.effort'),
       value: effortValue(),
       options: effortOptions(),
-      placeholder: 'Default',
+      placeholder: i18n.t('codex.common.default'),
       disabled: !composerHostAvailable() || effortOptions().length === 0,
       variant: 'value',
       onChange: codex.setEffortDraft,
     },
     {
       id: 'approval',
-      label: 'Approval',
+      label: i18n.t('codex.controls.approval'),
       value: approvalPolicyValue(),
       options: approvalPolicyOptions(),
-      placeholder: 'Never',
+      placeholder: i18n.t('codex.common.never'),
       disabled: !composerHostAvailable() || approvalPolicyOptions().length === 0,
       variant: 'policy',
       onChange: codex.setApprovalPolicyDraft,
     },
     {
       id: 'sandbox',
-      label: 'Sandbox',
+      label: i18n.t('codex.controls.sandbox'),
       value: sandboxModeValue(),
       options: sandboxModeOptions(),
-      placeholder: 'Full access',
+      placeholder: i18n.t('codex.common.fullAccess'),
       disabled: !composerHostAvailable() || sandboxModeOptions().length === 0,
       variant: 'policy',
       onChange: codex.setSandboxModeDraft,
@@ -416,29 +419,29 @@ export function CodexPageShell() {
     }
     if (composerPrimaryActionKind() === 'stop') {
       if (interruptPending()) {
-        return 'Stop request in progress.';
+        return i18n.t('codex.disabledReasons.stopRequestInProgress');
       }
       if (!activeInterruptTurnID()) {
         return codex.submitting()
-          ? 'Waiting for the active turn to start.'
-          : 'Waiting for Codex to expose an interruptible turn.';
+          ? i18n.t('codex.disabledReasons.waitingForActiveTurn')
+          : i18n.t('codex.disabledReasons.waitingForInterruptibleTurn');
       }
       if (!codex.supportsOperation('turn_interrupt')) {
-        return 'Turn interruption is unavailable on this host.';
+        return i18n.t('codex.disabledReasons.turnInterruptionUnavailable');
       }
       return '';
     }
     if (composerPrimaryActionKind() === 'queue') {
       if (!String(codex.activeThreadID() ?? '').trim()) {
-        return 'Queue is available after the current thread starts.';
+        return i18n.t('codex.disabledReasons.queueAfterThreadStarts');
       }
       return '';
     }
     if (!composerHasQueueableDraftContent()) {
-      return 'Add a prompt, image, or file mention to send.';
+      return i18n.t('codex.disabledReasons.addPromptImageOrMention');
     }
     if (codex.submitting()) {
-      return 'Sending...';
+      return i18n.t('codex.common.sending');
     }
     return '';
   });
@@ -448,25 +451,25 @@ export function CodexPageShell() {
       return composerDisabledReason() || codex.hostDisabledReason();
     }
     if (!hasActiveRun()) {
-      return 'Guide is available while Codex is running a turn.';
+      return i18n.t('codex.disabledReasons.guideWhileRunning');
     }
     if (interruptPending()) {
-      return 'Guide is unavailable while a stop request is in progress.';
+      return i18n.t('codex.disabledReasons.guideStopInProgress');
     }
     if (!activeInterruptTurnID()) {
-      return 'Codex is still starting the current turn.';
+      return i18n.t('codex.disabledReasons.currentTurnStarting');
     }
     if (!codex.supportsOperation('turn_steer')) {
-      return 'This Codex host does not support same-turn guidance.';
+      return i18n.t('codex.disabledReasons.sameTurnGuidanceUnsupported');
     }
     if (codex.activeTurnCanSteer() === false) {
       const turnKind = String(codex.activeTurnKind() ?? '').trim();
       return turnKind
-        ? `This ${turnKind} turn cannot accept guided input.`
-        : 'This turn cannot accept guided input.';
+        ? i18n.t('codex.disabledReasons.turnKindCannotAcceptGuidedInput', { kind: turnKind })
+        : i18n.t('codex.disabledReasons.turnCannotAcceptGuidedInput');
     }
     if (codex.submitting()) {
-      return 'Sending...';
+      return i18n.t('codex.common.sending');
     }
     return '';
   });
@@ -483,64 +486,64 @@ export function CodexPageShell() {
     if (threadArchived()) return actions;
     actions.push({
       key: 'archive',
-      label: archivePending ? 'Archiving…' : 'Archive',
-      aria_label: 'Archive Codex thread',
+      label: archivePending ? i18n.t('codex.actions.archiving') : i18n.t('codex.actions.archive'),
+      aria_label: i18n.t('codex.header.archiveThreadAria'),
       onClick: () => void codex.archiveActiveThread(),
       disabled: !summary().hostReady || archivePending || !codex.supportsOperation('thread_archive'),
       disabled_reason: !summary().hostReady
         ? hostUnavailableReason
         : !codex.supportsOperation('thread_archive')
-          ? 'Archive is unavailable on this host.'
+          ? i18n.t('codex.disabledReasons.archiveUnavailable')
           : archivePending
-            ? 'Archive in progress.'
+            ? i18n.t('codex.disabledReasons.archiveInProgress')
             : '',
     });
     actions.push({
       key: 'fork',
-      label: forkPending ? 'Forking…' : 'Fork',
-      aria_label: 'Fork Codex thread',
+      label: forkPending ? i18n.t('codex.actions.forking') : i18n.t('codex.actions.fork'),
+      aria_label: i18n.t('codex.header.forkThreadAria'),
       onClick: () => void codex.forkActiveThread(),
       disabled: !summary().hostReady || forkPending || !codex.supportsOperation('thread_fork'),
       disabled_reason: !summary().hostReady
         ? hostUnavailableReason
         : !codex.supportsOperation('thread_fork')
-          ? 'Fork is unavailable on this host.'
+          ? i18n.t('codex.disabledReasons.forkUnavailable')
           : forkPending
-            ? 'Fork in progress.'
+            ? i18n.t('codex.disabledReasons.forkInProgress')
             : '',
     });
     actions.push({
       key: 'review',
-      label: reviewPending ? 'Reviewing…' : 'Review',
-      aria_label: 'Review current workspace changes',
+      label: reviewPending ? i18n.t('codex.actions.reviewing') : i18n.t('codex.actions.review'),
+      aria_label: i18n.t('codex.header.reviewWorkspaceAria'),
       onClick: () => void codex.reviewActiveThread(),
       disabled: !summary().hostReady || reviewPending || !codex.supportsOperation('review_start'),
       disabled_reason: !summary().hostReady
         ? hostUnavailableReason
         : !codex.supportsOperation('review_start')
-          ? 'Review is unavailable on this host.'
+          ? i18n.t('codex.disabledReasons.reviewUnavailable')
           : reviewPending
-            ? 'Review already in progress.'
+            ? i18n.t('codex.disabledReasons.reviewInProgress')
             : '',
     });
     if (hasActiveRun()) {
       actions.push({
         key: 'stop',
-        label: interruptPending() ? 'Stopping…' : 'Stop',
-        aria_label: 'Stop active Codex turn',
+        label: interruptPending() ? i18n.t('codex.actions.stopping') : i18n.t('codex.actions.stop'),
+        aria_label: i18n.t('codex.header.stopTurnAria'),
         onClick: () => void codex.interruptActiveTurn(),
         disabled: !summary().hostReady || interruptPending() || !codex.supportsOperation('turn_interrupt') || !activeInterruptTurnID(),
         disabled_reason: !summary().hostReady
           ? hostUnavailableReason
           : !codex.supportsOperation('turn_interrupt')
-            ? 'Turn interruption is unavailable on this host.'
+            ? i18n.t('codex.disabledReasons.turnInterruptionUnavailable')
             : interruptPending()
-              ? 'Stop request in progress.'
+              ? i18n.t('codex.disabledReasons.stopRequestInProgress')
               : !activeInterruptTurnID()
                 ? (
                   codex.submitting()
-                    ? 'Stop will be available once the turn starts.'
-                    : 'Waiting for Codex to expose an interruptible turn.'
+                    ? i18n.t('codex.disabledReasons.stopAvailableAfterTurnStarts')
+                    : i18n.t('codex.disabledReasons.waitingForInterruptibleTurn')
                 )
                 : '',
       });
@@ -791,7 +794,7 @@ export function CodexPageShell() {
                   <CodexComposerShell
                     workingDirPath={workingDirPath()}
                     workingDirLabel={workingDirValue()}
-                    workingDirTitle={workingDirPath() || workingDirValue() || 'Working directory'}
+                    workingDirTitle={workingDirPath() || workingDirValue() || i18n.t('codex.common.workingDirectory')}
                     workingDirLocked={workingDirLocked()}
                     workingDirDisabled={workingDirDisabled()}
                     runtimeControls={runtimeControls()}

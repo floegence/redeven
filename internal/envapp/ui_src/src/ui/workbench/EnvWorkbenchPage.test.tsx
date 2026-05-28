@@ -203,6 +203,7 @@ const [workbenchSurfaceActivationSeq, setWorkbenchSurfaceActivationSeq] = create
 const [workbenchSurfaceActivation, setWorkbenchSurfaceActivation] = createSignal<any>(null);
 const [workbenchFilePreviewActivationSeq, setWorkbenchFilePreviewActivationSeq] = createSignal(0);
 const [workbenchFilePreviewActivation, setWorkbenchFilePreviewActivation] = createSignal<any>(null);
+const [testLocale, setTestLocale] = createSignal('en-US');
 const testDisposers: Array<() => void> = [];
 
 function deferred<T>() {
@@ -473,6 +474,25 @@ vi.mock('../pages/EnvContext', () => ({
   }),
 }));
 
+vi.mock('../i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../i18n')>();
+  return {
+    ...actual,
+    useI18n: () => ({
+      ...actual.createI18nHelpers(testLocale() as any),
+      snapshot: () => ({
+        preference: testLocale(),
+        resolved_locale: testLocale(),
+        source: 'preference',
+      }),
+      locale: () => testLocale(),
+      localePreference: () => testLocale(),
+      source: () => 'browser',
+      setLocalePreference: vi.fn(),
+    }),
+  };
+});
+
 vi.mock('../services/uiStorage', () => ({
   isDesktopStateStorageAvailable: storageMocks.isDesktopStateStorageAvailable,
   readUIStorageJSON: storageMocks.readUIStorageJSON,
@@ -527,6 +547,44 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       icon: () => null,
       body: (props: any) => widgetBodyMocks.renderPreviewBody?.(props) ?? null,
       defaultTitle: 'Preview',
+      defaultSize: { width: 900, height: 620 },
+      singleton: false,
+    },
+  ],
+  localizedRedevenWorkbenchWidgets: (t: (key: string) => string) => [
+    {
+      type: 'redeven.terminal',
+      label: t('workbench.widgets.terminal.label'),
+      icon: () => null,
+      body: (props: any) => widgetBodyMocks.renderTerminalBody?.(props) ?? null,
+      defaultTitle: t('workbench.widgets.terminal.defaultTitle'),
+      defaultSize: { width: 800, height: 480 },
+      singleton: false,
+    },
+    {
+      type: 'redeven.files',
+      label: t('workbench.widgets.files.label'),
+      icon: () => null,
+      body: (props: any) => widgetBodyMocks.renderFilesBody?.(props) ?? null,
+      defaultTitle: t('workbench.widgets.files.defaultTitle'),
+      defaultSize: { width: 720, height: 520 },
+      singleton: false,
+    },
+    {
+      type: 'redeven.monitor',
+      label: t('workbench.widgets.monitor.label'),
+      icon: () => null,
+      body: () => null,
+      defaultTitle: t('workbench.widgets.monitor.defaultTitle'),
+      defaultSize: { width: 760, height: 460 },
+      singleton: true,
+    },
+    {
+      type: 'redeven.preview',
+      label: t('workbench.widgets.preview.label'),
+      icon: () => null,
+      body: (props: any) => widgetBodyMocks.renderPreviewBody?.(props) ?? null,
+      defaultTitle: t('workbench.widgets.preview.defaultTitle'),
       defaultSize: { width: 900, height: 620 },
       singleton: false,
     },
@@ -642,6 +700,7 @@ describe('EnvWorkbenchPage', () => {
     setWorkbenchSurfaceActivationSeq(0);
     setWorkbenchFilePreviewActivation(null);
     setWorkbenchFilePreviewActivationSeq(0);
+    setTestLocale('en-US');
     storageMocks.isDesktopStateStorageAvailable.mockReturnValue(false);
     storageMocks.readUIStorageJSON.mockReset();
     storageMocks.readUIStorageJSON.mockReturnValue(null);
@@ -1431,6 +1490,72 @@ describe('EnvWorkbenchPage', () => {
         expect(widgetsOverlap(arrangedWidgets[leftIndex], arrangedWidgets[rightIndex])).toBe(false);
       }
     }
+  });
+
+  it('localizes Workbench add and go-to context-menu actions', async () => {
+    setTestLocale('zh-CN');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 100,
+      widgets: [
+        {
+          widget_id: 'widget-monitor-1',
+          widget_type: 'redeven.monitor',
+          x: 0,
+          y: 0,
+          width: 760,
+          height: 460,
+          z_index: 1,
+          created_at_unix_ms: 123,
+        },
+      ],
+      widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    const menuItems = surfaceApiMocks.lastSurfaceProps.resolveContextMenuItems({
+      menu: {
+        clientX: 200,
+        clientY: 200,
+        worldX: 0,
+        worldY: 0,
+      },
+      items: [
+        {
+          id: 'goto-redeven.monitor',
+          kind: 'action',
+          label: 'Go to Monitoring',
+          icon: () => null,
+          onSelect: vi.fn(),
+        },
+        {
+          id: 'add-redeven.terminal',
+          kind: 'action',
+          label: 'Add Terminal',
+          icon: () => null,
+          onSelect: vi.fn(),
+        },
+      ],
+      widgets: surfaceApiMocks.lastStateAccessor().widgets,
+      widget: null,
+      closeMenu: vi.fn(),
+    });
+
+    const labels = menuItems
+      .filter((item: any) => item.kind === 'action')
+      .map((item: any) => item.label);
+
+    expect(labels).toContain('转到 监控');
+    expect(labels).toContain('添加 Terminal');
   });
 
   it('keeps workbench tidy actions out of background-mode canvas menus', async () => {

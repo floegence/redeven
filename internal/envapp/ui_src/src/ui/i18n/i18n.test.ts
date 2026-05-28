@@ -1,0 +1,429 @@
+// @vitest-environment jsdom
+
+import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { createI18nHelpers } from './createI18n';
+import { findProtectedTermViolations, PROTECTED_TERMS } from './protectedTerms';
+import { desktopLanguageBridge } from './desktopLanguageBridge';
+import { resolveLocalePreference, type RedevenLanguageSnapshot } from './resolveLocale';
+import {
+  LOCALE_META,
+  LOCALE_OPTIONS,
+  SUPPORTED_LOCALES,
+  SYSTEM_LOCALE_PREFERENCE,
+  localeDisplayName,
+  normalizeLocalePreference,
+} from './localeMeta';
+import { dictionaries, enUS } from './locales';
+import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from './storageKey';
+import type { EnvAppTranslationShape } from './locales';
+
+type MessageLeaf = string | Readonly<Record<string, string>> | readonly unknown[];
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function isPluralLike(value: unknown): value is Readonly<Record<string, string>> {
+  return isRecord(value) && typeof value.other === 'string';
+}
+
+function collectLeaves(value: unknown, prefix = ''): Readonly<Record<string, MessageLeaf>> {
+  if (typeof value === 'string' || Array.isArray(value) || isPluralLike(value)) {
+    return { [prefix]: value };
+  }
+  if (!isRecord(value)) {
+    return {};
+  }
+  const entries: Record<string, MessageLeaf> = {};
+  for (const [key, child] of Object.entries(value)) {
+    Object.assign(entries, collectLeaves(child, prefix ? `${prefix}.${key}` : key));
+  }
+  return entries;
+}
+
+function stringsForLeaf(value: MessageLeaf): readonly string[] {
+  if (typeof value === 'string') {
+    return [value];
+  }
+  if (Array.isArray(value)) {
+    return value.map((part) => JSON.stringify(part));
+  }
+  return Object.values(value).filter((message): message is string => typeof message === 'string');
+}
+
+function placeholderSet(messages: readonly string[]): Set<string> {
+  const placeholders = new Set<string>();
+  for (const message of messages) {
+    for (const match of message.matchAll(/\{([A-Za-z_][A-Za-z0-9_]*)\}/g)) {
+      placeholders.add(match[1] ?? '');
+    }
+  }
+  placeholders.delete('');
+  return placeholders;
+}
+
+function sameSet(left: Set<string>, right: Set<string>): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+describe('Env App i18n metadata', () => {
+  it('defines ten real locales plus a separate system preference mode', () => {
+    expect(SUPPORTED_LOCALES).toEqual([
+      'en-US',
+      'zh-CN',
+      'zh-TW',
+      'ja-JP',
+      'ko-KR',
+      'de-DE',
+      'fr-FR',
+      'es-ES',
+      'pt-BR',
+      'ru-RU',
+    ]);
+    expect(LOCALE_OPTIONS).toHaveLength(10);
+    expect(SYSTEM_LOCALE_PREFERENCE).toBe('system');
+  });
+
+  it('keeps metadata displayable for each supported locale', () => {
+    for (const locale of SUPPORTED_LOCALES) {
+      expect(LOCALE_META[locale].id).toBe(locale);
+      expect(LOCALE_META[locale].htmlLang).toBe(locale);
+      expect(LOCALE_META[locale].textDirection).toBe('ltr');
+      expect(localeDisplayName(locale).length).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('Env App i18n resolver', () => {
+  it.each([
+    ['en-GB', 'en-US'],
+    ['zh-Hant', 'zh-TW'],
+    ['zh-Hant-HK', 'zh-TW'],
+    ['zh_Hant_HK', 'zh-TW'],
+    ['zh-MO', 'zh-TW'],
+    ['zh-SG', 'zh-CN'],
+    ['ja', 'ja-JP'],
+    ['ko', 'ko-KR'],
+    ['de-CH', 'de-DE'],
+    ['fr-CA', 'fr-FR'],
+    ['es-419', 'es-ES'],
+    ['pt-PT', 'pt-BR'],
+    ['ru', 'ru-RU'],
+  ] as const)('maps system candidate %s to %s', (candidate, expected) => {
+    expect(resolveLocalePreference({ preference: 'system', systemCandidates: [candidate] })).toMatchObject({
+      preference: 'system',
+      resolved_locale: expected,
+      source: 'system',
+    });
+  });
+
+  it('keeps explicit supported preferences ahead of browser candidates', () => {
+    expect(resolveLocalePreference({ preference: 'fr-FR', systemCandidates: ['zh-CN'] })).toMatchObject({
+      preference: 'fr-FR',
+      resolved_locale: 'fr-FR',
+      source: 'explicit',
+    });
+  });
+
+  it.each([
+    ['zh-cn', 'zh-CN'],
+    ['ZH-tw', 'zh-TW'],
+    ['ja-jp', 'ja-JP'],
+    ['PT-br', 'pt-BR'],
+    ['system', 'system'],
+    ['bogus', 'system'],
+  ] as const)('normalizes explicit preference %s to %s like Desktop', (input, expected) => {
+    expect(normalizeLocalePreference(input)).toBe(expected);
+    expect(resolveLocalePreference({ preference: input, systemCandidates: ['de-DE'] }).preference).toBe(expected);
+  });
+});
+
+describe('Env App Desktop language bridge', () => {
+  it('accepts only validated Desktop language snapshots', () => {
+    const original = window.redevenDesktopLanguage;
+    const validSnapshot: RedevenLanguageSnapshot = {
+      preference: 'zh-TW',
+      resolved_locale: 'zh-TW',
+      source: 'explicit',
+      system_candidates: ['zh-Hant-HK'],
+    };
+
+    window.redevenDesktopLanguage = {
+      getSnapshot: () => validSnapshot,
+      setPreference: () => validSnapshot,
+      subscribe: () => () => undefined,
+    };
+    expect(desktopLanguageBridge()).not.toBeNull();
+
+    window.redevenDesktopLanguage = {
+      getSnapshot: () => ({
+        preference: 'system',
+        resolved_locale: 'xx-TEST',
+        source: 'system',
+        system_candidates: [],
+      }) as unknown as RedevenLanguageSnapshot,
+      setPreference: () => validSnapshot,
+      subscribe: () => () => undefined,
+    };
+    expect(desktopLanguageBridge()).toBeNull();
+
+    window.redevenDesktopLanguage = original;
+  });
+
+  it('rejects explicit snapshots where preference and resolved locale disagree', () => {
+    const original = window.redevenDesktopLanguage;
+    const invalidSnapshot = {
+      preference: 'ja-JP',
+      resolved_locale: 'ko-KR',
+      source: 'explicit',
+      system_candidates: [],
+    } as unknown as RedevenLanguageSnapshot;
+
+    window.redevenDesktopLanguage = {
+      getSnapshot: () => invalidSnapshot,
+      setPreference: () => invalidSnapshot,
+      subscribe: () => () => undefined,
+    };
+    expect(desktopLanguageBridge()).toBeNull();
+
+    window.redevenDesktopLanguage = original;
+  });
+
+  it('ignores invalid snapshots emitted after bridge validation', () => {
+    const original = window.redevenDesktopLanguage;
+    const validSnapshot: RedevenLanguageSnapshot = {
+      preference: 'system',
+      resolved_locale: 'en-US',
+      source: 'fallback',
+      system_candidates: [],
+    };
+    const invalidSnapshot = {
+      preference: 'zh-CN',
+      resolved_locale: 'pt-BR',
+      source: 'system',
+      system_candidates: ['pt-PT'],
+    } as unknown as RedevenLanguageSnapshot;
+    const subscribers: Array<(snapshot: RedevenLanguageSnapshot) => void> = [];
+
+    window.redevenDesktopLanguage = {
+      getSnapshot: () => validSnapshot,
+      setPreference: () => invalidSnapshot,
+      subscribe: (listener) => {
+        subscribers.push(listener);
+        return () => undefined;
+      },
+    };
+
+    const bridge = desktopLanguageBridge();
+    const received: RedevenLanguageSnapshot[] = [];
+    bridge?.subscribe((snapshot) => received.push(snapshot));
+    subscribers[0]?.(invalidSnapshot);
+
+    expect(bridge?.setPreference('zh-CN')).toMatchObject({
+      preference: 'zh-CN',
+      resolved_locale: 'zh-CN',
+      source: 'explicit',
+    });
+    expect(received).toEqual([]);
+
+    window.redevenDesktopLanguage = original;
+  });
+});
+
+describe('Env App i18n dictionaries', () => {
+  it('preserves protected product terms across localized dictionaries', () => {
+    for (const locale of SUPPORTED_LOCALES) {
+      expect(findProtectedTermViolations(enUS, dictionaries[locale], locale)).toEqual([]);
+    }
+  });
+
+  it('keeps every locale shape and placeholders aligned with en-US', () => {
+    const sourceLeaves = collectLeaves(enUS);
+    const sourceKeys = Object.keys(sourceLeaves).sort();
+    for (const locale of SUPPORTED_LOCALES) {
+      const targetLeaves = collectLeaves(dictionaries[locale]);
+      expect(Object.keys(targetLeaves).sort()).toEqual(sourceKeys);
+      for (const key of sourceKeys) {
+        const source = sourceLeaves[key];
+        const target = targetLeaves[key];
+        expect(typeof target).toBe(typeof source);
+        expect(sameSet(
+          placeholderSet(stringsForLeaf(source)),
+          placeholderSet(stringsForLeaf(target)),
+        )).toBe(true);
+      }
+    }
+  });
+
+  it('keeps ru-RU plural messages wired for Russian plural categories', () => {
+    const ruLeaves = collectLeaves(dictionaries['ru-RU']);
+    for (const [key, value] of Object.entries(ruLeaves)) {
+      if (!isPluralLike(value)) {
+        continue;
+      }
+      expect(value, key).toHaveProperty('one');
+      expect(value, key).toHaveProperty('few');
+      expect(value, key).toHaveProperty('many');
+      expect(value, key).toHaveProperty('other');
+    }
+  });
+
+  it('formats translated strings and plural messages through the locale helpers', () => {
+    const zhCN = createI18nHelpers('zh-CN');
+    expect(zhCN.t('language.updatedMessage', { language: '简体中文' })).toBe('Redeven 将使用 简体中文。');
+    expect(zhCN.tn('language.availableCount', 10)).toBe('10 种语言');
+    expect(zhCN.t('shell.commandPalette.changeLanguageTitle')).toBe('更改语言');
+    expect(zhCN.t('accessGate.notice')).toContain('Runtime');
+    expect(zhCN.t('chatChrome.copyMessage')).toBe('复制消息');
+    expect(zhCN.t('chatActivity.command')).toBe('命令');
+    expect(zhCN.t('chatActivity.noneOfTheAbove')).toBe('以上都不是');
+    expect(zhCN.t('chatActivity.readyToContinue')).toBe('可以继续。');
+    expect(zhCN.t('filePreview.saveFile')).toBe('保存文件');
+
+    const deDE = createI18nHelpers('de-DE');
+    expect(deDE.t('chatActivity.command')).toBe('Befehl');
+
+    const ruRU = createI18nHelpers('ru-RU');
+    expect(ruRU.tn('language.availableCount', 1)).toBe('1 язык');
+    expect(ruRU.tn('language.availableCount', 2)).toBe('2 языка');
+    expect(ruRU.tn('language.availableCount', 5)).toBe('5 языков');
+    expect(ruRU.tn('runtimeStatus.workload.tasks', 1)).toBe('1 задача');
+    expect(ruRU.tn('runtimeStatus.workload.tasks', 2)).toBe('2 задачи');
+    expect(ruRU.tn('runtimeStatus.workload.tasks', 5)).toBe('5 задач');
+    expect(ruRU.tn('chatActivity.todoItems', 1)).toBe('1 элемент');
+    expect(ruRU.tn('chatActivity.todoItems', 2)).toBe('2 элемента');
+    expect(ruRU.tn('chatActivity.todoItems', 5)).toBe('5 элементов');
+    expect(ruRU.tn('chatActivity.fileCount', 1)).toBe('1 файл');
+    expect(ruRU.tn('chatActivity.fileCount', 2)).toBe('2 файла');
+    expect(ruRU.tn('chatActivity.fileCount', 5)).toBe('5 файлов');
+  });
+
+  it('keeps product chrome translation separate from user and generated content', () => {
+    const zhCN = createI18nHelpers('zh-CN');
+    const userPrompt = 'Flower should inspect src/main.ts and keep this prompt in English.';
+    const aiReply = 'I will read the file, then run npm test.';
+    const code = 'const Flower = "prompt text stays literal";';
+    const terminalOutput = 'npm test\nPASS src/main.test.ts';
+
+    expect(zhCN.t('chatChrome.copyMessage')).toBe('复制消息');
+    expect(userPrompt).toBe('Flower should inspect src/main.ts and keep this prompt in English.');
+    expect(aiReply).toBe('I will read the file, then run npm test.');
+    expect(code).toBe('const Flower = "prompt text stays literal";');
+    expect(terminalOutput).toBe('npm test\nPASS src/main.test.ts');
+  });
+
+  it('checks protected terms inside plural messages', () => {
+    expect(findProtectedTermViolations(
+      {
+        ...enUS,
+        language: {
+          ...enUS.language,
+          availableCount: {
+            one: '{count} Runtime issue',
+            other: '{count} Runtime issues',
+          },
+        },
+      },
+      {
+        ...enUS,
+        language: {
+          ...enUS.language,
+          availableCount: {
+            one: '{count} issue',
+            other: '{count} issues',
+          },
+        },
+      },
+      'xx-TEST',
+    )).toContainEqual({
+      key: 'language.availableCount',
+      locale: 'xx-TEST',
+      term: 'Runtime',
+    });
+  });
+
+  it('checks protected terms inside rich text messages', () => {
+    expect(findProtectedTermViolations(
+      ({
+        ...enUS,
+        aiChrome: {
+          ...enUS.aiChrome,
+          flowerTitle: [{ type: 'text', value: 'Open Flower' }],
+        },
+      } as unknown as EnvAppTranslationShape),
+      ({
+        ...enUS,
+        aiChrome: {
+          ...enUS.aiChrome,
+          flowerTitle: [{ type: 'text', value: 'Open assistant' }],
+        },
+      } as unknown as EnvAppTranslationShape),
+      'xx-TEST',
+    )).toContainEqual({
+      key: 'aiChrome.flowerTitle',
+      locale: 'xx-TEST',
+      term: 'Flower',
+    });
+  });
+});
+
+describe('Env App and Desktop i18n contract', () => {
+  it('keeps storage keys and supported locale order aligned with Desktop', () => {
+    const desktopLocaleMeta = fs.readFileSync(
+      path.resolve(process.cwd(), '../../../desktop/src/shared/i18n/localeMeta.ts'),
+      'utf8',
+    );
+    const desktopStorageKey = fs.readFileSync(
+      path.resolve(process.cwd(), '../../../desktop/src/shared/i18n/storageKey.ts'),
+      'utf8',
+    );
+
+    for (const locale of SUPPORTED_LOCALES) {
+      expect(desktopLocaleMeta).toContain(`'${locale}'`);
+    }
+    expect(desktopStorageKey).toContain(`'${REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY}'`);
+  });
+
+  it('keeps resolver aliases and protected term contracts aligned with Desktop', () => {
+    const desktopLocaleMeta = fs.readFileSync(
+      path.resolve(process.cwd(), '../../../desktop/src/shared/i18n/localeMeta.ts'),
+      'utf8',
+    );
+    const desktopResolver = fs.readFileSync(
+      path.resolve(process.cwd(), '../../../desktop/src/shared/i18n/resolveLocale.ts'),
+      'utf8',
+    );
+    const desktopProtectedTerms = fs.readFileSync(
+      path.resolve(process.cwd(), '../../../desktop/src/shared/i18n/protectedTerms.ts'),
+      'utf8',
+    );
+
+    expect(desktopResolver).toContain("case 'en':");
+    expect(desktopResolver).toContain("case 'de':");
+    expect(desktopResolver).toContain("case 'fr':");
+    expect(desktopResolver).toContain("case 'es':");
+    expect(desktopResolver).toContain("case 'pt':");
+    expect(desktopResolver).toContain("parts.includes('hant')");
+    expect(desktopResolver).toContain("parts.includes('hk')");
+    expect(desktopResolver).toContain("parts.includes('mo')");
+    expect(desktopResolver).toContain("return 'zh-TW'");
+    expect(desktopResolver).toContain("return 'zh-CN'");
+    expect(desktopResolver).toContain("return 'pt-BR'");
+    expect(desktopLocaleMeta).toContain('REDEVEN_LOCALE_PREFERENCES');
+    expect(desktopLocaleMeta).toContain('SYSTEM_LOCALE_PREFERENCE');
+    for (const term of PROTECTED_TERMS) {
+      expect(desktopProtectedTerms).toContain(`'${term}'`);
+    }
+  });
+});

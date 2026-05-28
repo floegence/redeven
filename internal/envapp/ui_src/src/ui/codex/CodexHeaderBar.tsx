@@ -2,6 +2,7 @@ import { Index, Show } from 'solid-js';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { CodexIcon } from '../icons/CodexIcon';
+import { useI18n } from '../i18n';
 import { Tooltip } from '../primitives/Tooltip';
 import { statusTagVariant } from './presentation';
 import type { CodexWorkbenchSummary } from './viewModel';
@@ -19,16 +20,17 @@ export function CodexHeaderBar(props: {
   summary: CodexWorkbenchSummary;
   actions: readonly CodexHeaderAction[];
 }) {
+  const i18n = useI18n();
   const shouldShowStatusTag = () => {
     const value = String(props.summary.statusLabel ?? '').trim().toLowerCase();
-    return value.length > 0 && value !== 'idle' && value !== 'ready' && value !== 'not loaded';
+    return value.length > 0 && value !== 'idle' && value !== i18n.t('common.status.ready').toLowerCase() && value !== 'not loaded';
   };
   const supplementalTag = () => {
     if (!props.summary.hostReady) {
-      return { variant: 'warning' as const, label: 'Install required' };
+      return { variant: 'warning' as const, label: i18n.t('codex.header.installRequired') };
     }
     if (props.summary.pendingRequestCount > 0) {
-      return { variant: 'warning' as const, label: `${props.summary.pendingRequestCount} pending` };
+      return { variant: 'warning' as const, label: i18n.tn('codex.header.pendingCount', props.summary.pendingRequestCount) };
     }
     if (props.summary.statusFlags.length > 0) {
       return { variant: 'info' as const, label: props.summary.statusFlags[0] };

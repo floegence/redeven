@@ -19,6 +19,7 @@ type DesktopAnchoredListboxProps = Readonly<{
   class?: string;
   maxHeight?: number;
   minHeight?: number;
+  width?: number;
   onOverlayRef?: (element: HTMLDivElement | undefined) => void;
   children: JSX.Element;
 }>;
@@ -49,12 +50,14 @@ export function resolveDesktopAnchoredListboxGeometry(options: Readonly<{
   viewportHeight: number;
   maxHeight?: number;
   minHeight?: number;
+  width?: number;
 }>): DesktopAnchoredListboxGeometry {
   const maxHeight = Math.max(1, options.maxHeight ?? DEFAULT_MAX_HEIGHT);
   const minHeight = Math.max(1, Math.min(options.minHeight ?? DEFAULT_MIN_HEIGHT, maxHeight));
   const viewportWidth = Math.max(0, options.viewportWidth);
   const viewportHeight = Math.max(0, options.viewportHeight);
-  const width = Math.max(1, Math.min(options.anchorRect.width, Math.max(1, viewportWidth - (LISTBOX_MARGIN * 2))));
+  const requestedWidth = options.width ?? options.anchorRect.width;
+  const width = Math.max(1, Math.min(Math.max(options.anchorRect.width, requestedWidth), Math.max(1, viewportWidth - (LISTBOX_MARGIN * 2))));
   const left = clamp(options.anchorRect.left, LISTBOX_MARGIN, viewportWidth - width - LISTBOX_MARGIN);
   const availableBelow = Math.max(0, viewportHeight - options.anchorRect.bottom - LISTBOX_MARGIN - LISTBOX_GAP);
   const availableAbove = Math.max(0, options.anchorRect.top - LISTBOX_MARGIN - LISTBOX_GAP);
@@ -107,6 +110,7 @@ export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
       viewportHeight,
       maxHeight: props.maxHeight,
       minHeight: props.minHeight,
+      width: props.width,
     });
     setGeometry({
       ...nextGeometry,
@@ -181,7 +185,11 @@ export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
         style={{
           left: geometry() ? `${geometry()!.left}px` : '0px',
           top: geometry() ? `${geometry()!.top}px` : '0px',
-          width: geometry() ? `${geometry()!.width}px` : props.anchorRef ? `${props.anchorRef.getBoundingClientRect().width}px` : '0px',
+          width: geometry()
+            ? `${geometry()!.width}px`
+            : props.anchorRef
+              ? `${Math.max(props.anchorRef.getBoundingClientRect().width, props.width ?? 0)}px`
+              : '0px',
           'max-height': geometry() ? `${geometry()!.maxHeight}px` : `${props.maxHeight ?? DEFAULT_MAX_HEIGHT}px`,
           visibility: props.open && geometry() ? 'visible' : 'hidden',
         }}

@@ -3,6 +3,8 @@ import {
   sanitizeWorkbenchState,
   type WorkbenchContextMenuItem,
   type WorkbenchState,
+  type WorkbenchWidgetDefinition,
+  type WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { TerminalSessionInfo } from '@floegence/floeterm-terminal-web';
@@ -12,6 +14,7 @@ import { Portal } from 'solid-js/web';
 
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from '../utils/askFlowerPath';
 import { envWidgetTypeForSurface, type EnvWorkbenchHandoffAnchor } from '../envViewMode';
+import { useI18n } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
 import { isDesktopStateStorageAvailable, readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { resolveEnvAppStorageBinding } from '../services/uiPersistence';
@@ -38,9 +41,9 @@ import {
   type RedevenWorkbenchSurfaceApi,
 } from './surface/RedevenWorkbenchSurface';
 import {
+  localizedRedevenWorkbenchWidgets,
   redevenWorkbenchFilterBarWidgetTypes,
   redevenWorkbenchInitialCanvasWidgetTypes,
-  redevenWorkbenchWidgets,
 } from './redevenWorkbenchWidgets';
 import { arrangeWorkbenchWidgetsByType } from './workbenchAutoArrange';
 import { createRedevenWorkbenchInitialLayout } from './workbenchInitialCanvas';
@@ -103,6 +106,17 @@ import {
 const WORKBENCH_PERSIST_DELAY_MS = 120;
 const WORKBENCH_LAYOUT_FLUSH_DELAY_MS = 160;
 const WORKBENCH_LAYOUT_FAST_FLUSH_DELAY_MS = 16;
+
+function workbenchWidgetTypeFromMenuID(id: string, prefix: 'add' | 'goto'): WorkbenchWidgetType | null {
+  const expectedPrefix = `${prefix}-`;
+  return id.startsWith(expectedPrefix)
+    ? id.slice(expectedPrefix.length) as WorkbenchWidgetType
+    : null;
+}
+
+function fallbackWorkbenchContextMenuSubject(label: string, prefix: 'Add ' | 'Go to '): string {
+  return label.startsWith(prefix) ? label.slice(prefix.length) : label;
+}
 const WORKBENCH_LAYOUT_RECONNECT_DELAY_MS = 900;
 const WORKBENCH_LAYOUT_VISUAL_SETTLE_MS = 90;
 const WORKBENCH_RENDER_TRANSACTION_FRAME_COUNT = 1;
@@ -240,6 +254,7 @@ function RedevenWorkbenchHudActions(props: {
   onMinimizeCanvasScale: () => void;
   onFitSelectedWidget: () => void;
 }) {
+  const i18n = useI18n();
   return (
     <Show when={props.mount()}>
       {(mount) => (
@@ -248,8 +263,8 @@ function RedevenWorkbenchHudActions(props: {
             <button
               type="button"
               class={`workbench-hud__button ${WORKBENCH_HUD_MINIMIZE_BUTTON_CLASS}`}
-              aria-label="Scale canvas to minimum"
-              title="Scale canvas to minimum"
+              aria-label={i18n.t('workbench.hud.scaleCanvasToMinimum')}
+              title={i18n.t('workbench.hud.scaleCanvasToMinimum')}
               data-floe-canvas-interactive="true"
               onPointerDown={(event) => event.preventDefault()}
               onClick={() => props.onMinimizeCanvasScale()}
@@ -260,8 +275,8 @@ function RedevenWorkbenchHudActions(props: {
               <button
                 type="button"
                 class={`workbench-hud__button ${WORKBENCH_HUD_MAXIMIZE_BUTTON_CLASS}`}
-                aria-label="Fit selected widget to viewport"
-                title="Fit selected widget to viewport"
+                aria-label={i18n.t('workbench.hud.fitSelectedWidgetToViewport')}
+                title={i18n.t('workbench.hud.fitSelectedWidgetToViewport')}
                 data-floe-canvas-interactive="true"
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={() => props.onFitSelectedWidget()}
@@ -544,15 +559,21 @@ function fileItemToRuntimePreviewItem(item: FileItem): RuntimeWorkbenchPreviewIt
   };
 }
 
-function readPersistedWorkbenchLocalState(storageKey: string): PersistedWorkbenchLocalState {
+function readPersistedWorkbenchLocalState(
+  storageKey: string,
+  widgetDefinitions: readonly WorkbenchWidgetDefinition[],
+): PersistedWorkbenchLocalState {
   return sanitizePersistedWorkbenchLocalState(
     readUIStorageJSON(storageKey, null),
-    redevenWorkbenchWidgets,
+    widgetDefinitions,
   );
 }
 
-function createWorkbenchStateFromLocalState(localState: PersistedWorkbenchLocalState): WorkbenchState {
-  const defaultState = createDefaultWorkbenchState(redevenWorkbenchWidgets);
+function createWorkbenchStateFromLocalState(
+  localState: PersistedWorkbenchLocalState,
+  widgetDefinitions: readonly WorkbenchWidgetDefinition[],
+): WorkbenchState {
+  const defaultState = createDefaultWorkbenchState(widgetDefinitions);
   return sanitizeWorkbenchState(
     {
       ...defaultState,
@@ -566,8 +587,8 @@ function createWorkbenchStateFromLocalState(localState: PersistedWorkbenchLocalS
       activeTool: localState.activeTool,
     },
     {
-      widgetDefinitions: redevenWorkbenchWidgets,
-      createFallbackState: () => createDefaultWorkbenchState(redevenWorkbenchWidgets),
+      widgetDefinitions,
+      createFallbackState: () => createDefaultWorkbenchState(widgetDefinitions),
     },
   );
 }
@@ -594,14 +615,16 @@ function waitForAbortOrTimeout(signal: AbortSignal, timeoutMs: number): Promise<
 
 export function EnvWorkbenchPage() {
   const env = useEnvContext();
+  const i18n = useI18n();
+  const workbenchWidgetDefinitions = createMemo(() => localizedRedevenWorkbenchWidgets(i18n.t));
   const storageBinding = createMemo(() => resolveEnvAppStorageBinding({
     envID: env.env_id(),
     desktopStateStorageAvailable: isDesktopStateStorageAvailable(),
   }));
   const localPreferencesKey = createMemo(() => storageBinding().workbenchLocalPreferencesKey);
   const instanceStateKey = createMemo(() => storageBinding().workbenchInstanceStateKey);
-  const initialLocalState = readPersistedWorkbenchLocalState(localPreferencesKey());
-  const initialWorkbenchState = createWorkbenchStateFromLocalState(initialLocalState);
+  const initialLocalState = readPersistedWorkbenchLocalState(localPreferencesKey(), workbenchWidgetDefinitions());
+  const initialWorkbenchState = createWorkbenchStateFromLocalState(initialLocalState, workbenchWidgetDefinitions());
   const [workbenchState, setWorkbenchState] = createSignal<WorkbenchState>(initialWorkbenchState);
   const [localState, setLocalState] = createSignal<PersistedWorkbenchLocalState>(initialLocalState);
   const [instanceState, setInstanceState] = createSignal<RedevenWorkbenchInstanceState>(
@@ -821,7 +844,7 @@ export function EnvWorkbenchPage() {
         snapshot,
         localState: localState(),
         existingState: previous,
-        widgetDefinitions: redevenWorkbenchWidgets,
+        widgetDefinitions: workbenchWidgetDefinitions(),
       });
       const previousSelectedWidgetId = compact(previous.selectedWidgetId);
       if (previousSelectedWidgetId && !compact(next.selectedWidgetId)) {
@@ -1130,11 +1153,39 @@ export function EnvWorkbenchPage() {
   };
 
   const resolveWorkbenchContextMenuItems: RedevenWorkbenchContextMenuItemsResolver = (context) => {
+    const widgetLabelByType = new Map<WorkbenchWidgetType, string>(
+      workbenchWidgetDefinitions().map((definition) => [definition.type, definition.label]),
+    );
+    const localizeWorkbenchMenuItem = (item: WorkbenchContextMenuItem): WorkbenchContextMenuItem => {
+      if (item.kind !== 'action') {
+        return item;
+      }
+      const addType = workbenchWidgetTypeFromMenuID(item.id, 'add');
+      if (addType) {
+        return {
+          ...item,
+          label: i18n.t('workbench.contextMenu.addWidget', {
+            label: widgetLabelByType.get(addType) ?? fallbackWorkbenchContextMenuSubject(item.label, 'Add '),
+          }),
+        };
+      }
+      const goToType = workbenchWidgetTypeFromMenuID(item.id, 'goto');
+      if (goToType) {
+        return {
+          ...item,
+          label: i18n.t('workbench.contextMenu.goToWidget', {
+            label: widgetLabelByType.get(goToType) ?? fallbackWorkbenchContextMenuSubject(item.label, 'Go to '),
+          }),
+        };
+      }
+      return item;
+    };
+    const localizedContextItems = context.items.map(localizeWorkbenchMenuItem);
     const disabled = workbenchState().locked || context.widgets.length <= 0;
     const tidyItem: WorkbenchContextMenuItem = {
       id: 'redeven-tidy-by-type',
       kind: 'action',
-      label: 'Tidy by Type',
+      label: i18n.t('workbench.contextMenu.tidyByType'),
       icon: LayoutDashboard,
       disabled,
       onSelect: () => {
@@ -1156,22 +1207,22 @@ export function EnvWorkbenchPage() {
       || targetKind === 'widget'
       || (targetKind === 'canvas' && menuTarget.mode === 'work');
     if (!targetAllowsWorkbenchTidy) {
-      return context.items;
+      return localizedContextItems;
     }
 
     if (targetKind !== 'widget' && !context.menu.widgetId) {
-      return [tidyItem, separator, ...context.items];
+      return [tidyItem, separator, ...localizedContextItems];
     }
 
-    const deleteSeparatorIndex = context.items.findIndex((item) => item.id === 'separator-delete');
+    const deleteSeparatorIndex = localizedContextItems.findIndex((item) => item.id === 'separator-delete');
     if (deleteSeparatorIndex < 0) {
-      return [...context.items, separator, tidyItem];
+      return [...localizedContextItems, separator, tidyItem];
     }
     return [
-      ...context.items.slice(0, deleteSeparatorIndex),
+      ...localizedContextItems.slice(0, deleteSeparatorIndex),
       tidyItem,
       separator,
-      ...context.items.slice(deleteSeparatorIndex),
+      ...localizedContextItems.slice(deleteSeparatorIndex),
     ];
   };
 
@@ -1274,8 +1325,9 @@ export function EnvWorkbenchPage() {
   createEffect(() => {
     const localKey = localPreferencesKey();
     const instanceKey = instanceStateKey();
-    const nextLocalState = readPersistedWorkbenchLocalState(localKey);
-    const nextWorkbenchState = createWorkbenchStateFromLocalState(nextLocalState);
+    const widgetDefinitions = workbenchWidgetDefinitions();
+    const nextLocalState = readPersistedWorkbenchLocalState(localKey, widgetDefinitions);
+    const nextWorkbenchState = createWorkbenchStateFromLocalState(nextLocalState, widgetDefinitions);
     setWorkbenchState(nextWorkbenchState);
     setLocalState(nextLocalState);
     setRuntimeSnapshot(createEmptyRuntimeWorkbenchLayoutSnapshot());
@@ -1341,7 +1393,7 @@ export function EnvWorkbenchPage() {
 
         if (runtimeWorkbenchLayoutIsPristine(snapshot)) {
           const initialLayout = createRedevenWorkbenchInitialLayout({
-            widgetDefinitions: redevenWorkbenchWidgets,
+            widgetDefinitions: workbenchWidgetDefinitions(),
             initialWidgetTypes: redevenWorkbenchInitialCanvasWidgetTypes,
             typeOrder: redevenWorkbenchFilterBarWidgetTypes,
             createdAtUnixMs: Date.now(),
@@ -1812,7 +1864,7 @@ export function EnvWorkbenchPage() {
       path: previewPath,
       name: compact(request.item?.name) || basenameFromAbsolutePath(previewPath) || 'File',
     };
-    const previewDefinition = redevenWorkbenchWidgets.find((definition) => definition.type === 'redeven.preview');
+    const previewDefinition = workbenchWidgetDefinitions().find((definition) => definition.type === 'redeven.preview');
     const frameSize = resolveCanvasFrameSize();
     const viewportCenter = resolveViewportWorldCenter(workbenchState().viewport, frameSize);
     const defaultWidth = Number(previewDefinition?.defaultSize?.width);
@@ -2406,7 +2458,7 @@ export function EnvWorkbenchPage() {
           <RedevenWorkbenchSurface
             state={workbenchState}
             setState={setSurfaceWorkbenchState}
-            widgetDefinitions={redevenWorkbenchWidgets}
+            widgetDefinitions={workbenchWidgetDefinitions()}
             filterBarWidgetTypes={redevenWorkbenchFilterBarWidgetTypes}
             resolveContextMenuItems={resolveWorkbenchContextMenuItems}
             onApiReady={setSurfaceApi}

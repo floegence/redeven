@@ -34,6 +34,7 @@ describe('buildDesktopPreloads', () => {
     expect(utilityOutput).toContain('redevenDesktopShell');
     expect(utilityOutput).toContain('redevenDesktopDownloads');
     expect(utilityOutput).toContain('redevenDesktopStateStorage');
+    expect(utilityOutput).toContain('redevenDesktopLanguage');
     expect(utilityOutput).not.toContain('redevenDesktopAskFlowerHandoff');
     expect(utilityOutput).not.toContain('redevenDesktopSessionContext');
     expect(utilityOutput).not.toMatch(/require\((['"])\.\//);
@@ -44,6 +45,7 @@ describe('buildDesktopPreloads', () => {
     expect(sessionOutput).toContain('redevenDesktopDownloads');
     expect(sessionOutput).toContain('redevenDesktopCodeWorkspace');
     expect(sessionOutput).toContain('redevenDesktopStateStorage');
+    expect(sessionOutput).toContain('redevenDesktopLanguage');
     expect(sessionOutput).toContain('redevenDesktopTheme');
     expect(sessionOutput).not.toContain('redevenDesktopAskFlowerHandoff');
     expect(sessionOutput).not.toContain('redevenDesktopLauncher');

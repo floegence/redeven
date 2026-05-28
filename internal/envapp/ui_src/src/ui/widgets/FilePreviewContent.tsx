@@ -11,6 +11,7 @@ import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { FilePreviewErrorState } from './FilePreviewErrorState';
 import { classifyFilePreviewError } from './filePreviewErrorUtils';
+import { useI18n } from '../i18n';
 
 export interface FilePreviewContentProps {
   item?: FileItem | null;
@@ -53,6 +54,7 @@ const PREVIEW_HEADER_ICON_BUTTON_CLASS = [
 ].join(' ');
 
 export function FilePreviewContent(props: FilePreviewContentProps) {
+  const i18n = useI18n();
   const resolvedError = () => props.error;
   const resolvedPath = () => String(props.item?.path ?? '').trim();
   const showHeader = () => props.showHeader !== false;
@@ -108,12 +110,12 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
       <Show when={showHeader()}>
         <div class="flex shrink-0 items-center gap-2 border-b border-border px-2.5 py-2 sm:px-3">
           <div class="flex min-w-0 flex-1 items-center gap-2">
-            <span class="hidden shrink-0 text-[11px] uppercase tracking-[0.08em] text-muted-foreground sm:inline">Path</span>
+            <span class="hidden shrink-0 text-[11px] uppercase tracking-[0.08em] text-muted-foreground sm:inline">{i18n.t('filePreview.pathLabel')}</span>
             <span
               class="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground"
-              title={resolvedPath() || '(unknown path)'}
+              title={resolvedPath() || i18n.t('filePreview.unknownPath')}
             >
-              {resolvedPath() || '(unknown path)'}
+              {resolvedPath() || i18n.t('filePreview.unknownPath')}
             </span>
             <Show when={props.onCopyPath}>
               <button
@@ -122,8 +124,8 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
                   pathCopied() ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
                 }`}
                 disabled={!resolvedPath()}
-                aria-label={pathCopied() ? 'Path copied' : 'Copy path'}
-                title={pathCopied() ? 'Path copied' : 'Copy path'}
+                aria-label={pathCopied() ? i18n.t('filePreview.pathCopied') : i18n.t('filePreview.copyPath')}
+                title={pathCopied() ? i18n.t('filePreview.pathCopied') : i18n.t('filePreview.copyPath')}
                 onClick={() => {
                   void handleCopyPath();
                 }}
@@ -140,8 +142,8 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
               <button
                 type="button"
                 class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
-                aria-label="Edit file"
-                title="Edit file"
+                aria-label={i18n.t('filePreview.editFile')}
+                title={i18n.t('filePreview.editFile')}
                 onClick={() => props.onStartEdit?.()}
               >
                 <Pencil class="size-3.5" />
@@ -152,8 +154,8 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
               <button
                 type="button"
                 class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
-                aria-label="Discard changes"
-                title="Discard changes"
+                aria-label={i18n.t('filePreview.discardChanges')}
+                title={i18n.t('filePreview.discardChanges')}
                 disabled={props.saving}
                 onClick={() => props.onDiscard?.()}
               >
@@ -162,8 +164,8 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
               <button
                 type="button"
                 class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
-                aria-label="Save file"
-                title="Save file"
+                aria-label={i18n.t('filePreview.saveFile')}
+                title={i18n.t('filePreview.saveFile')}
                 disabled={!props.dirty || props.saving}
                 onClick={() => props.onSave?.()}
               >
@@ -177,8 +179,8 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
               <button
                 type="button"
                 class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
-                aria-label="Ask Flower"
-                title="Ask Flower"
+                aria-label={i18n.t('filePreview.askFlower')}
+                title={i18n.t('filePreview.askFlower')}
                 disabled={!props.item || props.loading}
                 onClick={handleAskFlower}
               >
@@ -189,8 +191,8 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
             <button
               type="button"
               class={PREVIEW_HEADER_ICON_BUTTON_CLASS}
-              aria-label="Download file"
-              title="Download file"
+              aria-label={i18n.t('filePreview.downloadFile')}
+              title={i18n.t('filePreview.downloadFile')}
               disabled={!props.item || props.loading}
               onClick={() => props.onDownload?.()}
             >
@@ -220,7 +222,11 @@ export function FilePreviewContent(props: FilePreviewContentProps) {
           />
         </Show>
 
-        <RedevenLoadingCurtain visible={!!props.loading} eyebrow="Preview" message={props.message || 'Loading file...'} />
+        <RedevenLoadingCurtain
+          visible={!!props.loading}
+          eyebrow={i18n.t('filePreview.previewEyebrow')}
+          message={props.message || i18n.t('filePreview.loadingFile')}
+        />
       </div>
     </div>
   );

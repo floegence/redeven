@@ -3,6 +3,7 @@ import { Code, FileText, Terminal } from '@floegence/floe-webapp-core/icons';
 import type { TagProps } from '@floegence/floe-webapp-core/ui';
 
 import { CodexIcon } from '../icons/CodexIcon';
+import type { I18nHelpers } from '../i18n';
 import type { CodexItem, CodexThread, CodexTranscriptItem } from './types';
 
 export type CodexReviewArtifact = Readonly<{
@@ -39,30 +40,41 @@ export function codexUserInputTextSummary(inputs: ReadonlyArray<{
     .join('\n\n');
 }
 
-export function itemTitle(item: CodexItem): string {
+function localizedText(
+  i18n: I18nHelpers | undefined,
+  key: Parameters<I18nHelpers['t']>[0],
+  fallback: string,
+  params?: Parameters<I18nHelpers['t']>[1],
+): string {
+  return i18n?.t(key, params) ?? fallback;
+}
+
+export function itemTitle(item: CodexItem, i18n?: I18nHelpers): string {
   switch (item.type) {
     case 'userMessage':
-      return 'Requested review';
+      return localizedText(i18n, 'codexActivity.title.userMessage', 'Requested review');
     case 'agentMessage':
-      return 'Codex review';
+      return localizedText(i18n, 'codexActivity.title.agentMessage', 'Codex review');
     case 'commandExecution':
-      return 'Command evidence';
+      return localizedText(i18n, 'codexActivity.title.commandExecution', 'Command evidence');
     case 'fileChange':
-      return 'Artifact changes';
+      return localizedText(i18n, 'codexActivity.title.fileChange', 'Artifact changes');
     case 'webSearch':
-      return 'Web search';
+      return localizedText(i18n, 'codexActivity.title.webSearch', 'Web search');
     case 'reasoning':
-      return 'Reasoning note';
+      return localizedText(i18n, 'codexActivity.title.reasoning', 'Reasoning note');
     case 'plan':
-      return 'Execution plan';
+      return localizedText(i18n, 'codexActivity.title.plan', 'Execution plan');
     case 'turnDiagnostic':
-      return item.diagnostic_kind === 'empty_response' ? 'Turn completed without response' : 'Turn diagnostics';
+      return item.diagnostic_kind === 'empty_response'
+        ? localizedText(i18n, 'codexActivity.title.emptyResponse', 'Turn completed without response')
+        : localizedText(i18n, 'codexActivity.title.turnDiagnostic', 'Turn diagnostics');
     default:
-      return item.type || 'Event';
+      return displayStatus(item.type, localizedText(i18n, 'codexActivity.title.event', 'Event'));
   }
 }
 
-export function itemText(item: CodexTranscriptItem): string {
+export function itemText(item: CodexTranscriptItem, i18n?: I18nHelpers): string {
   if (String(item.text ?? '').trim()) return String(item.text);
   if (item.type === 'webSearch') {
     const query = String(item.query ?? '').trim();
@@ -75,19 +87,24 @@ export function itemText(item: CodexTranscriptItem): string {
 
     if (actionType === 'search') {
       const lines = [
-        query ? `Query: ${query}` : '',
-        queries.length > 0 ? `Queries:\n${queries.map((entry) => `- ${entry}`).join('\n')}` : '',
+        query ? `${localizedText(i18n, 'codexActivity.field.query', 'Query')}: ${query}` : '',
+        queries.length > 0
+          ? `${localizedText(i18n, 'codexActivity.field.queries', 'Queries')}:\n${queries.map((entry) => `- ${entry}`).join('\n')}`
+          : '',
       ].filter(Boolean);
       return lines.join('\n\n');
     }
     if (actionType === 'openPage') {
-      return [query ? `Query: ${query}` : '', url ? `Opened page: ${url}` : ''].filter(Boolean).join('\n\n');
+      return [
+        query ? `${localizedText(i18n, 'codexActivity.field.query', 'Query')}: ${query}` : '',
+        url ? `${localizedText(i18n, 'codexActivity.field.openedPage', 'Opened page')}: ${url}` : '',
+      ].filter(Boolean).join('\n\n');
     }
     if (actionType === 'findInPage') {
       return [
-        query ? `Query: ${query}` : '',
-        pattern ? `Pattern: ${pattern}` : '',
-        url ? `Page: ${url}` : '',
+        query ? `${localizedText(i18n, 'codexActivity.field.query', 'Query')}: ${query}` : '',
+        pattern ? `${localizedText(i18n, 'codexActivity.field.pattern', 'Pattern')}: ${pattern}` : '',
+        url ? `${localizedText(i18n, 'codexActivity.field.page', 'Page')}: ${url}` : '',
       ].filter(Boolean).join('\n\n');
     }
     if (query) return query;
@@ -227,12 +244,12 @@ export function threadStatusDotClass(status: string | null | undefined): string 
   return 'bg-muted-foreground/35';
 }
 
-export function threadPreview(thread: CodexThread): string {
+export function threadPreview(thread: CodexThread, t?: I18nHelpers['t']): string {
   const preview = String(thread.preview ?? '').trim();
   if (preview) return preview;
   const path = String(thread.path ?? thread.cwd ?? '').trim();
   if (path) return path;
-  return 'No conversation preview yet.';
+  return t?.('codex.common.noConversationPreview') ?? 'No conversation preview yet.';
 }
 
 function threadSortTime(thread: CodexThread): number {

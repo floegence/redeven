@@ -1,7 +1,8 @@
 import { For, Show } from 'solid-js';
 import { Button, Input, Tag } from '@floegence/floe-webapp-core/ui';
 
-import { displayStatus, requestTagVariant } from './presentation';
+import { useI18n } from '../i18n';
+import { requestTagVariant } from './presentation';
 import type { CodexPendingRequest } from './types';
 import { buildCodexPendingRequestViewModel } from './viewModel';
 
@@ -11,13 +12,28 @@ export function CodexPendingRequestsPanel(props: {
   setRequestDraftValue: (requestID: string, questionID: string, value: string) => void;
   onAnswer: (request: CodexPendingRequest, decision?: string) => void;
 }) {
+  const i18n = useI18n();
+  const requestTypeLabel = (type: string | null | undefined): string => {
+    switch (String(type ?? '').trim().toLowerCase()) {
+      case 'user_input':
+        return i18n.t('codex.pendingRequests.type.userInput');
+      case 'command_approval':
+        return i18n.t('codex.pendingRequests.type.commandApproval');
+      case 'file_change_approval':
+        return i18n.t('codex.pendingRequests.type.fileChangeApproval');
+      case 'permissions':
+        return i18n.t('codex.pendingRequests.type.permissions');
+      default:
+        return i18n.t('codex.common.request');
+    }
+  };
   return (
     <div data-codex-surface="pending-requests" class="codex-request-panel">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <div class="text-sm font-medium text-foreground">Pending Codex requests</div>
+          <div class="text-sm font-medium text-foreground">{i18n.t('codex.pendingRequests.title')}</div>
           <div class="mt-1 text-xs leading-5 text-muted-foreground">
-            Resolve these before the active Codex run can continue.
+            {i18n.t('codex.pendingRequests.description')}
           </div>
         </div>
         <Tag variant="warning" tone="soft" size="sm">
@@ -28,21 +44,21 @@ export function CodexPendingRequestsPanel(props: {
       <div class="codex-request-list">
         <For each={props.requests}>
           {(request) => {
-            const viewModel = () => buildCodexPendingRequestViewModel(request);
+            const viewModel = () => buildCodexPendingRequestViewModel(request, i18n.t);
             return (
               <div class="codex-request-card">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                   <div class="min-w-0 flex-1">
                     <div class="flex flex-wrap items-center gap-2">
                       <div class="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                        {displayStatus(request.type, 'request')}
+                        {requestTypeLabel(request.type)}
                       </div>
                       <Tag variant={requestTagVariant(request.type)} tone="soft" size="sm">
                         {viewModel().title}
                       </Tag>
                       <Show when={viewModel().questionCount > 0}>
                         <Tag variant="neutral" tone="soft" size="sm">
-                          {viewModel().questionCount} prompts
+                          {i18n.tn('codex.pendingRequests.promptsCount', viewModel().questionCount)}
                         </Tag>
                       </Show>
                     </div>
@@ -51,14 +67,14 @@ export function CodexPendingRequestsPanel(props: {
                     </div>
                   </div>
                   <Tag variant="neutral" tone="soft" size="sm">
-                    Item {request.item_id}
+                    {i18n.t('codex.pendingRequests.itemLabel', { id: request.item_id })}
                   </Tag>
                 </div>
 
                 <Show when={viewModel().command}>
                   <div class="codex-request-command">
                     <div class="mb-1 text-[11px] text-muted-foreground">
-                      {viewModel().cwd || 'Working directory unavailable'}
+                      {viewModel().cwd || i18n.t('codex.pendingRequests.workingDirectoryUnavailable')}
                     </div>
                     {viewModel().command}
                   </div>
@@ -75,7 +91,7 @@ export function CodexPendingRequestsPanel(props: {
                             type={question.is_secret ? 'password' : 'text'}
                             value={props.requestDraftValue(request.id, question.id)}
                             onInput={(event) => props.setRequestDraftValue(request.id, question.id, event.currentTarget.value)}
-                            placeholder={question.options?.[0]?.label || 'Enter response'}
+                            placeholder={question.options?.[0]?.label || i18n.t('codex.pendingRequests.enterResponse')}
                             class="mt-3 w-full"
                           />
                           <Show when={(question.options?.length ?? 0) > 0}>
@@ -106,7 +122,7 @@ export function CodexPendingRequestsPanel(props: {
                     fallback={(
                       <>
                         <Button size="sm" onClick={() => props.onAnswer(request, 'accept')}>
-                          Approve once
+                          {i18n.t('codex.actions.approveOnce')}
                         </Button>
                         <Show when={(request.available_decisions ?? []).includes('accept_for_session')}>
                           <Button
@@ -114,14 +130,14 @@ export function CodexPendingRequestsPanel(props: {
                             variant="outline"
                             onClick={() => props.onAnswer(request, 'accept_for_session')}
                           >
-                            Approve for session
+                            {i18n.t('codex.actions.approveForSession')}
                           </Button>
                         </Show>
                         <Button size="sm" variant="outline" onClick={() => props.onAnswer(request, 'decline')}>
-                          Decline
+                          {i18n.t('codex.actions.decline')}
                         </Button>
                         <Button size="sm" variant="ghost" onClick={() => props.onAnswer(request, 'cancel')}>
-                          Cancel
+                          {i18n.t('codex.actions.cancel')}
                         </Button>
                       </>
                     )}
@@ -130,7 +146,7 @@ export function CodexPendingRequestsPanel(props: {
                       {viewModel().decisionLabel}
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => props.onAnswer(request, 'cancel')}>
-                      Cancel
+                      {i18n.t('codex.actions.cancel')}
                     </Button>
                   </Show>
                 </div>

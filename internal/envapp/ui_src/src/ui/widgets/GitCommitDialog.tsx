@@ -3,6 +3,7 @@ import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import type { GitWorkspaceChange } from '../protocol/redeven_v1';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { gitChangePathClass } from './GitChrome';
+import { useI18n } from '../i18n';
 import {
   GIT_CHANGED_FILES_CELL_CLASS,
   GIT_CHANGED_FILES_HEADER_CELL_CLASS,
@@ -37,6 +38,7 @@ function itemPath(item: GitWorkspaceChange): string {
 }
 
 export function GitCommitDialog(props: GitCommitDialogProps) {
+  const i18n = useI18n();
   const loadedCount = createMemo(() => props.stagedItems.length);
   const fileCount = createMemo(() => Math.max(loadedCount(), Number(props.totalCount ?? 0)));
   const partial = createMemo(() => fileCount() > loadedCount());
@@ -50,27 +52,27 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
-      title="Commit staged changes"
+      title={i18n.t('git.commitDialog.title')}
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" class={outlineControlClass} onClick={props.onClose} disabled={props.loading}>
-            Cancel
+            {i18n.t('common.actions.cancel')}
           </Button>
           <Button size="sm" variant="default" onClick={() => props.onConfirm?.()} loading={props.loading} disabled={!props.canCommit}>
-            Commit
+            {i18n.t('git.commitDialog.commit')}
           </Button>
         </div>
       )}
     >
       <div class="space-y-3">
-        <div class="text-xs text-muted-foreground">Review the staged files below, then write the commit message for this snapshot.</div>
+        <div class="text-xs text-muted-foreground">{i18n.t('git.commitDialog.description')}</div>
 
         <GitStatStrip
           columnsClass="grid-cols-1 gap-1 sm:grid-cols-3"
           items={[
-            { label: 'Files Ready', value: `${fileCount()} ${fileCount() === 1 ? 'file' : 'files'}` },
-            { label: 'Added Lines', value: <span class="text-success">+{additions()}</span> },
-            { label: 'Removed Lines', value: <span class="text-error">-{deletions()}</span> },
+            { label: i18n.t('git.commitDialog.filesReady'), value: i18n.tn('git.common.fileCount', fileCount()) },
+            { label: i18n.t('git.commitDialog.addedLines'), value: <span class="text-success">+{additions()}</span> },
+            { label: i18n.t('git.commitDialog.removedLines'), value: <span class="text-error">-{deletions()}</span> },
           ]}
         />
 
@@ -79,7 +81,7 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
             when={!props.loadingItems || props.stagedItems.length > 0}
             fallback={(
               <div class="px-4 py-8">
-                <GitSubtleNote>Loading staged files...</GitSubtleNote>
+                <GitSubtleNote>{i18n.t('git.commitDialog.loadingStagedFiles')}</GitSubtleNote>
               </div>
             )}
           >
@@ -87,9 +89,9 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
               <table class={GIT_CHANGED_FILES_TABLE_CLASS}>
                 <thead class={GIT_CHANGED_FILES_HEAD_CLASS}>
                   <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
+                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.path')}</th>
+                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.status')}</th>
+                    <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.changes')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -110,24 +112,24 @@ export function GitCommitDialog(props: GitCommitDialogProps) {
             <Show when={props.hasMore || (props.loadingItems && props.stagedItems.length > 0)}>
               <GitPagedTableFooter
                 summary={partial()
-                  ? 'More staged files are available.'
-                  : 'Load more staged files if you want to review the full snapshot here.'}
+                  ? i18n.t('git.commitDialog.moreStagedFilesAvailable')
+                  : i18n.t('git.commitDialog.loadMoreStagedFiles')}
                 onLoadMore={props.onLoadMore}
                 hasMore={props.hasMore}
                 loading={props.loadingItems && props.stagedItems.length > 0}
-                loadingStatus="Loading next staged files"
+                loadingStatus={i18n.t('git.commitDialog.loadingNextStagedFiles')}
               />
             </Show>
           </Show>
         </div>
 
         <div>
-          <label class="mb-1 block text-xs font-medium text-foreground">Message</label>
+          <label class="mb-1 block text-xs font-medium text-foreground">{i18n.t('git.commitDialog.messageLabel')}</label>
           <textarea
             rows={4}
             class={`w-full resize-y rounded-md border bg-background px-3 py-2 text-xs leading-5 text-foreground shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/70 ${outlineControlClass}`}
             value={props.message}
-            placeholder="Write the commit message"
+            placeholder={i18n.t('git.commitDialog.messagePlaceholder')}
             onInput={(event) => props.onMessageChange?.(event.currentTarget.value)}
           />
         </div>

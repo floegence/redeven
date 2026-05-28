@@ -19,6 +19,7 @@ import type { DesktopRuntimeLifecycleProgress } from './desktopRuntimeLifecycleP
 import type { DesktopOperationFailurePresentation } from './desktopOperationFailure';
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
+import type { DesktopTranslationKey } from './i18n/desktopI18n';
 import {
   normalizeDesktopRuntimeHostAccess,
   normalizeDesktopRuntimePlacement,
@@ -45,6 +46,8 @@ export type DesktopLauncherSurface = 'connect_environment' | 'environment_settin
 export type DesktopEnvironmentEntryKind = 'local_environment' | 'provider_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopEnvironmentEntryTag = 'Open' | 'Saved' | 'Local' | 'Provider' | '';
 export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'saved';
+export type DesktopEnvironmentOpenAction = 'open' | 'opening' | 'focus';
+export type DesktopLauncherCloseAction = 'quit' | 'close_launcher';
 export type DesktopLocalEnvironmentStateRoute = 'local_host' | 'remote_desktop';
 export type DesktopLocalRuntimeState = 'not_running' | 'running_desktop' | 'running_external';
 export type DesktopLocalCloseBehavior = 'detaches' | 'not_applicable';
@@ -151,7 +154,9 @@ export type DesktopWelcomeIssue = Readonly<{
   scope: DesktopWelcomeIssueScope;
   code: string;
   title: string;
+  title_key?: DesktopTranslationKey;
   message: string;
+  message_key?: DesktopTranslationKey;
   diagnostics_copy: string;
   target_url: string;
   ssh_details?: DesktopSSHEnvironmentDetails;
@@ -252,7 +257,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   auto_runtime_probe_configurable?: boolean;
   open_session_key: string;
   open_session_lifecycle?: DesktopLauncherSessionLifecycle;
-  open_action_label: 'Open' | 'Opening…' | 'Focus';
+  open_action: DesktopEnvironmentOpenAction;
   can_edit: boolean;
   can_delete: boolean;
   created_at_ms: number;
@@ -264,7 +269,7 @@ export type DesktopWelcomeSnapshot = Readonly<{
   snapshot_generation?: number;
   surface: DesktopLauncherSurface;
   entry_reason: DesktopWelcomeEntryReason;
-  close_action_label: 'Quit' | 'Close Launcher';
+  close_action: DesktopLauncherCloseAction;
   open_windows: readonly DesktopOpenEnvironmentWindow[];
   environments: readonly DesktopEnvironmentEntry[];
   control_planes: readonly DesktopControlPlaneSummary[];
@@ -342,12 +347,16 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   status: DesktopLauncherOperationStatus;
   phase: string;
   title: string;
+  title_key?: DesktopTranslationKey;
   detail: string;
+  detail_key?: DesktopTranslationKey;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
   cancelable: boolean;
   interrupt_label?: string;
+  interrupt_label_key?: DesktopTranslationKey;
   interrupt_detail?: string;
+  interrupt_detail_key?: DesktopTranslationKey;
   interrupt_kind?: 'stop_opening' | 'cleanup_deleted_subject' | 'generic';
   deleted_subject: boolean;
   next_actions?: readonly DesktopLauncherOperationNextAction[];
@@ -359,31 +368,37 @@ export type DesktopLauncherOperationNextAction = Readonly<
       kind: 'retry';
       operation_key: string;
       label: string;
+      label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'refresh_status';
       environment_id?: string;
       label: string;
+      label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'copy_diagnostics';
       operation_key: string;
       label: string;
+      label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'dismiss';
       operation_key: string;
       label: string;
+      label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'update_runtime';
       environment_id: string;
       label: string;
+      label_key?: DesktopTranslationKey;
     }
   | {
       kind: 'manage_desktop_update';
       environment_id: string;
       label: string;
+      label_key?: DesktopTranslationKey;
     }
 >;
 
@@ -586,12 +601,16 @@ export type DesktopLauncherActionProgress = Readonly<{
   status?: DesktopLauncherOperationStatus;
   phase: string;
   title: string;
+  title_key?: DesktopTranslationKey;
   detail: string;
+  detail_key?: DesktopTranslationKey;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
   cancelable?: boolean;
   interrupt_label?: string;
+  interrupt_label_key?: DesktopTranslationKey;
   interrupt_detail?: string;
+  interrupt_detail_key?: DesktopTranslationKey;
   interrupt_kind?: 'stop_opening' | 'cleanup_deleted_subject' | 'generic';
   deleted_subject?: boolean;
   next_actions?: readonly DesktopLauncherOperationNextAction[];

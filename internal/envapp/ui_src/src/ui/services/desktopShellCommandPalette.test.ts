@@ -22,4 +22,21 @@ describe('desktopShellCommandPalette', () => {
 
     expect(openEnvironmentLauncher).toHaveBeenCalledTimes(1);
   });
+
+  it('accepts localized command palette labels from Env App i18n', () => {
+    const entries = buildDesktopShellCommandPaletteEntries({
+      labels: {
+        category: 'Desktop localized',
+        title: 'Open Environment localized',
+        description: 'Open launcher localized.',
+      },
+      openEnvironmentLauncher: vi.fn(),
+    });
+
+    expect(entries[0]).toMatchObject({
+      category: 'Desktop localized',
+      title: 'Open Environment localized',
+      description: 'Open launcher localized.',
+    });
+  });
 });

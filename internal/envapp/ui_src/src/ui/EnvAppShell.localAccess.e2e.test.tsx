@@ -953,7 +953,7 @@ describe('EnvAppShell local access gate', () => {
       expect(input).toBeTruthy();
       expect(input?.getAttribute('aria-describedby')).toContain('redeven-access-password-help');
       expect(help?.textContent).toContain('Use the full Local UI password');
-      expect(notice?.textContent).toContain('Password verification stays inside the runtime-managed session');
+      expect(notice?.textContent).toContain('Password verification stays inside the Runtime-managed session');
 
       input!.value = 'bad-secret';
       input!.dispatchEvent(new Event('input', { bubbles: true }));
@@ -996,6 +996,7 @@ describe('EnvAppShell local access gate', () => {
       input!.dispatchEvent(new Event('input', { bubbles: true }));
       host.querySelector('form')!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
 
+      await flushAsync();
       await flushAsync();
       await flushAsync();
 
@@ -1279,7 +1280,7 @@ describe('EnvAppShell remote access gate', () => {
       await vi.advanceTimersByTimeAsync(15_000);
       await flushAsync();
 
-      expect(host.textContent).toContain('Timed out while preparing the secure session');
+      expect(host.textContent).toContain('Failed to prepare the secure session');
       const retryButton = findButtonByText(host, 'Retry connection');
       expect(retryButton).toBeTruthy();
       expect(retryButton?.disabled).toBe(false);

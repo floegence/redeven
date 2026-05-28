@@ -18,8 +18,8 @@ import {
 
 describe('welcomeCopy', () => {
   it('shortens the dense desktop button labels', () => {
-    expect(compactCloseActionLabel('Close Launcher')).toBe('Close Launcher');
-    expect(compactCloseActionLabel('Quit')).toBe('Quit');
+    expect(compactCloseActionLabel('close_launcher')).toBe('Close Launcher');
+    expect(compactCloseActionLabel('quit')).toBe('Quit');
     expect(compactOpenLocalEnvironmentLabel(false)).toBe('Open');
     expect(compactOpenLocalEnvironmentLabel(true)).toBe('Focus');
     expect(compactSettingsActionLabel()).toBe('Settings');

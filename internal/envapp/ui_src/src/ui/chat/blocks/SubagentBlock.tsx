@@ -10,30 +10,31 @@ import {
   normalizeSubagentStatus,
   type SubagentView,
 } from '../../pages/aiDataNormalizers';
+import { useI18n, type I18nHelpers } from '../../i18n';
 
 export interface SubagentBlockProps {
   block: SubagentBlockType;
   class?: string;
 }
 
-function subagentStatusLabel(status: SubagentBlockType['status']): string {
+function subagentStatusLabel(i18n: I18nHelpers, status: SubagentBlockType['status']): string {
   switch (status) {
     case 'queued':
-      return 'Queued';
+      return i18n.t('flowerChat.subagents.status.queued');
     case 'running':
-      return 'Running';
+      return i18n.t('flowerChat.subagents.status.running');
     case 'waiting_input':
-      return 'Waiting input';
+      return i18n.t('flowerChat.subagents.status.waitingInput');
     case 'completed':
-      return 'Completed';
+      return i18n.t('flowerChat.subagents.status.completed');
     case 'failed':
-      return 'Failed';
+      return i18n.t('flowerChat.subagents.status.failed');
     case 'canceled':
-      return 'Canceled';
+      return i18n.t('flowerChat.subagents.status.canceled');
     case 'timed_out':
-      return 'Timed out';
+      return i18n.t('flowerChat.subagents.status.timedOut');
     default:
-      return 'Unknown';
+      return i18n.t('flowerChat.subagents.status.unknown');
   }
 }
 
@@ -233,6 +234,7 @@ function resolveLatestSubagentView(messages: Message[], subagentId: string, seed
 
 export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
   const ctx = useChatContext();
+  const i18n = useI18n();
   const [promptDialogOpen, setPromptDialogOpen] = createSignal(false);
 
   const blockView = createMemo(() => {
@@ -240,12 +242,12 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
     const latest = resolveLatestSubagentView(ctx.messages(), props.block.subagentId, seed);
     return subagentViewToBlock(latest);
   });
-  const statusText = createMemo(() => subagentStatusLabel(blockView().status));
+  const statusText = createMemo(() => subagentStatusLabel(i18n, blockView().status));
   const durationText = createMemo(() => formatDuration(blockView().stats.elapsedMs));
   const triggerReasonText = createMemo(() => {
     const value = String(blockView().triggerReason ?? '').trim();
     if (value) return summarizeText(value, 120);
-    return 'No trigger reason provided.';
+    return i18n.t('flowerChat.subagents.noTriggerReason');
   });
   const titleText = createMemo(() => {
     const title = String(blockView().title ?? '').trim();
@@ -261,13 +263,13 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
   });
   const promptDialogTitle = createMemo(() => {
     const title = String(blockView().title ?? '').trim();
-    if (title) return `Subagent Prompt · ${title}`;
-    return `Subagent Prompt · ${blockView().subagentId}`;
+    if (title) return i18n.t('flowerChat.subagents.promptDialogTitleWithName', { name: title });
+    return i18n.t('flowerChat.subagents.promptDialogTitleWithName', { name: blockView().subagentId });
   });
   const outcomeText = createMemo(() => {
     const value = String(blockView().stats.outcome ?? '').trim();
     if (value) return value;
-    return subagentStatusLabel(blockView().status);
+    return subagentStatusLabel(i18n, blockView().status);
   });
 
   return (
@@ -288,23 +290,23 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
 
       <div class="chat-subagent-compact-body">
         <div class="chat-subagent-compact-line">
-          <span class="chat-subagent-compact-label">Title</span>
+            <span class="chat-subagent-compact-label">{i18n.t('flowerChat.subagents.titleLabel')}</span>
           <span class="chat-subagent-compact-value">{titleText()}</span>
         </div>
         <div class="chat-subagent-compact-line">
-          <span class="chat-subagent-compact-label">Trigger</span>
+          <span class="chat-subagent-compact-label">{i18n.t('flowerChat.subagents.trigger')}</span>
           <span class="chat-subagent-compact-value">{triggerReasonText()}</span>
         </div>
         <Show when={promptPreview()}>
           <div class="chat-subagent-compact-line">
             <div class="chat-subagent-compact-line-head">
-              <span class="chat-subagent-compact-label">Prompt</span>
+              <span class="chat-subagent-compact-label">{i18n.t('flowerChat.subagents.promptLabel')}</span>
               <button
                 type="button"
                 class="chat-subagent-detail-link"
                 onClick={() => setPromptDialogOpen(true)}
               >
-                View details
+                {i18n.t('flowerChat.subagents.viewPrompt')}
               </button>
             </div>
             <span class="chat-subagent-compact-value">{promptPreview()}</span>
@@ -312,28 +314,28 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
         </Show>
         <div class="chat-subagent-kpi-grid">
           <div class="chat-subagent-kpi-chip">
-            <span class="chat-subagent-kpi-label">Steps</span>
+            <span class="chat-subagent-kpi-label">{i18n.t('flowerChat.subagents.steps')}</span>
             <span class="chat-subagent-kpi-value">{formatIntegerMetric(blockView().stats.steps)}</span>
           </div>
           <div class="chat-subagent-kpi-chip">
-            <span class="chat-subagent-kpi-label">Tools</span>
+            <span class="chat-subagent-kpi-label">{i18n.t('flowerChat.subagents.tools')}</span>
             <span class="chat-subagent-kpi-value">{formatIntegerMetric(blockView().stats.toolCalls)}</span>
           </div>
           <div class="chat-subagent-kpi-chip">
-            <span class="chat-subagent-kpi-label">Tokens</span>
+            <span class="chat-subagent-kpi-label">{i18n.t('flowerChat.subagents.tokens')}</span>
             <span class="chat-subagent-kpi-value">{formatIntegerMetric(blockView().stats.tokens)}</span>
           </div>
           <div class="chat-subagent-kpi-chip">
-            <span class="chat-subagent-kpi-label">Outcome</span>
+            <span class="chat-subagent-kpi-label">{i18n.t('flowerChat.subagents.outcomeLabel')}</span>
             <span class="chat-subagent-kpi-value">{outcomeText()}</span>
           </div>
         </div>
         <Show when={blockView().error}>
-          <div class="chat-subagent-error">Error: {blockView().error}</div>
+          <div class="chat-subagent-error">{i18n.t('chatActivity.error')}: {blockView().error}</div>
         </Show>
         <Show when={!blockView().error && blockView().status === 'running'}>
           <div class="chat-subagent-compact-hint">
-            The subagent is running in the background. Progress updates appear automatically.
+            {i18n.t('flowerChat.subagents.runningHint')}
           </div>
         </Show>
       </div>
@@ -346,39 +348,39 @@ export const SubagentBlock: Component<SubagentBlockProps> = (props) => {
         <div class="chat-subagent-detail-dialog">
           <div class="chat-subagent-detail-meta-grid">
             <div class="chat-subagent-detail-meta-card">
-              <div class="chat-subagent-detail-meta-label">Subagent</div>
+              <div class="chat-subagent-detail-meta-label">{i18n.t('flowerChat.subagents.subagentLabel')}</div>
               <div class="chat-subagent-detail-meta-value chat-subagent-detail-meta-value-mono">{blockView().subagentId}</div>
             </div>
             <div class="chat-subagent-detail-meta-card">
-              <div class="chat-subagent-detail-meta-label">Status</div>
+              <div class="chat-subagent-detail-meta-label">{i18n.t('flowerChat.subagents.statusLabel')}</div>
               <div class="chat-subagent-detail-meta-value">{statusText()}</div>
             </div>
             <div class="chat-subagent-detail-meta-card">
-              <div class="chat-subagent-detail-meta-label">Type</div>
+              <div class="chat-subagent-detail-meta-label">{i18n.t('flowerChat.subagents.typeLabel')}</div>
               <div class="chat-subagent-detail-meta-value">{blockView().agentType || 'subagent'}</div>
             </div>
             <div class="chat-subagent-detail-meta-card">
-              <div class="chat-subagent-detail-meta-label">Elapsed</div>
+              <div class="chat-subagent-detail-meta-label">{i18n.t('chatActivity.chip.duration')}</div>
               <div class="chat-subagent-detail-meta-value">{durationText()}</div>
             </div>
           </div>
 
           <Show when={blockView().objective}>
             <div class="chat-subagent-detail-section">
-              <div class="chat-subagent-detail-label">Objective</div>
+              <div class="chat-subagent-detail-label">{i18n.t('flowerChat.subagents.objectiveLabel')}</div>
               <div class="chat-subagent-detail-text">{blockView().objective}</div>
             </div>
           </Show>
 
           <Show when={blockView().triggerReason}>
             <div class="chat-subagent-detail-section">
-              <div class="chat-subagent-detail-label">Trigger reason</div>
+              <div class="chat-subagent-detail-label">{i18n.t('flowerChat.subagents.triggerReasonLabel')}</div>
               <div class="chat-subagent-detail-text">{blockView().triggerReason}</div>
             </div>
           </Show>
 
           <div class="chat-subagent-detail-section">
-            <div class="chat-subagent-detail-label">Delegation prompt</div>
+            <div class="chat-subagent-detail-label">{i18n.t('flowerChat.subagents.delegationPromptLabel')}</div>
             <pre class="chat-subagent-detail-prompt">
               {String(blockView().delegationPromptMarkdown ?? '').trim()}
             </pre>

@@ -2,6 +2,8 @@ import { createContext, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createI18nHelpers } from '../i18n';
+
 type MockThread = {
   thread_id: string;
   title?: string;
@@ -41,6 +43,7 @@ type ResizeObserverRecord = {
 const notificationErrorMock = vi.fn();
 const notificationInfoMock = vi.fn();
 const notificationSuccessMock = vi.fn();
+const i18n = createI18nHelpers('en-US');
 
 const protocolState = {
   status: 'connected' as 'connected' | 'disconnected',
@@ -1063,7 +1066,7 @@ export function registerEnvAIPageSendTests() {
 
       const { host, dispose } = await renderPage();
       try {
-        expect(host.textContent).toContain('Flower is not configured');
+        expect(host.textContent).toContain(i18n.t('flowerChat.emptyStates.notConfiguredTitle'));
 
         const badge = host.querySelector('[data-testid="flower-not-configured-badge-shell"]') as HTMLDivElement | null;
 
@@ -1119,7 +1122,7 @@ export function registerEnvAIPageSendTests() {
         const actionsText = headerActions(host)?.textContent ?? '';
 
         expect(currentControl).toBeTruthy();
-        expect(currentControl?.textContent).toContain('MODEL');
+        expect(currentControl?.textContent).toContain(i18n.t('flowerChat.model.label'));
         expect(actionsText).not.toContain('Tools');
         expect(actionsText).not.toContain('SSH Host');
         expect(host.querySelector('[data-testid="ai-remote-model-tag"]')).toBeNull();
@@ -1192,9 +1195,8 @@ export function registerEnvAIPageSendTests() {
         const tag = host.querySelector('[data-testid="ai-remote-model-tag"]');
         const tooltip = tag?.closest('[data-testid="tooltip"]');
 
-        expect(tag?.textContent).toContain('REMOTE');
-        expect(tooltip?.getAttribute('data-content')).toContain('AI requests are handled by your Desktop');
-        expect(tooltip?.getAttribute('data-content')).toContain('workspace actions still run in this environment');
+        expect(tag?.textContent).toContain(i18n.t('flowerChat.model.remoteTag'));
+        expect(tooltip?.getAttribute('data-content')).toContain(i18n.t('flowerChat.model.remoteTooltip'));
       } finally {
         dispose();
       }
@@ -1252,7 +1254,7 @@ export function registerEnvAIPageSendTests() {
         const threadSelect = threadControl?.querySelector('select') as HTMLSelectElement | null;
 
         expect(threadControl).toBeTruthy();
-        expect(threadControl?.textContent).toContain('MODEL');
+        expect(threadControl?.textContent).toContain(i18n.t('flowerChat.model.label'));
         expect(host.querySelector('[data-testid="current-model-control"]')).toBeNull();
         expect(host.querySelector('[data-testid="thread-model-locked-badge"]')).toBeNull();
 
@@ -1330,10 +1332,10 @@ export function registerEnvAIPageSendTests() {
         const lockedBadge = host.querySelector('[data-testid="thread-model-locked-badge"]');
 
         expect(lockedBadge).toBeTruthy();
-        expect(lockedBadge?.textContent).toContain('MODEL');
+        expect(lockedBadge?.textContent).toContain(i18n.t('flowerChat.model.label'));
         expect(lockedBadge?.textContent).toContain('Locked Model');
-        expect(lockedBadge?.textContent).toContain('Locked');
-        expect(lockedBadge?.textContent).toContain('REMOTE');
+        expect(lockedBadge?.textContent).toContain(i18n.t('flowerChat.model.locked'));
+        expect(lockedBadge?.textContent).toContain(i18n.t('flowerChat.model.remoteTag'));
         expect(lockedBadge?.querySelector('[data-testid="ai-remote-model-tag"]')).toBeTruthy();
         expect(host.querySelector('[data-testid="thread-model-control"]')).toBeNull();
         expect(host.querySelector('[data-testid="current-model-control"]')).toBeNull();
@@ -1353,7 +1355,7 @@ export function registerEnvAIPageSendTests() {
 
         expect(transcript).toBeTruthy();
         expect(dock).toBeTruthy();
-        expect(transcript?.textContent).toContain(`Hello! I'm Flower`);
+        expect(transcript?.textContent).toContain(i18n.t('flowerChat.emptyChat.title'));
         expect(dock?.contains(textarea as Node)).toBe(true);
       } finally {
         dispose();
@@ -1825,8 +1827,11 @@ export function registerEnvAIPageSendTests() {
           expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello Flower');
         });
 
+        await waitFor(() => {
+          expect(host.querySelector('.chat-message-item-assistant .chat-markdown-streaming-cursor-row')).toBeTruthy();
+        });
         expect(host.querySelector('.streaming-shimmer')).toBeNull();
-        expect(host.querySelector('.chat-message-item-assistant .chat-markdown-streaming-cursor-row')).toBeTruthy();
+        expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello Flower');
       } finally {
         dispose();
       }
@@ -2084,9 +2089,9 @@ export function registerEnvAIPageSendTests() {
 
         expect(host.querySelectorAll('.chat-message-item-assistant')).toHaveLength(1);
         expect(host.querySelector('.chat-message-item-assistant .chat-markdown-block')).toBeTruthy();
-        expect(host.querySelector('.chat-message-item-assistant .chat-markdown-streaming-cursor-row')).toBeTruthy();
         await waitFor(() => {
           expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello Flower');
+          expect(host.querySelector('.chat-message-item-assistant .chat-markdown-streaming-cursor-row')).toBeTruthy();
         });
       } finally {
         dispose();
@@ -2307,7 +2312,7 @@ export function registerEnvAIPageSendTests() {
         });
         await flushAsync();
 
-        expect(assistantRunIndicator(host)?.textContent).toContain('Thinking...');
+        expect(assistantRunIndicator(host)?.textContent).toContain(i18n.t('chatChrome.thinkingEllipsis'));
       } finally {
         dispose();
       }
@@ -2599,7 +2604,7 @@ export function registerEnvAIPageSendTests() {
           const replyButton = Array.from(host.querySelectorAll('button')).find((item) => item.getAttribute('title') === 'Reply now') as HTMLButtonElement | undefined;
           expect(replyButton).toBeTruthy();
           expect(replyButton?.disabled).toBe(true);
-          expect(host.textContent).toContain('Resolve all requested input fields before replying.');
+          expect(host.textContent).toContain(i18n.t('flowerChat.structuredInput.resolveAllFields'));
 
           submitComposer(host, trigger, buttonTitle);
           await flushAsync();
@@ -2700,7 +2705,7 @@ export function registerEnvAIPageSendTests() {
         await flushAsync();
 
         expect(replyButton?.disabled).toBe(true);
-        expect(host.textContent).toContain('Select one of the requested options before replying.');
+        expect(host.textContent).toContain(i18n.t('flowerChat.structuredInput.selectRequestedOption'));
 
         submitComposer(host, 'button', 'Reply now');
         await flushAsync();

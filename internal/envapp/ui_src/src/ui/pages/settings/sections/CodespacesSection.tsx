@@ -9,6 +9,7 @@ import {
 } from '../SettingsPrimitives';
 import { CodeRuntimeSettingsCard } from '../CodeRuntimeSettingsCard';
 import { formatUnknownError } from '../../../maintenance/shared';
+import { useI18n } from '../../../i18n';
 
 const AUTO_SAVE_DELAY_MS = 700;
 const DEFAULT_CODE_SERVER_PORT_MIN = 20000;
@@ -27,6 +28,7 @@ function normalizePortRange(min: number, max: number) {
 
 export function CodespacesSection() {
   const ctx = useEnvSettingsPage();
+  const i18n = useI18n();
 
   const [viewMode, setViewMode] = createSignal<ViewMode>('ui');
   const [useDefaults, setUseDefaults] = createSignal(true);
@@ -79,7 +81,7 @@ export function CodespacesSection() {
         });
         setSaving(false); setSavedAt(Date.now()); setDirty(false); setError(null);
       } catch (e) {
-        setSaving(false); setError(formatUnknownError(e) || 'Save failed.');
+        setSaving(false); setError(formatUnknownError(e) || i18n.t('codespacesSettings.saveFailed'));
       }
     }, AUTO_SAVE_DELAY_MS);
   });
@@ -110,8 +112,8 @@ export function CodespacesSection() {
 
       <SettingsCard
         icon={Code}
-        title="Codespaces Ports"
-        description="Configure the port range used for Codespaces instances."
+        title={i18n.t('codespacesSettings.title')}
+        description={i18n.t('codespacesSettings.description')}
         error={error()}
         actions={
           <>
@@ -127,18 +129,18 @@ export function CodespacesSection() {
           <div class="space-y-4">
             <label class={`flex items-center gap-2 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
               <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setDirty(true); }} disabled={!ctx.canInteract()} />
-              <span class="text-sm font-medium text-foreground">Use default port range</span>
+              <span class="text-sm font-medium text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
             </label>
             <div class="text-xs text-muted-foreground">
-              Effective range: <code class="font-mono">{effective().effective_min}–{effective().effective_max}</code>
+              {i18n.t('codespacesSettings.effectiveRange')}: <code class="font-mono">{effective().effective_min}–{effective().effective_max}</code>
             </div>
             <Show when={!useDefaults()}>
               <SettingsTable minWidthClass="min-w-[36rem]">
                 <SettingsTableHead>
                   <SettingsTableHeaderRow>
-                    <SettingsTableHeaderCell>Setting</SettingsTableHeaderCell>
-                    <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
-                    <SettingsTableHeaderCell>Notes</SettingsTableHeaderCell>
+                    <SettingsTableHeaderCell>{i18n.t('codespacesSettings.setting')}</SettingsTableHeaderCell>
+                    <SettingsTableHeaderCell>{i18n.t('codespacesSettings.value')}</SettingsTableHeaderCell>
+                    <SettingsTableHeaderCell>{i18n.t('codespacesSettings.notes')}</SettingsTableHeaderCell>
                   </SettingsTableHeaderRow>
                 </SettingsTableHead>
                 <SettingsTableBody>
@@ -149,7 +151,7 @@ export function CodespacesSection() {
                         onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMin(v ? Number(v) : ''); setDirty(true); }}
                         placeholder="20000" size="sm" class="w-full" disabled={!ctx.canInteract()} />
                     </SettingsTableCell>
-                    <SettingsTableCell class="text-[11px] text-muted-foreground">Start of the custom code-server port range.</SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('codespacesSettings.minPortNote')}</SettingsTableCell>
                   </SettingsTableRow>
                   <SettingsTableRow>
                     <SettingsTableCell class="font-medium text-muted-foreground">code_server_port_max</SettingsTableCell>
@@ -158,7 +160,7 @@ export function CodespacesSection() {
                         onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMax(v ? Number(v) : ''); setDirty(true); }}
                         placeholder="21000" size="sm" class="w-full" disabled={!ctx.canInteract()} />
                     </SettingsTableCell>
-                    <SettingsTableCell class="text-[11px] text-muted-foreground">End of the custom code-server port range.</SettingsTableCell>
+                    <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('codespacesSettings.maxPortNote')}</SettingsTableCell>
                   </SettingsTableRow>
                 </SettingsTableBody>
               </SettingsTable>

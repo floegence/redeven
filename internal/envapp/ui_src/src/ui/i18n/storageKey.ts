@@ -1,0 +1,1 @@
+export const REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY = 'redeven_ui_language_preference';

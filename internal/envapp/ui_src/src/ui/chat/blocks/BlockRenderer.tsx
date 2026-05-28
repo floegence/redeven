@@ -14,6 +14,7 @@ import { TodosBlock } from './TodosBlock';
 import { SourcesBlock } from './SourcesBlock';
 import { SubagentBlock } from './SubagentBlock';
 import { ActivityTimelineBlock } from './ActivityTimelineBlock';
+import { useI18n } from '../../i18n';
 
 // Lazy-load heavy components that rely on large third-party libraries
 const CodeBlock = lazy(() =>
@@ -56,11 +57,12 @@ const BlockSkeleton: Component = () => (
  * and wrapped in Suspense with a skeleton fallback.
  */
 export const BlockRenderer: Component<BlockRendererProps> = (props) => {
+  const i18n = useI18n();
   return (
     <Switch
       fallback={
         <div class="chat-block-unknown">
-          Unknown block type: {(props.block as any).type}
+          {i18n.t('chatActivity.unknownBlockType', { type: String((props.block as any).type ?? '') })}
         </div>
       }
     >
@@ -170,9 +172,11 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               : '');
           return (
             <div class="chat-structured-receipt">
-              <span class="chat-structured-receipt-label">Input Submitted</span>
+              <span class="chat-structured-receipt-label">{i18n.t('chatActivity.structuredInputSubmitted')}</span>
               <p class="chat-structured-receipt-text">
-                {summary || (b.contains_secret ? 'Secret input submitted.' : 'Structured input submitted.')}
+                {summary || (b.contains_secret
+                  ? i18n.t('chatActivity.secretInputSubmitted')
+                  : i18n.t('chatActivity.structuredInputSubmittedFallback'))}
               </p>
             </div>
           );
