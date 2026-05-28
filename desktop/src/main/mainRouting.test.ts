@@ -237,6 +237,24 @@ describe('main routing', () => {
     expect(localRecordVerifySrc).toContain('started_at_unix_ms: startup.started_at_unix_ms ?? currentRecord.startup.started_at_unix_ms');
     expect(localRecordVerifySrc).not.toContain('started_at_unix_ms: currentRecord.startup.started_at_unix_ms');
 
+    const bridgeRecordVerifyStart = mainSrc.indexOf('async function verifyRuntimePlacementBridgeRecord(');
+    const bridgeRecordVerifyEnd = mainSrc.indexOf('function clearSSHRuntimeReadyState(', bridgeRecordVerifyStart);
+    expect(bridgeRecordVerifyStart).toBeGreaterThanOrEqual(0);
+    expect(bridgeRecordVerifyEnd).toBeGreaterThan(bridgeRecordVerifyStart);
+    const bridgeRecordVerifySrc = mainSrc.slice(bridgeRecordVerifyStart, bridgeRecordVerifyEnd);
+    expect(bridgeRecordVerifySrc).toContain('started_at_unix_ms: startup.started_at_unix_ms\n            ?? bridgeRecord.startup.started_at_unix_ms');
+    expect(bridgeRecordVerifySrc).toContain('runtimePlacementBridgeByTargetID.set(targetID, updatedRecord)');
+    expect(bridgeRecordVerifySrc).not.toContain('started_at_unix_ms: bridgeRecord.startup.started_at_unix_ms');
+
+    const sshRecordVerifyStart = mainSrc.indexOf('async function verifySSHEnvironmentRuntimeRecord(');
+    const sshRecordVerifyEnd = mainSrc.indexOf('async function inspectSavedRuntimeTargetState(', sshRecordVerifyStart);
+    expect(sshRecordVerifyStart).toBeGreaterThanOrEqual(0);
+    expect(sshRecordVerifyEnd).toBeGreaterThan(sshRecordVerifyStart);
+    const sshRecordVerifySrc = mainSrc.slice(sshRecordVerifyStart, sshRecordVerifyEnd);
+    expect(sshRecordVerifySrc).toContain('started_at_unix_ms: startup.started_at_unix_ms\n            ?? runtimeRecord.startup.started_at_unix_ms');
+    expect(sshRecordVerifySrc).toContain('sshEnvironmentRuntimeByKey.set(runtimeKey, updatedRecord)');
+    expect(sshRecordVerifySrc).not.toContain('started_at_unix_ms: runtimeRecord.startup.started_at_unix_ms');
+
     const sshProbeStart = mainSrc.indexOf('async function probeSavedSSHRuntimeHealth(');
     const sshProbeEnd = mainSrc.indexOf('function runtimeTargetProbeSource(', sshProbeStart);
     expect(sshProbeStart).toBeGreaterThanOrEqual(0);
