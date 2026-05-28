@@ -5801,19 +5801,16 @@ function EnvironmentConnectionCard(props: Readonly<{
 
   return (
     <Card class={cn(
-      'redeven-environment-card h-full overflow-hidden border',
-      'transition-[transform,border-color,box-shadow] duration-200',
-      isCardOpen()
-        ? 'redeven-environment-card--open'
-        : 'border-border',
+      'redeven-environment-card h-full overflow-hidden',
+      isCardOpen() && 'redeven-environment-card--open',
       props.environmentFailure && 'redeven-environment-card--failure',
       props.environmentFailure?.failure.severity === 'error' && 'redeven-environment-card--failure-error',
       props.environmentFailure?.failure.severity === 'warning' && 'redeven-environment-card--failure-warning',
     )}>
-      <CardHeader class="px-3.5 pb-2 pt-3.5">
+      <CardHeader class="px-4 pb-2.5 pt-4">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0 flex-1">
-            <div class="mb-1.5 flex items-center gap-1.5">
+            <div class="mb-2 flex items-center gap-2">
               <Tag variant={environmentKindTagVariant(props.environment.kind)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
                 {card().kind_label}
               </Tag>
@@ -5909,16 +5906,22 @@ function EnvironmentConnectionCard(props: Readonly<{
                 }}
               </Show>
             </div>
-            <CardTitle class="truncate text-sm font-semibold" title={props.environment.label}>
+            <CardTitle class="truncate text-sm font-semibold leading-5 tracking-[0.01em]" title={props.environment.label}>
               {props.environment.label}
             </CardTitle>
-            <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{card().runtime_started_label}</span>
+            <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span class="redeven-card-runtime-chip">
+                <span class="redeven-card-runtime-chip__dot" aria-hidden="true" />
+                <span class="redeven-card-runtime-chip__text">{card().runtime_started_label}</span>
+              </span>
               <Show when={props.environment.control_plane_label}>
                 {(cpLabel) => (
                   <>
-                    <span class="text-border">·</span>
-                    <span>{cpLabel()}</span>
+                    <span class="text-border/30 select-none" aria-hidden="true">|</span>
+                    <span class="redeven-card-runtime-domain">
+                      <Globe class="h-3 w-3" />
+                      {cpLabel()}
+                    </span>
                   </>
                 )}
               </Show>
@@ -5940,7 +5943,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           </DesktopTooltip>
         </div>
       </CardHeader>
-      <CardContent class="flex flex-1 flex-col px-3.5 pb-2.5">
+      <CardContent class="flex flex-1 flex-col px-4 pb-3">
         <EnvironmentCardFactsBlock
           facts={facts()}
           minRows={3}
@@ -5948,7 +5951,7 @@ function EnvironmentConnectionCard(props: Readonly<{
           copyEnvironmentValue={props.copyEnvironmentValue}
         />
       </CardContent>
-      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border px-3.5 py-2.5">
+      <CardFooter class="mt-auto flex items-center gap-2 border-t border-border/60 px-4 pt-3 pb-2.5">
         <EnvironmentSplitActionButton
           presentation={environmentActionPresentation()}
           environmentID={props.environment.id}
