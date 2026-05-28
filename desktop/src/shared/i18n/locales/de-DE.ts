@@ -566,7 +566,7 @@ export const deDE = {
     version: "Version",
     provider: "Provider",
     localLink: "Lokaler Link",
-    environmentId: "Environment ID",
+    environmentId: "ENV ID",
     source: "Quelle",
     runtimeRoot: "Runtime-Root",
     bootstrap: "Bootstrap",

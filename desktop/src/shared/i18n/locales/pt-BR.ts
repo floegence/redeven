@@ -566,7 +566,7 @@ export const ptBR = {
     version: "Version",
     provider: "Provider",
     localLink: "Link local",
-    environmentId: "Environment ID",
+    environmentId: "ENV ID",
     source: "Origem",
     runtimeRoot: "Raiz Runtime",
     bootstrap: "Bootstrap",

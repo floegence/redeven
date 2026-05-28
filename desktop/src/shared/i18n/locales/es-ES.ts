@@ -566,7 +566,7 @@ export const esES = {
     version: "Version",
     provider: "Provider",
     localLink: "Enlace local",
-    environmentId: "Environment ID",
+    environmentId: "ENV ID",
     source: "Origen",
     runtimeRoot: "Raíz Runtime",
     bootstrap: "Bootstrap",
