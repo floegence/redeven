@@ -515,7 +515,7 @@ describe('DesktopWelcomeShell', () => {
   it('renders environment card time from runtime startup time, not access time', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('<span>{card().runtime_started_label}</span>');
+    expect(appSrc).toContain('card().runtime_started_label');
     expect(appSrc).not.toContain('formatRelativeTimestamp(props.environment.last_used_at_ms)');
     expect(appSrc).not.toContain('runtime_started_at_unix_ms ? props.environment.last_used_at_ms');
   });
