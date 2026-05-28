@@ -32,10 +32,7 @@ export function LoggingSection() {
   const clearTimer = (t: number | undefined) => { if (t != null) { window.clearTimeout(t); return undefined; } return undefined; };
 
   createEffect(() => {
-    if (!dirty() || saving() || !ctx.canInteract()) {
-      autoSaveTimer = clearTimer(autoSaveTimer);
-      return;
-    }
+    if (!dirty() || saving() || !ctx.canInteract()) { autoSaveTimer = clearTimer(autoSaveTimer); return; }
     autoSaveTimer = clearTimer(autoSaveTimer);
     autoSaveTimer = window.setTimeout(async () => {
       autoSaveTimer = undefined;
@@ -43,13 +40,9 @@ export function LoggingSection() {
       setSaving(true);
       try {
         await ctx.saveSettings({ logging: { log_format: logFormat() || null, log_level: logLevel() || null } });
-        setSaving(false);
-        setSavedAt(Date.now());
-        setDirty(false);
-        setError(null);
+        setSaving(false); setSavedAt(Date.now()); setDirty(false); setError(null);
       } catch (e) {
-        setSaving(false);
-        setError(formatUnknownError(e) || i18n.t('loggingSettings.saveFailed'));
+        setSaving(false); setError(formatUnknownError(e) || i18n.t('loggingSettings.saveFailed'));
       }
     }, AUTO_SAVE_DELAY_MS);
   });
@@ -62,33 +55,29 @@ export function LoggingSection() {
       title={i18n.t('loggingSettings.title')}
       description={`${i18n.t('loggingSettings.description')} ${i18n.t('loggingSettings.restartRequired')}`}
       error={error()}
-      actions={
-        <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
-      }
     >
-      <div class="space-y-5">
-        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-          <div class="sm:max-w-[55%]">
-            <label class="text-xs font-medium text-foreground">{i18n.t('loggingSettings.formatLabel')}</label>
-            <p class="mt-0.5 text-[11px] text-muted-foreground">{i18n.t('loggingSettings.defaultJson')}</p>
-          </div>
+      <div class="space-y-2">
+        <div class="flex items-center gap-4 py-2">
+          <label class="w-24 flex-shrink-0 text-xs font-medium text-foreground">{i18n.t('loggingSettings.formatLabel')}</label>
           <Select
             value={logFormat()} onChange={(v) => { setLogFormat(v); setDirty(true); }} disabled={!ctx.canInteract()}
             options={[{ value: '', label: i18n.t('loggingSettings.defaultJson') }, { value: 'json', label: 'json' }, { value: 'text', label: 'text' }]}
-            class="sm:w-48"
+            class="w-36"
           />
+          <span class="text-[11px] text-muted-foreground">{i18n.t('loggingSettings.defaultJson')}</span>
         </div>
-        <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-          <div class="sm:max-w-[55%]">
-            <label class="text-xs font-medium text-foreground">{i18n.t('loggingSettings.levelLabel')}</label>
-            <p class="mt-0.5 text-[11px] text-muted-foreground">{i18n.t('loggingSettings.defaultInfo')}</p>
-          </div>
+        <div class="flex items-center gap-4 py-2">
+          <label class="w-24 flex-shrink-0 text-xs font-medium text-foreground">{i18n.t('loggingSettings.levelLabel')}</label>
           <Select
             value={logLevel()} onChange={(v) => { setLogLevel(v); setDirty(true); }} disabled={!ctx.canInteract()}
             options={[{ value: '', label: i18n.t('loggingSettings.defaultInfo') }, { value: 'debug', label: 'debug' }, { value: 'info', label: 'info' }, { value: 'warn', label: 'warn' }, { value: 'error', label: 'error' }]}
-            class="sm:w-48"
+            class="w-36"
           />
+          <span class="text-[11px] text-muted-foreground">{i18n.t('loggingSettings.defaultInfo')}</span>
         </div>
+      </div>
+      <div class="mt-3">
+        <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
       </div>
     </SettingsSection>
   );

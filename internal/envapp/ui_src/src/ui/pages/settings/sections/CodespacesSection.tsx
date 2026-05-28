@@ -2,7 +2,7 @@ import { Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-j
 import { Code } from '@floegence/floe-webapp-core/icons';
 import { Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, AutoSaveIndicator, PropertyRow } from '../SettingsPrimitives';
+import { SettingsSection, AutoSaveIndicator } from '../SettingsPrimitives';
 import { CodeRuntimeSettingsCard } from '../CodeRuntimeSettingsCard';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
@@ -16,8 +16,7 @@ function normalizePortRange(min: number, max: number) {
   if (!Number.isFinite(m)) m = 0;
   if (!Number.isFinite(M)) M = 0;
   if (m <= 0 || M <= 0 || M > 65535 || m >= M) return { use_default: true, effective_min: DEFAULT_CODE_SERVER_PORT_MIN, effective_max: DEFAULT_CODE_SERVER_PORT_MAX };
-  if (m < 1024) m = 1024;
-  if (M < 1024) M = 1024;
+  if (m < 1024) m = 1024; if (M < 1024) M = 1024;
   if (m >= M) return { use_default: true, effective_min: DEFAULT_CODE_SERVER_PORT_MIN, effective_max: DEFAULT_CODE_SERVER_PORT_MAX };
   return { use_default: false, effective_min: m, effective_max: M };
 }
@@ -48,8 +47,7 @@ export function CodespacesSection() {
   });
 
   const effective = createMemo(() => normalizePortRange(
-    useDefaults() ? 0 : Number(portMin()),
-    useDefaults() ? 0 : Number(portMax()),
+    useDefaults() ? 0 : Number(portMin()), useDefaults() ? 0 : Number(portMax()),
   ));
 
   let autoSaveTimer: number | undefined;
@@ -81,55 +79,45 @@ export function CodespacesSection() {
   return (
     <div class="space-y-4">
       <CodeRuntimeSettingsCard
-        status={ctx.codeRuntimeStatus()}
-        loading={ctx.codeRuntimeStatus.loading}
-        error={null}
-        localPrepareFailure={ctx.codeRuntimeLocalPrepareFailure()}
-        canInteract={ctx.canInteract()}
-        canManage={ctx.canManageCodeRuntime()}
-        actionLoading={ctx.codeRuntimeActionLoading()}
-        cancelLoading={ctx.codeRuntimeCancelLoading()}
-        selectionLoadingVersion={ctx.codeRuntimeSelectionLoadingVersion()}
+        status={ctx.codeRuntimeStatus()} loading={ctx.codeRuntimeStatus.loading} error={null}
+        localPrepareFailure={ctx.codeRuntimeLocalPrepareFailure()} canInteract={ctx.canInteract()}
+        canManage={ctx.canManageCodeRuntime()} actionLoading={ctx.codeRuntimeActionLoading()}
+        cancelLoading={ctx.codeRuntimeCancelLoading()} selectionLoadingVersion={ctx.codeRuntimeSelectionLoadingVersion()}
         removeVersionLoading={ctx.codeRuntimeRemoveVersionLoading()}
-        onRefresh={() => ctx.refreshCodeRuntimeStatus()}
-        onPrepare={() => ctx.prepareManagedCodeRuntime()}
-        onSelectVersion={(v) => ctx.selectManagedCodeRuntimeVersion(v)}
-        onRemoveVersion={(v) => ctx.removeManagedCodeRuntimeVersion(v)}
+        onRefresh={() => ctx.refreshCodeRuntimeStatus()} onPrepare={() => ctx.prepareManagedCodeRuntime()}
+        onSelectVersion={(v) => ctx.selectManagedCodeRuntimeVersion(v)} onRemoveVersion={(v) => ctx.removeManagedCodeRuntimeVersion(v)}
         onCancel={() => ctx.cancelManagedCodeRuntimeOperation()}
       />
 
       <SettingsSection
-        icon={Code}
-        title={i18n.t('codespacesSettings.title')}
-        description={i18n.t('codespacesSettings.description')}
+        icon={Code} title={i18n.t('codespacesSettings.title')} description={i18n.t('codespacesSettings.description')}
         error={error()}
-        actions={
-          <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
-        }
+        actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />}
       >
-        <div class="space-y-4">
-          <label class={`flex items-center gap-2 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
+        {/* Port range card */}
+        <div class="rounded-xl border border-border/50 bg-background p-4">
+          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">端口范围</div>
+          <label class={`flex items-center gap-2 mb-3 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
             <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setDirty(true); }} disabled={!ctx.canInteract()} />
             <span class="text-sm text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
           </label>
-
-          <PropertyRow label={i18n.t('codespacesSettings.effectiveRange')} mono>
-            {effective().effective_min} – {effective().effective_max}
-          </PropertyRow>
-
+          <div class="flex items-center gap-2 mb-3 text-xs text-muted-foreground">
+            <span>{i18n.t('codespacesSettings.effectiveRange')}:</span>
+            <code class="font-mono text-foreground">{effective().effective_min} – {effective().effective_max}</code>
+          </div>
           <Show when={!useDefaults()}>
-            <div class="space-y-3 pt-2">
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <label class="text-xs font-medium text-foreground">code_server_port_min</label>
+            <div class="flex items-center gap-4 pt-3 border-t border-border/30">
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-muted-foreground">code_server_port_min</label>
                 <Input value={portMin() === '' ? '' : String(portMin())}
                   onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMin(v ? Number(v) : ''); setDirty(true); }}
-                  placeholder="20000" size="sm" class="sm:w-32" disabled={!ctx.canInteract()} />
+                  placeholder="20000" size="sm" class="w-24" disabled={!ctx.canInteract()} />
               </div>
-              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <label class="text-xs font-medium text-foreground">code_server_port_max</label>
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-muted-foreground">code_server_port_max</label>
                 <Input value={portMax() === '' ? '' : String(portMax())}
                   onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMax(v ? Number(v) : ''); setDirty(true); }}
-                  placeholder="21000" size="sm" class="sm:w-32" disabled={!ctx.canInteract()} />
+                  placeholder="21000" size="sm" class="w-24" disabled={!ctx.canInteract()} />
               </div>
             </div>
           </Show>
