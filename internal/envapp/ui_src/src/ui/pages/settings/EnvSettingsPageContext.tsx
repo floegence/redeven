@@ -6,7 +6,18 @@ import { resolveAgentUpgradeState } from '../../maintenance/agentUpgradeState';
 import { isReleaseVersion } from '../../maintenance/agentVersion';
 import { formatAgentStatusLabel } from '../../maintenance/shared';
 import { fetchGatewayJSON } from '../../services/gatewayApi';
-import { fetchCodeRuntimeStatus, type CodeRuntimeStatus } from '../../services/codeRuntimeApi';
+import {
+  cancelCodeRuntimeOperation,
+  codeRuntimeOperationNeedsAttention,
+  codeRuntimeOperationSucceeded,
+  fetchCodeRuntimeStatus,
+  removeCodeRuntimeVersion,
+  selectCodeRuntimeVersion,
+  type CodeRuntimeStatus,
+} from '../../services/codeRuntimeApi';
+import { desktopCodeWorkspacePrepareAvailable, prepareWorkspaceEngineWithDesktop } from '../../services/desktopCodeWorkspaceBridge';
+import { readDesktopSessionContextSnapshot } from '../../services/desktopSessionContext';
+import { browserEditorLocalFailureFromError, type BrowserEditorSetupLocalFailure } from '../../services/browserEditorSetupActivity';
 import { useEnvContext, type EnvSettingsSection } from '../EnvContext';
 import type { AgentSettingsResponse, CodexHostStatus, SettingsUpdateResponse } from './types';
 
@@ -178,11 +189,11 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   });
 
   // Code runtime
-  const [codeRuntimeActionLoading] = createSignal(false);
-  const [codeRuntimeCancelLoading] = createSignal(false);
-  const [codeRuntimeLocalPrepareFailure, setCodeRuntimeLocalPrepareFailure] = createSignal<any>(null);
-  const [codeRuntimeSelectionLoadingVersion] = createSignal<string | null>(null);
-  const [codeRuntimeRemoveVersionLoading] = createSignal<string | null>(null);
+  const [codeRuntimeActionLoading, setCodeRuntimeActionLoading] = createSignal(false);
+  const [codeRuntimeCancelLoading, setCodeRuntimeCancelLoading] = createSignal(false);
+  const [codeRuntimeLocalPrepareFailure, setCodeRuntimeLocalPrepareFailure] = createSignal<BrowserEditorSetupLocalFailure | null>(null);
+  const [codeRuntimeSelectionLoadingVersion, setCodeRuntimeSelectionLoadingVersion] = createSignal<string | null>(null);
+  const [codeRuntimeRemoveVersionLoading, setCodeRuntimeRemoveVersionLoading] = createSignal<string | null>(null);
   const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'prepare_workspace_engine' | 'remove_local_environment_version'>('');
 
   createEffect(() => {
@@ -205,7 +216,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
     if (!status) return;
     const operationAction = String((status as any).operation?.action ?? '').trim();
     if ((status as any).operation?.state === 'running') return;
-    if ((status as any).operation?.state === 'succeeded' && operationAction === pendingAction) {
+    if (codeRuntimeOperationSucceeded(status) && operationAction === pendingAction) {
       if (pendingAction === 'remove_local_environment_version') {
         notify.success('Version removed', 'The selected Browser Editor version has been removed.');
       } else {
@@ -213,6 +224,9 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
       }
       setPendingRuntimeSuccessAction('');
       return;
+    }
+    if (codeRuntimeOperationNeedsAttention(status) && operationAction === pendingAction) {
+      setPendingRuntimeSuccessAction('');
     }
   });
 
@@ -229,6 +243,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
     });
     const normalized = normalizeSettingsUpdateResponse(json);
     if (normalized.settings) mutateSettings(normalized.settings);
+    env.bumpSettingsSeq();
     return normalized as any;
   };
 
@@ -241,10 +256,80 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   const canStartUpgrade = createMemo(() => canAdmin() && !maintaining() && upgradeState().allowsUpgradeAction);
   const startRestart = async () => {};
   const startUpgrade = async () => {};
-  const prepareManagedCodeRuntime = () => {};
-  const cancelManagedCodeRuntimeOperation = () => {};
-  const selectManagedCodeRuntimeVersion = (_v: string) => {};
-  const removeManagedCodeRuntimeVersion = (_v: string) => {};
+  const prepareManagedCodeRuntime = () => {
+    void (async () => {
+      setCodeRuntimeActionLoading(true);
+      setPendingRuntimeSuccessAction('prepare_workspace_engine');
+      setCodeRuntimeLocalPrepareFailure(null);
+      try {
+        if (!desktopCodeWorkspacePrepareAvailable()) {
+          throw new Error('Open this environment in Redeven Desktop to set up Browser Editor.');
+        }
+        const result = await prepareWorkspaceEngineWithDesktop({
+          reason: 'settings',
+          status: codeRuntimeStatus(),
+          preferSessionUpload: readDesktopSessionContextSnapshot()?.target_route === 'remote_desktop',
+        });
+        if (!result.ok || !result.prepared) {
+          throw new Error(result.message || 'Browser Editor setup did not finish.');
+        }
+        setCodeRuntimeLocalPrepareFailure(null);
+        await refetchCodeRuntimeStatus();
+      } catch (e) {
+        setPendingRuntimeSuccessAction('');
+        const failure = browserEditorLocalFailureFromError(e);
+        setCodeRuntimeLocalPrepareFailure(failure);
+        notify.error('Browser Editor setup failed', failure.message);
+      } finally {
+        setCodeRuntimeActionLoading(false);
+      }
+    })();
+  };
+  const cancelManagedCodeRuntimeOperation = () => {
+    void (async () => {
+      setCodeRuntimeCancelLoading(true);
+      try {
+        await cancelCodeRuntimeOperation();
+        await refetchCodeRuntimeStatus();
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        notify.error('Cancel failed', msg || 'Request failed.');
+      } finally {
+        setCodeRuntimeCancelLoading(false);
+      }
+    })();
+  };
+  const selectManagedCodeRuntimeVersion = (version: string) => {
+    void (async () => {
+      setCodeRuntimeSelectionLoadingVersion(version);
+      try {
+        await selectCodeRuntimeVersion(version);
+        await refetchCodeRuntimeStatus();
+        notify.success('Browser Editor version selected', `This environment now uses Browser Editor ${version}.`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        notify.error('Selection failed', msg || 'Request failed.');
+      } finally {
+        setCodeRuntimeSelectionLoadingVersion(null);
+      }
+    })();
+  };
+  const removeManagedCodeRuntimeVersion = (version: string) => {
+    void (async () => {
+      setCodeRuntimeRemoveVersionLoading(version);
+      setPendingRuntimeSuccessAction('remove_local_environment_version');
+      try {
+        await removeCodeRuntimeVersion(version);
+        await refetchCodeRuntimeStatus();
+      } catch (e) {
+        setPendingRuntimeSuccessAction('');
+        const msg = e instanceof Error ? e.message : String(e);
+        notify.error('Version removal failed', msg || 'Request failed.');
+      } finally {
+        setCodeRuntimeRemoveVersionLoading(null);
+      }
+    })();
+  };
 
   const value: EnvSettingsPageContextValue = {
     env, protocol, notify, runtimeUpdate,

@@ -88,6 +88,13 @@ describe('Redeven file preview renderer registry', () => {
     expect(host.querySelector('[data-testid="docx-renderer"]')?.textContent).toBe('2');
     expect(host.textContent).toContain('Sheet: Sheet1');
     expect(host.textContent).toContain('A1');
+    expect(host.textContent).toContain('Preview not available');
+    expect(host.textContent).toContain('This file type cannot be previewed');
+    expect(host.textContent).toContain('Technical details');
+
+    const detailsButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Technical details'));
+    expect(detailsButton).toBeTruthy();
+    detailsButton?.click();
     expect(host.textContent).toContain('Preview blocked by policy.');
   });
 });

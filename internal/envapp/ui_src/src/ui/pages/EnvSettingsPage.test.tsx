@@ -4,6 +4,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvSettingsPage } from './EnvSettingsPage';
+import { SETTINGS_GROUPS, SETTINGS_NAV_ITEMS } from './settings/settingsStructure';
 
 const notificationMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -112,9 +113,11 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   Pencil: icon('Pencil'),
   Plus: icon('Plus'),
   RefreshIcon: icon('RefreshIcon'),
+  Search: icon('Search'),
   Shield: icon('Shield'),
   Terminal: icon('Terminal'),
   Trash: icon('Trash'),
+  X: icon('X'),
   Zap: icon('Zap'),
 }));
 
@@ -310,6 +313,7 @@ vi.mock('./settings/SettingsPrimitives', () => ({
     <section data-settings-card={props.title}>
       <h3>{props.title}</h3>
       <p>{props.description}</p>
+      {props.actions}
       {props.children}
     </section>
   ),
@@ -346,6 +350,17 @@ function flushPage(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function findButton(host: HTMLElement, label: string): HTMLButtonElement | undefined {
+  return Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === label);
+}
+
+async function openSettingsSection(host: HTMLElement, label: string): Promise<void> {
+  const button = findButton(host, label);
+  expect(button).toBeTruthy();
+  button?.click();
+  await flushPage();
+}
+
 describe('EnvSettingsPage', () => {
   let host: HTMLDivElement;
 
@@ -373,11 +388,11 @@ describe('EnvSettingsPage', () => {
     host.remove();
   });
 
-  it('renders the updated settings information architecture in navigation and groups', async () => {
+  it('renders the settings information architecture metadata and navigable sidebar', async () => {
     render(() => <EnvSettingsPage />, host);
     await flushPage();
 
-    const groupTitles = Array.from(host.querySelectorAll('[data-settings-group] > h2')).map((node) => node.textContent?.trim());
+    const groupTitles = SETTINGS_GROUPS.map((group) => group.title);
     expect(groupTitles).toEqual([
       'Overview',
       'Runtime Configuration',
@@ -387,7 +402,7 @@ describe('EnvSettingsPage', () => {
       'Diagnostics',
     ]);
 
-    const navLabels = Array.from(host.querySelectorAll('[data-settings-nav-item]')).map((node) => node.textContent?.trim());
+    const navLabels = SETTINGS_NAV_ITEMS.map((item) => item.label);
     expect(navLabels).toEqual([
       'Config File',
       'Connection',
@@ -402,19 +417,19 @@ describe('EnvSettingsPage', () => {
       'Debug Console',
     ]);
 
-    const diagnosticsGroup = host.querySelector('[data-settings-group="diagnostics"]');
-    expect(diagnosticsGroup?.querySelector('[data-settings-section="debug_console"]')).not.toBeNull();
+    const renderedNavLabels = Array.from(host.querySelectorAll('button'))
+      .map((node) => node.textContent?.trim() ?? '')
+      .filter((label) => navLabels.includes(label));
+    expect(renderedNavLabels).toEqual(navLabels);
 
-    const codespacesGroup = host.querySelector('[data-settings-group="codespaces_tooling"]');
-    expect(codespacesGroup?.querySelector('[data-settings-section="codespaces"]')).not.toBeNull();
+    expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
 
-    const runtimeGroup = host.querySelector('[data-settings-group="runtime_configuration"]');
-    expect(runtimeGroup?.querySelector('[data-settings-section="debug_console"]')).toBeNull();
-    expect(runtimeGroup?.querySelector('[data-settings-section="codespaces"]')).toBeNull();
+    await openSettingsSection(host, 'Debug Console');
+    expect(host.querySelector('[data-settings-card="Debug Console"]')).toBeTruthy();
+    expect(host.querySelector('[data-settings-card="Config File"]')).toBeNull();
 
-    const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
-    const aiGroupSections = Array.from(aiGroup?.querySelectorAll('[data-settings-section]') ?? []).map((node) => node.getAttribute('data-settings-section'));
-    expect(aiGroupSections).toEqual(['ai', 'skills', 'codex']);
+    await openSettingsSection(host, 'Codespaces & Tooling');
+    expect(host.querySelector('[data-settings-card="Browser Editor"]')).toBeTruthy();
   });
 
   it('renders Runtime Service identity and live-work rows in Runtime Status', async () => {
@@ -451,9 +466,10 @@ describe('EnvSettingsPage', () => {
     });
 
     render(() => <EnvSettingsPage />, host);
+    await openSettingsSection(host, 'Runtime Status');
     await flushPage();
 
-    const runtimeStatus = host.querySelector('[data-settings-section="agent"]');
+    const runtimeStatus = host.querySelector('[data-settings-card="Runtime Status"]');
     expect(runtimeStatus?.textContent).toContain('Service owner');
     expect(runtimeStatus?.textContent).toContain('Redeven Desktop');
     expect(runtimeStatus?.textContent).toContain('Maintenance authority');
@@ -469,7 +485,7 @@ describe('EnvSettingsPage', () => {
     expect(runtimeStatus?.textContent).toContain('Bound');
   });
 
-  it('shows Desktop model source status when remote AI config is missing', async () => {
+  it('shows the Flower settings section when remote AI config is missing', async () => {
     protocolMocks.status.mockReturnValue('connected');
     settingsResponse = {
       ai: null,
@@ -485,13 +501,13 @@ describe('EnvSettingsPage', () => {
     };
 
     render(() => <EnvSettingsPage />, host);
+    await openSettingsSection(host, 'Flower');
     await vi.waitFor(() => {
-      expect(host.querySelector('[data-settings-card="Flower"]')?.textContent).toContain('The Desktop model source is available for this SSH environment.');
+      expect(host.querySelector('[data-settings-card="Flower"]')?.textContent).toContain('Flower is currently disabled.');
     });
 
     const flowerCard = host.querySelector('[data-settings-card="Flower"]');
-    expect(flowerCard?.textContent).toContain('The Desktop model source is available for this SSH environment.');
-    expect(host.textContent).toContain('Desktop model source');
+    expect(flowerCard?.textContent).toContain('Configure providers below to enable it automatically.');
   });
 
   it('notifies the app settings revision after saving a Flower provider bundle', async () => {
@@ -544,6 +560,7 @@ describe('EnvSettingsPage', () => {
     });
 
     render(() => <EnvSettingsPage />, host);
+    await openSettingsSection(host, 'Flower');
     await vi.waitFor(() => {
       expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith('/_redeven_proxy/api/settings', { method: 'GET' });
     });
@@ -566,7 +583,7 @@ describe('EnvSettingsPage', () => {
 
     await vi.waitFor(() => {
       expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith(
-        '/_redeven_proxy/api/ai/provider_bundle',
+        '/_redeven_proxy/api/settings',
         expect.objectContaining({ method: 'PUT' }),
       );
       expect(envContextMocks.bumpSettingsSeq).toHaveBeenCalledTimes(1);
@@ -603,7 +620,7 @@ describe('EnvSettingsPage', () => {
     });
 
     render(() => <EnvSettingsPage />, host);
-    await flushPage();
+    await openSettingsSection(host, 'Codespaces & Tooling');
 
     const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Update browser editor'));
     expect(button).toBeTruthy();
@@ -630,7 +647,7 @@ describe('EnvSettingsPage', () => {
     });
 
     render(() => <EnvSettingsPage />, host);
-    await flushPage();
+    await openSettingsSection(host, 'Codespaces & Tooling');
 
     const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Update browser editor'));
     expect(button).toBeTruthy();
