@@ -2,11 +2,7 @@ import { Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-j
 import { Code } from '@floegence/floe-webapp-core/icons';
 import { Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import {
-  SettingsSection, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
-  SettingsTableBody, SettingsTableRow, SettingsTableCell, ViewToggle,
-  AutoSaveIndicator, JSONEditor, type ViewMode,
-} from '../SettingsPrimitives';
+import { SettingsSection, AutoSaveIndicator, PropertyRow } from '../SettingsPrimitives';
 import { CodeRuntimeSettingsCard } from '../CodeRuntimeSettingsCard';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
@@ -30,7 +26,6 @@ export function CodespacesSection() {
   const ctx = useEnvSettingsPage();
   const i18n = useI18n();
 
-  const [viewMode, setViewMode] = createSignal<ViewMode>('ui');
   const [useDefaults, setUseDefaults] = createSignal(true);
   const [portMin, setPortMin] = createSignal<number | ''>('');
   const [portMax, setPortMax] = createSignal<number | ''>('');
@@ -56,11 +51,6 @@ export function CodespacesSection() {
     useDefaults() ? 0 : Number(portMin()),
     useDefaults() ? 0 : Number(portMax()),
   ));
-
-  const jsonText = createMemo(() => JSON.stringify({
-    code_server_port_min: useDefaults() ? null : (portMin() === '' ? null : Number(portMin())),
-    code_server_port_max: useDefaults() ? null : (portMax() === '' ? null : Number(portMax())),
-  }, null, 2));
 
   let autoSaveTimer: number | undefined;
   const clearTimer = (t: number | undefined) => { if (t != null) { window.clearTimeout(t); return undefined; } return undefined; };
@@ -88,8 +78,6 @@ export function CodespacesSection() {
 
   onCleanup(() => { autoSaveTimer = clearTimer(autoSaveTimer); });
 
-  const switchView = (next: ViewMode) => setViewMode(next);
-
   return (
     <div class="space-y-4">
       <CodeRuntimeSettingsCard
@@ -116,57 +104,36 @@ export function CodespacesSection() {
         description={i18n.t('codespacesSettings.description')}
         error={error()}
         actions={
-          <>
-            <ViewToggle value={viewMode} disabled={!ctx.canInteract()} onChange={switchView} />
-            <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
-          </>
+          <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
         }
       >
-        <Show
-          when={viewMode() === 'ui'}
-          fallback={<JSONEditor value={jsonText()} onChange={(v) => { try { const p = JSON.parse(v); setUseDefaults(!p.code_server_port_min && !p.code_server_port_max); if (p.code_server_port_min) setPortMin(Number(p.code_server_port_min)); if (p.code_server_port_max) setPortMax(Number(p.code_server_port_max)); setDirty(true); } catch {} }} disabled={!ctx.canInteract()} rows={5} />}
-        >
-          <div class="space-y-4">
-            <label class={`flex items-center gap-2 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
-              <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setDirty(true); }} disabled={!ctx.canInteract()} />
-              <span class="text-sm font-medium text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
-            </label>
-            <div class="text-xs text-muted-foreground">
-              {i18n.t('codespacesSettings.effectiveRange')}: <code class="font-mono">{effective().effective_min}–{effective().effective_max}</code>
+        <div class="space-y-4">
+          <label class={`flex items-center gap-2 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
+            <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setDirty(true); }} disabled={!ctx.canInteract()} />
+            <span class="text-sm text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
+          </label>
+
+          <PropertyRow label={i18n.t('codespacesSettings.effectiveRange')} mono>
+            {effective().effective_min} – {effective().effective_max}
+          </PropertyRow>
+
+          <Show when={!useDefaults()}>
+            <div class="space-y-3 pt-2">
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <label class="text-xs font-medium text-foreground">code_server_port_min</label>
+                <Input value={portMin() === '' ? '' : String(portMin())}
+                  onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMin(v ? Number(v) : ''); setDirty(true); }}
+                  placeholder="20000" size="sm" class="sm:w-32" disabled={!ctx.canInteract()} />
+              </div>
+              <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                <label class="text-xs font-medium text-foreground">code_server_port_max</label>
+                <Input value={portMax() === '' ? '' : String(portMax())}
+                  onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMax(v ? Number(v) : ''); setDirty(true); }}
+                  placeholder="21000" size="sm" class="sm:w-32" disabled={!ctx.canInteract()} />
+              </div>
             </div>
-            <Show when={!useDefaults()}>
-              <SettingsTable minWidthClass="min-w-[36rem]">
-                <SettingsTableHead>
-                  <SettingsTableHeaderRow>
-                    <SettingsTableHeaderCell>{i18n.t('codespacesSettings.setting')}</SettingsTableHeaderCell>
-                    <SettingsTableHeaderCell>{i18n.t('codespacesSettings.value')}</SettingsTableHeaderCell>
-                    <SettingsTableHeaderCell>{i18n.t('codespacesSettings.notes')}</SettingsTableHeaderCell>
-                  </SettingsTableHeaderRow>
-                </SettingsTableHead>
-                <SettingsTableBody>
-                  <SettingsTableRow>
-                    <SettingsTableCell class="font-medium text-muted-foreground">code_server_port_min</SettingsTableCell>
-                    <SettingsTableCell>
-                      <Input value={portMin() === '' ? '' : String(portMin())}
-                        onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMin(v ? Number(v) : ''); setDirty(true); }}
-                        placeholder="20000" size="sm" class="w-full" disabled={!ctx.canInteract()} />
-                    </SettingsTableCell>
-                    <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('codespacesSettings.minPortNote')}</SettingsTableCell>
-                  </SettingsTableRow>
-                  <SettingsTableRow>
-                    <SettingsTableCell class="font-medium text-muted-foreground">code_server_port_max</SettingsTableCell>
-                    <SettingsTableCell>
-                      <Input value={portMax() === '' ? '' : String(portMax())}
-                        onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMax(v ? Number(v) : ''); setDirty(true); }}
-                        placeholder="21000" size="sm" class="w-full" disabled={!ctx.canInteract()} />
-                    </SettingsTableCell>
-                    <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('codespacesSettings.maxPortNote')}</SettingsTableCell>
-                  </SettingsTableRow>
-                </SettingsTableBody>
-              </SettingsTable>
-            </Show>
-          </div>
-        </Show>
+          </Show>
+        </div>
       </SettingsSection>
     </div>
   );

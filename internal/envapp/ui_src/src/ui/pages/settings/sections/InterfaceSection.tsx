@@ -1,5 +1,5 @@
 import { createMemo } from 'solid-js';
-import { Globe, Zap } from '@floegence/floe-webapp-core/icons';
+import { Globe } from '@floegence/floe-webapp-core/icons';
 import { Select } from '@floegence/floe-webapp-core/ui';
 
 import {
@@ -10,7 +10,7 @@ import {
   useI18n,
   type RedevenLocalePreference,
 } from '../../../i18n';
-import { FieldLabel, InfoRow, SettingsSection } from '../SettingsPrimitives';
+import { SettingsSection, PropertyRow } from '../SettingsPrimitives';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 
 export function InterfaceSection() {
@@ -32,11 +32,6 @@ export function InterfaceSection() {
         return i18n.t('language.source.fallback');
     }
   });
-  const languageStorageNote = createMemo(() => (
-    i18n.source() === 'desktop'
-      ? i18n.t('settings.desktopBridgeNote')
-      : i18n.t('settings.standaloneNote')
-  ));
 
   const updateLanguagePreference = (value: string | null | undefined) => {
     const preference = normalizeLocalePreference(value) as RedevenLocalePreference;
@@ -52,32 +47,33 @@ export function InterfaceSection() {
       <SettingsSection
         icon={Globe}
         title={i18n.t('settings.interfaceTitle')}
-        description={i18n.t('settings.interfaceDescription')}
-        badge={i18n.tn('language.availableCount', LOCALE_OPTIONS.length)}
+        description={`${i18n.t('settings.interfaceDescription')} ${i18n.tn('language.availableCount', LOCALE_OPTIONS.length)}`}
       >
-        <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-start">
-          <div class="space-y-2">
-            <FieldLabel>{i18n.t('language.preferenceLabel')}</FieldLabel>
+        <div class="space-y-5">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+            <div class="sm:max-w-[55%]">
+              <label class="text-xs font-medium text-foreground">{i18n.t('language.preferenceLabel')}</label>
+              <p class="mt-0.5 text-[11px] text-muted-foreground">{i18n.t('settings.languageDescription')}</p>
+            </div>
             <Select
               value={i18n.localePreference()}
               onChange={(value) => updateLanguagePreference(value)}
               options={languagePreferenceOptions()}
-              class="w-full cursor-pointer"
+              class="sm:w-48 cursor-pointer"
             />
-            <p class="text-[11px] leading-relaxed text-muted-foreground">
-              {i18n.t('settings.languageDescription')}
-            </p>
           </div>
 
-          <div class="rounded-lg border border-border/70 bg-muted/20 px-3 py-2.5">
-            <InfoRow icon={Globe} label={i18n.t('language.label')}>
+          <div class="border-t border-border/20 pt-4">
+            <PropertyRow label={i18n.t('language.label')}>
               {i18n.t('language.currentResolved', { language: localeDisplayName(i18n.locale()) })}
-            </InfoRow>
-            <InfoRow icon={Zap} label={i18n.t('language.sourceLabel')}>
+            </PropertyRow>
+            <PropertyRow label={i18n.t('language.sourceLabel')}>
               {languageSourceLabel()}
-            </InfoRow>
-            <p class="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              {languageStorageNote()}
+            </PropertyRow>
+            <p class="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              {i18n.source() === 'desktop'
+                ? i18n.t('settings.desktopBridgeNote')
+                : i18n.t('settings.standaloneNote')}
             </p>
           </div>
         </div>
