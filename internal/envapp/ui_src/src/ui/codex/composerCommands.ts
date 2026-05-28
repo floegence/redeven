@@ -1,4 +1,5 @@
 import type { CodexComposerControlID } from './composerControls';
+import type { I18nHelpers } from '../i18n';
 
 export type CodexSlashCommandID =
   | 'mention'
@@ -132,6 +133,32 @@ function commandScore(command: CodexSlashCommandSpec, normalizedQuery: string): 
 
 export function codexSlashCommands(): readonly CodexSlashCommandSpec[] {
   return CODEX_SLASH_COMMANDS;
+}
+
+export function localizedCodexSlashCommandDescription(
+  command: Pick<CodexSlashCommandSpec, 'id' | 'description'>,
+  t: I18nHelpers['t'],
+): string {
+  switch (command.id) {
+    case 'mention':
+      return t('codex.composer.slashDescriptions.mention');
+    case 'new':
+      return t('codex.composer.slashDescriptions.new');
+    case 'clear':
+      return t('codex.composer.slashDescriptions.clear');
+    case 'cwd':
+      return t('codex.composer.slashDescriptions.cwd');
+    case 'model':
+      return t('codex.composer.slashDescriptions.model');
+    case 'effort':
+      return t('codex.composer.slashDescriptions.effort');
+    case 'approval':
+      return t('codex.composer.slashDescriptions.approval');
+    case 'sandbox':
+      return t('codex.composer.slashDescriptions.sandbox');
+    default:
+      return command.description;
+  }
 }
 
 export function filterCodexSlashCommands(args: {

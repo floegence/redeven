@@ -1,38 +1,39 @@
 import { For, Show, type Component } from 'solid-js';
 
+import { useI18n, type I18nHelpers } from '../i18n';
 import type { CodexDispatchingInput, CodexQueuedFollowup } from './types';
 
 function pendingInputPreview(item: {
   text: string;
   attachments: readonly unknown[];
   mentions: readonly unknown[];
-}): string {
+}, t: I18nHelpers['t']): string {
   const text = String(item.text ?? '').trim();
   if (text) return text;
   if (item.attachments.length > 0 && item.mentions.length > 0) {
-    return 'Attachment and file context';
+    return t('codex.pendingInputs.attachmentAndFileContext');
   }
   if (item.attachments.length > 0) {
-    return 'Attachment context';
+    return t('codex.pendingInputs.attachmentContext');
   }
   if (item.mentions.length > 0) {
-    return 'File context';
+    return t('codex.pendingInputs.fileContext');
   }
-  return 'Pending input';
+  return t('codex.pendingInputs.pendingInput');
 }
 
-function dispatchingLabel(item: CodexDispatchingInput): string {
+function dispatchingLabel(item: CodexDispatchingInput, t: I18nHelpers['t']): string {
   return item.source === 'auto_send'
-    ? 'Sending'
-    : 'Guiding';
+    ? t('codex.pendingInputs.sending')
+    : t('codex.pendingInputs.guiding');
 }
 
-function queuedLabel(item: CodexQueuedFollowup): string {
+function queuedLabel(item: CodexQueuedFollowup, t: I18nHelpers['t']): string {
   return item.source === 'rejected_steer'
-    ? 'Guide unavailable'
+    ? t('codex.pendingInputs.guideUnavailable')
     : item.source === 'auto_send'
-      ? 'Retry queued'
-      : 'Queued';
+      ? t('codex.pendingInputs.retryQueued')
+      : t('codex.pendingInputs.queued');
 }
 
 export function CodexPendingInputsPanel(props: {
@@ -45,16 +46,17 @@ export function CodexPendingInputsPanel(props: {
   onRemoveQueued: (followupID: string) => void;
   onMoveQueued: (followupID: string, delta: number) => void;
 }) {
+  const i18n = useI18n();
   const guideTitle = () => (
-    String(props.guideQueuedDisabledReason ?? '').trim() || 'Guide queued input into the current turn'
+    String(props.guideQueuedDisabledReason ?? '').trim() || i18n.t('codex.pendingInputs.guideQueuedInput')
   );
 
   return (
-    <div class="codex-pending-inputs-panel" aria-label="Pending Codex inputs">
+    <div class="codex-pending-inputs-panel" aria-label={i18n.t('codex.pendingInputs.ariaLabel')}>
       <div class="codex-pending-inputs-list" role="list">
         <For each={props.dispatchingItems}>
           {(item) => {
-            const preview = pendingInputPreview(item);
+            const preview = pendingInputPreview(item, i18n.t);
             return (
               <div class="codex-pending-input-card codex-pending-input-card-dispatching" role="listitem">
                 <div class="codex-pending-input-card-main codex-pending-input-card-main-static">
@@ -64,7 +66,7 @@ export function CodexPendingInputsPanel(props: {
                   <span class="codex-pending-input-card-copy">
                     <span class="codex-pending-input-card-headline">
                       <span class="codex-pending-input-card-badge" data-codex-pending-tone="dispatching">
-                        {dispatchingLabel(item)}
+                        {dispatchingLabel(item, i18n.t)}
                       </span>
                       <span class="codex-pending-input-card-preview" title={preview}>
                         {preview}
@@ -79,7 +81,7 @@ export function CodexPendingInputsPanel(props: {
 
         <For each={props.queuedItems}>
           {(item, index) => {
-            const preview = pendingInputPreview(item);
+            const preview = pendingInputPreview(item, i18n.t);
             const tone = item.source === 'rejected_steer' ? 'blocked' : 'queued';
             return (
               <div class="codex-pending-input-card codex-pending-input-card-queued" role="listitem">
@@ -87,7 +89,7 @@ export function CodexPendingInputsPanel(props: {
                   type="button"
                   class="codex-pending-input-card-main"
                   onClick={() => props.onRestoreQueued(item.id)}
-                  title="Restore queued input to the composer"
+                  title={i18n.t('codex.pendingInputs.restoreQueuedInput')}
                 >
                   <span class="codex-pending-input-card-order" aria-hidden="true">
                     <QueuePromptIcon />
@@ -95,7 +97,7 @@ export function CodexPendingInputsPanel(props: {
                   <span class="codex-pending-input-card-copy">
                     <span class="codex-pending-input-card-headline">
                       <span class="codex-pending-input-card-badge" data-codex-pending-tone={tone}>
-                        {queuedLabel(item)}
+                        {queuedLabel(item, i18n.t)}
                       </span>
                       <span class="codex-pending-input-card-preview" title={preview}>
                         {preview}
@@ -110,8 +112,8 @@ export function CodexPendingInputsPanel(props: {
                       class="codex-pending-input-card-icon-action"
                       onClick={() => props.onMoveQueued(item.id, -1)}
                       disabled={index() === 0}
-                      title="Move queued input earlier"
-                      aria-label="Move queued input earlier"
+                      title={i18n.t('codex.pendingInputs.moveEarlier')}
+                      aria-label={i18n.t('codex.pendingInputs.moveEarlier')}
                     >
                       <ChevronUpIcon />
                     </button>
@@ -120,8 +122,8 @@ export function CodexPendingInputsPanel(props: {
                       class="codex-pending-input-card-icon-action"
                       onClick={() => props.onMoveQueued(item.id, 1)}
                       disabled={index() === props.queuedItems.length - 1}
-                      title="Move queued input later"
-                      aria-label="Move queued input later"
+                      title={i18n.t('codex.pendingInputs.moveLater')}
+                      aria-label={i18n.t('codex.pendingInputs.moveLater')}
                     >
                       <ChevronDownIcon />
                     </button>
@@ -133,14 +135,14 @@ export function CodexPendingInputsPanel(props: {
                     disabled={!props.canGuideQueued}
                     title={guideTitle()}
                   >
-                    Guide
+                    {i18n.t('codex.actions.guide')}
                   </button>
                   <button
                     type="button"
                     class="codex-pending-input-card-icon-action codex-pending-input-card-icon-action-danger"
                     onClick={() => props.onRemoveQueued(item.id)}
-                    title="Remove queued input"
-                    aria-label="Remove queued input"
+                    title={i18n.t('codex.pendingInputs.removeQueuedInput')}
+                    aria-label={i18n.t('codex.pendingInputs.removeQueuedInput')}
                   >
                     <TrashIcon />
                   </button>

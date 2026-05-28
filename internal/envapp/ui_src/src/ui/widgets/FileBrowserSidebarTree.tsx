@@ -6,6 +6,7 @@ import { ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
 import { matchFilesystemRoot } from '../utils/filesystemRoots';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
+import { useI18n } from '../i18n';
 
 const MAX_VISIBLE_DEPTH = 5;
 const TREE_ROW_BASE_PADDING = 8;
@@ -58,6 +59,7 @@ interface FileBrowserSidebarTreeRowProps {
 function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
   const browser = useFileBrowser();
   const drag = useFileBrowserDrag();
+  const i18n = useI18n();
   const childFolders = createMemo(() => getFolderChildren(props.item));
   const hasChildren = createMemo(() => childFolders().length > 0);
   const isExpanded = createMemo(() => browser.isExpanded(props.item.path));
@@ -145,7 +147,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
           <button
             type="button"
             class="flex h-3.5 w-3.5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground transition-transform duration-150 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring focus-visible:ring-inset"
-            aria-label={isExpanded() ? 'Collapse folder' : 'Expand folder'}
+            aria-label={isExpanded() ? i18n.t('files.collapseFolder') : i18n.t('files.expandFolder')}
             aria-expanded={isExpanded()}
             onClick={handleToggleExpand}
           >
@@ -201,6 +203,7 @@ function FileBrowserSidebarTreeRow(props: FileBrowserSidebarTreeRowProps) {
 
 export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
   const browser = useFileBrowser();
+  const i18n = useI18n();
   const rootFolders = createMemo(() => browser.files().filter((item) => item.type === 'folder'));
   const folderIndex = createMemo(() => buildFolderIndex(browser.files()));
   const activeRoot = createMemo(() => matchFilesystemRoot(props.currentPath || browser.currentPath(), props.roots ?? []));
@@ -252,8 +255,10 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
   const canToggleRootWrite = (root: NormalizedFilesystemRoot) => root.kind === 'computer' || root.kind === 'custom';
 
   const rootWriteToggleTitle = (root: NormalizedFilesystemRoot) => {
-    if (!canToggleRootWrite(root)) return 'Home write access is managed by Runtime Settings.';
-    return root.permissions.write ? `Switch ${root.label} to read-only` : `Allow writes for ${root.label}`;
+    if (!canToggleRootWrite(root)) return i18n.t('files.rootWriteManaged');
+    return root.permissions.write
+      ? i18n.t('files.switchRootReadOnly', { label: root.label })
+      : i18n.t('files.allowWritesForRoot', { label: root.label });
   };
 
   const applyRootWritePermission = async (root: NormalizedFilesystemRoot, write: boolean) => {
@@ -295,7 +300,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
       <div class={cn('flex min-h-full flex-col', props.class)}>
         <Show when={(props.roots?.length ?? 0) > 0}>
           <div class="mb-1 flex flex-col border-b border-sidebar-border/70 pb-1">
-            <div class="px-0.5 pb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">Roots</div>
+            <div class="px-0.5 pb-1 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">{i18n.t('files.roots')}</div>
             <For each={props.roots}>
               {(root) => {
                 const isActive = createMemo(() => activeRoot()?.id === root.id);
@@ -334,9 +339,9 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                               ? 'border-primary/35 bg-primary/[0.16] text-primary shadow-primary/10'
                               : 'border-border/50 bg-muted/60 text-muted-foreground',
                           )}
-                          title={`${root.label} is ${root.permissions.write ? 'read-write' : 'read-only'}`}
+                          title={i18n.t('files.rootAccessTitle', { label: root.label, mode: root.permissions.write ? i18n.t('files.readWriteAccess') : i18n.t('files.readOnlyAccess') })}
                         >
-                          {root.permissions.write ? 'RW' : 'RO'}
+                          {root.permissions.write ? i18n.t('files.readWriteBadge') : i18n.t('files.readOnlyBadge')}
                         </span>
                       )}
                     >
@@ -346,7 +351,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                           'grid h-5 shrink-0 grid-cols-2 overflow-hidden rounded-md border border-border/60 bg-muted/60 p-0.5 text-[8px] font-semibold leading-4 shadow-inner shadow-black/10',
                           saving() && 'opacity-70',
                         )}
-                        aria-label={`${root.label} filesystem access: ${root.permissions.write ? 'read-write' : 'read-only'}`}
+                        aria-label={i18n.t('files.rootAccessGroup', { label: root.label, mode: root.permissions.write ? i18n.t('files.readWriteAccess') : i18n.t('files.readOnlyAccess') })}
                         role="group"
                         title={rootWriteToggleTitle(root)}
                       >
@@ -359,12 +364,12 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                               : 'cursor-pointer text-muted-foreground/65 hover:bg-background/80 hover:text-foreground',
                             saving() && 'cursor-default',
                           )}
-                          aria-label={`Set ${root.label} to read-only`}
+                          aria-label={i18n.t('files.setRootReadOnly', { label: root.label })}
                           aria-pressed={!root.permissions.write}
                           disabled={saving()}
                           onClick={(event) => requestRootWriteToggle(event, root, false)}
                         >
-                          {saving() ? '...' : 'RO'}
+                          {saving() ? '...' : i18n.t('files.readOnlyBadge')}
                         </button>
                         <button
                           type="button"
@@ -375,12 +380,12 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                               : 'cursor-pointer text-muted-foreground/65 hover:bg-background/80 hover:text-primary',
                             saving() && 'cursor-default',
                           )}
-                          aria-label={`Set ${root.label} to read-write`}
+                          aria-label={i18n.t('files.setRootReadWrite', { label: root.label })}
                           aria-pressed={root.permissions.write}
                           disabled={saving()}
                           onClick={(event) => requestRootWriteToggle(event, root, true)}
                         >
-                          {saving() ? '...' : 'RW'}
+                          {saving() ? '...' : i18n.t('files.readWriteBadge')}
                         </button>
                       </div>
                     </Show>
@@ -392,7 +397,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
         </Show>
         <Show
           when={rootFolders().length > 0}
-          fallback={<div class="px-0.5 py-1.5 text-[11px] text-muted-foreground">No folders in this location.</div>}
+          fallback={<div class="px-0.5 py-1.5 text-[11px] text-muted-foreground">{i18n.t('files.noFolders')}</div>}
         >
           <div class="flex flex-col pb-0.5">
             <For each={rootFolders()}>
@@ -415,8 +420,8 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
         onOpenChange={(open) => {
           if (!open) setConfirmTarget(null);
         }}
-        title={confirmTarget()?.kind === 'computer' ? 'Enable write access for Computer?' : 'Allow filesystem writes?'}
-        confirmText={confirmTarget()?.kind === 'computer' ? 'Enable RW' : 'Allow writes'}
+        title={confirmTarget()?.kind === 'computer' ? i18n.t('files.enableComputerWriteTitle') : i18n.t('files.allowFilesystemWritesTitle')}
+        confirmText={confirmTarget()?.kind === 'computer' ? i18n.t('files.enableRW') : i18n.t('files.allowWrites')}
         variant="destructive"
         loading={Boolean(confirmTarget() && permissionSavingRootID() === confirmTarget()?.id)}
         onConfirm={() => void confirmRootWriteAccess()}
@@ -424,19 +429,19 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
         <div class="space-y-3">
           <Show
             when={confirmTarget()?.kind === 'computer'}
-            fallback={<p class="text-sm">This root will allow create, rename, overwrite, and delete operations from Redeven file capabilities.</p>}
+            fallback={<p class="text-sm">{i18n.t('files.rootWriteGenericDescription')}</p>}
           >
-            <p class="text-sm">Redeven will be allowed to create, rename, delete, and overwrite files anywhere under / that your OS user can write.</p>
-            <p class="text-xs text-muted-foreground">System permission prompts and OS restrictions still apply.</p>
+            <p class="text-sm">{i18n.t('files.rootWriteComputerDescription')}</p>
+            <p class="text-xs text-muted-foreground">{i18n.t('files.systemPermissionPrompts')}</p>
           </Show>
           <p class="break-all text-xs text-muted-foreground">
-            Root: {confirmTarget()?.label || confirmTarget()?.id || 'Filesystem Root'}
+            {i18n.t('files.rootLabel')}: {confirmTarget()?.label || confirmTarget()?.id || i18n.t('files.filesystemRootFallback')}
           </p>
           <p class="break-all text-xs text-muted-foreground">
-            Path: <span class="font-mono">{confirmTarget()?.pathAbs || '-'}</span>
+            {i18n.t('files.pathLabel')}: <span class="font-mono">{confirmTarget()?.pathAbs || '-'}</span>
           </p>
           <p class="text-xs text-muted-foreground">
-            The effective permission still intersects with the runtime permission policy, session capability, and OS-level filesystem permissions.
+            {i18n.t('files.permissionIntersection')}
           </p>
         </div>
       </ConfirmDialog>

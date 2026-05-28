@@ -3,24 +3,24 @@ import { Code, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, HighlightBlock } from '@floegence/floe-webapp-core/ui';
 
 import {
-  codeRuntimeManagedActionLabel,
   codeRuntimeOperationCancelled,
   codeRuntimeOperationFailed,
   codeRuntimeOperationNeedsAttention,
   codeRuntimeOperationRunning,
   codeRuntimePrepareCopy,
   codeRuntimeReady,
-  codeRuntimeStageLabel,
   type CodeRuntimeInstalledVersion,
   type CodeRuntimeStatus,
 } from '../../services/codeRuntimeApi';
 import {
   buildBrowserEditorSetupActivity,
   type BrowserEditorSetupLocalFailure,
+  type BrowserEditorSetupActivity,
 } from '../../services/browserEditorSetupActivity';
 import { Tooltip } from '../../primitives/Tooltip';
 import { BrowserEditorSetupActivityPanel } from '../BrowserEditorSetupActivityPanel';
 import { SettingsCard, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
+import { useI18n, type I18nHelpers } from '../../i18n';
 
 type RuntimeDetailRow = Readonly<{
   label: string;
@@ -29,16 +29,24 @@ type RuntimeDetailRow = Readonly<{
   mono?: boolean;
 }>;
 
-function runtimeSourceLabel(source: string | null | undefined): string {
+type LocalizedPrepareCopy = Readonly<{
+  actionLabel: string;
+  confirmTitle: string;
+  runningLabel: string;
+  tooltip: string;
+  description: string;
+}>;
+
+function runtimeSourceLabel(source: string | null | undefined, i18n: I18nHelpers): string {
   switch (String(source ?? '').trim()) {
     case 'managed':
-      return 'Managed runtime';
+      return i18n.t('codeRuntime.source.managed');
     case 'env_override':
-      return 'Environment override';
+      return i18n.t('codeRuntime.source.envOverride');
     case 'system':
-      return 'Host runtime discovery';
+      return i18n.t('codeRuntime.source.system');
     default:
-      return 'No active runtime';
+      return i18n.t('codeRuntime.source.none');
   }
 }
 
@@ -53,25 +61,213 @@ function runtimeStatusTone(state: string | null | undefined): 'default' | 'succe
   }
 }
 
-function runtimeStatusLabel(state: string | null | undefined): string {
+function runtimeStatusLabel(state: string | null | undefined, i18n: I18nHelpers): string {
   switch (String(state ?? '').trim()) {
     case 'ready':
-      return 'Ready';
+      return i18n.t('common.status.ready');
     case 'unusable':
-      return 'Needs attention';
+      return i18n.t('settings.autoSave.needsAttention');
     default:
-      return 'Unavailable';
+      return i18n.t('codeRuntime.unavailable');
   }
 }
 
-function operationLabel(status: CodeRuntimeStatus | null | undefined): string {
+function codeRuntimeStageLabelLocalized(stage: string | null | undefined, action: string | null | undefined, i18n: I18nHelpers): string {
+  const normalizedStage = String(stage ?? '').trim();
+  if (String(action ?? '').trim() === 'remove_local_environment_version') {
+    switch (normalizedStage) {
+      case 'preparing':
+        return i18n.t('codeRuntime.stage.removalPreparing');
+      case 'removing':
+        return i18n.t('codeRuntime.stage.removing');
+      case 'validating':
+        return i18n.t('codeRuntime.stage.removalValidating');
+      case 'finalizing':
+        return i18n.t('codeRuntime.stage.removalFinalizing');
+      default:
+        return i18n.t('codeRuntime.stage.removalDefault');
+    }
+  }
+
+  switch (normalizedStage) {
+    case 'preparing':
+      return i18n.t('codeRuntime.stage.preparing');
+    case 'receiving':
+      return i18n.t('codeRuntime.stage.receiving');
+    case 'verifying':
+      return i18n.t('codeRuntime.stage.verifying');
+    case 'installing':
+      return i18n.t('codeRuntime.stage.installing');
+    case 'validating':
+      return i18n.t('codeRuntime.stage.validating');
+    case 'finalizing':
+      return i18n.t('codeRuntime.stage.finalizing');
+    default:
+      return i18n.t('codeRuntime.stage.default');
+  }
+}
+
+function operationLabel(status: CodeRuntimeStatus | null | undefined, i18n: I18nHelpers): string {
   const operation = status?.operation;
-  if (!operation) return 'Idle';
-  if (operation.state === 'running') return codeRuntimeStageLabel(operation.stage, operation.action);
-  if (operation.state === 'failed') return operation.action === 'remove_local_environment_version' ? 'Version removal failed' : 'Browser Editor setup failed';
-  if (operation.state === 'cancelled') return operation.action === 'remove_local_environment_version' ? 'Version removal cancelled' : 'Browser Editor setup cancelled';
-  if (operation.state === 'succeeded') return operation.action === 'remove_local_environment_version' ? 'Version removed' : 'Browser Editor ready';
-  return 'Idle';
+  if (!operation) return i18n.t('codeRuntime.operation.idle');
+  if (operation.state === 'running') return codeRuntimeStageLabelLocalized(operation.stage, operation.action, i18n);
+  if (operation.state === 'failed') return operation.action === 'remove_local_environment_version' ? i18n.t('codeRuntime.operation.versionRemovalFailed') : i18n.t('codeRuntime.operation.setupFailed');
+  if (operation.state === 'cancelled') return operation.action === 'remove_local_environment_version' ? i18n.t('codeRuntime.operation.versionRemovalCancelled') : i18n.t('codeRuntime.operation.setupCancelled');
+  if (operation.state === 'succeeded') return operation.action === 'remove_local_environment_version' ? i18n.t('codeRuntime.operation.versionRemoved') : i18n.t('codeRuntime.operation.ready');
+  return i18n.t('codeRuntime.operation.idle');
+}
+
+function prepareCopyForI18n(intent: string, i18n: I18nHelpers): LocalizedPrepareCopy {
+  switch (intent) {
+    case 'retry':
+      return {
+        actionLabel: i18n.t('codeRuntime.prepare.retry.actionLabel'),
+        confirmTitle: i18n.t('codeRuntime.prepare.retry.confirmTitle'),
+        runningLabel: i18n.t('codeRuntime.prepare.retry.runningLabel'),
+        tooltip: i18n.t('codeRuntime.prepare.retry.tooltip'),
+        description: i18n.t('codeRuntime.prepare.description'),
+      };
+    case 'update':
+      return {
+        actionLabel: i18n.t('codeRuntime.prepare.update.actionLabel'),
+        confirmTitle: i18n.t('codeRuntime.prepare.update.confirmTitle'),
+        runningLabel: i18n.t('codeRuntime.prepare.update.runningLabel'),
+        tooltip: i18n.t('codeRuntime.prepare.update.tooltip'),
+        description: i18n.t('codeRuntime.prepare.description'),
+      };
+    case 'setup':
+    default:
+      return {
+        actionLabel: i18n.t('codeRuntime.prepare.setup.actionLabel'),
+        confirmTitle: i18n.t('codeRuntime.prepare.setup.confirmTitle'),
+        runningLabel: i18n.t('codeRuntime.prepare.setup.runningLabel'),
+        tooltip: i18n.t('codeRuntime.prepare.setup.tooltip'),
+        description: i18n.t('codeRuntime.prepare.description'),
+      };
+  }
+}
+
+function localizedActivityBadgeLabel(state: BrowserEditorSetupActivity['state'], i18n: I18nHelpers): string {
+  switch (state) {
+    case 'checking':
+      return i18n.t('common.status.checking');
+    case 'missing':
+      return i18n.t('codeRuntime.notReady');
+    case 'preparing':
+      return i18n.t('codeRuntime.preparing');
+    case 'ready':
+      return i18n.t('common.status.ready');
+    case 'failed':
+      return i18n.t('codeRuntime.setupFailed');
+    case 'cancelled':
+      return i18n.t('codeRuntime.cancelled');
+    case 'unusable':
+      return i18n.t('settings.autoSave.needsAttention');
+    case 'error':
+    default:
+      return i18n.t('common.status.failed');
+  }
+}
+
+function localizedActivityStepLabel(id: string, i18n: I18nHelpers): string {
+  switch (id) {
+    case 'lookup':
+      return i18n.t('codeRuntime.activity.steps.lookup');
+    case 'cache':
+      return i18n.t('codeRuntime.activity.steps.cache');
+    case 'upload':
+      return i18n.t('codeRuntime.activity.steps.upload');
+    case 'verify':
+      return i18n.t('codeRuntime.activity.steps.verify');
+    default:
+      return id;
+  }
+}
+
+function localizedLocalFailureSummary(failure: BrowserEditorSetupLocalFailure, i18n: I18nHelpers): string {
+  switch (failure.source) {
+    case 'desktop_release_lookup':
+      return i18n.t('codeRuntime.activity.failure.desktopReleaseLookup');
+    case 'desktop_package_cache':
+      return i18n.t('codeRuntime.activity.failure.desktopPackageCache');
+    case 'desktop_upload':
+      return i18n.t('codeRuntime.activity.failure.desktopUpload');
+    case 'runtime_import':
+      return i18n.t('codeRuntime.activity.failure.runtimeImport');
+    case 'runtime_status':
+      return i18n.t('codeRuntime.activity.failure.runtimeStatus');
+    case 'unknown':
+    default:
+      return i18n.t('codeRuntime.activity.failure.unknown');
+  }
+}
+
+function localizedLocalFailureDetail(failure: BrowserEditorSetupLocalFailure, i18n: I18nHelpers): string {
+  if (failure.source === 'desktop_release_lookup') {
+    return i18n.t('codeRuntime.activity.failure.desktopReleaseLookupDetail', { message: failure.message });
+  }
+  return failure.message;
+}
+
+function localizeBrowserEditorActivity(
+  activity: BrowserEditorSetupActivity,
+  args: Readonly<{
+    status: CodeRuntimeStatus | null | undefined;
+    loading: boolean;
+    localPending: boolean;
+    localFailure: BrowserEditorSetupLocalFailure | null | undefined;
+    prepareDescription: string;
+  }>,
+  i18n: I18nHelpers,
+): BrowserEditorSetupActivity {
+  const operation = args.status?.operation;
+  const setupOperation = String(operation?.action ?? '').trim() === 'prepare_workspace_engine';
+  const steps = activity.steps.map((step) => ({
+    ...step,
+    label: localizedActivityStepLabel(step.id, i18n),
+  }));
+  let summary = activity.summary;
+  let detail = activity.detail;
+  let pendingActionLabel = activity.pending_action_label;
+
+  if (args.localFailure) {
+    summary = localizedLocalFailureSummary(args.localFailure, i18n);
+    detail = localizedLocalFailureDetail(args.localFailure, i18n);
+  } else if (setupOperation && operation?.state === 'running') {
+    summary = codeRuntimeStageLabelLocalized(operation.stage, operation.action, i18n);
+    detail = i18n.t('codeRuntime.activity.explicitRequestDetail');
+  } else if (setupOperation && operation?.state === 'failed') {
+    summary = operation.last_error || i18n.t('codeRuntime.activity.failure.unknown');
+  } else if (setupOperation && operation?.state === 'cancelled') {
+    summary = i18n.t('codeRuntime.activity.cancelledSummary');
+  } else if (args.localPending) {
+    summary = i18n.t('codeRuntime.activity.desktopPreparing');
+    detail = i18n.t('codeRuntime.activity.explicitRequestDetail');
+  } else if (args.status?.active_runtime.detection_state === 'ready') {
+    summary = i18n.t('codeRuntime.activity.readyWithPath', { path: args.status?.active_runtime.binary_path ?? '-' });
+  } else if (args.loading) {
+    summary = i18n.t('codeRuntime.activity.checkingReadiness');
+  } else if (args.status?.active_runtime.detection_state === 'unusable') {
+    summary = args.status.active_runtime.error_message || i18n.t('codeRuntime.activity.unusableSummary');
+  } else if (activity.state === 'missing') {
+    summary = args.prepareDescription;
+  }
+
+  if (pendingActionLabel === 'Continue to open codespace') {
+    pendingActionLabel = i18n.t('codeRuntime.activity.continueToOpenCodespace');
+  } else if (pendingActionLabel === 'Continue to start codespace') {
+    pendingActionLabel = i18n.t('codeRuntime.activity.continueToStartCodespace');
+  }
+
+  return {
+    ...activity,
+    title: i18n.t('codeRuntime.title') as BrowserEditorSetupActivity['title'],
+    badge_label: localizedActivityBadgeLabel(activity.state, i18n),
+    summary,
+    ...(detail ? { detail } : {}),
+    steps,
+    ...(pendingActionLabel ? { pending_action_label: pendingActionLabel } : {}),
+  };
 }
 
 function RuntimeDetailsTableSection(props: { title: string; rows: readonly RuntimeDetailRow[] }) {
@@ -101,6 +297,7 @@ function VersionRow(props: {
   onUse: (version: string) => void;
   onRemove: (version: string) => void;
 }) {
+  const i18n = useI18n();
   const detectionTone = () => runtimeStatusTone(props.version.detection_state);
 
   return (
@@ -109,14 +306,14 @@ function VersionRow(props: {
         <div class="space-y-2">
           <div class="flex flex-wrap items-center gap-2">
             <div class="text-sm font-semibold text-foreground">{props.version.version}</div>
-            <SettingsPill tone={detectionTone()}>{runtimeStatusLabel(props.version.detection_state)}</SettingsPill>
+            <SettingsPill tone={detectionTone()}>{runtimeStatusLabel(props.version.detection_state, i18n)}</SettingsPill>
             <Show when={props.version.selected_by_local_environment}>
-              <SettingsPill tone="success">Current editor</SettingsPill>
+              <SettingsPill tone="success">{i18n.t('codeRuntime.currentEditor')}</SettingsPill>
             </Show>
           </div>
           <div class="grid gap-1 text-[11px] text-muted-foreground">
             <div>
-              Binary path: <span class="font-mono text-foreground break-all">{props.version.binary_path || '-'}</span>
+              {i18n.t('codeRuntime.binaryPath')}: <span class="font-mono text-foreground break-all">{props.version.binary_path || '-'}</span>
             </div>
             <Show when={props.version.error_message}>
               <div class="text-destructive">{props.version.error_message}</div>
@@ -131,7 +328,7 @@ function VersionRow(props: {
             onClick={() => props.onUse(props.version.version)}
             disabled={!props.canInteract || !props.canManage || props.busy || props.version.selected_by_local_environment}
           >
-            Use this version
+            {i18n.t('codeRuntime.useThisVersion')}
           </Button>
           <Button
             size="sm"
@@ -139,7 +336,7 @@ function VersionRow(props: {
             onClick={() => props.onRemove(props.version.version)}
             disabled={!props.canInteract || !props.canManage || props.busy || !props.version.removable}
           >
-            Remove version
+            {i18n.t('codeRuntime.removeVersionAction')}
           </Button>
         </div>
       </div>
@@ -166,6 +363,7 @@ export interface CodeRuntimeSettingsCardProps {
 }
 
 export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
+  const i18n = useI18n();
   const [prepareConfirmOpen, setPrepareConfirmOpen] = createSignal(false);
   const [removeVersionConfirmOpen, setRemoveVersionConfirmOpen] = createSignal<string | null>(null);
 
@@ -177,78 +375,89 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const installedVersions = createMemo(() => props.status?.installed_versions ?? []);
   const activeRuntime = createMemo(() => props.status?.active_runtime);
   const prepareCopy = createMemo(() => codeRuntimePrepareCopy(props.status));
-  const setupActivity = createMemo(() => buildBrowserEditorSetupActivity({
-    status: props.status,
-    localPending: props.actionLoading && !operationRunning(),
-    localFailure: props.localPrepareFailure,
-  }));
+  const localizedPrepareCopy = createMemo(() => prepareCopyForI18n(prepareCopy().intent, i18n));
+  const localPending = createMemo(() => props.actionLoading && !operationRunning());
+  const setupActivity = createMemo(() => {
+    const activity = buildBrowserEditorSetupActivity({
+      status: props.status,
+      localPending: localPending(),
+      localFailure: props.localPrepareFailure,
+    });
+    return localizeBrowserEditorActivity(activity, {
+      status: props.status,
+      loading: props.loading,
+      localPending: localPending(),
+      localFailure: props.localPrepareFailure,
+      prepareDescription: localizedPrepareCopy().description,
+    }, i18n);
+  });
   const prepareOperationActive = createMemo(() => String(props.status?.operation.action ?? '').trim() === 'prepare_workspace_engine');
   const showSetupActivity = createMemo(() => Boolean(props.localPrepareFailure) || props.actionLoading || (prepareOperationActive() && (operationRunning() || operationNeedsAttention())));
   const showRemovalOperation = createMemo(() => !prepareOperationActive() && (operationRunning() || operationNeedsAttention()));
   const operationLogTail = createMemo(() => props.status?.operation.log_tail ?? []);
-  const refreshActionLabel = () => 'Refresh';
-  const refreshActionTooltip = () => 'Re-scan the Browser Editor inventory and active runtime.';
-  const prepareActionLabel = () => codeRuntimeManagedActionLabel(props.status);
-  const prepareActionTooltip = () => prepareCopy().intent === 'update' ? 'Update the Browser Editor runtime.' : prepareCopy().tooltip;
-  const cancelActionLabel = () => 'Cancel';
-  const cancelActionTooltip = () => 'Cancel the current Browser Editor setup.';
+  const refreshActionLabel = () => i18n.t('common.actions.refresh');
+  const refreshActionTooltip = () => i18n.t('codeRuntime.refreshTooltip');
+  const prepareActionLabel = () => localizedPrepareCopy().actionLabel;
+  const prepareActionTooltip = () => localizedPrepareCopy().tooltip;
+  const cancelActionLabel = () => i18n.t('common.actions.cancel');
+  const cancelActionTooltip = () => i18n.t('codeRuntime.cancelTooltip');
 
   const currentRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
     const active = activeRuntime();
     return [
       {
-        label: 'Managed editor source',
-        value: props.status?.managed_runtime_source === 'managed' ? 'Selected managed version' : 'No managed version selected',
+        label: i18n.t('codeRuntime.rows.managedEditorSource'),
+        value: props.status?.managed_runtime_source === 'managed' ? i18n.t('codeRuntime.selectedManagedVersion') : i18n.t('codeRuntime.noManagedVersionSelected'),
         note:
           props.status?.managed_runtime_source === 'managed'
-            ? 'Codespaces uses the selected managed Browser Editor version.'
-            : 'Set up or select a managed Browser Editor version.',
+            ? i18n.t('codeRuntime.notes.codespacesUsesSelectedManagedVersion')
+            : i18n.t('codeRuntime.notes.setupOrSelectManagedVersion'),
       },
       {
-        label: 'Selected version',
-        value: props.status?.managed_runtime_version || 'None',
+        label: i18n.t('codeRuntime.rows.selectedVersion'),
+        value: props.status?.managed_runtime_version || i18n.t('codeRuntime.none'),
         note:
           props.status?.managed_runtime_version
-            ? 'Managed Browser Editor version currently selected.'
-            : 'A value appears here after setup selects a managed version.',
+            ? i18n.t('codeRuntime.notes.managedVersionSelected')
+            : i18n.t('codeRuntime.notes.valueAppearsAfterSetup'),
       },
       {
-        label: 'Active runtime',
+        label: i18n.t('codeRuntime.rows.activeRuntime'),
         value: (
           <SettingsPill tone={runtimeStatusTone(active?.detection_state)}>
-            {runtimeStatusLabel(active?.detection_state)}
+            {runtimeStatusLabel(active?.detection_state, i18n)}
           </SettingsPill>
         ),
-        note: active?.error_message || `Codespaces is currently using ${runtimeSourceLabel(active?.source).toLowerCase()}.`,
+        note: active?.error_message || i18n.t('codeRuntime.notes.codespacesUsingRuntimeSource', { source: runtimeSourceLabel(active?.source, i18n).toLowerCase() }),
       },
       {
-        label: 'Active source',
-        value: runtimeSourceLabel(active?.source),
+        label: i18n.t('codeRuntime.rows.activeSource'),
+        value: runtimeSourceLabel(active?.source, i18n),
         note:
           active?.source === 'env_override'
-            ? 'An environment override currently takes precedence over managed and host discovery.'
+            ? i18n.t('codeRuntime.notes.envOverrideActive')
             : active?.source === 'system'
-              ? 'Host discovery is active because no managed runtime is selected.'
+              ? i18n.t('codeRuntime.notes.hostDiscoveryActive')
               : active?.source === 'managed'
-                ? 'A managed Browser Editor runtime is currently active.'
-                : 'No active Browser Editor runtime is currently available.',
+                ? i18n.t('codeRuntime.notes.managedRuntimeActive')
+                : i18n.t('codeRuntime.notes.noActiveRuntime'),
       },
       {
-        label: 'Active editor path',
-        value: active?.binary_path || 'Not detected',
-        note: 'Executable path used when Codespaces launches.',
+        label: i18n.t('codeRuntime.rows.activeEditorPath'),
+        value: active?.binary_path || i18n.t('codeRuntime.notDetected'),
+        note: i18n.t('codeRuntime.notes.executablePathUsed'),
         mono: true,
       },
       {
-        label: 'Selected editor path',
+        label: i18n.t('codeRuntime.rows.selectedEditorPath'),
         value: props.status?.managed_prefix || '-',
-        note: 'This path points at the selected managed Browser Editor version.',
+        note: i18n.t('codeRuntime.notes.selectedManagedPath'),
         mono: true,
       },
       {
-        label: 'Shared runtime root',
+        label: i18n.t('codeRuntime.rows.sharedRuntimeRoot'),
         value: props.status?.shared_runtime_root || '-',
-        note: 'Browser Editor versions are stored here once per host.',
+        note: i18n.t('codeRuntime.notes.sharedRuntimeRoot'),
         mono: true,
       },
     ];
@@ -256,21 +465,21 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
 
   const localEnvironmentRows = createMemo<readonly RuntimeDetailRow[]>(() => [
     {
-      label: 'Installed versions',
+      label: i18n.t('codeRuntime.rows.installedVersions'),
       value: String(installedVersions().length),
-      note: installedVersions().length > 0 ? 'Browser Editor versions currently available.' : 'No Browser Editor versions are currently available.',
+      note: installedVersions().length > 0 ? i18n.t('codeRuntime.notes.installedVersionsAvailable') : i18n.t('codeRuntime.notes.noInstalledVersionsAvailable'),
     },
   ]);
 
   const removalOperationSummary = createMemo(() => {
     if (operationRunning()) {
-      return 'Redeven is removing one managed Browser Editor version after your explicit request.';
+      return i18n.t('codeRuntime.removal.runningSummary');
     }
     if (operationFailed()) {
-      return 'The last Browser Editor version removal did not finish successfully. Review the recent output below before retrying.';
+      return i18n.t('codeRuntime.removal.failedSummary');
     }
     if (operationCancelled()) {
-      return 'The last Browser Editor version removal was cancelled before Redeven finished validating the result.';
+      return i18n.t('codeRuntime.removal.cancelledSummary');
     }
     return '';
   });
@@ -293,9 +502,9 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     <>
       <SettingsCard
         icon={Code}
-        title="Browser Editor"
-        description="Manage the browser-based editor used by Codespaces."
-        badge={operationRunning() ? operationLabel(props.status) : runtimeReady() ? 'Ready' : 'Needs setup'}
+        title={i18n.t('codeRuntime.title')}
+        description={i18n.t('codeRuntime.description')}
+        badge={operationRunning() ? operationLabel(props.status, i18n) : runtimeReady() ? i18n.t('common.status.ready') : i18n.t('codeRuntime.needsSetup')}
         badgeVariant={operationRunning() ? 'warning' : runtimeReady() ? 'success' : 'warning'}
         error={props.error}
         actions={
@@ -303,7 +512,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             <ActionButtonTooltip content={refreshActionTooltip()} disabled={props.loading}>
               <Button size="sm" variant="outline" onClick={props.onRefresh} disabled={props.loading}>
                 <RefreshIcon class="mr-2 h-4 w-4" />
-                {props.loading ? 'Refreshing...' : refreshActionLabel()}
+                {props.loading ? i18n.t('codeRuntime.refreshing') : refreshActionLabel()}
               </Button>
             </ActionButtonTooltip>
             <Show
@@ -320,7 +529,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                       onClick={() => setPrepareConfirmOpen(true)}
                       disabled={!props.canInteract || !props.canManage || props.actionLoading}
                     >
-                      {props.actionLoading ? prepareCopy().running_label : prepareActionLabel()}
+                      {props.actionLoading ? localizedPrepareCopy().runningLabel : prepareActionLabel()}
                     </Button>
                   </ActionButtonTooltip>
                 </>
@@ -330,8 +539,8 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                 content={cancelActionTooltip()}
                 disabled={!props.canInteract || !props.canManage || props.cancelLoading}
               >
-                <Button size="sm" variant="outline" onClick={() => void props.onCancel()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
-                  {props.cancelLoading ? 'Cancelling...' : cancelActionLabel()}
+              <Button size="sm" variant="outline" onClick={() => void props.onCancel()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
+                  {props.cancelLoading ? i18n.t('codeRuntime.cancelling') : cancelActionLabel()}
                 </Button>
               </ActionButtonTooltip>
             </Show>
@@ -341,7 +550,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         <div class="space-y-4">
           <Show when={!props.canManage}>
             <div class="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-              Setting up, selecting, or removing Browser Editor versions requires read, write, and execute access for this session.
+              {i18n.t('codeRuntime.manageRequiresRwx')}
             </div>
           </Show>
 
@@ -351,18 +560,18 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
               loading={props.loading}
               prepareSubmitting={props.actionLoading}
               cancelSubmitting={props.cancelLoading}
-              actionLabel={setupActivity().can_retry ? 'Retry setup' : prepareActionLabel()}
-              runningLabel={prepareCopy().running_label}
+              actionLabel={setupActivity().can_retry ? i18n.t('codeRuntime.prepare.retry.actionLabel') : prepareActionLabel()}
+              runningLabel={localizedPrepareCopy().runningLabel}
               onPrepare={props.canInteract && props.canManage ? () => void props.onPrepare() : undefined}
               onRefresh={props.onRefresh}
               onCancel={props.canInteract && props.canManage ? () => void props.onCancel() : undefined}
               extraDetails={setupActivity().state === 'missing' || setupActivity().state === 'checking' ? undefined : (
                 <div class="grid gap-2 rounded-md border border-border bg-background/70 p-3 text-[11px] leading-5 text-muted-foreground">
                   <Show when={props.status?.operation.target_version}>
-                    <div>Target version: <span class="font-mono text-foreground">{props.status?.operation.target_version}</span></div>
+                    <div>{i18n.t('codeRuntime.targetVersion')}: <span class="font-mono text-foreground">{props.status?.operation.target_version}</span></div>
                   </Show>
-                  <div>Shared editor root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
-                  <div>Selected editor path: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
+                  <div>{i18n.t('codeRuntime.sharedEditorRoot')}: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
+                  <div>{i18n.t('codeRuntime.selectedEditorPath')}: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
                 </div>
               )}
             />
@@ -371,15 +580,15 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           <Show when={showRemovalOperation()}>
             <div class="rounded-lg border border-border bg-muted/20 p-4">
               <div class="flex flex-wrap items-center gap-2">
-                <div class="text-sm font-semibold text-foreground">Recent runtime operation</div>
+                <div class="text-sm font-semibold text-foreground">{i18n.t('codeRuntime.recentRuntimeOperation')}</div>
                 <SettingsPill tone={operationRunning() ? 'warning' : operationFailed() ? 'warning' : operationCancelled() ? 'warning' : 'success'}>
-                  {operationLabel(props.status)}
+                  {operationLabel(props.status, i18n)}
                 </SettingsPill>
               </div>
               <div class="mt-2 text-sm text-muted-foreground">{removalOperationSummary()}</div>
               <Show when={props.status?.operation.target_version}>
                 <div class="mt-2 text-xs text-muted-foreground">
-                  Target version: <span class="font-mono text-foreground">{props.status?.operation.target_version}</span>
+                  {i18n.t('codeRuntime.targetVersion')}: <span class="font-mono text-foreground">{props.status?.operation.target_version}</span>
                 </div>
               </Show>
               <Show when={props.status?.operation.last_error}>
@@ -388,27 +597,27 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                 </div>
               </Show>
               <pre class="mt-3 max-h-52 overflow-auto rounded-md border border-border bg-background/80 p-3 text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words">
-                {operationLogTail().length > 0 ? operationLogTail().join('\n') : 'No runtime output yet.'}
+                {operationLogTail().length > 0 ? operationLogTail().join('\n') : i18n.t('codeRuntime.noRuntimeOutput')}
               </pre>
             </div>
           </Show>
 
-          <RuntimeDetailsTableSection title="Current editor" rows={currentRuntimeRows()} />
-          <RuntimeDetailsTableSection title="Installed editor versions" rows={localEnvironmentRows()} />
+          <RuntimeDetailsTableSection title={i18n.t('codeRuntime.currentEditorSection')} rows={currentRuntimeRows()} />
+          <RuntimeDetailsTableSection title={i18n.t('codeRuntime.installedEditorVersionsSection')} rows={localEnvironmentRows()} />
 
           <Show
             when={installedVersions().length > 0}
             fallback={
-              <HighlightBlock variant="warning" title="Browser Editor setup required">
+              <HighlightBlock variant="warning" title={i18n.t('codeRuntime.setupRequiredTitle')}>
                 <div class="space-y-2 text-sm text-muted-foreground">
-                  <div>Set up the browser editor before opening codespaces.</div>
-                  <div>Desktop will download the editor to this computer and send it only after you confirm.</div>
+                  <div>{i18n.t('codeRuntime.setupRequiredDescription')}</div>
+                  <div>{i18n.t('codeRuntime.setupRequiresConfirmation')}</div>
                 </div>
               </HighlightBlock>
             }
           >
             <div class="space-y-3">
-              <div class="text-sm font-semibold text-foreground">Installed editor versions</div>
+              <div class="text-sm font-semibold text-foreground">{i18n.t('codeRuntime.installedEditorVersionsSection')}</div>
               <For each={installedVersions()}>
                 {(version) => (
                   <VersionRow
@@ -429,7 +638,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       <ConfirmDialog
         open={prepareConfirmOpen()}
         onOpenChange={(open) => setPrepareConfirmOpen(open)}
-        title={prepareCopy().confirm_title}
+        title={localizedPrepareCopy().confirmTitle}
         confirmText={prepareActionLabel()}
         loading={props.actionLoading}
         onConfirm={() => void confirmPrepare()}
@@ -437,13 +646,13 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         <div class="space-y-3">
           <p class="text-sm">
             {prepareCopy().intent === 'update'
-              ? 'Redeven Desktop will update the Browser Editor by downloading the latest editor to this computer and sending it to the connected environment.'
-              : prepareCopy().description}
+              ? i18n.t('codeRuntime.confirm.updateDescription')
+              : localizedPrepareCopy().description}
           </p>
-          <p class="text-sm text-muted-foreground">Workspace files stay in that environment. Setup starts only after you confirm.</p>
+          <p class="text-sm text-muted-foreground">{i18n.t('codeRuntime.confirm.workspaceFilesStay')}</p>
           <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
-            <div>Shared engine root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
-            <div>Selected editor path: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
+            <div>{i18n.t('codeRuntime.sharedEngineRoot')}: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
+            <div>{i18n.t('codeRuntime.selectedEditorPath')}: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
           </div>
         </div>
       </ConfirmDialog>
@@ -451,18 +660,18 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       <ConfirmDialog
         open={Boolean(removeVersionConfirmOpen())}
         onOpenChange={(open) => setRemoveVersionConfirmOpen(open ? removeVersionConfirmOpen() : null)}
-        title="Remove editor version"
-        confirmText="Remove version"
+        title={i18n.t('codeRuntime.removeDialogTitle')}
+        confirmText={i18n.t('codeRuntime.removeVersionAction')}
         loading={Boolean(props.removeVersionLoading)}
         onConfirm={() => void confirmRemoveVersion()}
       >
         <div class="space-y-3">
-          <p class="text-sm">This removes one managed Browser Editor version only when it is not the current selection.</p>
+          <p class="text-sm">{i18n.t('codeRuntime.removeDialogDescription')}</p>
           <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
-            <div>Target version: <span class="font-mono text-foreground">{removeVersionConfirmOpen() || '-'}</span></div>
-            <div>Shared runtime root: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
+            <div>{i18n.t('codeRuntime.targetVersion')}: <span class="font-mono text-foreground">{removeVersionConfirmOpen() || '-'}</span></div>
+            <div>{i18n.t('codeRuntime.sharedRuntimeRoot')}: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
           </div>
-          <p class="text-xs text-muted-foreground">This does not delete any workspace files. Redeven blocks the action when the selected version is still active.</p>
+          <p class="text-xs text-muted-foreground">{i18n.t('codeRuntime.removeDialogSafeNote')}</p>
         </div>
       </ConfirmDialog>
     </>

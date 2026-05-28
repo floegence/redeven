@@ -1,26 +1,37 @@
 import type { DesktopSettingsDraft } from './settingsIPC';
+import type { DesktopTranslationKey } from './i18n/desktopI18n';
 
 export type DesktopPageMode = 'environment_settings';
 export type DesktopAccessMode = 'local_only' | 'shared_local_network' | 'custom_exposure';
 export type DesktopSettingsSummaryTone = 'default' | 'warning' | 'success' | 'primary';
+export type DesktopPasswordStateID =
+  | 'not_required'
+  | 'configured'
+  | 'set_on_save'
+  | 'replace_on_save'
+  | 'clear_on_save'
+  | 'required'
+  | 'optional';
+export type DesktopNextStartAddressKind = 'raw' | 'auto_loopback' | 'lan_ip_port';
 
 export interface DesktopSettingsSummaryItem {
   id: 'visibility' | 'next_start_address' | 'password_state';
-  label: string;
+  label_key: DesktopTranslationKey;
+  value_key?: DesktopTranslationKey;
   value: string;
-  detail?: string;
+  detail_key?: DesktopTranslationKey;
   tone?: DesktopSettingsSummaryTone;
 }
 
 export interface DesktopPageFieldModel {
   id: string;
   name: keyof DesktopSettingsDraft;
-  label: string;
+  label_key: DesktopTranslationKey;
   type?: 'text' | 'password' | 'url';
   autocomplete?: string;
   inputMode?: 'url';
-  placeholder?: string;
-  helpHTML?: string;
+  placeholder_key?: DesktopTranslationKey;
+  help_key?: DesktopTranslationKey;
   helpId?: string;
   describedBy?: readonly string[];
   hidden?: boolean;
@@ -28,8 +39,8 @@ export interface DesktopPageFieldModel {
 
 export interface DesktopAccessModeOption {
   value: DesktopAccessMode;
-  label: string;
-  description: string;
+  label_key: DesktopTranslationKey;
+  description_key: DesktopTranslationKey;
 }
 
 export type DesktopSettingsSurfaceSnapshot = Readonly<{
@@ -37,14 +48,15 @@ export type DesktopSettingsSurfaceSnapshot = Readonly<{
   environment_id: string;
   environment_label: string;
   environment_kind: 'local' | 'controlplane';
-  window_title: string;
-  save_label: string;
+  window_title_key: DesktopTranslationKey;
+  save_label_key: DesktopTranslationKey;
   access_mode: DesktopAccessMode;
-  access_mode_label: string;
+  access_mode_label_key: DesktopTranslationKey;
   access_mode_options: readonly DesktopAccessModeOption[];
   next_start_address_display: string;
+  next_start_address_kind: DesktopNextStartAddressKind;
   current_runtime_url: string;
-  password_state_label: string;
+  password_state_id: DesktopPasswordStateID;
   password_state_tone: 'default' | 'warning' | 'success';
   local_ui_password_configured: boolean;
   runtime_password_required: boolean;

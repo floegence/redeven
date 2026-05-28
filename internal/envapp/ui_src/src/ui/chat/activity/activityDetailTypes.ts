@@ -1,16 +1,34 @@
+import type { TranslationParams } from '../../i18n/dictionaryTypes';
+import type { EnvAppTranslationKey } from '../../i18n/locales';
+
 export type ActivityDetailStatus = 'pending' | 'running' | 'success' | 'error' | 'waiting' | 'info';
 
 export type ActivityDetailTone = 'neutral' | 'success' | 'warning' | 'danger' | 'accent';
 
+export interface ActivityDetailLocalizedText {
+  label?: string;
+  labelKey?: EnvAppTranslationKey;
+  labelParams?: TranslationParams;
+  labelCount?: number;
+}
+
 export interface ActivityDetailChip {
-  label: string;
+  label?: string;
+  labelKey?: EnvAppTranslationKey;
+  labelParams?: TranslationParams;
+  labelCount?: number;
   value?: string;
+  valueKey?: EnvAppTranslationKey;
+  valueParams?: TranslationParams;
+  valueCount?: number;
   tone?: ActivityDetailTone;
 }
 
 export interface ActivityDetailPresentation {
   detailId: string;
-  title: string;
+  title?: string;
+  titleKey?: EnvAppTranslationKey;
+  titleParams?: TranslationParams;
   subtitle?: string;
   status: ActivityDetailStatus;
   toolName?: string;
@@ -45,10 +63,12 @@ export interface TerminalDetailSection {
 
 export interface TodoDetailSection {
   kind: 'todo_delta';
-  title: string;
+  title?: string;
+  titleKey?: EnvAppTranslationKey;
   items: Array<{
     id?: string;
-    content: string;
+    content?: string;
+    contentKey?: EnvAppTranslationKey;
     beforeStatus?: TodoDetailStatus;
     afterStatus: TodoDetailStatus;
     note?: string;
@@ -81,7 +101,8 @@ export interface WebDetailSection {
   kind: 'web_results';
   query?: string;
   sources: Array<{
-    title: string;
+    title?: string;
+    titleKey?: EnvAppTranslationKey;
     url?: string;
     snippet?: string;
   }>;
@@ -97,12 +118,18 @@ export interface ErrorDetailSection {
 
 export interface StructuredFieldsSection {
   kind: 'structured_fields';
-  title: string;
+  title?: string;
+  titleKey?: EnvAppTranslationKey;
   groups: Array<{
-    title: string;
+    title?: string;
+    titleKey?: EnvAppTranslationKey;
     fields: Array<{
-      label: string;
-      value: string;
+      label?: string;
+      labelKey?: EnvAppTranslationKey;
+      value?: string;
+      valueKey?: EnvAppTranslationKey;
+      valueParams?: TranslationParams;
+      valueCount?: number;
       tone?: ActivityDetailTone;
       secret?: boolean;
     }>;
@@ -111,7 +138,9 @@ export interface StructuredFieldsSection {
 
 export interface ActivityDetailCopyTarget {
   id: string;
-  label: string;
+  label?: string;
+  labelKey?: EnvAppTranslationKey;
+  labelParams?: TranslationParams;
   text: string;
 }
 

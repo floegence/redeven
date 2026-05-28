@@ -6,6 +6,7 @@ import {
   resolveFileBrowserFABContainerRef,
   type FileBrowserFABContainerRef,
 } from '../widgets/createFileBrowserFABModel';
+import { useI18n } from '../i18n';
 
 export interface CodexFileBrowserFABProps {
   workingDir: string;
@@ -14,6 +15,7 @@ export interface CodexFileBrowserFABProps {
 }
 
 export function CodexFileBrowserFAB(props: CodexFileBrowserFABProps) {
+  const i18n = useI18n();
   const fab = createFileBrowserFABModel({
     workingDir: () => props.workingDir,
     homePath: () => props.homePath,
@@ -30,7 +32,7 @@ export function CodexFileBrowserFAB(props: CodexFileBrowserFABProps) {
       >
         <button
           class="redeven-fab-file-browser-btn"
-          title="Browse files"
+          title={i18n.t('codex.actions.browseFiles')}
           disabled={!fab.canOpenBrowser()}
           aria-disabled={fab.canOpenBrowser() ? undefined : 'true'}
           onPointerDown={fab.onPointerDown}

@@ -4,6 +4,7 @@ import { Check, ChevronDown, ChevronRight, RefreshIcon, X } from '@floegence/flo
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { type BrowserEditorSetupActivity } from '../services/browserEditorSetupActivity';
+import { useI18n } from '../i18n';
 
 export type BrowserEditorSetupActivityPanelProps = Readonly<{
   activity: BrowserEditorSetupActivity;
@@ -96,6 +97,7 @@ function hasActionBar(activity: BrowserEditorSetupActivity, props: BrowserEditor
 }
 
 export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivityPanelProps) {
+  const i18n = useI18n();
   const activity = () => props.activity;
   const canPrepare = createMemo(() => activity().state === 'missing' || activity().can_retry || activity().state === 'unusable');
   const hasTechnicalDetails = createMemo(() => Boolean(props.extraDetails || activity().show_log));
@@ -130,7 +132,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
           </div>
         </div>
         <Show when={props.onRefresh}>
-          <Button size="icon" variant="ghost" onClick={() => props.onRefresh?.()} disabled={props.loading} aria-label="Refresh">
+          <Button size="icon" variant="ghost" onClick={() => props.onRefresh?.()} disabled={props.loading} aria-label={i18n.t('common.actions.refresh')}>
             <RefreshIcon class={cn('h-4 w-4', props.loading ? 'animate-spin' : '')} />
           </Button>
         </Show>
@@ -155,9 +157,12 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
       {/* ── Progress ── */}
       <div class="space-y-3 px-4 pt-4">
         <div class="flex items-center justify-between gap-4">
-          <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Setup progress</span>
+          <span class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{i18n.t('codeRuntime.setupProgress')}</span>
           <span class="text-xs font-medium text-muted-foreground">
-            Step {activity().active_step_index} of {activity().step_count}
+            {i18n.t('codeRuntime.stepProgress', {
+              current: activity().active_step_index,
+              total: activity().step_count,
+            })}
           </span>
         </div>
 
@@ -203,7 +208,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
             <Show when={detailsOpen()} fallback={<ChevronRight class="h-3.5 w-3.5" />}>
               <ChevronDown class="h-3.5 w-3.5" />
             </Show>
-            Technical details
+            {i18n.t('codeRuntime.technicalDetails')}
           </button>
 
           <Show when={detailsOpen()}>
@@ -214,7 +219,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
                   data-testid="code-runtime-log-tail"
                   class="max-h-48 overflow-auto rounded-lg border bg-[color-mix(in_srgb,var(--terminal-background)_6%,var(--background))] p-3 font-mono text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words"
                 >
-                  {activity().log_tail.length > 0 ? activity().log_tail.join('\n') : 'No browser editor setup details yet.'}
+                  {activity().log_tail.length > 0 ? activity().log_tail.join('\n') : i18n.t('codeRuntime.noSetupDetails')}
                 </pre>
               </Show>
             </div>
@@ -228,7 +233,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
           <div class="flex items-center gap-2">
             <Show when={activity().can_continue && props.onContinue}>
               <Button size="sm" variant="default" onClick={() => props.onContinue?.()}>
-                {activity().pending_action_label || 'Continue'}
+                {activity().pending_action_label || i18n.t('codeRuntime.continueAction')}
               </Button>
             </Show>
             <Show when={canPrepare() && props.onPrepare}>
@@ -238,13 +243,13 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
             </Show>
             <Show when={activity().can_cancel && props.onCancel}>
               <Button size="sm" variant="outline" onClick={() => props.onCancel?.()} disabled={props.cancelSubmitting}>
-                {props.cancelSubmitting ? 'Cancelling...' : 'Cancel'}
+                {props.cancelSubmitting ? i18n.t('codeRuntime.cancelling') : i18n.t('common.actions.cancel')}
               </Button>
             </Show>
           </div>
           <Show when={(activity().state === 'ready' || activity().state === 'failed' || activity().state === 'cancelled') && props.onDismiss}>
             <Button size="sm" variant="ghost" onClick={() => props.onDismiss?.()}>
-              Dismiss
+              {i18n.t('codeRuntime.dismiss')}
             </Button>
           </Show>
         </div>

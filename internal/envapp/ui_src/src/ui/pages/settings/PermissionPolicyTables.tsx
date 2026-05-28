@@ -5,6 +5,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import type { PermissionRow } from './types';
 import { EmptyState, SettingsPill } from './SettingsPrimitives';
 import { redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
+import { useI18n } from '../../i18n';
 
 export function PermissionRuleTable(props: {
   rows: PermissionRow[];
@@ -19,6 +20,8 @@ export function PermissionRuleTable(props: {
   onChangePerm: (index: number, key: 'read' | 'write' | 'execute', value: boolean) => void;
   onRemove: (index: number) => void;
 }) {
+  const i18n = useI18n();
+
   return (
     <div class="space-y-1.5">
       <Show
@@ -39,21 +42,21 @@ export function PermissionRuleTable(props: {
               <div class="flex items-center gap-1.5">
                 <PermToggle
                   icon={Eye}
-                  label="Read"
+                  label={i18n.t('permissionPolicy.permission.read')}
                   checked={row().read}
                   disabled={!props.canInteract || !props.readEnabled}
                   onChange={(v) => props.onChangePerm(index, 'read', v)}
                 />
                 <PermToggle
                   icon={Pencil}
-                  label="Write"
+                  label={i18n.t('permissionPolicy.permission.write')}
                   checked={row().write}
                   disabled={!props.canInteract || !props.writeEnabled}
                   onChange={(v) => props.onChangePerm(index, 'write', v)}
                 />
                 <PermToggle
                   icon={Play}
-                  label="Execute"
+                  label={i18n.t('permissionPolicy.permission.execute')}
                   checked={row().execute}
                   disabled={!props.canInteract || !props.executeEnabled}
                   onChange={(v) => props.onChangePerm(index, 'execute', v)}
@@ -66,7 +69,7 @@ export function PermissionRuleTable(props: {
                 onClick={() => props.onRemove(index)}
                 disabled={!props.canInteract}
                 icon={Trash}
-                aria-label={`Remove ${props.keyHeader.toLowerCase()} permission rule`}
+                aria-label={i18n.t('permissionPolicy.removeRuleAria', { subject: props.keyHeader.toLowerCase() })}
               />
             </div>
           )}
@@ -83,6 +86,8 @@ function PermToggle(props: {
   disabled?: boolean;
   onChange: (value: boolean) => void;
 }) {
+  const i18n = useI18n();
+
   return (
     <button
       type="button"
@@ -95,7 +100,10 @@ function PermToggle(props: {
       )}
       disabled={props.disabled}
       onClick={() => props.onChange(!props.checked)}
-      aria-label={`${props.label}: ${props.checked ? 'enabled' : 'disabled'}`}
+      aria-label={i18n.t('permissionPolicy.toggleAria', {
+        label: props.label,
+        state: props.checked ? i18n.t('permissionPolicy.enabled') : i18n.t('permissionPolicy.disabled'),
+      })}
     >
       <props.icon class="h-3 w-3" />
       <span>{props.checked ? '✓' : '✕'}</span>
@@ -110,10 +118,11 @@ export function PermissionMatrixTable(props: {
   canInteract: boolean;
   onChange: (key: 'read' | 'write' | 'execute', value: boolean) => void;
 }) {
+  const i18n = useI18n();
   const perms = () => [
-    { key: 'read' as const, icon: Eye, label: 'Read', checked: props.read },
-    { key: 'write' as const, icon: Pencil, label: 'Write', checked: props.write },
-    { key: 'execute' as const, icon: Play, label: 'Execute', checked: props.execute },
+    { key: 'read' as const, icon: Eye, label: i18n.t('permissionPolicy.permission.read'), checked: props.read },
+    { key: 'write' as const, icon: Pencil, label: i18n.t('permissionPolicy.permission.write'), checked: props.write },
+    { key: 'execute' as const, icon: Play, label: i18n.t('permissionPolicy.permission.execute'), checked: props.execute },
   ];
 
   return (
@@ -137,7 +146,7 @@ export function PermissionMatrixTable(props: {
             <perm.icon class="h-3.5 w-3.5 text-muted-foreground" />
             <span class="text-xs font-medium text-foreground">{perm.label}</span>
             <SettingsPill tone={perm.checked ? 'success' : 'default'}>
-              {perm.checked ? 'Allowed' : 'Denied'}
+              {perm.checked ? i18n.t('permissionPolicy.allowed') : i18n.t('permissionPolicy.denied')}
             </SettingsPill>
           </label>
         )}

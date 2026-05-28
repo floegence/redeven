@@ -6,11 +6,13 @@ import { ViewToggle, AutoSaveIndicator } from '../SettingsPrimitives';
 import { SettingsCard, CompactField, JSONEditor, type ViewMode as VM } from '../SettingsPrimitives';
 import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { formatUnknownError } from '../../../maintenance/shared';
+import { useI18n } from '../../../i18n';
 
 const AUTO_SAVE_DELAY_MS = 700;
 
 export function LoggingSection() {
   const ctx = useEnvSettingsPage();
+  const i18n = useI18n();
 
   const [viewMode, setViewMode] = createSignal<VM>('ui');
   const [logFormat, setLogFormat] = createSignal('');
@@ -53,7 +55,7 @@ export function LoggingSection() {
         setError(null);
       } catch (e) {
         setSaving(false);
-        setError(formatUnknownError(e) || 'Save failed.');
+        setError(formatUnknownError(e) || i18n.t('loggingSettings.saveFailed'));
       }
     }, AUTO_SAVE_DELAY_MS);
   });
@@ -68,9 +70,9 @@ export function LoggingSection() {
   return (
     <SettingsCard
       icon={Database}
-      title="Logging"
-      description="Log format and verbosity for backend runtime logs."
-      badge="Log changes require restart"
+      title={i18n.t('loggingSettings.title')}
+      description={i18n.t('loggingSettings.description')}
+      badge={i18n.t('loggingSettings.restartRequired')}
       badgeVariant="warning"
       error={error()}
       actions={
@@ -87,13 +89,13 @@ export function LoggingSection() {
         }
       >
         <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <CompactField icon={FileText} label="Format">
+          <CompactField icon={FileText} label={i18n.t('loggingSettings.formatLabel')}>
             <Select value={logFormat()} onChange={(v) => { setLogFormat(v); setDirty(true); }} disabled={!ctx.canInteract()}
-              options={[{ value: '', label: 'Default (json)' }, { value: 'json', label: 'json' }, { value: 'text', label: 'text' }]} class="w-full" />
+              options={[{ value: '', label: i18n.t('loggingSettings.defaultJson') }, { value: 'json', label: 'json' }, { value: 'text', label: 'text' }]} class="w-full" />
           </CompactField>
-          <CompactField icon={Zap} label="Level">
+          <CompactField icon={Zap} label={i18n.t('loggingSettings.levelLabel')}>
             <Select value={logLevel()} onChange={(v) => { setLogLevel(v); setDirty(true); }} disabled={!ctx.canInteract()}
-              options={[{ value: '', label: 'Default (info)' }, { value: 'debug', label: 'debug' }, { value: 'info', label: 'info' }, { value: 'warn', label: 'warn' }, { value: 'error', label: 'error' }]} class="w-full" />
+              options={[{ value: '', label: i18n.t('loggingSettings.defaultInfo') }, { value: 'debug', label: 'debug' }, { value: 'info', label: 'info' }, { value: 'warn', label: 'warn' }, { value: 'error', label: 'error' }]} class="w-full" />
           </CompactField>
         </div>
       </Show>

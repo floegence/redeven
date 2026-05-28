@@ -54,8 +54,6 @@ import {
 import {
   copyFileBrowserItemNames,
   copyFileBrowserItemPaths,
-  describeCopiedFileBrowserItemNames,
-  describeCopiedFileBrowserItemPaths,
 } from '../utils/fileBrowserClipboard';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { buildFilePathAskFlowerIntent } from '../utils/filePathAskFlower';
@@ -69,6 +67,7 @@ import { FlowerContextMenuIcon } from '../icons/FlowerSoftAuraIcon';
 import { GitStashWindow } from './GitStashWindow';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { GitWorkspace } from './GitWorkspace';
+import { useI18n } from '../i18n';
 import {
   WORKSPACE_VIEW_SECTIONS,
   applyWorkspaceViewPageSnapshot,
@@ -197,7 +196,6 @@ const ASK_FLOWER_MAX_ATTACHMENTS = 5;
 const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const GIT_COMMIT_PAGE_SIZE = 50;
 const GIT_WORKSPACE_PAGE_SIZE = 200;
-const DEFAULT_GIT_UNAVAILABLE_REASON = 'Git is not installed or not available in PATH on this runtime host.';
 const PAGE_SIDEBAR_DEFAULT_WIDTH = 240;
 const PAGE_SIDEBAR_MIN_WIDTH = 180;
 const PAGE_SIDEBAR_MAX_WIDTH = 520;
@@ -483,15 +481,19 @@ function inferGitBranchSummaryFromKey(
   };
 }
 
-function createMissingGitBranchMessage(branch: GitBranchSummary | null | undefined, requestedKey: string): {
+function createMissingGitBranchMessage(
+  branch: GitBranchSummary | null | undefined,
+  requestedKey: string,
+  i18n: ReturnType<typeof useI18n>,
+): {
   title: string;
   detail: string;
 } {
   const summary = inferGitBranchSummaryFromKey(requestedKey, branch);
-  const name = String(summary?.name ?? summary?.fullName ?? requestedKey).trim() || 'This branch';
+  const name = String(summary?.name ?? summary?.fullName ?? requestedKey).trim() || i18n.t('git.notifications.thisBranch');
   return {
-    title: 'Branch no longer exists',
-    detail: `${name} was deleted outside Redeven. Refresh branches or switch to another branch to continue.`,
+    title: i18n.t('git.notifications.branchNoLongerExistsTitle'),
+    detail: i18n.t('git.notifications.branchDeletedOutsideRedeven', { branch: name }),
   };
 }
 
@@ -513,6 +515,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const ctx = useEnvContext();
+  const i18n = useI18n();
   const deck = useDeck();
   const floe = useResolvedFloeConfig();
   const layout = useLayout();
@@ -545,6 +548,29 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         ? `redeven-files:${id}`
         : `redeven-files:${browserStateScope()}:${id}`
   );
+  const fileCountLabel = (count: number) => i18n.tn('git.common.fileCount', count);
+  const copyNamesDescription = (result: { count: number; firstName: string }) => (
+    result.count === 1
+      ? i18n.t('files.notifications.copiedValue', { value: result.firstName })
+      : i18n.tn('files.notifications.namesCopied', result.count)
+  );
+  const copyPathsDescription = (result: { count: number; firstPath: string }) => (
+    result.count === 1
+      ? i18n.t('files.notifications.copiedValue', { value: result.firstPath })
+      : i18n.tn('files.notifications.pathsCopied', result.count)
+  );
+  const validationMessage = (message: string) => {
+    switch (message) {
+      case 'Name is required.':
+        return i18n.t('files.validationNameRequired');
+      case 'Name cannot be "." or "..".':
+        return i18n.t('files.validationDotName');
+      case 'Name cannot contain path separators.':
+        return i18n.t('files.validationPathSeparator');
+      default:
+        return message;
+    }
+  };
 
   function readPersistedSidebarWidth(): number {
     const currentDeckWidgetId = deckWidgetId();
@@ -763,7 +789,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const setGitBranchDetailMissing = (requestedKey: string, branch: GitBranchSummary | null | undefined) => {
-    const message = createMissingGitBranchMessage(branch, requestedKey);
+    const message = createMissingGitBranchMessage(branch, requestedKey, i18n);
     rememberSelectedGitBranchSnapshot(branch, requestedKey);
     setGitBranchDetailState({
       kind: 'missing',
@@ -1016,7 +1042,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         defaultRootId: 'home',
         roots: [{
           id: 'home',
-          label: 'Home',
+          label: i18n.t('files.homeLabel'),
           pathAbs: requestedOverride,
           kind: 'home',
           permissions: { read: true, write: true },
@@ -1034,7 +1060,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         defaultRootId: 'home',
         roots: [{
           id: 'home',
-          label: 'Home',
+          label: i18n.t('files.homeLabel'),
           pathAbs: override,
           kind: 'home',
           permissions: { read: true, write: true },
@@ -1059,7 +1085,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const home = normalizeAbsolutePath(ctx.homePathAbs);
     const root = normalizeAbsolutePath(defaultFilesystemPath(ctx));
     if (!home || !root) {
-      throw new Error('Failed to resolve home directory.');
+      throw new Error(i18n.t('files.notifications.failedToResolveHomeDirectory'));
     }
     setFilesystemContext(ctx);
     setAgentHomePathAbs(home);
@@ -1095,9 +1121,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           targetPolicy: 'force_reload',
         });
       }
-      notification.success('Filesystem access updated', `${root.label} is now ${write ? 'read/write' : 'read-only'}.`);
+      notification.success(
+        i18n.t('files.notifications.filesystemAccessUpdatedTitle'),
+        i18n.t('files.notifications.filesystemAccessUpdatedMessage', {
+          label: root.label,
+          mode: write ? i18n.t('files.readWriteAccess') : i18n.t('files.readOnlyAccess'),
+        }),
+      );
     } catch (error) {
-      notification.error('Filesystem access update failed', error instanceof Error ? error.message : String(error));
+      notification.error(i18n.t('files.notifications.filesystemAccessUpdateFailedTitle'), error instanceof Error ? error.message : String(error));
       throw error;
     }
   };
@@ -1107,30 +1139,30 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const info = repoInfo();
     const reason = String(info?.unavailableReason ?? '').trim();
     if (reason) return reason;
-    if (info?.gitAvailable === false) return DEFAULT_GIT_UNAVAILABLE_REASON;
-    if (repoInfoResolved() && !info?.available) return 'Current path is not inside a Git repository.';
+    if (info?.gitAvailable === false) return i18n.t('git.notifications.gitUnavailableReason');
+    if (repoInfoResolved() && !info?.available) return i18n.t('git.notifications.currentPathNotGitRepo');
     return '';
   });
   const gitModeDisabledReason = createMemo(() => {
-    if (repoInfoLoading()) return 'Checking repository context for the current path...';
-    if (!repoInfoResolved()) return 'Checking repository context for the current path...';
+    if (repoInfoLoading()) return i18n.t('git.notifications.checkingRepositoryContext');
+    if (!repoInfoResolved()) return i18n.t('git.notifications.checkingRepositoryContext');
     const infoError = String(repoInfoError() ?? '').trim();
     if (infoError) return infoError;
     return repoUnavailableReason();
   });
   const gitShellLoadingMessage = createMemo(() => {
     if (pageMode() !== 'git') return '';
-    if (repoInfoLoading()) return 'Checking repository...';
+    if (repoInfoLoading()) return i18n.t('git.notifications.checkingRepository');
     if (!repoHistoryAvailable()) return '';
     if (gitSubview() === 'changes') {
-      return !gitWorkspace() && !gitWorkspaceError() ? 'Loading workspace changes...' : '';
+      return !gitWorkspace() && !gitWorkspaceError() ? i18n.t('git.changes.loadingWorkspaceChanges') : '';
     }
     if (gitSubview() === 'branches') {
-      if (!gitBranches() && !gitBranchesError()) return 'Loading branches...';
+      if (!gitBranches() && !gitBranchesError()) return i18n.t('git.notifications.loadingBranches');
       return '';
     }
     if (gitSubview() === 'history') {
-      return !gitListResolved() && !gitListError() ? 'Loading commits...' : '';
+      return !gitListResolved() && !gitListError() ? i18n.t('git.notifications.loadingCommits') : '';
     }
     return '';
   });
@@ -1184,15 +1216,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           setRepoInfo({
             available: false,
             gitAvailable: true,
-            unavailableReason: result.message || 'Current path is not inside a Git repository.',
+            unavailableReason: result.message || i18n.t('git.notifications.currentPathNotGitRepo'),
           });
           setRepoInfoError('');
         } else {
           setRepoInfo(null);
-          setRepoInfoError(result.message ?? 'Failed to inspect Git repository.');
+          setRepoInfoError(result.message ?? i18n.t('git.notifications.failedToInspectGitRepository'));
         }
       } else {
-        notification.warning('Git refresh incomplete', result.message ?? 'Failed to inspect the updated repository state.');
+        notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), result.message ?? i18n.t('git.notifications.failedToInspectUpdatedRepository'));
       }
       return null;
     } finally {
@@ -1601,7 +1633,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     return scope === 'stage' || scope === 'unstage' || scope === 'discard' ? scope : '';
   };
 
-  const formatGitFileCountLabel = (count: number): string => (count === 1 ? '1 file' : `${count} files`);
+  const formatGitFileCountLabel = (count: number): string => fileCountLabel(count);
   const activeChangesDirectoryPath = () => String(gitWorkspacePageState('changes').directoryPath ?? '').trim();
   const activeChangesPageCount = () => {
     const state = gitWorkspacePageState('changes');
@@ -1665,7 +1697,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     onSuccess: (result: T) => void | Promise<void>,
   ) => {
     if (!protocol.client()) {
-      notification.error('Git unavailable', 'Connection is not ready.');
+      notification.error(i18n.t('git.notifications.unavailableTitle'), i18n.t('git.common.connectionNotReady'));
       return false;
     }
     setGitMutationScope(scope);
@@ -1675,37 +1707,37 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       await onSuccess(result);
       return true;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err ?? 'Request failed.');
+      const message = err instanceof Error ? err.message : String(err ?? i18n.t('git.common.requestFailed'));
       const title = scope === 'commit'
-        ? 'Commit failed'
+        ? i18n.t('git.notifications.commitFailedTitle')
         : scope === 'stage'
-          ? 'Stage failed'
+          ? i18n.t('git.notifications.stageFailedTitle')
           : scope === 'unstage'
-            ? 'Unstage failed'
+            ? i18n.t('git.notifications.unstageFailedTitle')
             : scope === 'discard'
-              ? 'Discard failed'
+              ? i18n.t('git.notifications.discardFailedTitle')
             : scope === 'fetch'
-              ? 'Fetch failed'
+              ? i18n.t('git.notifications.fetchFailedTitle')
               : scope === 'pull'
-                ? 'Pull failed'
+                ? i18n.t('git.notifications.pullFailedTitle')
                 : scope === 'push'
-                ? 'Push failed'
+                ? i18n.t('git.notifications.pushFailedTitle')
                 : scope === 'checkout'
-                  ? 'Checkout failed'
-                : scope === 'switchDetached'
-                  ? 'Detach failed'
+                  ? i18n.t('git.notifications.checkoutFailedTitle')
+                  : scope === 'switchDetached'
+                  ? i18n.t('git.notifications.detachFailedTitle')
                   : scope === 'mergeBranch'
-                    ? 'Merge failed'
-                    : scope === 'deleteBranch'
-                      ? 'Delete failed'
+                    ? i18n.t('git.notifications.mergeFailedTitle')
+                      : scope === 'deleteBranch'
+                        ? i18n.t('git.notifications.deleteFailedTitle')
                       : scope === 'saveStash'
-                        ? 'Stash save failed'
+                        ? i18n.t('git.notifications.stashSaveFailedTitle')
                         : scope === 'applyStash'
-                          ? 'Apply stash failed'
+                          ? i18n.t('git.notifications.applyStashFailedTitle')
                           : scope === 'dropStash'
-                            ? 'Delete stash failed'
-                            : 'Git request failed';
-      notification.error(title, message || 'Request failed.');
+                            ? i18n.t('git.notifications.deleteStashFailedTitle')
+                            : i18n.t('git.notifications.gitRequestFailedTitle');
+      notification.error(title, message || i18n.t('git.common.requestFailed'));
       return false;
     } finally {
       setGitMutationScope('');
@@ -1742,11 +1774,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         notifyWorkspaceMutationResult({
           result: resp.result,
           fallbackCount: params.count,
-          successTitle: uniqueSourceSections.length === 1 && uniqueSourceSections[0] === 'untracked' ? 'Tracked' : 'Staged',
-          successMessage: (count) => `${formatGitFileCountLabel(count)} moved into the index.`,
-          noopTitle: 'Nothing staged',
-          noopMessage: 'No current pending files matched this request.',
-          partialTitle: 'Partially staged',
+          successTitle: uniqueSourceSections.length === 1 && uniqueSourceSections[0] === 'untracked' ? i18n.t('git.notifications.trackedTitle') : i18n.t('git.notifications.stagedTitle'),
+          successMessage: (count) => i18n.t('git.notifications.movedIntoIndex', { count, unit: formatGitFileCountLabel(count) }),
+          noopTitle: i18n.t('git.notifications.nothingStagedTitle'),
+          noopMessage: i18n.t('git.notifications.noPendingFilesMatched'),
+          partialTitle: i18n.t('git.notifications.partiallyStagedTitle'),
         });
       },
     );
@@ -1776,11 +1808,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         notifyWorkspaceMutationResult({
           result: resp.result,
           fallbackCount: params.count,
-          successTitle: 'Unstaged',
-          successMessage: (count) => `${formatGitFileCountLabel(count)} moved back to pending changes.`,
-          noopTitle: 'Nothing unstaged',
-          noopMessage: 'No current staged files matched this request.',
-          partialTitle: 'Partially unstaged',
+          successTitle: i18n.t('git.notifications.unstagedTitle'),
+          successMessage: (count) => i18n.t('git.notifications.movedBackToPending', { count, unit: formatGitFileCountLabel(count) }),
+          noopTitle: i18n.t('git.notifications.nothingUnstagedTitle'),
+          noopMessage: i18n.t('git.notifications.noStagedFilesMatched'),
+          partialTitle: i18n.t('git.notifications.partiallyUnstagedTitle'),
         });
       },
     );
@@ -1839,11 +1871,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         notifyWorkspaceMutationResult({
           result: resp.result,
           fallbackCount: params.count,
-          successTitle: 'Discarded',
-          successMessage: (count) => `${formatGitFileCountLabel(count)} removed from pending changes.`,
-          noopTitle: 'Nothing discarded',
-          noopMessage: 'No current pending files matched this request.',
-          partialTitle: 'Partially discarded',
+          successTitle: i18n.t('git.notifications.discardedTitle'),
+          successMessage: (count) => i18n.t('git.notifications.removedFromPending', { count, unit: formatGitFileCountLabel(count) }),
+          noopTitle: i18n.t('git.notifications.nothingDiscardedTitle'),
+          noopMessage: i18n.t('git.notifications.noPendingFilesMatched'),
+          partialTitle: i18n.t('git.notifications.partiallyDiscardedTitle'),
         });
       },
     );
@@ -1916,7 +1948,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const trimmed = String(message ?? '').trim();
     if (!repoRootPath) return;
     if (!trimmed) {
-      notification.error('Missing commit message', 'Write a commit message before committing staged changes.');
+      notification.error(i18n.t('git.notifications.missingCommitMessageTitle'), i18n.t('git.notifications.writeCommitMessage'));
       return;
     }
     await runGitMutation(
@@ -1941,7 +1973,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           : prev));
         setGitCommitMessage('');
         await refreshGitStateAfterMutation('commit', resp);
-        notification.success('Committed', `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
+        notification.success(i18n.t('git.notifications.committedTitle'), `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
       },
     );
   };
@@ -2051,7 +2083,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setStashWorkspaceSummary(null);
         setStashContextError(message);
       } else {
-        notification.warning('Stash refresh incomplete', message);
+        notification.warning(i18n.t('git.notifications.stashRefreshIncompleteTitle'), message);
       }
     } finally {
       if (!options.silent && seq === stashContextReqSeq) {
@@ -2109,7 +2141,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         resetStashDetailState();
         setStashListError(message);
       } else {
-        notification.warning('Stash refresh incomplete', message);
+        notification.warning(i18n.t('git.notifications.stashRefreshIncompleteTitle'), message);
       }
     } finally {
       if (!options.silent && seq === stashListReqSeq) {
@@ -2143,7 +2175,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setStashDetail(null);
         setStashDetailError(message);
       } else {
-        notification.warning('Stash refresh incomplete', message);
+        notification.warning(i18n.t('git.notifications.stashRefreshIncompleteTitle'), message);
       }
     } finally {
       if (!options.silent && seq === stashDetailReqSeq) {
@@ -2191,7 +2223,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const openGitStashWindow = (request: GitStashWindowRequest = {}) => {
     const repoRootPath = String(request.repoRootPath ?? resolveActiveRepoRootPath()).trim();
     if (!repoRootPath) {
-      notification.error('Stash unavailable', 'Repository path is unavailable.');
+      notification.error(i18n.t('git.notifications.stashUnavailableTitle'), i18n.t('git.notifications.repositoryPathUnavailable'));
       return;
     }
     const previousRepoRootPath = activeStashRepoRootPath();
@@ -2257,10 +2289,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           }),
         ]);
         notification.success(
-          'Stashed',
+          i18n.t('git.notifications.stashedTitle'),
           resp.created?.ref
-            ? `Saved current changes as ${resp.created.ref}.`
-            : 'Saved current changes to the stash stack.',
+            ? i18n.t('git.notifications.savedCurrentChangesAs', { ref: resp.created.ref })
+            : i18n.t('git.notifications.savedCurrentChangesStack'),
         );
       },
     );
@@ -2291,7 +2323,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       const message = err instanceof Error ? err.message : String(err ?? 'Failed to review stash apply');
       setStashReview(null);
       setStashReviewError(message);
-      notification.error('Stash review failed', message);
+      notification.error(i18n.t('git.notifications.stashReviewFailedTitle'), message);
     } finally {
       if (seq === stashReviewReqSeq) {
         setStashReviewLoading(false);
@@ -2323,7 +2355,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setStashReview(null);
       setStashReviewError(message);
       if (options.notifyOnError !== false) {
-        notification.error('Stash review failed', message);
+        notification.error(i18n.t('git.notifications.stashReviewFailedTitle'), message);
       }
     } finally {
       if (seq === stashReviewReqSeq) {
@@ -2344,7 +2376,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       });
       const stashStillExists = stashList().some((item) => item.id === stashId);
       if (!stashStillExists) {
-        notification.info('Stash no longer available', 'The selected stash no longer exists. The stash list was refreshed.');
+        notification.info(i18n.t('git.notifications.stashNoLongerAvailableTitle'), i18n.t('git.notifications.stashNoLongerAvailableMessage'));
         return true;
       }
       await handleRequestDropStash({
@@ -2357,11 +2389,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         repoSummary: stashRepoSummary(),
         stash: selectedStashSummary(),
       })) {
-        notification.info('Delete confirmation refreshed', 'Repository state changed. Confirm deletion again.');
+        notification.info(i18n.t('git.notifications.deleteConfirmationRefreshedTitle'), i18n.t('git.notifications.deleteConfirmationRefreshedMessage'));
         return true;
       }
       const refreshMessage = String(stashReviewError() ?? '').trim();
-      notification.warning('Delete confirmation unavailable', refreshMessage || 'Failed to refresh the delete confirmation. Try Delete again.');
+      notification.warning(i18n.t('git.notifications.deleteConfirmationUnavailableTitle'), refreshMessage || i18n.t('git.notifications.deleteConfirmationUnavailableMessage'));
       return true;
     }
     if (isStashNotFoundError(err)) {
@@ -2372,7 +2404,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         silent: true,
         reloadDetail: true,
       });
-      notification.info('Stash no longer available', 'The selected stash no longer exists. The stash list was refreshed.');
+      notification.info(i18n.t('git.notifications.stashNoLongerAvailableTitle'), i18n.t('git.notifications.stashNoLongerAvailableMessage'));
       return true;
     }
     return false;
@@ -2406,10 +2438,10 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           }),
         ]);
         notification.success(
-          review.removeAfterApply ? 'Applied and removed' : 'Applied',
+          review.removeAfterApply ? i18n.t('git.notifications.appliedAndRemovedTitle') : i18n.t('git.notifications.appliedTitle'),
           review.removeAfterApply
-            ? 'Applied the stash and removed it from the stack.'
-            : 'Applied the selected stash to the current worktree.',
+            ? i18n.t('git.notifications.appliedAndRemovedMessage')
+            : i18n.t('git.notifications.appliedSelectedStashMessage'),
         );
       } else {
         const resp = await rpc.git.dropStash({
@@ -2426,7 +2458,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
             reloadDetail: true,
           }),
         ]);
-        notification.success('Deleted stash', 'Removed the selected stash from the stack.');
+        notification.success(i18n.t('git.notifications.deletedStashTitle'), i18n.t('git.notifications.deletedStashMessage'));
       }
     } catch (err) {
       if (review.kind === 'drop' && await recoverDropStashError(err, { repoRootPath, stashId })) {
@@ -2442,7 +2474,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           reloadDetail: true,
         });
       }
-      notification.error(review.kind === 'drop' ? 'Delete stash failed' : 'Apply stash failed', message || 'Request failed.');
+      notification.error(review.kind === 'drop' ? i18n.t('git.notifications.deleteStashFailedTitle') : i18n.t('git.notifications.applyStashFailedTitle'), message || i18n.t('git.common.requestFailed'));
     } finally {
       setGitMutationScope('');
       setGitMutationKey('');
@@ -2458,7 +2490,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       () => rpc.git.fetchRepo({ repoRootPath }),
       (resp) => {
         void refreshGitStateAfterMutation('fetch', resp);
-        notification.success('Fetched', 'Remote refs were updated.');
+        notification.success(i18n.t('git.notifications.fetchedTitle'), i18n.t('git.notifications.remoteRefsUpdated'));
       },
     );
   };
@@ -2472,7 +2504,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       () => rpc.git.pullRepo({ repoRootPath }),
       (resp) => {
         void refreshGitStateAfterMutation('pull', resp);
-        notification.success('Pulled', `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
+        notification.success(i18n.t('git.notifications.pulledTitle'), `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
       },
     );
   };
@@ -2486,7 +2518,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       () => rpc.git.pushRepo({ repoRootPath }),
       (resp) => {
         void refreshGitStateAfterMutation('push', resp);
-        notification.success('Pushed', `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
+        notification.success(i18n.t('git.notifications.pushedTitle'), `${resp.headRef || 'HEAD'} ${String(resp.headCommit ?? '').slice(0, 7)}`.trim());
       },
     );
   };
@@ -2505,7 +2537,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }),
       (resp) => {
         void refreshGitStateAfterMutation('checkout', resp);
-        notification.success('Checked out', `${resp.headRef || branch.name || 'branch'} is now active.`);
+        notification.success(i18n.t('git.notifications.checkedOutTitle'), i18n.t('git.notifications.checkedOutMessage', { ref: resp.headRef || branch.name || i18n.t('git.notifications.branchFallback') }));
       },
     );
   };
@@ -2527,7 +2559,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }),
       async (resp) => {
         await refreshGitStateAfterMutation('switchDetached', resp);
-        notification.success('Detached HEAD', `Detached HEAD at ${shortGitHash(resp.headCommit || commitHash) || target.shortHash || 'selected commit'}.`);
+        notification.success(i18n.t('git.notifications.detachedHeadTitle'), i18n.t('git.notifications.detachedHeadMessage', { ref: shortGitHash(resp.headCommit || commitHash) || target.shortHash || i18n.t('git.notifications.selectedCommitFallback') }));
       },
     );
   };
@@ -2555,7 +2587,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
     if (!protocol.client()) {
-      notification.error('Git unavailable', 'Connection is not ready.');
+      notification.error(i18n.t('git.notifications.unavailableTitle'), i18n.t('git.common.connectionNotReady'));
       return;
     }
 
@@ -2578,7 +2610,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setGitMergeReviewPreview(resp);
     } catch (err) {
       if (seq !== gitMergeReviewReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to review branch merge.');
+      const message = err instanceof Error ? err.message : String(err ?? i18n.t('git.notifications.failedToReviewBranchMerge'));
       setGitMergeReviewPreview(null);
       setGitMergeReviewError(message);
     } finally {
@@ -2609,7 +2641,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
     if (!protocol.client()) {
-      notification.error('Git unavailable', 'Connection is not ready.');
+      notification.error(i18n.t('git.notifications.unavailableTitle'), i18n.t('git.common.connectionNotReady'));
       return;
     }
 
@@ -2632,7 +2664,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setGitDeleteReviewPreview(resp);
     } catch (err) {
       if (seq !== gitDeleteReviewReqSeq) return;
-      const message = err instanceof Error ? err.message : String(err ?? 'Failed to review branch deletion.');
+      const message = err instanceof Error ? err.message : String(err ?? i18n.t('git.notifications.failedToReviewBranchDeletion'));
       setGitDeleteReviewPreview(null);
       setGitDeleteReviewError(message);
     } finally {
@@ -2662,7 +2694,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
     if (!protocol.client()) {
-      notification.error('Git unavailable', 'Connection is not ready.');
+      notification.error(i18n.t('git.notifications.unavailableTitle'), i18n.t('git.common.connectionNotReady'));
       return;
     }
 
@@ -2680,32 +2712,33 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       closeGitMergeReview({ force: true });
       void refreshGitStateAfterMutation('merge', resp);
 
-      const targetRef = resp.headRef || String(gitRepoSummary()?.headRef ?? '').trim() || 'current branch';
+      const targetRef = resp.headRef || String(gitRepoSummary()?.headRef ?? '').trim() || i18n.t('git.notifications.currentBranchFallback');
+      const branchName = branch.name || i18n.t('git.notifications.selectedBranchFallback');
       if (resp.result === 'up_to_date') {
-        notification.info('Up to date', `${targetRef} already includes ${branch.name || 'the selected branch'}.`);
+        notification.info(i18n.t('git.notifications.upToDateTitle'), i18n.t('git.notifications.branchAlreadyIncluded', { target: targetRef, branch: branchName }));
         return;
       }
       if (resp.result === 'fast_forward') {
-        notification.success('Fast-forwarded', `${targetRef} now includes ${branch.name || 'the selected branch'}.`);
+        notification.success(i18n.t('git.notifications.fastForwardedTitle'), i18n.t('git.notifications.branchNowIncluded', { target: targetRef, branch: branchName }));
         return;
       }
       if (resp.result === 'merge_commit') {
-        notification.success('Merged', `${branch.name || 'Branch'} was merged into ${targetRef}.`);
+        notification.success(i18n.t('git.notifications.mergedTitle'), i18n.t('git.notifications.branchMerged', { branch: branch.name || i18n.t('git.notifications.branchTitleFallback'), target: targetRef }));
         return;
       }
 
       await loadGitWorkspaceSection('conflicted', { silent: true, repoRootPath, force: true });
       focusGitWorkspaceSection('conflicted', gitWorkspace());
-      notification.warning('Merge has conflicts', `Resolve the conflicted files in ${targetRef}.`);
+      notification.warning(i18n.t('git.notifications.mergeConflictsTitle'), i18n.t('git.notifications.resolveConflicts', { target: targetRef }));
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err ?? 'Request failed.');
+      const message = err instanceof Error ? err.message : String(err ?? i18n.t('git.common.requestFailed'));
       if (message.toLowerCase().includes('stale')) {
         setGitMergeReviewPreview(null);
         setGitMergeReviewError(message);
       } else {
         setGitMergeActionError(message);
       }
-      notification.error('Merge failed', message || 'Request failed.');
+      notification.error(i18n.t('git.notifications.mergeFailedTitle'), message || i18n.t('git.common.requestFailed'));
     } finally {
       setGitMutationScope('');
       setGitMutationKey('');
@@ -2725,7 +2758,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const repoRootPath = String(repoInfo()?.repoRootPath ?? '').trim();
     if (!repoRootPath) return;
     if (!protocol.client()) {
-      notification.error('Git unavailable', 'Connection is not ready.');
+      notification.error(i18n.t('git.notifications.unavailableTitle'), i18n.t('git.common.connectionNotReady'));
       return;
     }
 
@@ -2746,16 +2779,16 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       });
       closeGitDeleteReview({ force: true });
       void refreshGitStateAfterBranchDelete(resp);
-      notification.success('Deleted', `${branch.name || 'Branch'} was removed.`);
+      notification.success(i18n.t('git.notifications.deletedTitle'), i18n.t('git.notifications.branchRemoved', { branch: branch.name || i18n.t('git.notifications.branchTitleFallback') }));
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err ?? 'Request failed.');
+      const message = err instanceof Error ? err.message : String(err ?? i18n.t('git.common.requestFailed'));
       if (message.toLowerCase().includes('stale')) {
         setGitDeleteReviewPreview(null);
         setGitDeleteReviewError(message);
       } else {
         setGitDeleteActionError(message);
       }
-      notification.error('Delete failed', message || 'Request failed.');
+      notification.error(i18n.t('git.notifications.deleteFailedTitle'), message || i18n.t('git.common.requestFailed'));
     } finally {
       setGitMutationScope('');
       setGitMutationKey('');
@@ -2782,7 +2815,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setGitRepoSummary(null);
         setGitRepoSummaryError(message);
       } else {
-        notification.warning('Git refresh incomplete', message);
+        notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
       if (!options.silent && seq === gitRepoSummaryReqSeq) setGitRepoSummaryLoading(false);
@@ -2853,7 +2886,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         }
         setGitWorkspaceError(message);
       } else if (options.silent) {
-        notification.warning('Git refresh incomplete', message);
+        notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
       if (seq === gitWorkspaceReqSeqBySection[section]) {
@@ -2994,7 +3027,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         setGitBranches(null);
         setGitBranchesError(message);
       } else {
-        notification.warning('Git refresh incomplete', message);
+        notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
       if (!options.silent && seq === gitBranchesReqSeq) setGitBranchesLoading(false);
@@ -3144,7 +3177,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       if (!options.silent && !backgroundRefresh) {
         setGitListError(message);
       } else if (!backgroundRefresh) {
-        notification.warning('Git refresh incomplete', message);
+        notification.warning(i18n.t('git.notifications.refreshIncompleteTitle'), message);
       }
     } finally {
       if (seq === gitListReqSeq) {
@@ -3198,11 +3231,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const fileBrowserMoreItems = createMemo<DropdownItem[]>(() => [
     {
       id: GO_TO_PATH_DROPDOWN_ITEM_ID,
-      label: 'Go to path...',
+      label: i18n.t('files.goToPath'),
     },
     {
       id: SHOW_HIDDEN_DROPDOWN_ITEM_ID,
-      label: 'Show hidden files',
+      label: i18n.t('files.showHiddenFiles'),
     },
   ]);
 
@@ -3223,7 +3256,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       } catch (error) {
         notifyPathLoadFailure({
           status: 'transport_error',
-          message: error instanceof Error ? error.message : 'Failed to resolve home directory.',
+          message: error instanceof Error ? error.message : i18n.t('files.notifications.failedToResolveHomeDirectory'),
         });
         return;
       }
@@ -3263,11 +3296,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         icon={Refresh}
         {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
         class="cursor-pointer"
-        aria-label="Refresh current directory"
+        aria-label={i18n.t('files.refreshCurrentDirectory')}
         onClick={() => { void refreshCurrentDirectory({ forceReload: true }); }}
         disabled={!currentBrowserPath().trim() || loading() || !!pendingBrowserPath().trim()}
       >
-        Refresh
+        {i18n.t('common.actions.refresh')}
       </Button>
       <Dropdown
         trigger={(
@@ -3276,8 +3309,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
           variant="outline"
           {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
           class="cursor-pointer"
-          aria-label="More file browser options"
-          title="More options"
+          aria-label={i18n.t('files.moreFileBrowserOptions')}
+          title={i18n.t('files.moreOptions')}
         >
           <MoreHorizontal class="size-3.5" />
         </Button>
@@ -3325,7 +3358,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const notifyPathLoadFailure = (result: PathLoadResult) => {
     if (result.status === 'canceled' || result.status === 'invalid_path') return;
-    notification.error('Failed to load directory', result.message ?? 'Unable to load directory.');
+    notification.error(i18n.t('files.notifications.failedToLoadDirectoryTitle'), result.message ?? i18n.t('files.notifications.unableToLoadDirectory'));
   };
 
   const prepareDirectoryState = async (
@@ -3340,7 +3373,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (seq !== dirReqSeq) return { status: 'canceled' };
 
     if (!protocol.client()) {
-      return { status: 'transport_error', message: 'Connection is not ready.' };
+      return { status: 'transport_error', message: i18n.t('files.notifications.connectionNotReady') };
     }
 
     let rootPath = '';
@@ -3349,7 +3382,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } catch (error) {
       return {
         status: 'transport_error',
-        message: error instanceof Error ? error.message : 'Failed to resolve home directory.',
+        message: error instanceof Error ? error.message : i18n.t('files.notifications.failedToResolveHomeDirectory'),
       };
     }
 
@@ -3358,7 +3391,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!activeRoot) {
       return {
         status: 'invalid_path',
-        message: 'Path is outside the configured filesystem roots.',
+        message: i18n.t('files.notifications.pathOutsideRoots'),
         rootPath,
       };
     }
@@ -3538,7 +3571,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     } catch (error) {
       return {
         status: 'transport_error',
-        message: error instanceof Error ? error.message : 'Failed to resolve home directory.',
+        message: error instanceof Error ? error.message : i18n.t('files.notifications.failedToResolveHomeDirectory'),
       };
     }
 
@@ -3569,7 +3602,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (result.status === 'error') {
       return {
         status: result.result.status,
-        message: result.result.message ?? 'Unable to open the requested path.',
+        message: result.result.message ?? i18n.t('files.notifications.unableToOpenPath'),
       };
     }
 
@@ -3605,7 +3638,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const pendingPath = normalizeAbsolutePath(pendingBrowserPath());
     if (!pendingPath) return '';
     const currentPath = normalizeAbsolutePath(currentBrowserPath());
-    return normalizePath(pendingPath) === normalizePath(currentPath) ? 'Refreshing...' : 'Opening...';
+    return normalizePath(pendingPath) === normalizePath(currentPath) ? i18n.t('files.refreshing') : i18n.t('files.opening');
   });
 
   const applyLocalMove = (item: FileItem, destDir: string) => {
@@ -3642,7 +3675,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const client = protocol.client();
     if (!client) {
       resetFileBrowser();
-      notification.error('Move failed', 'Connection is not ready.');
+      notification.error(i18n.t('files.notifications.moveFailedTitle'), i18n.t('files.notifications.connectionNotReady'));
       return;
     }
 
@@ -3655,7 +3688,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     ];
     if (!mutationPaths.every((path) => canMutatePath(path))) {
       resetFileBrowser();
-      notification.error('Move unavailable', 'This filesystem root is read-only.');
+      notification.error(i18n.t('files.notifications.moveUnavailableTitle'), i18n.t('files.notifications.rootReadOnly'));
       return;
     }
 
@@ -3686,14 +3719,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         resetFileBrowser();
 
         const prefix = okCount > 0
-          ? `${okCount} moved, ${failures.length} failed.`
-          : `${failures.length} failed.`;
-        notification.error('Move failed', `${prefix} ${failures[0] ?? ''}`.trim());
+          ? i18n.t('files.notifications.movePartialMessage', { moved: okCount, failed: failures.length })
+          : i18n.tn('files.notifications.moveFailedMessage', failures.length);
+        notification.error(i18n.t('files.notifications.moveFailedTitle'), `${prefix} ${failures[0] ?? ''}`.trim());
         return;
       }
 
       if (okCount > 0) {
-        notification.success('Moved', okCount === 1 ? '1 item moved.' : `${okCount} items moved.`);
+        notification.success(i18n.t('files.notifications.movedTitle'), i18n.tn('files.notifications.itemMoved', okCount));
       }
     } finally {
       setDragMoveLoading(false);
@@ -3726,11 +3759,13 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
 
       notification.success(
-        items.length === 1 ? 'Deleted' : 'Delete completed',
-        items.length === 1 ? `"${items[0]!.name}" deleted.` : `${items.length} items deleted.`
+        items.length === 1 ? i18n.t('files.notifications.deletedTitle') : i18n.t('files.notifications.deleteCompletedTitle'),
+        items.length === 1
+          ? i18n.t('files.notifications.itemDeleted', { name: items[0]!.name })
+          : i18n.tn('files.notifications.itemsDeleted', items.length)
       );
     } catch (e) {
-      notification.error('Delete failed', e instanceof Error ? e.message : String(e));
+      notification.error(i18n.t('files.notifications.deleteFailedTitle'), e instanceof Error ? e.message : String(e));
     } finally {
       setDeleteLoading(false);
     }
@@ -3740,7 +3775,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const nextName = String(value ?? '').trim();
     const validationError = validateFileBrowserEntryName(nextName);
     if (validationError) {
-      notification.error(failureTitle, validationError);
+      notification.error(failureTitle, validationMessage(validationError));
       return null;
     }
     return nextName;
@@ -3801,7 +3836,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const askFlowerFromDirectoryContext = (event?: ContextMenuEvent | null) => {
     const directory = resolveDirectoryContextTarget(event);
     if (!directory) {
-      notification.error('Ask Flower unavailable', 'Failed to resolve the target directory.');
+      notification.error(i18n.t('files.notifications.askFlowerUnavailableTitle'), i18n.t('files.notifications.failedToResolveTargetDirectory'));
       return;
     }
 
@@ -3814,7 +3849,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       fallbackWorkingDirAbs: directory.path,
     });
     if (!result.intent) {
-      notification.error('Ask Flower unavailable', result.error ?? 'Failed to resolve selected file paths.');
+      notification.error(i18n.t('files.notifications.askFlowerUnavailableTitle'), result.error ?? i18n.t('files.notifications.failedToResolveSelectedFilePaths'));
       return;
     }
 
@@ -3825,7 +3860,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const client = protocol.client();
     if (!client) return;
 
-    const nextName = resolveValidatedEntryName(newName, 'Rename failed');
+    const nextName = resolveValidatedEntryName(newName, i18n.t('files.notifications.renameFailedTitle'));
     if (!nextName) return;
     if (nextName === item.name) {
       setRenameDialogOpen(false);
@@ -3858,9 +3893,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
       setRenameDialogOpen(false);
       setRenameDialogItem(null);
-      notification.success('Renamed', `"${item.name}" renamed to "${nextName}".`);
+      notification.success(i18n.t('files.notifications.renamedTitle'), i18n.t('files.notifications.renamedMessage', { oldName: item.name, newName: nextName }));
     } catch (e) {
-      notification.error('Rename failed', e instanceof Error ? e.message : String(e));
+      notification.error(i18n.t('files.notifications.renameFailedTitle'), e instanceof Error ? e.message : String(e));
     } finally {
       setRenameLoading(false);
     }
@@ -3900,7 +3935,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       }
       return { ok: true, newName };
     } catch (e) {
-      notification.error('Duplicate failed', e instanceof Error ? e.message : String(e));
+      notification.error(i18n.t('files.notifications.duplicateFailedTitle'), e instanceof Error ? e.message : String(e));
       return { ok: false };
     }
   };
@@ -3910,7 +3945,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const draft = createDialogDraft();
     if (!client || !draft) return;
 
-    const nextName = resolveValidatedEntryName(name, 'Create failed');
+    const nextName = resolveValidatedEntryName(name, i18n.t('files.notifications.createFailedTitle'));
     if (!nextName) return;
 
     const finalPath = buildChildPath(draft.parentDir, nextName);
@@ -3952,9 +3987,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         }
       }
 
-      notification.success('Created', `"${nextName}" created.`);
+      notification.success(i18n.t('files.notifications.createdTitle'), i18n.t('files.notifications.createdMessage', { name: nextName }));
     } catch (e) {
-      notification.error('Create failed', e instanceof Error ? e.message : String(e));
+      notification.error(i18n.t('files.notifications.createFailedTitle'), e instanceof Error ? e.message : String(e));
     } finally {
       setCreateLoading(false);
     }
@@ -3972,7 +4007,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       } catch (e) {
         notifyPathLoadFailure({
           status: 'transport_error',
-          message: e instanceof Error ? e.message : 'Failed to resolve home directory.',
+          message: e instanceof Error ? e.message : i18n.t('files.notifications.failedToResolveHomeDirectory'),
         });
         return;
       }
@@ -4024,7 +4059,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (!requestedPath) {
       lastHandledOpenPathRequestId = requestId;
       props.onOpenPathRequestHandled?.(requestId);
-      notification.error('Browse files unavailable', 'Could not resolve a valid directory path.');
+      notification.error(i18n.t('files.notifications.browseFilesUnavailableTitle'), i18n.t('files.notifications.invalidBrowseDirectoryMessage'));
       return;
     }
 
@@ -4250,7 +4285,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const handleGitAskFlower = (request: GitAskFlowerRequest) => {
     const result = buildGitAskFlowerIntent(request);
     if (!result.intent) {
-      notification.error('Ask Flower unavailable', result.error ?? 'Failed to build Git context.');
+      notification.error(i18n.t('git.notifications.askFlowerUnavailableTitle'), result.error ?? i18n.t('git.notifications.failedToBuildGitContext'));
       return;
     }
     dispatchAskFlowerIntent(result.intent);
@@ -4262,7 +4297,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       preferredName: request.preferredName,
       openTerminalInDirectory: ctx.openTerminalInDirectory,
       onInvalidDirectory: () => {
-        notification.error('Invalid directory', 'Could not resolve a terminal working directory.');
+        notification.error(i18n.t('git.notifications.invalidDirectoryTitle'), i18n.t('git.notifications.invalidTerminalDirectory'));
       },
     });
   };
@@ -4271,7 +4306,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const path = normalizeAbsolutePath(request.path);
     const homePath = normalizeAbsolutePath(request.homePath ?? '') || agentHomePathAbs() || undefined;
     if (!path) {
-      notification.error('Browse files unavailable', 'Could not resolve a valid directory path.');
+      notification.error(i18n.t('git.notifications.browseFilesUnavailableTitle'), i18n.t('git.notifications.invalidBrowseDirectory'));
       return;
     }
 
@@ -4369,7 +4404,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       notes,
     });
     if (!result.intent) {
-      notification.error('Ask Flower unavailable', result.error ?? 'Failed to resolve selected file paths.');
+      notification.error(i18n.t('files.notifications.askFlowerUnavailableTitle'), result.error ?? i18n.t('files.notifications.failedToResolveSelectedFilePaths'));
       return;
     }
 
@@ -4380,9 +4415,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     void (async () => {
       try {
         const result = await copyFileBrowserItemNames(items);
-        notification.success('Copied', describeCopiedFileBrowserItemNames(result));
+        notification.success(i18n.t('files.notifications.copiedTitle'), copyNamesDescription(result));
       } catch (e) {
-        notification.error('Copy failed', e instanceof Error ? e.message : String(e));
+        notification.error(i18n.t('files.notifications.copyFailedTitle'), e instanceof Error ? e.message : String(e));
       }
     })();
   };
@@ -4391,9 +4426,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     void (async () => {
       try {
         const result = await copyFileBrowserItemPaths(items);
-        notification.success('Copied', describeCopiedFileBrowserItemPaths(result));
+        notification.success(i18n.t('files.notifications.copiedTitle'), copyPathsDescription(result));
       } catch (e) {
-        notification.error('Copy failed', e instanceof Error ? e.message : String(e));
+        notification.error(i18n.t('files.notifications.copyFailedTitle'), e instanceof Error ? e.message : String(e));
       }
     })();
   };
@@ -4401,7 +4436,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const handleDownloadItems = (items: FileItem[]) => {
     const fileItems = items.filter((item) => item.type === 'file');
     if (fileItems.length <= 0) {
-      notification.error('Download unavailable', 'Only files can be downloaded.');
+      notification.error(i18n.t('files.notifications.downloadUnavailableTitle'), i18n.t('files.notifications.onlyFilesDownloaded'));
       return;
     }
 
@@ -4432,7 +4467,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       workbenchAnchor: event ? { clientX: event.x, clientY: event.y } : undefined,
       openTerminalInDirectory: ctx.openTerminalInDirectory,
       onInvalidDirectory: () => {
-        notification.error('Invalid directory', 'Could not resolve a terminal working directory.');
+        notification.error(i18n.t('files.notifications.invalidDirectoryTitle'), i18n.t('files.notifications.invalidDirectoryMessage'));
       },
     });
   };
@@ -4449,11 +4484,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const openCreateEntryDialog = (kind: CreateEntryKind, event?: ContextMenuEvent | null) => {
     const directory = resolveDirectoryContextTarget(event);
     if (!directory) {
-      notification.error('Create unavailable', 'Could not resolve the target directory.');
+      notification.error(i18n.t('files.notifications.createUnavailableTitle'), i18n.t('files.notifications.couldNotResolveTargetDirectory'));
       return;
     }
     if (!canMutatePath(directory.path)) {
-      notification.error('Create unavailable', 'This filesystem root is read-only.');
+      notification.error(i18n.t('files.notifications.createUnavailableTitle'), i18n.t('files.notifications.rootReadOnly'));
       return;
     }
 
@@ -4468,7 +4503,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const ctxMenu: ContextMenuCallbacks = {
     onDelete: (items: FileItem[]) => {
       if (!items.every((item) => canMutatePath(item.path))) {
-        notification.error('Delete unavailable', 'This filesystem root is read-only.');
+        notification.error(i18n.t('files.notifications.deleteUnavailableTitle'), i18n.t('files.notifications.rootReadOnly'));
         return;
       }
       setDeleteDialogItems(items);
@@ -4476,7 +4511,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
     onRename: (item: FileItem) => {
       if (!canMutatePath(item.path)) {
-        notification.error('Rename unavailable', 'This filesystem root is read-only.');
+        notification.error(i18n.t('files.notifications.renameUnavailableTitle'), i18n.t('files.notifications.rootReadOnly'));
         return;
       }
       setRenameDialogItem(item);
@@ -4484,7 +4519,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
     onDuplicate: (items: FileItem[]) => {
       if (!items.every((item) => canMutatePath(item.path))) {
-        notification.error('Duplicate unavailable', 'This filesystem root is read-only.');
+        notification.error(i18n.t('files.notifications.duplicateUnavailableTitle'), i18n.t('files.notifications.rootReadOnly'));
         return;
       }
       void (async () => {
@@ -4504,10 +4539,15 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
           if (okCount <= 0) return;
           if (okCount === 1) {
-            notification.success('Duplicated', lastNewName ? `Created "${lastNewName}".` : 'Duplicate completed.');
+            notification.success(
+              i18n.t('files.notifications.duplicatedTitle'),
+              lastNewName
+                ? i18n.t('files.notifications.duplicateCreatedMessage', { name: lastNewName })
+                : i18n.t('files.notifications.duplicateCompletedMessage'),
+            );
             return;
           }
-          notification.success('Duplicate completed', `${okCount} items duplicated.`);
+          notification.success(i18n.t('files.notifications.duplicateCompletedTitle'), i18n.tn('files.notifications.itemsDuplicated', okCount));
         } finally {
           setDuplicateLoading(false);
         }
@@ -4521,20 +4561,20 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const secondaryOverrideContextMenuItems: ContextMenuItem[] = [
     {
       id: 'duplicate',
-      label: 'Duplicate',
+      label: i18n.t('files.menuDuplicate'),
       type: 'duplicate',
       icon: (props) => <Copy class={props.class} />,
       shortcut: 'Cmd+D',
     },
     {
       id: 'copy-name',
-      label: 'Copy Name',
+      label: i18n.t('files.menuCopyName'),
       type: 'copy-name',
       icon: (props) => <ClipboardIcon class={props.class} />,
     },
     {
       id: 'copy-path',
-      label: 'Copy Path',
+      label: i18n.t('files.menuCopyPath'),
       type: 'custom',
       icon: (props) => <ClipboardIcon class={props.class} />,
       onAction: (items: FileItem[]) => {
@@ -4543,14 +4583,14 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     },
     {
       id: 'rename',
-      label: 'Rename',
+      label: i18n.t('files.menuRename'),
       type: 'rename',
       icon: (props) => <Pencil class={props.class} />,
       shortcut: 'Enter',
     },
     {
       id: 'delete',
-      label: 'Delete',
+      label: i18n.t('files.menuDelete'),
       type: 'delete',
       icon: (props) => <Trash class={props.class} />,
       shortcut: 'Del',
@@ -4603,7 +4643,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     onAction?: (items: FileItem[], event?: ContextMenuEvent) => void;
   }): ContextMenuItem => ({
     id: 'ask-flower',
-    label: 'Ask Flower',
+    label: i18n.t('files.menuAskFlower'),
     type: 'custom',
     icon: (props) => <FlowerContextMenuIcon class={props.class} />,
     separator: options?.separator,
@@ -4618,7 +4658,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const buildOpenInTerminalMenuItem = (): ContextMenuItem => ({
     id: 'open-in-terminal',
-    label: 'Open in Terminal',
+    label: i18n.t('files.menuOpenInTerminal'),
     type: 'custom',
     icon: (props) => <Terminal class={props.class} />,
     onAction: (_items, event) => {
@@ -4628,7 +4668,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const buildDownloadMenuItem = (separator = false): ContextMenuItem => ({
     id: 'download',
-    label: 'Download',
+    label: i18n.t('files.menuDownload'),
     type: 'custom',
     icon: (props) => <Download class={props.class} />,
     separator,
@@ -4639,7 +4679,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   const buildNewContextMenuItem = (separator = false, disabled = false): ContextMenuItem => ({
     id: 'new',
-    label: 'New',
+    label: i18n.t('files.menuNew'),
     type: 'custom',
     icon: (props) => <Plus class={props.class} />,
     disabled,
@@ -4647,7 +4687,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     children: [
       {
         id: 'new-file',
-        label: 'File',
+        label: i18n.t('files.menuFile'),
         type: 'custom',
         onAction: (_items, event) => {
           openCreateEntryDialog('file', event);
@@ -4655,7 +4695,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       },
       {
         id: 'new-folder',
-        label: 'Folder',
+        label: i18n.t('files.menuFolder'),
         type: 'custom',
         onAction: (_items, event) => {
           openCreateEntryDialog('folder', event);
@@ -4791,7 +4831,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                           case 'canceled':
                             return {
                               status: 'error',
-                              message: 'Path navigation was canceled.',
+                              message: i18n.t('files.pathNavigationCanceled'),
                             };
                           case 'invalid_path':
                           case 'permission_denied':
@@ -4927,8 +4967,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         )}
       </Show>
 
-      <RedevenLoadingCurtain visible={pageMode() === 'files' && loading()} eyebrow="Files" message="Loading files..." />
-      <RedevenLoadingCurtain visible={dragMoveLoading()} eyebrow="Files" message="Moving..." />
+      <RedevenLoadingCurtain visible={pageMode() === 'files' && loading()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.loadingFiles')} />
+      <RedevenLoadingCurtain visible={dragMoveLoading()} eyebrow={i18n.t('shell.nav.files')} message={i18n.t('files.moving')} />
 
       <GitStashWindow
         open={stashWindowOpen()}
@@ -4991,8 +5031,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         onOpenChange={(open) => {
           if (!open) setDeleteDialogOpen(false);
         }}
-        title="Delete"
-        confirmText="Delete"
+        title={i18n.t('files.deleteTitle')}
+        confirmText={i18n.t('files.deleteConfirm')}
         variant="destructive"
         loading={deleteLoading()}
         onConfirm={() => void handleDelete(deleteDialogItems())}
@@ -5000,9 +5040,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         <div class="text-sm text-foreground">
           <Show
             when={deleteDialogItems().length === 1}
-            fallback={<>Are you sure you want to delete <span class="font-semibold">{deleteDialogItems().length} items</span>?</>}
+            fallback={<>{i18n.tn('files.deleteManyPrompt', deleteDialogItems().length)}</>}
           >
-            Are you sure you want to delete <span class="font-semibold">"{deleteDialogItems()[0]?.name}"</span>?
+            {i18n.t('files.deleteOnePrompt', { name: deleteDialogItems()[0]?.name ?? '' })}
           </Show>
         </div>
       </ConfirmDialog>
@@ -5010,11 +5050,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       {/* Create Dialog */}
       <InputDialog
         open={createDialogOpen()}
-        title={createDialogDraft()?.kind === 'folder' ? 'New Folder' : 'New File'}
-        label={createDialogDraft()?.kind === 'folder' ? 'Folder name' : 'File name'}
+        title={createDialogDraft()?.kind === 'folder' ? i18n.t('files.newFolderTitle') : i18n.t('files.newFileTitle')}
+        label={createDialogDraft()?.kind === 'folder' ? i18n.t('files.folderNameLabel') : i18n.t('files.fileNameLabel')}
         value={createDialogDraft()?.initialName ?? ''}
         placeholder={createDialogDraft()?.kind === 'folder' ? 'new-folder' : 'README.md'}
-        confirmText="Create"
+        confirmText={i18n.t('files.createConfirm')}
         loading={createLoading()}
         onConfirm={(name) => {
           void handleCreateEntry(name);
@@ -5028,8 +5068,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       {/* Rename Dialog */}
       <InputDialog
         open={renameDialogOpen()}
-        title="Rename"
-        label="New name"
+        title={i18n.t('files.renameTitle')}
+        label={i18n.t('files.newNameLabel')}
         value={renameDialogItem()?.name ?? ''}
         loading={renameLoading()}
         onConfirm={(newName) => {
@@ -5045,7 +5085,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       <Show when={duplicateLoading()}>
         <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
           <div class="bg-background border border-border rounded-lg shadow-lg px-4 py-3 text-sm">
-            Duplicating...
+            {i18n.t('files.duplicating')}
           </div>
         </div>
       </Show>

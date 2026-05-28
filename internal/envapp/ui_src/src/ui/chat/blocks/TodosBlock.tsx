@@ -3,6 +3,7 @@
 import { For, Match, Show, Switch, createMemo } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { useI18n, type I18nHelpers } from '../../i18n';
 
 export interface TodosBlockProps {
   version: number;
@@ -28,16 +29,16 @@ function isDone(status: TodosBlockProps['todos'][number]['status']): boolean {
   return status === 'completed' || status === 'cancelled';
 }
 
-function statusLabel(status: TodosBlockProps['todos'][number]['status']): string {
+function statusLabel(i18n: I18nHelpers, status: TodosBlockProps['todos'][number]['status']): string {
   switch (status) {
     case 'in_progress':
-      return 'In progress';
+      return i18n.t('chatActivity.todoStatus.inProgress');
     case 'completed':
-      return 'Completed';
+      return i18n.t('chatActivity.todoStatus.completed');
     case 'cancelled':
-      return 'Cancelled';
+      return i18n.t('chatActivity.todoStatus.cancelled');
     default:
-      return 'Pending';
+      return i18n.t('chatActivity.todoStatus.pending');
   }
 }
 
@@ -55,6 +56,7 @@ function statusClass(status: TodosBlockProps['todos'][number]['status']): string
 }
 
 export const TodosBlock: Component<TodosBlockProps> = (props) => {
+  const i18n = useI18n();
   const totalCount = createMemo(() => props.todos.length);
   const closedCount = createMemo(() => props.todos.filter((item) => isDone(item.status)).length);
   const completedCount = createMemo(() => props.todos.filter((item) => item.status === 'completed').length);
@@ -67,40 +69,40 @@ export const TodosBlock: Component<TodosBlockProps> = (props) => {
       : 0
   ));
   const progressLabel = createMemo(() => (
-    totalCount() === 1 ? '1 task' : `${totalCount()} tasks`
+    i18n.tn('chatActivity.todoTasks', totalCount(), { count: totalCount() })
   ));
   const summaryLabel = createMemo(() => {
     if (completedCount() > 0) {
-      return completedCount() === 1 ? '1 completed' : `${completedCount()} completed`;
+      return i18n.tn('chatActivity.todoSummary.completed', completedCount(), { count: completedCount() });
     }
     if (inProgressCount() > 0) {
-      return inProgressCount() === 1 ? '1 in progress' : `${inProgressCount()} in progress`;
+      return i18n.tn('chatActivity.todoSummary.inProgress', inProgressCount(), { count: inProgressCount() });
     }
     if (pendingCount() > 0) {
-      return pendingCount() === 1 ? '1 pending' : `${pendingCount()} pending`;
+      return i18n.tn('chatActivity.todoSummary.pending', pendingCount(), { count: pendingCount() });
     }
     if (cancelledCount() > 0) {
-      return cancelledCount() === 1 ? '1 cancelled' : `${cancelledCount()} cancelled`;
+      return i18n.tn('chatActivity.todoSummary.cancelled', cancelledCount(), { count: cancelledCount() });
     }
-    return 'No tracked tasks';
+    return i18n.t('chatActivity.todoSummary.none');
   });
   const footerMeta = createMemo(() => {
     const items: string[] = [];
     if (props.version > 0) items.push(`v${props.version}`);
     const updated = formatTime(props.updatedAtUnixMs);
-    if (updated) items.push(`Updated ${updated}`);
+    if (updated) items.push(i18n.t('flowerChat.tasks.updatedAt', { time: updated }));
     return items;
   });
 
   return (
-    <div class={cn('chat-todos-block', props.class)} role="group" aria-label="Task plan">
+    <div class={cn('chat-todos-block', props.class)} role="group" aria-label={i18n.t('flowerChat.tasks.title')}>
       <div class="chat-todos-header">
         <div class="chat-todos-kicker-row">
-          <span class="chat-todos-kicker">Updated plan</span>
+          <span class="chat-todos-kicker">{i18n.t('chatActivity.updatedPlan')}</span>
           <Show when={inProgressCount() > 0}>
             <span class="chat-todos-live-pill">
               <span class="chat-todos-live-dot" aria-hidden="true" />
-              {inProgressCount() === 1 ? '1 active step' : `${inProgressCount()} active steps`}
+              {i18n.tn('chatActivity.activeSteps', inProgressCount(), { count: inProgressCount() })}
             </span>
           </Show>
         </div>
@@ -110,7 +112,7 @@ export const TodosBlock: Component<TodosBlockProps> = (props) => {
             <span class="chat-todos-summary">{summaryLabel()}</span>
           </div>
           <span class="chat-todos-progress">
-            {closedCount()}/{totalCount() || 0} closed
+            {i18n.t('chatActivity.todoProgressClosed', { closed: closedCount(), total: totalCount() || 0 })}
           </span>
         </div>
         <div class="chat-todos-progress-track" aria-hidden="true">
@@ -125,11 +127,11 @@ export const TodosBlock: Component<TodosBlockProps> = (props) => {
         when={totalCount() > 0}
         fallback={
           <div class="chat-todos-empty-row">
-            <span class="chat-todos-empty">No tasks tracked yet.</span>
+            <span class="chat-todos-empty">{i18n.t('chatActivity.noTasksTracked')}</span>
           </div>
         }
       >
-        <div class="chat-todos-list" role="list" aria-label="Plan steps">
+        <div class="chat-todos-list" role="list" aria-label={i18n.t('chatActivity.planSteps')}>
           <For each={props.todos}>
             {(item) => (
               <div
@@ -177,7 +179,7 @@ export const TodosBlock: Component<TodosBlockProps> = (props) => {
                       {item.content}
                     </div>
                     <span class={cn('chat-todos-status', statusClass(item.status))}>
-                      {statusLabel(item.status)}
+                      {statusLabel(i18n, item.status)}
                     </span>
                   </div>
                   <Show when={item.note}>
@@ -197,22 +199,22 @@ export const TodosBlock: Component<TodosBlockProps> = (props) => {
           <div class="chat-todos-footer-stats">
             <Show when={pendingCount() > 0}>
               <span class="chat-todos-footer-chip chat-todos-footer-chip-pending">
-                {pendingCount() === 1 ? '1 pending' : `${pendingCount()} pending`}
+                {i18n.tn('chatActivity.todoSummary.pending', pendingCount(), { count: pendingCount() })}
               </span>
             </Show>
             <Show when={inProgressCount() > 0}>
               <span class="chat-todos-footer-chip chat-todos-footer-chip-active">
-                {inProgressCount() === 1 ? '1 active' : `${inProgressCount()} active`}
+                {i18n.tn('chatActivity.todoSummary.active', inProgressCount(), { count: inProgressCount() })}
               </span>
             </Show>
             <Show when={completedCount() > 0}>
               <span class="chat-todos-footer-chip chat-todos-footer-chip-completed">
-                {completedCount() === 1 ? '1 completed' : `${completedCount()} completed`}
+                {i18n.tn('chatActivity.todoSummary.completed', completedCount(), { count: completedCount() })}
               </span>
             </Show>
             <Show when={cancelledCount() > 0}>
               <span class="chat-todos-footer-chip chat-todos-footer-chip-cancelled">
-                {cancelledCount() === 1 ? '1 cancelled' : `${cancelledCount()} cancelled`}
+                {i18n.tn('chatActivity.todoSummary.cancelled', cancelledCount(), { count: cancelledCount() })}
               </span>
             </Show>
           </div>

@@ -15,6 +15,7 @@ import { CodexActivityStream, type CodexActivityStreamState } from './CodexActiv
 import { CodexIcon } from '../icons/CodexIcon';
 import { CodexMessageRunIndicator } from './CodexMessageRunIndicator';
 import { CodexUserMessageContent } from './CodexUserMessageContent';
+import { useI18n, type I18nHelpers } from '../i18n';
 import {
   displayStatus,
   itemGlyph,
@@ -163,12 +164,24 @@ function CodexMessageLane(props: {
   );
 }
 
-function titleCaseStatus(value: string): string {
-  return displayStatus(value, 'working')
+function titleCaseStatus(value: string, fallback: string): string {
+  return displayStatus(value, fallback)
     .split(' ')
     .map((part) => (part ? `${part.slice(0, 1).toUpperCase()}${part.slice(1)}` : ''))
     .join(' ')
     .trim();
+}
+
+function localizedStatusLabel(i18n: I18nHelpers, value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) return i18n.t('codexActivity.statusLabel.idle');
+  if (normalized === 'pending') return i18n.t('chatActivity.status.pending');
+  if (normalized === 'running') return i18n.t('chatActivity.status.running');
+  if (normalized === 'success' || normalized === 'completed') return i18n.t('chatActivity.status.success');
+  if (normalized === 'error' || normalized.includes('fail')) return i18n.t('chatActivity.status.error');
+  if (normalized.includes('waiting')) return i18n.t('chatActivity.status.waiting');
+  if (isWorkingStatus(normalized)) return i18n.t('codexActivity.statusLabel.working');
+  return displayStatus(value, i18n.t('codexActivity.statusLabel.idle'));
 }
 
 function basenameFromPath(path: string | null | undefined): string {
@@ -187,8 +200,15 @@ function itemDisplayFilename(item: CodexTranscriptItem): string {
   return basenameFromPath(path);
 }
 
-function fileChangeWorkingVerb(kind: string | null | undefined): string {
-  const normalized = String(kind ?? '').trim().toLowerCase();
+function fileChangeWorkingLabel(i18n: I18nHelpers, item: CodexTranscriptItem): string {
+  const changes = item.changes ?? [];
+  if (changes.length !== 1) return i18n.t('codexActivity.working.editingFiles');
+  const change = changes[0];
+  if (!change) return i18n.t('codexActivity.working.editingFiles');
+  const path = String(change.move_path ?? change.path ?? '').trim();
+  const name = basenameFromPath(path);
+  if (!name) return i18n.t('codexActivity.working.editingFiles');
+  const normalized = String(change.kind ?? '').trim().toLowerCase();
   switch (normalized) {
     case 'add':
     case 'added':
@@ -198,34 +218,23 @@ function fileChangeWorkingVerb(kind: string | null | undefined): string {
     case 'newfile':
     case 'new_file':
     case 'new file':
-      return 'Creating';
+      return i18n.t('codexActivity.working.creatingFile', { name });
     case 'delete':
     case 'deleted':
     case 'remove':
     case 'removed':
-      return 'Deleting';
+      return i18n.t('codexActivity.working.deletingFile', { name });
     case 'rename':
     case 'renamed':
     case 'move':
     case 'moved':
-      return 'Renaming';
+      return i18n.t('codexActivity.working.renamingFile', { name });
     default:
-      return 'Editing';
+      return i18n.t('codexActivity.working.editingFile', { name });
   }
 }
 
-function fileChangeWorkingLabel(item: CodexTranscriptItem): string {
-  const changes = item.changes ?? [];
-  if (changes.length !== 1) return 'Editing files';
-  const change = changes[0];
-  if (!change) return 'Editing files';
-  const path = String(change.move_path ?? change.path ?? '').trim();
-  const name = basenameFromPath(path);
-  const suffix = name ? ` ${name}` : '';
-  return `${fileChangeWorkingVerb(change.kind)}${suffix}`;
-}
-
-function itemWorkingActivityHint(item: CodexTranscriptItem): WorkingActivityHint | null {
+function itemWorkingActivityHint(i18n: I18nHelpers, item: CodexTranscriptItem): WorkingActivityHint | null {
   if (!isWorkingStatus(item.status)) return null;
   const order = Number(item.order);
   const safeOrder = Number.isFinite(order) ? order : 0;
@@ -237,31 +246,38 @@ function itemWorkingActivityHint(item: CodexTranscriptItem): WorkingActivityHint
     case 'filepreview':
     case 'file_preview': {
       const name = itemDisplayFilename(item);
-      return { priority: 80, order: safeOrder, label: name ? `Reading ${name}` : 'Reading files' };
+      return {
+        priority: 80,
+        order: safeOrder,
+        label: name
+          ? i18n.t('codexActivity.working.readingFile', { name })
+          : i18n.t('codexActivity.working.readingFiles'),
+      };
     }
     case 'filechange':
-      return { priority: 80, order: safeOrder, label: fileChangeWorkingLabel(item) };
+      return { priority: 80, order: safeOrder, label: fileChangeWorkingLabel(i18n, item) };
     case 'commandexecution':
-      return { priority: 70, order: safeOrder, label: 'Running command' };
+      return { priority: 70, order: safeOrder, label: i18n.t('codexActivity.working.runningCommand') };
     case 'websearch':
-      return { priority: 70, order: safeOrder, label: 'Searching web' };
+      return { priority: 70, order: safeOrder, label: i18n.t('codexActivity.working.searchingWeb') };
     case 'plan':
-      return { priority: 60, order: safeOrder, label: 'Planning' };
+      return { priority: 60, order: safeOrder, label: i18n.t('codexActivity.working.planning') };
     case 'reasoning':
-      return { priority: 60, order: safeOrder, label: 'Thinking' };
+      return { priority: 60, order: safeOrder, label: i18n.t('codexActivity.working.thinking') };
     default:
       return null;
   }
 }
 
 function latestWorkingActivityLabel(
+  i18n: I18nHelpers,
   items: readonly CodexTranscriptItem[],
   optimisticBoundaryOrder: number | null,
 ): string {
   let selected: WorkingActivityHint | null = null;
   for (const item of items) {
     if (optimisticBoundaryOrder !== null && Number(item.order) <= optimisticBoundaryOrder) continue;
-    const hint = itemWorkingActivityHint(item);
+    const hint = itemWorkingActivityHint(i18n, item);
     if (!hint) continue;
     if (
       !selected ||
@@ -274,22 +290,23 @@ function latestWorkingActivityLabel(
   return selected?.label ?? '';
 }
 
-function lockedPhaseLabel(value: string): string {
+function lockedPhaseLabel(i18n: I18nHelpers, value: string): string {
   switch (value) {
     case 'finalizing':
-      return 'Finalizing';
+      return i18n.t('codexActivity.working.finalizing');
     case 'recovering':
-      return 'Recovering';
+      return i18n.t('codexActivity.working.recovering');
     case 'waiting approval':
     case 'waiting_approval':
     case 'waitingapproval':
-      return 'Waiting for approval';
+      return i18n.t('codexActivity.working.waitingApproval');
     default:
       return '';
   }
 }
 
 function workingPhaseLabel(args: {
+  i18n: I18nHelpers;
   label: string;
   flags: readonly string[];
   items: readonly CodexTranscriptItem[];
@@ -310,13 +327,13 @@ function workingPhaseLabel(args: {
     );
   });
   const selected = prioritizedFlag || normalizedLabel;
-  const lockedPhase = lockedPhaseLabel(selected);
+  const lockedPhase = lockedPhaseLabel(args.i18n, selected);
   if (lockedPhase) return lockedPhase;
-  const activityLabel = latestWorkingActivityLabel(args.items, args.optimisticBoundaryOrder);
+  const activityLabel = latestWorkingActivityLabel(args.i18n, args.items, args.optimisticBoundaryOrder);
   if (activityLabel) return activityLabel;
   switch (selected) {
     case 'planning':
-      return 'Planning';
+      return args.i18n.t('codexActivity.working.planning');
     case 'running':
     case 'working':
     case 'active':
@@ -324,25 +341,27 @@ function workingPhaseLabel(args: {
     case 'in progress':
     case 'in_progress':
     case 'inprogress':
-      return 'Thinking';
+      return args.i18n.t('codexActivity.working.thinking');
     default: {
-      const titled = titleCaseStatus(selected || 'working');
-      return titled || 'Thinking';
+      const fallback = args.i18n.t('codexActivity.working.thinking');
+      const titled = titleCaseStatus(selected || 'working', fallback);
+      return titled || fallback;
     }
   }
 }
 
 function EvidenceHeader(props: { item: CodexTranscriptItem }) {
+  const i18n = useI18n();
   return (
     <div class="codex-chat-evidence-header">
       <span class="codex-chat-evidence-kicker">{itemGlyph(props.item)}</span>
       <div class="codex-chat-evidence-copy">
-        <div class="codex-chat-evidence-title">{itemTitle(props.item)}</div>
+        <div class="codex-chat-evidence-title">{itemTitle(props.item, i18n)}</div>
       </div>
       <Show when={props.item.status}>
         <span class="codex-chat-evidence-status">
           <Tag variant={statusTagVariant(props.item.status)} tone="soft" size="sm">
-            {displayStatus(props.item.status)}
+            {localizedStatusLabel(i18n, props.item.status)}
           </Tag>
         </span>
       </Show>
@@ -351,7 +370,8 @@ function EvidenceHeader(props: { item: CodexTranscriptItem }) {
 }
 
 function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
-  const fallbackText = () => itemText(props.item);
+  const i18n = useI18n();
+  const fallbackText = () => itemText(props.item, i18n);
   return (
     <CodexMessageLane role="assistant">
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
@@ -378,13 +398,14 @@ function TranscriptEvidenceRow(props: { item: CodexTranscriptItem }) {
 }
 
 function AgentMessageRow(props: { item: CodexTranscriptItem }) {
+  const i18n = useI18n();
   const streaming = () => isWorkingStatus(props.item.status);
   return (
     <CodexMessageLane role="assistant">
       <div data-codex-item-type={props.item.type} class="chat-message-bubble chat-message-bubble-assistant codex-chat-message-bubble-assistant">
         <div class="codex-chat-message-surface codex-chat-message-surface-assistant">
           <MarkdownBlock
-            content={itemText(props.item)}
+            content={itemText(props.item, i18n)}
             streaming={streaming()}
             class="codex-chat-markdown-block"
             rendererVariant="codex"
@@ -430,6 +451,7 @@ interface PendingAssistantVisualState {
 }
 
 function PendingAssistantPrelude() {
+  const i18n = useI18n();
   return (
     <div
       data-codex-pre-output="true"
@@ -437,7 +459,7 @@ function PendingAssistantPrelude() {
     >
       <div class="codex-chat-message-surface codex-chat-message-surface-assistant codex-pending-assistant-prelude-surface">
         <div class="chat-markdown-block codex-chat-markdown-block">
-          <div class="chat-markdown-empty-streaming" aria-label="Codex is preparing to respond">
+          <div class="chat-markdown-empty-streaming" aria-label={i18n.t('chatChrome.assistantIsThinking')}>
             <StreamingCursor />
           </div>
         </div>
@@ -733,6 +755,7 @@ export function CodexTranscript(props: {
   emptyTitle: string;
   emptyBody: string;
 }) {
+  const i18n = useI18n();
   const optimisticUserTurns = createMemo<readonly CodexOptimisticUserTurn[]>(() => props.optimisticUserTurns ?? []);
   const transcriptRowScopeKey = createMemo(() => normalizeTranscriptRowScopeKey(
     props.threadKey ?? optimisticUserTurns()[0]?.thread_id ?? null,
@@ -785,6 +808,7 @@ export function CodexTranscript(props: {
       showPrelude,
       showWorkingRail: showPrelude && showWorkingRail,
       phaseLabel: workingPhaseLabel({
+        i18n,
         label: String(props.workingLabel ?? '').trim() || 'working',
         flags: props.workingFlags ?? [],
         items: props.items,

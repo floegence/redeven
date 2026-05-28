@@ -8,6 +8,7 @@ import {
   AutoSaveIndicator, JSONEditor, SubSectionHeader, type ViewMode,
 } from '../SettingsPrimitives';
 import { formatUnknownError } from '../../../maintenance/shared';
+import { useI18n } from '../../../i18n';
 import type { FilesystemRootPolicy, FilesystemScope } from '../types';
 
 const AUTO_SAVE_DELAY_MS = 700;
@@ -37,6 +38,7 @@ function nextCustomRootID(roots: readonly FilesystemRootPolicy[]): string {
 
 export function RuntimeConfigSection() {
   const ctx = useEnvSettingsPage();
+  const i18n = useI18n();
 
   const [viewMode, setViewMode] = createSignal<ViewMode>('ui');
   const [agentHomeDir, setAgentHomeDir] = createSignal('');
@@ -84,7 +86,7 @@ export function RuntimeConfigSection() {
         });
         setSaving(false); setSavedAt(Date.now()); setDirty(false); setError(null);
       } catch (e) {
-        setSaving(false); setError(formatUnknownError(e) || 'Save failed.');
+        setSaving(false); setError(formatUnknownError(e) || i18n.t('runtimeConfig.saveFailed'));
       }
     }, AUTO_SAVE_DELAY_MS);
   });
@@ -113,9 +115,9 @@ export function RuntimeConfigSection() {
     <>
       <SettingsCard
         icon={Terminal}
-        title="Shell & Workspace"
-        description="Default shell and working directory for runtime-backed tools."
-        badge="Manual restart required"
+        title={i18n.t('runtimeConfig.title')}
+        description={i18n.t('runtimeConfig.description')}
+        badge={i18n.t('runtimeConfig.manualRestartRequired')}
         badgeVariant="warning"
         error={error()}
         actions={
@@ -132,9 +134,9 @@ export function RuntimeConfigSection() {
           <SettingsTable minWidthClass="min-w-[42rem]">
             <SettingsTableHead>
               <SettingsTableHeaderRow>
-                <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
-                <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
-                <SettingsTableHeaderCell class="w-72">Notes</SettingsTableHeaderCell>
+                <SettingsTableHeaderCell class="w-48">{i18n.t('settings.table.setting')}</SettingsTableHeaderCell>
+                <SettingsTableHeaderCell>{i18n.t('settings.table.value')}</SettingsTableHeaderCell>
+                <SettingsTableHeaderCell class="w-72">{i18n.t('settings.table.notes')}</SettingsTableHeaderCell>
               </SettingsTableHeaderRow>
             </SettingsTableHead>
             <SettingsTableBody>
@@ -144,7 +146,7 @@ export function RuntimeConfigSection() {
                   <Input value={agentHomeDir()} onInput={(e) => { setAgentHomeDir(e.currentTarget.value); setDirty(true); }}
                     placeholder="/home/user" size="sm" class="w-full" disabled={!ctx.canInteract()} />
                 </SettingsTableCell>
-                <SettingsTableCell class="text-[11px] text-muted-foreground">Defaults to the user home directory if left empty.</SettingsTableCell>
+                <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.agentHomeDirNote')}</SettingsTableCell>
               </SettingsTableRow>
               <SettingsTableRow>
                 <SettingsTableCell class="font-medium text-muted-foreground">shell</SettingsTableCell>
@@ -152,22 +154,22 @@ export function RuntimeConfigSection() {
                   <Input value={shell()} onInput={(e) => { setShell(e.currentTarget.value); setDirty(true); }}
                     placeholder="/bin/bash" size="sm" class="w-full" disabled={!ctx.canInteract()} />
                 </SettingsTableCell>
-                <SettingsTableCell class="text-[11px] text-muted-foreground">Defaults to `$SHELL` if left empty.</SettingsTableCell>
+                <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.shellNote')}</SettingsTableCell>
               </SettingsTableRow>
             </SettingsTableBody>
           </SettingsTable>
 
           <div class="mt-5">
-            <SubSectionHeader title="Filesystem Roots" description="Directory-level file access exposed to Files, Git, Flower tools, and Code App."
-              actions={<Button size="sm" variant="outline" icon={Plus} onClick={addRoot} disabled={!ctx.canInteract()}>Add Root</Button>} />
+            <SubSectionHeader title={i18n.t('runtimeConfig.filesystemRootsTitle')} description={i18n.t('runtimeConfig.filesystemRootsDescription')}
+              actions={<Button size="sm" variant="outline" icon={Plus} onClick={addRoot} disabled={!ctx.canInteract()}>{i18n.t('runtimeConfig.addRoot')}</Button>} />
             <SettingsTable minWidthClass="min-w-[58rem]">
               <SettingsTableHead>
                 <SettingsTableHeaderRow>
-                  <SettingsTableHeaderCell class="w-52">Root</SettingsTableHeaderCell>
-                  <SettingsTableHeaderCell class="w-[22rem]">Path</SettingsTableHeaderCell>
-                  <SettingsTableHeaderCell class="w-36">Access</SettingsTableHeaderCell>
-                  <SettingsTableHeaderCell class="w-28">Type</SettingsTableHeaderCell>
-                  <SettingsTableHeaderCell class="w-24" align="right">Actions</SettingsTableHeaderCell>
+                  <SettingsTableHeaderCell class="w-52">{i18n.t('runtimeConfig.rootHeader')}</SettingsTableHeaderCell>
+                  <SettingsTableHeaderCell class="w-[22rem]">{i18n.t('runtimeConfig.pathHeader')}</SettingsTableHeaderCell>
+                  <SettingsTableHeaderCell class="w-36">{i18n.t('runtimeConfig.accessHeader')}</SettingsTableHeaderCell>
+                  <SettingsTableHeaderCell class="w-28">{i18n.t('runtimeConfig.typeHeader')}</SettingsTableHeaderCell>
+                  <SettingsTableHeaderCell class="w-24" align="right">{i18n.t('settings.table.actions')}</SettingsTableHeaderCell>
                 </SettingsTableHeaderRow>
               </SettingsTableHead>
               <SettingsTableBody>
@@ -188,18 +190,18 @@ export function RuntimeConfigSection() {
                       <SettingsTableCell>
                         <div class="space-y-1.5">
                           <SettingsPill tone={root.permissions?.write ? 'success' : 'warning'}>
-                            {root.permissions?.write ? 'Read/write' : 'Read-only'}
+                            {root.permissions?.write ? i18n.t('runtimeConfig.readWrite') : i18n.t('runtimeConfig.readOnly')}
                           </SettingsPill>
                           <label class={`flex items-center gap-2 text-[11px] text-muted-foreground ${ctx.canInteract() && !root.system ? 'cursor-pointer' : ''}`}>
                             <Checkbox checked={Boolean(root.permissions?.write)}
                               onChange={(v) => requestWriteChange(index(), root, Boolean(v))} disabled={!ctx.canInteract() || root.system} />
-                            Allow writes
+                            {i18n.t('runtimeConfig.allowWrites')}
                           </label>
                         </div>
                       </SettingsTableCell>
-                      <SettingsTableCell class="text-[11px] text-muted-foreground">{root.system ? 'System' : 'Custom'}</SettingsTableCell>
+                      <SettingsTableCell class="text-[11px] text-muted-foreground">{root.system ? i18n.t('runtimeConfig.systemRoot') : i18n.t('runtimeConfig.customRoot')}</SettingsTableCell>
                       <SettingsTableCell align="right">
-                        <Button size="icon" variant="ghost" icon={Trash} aria-label="Remove root"
+                        <Button size="icon" variant="ghost" icon={Trash} aria-label={i18n.t('runtimeConfig.removeRoot')}
                           class={root.system ? 'opacity-40' : 'text-muted-foreground hover:text-destructive'}
                           onClick={() => removeRoot(index())} disabled={!ctx.canInteract() || root.system} />
                       </SettingsTableCell>
@@ -209,7 +211,7 @@ export function RuntimeConfigSection() {
               </SettingsTableBody>
             </SettingsTable>
             <div class="text-[11px] leading-relaxed text-muted-foreground mt-2">
-              System roots are managed by the runtime. Custom roots require a manual restart after save.
+              {i18n.t('runtimeConfig.systemRootsNote')}
             </div>
           </div>
         </Show>
@@ -218,15 +220,15 @@ export function RuntimeConfigSection() {
       <ConfirmDialog
         open={Boolean(writeConfirmTarget())}
         onOpenChange={(open) => { if (!open) setWriteConfirmTarget(null); }}
-        title="Allow filesystem writes?"
-        confirmText="Allow writes"
+        title={i18n.t('runtimeConfig.allowWritesDialogTitle')}
+        confirmText={i18n.t('runtimeConfig.allowWrites')}
         variant="destructive"
         onConfirm={confirmWriteAccess}
       >
         <div class="space-y-3">
-          <p class="text-sm">This custom root will allow create, rename, overwrite, and delete operations from runtime file capabilities.</p>
-          <p class="text-xs text-muted-foreground break-all">Root: {writeConfirmTarget()?.root.label || writeConfirmTarget()?.root.id || 'Custom Root'}</p>
-          <p class="text-xs text-muted-foreground break-all">Path: <span class="font-mono">{writeConfirmTarget()?.root.path || '-'}</span></p>
+          <p class="text-sm">{i18n.t('runtimeConfig.allowWritesDialogDescription')}</p>
+          <p class="text-xs text-muted-foreground break-all">{i18n.t('runtimeConfig.rootLabel')}: {writeConfirmTarget()?.root.label || writeConfirmTarget()?.root.id || i18n.t('runtimeConfig.customRoot')}</p>
+          <p class="text-xs text-muted-foreground break-all">{i18n.t('runtimeConfig.pathHeader')}: <span class="font-mono">{writeConfirmTarget()?.root.path || '-'}</span></p>
         </div>
       </ConfirmDialog>
     </>

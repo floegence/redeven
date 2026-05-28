@@ -1,10 +1,10 @@
 import type { DesktopAccessMode } from '../shared/desktopSettingsSurface';
-import type { DesktopWelcomeSnapshot } from '../shared/desktopLauncherIPC';
+import type { DesktopLauncherCloseAction } from '../shared/desktopLauncherIPC';
 
 export function compactCloseActionLabel(
-  label: DesktopWelcomeSnapshot['close_action_label'],
+  action: DesktopLauncherCloseAction,
 ): string {
-  return label;
+  return action === 'quit' ? 'Quit' : 'Close Launcher';
 }
 
 export function compactOpenLocalEnvironmentLabel(isOpen: boolean): string {

@@ -19,6 +19,7 @@ import {
   showDesktopConfirmationDialog,
 } from './desktopConfirmation';
 import type { DesktopConfirmationDialogModel } from '../shared/desktopConfirmationContract';
+import { createDesktopI18n } from '../shared/i18n/desktopI18n';
 import {
   createSafeStorageSecretCodec,
   deleteSavedControlPlane,
@@ -88,6 +89,7 @@ import {
 import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRuntimeState';
 import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
 import { DesktopThemeState } from './desktopThemeState';
+import { DesktopLanguageState } from './desktopLanguageState';
 import { loadOrCreateDesktopRuntimeOwnerID } from './desktopRuntimeOwner';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
 import { DesktopDownloadWriter } from './desktopDownloadWriter';
@@ -251,6 +253,10 @@ import {
   DESKTOP_THEME_GET_SNAPSHOT_CHANNEL,
   DESKTOP_THEME_SET_SOURCE_CHANNEL,
 } from '../shared/desktopThemeIPC';
+import {
+  DESKTOP_LANGUAGE_GET_SNAPSHOT_CHANNEL,
+  DESKTOP_LANGUAGE_SET_PREFERENCE_CHANNEL,
+} from '../shared/desktopLanguageIPC';
 import { DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL } from '../shared/windowChromeIPC';
 import {
   DESKTOP_SHELL_OPEN_WINDOW_CHANNEL,
@@ -413,6 +419,7 @@ import {
   runtimeServiceNeedsRuntimeUpdate,
   runtimeServiceHasActiveWork,
   formatRuntimeServiceWorkload,
+  runtimeServiceWorkloadCounts,
   type RuntimeServiceProviderLinkBinding,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
@@ -650,6 +657,7 @@ let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';
 let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopStateStoreCache: DesktopStateStore | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
+let desktopLanguageStateCache: DesktopLanguageState | null = null;
 let desktopRuntimeOwnerIDTask: Promise<string> | null = null;
 const controlPlaneAccessStateByKey = new Map<string, DesktopControlPlaneAccessState>();
 const controlPlaneSyncStateByKey = new Map<string, DesktopControlPlaneSyncRecord>();
@@ -1819,6 +1827,7 @@ async function inspectRuntimePlacementTargetState(
           can_desktop_restart: false,
           has_active_work: true,
           active_work_label: 'Existing runtime work may be active',
+          active_workload: runtimeServiceWorkloadCounts(undefined),
           current_runtime_version: probe.reported_release_tag ?? undefined,
           target_runtime_version: probe.target_release_tag ?? resolveSSHRuntimeReleaseTag(),
           message: 'Update this container runtime before opening it with this Desktop.',
@@ -2164,6 +2173,50 @@ function desktopThemeState(): DesktopThemeState {
   }
   desktopThemeStateCache.initialize();
   return desktopThemeStateCache;
+}
+
+function desktopLanguageState(): DesktopLanguageState {
+  if (!desktopLanguageStateCache) {
+    desktopLanguageStateCache = new DesktopLanguageState(desktopStateStore(), app, {
+      onSnapshotChanged: () => {
+        installOrRefreshAppMenu();
+        broadcastDesktopWelcomeSnapshots();
+      },
+    });
+  }
+  desktopLanguageStateCache.initialize();
+  return desktopLanguageStateCache;
+}
+
+function appMenuActions() {
+  return {
+    openConnectionCenter: () => {
+      void openDesktopWelcomeWindow({
+        entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
+        stealAppFocus: true,
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        dialog.showErrorBox('Redeven Desktop failed to open the launcher', message || 'Unknown launcher error.');
+      });
+    },
+    openAdvancedSettings: () => {
+      void openAdvancedSettingsWindow().catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        dialog.showErrorBox('Redeven Desktop failed to open Local Environment Settings', message || 'Unknown settings error.');
+      });
+    },
+    requestQuit: () => {
+      void requestQuit();
+    },
+  } as const;
+}
+
+function installOrRefreshAppMenu(): void {
+  if (!app.isReady()) {
+    return;
+  }
+  const i18n = createDesktopI18n(desktopLanguageState().getSnapshot().resolved_locale);
+  Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate(appMenuActions(), i18n)));
 }
 
 function registerWindowStatePersistence(win: BrowserWindow, key: string): void {
@@ -3251,6 +3304,11 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
   const trackedWindow = trackBrowserWindow(win);
 
   desktopThemeState().registerWindow(win);
+  desktopLanguageState().registerWindow(win, {
+    titleForSnapshot: args.role === 'launcher'
+      ? (snapshot) => createDesktopI18n(snapshot.resolved_locale).t('desktop.title')
+      : false,
+  });
   const disposeWindowChromeBroadcast = attachDesktopWindowChromeBroadcast(win, process.platform);
   applyRestoredWindowState(win, restoredState);
   registerWindowStatePersistence(win, args.stateKey);
@@ -4961,6 +5019,7 @@ function sshRuntimeMaintenanceFromStartup(
     can_desktop_restart: Number.isInteger(startup.pid) && Number(startup.pid) > 0,
     has_active_work: runtimeServiceHasActiveWork(runtimeService),
     active_work_label: formatRuntimeServiceWorkload(runtimeService),
+    active_workload: runtimeServiceWorkloadCounts(runtimeService),
     current_runtime_version: runtimeService?.runtime_version,
     target_runtime_version: resolveSSHRuntimeReleaseTag(),
     message,
@@ -11660,6 +11719,12 @@ if (!app.requestSingleInstanceLock()) {
   ipcMain.on(DESKTOP_THEME_SET_SOURCE_CHANNEL, (event, source) => {
     event.returnValue = desktopThemeState().setSource(source);
   });
+  ipcMain.on(DESKTOP_LANGUAGE_GET_SNAPSHOT_CHANNEL, (event) => {
+    event.returnValue = desktopLanguageState().getSnapshot();
+  });
+  ipcMain.on(DESKTOP_LANGUAGE_SET_PREFERENCE_CHANNEL, (event, preference) => {
+    event.returnValue = desktopLanguageState().setPreference(preference);
+  });
   ipcMain.on(DESKTOP_WINDOW_CHROME_GET_SNAPSHOT_CHANNEL, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     event.returnValue = desktopWindowChromeSnapshotForWindow(win, process.platform);
@@ -11927,26 +11992,7 @@ if (!app.requestSingleInstanceLock()) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`[redeven:runtime-package-cache] Cache cleanup failed: ${message}`);
     });
-    Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate({
-      openConnectionCenter: () => {
-        void openDesktopWelcomeWindow({
-          entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
-          stealAppFocus: true,
-        }).catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          dialog.showErrorBox('Redeven Desktop failed to open the launcher', message || 'Unknown launcher error.');
-        });
-      },
-      openAdvancedSettings: () => {
-        void openAdvancedSettingsWindow().catch((error) => {
-          const message = error instanceof Error ? error.message : String(error);
-          dialog.showErrorBox('Redeven Desktop failed to open Local Environment Settings', message || 'Unknown settings error.');
-        });
-      },
-      requestQuit: () => {
-        void requestQuit();
-      },
-    })));
+    installOrRefreshAppMenu();
 
     try {
       if (pendingDesktopDeepLinks.length > 0) {
@@ -11971,6 +12017,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.on('activate', () => {
+    desktopLanguageState().refreshSystemLocale();
     void syncVisibleControlPlanesIfNeeded().catch(() => {
       // Best-effort refresh when the app becomes active again.
     });
@@ -11982,6 +12029,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   powerMonitor.on('resume', () => {
+    desktopLanguageState().refreshSystemLocale();
     void syncVisibleControlPlanesIfNeeded({ force: true }).catch(() => {
       // Best-effort refresh after sleep/wake.
     });

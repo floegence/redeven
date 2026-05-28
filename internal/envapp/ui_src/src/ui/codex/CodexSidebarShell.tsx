@@ -3,6 +3,7 @@ import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layo
 import { Button, ProcessingIndicator, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { CodexIcon } from '../icons/CodexIcon';
+import { useI18n } from '../i18n';
 import { Tooltip } from '../primitives/Tooltip';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useCodexContext } from './CodexProvider';
@@ -28,10 +29,12 @@ const THREAD_RAIL_SCROLL_CLASS = 'flex-1 min-h-0 overflow-y-auto overflow-x-hidd
 
 function RuntimeSummary() {
   const codex = useCodexContext();
+  const i18n = useI18n();
   const summary = createMemo(() => buildCodexSidebarSummary({
     status: codex.status(),
     pendingRequests: codex.pendingRequests(),
     statusError: codex.statusError(),
+    t: i18n.t,
   }));
 
   return (
@@ -53,7 +56,7 @@ function RuntimeSummary() {
         </div>
         <Show when={summary().pendingRequestCount > 0}>
           <span class="shrink-0 rounded-full border border-warning/30 bg-warning/10 px-2 py-1 text-[11px] text-warning">
-            {summary().pendingRequestCount} pending
+            {i18n.tn('codex.sidebar.pendingCount', summary().pendingRequestCount)}
           </span>
         </Show>
       </div>
@@ -63,18 +66,19 @@ function RuntimeSummary() {
 
 function EmptyState() {
   const codex = useCodexContext();
+  const i18n = useI18n();
   return (
     <div data-codex-surface="sidebar-empty" class="codex-sidebar-empty">
       <CodexIcon class="mx-auto mb-3 h-12 w-12" />
       <p class="text-xs font-medium text-muted-foreground/80">
         {codex.hasHostBinary()
-          ? 'No conversations yet'
-          : 'Codex is not available yet'}
+          ? i18n.t('codex.sidebar.noConversations')
+          : i18n.t('codex.sidebar.notAvailableYet')}
       </p>
       <p class="mt-1 text-[11px] leading-5 text-muted-foreground/50">
         {codex.hasHostBinary()
-          ? 'Start a new Codex chat to begin.'
-          : 'Install `codex` on the host, then refresh this panel.'}
+          ? i18n.t('codex.sidebar.startNewChat')
+          : i18n.t('codex.sidebar.installThenRefresh')}
       </p>
     </div>
   );
@@ -92,8 +96,9 @@ function ThreadCard(props: {
   onClick: () => void;
   onAction: () => void;
 }) {
-  const title = () => String(props.thread.name ?? props.thread.preview ?? '').trim() || 'New chat';
-  const preview = () => threadPreview(props.thread);
+  const i18n = useI18n();
+  const title = () => String(props.thread.name ?? props.thread.preview ?? '').trim() || i18n.t('codex.common.newChat');
+  const preview = () => threadPreview(props.thread, i18n.t);
   const timeLabel = () => formatRelativeThreadTime(props.thread.updated_at_unix_s);
   const indicatorMode = (): 'running' | 'unread' | 'none' => {
     if (props.isRunning) return 'running';
@@ -124,14 +129,14 @@ function ThreadCard(props: {
         <div class="relative mt-1.5 h-2 w-2 shrink-0" data-thread-indicator={indicatorMode()}>
           <Show when={indicatorMode() === 'running'}>
             <>
-              <div class={`h-2 w-2 rounded-full ${threadStatusDotClass(props.thread.status)}`} title={displayStatus(props.thread.status, 'Idle')} />
+              <div class={`h-2 w-2 rounded-full ${threadStatusDotClass(props.thread.status)}`} title={displayStatus(props.thread.status, i18n.t('codex.common.idle'))} />
               <Show when={isWorkingStatus(props.thread.status)}>
                 <div class="absolute inset-0 h-2 w-2 rounded-full bg-primary/50 animate-pulse" />
               </Show>
             </>
           </Show>
           <Show when={indicatorMode() === 'unread'}>
-            <div class="h-2 w-2 rounded-full bg-primary" title="Unread" />
+            <div class="h-2 w-2 rounded-full bg-primary" title={i18n.t('codex.sidebar.unread')} />
           </Show>
         </div>
 
@@ -143,7 +148,7 @@ function ThreadCard(props: {
             when={props.isRunning}
             fallback={<p class="truncate text-[11px] leading-tight text-muted-foreground/60">{preview()}</p>}
           >
-            <ProcessingIndicator variant="minimal" status="Working" class="h-3.5" />
+            <ProcessingIndicator variant="minimal" status={i18n.t('codex.common.working')} class="h-3.5" />
           </Show>
         </div>
       </button>
@@ -200,6 +205,7 @@ function ThreadCard(props: {
 
 export function CodexSidebarShell() {
   const codex = useCodexContext();
+  const i18n = useI18n();
 
   const threads = createMemo(() => codex.threads());
   const threadByID = createMemo(() => {
@@ -221,6 +227,19 @@ export function CodexSidebarShell() {
   const showGroupHeaders = createMemo(() => threads().length >= 5);
   const showInitialLoading = createMemo(() => codex.threadsLoading() && !hasThreads());
   const newChatDisabledReason = createMemo(() => codex.hostDisabledReason());
+  const groupLabel = (group: SidebarThreadGroup['group']): string => {
+    switch (group) {
+      case 'Today':
+        return i18n.t('codex.sidebar.today');
+      case 'Yesterday':
+        return i18n.t('codex.sidebar.yesterday');
+      case 'This Week':
+        return i18n.t('codex.sidebar.thisWeek');
+      case 'Older':
+      default:
+        return i18n.t('codex.sidebar.older');
+    }
+  };
   const renderNewChatButton = () => (
     <Button
       variant="primary"
@@ -229,7 +248,7 @@ export function CodexSidebarShell() {
       disabled={!codex.hasHostBinary()}
       onClick={codex.startNewThreadDraft}
     >
-      New Chat
+      {i18n.t('aiChrome.newChat')}
     </Button>
   );
   return (
@@ -257,12 +276,12 @@ export function CodexSidebarShell() {
           when={!showInitialLoading()}
           fallback={
             <div class="codex-sidebar-loading">
-              Loading chats...
+              {i18n.t('codex.sidebar.loadingChats')}
             </div>
           }
         >
           <Show when={hasThreads()} fallback={<EmptyState />}>
-            <SidebarSection title="Conversations" class={THREAD_RAIL_SECTION_CLASS}>
+            <SidebarSection title={i18n.t('codex.sidebar.conversations')} class={THREAD_RAIL_SECTION_CLASS}>
               <div
                 {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
                 data-testid="codex-thread-scroll-region"
@@ -276,7 +295,7 @@ export function CodexSidebarShell() {
                         <>
                           <Show when={showGroupHeaders()}>
                             <div class="codex-sidebar-group-label">
-                              {group().group}
+                              {groupLabel(group().group)}
                             </div>
                           </Show>
                           <For each={group().threadIDs}>
@@ -292,11 +311,11 @@ export function CodexSidebarShell() {
                                       unread={codex.isThreadUnread(threadID)}
                                       actionLabel={
                                         codex.supportsOperation('thread_archive')
-                                          ? (codex.archivingThreadID() === threadID ? 'Archiving…' : 'Archive')
+                                          ? (codex.archivingThreadID() === threadID ? i18n.t('codex.actions.archiving') : i18n.t('codex.actions.archive'))
                                           : ''
                                       }
                                       actionAriaLabel={
-                                        `Archive chat ${String(resolvedThread().name ?? resolvedThread().preview ?? threadID).trim() || threadID}`
+                                        i18n.t('codex.sidebar.archiveChatAria', { title: String(resolvedThread().name ?? resolvedThread().preview ?? threadID).trim() || threadID })
                                       }
                                       actionDisabled={
                                         !codex.hasHostBinary() || codex.archivingThreadID() === threadID

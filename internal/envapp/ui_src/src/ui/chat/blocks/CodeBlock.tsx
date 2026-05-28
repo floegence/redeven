@@ -6,6 +6,7 @@ import { cn, deferAfterPaint } from '@floegence/floe-webapp-core';
 import { highlightCodeToHtml, resolveCodeHighlightTheme } from '../../utils/shikiHighlight';
 import { isLargeCodeBlock } from '../responsiveness';
 import { hasShikiWorkerSupport, highlightCodeToHtmlInWorker } from '../workers/shikiWorkerClient';
+import { useI18n } from '../../i18n';
 
 export interface CodeBlockProps {
   language: string;
@@ -72,6 +73,7 @@ const CheckIcon = () => (
 );
 
 export const CodeBlock: Component<CodeBlockProps> = (props) => {
+  const i18n = useI18n();
   const [highlightedHtml, setHighlightedHtml] = createSignal('');
   const [copied, setCopied] = createSignal(false);
   let highlightRequestSeq = 0;
@@ -128,8 +130,8 @@ export const CodeBlock: Component<CodeBlockProps> = (props) => {
           <button
             class="chat-code-copy-btn"
             onClick={handleCopy}
-            title={copied() ? 'Copied!' : 'Copy code'}
-            aria-label={copied() ? 'Copied!' : 'Copy code'}
+            title={copied() ? i18n.t('chatChrome.copiedBang') : i18n.t('chatChrome.copyCode')}
+            aria-label={copied() ? i18n.t('chatChrome.copiedBang') : i18n.t('chatChrome.copyCode')}
           >
             <Show when={copied()} fallback={<CopyIcon />}>
               <CheckIcon />

@@ -4,6 +4,7 @@ import type {
   DesktopFailureSeverity,
   DesktopOperationFailurePresentation,
 } from '../shared/desktopOperationFailure';
+import type { DesktopTranslationKey } from '../shared/i18n';
 import type { DesktopRuntimeLifecycleStepID } from '../shared/desktopRuntimeLifecycleProgress';
 
 function compact(value: unknown): string {
@@ -35,9 +36,13 @@ export function desktopOperationFailurePresentation(
     code?: DesktopFailureCode;
     severity?: DesktopFailureSeverity;
     title: string;
+    titleKey?: DesktopTranslationKey;
     summary: string;
+    summaryKey?: DesktopTranslationKey;
     detail?: string;
+    detailKey?: DesktopTranslationKey;
     recoveryHint?: string;
+    recoveryHintKey?: DesktopTranslationKey;
     targetLabel?: string;
     diagnostics?: readonly DesktopFailureDiagnostic[];
   }>,
@@ -49,9 +54,13 @@ export function desktopOperationFailurePresentation(
     code: input.code ?? 'operation_failed',
     severity: input.severity ?? 'error',
     title,
+    ...(input.titleKey ? { title_key: input.titleKey } : {}),
     summary,
+    ...(input.summaryKey ? { summary_key: input.summaryKey } : {}),
     ...(compact(input.detail) ? { detail: compact(input.detail) } : {}),
+    ...(input.detailKey ? { detail_key: input.detailKey } : {}),
     ...(compact(input.recoveryHint) ? { recovery_hint: compact(input.recoveryHint) } : {}),
+    ...(input.recoveryHintKey ? { recovery_hint_key: input.recoveryHintKey } : {}),
     ...(compact(input.targetLabel) ? { target_label: compact(input.targetLabel) } : {}),
     ...(diagnostics.length > 0 ? { diagnostics } : {}),
   };

@@ -1,4 +1,5 @@
 import type { ActivityDetailRef, ActivityItem } from '../types';
+import type { EnvAppTranslationKey } from '../../i18n/locales';
 import type {
   ActivityDetailChip,
   ActivityDetailPresentation,
@@ -114,6 +115,10 @@ function statusTone(status: ActivityDetailStatus): ActivityDetailChip['tone'] {
   return 'neutral';
 }
 
+function statusLabelKey(status: ActivityDetailStatus): EnvAppTranslationKey {
+  return `chatActivity.status.${status}` as EnvAppTranslationKey;
+}
+
 function formatDuration(ms: number | undefined): string | undefined {
   if (typeof ms !== 'number' || !Number.isFinite(ms) || ms < 0) return undefined;
   if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -138,13 +143,13 @@ function basePresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
   const status = statusFrom(readString(rec, 'status') || item.status);
   const latency = readNumber(rec, 'latency_ms', 'duration_ms', 'durationMs');
   const chips: ActivityDetailChip[] = [
-    { label: status === 'success' ? 'success' : status, tone: statusTone(status) },
+    { labelKey: statusLabelKey(status), tone: statusTone(status) },
   ];
   const duration = formatDuration(latency);
-  if (duration) chips.push({ label: 'duration', value: duration });
+  if (duration) chips.push({ labelKey: 'chatActivity.chip.duration', value: duration });
   return {
     detailId: detailID(item, ref),
-    title: ref.title || item.label || 'Tool detail',
+    ...(ref.title || item.label ? { title: ref.title || item.label } : { titleKey: 'chatActivity.fallback.toolDetail' }),
     subtitle: itemTarget(item),
     status,
     toolName: readString(rec, 'tool_name', 'toolName') || item.toolName,
@@ -170,14 +175,14 @@ function terminalPresentation(item: ActivityItem, ref: ActivityDetailRef, payloa
   const truncated = readBoolean(rec, 'truncated');
 
   if (typeof exitCode === 'number') {
-    presentation.chips.push({ label: 'exit', value: String(exitCode), tone: exitCode === 0 ? 'success' : 'danger' });
+    presentation.chips.push({ labelKey: 'chatActivity.chip.exit', value: String(exitCode), tone: exitCode === 0 ? 'success' : 'danger' });
   }
   const duration = formatDuration(durationMs);
-  if (duration && !presentation.chips.some((chip) => chip.label === 'duration')) {
-    presentation.chips.push({ label: 'duration', value: duration });
+  if (duration && !presentation.chips.some((chip) => chip.labelKey === 'chatActivity.chip.duration')) {
+    presentation.chips.push({ labelKey: 'chatActivity.chip.duration', value: duration });
   }
-  if (timedOut) presentation.chips.push({ label: 'timed out', tone: 'danger' });
-  if (truncated) presentation.chips.push({ label: 'truncated', tone: 'warning' });
+  if (timedOut) presentation.chips.push({ labelKey: 'chatActivity.chip.timedOut', tone: 'danger' });
+  if (truncated) presentation.chips.push({ labelKey: 'chatActivity.truncated', tone: 'warning' });
 
   presentation.sections.push({
     kind: 'terminal',
@@ -191,9 +196,9 @@ function terminalPresentation(item: ActivityItem, ref: ActivityDetailRef, payloa
     timeoutMs,
   });
 
-  if (command) presentation.copyTargets.push({ id: 'command', label: 'Copy command', text: command });
-  if (stdout) presentation.copyTargets.push({ id: 'stdout', label: 'Copy stdout', text: stdout });
-  if (stderr) presentation.copyTargets.push({ id: 'stderr', label: 'Copy stderr', text: stderr });
+  if (command) presentation.copyTargets.push({ id: 'command', labelKey: 'chatActivity.copyTarget.command', text: command });
+  if (stdout) presentation.copyTargets.push({ id: 'stdout', labelKey: 'chatActivity.copyTarget.stdout', text: stdout });
+  if (stderr) presentation.copyTargets.push({ id: 'stderr', labelKey: 'chatActivity.copyTarget.stderr', text: stderr });
   return ensureContent(presentation);
 }
 
@@ -205,8 +210,9 @@ function normalizeTodoStatus(value: unknown): TodoDetailStatus {
   return 'pending';
 }
 
-function todoText(rec: AnyRecord): string {
-  return readString(rec, 'content', 'title', 'task', 'text', 'description') || 'Untitled todo';
+function todoContent(rec: AnyRecord): Pick<TodoDetailSection['items'][number], 'content' | 'contentKey'> {
+  const content = readString(rec, 'content', 'title', 'task', 'text', 'description');
+  return content ? { content } : { contentKey: 'chatActivity.fallback.untitledTodo' };
 }
 
 function todoPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: unknown): ActivityDetailPresentation | null {
@@ -218,13 +224,13 @@ function todoPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
   const presentation = basePresentation(item, ref, payload);
   const section: TodoDetailSection = {
     kind: 'todo_delta',
-    title: 'Todo changes',
+    titleKey: 'chatActivity.sectionTitle.todoChanges',
     items: todos.map((entry) => {
       const todo = asRecord(entry);
       const rawBeforeStatus = todo.before_status ?? todo.beforeStatus;
       return {
         id: readString(todo, 'id'),
-        content: todoText(todo),
+        ...todoContent(todo),
         beforeStatus: rawBeforeStatus === undefined || rawBeforeStatus === null ? undefined : normalizeTodoStatus(rawBeforeStatus),
         afterStatus: normalizeTodoStatus(todo.status ?? todo.after_status ?? todo.afterStatus),
         note: readString(todo, 'note'),
@@ -234,13 +240,13 @@ function todoPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
   presentation.sections.push(section);
   const completed = section.items.filter((todo) => todo.afterStatus === 'completed').length;
   const active = section.items.filter((todo) => todo.afterStatus === 'in_progress').length;
-  presentation.chips.push({ label: `${section.items.length} items` });
-  if (completed > 0) presentation.chips.push({ label: 'completed', value: String(completed), tone: 'success' });
-  if (active > 0) presentation.chips.push({ label: 'in progress', value: String(active), tone: 'accent' });
+  presentation.chips.push({ labelKey: 'chatActivity.todoItems', labelCount: section.items.length });
+  if (completed > 0) presentation.chips.push({ labelKey: 'chatActivity.chip.completed', value: String(completed), tone: 'success' });
+  if (active > 0) presentation.chips.push({ labelKey: 'chatActivity.chip.inProgress', value: String(active), tone: 'accent' });
   presentation.copyTargets.push({
     id: 'todos',
-    label: 'Copy summary',
-    text: section.items.map((todo) => `${todo.afterStatus}: ${todo.content}`).join('\n'),
+    labelKey: 'chatActivity.copyTarget.summary',
+    text: section.items.map((todo) => `${todo.afterStatus}: ${todo.content ?? ''}`.trim()).join('\n'),
   });
   return ensureContent(presentation);
 }
@@ -300,8 +306,8 @@ function filePresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
   if (files.length === 0) return null;
   const presentation = basePresentation(item, ref, payload);
   presentation.sections.push({ kind: 'file_change', files });
-  presentation.chips.push({ label: `${files.length} file${files.length === 1 ? '' : 's'}` });
-  presentation.copyTargets.push({ id: 'paths', label: 'Copy paths', text: files.map((file) => file.path).join('\n') });
+  presentation.chips.push({ labelKey: 'chatActivity.fileCount', labelCount: files.length });
+  presentation.copyTargets.push({ id: 'paths', labelKey: 'chatActivity.copyTarget.paths', text: files.map((file) => file.path).join('\n') });
   return ensureContent(presentation);
 }
 
@@ -319,7 +325,7 @@ function fileReadContentPresentation(item: ActivityItem, ref: ActivityDetailRef,
 
   const presentation: ActivityDetailPresentation = {
     detailId: detailID(item, ref),
-    title: item.label || 'Read file',
+    ...(item.label ? { title: item.label } : { titleKey: 'chatActivity.fallback.readFile' }),
     subtitle: filePath,
     status: 'success',
     toolName: readString(rec, 'tool_name', 'toolName') || item.toolName,
@@ -342,7 +348,7 @@ function fileReadContentPresentation(item: ActivityItem, ref: ActivityDetailRef,
   });
 
   if (content) {
-    presentation.copyTargets.push({ id: 'content', label: 'Copy content', text: content });
+    presentation.copyTargets.push({ id: 'content', labelKey: 'chatActivity.copyTarget.content', text: content });
   }
 
   return presentation;
@@ -353,14 +359,16 @@ function webPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: un
   const args = asRecord(rec.args);
   const result = asRecord(rec.result);
   const sourceInputs = asArray(result.sources).length > 0 ? asArray(result.sources) : asArray(result.results);
-  const sources = sourceInputs.map((entry) => {
+  const sources: WebDetailSection['sources'] = sourceInputs.map((entry) => {
     const source = asRecord(entry);
+    const title = readString(source, 'title', 'name') || readString(source, 'url', 'uri');
     return {
-      title: readString(source, 'title', 'name') || readString(source, 'url', 'uri') || 'Untitled source',
+      title: title || undefined,
+      titleKey: title ? undefined : 'chatActivity.fallback.untitledSource' as EnvAppTranslationKey,
       url: readString(source, 'url', 'uri'),
       snippet: readString(source, 'snippet', 'summary', 'content'),
     };
-  }).filter((source) => source.title || source.url);
+  }).filter((source) => source.title || source.titleKey || source.url);
   const targetSources = (item.targetRefs ?? [])
     .filter((target) => target.kind === 'url' || target.uri)
     .map((target) => ({ title: target.label, url: target.uri }));
@@ -370,8 +378,8 @@ function webPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: un
   const presentation = basePresentation(item, ref, payload);
   const section: WebDetailSection = { kind: 'web_results', query, sources: allSources };
   presentation.sections.push(section);
-  if (allSources.length > 0) presentation.chips.push({ label: `${allSources.length} source${allSources.length === 1 ? '' : 's'}` });
-  if (query) presentation.copyTargets.push({ id: 'query', label: 'Copy query', text: query });
+  if (allSources.length > 0) presentation.chips.push({ labelKey: 'chatActivity.chip.sourceCount', labelCount: allSources.length });
+  if (query) presentation.copyTargets.push({ id: 'query', labelKey: 'chatActivity.copyTarget.query', text: query });
   return ensureContent(presentation);
 }
 
@@ -395,7 +403,12 @@ function shouldOmitStructuredField(key: string, value: unknown): boolean {
   return OMITTED_FIELD_PATTERN.test(key) || isSecretMarker(key, value);
 }
 
-function displayValue(key: string, value: unknown, forceSecret = false): { value: string; secret: boolean } | null {
+function displayValue(key: string, value: unknown, forceSecret = false): {
+  value?: string;
+  valueKey?: EnvAppTranslationKey;
+  valueCount?: number;
+  secret: boolean;
+} | null {
   if (OMITTED_FIELD_PATTERN.test(key)) return null;
   if (isSecretMarker(key, value)) return null;
   const secret = forceSecret || SECRET_FIELD_PATTERN.test(key);
@@ -412,16 +425,16 @@ function displayValue(key: string, value: unknown, forceSecret = false): { value
     if (value.length === 0) return null;
     const scalar = value.filter((entry) => ['string', 'number', 'boolean'].includes(typeof entry)).map(String);
     if (scalar.length === value.length) return { value: compact(scalar.join(', '), 220), secret: false };
-    return { value: `${value.length} item${value.length === 1 ? '' : 's'}`, secret: false };
+    return { valueKey: 'chatActivity.todoItems', valueCount: value.length, secret: false };
   }
   if (typeof value === 'object') {
     const count = Object.entries(asRecord(value)).filter(([field, entry]) => !shouldOmitStructuredField(field, entry)).length;
-    return count > 0 ? { value: `${count} field${count === 1 ? '' : 's'}`, secret: false } : null;
+    return count > 0 ? { valueKey: 'chatActivity.chip.fieldCount', valueCount: count, secret: false } : null;
   }
   return null;
 }
 
-function structuredGroup(title: string, value: unknown): StructuredFieldsSection['groups'][number] | null {
+function structuredGroup(titleKey: EnvAppTranslationKey, value: unknown): StructuredFieldsSection['groups'][number] | null {
   const record = asRecord(value);
   const forceSecret = Object.entries(record).some(([key, entry]) => isSecretMarker(key, entry));
   const fields = Object.entries(record)
@@ -431,28 +444,34 @@ function structuredGroup(title: string, value: unknown): StructuredFieldsSection
       return {
         label: titleCase(key),
         value: displayed.value,
+        valueKey: displayed.valueKey,
+        valueCount: displayed.valueCount,
         secret: displayed.secret,
       };
     })
     .filter((field): field is NonNullable<typeof field> => field !== null);
-  return fields.length > 0 ? { title, fields } : null;
+  return fields.length > 0 ? { titleKey, fields } : null;
 }
 
 function structuredPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: unknown): ActivityDetailPresentation {
   const rec = asRecord(payload);
   const presentation = basePresentation(item, ref, payload);
   const groups = [
-    structuredGroup('Arguments', rec.args),
-    structuredGroup('Result', rec.result),
+    structuredGroup('chatActivity.sectionTitle.arguments', rec.args),
+    structuredGroup('chatActivity.sectionTitle.result', rec.result),
   ].filter((group): group is NonNullable<typeof group> => group !== null);
   const section: StructuredFieldsSection = {
     kind: 'structured_fields',
-    title: 'Tool details',
+    titleKey: 'chatActivity.sectionTitle.toolDetails',
     groups: groups.length > 0 ? groups : [{
-      title: 'Summary',
+      titleKey: 'chatActivity.sectionTitle.summary',
       fields: [
-        { label: 'Tool', value: presentation.toolName || item.toolName || 'Unknown tool' },
-        { label: 'Status', value: presentation.status },
+        {
+          labelKey: 'chatActivity.field.tool',
+          value: presentation.toolName || item.toolName,
+          valueKey: presentation.toolName || item.toolName ? undefined : 'chatActivity.fallback.unknownTool',
+        },
+        { labelKey: 'chatActivity.field.status', valueKey: statusLabelKey(presentation.status) },
       ],
     }],
   };
@@ -466,12 +485,12 @@ function ensureContent(presentation: ActivityDetailPresentation): ActivityDetail
   if (presentation.sections.length > 0) return presentation;
   presentation.sections.push({
     kind: 'structured_fields',
-    title: 'No captured content',
+    titleKey: 'chatActivity.sectionTitle.noCapturedContent',
     groups: [{
-      title: 'Summary',
+      titleKey: 'chatActivity.sectionTitle.summary',
       fields: [
-        { label: 'Status', value: presentation.status },
-        { label: 'Detail', value: 'No output was captured for this tool call.' },
+        { labelKey: 'chatActivity.field.status', valueKey: statusLabelKey(presentation.status) },
+        { labelKey: 'chatActivity.field.detail', valueKey: 'chatActivity.fallback.noOutputCaptured' },
       ],
     }],
   });

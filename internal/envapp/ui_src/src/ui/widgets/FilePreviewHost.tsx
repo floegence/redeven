@@ -6,9 +6,11 @@ import { writeTextToClipboard } from '../utils/clipboard';
 import { buildFilePreviewAskFlowerIntent } from '../utils/filePreviewAskFlower';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewSurface } from './FilePreviewSurface';
+import { useI18n } from '../i18n';
 
 export function FilePreviewHost() {
   const notification = useNotification();
+  const i18n = useI18n();
   const env = useEnvContext();
   const filePreview = useFilePreviewContext();
   const downloads = useDownloadManager();
@@ -16,7 +18,7 @@ export function FilePreviewHost() {
   const handleCopyPath = async (): Promise<boolean> => {
     const path = String(filePreview.controller.item()?.path ?? '').trim();
     if (!path) {
-      notification.error('Copy failed', 'Missing file path');
+      notification.error(i18n.t('shell.notifications.copyFailedTitle'), i18n.t('shell.notifications.missingFilePath'));
       return false;
     }
 
@@ -24,7 +26,10 @@ export function FilePreviewHost() {
       await writeTextToClipboard(path);
       return true;
     } catch (error) {
-      notification.error('Copy failed', error instanceof Error ? error.message : 'Failed to copy text to clipboard.');
+      notification.error(
+        i18n.t('shell.notifications.copyFailedTitle'),
+        error instanceof Error ? error.message : i18n.t('shell.notifications.clipboardCopyFailed'),
+      );
       return false;
     }
   };
@@ -35,7 +40,7 @@ export function FilePreviewHost() {
       selectionText,
     });
     if (result.error) {
-      notification.error('Ask Flower unavailable', result.error);
+      notification.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), result.error);
       return;
     }
     if (!result.intent) return;
@@ -51,7 +56,7 @@ export function FilePreviewHost() {
       origin: 'file_preview',
     });
     if (!command) {
-      notification.error('Download unavailable', 'Only files can be downloaded.');
+      notification.error(i18n.t('shell.notifications.downloadUnavailableTitle'), i18n.t('shell.notifications.onlyFilesDownloaded'));
       return;
     }
     downloads.enqueue(command);

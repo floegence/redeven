@@ -3,6 +3,7 @@ import {
   resolveCodexApprovalPolicyValue,
   resolveCodexSandboxModeValue,
 } from './runtimeDefaults';
+import type { I18nHelpers } from '../i18n';
 import type {
   CodexCapabilitiesSnapshot,
   CodexModelOption,
@@ -116,7 +117,10 @@ function codexStatusLabel(status: string | null | undefined): string {
   }
 }
 
-function codexContextSummary(tokenUsage: CodexThreadTokenUsage | null | undefined): {
+function codexContextSummary(
+  tokenUsage: CodexThreadTokenUsage | null | undefined,
+  t?: I18nHelpers['t'],
+): {
   contextLabel: string;
   contextDetail: string;
 } {
@@ -132,13 +136,25 @@ function codexContextSummary(tokenUsage: CodexThreadTokenUsage | null | undefine
   if (contextWindow > 0) {
     const remainingPercent = Math.max(0, Math.min(100, Math.round(((contextWindow - totalTokens) / contextWindow) * 100)));
     return {
-      contextLabel: `${remainingPercent}% context left`,
-      contextDetail: `${compactTokenCount(totalTokens)} used · ${compactTokenCount(lastTurnTokens)} last`,
+      contextLabel: t
+        ? t('codex.context.contextLeft', { percent: remainingPercent })
+        : `${remainingPercent}% context left`,
+      contextDetail: t
+        ? t('codex.context.usedAndLastTokens', { used: compactTokenCount(totalTokens), last: compactTokenCount(lastTurnTokens) })
+        : `${compactTokenCount(totalTokens)} used · ${compactTokenCount(lastTurnTokens)} last`,
     };
   }
   return {
-    contextLabel: `${compactTokenCount(totalTokens)} used`,
-    contextDetail: lastTurnTokens > 0 ? `${compactTokenCount(lastTurnTokens)} last turn` : '',
+    contextLabel: t
+      ? t('codex.context.usedTokens', { count: compactTokenCount(totalTokens) })
+      : `${compactTokenCount(totalTokens)} used`,
+    contextDetail: lastTurnTokens > 0
+      ? (
+        t
+          ? t('codex.context.lastTurnTokens', { count: compactTokenCount(lastTurnTokens) })
+          : `${compactTokenCount(lastTurnTokens)} last turn`
+      )
+      : '',
   };
 }
 
@@ -239,6 +255,26 @@ export function codexApprovalPolicyLabel(value: string | null | undefined): stri
   }
 }
 
+export function localizedCodexApprovalPolicyLabel(
+  value: string | null | undefined,
+  t: I18nHelpers['t'],
+): string {
+  switch (resolveCodexApprovalPolicyValue(value)) {
+    case 'untrusted':
+      return t('codex.controls.approvalPolicy.untrusted');
+    case 'on-failure':
+      return t('codex.controls.approvalPolicy.onFailure');
+    case 'on-request':
+      return t('codex.controls.approvalPolicy.onRequest');
+    case 'never':
+      return t('codex.controls.approvalPolicy.never');
+    case 'granular':
+      return t('codex.controls.approvalPolicy.granular');
+    default:
+      return displayStatus(resolveCodexApprovalPolicyValue(value), t('codex.controls.approvalPolicy.never'));
+  }
+}
+
 export function codexSandboxModeLabel(value: string | null | undefined): string {
   switch (resolveCodexSandboxModeValue(value)) {
     case 'read-only':
@@ -254,33 +290,51 @@ export function codexSandboxModeLabel(value: string | null | undefined): string 
   }
 }
 
-function requestTitle(type: string): string {
-  switch (String(type ?? '').trim().toLowerCase()) {
-    case 'user_input':
-      return 'User input required';
-    case 'command_approval':
-      return 'Command approval required';
-    case 'file_change_approval':
-      return 'File change approval required';
-    case 'permissions':
-      return 'Permission update required';
+export function localizedCodexSandboxModeLabel(
+  value: string | null | undefined,
+  t: I18nHelpers['t'],
+): string {
+  switch (resolveCodexSandboxModeValue(value)) {
+    case 'read-only':
+      return t('codex.controls.sandboxMode.readOnly');
+    case 'workspace-write':
+      return t('codex.controls.sandboxMode.workspaceWrite');
+    case 'danger-full-access':
+      return t('codex.controls.sandboxMode.dangerFullAccess');
+    case 'external-sandbox':
+      return t('codex.controls.sandboxMode.externalSandbox');
     default:
-      return `${displayStatus(type, 'Request')} required`;
+      return displayStatus(resolveCodexSandboxModeValue(value), t('codex.controls.sandboxMode.dangerFullAccess'));
   }
 }
 
-function requestFallbackDetail(request: CodexPendingRequest): string {
+function requestTitle(type: string, t?: I18nHelpers['t']): string {
+  switch (String(type ?? '').trim().toLowerCase()) {
+    case 'user_input':
+      return t?.('codex.pendingRequests.titleByType.userInput') ?? 'User input required';
+    case 'command_approval':
+      return t?.('codex.pendingRequests.titleByType.commandApproval') ?? 'Command approval required';
+    case 'file_change_approval':
+      return t?.('codex.pendingRequests.titleByType.fileChangeApproval') ?? 'File change approval required';
+    case 'permissions':
+      return t?.('codex.pendingRequests.titleByType.permissions') ?? 'Permission update required';
+    default:
+      return t?.('codex.pendingRequests.titleByType.default', { type: displayStatus(type, 'Request') }) ?? `${displayStatus(type, 'Request')} required`;
+  }
+}
+
+function requestFallbackDetail(request: CodexPendingRequest, t?: I18nHelpers['t']): string {
   switch (String(request.type ?? '').trim().toLowerCase()) {
     case 'user_input':
-      return 'Codex needs more input before it can continue.';
+      return t?.('codex.pendingRequests.fallbackDetail.userInput') ?? 'Codex needs more input before it can continue.';
     case 'command_approval':
-      return 'Review this command before Codex continues.';
+      return t?.('codex.pendingRequests.fallbackDetail.commandApproval') ?? 'Review this command before Codex continues.';
     case 'file_change_approval':
-      return 'Review the proposed file changes before Codex continues.';
+      return t?.('codex.pendingRequests.fallbackDetail.fileChangeApproval') ?? 'Review the proposed file changes before Codex continues.';
     case 'permissions':
-      return 'Review the requested permission changes before Codex continues.';
+      return t?.('codex.pendingRequests.fallbackDetail.permissions') ?? 'Review the requested permission changes before Codex continues.';
     default:
-      return 'Codex needs a response before it can continue.';
+      return t?.('codex.pendingRequests.fallbackDetail.default') ?? 'Codex needs a response before it can continue.';
   }
 }
 
@@ -295,14 +349,15 @@ export function buildCodexWorkbenchSummary(args: {
   activeStatus: string;
   activeStatusFlags: readonly string[];
   pendingRequests: readonly CodexPendingRequest[];
+  t?: I18nHelpers['t'];
 }): CodexWorkbenchSummary {
   const workspaceLabel = resolveCodexWorkingDir(args);
   const modelValue = firstNonEmpty(args.modelDraft, args.runtimeConfig?.model);
   const hostReady = Boolean(args.status?.available);
   const pendingRequestCount = args.pendingRequests.length;
-  const contextSummary = codexContextSummary(args.tokenUsage);
+  const contextSummary = codexContextSummary(args.tokenUsage, args.t);
   return {
-    threadTitle: firstNonEmpty(args.thread?.name, args.thread?.preview, 'New thread'),
+    threadTitle: firstNonEmpty(args.thread?.name, args.thread?.preview, args.t?.('codex.common.newThread') ?? 'New thread'),
     workspaceLabel,
     modelLabel: codexModelLabel(args.capabilities, modelValue),
     statusLabel: codexStatusLabel(args.activeStatus),
@@ -318,33 +373,37 @@ export function buildCodexSidebarSummary(args: {
   status: CodexStatus | null | undefined;
   pendingRequests: readonly CodexPendingRequest[];
   statusError: string | null | undefined;
+  t?: I18nHelpers['t'];
 }): CodexSidebarSummary {
   const binaryPath = String(args.status?.binary_path ?? '').trim();
   const hostReady = Boolean(args.status?.available);
   const statusError = String(args.statusError ?? '').trim();
 
   return {
-    hostLabel: hostReady ? 'Host ready' : 'Install required',
+    hostLabel: hostReady ? args.t?.('codex.sidebar.hostReady') ?? 'Host ready' : args.t?.('codex.sidebar.installRequired') ?? 'Install required',
     hostReady,
     binaryPath,
     pendingRequestCount: args.pendingRequests.length,
     statusError,
     secondaryLabel: hostReady
-      ? 'Host Codex runtime is available.'
-      : 'Install the host `codex` binary to use Codex chat.',
+      ? args.t?.('codex.sidebar.hostAvailable') ?? 'Host Codex runtime is available.'
+      : args.t?.('codex.sidebar.installHostBinary') ?? 'Install the host `codex` binary to use Codex chat.',
   };
 }
 
-export function buildCodexPendingRequestViewModel(request: CodexPendingRequest): CodexPendingRequestViewModel {
+export function buildCodexPendingRequestViewModel(
+  request: CodexPendingRequest,
+  t?: I18nHelpers['t'],
+): CodexPendingRequestViewModel {
   return {
     id: String(request.id ?? '').trim(),
-    title: requestTitle(request.type),
-    detail: firstNonEmpty(request.reason, requestFallbackDetail(request)),
+    title: requestTitle(request.type, t),
+    detail: firstNonEmpty(request.reason, requestFallbackDetail(request, t)),
     command: String(request.command ?? '').trim(),
     cwd: String(request.cwd ?? '').trim(),
     questionCount: Array.isArray(request.questions) ? request.questions.length : 0,
     decisionLabel: String(request.type ?? '').trim().toLowerCase() === 'user_input'
-      ? 'Submit response'
-      : 'Review approval',
+      ? t?.('codex.actions.submitResponse') ?? 'Submit response'
+      : t?.('codex.actions.reviewApproval') ?? 'Review approval',
   };
 }

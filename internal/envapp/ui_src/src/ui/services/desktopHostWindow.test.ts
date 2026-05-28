@@ -8,6 +8,7 @@ type FakeWindow = Window & {
   top: Window;
   redevenDesktopEmbeddedDragRegions?: unknown;
   redevenDesktopCodeWorkspace?: unknown;
+  redevenDesktopLanguage?: unknown;
   redevenDesktopTheme?: unknown;
   redevenDesktopSessionContext?: unknown;
   redevenDesktopStateStorage?: unknown;
@@ -26,7 +27,21 @@ function createFakeWindow(origin = 'https://env.example.invalid'): FakeWindow {
 describe('desktopHostWindow', () => {
   it('prefers desktop bridges on the current window', () => {
     const currentWindow = createFakeWindow();
-    currentWindow.redevenDesktopTheme = { getSnapshot: () => ({}) };
+    currentWindow.redevenDesktopLanguage = {
+      getSnapshot: () => ({
+        preference: 'system',
+        resolved_locale: 'en-US',
+        source: 'fallback',
+        system_candidates: [],
+      }),
+      setPreference: () => ({
+        preference: 'system',
+        resolved_locale: 'en-US',
+        source: 'fallback',
+        system_candidates: [],
+      }),
+      subscribe: () => () => undefined,
+    };
 
     expect(resolveDesktopHostWindow(currentWindow)).toBe(currentWindow);
   });

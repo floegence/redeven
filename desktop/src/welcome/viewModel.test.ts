@@ -2664,7 +2664,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(entry).toEqual(expect.objectContaining({
       is_open: false,
       is_opening: true,
-      open_action_label: 'Opening…',
+      open_action: 'opening',
     }));
 
     const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
@@ -2858,7 +2858,7 @@ describe('buildEnvironmentCardModel', () => {
       open_remote_session_key: remoteTarget.session_key,
       open_session_key: remoteTarget.session_key,
       local_ui_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
-      open_action_label: 'Focus',
+      open_action: 'focus',
       open_local_session_key: undefined,
     }));
   });

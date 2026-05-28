@@ -1,6 +1,7 @@
 import { HighlightBlock } from '@floegence/floe-webapp-core/ui';
 import { Show } from 'solid-js';
 
+import { useI18n } from '../i18n';
 import type { CodexStatus, CodexStreamTransportState } from './types';
 
 function Banner(props: {
@@ -22,6 +23,7 @@ export function CodexStatusBannerStack(props: {
   status?: CodexStatus | null;
   hostAvailable: boolean;
 }) {
+  const i18n = useI18n();
   const streamPhase = () => String(props.streamTransportState.phase ?? '').trim();
   const streamMessage = () => String(
     props.streamTransportState.desync_reason ??
@@ -29,47 +31,47 @@ export function CodexStatusBannerStack(props: {
     '',
   ).trim();
   const hostDiagnostics = () => [
-    ['Binary', props.status?.binary_path],
-    ['Codex Home', props.status?.codex_home],
-    ['Runtime', props.status?.user_agent],
-    ['Platform', [props.status?.platform_family, props.status?.platform_os].filter(Boolean).join(' / ')],
-    ['Last stderr', props.status?.last_stderr],
+    [i18n.t('codex.statusBanner.binary'), props.status?.binary_path],
+    [i18n.t('codex.statusBanner.codexHome'), props.status?.codex_home],
+    [i18n.t('codex.statusBanner.runtime'), props.status?.user_agent],
+    [i18n.t('codex.statusBanner.platform'), [props.status?.platform_family, props.status?.platform_os].filter(Boolean).join(' / ')],
+    [i18n.t('codex.statusBanner.lastStderr'), props.status?.last_stderr],
   ].map(([label, value]) => [String(label), String(value ?? '').trim()] as const)
     .filter(([, value]) => value);
   return (
     <>
       <Show when={props.statusError}>
-        <Banner title="Status error" body={props.statusError || ''} />
+        <Banner title={i18n.t('codex.statusBanner.statusError')} body={props.statusError || ''} />
       </Show>
       <Show when={props.threadError}>
         <Banner
-          title="Thread loading"
+          title={i18n.t('codex.statusBanner.threadLoading')}
           body={props.threadError || ''}
         />
       </Show>
       <Show when={streamPhase() === 'reconnecting'}>
         <Banner
-          title="Live event stream"
-          body={streamMessage() || 'Live event stream disconnected. Reconnecting...'}
+          title={i18n.t('codex.statusBanner.liveEventStream')}
+          body={streamMessage() || i18n.t('codex.statusBanner.disconnectedReconnecting')}
           variant="warning"
         />
       </Show>
       <Show when={streamPhase() === 'lagged'}>
         <Banner
-          title="Live event stream"
-          body={`Live event stream dropped ${Math.max(0, Number(props.streamTransportState.last_lagged_dropped_events ?? 0) || 0)} best-effort updates while catching up.`}
+          title={i18n.t('codex.statusBanner.liveEventStream')}
+          body={i18n.tn('codex.statusBanner.droppedUpdates', Math.max(0, Number(props.streamTransportState.last_lagged_dropped_events ?? 0) || 0))}
           variant="warning"
         />
       </Show>
       <Show when={streamPhase() === 'desynced'}>
         <Banner
-          title="Live event stream"
-          body={streamMessage() || 'Live event stream lost continuity and is reloading the thread state.'}
+          title={i18n.t('codex.statusBanner.liveEventStream')}
+          body={streamMessage() || i18n.t('codex.statusBanner.lostContinuity')}
         />
       </Show>
       <Show when={!props.hostAvailable}>
-        <HighlightBlock variant="warning" title="Host diagnostics">
-          <p>Redeven uses the host's `codex` binary directly. There is no separate in-app Codex runtime toggle to manage here.</p>
+        <HighlightBlock variant="warning" title={i18n.t('codex.statusBanner.hostDiagnostics')}>
+          <p>{i18n.t('codex.statusBanner.hostDiagnosticsBody')}</p>
           <Show when={hostDiagnostics().length > 0}>
             <dl class="mt-3 grid gap-2 text-xs">
               {hostDiagnostics().map(([label, value]) => (

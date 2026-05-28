@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import { desktopControlPlaneKey } from '../shared/controlPlaneProvider';
+import { createDesktopI18n } from '../shared/i18n';
 import type { DesktopLauncherActionProgress } from '../shared/desktopLauncherIPC';
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import {
@@ -109,11 +110,15 @@ describe('DesktopWelcomeShell', () => {
       surface_title: 'Connect Environment',
       connect_heading: 'Connect Environment',
       primary_action_label: 'Open Environment',
-      settings_save_label: 'Save Local Environment Settings',
+      settings_save_key: 'settings.saveEnvironmentSettings',
     });
     expect(shellStatus(snapshot)).toEqual({
       tone: 'disconnected',
       label: 'No environment windows open',
+    });
+    expect(shellStatus(snapshot, createDesktopI18n('zh-CN'))).toEqual({
+      tone: 'disconnected',
+      label: '没有打开的 Environment 窗口',
     });
   });
 
@@ -138,25 +143,46 @@ describe('DesktopWelcomeShell', () => {
       surface_title: 'Environment Settings',
       connect_heading: 'Connect Environment',
       primary_action_label: 'Open Environment',
-      settings_save_label: 'Save Local Environment Settings',
+      settings_save_key: 'settings.saveEnvironmentSettings',
     });
-    expect(snapshot.settings_surface.window_title).toBe('Local Environment Settings');
+    expect(snapshot.settings_surface.window_title_key).toBe('settings.settingsWindowTitle');
     expect(snapshot.settings_surface.access_mode).toBe('shared_local_network');
-    expect(snapshot.settings_surface.password_state_label).toBe('Password configured');
+    expect(snapshot.settings_surface.password_state_id).toBe('configured');
     expect(snapshot.settings_surface.draft.local_ui_password).toBe('');
     expect(snapshot.settings_surface.draft.local_ui_password_mode).toBe('keep');
     expect(snapshot.settings_surface.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'next_start_address',
-        value: 'Your device IP:24000',
-        detail: 'Other devices on your local network can open the Local Environment.',
+        value: '24000',
+        detail_key: 'settings.sharedAddressDetail',
       }),
       expect.objectContaining({
         id: 'password_state',
-        value: 'Password configured',
+        value_key: 'settings.passwordSet',
         tone: 'success',
       }),
     ]));
+  });
+
+  it('localizes issue status labels when a semantic issue key is available', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      issue: {
+        scope: 'local_environment',
+        code: 'state_dir_locked',
+        title: 'Redeven is already starting elsewhere',
+        title_key: 'issue.stateDirLockedAttachTitle',
+        message: 'Another Redeven runtime instance is using the default state directory and appears to provide Local UI. Retry in a moment so Desktop can attach to it.',
+        message_key: 'issue.stateDirLockedAttachMessage',
+        diagnostics_copy: 'status: blocked',
+        target_url: '',
+      },
+    });
+
+    expect(shellStatus(snapshot, createDesktopI18n('zh-CN'))).toEqual({
+      tone: 'error',
+      label: 'Redeven 已在其他位置启动中',
+    });
   });
 
   it('derives the Env card primary progress from snapshot action progress instead of stale Opening state', () => {
@@ -252,7 +278,7 @@ describe('DesktopWelcomeShell', () => {
       progress: staleBusyProgress,
     }, snapshot.action_progress);
 
-    expect(entry.open_action_label).toBe('Opening…');
+    expect(entry.open_action).toBe('opening');
     expect(fallbackAction).toMatchObject({ intent: 'opening', enabled: false });
     expect(environmentProgressPrimaryPresentation(panelProgress)).toMatchObject({
       kind: 'attention_trigger',
@@ -445,7 +471,7 @@ describe('DesktopWelcomeShell', () => {
   it('shows compact Control Plane metrics with tooltip-based guidance instead of inline prose', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Online Now');
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.providerOnlineLabel')");
     expect(appSrc).toContain('ControlPlaneMetricTile');
     expect(appSrc).toContain('controlPlanePublishedCountTooltipContent');
     expect(appSrc).toContain('controlPlaneOnlineCountTooltipContent');
@@ -597,28 +623,50 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<DesktopAnchoredListbox');
     expect(appSrc).toContain('anchorRef={buttonRef}');
     expect(appSrc).toContain('anchorRef={rootRef}');
+    expect(appSrc).toContain('width={288}');
     expect(appSrc).not.toContain('class="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"');
     expect(appSrc).not.toContain('class="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-xl"');
     expect(listboxSrc).toContain("import { Portal } from 'solid-js/web';");
     expect(listboxSrc).toContain('<Portal>');
     expect(listboxSrc).toContain("'fixed z-[240] flex flex-col overflow-hidden");
     expect(listboxSrc).toContain('style={{');
+    expect(listboxSrc).toContain('width?: number;');
     expect(listboxSrc).toContain('resolveDesktopAnchoredListboxGeometry');
     expect(listboxSrc).toContain('IMPORTANT: Dialog form listboxes must live outside dialog scroll containers.');
+  });
+
+  it('routes Desktop language and command chrome through i18n dictionaries', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain("props.i18n.t('language.systemDefault')");
+    expect(appSrc).toContain("props.i18n.t('language.usingLanguage'");
+    expect(appSrc).toContain("i18n.t('shell.accessibility.skipLinkLabel')");
+    expect(appSrc).toContain("i18n.t('shell.commandSearchPlaceholder')");
+    expect(appSrc).toContain("props.i18n.t('commandPalette.changeLanguageTitle')");
+    expect(appSrc).toContain('execute: () => props.openLanguageSettings()');
+    expect(appSrc).toContain('openLanguageSettings={openLanguageSettings}');
+    expect(appSrc).toContain('function openLanguageSettings(): void');
+    expect(appSrc).toContain('<DesktopInterfaceSettingsDialog');
+    expect(appSrc).toContain('open={languageSettingsOpen()}');
+    expect(appSrc).toContain("props.i18n.t('commandPalette.toggleThemeTitle')");
+    expect(appSrc).toContain("i18n().t('shell.useDarkTheme')");
+    expect(appSrc).toContain("i18n().t('shell.useLightTheme')");
+    expect(appSrc).not.toContain("title: 'Change Language'");
+    expect(appSrc).not.toContain("label={theme.resolvedTheme() === 'light' ? 'Use dark theme' : 'Use light theme'}");
   });
 
   it('includes compact environment-card launcher copy inside the source', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Connect Environment');
-    expect(appSrc).toContain('Open Redeven Dashboard');
+    expect(appSrc).toContain('connectEnvironmentTitle');
+    expect(appSrc).toContain('openRedevenDashboard');
     expect(appSrc).toContain('function openRedevenDashboard');
-    expect(appSrc).toContain('Environments');
-    expect(appSrc).toContain('Providers');
-    expect(appSrc).toContain('Search environments...');
-    expect(appSrc).toContain('Local Environment');
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.title')");
+    expect(appSrc).toContain("labelKey: 'desktop.provider'");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.searchPlaceholder')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.localFilter')");
     expect(appSrc).toContain('<EnvironmentConnectionCard');
-    expect(appSrc).toContain('New Environment');
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.newEnvironmentTitle')");
     expect(appSrc).toContain('NewEnvironmentPlaceholderCard');
   });
 
@@ -627,7 +675,7 @@ describe('DesktopWelcomeShell', () => {
     const styles = readWelcomeStyles();
 
     // Pill counts
-    expect(appSrc).toContain('All ({layoutReferenceEnvironmentCount()})');
+    expect(appSrc).toContain("{props.i18n.t('environmentCenter.allFilter')} ({layoutReferenceEnvironmentCount()})");
     expect(appSrc).toContain('{option.label} ({option.count})');
     // Chip for non-category filters
     expect(appSrc).toContain('activeNonCategoryFilterChipLabel');
@@ -659,13 +707,13 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('runEnvironmentCardFactAction');
     expect(appSrc).toContain('runtimeTargetEnvironmentLibraryFilterValue(action.runtime_target_id)');
     expect(appSrc).toContain('runtimeTargetEnvironmentLibraryFilterTargetID(props.librarySourceFilter)');
-    expect(appSrc).toContain('Linked runtime · ${environment.label}');
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.linkedRuntimeFilterWithLabel'");
     expect(appSrc).toContain('redeven-card-fact-value--action');
     expect(appSrc).toContain('cardFactIconMaskStyle');
     expect(appSrc).not.toContain('<img src={icon()} class="redeven-card-fact-label-icon"');
     expect(appSrc).not.toContain('<img src={icon()} class="redeven-card-fact-leading-icon"');
     expect(appSrc).toContain('function EndpointsPopover');
-    expect(appSrc).toContain('Pinned');
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.pinnedSection')");
     expect(appSrc).toContain('copyEnvironmentValue');
     expect(appSrc).toContain('<Pin class=');
     expect(styles).toContain('.redeven-card-fact-row');
@@ -698,8 +746,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('openSettingsSurface(environment.id);');
     expect(appSrc).toContain("route: 'remote_desktop'");
     expect(appSrc).toContain('return startEnvironmentRuntime(environment, errorTarget);');
-    expect(appSrc).toContain('Refresh runtime status');
-    expect(appSrc).toContain('Refresh runtime statuses');
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.refreshRuntimeStatus')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.refreshRuntimeStatuses')");
     expect(appSrc).toContain('const secondaryIconOnly = () => isSecondary && props.overlay.actions.length > 1;');
     expect(appSrc).toContain("showsRefreshIcon && 'gap-1.5'");
     expect(appSrc).toContain('<Show when={showsRefreshIcon}>');
@@ -716,7 +764,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('fallback={props.presentation.primary_action.label}');
     expect(appSrc).toContain("'redeven-split-action-trigger--blocked'");
     expect(appSrc).toContain('aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}');
-    expect(appSrc).toContain('return `${label} is unavailable. Show recovery options.`;');
+    expect(appSrc).toContain("return i18n.t('environmentAction.unavailableTrigger', { label });");
     expect(appSrc).toContain('activeEnvironmentOverlayState');
     expect(appSrc).toContain('guidanceSessionState');
     expect(appSrc).toContain('reconcileEnvironmentLibraryOverlayState');
@@ -751,8 +799,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("action?.runtime_operation_method === 'desktop_local_update_handoff'");
     expect(appSrc).toContain("kind: 'manage_desktop_update'");
     expect(appSrc).toContain("result?.outcome === 'opened_desktop_update_handoff'");
-    expect(appSrc).toContain('Desktop update options opened for ${environment.label}.');
-    expect(appSrc).toContain('formatRuntimeServiceWorkload');
+    expect(appSrc).toContain("i18n().t('environmentCenter.desktopUpdateOpenedToast'");
+    expect(appSrc).toContain('localizedRuntimeServiceWorkload');
+    expect(appSrc).toContain('providerRuntimeLinkActiveWorkLabel');
+    expect(appSrc).toContain("i18n.tn('plural.terminalCount'");
     expect(appSrc).toContain("case 'start_runtime':");
     expect(appSrc).toContain("case 'connect_provider_runtime':");
     expect(appSrc).toContain("case 'disconnect_provider_runtime':");
@@ -822,7 +872,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('function EnvironmentProgressPanel');
     expect(appSrc).toContain('primaryAction?: EnvironmentActionModel;');
     expect(appSrc).toContain('runPrimaryAction?: (action: EnvironmentActionModel) => void;');
-    expect(appSrc).toContain('const panelPrimaryAction = createMemo(() => environmentProgressPanelPrimaryAction(');
+    expect(appSrc).toContain('const panelPrimaryAction = createMemo(() => localizedProgressPanelPrimaryAction(');
     expect(appSrc).toContain('<Show when={panelPrimaryAction()}>');
     expect(appSrc).toContain('<ExternalLink class="h-3.5 w-3.5" />');
     expect(appSrc).toContain('onClick={() => props.runPrimaryAction?.(action().action)}');
@@ -842,8 +892,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("data-plan-state={startup()?.plan_state ?? 'executing'}");
     expect(appSrc).toContain("currentRuntimeLifecycle()?.plan_state !== 'planning'");
     expect(appSrc).not.toContain("current.plan_state === 'planning'");
-    expect(appSrc).toContain("Planning ${props.progress.action === 'restart_environment_runtime' ? 'restart'");
-    expect(appSrc).toContain('<Show when={props.progress.failure}>');
+    expect(appSrc).toContain('localizedProgressPlanningLabel(props.i18n, props.progress.action)');
+    expect(appSrc).toContain('<Show when={localizedFailure()}>');
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
     expect(appSrc).toContain('redeven-action-popover__notice-detail--pre');
     expect(appSrc).toContain("action.kind === 'update_runtime'");
@@ -865,7 +915,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('runtimeLifecycleProgress={runtimeMenuProgress()}');
     expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\'], runtimeLifecycleProgress)');
     expect(appSrc).toContain('const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());');
-    expect(appSrc).toContain('const primaryProgressPresentation = createMemo(() => environmentProgressPrimaryPresentation(panelProgress()));');
+    expect(appSrc).toContain('const primaryProgressPresentation = createMemo(() => localizedPrimaryProgressPresentation(');
     expect(appSrc).toContain('primaryProgressPresentation() || progressPanelVisible()');
     expect(appSrc).toContain('const popoverOpen = createMemo(() => progressPanelVisible() || (props.guidanceOpen && popoverOverlay() !== undefined));');
     expect(appSrc).toContain("classList={{ 'redeven-popover-panel-collapse--open': progressPanelVisible() }}");
@@ -912,7 +962,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('formatDesktopOperationFailureForClipboard(presentation())');
     expect(appSrc).toContain('{presentation().summary}');
     expect(appSrc).toContain('{presentation().recovery_hint}');
-    expect(appSrc).toContain('<summary>Details</summary>');
+    expect(appSrc).toContain("<summary>{props.i18n.t('settings.detailsTitle')}</summary>");
     expect(appSrc).toContain('diagnostic.label');
     expect(appSrc).toContain('diagnostic.text');
     expect(styles).toContain('.redeven-environment-card__failure-details summary');
@@ -928,18 +978,18 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("kind: 'cancel_launcher_operation'");
     expect(appSrc).not.toContain("kind: 'continue_launcher_operation'");
     expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
-    expect(appSrc).toContain("showActionToast(progress.open_progress ? 'Opening is stopping.' : 'Runtime startup is stopping.', 'info');");
+    expect(appSrc).toContain("showActionToast(progress.open_progress ? i18n().t('toast.openingStopping') : i18n().t('toast.runtimeStartupStopping'), 'info');");
     expect(appSrc).toContain('cancelOperation={(progress) => {\n            void cancelLauncherOperation(progress);');
     expect(appSrc).toContain('cancelOperation: (progress: DesktopLauncherActionProgress) => void;');
-    expect(appSrc).toContain("case 'cleanup_failed':\n      return 'Cleanup needs attention';");
+    expect(appSrc).toContain("case 'cleanup_failed':\n      return i18n.t('progress.cleanupNeedsAttention');");
     expect(appSrc).toContain('props.progress.cancelable === true && props.progress.status === \'running\'');
     expect(appSrc).toContain('onClick={() => props.cancelOperation(props.progress)}');
     expect(appSrc).not.toContain("props.progress.status === 'awaiting_confirmation'");
     expect(appSrc).not.toContain('onClick={() => props.continueOperation(props.progress)}');
     expect(appSrc).toContain('onClick={() => props.dismissOperation(props.progress)}');
-    expect(appSrc).toContain('Copy log');
+    expect(appSrc).toContain("props.i18n.t('progress.copyLog')");
     expect(appSrc).toContain('<Stop class="h-3.5 w-3.5" />');
-    expect(appSrc).toContain("{props.progress.interrupt_label || 'Stop startup'}");
+    expect(appSrc).toContain('localizedProgressInterruptLabel(props.i18n, props.progress)');
     expect(appSrc).toContain("class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}");
     expect(appSrc).not.toContain('disabled={props.loading && !hasOpenConnectionProgress() && !hasRuntimeLifecycleProgress()}');
     expect(appSrc).not.toContain('disabled={props.loading && popoverPrimaryRunsAction()}');
@@ -960,17 +1010,17 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
-    expect(appSrc).toContain('Providers');
-    expect(appSrc).toContain('Add Provider');
-    expect(appSrc).toContain('View Environments');
+    expect(appSrc).toContain("labelKey: 'desktop.provider'");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.addProviderTitle')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.viewEnvironments')");
     expect(appSrc).not.toContain('All Sources');
     expect(appSrc).toContain('Local');
     expect(appSrc).toContain('control-plane-label');
     expect(appSrc).toContain('suggestControlPlaneDisplayLabel');
-    expect(appSrc).toContain('Continue in Browser');
-    expect(appSrc).toContain('revocable desktop authorization');
-    expect(appSrc).toContain('Reconnect');
-    expect(appSrc).toContain('Connect Provider');
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.continueInBrowser')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.providerAuthorizationHelp')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.reconnect')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.connectProvider')");
     expect(appSrc).toContain('redeven-control-plane-grid');
     expect(appSrc).toContain('redeven-control-plane-card');
     expect(styles).toContain('--redeven-control-plane-grid-column-size: 35rem;');
@@ -1012,9 +1062,9 @@ describe('DesktopWelcomeShell', () => {
   it('uses a settings affordance for every editable environment card', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('content="Settings"');
-    expect(appSrc).toContain("title={isContainerRuntimeTarget() ? 'Runtime target settings' : props.environment.kind === 'local_environment' ? 'Environment settings' : 'Connection settings'}");
-    expect(appSrc).toContain('Connection settings for ${props.environment.label}');
+    expect(appSrc).toContain("content={props.i18n.t('common.settings')}");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.runtimeTargetSettings')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.connectionSettingsForLabel'");
     expect(appSrc).toContain('<Settings class="h-3.5 w-3.5" />');
     expect(appSrc).not.toContain('<Pencil class="h-3.5 w-3.5" />');
   });
@@ -1022,7 +1072,7 @@ describe('DesktopWelcomeShell', () => {
   it('describes local environment actions as window-only and runtime-decoupled', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Open the selected Local Environment window');
+    expect(appSrc).toContain('openEnvironmentDescription');
     expect(appSrc).toContain("case 'start_runtime':");
   });
 
@@ -1030,15 +1080,15 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('providerRuntimeLinkConfirmation');
-    expect(appSrc).toContain('Connect to provider');
-    expect(appSrc).toContain('Disconnect from provider');
-    expect(appSrc).toContain('Provider Environment');
-    expect(appSrc).toContain('Source environment: <span');
-    expect(appSrc).toContain('the selected provider can request sessions through this running runtime');
-    expect(appSrc).toContain('Existing local work keeps running');
+    expect(appSrc).toContain("i18n().t('environmentCenter.connectToProvider')");
+    expect(appSrc).toContain("i18n().t('environmentCenter.disconnectFromProvider')");
+    expect(appSrc).toContain("i18n().t('environmentCenter.providerEnvironment')");
+    expect(appSrc).toContain("i18n().t('environmentCenter.sourceEnvironment')");
+    expect(appSrc).toContain("i18n().t('environmentCenter.connectProviderRuntimeNote')");
+    expect(appSrc).toContain("i18n().t('environmentCenter.disconnectProviderRuntimeNote')");
     expect(appSrc).not.toContain('matching provider link. Confirming');
     expect(appSrc).toContain("busyStateMatchesAction(busyState(), 'disconnect_provider_runtime')");
-    expect(appSrc).toContain("showActionToast('Disconnected from provider.', 'info');");
+    expect(appSrc).toContain("showActionToast(i18n().t('environmentCenter.disconnectedFromProviderToast'), 'info');");
     expect(appSrc).toContain('if (presentation.refresh_snapshot) {');
     expect(appSrc).toContain("const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');");
   });
@@ -1067,63 +1117,63 @@ describe('DesktopWelcomeShell', () => {
   it('keeps the New Environment dialog focused on Redeven URLs, SSH hosts, and managed container targets', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Name</label>');
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.name')");
     expect(appSrc).not.toContain('Environment Name');
-    expect(appSrc).toContain("label: 'Redeven URL'");
-    expect(appSrc).toContain("label: 'SSH Host'");
-    expect(appSrc).toContain("label: 'Local Container'");
-    expect(appSrc).toContain("label: 'SSH Container'");
+    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.redevenUrl')");
+    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.sshHost')");
+    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.localContainer')");
+    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.sshContainer')");
     expect(appSrc).not.toContain('Run a Desktop-managed Redeven environment on this device.');
     expect(appSrc).not.toContain('Create a local serve runtime for this provider environment on this Mac.');
     expect(appSrc).not.toContain('This provider environment card will keep both routes visible on this device: serve local here, or open via Control Plane.');
-    expect(appSrc).toContain('Connect straight to a Redeven runtime that already exposes its own Environment URL');
-    expect(appSrc).toContain('This is not the Provider URL.');
-    expect(appSrc).toContain('Deploy a Desktop-owned Local Environment profile to a host you can reach over SSH.');
-    expect(appSrc).toContain('Desktop reuses shared release artifacts on that host and keeps one runtime state set there.');
-    expect(appSrc).toContain("Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single runtime profile.");
-    expect(appSrc).toContain('Save a runtime target inside a running container on this device.');
-    expect(appSrc).toContain('Save a runtime target inside a running container on an SSH host.');
-    expect(appSrc).toContain('bridge stream, not through published container ports');
-    expect(appSrc).toContain('Container <span class="text-destructive">*</span>');
-    expect(appSrc).toContain('Runtime Root <span class="text-destructive">*</span>');
-    expect(appSrc).toContain('Stores Redeven releases, Local Environment state, sessions, and logs inside this container.');
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.urlDescription')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.notProviderUrl')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.sshDescription')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.sshDescription')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.sshEnvironmentNotice')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.localContainerDescription')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.sshContainerDescription')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.sshContainerDescription')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.container')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.runtimeRoot')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.containerRuntimeRootHelp')");
     expect(appSrc).not.toContain(['Runtime', 'Install', 'Root'].join(' ') + ' <span class="text-destructive">*</span>');
     expect(appSrc).not.toContain(['Runtime', 'State', 'Root'].join(' ') + ' <span class="text-destructive">*</span>');
     expect(appSrc).toContain("label: 'Docker'");
     expect(appSrc).toContain("label: 'Podman'");
     expect(appSrc).toContain('function ContainerPicker');
-    expect(appSrc).toContain('Choose a running container');
-    expect(appSrc).toContain('No running containers found. Start the container outside Redeven, then refresh this list.');
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.chooseRunningContainer')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.noRunningContainers')");
     expect(appSrc).not.toContain('Container Label</label>');
     expect(appSrc).not.toContain('Owner</label>');
     expect(appSrc).not.toContain("label: 'External'");
     expect(appSrc).not.toContain("label: 'Desktop'");
-    expect(appSrc).toContain('Bootstrap Delivery');
-    expect(appSrc).toContain('Authentication');
-    expect(appSrc).toContain("label: 'Key / agent'");
-    expect(appSrc).toContain("label: 'Password prompt'");
-    expect(appSrc).toContain('Local SSH password');
-    expect(appSrc).toContain('Desktop stores this password only on this device');
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.bootstrapDelivery')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.authentication')");
+    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.keyAgent')");
+    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.passwordPrompt')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.localSshPassword')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.localSshPasswordHelp')");
     expect(appSrc).toContain('variant="default"');
     expect(appSrc).not.toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');");
     expect(appSrc).not.toContain('<Show when={showCreateConnectAction()}>');
     expect(appSrc).not.toContain('async function saveAndConnectURLFromDialog()');
     expect(appSrc).not.toContain('async function ' + 'connectFrom' + 'Dialog()');
-    expect(appSrc).toContain("label: 'Automatic'");
-    expect(appSrc).toContain("label: 'Desktop Upload'");
-    expect(appSrc).toContain("label: 'Remote Fallback'");
-    expect(appSrc).toContain("remote install is only a fallback");
-    expect(appSrc).toContain('SSH Destination');
+    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.automatic')");
+    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.desktopUpload')");
+    expect(appSrc).toContain("label: props.i18n.t('connectionDialog.remoteFallback')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.bootstrapHelp')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.sshDestination')");
     expect(appSrc).toContain('function SSHDestinationCombobox');
     expect(appSrc).toContain('sm:grid-cols-[minmax(0,1fr)_7.5rem]');
     expect(appSrc).toContain("props.updateField('ssh_destination', host.alias);");
     expect(appSrc).toContain("props.updateField('ssh_port', host.port == null ? '' : String(host.port));");
     expect(appSrc).toContain('getSSHConfigHosts');
     expect(appSrc).toContain('listRuntimeContainers');
-    expect(appSrc).toContain('Runtime Root');
-    expect(appSrc).toContain('Release Base URL');
-    expect(appSrc).toContain('Set an internal release mirror when this desktop cannot use GitHub directly.');
-    expect(appSrc).toContain("Leave blank to use the remote user's .redeven root:");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.runtimeRoot')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.releaseBaseUrl')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.releaseBaseUrlHelp'");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.runtimeRootHelp'");
     expect(appSrc).not.toContain(['Remote', 'Install', 'Directory'].join(' '));
     expect(appSrc).not.toContain(['default', 'remote', 'user', 'cache'].join(' '));
   });
@@ -1153,23 +1203,23 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain('props.baselineSnapshot.access_mode_options');
-    expect(appSrc).toContain('aria-label="Visibility presets"');
-    expect(appSrc).toContain('This Redeven profile keeps one Local Environment runtime for the current binding.');
-    expect(appSrc).toContain('Choose how the Local Environment is exposed on the next desktop-managed start');
-    expect(appSrc).toContain('Published environments that can link to this Local Environment.');
-    expect(appSrc).toContain('Local Links counts provider environments that can bind to this Local Environment profile for local use.');
-    expect(appSrc).toContain('Loopback bind keeps the runtime on this device only. No password is required.');
-    expect(appSrc).toContain('Shared local network access requires a password before other devices can open this Environment.');
+    expect(appSrc).toContain("aria-label={props.i18n.t('settings.visibilityTitle')}");
+    expect(appSrc).toContain("props.i18n.t('settings.accessSecurityDescription')");
+    expect(appSrc).toContain("props.i18n.t('settings.visibilityDescription')");
+    expect(appSrc).toContain("i18n.t('environmentCenter.localLinksTooltipTitle')");
+    expect(appSrc).toContain("i18n.t('environmentCenter.localLinksTooltipDescription')");
+    expect(appSrc).toContain("props.i18n.t('settings.localOnlyProtectionNote')");
+    expect(appSrc).toContain("i18n.t('settings.sharedPasswordHelp')");
   });
 
   it('includes Local Environment Settings copy inside the source', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('Next start');
-    expect(appSrc).toContain('Visibility');
-    expect(appSrc).toContain('Details');
-    expect(appSrc).toContain('Runtime');
-    expect(appSrc).toContain('Next start');
+    expect(appSrc).toContain("props.i18n.t('settings.nextStartLabel')");
+    expect(appSrc).toContain("props.i18n.t('settings.visibilityTitle')");
+    expect(appSrc).toContain("props.i18n.t('settings.detailsTitle')");
+    expect(appSrc).toContain("props.i18n.t('settings.runtimeLabel')");
+    expect(appSrc).toContain("props.i18n.t('settings.interfaceTitle')");
   });
 
   it('exposes auto status detection only on non-provider runtime forms', () => {
@@ -1178,13 +1228,13 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("kind === 'local_container_runtime'");
     expect(appSrc).toContain('connectionDialogAutoRuntimeProbeConfigurable(props.state)');
     expect(appSrc).toContain('toggleAutoRuntimeProbe={toggleConnectionRuntimeAutoProbe}');
-    expect(appSrc).toContain('Status Detection');
-    expect(appSrc).toContain('Auto status detection');
-    expect(appSrc).toContain('Welcome checks this runtime automatically while open. Refresh status always checks now.');
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.statusDetection')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.autoStatusDetection')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.autoStatusDetectionHelp')");
     expect(appSrc).toContain('auto_runtime_probe_configurable');
     expect(appSrc).not.toContain('Control whether Welcome checks this runtime in the background');
     expect(appSrc).not.toContain('Welcome checks this runtime automatically while open. Refresh status still checks immediately when this is off.');
-    expect(appSrc).toContain('title="Add Provider"');
+    expect(appSrc).toContain("title={props.i18n.t('connectionDialog.addProviderTitle')}");
     expect(appSrc).not.toContain('ControlPlaneDialog(props: Readonly<{\\n  state: ControlPlaneDialogState;\\n  auto_runtime_probe_enabled');
   });
 
@@ -1201,12 +1251,12 @@ describe('DesktopWelcomeShell', () => {
   it('uses the shared deletion copy for saved connections only', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('title="Delete Connection"');
-    expect(appSrc).toContain('confirmText="Delete Connection"');
-    expect(appSrc).toContain('Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?');
+    expect(appSrc).toContain("title={i18n().t('confirm.deleteConnectionTitle')}");
+    expect(appSrc).toContain("confirmText={i18n().t('confirm.deleteConnectionConfirm')}");
+    expect(appSrc).toContain("i18n().t('confirm.deleteConnectionQuestion'");
     expect(appSrc).toContain('const deleteTargetOperation = createMemo(() => {');
-    expect(appSrc).toContain('The connection is involved in a background task. Desktop will remove it now, then cancel or clean up that task in the background.');
-    expect(appSrc).toContain('Connection removed. Startup cleanup is running in the background.');
+    expect(appSrc).toContain("i18n().t('confirm.deleteConnectionBusyDescription')");
+    expect(appSrc).toContain("i18n().t('environmentCenter.connectionRemovedCleanup')");
   });
 
   it('memoizes the Dialog open prop so overlay-mask focus trap does not thrash on every keystroke', () => {
@@ -1248,8 +1298,8 @@ describe('DesktopWelcomeShell', () => {
 });
 
 describe('suggestConnectionLabel', () => {
-  // suggestConnectionLabel 在 App.tsx 中定义，以下是在测试中重建的等效逻辑以验证其正确性。
-  // 这些测试确保函数行为符合设计方案中定义的数据结构设计。
+  // suggestConnectionLabel is defined inside App.tsx. These tests mirror its
+  // pure logic so the connection label contract stays covered.
 
   function trimString(value: string): string {
     return value.trim();

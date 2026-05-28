@@ -140,12 +140,20 @@ git config --global merge.conflictstyle zdiff3
 
 ## Repository Language Policy
 
-- English is the default language for maintained repository content, including:
-  - source code identifiers and messages where practical;
+- English is the default language for all maintained repository content.
+- Use English for:
+  - source code identifiers and source messages where practical;
   - code comments;
-  - Markdown and other documentation files;
-  - scripts and examples.
-- Multilingual test fixtures are allowed only when they are necessary to validate language-sensitive behavior, and they must remain clearly scoped and documented in English.
+  - developer-facing Markdown documents;
+  - scripts, examples, fixture descriptions, and troubleshooting notes;
+  - test names and assertion descriptions where practical;
+  - commit/PR-facing text produced inside this repository.
+- Non-English text is allowed only when it is necessary for product internationalization, including:
+  - locale dictionaries and localized UI copy;
+  - locale metadata such as native language names;
+  - language-sensitive tests, snapshots, and fixtures;
+  - documented examples that explicitly validate Unicode, locale resolution, or translated UI behavior.
+- When non-English text is added for i18n, keep it scoped to the relevant locale, resource, or test file and document the reason in English when the purpose is not obvious.
 
 ## AI Design Principles
 

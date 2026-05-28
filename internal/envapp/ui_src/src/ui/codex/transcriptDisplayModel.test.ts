@@ -45,10 +45,10 @@ describe('buildCodexTranscriptDisplayNodes', () => {
     const group = activity(nodes, 1);
     expect(group.summary.searches).toBe(1);
     expect(group.summary.commands).toBe(1);
-    expect(group.summary.headline).toBe('1 search, 1 command');
+    expect(group.summary.headline).toBe('');
     expect(group.items.map((entry) => entry.label)).toEqual([
-      'Searched for "assistant-ui tool group"',
-      'Ran npm test · 2.4s',
+      'assistant-ui tool group',
+      'npm test',
     ]);
   });
 
@@ -60,8 +60,8 @@ describe('buildCodexTranscriptDisplayNodes', () => {
     ]);
 
     expect(nodes.map((node) => node.kind)).toEqual(['activity_group', 'message', 'activity_group']);
-    expect(activity(nodes, 0).items[0]?.label).toBe('Ran npm test');
-    expect(activity(nodes, 2).items[0]?.label).toBe('Ran npm run lint');
+    expect(activity(nodes, 0).items[0]?.label).toBe('npm test');
+    expect(activity(nodes, 2).items[0]?.label).toBe('npm run lint');
   });
 
   it('expands multi-file changes into clickable file diff activity items', () => {
@@ -101,12 +101,12 @@ describe('buildCodexTranscriptDisplayNodes', () => {
     expect(group.items).toHaveLength(2);
     expect(group.items[0]).toMatchObject({
       kind: 'file_change',
-      label: 'Edited …/runtime/desktop_bridge.go +2 -1',
+      label: '…/runtime/desktop_bridge.go +2 -1',
       detail: { type: 'file_diff', sourceItemID: 'changes-1', changeIndex: 0 },
     });
     expect(group.items[1]).toMatchObject({
       kind: 'file_change',
-      label: 'Created …/runtime/desktop_runtime_daemon.go +1 -0',
+      label: '…/runtime/desktop_runtime_daemon.go +1 -0',
       detail: { type: 'file_diff', sourceItemID: 'changes-1', changeIndex: 1 },
     });
   });
@@ -131,7 +131,7 @@ describe('buildCodexTranscriptDisplayNodes', () => {
     expect(group.items[0]).toMatchObject({
       kind: 'command',
       status: 'failed',
-      label: 'Ran go test ./... · failed · exit 1 · 18s',
+      label: 'go test ./...',
       detail: { type: 'command_output', sourceItemID: 'cmd-1' },
     });
   });

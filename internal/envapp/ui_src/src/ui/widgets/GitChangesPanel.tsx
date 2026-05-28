@@ -13,7 +13,6 @@ import {
   type GitWorkspaceViewPageState,
   workspaceDirectoryPath,
   workspaceEntryKey,
-  workspaceViewBulkActionLabel,
   workspaceViewSectionCount,
   workspaceViewSectionActionKey,
   workspaceViewSectionItems,
@@ -60,6 +59,7 @@ import {
   type GitChangesBreadcrumbSegment,
   type GitChangesHeaderActionId,
 } from './gitChangesHeaderLayout';
+import { useI18n, type I18nHelpers } from '../i18n';
 
 export interface GitChangesPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
@@ -103,14 +103,14 @@ function itemPrimaryLabel(item: GitSeededWorkspaceChange): string {
   return parts[parts.length - 1] || pathValue || '(unknown path)';
 }
 
-function itemDirectorySummary(item: GitSeededWorkspaceChange): string {
+function itemDirectorySummary(item: GitSeededWorkspaceChange, i18n: I18nHelpers): string {
   const count = Number(item.descendantFileCount ?? 0);
-  return count === 1 ? '1 file' : `${count} files`;
+  return i18n.tn('git.common.fileCount', count);
 }
 
-function listItemActionLabel(item: GitSeededWorkspaceChange): string {
-  if (isGitWorkspaceDirectoryEntry(item)) return 'Stage';
-  return item.section === 'staged' ? 'Unstage' : '+ Stage';
+function listItemActionLabel(item: GitSeededWorkspaceChange, i18n: I18nHelpers): string {
+  if (isGitWorkspaceDirectoryEntry(item)) return i18n.t('git.changes.stage');
+  return item.section === 'staged' ? i18n.t('git.changes.unstage') : i18n.t('git.changes.stageWithPlus');
 }
 
 function isDiscardableWorkspaceItem(item: GitSeededWorkspaceChange | null | undefined): boolean {
@@ -122,16 +122,16 @@ function sectionItems(workspace: GitSeededWorkspaceChangesResponse | null | unde
   return workspaceViewSectionItems(workspace, section) as GitSeededWorkspaceChange[];
 }
 
-function emptySectionMessage(section: GitWorkspaceViewSection): string {
+function emptySectionMessage(section: GitWorkspaceViewSection, i18n: I18nHelpers): string {
   switch (section) {
     case 'staged':
-      return 'No staged files yet. Stage files from the pending sections, then open the commit dialog.';
+      return i18n.t('git.changes.noStagedFiles');
     case 'changes':
-      return 'No pending files in this repository.';
+      return i18n.t('git.changes.noPendingFiles');
     case 'conflicted':
-      return 'No conflicted files right now.';
+      return i18n.t('git.changes.noConflictedFiles');
     default:
-      return 'No files in this section.';
+      return i18n.t('git.changes.noFilesInSection');
   }
 }
 
@@ -154,14 +154,15 @@ interface WorkspaceTableProps {
 }
 
 function WorkspaceTable(props: WorkspaceTableProps) {
-  const summaryUnit = () => props.section === 'changes' ? 'item' : 'file';
+  const i18n = useI18n();
+  const summaryUnit = () => props.section === 'changes' ? i18n.tn('git.common.itemCount', props.totalCount) : i18n.tn('git.common.fileCount', props.totalCount);
   return (
     <GitTableFrame class="flex h-full min-h-0 flex-col">
       <Show
         when={props.items.length > 0}
         fallback={(
           <div class="px-4 py-8">
-            <GitSubtleNote>{emptySectionMessage(props.section)}</GitSubtleNote>
+            <GitSubtleNote>{emptySectionMessage(props.section, i18n)}</GitSubtleNote>
           </div>
         )}
       >
@@ -170,10 +171,10 @@ function WorkspaceTable(props: WorkspaceTableProps) {
           tableClass={`${GIT_CHANGED_FILES_TABLE_CLASS} min-w-[34rem] sm:min-w-[42rem] md:min-w-0`}
           header={(
             <tr class={GIT_CHANGED_FILES_HEADER_ROW_CLASS}>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Path</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Status</th>
-              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>Changes</th>
-              <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>Action</th>
+              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.path')}</th>
+              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.status')}</th>
+              <th class={GIT_CHANGED_FILES_HEADER_CELL_CLASS}>{i18n.t('git.common.changes')}</th>
+              <th class={GIT_CHANGED_FILES_STICKY_HEADER_CELL_CLASS}>{i18n.t('git.common.action')}</th>
             </tr>
           )}
           renderRow={(item) => {
@@ -235,12 +236,12 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                     fallback={<GitChangeStatusPill change={item.changeType} />}
                   >
                     <div class="flex flex-wrap items-center gap-1.5">
-                      <GitMetaPill tone="neutral">Folder</GitMetaPill>
+                      <GitMetaPill tone="neutral">{i18n.t('git.common.folder')}</GitMetaPill>
                       <Show when={item.containsUnstaged}>
-                        <GitMetaPill tone="warning">Unstaged</GitMetaPill>
+                        <GitMetaPill tone="warning">{i18n.t('git.common.unstaged')}</GitMetaPill>
                       </Show>
                       <Show when={item.containsUntracked}>
-                        <GitMetaPill tone="brand">Untracked</GitMetaPill>
+                        <GitMetaPill tone="brand">{i18n.t('git.common.untracked')}</GitMetaPill>
                       </Show>
                     </div>
                   </Show>
@@ -250,7 +251,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                     when={isGitWorkspaceDirectoryEntry(item)}
                     fallback={<GitChangeMetrics additions={item.additions} deletions={item.deletions} />}
                   >
-                    <div class="text-[11px] font-medium text-muted-foreground">{itemDirectorySummary(item)}</div>
+                    <div class="text-[11px] font-medium text-muted-foreground">{itemDirectorySummary(item, i18n)}</div>
                   </Show>
                 </td>
                 <td class={gitChangedFilesStickyCellClass(active())}>
@@ -263,7 +264,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                       busy={busy(action())}
                       disabled={actionsDisabled()}
                     >
-                      {listItemActionLabel(item)}
+                      {listItemActionLabel(item, i18n)}
                     </GitChangedFilesActionButton>
                     <Show when={isDiscardableWorkspaceItem(item)}>
                       <GitChangedFilesActionButton
@@ -275,7 +276,7 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                         busy={busy('discard')}
                         disabled={actionsDisabled()}
                       >
-                        Discard...
+                        {i18n.t('git.changes.discard')}
                       </GitChangedFilesActionButton>
                     </Show>
                   </div>
@@ -288,14 +289,13 @@ function WorkspaceTable(props: WorkspaceTableProps) {
           <GitPagedTableFooter
             summary={(
               <>
-                Showing <span class="font-semibold tabular-nums text-foreground/90">{props.items.length}</span> of{' '}
-                <span class="font-semibold tabular-nums text-foreground/90">{props.totalCount}</span> {summaryUnit()}{props.totalCount === 1 ? '' : 's'}.
+                {i18n.t('git.changes.showingOf', { visible: props.items.length, total: props.totalCount, unit: summaryUnit() })}
               </>
             )}
             onLoadMore={props.onLoadMore}
             hasMore={props.hasMore}
             loading={props.loadingMore}
-            loadingStatus="Loading next page"
+            loadingStatus={i18n.t('git.changes.loadingNextPage')}
           />
         </Show>
       </Show>
@@ -310,6 +310,7 @@ type WorkspaceDiscardTarget =
   | null;
 
 export function GitChangesPanel(props: GitChangesPanelProps) {
+  const i18n = useI18n();
   const [commitDialogOpen, setCommitDialogOpen] = createSignal(false);
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] = createSignal<GitSeededWorkspaceChange | null>(null);
@@ -372,8 +373,12 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const canCommit = () => stagedCount() > 0 && String(props.commitMessage ?? '').trim().length > 0 && !props.commitBusy;
   const bulkActionLabel = () => (
     selectedSection() === 'changes' && activeDirectoryPath()
-      ? 'Stage Folder'
-      : workspaceViewBulkActionLabel(selectedSection())
+      ? i18n.t('git.changes.stageFolder')
+      : selectedSection() === 'staged'
+        ? i18n.t('git.changes.unstageAll')
+        : selectedSection() === 'conflicted'
+          ? i18n.t('git.changes.stageAll')
+          : i18n.t('git.changes.stageAll')
   );
   const bulkAction = () => (selectedSection() === 'staged' ? 'unstage' : 'stage');
   const sectionActionKey = () => workspaceViewSectionActionKey(selectedSection(), activeDirectoryPath());
@@ -384,6 +389,30 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const canOpenInTerminal = () => Boolean(props.onOpenInTerminal && repoShortcutRequest());
   const canBrowseFiles = () => Boolean(props.onBrowseFiles && repoShortcutRequest());
   const canOpenStash = () => Boolean(props.onOpenStash && repoRootPath());
+  const sectionTitle = () => (
+    headerPresentation().isCleanState
+      ? i18n.t('git.common.clean')
+      : selectedSection() === 'changes'
+        ? i18n.t('git.common.changes')
+        : selectedSection() === 'staged'
+          ? i18n.t('git.common.staged')
+          : selectedSection() === 'conflicted'
+            ? i18n.t('git.common.conflicted')
+            : headerPresentation().title
+  );
+  const countBadgeLabel = () => (
+    headerPresentation().isCleanState
+      ? i18n.t('git.changes.noPendingChanges')
+      : i18n.tn('git.common.fileCount', visibleCount())
+  );
+  const stagedBadgeLabel = () => i18n.t('git.changes.stagedCount', { count: stagedCount() });
+  const summaryCopy = () => {
+    if (headerPresentation().isCleanState) return '';
+    if (selectedSection() === 'staged') return i18n.t('git.changes.reviewStagedSnapshot');
+    if (selectedSection() === 'changes' && visibleCount() === 0 && stagedCount() > 0) return i18n.t('git.changes.pendingClearCommitReady');
+    if (selectedSection() === 'changes' && activeDirectoryPath()) return i18n.t('git.changes.reviewScopeThenStage');
+    return i18n.t('git.changes.stageThenCommit');
+  };
   const headerDensity = createMemo(() => resolveGitChangesHeaderDensity(headerWidth()));
   const headerPresentation = createMemo(() => buildGitChangesHeaderPresentation({
     density: headerDensity(),
@@ -400,7 +429,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   }));
   const headerTone = () => headerPresentation().isCleanState ? 'success' : selectedTone();
   const breadcrumbSegments = createMemo<GitChangesBreadcrumbSegment[]>(() => activeBreadcrumbs().map((crumb) => ({
-    label: String(crumb.label ?? '').trim() || 'Folder',
+    label: String(crumb.label ?? '').trim() || i18n.t('git.common.folder'),
     path: String(crumb.path ?? '').trim(),
   })));
   const headerPrimaryActions = () => headerPresentation().primaryActionIds;
@@ -408,12 +437,12 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const overflowItems = createMemo<DropdownItem[]>(() => headerPresentation().overflowActionIds.map((actionId) => ({
     id: actionId,
     label: actionId === 'discard'
-      ? (activeDirectoryPath() ? 'Discard folder changes' : 'Discard all changes')
+      ? (activeDirectoryPath() ? i18n.t('git.changes.discardFolderChanges') : i18n.t('git.changes.discardAllChanges'))
       : actionId === 'terminal'
-        ? 'Open in Terminal'
+        ? i18n.t('git.changes.openInTerminal')
         : actionId === 'files'
-          ? 'Browse Files'
-          : 'Ask Flower',
+          ? i18n.t('git.changes.browseFiles')
+          : i18n.t('git.changes.askFlower'),
   })));
   const showActionRow = () => headerPrimaryActions().length > 0 || headerUtilityActions().length > 0 || overflowItems().length > 0;
   const showBreadcrumbRail = () => (
@@ -493,35 +522,47 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const discardTitle = () => {
     const target = discardTarget();
     if (target?.kind === 'section') {
-      return activeDirectoryPath() ? 'Discard folder changes' : 'Discard pending changes';
+      return activeDirectoryPath() ? i18n.t('git.changes.discardFolderChanges') : i18n.t('git.changes.discardPendingTitle');
     }
     if (target?.kind === 'item' && isGitWorkspaceDirectoryEntry(target.item)) {
-      return 'Discard folder changes';
+      return i18n.t('git.changes.discardFolderChanges');
     }
-    return 'Discard file changes';
+    return i18n.t('git.changes.discardFileTitle');
   };
   const discardConfirmText = () => {
     const target = discardTarget();
-    if (target?.kind === 'section') return activeDirectoryPath() ? 'Discard Folder' : 'Discard All';
-    if (target?.kind === 'item' && isGitWorkspaceDirectoryEntry(target.item)) return 'Discard Folder';
-    return 'Discard';
+    if (target?.kind === 'section') return activeDirectoryPath() ? i18n.t('git.changes.discardFolderConfirm') : i18n.t('git.changes.discardAllConfirm');
+    if (target?.kind === 'item' && isGitWorkspaceDirectoryEntry(target.item)) return i18n.t('git.changes.discardFolderConfirm');
+    return i18n.t('git.changes.discardConfirm');
   };
   const discardDescription = () => {
     const target = discardTarget();
     if (!target) return '';
     if (target.kind === 'section') {
       if (activeDirectoryPath()) {
-        return `Discard all ${visibleCount()} file${visibleCount() === 1 ? '' : 's'} inside "${activeDirectoryPath()}"? Tracked files will be restored to their last Git state, and untracked files will be deleted from the working tree.`;
+        return i18n.t('git.changes.discardDirectoryDescription', {
+          count: visibleCount(),
+          unit: i18n.tn('git.common.fileCount', visibleCount()),
+          path: activeDirectoryPath(),
+        });
       }
-      return `Discard all ${visibleCount()} file${visibleCount() === 1 ? '' : 's'} in Changes? Tracked files will be restored to their last Git state, and untracked files will be deleted from the working tree.`;
+      return i18n.t('git.changes.discardAllDescription', {
+        count: visibleCount(),
+        unit: i18n.tn('git.common.fileCount', visibleCount()),
+      });
     }
     if (isGitWorkspaceDirectoryEntry(target.item)) {
-      return `Discard all ${itemDirectorySummary(target.item)} inside "${workspaceDirectoryPath(target.item)}"? Tracked files will be restored to their last Git state, and untracked files will be deleted from the working tree.`;
+      const count = Number(target.item.descendantFileCount ?? 0) || 1;
+      return i18n.t('git.changes.discardDirectoryDescription', {
+        count,
+        unit: itemDirectorySummary(target.item, i18n),
+        path: workspaceDirectoryPath(target.item),
+      });
     }
     if (target.item.section === 'untracked') {
-      return `Delete the untracked file "${itemPath(target.item)}" from the working tree? Git cannot restore untracked files after they are discarded.`;
+      return i18n.t('git.changes.discardUntrackedFileDescription', { path: itemPath(target.item) });
     }
-    return `Restore "${itemPath(target.item)}" to the last Git state and drop its unstaged edits? Any staged snapshot for this file will stay intact.`;
+    return i18n.t('git.changes.discardFileDescription', { path: itemPath(target.item) });
   };
 
   const runHeaderAction = (actionId: GitChangesHeaderActionId) => {
@@ -573,7 +614,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const renderUtilityAction = (actionId: GitChangesHeaderActionId) => (
     <Show when={actionId === 'flower' || actionId === 'terminal' || actionId === 'files'}>
       <GitShortcutOrbButton
-        label={actionId === 'flower' ? 'Ask Flower' : actionId === 'terminal' ? 'Terminal' : 'Files'}
+        label={actionId === 'flower' ? i18n.t('git.changes.askFlower') : actionId === 'terminal' ? i18n.t('git.changes.terminal') : i18n.t('git.changes.files')}
         tone={actionId === 'flower' ? 'flower' : actionId === 'terminal' ? 'terminal' : 'files'}
         icon={actionId === 'flower' ? FlowerIcon : actionId === 'terminal' ? Terminal : Folder}
         onClick={() => runHeaderAction(actionId)}
@@ -593,13 +634,13 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const primaryActionLabel = (actionId: GitChangesHeaderActionId) => {
     switch (actionId) {
       case 'commit':
-        return 'Commit...';
+        return i18n.t('git.changes.commitAction');
       case 'bulk':
         return bulkActionLabel();
       case 'stash':
-        return 'Stash...';
+        return i18n.t('git.changes.stashAction');
       case 'discard':
-        return activeDirectoryPath() ? 'Discard Folder...' : 'Discard All...';
+        return activeDirectoryPath() ? i18n.t('git.changes.discardFolderAction') : i18n.t('git.changes.discardAllAction');
       default:
         return '';
     }
@@ -646,8 +687,8 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
             size="sm"
             variant="outline"
             class={`rounded-md ${redevenSurfaceRoleClass('control')}`}
-            aria-label="More actions"
-            title="More actions"
+            aria-label={i18n.t('git.common.moreActions')}
+            title={i18n.t('git.common.moreActions')}
           >
             <MoreHorizontal class="size-3.5" />
           </Button>
@@ -685,7 +726,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   return (
     <div class="flex h-full min-h-0 flex-col overflow-hidden">
       <div class="flex flex-1 min-h-0 flex-col px-3 py-3 sm:px-4 sm:py-4">
-        <Show when={!visibleLoading()} fallback={<GitStatePane loading message="Loading workspace changes..." />}>
+        <Show when={!visibleLoading()} fallback={<GitStatePane loading message={i18n.t('git.changes.loadingWorkspaceChanges')} />}>
           <Show when={!visibleError()} fallback={<GitStatePane tone="error" message={visibleError()} />}>
             <div class="flex min-h-0 flex-1 flex-col gap-3">
               <GitPanelFrame class="shrink-0">
@@ -695,19 +736,19 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
                   class={headerContainerClass()}
                 >
                   <div class={headerTopRowClass()}>
-                    <GitLabelBlock class="min-w-0" label="Workspace" tone={headerTone()}>
+                    <GitLabelBlock class="min-w-0" label={i18n.t('git.changes.workspace')} tone={headerTone()}>
                       <div class="flex flex-wrap items-center gap-2">
-                        <GitPrimaryTitle>{headerPresentation().title}</GitPrimaryTitle>
+                        <GitPrimaryTitle>{sectionTitle()}</GitPrimaryTitle>
                         <GitMetaPill tone={headerPresentation().isCleanState ? 'success' : headerTone()}>
-                          {headerPresentation().countBadgeLabel}
+                          {countBadgeLabel()}
                         </GitMetaPill>
                         <Show when={stagedCount() > 0}>
-                          <GitMetaPill tone="success">{headerPresentation().stagedBadgeLabel}</GitMetaPill>
+                          <GitMetaPill tone="success">{stagedBadgeLabel()}</GitMetaPill>
                         </Show>
                       </div>
                       <Show when={headerPresentation().showSummaryCopy}>
                         <div class="max-w-full text-[11px] leading-relaxed text-muted-foreground line-clamp-2 sm:max-w-[32rem]">
-                          {headerPresentation().summaryCopy}
+                          {summaryCopy()}
                         </div>
                       </Show>
                     </GitLabelBlock>
@@ -818,9 +859,9 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
           repoRootPath: String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim(),
           workspaceSection: String(diffItem()?.section ?? '').trim(),
         } : null}
-        title="Workspace Diff"
-        description={diffItem() ? changeSecondaryPath(diffItem()) : 'Review the selected workspace change.'}
-        emptyMessage="Select a workspace file to inspect its diff."
+        title={i18n.t('git.changes.workspaceDiffTitle')}
+        description={diffItem() ? changeSecondaryPath(diffItem()) : i18n.t('git.changes.workspaceDiffDescription')}
+        emptyMessage={i18n.t('git.changes.workspaceDiffEmpty')}
       />
 
       <ConfirmDialog

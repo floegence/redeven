@@ -1,6 +1,7 @@
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { PickerEnsurePath } from '@floegence/floe-webapp-core/ui';
 import { LazyMountedDirectoryPicker } from '../primitives/LazyMountedPickers';
+import { useI18n } from '../i18n';
 
 export function CodexWorkingDirPickerDialog(props: {
   open: boolean;
@@ -12,16 +13,17 @@ export function CodexWorkingDirPickerDialog(props: {
   ensurePath: PickerEnsurePath;
   onSelect: (path: string) => void;
 }) {
+  const i18n = useI18n();
   return (
     <LazyMountedDirectoryPicker
       open={props.open}
       onOpenChange={props.onOpenChange}
       files={[...props.files]}
       initialPath={props.initialPath}
-      homeLabel="Home"
+      homeLabel={i18n.t('codex.workingDirPicker.home')}
       homePath={props.homePath}
-      title="Select Working Directory"
-      confirmText="Select"
+      title={i18n.t('codex.workingDirPicker.title')}
+      confirmText={i18n.t('codex.workingDirPicker.confirm')}
       onExpand={props.onExpand}
       ensurePath={props.ensurePath}
       onSelect={props.onSelect}

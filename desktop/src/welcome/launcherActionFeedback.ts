@@ -1,8 +1,13 @@
 import type { DesktopLauncherActionFailure } from '../shared/desktopLauncherIPC';
+import type { DesktopI18n } from '../shared/i18n';
 import type {
   DesktopActionToastAction,
   DesktopActionToastTone,
 } from './actionToastModel';
+import {
+  localizedOperationFailureSummary,
+  localizedOperationFailureTitle,
+} from './operationFailureI18n';
 
 export type LauncherActionFailurePresentation = Readonly<{
   title?: string;
@@ -18,15 +23,19 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function controlPlaneAuthRequiredMessage(failure: DesktopLauncherActionFailure): string {
+function controlPlaneAuthRequiredMessage(
+  i18n: DesktopI18n,
+  failure: DesktopLauncherActionFailure,
+): string {
   const envPublicID = compact(failure.env_public_id);
   if (envPublicID !== '') {
-    return 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.';
+    return i18n.t('toast.providerAuthorizationRequired');
   }
-  return 'Desktop authorization for this provider expired. Reconnect the provider, then try the action again.';
+  return i18n.t('toast.providerAuthorizationExpired');
 }
 
 function reconnectControlPlaneAction(
+  i18n: DesktopI18n,
   failure: DesktopLauncherActionFailure,
 ): DesktopActionToastAction | undefined {
   const providerOrigin = compact(failure.provider_origin);
@@ -35,13 +44,14 @@ function reconnectControlPlaneAction(
   }
   return {
     kind: 'reconnect_control_plane',
-    label: 'Reconnect Provider',
+    label: i18n.t('environmentAction.reconnectProvider'),
     provider_origin: providerOrigin,
     provider_id: compact(failure.provider_id) || undefined,
   };
 }
 
 export function launcherActionFailurePresentation(
+  i18n: DesktopI18n,
   failure: DesktopLauncherActionFailure,
 ): LauncherActionFailurePresentation {
   const refreshSnapshot = failure.should_refresh_snapshot === true;
@@ -49,8 +59,8 @@ export function launcherActionFailurePresentation(
   const structured = failure.failure;
   if (structured) {
     return {
-      title: structured.title,
-      message: structured.summary,
+      title: localizedOperationFailureTitle(i18n, structured),
+      message: localizedOperationFailureSummary(i18n, structured),
       tone: structured.severity,
       refresh_snapshot: refreshSnapshot,
       delivery,
@@ -59,56 +69,56 @@ export function launcherActionFailurePresentation(
   switch (failure.code) {
     case 'session_stale':
       return {
-        message: 'That window was already closed. Desktop refreshed the environment list.',
+        message: i18n.t('toast.sessionStale'),
         tone: 'info',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
     case 'environment_opening':
       return {
-        message: failure.message,
+        message: compact(failure.message) || i18n.t('toast.openingStopping'),
         tone: 'info',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
     case 'environment_offline':
       return {
-        message: 'This environment is currently offline in the provider.',
+        message: i18n.t('toast.environmentOffline'),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
     case 'runtime_not_started':
       return {
-        message: failure.message || 'Start the runtime before opening this environment.',
+        message: i18n.t('toast.runtimeNotStarted'),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
     case 'runtime_not_ready':
       return {
-        message: failure.message || 'Runtime is preparing this environment. Try again once it is ready.',
+        message: i18n.t('toast.runtimeNotReady'),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
     case 'environment_status_stale':
       return {
-        message: 'Remote status is stale. Refresh the provider to confirm the latest state.',
+        message: i18n.t('toast.environmentStatusStale'),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
     case 'provider_sync_required':
       return {
-        message: 'Desktop needs a fresh provider sync before opening this environment.',
+        message: i18n.t('toast.providerSyncRequired'),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
     case 'provider_sync_in_progress':
       return {
-        message: 'Desktop is already checking the latest provider status.',
+        message: i18n.t('toast.providerSyncInProgress'),
         tone: 'info',
         refresh_snapshot: refreshSnapshot,
         delivery,
@@ -121,26 +131,32 @@ export function launcherActionFailurePresentation(
     case 'provider_environment_removed':
     case 'provider_unreachable':
     case 'provider_invalid_response':
+      return {
+        message: compact(failure.message) || i18n.t('runtimeMessage.providerLinkFailedDetail'),
+        tone: 'warning',
+        refresh_snapshot: refreshSnapshot,
+        delivery,
+      };
     case 'provider_link_failed':
       return {
-        message: failure.message,
+        message: i18n.t('runtimeMessage.providerLinkFailedDetail'),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
     case 'control_plane_auth_required':
       return {
-        title: 'Provider Authorization Expired',
-        message: controlPlaneAuthRequiredMessage(failure),
+        title: i18n.t('toast.providerAuthorizationExpiredTitle'),
+        message: controlPlaneAuthRequiredMessage(i18n, failure),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
-        action: reconnectControlPlaneAction(failure),
+        action: reconnectControlPlaneAction(i18n, failure),
         auto_dismiss: false,
       };
     case 'runtime_start_failed':
       return {
-        message: failure.message,
+        message: i18n.t('progress.runtimeStartFailedSummary'),
         tone: 'error',
         refresh_snapshot: refreshSnapshot,
         delivery,

@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildAppMenuTemplate } from './appMenu';
+import { createDesktopI18n } from '../shared/i18n/desktopI18n';
+import type { RedevenLocale } from '../shared/i18n/localeMeta';
 
-function buildMenu(platform: NodeJS.Platform) {
+function buildMenu(platform: NodeJS.Platform, locale: RedevenLocale = 'en-US') {
   return buildAppMenuTemplate({
     openConnectionCenter: () => undefined,
     openAdvancedSettings: () => undefined,
     requestQuit: () => undefined,
-  }, platform);
+  }, createDesktopI18n(locale), platform);
 }
 
 describe('appMenu', () => {
@@ -75,6 +77,21 @@ describe('appMenu', () => {
           expect.objectContaining({ role: 'close' }),
         ]),
       }),
+    ]));
+  });
+
+  it('routes menu chrome through the current Desktop locale', () => {
+    const template = buildMenu('linux', 'zh-CN');
+
+    expect(template).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '文件' }),
+      expect.objectContaining({ label: '编辑' }),
+      expect.objectContaining({ label: '视图' }),
+      expect.objectContaining({ label: '窗口' }),
+    ]));
+    expect(template.flatMap((item) => Array.isArray(item.submenu) ? item.submenu : [])).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '连接 Environment...' }),
+      expect.objectContaining({ label: '退出 Redeven Desktop' }),
     ]));
   });
 });

@@ -15,10 +15,12 @@ import { RemoteFileBrowser } from '../widgets/RemoteFileBrowser';
 import { RuntimeMonitorPanel } from '../widgets/RuntimeMonitorPanel';
 import { TerminalPanel } from '../widgets/TerminalPanel';
 import { EnvDeckConversationShell, EnvDeckSingletonSurface } from './EnvDeckSurfaceShell';
+import { useI18n } from '../i18n';
 
 function FilesWidget(props: WidgetProps) {
+  const i18n = useI18n();
   return (
-    <EnvDeckSingletonSurface widgetId={props.widgetId} widgetType="redeven.files" surfaceLabel="File Browser">
+    <EnvDeckSingletonSurface widgetId={props.widgetId} widgetType="redeven.files" surfaceLabel={i18n.t('shell.nav.fileBrowser')}>
       <div class="h-full">
         <RemoteFileBrowser widgetId={props.widgetId} />
       </div>
@@ -28,9 +30,10 @@ function FilesWidget(props: WidgetProps) {
 
 function TerminalWidget(props: WidgetProps) {
   const env = useEnvContext();
+  const i18n = useI18n();
 
   return (
-    <EnvDeckSingletonSurface widgetId={props.widgetId} widgetType="redeven.terminal" surfaceLabel="Terminal">
+    <EnvDeckSingletonSurface widgetId={props.widgetId} widgetType="redeven.terminal" surfaceLabel={i18n.t('shell.nav.terminal')}>
       <TerminalPanel
         variant="deck"
         openSessionRequest={env.openTerminalInDirectoryRequest()}
@@ -41,27 +44,30 @@ function TerminalWidget(props: WidgetProps) {
 }
 
 function MonitorWidget(props: WidgetProps) {
+  const i18n = useI18n();
   return (
-    <EnvDeckSingletonSurface widgetId={props.widgetId} widgetType="redeven.monitor" surfaceLabel="Monitoring">
+    <EnvDeckSingletonSurface widgetId={props.widgetId} widgetType="redeven.monitor" surfaceLabel={i18n.t('shell.nav.monitoring')}>
       <RuntimeMonitorPanel variant="deck" />
     </EnvDeckSingletonSurface>
   );
 }
 
 function CodespacesWidget(props: WidgetProps) {
+  const i18n = useI18n();
   return (
-    <EnvDeckSingletonSurface widgetId={props.widgetId} widgetType="redeven.codespaces" surfaceLabel="Codespaces">
+    <EnvDeckSingletonSurface widgetId={props.widgetId} widgetType="redeven.codespaces" surfaceLabel={i18n.t('shell.nav.codespaces')}>
       <EnvCodespacesPage />
     </EnvDeckSingletonSurface>
   );
 }
 
 function PortsWidget(props: WidgetProps) {
+  const i18n = useI18n();
   return (
     <EnvDeckSingletonSurface
       widgetId={props.widgetId}
       widgetType="redeven.ports"
-      surfaceLabel="Web Services"
+      surfaceLabel={i18n.t('shell.nav.webServices')}
     >
       <EnvPortForwardsPage />
     </EnvDeckSingletonSurface>
@@ -70,6 +76,7 @@ function PortsWidget(props: WidgetProps) {
 
 function FlowerWidget(props: WidgetProps) {
   const env = useEnvContext();
+  const i18n = useI18n();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
 
   return (
@@ -78,12 +85,12 @@ function FlowerWidget(props: WidgetProps) {
       widgetType="redeven.ai"
       surfaceLabel="Flower"
       available={available()}
-      unavailableTitle="Flower needs read, write, and execute access"
-      unavailableDescription="Grant RWX permission for this environment to use the embedded Flower workspace."
+      unavailableTitle={i18n.t('workbench.notices.flowerRwxTitle')}
+      unavailableDescription={i18n.t('workbench.notices.flowerRwxDescription')}
     >
       <EnvDeckConversationShell
         widgetId={props.widgetId}
-        railLabel="Flower threads"
+        railLabel={i18n.t('workbench.notices.flowerThreads')}
         rail={<AIChatSidebar />}
         workbench={<EnvAIPage />}
       />
@@ -93,6 +100,7 @@ function FlowerWidget(props: WidgetProps) {
 
 function CodexWidget(props: WidgetProps) {
   const env = useEnvContext();
+  const i18n = useI18n();
   const available = () => env.env.state !== 'ready' || hasRWXPermissions(env.env());
 
   return (
@@ -101,12 +109,12 @@ function CodexWidget(props: WidgetProps) {
       widgetType="redeven.codex"
       surfaceLabel="Codex"
       available={available()}
-      unavailableTitle="Codex needs read, write, and execute access"
-      unavailableDescription="Grant RWX permission for this environment to use the embedded Codex workspace."
+      unavailableTitle={i18n.t('workbench.notices.codexRwxTitle')}
+      unavailableDescription={i18n.t('workbench.notices.codexRwxDescription')}
     >
       <EnvDeckConversationShell
         widgetId={props.widgetId}
-        railLabel="Codex threads"
+        railLabel={i18n.t('workbench.notices.codexThreads')}
         rail={<CodexSidebarShell />}
         workbench={<CodexPage />}
       />

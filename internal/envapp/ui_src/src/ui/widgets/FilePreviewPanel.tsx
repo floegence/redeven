@@ -7,6 +7,7 @@ import type { FilePreviewDescriptor } from '../utils/filePreview';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { FilePreviewContent } from './FilePreviewContent';
 import { WindowModal } from './WindowModal';
+import { useI18n } from '../i18n';
 
 export interface FilePreviewPanelProps {
   item?: FileItem | null;
@@ -44,16 +45,17 @@ export interface FilePreviewPanelProps {
 }
 
 export function FilePreviewPanel(props: FilePreviewPanelProps) {
+  const i18n = useI18n();
   const closeConfirmVariant = createMemo(() => props.closeConfirmVariant ?? 'none');
 
   const closeConfirmFooter = (
     <div class="border-t border-border/70 px-4 pt-3 pb-4">
       <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
         <Button size="sm" variant="outline" class="w-full sm:w-auto" onClick={() => props.onCloseConfirmChange?.(false)}>
-          Cancel
+          {i18n.t('common.actions.cancel')}
         </Button>
         <Button size="sm" variant="destructive" class="w-full sm:w-auto" onClick={() => void props.onConfirmDiscardClose?.()}>
-          Discard changes
+          {i18n.t('filePreview.discardChanges')}
         </Button>
       </div>
     </div>
@@ -98,9 +100,9 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
         <ConfirmDialog
           open={!!props.closeConfirmOpen}
           onOpenChange={(open) => props.onCloseConfirmChange?.(open)}
-          title="Discard unsaved changes?"
-          description={props.closeConfirmMessage || 'Discard the current edits before continuing.'}
-          confirmText="Discard changes"
+          title={i18n.t('filePreview.discardUnsavedTitle')}
+          description={props.closeConfirmMessage || i18n.t('filePreview.discardUnsavedDescription')}
+          confirmText={i18n.t('filePreview.discardChanges')}
           variant="destructive"
           onConfirm={() => void props.onConfirmDiscardClose?.()}
         />
@@ -110,8 +112,8 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
         <WindowModal
           open={!!props.closeConfirmOpen}
           host={props.closeConfirmHost ?? null}
-          title="Discard unsaved changes?"
-          description={props.closeConfirmMessage || 'Discard the current edits before continuing.'}
+          title={i18n.t('filePreview.discardUnsavedTitle')}
+          description={props.closeConfirmMessage || i18n.t('filePreview.discardUnsavedDescription')}
           footer={closeConfirmFooter}
           class="w-[min(30rem,calc(100%-1rem))]"
           onOpenChange={(open) => props.onCloseConfirmChange?.(open)}

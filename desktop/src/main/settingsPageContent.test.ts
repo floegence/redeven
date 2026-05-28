@@ -45,15 +45,16 @@ describe('settingsPageContent', () => {
     expect(snapshot.summary_items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: 'visibility',
-        value: 'Shared on your local network',
+        value_key: 'settings.sharedLocalNetworkLabel',
       }),
       expect.objectContaining({
         id: 'next_start_address',
-        value: 'Your device IP:23998',
+        value: '23998',
+        detail_key: 'settings.sharedAddressDetail',
       }),
       expect.objectContaining({
         id: 'password_state',
-        value: 'Password required before the next open of Local Environment',
+        value_key: 'settings.passwordNeeded',
         tone: 'warning',
       }),
     ]));
@@ -72,11 +73,11 @@ describe('settingsPageContent', () => {
       expect.objectContaining({
         id: 'next_start_address',
         value: '10.0.0.12:25000',
-        detail: 'Custom bind and password rules.',
+        detail_key: 'settings.customBindDetail',
       }),
       expect.objectContaining({
         id: 'password_state',
-        value: 'Password will be configured on save',
+        value_key: 'settings.setOnSave',
         tone: 'success',
       }),
     ]));
@@ -90,10 +91,10 @@ describe('settingsPageContent', () => {
       local_ui_password_configured: true,
     }));
 
-    expect(snapshot.password_state_label).toBe('Password configured');
+    expect(snapshot.password_state_id).toBe('configured');
     expect(snapshot.local_ui_password_configured).toBe(true);
     expect(snapshot.draft.local_ui_password).toBe('');
-    expect(snapshot.host_fields[1]?.helpHTML).toContain('Leave this blank to keep the current stored password.');
+    expect(snapshot.host_fields[1]?.help_key).toBe('settings.localUIPasswordKeepHelp');
   });
 
   it('describes replacing a stored password before save', () => {
@@ -104,8 +105,8 @@ describe('settingsPageContent', () => {
       local_ui_password_configured: true,
     }));
 
-    expect(snapshot.password_state_label).toBe('Password will be replaced on save');
-    expect(snapshot.host_fields[1]?.helpHTML).toContain('Saving will replace the stored password.');
+    expect(snapshot.password_state_id).toBe('replace_on_save');
+    expect(snapshot.host_fields[1]?.help_key).toBe('settings.localUIPasswordReplaceHelp');
   });
 
   it('explains when the current runtime needs a password that Desktop has not stored yet', () => {
@@ -115,9 +116,9 @@ describe('settingsPageContent', () => {
       runtime_password_required: true,
     }));
 
-    expect(snapshot.password_state_label).toBe('Password required before the next open of Local Environment');
+    expect(snapshot.password_state_id).toBe('required');
     expect(snapshot.runtime_password_required).toBe(true);
     expect(snapshot.local_ui_password_can_clear).toBe(false);
-    expect(snapshot.host_fields[1]?.helpHTML).toContain('The current runtime is protected, but Desktop does not have a stored password ready to reuse.');
+    expect(snapshot.host_fields[1]?.help_key).toBe('settings.localUIPasswordRuntimeRequiredHelp');
   });
 });

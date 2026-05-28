@@ -27,6 +27,7 @@ import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surf
 import { formatFileBrowserPathInputValue, parseFileBrowserPathInput } from '../utils/fileBrowserPathInput';
 import type { NormalizedFilesystemRoot } from '../utils/filesystemRoots';
 import { matchFilesystemRoot } from '../utils/filesystemRoots';
+import { useI18n } from '../i18n';
 import {
   mapContextMenuCallbacksToAbsolute,
   mapContextMenuEventToAbsolutePath,
@@ -109,6 +110,7 @@ interface FileWorkspaceHeaderProps {
 
 function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
   const browser = useFileBrowser();
+  const i18n = useI18n();
   let toolbarLayoutRef: HTMLDivElement | undefined;
   const [toolbarWidth, setToolbarWidth] = createSignal(0);
   const canNavigateUp = () => {
@@ -154,15 +156,15 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               icon={FilesIcon}
               {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
               class={FILE_WORKSPACE_OUTLINE_CONTROL_CLASS}
-              aria-label="Toggle browser sidebar"
+              aria-label={i18n.t('files.sidebarToggle')}
               onClick={props.onToggleSidebar}
             >
-              Sidebar
+              {i18n.t('files.sidebar')}
             </Button>
           </Show>
 
           <Button size="sm" variant="outline" icon={ArrowUp} {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS} class={FILE_WORKSPACE_OUTLINE_CONTROL_CLASS} onClick={browser.navigateUp} disabled={!canNavigateUp()}>
-            Up
+            {i18n.t('files.up')}
           </Button>
         </div>
 
@@ -203,8 +205,8 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               type="text"
               value={browser.filterQuery()}
               onInput={(event) => browser.setFilterQuery(event.currentTarget.value)}
-              placeholder="Filter files"
-              aria-label="Filter files"
+              placeholder={i18n.t('files.filterPlaceholder')}
+              aria-label={i18n.t('files.filterPlaceholder')}
               class="h-full min-w-0 flex-1 border-0 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground/70"
             />
           </label>
@@ -217,8 +219,8 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
               {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
               onChange={(value) => browser.setViewMode(value === 'grid' ? 'grid' : 'list')}
               options={[
-                { value: 'list', label: 'List' },
-                { value: 'grid', label: 'Grid' },
+                { value: 'list', label: i18n.t('files.viewList') },
+                { value: 'grid', label: i18n.t('files.viewGrid') },
               ]}
             />
 
@@ -230,17 +232,17 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
       </div>
 
       <div class="mt-1 flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-        <span>{browser.currentFiles().length} visible</span>
+        <span>{i18n.tn('files.visibleCount', browser.currentFiles().length)}</span>
         <Show when={browser.selectedItems().size > 0}>
           <>
             <span aria-hidden="true">·</span>
-            <span class="text-primary/80">{browser.selectedItems().size} selected</span>
+            <span class="text-primary/80">{i18n.tn('files.selectedCount', browser.selectedItems().size)}</span>
           </>
         </Show>
         <Show when={browser.filterQueryApplied().trim()}>
           <>
             <span aria-hidden="true">·</span>
-            <span>Filter active</span>
+            <span>{i18n.t('files.filterActive')}</span>
           </>
         </Show>
         <Show when={props.pathStatusText?.trim()}>
@@ -256,21 +258,22 @@ function FileWorkspaceHeader(props: FileWorkspaceHeaderProps) {
 
 function FileWorkspaceStatusBar() {
   const browser = useFileBrowser();
+  const i18n = useI18n();
 
   return (
     <div class={cn('flex flex-wrap items-center justify-between gap-2 border-t px-2.5 py-1 text-[10px] text-muted-foreground', redevenDividerRoleClass(), redevenSurfaceRoleClass('inset'))}>
       <div class="flex flex-wrap items-center gap-1.5">
-        <span>{browser.currentFiles().length} items</span>
+        <span>{i18n.tn('files.itemCount', browser.currentFiles().length)}</span>
         <Show when={browser.filterQueryApplied().trim()}>
           <>
             <span aria-hidden="true">·</span>
-            <span>Filtered view</span>
+            <span>{i18n.t('files.filteredView')}</span>
           </>
         </Show>
         <Show when={browser.selectedItems().size > 0}>
           <>
             <span aria-hidden="true">·</span>
-            <span class="text-primary/80">{browser.selectedItems().size} selected</span>
+            <span class="text-primary/80">{i18n.tn('files.selectedCount', browser.selectedItems().size)}</span>
           </>
         </Show>
       </div>
@@ -284,6 +287,7 @@ function FileWorkspaceStatusBar() {
 function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files' | 'initialPath' | 'persistenceKey' | 'resetKey'>) {
   const browser = useFileBrowser();
   const drag = useFileBrowserDrag();
+  const i18n = useI18n();
   const dragEnabled = () => Boolean(drag && props.onDragMove);
   const resolvedOverrideContextMenuItems = createMemo(() => {
     if (!props.resolveOverrideContextMenuItems) {
@@ -308,9 +312,9 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       return { tone: 'error' as const, text: pathError().trim() };
     }
     if (pathSubmitting()) {
-      return { tone: 'muted' as const, text: 'Opening path...' };
+      return { tone: 'muted' as const, text: i18n.t('files.openingPath') };
     }
-    return { tone: 'muted' as const, text: 'Enter to open · Esc to cancel' };
+    return { tone: 'muted' as const, text: i18n.t('files.pathEditHint') };
   });
 
   const focusPathInput = () => {
@@ -432,7 +436,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
 
   return (
     <BrowserWorkspaceShell
-      title="Browser"
+      title={i18n.t('files.browserTitle')}
       width={props.width}
       open={props.open}
       resizable={props.resizable}
@@ -451,16 +455,16 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
       sidebarBody={(
         <div class="flex h-full min-h-0 flex-col gap-1.5">
           <div class="flex items-center justify-between px-0.5 text-[9px] font-medium uppercase tracking-[0.14em] text-muted-foreground/60">
-            <span>Folder Tree</span>
+            <span>{i18n.t('files.folderTree')}</span>
             <span class="flex items-center gap-1">
-              <span>{currentRoot()?.label ?? 'Compact depth'}</span>
+              <span>{currentRoot()?.label ?? i18n.t('files.compactDepth')}</span>
               <Show when={currentRoot()}>
                 {(root) => (
                   <span
                     class="rounded-full border border-border/40 bg-background/80 px-1 py-0 text-[8px] font-semibold leading-4 text-muted-foreground"
-                    title={`${root().label} is ${root().permissions.write ? 'read-write' : 'read-only'}`}
+                    title={i18n.t('files.rootAccessTitle', { label: root().label, mode: root().permissions.write ? i18n.t('files.readWriteAccess') : i18n.t('files.readOnlyAccess') })}
                   >
-                    {root().permissions.write ? 'RW' : 'RO'}
+                    {root().permissions.write ? i18n.t('files.readWriteBadge') : i18n.t('files.readOnlyBadge')}
                   </span>
                 )}
               </Show>
@@ -545,6 +549,7 @@ function FileBrowserWorkspaceInner(props: Omit<FileBrowserWorkspaceProps, 'files
 }
 
 export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
+  const i18n = useI18n();
   const displayFiles = createMemo(() => mapFileItemsToDisplayPath(props.files, props.homePath));
   const displayCurrentPath = createMemo(() => toFileBrowserDisplayPath(props.currentPath, props.homePath));
   const displayInitialPath = createMemo(() => toFileBrowserDisplayPath(props.initialPath, props.homePath));
@@ -572,7 +577,7 @@ export function FileBrowserWorkspace(props: FileBrowserWorkspaceProps) {
         initialPath={displayInitialPath()}
         initialViewMode="grid"
         persistenceKey={props.persistenceKey}
-        homeLabel="Home"
+        homeLabel={i18n.t('files.homeLabel')}
         onNavigate={(path) => props.onNavigate?.(toAbsolutePath(path))}
         onPathChange={(path, source) => props.onPathChange?.(toAbsolutePath(path), source)}
         onOpen={(item) => props.onOpen?.(mapFileItemToAbsolutePath(item, props.homePath))}

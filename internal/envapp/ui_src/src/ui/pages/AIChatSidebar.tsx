@@ -15,13 +15,14 @@ import { hasRWXPermissions } from './aiPermissions';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { FloatingContextMenu, type FloatingContextMenuItem } from '../widgets/FloatingContextMenu';
 import { writeTextToClipboard } from '../utils/clipboard';
+import { useI18n, type I18nHelpers } from '../i18n';
 
 const THREAD_RAIL_CONTENT_CLASS = 'flex h-full min-h-0 flex-col overflow-hidden';
 const THREAD_RAIL_SECTION_CLASS = 'min-h-0 flex flex-1 flex-col overflow-hidden [&>div:last-child]:flex [&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden';
 const THREAD_RAIL_SCROLL_CLASS = 'flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] [touch-action:pan-y_pinch-zoom]';
 
 // Compact timestamp for the right side of each thread card.
-function fmtShortTime(ms: number): string {
+function fmtShortTime(ms: number, i18n: I18nHelpers): string {
   if (!ms) return '';
   try {
     const now = Date.now();
@@ -32,30 +33,29 @@ function fmtShortTime(ms: number): string {
     const days = Math.floor(hours / 24);
 
     if (days > 7) {
-      const d = new Date(ms);
-      return `${d.getMonth() + 1}/${d.getDate()}`;
+      return i18n.formatDateTime(ms, { month: 'numeric', day: 'numeric' });
     }
-    if (days > 0) return `${days}d`;
-    if (hours > 0) return `${hours}h`;
-    if (minutes > 0) return `${minutes}m`;
-    return 'now';
+    if (days > 0) return i18n.t('flowerChat.sidebar.time.days', { count: days });
+    if (hours > 0) return i18n.t('flowerChat.sidebar.time.hours', { count: hours });
+    if (minutes > 0) return i18n.t('flowerChat.sidebar.time.minutes', { count: minutes });
+    return i18n.t('flowerChat.sidebar.time.now');
   } catch {
     return '';
   }
 }
 
 // Full timestamp used by the management dialog table.
-function fmtDetailTime(ms: number): string {
-  if (!ms) return '-';
+function fmtDetailTime(ms: number, i18n: I18nHelpers): string {
+  if (!ms) return i18n.t('flowerChat.sidebar.time.empty');
   try {
-    return new Date(ms).toLocaleString();
+    return i18n.formatDateTime(ms, { dateStyle: 'medium', timeStyle: 'short' });
   } catch {
-    return '-';
+    return i18n.t('flowerChat.sidebar.time.empty');
   }
 }
 
 // Time group type.
-type TimeGroup = 'Today' | 'Yesterday' | 'This Week' | 'Older';
+type TimeGroup = 'today' | 'yesterday' | 'this_week' | 'older';
 
 type ThreadAgePreset = 'all' | 'older_1d' | 'older_1w' | 'older_1m';
 type DeleteThreadResult = 'deleted' | 'busy';
@@ -63,7 +63,7 @@ type DeleteThreadResult = 'deleted' | 'busy';
 // Group threads by date (only when total count >= 5).
 function groupThreadsByDate(threads: ThreadView[]): { group: TimeGroup; threads: ThreadView[] }[] {
   if (threads.length < 5) {
-    return [{ group: 'Today' as TimeGroup, threads }];
+    return [{ group: 'today' as TimeGroup, threads }];
   }
 
   const now = new Date();
@@ -74,26 +74,26 @@ function groupThreadsByDate(threads: ThreadView[]): { group: TimeGroup; threads:
   const weekStart = todayStart - ((dayOfWeek === 0 ? 6 : dayOfWeek - 1) * 86400000);
 
   const groups: Record<TimeGroup, ThreadView[]> = {
-    'Today': [],
-    'Yesterday': [],
-    'This Week': [],
-    'Older': [],
+    today: [],
+    yesterday: [],
+    this_week: [],
+    older: [],
   };
 
   for (const t of threads) {
     const ts = threadSortTime(t);
     if (ts >= todayStart) {
-      groups['Today'].push(t);
+      groups.today.push(t);
     } else if (ts >= yesterdayStart) {
-      groups['Yesterday'].push(t);
+      groups.yesterday.push(t);
     } else if (ts >= weekStart) {
-      groups['This Week'].push(t);
+      groups.this_week.push(t);
     } else {
-      groups['Older'].push(t);
+      groups.older.push(t);
     }
   }
 
-  const order: TimeGroup[] = ['Today', 'Yesterday', 'This Week', 'Older'];
+  const order: TimeGroup[] = ['today', 'yesterday', 'this_week', 'older'];
   return order.filter((g) => groups[g].length > 0).map((g) => ({ group: g, threads: groups[g] }));
 }
 
@@ -124,19 +124,34 @@ function statusDotClass(status: ThreadRunStatus): string {
 }
 
 // Status label used for tooltip text.
-function statusLabel(status: ThreadRunStatus): string {
+function statusLabel(status: ThreadRunStatus, i18n: I18nHelpers): string {
   switch (status) {
-    case 'accepted': return 'Queued';
-    case 'running': return 'Running';
-    case 'waiting_approval': return 'Waiting Approval';
-    case 'waiting_user': return 'Waiting Input';
-    case 'recovering': return 'Recovering';
-    case 'finalizing': return 'Finalizing';
-    case 'success': return 'Done';
-    case 'failed': return 'Failed';
-    case 'timed_out': return 'Timed Out';
-    case 'canceled': return 'Canceled';
+    case 'accepted': return i18n.t('flowerChat.sidebar.status.queued');
+    case 'running': return i18n.t('flowerChat.sidebar.status.running');
+    case 'waiting_approval': return i18n.t('flowerChat.sidebar.status.waitingApproval');
+    case 'waiting_user': return i18n.t('flowerChat.sidebar.status.waitingInput');
+    case 'recovering': return i18n.t('flowerChat.sidebar.status.recovering');
+    case 'finalizing': return i18n.t('flowerChat.sidebar.status.finalizing');
+    case 'success': return i18n.t('flowerChat.sidebar.status.done');
+    case 'failed': return i18n.t('flowerChat.sidebar.status.failed');
+    case 'timed_out': return i18n.t('flowerChat.sidebar.status.timedOut');
+    case 'canceled': return i18n.t('flowerChat.sidebar.status.canceled');
     default: return '';
+  }
+}
+
+function timeGroupLabel(group: TimeGroup, i18n: I18nHelpers): string {
+  switch (group) {
+    case 'today':
+      return i18n.t('flowerChat.sidebar.groups.today');
+    case 'yesterday':
+      return i18n.t('flowerChat.sidebar.groups.yesterday');
+    case 'this_week':
+      return i18n.t('flowerChat.sidebar.groups.thisWeek');
+    case 'older':
+      return i18n.t('flowerChat.sidebar.groups.older');
+    default:
+      return '';
   }
 }
 
@@ -252,17 +267,18 @@ export function AIChatSidebar() {
   const env = useEnvContext();
   const protocol = useProtocol();
   const notify = useNotification();
+  const i18n = useI18n();
 
   const permissionReady = () => env.env.state === 'ready';
   const canRWX = createMemo(() => hasRWXPermissions(env.env()));
   const canManageChats = createMemo(() => permissionReady() && canRWX());
   const ensureRWX = (): boolean => {
     if (!permissionReady()) {
-      notify.error('Not ready', 'Loading environment permissions...');
+      notify.error(i18n.t('shell.notifications.notReadyTitle'), i18n.t('shell.notifications.loadingEnvironmentPermissions'));
       return false;
     }
     if (!canRWX()) {
-      notify.error('Permission denied', 'Read/write/execute permission required.');
+      notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return false;
     }
     return true;
@@ -294,7 +310,7 @@ export function AIChatSidebar() {
 
   const openDelete = (threadId: string, title: string) => {
     setDeleteThreadId(threadId);
-    setDeleteThreadTitle(String(title ?? '').trim() || 'New chat');
+    setDeleteThreadTitle(String(title ?? '').trim() || i18n.t('flowerChat.sidebar.untitledChat'));
     setDeleteForce(false);
     setDeleteOpen(true);
   };
@@ -332,7 +348,7 @@ export function AIChatSidebar() {
       ctx.bumpThreadsSeq();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      notify.error('Failed to delete chat', msg || 'Request failed.');
+      notify.error(i18n.t('flowerChat.sidebar.delete.failedTitle'), msg || i18n.t('flowerChat.errors.requestFailed'));
     } finally {
       setDeleting(false);
     }
@@ -360,7 +376,7 @@ export function AIChatSidebar() {
     } catch (e) {
       if (version !== managerLoadVersion) return;
       const msg = e instanceof Error ? e.message : String(e);
-      setManagerError(msg || 'Request failed.');
+      setManagerError(msg || i18n.t('flowerChat.errors.requestFailed'));
     } finally {
       if (version === managerLoadVersion) {
         setManagerLoading(false);
@@ -423,16 +439,25 @@ export function AIChatSidebar() {
     const text = String(value ?? '').trim();
     setThreadContextMenu(null);
     if (!text) {
-      notify.error('Copy failed', `${label} unavailable.`);
+      notify.error(
+        i18n.t('flowerChat.sidebar.contextMenu.copyFailedTitle'),
+        i18n.t('flowerChat.sidebar.contextMenu.unavailable', { label }),
+      );
       return;
     }
 
     try {
       await writeTextToClipboard(text);
-      notify.success('Copied', `${label} copied to clipboard`);
+      notify.success(
+        i18n.t('flowerChat.sidebar.contextMenu.copiedTitle'),
+        i18n.t('flowerChat.sidebar.contextMenu.copied', { label }),
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      notify.error('Copy failed', message || 'Failed to copy to clipboard.');
+      notify.error(
+        i18n.t('flowerChat.sidebar.contextMenu.copyFailedTitle'),
+        message || i18n.t('flowerChat.sidebar.contextMenu.clipboardCopyFailed'),
+      );
     }
   };
 
@@ -440,20 +465,20 @@ export function AIChatSidebar() {
     {
       id: 'copy-thread-id',
       kind: 'action',
-      label: 'Copy thread ID',
+      label: i18n.t('flowerChat.sidebar.contextMenu.copyThreadId'),
       icon: Copy,
       onSelect: () => {
-        void copyThreadContextValue('Thread ID', menu.thread.thread_id);
+        void copyThreadContextValue(i18n.t('flowerChat.sidebar.contextMenu.threadIdLabel'), menu.thread.thread_id);
       },
     },
     {
       id: 'copy-working-directory',
       kind: 'action',
-      label: 'Copy working directory',
+      label: i18n.t('flowerChat.sidebar.contextMenu.copyWorkingDirectory'),
       icon: Copy,
       disabled: !String(menu.thread.working_dir ?? '').trim(),
       onSelect: () => {
-        void copyThreadContextValue('Working directory', menu.thread.working_dir);
+        void copyThreadContextValue(i18n.t('flowerChat.sidebar.contextMenu.workingDirectoryLabel'), menu.thread.working_dir);
       },
     },
   ];
@@ -593,12 +618,15 @@ export function AIChatSidebar() {
 
       if (failed === 0) {
         const details = forced > 0
-          ? `Deleted ${deleted} chats. ${forced} running chats were force deleted.`
-          : `Deleted ${deleted} chats.`;
-        notify.success('Chats deleted', details);
+          ? i18n.t('flowerChat.sidebar.bulkDelete.deletedWithForcedDetails', { deleted, forced })
+          : i18n.tn('flowerChat.sidebar.bulkDelete.deletedDetails', deleted);
+        notify.success(i18n.t('flowerChat.sidebar.bulkDelete.deletedTitle'), details);
         setManagerDeleteConfirmOpen(false);
       } else {
-        notify.error('Some chats were not deleted', `${deleted} deleted, ${failed} failed.`);
+        notify.error(
+          i18n.t('flowerChat.sidebar.bulkDelete.someFailedTitle'),
+          i18n.t('flowerChat.sidebar.bulkDelete.partialFailed', { deleted, failed }),
+        );
       }
     } finally {
       setManagerDeleting(false);
@@ -625,16 +653,16 @@ export function AIChatSidebar() {
             onClick={() => ctx.enterDraftChat()}
             disabled={protocol.status() !== 'connected' || !canManageChats()}
           >
-            New Chat
+            {i18n.t('flowerChat.sidebar.newChat')}
           </Button>
-          <Tooltip content="Manage chats" placement="bottom" delay={0}>
+          <Tooltip content={i18n.t('flowerChat.sidebar.manageChats')} placement="bottom" delay={0}>
             <Button
               variant="outline"
               size="icon"
               class="h-8 w-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
               onClick={openManager}
               disabled={protocol.status() !== 'connected' || !canManageChats()}
-              aria-label="Manage chats"
+              aria-label={i18n.t('flowerChat.sidebar.manageChats')}
             >
               <History class="w-3.5 h-3.5" />
             </Button>
@@ -647,7 +675,7 @@ export function AIChatSidebar() {
             fallback={
               <div class="px-2.5 py-2 text-xs text-muted-foreground flex items-center gap-2">
                 <SnakeLoader size="sm" />
-                <span>Loading chats...</span>
+                <span>{i18n.t('flowerChat.sidebar.loadingChats')}</span>
               </div>
             }
           >
@@ -661,9 +689,9 @@ export function AIChatSidebar() {
             >
               <Show
                 when={threadList().length > 0}
-                fallback={<EmptyState />}
+                fallback={<EmptyState i18n={i18n} />}
               >
-                <SidebarSection title="Conversations" class={THREAD_RAIL_SECTION_CLASS}>
+                <SidebarSection title={i18n.t('flowerChat.sidebar.conversations')} class={THREAD_RAIL_SECTION_CLASS}>
                   <div
                     {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
                     data-testid="flower-thread-scroll-region"
@@ -677,7 +705,7 @@ export function AIChatSidebar() {
                             <>
                               <Show when={showGroupHeaders()}>
                                 <div class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40 px-2.5 pt-3 pb-1 select-none">
-                                  {group().group}
+                                  {timeGroupLabel(group().group, i18n)}
                                 </div>
                               </Show>
                               <Index each={group().threads}>
@@ -692,6 +720,7 @@ export function AIChatSidebar() {
                                       unread={ctx.isThreadUnread(threadID())}
                                       connected={protocol.status() === 'connected'}
                                       canDelete={canManageChats()}
+                                      i18n={i18n}
                                       onClick={() => {
                                         setThreadContextMenu(null);
                                         ctx.selectThreadId(threadID());
@@ -724,13 +753,13 @@ export function AIChatSidebar() {
           }
           setManagerOpen(open);
         }}
-        title="Manage chats"
-        description="View all conversations, filter by age, and delete in batches."
+        title={i18n.t('flowerChat.sidebar.manager.title')}
+        description={i18n.t('flowerChat.sidebar.manager.description')}
         class="max-w-5xl h-[78vh] max-h-[78vh]"
         footer={
           <div class="w-full flex flex-wrap items-center justify-between gap-2">
             <div class="text-xs text-muted-foreground">
-              {managerSelectedCount()} selected
+              {i18n.tn('flowerChat.sidebar.manager.selectedCount', managerSelectedCount())}
             </div>
             <div class="flex items-center gap-2">
               <Button
@@ -740,7 +769,7 @@ export function AIChatSidebar() {
                 onClick={() => void loadManagerThreads()}
                 disabled={managerLoading() || managerDeleting()}
               >
-                Refresh
+                {i18n.t('flowerChat.sidebar.manager.refresh')}
               </Button>
               <Button
                 size="sm"
@@ -749,7 +778,7 @@ export function AIChatSidebar() {
                 onClick={() => setManagerDeleteConfirmOpen(true)}
                 disabled={managerSelectedCount() === 0 || managerDeleting() || protocol.status() !== 'connected'}
               >
-                Delete Selected
+                {i18n.t('flowerChat.sidebar.manager.deleteSelected')}
               </Button>
             </div>
           </div>
@@ -762,10 +791,10 @@ export function AIChatSidebar() {
               onChange={(value) => setManagerAgePreset(normalizeThreadAgePreset(value))}
               size="sm"
               options={[
-                { value: 'all', label: 'All' },
-                { value: 'older_1d', label: '1d+' },
-                { value: 'older_1w', label: '1w+' },
-                { value: 'older_1m', label: '1m+' },
+                { value: 'all', label: i18n.t('flowerChat.sidebar.manager.filter.all') },
+                { value: 'older_1d', label: i18n.t('flowerChat.sidebar.manager.filter.olderOneDay') },
+                { value: 'older_1w', label: i18n.t('flowerChat.sidebar.manager.filter.olderOneWeek') },
+                { value: 'older_1m', label: i18n.t('flowerChat.sidebar.manager.filter.olderOneMonth') },
               ]}
             />
             <Button
@@ -774,7 +803,7 @@ export function AIChatSidebar() {
               onClick={() => setFilteredThreadsSelected(true)}
               disabled={managerFilteredThreads().length === 0 || managerLoading()}
             >
-              Select Filtered
+              {i18n.t('flowerChat.sidebar.manager.selectFiltered')}
             </Button>
             <Button
               size="xs"
@@ -782,10 +811,13 @@ export function AIChatSidebar() {
               onClick={clearManagerSelection}
               disabled={managerSelectedCount() === 0}
             >
-              Clear Selection
+              {i18n.t('flowerChat.sidebar.manager.clearSelection')}
             </Button>
             <div class="ml-auto text-xs text-muted-foreground">
-              {managerFilteredThreads().length} shown / {managerThreads().length} total
+              {i18n.t('flowerChat.sidebar.manager.shownTotal', {
+                shown: i18n.formatNumber(managerFilteredThreads().length),
+                total: i18n.formatNumber(managerThreads().length),
+              })}
             </div>
           </div>
 
@@ -795,7 +827,7 @@ export function AIChatSidebar() {
               fallback={
                 <div class="px-3 py-5 text-xs text-muted-foreground flex items-center gap-2">
                   <SnakeLoader size="sm" />
-                  <span>Loading chats...</span>
+                  <span>{i18n.t('flowerChat.sidebar.loadingChats')}</span>
                 </div>
               }
             >
@@ -805,11 +837,11 @@ export function AIChatSidebar() {
               >
                 <Show
                   when={managerThreads().length > 0}
-                  fallback={<div class="px-3 py-6 text-xs text-muted-foreground">No chats found.</div>}
+                  fallback={<div class="px-3 py-6 text-xs text-muted-foreground">{i18n.t('flowerChat.sidebar.manager.noChats')}</div>}
                 >
                   <Show
                     when={managerFilteredThreads().length > 0}
-                    fallback={<div class="px-3 py-6 text-xs text-muted-foreground">No chats match this filter.</div>}
+                    fallback={<div class="px-3 py-6 text-xs text-muted-foreground">{i18n.t('flowerChat.sidebar.manager.noFilterMatches')}</div>}
                   >
                     <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full overflow-auto">
                       <table class="w-full table-fixed text-xs">
@@ -823,9 +855,9 @@ export function AIChatSidebar() {
                                 disabled={managerFilteredThreads().length === 0}
                               />
                             </th>
-                            <th class="w-[52%] py-2 pr-3">Title</th>
-                            <th class="w-32 py-2 pr-3">Status</th>
-                            <th class="w-44 py-2 pr-3">Updated</th>
+                            <th class="w-[52%] py-2 pr-3">{i18n.t('flowerChat.sidebar.manager.tableTitle')}</th>
+                            <th class="w-32 py-2 pr-3">{i18n.t('flowerChat.sidebar.manager.tableStatus')}</th>
+                            <th class="w-44 py-2 pr-3">{i18n.t('flowerChat.sidebar.manager.tableUpdated')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -834,7 +866,7 @@ export function AIChatSidebar() {
                               const threadID = thread.thread_id;
                               const selected = () => !!managerSelection()[threadID];
                               const status = () => managerStatusFor(thread);
-                              const title = () => thread.title?.trim() || 'New chat';
+                              const title = () => thread.title?.trim() || i18n.t('flowerChat.sidebar.untitledChat');
                               const preview = () => thread.last_message_preview?.trim() || '';
 
                               return (
@@ -861,7 +893,7 @@ export function AIChatSidebar() {
                                         </button>
                                         <Show when={threadID === ctx.activeThreadId()}>
                                           <span class="text-[10px] rounded border border-primary/30 bg-primary/10 text-primary px-1.5 py-0.5">
-                                            Active
+                                            {i18n.t('flowerChat.sidebar.manager.active')}
                                           </span>
                                         </Show>
                                       </div>
@@ -873,11 +905,11 @@ export function AIChatSidebar() {
                                   <td class="py-2.5 pr-3 align-top">
                                     <div class="inline-flex items-center gap-1.5 text-muted-foreground">
                                       <span class={`w-1.5 h-1.5 rounded-full ${statusDotClass(status())}`} />
-                                      <span>{statusLabel(status()) || 'Idle'}</span>
+                                      <span>{statusLabel(status(), i18n) || i18n.t('flowerChat.sidebar.status.idle')}</span>
                                     </div>
                                   </td>
                                   <td class="py-2.5 pr-3 align-top text-muted-foreground whitespace-nowrap">
-                                    {fmtDetailTime(threadSortTime(thread))}
+                                    {fmtDetailTime(threadSortTime(thread), i18n)}
                                   </td>
                                 </tr>
                               );
@@ -906,22 +938,22 @@ export function AIChatSidebar() {
             setManagerDeleteConfirmOpen(true);
           }
         }}
-        title="Delete Selected Chats"
-        confirmText={`Delete ${managerSelectedCount()} Chat${managerSelectedCount() === 1 ? '' : 's'}`}
+        title={i18n.t('flowerChat.sidebar.bulkDelete.title')}
+        confirmText={i18n.tn('flowerChat.sidebar.bulkDelete.confirm', managerSelectedCount())}
         variant="destructive"
         loading={managerDeleting()}
         onConfirm={() => void doBulkDelete()}
       >
         <div class="space-y-2">
           <p class="text-sm">
-            Delete <span class="font-semibold">{managerSelectedCount()} selected chats</span>?
+            {i18n.tn('flowerChat.sidebar.bulkDelete.prompt', managerSelectedCount())}
           </p>
           <Show when={managerSelectedRunningCount() > 0}>
             <p class="text-xs text-muted-foreground">
-              {managerSelectedRunningCount()} running chats will be force deleted.
+              {i18n.tn('flowerChat.sidebar.bulkDelete.runningWarning', managerSelectedRunningCount())}
             </p>
           </Show>
-          <p class="text-xs text-muted-foreground">This cannot be undone.</p>
+          <p class="text-xs text-muted-foreground">{i18n.t('flowerChat.sidebar.delete.cannotUndo')}</p>
         </div>
       </ConfirmDialog>
 
@@ -938,22 +970,22 @@ export function AIChatSidebar() {
           }
           setDeleteOpen(true);
         }}
-        title="Delete Chat"
-        confirmText={deleteForce() ? 'Force Delete' : 'Delete'}
+        title={i18n.t('flowerChat.sidebar.delete.title')}
+        confirmText={deleteForce() ? i18n.t('flowerChat.sidebar.delete.forceConfirm') : i18n.t('flowerChat.sidebar.delete.confirm')}
         variant="destructive"
         loading={deleting()}
         onConfirm={() => void doDelete()}
       >
         <div class="space-y-2">
           <p class="text-sm">
-            Delete <span class="font-semibold">"{deleteThreadTitle()}"</span>?
+            {i18n.t('flowerChat.sidebar.delete.prompt', { title: deleteThreadTitle() })}
           </p>
           <Show when={deleteForce()}>
             <p class="text-xs text-muted-foreground">
-              This chat is running. Deleting will stop the run and delete the thread.
+              {i18n.t('flowerChat.sidebar.delete.runningWarning')}
             </p>
           </Show>
-          <p class="text-xs text-muted-foreground">This cannot be undone.</p>
+          <p class="text-xs text-muted-foreground">{i18n.t('flowerChat.sidebar.delete.cannotUndo')}</p>
         </div>
       </ConfirmDialog>
 
@@ -982,6 +1014,7 @@ function ThreadCard(props: {
   unread: boolean;
   connected: boolean;
   canDelete: boolean;
+  i18n: I18nHelpers;
   onClick: () => void;
   onContextMenu: (event: MouseEvent) => void;
   onDelete: () => void;
@@ -995,15 +1028,15 @@ function ThreadCard(props: {
     return 'running';
   };
 
-  const title = () => props.thread.title?.trim() || 'New chat';
+  const title = () => props.thread.title?.trim() || props.i18n.t('flowerChat.sidebar.untitledChat');
   const preview = () => props.thread.last_message_preview?.trim() || '';
-  const timeStr = () => fmtShortTime(props.thread.updated_at_unix_ms);
+  const timeStr = () => fmtShortTime(props.thread.updated_at_unix_ms, props.i18n);
   const indicatorMode = (): 'running' | 'unread' | 'none' => {
     if (props.isRunning) return 'running';
     if (props.unread) return 'unread';
     return 'none';
   };
-  const deleteLabel = () => `Delete chat ${title()}`;
+  const deleteLabel = () => props.i18n.t('flowerChat.sidebar.delete.aria', { title: title() });
 
   return (
     <div
@@ -1031,7 +1064,7 @@ function ThreadCard(props: {
             <>
               <div
                 class={`h-2 w-2 rounded-full ${statusDotClass(status())}`}
-                title={statusLabel(status())}
+                title={statusLabel(status(), props.i18n)}
               />
               <Show when={status() === 'running'}>
                 <div class="absolute inset-0 h-2 w-2 rounded-full bg-primary/50 animate-pulse" />
@@ -1039,7 +1072,7 @@ function ThreadCard(props: {
             </>
           </Show>
           <Show when={indicatorMode() === 'unread'}>
-            <div class="h-2 w-2 rounded-full bg-primary" title="Unread" />
+            <div class="h-2 w-2 rounded-full bg-primary" title={props.i18n.t('flowerChat.sidebar.unread')} />
           </Show>
         </div>
 
@@ -1061,7 +1094,7 @@ function ThreadCard(props: {
               <p class="truncate text-[11px] leading-tight text-muted-foreground/50">{preview()}</p>
             </Show>
           }>
-            <ProcessingIndicator variant="minimal" status="Working" class="h-3.5" />
+            <ProcessingIndicator variant="minimal" status={props.i18n.t('flowerChat.sidebar.working')} class="h-3.5" />
           </Show>
         </div>
       </button>
@@ -1098,7 +1131,7 @@ function ThreadCard(props: {
 
 // ---- Empty state ----
 
-function EmptyState() {
+function EmptyState(props: { i18n: I18nHelpers }) {
   return (
     <div class="px-2.5 py-8 text-center">
       <Motion.div
@@ -1115,8 +1148,8 @@ function EmptyState() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.2, easing: 'ease-out' }}
       >
-        <p class="text-xs font-medium text-muted-foreground/70">No conversations yet</p>
-        <p class="text-[11px] text-muted-foreground/40 mt-1">Start a new chat to begin</p>
+        <p class="text-xs font-medium text-muted-foreground/70">{props.i18n.t('flowerChat.sidebar.noConversationsTitle')}</p>
+        <p class="text-[11px] text-muted-foreground/40 mt-1">{props.i18n.t('flowerChat.sidebar.noConversationsDescription')}</p>
       </Motion.div>
     </div>
   );

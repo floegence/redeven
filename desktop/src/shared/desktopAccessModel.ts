@@ -5,6 +5,8 @@ import {
 import type {
   DesktopAccessMode,
   DesktopAccessModeOption,
+  DesktopNextStartAddressKind,
+  DesktopPasswordStateID,
   DesktopSettingsSummaryItem,
 } from './desktopSettingsSurface';
 
@@ -17,18 +19,18 @@ export const DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND = '127.0.0.1:0';
 export const DESKTOP_ACCESS_MODE_OPTIONS: readonly DesktopAccessModeOption[] = [
   {
     value: 'local_only',
-    label: 'Local only',
-    description: 'Keep the Local Environment available only on this device.',
+    label_key: 'settings.localOnlyLabel',
+    description_key: 'settings.localOnlyDescription',
   },
   {
     value: 'shared_local_network',
-    label: 'Shared on your local network',
-    description: 'Expose the Local Environment on your LAN with a fixed port and password.',
+    label_key: 'settings.sharedLocalNetworkLabel',
+    description_key: 'settings.sharedLocalNetworkDescription',
   },
   {
     value: 'custom_exposure',
-    label: 'Custom exposure',
-    description: 'Edit the bind host, port, and password directly.',
+    label_key: 'settings.customExposureLabel',
+    description_key: 'settings.customExposureDescription',
   },
 ] as const;
 
@@ -41,10 +43,11 @@ export type DesktopAccessDraftModel = Readonly<{
   fixed_port_value: string;
   port_mode: DesktopAccessPortMode;
   next_start_address_display: string;
-  next_start_address_detail: string;
+  next_start_address_kind: DesktopNextStartAddressKind;
+  next_start_address_detail_key: 'settings.localOnlyAddressDetail' | 'settings.sharedAddressDetail' | 'settings.customLoopbackDetail' | 'settings.customBindDetail' | 'settings.autoLoopbackAddressDetail';
   password_required: boolean;
   password_configured: boolean;
-  password_state_label: string;
+  password_state_id: DesktopPasswordStateID;
   password_state_tone: 'default' | 'warning' | 'success';
   current_runtime_url: string;
 }>;
@@ -131,8 +134,8 @@ function effectiveLocalUIPasswordConfigured(
   }
 }
 
-export function desktopAccessModeLabel(mode: DesktopAccessMode): string {
-  return DESKTOP_ACCESS_MODE_OPTIONS.find((option) => option.value === mode)?.label ?? 'Custom exposure';
+export function desktopAccessModeLabel(mode: DesktopAccessMode): DesktopAccessModeOption['label_key'] {
+  return DESKTOP_ACCESS_MODE_OPTIONS.find((option) => option.value === mode)?.label_key ?? 'settings.customExposureLabel';
 }
 
 export function desktopAccessModeForDraft(
@@ -167,28 +170,36 @@ function nextStartAddressDisplay(
   portMode: DesktopAccessPortMode,
   fixedPort: string,
   bindRaw: string,
-): Readonly<{ value: string; detail: string }> {
+): Readonly<{
+  value: string;
+  kind: DesktopNextStartAddressKind;
+  detailKey: DesktopAccessDraftModel['next_start_address_detail_key'];
+}> {
   if (accessMode === 'local_only') {
     if (portMode === 'auto') {
       return {
-        value: 'Auto-select on localhost',
-        detail: 'Desktop will show the actual localhost port after the next successful start.',
+        value: '',
+        kind: 'auto_loopback',
+        detailKey: 'settings.autoLoopbackAddressDetail',
       };
     }
     return {
       value: `localhost:${fixedPort}`,
-      detail: 'Only this device can open the Local Environment.',
+      kind: 'raw',
+      detailKey: 'settings.localOnlyAddressDetail',
     };
   }
   if (accessMode === 'shared_local_network') {
     return {
-      value: `Your device IP:${fixedPort}`,
-      detail: 'Other devices on your local network can open the Local Environment.',
+      value: fixedPort,
+      kind: 'lan_ip_port',
+      detailKey: 'settings.sharedAddressDetail',
     };
   }
   return {
     value: bindRaw || formatHostPort(host, fixedPort),
-    detail: isLoopbackHost(host) ? 'Custom loopback bind.' : 'Custom bind and password rules.',
+    kind: 'raw',
+    detailKey: isLoopbackHost(host) ? 'settings.customLoopbackDetail' : 'settings.customBindDetail',
   };
 }
 
@@ -198,7 +209,7 @@ function passwordState(
   draft: DesktopSettingsDraft,
   options: DesktopAccessModelOptions = {},
 ): Readonly<{
-  label: string;
+  id: DesktopPasswordStateID;
   tone: 'default' | 'warning' | 'success';
   required: boolean;
   configured: boolean;
@@ -210,7 +221,7 @@ function passwordState(
   const hasEffectivePassword = effectiveLocalUIPasswordConfigured(draft, storedPasswordConfigured);
   if (accessMode === 'local_only') {
     return {
-      label: 'No password required',
+      id: 'not_required',
       tone: 'default',
       required: false,
       configured: false,
@@ -218,7 +229,7 @@ function passwordState(
   }
   if (passwordMode === 'clear') {
     return {
-      label: 'Password will be removed on save',
+      id: 'clear_on_save',
       tone: 'warning',
       required: passwordRequired,
       configured: false,
@@ -226,7 +237,7 @@ function passwordState(
   }
   if (passwordMode === 'replace' && typedPassword) {
     return {
-      label: storedPasswordConfigured ? 'Password will be replaced on save' : 'Password will be configured on save',
+      id: storedPasswordConfigured ? 'replace_on_save' : 'set_on_save',
       tone: 'success',
       required: passwordRequired,
       configured: true,
@@ -234,7 +245,7 @@ function passwordState(
   }
   if (hasEffectivePassword) {
     return {
-      label: 'Password configured',
+      id: 'configured',
       tone: 'success',
       required: passwordRequired,
       configured: true,
@@ -242,14 +253,14 @@ function passwordState(
   }
   if (passwordRequired) {
     return {
-      label: 'Password required before the next open of Local Environment',
+      id: 'required',
       tone: 'warning',
       required: true,
       configured: false,
     };
   }
   return {
-    label: 'Password optional',
+    id: 'optional',
     tone: 'default',
     required: false,
     configured: false,
@@ -277,13 +288,33 @@ export function deriveDesktopAccessDraftModel(
     fixed_port_value: fixedPort,
     port_mode: portMode,
     next_start_address_display: addressDisplay.value,
-    next_start_address_detail: addressDisplay.detail,
+    next_start_address_kind: addressDisplay.kind,
+    next_start_address_detail_key: addressDisplay.detailKey,
     password_required: password.required,
     password_configured: password.configured,
-    password_state_label: password.label,
+    password_state_id: password.id,
     password_state_tone: password.tone,
     current_runtime_url: trimString(options.current_runtime_url),
   };
+}
+
+export function desktopPasswordStateTranslationKey(state: DesktopPasswordStateID) {
+  switch (state) {
+    case 'not_required':
+      return 'settings.noPassword';
+    case 'configured':
+      return 'settings.passwordSet';
+    case 'set_on_save':
+      return 'settings.setOnSave';
+    case 'replace_on_save':
+      return 'settings.updateOnSave';
+    case 'clear_on_save':
+      return 'settings.clearOnSave';
+    case 'required':
+      return 'settings.passwordNeeded';
+    case 'optional':
+      return 'settings.optional';
+  }
 }
 
 export function buildDesktopAccessSummaryItems(
@@ -292,22 +323,24 @@ export function buildDesktopAccessSummaryItems(
   return [
     {
       id: 'visibility',
-      label: 'Visibility',
-      value: desktopAccessModeLabel(model.access_mode),
-      detail: DESKTOP_ACCESS_MODE_OPTIONS.find((option) => option.value === model.access_mode)?.description,
+      label_key: 'settings.visibilityTitle',
+      value_key: desktopAccessModeLabel(model.access_mode),
+      value: '',
+      detail_key: DESKTOP_ACCESS_MODE_OPTIONS.find((option) => option.value === model.access_mode)?.description_key,
       tone: 'default',
     },
     {
       id: 'next_start_address',
-      label: 'Next start address',
+      label_key: 'settings.nextStartAddressLabel',
       value: model.next_start_address_display,
-      detail: model.next_start_address_detail,
+      detail_key: model.next_start_address_detail_key,
       tone: 'default',
     },
     {
       id: 'password_state',
-      label: 'Password',
-      value: model.password_state_label,
+      label_key: 'settings.passwordTitle',
+      value_key: desktopPasswordStateTranslationKey(model.password_state_id),
+      value: '',
       tone: model.password_state_tone,
     },
   ] as const;

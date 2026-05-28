@@ -85,6 +85,7 @@ export type CodexActivityReadItem = CodexActivityItemBase & Readonly<{
 
 export type CodexActivitySearchItem = CodexActivityItemBase & Readonly<{
   kind: 'search';
+  action: 'search' | 'open_page' | 'find_in_page';
   query: string;
   scope?: string;
   resultCount?: number;
@@ -226,35 +227,10 @@ function normalizeChangeAction(kind: string | null | undefined): CodexActivityFi
   }
 }
 
-function fileChangeVerb(action: CodexActivityFileChangeAction): string {
-  switch (action) {
-    case 'created':
-      return 'Created';
-    case 'deleted':
-      return 'Deleted';
-    case 'renamed':
-      return 'Renamed';
-    case 'edited':
-    default:
-      return 'Edited';
-  }
-}
-
 function commandPreview(command: string | null | undefined): string {
   const normalized = String(command ?? '').replace(/\s+/g, ' ').trim();
   if (!normalized) return 'command';
   return normalized.length > 72 ? `${normalized.slice(0, 69).trim()}...` : normalized;
-}
-
-function formatDuration(ms: number | null | undefined): string {
-  const value = Number(ms);
-  if (!Number.isFinite(value) || value < 0) return '';
-  if (value < 1000) return `${Math.round(value)}ms`;
-  const seconds = value / 1000;
-  if (seconds < 60) return `${seconds >= 10 ? Math.round(seconds) : Number(seconds.toFixed(1))}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainder = Math.round(seconds % 60);
-  return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`;
 }
 
 function webSearchQuery(item: CodexTranscriptItem): string {
@@ -275,16 +251,15 @@ function webSearchQuery(item: CodexTranscriptItem): string {
   return String(action?.query ?? action?.pattern ?? action?.url ?? itemText(item) ?? '').trim();
 }
 
-function webSearchLabel(item: CodexTranscriptItem): string {
+function webSearchAction(item: CodexTranscriptItem): CodexActivitySearchItem['action'] {
   const actionType = String(item.action?.type ?? '').trim();
-  const query = webSearchQuery(item);
   if (actionType === 'openPage') {
-    return query ? `Opened ${query}` : 'Opened page';
+    return 'open_page';
   }
   if (actionType === 'findInPage') {
-    return query ? `Searched page for "${query}"` : 'Searched page';
+    return 'find_in_page';
   }
-  return query ? `Searched for "${query}"` : 'Searched web';
+  return 'search';
 }
 
 function reasoningContent(item: CodexTranscriptItem): string {
@@ -310,7 +285,7 @@ function buildFileChangeActivityItems(item: CodexTranscriptItem): CodexActivityF
       sourceItemID: item.id,
       order: item.order + changeIndex / 1000,
       status: activityItemStatus(item),
-      label: `${fileChangeVerb(action)} ${compactPathLabel(path, path)} ${delta}`,
+      label: `${compactPathLabel(path, path)} ${delta}`,
       detail: { type: 'file_diff', sourceItemID: item.id, changeIndex },
       action,
       path,
@@ -325,17 +300,13 @@ function buildFileChangeActivityItems(item: CodexTranscriptItem): CodexActivityF
 function buildCommandActivityItem(item: CodexTranscriptItem): CodexActivityCommandItem {
   const preview = commandPreview(item.command);
   const status = activityItemStatus(item);
-  const duration = formatDuration(item.duration_ms);
-  const failed = status === 'failed';
-  const exit = failed && typeof item.exit_code === 'number' ? `exit ${item.exit_code}` : '';
-  const suffix = [failed ? 'failed' : '', exit, duration].filter(Boolean).join(' · ');
   return {
     id: `${item.id}:command`,
     kind: 'command',
     sourceItemID: item.id,
     order: item.order,
     status,
-    label: suffix ? `Ran ${preview} · ${suffix}` : `Ran ${preview}`,
+    label: preview,
     detail: { type: 'command_output', sourceItemID: item.id },
     commandPreview: preview,
     cwd: item.cwd,
@@ -352,8 +323,9 @@ function buildSearchActivityItem(item: CodexTranscriptItem): CodexActivitySearch
     sourceItemID: item.id,
     order: item.order,
     status: activityItemStatus(item),
-    label: webSearchLabel(item),
+    label: query,
     detail: { type: 'web_search', sourceItemID: item.id },
+    action: webSearchAction(item),
     query,
   };
 }
@@ -366,7 +338,7 @@ function buildReasoningActivityItem(item: CodexTranscriptItem): CodexActivityRea
     sourceItemID: item.id,
     order: item.order,
     status: activityItemStatus(item),
-    label: item.type === 'plan' ? 'Planned next steps' : 'Thought through the approach',
+    label: '',
     detail: { type: 'reasoning', sourceItemID: item.id },
   };
 }
@@ -379,7 +351,7 @@ function buildPlanActivityItem(item: CodexTranscriptItem): CodexActivityPlanItem
     sourceItemID: item.id,
     order: item.order,
     status: activityItemStatus(item),
-    label: 'Planned next steps',
+    label: '',
     detail: { type: 'plan', sourceItemID: item.id },
   };
 }
@@ -492,19 +464,6 @@ function summarizeActivityGroup(items: readonly CodexActivityItem[]): CodexActiv
     }
   }
 
-  const parts: string[] = [];
-  if (createdFiles > 0) parts.push(`created ${createdFiles} ${createdFiles === 1 ? 'file' : 'files'}`);
-  if (editedFiles > 0) parts.push(`edited ${editedFiles} ${editedFiles === 1 ? 'file' : 'files'}`);
-  if (deletedFiles > 0) parts.push(`deleted ${deletedFiles} ${deletedFiles === 1 ? 'file' : 'files'}`);
-  if (renamedFiles > 0) parts.push(`renamed ${renamedFiles} ${renamedFiles === 1 ? 'file' : 'files'}`);
-  if (exploredFiles > 0) parts.push(`explored ${exploredFiles} ${exploredFiles === 1 ? 'file' : 'files'}`);
-  if (searches > 0) parts.push(`${searches} ${searches === 1 ? 'search' : 'searches'}`);
-  if (commands > 0) {
-    parts.push(failedCommands > 0 ? `${commands} commands, ${failedCommands} failed` : `${commands} ${commands === 1 ? 'command' : 'commands'}`);
-  }
-  if (hasPlan) parts.push('planned');
-  if (hasReasoning) parts.push('reasoned');
-
   return {
     exploredFiles,
     searches,
@@ -518,7 +477,7 @@ function summarizeActivityGroup(items: readonly CodexActivityItem[]): CodexActiv
     deletions,
     hasReasoning,
     hasPlan,
-    headline: parts.length > 0 ? parts.join(', ') : 'worked',
+    headline: '',
   };
 }
 

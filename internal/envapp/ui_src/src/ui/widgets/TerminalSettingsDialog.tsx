@@ -5,16 +5,17 @@ import {
   DEFAULT_TERMINAL_FONT_FAMILY_ID,
   type TerminalMobileInputMode,
 } from '../services/terminalPreferences';
+import { useI18n, type I18nHelpers } from '../i18n';
 
 type TerminalThemeOptionId = 'system' | 'dark' | 'light' | 'solarizedDark' | 'monokai' | 'tokyoNight';
 
-const TERMINAL_THEME_ITEMS: Array<{ id: TerminalThemeOptionId; label: string }> = [
-  { id: 'system', label: 'System Theme' },
-  { id: 'dark', label: 'Dark' },
-  { id: 'light', label: 'Light' },
-  { id: 'solarizedDark', label: 'Solarized Dark' },
-  { id: 'monokai', label: 'Monokai' },
-  { id: 'tokyoNight', label: 'Tokyo Night' },
+const TERMINAL_THEME_ITEMS: Array<{ id: TerminalThemeOptionId; labelKey: Parameters<I18nHelpers['t']>[0] }> = [
+  { id: 'system', labelKey: 'terminal.settings.systemTheme' },
+  { id: 'dark', labelKey: 'terminal.settings.dark' },
+  { id: 'light', labelKey: 'terminal.settings.light' },
+  { id: 'solarizedDark', labelKey: 'terminal.settings.solarizedDark' },
+  { id: 'monokai', labelKey: 'terminal.settings.monokai' },
+  { id: 'tokyoNight', labelKey: 'terminal.settings.tokyoNight' },
 ];
 
 export const TERMINAL_FONT_OPTIONS: Array<{ id: string; label: string; family: string }> = [
@@ -81,6 +82,8 @@ type MobileInputOptionCardProps = {
   selected: boolean;
   label: string;
   description: string;
+  selectedLabel: string;
+  tapToUseLabel: string;
   onClick: () => void;
 };
 
@@ -98,7 +101,7 @@ function MobileInputOptionCard(props: MobileInputOptionCardProps) {
       <span class="flex w-full items-center justify-between gap-2 text-sm font-medium">
         <span>{props.label}</span>
         <span class="text-[10px] font-semibold uppercase tracking-[0.12em] opacity-80">
-          {props.selected ? 'Selected' : 'Tap to use'}
+          {props.selected ? props.selectedLabel : props.tapToUseLabel}
         </span>
       </span>
       <span
@@ -114,6 +117,7 @@ function MobileInputOptionCard(props: MobileInputOptionCardProps) {
 }
 
 export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
+  const i18n = useI18n();
   const layout = useLayout();
   const isMobile = () => layout.isMobile();
 
@@ -121,8 +125,8 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
     <Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
-      title="Terminal settings"
-      description="Customize the default theme, font, and mobile input behavior for terminal sessions."
+      title={i18n.t('terminal.settings.title')}
+      description={i18n.t('terminal.settings.description')}
       class={cn(
         'flex flex-col overflow-hidden rounded-md p-0',
         '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:gap-5',
@@ -132,33 +136,36 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
       )}
       footer={
         <Button size="sm" variant="primary" onClick={() => props.onOpenChange(false)}>
-          Close
+          {i18n.t('terminal.settings.close')}
         </Button>
       }
     >
       <Show when={isMobile()}>
         <section class="space-y-3">
           <SectionTitle
-            title="Mobile input"
-            description="Choose one default input mode for every mobile terminal session."
+            title={i18n.t('terminal.settings.mobileInputTitle')}
+            description={i18n.t('terminal.settings.mobileInputDescription')}
           />
           <div class="rounded-md border border-border/70 bg-muted/[0.14] p-3">
             <p class="text-xs leading-5 text-muted-foreground">
-              Only one mode can be active at a time. Use Floe Keyboard to keep the system keyboard hidden until you
-              explicitly switch back to System IME.
+              {i18n.t('terminal.settings.mobileInputNote')}
             </p>
           </div>
           <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
             <MobileInputOptionCard
               selected={props.mobileInputMode === 'floe'}
-              label="Floe Keyboard"
-              description="Keeps terminal taps focused on the terminal surface and shows Floe suggestions, quick inserts, scripts, and path completions."
+              label={i18n.t('terminal.settings.floeKeyboard')}
+              description={i18n.t('terminal.settings.floeKeyboardDescription')}
+              selectedLabel={i18n.t('terminal.settings.selected')}
+              tapToUseLabel={i18n.t('terminal.settings.tapToUse')}
               onClick={() => props.onMobileInputModeChange('floe')}
             />
             <MobileInputOptionCard
               selected={props.mobileInputMode === 'system'}
-              label="System IME"
-              description="Focuses the native terminal input so you can use the device keyboard, IME candidate bar, and platform text features."
+              label={i18n.t('terminal.settings.systemIme')}
+              description={i18n.t('terminal.settings.systemImeDescription')}
+              selectedLabel={i18n.t('terminal.settings.selected')}
+              tapToUseLabel={i18n.t('terminal.settings.tapToUse')}
               onClick={() => props.onMobileInputModeChange('system')}
             />
           </div>
@@ -167,8 +174,8 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
 
       <section class="space-y-3">
         <SectionTitle
-          title="Theme"
-          description="Choose how terminal colors should be rendered."
+          title={i18n.t('terminal.settings.themeTitle')}
+          description={i18n.t('terminal.settings.themeDescription')}
         />
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <For each={TERMINAL_THEME_ITEMS}>
@@ -179,7 +186,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
                 class="w-full justify-start"
                 onClick={() => props.onThemeChange(item.id)}
               >
-                {item.label}
+                {i18n.t(item.labelKey)}
               </Button>
             )}
           </For>
@@ -188,21 +195,21 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
 
       <section class="space-y-3">
         <SectionTitle
-          title="Activity border"
-          description="Control the animated border that highlights active workbench terminal activity."
+          title={i18n.t('terminal.settings.activityBorderTitle')}
+          description={i18n.t('terminal.settings.activityBorderDescription')}
         />
         <div class="rounded-md border border-border/70 bg-muted/[0.14] p-3">
           <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div class="space-y-1">
-              <div class="text-xs font-medium text-foreground">Show running and active border</div>
+              <div class="text-xs font-medium text-foreground">{i18n.t('terminal.settings.showRunningBorder')}</div>
               <p class="text-xs text-muted-foreground">
-                Keeps session, tab, and unread status tracking unchanged.
+                {i18n.t('terminal.settings.statusTrackingUnchanged')}
               </p>
             </div>
             <Checkbox
               checked={props.workIndicatorEnabled}
               onChange={props.onWorkIndicatorEnabledChange}
-              label={props.workIndicatorEnabled ? 'Shown' : 'Hidden'}
+              label={props.workIndicatorEnabled ? i18n.t('terminal.settings.shown') : i18n.t('terminal.settings.hidden')}
               size="sm"
             />
           </div>
@@ -211,10 +218,10 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
 
       <section class="space-y-3">
         <SectionTitle
-          title="Font"
+          title={i18n.t('terminal.settings.fontTitle')}
           description={props.fontScope === 'shared-workbench'
-            ? 'Pick the shared font family and size for this workbench terminal.'
-            : 'Pick the terminal font family and adjust the global font size.'}
+            ? i18n.t('terminal.settings.sharedWorkbenchFontDescription')
+            : i18n.t('terminal.settings.localFontDescription')}
         />
         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <For each={TERMINAL_FONT_OPTIONS}>
@@ -234,9 +241,9 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         <div class="rounded-md border border-border/70 bg-muted/[0.14] p-3">
           <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div class="space-y-1">
-              <div class="text-xs font-medium text-foreground">Font size</div>
+              <div class="text-xs font-medium text-foreground">{i18n.t('terminal.settings.fontSize')}</div>
               <p class="text-xs text-muted-foreground">
-                Use a readable size that still keeps enough terminal history on screen.
+                {i18n.t('terminal.settings.fontSizeDescription')}
               </p>
             </div>
             <NumberInput

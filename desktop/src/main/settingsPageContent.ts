@@ -26,10 +26,6 @@ type LocalEnvironmentSettingsSnapshotOptions = DesktopAccessModelOptions & Reado
   auto_runtime_probe_configurable?: boolean;
 }>;
 
-export function pageWindowTitle(_mode: DesktopPageMode, environmentLabel: string): string {
-  return `${trimString(environmentLabel) || 'Environment'} Settings`;
-}
-
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -62,41 +58,40 @@ function hostFields(
   const runtimePasswordRequired = options.runtime_password_required === true;
   const passwordMode = localUIPasswordMode(draft, localUIPasswordConfigured);
   const typedPassword = trimString(draft.local_ui_password) !== '';
-  const passwordHelpHTML = (() => {
-    const base = 'Desktop stores this secret locally and forwards it through a non-interactive stdin startup channel.';
+  const passwordHelpKey = (() => {
     if (passwordMode === 'clear') {
-      return 'Desktop will remove the stored password on save. Enter a new value to replace it instead.';
+      return 'settings.localUIPasswordClearHelp';
     }
     if (passwordMode === 'replace' && typedPassword) {
-      return `${base} Saving will replace the stored password.`;
+      return 'settings.localUIPasswordReplaceHelp';
     }
     if (localUIPasswordConfigured) {
-      return `${base} Leave this blank to keep the current stored password.`;
+      return 'settings.localUIPasswordKeepHelp';
     }
     if (runtimePasswordRequired) {
-      return `${base} The current runtime is protected, but Desktop does not have a stored password ready to reuse. Enter it here to save it for the next desktop-managed start.`;
+      return 'settings.localUIPasswordRuntimeRequiredHelp';
     }
-    return base;
+    return 'settings.localUIPasswordHelpBase';
   })();
 
   return [
     {
       id: 'local-ui-bind',
       name: 'local_ui_bind',
-      label: 'Local UI bind address',
+      label_key: 'settings.localUIBindAddressLabel',
       autocomplete: 'off',
-      helpHTML: 'Examples: <code>localhost:23998</code>, <code>127.0.0.1:0</code>, or <code>0.0.0.0:23998</code>. Non-loopback binds require a Local UI password.',
+      help_key: 'settings.localUIBindHelp',
       helpId: 'local-ui-bind-help',
       describedBy: ['local-ui-bind-help', 'settings-error'],
     },
     {
       id: 'local-ui-password',
       name: 'local_ui_password',
-      label: 'Local UI password',
+      label_key: 'settings.localUIPasswordLabel',
       type: 'password',
       autocomplete: 'new-password',
-      placeholder: localUIPasswordConfigured ? 'Enter a new password to replace the stored one' : undefined,
-      helpHTML: passwordHelpHTML,
+      placeholder_key: localUIPasswordConfigured ? 'settings.localUIPasswordReplacePlaceholder' : undefined,
+      help_key: passwordHelpKey,
       helpId: 'local-ui-password-help',
       describedBy: ['local-ui-password-help', 'settings-error'],
     },
@@ -119,14 +114,15 @@ export function buildDesktopSettingsSurfaceSnapshot(
     environment_id: options.environment_id,
     environment_label: options.environment_label,
     environment_kind: options.environment_kind,
-    window_title: pageWindowTitle(mode, options.environment_label),
-    save_label: `Save ${options.environment_label || 'Environment'} Settings`,
+    window_title_key: 'settings.settingsWindowTitle',
+    save_label_key: 'settings.saveEnvironmentSettings',
     access_mode: accessModel.access_mode,
-    access_mode_label: desktopAccessModeLabel(accessModel.access_mode),
+    access_mode_label_key: desktopAccessModeLabel(accessModel.access_mode),
     access_mode_options: DESKTOP_ACCESS_MODE_OPTIONS,
     next_start_address_display: accessModel.next_start_address_display,
+    next_start_address_kind: accessModel.next_start_address_kind,
     current_runtime_url: accessModel.current_runtime_url,
-    password_state_label: accessModel.password_state_label,
+    password_state_id: accessModel.password_state_id,
     password_state_tone: accessModel.password_state_tone,
     local_ui_password_configured: localUIPasswordConfigured,
     runtime_password_required: options.runtime_password_required === true,

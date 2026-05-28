@@ -15,6 +15,7 @@ import { FilePreviewPanel } from '../widgets/FilePreviewPanel';
 import { createFilePreviewController } from '../widgets/createFilePreviewController';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
 import type { RuntimeWorkbenchPreviewItem } from './runtimeWorkbenchLayout';
+import { useI18n } from '../i18n';
 
 type PreviewOpenIntentSource =
   | 'direct_request'
@@ -110,6 +111,7 @@ function appendRequestId(requestIds: readonly string[], requestId: string | unde
 
 export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   const notification = useNotification();
+  const i18n = useI18n();
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const env = useEnvContext();
@@ -120,10 +122,10 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
     rpc: () => rpc,
     canWrite: () => Boolean(env.env()?.permissions?.can_write),
     onSaved: (path) => {
-      notification.success('File saved', `${path} saved successfully.`);
+      notification.success(i18n.t('filePreview.savedTitle'), i18n.t('filePreview.savedMessage', { path }));
     },
     onSaveError: (path, message) => {
-      notification.error('Save failed', `${path}: ${message}`);
+      notification.error(i18n.t('filePreview.saveFailedTitle'), i18n.t('filePreview.saveFailedMessage', { path, message }));
     },
   });
   const [openLifecycle, setOpenLifecycle] = createSignal<PreviewOpenLifecycle>({ phase: 'idle' });
@@ -240,7 +242,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   const handleCopyPath = async (): Promise<boolean> => {
     const path = compact(controller.item()?.path);
     if (!path) {
-      notification.error('Copy failed', 'Missing file path');
+      notification.error(i18n.t('shell.notifications.copyFailedTitle'), i18n.t('shell.notifications.missingFilePath'));
       return false;
     }
 
@@ -248,7 +250,10 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       await writeTextToClipboard(path);
       return true;
     } catch (error) {
-      notification.error('Copy failed', error instanceof Error ? error.message : 'Failed to copy text to clipboard.');
+      notification.error(
+        i18n.t('shell.notifications.copyFailedTitle'),
+        error instanceof Error ? error.message : i18n.t('shell.notifications.clipboardCopyFailed'),
+      );
       return false;
     }
   };
@@ -259,7 +264,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       selectionText,
     });
     if (result.error) {
-      notification.error('Ask Flower unavailable', result.error);
+      notification.error(i18n.t('shell.notifications.askFlowerUnavailableTitle'), result.error);
       return;
     }
     if (!result.intent) return;
@@ -275,7 +280,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       origin: 'workbench_preview',
     });
     if (!command) {
-      notification.error('Download unavailable', 'Only files can be downloaded.');
+      notification.error(i18n.t('shell.notifications.downloadUnavailableTitle'), i18n.t('shell.notifications.onlyFilesDownloaded'));
       return;
     }
     downloads.enqueue(command);

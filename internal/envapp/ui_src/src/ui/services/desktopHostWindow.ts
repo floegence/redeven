@@ -1,5 +1,6 @@
 export type DesktopBridgeName =
   | 'redevenDesktopTheme'
+  | 'redevenDesktopLanguage'
   | 'redevenDesktopEmbeddedDragRegions'
   | 'redevenDesktopCodeWorkspace'
   | 'redevenDesktopSessionContext'
@@ -10,6 +11,7 @@ export type DesktopHostWindow = Window;
 
 const DESKTOP_BRIDGE_NAMES: readonly DesktopBridgeName[] = [
   'redevenDesktopTheme',
+  'redevenDesktopLanguage',
   'redevenDesktopEmbeddedDragRegions',
   'redevenDesktopCodeWorkspace',
   'redevenDesktopSessionContext',

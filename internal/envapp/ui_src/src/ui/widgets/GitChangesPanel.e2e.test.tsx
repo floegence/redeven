@@ -686,6 +686,7 @@ describe('GitChangesPanel interactions', () => {
       const discardAllButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Discard All...');
       expect(discardAllButton).toBeTruthy();
       discardAllButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
 
       expect(document.body.textContent).toContain('Discard pending changes');
       expect(document.body.textContent).toContain('Discard all 2 files in Changes?');

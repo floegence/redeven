@@ -15,11 +15,15 @@ import {
   selectCodeRuntimeVersion,
   type CodeRuntimeStatus,
 } from '../../services/codeRuntimeApi';
+import {
+  browserEditorLocalFailureFromError,
+  type BrowserEditorSetupLocalFailure,
+} from '../../services/browserEditorSetupActivity';
 import { desktopCodeWorkspacePrepareAvailable, prepareWorkspaceEngineWithDesktop } from '../../services/desktopCodeWorkspaceBridge';
 import { readDesktopSessionContextSnapshot } from '../../services/desktopSessionContext';
-import { browserEditorLocalFailureFromError, type BrowserEditorSetupLocalFailure } from '../../services/browserEditorSetupActivity';
 import { useEnvContext, type EnvSettingsSection } from '../EnvContext';
 import type { AgentSettingsResponse, CodexHostStatus, SettingsUpdateResponse } from './types';
+import { useI18n } from '../../i18n';
 
 // ── Helpers ──
 
@@ -38,16 +42,16 @@ function normalizeSettingsUpdateResponse(raw: unknown): { settings: AgentSetting
   return { settings, aiUpdate };
 }
 
-function formatRuntimeServiceWorkload(snapshot: any): string {
+function formatRuntimeServiceWorkload(i18n: ReturnType<typeof useI18n>, snapshot: any): string {
   const workload = snapshot?.activeWorkload;
-  if (!workload) return 'No active work';
+  if (!workload) return i18n.t('runtimeStatus.noActiveWork');
   const parts = [
-    workload.terminalCount > 0 ? `${workload.terminalCount} ${workload.terminalCount === 1 ? 'terminal' : 'terminals'}` : '',
-    workload.sessionCount > 0 ? `${workload.sessionCount} ${workload.sessionCount === 1 ? 'session' : 'sessions'}` : '',
-    workload.taskCount > 0 ? `${workload.taskCount} ${workload.taskCount === 1 ? 'task' : 'tasks'}` : '',
-    workload.portForwardCount > 0 ? `${workload.portForwardCount} ${workload.portForwardCount === 1 ? 'web service' : 'web services'}` : '',
+    workload.terminalCount > 0 ? i18n.tn('runtimeStatus.workload.terminals', workload.terminalCount) : '',
+    workload.sessionCount > 0 ? i18n.tn('runtimeStatus.workload.sessions', workload.sessionCount) : '',
+    workload.taskCount > 0 ? i18n.tn('runtimeStatus.workload.tasks', workload.taskCount) : '',
+    workload.portForwardCount > 0 ? i18n.tn('runtimeStatus.workload.webServices', workload.portForwardCount) : '',
   ].filter(Boolean);
-  return parts.length > 0 ? parts.join(', ') : 'No active work';
+  return parts.length > 0 ? parts.join(', ') : i18n.t('runtimeStatus.noActiveWork');
 }
 
 // ── Context Type ──
@@ -135,6 +139,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   const runtimeUpdate = useRuntimeUpdateContext();
   const protocol = useProtocol();
   const notify = useNotification();
+  const i18n = useI18n();
 
   const key = createMemo<number | null>(() => (protocol.status() === 'connected' ? env.settingsSeq() : null));
 
@@ -156,8 +161,14 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   const canAdmin = createMemo(() => !!env.env()?.permissions?.can_admin || !!env.env()?.permissions?.is_owner);
 
   // Navigation
-  const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>('config');
+  const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>('interface');
   const [searchQuery, setSearchQuery] = createSignal('');
+
+  createEffect(() => {
+    const focusSeq = env.settingsFocusSeq();
+    if (focusSeq <= 0) return;
+    setActiveSection(env.settingsFocusSection() ?? 'interface');
+  });
 
   // Runtime maintenance
   const latestVersion = createMemo(() => runtimeUpdate.version.latestMeta());
@@ -172,7 +183,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   const isUpgrading = createMemo(() => runtimeUpdate.maintenance.isUpgrading());
   const isRestarting = createMemo(() => runtimeUpdate.maintenance.isRestarting());
   const runtimeService = createMemo(() => runtimeUpdate.version.runtimeService());
-  const activeWorkSummary = createMemo(() => formatRuntimeServiceWorkload(runtimeService()));
+  const activeWorkSummary = createMemo(() => formatRuntimeServiceWorkload(i18n, runtimeService()));
   const runtimeDesktopModelSourceBinding = createMemo(() => runtimeService()?.bindings?.desktopModelSource);
   const statusLabel = createMemo(() => formatAgentStatusLabel(displayedStatus()));
 
@@ -206,7 +217,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   createEffect(() => {
     const status = codeRuntimeStatus();
     if (!status) return;
-    if ((status as any).operation?.state === 'succeeded') setCodeRuntimeLocalPrepareFailure(null);
+    if (codeRuntimeOperationSucceeded(status)) setCodeRuntimeLocalPrepareFailure(null);
   });
 
   createEffect(() => {
@@ -218,9 +229,9 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
     if ((status as any).operation?.state === 'running') return;
     if (codeRuntimeOperationSucceeded(status) && operationAction === pendingAction) {
       if (pendingAction === 'remove_local_environment_version') {
-        notify.success('Version removed', 'The selected Browser Editor version has been removed.');
+        notify.success(i18n.t('codeRuntime.notifications.versionRemovedTitle'), i18n.t('codeRuntime.notifications.versionRemovedMessage'));
       } else {
-        notify.success('Browser Editor ready', 'The latest Browser Editor is ready for this environment.');
+        notify.success(i18n.t('codeRuntime.notifications.readyTitle'), i18n.t('codeRuntime.notifications.readyMessage'));
       }
       setPendingRuntimeSuccessAction('');
       return;
@@ -256,79 +267,72 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   const canStartUpgrade = createMemo(() => canAdmin() && !maintaining() && upgradeState().allowsUpgradeAction);
   const startRestart = async () => {};
   const startUpgrade = async () => {};
-  const prepareManagedCodeRuntime = () => {
-    void (async () => {
-      setCodeRuntimeActionLoading(true);
-      setPendingRuntimeSuccessAction('prepare_workspace_engine');
-      setCodeRuntimeLocalPrepareFailure(null);
-      try {
-        if (!desktopCodeWorkspacePrepareAvailable()) {
-          throw new Error('Open this environment in Redeven Desktop to set up Browser Editor.');
-        }
-        const result = await prepareWorkspaceEngineWithDesktop({
-          reason: 'settings',
-          status: codeRuntimeStatus(),
-          preferSessionUpload: readDesktopSessionContextSnapshot()?.target_route === 'remote_desktop',
-        });
-        if (!result.ok || !result.prepared) {
-          throw new Error(result.message || 'Browser Editor setup did not finish.');
-        }
-        setCodeRuntimeLocalPrepareFailure(null);
-        await refetchCodeRuntimeStatus();
-      } catch (e) {
-        setPendingRuntimeSuccessAction('');
-        const failure = browserEditorLocalFailureFromError(e);
-        setCodeRuntimeLocalPrepareFailure(failure);
-        notify.error('Browser Editor setup failed', failure.message);
-      } finally {
-        setCodeRuntimeActionLoading(false);
+  const prepareManagedCodeRuntime = async () => {
+    setCodeRuntimeActionLoading(true);
+    setPendingRuntimeSuccessAction('prepare_workspace_engine');
+    setCodeRuntimeLocalPrepareFailure(null);
+    try {
+      if (!desktopCodeWorkspacePrepareAvailable()) {
+        throw new Error(i18n.t('codeRuntime.notifications.desktopRequiredToSetup'));
       }
-    })();
+      const result = await prepareWorkspaceEngineWithDesktop({
+        reason: 'settings',
+        status: codeRuntimeStatus(),
+        preferSessionUpload: readDesktopSessionContextSnapshot()?.target_route === 'remote_desktop',
+      });
+      if (!result.ok || !result.prepared) {
+        throw new Error(result.message || i18n.t('codeRuntime.notifications.setupDidNotFinish'));
+      }
+      await refetchCodeRuntimeStatus();
+    } catch (e) {
+      setPendingRuntimeSuccessAction('');
+      const failure = browserEditorLocalFailureFromError(e);
+      setCodeRuntimeLocalPrepareFailure(failure);
+      notify.error(i18n.t('codeRuntime.notifications.setupFailedTitle'), failure.message);
+    } finally {
+      setCodeRuntimeActionLoading(false);
+    }
   };
-  const cancelManagedCodeRuntimeOperation = () => {
-    void (async () => {
-      setCodeRuntimeCancelLoading(true);
-      try {
-        await cancelCodeRuntimeOperation();
-        await refetchCodeRuntimeStatus();
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        notify.error('Cancel failed', msg || 'Request failed.');
-      } finally {
-        setCodeRuntimeCancelLoading(false);
-      }
-    })();
+  const cancelManagedCodeRuntimeOperation = async () => {
+    setCodeRuntimeCancelLoading(true);
+    try {
+      await cancelCodeRuntimeOperation();
+      await refetchCodeRuntimeStatus();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error(i18n.t('codeRuntime.notifications.cancelFailedTitle'), msg || i18n.t('codeRuntime.notifications.requestFailed'));
+    } finally {
+      setCodeRuntimeCancelLoading(false);
+    }
   };
-  const selectManagedCodeRuntimeVersion = (version: string) => {
-    void (async () => {
-      setCodeRuntimeSelectionLoadingVersion(version);
-      try {
-        await selectCodeRuntimeVersion(version);
-        await refetchCodeRuntimeStatus();
-        notify.success('Browser Editor version selected', `This environment now uses Browser Editor ${version}.`);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        notify.error('Selection failed', msg || 'Request failed.');
-      } finally {
-        setCodeRuntimeSelectionLoadingVersion(null);
-      }
-    })();
+  const selectManagedCodeRuntimeVersion = async (version: string) => {
+    setCodeRuntimeSelectionLoadingVersion(version);
+    setCodeRuntimeLocalPrepareFailure(null);
+    try {
+      await selectCodeRuntimeVersion(version);
+      await refetchCodeRuntimeStatus();
+      notify.success(i18n.t('codeRuntime.notifications.updatedTitle'), i18n.t('codeRuntime.notifications.updatedMessage', { version }));
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error(i18n.t('codeRuntime.notifications.selectionFailedTitle'), msg || i18n.t('codeRuntime.notifications.requestFailed'));
+    } finally {
+      setCodeRuntimeSelectionLoadingVersion(null);
+    }
   };
-  const removeManagedCodeRuntimeVersion = (version: string) => {
-    void (async () => {
-      setCodeRuntimeRemoveVersionLoading(version);
-      setPendingRuntimeSuccessAction('remove_local_environment_version');
-      try {
-        await removeCodeRuntimeVersion(version);
-        await refetchCodeRuntimeStatus();
-      } catch (e) {
-        setPendingRuntimeSuccessAction('');
-        const msg = e instanceof Error ? e.message : String(e);
-        notify.error('Version removal failed', msg || 'Request failed.');
-      } finally {
-        setCodeRuntimeRemoveVersionLoading(null);
-      }
-    })();
+  const removeManagedCodeRuntimeVersion = async (version: string) => {
+    setCodeRuntimeRemoveVersionLoading(version);
+    setPendingRuntimeSuccessAction('remove_local_environment_version');
+    setCodeRuntimeLocalPrepareFailure(null);
+    try {
+      await removeCodeRuntimeVersion(version);
+      await refetchCodeRuntimeStatus();
+    } catch (e) {
+      setPendingRuntimeSuccessAction('');
+      const msg = e instanceof Error ? e.message : String(e);
+      notify.error(i18n.t('codeRuntime.notifications.versionRemovalFailedTitle'), msg || i18n.t('codeRuntime.notifications.requestFailed'));
+    } finally {
+      setCodeRuntimeRemoveVersionLoading(null);
+    }
   };
 
   const value: EnvSettingsPageContextValue = {

@@ -5,6 +5,8 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AskFlowerComposerWindow } from './AskFlowerComposerWindow';
+import { I18nProvider } from '../i18n';
+import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from '../i18n/storageKey';
 import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
 import {
   REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR,
@@ -168,6 +170,8 @@ function composePrompt(host: HTMLElement, value: string): HTMLTextAreaElement {
 beforeEach(() => {
   vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(performance.now()), 0));
   vi.stubGlobal('cancelAnimationFrame', (id: number) => clearTimeout(id));
+  window.localStorage.clear();
+  delete window.redevenDesktopLanguage;
   filePreviewContextMock.openPreview.mockClear();
   fileStreamReaderMock.readFileBytesOnce.mockClear();
 });
@@ -251,6 +255,54 @@ describe('AskFlowerComposerWindow', () => {
     expect(composerDock?.querySelector('.ask-flower-flat-input')).toBeTruthy();
     expect(composerDock?.querySelector('.chat-input-container')).toBeNull();
     expect(composerDock?.querySelector('.ask-flower-composer-toolbar')).toBeNull();
+  });
+
+  it('localizes product chrome while preserving prompt and context content', async () => {
+    window.localStorage.setItem(REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY, 'zh-CN');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <I18nProvider>
+        <AskFlowerComposerWindow
+          open
+          intent={{
+            ...baseIntent,
+            source: 'file_preview',
+            suggestedWorkingDirAbs: '/Users/demo/project',
+            contextItems: [
+              {
+                kind: 'file_selection',
+                path: '/Users/demo/project/src/main.ts',
+                selection: 'const answer = 42;',
+                selectionChars: 18,
+              },
+            ],
+            userPrompt: 'Please keep this user prompt in English.',
+          }}
+          onClose={() => undefined}
+          onSend={async () => undefined}
+        />
+      </I18nProvider>
+    ), host);
+    await flushAsync();
+
+    expect(host.textContent).toContain('询问 Flower');
+    expect(host.textContent).toContain('工作目录');
+    expect(host.textContent).toContain('关联上下文');
+    expect(host.textContent).toContain('你');
+    expect(host.textContent).toContain('回复 Flower');
+    expect(host.textContent).toContain('已选内容');
+    const selectionButton = Array.from(host.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('已选内容'),
+    );
+    expect(selectionButton?.getAttribute('title')).toBe('预览来自 /Users/demo/project/src/main.ts 的已选内容');
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    const sendButton = host.querySelector('[data-testid="ask-flower-inline-send"]') as HTMLButtonElement | null;
+    expect(textarea?.value).toBe('Please keep this user prompt in English.');
+    expect(textarea?.getAttribute('placeholder')).toBe('询问这段选择内容、请求修改，或描述你的需求');
+    expect(sendButton?.getAttribute('aria-label')).toBe('发送消息');
   });
 
   it('keeps the inline send button anchored inside the composer field', () => {

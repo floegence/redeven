@@ -34,6 +34,7 @@ import {
   startCodexTurn,
   steerCodexTurn,
 } from './api';
+import { useI18n, type I18nHelpers } from '../i18n';
 import {
   CODEX_NEW_THREAD_OWNER,
   codexOwnerIDForThread,
@@ -213,12 +214,12 @@ function sameReadStatus(
   );
 }
 
-function formatCodexErrorForNotification(error: unknown): string {
+function formatCodexErrorForNotification(error: unknown, t: I18nHelpers['t']): string {
   if (error instanceof CodexGatewayError) {
     const message = String(error.message ?? '').trim();
     const details = String(error.details ?? '').trim();
     const code = String(error.errorCode ?? '').trim();
-    return [message, details, code ? `Codex error code: ${code}` : ''].filter(Boolean).join('\n\n') || 'Request failed.';
+    return [message, details, code ? t('codex.notifications.errorCode', { code }) : ''].filter(Boolean).join('\n\n') || t('codex.notifications.requestFailed');
   }
   return error instanceof Error ? error.message : String(error);
 }
@@ -685,6 +686,7 @@ const CodexContext = createContext<CodexContextValue>();
 
 export function CodexProvider(props: ParentProps) {
   const notify = useNotification();
+  const i18n = useI18n();
   const env = useEnvContext();
 
   const threadController = createCodexThreadController();
@@ -1245,7 +1247,7 @@ export function CodexProvider(props: ParentProps) {
         String(detail.runtime_config?.cwd ?? detail.thread.cwd ?? '').trim(),
       );
     } catch (error) {
-      const message = formatCodexErrorForNotification(error);
+      const message = formatCodexErrorForNotification(error, i18n.t);
       if (!threadController.failThreadBootstrap(token, message)) return;
     }
   };
@@ -1345,7 +1347,7 @@ export function CodexProvider(props: ParentProps) {
   const statusError = createMemo(() => statusErrorMessage(status));
   const hostDisabledReason = createMemo(() => {
     if (status()?.available) return '';
-    return statusError() || 'Install `codex` on the host and refresh diagnostics.';
+    return statusError() || i18n.t('codex.notifications.hostInstallHint');
   });
   const hasHostBinary = createMemo(() => Boolean(status()?.available));
   const supportsOperation = (operation: CodexOperationName): boolean => codexSupportsOperation(capabilities(), operation);
@@ -1448,8 +1450,8 @@ export function CodexProvider(props: ParentProps) {
 
   const threadTitle = createMemo(() => {
     const thread = activeThread();
-    if (!thread) return 'New thread';
-    return String(thread.name ?? thread.preview ?? '').trim() || 'Untitled thread';
+    if (!thread) return i18n.t('codex.common.newThread');
+    return String(thread.name ?? thread.preview ?? '').trim() || i18n.t('codex.common.untitledThread');
   });
 
   const transcriptItems = createMemo<CodexTranscriptItem[]>(() => {
@@ -1548,7 +1550,7 @@ export function CodexProvider(props: ParentProps) {
     const mentionsToAppend: CodexComposerMentionDraft[] = mentionSeeds
       .map((entry) => ({
         id: createDraftEntryID(),
-        name: String(entry.name ?? '').trim() || 'File',
+        name: String(entry.name ?? '').trim() || i18n.t('codex.common.file'),
         path: String(entry.path ?? '').trim(),
         kind: 'file' as const,
         is_image: Boolean(entry.is_image),
@@ -1572,18 +1574,18 @@ export function CodexProvider(props: ParentProps) {
         const dataURL = await fileToDataURL(file);
         nextAttachments.push({
           id: createDraftEntryID(),
-          name: String(file.name ?? 'Image').trim() || 'Image',
+          name: String(file.name ?? i18n.t('codex.common.image')).trim() || i18n.t('codex.common.image'),
           mime_type: String(file.type ?? 'image/*').trim() || 'image/*',
           size_bytes: Math.max(0, Number(file.size ?? 0) || 0),
           data_url: dataURL,
           preview_url: dataURL,
         });
       } catch (error) {
-        notify.error('Attachment failed', formatCodexErrorForNotification(error));
+        notify.error(i18n.t('codex.notifications.attachmentFailedTitle'), formatCodexErrorForNotification(error, i18n.t));
       }
     }
     if (rejectedCount > 0) {
-      notify.error('Unsupported attachment', 'Codex attachments currently support images only.');
+      notify.error(i18n.t('codex.notifications.unsupportedAttachmentTitle'), i18n.t('codex.notifications.unsupportedAttachmentBody'));
     }
     if (nextAttachments.length > 0) {
       draftController.appendAttachments(activeOwnerID(), nextAttachments);
@@ -1636,7 +1638,7 @@ export function CodexProvider(props: ParentProps) {
           : Promise.resolve(),
       ]);
     } catch (error) {
-      notify.error('Refresh failed', formatCodexErrorForNotification(error));
+      notify.error(i18n.t('codex.notifications.refreshFailedTitle'), formatCodexErrorForNotification(error, i18n.t));
     }
   };
 
@@ -1747,15 +1749,15 @@ export function CodexProvider(props: ParentProps) {
 
   const queueTurn = async () => {
     if (!hasHostBinary()) {
-      notify.error('Host Codex not detected', hostDisabledReason());
+      notify.error(i18n.t('codex.notifications.hostNotDetectedTitle'), hostDisabledReason());
       return;
     }
     if (String(activeThread()?.status ?? '').trim().toLowerCase() === 'archived') {
-      notify.error('Thread archived', 'Archived threads are hidden from the conversation list.');
+      notify.error(i18n.t('codex.notifications.threadArchivedTitle'), i18n.t('codex.disabledReasons.archivedThreadHidden'));
       return;
     }
     if (!String(foregroundThreadID() ?? '').trim()) {
-      notify.error('Queue unavailable', 'Queue is available after the current thread starts.');
+      notify.error(i18n.t('codex.notifications.queueUnavailableTitle'), i18n.t('codex.disabledReasons.queueAfterThreadStarts'));
       return;
     }
     if (!queueCurrentDraftInternal('queued')) {
@@ -2011,8 +2013,8 @@ export function CodexProvider(props: ParentProps) {
         setBlockedAutoSendKey('');
       }
       notify.error(
-        args?.failureMessage ?? 'Queued follow-up failed',
-        formatCodexErrorForNotification(error),
+        args?.failureMessage ?? i18n.t('codex.notifications.queuedFollowupFailedTitle'),
+        formatCodexErrorForNotification(error, i18n.t),
       );
       return false;
     }
@@ -2024,11 +2026,11 @@ export function CodexProvider(props: ParentProps) {
     const prepared = prepareCodexSubmission(snapshot);
     if (!hasCodexSubmissionContent(prepared) || submitting()) return;
     if (!hasHostBinary()) {
-      notify.error('Host Codex not detected', hostDisabledReason());
+      notify.error(i18n.t('codex.notifications.hostNotDetectedTitle'), hostDisabledReason());
       return;
     }
     if (String(activeThread()?.status ?? '').trim().toLowerCase() === 'archived') {
-      notify.error('Thread archived', 'Archived threads are hidden from the conversation list.');
+      notify.error(i18n.t('codex.notifications.threadArchivedTitle'), i18n.t('codex.disabledReasons.archivedThreadHidden'));
       return;
     }
 
@@ -2055,7 +2057,7 @@ export function CodexProvider(props: ParentProps) {
         },
         onFailure: (_failedInput, error) => {
           restoreComposerSnapshot(ownerID, snapshot);
-          notify.error('Send failed', formatCodexErrorForNotification(error));
+          notify.error(i18n.t('codex.notifications.sendFailedTitle'), formatCodexErrorForNotification(error, i18n.t));
         },
       });
       return;
@@ -2081,7 +2083,7 @@ export function CodexProvider(props: ParentProps) {
           : ownerID
       );
       restoreComposerSnapshot(restoreOwnerID, snapshot);
-      notify.error('Send failed', formatCodexErrorForNotification(error));
+      notify.error(i18n.t('codex.notifications.sendFailedTitle'), formatCodexErrorForNotification(error, i18n.t));
     }
   };
 
@@ -2090,15 +2092,15 @@ export function CodexProvider(props: ParentProps) {
     const turnID = String(activeInterruptTurnID() ?? '').trim();
     if (!threadID || !followupID) return;
     if (!hasHostBinary()) {
-      notify.error('Host Codex not detected', hostDisabledReason());
+      notify.error(i18n.t('codex.notifications.hostNotDetectedTitle'), hostDisabledReason());
       return;
     }
     if (String(activeThread()?.status ?? '').trim().toLowerCase() === 'archived') {
-      notify.error('Thread archived', 'Archived threads are hidden from the conversation list.');
+      notify.error(i18n.t('codex.notifications.threadArchivedTitle'), i18n.t('codex.disabledReasons.archivedThreadHidden'));
       return;
     }
     if (!supportsOperation('turn_steer')) {
-      notify.error('Guide unavailable', 'This Codex host does not support same-turn guidance from queued prompts.');
+      notify.error(i18n.t('codex.notifications.guideUnavailableTitle'), i18n.t('codex.notifications.guideUnsupportedBody'));
       return;
     }
     if (activeTurnCanSteer() === false) {
@@ -2133,7 +2135,7 @@ export function CodexProvider(props: ParentProps) {
         followupController.prependFollowup(
           queuedFollowupFromDispatching(failedInput, followup.source),
         );
-        notify.error('Guide failed', formatCodexErrorForNotification(error));
+        notify.error(i18n.t('codex.notifications.guideFailedTitle'), formatCodexErrorForNotification(error, i18n.t));
       },
     });
   };
@@ -2142,11 +2144,11 @@ export function CodexProvider(props: ParentProps) {
     const normalizedThreadID = String(threadID ?? '').trim();
     if (!normalizedThreadID) return;
     if (!hasHostBinary()) {
-      notify.error('Host Codex not detected', hostDisabledReason());
+      notify.error(i18n.t('codex.notifications.hostNotDetectedTitle'), hostDisabledReason());
       return;
     }
     if (!supportsOperation('thread_archive')) {
-      notify.error('Action unavailable', 'This Codex host does not support thread archiving from Redeven yet.');
+      notify.error(i18n.t('codex.notifications.actionUnavailableTitle'), i18n.t('codex.notifications.archiveUnsupportedBody'));
       return;
     }
     setArchivingThreadID(normalizedThreadID);
@@ -2163,7 +2165,7 @@ export function CodexProvider(props: ParentProps) {
       threadController.removeThreadState(normalizedThreadID);
       await refetchThreads();
     } catch (error) {
-      notify.error('Archive failed', formatCodexErrorForNotification(error));
+      notify.error(i18n.t('codex.notifications.archiveFailedTitle'), formatCodexErrorForNotification(error, i18n.t));
     } finally {
       setArchivingThreadID((current) => (current === normalizedThreadID ? null : current));
     }
@@ -2177,11 +2179,11 @@ export function CodexProvider(props: ParentProps) {
     const threadID = String(foregroundThreadID() ?? '').trim();
     if (!threadID) return;
     if (!hasHostBinary()) {
-      notify.error('Host Codex not detected', hostDisabledReason());
+      notify.error(i18n.t('codex.notifications.hostNotDetectedTitle'), hostDisabledReason());
       return;
     }
     if (!supportsOperation('thread_fork')) {
-      notify.error('Action unavailable', 'This Codex host does not support thread fork from Redeven yet.');
+      notify.error(i18n.t('codex.notifications.actionUnavailableTitle'), i18n.t('codex.notifications.forkUnsupportedBody'));
       return;
     }
     setForkingThreadID(threadID);
@@ -2207,7 +2209,7 @@ export function CodexProvider(props: ParentProps) {
       requestScrollToBottom('bootstrap');
       await refetchThreads();
     } catch (error) {
-      notify.error('Fork failed', formatCodexErrorForNotification(error));
+      notify.error(i18n.t('codex.notifications.forkFailedTitle'), formatCodexErrorForNotification(error, i18n.t));
     } finally {
       setForkingThreadID((current) => (current === threadID ? null : current));
     }
@@ -2218,11 +2220,11 @@ export function CodexProvider(props: ParentProps) {
     const turnID = String(activeInterruptTurnID() ?? '').trim();
     if (!threadID || !turnID) return;
     if (!hasHostBinary()) {
-      notify.error('Host Codex not detected', hostDisabledReason());
+      notify.error(i18n.t('codex.notifications.hostNotDetectedTitle'), hostDisabledReason());
       return;
     }
     if (!supportsOperation('turn_interrupt')) {
-      notify.error('Action unavailable', 'This Codex host does not support turn interruption from Redeven yet.');
+      notify.error(i18n.t('codex.notifications.actionUnavailableTitle'), i18n.t('codex.notifications.interruptUnsupportedBody'));
       return;
     }
     setInterruptingTurnID(turnID);
@@ -2232,7 +2234,7 @@ export function CodexProvider(props: ParentProps) {
         turn_id: turnID,
       });
     } catch (error) {
-      notify.error('Interrupt failed', formatCodexErrorForNotification(error));
+      notify.error(i18n.t('codex.notifications.interruptFailedTitle'), formatCodexErrorForNotification(error, i18n.t));
     } finally {
       setInterruptingTurnID((current) => (current === turnID ? null : current));
     }
@@ -2242,15 +2244,15 @@ export function CodexProvider(props: ParentProps) {
     const threadID = String(foregroundThreadID() ?? '').trim();
     if (!threadID) return;
     if (!hasHostBinary()) {
-      notify.error('Host Codex not detected', hostDisabledReason());
+      notify.error(i18n.t('codex.notifications.hostNotDetectedTitle'), hostDisabledReason());
       return;
     }
     if (!supportsOperation('review_start')) {
-      notify.error('Action unavailable', 'This Codex host does not support inline review from Redeven yet.');
+      notify.error(i18n.t('codex.notifications.actionUnavailableTitle'), i18n.t('codex.notifications.reviewUnsupportedBody'));
       return;
     }
     if (String(activeThread()?.status ?? '').trim().toLowerCase() === 'archived') {
-      notify.error('Thread archived', 'Archived threads are hidden from the conversation list.');
+      notify.error(i18n.t('codex.notifications.threadArchivedTitle'), i18n.t('codex.disabledReasons.archivedThreadHidden'));
       return;
     }
     setReviewingThreadID(threadID);
@@ -2264,7 +2266,7 @@ export function CodexProvider(props: ParentProps) {
       requestScrollToBottom('send');
       await refetchThreads();
     } catch (error) {
-      notify.error('Review failed', formatCodexErrorForNotification(error));
+      notify.error(i18n.t('codex.notifications.reviewFailedTitle'), formatCodexErrorForNotification(error, i18n.t));
     } finally {
       setReviewingThreadID((current) => (current === threadID ? null : current));
     }
@@ -2326,7 +2328,7 @@ export function CodexProvider(props: ParentProps) {
     });
     pushDispatchingInput(dispatchingInput);
     void submitDispatchingInput(dispatchingInput, {
-      failureMessage: 'Queued follow-up failed',
+      failureMessage: i18n.t('codex.notifications.queuedFollowupFailedTitle'),
       onFailureRequeueSource: 'auto_send',
     });
   });
@@ -2341,7 +2343,7 @@ export function CodexProvider(props: ParentProps) {
         answers: request.type === 'user_input' ? requestDrafts()[request.id] ?? {} : undefined,
       });
     } catch (error) {
-      notify.error('Request failed', formatCodexErrorForNotification(error));
+      notify.error(i18n.t('codex.notifications.requestFailed'), formatCodexErrorForNotification(error, i18n.t));
     }
   };
 

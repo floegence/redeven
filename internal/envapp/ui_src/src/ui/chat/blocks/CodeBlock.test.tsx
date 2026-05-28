@@ -106,4 +106,18 @@ describe('CodeBlock', () => {
     expect(host.querySelector('.chat-code-pre')).toBeTruthy();
     expect(host.textContent).toContain('echo hi');
   });
+
+  it('keeps code content literal while localizing only the copy chrome', async () => {
+    hasShikiWorkerSupportMock.mockReturnValue(false);
+    highlightCodeToHtmlMock.mockResolvedValue(null);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <CodeBlock language="typescript" content={'const prompt = "Do not translate Flower prompts";'} />, host);
+    await flushAfterPaint();
+
+    expect(host.textContent).toContain('const prompt = "Do not translate Flower prompts";');
+    expect(host.querySelector('button')?.getAttribute('aria-label')).toBe('Copy code');
+  });
 });

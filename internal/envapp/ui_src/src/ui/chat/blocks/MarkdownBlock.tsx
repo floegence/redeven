@@ -23,6 +23,7 @@ import type { MarkdownRenderSnapshot } from '../types';
 import { renderMarkdownSnapshot } from '../workers/markdownWorkerClient';
 import { fileItemFromPath } from '../../utils/filePreviewItem';
 import { FilePreviewContext } from '../../widgets/FilePreviewContext';
+import { useI18n } from '../../i18n';
 
 export interface MarkdownBlockProps {
   content: string;
@@ -97,6 +98,7 @@ async function renderMarkdownFallback(
 }
 
 export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
+  const i18n = useI18n();
   const filePreview = useContext(FilePreviewContext);
   const [renderedSnapshot, setRenderedSnapshot] = createSignal<MarkdownRenderSnapshot | null>(null);
   const [renderedText, setRenderedText] = createSignal('');
@@ -259,7 +261,7 @@ export const MarkdownBlock: Component<MarkdownBlockProps> = (props) => {
       <Show
         when={!isEmptyStreaming()}
         fallback={
-          <div class="chat-markdown-empty-streaming" aria-label="Assistant is responding">
+          <div class="chat-markdown-empty-streaming" aria-label={i18n.t('chatChrome.assistantIsResponding')}>
             <StreamingShimmer />
           </div>
         }

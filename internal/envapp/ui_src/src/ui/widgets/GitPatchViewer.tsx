@@ -15,6 +15,7 @@ import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redev
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchTextSelectionSurface';
 import { gitToneActionButtonClass } from './GitChrome';
 import { GitChangeStatusPill, GitMetaPill } from './GitWorkbenchPrimitives';
+import { useI18n } from '../i18n';
 
 export type GitPatchRenderable = GitDiffFileContent;
 
@@ -30,6 +31,7 @@ export interface GitPatchViewerProps {
 }
 
 export function GitPatchViewer(props: GitPatchViewerProps) {
+  const i18n = useI18n();
   const layout = useLayout();
   const notification = useNotification();
   const [patchExpanded, setPatchExpanded] = createSignal(false);
@@ -52,6 +54,9 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
     if (typeof props.unavailableMessage === 'function') return String(props.unavailableMessage(item) ?? '');
     return String(props.unavailableMessage ?? '');
   });
+  const patchUnavailableMessage = createMemo(() => (
+    props.item?.isBinary ? i18n.t('git.patchViewer.binaryDiffUnavailable') : unavailableMessage()
+  ));
 
   createEffect(() => {
     void props.item?.path;
@@ -69,7 +74,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1400);
     } catch {
-      notification.error('Copy failed', 'Failed to copy patch to clipboard.');
+      notification.error(i18n.t('git.patchViewer.copyFailedTitle'), i18n.t('git.patchViewer.copyPatchFailed'));
     }
   };
 
@@ -89,14 +94,14 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                       {changeDisplayPath(file)}
                     </span>
                     <Show when={file.isBinary}>
-                      <GitMetaPill tone="warning">Binary</GitMetaPill>
+                      <GitMetaPill tone="warning">{i18n.t('git.patchViewer.binaryBadge')}</GitMetaPill>
                     </Show>
                   </div>
                 </div>
 
                 <Show when={showCopyButton()}>
                   <Button size="xs" variant="ghost" class={cn('self-start', gitToneActionButtonClass())} onClick={() => void handleCopyPatch()} disabled={!canCopyPatch()}>
-                    {copied() ? 'Copied' : 'Copy Patch'}
+                    {copied() ? i18n.t('common.actions.copied') : i18n.t('git.patchViewer.copyPatch')}
                   </Button>
                 </Show>
               </div>
@@ -110,14 +115,14 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
               </Show>
 
               <Show when={layout.isMobile() && showMobileHint()}>
-                <div class="text-[11px] leading-5 text-muted-foreground">Swipe horizontally to inspect long diff lines.</div>
+                <div class="text-[11px] leading-5 text-muted-foreground">{i18n.t('git.patchViewer.mobileHorizontalHint')}</div>
               </Show>
 
               <Show
-                when={!file.isBinary && !unavailableMessage()}
-                fallback={<div class={cn('rounded-md border px-3 py-2 text-[11px] leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{unavailableMessage() || 'Binary file changed. Inline text diff is not available.'}</div>}
+                when={!file.isBinary && !patchUnavailableMessage()}
+                fallback={<div class={cn('rounded-md border px-3 py-2 text-[11px] leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{patchUnavailableMessage()}</div>}
               >
-                <Show when={visiblePatchLines().length > 0} fallback={<div class={cn('rounded-md border px-3 py-2 text-[11px] leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>No inline diff lines available for this file.</div>}>
+                <Show when={visiblePatchLines().length > 0} fallback={<div class={cn('rounded-md border px-3 py-2 text-[11px] leading-5 text-muted-foreground', redevenSurfaceRoleClass('inset'))}>{i18n.t('git.patchViewer.noInlineDiffLines')}</div>}>
                   <div
                     {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
                     class={cn(
@@ -141,7 +146,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                 </Show>
 
                 <Show when={patchTruncated()}>
-                  <div class="text-[11px] text-muted-foreground">Patch preview is truncated.</div>
+                  <div class="text-[11px] text-muted-foreground">{i18n.t('git.patchViewer.patchPreviewTruncated')}</div>
                 </Show>
 
                 <Show when={hasMorePatchLines()}>
@@ -151,7 +156,7 @@ export function GitPatchViewer(props: GitPatchViewerProps) {
                       class={cn('cursor-pointer rounded-md border px-2.5 py-2 text-[11px] font-medium text-muted-foreground transition-colors duration-150 hover:bg-muted/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-1 sm:py-1', redevenSurfaceRoleClass('controlMuted'))}
                       onClick={() => setPatchExpanded((value) => !value)}
                     >
-                      {patchExpanded() ? 'Show less' : `Show all ${renderedPatchLines().length} lines`}
+                      {patchExpanded() ? i18n.t('git.patchViewer.showLess') : i18n.tn('git.patchViewer.showAllLines', renderedPatchLines().length)}
                     </button>
                   </div>
                 </Show>

@@ -4,6 +4,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { prepareGatewayRequestInit } from '../../services/gatewayApi';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
+import { useI18n, type I18nHelpers } from '../../i18n';
 
 export interface ShellBlockProps {
   command: string;
@@ -300,18 +301,18 @@ function summarizeCommandPreview(command: string, maxLength = COMMAND_PREVIEW_MA
   return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`;
 }
 
-function formatCommandLineCount(count: number): string {
-  return `${count} ${count === 1 ? 'line' : 'lines'}`;
+function formatCommandLineCount(count: number, i18n: I18nHelpers): string {
+  return i18n.tn('shellBlock.lineCount', count);
 }
 
-function formatShellStatus(status: ShellBlockProps['status']): string {
+function formatShellStatus(status: ShellBlockProps['status'], i18n: I18nHelpers): string {
   switch (status) {
     case 'running':
-      return 'Running';
+      return i18n.t('shellBlock.status.running');
     case 'error':
-      return 'Error';
+      return i18n.t('shellBlock.status.error');
     default:
-      return 'Success';
+      return i18n.t('shellBlock.status.success');
   }
 }
 
@@ -325,12 +326,12 @@ function formatDuration(durationMs: number | undefined): string | null {
   return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
-function formatTimeoutLabel(timeoutMs: number | undefined, timeoutSource: string): string | null {
+function formatTimeoutLabel(timeoutMs: number | undefined, timeoutSource: string, i18n: I18nHelpers): string | null {
   if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) return null;
   const seconds = Math.max(1, Math.floor(timeoutMs / 1000));
-  if (timeoutSource === 'default') return `auto ${seconds}s`;
-  if (timeoutSource === 'capped') return `${seconds}s cap`;
-  return `${seconds}s timeout`;
+  if (timeoutSource === 'default') return i18n.t('shellBlock.timeoutAuto', { seconds });
+  if (timeoutSource === 'capped') return i18n.t('shellBlock.timeoutCap', { seconds });
+  return i18n.t('shellBlock.timeoutValue', { seconds });
 }
 
 function composeDeferredOutput(parts: {
@@ -398,6 +399,7 @@ function terminalOutputURL(runID: string, toolID: string, metaOnly: boolean): st
 }
 
 export const ShellBlock: Component<ShellBlockProps> = (props) => {
+  const i18n = useI18n();
   const [expanded, setExpanded] = createSignal(false);
   const [loadingOutput, setLoadingOutput] = createSignal(false);
   const [loadedOutput, setLoadedOutput] = createSignal<string | undefined>(undefined);
@@ -442,7 +444,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const showCommandDetails = createMemo(
     () => normalizedCommand().length > 0 && (commandLineCount() > 1 || commandPreview() !== commandPreviewSource()),
   );
-  const timeoutInlineLabel = createMemo(() => formatTimeoutLabel(displayTimeoutMs(), displayTimeoutSource()));
+  const timeoutInlineLabel = createMemo(() => formatTimeoutLabel(displayTimeoutMs(), displayTimeoutSource(), i18n));
 
   createEffect(() => {
     const runID = String(props.outputRef?.runId ?? '').trim();
@@ -483,8 +485,6 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         return 'chat-shell-block-success';
     }
   };
-
-  const toggleLabel = () => (expanded() ? 'Hide output' : 'Show output');
 
   const fetchToolOutput = async (metaOnly: boolean): Promise<TerminalToolOutputPayload> => {
     const runID = String(props.outputRef?.runId ?? '').trim();
@@ -567,10 +567,10 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         truncated:
           typeof data.truncated === 'boolean' ? data.truncated : displayTruncated(),
       });
-      setLoadedOutput(output || 'No output captured.');
+      setLoadedOutput(output || i18n.t('shellBlock.noOutputCaptured'));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setLoadError(message || 'Failed to load output.');
+      setLoadError(message || i18n.t('shellBlock.failedToLoadOutput'));
     } finally {
       setLoadingOutput(false);
     }
@@ -673,7 +673,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         <div class="chat-shell-header-meta">
           <Show when={commandLineCount() > 1}>
             <span class="chat-shell-inline-chip chat-shell-inline-chip-muted">
-              {formatCommandLineCount(commandLineCount())}
+              {formatCommandLineCount(commandLineCount(), i18n)}
             </span>
           </Show>
 
@@ -684,7 +684,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
                 displayExitCode() === 0 ? 'chat-shell-exit-inline-success' : 'chat-shell-exit-inline-error',
               )}
             >
-              exit {displayExitCode()}
+              {i18n.t('shellBlock.exitCodeInline', { code: displayExitCode() ?? '' })}
             </span>
           </Show>
 
@@ -708,7 +708,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
               aria-expanded={commandDetailsOpen()}
               aria-controls={commandPanelId}
             >
-              Command
+              {i18n.t('shellBlock.command')}
             </button>
           </Show>
 
@@ -719,9 +719,9 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
               onClick={handleToggleOutput}
               aria-expanded={expanded()}
               aria-controls={outputPanelId}
-              aria-label={`${toggleLabel()} for command output`}
+              aria-label={expanded() ? i18n.t('shellBlock.hideOutputAria') : i18n.t('shellBlock.showOutputAria')}
             >
-              <span class="chat-shell-toggle-label">Output</span>
+              <span class="chat-shell-toggle-label">{i18n.t('shellBlock.output')}</span>
               <span class={cn('chat-shell-toggle', expanded() && 'chat-shell-toggle-open')}>
                 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="m6 9 6 6 6-6" />
@@ -736,29 +736,29 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         <div id={commandPanelId} class="chat-shell-detail-panel">
           <div class="chat-shell-detail-meta-grid">
             <div class="chat-shell-detail-meta-card">
-              <div class="chat-shell-detail-meta-label">Status</div>
-              <div class="chat-shell-detail-meta-value">{formatShellStatus(displayStatus())}</div>
+              <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.statusLabel')}</div>
+              <div class="chat-shell-detail-meta-value">{formatShellStatus(displayStatus(), i18n)}</div>
             </div>
             <Show when={displayExitCode() !== undefined}>
               <div class="chat-shell-detail-meta-card">
-                <div class="chat-shell-detail-meta-label">Exit code</div>
+                <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.exitCodeLabel')}</div>
                 <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{displayExitCode()}</div>
               </div>
             </Show>
             <div class="chat-shell-detail-meta-card">
-              <div class="chat-shell-detail-meta-label">Lines</div>
-              <div class="chat-shell-detail-meta-value">{formatCommandLineCount(commandLineCount())}</div>
+              <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.linesLabel')}</div>
+              <div class="chat-shell-detail-meta-value">{formatCommandLineCount(commandLineCount(), i18n)}</div>
             </div>
             <Show when={displayCwd()}>
               <div class="chat-shell-detail-meta-card">
-                <div class="chat-shell-detail-meta-label">Working directory</div>
+                <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.workingDirectory')}</div>
                 <div class="chat-shell-detail-meta-value chat-shell-detail-meta-value-mono">{displayCwd()}</div>
               </div>
             </Show>
             <Show when={formatDuration(displayDurationMs())}>
               {(value) => (
                 <div class="chat-shell-detail-meta-card">
-                  <div class="chat-shell-detail-meta-label">Duration</div>
+                  <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.duration')}</div>
                   <div class="chat-shell-detail-meta-value">{value()}</div>
                 </div>
               )}
@@ -766,7 +766,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
             <Show when={timeoutInlineLabel()}>
               {(value) => (
                 <div class="chat-shell-detail-meta-card">
-                  <div class="chat-shell-detail-meta-label">Timeout</div>
+                  <div class="chat-shell-detail-meta-label">{i18n.t('shellBlock.timeout')}</div>
                   <div class="chat-shell-detail-meta-value">{value()}</div>
                 </div>
               )}
@@ -779,14 +779,14 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
               class="chat-shell-detail-copy"
               onClick={() => void handleCopyCommand()}
             >
-              {commandCopied() ? 'Copied' : 'Copy command'}
+              {commandCopied() ? i18n.t('common.actions.copied') : i18n.t('shellBlock.copyCommand')}
             </button>
           </div>
 
           <div class="chat-shell-detail-section">
-            <div class="chat-shell-detail-label">Full command</div>
+            <div class="chat-shell-detail-label">{i18n.t('shellBlock.fullCommand')}</div>
             <pre class="chat-shell-detail-command">
-              {normalizedCommand() || '(empty command)'}
+              {normalizedCommand() || i18n.t('shellBlock.emptyCommand')}
             </pre>
           </div>
         </div>
@@ -803,12 +803,12 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
                 <div class={cn('chat-shell-output', loadError() ? 'chat-shell-output-error' : 'chat-shell-output-muted')}>
                   <pre>
                     {displayStatus() === 'running'
-                      ? 'Waiting for output...'
+                      ? i18n.t('shellBlock.waitingForOutput')
                       : loadingOutput()
-                        ? 'Loading output...'
+                        ? i18n.t('shellBlock.loadingOutput')
                         : loadError()
-                          ? `[error] ${loadError()}`
-                          : 'No output captured.'}
+                          ? i18n.t('shellBlock.outputError', { message: loadError() })
+                          : i18n.t('shellBlock.noOutputCaptured')}
                   </pre>
                 </div>
               </Show>

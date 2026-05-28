@@ -44,15 +44,29 @@ import {
   Tag,
 } from '@floegence/floe-webapp-core/ui';
 
+import {
+  REDEVEN_LOCALE_META,
+  REDEVEN_LOCALE_PREFERENCES,
+  SYSTEM_LOCALE_PREFERENCE,
+  createDesktopI18n,
+  localePreferenceDisplayName,
+  type DesktopI18n,
+  type DesktopTranslationKey,
+  type RedevenLanguageSnapshot,
+  type RedevenLocalePreference,
+} from '../shared/i18n';
 import type {
   DesktopAccessMode,
   DesktopSettingsSurfaceSnapshot,
 } from '../shared/desktopSettingsSurface';
 import type {
   DesktopEnvironmentEntry,
+  DesktopEnvironmentOpenAction,
   DesktopLauncherActionProgress,
+  DesktopLauncherActionKind,
   DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
+  DesktopLauncherCloseAction,
   DesktopLauncherOperationNextAction,
   DesktopLauncherSurface,
   DesktopLauncherRuntimeTarget,
@@ -77,15 +91,19 @@ import {
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
-  formatRuntimeServiceWorkload,
   runtimeServiceIsOpenable,
   type RuntimeServiceSnapshot,
+  type RuntimeServiceWorkload,
 } from '../shared/runtimeService';
 import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
-  OPEN_CONNECTION_PHASE_LABELS,
   openConnectionPhaseSequence,
+  type DesktopOpenConnectionPhase,
 } from '../shared/desktopOpenConnectionProgress';
+import type {
+  DesktopRuntimeLifecyclePhase,
+  DesktopRuntimeLifecycleStepSnapshot,
+} from '../shared/desktopRuntimeLifecycleProgress';
 import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
@@ -101,8 +119,14 @@ import type {
   DesktopContainerEngine,
   DesktopRuntimeHostAccess,
 } from '../shared/desktopRuntimePlacement';
-import { buildDesktopProviderRuntimeLinkPlan } from '../shared/providerRuntimeLinkPlanner';
-import type { DesktopProviderEnvironmentCandidate } from '../shared/providerRuntimeLinkTarget';
+import {
+  buildDesktopProviderRuntimeLinkPlan,
+  type DesktopProviderRuntimeLinkPlanState,
+} from '../shared/providerRuntimeLinkPlanner';
+import type {
+  DesktopProviderEnvironmentCandidate,
+  DesktopProviderRuntimeLinkTarget,
+} from '../shared/providerRuntimeLinkTarget';
 import type { DesktopSSHConfigHost } from '../shared/desktopSSHConfig';
 import type {
   DesktopRuntimeContainerListRequest,
@@ -117,11 +141,11 @@ import {
   applyDesktopAccessAutoPortToDraft,
   applyDesktopAccessFixedPortToDraft,
   applyDesktopAccessModeToDraft,
+  desktopPasswordStateTranslationKey,
   deriveDesktopAccessDraftModel,
 } from '../shared/desktopAccessModel';
 import {
   buildEnvironmentLibraryLayoutModel,
-  buildDesktopWelcomeShellViewModel,
   buildEnvironmentCardModel,
   buildEnvironmentCardFactsModel,
   ICON_ENDPOINTS,
@@ -140,6 +164,7 @@ import {
   type EnvironmentActionIntent,
   type EnvironmentActionModel,
   type EnvironmentActionMenuItemModel,
+  type EnvironmentGuidanceActionModel,
   type EnvironmentCardEndpointModel,
   type EnvironmentCardFactActionModel,
   type EnvironmentCardFactModel,
@@ -154,6 +179,12 @@ import {
   launcherActionFailurePresentation,
 } from './launcherActionFeedback';
 import {
+  localizedOperationFailureDetail,
+  localizedOperationFailureRecoveryHint,
+  localizedOperationFailureSummary,
+  localizedOperationFailureTitle,
+} from './operationFailureI18n';
+import {
   syncSSHConnectionDialogAdvancedState,
   type SSHConnectionDialogAdvancedState,
 } from './sshConnectionDialogState';
@@ -164,13 +195,8 @@ import {
   updateDesktopSettingsDraftSessionDraft,
 } from './settingsDraftSession';
 import {
-  compactPasswordStateTagLabel,
-  compactSaveActionLabel,
-  compactSettingsFieldLabel,
   describeNextStartAddress,
   describeRuntimeAddress,
-  isRedundantSettingsFieldLabel,
-  plainTextFromHelpHTML,
 } from './welcomeCopy';
 import {
   createDesktopThemeStorageAdapter,
@@ -178,6 +204,7 @@ import {
   desktopThemeBridge,
   toggleDesktopTheme,
 } from './desktopTheme';
+import { desktopLanguageBridge } from './desktopLanguage';
 import { DesktopTooltip } from './DesktopTooltip';
 import { DesktopPopover } from './DesktopPopover';
 import { DesktopLauncherShell } from './DesktopLauncherShell';
@@ -384,12 +411,16 @@ type ProviderRuntimeLinkConfirmationState = Readonly<{
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
 const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
-const DESKTOP_SKIP_LINK_LABEL = 'Skip to Redeven Desktop content';
-const DESKTOP_TOP_BAR_LABEL = 'Redeven Desktop toolbar';
-const DESKTOP_COMMAND_PLACEHOLDER = 'Search desktop commands...';
 const ACTION_TOAST_TTL_MS = 4_000;
 const GUIDANCE_SUCCESS_DISMISS_MS = 720;
 const GUIDANCE_SESSION_CLEAR_MS = 220;
+
+const FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT: RedevenLanguageSnapshot = {
+  preference: SYSTEM_LOCALE_PREFERENCE,
+  resolved_locale: 'en-US',
+  source: 'fallback',
+  system_candidates: [],
+};
 
 function normalizePixelMeasurement(value: number): number {
   if (!Number.isFinite(value)) {
@@ -418,7 +449,7 @@ function readDocumentRootFontSizePx(): number {
   return value;
 }
 
-function buildDesktopFloeConfig() {
+function buildDesktopFloeConfig(i18n: DesktopI18n) {
   const themeBridge = desktopThemeBridge();
   const stateStorage = desktopStateStorageBridge();
 
@@ -443,24 +474,24 @@ function buildDesktopFloeConfig() {
     },
     accessibility: {
       mainContentId: 'redeven-desktop-main',
-      skipLinkLabel: DESKTOP_SKIP_LINK_LABEL,
-      topBarLabel: DESKTOP_TOP_BAR_LABEL,
-      primaryNavigationLabel: 'Redeven Desktop navigation',
-      mobileNavigationLabel: 'Redeven Desktop navigation',
-      sidebarLabel: 'Redeven Desktop sidebar',
-      mainLabel: 'Redeven Desktop content',
+      skipLinkLabel: i18n.t('shell.accessibility.skipLinkLabel'),
+      topBarLabel: i18n.t('shell.accessibility.topBarLabel'),
+      primaryNavigationLabel: i18n.t('shell.accessibility.primaryNavigationLabel'),
+      mobileNavigationLabel: i18n.t('shell.accessibility.mobileNavigationLabel'),
+      sidebarLabel: i18n.t('shell.accessibility.sidebarLabel'),
+      mainLabel: i18n.t('shell.accessibility.mainLabel'),
     },
     strings: {
       topBar: {
-        searchPlaceholder: DESKTOP_COMMAND_PLACEHOLDER,
+        searchPlaceholder: i18n.t('shell.commandSearchPlaceholder'),
       },
     },
   } as const;
 }
 
-const ENVIRONMENT_CENTER_TABS: readonly Readonly<{ value: EnvironmentCenterTab; label: string }>[] = [
-  { value: 'environments', label: 'Environments' },
-  { value: 'control_planes', label: 'Providers' },
+const ENVIRONMENT_CENTER_TABS: readonly Readonly<{ value: EnvironmentCenterTab; labelKey: DesktopTranslationKey }>[] = [
+  { value: 'environments', labelKey: 'environmentCenter.environmentsSection' },
+  { value: 'control_planes', labelKey: 'desktop.provider' },
 ];
 
 function trimString(value: unknown): string {
@@ -504,15 +535,389 @@ function getErrorMessage(error: unknown): string {
   return trimString(error);
 }
 
+function localizedStringByValue(
+  i18n: DesktopI18n,
+  value: string | undefined,
+  mapping: Readonly<Record<string, DesktopTranslationKey>>,
+): string {
+  const clean = trimString(value);
+  const key = mapping[clean];
+  return key ? i18n.t(key) : clean;
+}
+
+function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): string {
+  return localizedStringByValue(i18n, label, {
+    Open: 'environmentStatus.open',
+    'READY TO OPEN': 'environmentStatus.readyToOpen',
+    CHECKING: 'environmentStatus.checking',
+    'NOT CHECKED': 'environmentStatus.notChecked',
+    'CHECK FAILED': 'environmentStatus.checkFailed',
+    'RECONNECT REQUIRED': 'environmentStatus.reconnectRequired',
+    'REMOTE OFFLINE': 'environmentStatus.remoteOffline',
+    'SYNC FAILED': 'environmentStatus.syncFailed',
+    'INVALID PROVIDER': 'environmentStatus.invalidProvider',
+    REMOVED: 'environmentStatus.removed',
+    'REFRESH NEEDED': 'environmentStatus.refreshNeeded',
+    'RUNTIME OFFLINE': 'environmentStatus.runtimeOffline',
+    'MANUAL AUTH REQUIRED': 'environmentStatus.manualAuthRequired',
+    UNVERIFIED: 'environmentStatus.unverified',
+    'SETUP REQUIRED': 'environmentStatus.setupRequired',
+    'RESTART REQUIRED': 'environmentStatus.restartRequired',
+    'RUNTIME NEEDS UPDATE': 'environmentStatus.runtimeNeedsUpdate',
+    'RUNTIME BLOCKED': 'environmentStatus.runtimeBlocked',
+    'RUNTIME PREPARING': 'environmentStatus.runtimePreparing',
+    'DESKTOP UPDATE REQUIRED': 'environmentStatus.desktopUpdateRequired',
+    'Invalid response': 'environmentStatus.invalidResponse',
+    'Status stale': 'environmentStatus.statusStale',
+    Authorized: 'environmentStatus.authorized',
+  });
+}
+
+function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): string {
+  return localizedStringByValue(i18n, label, {
+    Open: 'environmentAction.open',
+    Focus: 'environmentAction.focus',
+    'Focus remote window': 'environmentAction.focusRemoteWindow',
+    'Remote window opening...': 'environmentAction.remoteWindowOpening',
+    'Remote window opening…': 'environmentAction.remoteWindowOpening',
+    'Reconnect Provider': 'environmentAction.reconnectProvider',
+    'Runtime actions': 'environmentAction.runtimeActions',
+    'Refresh status': 'environmentAction.refreshStatus',
+    'Refresh runtime status': 'environmentAction.refreshRuntimeStatus',
+    'Refresh Runtime status': 'environmentAction.refreshRuntimeStatus',
+    'Refresh provider status': 'environmentAction.refreshProviderStatus',
+    'Start runtime': 'environmentAction.startRuntime',
+    'Start Runtime': 'environmentAction.startRuntime',
+    'Stop runtime': 'environmentAction.stopRuntime',
+    'Stop Runtime': 'environmentAction.stopRuntime',
+    'Restart runtime': 'environmentAction.restartRuntime',
+    'Restart Runtime': 'environmentAction.restartRuntime',
+    'Update runtime': 'environmentAction.updateRuntime',
+    'Update Runtime': 'environmentAction.updateRuntime',
+    'Update and restart...': 'environmentAction.updateAndRestart',
+    'Update and restart…': 'environmentAction.updateAndRestart',
+    'Restart runtime...': 'environmentAction.restartRuntimeEllipsis',
+    'Restart runtime…': 'environmentAction.restartRuntimeEllipsis',
+    'Connect to provider': 'environmentAction.connectToProvider',
+    'Connect to provider...': 'environmentAction.connectToProviderEllipsis',
+    'Connect to provider…': 'environmentAction.connectToProviderEllipsis',
+    'Disconnect from provider': 'environmentAction.disconnectFromProvider',
+    'Connecting to provider': 'environmentAction.connectingToProvider',
+    'Disconnecting from provider': 'environmentAction.disconnectingFromProvider',
+    'Provider link needs attention': 'environmentAction.providerLinkNeedsAttention',
+    'Provider link unavailable': 'environmentAction.providerLinkUnavailable',
+    Continue: 'environmentAction.continue',
+    'Manage in Desktop': 'environmentAction.manageInDesktop',
+    'Update Redeven Desktop': 'environmentAction.updateRedevenDesktop',
+  });
+}
+
+function localizedEnvironmentAction(
+  i18n: DesktopI18n,
+  action: EnvironmentActionModel,
+): EnvironmentActionModel {
+  return {
+    ...action,
+    label: localizedEnvironmentActionLabel(i18n, action.label),
+    ...(action.disabled_reason
+      ? { disabled_reason: localizedRuntimeMessage(i18n, action.disabled_reason) }
+      : {}),
+  };
+}
+
+function localizedEnvironmentMenuItem(
+  i18n: DesktopI18n,
+  item: EnvironmentActionMenuItemModel,
+): EnvironmentActionMenuItemModel {
+  const action = localizedEnvironmentAction(i18n, item.action);
+  return {
+    ...item,
+    label: localizedEnvironmentActionLabel(i18n, item.label),
+    action,
+  };
+}
+
+function localizedGuidanceAction(
+  i18n: DesktopI18n,
+  item: EnvironmentGuidanceActionModel,
+): EnvironmentGuidanceActionModel {
+  return {
+    ...item,
+    label: localizedEnvironmentActionLabel(i18n, item.label),
+    action: localizedEnvironmentAction(i18n, item.action),
+  };
+}
+
+function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
+  const clean = trimString(message);
+  return localizedStringByValue(i18n, clean, {
+    'Runtime is offline or unavailable right now. Start it from its source, then refresh status.': 'runtimeMessage.runtimeOfflineRefresh',
+    'Desktop needs fresh provider authorization before it can open or connect this provider Environment.': 'runtimeMessage.providerAuthRequired',
+    'Remote open is not ready yet. Open stays separate from runtime start and provider link actions.': 'runtimeMessage.remoteOpenNotReady',
+    'Desktop has not checked this runtime yet. Refresh status now, or start the runtime when you already know it is offline.': 'runtimeMessage.statusNotCheckedDetail',
+    'Connect this runtime to a provider Environment first. Open stays separate and becomes available after the link is ready.': 'runtimeMessage.connectProviderFirst',
+    'Open becomes available after Desktop updates the runtime package in this running container and the runtime reports ready.': 'runtimeMessage.updateContainerRuntimeReady',
+    'Open becomes available after Desktop updates the runtime on this SSH host and it reports ready.': 'runtimeMessage.updateSshRuntimeReady',
+    'Open becomes available after Desktop completes the runtime update and it reports ready.': 'runtimeMessage.updateRuntimeReady',
+    'Open becomes available after Desktop restarts the runtime on this SSH host and it reports ready.': 'runtimeMessage.restartSshRuntimeReady',
+    'Open becomes available after Desktop restarts the runtime and it reports ready.': 'runtimeMessage.restartRuntimeReady',
+    'Open becomes available once the runtime package is ready in this running container.': 'runtimeMessage.containerPackageReady',
+    'Open becomes available once the runtime is ready on this SSH host.': 'runtimeMessage.sshRuntimeReady',
+    'Open becomes available once the runtime is ready on this device.': 'runtimeMessage.localRuntimeReady',
+    'Desktop could not connect this runtime to the provider Environment.': 'runtimeMessage.providerLinkFailedDetail',
+    'Desktop could not disconnect this runtime from its provider Environment.': 'runtimeMessage.providerUnlinkFailedDetail',
+    'Desktop could not refresh the runtime status.': 'runtimeMessage.statusRefreshFailedDetail',
+    'The runtime is still offline on this SSH host. Start it from the same host, then try again.': 'runtimeMessage.runtimeStillOfflineSshDetail',
+    'The runtime is still offline on this device. Start it from its source, then try again.': 'runtimeMessage.runtimeStillOfflineLocalDetail',
+    'The environment window is open and ready to focus.': 'runtimeMessage.environmentWindowReadyDetail',
+    'Desktop is preparing the environment window.': 'runtimeMessage.environmentWindowPreparingDetail',
+    'The runtime is ready on this SSH host. Open is available now.': 'runtimeMessage.runtimeReadySshOpenDetail',
+    'The runtime is ready. Open is available now.': 'runtimeMessage.runtimeReadyOpenDetail',
+    'Desktop is probing the latest runtime health for this environment.': 'runtimeMessage.checkingRuntimeStatusDetail',
+    'Desktop is requesting a provider link ticket and connecting the selected runtime.': 'runtimeMessage.connectingRuntimeDetail',
+    'Desktop is disconnecting the selected runtime from its provider.': 'runtimeMessage.disconnectingRuntimeDetail',
+    'Refreshing the latest environment status from this provider.': 'runtimeMessage.providerRefreshingDetail',
+    'Desktop authorization expired. Reconnect in your browser to refresh environments again.': 'runtimeMessage.providerAuthorizationExpiredDetail',
+    'Desktop could not reach this provider.': 'runtimeMessage.providerReachFailedDetail',
+    'This provider returned an invalid response.': 'runtimeMessage.providerInvalidResponseDetail',
+    'Desktop could not refresh this provider.': 'runtimeMessage.providerRefreshFailedDetail',
+    'The last provider sync is getting old. Refresh to confirm the latest environment status.': 'runtimeMessage.providerStatusStaleDetail',
+    'Desktop has active provider authorization and a fresh environment catalog.': 'runtimeMessage.providerAuthorizedDetail',
+  });
+}
+
+function localizedToastMessage(i18n: DesktopI18n, message: string): string {
+  return localizedRuntimeMessage(i18n, message);
+}
+
+function localizedOverlayTitle(i18n: DesktopI18n, title: string): string {
+  return localizedStringByValue(i18n, title, {
+    Ready: 'progress.ready',
+    Working: 'progress.running',
+    'Needs attention': 'progress.needsAttention',
+    'Runtime offline': 'runtimeMessage.runtimeOfflineTitle',
+    'Connect to provider to continue': 'runtimeMessage.connectProviderTitle',
+    'Provider link failed': 'runtimeMessage.providerLinkFailedTitle',
+    'Provider unlink failed': 'runtimeMessage.providerUnlinkFailedTitle',
+    'Status refresh failed': 'runtimeMessage.statusRefreshFailedTitle',
+    'Checking runtime status…': 'runtimeMessage.checkingRuntimeStatusTitle',
+    'Connecting runtime…': 'runtimeMessage.connectingRuntimeTitle',
+    'Disconnecting runtime…': 'runtimeMessage.disconnectingRuntimeTitle',
+    'Update the runtime to continue': 'runtimeMessage.updateRuntimeTitle',
+    'Update Redeven Desktop to continue': 'runtimeMessage.updateDesktopTitle',
+    'Restart the runtime to continue': 'runtimeMessage.restartRuntimeTitle',
+    'Start the runtime to continue': 'runtimeMessage.startRuntimeTitle',
+    'Start the local runtime to continue': 'runtimeMessage.startLocalRuntimeTitle',
+    'Desktop model source needs update': 'runtimeMessage.desktopModelSourceNeedsUpdate',
+    'Runtime restart required': 'runtimeMessage.runtimeRestartRequired',
+    'Runtime update required': 'runtimeMessage.runtimeUpdateRequired',
+    'Redeven Desktop update required': 'runtimeMessage.desktopUpdateRequired',
+    'Runtime cannot open yet': 'runtimeMessage.runtimeCannotOpenYet',
+    'Provider reports offline': 'runtimeMessage.providerReportsOffline',
+    'Provider is unreachable': 'runtimeMessage.providerUnreachable',
+    'Provider response is invalid': 'runtimeMessage.providerResponseInvalid',
+    'Environment removed': 'runtimeMessage.environmentRemoved',
+    'Provider status is stale': 'runtimeMessage.providerStatusStale',
+    'Refresh provider status': 'environmentAction.refreshProviderStatus',
+    'Refresh status to continue': 'runtimeMessage.refreshStatusTitle',
+    'Runtime still needs attention': 'runtimeMessage.runtimeStillNeedsAttention',
+  });
+}
+
+function localizedOverlayEyebrow(i18n: DesktopI18n, eyebrow: string): string {
+  return localizedStringByValue(i18n, eyebrow, {
+    Ready: 'progress.ready',
+    Working: 'progress.running',
+    'Needs attention': 'progress.needsAttention',
+    'Runtime offline': 'runtimeMessage.runtimeOfflineTitle',
+    'Runtime blocked': 'runtimeMessage.runtimeBlockedTitle',
+    'Remote route unavailable': 'runtimeMessage.remoteRouteUnavailable',
+    'Status not checked': 'runtimeMessage.statusNotChecked',
+  });
+}
+
+function localizedEnvironmentOverlay(
+  i18n: DesktopI18n,
+  overlay: EnvironmentPrimaryActionOverlayModel,
+): EnvironmentPrimaryActionOverlayModel {
+  if (overlay.kind === 'tooltip') {
+    return {
+      ...overlay,
+      message: localizedRuntimeMessage(i18n, overlay.message),
+    };
+  }
+  return {
+    ...overlay,
+    eyebrow: localizedOverlayEyebrow(i18n, overlay.eyebrow),
+    title: localizedOverlayTitle(i18n, overlay.title),
+    detail: localizedRuntimeMessage(i18n, overlay.detail),
+    actions: overlay.actions.map((item) => localizedGuidanceAction(i18n, item)),
+  };
+}
+
+function localizedEnvironmentActionPresentation(
+  i18n: DesktopI18n,
+  presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>,
+): Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>> {
+  return {
+    ...presentation,
+    primary_action: localizedEnvironmentAction(i18n, presentation.primary_action),
+    primary_action_overlay: presentation.primary_action_overlay
+      ? localizedEnvironmentOverlay(i18n, presentation.primary_action_overlay)
+      : undefined,
+    menu_button_label: localizedEnvironmentActionLabel(i18n, presentation.menu_button_label),
+    menu_actions: presentation.menu_actions.map((item) => localizedEnvironmentMenuItem(i18n, item)),
+  };
+}
+
+function localizedFactLabel(i18n: DesktopI18n, label: string): string {
+  return localizedStringByValue(i18n, label, {
+    'RUNS ON': 'environmentFacts.runsOn',
+    CONTAINER: 'environmentFacts.container',
+    VERSION: 'environmentFacts.version',
+    PROVIDER: 'environmentFacts.provider',
+    'LOCAL LINK': 'environmentFacts.localLink',
+    'ENV ID': 'environmentFacts.environmentId',
+    Provider: 'environmentFacts.provider',
+    'Environment ID': 'environmentFacts.environmentId',
+    'Runtime root': 'environmentFacts.runtimeRoot',
+    Bootstrap: 'environmentFacts.bootstrap',
+    Source: 'environmentFacts.source',
+    URL: 'environmentFacts.url',
+    Local: 'environmentCenter.localFilter',
+    'Redeven URL': 'environmentCenter.redevenUrlFilter',
+    'SSH Host': 'environmentCenter.sshHostFilter',
+    LOCAL: 'environmentFacts.local',
+    'SSH HOST': 'environmentFacts.sshHost',
+    'FORWARDED URL': 'environmentFacts.forwardedUrl',
+    DETAIL: 'environmentFacts.detail',
+  });
+}
+
+function localizedFactValue(i18n: DesktopI18n, value: string): string {
+  const connecting = value.match(/^Connecting through (.+)$/u);
+  if (connecting) {
+    return i18n.t('environmentFacts.connectingThrough', { label: connecting[1] ?? '' });
+  }
+  const disconnecting = value.match(/^Disconnecting from (.+)$/u);
+  if (disconnecting) {
+    return i18n.t('environmentFacts.disconnectingFrom', { label: disconnecting[1] ?? '' });
+  }
+  const needsAttention = value.match(/^(.+) needs attention$/u);
+  if (needsAttention) {
+    return i18n.t('environmentFacts.runtimeNeedsAttention', { label: needsAttention[1] ?? '' });
+  }
+  return localizedStringByValue(i18n, value, {
+    UNKNOWN: 'environmentFacts.unknown',
+    Unavailable: 'environmentFacts.unavailable',
+    'No managed runtime linked': 'environmentFacts.noManagedRuntimeLinked',
+    'Desktop upload': 'environmentFacts.desktopUpload',
+    'Remote fallback': 'environmentFacts.remoteFallback',
+    Automatic: 'environmentFacts.automatic',
+    'Local environment': 'environmentFacts.localEnvironment',
+    'Provider environment': 'environmentFacts.providerEnvironment',
+  });
+}
+
+function localizedActionToastAction(
+  i18n: DesktopI18n,
+  action: DesktopActionToastAction | undefined,
+): DesktopActionToastAction | undefined {
+  return action
+    ? {
+        ...action,
+        label: localizedStringByValue(i18n, action.label, {
+          Dismiss: 'environmentCenter.dismissToast',
+          Retry: 'common.retry',
+          Refresh: 'common.refresh',
+        }),
+      }
+    : undefined;
+}
+
+function localizedFactActionLabel(i18n: DesktopI18n, label: string): string {
+  const show = label.match(/^Show (.+)$/u);
+  if (show) {
+    return i18n.t('environmentFacts.showLabel', { label: show[1] ?? '' });
+  }
+  return label;
+}
+
+function localizedFactActionAriaLabel(i18n: DesktopI18n, label: string): string {
+  const showLinked = label.match(/^Show linked runtime (.+)$/u);
+  if (showLinked) {
+    return i18n.t('environmentFacts.showLinkedRuntime', { label: showLinked[1] ?? '' });
+  }
+  return localizedFactActionLabel(i18n, label);
+}
+
+function localizedCopyLabel(i18n: DesktopI18n, label: string): string {
+  return localizedStringByValue(i18n, label, {
+    'Copy local endpoint': 'environmentFacts.copyLocalEndpoint',
+    'Copy environment URL': 'environmentFacts.copyEnvironmentUrl',
+    'Copy endpoint': 'environmentFacts.copyEndpoint',
+    'Copy SSH host': 'environmentFacts.copySshHost',
+    'Copy forwarded URL': 'environmentFacts.copyForwardedUrl',
+  });
+}
+
+function englishCopyPrefixForLabel(i18n: DesktopI18n, label: string): string {
+  const keyByLocalized = new Map<string, string>([
+    [i18n.t('environmentFacts.localEndpoint'), 'local endpoint'],
+    [i18n.t('environmentFacts.environmentUrl'), 'environment URL'],
+    [i18n.t('environmentFacts.endpoint'), 'endpoint'],
+    [i18n.t('environmentFacts.sshHostLower'), 'SSH host'],
+    [i18n.t('environmentFacts.forwardedUrlLower'), 'forwarded URL'],
+  ]);
+  return keyByLocalized.get(label) ?? label;
+}
+
+function localizedEnvironmentFact(
+  i18n: DesktopI18n,
+  fact: EnvironmentCardFactModel,
+): EnvironmentCardFactModel {
+  return {
+    ...fact,
+    label: localizedFactLabel(i18n, fact.label),
+    value: localizedFactValue(i18n, fact.value),
+    action: fact.action
+      ? {
+          ...fact.action,
+          label: localizedFactActionLabel(i18n, fact.action.label),
+          aria_label: localizedFactActionAriaLabel(i18n, fact.action.aria_label),
+        }
+      : undefined,
+    endpoints: fact.endpoints?.map((endpoint) => ({
+      ...endpoint,
+      label: localizedFactLabel(i18n, endpoint.label),
+      copy_label: localizedCopyLabel(i18n, endpoint.copy_label),
+    })),
+  };
+}
+
 function inlineFailurePresentation(
+  i18n: DesktopI18n,
   message: string,
   tone: 'error' | 'warning',
 ): DesktopOperationFailurePresentation {
   return {
     code: 'operation_failed',
     severity: tone,
-    title: tone === 'warning' ? 'Warning' : 'Error',
-    summary: trimString(message) || 'Desktop could not complete that action.',
+    title: tone === 'warning' ? i18n.t('toast.needsAttention') : i18n.t('toast.couldNotComplete'),
+    summary: trimString(message) || i18n.t('toast.actionFailedFallback'),
+  };
+}
+
+function localizedFailureForDisplay(
+  i18n: DesktopI18n,
+  failure: DesktopOperationFailurePresentation,
+): DesktopOperationFailurePresentation {
+  return {
+    ...failure,
+    title: localizedOperationFailureTitle(i18n, failure),
+    summary: localizedOperationFailureSummary(i18n, failure),
+    ...(failure.detail ? { detail: localizedOperationFailureDetail(i18n, failure) } : {}),
+    ...(failure.recovery_hint ? { recovery_hint: localizedOperationFailureRecoveryHint(i18n, failure) } : {}),
   };
 }
 
@@ -526,9 +931,17 @@ function launcherFailureSummary(failure: SilentLauncherActionFailure): string {
   return trimString(failure.failure?.summary) || trimString(failure.message);
 }
 
-function formatIssueToastMessage(issue: DesktopWelcomeIssue): string {
-  const message = trimString(issue.message);
-  const title = trimString(issue.title);
+function localizedIssueTitle(i18n: DesktopI18n, issue: DesktopWelcomeIssue): string {
+  return issue.title_key ? i18n.t(issue.title_key) : trimString(issue.title);
+}
+
+function localizedIssueMessage(i18n: DesktopI18n, issue: DesktopWelcomeIssue): string {
+  return issue.message_key ? i18n.t(issue.message_key) : trimString(issue.message);
+}
+
+function formatIssueToastMessage(i18n: DesktopI18n, issue: DesktopWelcomeIssue): string {
+  const message = localizedIssueMessage(i18n, issue);
+  const title = localizedIssueTitle(i18n, issue);
   if (message === '') {
     return title;
   }
@@ -617,21 +1030,14 @@ function formatTimestamp(unixMS: number): string {
   }
 }
 
-function formatRelativeTimestamp(unixMS: number): string {
+function formatLocalizedRelativeTimestamp(i18n: DesktopI18n, unixMS: number): string {
   if (!Number.isFinite(unixMS) || unixMS <= 0) {
-    return 'Never';
+    return i18n.t('common.never');
   }
   try {
-    const diff = Math.max(0, Date.now() - unixMS);
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-    if (days > 0) return `${days}d ago`;
-    if (hours > 0) return `${hours}h ago`;
-    if (minutes > 0) return `${minutes}m ago`;
-    return 'Just now';
+    return i18n.formatRelativeTime(unixMS, { style: 'short' });
   } catch {
-    return formatTimestamp(unixMS) || 'Unknown';
+    return formatTimestamp(unixMS) || i18n.t('common.unknown');
   }
 }
 
@@ -830,6 +1236,157 @@ function passwordStateTagVariant(
   }
 }
 
+function localizedCloseActionLabel(i18n: DesktopI18n, action: DesktopLauncherCloseAction): string {
+  return action === 'quit' ? i18n.t('launcher.quit') : i18n.t('launcher.closeLauncher');
+}
+
+function localizedOpenActionLabel(i18n: DesktopI18n, action: DesktopEnvironmentOpenAction): string {
+  switch (action) {
+    case 'opening':
+      return i18n.t('launcher.opening');
+    case 'focus':
+      return i18n.t('launcher.focus');
+    default:
+      return i18n.t('common.open');
+  }
+}
+
+function localizedSurfaceTitle(i18n: DesktopI18n, surface: DesktopLauncherSurface): string {
+  return surface === 'environment_settings'
+    ? i18n.t('launcher.environmentSettings')
+    : i18n.t('launcher.connectEnvironment');
+}
+
+function localizedOpenWindowsSubtitle(i18n: DesktopI18n, openWindows: DesktopWelcomeSnapshot['open_windows']): string {
+  if (openWindows.length <= 0) {
+    return i18n.t('launcher.noEnvironmentWindowsOpen');
+  }
+  if (openWindows.length === 1) {
+    return `${openWindows[0]!.label} · ${openWindows[0]!.local_ui_url}`;
+  }
+  return i18n.t('launcher.environmentWindowsOpen', { count: openWindows.length });
+}
+
+function languageSourceLabel(i18n: DesktopI18n, source: RedevenLanguageSnapshot['source']): string {
+  switch (source) {
+    case 'explicit':
+      return i18n.t('settings.languageSourceExplicit');
+    case 'system':
+      return i18n.t('settings.languageSourceSystem');
+    case 'fallback':
+    default:
+      return i18n.t('settings.languageSourceFallback');
+  }
+}
+
+function settingsAddressCardTitle(i18n: DesktopI18n, accessMode: DesktopAccessMode): string {
+  return accessMode === 'custom_exposure' ? i18n.t('settings.bindAddressTitle') : i18n.t('settings.portTitle');
+}
+
+function settingsAddressCardHelp(i18n: DesktopI18n, accessMode: DesktopAccessMode): string {
+  if (accessMode === 'custom_exposure') {
+    return i18n.t('settings.bindAddressHelp');
+  }
+  return accessMode === 'shared_local_network'
+    ? i18n.t('settings.sharedPortHelp')
+    : i18n.t('settings.localPortHelp');
+}
+
+function settingsProtectionCardTitle(i18n: DesktopI18n, accessMode: DesktopAccessMode): string {
+  return accessMode === 'local_only' ? i18n.t('settings.protectionTitle') : i18n.t('settings.passwordTitle');
+}
+
+function settingsProtectionCardHelp(i18n: DesktopI18n, accessMode: DesktopAccessMode): string {
+  if (accessMode === 'shared_local_network') {
+    return i18n.t('settings.sharedPasswordHelp');
+  }
+  if (accessMode === 'custom_exposure') {
+    return i18n.t('settings.customPasswordHelp');
+  }
+  return i18n.t('settings.localProtectionHelp');
+}
+
+function compactLocalizedPasswordStateTagLabel(
+  i18n: DesktopI18n,
+  stateID: DesktopSettingsSurfaceSnapshot['password_state_id'],
+): string {
+  return i18n.t(desktopPasswordStateTranslationKey(stateID));
+}
+
+function localizedAccessModeOption(
+  i18n: DesktopI18n,
+  option: DesktopSettingsSurfaceSnapshot['access_mode_options'][number],
+) {
+  switch (option.value) {
+    case 'local_only':
+      return {
+        label: i18n.t(option.label_key),
+        description: i18n.t(option.description_key),
+      };
+    case 'shared_local_network':
+      return {
+        label: i18n.t(option.label_key),
+        description: i18n.t(option.description_key),
+      };
+    case 'custom_exposure':
+      return {
+        label: i18n.t(option.label_key),
+        description: i18n.t(option.description_key),
+      };
+  }
+}
+
+function compactLocalizedSettingsFieldLabel(
+  i18n: DesktopI18n,
+  field: DesktopSettingsSurfaceSnapshot['host_fields'][number],
+): string {
+  return i18n.t(field.label_key);
+}
+
+function localizedSettingsFieldHelp(
+  i18n: DesktopI18n,
+  field: DesktopSettingsSurfaceSnapshot['host_fields'][number],
+): string {
+  return field.help_key ? i18n.t(field.help_key) : '';
+}
+
+function localizedSettingsFieldPlaceholder(
+  i18n: DesktopI18n,
+  field: DesktopSettingsSurfaceSnapshot['host_fields'][number],
+): string | undefined {
+  return field.placeholder_key ? i18n.t(field.placeholder_key) : undefined;
+}
+
+function describeLocalizedNextStartAddress(
+  i18n: DesktopI18n,
+  model: Pick<ReturnType<typeof deriveDesktopAccessDraftModel>, 'next_start_address_display' | 'next_start_address_kind'>,
+) {
+  switch (model.next_start_address_kind) {
+    case 'auto_loopback':
+      return {
+        primary: i18n.t('settings.autoPort'),
+        primary_monospace: false,
+        hint: i18n.t('settings.onLocalhost'),
+      };
+    case 'lan_ip_port':
+      return {
+        primary: i18n.t('settings.portNumber', { port: model.next_start_address_display }),
+        primary_monospace: false,
+        hint: i18n.t('settings.onLanIp'),
+      };
+    case 'raw':
+    default:
+      return describeNextStartAddress(model.next_start_address_display);
+  }
+}
+
+function describeLocalizedRuntimeAddress(i18n: DesktopI18n, value: string) {
+  const display = describeRuntimeAddress(value);
+  return display.primary === 'Not running'
+    ? { ...display, primary: i18n.t('settings.notRunning') }
+    : display;
+}
+
 async function copyToClipboard(text: string): Promise<void> {
   const value = trimString(text);
   if (!value) {
@@ -871,8 +1428,180 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
   return candidate;
 }
 
+function DesktopLanguagePicker(props: Readonly<{
+  openRequest: number;
+  snapshot: RedevenLanguageSnapshot;
+  i18n: DesktopI18n;
+  onPreferenceChange: (preference: RedevenLocalePreference) => void;
+}>) {
+  const [open, setOpen] = createSignal(false);
+  const [highlightedIndex, setHighlightedIndex] = createSignal(0);
+  let buttonRef: HTMLButtonElement | undefined;
+  let listboxRef: HTMLDivElement | undefined;
+
+  const options = createMemo(() => (
+    REDEVEN_LOCALE_PREFERENCES.map((preference) => ({
+      preference,
+      label: preference === SYSTEM_LOCALE_PREFERENCE
+        ? props.i18n.t('language.systemDefault')
+        : localePreferenceDisplayName(preference),
+      secondary: preference === SYSTEM_LOCALE_PREFERENCE
+        ? props.i18n.t('language.usingLanguage', { language: localePreferenceDisplayName(props.snapshot.resolved_locale) })
+        : REDEVEN_LOCALE_META[preference].english_name,
+    }))
+  ));
+  const selectedIndex = createMemo(() => Math.max(0, options().findIndex((item) => item.preference === props.snapshot.preference)));
+
+  createEffect(on(
+    () => props.openRequest,
+    (next, previous) => {
+      if (next === previous) {
+        return;
+      }
+      setOpen(true);
+      buttonRef?.focus();
+    },
+  ));
+
+  createEffect(() => {
+    if (open()) {
+      setHighlightedIndex(selectedIndex());
+    }
+  });
+
+  createEffect(() => {
+    if (!open()) {
+      return;
+    }
+    const containsTarget = (target: EventTarget | null): boolean => (
+      target instanceof Node && (buttonRef?.contains(target) === true || listboxRef?.contains(target) === true)
+    );
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containsTarget(event.target)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        buttonRef?.focus();
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    });
+  });
+
+  const moveHighlight = (delta: number) => {
+    const count = options().length;
+    if (count <= 0) {
+      return;
+    }
+    setHighlightedIndex((current) => (current + delta + count) % count);
+  };
+  const selectPreference = (preference: RedevenLocalePreference) => {
+    props.onPreferenceChange(preference);
+    setOpen(false);
+    buttonRef?.focus();
+  };
+
+  return (
+    <>
+      <TopBarIconButton
+        ref={(element) => {
+          buttonRef = element;
+        }}
+        label={props.i18n.t('common.language')}
+        tooltip={props.i18n.t('common.language')}
+        aria-haspopup="listbox"
+        aria-expanded={open() ? 'true' : 'false'}
+        aria-controls="redeven-desktop-language-options"
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            setOpen(true);
+            moveHighlight(event.key === 'ArrowDown' ? 1 : -1);
+          } else if (event.key === 'Enter' && open()) {
+            event.preventDefault();
+            const option = options()[highlightedIndex()];
+            if (option) {
+              selectPreference(option.preference);
+            }
+          }
+        }}
+      >
+        <Globe class="h-4 w-4" />
+      </TopBarIconButton>
+
+      <Show when={open()}>
+        <DesktopAnchoredListbox
+          id="redeven-desktop-language-options"
+          anchorRef={buttonRef}
+          class="min-w-72 p-1"
+          width={288}
+          maxHeight={360}
+          role="listbox"
+          open={open()}
+          onOverlayRef={(element) => {
+            listboxRef = element;
+          }}
+        >
+          <div class="min-h-0 flex-1 overflow-auto">
+            <For each={options()}>
+              {(option, index) => {
+                const selected = createMemo(() => props.snapshot.preference === option.preference);
+                const highlighted = createMemo(() => highlightedIndex() === index());
+                return (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={selected() ? 'true' : 'false'}
+                    class={cn(
+                      'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
+                      highlighted()
+                        ? 'bg-accent text-accent-foreground'
+                        : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                    )}
+                    title={`${option.label} - ${option.secondary}`}
+                    onClick={() => selectPreference(option.preference)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        selectPreference(option.preference);
+                      }
+                    }}
+                    onMouseEnter={() => setHighlightedIndex(index())}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      selectPreference(option.preference);
+                    }}
+                  >
+                    <span class="min-w-0">
+                      <span class="block whitespace-normal text-xs font-medium leading-snug">{option.label}</span>
+                      <span class="block whitespace-normal text-[11px] leading-snug text-muted-foreground">{option.secondary}</span>
+                    </span>
+                    <Show when={selected()}>
+                      <Check class="h-3.5 w-3.5 shrink-0" />
+                    </Show>
+                  </button>
+                );
+              }}
+            </For>
+          </div>
+        </DesktopAnchoredListbox>
+      </Show>
+    </>
+  );
+}
+
 function DesktopCommandRegistrar(props: Readonly<{
   snapshot: () => DesktopWelcomeSnapshot;
+  i18n: DesktopI18n;
   showConnectEnvironment: (message?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
   openSettingsSurface: (environmentID?: string) => void;
@@ -882,6 +1611,7 @@ function DesktopCommandRegistrar(props: Readonly<{
     errorTarget?: 'connect' | 'dialog',
   ) => Promise<boolean>;
   closeLauncherOrQuit: () => Promise<void>;
+  openLanguageSettings: () => void;
 }>): null {
   const cmd = useCommand();
   const theme = useTheme();
@@ -892,18 +1622,18 @@ function DesktopCommandRegistrar(props: Readonly<{
     const list = [
       {
         id: 'redeven.desktop.connectEnvironment',
-        title: 'Connect Environment',
-        description: 'Show the desktop connection center',
-        category: 'Desktop',
+        title: props.i18n.t('commandPalette.connectEnvironmentTitle'),
+        description: props.i18n.t('commandPalette.connectEnvironmentDescription'),
+        category: props.i18n.t('commandPalette.categories.desktop'),
         keybind: 'mod+shift+o',
         icon: Globe,
         execute: () => props.showConnectEnvironment(),
       },
       {
         id: 'redeven.desktop.openLocalEnvironment',
-        title: 'Open Environment',
-        description: 'Open the selected Local Environment window',
-        category: 'Desktop',
+        title: props.i18n.t('commandPalette.openEnvironmentTitle'),
+        description: props.i18n.t('commandPalette.openEnvironmentDescription'),
+        category: props.i18n.t('commandPalette.categories.desktop'),
         keybind: 'mod+enter',
         icon: Globe,
         execute: () => {
@@ -912,46 +1642,54 @@ function DesktopCommandRegistrar(props: Readonly<{
       },
       {
         id: 'redeven.desktop.openLocalEnvironmentSettings',
-        title: 'Environment Settings',
-        description: 'Edit startup, access, and exposure settings for the Local Environment',
-        category: 'Desktop',
+        title: props.i18n.t('commandPalette.environmentSettingsTitle'),
+        description: props.i18n.t('commandPalette.environmentSettingsDescription'),
+        category: props.i18n.t('commandPalette.categories.desktop'),
         keybind: 'mod+,',
         icon: Settings,
         execute: () => props.openSettingsSurface(),
       },
       {
         id: 'redeven.desktop.focusEnvironmentURL',
-        title: 'Connect Another Environment',
-        description: 'Open the New Environment dialog for a Redeven URL, SSH host, or container runtime target',
-        category: 'Desktop',
+        title: props.i18n.t('commandPalette.connectAnotherEnvironmentTitle'),
+        description: props.i18n.t('commandPalette.connectAnotherEnvironmentDescription'),
+        category: props.i18n.t('commandPalette.categories.desktop'),
         icon: Search,
-        execute: () => props.openCreateConnectionDialog('Add a Redeven URL, SSH host, or container runtime target.'),
+        execute: () => props.openCreateConnectionDialog(props.i18n.t('commandPalette.connectAnotherEnvironmentPrompt')),
       },
       {
         id: 'redeven.desktop.closeLauncherOrQuit',
-        title: snapshot.close_action_label,
-        description: snapshot.close_action_label === 'Quit'
-          ? 'Quit Redeven Desktop'
-          : 'Close the launcher window',
-        category: 'Desktop',
+        title: localizedCloseActionLabel(props.i18n, snapshot.close_action),
+        description: snapshot.close_action === 'quit'
+          ? props.i18n.t('commandPalette.quitDesktopDescription')
+          : props.i18n.t('commandPalette.closeLauncherDescription'),
+        category: props.i18n.t('commandPalette.categories.desktop'),
         icon: Globe,
         execute: () => {
           void props.closeLauncherOrQuit();
         },
       },
       {
+        id: 'redeven.desktop.changeLanguage',
+        title: props.i18n.t('commandPalette.changeLanguageTitle'),
+        description: props.i18n.t('commandPalette.changeLanguageDescription'),
+        category: props.i18n.t('commandPalette.categories.general'),
+        icon: Globe,
+        execute: () => props.openLanguageSettings(),
+      },
+      {
         id: 'redeven.desktop.toggleTheme',
-        title: 'Toggle Theme',
-        description: 'Switch between light and dark theme',
-        category: 'General',
+        title: props.i18n.t('commandPalette.toggleThemeTitle'),
+        description: props.i18n.t('commandPalette.toggleThemeDescription'),
+        category: props.i18n.t('commandPalette.categories.general'),
         icon: theme.resolvedTheme() === 'light' ? Moon : Sun,
         execute: () => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme()),
       },
       {
         id: 'redeven.desktop.openCommandPalette',
-        title: 'Open Command Palette',
-        description: 'Open the command palette',
-        category: 'General',
+        title: props.i18n.t('commandPalette.openCommandPaletteTitle'),
+        description: props.i18n.t('commandPalette.openCommandPaletteDescription'),
+        category: props.i18n.t('commandPalette.categories.general'),
         keybind: 'mod+k',
         icon: Search,
         execute: () => cmd.open(),
@@ -961,9 +1699,9 @@ function DesktopCommandRegistrar(props: Readonly<{
     for (const environment of snapshot.environments.slice(0, 5)) {
       list.push({
         id: `redeven.desktop.openEnvironment.${environment.id}`,
-        title: `${environment.open_action_label} ${environment.label}`,
+        title: `${localizedOpenActionLabel(props.i18n, environment.open_action)} ${environment.label}`,
         description: environment.secondary_text,
-        category: 'Recent Environments',
+        category: props.i18n.t('commandPalette.categories.recentEnvironments'),
         icon: Globe,
         execute: () => {
           void props.openEnvironment(environment, 'connect');
@@ -974,9 +1712,9 @@ function DesktopCommandRegistrar(props: Readonly<{
     if (snapshot.surface === 'connect_environment') {
       list.push({
         id: 'redeven.desktop.openDeck',
-        title: 'Open Deck',
+        title: props.i18n.t('commandPalette.openDeckTitle'),
         description: capabilityUnavailableMessage('Deck'),
-        category: 'Unavailable',
+        category: props.i18n.t('commandPalette.categories.unavailable'),
         icon: Search,
         execute: () => props.showConnectEnvironment(capabilityUnavailableMessage('Deck')),
       });
@@ -992,7 +1730,13 @@ function DesktopCommandRegistrar(props: Readonly<{
 function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const theme = useTheme();
   const shellTheme = desktopThemeBridge();
+  const shellLanguage = desktopLanguageBridge();
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
+  const [languageSnapshot, setLanguageSnapshot] = createSignal<RedevenLanguageSnapshot>(
+    shellLanguage?.getSnapshot() ?? FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT,
+  );
+  const [languagePickerOpenRequest] = createSignal(0);
+  const [languageSettingsOpen, setLanguageSettingsOpen] = createSignal(false);
   const [actionToasts, setActionToasts] = createSignal<readonly DesktopActionToast[]>([]);
   const [settingsError, setSettingsError] = createSignal('');
   const [connectionDialogError, setConnectionDialogError] = createSignal('');
@@ -1033,8 +1777,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   let runtimeContainerOptionsRequestID = 0;
 
   const visibleSurface = createMemo<DesktopLauncherSurface>(() => snapshot().surface);
-  const status = createMemo(() => shellStatus(snapshot()));
-  const shellView = createMemo(() => buildDesktopWelcomeShellViewModel(snapshot(), visibleSurface()));
+  const i18n = createMemo(() => createDesktopI18n(languageSnapshot().resolved_locale));
+  const status = createMemo(() => shellStatus(snapshot(), i18n()));
   const headerLogoSrc = createMemo(() => theme.resolvedTheme() === 'light' ? LOGO_LIGHT_URL : LOGO_DARK_URL);
   const settingsSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => snapshot().settings_surface);
   const settingsBaselineSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => settingsDraftSession().baseline_surface);
@@ -1075,14 +1819,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     return next;
   });
   const openWindowsSubtitle = createMemo(() => {
-    const openWindows = snapshot().open_windows;
-    if (openWindows.length <= 0) {
-      return 'No environment windows open';
-    }
-    if (openWindows.length === 1) {
-      return `${openWindows[0]!.label} · ${openWindows[0]!.local_ui_url}`;
-    }
-    return `${openWindows.length} environment windows open`;
+    return localizedOpenWindowsSubtitle(i18n(), snapshot().open_windows);
   });
   const libraryEntries = createMemo(() => (
     filterEnvironmentLibrary(
@@ -1092,14 +1829,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     )
   ));
   const providerRuntimeLinkActionLabel = createMemo(() => (
-    providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'Disconnect from provider' : 'Connect to provider'
+    providerRuntimeLinkConfirmation()?.action === 'disconnect'
+      ? i18n().t('environmentCenter.disconnectFromProvider')
+      : i18n().t('environmentCenter.connectToProvider')
   ));
   const providerRuntimeLinkDialogOpen = createMemo(() => providerRuntimeLinkConfirmation() !== null);
   const providerRuntimeLinkSnapshot = createMemo<RuntimeServiceSnapshot | undefined>(() => (
     environmentRuntimeServiceSnapshot(providerRuntimeLinkConfirmation()?.environment ?? null)
   ));
   const providerRuntimeLinkActiveWorkLabel = createMemo(() => (
-    formatRuntimeServiceWorkload(providerRuntimeLinkSnapshot())
+    localizedRuntimeServiceWorkload(i18n(), providerRuntimeLinkSnapshot()?.active_workload)
   ));
   const providerRuntimeLinkCandidates = createMemo(() => (
     providerRuntimeLinkConfirmation()?.environment.provider_environment_candidates ?? []
@@ -1123,7 +1862,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return {
         candidate,
         canConnect: plan.can_connect,
-        message: plan.message,
+        message: localizedProviderRuntimeLinkPlanMessage(i18n(), target, candidate, plan.state),
       };
     });
   });
@@ -1140,6 +1879,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     )
   ));
   const activeActionProgress = createMemo(() => snapshot().action_progress);
+
+  createEffect(() => {
+    document.title = i18n().t('desktop.title');
+  });
 
   createEffect(() => {
     const activeSourceFilter = librarySourceFilter();
@@ -1176,6 +1919,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     };
     applyShellTheme(shellTheme.getSnapshot());
     const unsubscribe = shellTheme.subscribe(applyShellTheme);
+    onCleanup(unsubscribe);
+  }
+
+  if (shellLanguage) {
+    const applyShellLanguage = (next: RedevenLanguageSnapshot) => {
+      setLanguageSnapshot(next);
+    };
+    applyShellLanguage(shellLanguage.getSnapshot());
+    const unsubscribe = shellLanguage.subscribe(applyShellLanguage);
     onCleanup(unsubscribe);
   }
 
@@ -1233,7 +1985,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return;
       }
       previousIssueKey = issueKey;
-      showActionToast(formatIssueToastMessage(issue), issueToastTone(issue));
+      showActionToast(formatIssueToastMessage(i18n(), issue), issueToastTone(issue));
     });
   }
 
@@ -1317,7 +2069,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     if (!props.runtime.launcher.listRuntimeContainers) {
       setRuntimeContainerOptions([]);
-      setRuntimeContainerOptionsError('This Desktop build cannot list containers. Update Desktop before creating container runtime targets.');
+      setRuntimeContainerOptionsError(i18n().t('connectionDialog.containerListUnsupported'));
       setRuntimeContainerOptionsKey(key);
       return;
     }
@@ -1373,7 +2125,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               };
             });
           } else {
-            setRuntimeContainerOptionsError('The selected container is no longer running. Start it outside Redeven, refresh this list, then choose it again.');
+            setRuntimeContainerOptionsError(i18n().t('connectionDialog.selectedContainerGone'));
           }
         }
       } else {
@@ -1385,7 +2137,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return;
       }
       setRuntimeContainerOptions([]);
-      setRuntimeContainerOptionsError(getErrorMessage(error) || 'Desktop could not list running containers.');
+      setRuntimeContainerOptionsError(getErrorMessage(error) || i18n().t('connectionDialog.containerListFailed'));
       setRuntimeContainerOptionsKey(key);
     } finally {
       if (requestID === runtimeContainerOptionsRequestID) {
@@ -1425,8 +2177,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         id: ++nextActionToastID,
         tone,
         title: options.title,
-        message,
-        action: options.action,
+        message: localizedToastMessage(i18n(), message),
+        action: localizedActionToastAction(i18n(), options.action),
         auto_dismiss: options.autoDismiss === false ? false : undefined,
       },
       limit: DESKTOP_ACTION_TOAST_LIMIT,
@@ -1458,6 +2210,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  function updateDesktopLanguagePreference(preference: RedevenLocalePreference): void {
+    const nextSnapshot = shellLanguage?.setPreference(preference) ?? languageSnapshot();
+    setLanguageSnapshot(nextSnapshot);
+    const language = preference === SYSTEM_LOCALE_PREFERENCE
+      ? i18n().t('language.systemDefault')
+      : localePreferenceDisplayName(preference);
+    showActionToast(i18n().t('language.updatedMessage', { language }), 'info');
+  }
+
   async function runActionToastAction(
     action: DesktopActionToastAction,
     toastID: number,
@@ -1478,7 +2239,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           display_label: displayLabel,
         });
         if (result?.outcome === 'started_control_plane_connect') {
-          showActionToast('Continue in your browser to reconnect this provider.', 'info');
+          showActionToast(i18n().t('environmentCenter.continueBrowserReconnectProvider'), 'info');
         }
         break;
       }
@@ -1492,7 +2253,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog',
     requestEnvID?: string,
   ): Promise<void> {
-    const presentation = launcherActionFailurePresentation(failure);
+    const presentation = launcherActionFailurePresentation(i18n(), failure);
     if (presentation.refresh_snapshot) {
       try {
         await refreshSnapshot();
@@ -1517,7 +2278,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         setEnvironmentFailures((current) => {
           const next = new Map(current);
           next.set(environmentID, {
-            failure: failure.failure ?? inlineFailurePresentation(presentation.message, tone),
+            failure: failure.failure ?? inlineFailurePresentation(i18n(), presentation.message, tone),
           });
           return next;
         });
@@ -1535,7 +2296,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     try {
       const result = await props.runtime.launcher.performAction(request);
       if (isDesktopLauncherActionFailure(result)) {
-        const presentation = launcherActionFailurePresentation(result);
+        const presentation = launcherActionFailurePresentation(i18n(), result);
         if (presentation.refresh_snapshot) {
           try {
             await refreshSnapshot();
@@ -1548,7 +2309,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         }
         return {
           ok: false,
-          message: presentation.message || 'Desktop could not complete that action.',
+          message: presentation.message || i18n().t('toast.actionFailedFallback'),
           ...(result.failure ? { failure: result.failure } : {}),
         };
       }
@@ -1557,7 +2318,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       return {
         ok: false,
-        message: 'Desktop returned an unexpected launcher result.',
+        message: i18n().t('toast.unexpectedLauncherResult'),
       };
     } catch (error) {
       return {
@@ -1602,7 +2363,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function openSettingsSurface(environmentID = selectedSettingsEnvironmentEntry()?.id ?? ''): void {
     if (environmentID === '') {
-      setSettingsError('Choose an environment first.');
+      setSettingsError(i18n().t('settings.chooseEnvironmentFirst'));
       return;
     }
     resetMessages();
@@ -1625,12 +2386,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       });
   }
 
+  function openLanguageSettings(): void {
+    resetMessages();
+    setConnectionDialogState(null);
+    setControlPlaneDialogState(null);
+    setLanguageSettingsOpen(true);
+  }
+
   function openCreateConnectionDialog(
     message = '',
     preferredKind: ConnectionDialogKind = 'external_local_ui',
   ): void {
     if (snapshot().surface !== 'connect_environment') {
-      showConnectEnvironment(message || 'Open the launcher to add a connection.');
+      showConnectEnvironment(message || i18n().t('environmentCenter.addConnectionLauncherPrompt'));
       return;
     }
     setActiveCenterTab('environments');
@@ -1718,7 +2486,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function openCreateControlPlaneDialog(message = ''): void {
     if (snapshot().surface !== 'connect_environment') {
-      showConnectEnvironment(message || 'Open the launcher to add a Provider.');
+      showConnectEnvironment(message || i18n().t('environmentCenter.addProviderLauncherPrompt'));
       return;
     }
     setActiveCenterTab('control_planes');
@@ -1915,7 +2683,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (isDesktopLauncherActionSuccess(result)) {
         return result;
       }
-      setErrorMessage(errorTarget, 'Desktop returned an unexpected launcher result.');
+      setErrorMessage(errorTarget, i18n().t('toast.unexpectedLauncherResult'));
       return null;
     } catch (error) {
       setErrorMessage(errorTarget, getErrorMessage(error));
@@ -1946,7 +2714,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       operation_key: operationKey,
     });
     if (result?.outcome === 'canceled_launcher_operation') {
-      showActionToast(progress.open_progress ? 'Opening is stopping.' : 'Runtime startup is stopping.', 'info');
+      showActionToast(progress.open_progress ? i18n().t('toast.openingStopping') : i18n().t('toast.runtimeStartupStopping'), 'info');
     }
   }
 
@@ -1967,7 +2735,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return;
     }
     await navigator.clipboard.writeText(formatDesktopOperationFailureForClipboard(failure));
-    showActionToast('Log copied.', 'info');
+    showActionToast(i18n().t('toast.logCopied'), 'info');
   }
 
   async function openLocalEnvironment(
@@ -2001,7 +2769,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function openPrimaryLocalEnvironment(): Promise<void> {
     const entry = selectedSettingsEnvironmentEntry();
     if (!entry) {
-      setErrorMessage(visibleSurface() === 'environment_settings' ? 'settings' : 'connect', 'Create a Local Environment or connect a Provider first.');
+      setErrorMessage(visibleSurface() === 'environment_settings' ? 'settings' : 'connect', i18n().t('environmentCenter.chooseEnvironmentOrProviderFirst'));
       return;
     }
     await openLocalEnvironment(entry, visibleSurface() === 'environment_settings' ? 'settings' : 'connect');
@@ -2017,7 +2785,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const normalizedTargetURL = trimString(targetURL);
     if (!normalizedTargetURL) {
-      setErrorMessage(errorTarget, 'Environment URL is required.');
+      setErrorMessage(errorTarget, i18n().t('connectionDialog.validationEnvironmentUrlRequired'));
       return false;
     }
 
@@ -2059,8 +2827,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   function runtimeUnavailableMessage(environment: DesktopEnvironmentEntry): string {
     return environment.runtime_operations.start.availability === 'available'
-      ? 'Start the runtime first to continue.'
-      : 'This runtime is offline or unavailable right now.';
+      ? i18n().t('environmentCenter.startRuntimeFirst')
+      : i18n().t('environmentCenter.runtimeUnavailableNow');
   }
 
   function runtimeActionRequest(
@@ -2139,7 +2907,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     const providerOrigin = trimString(action.provider_origin) || trimString(environment.provider_origin);
     if (providerOrigin === '') {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, 'Desktop could not resolve this provider.');
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, i18n().t('environmentCenter.resolveProviderError'));
       return false;
     }
     const controlPlane = snapshot().control_planes.find((candidate) => (
@@ -2155,7 +2923,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       display_label: controlPlane?.display_label ?? environment.control_plane_label,
     }, errorTarget);
     if (result?.outcome === 'started_control_plane_connect') {
-      showActionToast('Continue in your browser to reconnect this provider.', 'info');
+      showActionToast(i18n().t('environmentCenter.continueBrowserReconnectProvider'), 'info');
       return true;
     }
     return false;
@@ -2175,13 +2943,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     const request = runtimeActionRequest(environment, 'start_environment_runtime');
     if (!request) {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
     }
     const result = await performLauncherAction(request, errorTarget);
     const started = result?.outcome === 'started_environment_runtime';
     if (started && options.announceSuccess !== false) {
-      showActionToast(`Runtime started for ${environment.label}.`);
+      showActionToast(i18n().t('environmentCenter.runtimeStartedToast', { label: environment.label }));
     }
     return started;
   }
@@ -2199,7 +2967,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }, errorTarget);
       const opened = result?.outcome === 'opened_desktop_update_handoff';
       if (opened) {
-        showActionToast(`Desktop update options opened for ${environment.label}.`, 'info');
+        showActionToast(i18n().t('environmentCenter.desktopUpdateOpenedToast', { label: environment.label }), 'info');
       }
       return opened;
     }
@@ -2207,13 +2975,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       forceRuntimeUpdate: true,
     });
     if (!request) {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
     }
     const result = await performLauncherAction(request, errorTarget);
     const updated = result?.outcome === 'updated_environment_runtime';
     if (updated) {
-      showActionToast(`Runtime updated for ${environment.label}.`);
+      showActionToast(i18n().t('environmentCenter.runtimeUpdatedToast', { label: environment.label }));
     }
     return updated;
   }
@@ -2224,13 +2992,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     const request = runtimeActionRequest(environment, 'restart_environment_runtime');
     if (!request) {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
     }
     const result = await performLauncherAction(request, errorTarget);
     const restarted = result?.outcome === 'restarted_environment_runtime';
     if (restarted) {
-      showActionToast(`Runtime restarted for ${environment.label}.`);
+      showActionToast(i18n().t('environmentCenter.runtimeRestartedToast', { label: environment.label }));
     }
     return restarted;
   }
@@ -2241,17 +3009,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     const request = runtimeActionRequest(environment, 'stop_environment_runtime');
     if (!request) {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
     }
     const result = await performLauncherAction(request, errorTarget);
     const stopped = result?.outcome === 'stopped_environment_runtime';
     const canceled = result?.outcome === 'canceled_launcher_operation';
     if (stopped) {
-      showActionToast(`Runtime stopped for ${environment.label}.`);
+      showActionToast(i18n().t('environmentCenter.runtimeStoppedToast', { label: environment.label }));
     }
     if (canceled) {
-      showActionToast(`Startup canceled for ${environment.label}.`, 'info');
+      showActionToast(i18n().t('environmentCenter.startupCanceledToast', { label: environment.label }), 'info');
     }
     return stopped || canceled;
   }
@@ -2263,13 +3031,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     const request = runtimeActionRequest(environment, 'refresh_environment_runtime');
     if (!request) {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', 'Desktop could not resolve that runtime target.');
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : 'connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
     }
     const result = await performLauncherAction(request, errorTarget);
     const refreshed = result?.outcome === 'refreshed_environment_runtime';
     if (refreshed && options.announceSuccess !== false) {
-      showActionToast(`Runtime status refreshed for ${environment.label}.`, 'info');
+      showActionToast(i18n().t('environmentCenter.runtimeStatusRefreshedToast', { label: environment.label }), 'info');
     }
     return refreshed;
   }
@@ -2286,11 +3054,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     const target = environment.provider_runtime_link_target;
     if (!target) {
-      setErrorMessage('connect', 'Desktop could not resolve that runtime target.');
+      setErrorMessage('connect', i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return;
     }
     if (action === 'connect' && (environment.provider_environment_candidates?.length ?? 0) === 0) {
-      setErrorMessage('connect', 'No provider environments are available to connect.');
+      setErrorMessage('connect', i18n().t('environmentCenter.noProviderEnvironmentsToConnect'));
       return;
     }
     setProviderRuntimeLinkProviderEnvironmentID(action === 'disconnect'
@@ -2329,7 +3097,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const providerEnvironmentID = providerRuntimeLinkProviderEnvironmentID();
     if (confirmation.action === 'connect') {
       if (providerEnvironmentID === '') {
-        setErrorMessage('connect', 'Choose a provider environment first.');
+        setErrorMessage('connect', i18n().t('environmentCenter.chooseProviderEnvironmentFirst'));
         return;
       }
       const target = latestEnvironment.provider_runtime_link_target;
@@ -2337,7 +3105,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         candidate.provider_environment_id === providerEnvironmentID
       ));
       if (!target || !providerEnvironment) {
-        setErrorMessage('connect', 'Desktop could not resolve that provider environment.');
+        setErrorMessage('connect', i18n().t('environmentCenter.resolveProviderEnvironmentError'));
         return;
       }
       const plan = buildDesktopProviderRuntimeLinkPlan(target, providerEnvironment);
@@ -2361,7 +3129,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     const target = environment.provider_runtime_link_target;
     if (!target) {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, 'Desktop could not resolve that runtime target.');
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
     }
     const result = await performLauncherAction({
@@ -2371,7 +3139,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }, errorTarget);
     const connected = result?.outcome === 'connected_provider_runtime';
     if (connected) {
-      showActionToast(`${environment.label} connected to provider.`, 'success');
+      showActionToast(i18n().t('environmentCenter.connectedToProviderToast', { label: environment.label }), 'success');
     }
     return connected;
   }
@@ -2383,7 +3151,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     const target = environment.provider_runtime_link_target;
     if (!target) {
-      setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, 'Desktop could not resolve that runtime target.');
+      setErrorMessage(errorTarget === 'settings' ? 'settings' : errorTarget, i18n().t('environmentCenter.resolveRuntimeTargetError'));
       return false;
     }
     const result = await performLauncherAction({
@@ -2393,7 +3161,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }, errorTarget);
     const disconnected = result?.outcome === 'disconnected_provider_runtime';
     if (disconnected) {
-      showActionToast('Disconnected from provider.', 'info');
+      showActionToast(i18n().t('environmentCenter.disconnectedFromProviderToast'), 'info');
     }
     return disconnected;
   }
@@ -2403,7 +3171,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       kind: 'refresh_all_environment_runtimes',
     });
     if (result?.outcome === 'refreshed_all_environment_runtimes') {
-      showActionToast('Runtime statuses refreshed.', 'info');
+      showActionToast(i18n().t('toast.runtimeStatusesRefreshed'), 'info');
     }
   }
 
@@ -2455,7 +3223,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setErrorMessage(errorTarget, message);
       setEnvironmentFailures((current) => {
         const next = new Map(current);
-        next.set(environment.id, { failure: inlineFailurePresentation(message, 'warning') });
+        next.set(environment.id, { failure: inlineFailurePresentation(i18n(), message, 'warning') });
         return next;
       });
       return false;
@@ -2469,7 +3237,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (environment.kind === 'ssh_environment') {
       const details = environment.ssh_details;
       if (!details) {
-        setErrorMessage(errorTarget, 'SSH connection details are missing.');
+        setErrorMessage(errorTarget, i18n().t('environmentCenter.sshConnectionDetailsMissing'));
         return false;
       }
       return openSSHEnvironment(details, errorTarget, environment);
@@ -2553,7 +3321,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
       const nextEnvironment = await loadLatestEnvironmentEntry(environment.id);
       if (!nextEnvironment) {
-        showActionToast(`Runtime is ready for ${environment.label}.`, 'success');
+        showActionToast(i18n().t('toast.runtimeReadyFor', { label: environment.label }), 'success');
         return {
           close_panel: true,
           next_session: null,
@@ -2562,7 +3330,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
       const nextSession = completeEnvironmentGuidanceRefresh(currentSession, nextEnvironment);
       if (!nextSession) {
-        showActionToast(`Runtime is ready for ${environment.label}.`, 'success');
+        showActionToast(i18n().t('toast.runtimeReadyFor', { label: environment.label }), 'success');
         return {
           close_panel: true,
           next_session: null,
@@ -2614,7 +3382,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }, 'control_plane_dialog');
     if (result?.outcome === 'started_control_plane_connect') {
       closeControlPlaneDialog();
-      showActionToast('Continue in your browser to finish authorizing this provider.', 'info');
+      showActionToast(i18n().t('environmentCenter.continueBrowserAuthorizeProvider'), 'info');
     }
   }
 
@@ -2625,7 +3393,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       display_label: controlPlane.display_label,
     });
     if (result?.outcome === 'started_control_plane_connect') {
-      showActionToast(`Continue in your browser to reconnect ${controlPlaneName(controlPlane)}.`, 'info');
+      showActionToast(i18n().t('environmentCenter.continueBrowserReconnectNamedProvider', { label: controlPlaneName(controlPlane) }), 'info');
     }
   }
 
@@ -2636,7 +3404,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       provider_id: controlPlane.provider.provider_id,
     });
     if (result?.outcome === 'refreshed_control_plane') {
-      showActionToast(`Refreshed ${controlPlaneName(controlPlane)}.`);
+      showActionToast(i18n().t('toast.refreshedControlPlane', { label: controlPlaneName(controlPlane) }));
     }
   }
 
@@ -2724,7 +3492,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       const nextSnapshot = await refreshSnapshot();
       setSettingsDraftSession(createDesktopSettingsDraftSession(nextSnapshot.settings_surface));
-      showActionToast('Environment settings saved.');
+      showActionToast(i18n().t('toast.settingsSaved'));
     } catch (error) {
       setSettingsError(getErrorMessage(error));
     } finally {
@@ -2749,7 +3517,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ): Promise<boolean> {
     const normalizedTargetURL = trimString(request.external_local_ui_url);
     if (!normalizedTargetURL) {
-      setErrorMessage(request.errorTarget, 'Environment URL is required.');
+      setErrorMessage(request.errorTarget, i18n().t('connectionDialog.validationEnvironmentUrlRequired'));
       return false;
     }
 
@@ -2891,16 +3659,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function validateConnectionDialogFields(state: ConnectionDialogState): Partial<Record<string, string>> {
     const errors: Partial<Record<string, string>> = {};
     if (!trimString(state?.label ?? '')) {
-      errors.label = 'Name is required.';
+      errors.label = i18n().t('connectionDialog.validationNameRequired');
     }
     if (state?.connection_kind === 'external_local_ui' && !trimString(state.external_local_ui_url)) {
-      errors.external_local_ui_url = 'Environment URL is required.';
+      errors.external_local_ui_url = i18n().t('connectionDialog.validationEnvironmentUrlRequired');
     }
     if (state?.connection_kind === 'ssh_environment' && !trimString(state.ssh_destination)) {
-      errors.ssh_destination = 'SSH Destination is required.';
+      errors.ssh_destination = i18n().t('connectionDialog.validationSshDestinationRequired');
     }
     if (state?.connection_kind === 'ssh_container_runtime' && !trimString(state.ssh_destination)) {
-      errors.ssh_destination = 'SSH Destination is required.';
+      errors.ssh_destination = i18n().t('connectionDialog.validationSshDestinationRequired');
     }
     if (
       (state?.connection_kind === 'ssh_environment' || state?.connection_kind === 'ssh_container_runtime')
@@ -2908,27 +3676,27 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     ) {
       const port = Number.parseInt(state.ssh_port, 10);
       if (!Number.isFinite(port) || port < 1 || port > 65535) {
-        errors.ssh_port = 'Port must be 1–65535.';
+        errors.ssh_port = i18n().t('connectionDialog.validationPortRange');
       }
     }
     if (
       (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
       && !trimString(state.container_id)
     ) {
-      errors.container_id = 'Choose a running container.';
+      errors.container_id = i18n().t('connectionDialog.validationChooseContainer');
     }
     if (
       (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
       && trimString(state.container_id)
       && !runtimeContainerOptions().some((container) => container.container_id === trimString(state.container_id))
     ) {
-      errors.container_id = 'Choose a running container from the current list.';
+      errors.container_id = i18n().t('connectionDialog.validationChooseContainerFromList');
     }
     if (
       (state?.connection_kind === 'local_container_runtime' || state?.connection_kind === 'ssh_container_runtime')
       && !trimString(state.runtime_root)
     ) {
-      errors.runtime_root = 'Runtime root is required.';
+      errors.runtime_root = i18n().t('connectionDialog.validationRuntimeRootRequired');
     }
     return errors;
   }
@@ -2963,8 +3731,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         autoRuntimeProbeEnabled: state.auto_runtime_probe_enabled,
         errorTarget: 'dialog',
         successMessage: state.mode === 'edit'
-          ? 'Connection updated.'
-          : 'Connection saved to Environment Library.',
+          ? i18n().t('toast.connectionUpdated')
+          : i18n().t('toast.connectionSaved'),
       });
     } else if (state.connection_kind === 'local_container_runtime' || state.connection_kind === 'ssh_container_runtime') {
       saved = await upsertSavedRuntimeTarget({
@@ -2973,8 +3741,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         state,
         errorTarget: 'dialog',
         successMessage: state.mode === 'edit'
-          ? 'Runtime target updated.'
-          : 'Runtime target saved to Environment Library.',
+          ? i18n().t('toast.runtimeTargetUpdated')
+          : i18n().t('toast.runtimeTargetSaved'),
       });
     } else if (state.connection_kind === 'external_local_ui') {
       saved = await upsertSavedEnvironment({
@@ -2984,8 +3752,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         autoRuntimeProbeEnabled: state.auto_runtime_probe_enabled,
         errorTarget: 'dialog',
         successMessage: state.mode === 'edit'
-          ? 'Connection updated.'
-          : 'Connection saved to Environment Library.',
+          ? i18n().t('toast.connectionUpdated')
+          : i18n().t('toast.connectionSaved'),
       });
     }
     if (saved) {
@@ -2996,8 +3764,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   async function toggleEnvironmentPinned(environment: DesktopEnvironmentEntry): Promise<void> {
     const nextPinned = !environment.pinned;
     const successMessage = nextPinned
-      ? `${environment.label} pinned.`
-      : `${environment.label} unpinned.`;
+      ? i18n().t('toast.pinned', { label: environment.label })
+      : i18n().t('toast.unpinned', { label: environment.label });
     if (environment.kind === 'local_environment') {
       if (environment.managed_runtime_placement?.kind === 'container_process' && environment.managed_runtime_host_access) {
         const result = await performLauncherAction({
@@ -3051,7 +3819,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       const details = environment.ssh_details;
       if (!details) {
-        setErrorMessage('connect', 'SSH connection details are missing.');
+        setErrorMessage('connect', i18n().t('environmentCenter.sshConnectionDetailsMissing'));
         return;
       }
       const result = await performLauncherAction({
@@ -3086,8 +3854,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function copyEnvironmentValue(value: string, copyLabel: string): Promise<void> {
     await copyToClipboard(value);
-    const messageLabel = trimString(copyLabel).replace(/^Copy\s+/u, '');
-    showActionToast(messageLabel ? `${messageLabel} copied.` : 'Copied to clipboard.');
+    const messageLabel = englishCopyPrefixForLabel(i18n(), trimString(copyLabel).replace(/^Copy\s+/u, ''));
+    showActionToast(messageLabel ? i18n().t('toast.valueCopied', { label: messageLabel }) : i18n().t('environmentCenter.copiedToClipboard'));
   }
 
   async function deleteEnvironment(): Promise<void> {
@@ -3124,8 +3892,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setDeleteTarget(null);
       showActionToast(
         hadBackgroundOperation
-          ? 'Connection removed. Startup cleanup is running in the background.'
-          : 'Connection removed from Environment Library.',
+          ? i18n().t('environmentCenter.connectionRemovedCleanup')
+          : i18n().t('environmentCenter.connectionRemoved'),
         'info',
       );
     } catch (error) {
@@ -3147,7 +3915,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
     if (result?.outcome === 'deleted_control_plane') {
       setDeleteControlPlaneTarget(null);
-      showActionToast('Provider removed from Desktop.');
+      showActionToast(i18n().t('environmentCenter.providerRemoved'));
     }
   }
 
@@ -3155,19 +3923,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     <>
       <DesktopCommandRegistrar
         snapshot={snapshot}
+        i18n={i18n()}
         showConnectEnvironment={showConnectEnvironment}
         openCreateConnectionDialog={openCreateConnectionDialog}
         openSettingsSurface={openSettingsSurface}
         openLocalEnvironment={openPrimaryLocalEnvironment}
         openEnvironment={openEnvironment}
         closeLauncherOrQuit={closeLauncherOrQuit}
+        openLanguageSettings={openLanguageSettings}
       />
       <DesktopLauncherShell
         mainContentId="redeven-desktop-main"
-        skipLinkLabel={DESKTOP_SKIP_LINK_LABEL}
-        topBarLabel={DESKTOP_TOP_BAR_LABEL}
+        skipLinkLabel={i18n().t('shell.accessibility.skipLinkLabel')}
+        topBarLabel={i18n().t('shell.accessibility.topBarLabel')}
         logo={(
-          <TopBarIconButton label="Open Redeven Dashboard" onClick={() => openRedevenDashboard()}>
+          <TopBarIconButton label={i18n().t('shell.openRedevenDashboard')} onClick={() => openRedevenDashboard()}>
             <img
               src={headerLogoSrc()}
               alt="Redeven"
@@ -3178,8 +3948,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
         trailingActions={(
           <div class="flex items-center gap-1">
+            <DesktopLanguagePicker
+              openRequest={languagePickerOpenRequest()}
+              snapshot={languageSnapshot()}
+              i18n={i18n()}
+              onPreferenceChange={updateDesktopLanguagePreference}
+            />
             <TopBarIconButton
-              label={theme.resolvedTheme() === 'light' ? 'Use dark theme' : 'Use light theme'}
+              label={theme.resolvedTheme() === 'light' ? i18n().t('shell.useDarkTheme') : i18n().t('shell.useLightTheme')}
               onClick={() => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme())}
             >
               {theme.resolvedTheme() === 'light' ? <Moon class="h-4 w-4" /> : <Sun class="h-4 w-4" />}
@@ -3189,7 +3965,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         bottomBarLeading={(
           <>
             <BottomBarItem class="min-w-0">
-              <span class="truncate">{shellView().surface_title}</span>
+              <span class="truncate">{localizedSurfaceTitle(i18n(), visibleSurface())}</span>
             </BottomBarItem>
             <BottomBarItem class="min-w-0">
               <span class="truncate">{openWindowsSubtitle()}</span>
@@ -3201,13 +3977,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             <StatusIndicator status={status().tone} label={status().label} />
             <Show when={snapshot().surface === 'connect_environment'}>
               <BottomBarItem class="cursor-pointer" onClick={() => void closeLauncherOrQuit()}>
-                {snapshot().close_action_label}
+                {localizedCloseActionLabel(i18n(), snapshot().close_action)}
               </BottomBarItem>
             </Show>
           </>
         )}
       >
         <ConnectEnvironmentSurface
+          i18n={i18n()}
           snapshot={snapshot()}
           busyState={busyState()}
           actionProgress={activeActionProgress()}
@@ -3237,7 +4014,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               label,
             });
             if (result?.outcome === 'opened_desktop_update_handoff') {
-              showActionToast(`Desktop update options opened for ${label || 'this environment'}.`, 'info');
+          showActionToast(i18n().t('environmentCenter.desktopUpdateOpenedToast', { label: label || i18n().t('environmentCenter.thisEnvironment') }), 'info');
             }
           }}
           toggleEnvironmentPinned={toggleEnvironmentPinned}
@@ -3270,6 +4047,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       </DesktopLauncherShell>
 
       <DesktopActionToastViewport
+        i18n={i18n()}
         toasts={actionToasts()}
         dismissToast={dismissActionToast}
         runToastAction={runActionToastAction}
@@ -3280,6 +4058,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         snapshot={settingsSurface()}
         baselineSnapshot={settingsBaselineSurface()}
         draft={draft()}
+        languageSnapshot={languageSnapshot()}
+        i18n={i18n()}
         busyState={busyState()}
         settingsError={settingsError()}
         settingsErrorRef={(value) => {
@@ -3292,9 +4072,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         saveSettings={saveSettings}
         cancelSettings={cancelSettings}
         clearStoredLocalUIPassword={clearStoredLocalUIPassword}
+        updateLanguagePreference={updateDesktopLanguagePreference}
+      />
+
+      <DesktopInterfaceSettingsDialog
+        open={languageSettingsOpen()}
+        languageSnapshot={languageSnapshot()}
+        i18n={i18n()}
+        onOpenChange={setLanguageSettingsOpen}
+        updateLanguagePreference={updateDesktopLanguagePreference}
       />
 
       <ConnectionDialog
+        i18n={i18n()}
         state={connectionDialogState()}
         sshConfigHosts={sshConfigHosts()}
         containerOptions={runtimeContainerOptions()}
@@ -3321,6 +4111,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       />
 
       <ControlPlaneDialog
+        i18n={i18n()}
         state={controlPlaneDialogState()}
         error={controlPlaneDialogError()}
         busyState={busyState()}
@@ -3340,22 +4131,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             setDeleteTarget(null);
           }
         }}
-        title="Delete Connection"
-        confirmText="Delete Connection"
+        title={i18n().t('confirm.deleteConnectionTitle')}
+        confirmText={i18n().t('confirm.deleteConnectionConfirm')}
         variant="destructive"
         loading={busyStateMatchesAction(busyState(), 'delete_environment')}
         onConfirm={() => void deleteEnvironment()}
       >
         <div class="space-y-2">
           <p class="text-sm">
-            Remove <span class="font-semibold">{deleteTarget()?.label}</span> from the Environment Library?
+            {i18n().t('confirm.deleteConnectionQuestion', { label: deleteTarget()?.label ?? '' })}
           </p>
           <p class="text-xs text-muted-foreground">
             <Show
               when={deleteTargetOperation()}
-              fallback={<>This only removes the saved Desktop entry. It does not stop the remote Environment.</>}
+              fallback={<>{i18n().t('confirm.deleteConnectionDescription')}</>}
             >
-              <>The connection is involved in a background task. Desktop will remove it now, then cancel or clean up that task in the background.</>
+              <>{i18n().t('confirm.deleteConnectionBusyDescription')}</>
             </Show>
           </p>
         </div>
@@ -3368,17 +4159,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             setDeleteControlPlaneTarget(null);
           }
         }}
-        title="Remove Provider"
-        confirmText="Remove Provider"
+        title={i18n().t('confirm.removeProviderTitle')}
+        confirmText={i18n().t('confirm.removeProviderConfirm')}
         variant="destructive"
         loading={busyStateMatchesAction(busyState(), 'delete_control_plane')}
         onConfirm={() => void deleteControlPlane()}
       >
         <div class="space-y-2">
           <p class="text-sm">
-            Remove <span class="font-semibold">{deleteControlPlaneTarget() ? controlPlaneName(deleteControlPlaneTarget()!) : ''}</span> from Desktop?
+            {i18n().t('confirm.removeProviderQuestion', { label: deleteControlPlaneTarget() ? controlPlaneName(deleteControlPlaneTarget()!) : '' })}
           </p>
-          <p class="text-xs text-muted-foreground">Desktop will revoke the saved authorization, then remove the local account snapshot and cached environment list.</p>
+          <p class="text-xs text-muted-foreground">{i18n().t('confirm.removeProviderDescription')}</p>
         </div>
       </ConfirmDialog>
 
@@ -3397,7 +4188,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               onClick={() => closeProviderRuntimeLinkConfirmation()}
               disabled={providerRuntimeLinkBusy()}
             >
-              Cancel
+              {i18n().t('common.cancel')}
             </Button>
             <Button
               variant={providerRuntimeLinkConfirmation()?.action === 'disconnect' ? 'destructive' : 'primary'}
@@ -3415,15 +4206,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             <Show
               when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}
               fallback={(
-                <>Connect <span class="font-semibold">{providerRuntimeLinkConfirmation()?.environment.label}</span> to a provider?</>
+                <>{i18n().t('environmentCenter.connectProviderQuestion', { label: providerRuntimeLinkConfirmation()?.environment.label ?? '' })}</>
               )}
             >
-              Disconnect <span class="font-semibold">{providerRuntimeLinkConfirmation()?.environment.label}</span> from its provider?
+              {i18n().t('environmentCenter.disconnectProviderQuestion', { label: providerRuntimeLinkConfirmation()?.environment.label ?? '' })}
             </Show>
           </p>
           <Show when={providerRuntimeLinkConfirmation()?.action === 'connect'}>
             <div class="space-y-1">
-              <p class="text-xs font-medium text-muted-foreground">Provider Environment</p>
+              <p class="text-xs font-medium text-muted-foreground">{i18n().t('environmentCenter.providerEnvironment')}</p>
               <div class="space-y-1">
                 <For each={providerRuntimeLinkCandidatePlans()}>
                   {(item) => (
@@ -3461,27 +4252,27 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </Show>
           <Show when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}>
             <p class="text-xs text-muted-foreground">
-              Provider: <span class="font-medium text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.provider_origin || 'Unknown provider'}</span>
+              {i18n().t('desktop.provider')}: <span class="font-medium text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.provider_origin || i18n().t('environmentCenter.unknownProvider')}</span>
             </p>
             <p class="text-xs text-muted-foreground">
-              Source environment: <span class="font-mono text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.env_public_id || 'unknown'}</span>
+              {i18n().t('environmentCenter.sourceEnvironment')}: <span class="font-mono text-foreground">{providerRuntimeLinkConfirmation()?.environment.provider_runtime_link_target?.env_public_id || 'unknown'}</span>
             </p>
           </Show>
           <Show
             when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}
             fallback={(
               <p class="text-xs text-muted-foreground">
-                After the link is established, the selected provider can request sessions through this running runtime. Existing local work keeps running.
+                {i18n().t('environmentCenter.connectProviderRuntimeNote')}
               </p>
             )}
           >
             <p class="text-xs text-muted-foreground">
-              Existing local-only work keeps running. Provider-originated sessions, tasks, or grants may stop receiving remote control updates after disconnect.
+              {i18n().t('environmentCenter.disconnectProviderRuntimeNote')}
             </p>
           </Show>
           <Show when={providerRuntimeLinkConfirmation()?.action === 'disconnect'}>
             <p class="text-xs text-muted-foreground">
-              Active work: <span class="font-medium text-foreground">{providerRuntimeLinkActiveWorkLabel()}</span>
+              {i18n().t('environmentCenter.activeWork')}: <span class="font-medium text-foreground">{providerRuntimeLinkActiveWorkLabel()}</span>
             </p>
           </Show>
         </div>
@@ -3491,10 +4282,26 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 }
 
 function DesktopActionToastViewport(props: Readonly<{
+  i18n: DesktopI18n;
   toasts: readonly DesktopActionToast[];
   dismissToast: (toastID: number) => void;
   runToastAction: (action: DesktopActionToastAction, toastID: number) => void;
 }>) {
+  const toastTitle = (toast: DesktopActionToast): string => {
+    if (toast.title) {
+      return localizedOverlayTitle(props.i18n, toast.title);
+    }
+    switch (toast.tone) {
+      case 'success':
+        return props.i18n.t('toast.updated');
+      case 'info':
+        return props.i18n.t('toast.notice');
+      case 'warning':
+        return props.i18n.t('toast.needsAttention');
+      default:
+        return props.i18n.t('toast.couldNotComplete');
+    }
+  };
   return (
     <Portal>
       <Show when={props.toasts.length > 0}>
@@ -3504,14 +4311,7 @@ function DesktopActionToastViewport(props: Readonly<{
               {(toast) => {
                 const [copied, setCopied] = createSignal(false);
                 const toastCopyText = createMemo(() => {
-                  const title = toast.title ?? (toast.tone === 'success'
-                    ? 'Updated'
-                    : toast.tone === 'info'
-                      ? 'Notice'
-                      : toast.tone === 'warning'
-                        ? 'Needs Attention'
-                        : 'Could Not Complete');
-                  return `${title}: ${toast.message}`;
+                  return `${toastTitle(toast)}: ${toast.message}`;
                 });
                 let copyResetHandle: number | undefined;
                 const handleCopy = () => {
@@ -3537,13 +4337,7 @@ function DesktopActionToastViewport(props: Readonly<{
                     </div>
                     <div class="min-w-0 flex-1">
                       <div class="redeven-desktop-toast__title">
-                        {toast.title ?? (toast.tone === 'success'
-                          ? 'Updated'
-                          : toast.tone === 'info'
-                            ? 'Notice'
-                            : toast.tone === 'warning'
-                              ? 'Needs Attention'
-                              : 'Could Not Complete')}
+                        {toastTitle(toast)}
                       </div>
                       <div class="redeven-desktop-toast__message">{toast.message}</div>
                       <Show when={toast.action}>
@@ -3561,8 +4355,8 @@ function DesktopActionToastViewport(props: Readonly<{
                     <button
                       type="button"
                       class="redeven-desktop-toast__copy"
-                      aria-label="Copy message"
-                      title="Copy message"
+                      aria-label={props.i18n.t('toast.copyMessage')}
+                      title={props.i18n.t('toast.copyMessage')}
                       onClick={handleCopy}
                     >
                       <Show when={!copied()} fallback={<Check class="h-3 w-3" />}>
@@ -3574,7 +4368,7 @@ function DesktopActionToastViewport(props: Readonly<{
                       class="redeven-desktop-toast__dismiss"
                       onClick={() => props.dismissToast(toast.id)}
                     >
-                      Dismiss
+                      {props.i18n.t('environmentCenter.dismissToast')}
                     </button>
                   </div>
                 </Motion.div>
@@ -3589,6 +4383,7 @@ function DesktopActionToastViewport(props: Readonly<{
 }
 
 function ConnectEnvironmentSurface(props: Readonly<{
+  i18n: DesktopI18n;
   snapshot: DesktopWelcomeSnapshot;
   busyState: DesktopLauncherBusyState;
   actionProgress: readonly DesktopLauncherActionProgress[];
@@ -3673,28 +4468,28 @@ function ConnectEnvironmentSurface(props: Readonly<{
     if (localSourceCount() > 0) {
       options.push({
         value: LOCAL_ENVIRONMENT_LIBRARY_FILTER,
-        label: 'Local',
+        label: props.i18n.t('environmentCenter.localFilter'),
         count: localSourceCount(),
       });
     }
     if (providerSourceCount() > 0) {
       options.push({
         value: PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
-        label: 'Provider',
+        label: props.i18n.t('environmentCenter.providerFilter'),
         count: providerSourceCount(),
       });
     }
     if (urlSourceCount() > 0) {
       options.push({
         value: URL_ENVIRONMENT_LIBRARY_FILTER,
-        label: 'Redeven URL',
+        label: props.i18n.t('environmentCenter.redevenUrlFilter'),
         count: urlSourceCount(),
       });
     }
     if (sshSourceCount() > 0) {
       options.push({
         value: SSH_ENVIRONMENT_LIBRARY_FILTER,
-        label: 'SSH Host',
+        label: props.i18n.t('environmentCenter.sshHostFilter'),
         count: sshSourceCount(),
       });
     }
@@ -3708,7 +4503,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
     const environment = props.snapshot.environments.find((entry) => (
       entry.provider_runtime_link_target?.id === runtimeTargetID
     ));
-    return environment ? `Linked runtime · ${environment.label}` : 'Linked runtime';
+    return environment
+      ? props.i18n.t('environmentCenter.linkedRuntimeFilterWithLabel', { label: environment.label })
+      : props.i18n.t('environmentCenter.linkedRuntimeFilter');
   });
   const activeNonCategoryFilterChipLabel = createMemo(() => {
     const runtimeLabel = activeRuntimeTargetFilterLabel();
@@ -3760,9 +4557,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
           <header class="redeven-header-separator mb-5 space-y-4">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-y-1">
-                <h1 class="text-lg font-semibold tracking-tight text-foreground">Environments</h1>
+                <h1 class="text-lg font-semibold tracking-tight text-foreground">{props.i18n.t('environmentCenter.title')}</h1>
                 <p class="text-xs text-muted-foreground">
-                  Manage local and remote environments. Connect providers, open workspaces, and rebind this Local Environment profile when needed.
+                  {props.i18n.t('environmentCenter.description')}
                 </p>
               </div>
               <div class="flex items-center gap-2">
@@ -3772,14 +4569,14 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     <Input
                       value={props.libraryQuery}
                       onInput={(event) => props.setLibraryQuery(event.currentTarget.value)}
-                      placeholder="Search environments..."
+                      placeholder={props.i18n.t('environmentCenter.searchPlaceholder')}
                       size="sm"
                       class="w-full pl-9"
                     />
                   </div>
                 </Show>
                 <Show when={props.activeTab === 'environments'}>
-                  <DesktopTooltip content="Refresh runtime statuses" placement="top">
+                  <DesktopTooltip content={props.i18n.t('environmentCenter.refreshRuntimeStatuses')} placement="top">
                     <span>
                       <Button
                         size="sm"
@@ -3800,13 +4597,13 @@ function ConnectEnvironmentSurface(props: Readonly<{
                   fallback={(
                     <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
                       <Plus class="mr-1 h-3.5 w-3.5" />
-                      Connect Provider
+                      {props.i18n.t('environmentCenter.connectProvider')}
                     </Button>
                   )}
                 >
                   <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
                     <Plus class="mr-1 h-3.5 w-3.5" />
-                    New
+                    {props.i18n.t('environmentCenter.newEnvironmentShort')}
                   </Button>
                 </Show>
               </div>
@@ -3822,8 +4619,8 @@ function ConnectEnvironmentSurface(props: Readonly<{
                       data-active={props.activeTab === tab.value}
                       aria-pressed={props.activeTab === tab.value}
                       onClick={() => props.setActiveTab(tab.value)}
-                    >
-                      {tab.label}
+                  >
+                      {props.i18n.t(tab.labelKey)}
                     </button>
                   )}
                 </For>
@@ -3833,9 +4630,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
                   when={props.activeTab === 'environments'}
                   fallback={(
                     <div class="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{props.controlPlanes.length} providers</span>
+                      <span>{props.i18n.t('environmentCenter.providersCount', { count: props.controlPlanes.length })}</span>
                       <span class="text-border">·</span>
-                      <span>{controlPlaneEnvironmentCount()} environments</span>
+                      <span>{props.i18n.t('environmentCenter.environmentsCount', { count: controlPlaneEnvironmentCount() })}</span>
                     </div>
                   )}
                 >
@@ -3846,7 +4643,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     aria-pressed={props.librarySourceFilter === ''}
                     onClick={() => props.setLibrarySourceFilter('')}
                   >
-                    All ({layoutReferenceEnvironmentCount()})
+                    {props.i18n.t('environmentCenter.allFilter')} ({layoutReferenceEnvironmentCount()})
                   </button>
                   <For each={sourceFilterOptions()}>
                     {(option) => (
@@ -3886,10 +4683,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     </button>
                   </Show>
                   <div class="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
-                    <span>{visibleEnvironmentCount()} shown</span>
+                    <span>{props.i18n.t('environmentCenter.shownCount', { count: visibleEnvironmentCount() })}</span>
                     <Show when={props.snapshot.open_windows.length > 0}>
                       <span class="text-border">·</span>
-                      <span>{props.snapshot.open_windows.length} live</span>
+                      <span>{props.i18n.t('environmentCenter.liveCount', { count: props.snapshot.open_windows.length })}</span>
                     </Show>
                   </div>
                 </Show>
@@ -3902,6 +4699,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
               when={props.activeTab === 'environments'}
               fallback={(
                 <ControlPlanesPanel
+                  i18n={props.i18n}
                   controlPlanes={props.controlPlanes}
                   busyState={props.busyState}
                   openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
@@ -3914,6 +4712,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
               )}
             >
               <EnvironmentCardsPanel
+                i18n={props.i18n}
                 entries={props.libraryEntries}
                 showQuickAddCards={showQuickAddCards()}
                 visibleCardCount={visibleEnvironmentCardCount()}
@@ -3946,6 +4745,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
 }
 
 function EnvironmentCardsPanel(props: Readonly<{
+  i18n: DesktopI18n;
   entries: readonly DesktopEnvironmentEntry[];
   showQuickAddCards: boolean;
   visibleCardCount: number;
@@ -4176,9 +4976,9 @@ function EnvironmentCardsPanel(props: Readonly<{
             <div class="redeven-console-empty flex flex-col items-center justify-center gap-3 rounded-lg px-6 py-8 text-center">
               <Search class="h-8 w-8 text-muted-foreground/50" />
               <div class="space-y-1">
-                <div class="text-sm font-medium text-foreground">No matching environments</div>
+                <div class="text-sm font-medium text-foreground">{props.i18n.t('environmentCenter.noMatchingEnvironmentsTitle')}</div>
                 <div class="text-xs text-muted-foreground">
-                  No environment cards match the current search or filter.
+                  {props.i18n.t('environmentCenter.noMatchingEnvironmentsDescription')}
                 </div>
               </div>
             </div>
@@ -4192,10 +4992,11 @@ function EnvironmentCardsPanel(props: Readonly<{
           style={environmentGridStyle()}
         >
           <Show when={groupedEntryIDs().pinned_entry_ids.length > 0}>
-            <EnvironmentLibrarySection title="Pinned">
+            <EnvironmentLibrarySection title={props.i18n.t('environmentCenter.pinnedSection')}>
               <For each={groupedEntryIDs().pinned_entry_ids}>
                 {(environmentID) => (
                   <EnvironmentConnectionCard
+                    i18n={props.i18n}
                     environment={projectedEnvironment(environmentID)}
                     busyState={props.busyState}
                     actionProgress={props.actionProgress}
@@ -4231,11 +5032,12 @@ function EnvironmentCardsPanel(props: Readonly<{
           </Show>
           <Show when={groupedEntryIDs().regular_entry_ids.length > 0 || props.showQuickAddCards}>
             <EnvironmentLibrarySection
-              title={groupedEntryIDs().pinned_entry_ids.length > 0 ? 'Environments' : undefined}
+              title={groupedEntryIDs().pinned_entry_ids.length > 0 ? props.i18n.t('environmentCenter.environmentsSection') : undefined}
             >
               <For each={groupedEntryIDs().regular_entry_ids}>
                 {(environmentID) => (
                   <EnvironmentConnectionCard
+                    i18n={props.i18n}
                     environment={projectedEnvironment(environmentID)}
                     busyState={props.busyState}
                     actionProgress={props.actionProgress}
@@ -4269,6 +5071,7 @@ function EnvironmentCardsPanel(props: Readonly<{
               </For>
               <Show when={props.showQuickAddCards}>
                 <NewEnvironmentPlaceholderCard
+                  i18n={props.i18n}
                   openCreateConnectionDialog={props.openCreateConnectionDialog}
                 />
               </Show>
@@ -4384,6 +5187,7 @@ function cardFactIconMaskStyle(icon: string): JSX.CSSProperties {
 }
 
 function EnvironmentCardFactsBlock(props: Readonly<{
+  i18n: DesktopI18n;
   facts: readonly EnvironmentCardFactModel[];
   minRows?: number;
   onFactAction: (action: EnvironmentCardFactActionModel) => void;
@@ -4436,7 +5240,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   title={fact.value}
                   role={fact.copy_value ? 'button' : undefined}
                   tabIndex={fact.copy_value ? 0 : undefined}
-                  aria-label={fact.copy_value ? `Copy ${fact.label}` : undefined}
+                  aria-label={fact.copy_value ? props.i18n.t('environmentFacts.copyFact', { label: fact.label }) : undefined}
                   onClick={fact.copy_value ? handleCopy : undefined}
                   onKeyDown={fact.copy_value ? (e: KeyboardEvent) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -4461,6 +5265,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                   )}
                   <Show when={fact.endpoints && fact.endpoints.length > 0}>
                     <EndpointsPopover
+                      i18n={props.i18n}
                       endpoints={fact.endpoints!}
                       copyEnvironmentValue={props.copyEnvironmentValue}
                     />
@@ -4511,6 +5316,7 @@ function EnvironmentCardFactsBlock(props: Readonly<{
 }
 
 function EndpointsPopover(props: Readonly<{
+  i18n: DesktopI18n;
   endpoints: readonly EnvironmentCardEndpointModel[];
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
 }>) {
@@ -4550,7 +5356,7 @@ function EndpointsPopover(props: Readonly<{
         class="redeven-card-fact-endpoint-trigger"
         role="button"
         tabIndex={0}
-        aria-label="Show endpoints"
+        aria-label={props.i18n.t('environmentCenter.showEndpoints')}
         aria-haspopup="dialog"
         aria-expanded={open()}
         onClick={(e) => {
@@ -4573,7 +5379,7 @@ function EndpointsPopover(props: Readonly<{
           placement="bottom"
           role="dialog"
           ariaModal={false}
-          ariaLabel="Environment endpoints"
+          ariaLabel={props.i18n.t('environmentCenter.environmentEndpoints')}
           interactive
           class="z-[225] rounded-md border border-border/80 bg-popover text-popover-foreground shadow-[0_14px_40px_-22px_rgba(0,0,0,0.55),0_24px_50px_-28px_rgba(0,0,0,0.28)]"
           onOverlayRef={(element) => {
@@ -4582,11 +5388,11 @@ function EndpointsPopover(props: Readonly<{
         >
           <div class="redeven-endpoints-popover">
             <div class="redeven-endpoints-popover-header">
-              <span class="redeven-endpoints-popover-title">Endpoints</span>
+              <span class="redeven-endpoints-popover-title">{props.i18n.t('environmentCenter.endpoints')}</span>
               <button
                 type="button"
                 class="redeven-endpoints-popover-close"
-                aria-label="Close endpoints"
+                aria-label={props.i18n.t('environmentCenter.closeEndpoints')}
                 onClick={() => setOpen(false)}
               >
                 <X class="h-3 w-3" />
@@ -4679,63 +5485,60 @@ function isEnvironmentActionBusy(
   }
 }
 
-function blockedPrimaryActionTriggerLabel(label: string): string {
-  return `${label} is unavailable. Show recovery options.`;
+function blockedPrimaryActionTriggerLabel(i18n: DesktopI18n, label: string): string {
+  return i18n.t('environmentAction.unavailableTrigger', { label });
 }
 
-function environmentProgressStatus(progress: DesktopLauncherActionProgress): string {
+function environmentProgressStatus(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
   if (progress.deleted_subject) {
-    return 'Connection removed';
+    return i18n.t('progress.connectionRemoved');
   }
   switch (progress.status) {
     case 'canceling':
     case 'cleanup_running':
-      return 'Stopping';
+      return i18n.t('progress.stopping');
     case 'cleanup_failed':
-      return 'Cleanup needs attention';
+      return i18n.t('progress.cleanupNeedsAttention');
     case 'failed':
-      return 'Failed';
+      return i18n.t('progress.failed');
     case 'canceled':
-      return 'Canceled';
+      return i18n.t('progress.canceled');
     case 'succeeded':
-      return 'Ready';
+      return i18n.t('progress.ready');
     default:
-      return 'Running';
+      return i18n.t('progress.running');
   }
 }
 
-function environmentProgressLabel(progress: DesktopLauncherActionProgress): string {
+function localizedProgressLocation(i18n: DesktopI18n, location: string): string {
+  switch (location) {
+    case 'local_host':
+      return i18n.t('progress.local');
+    case 'local_container':
+      return i18n.t('progress.localContainer');
+    case 'ssh_host':
+      return i18n.t('progress.sshHost');
+    case 'ssh_container':
+      return i18n.t('progress.sshContainer');
+    case 'provider_remote':
+      return i18n.t('progress.provider');
+    default:
+      return '';
+  }
+}
+
+function environmentProgressLabel(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
   const open = progress.open_progress;
   if (open) {
     const environmentLabel = trimString(open.environment_label) || trimString(progress.environment_label) || 'Environment';
-    switch (open.location) {
-      case 'local_host':
-        return `${environmentLabel} · Local`;
-      case 'local_container':
-        return `${environmentLabel} · Local container`;
-      case 'ssh_host':
-        return `${environmentLabel} · SSH host`;
-      case 'ssh_container':
-        return `${environmentLabel} · SSH container`;
-      case 'provider_remote':
-        return `${environmentLabel} · Provider`;
-    }
+    return `${environmentLabel} · ${localizedProgressLocation(i18n, open.location)}`;
   }
   const startup = progress.lifecycle_progress;
   if (!startup) {
-    return 'Environment progress';
+    return i18n.t('progress.environmentProgress');
   }
   const targetLabel = trimString(startup.target_label) || trimString(progress.environment_label) || 'Runtime';
-  switch (startup.location) {
-    case 'local_host':
-      return `${targetLabel} · Local`;
-    case 'local_container':
-      return `${targetLabel} · Local container`;
-    case 'ssh_host':
-      return `${targetLabel} · SSH host`;
-    case 'ssh_container':
-      return `${targetLabel} · SSH container`;
-  }
+  return `${targetLabel} · ${localizedProgressLocation(i18n, startup.location)}`;
 }
 
 function environmentProgressStatusIconTone(progress: DesktopLauncherActionProgress): 'info' | 'success' | 'error' {
@@ -4754,7 +5557,240 @@ function environmentProgressStatusIconTone(progress: DesktopLauncherActionProgre
   }
 }
 
+function localizedOpenConnectionPhaseLabel(i18n: DesktopI18n, phase: DesktopOpenConnectionPhase): string {
+  switch (phase) {
+    case 'checking_runtime_record':
+      return i18n.t('progress.checkingRuntime');
+    case 'ensuring_runtime_ready':
+      return i18n.t('progress.preparingRuntime');
+    case 'opening_ssh_control':
+      return i18n.t('progress.openingSshConnection');
+    case 'opening_local_tunnel':
+      return i18n.t('progress.openingLocalTunnel');
+    case 'starting_container_bridge':
+      return i18n.t('progress.openingContainerBridge');
+    case 'opening_bridge_proxy':
+      return i18n.t('progress.openingBridgeProxy');
+    case 'connecting_runtime_control':
+      return i18n.t('progress.connectingRuntimeControl');
+    case 'connecting_desktop_model_source':
+      return i18n.t('progress.connectingModelSource');
+    case 'checking_env_app_readiness':
+      return i18n.t('progress.checkingAppReadiness');
+    case 'opening_window':
+      return i18n.t('progress.openingWindow');
+    case 'open_ready':
+      return i18n.t('progress.openReady');
+    case 'failed':
+      return i18n.t('progress.failed');
+    case 'canceled':
+      return i18n.t('progress.canceled');
+  }
+}
+
+function localizedRuntimeLifecyclePhaseLabel(i18n: DesktopI18n, phase: DesktopRuntimeLifecyclePhase): string {
+  switch (phase) {
+    case 'checking_existing_runtime':
+      return i18n.t('progress.checkingExistingRuntime');
+    case 'checking_host':
+      return i18n.t('progress.checkingHost');
+    case 'checking_container':
+      return i18n.t('progress.checkingContainer');
+    case 'detecting_platform':
+      return i18n.t('progress.detectingPlatform');
+    case 'checking_runtime_package':
+      return i18n.t('progress.checkingRuntimePackage');
+    case 'stopping_runtime_process':
+      return i18n.t('progress.stoppingRuntimeProcess');
+    case 'verifying_runtime_stopped':
+      return i18n.t('progress.verifyingRuntimeStopped');
+    case 'preparing_runtime_package':
+      return i18n.t('progress.preparingRuntimePackage');
+    case 'installing_runtime_package':
+      return i18n.t('progress.installingRuntimePackage');
+    case 'starting_runtime_process':
+      return i18n.t('progress.startingRuntime');
+    case 'checking_runtime_service':
+      return i18n.t('progress.checkingRuntimeService');
+    case 'runtime_ready':
+      return i18n.t('progress.runtimeReady');
+    case 'runtime_up_to_date':
+      return i18n.t('progress.runtimeUpToDate');
+    case 'runtime_already_stopped':
+      return i18n.t('progress.runtimeAlreadyStopped');
+    case 'runtime_stopped':
+      return i18n.t('progress.runtimeStopped');
+  }
+}
+
+function localizedRuntimeLifecycleStepLabel(
+  i18n: DesktopI18n,
+  step: DesktopRuntimeLifecycleStepSnapshot,
+): string {
+  return localizedRuntimeLifecyclePhaseLabel(i18n, step.id);
+}
+
+function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
+  const open = progress.open_progress;
+  if (open) {
+    switch (open.phase) {
+      case 'checking_runtime_record':
+        return i18n.t('progress.titleCheckingRuntimeStatus');
+      case 'checking_env_app_readiness':
+        return i18n.t('progress.titleCheckingAppReadiness');
+      case 'opening_ssh_control':
+        return i18n.t('progress.titleOpeningSshConnection');
+      case 'starting_container_bridge':
+      case 'opening_bridge_proxy':
+        return i18n.t('progress.titleOpeningContainerBridge');
+      case 'connecting_desktop_model_source':
+        return i18n.t('progress.titleConnectingDesktopModelSource');
+      case 'opening_window':
+        return i18n.t('progress.titleOpeningEnvironment');
+      case 'open_ready':
+        return i18n.t('progress.titleEnvironmentOpen');
+      case 'failed':
+        return i18n.t('progress.openFailed');
+      case 'canceled':
+        return i18n.t('progress.canceled');
+      case 'ensuring_runtime_ready':
+      case 'opening_local_tunnel':
+      case 'connecting_runtime_control':
+        return localizedOpenConnectionPhaseLabel(i18n, open.phase);
+    }
+  }
+  const lifecycle = progress.lifecycle_progress;
+  if (lifecycle) {
+    return localizedRuntimeLifecyclePhaseLabel(i18n, lifecycle.phase);
+  }
+  return localizedStringByValue(i18n, progress.title, {
+    'Runtime ready': 'progress.titleRuntimeReady',
+    'Startup canceled': 'progress.titleStartupCanceled',
+    'Connection removed': 'progress.connectionRemoved',
+  });
+}
+
+function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
+  const open = progress.open_progress;
+  if (open) {
+    switch (open.phase) {
+      case 'checking_runtime_record':
+        return i18n.t('progress.detailCheckingRuntimeStatus');
+      case 'checking_env_app_readiness':
+        return i18n.t('progress.detailCheckingAppReadiness');
+      case 'opening_ssh_control':
+        return i18n.t('progress.detailOpeningSshConnection');
+      case 'starting_container_bridge':
+      case 'opening_bridge_proxy':
+        return i18n.t('progress.detailOpeningContainerBridge');
+      case 'connecting_desktop_model_source':
+        return i18n.t('progress.detailConnectingDesktopModelSource');
+      case 'opening_window':
+        return i18n.t('progress.detailOpeningEnvironment');
+      case 'open_ready':
+        return i18n.t('progress.detailEnvironmentOpen');
+      case 'ensuring_runtime_ready':
+      case 'opening_local_tunnel':
+      case 'connecting_runtime_control':
+      case 'failed':
+      case 'canceled':
+        break;
+    }
+  }
+  const lifecycle = progress.lifecycle_progress;
+  if (lifecycle?.phase === 'runtime_ready') {
+    return i18n.t('progress.detailRuntimeReady');
+  }
+  return localizedStringByValue(i18n, progress.detail, {
+    'The runtime daemon is running. Open will prepare the Desktop bridge.': 'progress.detailRuntimeReady',
+    'Desktop stopped the container runtime startup and cleaned up local startup resources.': 'progress.detailStartupCanceled',
+    'Desktop stopped the Runtime startup and cleaned up local startup resources.': 'progress.detailStartupCanceled',
+  });
+}
+
+function localizedProgressInterruptLabel(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
+  return localizedStringByValue(i18n, progress.interrupt_label, {
+    'Stop opening': 'progress.interruptStopOpening',
+    'Stop startup': 'progress.interruptStopStartup',
+  }) || i18n.t('progress.stopStartup');
+}
+
+function localizedProgressInterruptDetail(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
+  return localizedStringByValue(i18n, progress.interrupt_detail, {
+    'Desktop is stopping this runtime startup.': 'progress.interruptStopStartupDetail',
+    'Desktop is stopping this Runtime startup.': 'progress.interruptStopStartupDetail',
+    'Desktop is stopping this open request before opening the local environment window.': 'progress.interruptStopOpeningDetail',
+    'Desktop is stopping this open request and closing local SSH resources already created.': 'progress.interruptStopOpeningDetail',
+    'Desktop is stopping this open request and closing local connection resources already created.': 'progress.interruptStopOpeningDetail',
+    'Desktop is stopping this open request before opening the Redeven URL window.': 'progress.interruptStopOpeningDetail',
+    'Desktop is stopping this provider open request before opening the environment window.': 'progress.interruptStopOpeningDetail',
+  }) || i18n.t('progress.stopBackgroundTask');
+}
+
+function localizedProgressPlanningLabel(i18n: DesktopI18n, action: DesktopLauncherActionKind): string {
+  switch (action) {
+    case 'restart_environment_runtime':
+      return i18n.t('progress.planningRestartPath');
+    case 'update_environment_runtime':
+      return i18n.t('progress.planningUpdatePath');
+    case 'stop_environment_runtime':
+      return i18n.t('progress.planningStopPath');
+    default:
+      return i18n.t('progress.planningStartupPath');
+  }
+}
+
+function localizedFailureNoticeTitle(i18n: DesktopI18n, progress: DesktopLauncherActionProgress): string {
+  if (progress.open_progress) {
+    return i18n.t('progress.openNeedsAttention');
+  }
+  switch (progress.action) {
+    case 'restart_environment_runtime':
+      return i18n.t('progress.restartNeedsAttention');
+    case 'update_environment_runtime':
+      return i18n.t('progress.updateNeedsAttention');
+    case 'stop_environment_runtime':
+      return i18n.t('progress.stopNeedsAttention');
+    default:
+      return i18n.t('progress.startupNeedsAttention');
+  }
+}
+
+function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOperationNextAction): string {
+  switch (action.kind) {
+    case 'refresh_status':
+      return i18n.t('environmentAction.refreshStatus');
+    case 'update_runtime':
+      return i18n.t('environmentAction.updateRuntime');
+    case 'manage_desktop_update':
+      return i18n.t('environmentAction.updateRedevenDesktop');
+    case 'copy_diagnostics':
+      return i18n.t('progress.copyLog');
+    case 'dismiss':
+      return i18n.t('progress.dismiss');
+    case 'retry':
+      return localizedEnvironmentActionLabel(i18n, action.label);
+  }
+}
+
+function localizedProgressPanelPrimaryAction(
+  i18n: DesktopI18n,
+  progress: DesktopLauncherActionProgress,
+  primaryAction: EnvironmentActionModel | undefined,
+  input: Readonly<{ busy?: boolean }> = {},
+) {
+  const action = environmentProgressPanelPrimaryAction(progress, primaryAction, input);
+  return action
+    ? {
+        ...action,
+        action: localizedEnvironmentAction(i18n, action.action),
+        label: localizedEnvironmentActionLabel(i18n, action.label),
+      }
+    : null;
+}
+
 function EnvironmentProgressPanel(props: Readonly<{
+  i18n: DesktopI18n;
   progress: DesktopLauncherActionProgress;
   primaryAction?: EnvironmentActionModel;
   primaryActionBusy?: boolean;
@@ -4795,7 +5831,8 @@ function EnvironmentProgressPanel(props: Readonly<{
     || props.progress.status === 'cleanup_failed'
     || props.progress.status === 'canceled'
   ));
-  const panelPrimaryAction = createMemo(() => environmentProgressPanelPrimaryAction(
+  const panelPrimaryAction = createMemo(() => localizedProgressPanelPrimaryAction(
+    props.i18n,
     props.progress,
     props.primaryAction,
     { busy: props.primaryActionBusy },
@@ -4814,7 +5851,7 @@ function EnvironmentProgressPanel(props: Readonly<{
     const open = openConnection();
     if (open) {
       return openConnectionPhaseSequence(open.location)
-        .map((p, index) => ({ phase: p, key: `open:${index}:${p}`, label: OPEN_CONNECTION_PHASE_LABELS[p] }));
+        .map((p, index) => ({ phase: p, key: `open:${index}:${p}`, label: localizedOpenConnectionPhaseLabel(props.i18n, p) }));
     }
     if (!current) {
       return [];
@@ -4822,24 +5859,14 @@ function EnvironmentProgressPanel(props: Readonly<{
     return current.steps.map((step) => ({
       phase: step.id,
       key: step.key,
-      label: step.label,
+      label: localizedRuntimeLifecycleStepLabel(props.i18n, step),
       status: step.status,
     }));
   });
-  const failureNoticeTitle = createMemo(() => {
-    if (openConnection()) {
-      return 'Open needs attention';
-    }
-    switch (props.progress.action) {
-      case 'restart_environment_runtime':
-        return 'Restart needs attention';
-      case 'update_environment_runtime':
-        return 'Update needs attention';
-      case 'stop_environment_runtime':
-        return 'Stop needs attention';
-      default:
-        return 'Startup needs attention';
-    }
+  const failureNoticeTitle = createMemo(() => localizedFailureNoticeTitle(props.i18n, props.progress));
+  const localizedFailure = createMemo(() => {
+    const failure = props.progress.failure;
+    return failure ? localizedFailureForDisplay(props.i18n, failure) : null;
   });
   const stepState = (index: number, currentPhase: string | undefined, opStatus: string): 'done' | 'active' | 'pending' | 'error' => {
     const step = phaseSequence()[index];
@@ -4885,12 +5912,12 @@ function EnvironmentProgressPanel(props: Readonly<{
           </Show>
         </span>
         <div class="redeven-action-popover__status-text">
-          <div class="redeven-action-popover__eyebrow">{environmentProgressStatus(props.progress)}</div>
-          <div class="redeven-action-popover__title">{props.progress.title}</div>
-          <div class="redeven-environment-progress__target">{environmentProgressLabel(props.progress)}</div>
+          <div class="redeven-action-popover__eyebrow">{environmentProgressStatus(props.i18n, props.progress)}</div>
+          <div class="redeven-action-popover__title">{localizedProgressTitle(props.i18n, props.progress)}</div>
+          <div class="redeven-environment-progress__target">{environmentProgressLabel(props.i18n, props.progress)}</div>
         </div>
       </div>
-      <div class="redeven-action-popover__detail">{props.progress.detail}</div>
+      <div class="redeven-action-popover__detail">{localizedProgressDetail(props.i18n, props.progress)}</div>
       <Show when={startup() || openConnection()}>
         {(currentStartup) => (
           <>
@@ -4931,9 +5958,9 @@ function EnvironmentProgressPanel(props: Readonly<{
             <div class="redeven-environment-progress__meta">
               <Show
                 when={currentRuntimeLifecycle()?.plan_state !== 'planning'}
-                fallback={<span>{`Planning ${props.progress.action === 'restart_environment_runtime' ? 'restart' : props.progress.action === 'update_environment_runtime' ? 'update' : props.progress.action === 'stop_environment_runtime' ? 'stop' : 'startup'} path`}</span>}
+                fallback={<span>{localizedProgressPlanningLabel(props.i18n, props.progress.action)}</span>}
               >
-                <span>Step {currentStartup().stage_index} of {currentStartup().stage_count}</span>
+                <span>{props.i18n.t('progress.stepOf', { current: currentStartup().stage_index, total: currentStartup().stage_count })}</span>
               </Show>
               <Show when={currentStartup().target_detail}>
                 {(detail) => <span>{detail()}</span>}
@@ -4942,7 +5969,7 @@ function EnvironmentProgressPanel(props: Readonly<{
           </>
         )}
       </Show>
-      <Show when={props.progress.failure}>
+      <Show when={localizedFailure()}>
         {(failure) => (
           <div class="redeven-action-popover__notice" data-tone="error">
             <div class="redeven-action-popover__notice-title">{failureNoticeTitle()}</div>
@@ -4959,11 +5986,11 @@ function EnvironmentProgressPanel(props: Readonly<{
             size="sm"
             variant="outline"
             class="w-full justify-center gap-1.5"
-            title={props.progress.interrupt_detail || 'Stop this background task.'}
+            title={localizedProgressInterruptDetail(props.i18n, props.progress)}
             onClick={() => props.cancelOperation(props.progress)}
           >
             <Stop class="h-3.5 w-3.5" />
-            {props.progress.interrupt_label || 'Stop startup'}
+            {localizedProgressInterruptLabel(props.i18n, props.progress)}
           </Button>
         </div>
       </Show>
@@ -5012,7 +6039,7 @@ function EnvironmentProgressPanel(props: Readonly<{
                       >
                         <Refresh class="h-3.5 w-3.5" />
                       </Show>
-                      {action.label}
+                      {localizedNextActionLabel(props.i18n, action)}
                     </Button>
                   )}
                 </For>
@@ -5031,7 +6058,7 @@ function EnvironmentProgressPanel(props: Readonly<{
               onClick={() => props.copyOperationDiagnostics(props.progress)}
             >
               <Copy class="h-3.5 w-3.5" />
-              Copy log
+              {props.i18n.t('progress.copyLog')}
             </Button>
           </Show>
           <Show when={showFallbackDismissAction()}>
@@ -5041,7 +6068,7 @@ function EnvironmentProgressPanel(props: Readonly<{
               class="flex-1 justify-center"
               onClick={() => props.dismissOperation(props.progress)}
             >
-              Dismiss
+              {props.i18n.t('progress.dismiss')}
             </Button>
           </Show>
         </div>
@@ -5055,6 +6082,7 @@ function overlayStatusIconTone(tone: EnvironmentActionOverlayTone): 'warning' | 
 }
 
 function EnvironmentPrimaryActionPanel(props: Readonly<{
+  i18n: DesktopI18n;
   overlay: Extract<EnvironmentPrimaryActionOverlayModel, Readonly<{ kind: 'popover' }>>;
   environmentID: string;
   busyState?: DesktopLauncherBusyState;
@@ -5065,6 +6093,16 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
   const notice = createMemo(() => (
     props.overlay.actions.length > 0 ? guidanceSessionNotice(props.session) : null
   ));
+  const localizedNotice = createMemo(() => {
+    const current = notice();
+    return current
+      ? {
+          ...current,
+          title: localizedOverlayTitle(props.i18n, current.title),
+          detail: localizedRuntimeMessage(props.i18n, current.detail),
+        }
+      : null;
+  });
   const panelBusy = createMemo(() => props.session?.pending_intent !== null);
   const iconTone = createMemo(() => overlayStatusIconTone(props.overlay.tone));
 
@@ -5082,7 +6120,7 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
         </div>
       </div>
       <div class="redeven-action-popover__detail">{props.overlay.detail}</div>
-      <Show when={notice()}>
+      <Show when={localizedNotice()}>
         {(currentNotice) => (
           <div class="redeven-action-popover__notice" data-tone={currentNotice().tone}>
             <div class="redeven-action-popover__notice-title">{currentNotice().title}</div>
@@ -5195,7 +6233,40 @@ function progressTriggerClassName(presentation: EnvironmentProgressPrimaryPresen
     : 'redeven-split-action-trigger--attention';
 }
 
+function localizedPrimaryProgressPresentation(
+  i18n: DesktopI18n,
+  presentation: EnvironmentProgressPrimaryPresentation | null,
+): EnvironmentProgressPrimaryPresentation | null {
+  if (!presentation) {
+    return null;
+  }
+  const label = localizedStringByValue(i18n, presentation.label, {
+    'Canceling...': 'progress.canceling',
+    'Cleaning up...': 'progress.cleaningUp',
+    'Opening...': 'progress.opening',
+    'Stopping...': 'progress.stoppingEllipsis',
+    'Restarting...': 'progress.restartingEllipsis',
+    'Updating...': 'progress.updatingEllipsis',
+    'Starting...': 'progress.startingEllipsis',
+    'Cleanup failed': 'progress.cleanupFailed',
+    'Open failed': 'progress.openFailed',
+    'Start failed': 'progress.startFailed',
+    'Restart failed': 'progress.restartFailed',
+    'Update failed': 'progress.updateFailed',
+    'Stop failed': 'progress.stopFailed',
+    'Needs attention': 'progress.needsAttention',
+  });
+  return {
+    ...presentation,
+    label,
+    ariaLabel: presentation.kind === 'progress_trigger'
+      ? i18n.t('progress.showProgress', { label })
+      : i18n.t('progress.showDetails', { label }),
+  };
+}
+
 function EnvironmentSplitActionButton(props: Readonly<{
+  i18n: DesktopI18n;
   presentation: Extract<EnvironmentActionPresentation, Readonly<{ kind: 'split_button' }>>;
   environmentID: string;
   environmentLabel: string;
@@ -5228,9 +6299,9 @@ function EnvironmentSplitActionButton(props: Readonly<{
     return {
       kind: 'popover',
       tone: notice.tone === 'warning' ? 'warning' : 'neutral',
-      eyebrow: notice.tone === 'success' ? 'Ready' : notice.tone === 'error' ? 'Needs attention' : 'Working',
-      title: notice.title,
-      detail: notice.detail,
+      eyebrow: notice.tone === 'success' ? props.i18n.t('progress.ready') : notice.tone === 'error' ? props.i18n.t('progress.needsAttention') : props.i18n.t('progress.running'),
+      title: localizedOverlayTitle(props.i18n, notice.title),
+      detail: localizedRuntimeMessage(props.i18n, notice.detail),
       actions: [],
     };
   });
@@ -5239,7 +6310,10 @@ function EnvironmentSplitActionButton(props: Readonly<{
   const panelProgress = createMemo(() => selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress()));
   const hasPanelProgress = createMemo(() => panelProgress() !== null);
   const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());
-  const primaryProgressPresentation = createMemo(() => environmentProgressPrimaryPresentation(panelProgress()));
+  const primaryProgressPresentation = createMemo(() => localizedPrimaryProgressPresentation(
+    props.i18n,
+    environmentProgressPrimaryPresentation(panelProgress()),
+  ));
   const primaryActionOverlay = createMemo(() => (
     primaryProgressPresentation() || progressPanelVisible()
       ? undefined
@@ -5397,6 +6471,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                     <Show when={popoverOverlay()}>
                       {(overlay) => (
                         <EnvironmentPrimaryActionPanel
+                          i18n={props.i18n}
                           overlay={overlay()}
                           environmentID={props.environmentID}
                           busyState={props.busyState}
@@ -5419,6 +6494,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                     <Show when={panelProgress()}>
                       {(p) => (
                         <EnvironmentProgressPanel
+                          i18n={props.i18n}
                           progress={p()}
                           primaryAction={props.presentation.primary_action}
                           primaryActionBusy={props.loading === true}
@@ -5476,7 +6552,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
             anchorClass="flex w-full"
             popoverAriaLabel={
               progressPanelVisible()
-                ? (panelProgress()?.title ?? 'Environment progress')
+                ? (panelProgress() ? localizedProgressTitle(props.i18n, panelProgress()!) : props.i18n.t('progress.environmentProgress'))
                 : (popoverOverlay()?.title ?? '')
             }
           >
@@ -5495,7 +6571,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                   aria-disabled={blockedPrimaryActionDisabled() ? true : undefined}
                   aria-haspopup={popoverOverlay() ? 'dialog' : undefined}
                   aria-expanded={popoverOverlay() ? props.guidanceOpen : undefined}
-                  aria-label={blockedPrimaryActionDisabled() ? blockedPrimaryActionTriggerLabel(props.presentation.primary_action.label) : undefined}
+                  aria-label={blockedPrimaryActionDisabled() ? blockedPrimaryActionTriggerLabel(props.i18n, props.presentation.primary_action.label) : undefined}
                   onClick={() => {
                     closeMenu();
                     if (primaryFallbackRunsAction()) {
@@ -5666,6 +6742,7 @@ function QuickCreateConnectionCard(props: Readonly<{
 }
 
 function EnvironmentConnectionCard(props: Readonly<{
+  i18n: DesktopI18n;
   environment: DesktopEnvironmentEntry;
   busyState: DesktopLauncherBusyState;
   actionProgress: readonly DesktopLauncherActionProgress[];
@@ -5709,11 +6786,24 @@ function EnvironmentConnectionCard(props: Readonly<{
   environmentFailure: EnvironmentFailureState | null;
   dismissEnvironmentFailure: () => void;
 }>) {
-  const card = createMemo(() => buildEnvironmentCardModel(props.environment));
-  const facts = createMemo(() => buildEnvironmentCardFactsModel(props.environment));
+  const card = createMemo(() => {
+    const model = buildEnvironmentCardModel(props.environment);
+    return {
+      ...model,
+      kind_label: localizedFactLabel(props.i18n, model.kind_label),
+      status_label: localizedEnvironmentStatusLabel(props.i18n, model.status_label),
+      target_primary: localizedFactValue(props.i18n, model.target_primary),
+    };
+  });
+  const facts = createMemo(() => buildEnvironmentCardFactsModel(props.environment).map((fact) => (
+    localizedEnvironmentFact(props.i18n, fact)
+  )));
 
   const environmentActionModel = createMemo(() => buildProviderBackedEnvironmentActionModel(props.environment));
-  const environmentActionPresentation = createMemo(() => environmentActionModel().action_presentation);
+  const environmentActionPresentation = createMemo(() => localizedEnvironmentActionPresentation(
+    props.i18n,
+    environmentActionModel().action_presentation,
+  ));
   const runtimeLifecycleProgress = createMemo(() => (
     selectedSnapshotRuntimeLifecycleProgressForEnvironment(props.environment, props.actionProgress)
   ));
@@ -5797,7 +6887,11 @@ function EnvironmentConnectionCard(props: Readonly<{
     ])
   ));
   const isContainerRuntimeTarget = createMemo(() => props.environment.managed_runtime_placement?.kind === 'container_process');
-  const deleteTitle = createMemo(() => isContainerRuntimeTarget() ? 'Delete runtime target' : 'Delete connection');
+  const deleteTitle = createMemo(() => (
+    isContainerRuntimeTarget()
+      ? props.i18n.t('environmentCenter.deleteRuntimeTarget')
+      : props.i18n.t('environmentCenter.deleteConnection')
+  ));
 
   return (
     <Card class={cn(
@@ -5821,7 +6915,7 @@ function EnvironmentConnectionCard(props: Readonly<{
                 {(failure) => {
                   const [popoverOpen, setPopoverOpen] = createSignal(false);
                   const [copied, setCopied] = createSignal(false);
-                  const presentation = createMemo(() => failure().failure);
+                  const presentation = createMemo(() => localizedFailureForDisplay(props.i18n, failure().failure));
 
                   const handleCopy = async () => {
                     await copyToClipboard(formatDesktopOperationFailureForClipboard(presentation()));
@@ -5851,13 +6945,13 @@ function EnvironmentConnectionCard(props: Readonly<{
                             <button
                               type="button"
                               class="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.65rem] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                              aria-label="Copy error message"
+                              aria-label={props.i18n.t('environmentCenter.copyErrorMessage')}
                               onClick={(e) => { e.stopPropagation(); void handleCopy(); }}
                             >
                               <Show when={copied()} fallback={<Copy class="h-3 w-3" />}>
                                 <Check class="h-3 w-3" />
                               </Show>
-                              <span>{copied() ? 'Copied' : 'Copy'}</span>
+                              <span>{copied() ? props.i18n.t('environmentCenter.copied') : props.i18n.t('common.copy')}</span>
                             </button>
                           </div>
                           <div class="space-y-1.5">
@@ -5872,7 +6966,7 @@ function EnvironmentConnectionCard(props: Readonly<{
                             </Show>
                             <Show when={(presentation().diagnostics ?? []).length > 0}>
                               <details class="redeven-environment-card__failure-details">
-                                <summary>Details</summary>
+                                <summary>{props.i18n.t('settings.detailsTitle')}</summary>
                                 <div class="mt-1.5 space-y-1.5">
                                   <For each={presentation().diagnostics ?? []}>
                                     {(diagnostic) => (
@@ -5897,7 +6991,7 @@ function EnvironmentConnectionCard(props: Readonly<{
                         onClick={props.dismissEnvironmentFailure}
                         role="button"
                         tabIndex={0}
-                        aria-label={`Dismiss startup failure: ${presentation().summary}`}
+                        aria-label={props.i18n.t('environmentCenter.dismissStartupFailureAriaLabel', { summary: presentation().summary })}
                       >
                         <span class="redeven-environment-card__failure-badge-icon" aria-hidden="true">!</span>
                       </span>
@@ -5914,6 +7008,7 @@ function EnvironmentConnectionCard(props: Readonly<{
                 <span class="redeven-card-runtime-chip__dot" aria-hidden="true" />
                 <span class="redeven-card-runtime-chip__text">{card().runtime_started_label}</span>
               </span>
+              <span class="ml-1.5 text-xs text-muted-foreground">{formatLocalizedRelativeTimestamp(props.i18n, props.environment.last_used_at_ms)}</span>
               <Show when={props.environment.control_plane_label}>
                 {(cpLabel) => (
                   <span class="redeven-card-runtime-domain ml-1.5">
@@ -5924,11 +7019,11 @@ function EnvironmentConnectionCard(props: Readonly<{
               </Show>
             </div>
           </div>
-          <DesktopTooltip content="Refresh runtime status" placement="top">
+          <DesktopTooltip content={props.i18n.t('environmentCenter.refreshRuntimeStatus')} placement="top">
             <span>
               <ConsoleActionIconButton
-                title="Refresh runtime status"
-                aria-label={`Refresh runtime status for ${props.environment.label}`}
+                title={props.i18n.t('environmentCenter.refreshRuntimeStatus')}
+                aria-label={props.i18n.t('environmentCenter.refreshRuntimeStatusForLabel', { label: props.environment.label })}
                 disabled={isRuntimeActionBusy()}
                 onClick={() => {
                   void props.refreshEnvironmentRuntime(props.environment, 'connect');
@@ -5942,6 +7037,7 @@ function EnvironmentConnectionCard(props: Readonly<{
       </CardHeader>
       <CardContent class="flex flex-1 flex-col px-4 pb-3">
         <EnvironmentCardFactsBlock
+          i18n={props.i18n}
           facts={facts()}
           minRows={3}
           onFactAction={props.runEnvironmentCardFactAction}
@@ -5950,6 +7046,7 @@ function EnvironmentConnectionCard(props: Readonly<{
       </CardContent>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border/60 px-4 pt-3 pb-2.5">
         <EnvironmentSplitActionButton
+          i18n={props.i18n}
           presentation={environmentActionPresentation()}
           environmentID={props.environment.id}
           environmentLabel={props.environment.label}
@@ -6012,12 +7109,14 @@ function EnvironmentConnectionCard(props: Readonly<{
         />
         <div class="flex items-center gap-0.5">
           <DesktopTooltip
-            content={props.environment.pinned ? 'Unpin' : 'Pin'}
+            content={props.environment.pinned ? props.i18n.t('environmentCenter.unpin') : props.i18n.t('environmentCenter.pin')}
             placement="top"
           >
             <ConsoleActionIconButton
-              title={props.environment.pinned ? 'Unpin environment' : 'Pin environment'}
-              aria-label={props.environment.pinned ? `Unpin ${props.environment.label}` : `Pin ${props.environment.label}`}
+              title={props.environment.pinned ? props.i18n.t('environmentCenter.unpinEnvironment') : props.i18n.t('environmentCenter.pinEnvironment')}
+              aria-label={props.environment.pinned
+                ? props.i18n.t('environmentCenter.unpinLabel', { label: props.environment.label })
+                : props.i18n.t('environmentCenter.pinLabel', { label: props.environment.label })}
               active={props.environment.pinned}
               disabled={isPinBusy()}
               onClick={() => {
@@ -6029,14 +7128,18 @@ function EnvironmentConnectionCard(props: Readonly<{
           </DesktopTooltip>
           <Show when={props.environment.can_edit}>
             <DesktopTooltip
-              content="Settings"
+              content={props.i18n.t('common.settings')}
               placement="top"
             >
               <ConsoleActionIconButton
-                title={isContainerRuntimeTarget() ? 'Runtime target settings' : props.environment.kind === 'local_environment' ? 'Environment settings' : 'Connection settings'}
+                title={isContainerRuntimeTarget()
+                  ? props.i18n.t('environmentCenter.runtimeTargetSettings')
+                  : props.environment.kind === 'local_environment'
+                    ? props.i18n.t('environmentCenter.environmentSettings')
+                    : props.i18n.t('environmentCenter.connectionSettings')}
                 aria-label={props.environment.kind === 'local_environment' && !isContainerRuntimeTarget()
-                  ? `Settings for ${props.environment.label}`
-                  : `Connection settings for ${props.environment.label}`}
+                  ? props.i18n.t('environmentCenter.settingsForLabel', { label: props.environment.label })
+                  : props.i18n.t('environmentCenter.connectionSettingsForLabel', { label: props.environment.label })}
                 onClick={() => props.editEnvironment(props.environment)}
               >
                 <Settings class="h-3.5 w-3.5" />
@@ -6044,10 +7147,10 @@ function EnvironmentConnectionCard(props: Readonly<{
             </DesktopTooltip>
           </Show>
           <Show when={props.environment.can_delete}>
-            <DesktopTooltip content="Delete" placement="top">
+            <DesktopTooltip content={props.i18n.t('common.delete')} placement="top">
               <ConsoleActionIconButton
                 title={deleteTitle()}
-                aria-label={`Delete ${props.environment.label}`}
+                aria-label={props.i18n.t('environmentCenter.deleteLabel', { label: props.environment.label })}
                 danger
                 onClick={() => props.deleteEnvironment(props.environment)}
               >
@@ -6062,6 +7165,7 @@ function EnvironmentConnectionCard(props: Readonly<{
 }
 
 function NewEnvironmentPlaceholderCard(props: Readonly<{
+  i18n: DesktopI18n;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
 }>) {
   return (
@@ -6078,8 +7182,8 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
           <Plus class="h-6 w-6" />
         </div>
         <div class="space-y-1 text-center">
-          <div class="text-sm font-semibold text-foreground">New Environment</div>
-          <div class="text-xs text-muted-foreground">Add URL, SSH, or container runtime targets</div>
+          <div class="text-sm font-semibold text-foreground">{props.i18n.t('environmentCenter.newEnvironmentTitle')}</div>
+          <div class="text-xs text-muted-foreground">{props.i18n.t('environmentCenter.newEnvironmentDescription')}</div>
         </div>
         <div class="flex flex-wrap justify-center gap-2">
           <ConsoleChipActionButton
@@ -6104,7 +7208,7 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
               props.openCreateConnectionDialog('', 'local_container_runtime');
             }}
           >
-            Local Container
+            {props.i18n.t('connectionDialog.localContainer')}
           </ConsoleChipActionButton>
           <ConsoleChipActionButton
             onClick={(event) => {
@@ -6112,7 +7216,7 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
               props.openCreateConnectionDialog('', 'ssh_container_runtime');
             }}
           >
-            SSH Container
+            {props.i18n.t('connectionDialog.sshContainer')}
           </ConsoleChipActionButton>
         </div>
       </div>
@@ -6121,6 +7225,7 @@ function NewEnvironmentPlaceholderCard(props: Readonly<{
 }
 
 function ControlPlanesPanel(props: Readonly<{
+  i18n: DesktopI18n;
   controlPlanes: readonly DesktopControlPlaneSummary[];
   environments: readonly DesktopEnvironmentEntry[];
   busyState: DesktopLauncherBusyState;
@@ -6138,10 +7243,10 @@ function ControlPlanesPanel(props: Readonly<{
           <div class="redeven-control-plane-grid">
             <div class="redeven-control-plane-card">
               <QuickCreateConnectionCard
-                title="Add Provider"
-                badge="Provider"
-                detail="Authorize a compatible provider."
-                actionLabel="Connect Provider"
+                title={props.i18n.t('environmentCenter.addProviderTitle')}
+                badge={props.i18n.t('environmentCenter.addProviderBadge')}
+                detail={props.i18n.t('environmentCenter.addProviderDescription')}
+                actionLabel={props.i18n.t('environmentCenter.connectProvider')}
                 onClick={() => props.openCreateControlPlaneDialog()}
               />
             </div>
@@ -6152,6 +7257,7 @@ function ControlPlanesPanel(props: Readonly<{
           <For each={props.controlPlanes}>
             {(controlPlane) => (
               <ControlPlaneShelf
+                i18n={props.i18n}
                 controlPlane={controlPlane}
                 environments={props.environments}
                 busyState={props.busyState}
@@ -6209,49 +7315,52 @@ function ControlPlaneMetricTooltipContent(props: Readonly<{
 }
 
 function controlPlanePublishedCountTooltipContent(
+  i18n: DesktopI18n,
   controlPlane: DesktopControlPlaneSummary,
 ): JSX.Element {
   return (
     <ControlPlaneMetricTooltipContent
-      title="Every environment this provider account has published to Desktop."
-      description="Published includes everything listed in Desktop for this account, whether it is online, offline, or waiting for the next provider refresh."
+      title={i18n.t('environmentCenter.publishedTooltipTitle')}
+      description={i18n.t('environmentCenter.publishedTooltipDescription')}
       status={controlPlane.environments.length === 0
-        ? 'Nothing from this provider is in the Desktop catalog yet.'
+        ? i18n.t('environmentCenter.publishedTooltipEmpty')
         : undefined}
     />
   );
 }
 
 function controlPlaneOnlineCountTooltipContent(
+  i18n: DesktopI18n,
   controlPlane: DesktopControlPlaneSummary,
   onlineCount: number,
 ): JSX.Element {
   const status = (() => {
     if (controlPlane.sync_state === 'syncing') {
-      return 'A refresh is running now, so this number may change again in a moment.';
+      return i18n.t('environmentCenter.onlineTooltipSyncing');
     }
 
     if (controlPlane.sync_state === 'ready' && controlPlane.catalog_freshness === 'fresh') {
       return onlineCount > 0
-        ? 'This number matches the latest provider sync.'
-        : 'The latest provider sync says none are online right now.';
+        ? i18n.t('environmentCenter.onlineTooltipFreshOnline')
+        : i18n.t('environmentCenter.onlineTooltipFreshNone');
     }
 
     return onlineCount > 0
-      ? 'This number comes from the last completed sync and may already be outdated.'
-      : 'The last completed sync did not report any online environments.';
+      ? i18n.t('environmentCenter.onlineTooltipStaleOnline')
+      : i18n.t('environmentCenter.onlineTooltipStaleNone');
   })();
 
   return (
     <ControlPlaneMetricTooltipContent
-      title="Only published environments that are reachable right now."
-      description="Online Now counts environments from Published that currently report an online runtime signal."
+      title={i18n.t('environmentCenter.onlineTooltipTitle')}
+      description={i18n.t('environmentCenter.onlineTooltipDescription')}
       status={status}
     />
   );
 }
 
 function controlPlaneLocalHostCountTooltipContent(
+  i18n: DesktopI18n,
   stats: Readonly<{
     local_host_count: number;
     open_count: number;
@@ -6259,29 +7368,130 @@ function controlPlaneLocalHostCountTooltipContent(
   freshestEnvironment: DesktopControlPlaneSummary['environments'][number] | null,
 ): JSX.Element {
   const runtimeLabel = freshestEnvironment
-    ? desktopProviderEnvironmentRuntimeLabel(
+    ? localizedProviderRuntimeLabel(i18n, desktopProviderEnvironmentRuntimeLabel(
       freshestEnvironment.status,
       freshestEnvironment.lifecycle_status,
-    )
+    ))
     : '';
   const status = stats.open_count > 0
-    ? `${stats.open_count === 1 ? '1 local window is' : `${stats.open_count} local windows are`} already open right now.`
+    ? i18n.t(stats.open_count === 1 ? 'environmentCenter.localWindowOpenOne' : 'environmentCenter.localWindowsOpen', {
+        count: stats.open_count,
+      })
     : runtimeLabel !== ''
-      ? `Most recent provider state received: ${runtimeLabel}.`
-      : 'No published environment from this provider has reported a runtime state yet.';
+      ? i18n.t('environmentCenter.mostRecentProviderState', { state: runtimeLabel })
+      : i18n.t('environmentCenter.noProviderRuntimeState');
 
   return (
     <ControlPlaneMetricTooltipContent
-      title="Published environments that can link to this Local Environment."
+      title={i18n.t('environmentCenter.localLinksTooltipTitle')}
       description={stats.local_host_count > 0
-        ? 'Local Links counts provider environments that can bind to this Local Environment profile for local use.'
-        : 'This provider has not exposed any published environments that can link to this Local Environment profile yet.'}
+        ? i18n.t('environmentCenter.localLinksTooltipDescription')
+        : i18n.t('environmentCenter.localLinksTooltipEmptyDescription')}
       status={status}
     />
   );
 }
 
+function localizedProviderRuntimeLabel(i18n: DesktopI18n, label: string): string {
+  const parts = trimString(label).split('·').map((part) => trimString(part)).filter(Boolean);
+  if (parts.length <= 0) {
+    return i18n.t('common.unknown');
+  }
+  return parts.map((part) => localizedStringByValue(i18n, part, {
+    online: 'providerRuntimeState.online',
+    offline: 'providerRuntimeState.offline',
+    unknown: 'providerRuntimeState.unknown',
+    ready: 'providerRuntimeState.ready',
+    active: 'providerRuntimeState.active',
+    inactive: 'providerRuntimeState.inactive',
+    stopped: 'providerRuntimeState.stopped',
+    suspended: 'providerRuntimeState.suspended',
+  })).join(' · ');
+}
+
+function localizedProviderRuntimeTargetLabel(
+  i18n: DesktopI18n,
+  target: DesktopProviderRuntimeLinkTarget,
+): string {
+  return target.kind === 'ssh_environment'
+    ? i18n.t('providerRuntimeLink.sshRuntime')
+    : i18n.t('providerRuntimeLink.localRuntime');
+}
+
+function localizedProviderRuntimeLinkPlanMessage(
+  i18n: DesktopI18n,
+  target: DesktopProviderRuntimeLinkTarget,
+  providerEnvironment: DesktopProviderEnvironmentCandidate,
+  state: DesktopProviderRuntimeLinkPlanState,
+): string {
+  const runtimeLabel = localizedProviderRuntimeTargetLabel(i18n, target);
+  switch (state) {
+    case 'target_ready':
+      return i18n.t('providerRuntimeLink.targetReady', { runtime: runtimeLabel, environment: providerEnvironment.label });
+    case 'target_not_running':
+      return i18n.t('providerRuntimeLink.targetNotRunning', { runtime: runtimeLabel });
+    case 'runtime_control_missing':
+      return i18n.t('providerRuntimeLink.runtimeControlMissing', { runtime: runtimeLabel });
+    case 'provider_link_unsupported':
+      return i18n.t('providerRuntimeLink.providerLinkUnsupported', { runtime: runtimeLabel });
+    case 'already_linked':
+      return i18n.t('providerRuntimeLink.alreadyLinked', { runtime: runtimeLabel, environment: providerEnvironment.label });
+    case 'provider_environment_occupied':
+      return providerEnvironment.occupancy.state === 'occupied_by_known_runtime' && providerEnvironment.occupancy.runtime_label
+        ? i18n.t('providerRuntimeLink.providerEnvironmentOccupiedKnown', {
+            environment: providerEnvironment.label,
+            runtime: providerEnvironment.occupancy.runtime_label,
+          })
+        : i18n.t('providerRuntimeLink.providerEnvironmentOccupiedUnknown', { environment: providerEnvironment.label });
+    case 'linked_elsewhere':
+      return i18n.t('providerRuntimeLink.linkedElsewhere', { runtime: runtimeLabel });
+    case 'blocked_active_work':
+      return i18n.t('providerRuntimeLink.blockedActiveWork', { runtime: runtimeLabel });
+    case 'blocked_owner_mismatch':
+      return i18n.t('providerRuntimeLink.blockedOwnerMismatch', { runtime: runtimeLabel });
+    case 'blocked_runtime':
+      return i18n.t('providerRuntimeLink.blockedRuntime', { runtime: runtimeLabel });
+  }
+}
+
+function localizedRuntimeServiceWorkload(
+  i18n: DesktopI18n,
+  workload: RuntimeServiceWorkload | null | undefined,
+): string {
+  if (!workload) {
+    return i18n.t('providerRuntimeLink.noActiveWork');
+  }
+
+  const parts = [
+    workload.terminal_count > 0
+      ? i18n.tn('plural.terminalCount', workload.terminal_count)
+      : '',
+    workload.session_count > 0
+      ? i18n.tn('plural.sessionCount', workload.session_count)
+      : '',
+    workload.task_count > 0
+      ? i18n.tn('plural.taskCount', workload.task_count)
+      : '',
+    workload.port_forward_count > 0
+      ? i18n.tn('plural.portForwardCount', workload.port_forward_count)
+      : '',
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(i18n.t('providerRuntimeLink.workloadSeparator')) : i18n.t('providerRuntimeLink.noActiveWork');
+}
+
+function localizedControlPlaneStatusModel(
+  i18n: DesktopI18n,
+  model: ReturnType<typeof buildControlPlaneStatusModel>,
+): ReturnType<typeof buildControlPlaneStatusModel> {
+  return {
+    ...model,
+    label: localizedEnvironmentStatusLabel(i18n, model.label),
+    detail: localizedRuntimeMessage(i18n, model.detail),
+  };
+}
+
 function ControlPlaneMetricTile(props: Readonly<{
+  i18n: DesktopI18n;
   label: string;
   value: number;
   help: JSX.Element;
@@ -6292,7 +7502,7 @@ function ControlPlaneMetricTile(props: Readonly<{
         <div class="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           {props.label}
         </div>
-        <SettingsHelpBadge label={props.label} content={props.help} />
+        <SettingsHelpBadge label={props.label} content={props.help} i18n={props.i18n} />
       </div>
       <div class="redeven-provider-shelf__metric-value">
         {props.value}
@@ -6302,6 +7512,7 @@ function ControlPlaneMetricTile(props: Readonly<{
 }
 
 function ControlPlaneShelf(props: Readonly<{
+  i18n: DesktopI18n;
   controlPlane: DesktopControlPlaneSummary;
   environments: readonly DesktopEnvironmentEntry[];
   busyState: DesktopLauncherBusyState;
@@ -6310,7 +7521,10 @@ function ControlPlaneShelf(props: Readonly<{
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
 }>) {
-  const statusModel = createMemo(() => buildControlPlaneStatusModel(props.controlPlane));
+  const statusModel = createMemo(() => localizedControlPlaneStatusModel(
+    props.i18n,
+    buildControlPlaneStatusModel(props.controlPlane),
+  ));
   const stats = createMemo(() => controlPlaneLocalEnvironmentStats(
     props.controlPlane,
     props.environments,
@@ -6347,15 +7561,15 @@ function ControlPlaneShelf(props: Readonly<{
                     {statusModel().label}
                   </ConsoleStatusBadge>
                   <ConsoleBadge>{props.controlPlane.provider.display_name}</ConsoleBadge>
-                  <ConsoleBadge>{props.controlPlane.environments.length} envs</ConsoleBadge>
+                  <ConsoleBadge>{props.i18n.t('environmentCenter.providerEnvsBadge', { count: props.controlPlane.environments.length })}</ConsoleBadge>
                   <Show when={stats().local_host_count > 0}>
-                    <ConsoleBadge>{stats().local_host_count} local links</ConsoleBadge>
+                    <ConsoleBadge>{props.i18n.t('environmentCenter.providerLocalLinksBadge', { count: stats().local_host_count })}</ConsoleBadge>
                   </Show>
                 </div>
                 <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                   <span>{props.controlPlane.account.user_display_name}</span>
                   <span class="font-mono text-[11px]">{props.controlPlane.provider.provider_origin}</span>
-                  <span>Synced {formatRelativeTimestamp(props.controlPlane.last_synced_at_ms)}</span>
+                  <span>{props.i18n.t('environmentCenter.providerSynced', { time: formatLocalizedRelativeTimestamp(props.i18n, props.controlPlane.last_synced_at_ms) })}</span>
                 </div>
               </div>
             </div>
@@ -6367,19 +7581,22 @@ function ControlPlaneShelf(props: Readonly<{
           </Show>
           <div class="redeven-provider-shelf__metrics mt-3">
             <ControlPlaneMetricTile
-              label="Published"
+              i18n={props.i18n}
+              label={props.i18n.t('environmentCenter.providerPublishedLabel')}
               value={props.controlPlane.environments.length}
-              help={controlPlanePublishedCountTooltipContent(props.controlPlane)}
+              help={controlPlanePublishedCountTooltipContent(props.i18n, props.controlPlane)}
             />
             <ControlPlaneMetricTile
-              label="Online Now"
+              i18n={props.i18n}
+              label={props.i18n.t('environmentCenter.providerOnlineLabel')}
               value={stats().online_count}
-              help={controlPlaneOnlineCountTooltipContent(props.controlPlane, stats().online_count)}
+              help={controlPlaneOnlineCountTooltipContent(props.i18n, props.controlPlane, stats().online_count)}
             />
             <ControlPlaneMetricTile
-              label="Local Links"
+              i18n={props.i18n}
+              label={props.i18n.t('environmentCenter.providerLocalLinksLabel')}
               value={stats().local_host_count}
-              help={controlPlaneLocalHostCountTooltipContent(stats(), freshestEnvironment())}
+              help={controlPlaneLocalHostCountTooltipContent(props.i18n, stats(), freshestEnvironment())}
             />
           </div>
         </div>
@@ -6389,7 +7606,7 @@ function ControlPlaneShelf(props: Readonly<{
             variant="default"
             onClick={() => props.viewControlPlaneEnvironments(props.controlPlane)}
           >
-            View Environments
+            {props.i18n.t('environmentCenter.viewEnvironments')}
           </Button>
           <Button
             size="sm"
@@ -6399,7 +7616,7 @@ function ControlPlaneShelf(props: Readonly<{
               void props.reconnectControlPlane(props.controlPlane);
             }}
           >
-            Reconnect
+            {props.i18n.t('environmentCenter.reconnect')}
           </Button>
           <Button
             size="sm"
@@ -6410,14 +7627,14 @@ function ControlPlaneShelf(props: Readonly<{
               void props.refreshControlPlane(props.controlPlane);
             }}
           >
-            Refresh
+            {props.i18n.t('common.refresh')}
           </Button>
           <div class="flex-1" />
           <ConsoleActionIconButton
-            title="Remove Provider"
+            title={props.i18n.t('environmentCenter.removeProvider')}
             danger
             onClick={() => props.deleteControlPlane(props.controlPlane)}
-            aria-label={`Remove ${controlPlaneName(props.controlPlane)}`}
+            aria-label={props.i18n.t('environmentCenter.removeProviderAriaLabel', { label: controlPlaneName(props.controlPlane) })}
           >
             <Trash class="h-4 w-4" />
           </ConsoleActionIconButton>
@@ -6454,36 +7671,10 @@ function accessModeIcon(mode: DesktopAccessMode): (props?: { class?: string }) =
   }
 }
 
-function settingsAddressCardTitle(accessMode: DesktopAccessMode): string {
-  return accessMode === 'custom_exposure' ? 'Bind address' : 'Port';
-}
-
-function settingsAddressCardHelp(accessMode: DesktopAccessMode): string {
-  if (accessMode === 'custom_exposure') {
-    return 'Edit the bind host and port directly for the next desktop-managed start. Non-loopback binds require a password.';
-  }
-  return accessMode === 'shared_local_network'
-    ? 'Choose the fixed port other devices on your local network will use to open this Environment.'
-    : 'Choose the localhost port for the next desktop-managed start.';
-}
-
-function settingsProtectionCardTitle(accessMode: DesktopAccessMode): string {
-  return accessMode === 'local_only' ? 'Protection' : 'Password';
-}
-
-function settingsProtectionCardHelp(accessMode: DesktopAccessMode): string {
-  if (accessMode === 'shared_local_network') {
-    return 'Shared local network access requires a password before other devices can open this Environment.';
-  }
-  if (accessMode === 'custom_exposure') {
-    return 'Review the password used with your custom bind rules before the next desktop-managed start.';
-  }
-  return 'Local-only mode binds to loopback and never exposes the runtime beyond this device.';
-}
-
 function SettingsHelpBadge(props: Readonly<{
   label: string;
   content?: string | JSX.Element;
+  i18n: DesktopI18n;
 }>) {
   const tooltip = createMemo<JSX.Element | undefined>(() => {
     if (typeof props.content === 'string') {
@@ -6499,7 +7690,7 @@ function SettingsHelpBadge(props: Readonly<{
         <span
           data-redeven-settings-help=""
           role="img"
-          aria-label={`${props.label}: more information`}
+          aria-label={`${props.label}: ${props.i18n.t('common.moreInformation')}`}
           tabIndex={0}
           class="inline-flex h-[1.125rem] w-[1.125rem] shrink-0 cursor-help items-center justify-center rounded-full border border-border/70 bg-muted/35 text-[10px] font-semibold leading-none text-muted-foreground transition-colors hover:border-border hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
@@ -6513,13 +7704,14 @@ function SettingsHelpBadge(props: Readonly<{
 function SettingsCardHeading(props: Readonly<{
   title: string;
   help?: string;
+  i18n: DesktopI18n;
   accessory?: JSX.Element;
 }>) {
   return (
     <div class="flex w-full items-start justify-between gap-3">
       <div class="flex min-w-0 items-center gap-2">
         <div class="min-w-0 text-sm font-medium text-foreground">{props.title}</div>
-        <SettingsHelpBadge label={props.title} content={props.help} />
+        <SettingsHelpBadge label={props.title} content={props.help} i18n={props.i18n} />
       </div>
       {props.accessory}
     </div>
@@ -6546,11 +7738,107 @@ function SettingsSectionHeader(props: Readonly<{
   );
 }
 
+function DesktopLanguageSettingsPanel(props: Readonly<{
+  languageSnapshot: RedevenLanguageSnapshot;
+  i18n: DesktopI18n;
+  updateLanguagePreference: (preference: RedevenLocalePreference) => void;
+}>) {
+  const languagePreferenceOptions = createMemo(() => (
+    REDEVEN_LOCALE_PREFERENCES.map((preference) => ({
+      value: preference,
+      label: preference === SYSTEM_LOCALE_PREFERENCE
+        ? props.i18n.t('language.systemDefault')
+        : localePreferenceDisplayName(preference),
+    }))
+  ));
+
+  return (
+    <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
+      <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] sm:items-start">
+        <div class="space-y-2">
+          <SettingsCardHeading
+            title={props.i18n.t('settings.languageTitle')}
+            help={props.i18n.t('settings.languageDescription')}
+            i18n={props.i18n}
+          />
+          <label class="block">
+            <span class="sr-only">{props.i18n.t('settings.languageSelectLabel')}</span>
+            <select
+              class="mt-2 h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+              value={props.languageSnapshot.preference}
+              aria-label={props.i18n.t('settings.languageSelectLabel')}
+              onChange={(event) => props.updateLanguagePreference(event.currentTarget.value as RedevenLocalePreference)}
+            >
+              <For each={languagePreferenceOptions()}>
+                {(option) => (
+                  <option value={option.value}>{option.label}</option>
+                )}
+              </For>
+            </select>
+          </label>
+          <p class="text-[11px] leading-relaxed text-muted-foreground">
+            {props.i18n.t('language.appliesToDesktopAndEnvApp')}
+          </p>
+        </div>
+        <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-2.5">
+          <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+            {props.i18n.t('settings.languageSourceLabel')}
+          </div>
+          <div class="mt-1 text-sm font-medium text-foreground">
+            {languageSourceLabel(props.i18n, props.languageSnapshot.source)}
+          </div>
+          <div class="mt-1 text-[11px] text-muted-foreground">
+            {props.i18n.t('language.usingLanguage', { language: localePreferenceDisplayName(props.languageSnapshot.resolved_locale) })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DesktopInterfaceSettingsDialog(props: Readonly<{
+  open: boolean;
+  languageSnapshot: RedevenLanguageSnapshot;
+  i18n: DesktopI18n;
+  onOpenChange: (open: boolean) => void;
+  updateLanguagePreference: (preference: RedevenLocalePreference) => void;
+}>) {
+  return (
+    <Dialog
+      open={props.open}
+      onOpenChange={props.onOpenChange}
+      title={props.i18n.t('settings.interfaceTitle')}
+      class={LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS}
+      footer={(
+        <div class="flex justify-end">
+          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
+            {props.i18n.t('common.close')}
+          </Button>
+        </div>
+      )}
+    >
+      <div class="space-y-3">
+        <SettingsSectionHeader
+          label={props.i18n.t('settings.interfaceTitle')}
+          hint={props.i18n.t('settings.interfaceDescription')}
+        />
+        <DesktopLanguageSettingsPanel
+          languageSnapshot={props.languageSnapshot}
+          i18n={props.i18n}
+          updateLanguagePreference={props.updateLanguagePreference}
+        />
+      </div>
+    </Dialog>
+  );
+}
+
 function LocalEnvironmentSettingsDialog(props: Readonly<{
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
   baselineSnapshot: DesktopSettingsSurfaceSnapshot;
   draft: DesktopSettingsDraft;
+  languageSnapshot: RedevenLanguageSnapshot;
+  i18n: DesktopI18n;
   busyState: DesktopLauncherBusyState;
   settingsError: string;
   settingsErrorRef: (value: HTMLElement) => void;
@@ -6561,6 +7849,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   saveSettings: () => Promise<void>;
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
+  updateLanguagePreference: (preference: RedevenLocalePreference) => void;
 }>) {
   const [accessModeOverride, setAccessModeOverride] = createSignal<DesktopAccessMode | null>(null);
   const accessModelOptions = createMemo(() => ({
@@ -6570,10 +7859,19 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     mode_override: accessModeOverride(),
   }));
   const accessModel = createMemo(() => deriveDesktopAccessDraftModel(props.draft, accessModelOptions()));
-  const addressCardTitle = createMemo(() => settingsAddressCardTitle(accessModel().access_mode));
-  const addressCardHelp = createMemo(() => settingsAddressCardHelp(accessModel().access_mode));
-  const protectionCardTitle = createMemo(() => settingsProtectionCardTitle(accessModel().access_mode));
-  const protectionCardHelp = createMemo(() => settingsProtectionCardHelp(accessModel().access_mode));
+  const addressCardTitle = createMemo(() => settingsAddressCardTitle(props.i18n, accessModel().access_mode));
+  const addressCardHelp = createMemo(() => settingsAddressCardHelp(props.i18n, accessModel().access_mode));
+  const protectionCardTitle = createMemo(() => settingsProtectionCardTitle(props.i18n, accessModel().access_mode));
+  const protectionCardHelp = createMemo(() => settingsProtectionCardHelp(props.i18n, accessModel().access_mode));
+  const runtimeAddress = createMemo(() => describeLocalizedRuntimeAddress(props.i18n, accessModel().current_runtime_url));
+  const nextStartAddress = createMemo(() => describeLocalizedNextStartAddress(props.i18n, accessModel()));
+  const settingsEnvironmentLabel = createMemo(() => trimString(props.baselineSnapshot.environment_label) || props.i18n.t('desktop.environment'));
+  const settingsWindowTitle = createMemo(() => props.i18n.t('settings.settingsWindowTitle', {
+    label: settingsEnvironmentLabel(),
+  }));
+  const settingsSaveLabel = createMemo(() => props.i18n.t('settings.saveEnvironmentSettings', {
+    label: settingsEnvironmentLabel(),
+  }));
   const localUIPasswordCanClear = createMemo(() => (
     props.baselineSnapshot.local_ui_password_configured
     && props.draft.local_ui_password_mode !== 'clear'
@@ -6615,30 +7913,29 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
           props.cancelSettings();
         }
       }}
-      title={props.baselineSnapshot.window_title}
+      title={settingsWindowTitle()}
       class={LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS}
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={props.cancelSettings}>
-            Cancel
+            {props.i18n.t('common.cancel')}
           </Button>
           <Button
             size="sm"
             variant="default"
             loading={busyStateMatchesAction(props.busyState, 'save_settings')}
-            aria-label={props.baselineSnapshot.save_label}
-            title={props.baselineSnapshot.save_label}
+            aria-label={settingsSaveLabel()}
+            title={settingsSaveLabel()}
             onClick={() => {
               void props.saveSettings();
             }}
           >
-            {compactSaveActionLabel()}
+            {props.i18n.t('common.save')}
           </Button>
         </div>
       )}
     >
       <div class="space-y-6">
-        {/* Runtime status strip */}
         <div class="redeven-settings-statusbar overflow-hidden rounded-md border border-border">
           <div class="grid divide-y divide-border sm:grid-cols-[1fr_auto_1fr] sm:divide-x sm:divide-y-0">
             <div class="flex items-start gap-3 px-4 py-3">
@@ -6654,12 +7951,12 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                 )} />
               </div>
               <div class="min-w-0 flex-1">
-                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Runtime</div>
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.runtimeLabel')}</div>
                 <div class={cn(
                   'mt-0.5 truncate text-xs font-medium text-foreground',
-                  describeRuntimeAddress(accessModel().current_runtime_url).primary_monospace && 'font-mono text-[12px]',
+                  runtimeAddress().primary_monospace && 'font-mono text-[12px]',
                 )}>
-                  {describeRuntimeAddress(accessModel().current_runtime_url).primary}
+                  {runtimeAddress().primary}
                 </div>
               </div>
             </div>
@@ -6676,16 +7973,16 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                 })()}
               </div>
               <div class="min-w-0 flex-1">
-                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Next start</div>
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.nextStartLabel')}</div>
                 <div class="mt-0.5 flex items-baseline gap-1.5">
                   <div class={cn(
                     'truncate text-xs font-medium text-foreground',
-                    describeNextStartAddress(accessModel().next_start_address_display).primary_monospace && 'font-mono text-[12px]',
+                    nextStartAddress().primary_monospace && 'font-mono text-[12px]',
                   )}>
-                    {describeNextStartAddress(accessModel().next_start_address_display).primary}
+                    {nextStartAddress().primary}
                   </div>
-                  <Show when={describeNextStartAddress(accessModel().next_start_address_display).hint}>
-                    <div class="truncate text-[11px] text-muted-foreground">{describeNextStartAddress(accessModel().next_start_address_display).hint}</div>
+                  <Show when={nextStartAddress().hint}>
+                    <div class="truncate text-[11px] text-muted-foreground">{nextStartAddress().hint}</div>
                   </Show>
                 </div>
               </div>
@@ -6693,34 +7990,45 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
           </div>
         </div>
 
-        {/* Section header */}
+        <section class="space-y-3">
+          <SettingsSectionHeader
+            label={props.i18n.t('settings.interfaceTitle')}
+            hint={props.i18n.t('settings.interfaceDescription')}
+          />
+          <DesktopLanguageSettingsPanel
+            languageSnapshot={props.languageSnapshot}
+            i18n={props.i18n}
+            updateLanguagePreference={props.updateLanguagePreference}
+          />
+        </section>
+
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Access &amp; Security</div>
-            <div class="mt-1 text-sm text-foreground">This Redeven profile keeps one Local Environment runtime for the current binding.</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.accessSecurityTitle')}</div>
+            <div class="mt-1 text-sm text-foreground">{props.i18n.t('settings.accessSecurityDescription')}</div>
           </div>
           <div class="flex flex-wrap items-center gap-1.5">
             <Tag variant={passwordStateTagVariant(accessModel().password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {compactPasswordStateTagLabel(accessModel().password_state_label)}
+              {compactLocalizedPasswordStateTagLabel(props.i18n, accessModel().password_state_id)}
             </Tag>
           </div>
         </div>
 
         <div class="space-y-6">
-            {/* Visibility presets — radio-group style */}
             <section>
               <SettingsSectionHeader
-                label="Visibility"
-                hint="Choose how the Local Environment is exposed on the next desktop-managed start"
+                label={props.i18n.t('settings.visibilityTitle')}
+                hint={props.i18n.t('settings.visibilityDescription')}
               />
               <div
                 role="radiogroup"
-                aria-label="Visibility presets"
+                aria-label={props.i18n.t('settings.visibilityTitle')}
                 class="mt-3 grid gap-3 sm:grid-cols-3"
               >
                 <For each={props.baselineSnapshot.access_mode_options}>
                   {(option) => {
                     const selected = createMemo(() => accessModel().access_mode === option.value);
+                    const localizedOption = createMemo(() => localizedAccessModeOption(props.i18n, option));
                     const Icon = accessModeIcon(option.value);
                     return (
                       <button
@@ -6763,8 +8071,8 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                             </Show>
                           </div>
                         </div>
-                        <div class="mt-1 text-sm font-semibold text-foreground">{option.label}</div>
-                        <div class="text-[11px] leading-[1.55] text-muted-foreground">{option.description}</div>
+                        <div class="mt-1 text-sm font-semibold text-foreground">{localizedOption().label}</div>
+                        <div class="text-[11px] leading-[1.55] text-muted-foreground">{localizedOption().description}</div>
                       </button>
                     );
                   }}
@@ -6772,29 +8080,31 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               </div>
             </section>
 
-            {/* Port & Protection side by side */}
             <section>
               <SettingsSectionHeader
-                label="Details"
-                hint={`Fine-tune the ${addressCardTitle().toLowerCase()} and ${accessModel().access_mode === 'local_only' ? 'protection' : 'password'} for this preset`}
+                label={props.i18n.t('settings.detailsTitle')}
+                hint={props.i18n.t('settings.detailsDescription', {
+                  address: addressCardTitle().toLowerCase(),
+                  protection: protectionCardTitle().toLowerCase(),
+                })}
               />
               <div class="mt-3 grid gap-3 sm:grid-cols-2">
                 <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
-                  <SettingsCardHeading title={addressCardTitle()} help={addressCardHelp()} />
+                  <SettingsCardHeading title={addressCardTitle()} help={addressCardHelp()} i18n={props.i18n} />
                   <div class="mt-3 space-y-3">
                     <Show
                       when={accessModel().access_mode === 'custom_exposure'}
                       fallback={(
                         <>
                           <label class="block">
-                            <span class="sr-only">Port</span>
+                            <span class="sr-only">{props.i18n.t('settings.portLabel')}</span>
                             <Input
                               value={accessModel().fixed_port_value}
                               inputMode="numeric"
                               disabled={accessModel().port_mode === 'auto'}
                               size="sm"
                               class="w-full"
-                              aria-label="Port"
+                              aria-label={props.i18n.t('settings.portLabel')}
                               placeholder="23998"
                               onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
                             />
@@ -6804,7 +8114,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                               <Checkbox
                                 checked={accessModel().port_mode === 'auto'}
                                 onChange={props.toggleAutoPort}
-                                label="Auto-select a free port each start"
+                                label={props.i18n.t('settings.autoSelectPort')}
                                 size="sm"
                               />
                             </div>
@@ -6817,13 +8127,14 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                         value={props.draft.local_ui_bind}
                         updateDraftField={props.updateDraftField}
                         sectionTitle={addressCardTitle()}
+                        i18n={props.i18n}
                       />
                     </Show>
                   </div>
                 </div>
 
                 <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
-                  <SettingsCardHeading title={protectionCardTitle()} help={protectionCardHelp()} />
+                  <SettingsCardHeading title={protectionCardTitle()} help={protectionCardHelp()} i18n={props.i18n} />
                   <div class="mt-3">
                     <Show
                       when={accessModel().access_mode === 'local_only'}
@@ -6831,19 +8142,20 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                         <LocalUIPasswordField
                           snapshot={props.baselineSnapshot}
                           draft={props.draft}
-                          passwordStateLabel={accessModel().password_state_label}
+                          passwordStateID={accessModel().password_state_id}
                           passwordStateTone={accessModel().password_state_tone}
                           localUIPasswordCanClear={localUIPasswordCanClear()}
                           updateDraftField={props.updateDraftField}
                           clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
                           sectionTitle={protectionCardTitle()}
+                          i18n={props.i18n}
                         />
                       )}
                     >
                       <div class="flex items-start gap-2.5 rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2.5">
                         <Shield class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         <div class="text-[11px] leading-[1.55] text-muted-foreground">
-                          Loopback bind keeps the runtime on this device only. No password is required.
+                          {props.i18n.t('settings.localOnlyProtectionNote')}
                         </div>
                       </div>
                     </Show>
@@ -6885,6 +8197,7 @@ function sshConfigHostEndpointLabel(host: DesktopSSHConfigHost): string {
 }
 
 function SSHDestinationCombobox(props: Readonly<{
+  i18n: DesktopI18n;
   value: string;
   hosts: readonly DesktopSSHConfigHost[];
   autofocus: boolean;
@@ -6995,7 +8308,7 @@ function SSHDestinationCombobox(props: Readonly<{
             setOpen(false);
           }
         }}
-        placeholder="user@host or ssh-config-alias"
+        placeholder={props.i18n.t('connectionDialog.sshDestinationPlaceholder')}
         size="sm"
         class={cn('w-full', props.class)}
         spellcheck={false}
@@ -7052,7 +8365,7 @@ function SSHDestinationCombobox(props: Readonly<{
                   </span>
                   <Show when={host.port !== null}>
                     <Tag variant="neutral" tone="soft" size="sm" class="shrink-0 cursor-default whitespace-nowrap">
-                      Port {host.port}
+                      {props.i18n.t('connectionDialog.sshPortTag', { port: host.port ?? '' })}
                     </Tag>
                   </Show>
                 </button>
@@ -7076,6 +8389,7 @@ function runtimeContainerSearchText(container: DesktopRuntimeContainerOption): s
 }
 
 function ContainerPicker(props: Readonly<{
+  i18n: DesktopI18n;
   selectedContainerID: string;
   selectedContainerRef: string;
   selectedContainerLabel: string;
@@ -7179,7 +8493,7 @@ function ContainerPicker(props: Readonly<{
     >
       <div class="flex items-center justify-between gap-2">
         <label for="environment-container-picker" class="block text-xs font-medium text-foreground">
-          Container <span class="text-destructive">*</span>
+          {props.i18n.t('connectionDialog.containerPickerLabel')} <span class="text-destructive">*</span>
         </label>
         <Button
           type="button"
@@ -7191,7 +8505,7 @@ function ContainerPicker(props: Readonly<{
           onClick={props.onRefresh}
         >
           <Refresh class="mr-1 h-3.5 w-3.5" />
-          Refresh
+          {props.i18n.t('connectionDialog.refreshContainers')}
         </Button>
       </div>
       <div class="relative">
@@ -7240,7 +8554,7 @@ function ContainerPicker(props: Readonly<{
           aria-controls="environment-container-picker-options"
         >
           <span class={cn('min-w-0 truncate', selectedLabel() ? 'text-foreground' : 'text-muted-foreground')}>
-            {selectedLabel() || (props.loading ? 'Loading running containers...' : 'Choose a running container')}
+            {selectedLabel() || (props.loading ? props.i18n.t('connectionDialog.loadingContainers') : props.i18n.t('connectionDialog.chooseRunningContainer'))}
           </span>
           <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         </button>
@@ -7263,7 +8577,7 @@ function ContainerPicker(props: Readonly<{
                   setQuery(event.currentTarget.value);
                   setHighlightedIndex(0);
                 }}
-                placeholder="Filter containers"
+                placeholder={props.i18n.t('connectionDialog.filterContainers')}
                 size="sm"
                 class="w-full"
                 onKeyDown={(event) => {
@@ -7350,6 +8664,7 @@ function ContainerPicker(props: Readonly<{
 }
 
 function ConnectionDialog(props: Readonly<{
+  i18n: DesktopI18n;
   state: ConnectionDialogState;
   sshConfigHosts: readonly DesktopSSHConfigHost[];
   containerOptions: readonly DesktopRuntimeContainerOption[];
@@ -7393,16 +8708,16 @@ function ConnectionDialog(props: Readonly<{
         : '',
     ) === ''
       ? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL
-      : 'Custom mirror'
+      : props.i18n.t('connectionDialog.customMirror')
   ));
   const sshBootstrapSummaryLabel = createMemo(() => {
     switch (sshBootstrapStrategy()) {
       case 'desktop_upload':
         return sshReleaseBaseURLLabel();
       case 'remote_install':
-        return 'Remote fallback';
+        return props.i18n.t('connectionDialog.remoteFallback');
       default:
-        return 'Auto';
+        return props.i18n.t('connectionDialog.automatic');
     }
   });
   const connectionKindDescription = createMemo<JSX.Element>(() => {
@@ -7410,17 +8725,17 @@ function ConnectionDialog(props: Readonly<{
       case 'external_local_ui':
         return (
           <>
-            Connect straight to a Redeven runtime that already exposes its own Environment URL, such as a runtime on this device or a host on your local network.
+            {props.i18n.t('connectionDialog.urlDescription')}
             {' '}
-            <span class="font-medium text-foreground">This is not the Provider URL.</span>
+            <span class="font-medium text-foreground">{props.i18n.t('connectionDialog.notProviderUrl')}</span>
           </>
         );
       case 'ssh_environment':
-        return 'Deploy a Desktop-owned Local Environment profile to a host you can reach over SSH. Desktop reuses shared release artifacts on that host and keeps one runtime state set there.';
+        return props.i18n.t('connectionDialog.sshDescription');
       case 'local_container_runtime':
-        return 'Save a runtime target inside a running container on this device. Redeven starts only the runtime process inside the selected container.';
+        return props.i18n.t('connectionDialog.localContainerDescription');
       case 'ssh_container_runtime':
-        return 'Save a runtime target inside a running container on an SSH host. Desktop manages the runtime through SSH and a bridge stream, not through published container ports.';
+        return props.i18n.t('connectionDialog.sshContainerDescription');
       default:
         return '';
     }
@@ -7439,12 +8754,12 @@ function ConnectionDialog(props: Readonly<{
     <Dialog
       open={isOpen()}
       onOpenChange={props.onOpenChange}
-      title={isCreate() ? 'New Environment' : 'Edit Environment'}
+      title={isCreate() ? props.i18n.t('connectionDialog.newEnvironmentTitle') : props.i18n.t('connectionDialog.editEnvironmentTitle')}
       class={CONNECTION_DIALOG_CLASS}
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
-            Cancel
+            {props.i18n.t('common.cancel')}
           </Button>
           <Button
             size="sm"
@@ -7455,7 +8770,7 @@ function ConnectionDialog(props: Readonly<{
             }}
           >
             <Save class="mr-1 h-3.5 w-3.5" />
-            {compactSaveActionLabel()}
+            {props.i18n.t('connectionDialog.save')}
           </Button>
         </div>
       )}
@@ -7478,15 +8793,15 @@ function ConnectionDialog(props: Readonly<{
       >
         <Show when={isCreate()}>
           <div class="space-y-1.5">
-            <label class="block text-xs font-medium text-foreground">Environment Type</label>
+            <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.environmentType')}</label>
             <SegmentedControl
               value={connectionKind()}
               onChange={(value) => props.switchKind(value as ConnectionDialogKind)}
               options={[
-                { value: 'external_local_ui', label: 'Redeven URL' },
-                { value: 'ssh_environment', label: 'SSH Host' },
-                { value: 'local_container_runtime', label: 'Local Container' },
-                { value: 'ssh_container_runtime', label: 'SSH Container' },
+                { value: 'external_local_ui', label: props.i18n.t('connectionDialog.redevenUrl') },
+                { value: 'ssh_environment', label: props.i18n.t('connectionDialog.sshHost') },
+                { value: 'local_container_runtime', label: props.i18n.t('connectionDialog.localContainer') },
+                { value: 'ssh_container_runtime', label: props.i18n.t('connectionDialog.sshContainer') },
               ]}
               size="sm"
             />
@@ -7499,12 +8814,12 @@ function ConnectionDialog(props: Readonly<{
         <Show when={connectionKind() === 'external_local_ui'}>
           <div class="redeven-dialog-section">
             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Connection URL
+              {props.i18n.t('connectionDialog.connectionUrl')}
             </div>
             <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
               <div class="space-y-1.5">
                 <label for="environment-url" class="block text-xs font-medium text-foreground">
-                  Environment URL <span class="text-destructive">*</span>
+                  {props.i18n.t('connectionDialog.environmentUrl')} <span class="text-destructive">*</span>
                 </label>
                 <Input
                   id="environment-url"
@@ -7530,21 +8845,22 @@ function ConnectionDialog(props: Readonly<{
         <Show when={isSSHBackedKind()}>
           <div class="redeven-dialog-section">
             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              SSH Host
+              {props.i18n.t('connectionDialog.sshHostSection')}
             </div>
             <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
               <div class="rounded-md border border-dashed border-border/40 bg-muted/10 px-2.5 py-2 text-[11px] leading-5 text-muted-foreground">
                 {connectionKind() === 'ssh_environment'
-                  ? "Desktop reuses only the exact Desktop-managed Redeven release on that host, installs it on demand when needed, and stores runtime state in that host's single runtime profile."
-                  : 'Desktop uses this SSH host only as the management channel for the selected container runtime target.'}
+                  ? props.i18n.t('connectionDialog.sshEnvironmentNotice')
+                  : props.i18n.t('connectionDialog.sshContainerNotice')}
               </div>
               <div class="mt-3 space-y-3">
                 <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
                 <div class="space-y-1.5">
                   <label for="environment-ssh-destination" class="block text-xs font-medium text-foreground">
-                    SSH Destination <span class="text-destructive">*</span>
+                    {props.i18n.t('connectionDialog.sshDestination')} <span class="text-destructive">*</span>
                   </label>
                   <SSHDestinationCombobox
+                    i18n={props.i18n}
                     value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_destination ?? '' : ''}
                     hosts={props.sshConfigHosts}
                     autofocus={props.state?.mode === 'create'}
@@ -7563,7 +8879,7 @@ function ConnectionDialog(props: Readonly<{
                   </Show>
                 </div>
                 <div class="space-y-1.5">
-                  <label for="environment-ssh-port" class="block text-xs font-medium text-foreground">Port</label>
+                  <label for="environment-ssh-port" class="block text-xs font-medium text-foreground">{props.i18n.t('settings.portLabel')}</label>
                   <Input
                     id="environment-ssh-port"
                     value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_port ?? '' : ''}
@@ -7583,43 +8899,43 @@ function ConnectionDialog(props: Readonly<{
                 </div>
               </div>
               <div class="space-y-1.5">
-                <label class="block text-xs font-medium text-foreground">Authentication</label>
+                <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.authentication')}</label>
                 <SegmentedControl
                   value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE : DEFAULT_DESKTOP_SSH_AUTH_MODE}
                   onChange={(value) => props.updateField('auth_mode', value)}
                   options={[
-                    { value: 'key_agent', label: 'Key / agent' },
-                    { value: 'password', label: 'Password prompt' },
+                    { value: 'key_agent', label: props.i18n.t('connectionDialog.keyAgent') },
+                    { value: 'password', label: props.i18n.t('connectionDialog.passwordPrompt') },
                   ]}
                   size="sm"
                 />
                 <div class="text-[11px] leading-5 text-muted-foreground">
-                  Key / agent uses your existing SSH configuration. Password prompt can reuse a locally saved password after Save.
+                  {props.i18n.t('connectionDialog.authenticationHelp')}
                 </div>
               </div>
               <Show when={isSSHBackedKind() && ((props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE) === 'password'}>
                 <div class="space-y-1.5">
-                  <label for="environment-ssh-password" class="block text-xs font-medium text-foreground">Local SSH password</label>
+                  <label for="environment-ssh-password" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.localSshPassword')}</label>
                   <Input
                     id="environment-ssh-password"
                     type="password"
                     autocomplete="new-password"
                     value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password ?? '' : ''}
                     onInput={(event) => props.updateField('ssh_password', event.currentTarget.value)}
-                    placeholder={(props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_configured ? 'Enter a new password to replace the stored one' : 'Optional saved password for local auto detection'}
+                    placeholder={(props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_configured ? props.i18n.t('connectionDialog.replaceStoredPasswordPlaceholder') : props.i18n.t('connectionDialog.optionalSavedPasswordPlaceholder')}
                     size="sm"
                     class="w-full"
                   />
                   <div class="text-[11px] leading-5 text-muted-foreground">
-                    Desktop stores this password only on this device. Automatic detection uses it silently; manual password prompts are not saved.
+                    {props.i18n.t('connectionDialog.localSshPasswordHelp')}
                   </div>
                   <Show when={(props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_configured && (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_mode !== 'clear'}>
                     <Button size="sm" variant="outline" onClick={props.removeSSHPassword}>
-                      Remove stored password
+                      {props.i18n.t('settings.removeStoredPassword')}
                     </Button>
                   </Show>
                   <Show when={(props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_mode === 'clear'}>
-                    <div class="text-[11px] text-muted-foreground">The stored SSH password will be removed on save.</div>
+                    <div class="text-[11px] text-muted-foreground">{props.i18n.t('connectionDialog.storedSshPasswordWillBeRemoved')}</div>
                   </Show>
                 </div>
               </Show>
@@ -7631,13 +8947,13 @@ function ConnectionDialog(props: Readonly<{
                   onClick={() => setAdvancedState((current) => ({ ...current, open: !current.open }))}
                 >
                   <div>
-                    <div class="text-xs font-medium text-foreground">Advanced</div>
+                    <div class="text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.advanced')}</div>
                     <div class="mt-1 text-[11px] text-muted-foreground">
-                      Runtime root, package delivery, and release mirror for this SSH host.
+                      {props.i18n.t('connectionDialog.advancedDescription')}
                     </div>
                   </div>
                   <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                    {showSSHAdvanced() ? 'Shown' : 'Hidden'}
+                    {showSSHAdvanced() ? props.i18n.t('connectionDialog.shown') : props.i18n.t('connectionDialog.hidden')}
                   </Tag>
                 </button>
                 <div class={cn(
@@ -7648,24 +8964,24 @@ function ConnectionDialog(props: Readonly<{
                     <div class="border-t border-border/70 px-3 py-3">
                     <div class="space-y-3">
                       <div class="space-y-1.5">
-                        <label class="block text-xs font-medium text-foreground">Bootstrap Delivery</label>
+                        <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.bootstrapDelivery')}</label>
                         <SegmentedControl
                           value={sshBootstrapStrategy()}
                           onChange={(value) => props.switchBootstrapStrategy(value as DesktopSSHBootstrapStrategy)}
                           options={[
-                            { value: 'auto', label: 'Automatic' },
-                            { value: 'desktop_upload', label: 'Desktop Upload' },
-                            { value: 'remote_install', label: 'Remote Fallback' },
+                            { value: 'auto', label: props.i18n.t('connectionDialog.automatic') },
+                            { value: 'desktop_upload', label: props.i18n.t('connectionDialog.desktopUpload') },
+                            { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteFallback') },
                           ]}
                           size="sm"
                         />
                         <div class="text-[11px] text-muted-foreground">
-                          Automatic uses Desktop's verified local package cache first; remote install is only a fallback when local package preparation is unavailable.{' '}
-                          <span class="font-medium text-foreground">Source: {sshBootstrapSummaryLabel()}</span>
+                          {props.i18n.t('connectionDialog.bootstrapHelp')}{' '}
+                          <span class="font-medium text-foreground">{props.i18n.t('connectionDialog.source', { source: sshBootstrapSummaryLabel() })}</span>
                         </div>
                       </div>
                       <div class="space-y-1.5">
-                        <label for="environment-ssh-runtime-root" class="block text-xs font-medium text-foreground">Runtime Root</label>
+                        <label for="environment-ssh-runtime-root" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.runtimeRoot')}</label>
                         <Input
                           id="environment-ssh-runtime-root"
                           value={props.state?.connection_kind === 'ssh_environment' ? props.state.runtime_root : ''}
@@ -7676,11 +8992,11 @@ function ConnectionDialog(props: Readonly<{
                           spellcheck={false}
                         />
                         <div class="text-[11px] text-muted-foreground">
-                          Leave blank to use the remote user's .redeven root: {DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL}.
+                          {props.i18n.t('connectionDialog.runtimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}
                         </div>
                       </div>
                       <div class="space-y-1.5">
-                        <label for="environment-ssh-release-base-url" class="block text-xs font-medium text-foreground">Release Base URL</label>
+                        <label for="environment-ssh-release-base-url" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.releaseBaseUrl')}</label>
                         <Input
                           id="environment-ssh-release-base-url"
                           value={props.state?.connection_kind === 'ssh_environment' ? props.state.release_base_url : ''}
@@ -7691,11 +9007,11 @@ function ConnectionDialog(props: Readonly<{
                           spellcheck={false}
                         />
                         <div class="text-[11px] text-muted-foreground">
-                          Leave blank to use {DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL}. Set an internal release mirror when this desktop cannot use GitHub directly.
+                          {props.i18n.t('connectionDialog.releaseBaseUrlHelp', { url: DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL })}
                         </div>
                       </div>
                       <div class="space-y-1.5">
-                        <label for="environment-ssh-connect-timeout" class="block text-xs font-medium text-foreground">Connect Timeout (seconds)</label>
+                        <label for="environment-ssh-connect-timeout" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.connectTimeout')}</label>
                         <Input
                           id="environment-ssh-connect-timeout"
                           value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.connect_timeout_seconds ?? '' : ''}
@@ -7706,7 +9022,7 @@ function ConnectionDialog(props: Readonly<{
                           spellcheck={false}
                         />
                         <div class="text-[11px] text-muted-foreground">
-                          SSH connection timeout in seconds. Defaults to {DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS}s.
+                          {props.i18n.t('connectionDialog.connectTimeoutHelp', { seconds: DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS })}
                         </div>
                       </div>
                     </div>
@@ -7723,14 +9039,14 @@ function ConnectionDialog(props: Readonly<{
         <Show when={isContainerKind()}>
           <div class="redeven-dialog-section">
             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Container
+              {props.i18n.t('connectionDialog.container')}
             </div>
             <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3 mt-2 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
               <div class="space-y-3">
                 <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)] items-start">
                   <div class="space-y-1.5">
                     <div class="flex items-center h-7">
-                      <label class="block text-xs font-medium text-foreground">Engine</label>
+                      <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.engine')}</label>
                     </div>
                     <SegmentedControl
                     value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_engine : 'docker'}
@@ -7749,6 +9065,7 @@ function ConnectionDialog(props: Readonly<{
                   />
                 </div>
                 <ContainerPicker
+                  i18n={props.i18n}
                   selectedContainerID={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_id : ''}
                   selectedContainerRef={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_ref : ''}
                   selectedContainerLabel={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_label : ''}
@@ -7757,8 +9074,8 @@ function ConnectionDialog(props: Readonly<{
                   disabled={connectionKind() === 'ssh_container_runtime' && trimString((props.state as RuntimeContainerConnectionDialogState | null)?.ssh_destination) === ''}
                   error={props.containerOptionsError}
                   emptyMessage={connectionKind() === 'ssh_container_runtime' && trimString((props.state as RuntimeContainerConnectionDialogState | null)?.ssh_destination) === ''
-                    ? 'Choose an SSH destination before listing containers.'
-                    : 'No running containers found. Start the container outside Redeven, then refresh this list.'}
+                    ? props.i18n.t('connectionDialog.chooseSshBeforeContainers')
+                    : props.i18n.t('connectionDialog.noRunningContainers')}
                   fieldError={props.fieldErrors.container_id}
                   onRefresh={props.refreshContainerOptions}
                   onSelect={(container) => {
@@ -7771,7 +9088,7 @@ function ConnectionDialog(props: Readonly<{
               </div>
               <div class="space-y-1.5">
                 <label for="environment-container-runtime-root" class="block text-xs font-medium text-foreground">
-                  Runtime Root <span class="text-destructive">*</span>
+                  {props.i18n.t('connectionDialog.runtimeRoot')} <span class="text-destructive">*</span>
                 </label>
                 <Input
                   id="environment-container-runtime-root"
@@ -7786,7 +9103,7 @@ function ConnectionDialog(props: Readonly<{
                   spellcheck={false}
                 />
                 <div class="text-[11px] text-muted-foreground">
-                  Stores Redeven releases, Local Environment state, sessions, and logs inside this container.
+                  {props.i18n.t('connectionDialog.containerRuntimeRootHelp')}
                 </div>
                 <Show when={props.fieldErrors.runtime_root}>
                   <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_root}</div>
@@ -7800,20 +9117,20 @@ function ConnectionDialog(props: Readonly<{
         <Show when={connectionDialogAutoRuntimeProbeConfigurable(props.state)}>
           <div class="redeven-dialog-section">
             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-              Status Detection
+              {props.i18n.t('connectionDialog.statusDetection')}
             </div>
             <div class="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3">
               <div class="flex items-start justify-between gap-4">
                 <div class="min-w-0">
-                  <div class="text-xs font-medium text-foreground">Auto status detection</div>
+                  <div class="text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.autoStatusDetection')}</div>
                   <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                    Welcome checks this runtime automatically while open. Refresh status always checks now.
+                    {props.i18n.t('connectionDialog.autoStatusDetectionHelp')}
                   </div>
                 </div>
                 <Checkbox
                   checked={props.state?.auto_runtime_probe_enabled === true}
                   onChange={props.toggleAutoRuntimeProbe}
-                  label="Enabled"
+                  label={props.i18n.t('connectionDialog.enabled')}
                   size="sm"
                 />
               </div>
@@ -7823,7 +9140,7 @@ function ConnectionDialog(props: Readonly<{
 
         <div class="space-y-1.5 rounded-md border border-dashed border-border/30 bg-background/40 px-3 py-3">
           <label for="environment-label" class="block text-xs font-medium text-foreground">
-            Name <span class="text-destructive">*</span>
+            {props.i18n.t('connectionDialog.name')} <span class="text-destructive">*</span>
           </label>
           <Input
             id="environment-label"
@@ -7832,7 +9149,7 @@ function ConnectionDialog(props: Readonly<{
               props.updateField('label', event.currentTarget.value);
               props.clearFieldErrors();
             }}
-            placeholder="My Environment"
+            placeholder={props.i18n.t('connectionDialog.namePlaceholder')}
             size="sm"
             class={cn('w-full', props.fieldErrors.label && 'border-destructive ring-1 ring-destructive/20')}
           />
@@ -7852,6 +9169,7 @@ function ConnectionDialog(props: Readonly<{
 }
 
 function ControlPlaneDialog(props: Readonly<{
+  i18n: DesktopI18n;
   state: ControlPlaneDialogState;
   error: string;
   busyState: DesktopLauncherBusyState;
@@ -7866,11 +9184,11 @@ function ControlPlaneDialog(props: Readonly<{
     <Dialog
       open={isOpen()}
       onOpenChange={props.onOpenChange}
-      title="Add Provider"
+      title={props.i18n.t('connectionDialog.addProviderTitle')}
       footer={(
         <div class="flex justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
-            Cancel
+            {props.i18n.t('common.cancel')}
           </Button>
           <Button
             size="sm"
@@ -7880,14 +9198,14 @@ function ControlPlaneDialog(props: Readonly<{
               void props.onConnect();
             }}
           >
-            Continue in Browser
+            {props.i18n.t('connectionDialog.continueInBrowser')}
           </Button>
         </div>
       )}
     >
       <div class="space-y-4">
         <div class="space-y-1.5">
-          <label for="control-plane-label" class="block text-xs font-medium text-foreground">Name</label>
+          <label for="control-plane-label" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.providerName')}</label>
           <Input
             id="control-plane-label"
             value={props.state?.display_label ?? ''}
@@ -7899,7 +9217,7 @@ function ControlPlaneDialog(props: Readonly<{
           />
         </div>
         <div class="space-y-1.5">
-          <label for="control-plane-origin" class="block text-xs font-medium text-foreground">Provider URL</label>
+          <label for="control-plane-origin" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.providerUrl')}</label>
           <Input
             id="control-plane-origin"
             value={props.state?.provider_origin ?? ''}
@@ -7912,7 +9230,7 @@ function ControlPlaneDialog(props: Readonly<{
           />
         </div>
         <div class="text-xs text-muted-foreground">
-          Desktop will open your browser, use your current control plane session to authorize this provider, and store only a revocable desktop authorization locally.
+          {props.i18n.t('connectionDialog.providerAuthorizationHelp')}
         </div>
         <Show when={props.error}>
           <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -7927,7 +9245,8 @@ function ControlPlaneDialog(props: Readonly<{
 function LocalUIPasswordField(props: Readonly<{
   snapshot: DesktopSettingsSurfaceSnapshot;
   draft: DesktopSettingsDraft;
-  passwordStateLabel: string;
+  i18n: DesktopI18n;
+  passwordStateID: DesktopSettingsSurfaceSnapshot['password_state_id'];
   passwordStateTone: DesktopSettingsSurfaceSnapshot['password_state_tone'];
   localUIPasswordCanClear: boolean;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
@@ -7943,11 +9262,11 @@ function LocalUIPasswordField(props: Readonly<{
           size="sm"
           class="cursor-default whitespace-nowrap"
         >
-          {compactPasswordStateTagLabel(props.passwordStateLabel)}
+          {compactLocalizedPasswordStateTagLabel(props.i18n, props.passwordStateID)}
         </Tag>
         <Show when={trimString(props.draft.local_ui_password) !== ''}>
           <Tag variant="primary" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-            Replacement queued
+            {props.i18n.t('settings.replacementQueued')}
           </Tag>
         </Show>
       </div>
@@ -7956,6 +9275,7 @@ function LocalUIPasswordField(props: Readonly<{
         value={props.draft.local_ui_password}
         updateDraftField={props.updateDraftField}
         sectionTitle={props.sectionTitle}
+        i18n={props.i18n}
       />
       <Show when={props.localUIPasswordCanClear}>
         <div class="flex justify-end">
@@ -7964,7 +9284,7 @@ function LocalUIPasswordField(props: Readonly<{
             class="inline-flex cursor-pointer items-center justify-start rounded-md text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
             onClick={props.clearStoredLocalUIPassword}
           >
-            Remove stored password
+            {props.i18n.t('settings.removeStoredPassword')}
           </button>
         </div>
       </Show>
@@ -7976,11 +9296,13 @@ function SettingsFieldInput(props: Readonly<{
   field: DesktopSettingsSurfaceSnapshot['host_fields'][number];
   value: string;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
+  i18n: DesktopI18n;
   sectionTitle?: string;
 }>) {
-  const compactLabel = createMemo(() => compactSettingsFieldLabel(props.field.label));
-  const helpText = createMemo(() => plainTextFromHelpHTML(props.field.helpHTML ?? ''));
-  const showVisibleLabel = createMemo(() => !isRedundantSettingsFieldLabel(props.field.label, props.sectionTitle));
+  const compactLabel = createMemo(() => compactLocalizedSettingsFieldLabel(props.i18n, props.field));
+  const helpText = createMemo(() => localizedSettingsFieldHelp(props.i18n, props.field));
+  const placeholderText = createMemo(() => localizedSettingsFieldPlaceholder(props.i18n, props.field));
+  const showVisibleLabel = createMemo(() => compactLabel() !== trimString(props.sectionTitle));
   const describedBy = createMemo(() => {
     const values = (props.field.describedBy ?? []).filter((value) => {
       if (value === props.field.helpId) {
@@ -7999,7 +9321,7 @@ function SettingsFieldInput(props: Readonly<{
       >
         <div class="flex items-center gap-2">
           <span class="text-xs font-medium text-foreground">{compactLabel()}</span>
-          <SettingsHelpBadge label={props.field.label} content={helpText()} />
+          <SettingsHelpBadge label={compactLabel()} content={helpText()} i18n={props.i18n} />
         </div>
       </Show>
       <Input
@@ -8009,7 +9331,7 @@ function SettingsFieldInput(props: Readonly<{
         type={props.field.type ?? 'text'}
         autocomplete={props.field.autocomplete}
         inputMode={props.field.inputMode}
-        placeholder={props.field.placeholder}
+        placeholder={placeholderText()}
         spellcheck={false}
         aria-describedby={describedBy()}
         aria-label={showVisibleLabel() ? undefined : compactLabel()}
@@ -8025,12 +9347,28 @@ function SettingsFieldInput(props: Readonly<{
 }
 
 export function DesktopWelcomeShell(props: DesktopWelcomeShellProps) {
+  const shellLanguage = desktopLanguageBridge();
+  const [languageSnapshot, setLanguageSnapshot] = createSignal<RedevenLanguageSnapshot>(
+    shellLanguage?.getSnapshot() ?? FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT,
+  );
+  createEffect(() => {
+    if (!shellLanguage) return;
+    const unsubscribe = shellLanguage.subscribe((next) => {
+      setLanguageSnapshot(next);
+    });
+    onCleanup(unsubscribe);
+  });
+  const i18n = createMemo(() => createDesktopI18n(languageSnapshot().resolved_locale));
+  const floeConfig = createMemo(() => buildDesktopFloeConfig(i18n()));
+  createEffect(() => {
+    document.title = i18n().t('desktop.title');
+  });
   return (
-    <FloeProvider config={buildDesktopFloeConfig()}>
-      <>
+    <FloeProvider config={floeConfig()}>
+      <div data-redeven-desktop-locale={languageSnapshot().resolved_locale}>
         <DesktopWelcomeShellInner {...props} />
         <CommandPalette />
-      </>
+      </div>
     </FloeProvider>
   );
 }

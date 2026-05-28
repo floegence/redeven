@@ -5,10 +5,12 @@ import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsCard, FieldLabel } from '../SettingsPrimitives';
 import { SkillsCatalogTable } from '../SkillsCatalogTable';
 import { fetchGatewayJSON } from '../../../services/gatewayApi';
+import { useI18n } from '../../../i18n';
 import type { SkillCatalogEntry } from '../types';
 
 export function SkillsSection() {
   const ctx = useEnvSettingsPage();
+  const i18n = useI18n();
 
   const [skillsData, setSkillsData] = createSignal<any>(null);
   const [sourcesData, setSourcesData] = createSignal<any>(null);
@@ -89,30 +91,30 @@ export function SkillsSection() {
     <>
       <SettingsCard
         icon={Layers}
-        title="Skills"
-        description="Manage Flower skills: install from GitHub, browse skill files, toggle enable state, and maintain local skills."
-        badge={skillsReloading() || skillsLoading() ? 'Loading' : `${skillsCatalog()?.skills?.length ?? 0} skills`}
+        title={i18n.t('skillsSettings.title')}
+        description={i18n.t('skillsSettings.description')}
+        badge={skillsReloading() || skillsLoading() ? i18n.t('skillsSettings.loading') : i18n.tn('skillsSettings.skillCount', skillsCatalog()?.skills?.length ?? 0)}
         error={skillsError()}
         actions={
           <>
-            <Button size="sm" variant="outline" onClick={() => void refreshSkillsCatalog(true)} loading={skillsReloading()} disabled={!ctx.canInteract()}>Reload</Button>
-            <Button size="sm" variant="default" onClick={openInstallDialog} disabled={!ctx.canInteract() || !ctx.canAdmin()}>Install from GitHub</Button>
-            <Button size="sm" variant="default" onClick={() => setSkillCreateOpen(true)} disabled={!ctx.canInteract() || !ctx.canAdmin()}>Create Skill</Button>
+            <Button size="sm" variant="outline" onClick={() => void refreshSkillsCatalog(true)} loading={skillsReloading()} disabled={!ctx.canInteract()}>{i18n.t('skillsSettings.reload')}</Button>
+            <Button size="sm" variant="default" onClick={openInstallDialog} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.installFromGitHub')}</Button>
+            <Button size="sm" variant="default" onClick={() => setSkillCreateOpen(true)} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.createSkill')}</Button>
           </>
         }
       >
         <div class="space-y-4">
           <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
             <div class="md:col-span-2">
-              <FieldLabel>Search</FieldLabel>
+              <FieldLabel>{i18n.t('skillsSettings.searchLabel')}</FieldLabel>
               <Input value={skillQuery()} onInput={(e) => setSkillQuery(e.currentTarget.value)}
-                placeholder="Search by name, description, or path" size="sm" class="w-full" disabled={!ctx.canInteract()} />
+                placeholder={i18n.t('skillsSettings.searchPlaceholder')} size="sm" class="w-full" disabled={!ctx.canInteract()} />
             </div>
             <div>
-              <FieldLabel>Scope</FieldLabel>
+              <FieldLabel>{i18n.t('skillsSettings.scopeLabel')}</FieldLabel>
               <Select value={skillScopeFilter()} onChange={(v) => setSkillScopeFilter(v as any)}
                 disabled={!ctx.canInteract()}
-                options={[{ value: 'all', label: 'All scopes' }, { value: 'user', label: 'User (.redeven)' }, { value: 'user_agents', label: 'User (.agents)' }]}
+                options={[{ value: 'all', label: i18n.t('skillsSettings.scopeAll') }, { value: 'user', label: i18n.t('skillsSettings.scopeUserRedeven') }, { value: 'user_agents', label: i18n.t('skillsSettings.scopeUserAgents') }]}
                 class="w-full" />
             </div>
           </div>
@@ -127,7 +129,7 @@ export function SkillsSection() {
 
           <Show when={(skillsCatalog()?.conflicts?.length ?? 0) > 0}>
             <div class="space-y-1 rounded-lg border border-warning/40 bg-warning/10 p-3">
-              <div class="text-xs font-semibold text-warning">Conflicts detected: {skillsCatalog()?.conflicts?.length ?? 0}</div>
+              <div class="text-xs font-semibold text-warning">{i18n.t('skillsSettings.conflictsDetected', { count: skillsCatalog()?.conflicts?.length ?? 0 })}</div>
               <For each={(skillsCatalog()?.conflicts ?? []).slice(0, 5)}>
                 {(item: any) => <div class="break-all text-[11px] text-warning">{item.name}: {item.path}</div>}
               </For>
@@ -136,7 +138,7 @@ export function SkillsSection() {
 
           <Show when={(skillsCatalog()?.errors?.length ?? 0) > 0}>
             <div class="space-y-1 rounded-lg border border-destructive/40 bg-destructive/10 p-3">
-              <div class="text-xs font-semibold text-destructive">Catalog errors: {skillsCatalog()?.errors?.length ?? 0}</div>
+              <div class="text-xs font-semibold text-destructive">{i18n.t('skillsSettings.catalogErrors', { count: skillsCatalog()?.errors?.length ?? 0 })}</div>
               <For each={(skillsCatalog()?.errors ?? []).slice(0, 5)}>
                 {(item: any) => <div class="break-all text-[11px] text-destructive">{item.path}: {item.message}</div>}
               </For>
@@ -147,33 +149,33 @@ export function SkillsSection() {
 
       {/* Install dialog */}
       <Dialog open={skillInstallOpen()} onOpenChange={(open) => { setSkillInstallOpen(open); if (!open) setSkillInstallResolved([]); }}
-        title="Install skills from GitHub"
+        title={i18n.t('skillsSettings.installDialogTitle')}
         footer={
           <div class="flex items-center justify-end gap-2">
-            <Button size="sm" variant="outline" onClick={() => setSkillInstallOpen(false)} disabled={skillInstallSaving() || skillInstallValidating()}>Cancel</Button>
-            <Button size="sm" variant="outline" onClick={() => void validateSkillInstall()} loading={skillInstallValidating()} disabled={!ctx.canInteract() || !ctx.canAdmin() || skillInstallSaving()}>Validate</Button>
-            <Button size="sm" variant="default" onClick={() => void installSkillsFromGitHub()} loading={skillInstallSaving()} disabled={!ctx.canInteract() || !ctx.canAdmin()}>Install</Button>
+            <Button size="sm" variant="outline" onClick={() => setSkillInstallOpen(false)} disabled={skillInstallSaving() || skillInstallValidating()}>{i18n.t('common.actions.cancel')}</Button>
+            <Button size="sm" variant="outline" onClick={() => void validateSkillInstall()} loading={skillInstallValidating()} disabled={!ctx.canInteract() || !ctx.canAdmin() || skillInstallSaving()}>{i18n.t('skillsSettings.validate')}</Button>
+            <Button size="sm" variant="default" onClick={() => void installSkillsFromGitHub()} loading={skillInstallSaving()} disabled={!ctx.canInteract() || !ctx.canAdmin()}>{i18n.t('skillsSettings.install')}</Button>
           </div>
         }>
         <div class="space-y-4">
-          <div><FieldLabel>Scope</FieldLabel><Select value={skillInstallScope()} onChange={(v) => setSkillInstallScope(v as any)} options={[{ value: 'user', label: 'User (.redeven)' }, { value: 'user_agents', label: 'User (.agents)' }]} class="w-full" /></div>
-          <div><FieldLabel hint="preferred">GitHub URL</FieldLabel><Input value={skillInstallURL()} onInput={(e) => setSkillInstallURL(e.currentTarget.value)} placeholder="https://github.com/openai/skills/tree/main/skills/.curated/skill-installer" size="sm" class="w-full" /></div>
+          <div><FieldLabel>{i18n.t('skillsSettings.scopeLabel')}</FieldLabel><Select value={skillInstallScope()} onChange={(v) => setSkillInstallScope(v as any)} options={[{ value: 'user', label: i18n.t('skillsSettings.scopeUserRedeven') }, { value: 'user_agents', label: i18n.t('skillsSettings.scopeUserAgents') }]} class="w-full" /></div>
+          <div><FieldLabel hint={i18n.t('skillsSettings.preferredHint')}>{i18n.t('skillsSettings.githubUrlLabel')}</FieldLabel><Input value={skillInstallURL()} onInput={(e) => setSkillInstallURL(e.currentTarget.value)} placeholder="https://github.com/openai/skills/tree/main/skills/.curated/skill-installer" size="sm" class="w-full" /></div>
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div><FieldLabel>repo</FieldLabel><Input value={skillInstallRepo()} onInput={(e) => setSkillInstallRepo(e.currentTarget.value)} placeholder="openai/skills" size="sm" class="w-full font-mono text-xs" /></div>
-            <div><FieldLabel>ref</FieldLabel><Input value={skillInstallRef()} onInput={(e) => setSkillInstallRef(e.currentTarget.value)} placeholder="main" size="sm" class="w-full font-mono text-xs" /></div>
-            <div class="md:col-span-2"><FieldLabel hint="comma or newline separated">paths</FieldLabel><textarea class="w-full font-mono text-xs border border-border rounded-lg px-3 py-2.5 bg-muted/30 resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" style={{ 'min-height': '5rem' }} value={skillInstallPaths()} onInput={(e) => setSkillInstallPaths(e.currentTarget.value)} spellcheck={false} /></div>
+            <div><FieldLabel>{i18n.t('skillsSettings.repoLabel')}</FieldLabel><Input value={skillInstallRepo()} onInput={(e) => setSkillInstallRepo(e.currentTarget.value)} placeholder="openai/skills" size="sm" class="w-full font-mono text-xs" /></div>
+            <div><FieldLabel>{i18n.t('skillsSettings.refLabel')}</FieldLabel><Input value={skillInstallRef()} onInput={(e) => setSkillInstallRef(e.currentTarget.value)} placeholder="main" size="sm" class="w-full font-mono text-xs" /></div>
+            <div class="md:col-span-2"><FieldLabel hint={i18n.t('skillsSettings.pathsHint')}>{i18n.t('skillsSettings.pathsLabel')}</FieldLabel><textarea class="w-full font-mono text-xs border border-border rounded-lg px-3 py-2.5 bg-muted/30 resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" style={{ 'min-height': '5rem' }} value={skillInstallPaths()} onInput={(e) => setSkillInstallPaths(e.currentTarget.value)} spellcheck={false} /></div>
           </div>
-          <Checkbox checked={skillInstallOverwrite()} onChange={(v) => setSkillInstallOverwrite(v)} label="Overwrite existing skills if target already exists" size="sm" disabled={!ctx.canInteract() || !ctx.canAdmin()} />
+          <Checkbox checked={skillInstallOverwrite()} onChange={(v) => setSkillInstallOverwrite(v)} label={i18n.t('skillsSettings.overwriteExisting')} size="sm" disabled={!ctx.canInteract() || !ctx.canAdmin()} />
         </div>
       </Dialog>
 
       {/* Create dialog */}
-      <ConfirmDialog open={skillCreateOpen()} onOpenChange={(open) => setSkillCreateOpen(open)} title="Create skill" confirmText="Create" loading={skillCreateSaving()} onConfirm={() => void createSkill()}>
+      <ConfirmDialog open={skillCreateOpen()} onOpenChange={(open) => setSkillCreateOpen(open)} title={i18n.t('skillsSettings.createDialogTitle')} confirmText={i18n.t('skillsSettings.create')} loading={skillCreateSaving()} onConfirm={() => void createSkill()}>
         <div class="space-y-3">
-          <div><FieldLabel>Scope</FieldLabel><Select value={skillCreateScope()} onChange={(v) => setSkillCreateScope(v as any)} options={[{ value: 'user', label: 'User (.redeven)' }, { value: 'user_agents', label: 'User (.agents)' }]} class="w-full" /></div>
-          <div><FieldLabel>Name</FieldLabel><Input value={skillCreateName()} onInput={(e) => setSkillCreateName(e.currentTarget.value)} placeholder="incident-response" size="sm" class="w-full" /></div>
-          <div><FieldLabel>Description</FieldLabel><Input value={skillCreateDescription()} onInput={(e) => setSkillCreateDescription(e.currentTarget.value)} placeholder="Brief description" size="sm" class="w-full" /></div>
-          <div><FieldLabel hint="optional">Initial body</FieldLabel><textarea class="w-full font-mono text-xs border border-border rounded-lg px-3 py-2.5 bg-muted/30 resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" style={{ 'min-height': '7rem' }} value={skillCreateBody()} onInput={(e) => setSkillCreateBody(e.currentTarget.value)} spellcheck={false} /></div>
+          <div><FieldLabel>{i18n.t('skillsSettings.scopeLabel')}</FieldLabel><Select value={skillCreateScope()} onChange={(v) => setSkillCreateScope(v as any)} options={[{ value: 'user', label: i18n.t('skillsSettings.scopeUserRedeven') }, { value: 'user_agents', label: i18n.t('skillsSettings.scopeUserAgents') }]} class="w-full" /></div>
+          <div><FieldLabel>{i18n.t('skillsSettings.nameLabel')}</FieldLabel><Input value={skillCreateName()} onInput={(e) => setSkillCreateName(e.currentTarget.value)} placeholder="incident-response" size="sm" class="w-full" /></div>
+          <div><FieldLabel>{i18n.t('skillsSettings.descriptionLabel')}</FieldLabel><Input value={skillCreateDescription()} onInput={(e) => setSkillCreateDescription(e.currentTarget.value)} placeholder={i18n.t('skillsSettings.briefDescriptionPlaceholder')} size="sm" class="w-full" /></div>
+          <div><FieldLabel hint={i18n.t('skillsSettings.optionalHint')}>{i18n.t('skillsSettings.initialBodyLabel')}</FieldLabel><textarea class="w-full font-mono text-xs border border-border rounded-lg px-3 py-2.5 bg-muted/30 resize-y focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" style={{ 'min-height': '7rem' }} value={skillCreateBody()} onInput={(e) => setSkillCreateBody(e.currentTarget.value)} spellcheck={false} /></div>
         </div>
       </ConfirmDialog>
     </>

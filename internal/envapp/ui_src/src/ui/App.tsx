@@ -1,5 +1,5 @@
 import { FileBrowserDragProvider, FloeProvider, NotificationContainer, useTheme } from '@floegence/floe-webapp-core';
-import { onCleanup, onMount } from 'solid-js';
+import { createMemo, onCleanup, onMount } from 'solid-js';
 import { CommandPalette } from '@floegence/floe-webapp-core/ui';
 import { ProtocolProvider } from '@floegence/floe-webapp-protocol';
 import { EnvAppShell } from './EnvAppShell';
@@ -16,6 +16,7 @@ import { resolveEnvAppStorageBinding } from './services/uiPersistence';
 import { TerminalSessionsLifecycleSync } from './services/terminalSessionsLifecycleSync';
 import { REDEVEN_DECK_LAYOUT_IDS, redevenDeckPresets } from './deck/redevenDeckPresets';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
+import { I18nProvider, useI18n, type I18nHelpers } from './i18n';
 
 function readSessionStorage(key: string): string {
   try {
@@ -34,7 +35,7 @@ const persistenceBinding = resolveEnvAppStorageBinding({
   desktopStateStorageAvailable: isDesktopStateStorageAvailable(),
 });
 
-function buildFloeConfig() {
+function buildFloeConfig(t: I18nHelpers['t']) {
   const shellTheme = desktopThemeBridge();
 
   return {
@@ -55,12 +56,12 @@ function buildFloeConfig() {
     commands: { ignoreWhenTyping: false },
     accessibility: {
       mainContentId: 'redeven-env-main',
-      skipLinkLabel: 'Skip to Redeven environment content',
-      topBarLabel: 'Redeven environment toolbar',
-      primaryNavigationLabel: 'Redeven environment navigation',
-      mobileNavigationLabel: 'Redeven environment navigation',
-      sidebarLabel: 'Redeven environment sidebar',
-      mainLabel: 'Redeven environment content',
+      skipLinkLabel: t('shell.accessibility.skipLinkLabel'),
+      topBarLabel: t('shell.accessibility.topBarLabel'),
+      primaryNavigationLabel: t('shell.accessibility.primaryNavigationLabel'),
+      mobileNavigationLabel: t('shell.accessibility.mobileNavigationLabel'),
+      sidebarLabel: t('shell.accessibility.sidebarLabel'),
+      mainLabel: t('shell.accessibility.mainLabel'),
     },
     deck: {
       storageKey: persistenceBinding.deckStorageKey,
@@ -165,17 +166,13 @@ function DesktopThemeSync() {
   return null;
 }
 
-export function App() {
-  onMount(() => {
-    const dragRegionSync = installDesktopEmbeddedDragRegionSync();
-    onCleanup(() => {
-      dragRegionSync?.dispose();
-    });
-  });
+function EnvAppProviders() {
+  const i18n = useI18n();
+  const floeConfig = createMemo(() => buildFloeConfig(i18n.t));
 
   return (
     <FloeProvider
-      config={buildFloeConfig()}
+      config={floeConfig()}
       wrapAfterTheme={(renderChildren) => (
         <>
           <DesktopThemeSync />
@@ -194,5 +191,20 @@ export function App() {
         <NotificationContainer />
       </>
     </FloeProvider>
+  );
+}
+
+export function App() {
+  onMount(() => {
+    const dragRegionSync = installDesktopEmbeddedDragRegionSync();
+    onCleanup(() => {
+      dragRegionSync?.dispose();
+    });
+  });
+
+  return (
+    <I18nProvider>
+      <EnvAppProviders />
+    </I18nProvider>
   );
 }

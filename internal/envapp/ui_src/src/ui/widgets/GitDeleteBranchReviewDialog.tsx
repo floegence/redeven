@@ -9,6 +9,7 @@ import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redev
 import { GitDeleteBranchConfirmButton } from './GitDeleteBranchConfirmButton';
 import { GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
 import { expectedDeleteBranchName, resolveDeleteBranchReview, trimDeleteBranchReason, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchReviewModel';
+import { useI18n } from '../i18n';
 
 export interface GitDeleteBranchReviewDialogProps {
   open: boolean;
@@ -30,6 +31,7 @@ export interface GitDeleteBranchReviewDialogProps {
 }
 
 export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogProps) {
+  const i18n = useI18n();
   const layout = useLayout();
   const notification = useNotification();
   const [confirmBranchName, setConfirmBranchName] = createSignal('');
@@ -92,7 +94,7 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
   });
 
   const confirmLabel = () => {
-    if (deleting()) return 'Deleting...';
+    if (deleting()) return i18n.t('git.deleteBranchReview.deleting');
     return review().confirmMode === 'force' ? props.forceConfirmLabel : props.safeConfirmLabel;
   };
 
@@ -102,7 +104,7 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
     try {
       await writeTextToClipboard(value);
     } catch (error) {
-      notification.error('Copy failed', error instanceof Error ? error.message : 'Failed to copy branch name.');
+      notification.error(i18n.t('git.deleteBranchReview.copyFailedTitle'), error instanceof Error ? error.message : i18n.t('git.deleteBranchReview.failedToCopyBranchName'));
       return;
     }
     setBranchNameCopied(true);
@@ -121,13 +123,13 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
       onOpenChange={(open) => {
         if (!open) props.onClose();
       }}
-      title="Delete Branch"
+      title={i18n.t('git.deleteBranchReview.title')}
       description={props.description}
       footer={(
         <div class={cn('border-t px-4 pt-3 pb-4 backdrop-blur', redevenDividerRoleClass('strong'), redevenSurfaceRoleClass('inset'), 'supports-[backdrop-filter]:bg-background/78')}>
           <div class="flex w-full flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
             <Button size="sm" variant="outline" class={cn('w-full sm:w-auto', outlineControlClass)} disabled={loading() || deleting()} onClick={props.onClose}>
-              Cancel
+              {i18n.t('common.actions.cancel')}
             </Button>
             <Show when={props.previewError && props.branch}>
               <Button
@@ -137,7 +139,7 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
                 disabled={loading() || deleting()}
                 onClick={() => props.branch && props.onRetryPreview?.(props.branch)}
               >
-                Retry
+                {i18n.t('terminal.retry')}
               </Button>
             </Show>
             <GitDeleteBranchConfirmButton
@@ -172,10 +174,10 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
       <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
         <Show
           when={!loading()}
-          fallback={<GitStatePane loading message="Reviewing branch deletion..." class="m-4" surface />}
+          fallback={<GitStatePane loading message={i18n.t('git.deleteBranchReview.reviewing')} class="m-4" surface />}
         >
-          <Show when={!props.previewError} fallback={<GitStatePane tone="error" message={props.previewError ?? 'Delete review failed.'} class="m-4" surface />}>
-            <Show when={props.branch && preview()} fallback={<GitStatePane message="Choose a branch to review its deletion plan." class="m-4" surface />}>
+          <Show when={!props.previewError} fallback={<GitStatePane tone="error" message={props.previewError ?? i18n.t('git.deleteBranchReview.reviewFailed')} class="m-4" surface />}>
+            <Show when={props.branch && preview()} fallback={<GitStatePane message={i18n.t('git.deleteBranchReview.chooseBranch')} class="m-4" surface />}>
               <div class="flex flex-col gap-3 px-4 pt-2 pb-4">
                 <GitSubtleNote class={props.summaryNoteClass}>
                   {props.safeSummary}
@@ -183,7 +185,7 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
 
                 <Show when={!preview()?.safeDeleteAllowed}>
                   <GitSubtleNote class="border-warning/25 bg-warning/10 text-warning-foreground">
-                    {preview()?.safeDeleteReason || 'Safe delete is blocked.'}
+                    {preview()?.safeDeleteReason || i18n.t('git.deleteBranchReview.safeDeleteBlocked')}
                   </GitSubtleNote>
                 </Show>
 
@@ -191,17 +193,17 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
                   <GitSubtleNote class="border-error/25 bg-error/10 text-foreground">
                     <div class="space-y-3">
                       <div class="space-y-2">
-                        <div class="text-xs font-semibold text-foreground">Force delete consequences</div>
+                        <div class="text-xs font-semibold text-foreground">{i18n.t('git.deleteBranchReview.forceConsequences')}</div>
                         {props.forceDeleteSummary}
                       </div>
                       <div class="space-y-1.5">
                         <div id={confirmBranchLabelId} class="flex flex-wrap items-center gap-1.5 text-[11px] font-medium text-foreground">
-                          <span>Type</span>
+                          <span>{i18n.t('git.deleteBranchReview.type')}</span>
                           <button
                             type="button"
                             class="inline-flex min-w-0 max-w-full cursor-pointer items-center rounded-md bg-background/70 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-foreground shadow-sm ring-1 ring-border/60 transition-colors duration-150 hover:bg-background hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
-                            title={branchNameCopied() ? 'Branch name copied' : 'Copy branch name'}
-                            aria-label={`Copy branch name ${requiredBranchName()}`}
+                            title={branchNameCopied() ? i18n.t('git.deleteBranchReview.branchNameCopied') : i18n.t('git.deleteBranchReview.copyBranchName')}
+                            aria-label={i18n.t('git.deleteBranchReview.copyBranchNameValue', { name: requiredBranchName() })}
                             onClick={() => void handleCopyBranchName()}
                           >
                             <span class="min-w-0 truncate">{requiredBranchName()}</span>
@@ -212,15 +214,15 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
                               'inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md border border-transparent transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70',
                               branchNameCopied() ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-background hover:text-foreground',
                             )}
-                            aria-label={branchNameCopied() ? 'Branch name copied' : 'Copy branch name'}
-                            title={branchNameCopied() ? 'Branch name copied' : 'Copy branch name'}
+                            aria-label={branchNameCopied() ? i18n.t('git.deleteBranchReview.branchNameCopied') : i18n.t('git.deleteBranchReview.copyBranchName')}
+                            title={branchNameCopied() ? i18n.t('git.deleteBranchReview.branchNameCopied') : i18n.t('git.deleteBranchReview.copyBranchName')}
                             onClick={() => void handleCopyBranchName()}
                           >
                             <Show when={branchNameCopied()} fallback={<Copy class="size-3.5" />}>
                               <Check class="size-3.5" />
                             </Show>
                           </button>
-                          <span>to confirm force delete</span>
+                          <span>{i18n.t('git.deleteBranchReview.confirmForceDeleteSuffix')}</span>
                         </div>
                         <input
                           id={confirmBranchInputId}
@@ -233,7 +235,7 @@ export function GitDeleteBranchReviewDialog(props: GitDeleteBranchReviewDialogPr
                           autofocus
                         />
                         <div class="text-[11px] leading-relaxed text-muted-foreground">
-                          Branch name must match exactly.
+                          {i18n.t('git.deleteBranchReview.exactMatchHint')}
                         </div>
                       </div>
                     </div>

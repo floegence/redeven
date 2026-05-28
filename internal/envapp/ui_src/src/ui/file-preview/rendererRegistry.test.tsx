@@ -3,6 +3,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { createI18nHelpers } from '../i18n';
 import {
   renderRedevenFilePreviewBody,
   resolveRedevenFilePreviewRenderer,
@@ -49,6 +50,7 @@ describe('Redeven file preview renderer registry', () => {
   it('renders text, PDF, DOCX, spreadsheet, and unsupported bodies without a shared-package preview component', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
+    const i18n = createI18nHelpers('en-US');
 
     render(() => (
       <>
@@ -88,11 +90,11 @@ describe('Redeven file preview renderer registry', () => {
     expect(host.querySelector('[data-testid="docx-renderer"]')?.textContent).toBe('2');
     expect(host.textContent).toContain('Sheet: Sheet1');
     expect(host.textContent).toContain('A1');
-    expect(host.textContent).toContain('Preview not available');
-    expect(host.textContent).toContain('This file type cannot be previewed');
-    expect(host.textContent).toContain('Technical details');
+    expect(host.textContent).toContain(i18n.t('filePreview.errorUnsupportedTitle'));
+    expect(host.textContent).toContain(i18n.t('filePreview.errorUnsupportedDescription'));
+    expect(host.textContent).toContain(i18n.t('filePreview.technicalDetails'));
 
-    const detailsButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Technical details'));
+    const detailsButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes(i18n.t('filePreview.technicalDetails')));
     expect(detailsButton).toBeTruthy();
     detailsButton?.click();
     expect(host.textContent).toContain('Preview blocked by policy.');

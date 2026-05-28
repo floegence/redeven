@@ -3,6 +3,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Card, Tag, Button, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { Copy, Check } from '@floegence/floe-webapp-core/icons';
 import { redevenDividerRoleClass, redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
+import { useI18n } from '../../i18n';
 
 export type ViewMode = 'ui' | 'json';
 
@@ -21,6 +22,7 @@ function settingsTagVariant(tone: 'default' | 'success' | 'warning' | 'danger' =
 }
 
 export function ViewToggle(props: { value: () => ViewMode; disabled?: boolean; onChange: (v: ViewMode) => void }) {
+  const i18n = useI18n();
   const btnClass = (active: boolean) => {
     const base = 'px-3 py-1.5 text-xs font-medium rounded-md transition-all duration-150';
     if (active) return cn(base, redevenSegmentedItemClass(true), 'text-foreground shadow-sm');
@@ -31,10 +33,10 @@ export function ViewToggle(props: { value: () => ViewMode; disabled?: boolean; o
   return (
     <div class={cn('inline-flex items-center gap-0.5 rounded-lg border p-0.5', redevenSurfaceRoleClass('segmented'), disabledClass())}>
       <button type="button" class={btnClass(props.value() === 'ui')} onClick={() => props.onChange('ui')}>
-        UI
+        {i18n.t('settings.viewMode.ui')}
       </button>
       <button type="button" class={btnClass(props.value() === 'json')} onClick={() => props.onChange('json')}>
-        JSON
+        {i18n.t('settings.viewMode.json')}
       </button>
     </div>
   );
@@ -50,6 +52,7 @@ function formatSavedTime(unixMs: number | null): string {
 }
 
 export function AutoSaveIndicator(props: { dirty: boolean; saving: boolean; error?: string | null; savedAt: number | null; enabled?: boolean }) {
+  const i18n = useI18n();
   const tagVariant = createMemo<TagProps['variant']>(() => {
     if (props.saving) return 'primary';
     if (!props.enabled) return 'neutral';
@@ -65,15 +68,15 @@ export function AutoSaveIndicator(props: { dirty: boolean; saving: boolean; erro
   });
 
   const label = createMemo(() => {
-    if (props.saving) return 'Saving...';
-    if (!props.enabled) return 'Auto-save paused';
-    if (props.error) return 'Needs attention';
-    if (props.dirty) return 'Unsaved changes';
+    if (props.saving) return i18n.t('settings.autoSave.saving');
+    if (!props.enabled) return i18n.t('settings.autoSave.paused');
+    if (props.error) return i18n.t('settings.autoSave.needsAttention');
+    if (props.dirty) return i18n.t('settings.autoSave.unsavedChanges');
     if (props.savedAt) {
       const t = formatSavedTime(props.savedAt);
-      return t ? `Saved ${t}` : 'Saved';
+      return t ? i18n.t('settings.autoSave.savedAt', { time: t }) : i18n.t('settings.autoSave.saved');
     }
-    return 'Auto-save on';
+    return i18n.t('settings.autoSave.on');
   });
 
   return (
@@ -298,13 +301,14 @@ export function SettingsKeyValueTable(props: {
   rows: ReadonlyArray<Readonly<{ label: string; value: JSX.Element | string; note?: JSX.Element | string; mono?: boolean }>>;
   minWidthClass?: string;
 }) {
+  const i18n = useI18n();
   return (
     <SettingsTable minWidthClass={props.minWidthClass}>
       <SettingsTableHead>
         <SettingsTableHeaderRow>
-          <SettingsTableHeaderCell class="w-48">Setting</SettingsTableHeaderCell>
-          <SettingsTableHeaderCell>Value</SettingsTableHeaderCell>
-          <SettingsTableHeaderCell class="w-64">Notes</SettingsTableHeaderCell>
+          <SettingsTableHeaderCell class="w-48">{i18n.t('settings.table.setting')}</SettingsTableHeaderCell>
+          <SettingsTableHeaderCell>{i18n.t('settings.table.value')}</SettingsTableHeaderCell>
+          <SettingsTableHeaderCell class="w-64">{i18n.t('settings.table.notes')}</SettingsTableHeaderCell>
         </SettingsTableHeaderRow>
       </SettingsTableHead>
       <SettingsTableBody>
@@ -442,6 +446,7 @@ export function EmptyState(props: {
 // ── Copy Button ──────────────────────────────────────────────
 
 export function CopyButton(props: { value: string; label?: string }) {
+  const i18n = useI18n();
   const [copied, setCopied] = createSignal(false);
   let timer: ReturnType<typeof setTimeout>;
 
@@ -462,9 +467,9 @@ export function CopyButton(props: { value: string; label?: string }) {
       size="xs"
       icon={copied() ? Check : Copy}
       onClick={handleCopy}
-      aria-label={props.label ?? `Copy ${props.value}`}
+      aria-label={props.label ?? i18n.t('settings.copyValue', { value: props.value })}
     >
-      {copied() ? 'Copied' : (props.label ?? '')}
+      {copied() ? i18n.t('common.actions.copied') : (props.label ?? '')}
     </Button>
   );
 }

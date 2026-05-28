@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildAskFlowerComposerCopy } from './askFlowerComposerCopy';
 import { setAskFlowerAttachmentSourcePath } from './askFlowerAttachmentMetadata';
+import { createI18nHelpers } from '../i18n/createI18n';
 
 const baseIntent = {
   id: 'intent-1',
@@ -45,6 +46,35 @@ describe('buildAskFlowerComposerCopy', () => {
           path: '/Users/demo/notes.md',
         },
       ],
+    });
+  });
+
+  it('localizes product chrome while preserving selected content and file paths', () => {
+    const zhCN = createI18nHelpers('zh-CN');
+    const copy = buildAskFlowerComposerCopy({
+      ...baseIntent,
+      contextItems: [
+        {
+          kind: 'file_selection',
+          path: '/Users/demo/notes.md',
+          selection: 'const answer = 42;',
+          selectionChars: 18,
+        },
+      ],
+    }, { t: zhCN.t });
+
+    expect(copy.placeholder).toBe('询问这段选择内容、请求修改，或描述你的需求');
+    expect(copy.question).toBe('你想理解、修改或验证什么？');
+    expect(copy.contextEntries[0]).toMatchObject({
+      label: '已选内容',
+      title: '预览来自 /Users/demo/notes.md 的已选内容',
+      detail: 'notes.md',
+      primaryAction: {
+        title: '已选内容',
+        subtitle: 'notes.md',
+        body: 'const answer = 42;',
+        sourcePath: '/Users/demo/notes.md',
+      },
     });
   });
 

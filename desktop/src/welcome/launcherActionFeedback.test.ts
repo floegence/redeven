@@ -1,17 +1,20 @@
 import { describe, expect, it } from 'vitest';
 
+import { createDesktopI18n } from '../shared/i18n';
 import { launcherActionFailurePresentation } from './launcherActionFeedback';
 
 describe('launcherActionFeedback', () => {
+  const i18n = createDesktopI18n('en-US');
+
   it('maps stale sessions to an informational toast and snapshot refresh', () => {
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'session_stale',
       scope: 'environment',
       message: 'That window was already closed. Desktop refreshed the environment list.',
       should_refresh_snapshot: true,
     })).toEqual({
-      message: 'That window was already closed. Desktop refreshed the environment list.',
+      message: 'That window was already closed. Desktop refreshed the Environment list.',
       tone: 'info',
       refresh_snapshot: true,
       delivery: 'toast',
@@ -19,7 +22,7 @@ describe('launcherActionFeedback', () => {
   });
 
   it('treats opening collisions as informational toasts', () => {
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'environment_opening',
       scope: 'environment',
@@ -33,19 +36,19 @@ describe('launcherActionFeedback', () => {
   });
 
   it('keeps provider and control-plane failures toast-oriented', () => {
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'environment_offline',
       scope: 'environment',
       message: 'This environment is currently offline in the provider.',
     })).toEqual({
-      message: 'This environment is currently offline in the provider.',
+      message: 'This Environment is currently offline in the Provider.',
       tone: 'warning',
       refresh_snapshot: false,
       delivery: 'toast',
     });
 
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'control_plane_missing',
       scope: 'control_plane',
@@ -57,7 +60,7 @@ describe('launcherActionFeedback', () => {
       delivery: 'toast',
     });
 
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'action_invalid',
       scope: 'environment',
@@ -70,26 +73,26 @@ describe('launcherActionFeedback', () => {
     });
   });
 
-  it('keeps local and SSH runtime-not-started failures source-specific', () => {
-    expect(launcherActionFailurePresentation({
+  it('localizes runtime-not-started failures instead of echoing raw launcher strings', () => {
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'runtime_not_started',
       scope: 'environment',
       message: 'Start the SSH runtime first, then open this environment.',
     })).toEqual({
-      message: 'Start the SSH runtime first, then open this environment.',
+      message: 'Start the Runtime before opening this Environment.',
       tone: 'warning',
       refresh_snapshot: false,
       delivery: 'toast',
     });
 
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'runtime_not_started',
       scope: 'environment',
       message: '',
     })).toEqual({
-      message: 'Start the runtime before opening this environment.',
+      message: 'Start the Runtime before opening this Environment.',
       tone: 'warning',
       refresh_snapshot: false,
       delivery: 'toast',
@@ -97,7 +100,7 @@ describe('launcherActionFeedback', () => {
   });
 
   it('turns provider authorization failures into persistent reconnect actions', () => {
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'control_plane_auth_required',
       scope: 'control_plane',
@@ -108,7 +111,7 @@ describe('launcherActionFeedback', () => {
       should_refresh_snapshot: true,
     })).toEqual({
       title: 'Provider Authorization Expired',
-      message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
+      message: 'Desktop needs fresh Provider authorization before it can open or connect this Provider Environment.',
       tone: 'warning',
       refresh_snapshot: true,
       delivery: 'toast',
@@ -122,15 +125,34 @@ describe('launcherActionFeedback', () => {
     });
   });
 
+  it('localizes fixed launcher failure chrome with the current Desktop locale', () => {
+    const zhCN = createDesktopI18n('zh-CN');
+
+    expect(launcherActionFailurePresentation(zhCN, {
+      ok: false,
+      code: 'control_plane_auth_required',
+      scope: 'control_plane',
+      message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
+      provider_origin: 'https://cp.example.invalid',
+      env_public_id: 'env_demo',
+    })).toMatchObject({
+      title: 'Provider 授权已过期',
+      message: 'Desktop 需要新的 Provider 授权，才能打开或连接此 Provider Environment。',
+      action: {
+        label: '重新连接 Provider',
+      },
+    });
+  });
+
   it('keeps provider-link failures separate from runtime-start failures', () => {
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'provider_link_failed',
       scope: 'environment',
       message: 'Desktop failed to connect the Local Runtime to this provider Environment.',
       should_refresh_snapshot: true,
     })).toEqual({
-      message: 'Desktop failed to connect the Local Runtime to this provider Environment.',
+      message: 'Desktop could not connect this Runtime to the Provider Environment.',
       tone: 'warning',
       refresh_snapshot: true,
       delivery: 'toast',
@@ -138,14 +160,14 @@ describe('launcherActionFeedback', () => {
   });
 
   it('shows Start Runtime failures as error toasts with a snapshot refresh', () => {
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'runtime_start_failed',
       scope: 'environment',
       message: 'Start Runtime did not complete because the runtime process did not stay online.',
       should_refresh_snapshot: true,
     })).toEqual({
-      message: 'Start Runtime did not complete because the runtime process did not stay online.',
+      message: 'Start Runtime did not complete.',
       tone: 'error',
       refresh_snapshot: true,
       delivery: 'toast',
@@ -153,7 +175,7 @@ describe('launcherActionFeedback', () => {
   });
 
   it('uses structured failure summaries instead of raw launcher messages', () => {
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'runtime_start_failed',
       scope: 'environment',
@@ -177,10 +199,28 @@ describe('launcherActionFeedback', () => {
       refresh_snapshot: true,
       delivery: 'toast',
     });
+
+    const zhCN = createDesktopI18n('zh-CN');
+    expect(launcherActionFailurePresentation(zhCN, {
+      ok: false,
+      code: 'runtime_start_failed',
+      scope: 'environment',
+      message: 'control_stderr:',
+      failure: {
+        code: 'ssh_connection_failed',
+        severity: 'error',
+        title: 'SSH Connection Failed',
+        summary: 'SSH connection to "dify" failed.',
+        target_label: 'dify',
+      },
+    })).toMatchObject({
+      title: 'SSH 连接失败',
+      message: '无法连接到 “dify” 的 SSH。',
+    });
   });
 
   it('keeps dialog-scoped validation failures inline', () => {
-    expect(launcherActionFailurePresentation({
+    expect(launcherActionFailurePresentation(i18n, {
       ok: false,
       code: 'action_invalid',
       scope: 'dialog',
