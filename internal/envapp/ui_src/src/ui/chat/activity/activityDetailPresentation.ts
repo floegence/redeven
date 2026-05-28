@@ -247,6 +247,8 @@ function todoPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
     id: 'todos',
     labelKey: 'chatActivity.copyTarget.summary',
     text: section.items.map((todo) => `${todo.afterStatus}: ${todo.content ?? ''}`.trim()).join('\n'),
+    textKey: 'chatActivity.fallback.untitledTodo',
+    textPrefixSeparator: ':',
   });
   return ensureContent(presentation);
 }

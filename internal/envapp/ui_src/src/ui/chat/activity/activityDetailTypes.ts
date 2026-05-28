@@ -142,6 +142,9 @@ export interface ActivityDetailCopyTarget {
   labelKey?: EnvAppTranslationKey;
   labelParams?: TranslationParams;
   text: string;
+  textKey?: EnvAppTranslationKey;
+  textParams?: TranslationParams;
+  textPrefixSeparator?: string;
 }
 
 export type ActivityDetailLoadState =

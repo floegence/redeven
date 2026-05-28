@@ -7008,7 +7008,6 @@ function EnvironmentConnectionCard(props: Readonly<{
                 <span class="redeven-card-runtime-chip__dot" aria-hidden="true" />
                 <span class="redeven-card-runtime-chip__text">{card().runtime_started_label}</span>
               </span>
-              <span class="ml-1.5 text-xs text-muted-foreground">{formatLocalizedRelativeTimestamp(props.i18n, props.environment.last_used_at_ms)}</span>
               <Show when={props.environment.control_plane_label}>
                 {(cpLabel) => (
                   <span class="redeven-card-runtime-domain ml-1.5">

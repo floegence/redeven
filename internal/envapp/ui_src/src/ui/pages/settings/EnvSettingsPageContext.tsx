@@ -161,13 +161,13 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   const canAdmin = createMemo(() => !!env.env()?.permissions?.can_admin || !!env.env()?.permissions?.is_owner);
 
   // Navigation
-  const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>('interface');
+  const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>('config');
   const [searchQuery, setSearchQuery] = createSignal('');
 
   createEffect(() => {
     const focusSeq = env.settingsFocusSeq();
     if (focusSeq <= 0) return;
-    setActiveSection(env.settingsFocusSection() ?? 'interface');
+    setActiveSection(env.settingsFocusSection() ?? 'config');
   });
 
   // Runtime maintenance

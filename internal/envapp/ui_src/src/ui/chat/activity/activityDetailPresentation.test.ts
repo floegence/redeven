@@ -65,4 +65,34 @@ describe('activityDetailPresentation', () => {
       }),
     ]));
   });
+
+  it('keeps todo copy summaries meaningful when UI uses a localized fallback label', () => {
+    const detail = normalizeActivityDetail({
+      ...baseItem,
+      renderer: 'todos',
+    }, { ...inlineRef, kind: 'todo_delta' }, {
+      result: {
+        todos: [
+          { id: 'todo-1', status: 'pending' },
+        ],
+      },
+    });
+
+    expect(detail.sections).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'todo_delta',
+        items: [expect.objectContaining({
+          contentKey: 'chatActivity.fallback.untitledTodo',
+        })],
+      }),
+    ]));
+    expect(detail.copyTargets).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'todos',
+        text: 'pending:',
+        textKey: 'chatActivity.fallback.untitledTodo',
+        textPrefixSeparator: ':',
+      }),
+    ]));
+  });
 });

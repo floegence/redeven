@@ -408,10 +408,10 @@ describe('EnvSettingsPage', () => {
 
     const navLabels = SETTINGS_NAV_ITEMS.map((item) => item.label);
     expect(navLabels).toEqual([
-      'Interface',
       'Config File',
       'Connection',
       'Runtime Status',
+      'Interface',
       'Shell & Workspace',
       'Logging',
       'Codespaces & Tooling',
@@ -427,6 +427,9 @@ describe('EnvSettingsPage', () => {
       .filter((label) => navLabels.includes(label));
     expect(renderedNavLabels).toEqual(navLabels);
 
+    expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
+    expect(host.querySelector('[data-settings-card="Interface"]')).toBeNull();
+    await openSettingsSection(host, 'interface');
     expect(host.querySelector('[data-settings-card="Interface"]')?.textContent).toContain('Language preference');
     expect(host.querySelector('[data-settings-card="Interface"]')?.textContent).toContain('System default');
 
@@ -450,6 +453,14 @@ describe('EnvSettingsPage', () => {
 
     await openSettingsSection(host, 'codespaces');
     expect(host.querySelector('[data-settings-card="Browser Editor"]')).toBeTruthy();
+  });
+
+  it('opens Runtime Settings on the existing Config File section by default', async () => {
+    render(() => <EnvSettingsPage />, host);
+    await flushPage();
+
+    expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
+    expect(host.querySelector('[data-settings-card="Interface"]')).toBeNull();
   });
 
   it('honors the shell focus request for the Interface section', async () => {
@@ -504,7 +515,6 @@ describe('EnvSettingsPage', () => {
     });
 
     render(() => <EnvSettingsPage />, host);
-    await openSettingsSection(host, 'Runtime Status');
     await flushPage();
     await openSettingsSection(host, 'agent');
 
@@ -542,11 +552,11 @@ describe('EnvSettingsPage', () => {
     render(() => <EnvSettingsPage />, host);
     await openSettingsSection(host, 'ai');
     await vi.waitFor(() => {
-      expect(host.querySelector('[data-settings-card="Flower"]')?.textContent).toContain('Flower is currently disabled.');
+      expect(host.querySelector('[data-settings-card="Flower"]')).toBeTruthy();
     });
 
     const flowerCard = host.querySelector('[data-settings-card="Flower"]');
-    expect(flowerCard?.textContent).toContain('Configure providers below to enable it automatically.');
+    expect(flowerCard?.textContent).toContain('The Desktop model source is available for this SSH environment.');
   });
 
   it('notifies the app settings revision after saving a Flower provider bundle', async () => {
@@ -622,7 +632,7 @@ describe('EnvSettingsPage', () => {
 
     await vi.waitFor(() => {
       expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith(
-        '/_redeven_proxy/api/settings',
+        '/_redeven_proxy/api/ai/provider_bundle',
         expect.objectContaining({ method: 'PUT' }),
       );
       expect(envContextMocks.bumpSettingsSeq).toHaveBeenCalledTimes(1);

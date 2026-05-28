@@ -479,7 +479,12 @@ vi.mock('../i18n', async (importOriginal) => {
   return {
     ...actual,
     useI18n: () => ({
-      ...actual.createI18nHelpers(testLocale() as any),
+      t: (key: any, params?: any) => actual.createI18nHelpers(testLocale() as any).t(key, params),
+      tn: (key: any, count: number, params?: any) => actual.createI18nHelpers(testLocale() as any).tn(key, count, params),
+      rich: (key: any, params?: any) => actual.createI18nHelpers(testLocale() as any).rich(key, params),
+      formatDateTime: (value: any, options?: any) => actual.createI18nHelpers(testLocale() as any).formatDateTime(value, options),
+      formatRelativeTime: (value: any) => actual.createI18nHelpers(testLocale() as any).formatRelativeTime(value),
+      formatNumber: (value: number, options?: any) => actual.createI18nHelpers(testLocale() as any).formatNumber(value, options),
       snapshot: () => ({
         preference: testLocale(),
         resolved_locale: testLocale(),
@@ -635,10 +640,12 @@ vi.mock('@floegence/floe-webapp-core/workbench', async (importOriginal) => ({
 
 vi.mock('./surface/RedevenWorkbenchSurface', () => ({
   RedevenWorkbenchSurface: (props: any) => {
-    surfaceApiMocks.lastWidgetDefinitions = props.widgetDefinitions;
-    surfaceApiMocks.lastStateAccessor = props.state;
-    surfaceApiMocks.lastSetState = props.setState;
-    surfaceApiMocks.lastSurfaceProps = props;
+    createEffect(() => {
+      surfaceApiMocks.lastWidgetDefinitions = props.widgetDefinitions;
+      surfaceApiMocks.lastStateAccessor = props.state;
+      surfaceApiMocks.lastSetState = props.setState;
+      surfaceApiMocks.lastSurfaceProps = props;
+    });
     props.onApiReady?.(stableSurfaceApi);
     const topWidgetId = () => ([...props.state().widgets].sort((left: any, right: any) => {
       if (left.z_index !== right.z_index) {
@@ -1124,6 +1131,60 @@ describe('EnvWorkbenchPage', () => {
       expect.objectContaining({ type: 'redeven.files', singleton: false }),
       expect.objectContaining({ type: 'redeven.preview', singleton: false }),
     ]));
+  });
+
+  it('updates localized Workbench chrome without reloading runtime layout state', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    storageMocks.readUIStorageJSON.mockImplementation(((key: string) => {
+      if (key === 'workbench:local_preferences:env-123') {
+        return localWorkbenchPreferences({
+          theme: 'mica',
+        });
+      }
+      if (key === 'workbench:instance_state:env-123') {
+        return {
+          version: 1,
+          file_browser_committed_paths: {},
+          terminal_panels: {},
+          terminal_geometry: {},
+        };
+      }
+      return null;
+    }) as any);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 5,
+      revision: 9,
+      updated_at_unix_ms: 100,
+      widgets: [
+        runtimeWidget('widget-files-1', 'redeven.files', 1, 123),
+      ],
+      widget_states: [],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.lastWidgetDefinitions.find((definition: any) => definition.type === 'redeven.files')?.label).toBe('Files');
+    const storageReadCount = storageMocks.readUIStorageJSON.mock.calls.length;
+    const layoutSnapshotReadCount = layoutApiMocks.getWorkbenchLayoutSnapshot.mock.calls.length;
+    const layoutStreamConnectCount = layoutApiMocks.connectWorkbenchLayoutEventStream.mock.calls.length;
+    const surface = host.querySelector('[data-testid="env-workbench-surface"]') as HTMLElement;
+    expect(surface.dataset.widgetIds).toBe('widget-files-1');
+
+    setTestLocale('zh-CN');
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.lastWidgetDefinitions.find((definition: any) => definition.type === 'redeven.files')?.label).toBe('文件');
+    expect(surface.dataset.widgetIds).toBe('widget-files-1');
+    expect(storageMocks.readUIStorageJSON).toHaveBeenCalledTimes(storageReadCount);
+    expect(layoutApiMocks.getWorkbenchLayoutSnapshot).toHaveBeenCalledTimes(layoutSnapshotReadCount);
+    expect(layoutApiMocks.connectWorkbenchLayoutEventStream).toHaveBeenCalledTimes(layoutStreamConnectCount);
+    expect(layoutApiMocks.lastStreamArgs?.signal.aborted).toBe(false);
   });
 
   it('uses a full-screen progress curtain until the runtime layout is ready', async () => {

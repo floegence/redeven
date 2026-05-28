@@ -5,7 +5,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { useI18n } from '../../i18n';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { localizedActivityText, localizedActivityValue } from './activityDetailI18n';
-import type { ActivityDetailLoadState, ActivityDetailSection } from './activityDetailTypes';
+import type { ActivityDetailCopyTarget, ActivityDetailLoadState, ActivityDetailSection } from './activityDetailTypes';
 import { ErrorDetailRenderer } from './renderers/ErrorDetailRenderer';
 import { FileChangeDetailRenderer } from './renderers/FileChangeDetailRenderer';
 import { FileReadContentRenderer } from './renderers/FileReadContentRenderer';
@@ -34,6 +34,31 @@ function renderSection(section: ActivityDetailSection) {
     default:
       return <div class="chat-activity-detail-empty">{i18n.t('chatActivity.noDetailContent')}</div>;
   }
+}
+
+function localizedCopyText(i18n: ReturnType<typeof useI18n>, target: ActivityDetailCopyTarget): string {
+  if (!target.textKey) {
+    return target.text;
+  }
+  const fallback = i18n.t(target.textKey, target.textParams);
+  const separator = target.textPrefixSeparator;
+  if (!separator) {
+    return target.text || fallback;
+  }
+  if (!target.text.trim()) {
+    return fallback;
+  }
+  return target.text
+    .split('\n')
+    .map((line) => {
+      const [status, ...rest] = line.split(separator);
+      const content = rest.join(separator).trim();
+      if (!status || content) {
+        return line;
+      }
+      return `${status}${separator} ${fallback}`;
+    })
+    .join('\n');
 }
 
 export const ActivityDetailPanel: Component<{
@@ -103,7 +128,7 @@ export const ActivityDetailPanel: Component<{
                           class="chat-activity-detail-action"
                           onClick={(event) => {
                             event.stopPropagation();
-                            void copyTarget(target.id, target.text);
+                            void copyTarget(target.id, localizedCopyText(i18n, target));
                           }}
                         >
                           {copiedId() === target.id ? i18n.t('common.actions.copied') : localizedActivityText(i18n, target)}

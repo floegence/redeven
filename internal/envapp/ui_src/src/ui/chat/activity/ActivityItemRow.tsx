@@ -4,6 +4,9 @@ import { cn } from '@floegence/floe-webapp-core';
 
 import {
   getSelectedAskUserChoice,
+  ASK_USER_SELECT_OR_WRITE_DEFAULT_LABEL,
+  ASK_USER_SELECT_OR_WRITE_DEFAULT_PLACEHOLDER,
+  ASK_USER_WRITE_DEFAULT_PLACEHOLDER,
   normalizeAskUserDraft,
   normalizeAskUserDraftForQuestion,
   normalizeAskUserQuestions,
@@ -50,7 +53,7 @@ function localizedQuestionInputPlaceholder(
   draft: AskUserDraft | undefined | null,
 ): string {
   const fallback = questionInputPlaceholder(question, draft);
-  if (fallback && fallback !== 'Type your answer') {
+  if (fallback && fallback !== ASK_USER_WRITE_DEFAULT_PLACEHOLDER && fallback !== ASK_USER_SELECT_OR_WRITE_DEFAULT_PLACEHOLDER) {
     return fallback;
   }
   if (question.isSecret) {
@@ -59,6 +62,13 @@ function localizedQuestionInputPlaceholder(
   return question.responseMode === 'select_or_write'
     ? i18n.t('chatActivity.typeAnotherAnswer')
     : i18n.t('chatActivity.typeYourAnswer');
+}
+
+function localizedQuestionWriteLabel(i18n: ReturnType<typeof useI18n>, question: AskUserQuestion): string {
+  if (!question.writeLabel || question.writeLabel === ASK_USER_SELECT_OR_WRITE_DEFAULT_LABEL) {
+    return i18n.t('chatActivity.noneOfTheAbove');
+  }
+  return question.writeLabel;
 }
 
 const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem }> = (props) => {
@@ -209,7 +219,7 @@ const ActivityAskUserItem: Component<{ messageId: string; item: ActivityItem }> 
                         onChange={() => setQuestionDraft(question.id, { choiceId: undefined, text: draft().text, writeSelected: true })}
                       />
                       <span>
-                        <span class="chat-activity-input-option-label">{question.writeLabel ?? i18n.t('chatActivity.noneOfTheAbove')}</span>
+                        <span class="chat-activity-input-option-label">{localizedQuestionWriteLabel(i18n, question)}</span>
                         <span class="chat-activity-input-option-description">{i18n.t('chatActivity.typeAnotherAnswer')}</span>
                       </span>
                     </label>

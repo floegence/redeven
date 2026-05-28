@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createContext, useContext } from 'solid-js';
+import { createContext, createEffect, useContext } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -28,6 +28,10 @@ const notesOverlayState = vi.hoisted(() => ({
     viewportHosts?: readonly HTMLElement[];
     toggleKeybind?: string;
   },
+}));
+const settingsPageState = vi.hoisted(() => ({
+  focusSeq: 0,
+  focusSection: null as string | null,
 }));
 
 const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
@@ -155,6 +159,15 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
     value === 'activity' || value === 'deck' || value === 'workbench' ? value : fallback
   ),
   Shell: (props: any) => {
+    const env = useContext(EnvContextMock as any) as {
+      settingsFocusSeq?: () => number;
+      settingsFocusSection?: () => string | null;
+    } | undefined;
+    createEffect(() => {
+      settingsPageState.focusSeq = env?.settingsFocusSeq?.() ?? 0;
+      settingsPageState.focusSection = env?.settingsFocusSection?.() ?? null;
+    });
+
     const activateItem = (item: any) => {
       if (item.onClick) {
         item.onClick();
@@ -353,7 +366,23 @@ vi.mock('./codex/CodexPage', () => ({ CodexPage: () => <div /> }));
 vi.mock('./codex/CodexProvider', () => ({ CodexProvider: (props: any) => <>{props.children}</> }));
 vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
 vi.mock('./pages/AIChatSidebar', () => ({ AIChatSidebar: () => <div /> }));
-vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
+vi.mock('./pages/EnvSettingsPage', async () => {
+  const { EnvContext } = await import('./pages/EnvContext');
+  return {
+    EnvSettingsPage: () => {
+      const env = useContext(EnvContext);
+      settingsPageState.focusSeq = env?.settingsFocusSeq() ?? 0;
+      settingsPageState.focusSection = env?.settingsFocusSection() ?? null;
+      return (
+        <div
+          data-testid="settings-page"
+          data-focus-seq={String(settingsPageState.focusSeq)}
+          data-focus-section={settingsPageState.focusSection ?? ''}
+        />
+      );
+    },
+  };
+});
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
 vi.mock('./deck/redevenDeckWidgets', () => ({ redevenDeckWidgets: [] }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
@@ -385,7 +414,10 @@ vi.mock('./services/gatewayApi', () => ({
   unlockGatewayAccess: unlockGatewayAccessMock,
 }));
 vi.mock('./services/sandboxWindowRegistry', () => ({ getSandboxWindowInfo: () => null }));
-vi.mock('./pages/EnvContext', () => ({ EnvContext: EnvContextMock }));
+vi.mock('./pages/EnvContext', () => ({
+  EnvContext: EnvContextMock,
+  useEnvContext: () => useContext(EnvContextMock as any),
+}));
 vi.mock('./pages/AIChatContext', () => ({
   AIChatContext: createContext({}),
   createAIChatContextValue: () => ({}),
@@ -458,6 +490,8 @@ beforeEach(() => {
   window.sessionStorage.clear();
   commandState.commands = [];
   notesOverlayState.lastProps = null;
+  settingsPageState.focusSeq = 0;
+  settingsPageState.focusSection = null;
   protocolStatus = 'disconnected';
   protocolClient = null;
   protocolError = null;
@@ -540,6 +574,23 @@ describe('EnvAppShell environment entry affordances', () => {
 
       expect(sidebarActiveTabValue).toBe('settings');
       expect(setSidebarActiveTabMock).toHaveBeenCalled();
+      expect(settingsPageState.focusSection).toBe('config');
+
+      const changeLanguageCommand = commandState.commands.find((command) => command.id === 'redeven.env.changeLanguage') as
+        | undefined
+        | {
+            execute?: () => void;
+          };
+      expect(changeLanguageCommand).toBeTruthy();
+      changeLanguageCommand?.execute?.();
+      await flushAsync();
+
+      expect(settingsPageState.focusSection).toBe('interface');
+
+      runtimeSettingsButton?.click();
+      await flushAsync();
+
+      expect(settingsPageState.focusSection).toBe('config');
     } finally {
       dispose();
     }

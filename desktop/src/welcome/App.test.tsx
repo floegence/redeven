@@ -543,6 +543,8 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('card().runtime_started_label');
     expect(appSrc).not.toContain('formatRelativeTimestamp(props.environment.last_used_at_ms)');
+    expect(appSrc).not.toContain('formatLocalizedRelativeTimestamp(props.i18n, props.environment.last_used_at_ms)');
+    expect(appSrc).not.toContain('props.environment.last_used_at_ms');
     expect(appSrc).not.toContain('runtime_started_at_unix_ms ? props.environment.last_used_at_ms');
   });
 
