@@ -1,12 +1,8 @@
-import { For, Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-js';
+import { For, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Terminal, Plus, Trash } from '@floegence/floe-webapp-core/icons';
-import { Button, Input, Checkbox, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
+import { Button, Input, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import {
-  SettingsSection, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
-  SettingsTableBody, SettingsTableRow, SettingsTableCell, SettingsPill, ViewToggle,
-  AutoSaveIndicator, JSONEditor, SubSectionHeader, type ViewMode,
-} from '../SettingsPrimitives';
+import { SettingsSection, AutoSaveIndicator, CardRow, DotIndicator } from '../SettingsPrimitives';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
 import type { FilesystemRootPolicy, FilesystemScope } from '../types';
@@ -40,7 +36,6 @@ export function RuntimeConfigSection() {
   const ctx = useEnvSettingsPage();
   const i18n = useI18n();
 
-  const [viewMode, setViewMode] = createSignal<ViewMode>('ui');
   const [agentHomeDir, setAgentHomeDir] = createSignal('');
   const [shell, setShell] = createSignal('');
   const [roots, setRoots] = createSignal<FilesystemRootPolicy[]>([]);
@@ -59,12 +54,6 @@ export function RuntimeConfigSection() {
       setRoots(runtimeFilesystemRoots(String(s.runtime?.agent_home_dir ?? ''), s.runtime?.filesystem_scope ?? null).map(cloneFilesystemRoot));
     }
   });
-
-  const jsonText = createMemo(() => JSON.stringify({
-    agent_home_dir: agentHomeDir() || null,
-    shell: shell() || null,
-    filesystem_scope: { roots: roots() },
-  }, null, 2));
 
   let autoSaveTimer: number | undefined;
   const clearTimer = (t: number | undefined) => { if (t != null) { window.clearTimeout(t); return undefined; } return undefined; };
@@ -93,8 +82,6 @@ export function RuntimeConfigSection() {
 
   onCleanup(() => { autoSaveTimer = clearTimer(autoSaveTimer); });
 
-  const switchView = (next: ViewMode) => setViewMode(next);
-
   const updateRootAt = (index: number, fn: (r: FilesystemRootPolicy) => FilesystemRootPolicy) => {
     setRoots((prev) => prev.map((r, i) => (i === index ? fn(r) : r)));
     setDirty(true);
@@ -121,100 +108,67 @@ export function RuntimeConfigSection() {
         badgeVariant="warning"
         error={error()}
         actions={
-          <>
-            <ViewToggle value={viewMode} disabled={!ctx.canInteract()} onChange={switchView} />
-            <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
-          </>
+          <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
         }
       >
-        <Show
-          when={viewMode() === 'ui'}
-          fallback={<JSONEditor value={jsonText()} onChange={(v) => { try { const p = JSON.parse(v); setAgentHomeDir(p.agent_home_dir ?? ''); setShell(p.shell ?? ''); setDirty(true); } catch {} }} disabled={!ctx.canInteract()} rows={5} />}
-        >
-          <SettingsTable minWidthClass="min-w-[42rem]">
-            <SettingsTableHead>
-              <SettingsTableHeaderRow>
-                <SettingsTableHeaderCell class="w-48">{i18n.t('settings.table.setting')}</SettingsTableHeaderCell>
-                <SettingsTableHeaderCell>{i18n.t('settings.table.value')}</SettingsTableHeaderCell>
-                <SettingsTableHeaderCell class="w-72">{i18n.t('settings.table.notes')}</SettingsTableHeaderCell>
-              </SettingsTableHeaderRow>
-            </SettingsTableHead>
-            <SettingsTableBody>
-              <SettingsTableRow>
-                <SettingsTableCell class="font-medium text-muted-foreground">agent_home_dir</SettingsTableCell>
-                <SettingsTableCell>
-                  <Input value={agentHomeDir()} onInput={(e) => { setAgentHomeDir(e.currentTarget.value); setDirty(true); }}
-                    placeholder="/home/user" size="sm" class="w-full" disabled={!ctx.canInteract()} />
-                </SettingsTableCell>
-                <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.agentHomeDirNote')}</SettingsTableCell>
-              </SettingsTableRow>
-              <SettingsTableRow>
-                <SettingsTableCell class="font-medium text-muted-foreground">shell</SettingsTableCell>
-                <SettingsTableCell>
-                  <Input value={shell()} onInput={(e) => { setShell(e.currentTarget.value); setDirty(true); }}
-                    placeholder="/bin/bash" size="sm" class="w-full" disabled={!ctx.canInteract()} />
-                </SettingsTableCell>
-                <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.shellNote')}</SettingsTableCell>
-              </SettingsTableRow>
-            </SettingsTableBody>
-          </SettingsTable>
-
-          <div class="mt-5">
-            <SubSectionHeader title={i18n.t('runtimeConfig.filesystemRootsTitle')} description={i18n.t('runtimeConfig.filesystemRootsDescription')}
-              actions={<Button size="sm" variant="outline" icon={Plus} onClick={addRoot} disabled={!ctx.canInteract()}>{i18n.t('runtimeConfig.addRoot')}</Button>} />
-            <SettingsTable minWidthClass="min-w-[58rem]">
-              <SettingsTableHead>
-                <SettingsTableHeaderRow>
-                  <SettingsTableHeaderCell class="w-52">{i18n.t('runtimeConfig.rootHeader')}</SettingsTableHeaderCell>
-                  <SettingsTableHeaderCell class="w-[22rem]">{i18n.t('runtimeConfig.pathHeader')}</SettingsTableHeaderCell>
-                  <SettingsTableHeaderCell class="w-36">{i18n.t('runtimeConfig.accessHeader')}</SettingsTableHeaderCell>
-                  <SettingsTableHeaderCell class="w-28">{i18n.t('runtimeConfig.typeHeader')}</SettingsTableHeaderCell>
-                  <SettingsTableHeaderCell class="w-24" align="right">{i18n.t('settings.table.actions')}</SettingsTableHeaderCell>
-                </SettingsTableHeaderRow>
-              </SettingsTableHead>
-              <SettingsTableBody>
-                <For each={roots()}>
-                  {(root, index) => (
-                    <SettingsTableRow>
-                      <SettingsTableCell>
-                        <div class="space-y-1">
-                          <Input value={root.label || root.id} onInput={(e) => updateRootAt(index(), (r) => ({ ...r, label: e.currentTarget.value }))}
-                            size="sm" class="w-full" disabled={!ctx.canInteract() || root.system} />
-                          <div class="font-mono text-[11px] text-muted-foreground">{root.id}</div>
-                        </div>
-                      </SettingsTableCell>
-                      <SettingsTableCell>
-                        <Input value={root.path} onInput={(e) => updateRootAt(index(), (r) => ({ ...r, path: e.currentTarget.value }))}
-                          placeholder="/path/to/folder" size="sm" class="w-full font-mono text-[11px]" disabled={!ctx.canInteract() || root.system} />
-                      </SettingsTableCell>
-                      <SettingsTableCell>
-                        <div class="space-y-1.5">
-                          <SettingsPill tone={root.permissions?.write ? 'success' : 'warning'}>
-                            {root.permissions?.write ? i18n.t('runtimeConfig.readWrite') : i18n.t('runtimeConfig.readOnly')}
-                          </SettingsPill>
-                          <label class={`flex items-center gap-2 text-[11px] text-muted-foreground ${ctx.canInteract() && !root.system ? 'cursor-pointer' : ''}`}>
-                            <Checkbox checked={Boolean(root.permissions?.write)}
-                              onChange={(v) => requestWriteChange(index(), root, Boolean(v))} disabled={!ctx.canInteract() || root.system} />
-                            {i18n.t('runtimeConfig.allowWrites')}
-                          </label>
-                        </div>
-                      </SettingsTableCell>
-                      <SettingsTableCell class="text-[11px] text-muted-foreground">{root.system ? i18n.t('runtimeConfig.systemRoot') : i18n.t('runtimeConfig.customRoot')}</SettingsTableCell>
-                      <SettingsTableCell align="right">
-                        <Button size="icon" variant="ghost" icon={Trash} aria-label={i18n.t('runtimeConfig.removeRoot')}
-                          class={root.system ? 'opacity-40' : 'text-muted-foreground hover:text-destructive'}
-                          onClick={() => removeRoot(index())} disabled={!ctx.canInteract() || root.system} />
-                      </SettingsTableCell>
-                    </SettingsTableRow>
-                  )}
-                </For>
-              </SettingsTableBody>
-            </SettingsTable>
-            <div class="text-[11px] leading-relaxed text-muted-foreground mt-2">
-              {i18n.t('runtimeConfig.systemRootsNote')}
+        <div class="space-y-5">
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+            <div class="sm:max-w-[45%]">
+              <label class="text-xs font-medium text-foreground">agent_home_dir</label>
+              <p class="mt-0.5 text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.agentHomeDirNote')}</p>
             </div>
+            <Input value={agentHomeDir()} onInput={(e) => { setAgentHomeDir(e.currentTarget.value); setDirty(true); }}
+              placeholder="/home/user" size="sm" class="sm:w-56" disabled={!ctx.canInteract()} />
           </div>
-        </Show>
+          <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+            <div class="sm:max-w-[45%]">
+              <label class="text-xs font-medium text-foreground">shell</label>
+              <p class="mt-0.5 text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.shellNote')}</p>
+            </div>
+            <Input value={shell()} onInput={(e) => { setShell(e.currentTarget.value); setDirty(true); }}
+              placeholder="/bin/bash" size="sm" class="sm:w-56" disabled={!ctx.canInteract()} />
+          </div>
+        </div>
+
+        <div class="mt-6 pt-5 border-t border-border/20 space-y-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm font-semibold text-foreground">{i18n.t('runtimeConfig.filesystemRootsTitle')}</div>
+              <p class="mt-0.5 text-xs text-muted-foreground">{i18n.t('runtimeConfig.filesystemRootsDescription')}</p>
+            </div>
+            <Button size="sm" variant="outline" icon={Plus} onClick={addRoot} disabled={!ctx.canInteract()}>{i18n.t('runtimeConfig.addRoot')}</Button>
+          </div>
+
+          <For each={roots()}>
+            {(root, index) => (
+              <CardRow
+                label={
+                  <div class="flex items-center gap-1.5">
+                    <span>{root.label || root.id}</span>
+                    <code class="text-[10px] font-mono text-muted-foreground">{root.id}</code>
+                  </div>
+                }
+                badge={root.system ? i18n.t('runtimeConfig.systemRoot') : i18n.t('runtimeConfig.customRoot')}
+                badgeTone={root.system ? 'default' : 'success'}
+                actions={
+                  <Button size="icon" variant="ghost" icon={Trash} aria-label={i18n.t('runtimeConfig.removeRoot')}
+                    class={root.system ? 'invisible' : 'text-muted-foreground hover:text-destructive'}
+                    onClick={() => removeRoot(index())} disabled={!ctx.canInteract() || root.system} />
+                }
+              >
+                <div class="space-y-2">
+                  <Input value={root.path} onInput={(e) => updateRootAt(index(), (r) => ({ ...r, path: e.currentTarget.value }))}
+                    placeholder="/path/to/folder" size="sm" class="w-full font-mono text-xs" disabled={!ctx.canInteract() || root.system} />
+                  <div class="flex items-center gap-4">
+                    <DotIndicator active={Boolean(root.permissions?.read)} label={i18n.t('permissionPolicy.permission.read')} />
+                    <DotIndicator active={Boolean(root.permissions?.write)} label={i18n.t('permissionPolicy.permission.write')} onClick={root.system ? undefined : () => requestWriteChange(index(), root, !root.permissions?.write)} />
+                  </div>
+                </div>
+              </CardRow>
+            )}
+          </For>
+          <p class="text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.systemRootsNote')}</p>
+        </div>
       </SettingsSection>
 
       <ConfirmDialog

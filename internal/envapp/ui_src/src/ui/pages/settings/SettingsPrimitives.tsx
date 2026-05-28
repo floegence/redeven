@@ -53,18 +53,13 @@ function formatSavedTime(unixMs: number | null): string {
 
 export function AutoSaveIndicator(props: { dirty: boolean; saving: boolean; error?: string | null; savedAt: number | null; enabled?: boolean }) {
   const i18n = useI18n();
-  const tagVariant = createMemo<TagProps['variant']>(() => {
-    if (props.saving) return 'primary';
-    if (!props.enabled) return 'neutral';
-    if (props.error) return 'error';
-    if (props.dirty) return 'warning';
-    if (props.savedAt) return 'success';
-    return 'neutral';
-  });
-
-  const tagTone = createMemo<'solid' | 'soft'>(() => {
-    if (props.saving) return 'solid';
-    return 'soft';
+  const dotColor = createMemo(() => {
+    if (props.saving) return 'text-primary';
+    if (!props.enabled) return 'text-muted-foreground/40';
+    if (props.error) return 'text-destructive';
+    if (props.dirty) return 'text-warning';
+    if (props.savedAt) return 'text-success';
+    return 'text-muted-foreground/40';
   });
 
   const label = createMemo(() => {
@@ -76,19 +71,14 @@ export function AutoSaveIndicator(props: { dirty: boolean; saving: boolean; erro
       const t = formatSavedTime(props.savedAt);
       return t ? i18n.t('settings.autoSave.savedAt', { time: t }) : i18n.t('settings.autoSave.saved');
     }
-    return i18n.t('settings.autoSave.on');
+    return '';
   });
 
   return (
-    <Tag
-      variant={tagVariant()}
-      tone={tagTone()}
-      size="sm"
-      dot={props.saving || props.dirty || Boolean(props.savedAt)}
-      class="whitespace-nowrap"
-    >
+    <span class="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground whitespace-nowrap">
+      <span class={cn('inline-block h-1.5 w-1.5 rounded-full', dotColor())} />
       {label()}
-    </Tag>
+    </span>
   );
 }
 
@@ -485,6 +475,106 @@ export function CompactField(props: {
       <props.icon class="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
       <label class="flex-shrink-0 text-xs font-medium text-muted-foreground">{props.label}</label>
       <div class="min-w-0 flex-1">{props.children}</div>
+    </div>
+  );
+}
+
+// ── Dot Indicator (status dot + label) ─────────────────────
+
+export function DotIndicator(props: {
+  active: boolean;
+  label: string;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      class={cn(
+        'inline-flex items-center gap-1.5 text-xs',
+        props.onClick ? 'cursor-pointer hover:opacity-80' : 'cursor-default',
+      )}
+      onClick={() => props.onClick?.()}
+      disabled={!props.onClick}
+    >
+      <span
+        class={cn(
+          'inline-block h-1.5 w-1.5 rounded-full',
+          props.active ? 'bg-success' : 'border border-muted-foreground/30',
+        )}
+      />
+      <span class={props.active ? 'text-foreground' : 'text-muted-foreground'}>{props.label}</span>
+    </button>
+  );
+}
+
+// ── Property Row (clean label-above-value read-only row) ────
+
+export function PropertyRow(props: {
+  label: string;
+  children: JSX.Element;
+  mono?: boolean;
+  copyValue?: string;
+}) {
+  return (
+    <div class="group py-2.5 first:pt-0 last:pb-0">
+      <div class="text-[11px] text-muted-foreground mb-1">{props.label}</div>
+      <div class="flex items-center gap-2">
+        <div class={cn('min-w-0 flex-1 text-sm', props.mono && 'font-mono text-xs')}>{props.children}</div>
+        <Show when={props.copyValue}>
+          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+            <CopyButton value={props.copyValue!} />
+          </div>
+        </Show>
+      </div>
+    </div>
+  );
+}
+
+// ── Permission Dot (read / write / execute indicator group) ─
+
+export function PermissionDot(props: {
+  read: boolean;
+  write: boolean;
+  execute: boolean;
+  onReadChange?: (v: boolean) => void;
+  onWriteChange?: (v: boolean) => void;
+  onExecuteChange?: (v: boolean) => void;
+  readonly?: boolean;
+}) {
+  return (
+    <div class="flex items-center gap-4">
+      <DotIndicator active={props.read} label="读取" onClick={props.readonly ? undefined : () => props.onReadChange?.(!props.read)} />
+      <DotIndicator active={props.write} label="写入" onClick={props.readonly ? undefined : () => props.onWriteChange?.(!props.write)} />
+      <DotIndicator active={props.execute} label="执行" onClick={props.readonly ? undefined : () => props.onExecuteChange?.(!props.execute)} />
+    </div>
+  );
+}
+
+// ── Card Row (lightweight card for editable list items) ─────
+
+export function CardRow(props: {
+  label: JSX.Element;
+  badge?: string;
+  badgeTone?: 'default' | 'success' | 'warning';
+  actions?: JSX.Element;
+  children: JSX.Element;
+}) {
+  return (
+    <div class="rounded-lg border border-border/50 p-3 transition-colors hover:border-border/80">
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <div class="flex items-center gap-2 min-w-0">
+          <span class="text-xs font-medium text-foreground truncate">{props.label}</span>
+          <Show when={props.badge}>
+            <Tag variant={settingsTagVariant(props.badgeTone ?? 'default')} tone="soft" size="sm">
+              {props.badge}
+            </Tag>
+          </Show>
+        </div>
+        <Show when={props.actions}>
+          <div class="flex items-center gap-1 flex-shrink-0">{props.actions}</div>
+        </Show>
+      </div>
+      <div class="text-xs">{props.children}</div>
     </div>
   );
 }

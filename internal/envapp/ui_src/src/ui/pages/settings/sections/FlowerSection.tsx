@@ -5,8 +5,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { fetchGatewayJSON } from '../../../services/gatewayApi';
 import {
-  SettingsSection, ViewToggle, AutoSaveIndicator, JSONEditor, SubSectionHeader,
-  type ViewMode,
+  SettingsSection, AutoSaveIndicator, SubSectionHeader, DotIndicator,
 } from '../SettingsPrimitives';
 import { AIProviderDialog } from '../AIProviderDialog';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
@@ -179,11 +178,7 @@ function validateAIValue(cfg: AIConfig, i18n: I18nHelpers) {
     if (providerTypeRequiresBaseURL(typ as AIProviderType) && !baseURL) throw new Error(i18n.t('flowerSettings.providerRequiresBaseUrl', { provider: id }));
     if (baseURL) {
       let u: URL;
-      try {
-        u = new URL(baseURL);
-      } catch {
-        throw new Error(i18n.t('flowerSettings.providerInvalidBaseUrl', { provider: id }));
-      }
+      try { u = new URL(baseURL); } catch { throw new Error(i18n.t('flowerSettings.providerInvalidBaseUrl', { provider: id })); }
       if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error(i18n.t('flowerSettings.providerBaseUrlMustBeHttpHttps', { provider: id }));
     }
 
@@ -212,7 +207,6 @@ export function FlowerSection() {
   const ctx = useEnvSettingsPage();
   const i18n = useI18n();
 
-  const [viewMode, setViewMode] = createSignal<ViewMode>('ui');
   const [aiEnabled, setAiEnabled] = createSignal(true);
   const [requireUserApproval, setRequireUserApproval] = createSignal(false);
   const [blockDangerousCommands, setBlockDangerousCommands] = createSignal(false);
@@ -231,7 +225,6 @@ export function FlowerSection() {
   const [disableAISaving, setDisableAISaving] = createSignal(false);
   const [disableAIOpen, setDisableAIOpen] = createSignal(false);
 
-  // Provider dialog state
   const [providerDialogOpen, setProviderDialogOpen] = createSignal(false);
   const [providerDialogIndex, setProviderDialogIndex] = createSignal<number | null>(null);
   const [providerDialogProvider, setProviderDialogProvider] = createSignal<AIProviderRow | null>(null);
@@ -261,11 +254,6 @@ export function FlowerSection() {
 
   const aiModelOptions = createMemo(() => collectAIModelOptions(providers()));
   const aiCurrentModelOption = createMemo(() => aiModelOptions().find((o) => o.id === currentModelID()));
-  const jsonText = createMemo(() => JSON.stringify({
-    current_model_id: currentModelID() || null,
-    execution_policy: { require_user_approval: requireUserApproval(), block_dangerous_commands: blockDangerousCommands() },
-    providers: providers(),
-  }, null, 2));
 
   let autoSaveTimer: number | undefined;
   const clearTimer = (t: number | undefined) => { if (t != null) { window.clearTimeout(t); return undefined; } return undefined; };
@@ -299,9 +287,6 @@ export function FlowerSection() {
 
   onCleanup(() => { autoSaveTimer = clearTimer(autoSaveTimer); });
 
-  const switchView = (next: ViewMode) => setViewMode(next);
-
-  // Direct model save
   const saveAICurrentModelDirectly = async (nextModelID: string, _prev: string) => {
     try {
       const providersDraft = normalizeAIProviders(providers()).map((p) => ({
@@ -422,7 +407,6 @@ export function FlowerSection() {
     }
   };
 
-  // Provider dialog
   const addAIProviderAndOpenDialog = () => {
     const draft = newAIProviderDraft();
     setProviderDialogProvider(draft);
@@ -460,7 +444,6 @@ export function FlowerSection() {
     setProviderDialogProvider((prev) => prev ? fn(prev) : null);
   };
 
-  // Disable AI
   const disableAI = async () => {
     setDisableAISaving(true);
     try {
@@ -481,7 +464,6 @@ export function FlowerSection() {
         error={error()}
         actions={
           <>
-            <ViewToggle value={viewMode} disabled={!ctx.canInteract()} onChange={switchView} />
             <AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />
             <Show when={aiEnabled()}>
               <Button size="sm" variant="destructive" onClick={() => setDisableAIOpen(true)} disabled={!ctx.canInteract() || saving()}>
@@ -492,151 +474,150 @@ export function FlowerSection() {
         }
       >
         <Show when={!aiEnabled() && !ctx.settings.loading && !ctx.settings.error}>
-          <div class="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-4">
+          <div class="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/30 p-4">
             <Zap class="h-5 w-5 text-muted-foreground" />
             <div class="text-sm text-muted-foreground">{desktopModelSourceNotice()}</div>
           </div>
         </Show>
 
-        <Show
-          when={viewMode() === 'ui'}
-          fallback={<JSONEditor value={jsonText()} onChange={(v) => { try { const p = JSON.parse(v); if (p.current_model_id) setCurrentModelID(p.current_model_id); if (p.execution_policy) { setRequireUserApproval(p.execution_policy.require_user_approval ?? false); setBlockDangerousCommands(p.execution_policy.block_dangerous_commands ?? false); } setDirty(true); } catch {} }} disabled={!ctx.canInteract()} rows={14} />}
-        >
-          <div class="space-y-6">
-            <div class="space-y-3">
-              <SubSectionHeader
-                title={i18n.t('flowerSettings.executionPolicyTitle')}
-                description={i18n.t('flowerSettings.executionPolicyDescription')}
-              />
-              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label class={cn('group flex cursor-pointer flex-col gap-2.5 rounded-xl border px-4 py-3.5 transition-all duration-150', redevenSurfaceRoleClass('panel'), ctx.canInteract() && 'hover:border-primary/40 hover:shadow-sm', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}>
-                  <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2.5">
-                      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10"><Shield class="h-4 w-4 text-blue-500" /></div>
-                      <span class="text-sm font-semibold text-foreground">{i18n.t('flowerSettings.userApprovalTitle')}</span>
-                    </div>
-                    <Checkbox checked={requireUserApproval()} onChange={(v) => { setRequireUserApproval(v); setDirty(true); }} disabled={!ctx.canInteract()} label="" size="sm" />
-                  </div>
-                  <p class="text-xs leading-relaxed text-muted-foreground">{i18n.t('flowerSettings.userApprovalDescription')}</p>
-                </label>
-                <label class={cn('group flex cursor-pointer flex-col gap-2.5 rounded-xl border px-4 py-3.5 transition-all duration-150', redevenSurfaceRoleClass('panel'), ctx.canInteract() && 'hover:border-primary/40 hover:shadow-sm', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}>
-                  <div class="flex items-center justify-between">
-                    <div class="flex items-center gap-2.5">
-                      <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10"><AlertTriangle class="h-4 w-4 text-amber-500" /></div>
-                      <span class="text-sm font-semibold text-foreground">{i18n.t('flowerSettings.blockDangerousCommandsTitle')}</span>
-                    </div>
-                    <Checkbox checked={blockDangerousCommands()} onChange={(v) => { setBlockDangerousCommands(v); setDirty(true); }} disabled={!ctx.canInteract()} label="" size="sm" />
-                  </div>
-                  <p class="text-xs leading-relaxed text-muted-foreground">{i18n.t('flowerSettings.blockDangerousCommandsDescription')}</p>
-                </label>
+        <div class="space-y-6">
+          <div class="space-y-3">
+            <SubSectionHeader
+              title={i18n.t('flowerSettings.currentModelTitle')}
+              description={i18n.t('flowerSettings.currentModelDescription')}
+            />
+            <div class={cn('flex items-center gap-4 rounded-xl border bg-background p-4', redevenSurfaceRoleClass('panel'))}>
+              <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
+                <Show when={aiCurrentModelOption()} fallback={<Bot class="h-5 w-5 text-muted-foreground" />}>
+                  <ProviderBrandIcon type={providers().find((p) => currentModelID().startsWith(String(p.id ?? '').trim() + '/'))?.type ?? 'openai'} class="h-5 w-5" />
+                </Show>
               </div>
-              <Show when={!blockDangerousCommands()}>
-                <div class="flex items-start gap-2.5 rounded-lg border border-warning/50 bg-warning/10 p-3">
-                  <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
-                  <div class="text-xs font-medium text-foreground">{i18n.t('flowerSettings.dangerousCommandsDisabled')}</div>
-                </div>
-              </Show>
-            </div>
-
-            <div class="space-y-3">
-              <SubSectionHeader
-                title={i18n.t('flowerSettings.currentModelTitle')}
-                description={i18n.t('flowerSettings.currentModelDescription')}
-              />
-              <div class={cn('flex items-center gap-4 rounded-xl border bg-background p-4', redevenSurfaceRoleClass('panel'))}>
-                <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
-                  <Show when={aiCurrentModelOption()} fallback={<Bot class="h-5 w-5 text-muted-foreground" />}>
-                    <ProviderBrandIcon type={providers().find((p) => currentModelID().startsWith(String(p.id ?? '').trim() + '/'))?.type ?? 'openai'} class="h-5 w-5" />
-                  </Show>
-                </div>
-                <div class="min-w-0 flex-1">
-                  <Show when={aiCurrentModelOption()} fallback={<div class="text-sm font-medium text-muted-foreground">{i18n.t('flowerSettings.noModelSelected')}</div>}>
-                    <div class="truncate text-sm font-semibold text-foreground">{aiCurrentModelOption()!.label}</div>
-                    <div class="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                      <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-success/70"></span>{i18n.t('flowerSettings.textCapability')}</span>
-                      <Show when={aiCurrentModelOption()?.supportsImageInput}>
-                        <span class="inline-flex items-center gap-1"><span class="h-1.5 w-1.5 rounded-full bg-success/70"></span>{i18n.t('flowerSettings.imageInputCapability')}</span>
-                      </Show>
-                    </div>
-                  </Show>
-                </div>
-                <div class="relative flex-shrink-0">
-                  <Select value={currentModelID()} options={aiModelOptions().map((item) => ({ value: item.id, label: item.label }))}
-                    onChange={(value) => {
-                      const nextModelID = normalizeAICurrentModelID(String(value ?? '').trim(), providers());
-                      if (!nextModelID) return;
-                      const prevModelID = normalizeAICurrentModelID(currentModelID(), providers());
-                      if (nextModelID === prevModelID) return;
-                      setCurrentModelID(nextModelID);
-                      const canDirectSave = viewMode() === 'ui' && !dirty() && !saving() && !disableAISaving();
-                      if (canDirectSave) { void saveAICurrentModelDirectly(nextModelID, prevModelID || ''); return; }
-                      setDirty(true);
-                    }}
-                    placeholder={i18n.t('flowerSettings.selectModelPlaceholder')} class="w-52" disabled={!ctx.canInteract() || aiModelOptions().length === 0 || saving() || disableAISaving()} />
-                </div>
+              <div class="min-w-0 flex-1">
+                <Show when={aiCurrentModelOption()} fallback={<div class="text-sm font-medium text-muted-foreground">{i18n.t('flowerSettings.noModelSelected')}</div>}>
+                  <div class="truncate text-sm font-semibold text-foreground">{aiCurrentModelOption()!.label}</div>
+                  <div class="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground">
+                    <DotIndicator active label={i18n.t('flowerSettings.textCapability')} />
+                    <Show when={aiCurrentModelOption()?.supportsImageInput}>
+                      <DotIndicator active label={i18n.t('flowerSettings.imageInputCapability')} />
+                    </Show>
+                  </div>
+                </Show>
               </div>
-            </div>
-
-            <div class="space-y-3">
-              <SubSectionHeader
-                title={i18n.t('flowerSettings.providersTitle')}
-                description={i18n.t('flowerSettings.providersDescription')}
-                actions={<Button size="sm" variant="default" onClick={addAIProviderAndOpenDialog} disabled={!ctx.canInteract()}>{i18n.t('flowerSettings.addProvider')}</Button>}
-              />
-              <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                <For each={providers()}>
-                  {(provider, index) => {
-                    const providerID = () => String(provider.id ?? '').trim();
-                    const displayName = () => providerDisplayName(provider, i18n.t('flowerSettings.providerFallbackName', { count: index() + 1 }));
-                    const modelNames = () => (Array.isArray(provider.models) ? provider.models : []).map((m) => String(m.model_name ?? '').trim()).filter(Boolean);
-                    const hasImageModel = () => (Array.isArray(provider.models) ? provider.models : []).some((m) => modelSupportsImageInput(m.input_modalities));
-                    const isDefault = () => currentModelID().startsWith(`${providerID()}/`);
-                    const keyOk = () => providerKeySet()?.[providerID()];
-                    const webSearchSummary = () => providerWebSearchSummary(provider, i18n);
-                    return (
-                      <div class={cn('flex gap-3 rounded-xl border bg-background p-4 transition-all', redevenSurfaceRoleClass('panel'), isDefault() && 'border-l-[3px] border-l-primary pl-[13px]')}>
-                        <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
-                          <ProviderBrandIcon type={provider.type} class="h-5 w-5" />
-                        </div>
-                        <div class="min-w-0 flex-1">
-                          <div class="flex items-center justify-between gap-2">
-                            <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-                              <span class="truncate text-sm font-semibold text-foreground">{displayName()}</span>
-                              <span class="flex-shrink-0 text-xs text-muted-foreground">{providerTypeLabel(provider.type)}</span>
-                              <Show when={isDefault()}><span class="flex-shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-medium text-primary">{i18n.t('flowerSettings.activeProviderBadge')}</span></Show>
-                            </div>
-                            <div class="flex flex-shrink-0 items-center">
-                              <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openAIProviderDialog(index())} disabled={!ctx.canInteract()} aria-label={i18n.t('flowerSettings.editProvider')}><Pencil class="h-3.5 w-3.5" /></Button>
-                              <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-destructive"
-                                onClick={() => { setProviders((prev) => { const n = normalizeAIProviders(prev.filter((_, i) => i !== index())); setCurrentModelID(normalizeAICurrentModelID(currentModelID(), n)); return n; }); setDirty(true); }}
-                                disabled={!ctx.canInteract() || providers().length <= 1} aria-label={i18n.t('flowerSettings.removeProvider')}><Trash class="h-3.5 w-3.5" /></Button>
-                            </div>
-                          </div>
-                          <div class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground">
-                            <span>{i18n.tn('flowerSettings.modelCount', modelNames().length)}</span>
-                            <span class={keyOk() ? 'text-success' : ''}>{keyOk() ? i18n.t('flowerSettings.keyVerified') : i18n.t('flowerSettings.needsKey')}</span>
-                            <Show when={webSearchSummary().supported}><span class={webSearchSummary().enabled ? 'text-success' : ''}>{webSearchSummary().label}</span></Show>
-                            <Show when={hasImageModel()}><span>{i18n.t('flowerSettings.imageInput')}</span></Show>
-                          </div>
-                          <Show when={modelNames().length > 0}>
-                            <div class="mt-2.5 flex flex-wrap gap-1">
-                              <For each={modelNames().slice(0, 5)}>
-                                {(name) => (
-                                  <code class={cn('rounded px-1.5 py-0.5 text-[11px] font-mono', isDefault() && currentModelID() === `${providerID()}/${name}` ? 'bg-primary/10 text-primary font-semibold' : 'bg-muted text-muted-foreground')}>{name}</code>
-                                )}
-                              </For>
-                              <Show when={modelNames().length > 5}><span class="self-center text-[11px] text-muted-foreground">{i18n.t('flowerSettings.moreModels', { count: modelNames().length - 5 })}</span></Show>
-                            </div>
-                          </Show>
-                        </div>
-                      </div>
-                    );
+              <div class="relative flex-shrink-0">
+                <Select value={currentModelID()} options={aiModelOptions().map((item) => ({ value: item.id, label: item.label }))}
+                  onChange={(value) => {
+                    const nextModelID = normalizeAICurrentModelID(String(value ?? '').trim(), providers());
+                    if (!nextModelID) return;
+                    const prevModelID = normalizeAICurrentModelID(currentModelID(), providers());
+                    if (nextModelID === prevModelID) return;
+                    setCurrentModelID(nextModelID);
+                    const canDirectSave = !dirty() && !saving() && !disableAISaving();
+                    if (canDirectSave) { void saveAICurrentModelDirectly(nextModelID, prevModelID || ''); return; }
+                    setDirty(true);
                   }}
-                </For>
+                  placeholder={i18n.t('flowerSettings.selectModelPlaceholder')} class="w-52" disabled={!ctx.canInteract() || aiModelOptions().length === 0 || saving() || disableAISaving()} />
               </div>
             </div>
           </div>
-        </Show>
+
+          <div class="space-y-3">
+            <SubSectionHeader
+              title={i18n.t('flowerSettings.executionPolicyTitle')}
+              description={i18n.t('flowerSettings.executionPolicyDescription')}
+            />
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label class={cn('group flex cursor-pointer flex-col gap-2.5 rounded-xl border px-4 py-3.5 transition-all duration-150', redevenSurfaceRoleClass('panel'), ctx.canInteract() && 'hover:border-primary/40 hover:shadow-sm', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}>
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10"><Shield class="h-4 w-4 text-blue-500" /></div>
+                    <span class="text-sm font-semibold text-foreground">{i18n.t('flowerSettings.userApprovalTitle')}</span>
+                  </div>
+                  <Checkbox checked={requireUserApproval()} onChange={(v) => { setRequireUserApproval(v); setDirty(true); }} disabled={!ctx.canInteract()} label="" size="sm" />
+                </div>
+                <p class="text-xs leading-relaxed text-muted-foreground">{i18n.t('flowerSettings.userApprovalDescription')}</p>
+              </label>
+              <label class={cn('group flex cursor-pointer flex-col gap-2.5 rounded-xl border px-4 py-3.5 transition-all duration-150', redevenSurfaceRoleClass('panel'), ctx.canInteract() && 'hover:border-primary/40 hover:shadow-sm', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}>
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2.5">
+                    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10"><AlertTriangle class="h-4 w-4 text-amber-500" /></div>
+                    <span class="text-sm font-semibold text-foreground">{i18n.t('flowerSettings.blockDangerousCommandsTitle')}</span>
+                  </div>
+                  <Checkbox checked={blockDangerousCommands()} onChange={(v) => { setBlockDangerousCommands(v); setDirty(true); }} disabled={!ctx.canInteract()} label="" size="sm" />
+                </div>
+                <p class="text-xs leading-relaxed text-muted-foreground">{i18n.t('flowerSettings.blockDangerousCommandsDescription')}</p>
+              </label>
+            </div>
+            <Show when={!blockDangerousCommands()}>
+              <div class="flex items-start gap-2.5 rounded-lg border border-warning/50 bg-warning/10 p-3">
+                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                <div class="text-xs font-medium text-foreground">{i18n.t('flowerSettings.dangerousCommandsDisabled')}</div>
+              </div>
+            </Show>
+          </div>
+
+          <div class="space-y-3">
+            <SubSectionHeader
+              title={i18n.t('flowerSettings.providersTitle')}
+              description={i18n.t('flowerSettings.providersDescription')}
+              actions={<Button size="sm" variant="default" onClick={addAIProviderAndOpenDialog} disabled={!ctx.canInteract()}>{i18n.t('flowerSettings.addProvider')}</Button>}
+            />
+            <div class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              <For each={providers()}>
+                {(provider, index) => {
+                  const providerID = () => String(provider.id ?? '').trim();
+                  const displayName = () => providerDisplayName(provider, i18n.t('flowerSettings.providerFallbackName', { count: index() + 1 }));
+                  const modelNames = () => (Array.isArray(provider.models) ? provider.models : []).map((m) => String(m.model_name ?? '').trim()).filter(Boolean);
+                  const hasImageModel = () => (Array.isArray(provider.models) ? provider.models : []).some((m) => modelSupportsImageInput(m.input_modalities));
+                  const isDefault = () => currentModelID().startsWith(`${providerID()}/`);
+                  const keyOk = () => providerKeySet()?.[providerID()];
+                  const webSearchSummary = () => providerWebSearchSummary(provider, i18n);
+                  return (
+                    <div class={cn('flex gap-3 rounded-xl border bg-background p-4 transition-all', redevenSurfaceRoleClass('panel'), isDefault() && 'border-l-[3px] border-l-primary pl-[13px]')}>
+                      <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted">
+                        <ProviderBrandIcon type={provider.type} class="h-5 w-5" />
+                      </div>
+                      <div class="min-w-0 flex-1">
+                        <div class="flex items-center justify-between gap-2">
+                          <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                            <span class="truncate text-sm font-semibold text-foreground">{displayName()}</span>
+                            <span class="flex-shrink-0 text-xs text-muted-foreground">{providerTypeLabel(provider.type)}</span>
+                            <Show when={isDefault()}><span class="flex-shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-medium text-primary">{i18n.t('flowerSettings.activeProviderBadge')}</span></Show>
+                          </div>
+                          <div class="flex flex-shrink-0 items-center">
+                            <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openAIProviderDialog(index())} disabled={!ctx.canInteract()} aria-label={i18n.t('flowerSettings.editProvider')}><Pencil class="h-3.5 w-3.5" /></Button>
+                            <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-destructive"
+                              onClick={() => { setProviders((prev) => { const n = normalizeAIProviders(prev.filter((_, i) => i !== index())); setCurrentModelID(normalizeAICurrentModelID(currentModelID(), n)); return n; }); setDirty(true); }}
+                              disabled={!ctx.canInteract() || providers().length <= 1} aria-label={i18n.t('flowerSettings.removeProvider')}><Trash class="h-3.5 w-3.5" /></Button>
+                          </div>
+                        </div>
+                        <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          <DotIndicator active={Boolean(keyOk())} label={keyOk() ? i18n.t('flowerSettings.keyVerified') : i18n.t('flowerSettings.needsKey')} />
+                          <span>{i18n.tn('flowerSettings.modelCount', modelNames().length)}</span>
+                          <Show when={webSearchSummary().supported}>
+                            <DotIndicator active={webSearchSummary().enabled} label={webSearchSummary().label} />
+                          </Show>
+                          <Show when={hasImageModel()}>
+                            <DotIndicator active label={i18n.t('flowerSettings.imageInput')} />
+                          </Show>
+                        </div>
+                        <Show when={modelNames().length > 0}>
+                          <div class="mt-2.5 flex flex-wrap gap-1">
+                            <For each={modelNames().slice(0, 5)}>
+                              {(name) => (
+                                <code class={cn('rounded px-1.5 py-0.5 text-[11px] font-mono', isDefault() && currentModelID() === `${providerID()}/${name}` ? 'bg-primary/10 text-primary font-semibold' : 'bg-muted text-muted-foreground')}>{name}</code>
+                              )}
+                            </For>
+                            <Show when={modelNames().length > 5}><span class="self-center text-[11px] text-muted-foreground">{i18n.t('flowerSettings.moreModels', { count: modelNames().length - 5 })}</span></Show>
+                          </div>
+                        </Show>
+                      </div>
+                    </div>
+                  );
+                }}
+              </For>
+            </div>
+          </div>
+        </div>
       </SettingsSection>
 
       <AIProviderDialog

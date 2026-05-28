@@ -104,13 +104,13 @@ export function SkillsSection() {
         }
       >
         <div class="space-y-4">
-          <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <div class="md:col-span-2">
+          <div class="flex items-end gap-3">
+            <div class="flex-1 min-w-0">
               <FieldLabel>{i18n.t('skillsSettings.searchLabel')}</FieldLabel>
               <Input value={skillQuery()} onInput={(e) => setSkillQuery(e.currentTarget.value)}
                 placeholder={i18n.t('skillsSettings.searchPlaceholder')} size="sm" class="w-full" disabled={!ctx.canInteract()} />
             </div>
-            <div>
+            <div class="w-40 flex-shrink-0">
               <FieldLabel>{i18n.t('skillsSettings.scopeLabel')}</FieldLabel>
               <Select value={skillScopeFilter()} onChange={(v) => setSkillScopeFilter(v as any)}
                 disabled={!ctx.canInteract()}

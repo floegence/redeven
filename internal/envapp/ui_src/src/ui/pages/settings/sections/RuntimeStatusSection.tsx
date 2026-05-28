@@ -2,10 +2,7 @@ import { Show } from 'solid-js';
 import { Zap, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import {
-  SettingsSection, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
-  SettingsTableBody, SettingsTableRow, SettingsTableCell, SettingsPill,
-} from '../SettingsPrimitives';
+import { SettingsSection, PropertyRow, DotIndicator } from '../SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../../i18n';
 import { runtimeServiceCompatibilityTone } from './helpers';
 
@@ -20,12 +17,8 @@ function formatDesktopModelSourceBindingState(value: unknown, i18n: I18nHelpers)
   }
 }
 
-function desktopModelSourceBindingTone(value: unknown): 'default' | 'warning' | 'success' {
-  switch (String(value ?? '').trim()) {
-    case 'bound': return 'success';
-    case 'unsupported': case 'expired': case 'error': return 'warning';
-    default: return 'default';
-  }
+function desktopModelSourceActive(value: unknown): boolean {
+  return String(value ?? '').trim() === 'bound';
 }
 
 export function RuntimeStatusSection() {
@@ -40,7 +33,9 @@ export function RuntimeStatusSection() {
       default: return ctx.statusLabel();
     }
   };
-  const runtimeServiceOwner = () => {
+  const statusActive = () => ctx.displayedStatus() === 'online';
+
+  const serviceOwnerLabel = () => {
     const service = ctx.runtimeService();
     if (service?.serviceOwner === 'desktop' || service?.desktopManaged) return i18n.t('runtimeStatus.owner.redevenDesktop');
     if (service?.serviceOwner === 'external') return i18n.t('runtimeStatus.owner.externalService');
@@ -57,6 +52,8 @@ export function RuntimeStatusSection() {
       default: return i18n.t('runtimeStatus.unknown');
     }
   };
+  const compatTone = runtimeServiceCompatibilityTone(ctx.runtimeService());
+  const compatActive = () => compatTone === 'success';
   const activeWorkSummary = () => {
     const workload = ctx.runtimeService()?.activeWorkload;
     if (!workload) return i18n.t('runtimeStatus.noActiveWork');
@@ -105,117 +102,67 @@ export function RuntimeStatusSection() {
         </>
       }
     >
-      <SettingsTable minWidthClass="min-w-[44rem]">
-        <SettingsTableHead>
-          <SettingsTableHeaderRow>
-            <SettingsTableHeaderCell class="w-48">{i18n.t('runtimeStatus.metricHeader')}</SettingsTableHeaderCell>
-            <SettingsTableHeaderCell>{i18n.t('settings.table.value')}</SettingsTableHeaderCell>
-            <SettingsTableHeaderCell class="w-72">{i18n.t('settings.table.notes')}</SettingsTableHeaderCell>
-          </SettingsTableHeaderRow>
-        </SettingsTableHead>
-        <SettingsTableBody>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.currentVersion')}</SettingsTableCell>
-            <SettingsTableCell class="font-mono text-[11px]">{ctx.runtimeUpdate.version.currentVersion() || '—'}</SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.currentVersionNote')}</SettingsTableCell>
-          </SettingsTableRow>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.latestVersion')}</SettingsTableCell>
-            <SettingsTableCell class="font-mono text-[11px]">
-              {ctx.latestVersion()?.latest_version ? String(ctx.latestVersion()!.latest_version) : ctx.latestVersionLoading() ? i18n.t('runtimeStatus.loading') : '—'}
-            </SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.latestVersionNote')}</SettingsTableCell>
-          </SettingsTableRow>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.statusLabel')}</SettingsTableCell>
-            <SettingsTableCell>
-              <SettingsPill tone={ctx.displayedStatus() === 'online' ? 'success' : ctx.displayedStatus() === 'offline' ? 'warning' : 'default'}>
-                {statusLabel()}
-              </SettingsPill>
-            </SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.statusNote')}</SettingsTableCell>
-          </SettingsTableRow>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.serviceOwner')}</SettingsTableCell>
-            <SettingsTableCell>{runtimeServiceOwner()}</SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.serviceOwnerNote')}</SettingsTableCell>
-          </SettingsTableRow>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.maintenanceAuthority')}</SettingsTableCell>
-            <SettingsTableCell>{maintenanceAuthority()}</SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.maintenanceAuthorityNote')}</SettingsTableCell>
-          </SettingsTableRow>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.compatibilityLabel')}</SettingsTableCell>
-            <SettingsTableCell>
-              <SettingsPill tone={runtimeServiceCompatibilityTone(ctx.runtimeService())}>
-                {runtimeServiceCompatibility()}
-              </SettingsPill>
-            </SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">
-              {ctx.runtimeService()?.compatibilityMessage || i18n.t('runtimeStatus.compatibilityNote')}
-            </SettingsTableCell>
-          </SettingsTableRow>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.activeWork')}</SettingsTableCell>
-            <SettingsTableCell>{activeWorkSummary()}</SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.activeWorkNote')}</SettingsTableCell>
-          </SettingsTableRow>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.runtimeProtocol')}</SettingsTableCell>
-            <SettingsTableCell class="font-mono text-[11px]">{ctx.runtimeService()?.protocolVersion || '—'}</SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.runtimeProtocolNote')}</SettingsTableCell>
-          </SettingsTableRow>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.desktopModelSource')}</SettingsTableCell>
-            <SettingsTableCell>
-              <SettingsPill tone={desktopModelSourceBindingTone(ctx.runtimeDesktopModelSourceBinding()?.state)}>
-                {formatDesktopModelSourceBindingState(ctx.runtimeDesktopModelSourceBinding()?.state, i18n)}
-              </SettingsPill>
-            </SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">
-              {ctx.runtimeDesktopModelSourceBinding()?.lastError || i18n.t('runtimeStatus.desktopModelSourceNote')}
-            </SettingsTableCell>
-          </SettingsTableRow>
-          <Show when={ctx.upgradeState().allowsUpgradeAction && ctx.upgradeState().requiresTargetVersion}>
-            <SettingsTableRow>
-              <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.targetVersion')}</SettingsTableCell>
-              <SettingsTableCell>
-                <Input value={ctx.targetVersionInput()} onInput={(e) => ctx.setTargetVersionInput(e.currentTarget.value)}
-                  placeholder="v1.2.3" size="sm" class="w-full" disabled={ctx.maintaining()} />
-              </SettingsTableCell>
-              <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.targetVersionNote')}</SettingsTableCell>
-            </SettingsTableRow>
-          </Show>
-          <SettingsTableRow>
-            <SettingsTableCell class="font-medium text-muted-foreground">{i18n.t('runtimeStatus.manifestETag')}</SettingsTableCell>
-            <SettingsTableCell class="font-mono text-[11px]">{ctx.latestVersion()?.manifest_etag ? String(ctx.latestVersion()!.manifest_etag) : '—'}</SettingsTableCell>
-            <SettingsTableCell class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.manifestETagNote')}</SettingsTableCell>
-          </SettingsTableRow>
-        </SettingsTableBody>
-      </SettingsTable>
+      <div class="flex items-center gap-2 mb-5">
+        <DotIndicator active={statusActive()} label={statusLabel()} />
+      </div>
 
-      <div class="mt-3 space-y-2">
+      <PropertyRow label={i18n.t('runtimeStatus.currentVersion')} mono>
+        {ctx.runtimeUpdate.version.currentVersion() || '—'}
+      </PropertyRow>
+      <PropertyRow label={i18n.t('runtimeStatus.latestVersion')} mono>
+        {ctx.latestVersion()?.latest_version ? String(ctx.latestVersion()!.latest_version) : ctx.latestVersionLoading() ? i18n.t('runtimeStatus.loading') : '—'}
+      </PropertyRow>
+      <PropertyRow label={i18n.t('runtimeStatus.activeWork')}>
+        {activeWorkSummary()}
+      </PropertyRow>
+      <PropertyRow label={i18n.t('runtimeStatus.compatibilityLabel')}>
+        <DotIndicator active={compatActive()} label={runtimeServiceCompatibility()} />
+      </PropertyRow>
+      <PropertyRow label={i18n.t('runtimeStatus.serviceOwner')}>
+        {serviceOwnerLabel()}
+      </PropertyRow>
+      <PropertyRow label={i18n.t('runtimeStatus.maintenanceAuthority')}>
+        {maintenanceAuthority()}
+      </PropertyRow>
+      <PropertyRow label={i18n.t('runtimeStatus.runtimeProtocol')} mono>
+        {ctx.runtimeService()?.protocolVersion || '—'}
+      </PropertyRow>
+      <PropertyRow label={i18n.t('runtimeStatus.desktopModelSource')}>
+        <DotIndicator active={desktopModelSourceActive(ctx.runtimeDesktopModelSourceBinding()?.state)} label={formatDesktopModelSourceBindingState(ctx.runtimeDesktopModelSourceBinding()?.state, i18n)} />
+      </PropertyRow>
+      <PropertyRow label={i18n.t('runtimeStatus.manifestETag')} mono>
+        {ctx.latestVersion()?.manifest_etag ? String(ctx.latestVersion()!.manifest_etag) : '—'}
+      </PropertyRow>
+
+      <Show when={ctx.upgradeState().allowsUpgradeAction && ctx.upgradeState().requiresTargetVersion}>
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 py-2.5">
+          <label class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.targetVersion')}</label>
+          <Input value={ctx.targetVersionInput()} onInput={(e) => ctx.setTargetVersionInput(e.currentTarget.value)}
+            placeholder="v1.2.3" size="sm" class="sm:w-48" disabled={ctx.maintaining()} />
+        </div>
+      </Show>
+
+      <div class="mt-4 pt-4 border-t border-border/20 space-y-1.5">
         <Show when={ctx.upgradeState().requiresTargetVersion && ctx.targetUpgradeVersion() && !ctx.targetUpgradeVersionValid()}>
-          <div class="text-xs text-destructive">{i18n.t('runtimeStatus.validReleaseTagHint')}</div>
+          <div class="text-[11px] text-destructive">{i18n.t('runtimeStatus.validReleaseTagHint')}</div>
         </Show>
         <Show when={ctx.upgradeState().message}>
-          <div class="text-xs text-muted-foreground">{ctx.upgradeState().message}</div>
+          <div class="text-[11px] text-muted-foreground">{ctx.upgradeState().message}</div>
         </Show>
         <Show when={ctx.upgradeState().policy === 'desktop_release' && ctx.upgradeState().releasePageURL}>
-          <div class="text-xs text-muted-foreground">{i18n.t('runtimeStatus.desktopReleasePageHint')}</div>
+          <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.desktopReleasePageHint')}</div>
         </Show>
         <Show when={ctx.latestVersionError()}>
-          <div class="text-xs text-destructive">{i18n.t('runtimeStatus.latestVersionUnavailable', { message: ctx.latestVersionError() })}</div>
+          <div class="text-[11px] text-destructive">{i18n.t('runtimeStatus.latestVersionUnavailable', { message: ctx.latestVersionError() })}</div>
         </Show>
         <Show when={ctx.latestVersion()?.stale}>
-          <div class="text-xs text-muted-foreground">{i18n.t('runtimeStatus.staleMetadataHint')}</div>
+          <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.staleMetadataHint')}</div>
         </Show>
         <Show when={!ctx.canAdmin()}>
-          <div class="text-xs text-muted-foreground">{i18n.t('runtimeStatus.adminRequired')}</div>
+          <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.adminRequired')}</div>
         </Show>
         <Show when={ctx.maintenanceStage()}>
-          <div class="text-xs text-muted-foreground">{ctx.maintenanceStage()}</div>
+          <div class="text-[11px] text-muted-foreground">{ctx.maintenanceStage()}</div>
         </Show>
       </div>
     </SettingsSection>
