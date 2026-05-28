@@ -779,7 +779,6 @@ function localizedFactLabel(i18n: DesktopI18n, label: string): string {
     'LOCAL LINK': 'environmentFacts.localLink',
     'ENV ID': 'environmentFacts.environmentId',
     Provider: 'environmentFacts.provider',
-    'Environment ID': 'environmentFacts.environmentId',
     'Runtime root': 'environmentFacts.runtimeRoot',
     Bootstrap: 'environmentFacts.bootstrap',
     Source: 'environmentFacts.source',
