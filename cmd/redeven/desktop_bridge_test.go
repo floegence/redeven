@@ -66,9 +66,10 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 		return runtimemanagement.RuntimeAttachStatus{
 			State: runtimemanagement.AttachStateReady,
 			Identity: runtimemanagement.RuntimeInstanceIdentity{
-				StateDir:       layout.StateDir,
-				DesktopManaged: true,
-				DesktopOwnerID: "test-desktop-owner",
+				StateDir:        layout.StateDir,
+				StartedAtUnixMS: 1778751234567,
+				DesktopManaged:  true,
+				DesktopOwnerID:  "test-desktop-owner",
 			},
 			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 				LocalUIURL:       localUIServer.URL + "/",
@@ -121,6 +122,9 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	}
 	if hello.ProtocolVersion != desktopbridge.ProtocolVersion {
 		t.Fatalf("hello protocol = %q, want %q", hello.ProtocolVersion, desktopbridge.ProtocolVersion)
+	}
+	if hello.StartedAtUnixMS != 1778751234567 {
+		t.Fatalf("hello StartedAtUnixMS = %d", hello.StartedAtUnixMS)
 	}
 	if strings.Contains(stderr.String(), "codeapp gateway listening") || strings.Contains(stderr.String(), "init runtime") {
 		t.Fatalf("stderr = %q, bridge must not start runtime components", stderr.String())

@@ -74,6 +74,7 @@ type desktopLaunchReport struct {
 	RuntimeControlSocketPath string                  `json:"runtime_control_socket_path,omitempty"`
 	DiagnosticsEnabled       bool                    `json:"diagnostics_enabled"`
 	PID                      int                     `json:"pid,omitempty"`
+	StartedAtUnixMS          int64                   `json:"started_at_unix_ms,omitempty"`
 	RuntimeService           runtimeservice.Snapshot `json:"runtime_service"`
 
 	LockOwner   *desktopLaunchLockOwner   `json:"lock_owner,omitempty"`

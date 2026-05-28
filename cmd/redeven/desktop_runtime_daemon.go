@@ -241,6 +241,7 @@ func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachS
 		StateDir:                 state.Identity.StateDir,
 		RuntimeControlSocketPath: state.Diagnostics.ControlSocketPath,
 		PID:                      state.Identity.PID,
+		StartedAtUnixMS:          state.Identity.StartedAtUnixMS,
 		RuntimeService:           state.RuntimeService,
 	}
 }

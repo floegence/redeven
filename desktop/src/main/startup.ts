@@ -16,6 +16,7 @@ export type StartupReport = Readonly<{
   state_dir?: string;
   diagnostics_enabled?: boolean;
   pid?: number;
+  started_at_unix_ms?: number;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
 
@@ -36,6 +37,11 @@ function parseRuntimeControlEndpoint(value: unknown): DesktopRuntimeControlEndpo
     desktop_owner_id: desktopOwnerID,
     ...(Number.isFinite(expiresAt) && expiresAt > 0 ? { expires_at_unix_ms: Math.floor(expiresAt) } : {}),
   };
+}
+
+function normalizePositiveInteger(value: unknown): number | undefined {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : undefined;
 }
 
 export function parseStartupReport(raw: string): StartupReport {
@@ -64,7 +70,8 @@ export function parseStartupReport(raw: string): StartupReport {
     env_public_id: String(parsed.env_public_id ?? '').trim() || undefined,
     state_dir: String(parsed.state_dir ?? '').trim() || undefined,
     diagnostics_enabled: typeof parsed.diagnostics_enabled === 'boolean' ? parsed.diagnostics_enabled : undefined,
-    pid: Number.isInteger(parsed.pid) && Number(parsed.pid) > 0 ? Number(parsed.pid) : undefined,
+    pid: normalizePositiveInteger(parsed.pid),
+    started_at_unix_ms: normalizePositiveInteger(parsed.started_at_unix_ms),
     ...(parsed.runtime_service ? { runtime_service: normalizeRuntimeServiceSnapshot(parsed.runtime_service, {
       desktopManaged: typeof parsed.desktop_managed === 'boolean' ? parsed.desktop_managed : undefined,
       effectiveRunMode: String(parsed.effective_run_mode ?? '').trim(),

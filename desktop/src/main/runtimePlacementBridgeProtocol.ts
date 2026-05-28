@@ -39,6 +39,7 @@ export type RuntimePlacementBridgeHello = Readonly<{
   protocol_version: typeof RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION;
   runtime_version: string;
   runtime_commit?: string;
+  started_at_unix_ms?: number;
   local_ui: Readonly<{
     available: boolean;
     base_path: string;
@@ -60,6 +61,11 @@ export type RuntimePlacementBridgeStreamError = Readonly<{
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function normalizePositiveInteger(value: unknown): number | undefined {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : undefined;
 }
 
 function normalizeFrameType(value: unknown): RuntimePlacementBridgeFrameType {
@@ -302,6 +308,7 @@ export function parseRuntimePlacementBridgeHello(payload: Buffer): RuntimePlacem
     protocol_version: RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION,
     runtime_version: compact(parsed.runtime_version),
     runtime_commit: compact(parsed.runtime_commit) || undefined,
+    started_at_unix_ms: normalizePositiveInteger(parsed.started_at_unix_ms),
     local_ui: {
       available: localUI.available === true,
       base_path: compact(localUI.base_path) || '/',

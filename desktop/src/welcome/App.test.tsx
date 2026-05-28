@@ -512,6 +512,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-environment-grid');
   });
 
+  it('renders environment card time from runtime startup time, not access time', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('<span>{card().runtime_started_label}</span>');
+    expect(appSrc).not.toContain('formatRelativeTimestamp(props.environment.last_used_at_ms)');
+    expect(appSrc).not.toContain('runtime_started_at_unix_ms ? props.environment.last_used_at_ms');
+  });
+
   it('uses one measured shared column model across pinned and regular environment sections', () => {
     const styles = readWelcomeStyles();
     const appSrc = readWelcomeSource();

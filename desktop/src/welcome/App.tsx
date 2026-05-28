@@ -5913,7 +5913,7 @@ function EnvironmentConnectionCard(props: Readonly<{
               {props.environment.label}
             </CardTitle>
             <div class="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{formatRelativeTimestamp(props.environment.last_used_at_ms)}</span>
+              <span>{card().runtime_started_label}</span>
               <Show when={props.environment.control_plane_label}>
                 {(cpLabel) => (
                   <>

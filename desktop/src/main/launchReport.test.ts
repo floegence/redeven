@@ -12,6 +12,7 @@ describe('launchReport', () => {
       effective_run_mode: 'hybrid',
       remote_enabled: true,
       desktop_managed: true,
+      started_at_unix_ms: 1778751234567,
       state_dir: '/Users/tester/.redeven',
       diagnostics_enabled: true,
     }))).toEqual({
@@ -23,6 +24,7 @@ describe('launchReport', () => {
         effective_run_mode: 'hybrid',
         remote_enabled: true,
         desktop_managed: true,
+        started_at_unix_ms: 1778751234567,
         state_dir: '/Users/tester/.redeven',
         diagnostics_enabled: true,
       },

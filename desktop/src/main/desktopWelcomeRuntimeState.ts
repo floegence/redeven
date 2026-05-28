@@ -47,6 +47,7 @@ function runtimeStateFromStartup(
     return undefined;
   }
   const pid = Number(startup.pid);
+  const startedAtUnixMS = Number(startup.started_at_unix_ms);
   const rawDesktopManaged = startup.desktop_managed === true;
   const serviceDesktopManaged = startup.runtime_service?.desktop_managed ?? rawDesktopManaged;
   const runtimeService = normalizeRuntimeServiceSnapshot(startup.runtime_service ?? { service_owner: serviceOwner }, {
@@ -67,6 +68,7 @@ function runtimeStateFromStartup(
     password_required: startup.password_required === true,
     diagnostics_enabled: startup.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
+    started_at_unix_ms: Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? startedAtUnixMS : undefined,
     runtime_control: startup.runtime_control,
     runtime_service: runtimeService,
   };
@@ -184,6 +186,7 @@ function withCurrentRuntime(
     && (existingRuntime?.remote_enabled ?? false) === (currentRuntime?.remote_enabled ?? false)
     && (existingRuntime?.diagnostics_enabled ?? false) === (currentRuntime?.diagnostics_enabled ?? false)
     && (existingRuntime?.pid ?? 0) === (currentRuntime?.pid ?? 0)
+    && (existingRuntime?.started_at_unix_ms ?? 0) === (currentRuntime?.started_at_unix_ms ?? 0)
     && JSON.stringify(existingRuntime?.runtime_control ?? null) === JSON.stringify(currentRuntime?.runtime_control ?? null)
     && JSON.stringify(existingRuntime?.runtime_service ?? null) === JSON.stringify(currentRuntime?.runtime_service ?? null)
   ) {

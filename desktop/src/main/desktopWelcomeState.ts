@@ -121,6 +121,23 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function positiveUnixMS(value: unknown): number | undefined {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : undefined;
+}
+
+function runtimeStartedAtUnixMS(
+  ...candidates: readonly unknown[]
+): number | undefined {
+  for (const candidate of candidates) {
+    const value = positiveUnixMS(candidate);
+    if (value !== undefined) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 function normalizeRuntimeURLForComparison(value: unknown): string {
   const raw = compact(value);
   if (raw === '') {
@@ -933,6 +950,7 @@ function runtimeHealthFromPresence(
       : null;
     return {
       ...fallback,
+      ...(presence.started_at_unix_ms ? { started_at_unix_ms: presence.started_at_unix_ms } : {}),
       checked_at_unix_ms: presence.checked_at_unix_ms,
       source,
       freshness: fallback.freshness === 'unknown' ? undefined : fallback.freshness,
@@ -954,6 +972,7 @@ function runtimeHealthFromPresence(
     source,
     freshness: fallback.freshness === 'unknown' ? undefined : fallback.freshness,
     local_ui_url: presence.local_ui_url || undefined,
+    ...(presence.started_at_unix_ms ? { started_at_unix_ms: presence.started_at_unix_ms } : {}),
     runtime_service: presenceRuntimeService,
     runtime_maintenance: presenceMaintenance,
   };
@@ -1113,6 +1132,12 @@ function buildLocalEnvironmentEntry(
     ? (presence.runtime_service?.desktop_managed === false ? 'running_external' : 'running_desktop')
     : localRuntimeStateFromCachedHealth(localRuntimeState(environment), cachedRuntimeHealth);
   const resolvedLocalRuntimeURL = presence?.local_ui_url ?? cachedRuntimeHealth?.local_ui_url ?? localRuntimeURL(environment);
+  const startedAtUnixMS = runtimeStartedAtUnixMS(
+    presence?.started_at_unix_ms,
+    localSession?.startup?.started_at_unix_ms,
+    environment.local_hosting?.current_runtime?.started_at_unix_ms,
+    cachedRuntimeHealth?.started_at_unix_ms,
+  );
   const runtimeService = preferredRuntimeService(localEnvironmentRuntimeService(environment), cachedRuntimeHealth, presence);
   const localRuntimePlan = buildDesktopLocalRuntimeOpenPlan(
     { kind: 'local_environment' },
@@ -1232,6 +1257,7 @@ function buildLocalEnvironmentEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_service: runtimeService,
+    runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenance,
     runtime_operations: runtimeOperations,
     auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
@@ -1552,6 +1578,10 @@ function buildSavedEnvironmentEntry(
   const runtimeHealth = sessionRuntimeHealth
     ?? savedRuntimeHealth
     ?? unknownRuntimeHealth('external_local_ui_probe');
+  const startedAtUnixMS = runtimeStartedAtUnixMS(
+    openSession?.startup?.started_at_unix_ms,
+    savedRuntimeHealth?.started_at_unix_ms,
+  );
   const externalOpenable = runtimeHealth.status === 'online'
     || runtimeHealth.offline_reason_code === 'unverified'
     || runtimeHealth.offline_reason_code === 'external_unreachable';
@@ -1569,6 +1599,7 @@ function buildSavedEnvironmentEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_service: preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth),
+    runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenanceFromHealth(runtimeHealth),
     runtime_operations: externalLocalUIRuntimeOperations(externalOpenable),
     auto_runtime_probe_enabled: environment.auto_runtime_probe_enabled,
@@ -1603,6 +1634,11 @@ function buildSavedSSHEnvironmentEntry(
     )
     ?? savedRuntimeHealth
     ?? unknownRuntimeHealth('ssh_runtime_probe');
+  const startedAtUnixMS = runtimeStartedAtUnixMS(
+    presence?.started_at_unix_ms,
+    openSession?.startup?.started_at_unix_ms,
+    savedRuntimeHealth?.started_at_unix_ms,
+  );
   const runtimeService = preferredRuntimeService(openSession?.startup?.runtime_service, savedRuntimeHealth, presence);
   const runtimeMaintenance = runtimeMaintenanceFromHealth(runtimeHealth);
   const runtimeKey = desktopSSHEnvironmentID(environment);
@@ -1656,6 +1692,7 @@ function buildSavedSSHEnvironmentEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_service: runtimeService,
+    runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenance,
     provider_runtime_link_target: providerRuntimeLinkTarget,
     provider_environment_candidates: providerEnvironmentCandidates,
@@ -1727,6 +1764,11 @@ function buildSavedRuntimeTargetEntry(
     ?? cachedRuntimeHealth
     ?? unknownRuntimeHealth(target.host_access.kind === 'ssh_host' ? 'ssh_runtime_probe' : 'local_runtime_probe'),
   );
+  const startedAtUnixMS = runtimeStartedAtUnixMS(
+    presence?.started_at_unix_ms,
+    openSession?.startup?.started_at_unix_ms,
+    runtimeHealth.started_at_unix_ms,
+  );
   const runtimeService = preferredRuntimeService(openSession?.startup?.runtime_service, runtimeHealth, presence);
   const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
   const providerRuntimeLinkTarget = buildProviderRuntimeLinkTarget({
@@ -1777,6 +1819,7 @@ function buildSavedRuntimeTargetEntry(
     is_opening: isOpening,
     runtime_health: runtimeHealth,
     runtime_service: runtimeService,
+    runtime_started_at_unix_ms: startedAtUnixMS,
     runtime_maintenance: runtimeMaintenance,
     provider_runtime_link_target: providerRuntimeLinkTarget,
     provider_environment_candidates: providerEnvironmentCandidates,

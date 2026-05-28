@@ -123,6 +123,7 @@ export type EnvironmentCardModel = Readonly<{
   kind_label: 'Local' | 'Provider' | 'Redeven URL' | 'SSH Host';
   status_label: string;
   status_tone: EnvironmentCardTone;
+  runtime_started_label: string;
   target_primary: string;
   target_secondary: string;
   target_primary_monospace: boolean;
@@ -232,6 +233,28 @@ export function capabilityUnavailableMessage(label: string): string {
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function formatRuntimeStartedRelativeTimestamp(unixMS: number): string {
+  if (!Number.isFinite(unixMS) || unixMS <= 0) {
+    return 'Unknown';
+  }
+  const diff = Math.max(0, Date.now() - unixMS);
+  const minutes = Math.floor(diff / 60000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (minutes > 0) return `${minutes}m ago`;
+  return 'Just now';
+}
+
+function environmentRuntimeStartedLabel(environment: DesktopEnvironmentEntry): string {
+  const startedAtUnixMS = Number(environment.runtime_started_at_unix_ms);
+  if (!Number.isInteger(startedAtUnixMS) || startedAtUnixMS <= 0) {
+    return environment.runtime_health.status === 'online' ? 'Start time unavailable' : 'Not running';
+  }
+  return `Started ${formatRuntimeStartedRelativeTimestamp(startedAtUnixMS)}`;
 }
 
 function looksLikeAbsoluteURL(value: string): boolean {
@@ -1661,6 +1684,7 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
       kind_label: environmentKindLabel(environment),
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
+      runtime_started_label: environmentRuntimeStartedLabel(environment),
       target_primary: targetPrimary,
       target_secondary: '',
       target_primary_monospace: shouldUseMonospaceEndpoint(targetPrimary),
@@ -1679,6 +1703,7 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
       kind_label: 'Provider',
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
+      runtime_started_label: environmentRuntimeStartedLabel(environment),
       target_primary: targetPrimary,
       target_secondary: '',
       target_primary_monospace: shouldUseMonospaceEndpoint(targetPrimary),
@@ -1692,6 +1717,7 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
       kind_label: 'SSH Host',
       status_label: environmentStatusLabel(environment),
       status_tone: environmentStatusTone(environment),
+      runtime_started_label: environmentRuntimeStartedLabel(environment),
       target_primary: environment.secondary_text,
       target_secondary: environment.local_ui_url,
       target_primary_monospace: true,
@@ -1704,6 +1730,7 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
     kind_label: 'Redeven URL',
     status_label: environmentStatusLabel(environment),
     status_tone: environmentStatusTone(environment),
+    runtime_started_label: environmentRuntimeStartedLabel(environment),
     target_primary: environment.local_ui_url || environment.secondary_text,
     target_secondary: '',
     target_primary_monospace: true,

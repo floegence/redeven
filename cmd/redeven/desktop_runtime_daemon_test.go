@@ -8,6 +8,7 @@ import (
 
 	"github.com/floegence/redeven/internal/lockfile"
 	"github.com/floegence/redeven/internal/runtimemanagement"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 func TestRetireStaleRuntimeLeaseClearsStoppedRuntimeLock(t *testing.T) {
@@ -86,5 +87,35 @@ func TestStoppedRuntimeStatusErrorRequiresConfirmedNotRunning(t *testing.T) {
 	err = stoppedRuntimeStatusError(runtimemanagement.RuntimeAttachStatus{})
 	if err == nil || !strings.Contains(err.Error(), "did not report a state") {
 		t.Fatalf("stoppedRuntimeStatusError(empty) error = %v, want missing state failure", err)
+	}
+}
+
+func TestDesktopLaunchReportFromRuntimeStatusIncludesStartTime(t *testing.T) {
+	report := desktopLaunchReportFromRuntimeStatus(runtimemanagement.RuntimeAttachStatus{
+		State: runtimemanagement.AttachStateReady,
+		Identity: runtimemanagement.RuntimeInstanceIdentity{
+			PID:             4242,
+			StartedAtUnixMS: 1778751234567,
+			DesktopManaged:  true,
+			DesktopOwnerID:  "desktop-owner-status",
+		},
+		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+			LocalUIURL: "http://127.0.0.1:23998/",
+		},
+		RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
+			ServiceOwner:     runtimeservice.OwnerDesktop,
+			DesktopManaged:   true,
+			EffectiveRunMode: "desktop",
+			OpenReadiness: runtimeservice.OpenReadiness{
+				State: runtimeservice.OpenReadinessOpenable,
+			},
+		}),
+	}, desktopLaunchStatusReady)
+
+	if report.StartedAtUnixMS != 1778751234567 {
+		t.Fatalf("StartedAtUnixMS = %d", report.StartedAtUnixMS)
+	}
+	if report.PID != 4242 {
+		t.Fatalf("PID = %d", report.PID)
 	}
 }
