@@ -51,6 +51,14 @@ vi.mock('../../primitives/Tooltip', () => ({
 }));
 
 vi.mock('./SettingsPrimitives', () => ({
+  SettingsSection: (props: any) => (
+    <section>
+      <div>{props.title}</div>
+      <div>{props.description}</div>
+      <div>{props.actions}</div>
+      {props.children}
+    </section>
+  ),
   SettingsCard: (props: any) => (
     <section>
       <div>{props.title}</div>

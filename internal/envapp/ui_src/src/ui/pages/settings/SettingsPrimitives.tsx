@@ -1,6 +1,6 @@
 import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Card, Tag, Button, type TagProps } from '@floegence/floe-webapp-core/ui';
+import { Tag, Button, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { Copy, Check } from '@floegence/floe-webapp-core/icons';
 import { redevenDividerRoleClass, redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
 import { useI18n } from '../../i18n';
@@ -103,34 +103,30 @@ export interface SettingsCardProps {
   children: JSX.Element;
 }
 
-export function SettingsCard(props: SettingsCardProps) {
+export function SettingsSection(props: SettingsCardProps) {
   return (
-    <Card class={cn('overflow-hidden shadow-sm', redevenSurfaceRoleClass('panelStrong'))}>
-      <div class={cn('border-b bg-muted/20 px-4 py-3.5 sm:px-5', redevenDividerRoleClass('strong'))}>
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div class="flex min-w-0 items-start gap-3">
-            <div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/15">
-              <props.icon class="h-4 w-4 text-primary" />
+    <div class="border-t border-border/30 pt-6 mt-8 first:border-t-0 first:mt-0 first:pt-0">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div class="flex min-w-0 items-start gap-3">
+          <props.icon class="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <h3 class="text-sm font-semibold tracking-tight text-foreground">{props.title}</h3>
+              <Show when={props.badge}>
+                <Tag variant={settingsTagVariant(props.badgeVariant ?? 'default')} tone="soft" size="sm">
+                  {props.badge}
+                </Tag>
+              </Show>
             </div>
-            <div class="min-w-0">
-              <div class="flex flex-wrap items-center gap-2">
-                <h3 class="text-sm font-semibold tracking-tight text-foreground">{props.title}</h3>
-                <Show when={props.badge}>
-                  <Tag variant={settingsTagVariant(props.badgeVariant ?? 'default')} tone="soft" size="sm">
-                    {props.badge}
-                  </Tag>
-                </Show>
-              </div>
-              <p class="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">{props.description}</p>
-            </div>
+            <p class="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">{props.description}</p>
           </div>
-          <Show when={props.actions}>
-            <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">{props.actions}</div>
-          </Show>
         </div>
+        <Show when={props.actions}>
+          <div class="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-shrink-0 sm:justify-end">{props.actions}</div>
+        </Show>
       </div>
 
-      <div class="space-y-4 p-4 sm:p-5">
+      <div class="mt-4 space-y-4">
         <Show when={props.error}>
           <div class="flex items-start gap-2.5 rounded-lg border border-destructive/20 bg-destructive/10 p-3">
             <div class="min-h-4 h-full w-1 flex-shrink-0 rounded-full bg-destructive/60" />
@@ -139,9 +135,12 @@ export function SettingsCard(props: SettingsCardProps) {
         </Show>
         {props.children}
       </div>
-    </Card>
+    </div>
   );
 }
+
+/** @deprecated Use SettingsSection instead. */
+export const SettingsCard = SettingsSection;
 
 export function FieldLabel(props: { children: string; hint?: string }) {
   return (

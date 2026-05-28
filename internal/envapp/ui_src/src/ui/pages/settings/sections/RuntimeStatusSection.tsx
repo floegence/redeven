@@ -3,7 +3,7 @@ import { Zap, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import {
-  SettingsCard, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
+  SettingsSection, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
   SettingsTableBody, SettingsTableRow, SettingsTableCell, SettingsPill,
 } from '../SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../../i18n';
@@ -83,7 +83,7 @@ export function RuntimeStatusSection() {
   };
 
   return (
-    <SettingsCard
+    <SettingsSection
       icon={Zap}
       title={i18n.t('runtimeStatus.title')}
       description={i18n.t('runtimeStatus.description')}
@@ -218,6 +218,6 @@ export function RuntimeStatusSection() {
           <div class="text-xs text-muted-foreground">{ctx.maintenanceStage()}</div>
         </Show>
       </div>
-    </SettingsCard>
+    </SettingsSection>
   );
 }

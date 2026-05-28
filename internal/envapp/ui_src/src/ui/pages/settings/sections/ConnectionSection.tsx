@@ -1,7 +1,7 @@
 import { Show, createMemo, createSignal } from 'solid-js';
 import { Globe, Key, Link } from '@floegence/floe-webapp-core/icons';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsCard, ViewToggle, CopyButton, InfoRow, JSONEditor, type ViewMode } from '../SettingsPrimitives';
+import { SettingsSection, ViewToggle, CopyButton, InfoRow, JSONEditor, type ViewMode } from '../SettingsPrimitives';
 import { useI18n } from '../../../i18n';
 
 export function ConnectionSection() {
@@ -18,7 +18,7 @@ export function ConnectionSection() {
   const settings = () => ctx.settings();
 
   return (
-    <SettingsCard
+    <SettingsSection
       icon={Globe}
       title={i18n.t('settings.connection.title')}
       description={i18n.t('settings.connection.description')}
@@ -43,6 +43,6 @@ export function ConnectionSection() {
         </div>
         <p class="mt-3 text-[11px] text-muted-foreground">{i18n.t('settings.connection.readOnlyControlPlaneManaged')}</p>
       </Show>
-    </SettingsCard>
+    </SettingsSection>
   );
 }

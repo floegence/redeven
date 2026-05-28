@@ -5,7 +5,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { fetchGatewayJSON } from '../../../services/gatewayApi';
 import {
-  SettingsCard, ViewToggle, AutoSaveIndicator, JSONEditor, SubSectionHeader,
+  SettingsSection, ViewToggle, AutoSaveIndicator, JSONEditor, SubSectionHeader,
   type ViewMode,
 } from '../SettingsPrimitives';
 import { AIProviderDialog } from '../AIProviderDialog';
@@ -472,7 +472,7 @@ export function FlowerSection() {
 
   return (
     <>
-      <SettingsCard
+      <SettingsSection
         icon={Zap}
         title={i18n.t('aiChrome.flowerTitle')}
         description={i18n.t('flowerSettings.description')}
@@ -637,7 +637,7 @@ export function FlowerSection() {
             </div>
           </div>
         </Show>
-      </SettingsCard>
+      </SettingsSection>
 
       <AIProviderDialog
         open={providerDialogOpen()} onOpenChange={(open) => { if (!open) closeAIProviderDialog(); }}

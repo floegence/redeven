@@ -19,7 +19,7 @@ import {
 } from '../../services/browserEditorSetupActivity';
 import { Tooltip } from '../../primitives/Tooltip';
 import { BrowserEditorSetupActivityPanel } from '../BrowserEditorSetupActivityPanel';
-import { SettingsCard, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
+import { SettingsSection, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../i18n';
 
 type RuntimeDetailRow = Readonly<{
@@ -500,7 +500,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
 
   return (
     <>
-      <SettingsCard
+      <SettingsSection
         icon={Code}
         title={i18n.t('codeRuntime.title')}
         description={i18n.t('codeRuntime.description')}
@@ -633,7 +633,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             </div>
           </Show>
         </div>
-      </SettingsCard>
+      </SettingsSection>
 
       <ConfirmDialog
         open={prepareConfirmOpen()}

@@ -2,7 +2,7 @@ import { For, Show, createMemo, createSignal } from 'solid-js';
 import { Layers } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Select, Dialog, ConfirmDialog, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsCard, FieldLabel } from '../SettingsPrimitives';
+import { SettingsSection, FieldLabel } from '../SettingsPrimitives';
 import { SkillsCatalogTable } from '../SkillsCatalogTable';
 import { fetchGatewayJSON } from '../../../services/gatewayApi';
 import { useI18n } from '../../../i18n';
@@ -89,7 +89,7 @@ export function SkillsSection() {
 
   return (
     <>
-      <SettingsCard
+      <SettingsSection
         icon={Layers}
         title={i18n.t('skillsSettings.title')}
         description={i18n.t('skillsSettings.description')}
@@ -145,7 +145,7 @@ export function SkillsSection() {
             </div>
           </Show>
         </div>
-      </SettingsCard>
+      </SettingsSection>
 
       {/* Install dialog */}
       <Dialog open={skillInstallOpen()} onOpenChange={(open) => { setSkillInstallOpen(open); if (!open) setSkillInstallResolved([]); }}
