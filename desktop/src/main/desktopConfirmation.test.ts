@@ -24,6 +24,9 @@ const quitModel: DesktopConfirmationDialogModel = {
   confirm_label: 'Quit',
   cancel_label: 'Cancel',
   confirm_tone: 'danger',
+  platform_action: 'quit_app',
+  platform_title: 'Exit Redeven Desktop?',
+  platform_confirm_label: 'Exit',
 };
 
 describe('desktopConfirmation', () => {
@@ -44,6 +47,23 @@ describe('desktopConfirmation', () => {
       defaultId: 1,
       cancelId: 1,
       noLink: false,
+    });
+  });
+
+  it('uses explicit platform quit semantics instead of comparing localized titles', () => {
+    expect(buildDesktopConfirmationMessageBoxOptions({
+      model: {
+        ...quitModel,
+        title: '退出 Redeven Desktop？',
+        confirm_label: '退出',
+        cancel_label: '取消',
+        platform_title: '退出 Redeven Desktop？',
+        platform_confirm_label: '退出',
+      },
+      platform: 'win32',
+    })).toMatchObject({
+      title: '退出 Redeven Desktop？',
+      buttons: ['退出', '取消'],
     });
   });
 

@@ -1,4 +1,6 @@
 import type { DesktopConfirmationDialogModel } from '../shared/desktopConfirmationContract';
+import { createDesktopI18n, type DesktopI18n } from '../shared/i18n/desktopI18n';
+import type { RedevenLocale } from '../shared/i18n/localeMeta';
 
 export type DesktopQuitSource = 'explicit' | 'system' | 'last_window_close';
 
@@ -14,21 +16,15 @@ export type DesktopQuitImpact = Readonly<{
   running_runtime_count: number;
 }>;
 
-function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-  return count === 1 ? singular : plural;
-}
-
-function joinWithAnd(parts: readonly string[]): string {
+function joinWithAnd(parts: readonly string[], locale: RedevenLocale): string {
   if (parts.length <= 0) {
     return '';
   }
-  if (parts.length === 1) {
-    return parts[0] ?? '';
+  try {
+    return new Intl.ListFormat(locale, { style: 'long', type: 'conjunction' }).format([...parts]);
+  } catch {
+    return new Intl.ListFormat('en-US', { style: 'long', type: 'conjunction' }).format([...parts]);
   }
-  if (parts.length === 2) {
-    return `${parts[0]} and ${parts[1]}`;
-  }
-  return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
 }
 
 export function buildDesktopQuitImpact(input: DesktopQuitImpactInput): DesktopQuitImpact {
@@ -58,7 +54,15 @@ export function shouldConfirmDesktopLastWindowClose(
   return impact.pending_operation_count > 0 || impact.environment_window_count > 0;
 }
 
-export function buildDesktopQuitConfirmationModel(impact: DesktopQuitImpact): DesktopConfirmationDialogModel {
+function i18nFromLocale(locale: RedevenLocale = 'en-US'): DesktopI18n {
+  return createDesktopI18n(locale);
+}
+
+export function buildDesktopQuitConfirmationModel(
+  impact: DesktopQuitImpact,
+  locale: RedevenLocale = 'en-US',
+): DesktopConfirmationDialogModel {
+  const i18n = i18nFromLocale(locale);
   const sessionCount = impact.environment_window_count;
   const operationCount = impact.pending_operation_count;
   const runtimeCount = impact.running_runtime_count;
@@ -66,52 +70,57 @@ export function buildDesktopQuitConfirmationModel(impact: DesktopQuitImpact): De
 
   if (sessionCount > 0) {
     summary.push(
-      `close ${sessionCount} environment ${pluralize(sessionCount, 'window')}`,
+      i18n.tn('quitImpact.closeEnvironmentWindows', sessionCount),
     );
   }
   if (operationCount > 0) {
     summary.push(
-      `cancel ${operationCount} background ${pluralize(operationCount, 'task')}`,
+      i18n.tn('quitImpact.cancelBackgroundTasks', operationCount),
     );
   }
 
   const message = summary.length > 0
-    ? `This will ${joinWithAnd(summary)}.`
-    : 'Redeven Desktop will quit.';
+    ? i18n.t('quitImpact.quitWill', { summary: joinWithAnd(summary, locale) })
+    : i18n.t('quitImpact.quitWithoutImpact');
   const detail = runtimeCount > 0
-    ? `${runtimeCount} runtime ${pluralize(runtimeCount, 'process', 'processes')} will keep running.`
+    ? i18n.tn('quitImpact.runtimeProcessesKeepRunning', runtimeCount)
     : '';
 
   return {
-    title: 'Quit Redeven Desktop?',
+    title: i18n.t('quitImpact.quitTitle'),
     message,
     detail,
-    confirm_label: 'Quit',
-    cancel_label: 'Cancel',
+    confirm_label: i18n.t('quitImpact.quitConfirm'),
+    cancel_label: i18n.t('common.cancel'),
     confirm_tone: 'danger',
+    platform_action: 'quit_app',
+    platform_title: i18n.t('quitImpact.exitTitle'),
+    platform_confirm_label: i18n.t('quitImpact.exitConfirm'),
   };
 }
 
 export function buildDesktopLastWindowCloseConfirmationModel(
   impact: DesktopQuitImpact,
+  locale: RedevenLocale = 'en-US',
 ): DesktopConfirmationDialogModel {
+  const i18n = i18nFromLocale(locale);
   const operationCount = impact.pending_operation_count;
   const runtimeCount = impact.running_runtime_count;
   const message = operationCount > 0
-    ? `The last window will close, but ${operationCount} background ${pluralize(operationCount, 'task')} will keep running.`
+    ? i18n.tn('quitImpact.lastWindowBackgroundTasksKeepRunning', operationCount)
     : impact.environment_window_count > 0
-      ? 'The last window will close, but Redeven Desktop will keep running in the background.'
-      : 'Redeven Desktop will keep running in the background.';
+      ? i18n.t('quitImpact.lastWindowDesktopKeepsRunning')
+      : i18n.t('quitImpact.desktopKeepsRunning');
   const runtimeDetail = runtimeCount > 0
-    ? `${runtimeCount} runtime ${pluralize(runtimeCount, 'process', 'processes')} will keep running.`
+    ? i18n.tn('quitImpact.runtimeProcessesKeepRunning', runtimeCount)
     : '';
 
   return {
-    title: 'Close the Last Window?',
+    title: i18n.t('quitImpact.closeLastWindowTitle'),
     message,
-    detail: [runtimeDetail, 'Reopen the launcher from the Dock or app menu.'].filter(Boolean).join(' '),
-    confirm_label: 'Close Window',
-    cancel_label: 'Cancel',
+    detail: [runtimeDetail, i18n.t('quitImpact.reopenLauncherHint')].filter(Boolean).join(' '),
+    confirm_label: i18n.t('quitImpact.closeWindowConfirm'),
+    cancel_label: i18n.t('common.cancel'),
     confirm_tone: 'warning',
   };
 }

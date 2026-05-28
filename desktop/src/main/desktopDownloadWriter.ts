@@ -12,6 +12,8 @@ import type {
   DesktopDownloadPrepareResponse,
   DesktopDownloadWriteRequest,
 } from '../shared/desktopDownloadIPC';
+import { createDesktopI18n, type DesktopI18n } from '../shared/i18n/desktopI18n';
+import type { RedevenLocale } from '../shared/i18n/localeMeta';
 
 type DesktopDownloadRecord = {
   token: string;
@@ -57,15 +59,22 @@ function errorMessage(error: unknown, fallback: string): string {
 export class DesktopDownloadWriter {
   private readonly records = new Map<string, DesktopDownloadRecord>();
 
+  constructor(private readonly localeProvider: () => RedevenLocale = () => 'en-US') {}
+
+  private i18n(): DesktopI18n {
+    return createDesktopI18n(this.localeProvider());
+  }
+
   async prepare(
     ownerWindow: BrowserWindow | null,
     request: DesktopDownloadPrepareRequest,
   ): Promise<DesktopDownloadPrepareResponse> {
+    const i18n = this.i18n();
     const suggestedName = safeSuggestedFileName(request.suggested_name);
     const options: SaveDialogOptions = {
-      title: 'Save download',
+      title: i18n.t('download.saveTitle'),
       defaultPath: suggestedName,
-      buttonLabel: 'Save',
+      buttonLabel: i18n.t('common.save'),
       properties: ['createDirectory', 'showOverwriteConfirmation'],
     };
     const result = ownerWindow
@@ -99,17 +108,18 @@ export class DesktopDownloadWriter {
     } catch (error) {
       return {
         ok: false,
-        message: errorMessage(error, 'Desktop could not open the destination file.'),
+        message: errorMessage(error, i18n.t('download.openDestinationFailed')),
       };
     }
   }
 
   async write(request: DesktopDownloadWriteRequest): Promise<DesktopDownloadActionResponse> {
+    const i18n = this.i18n();
     const record = this.records.get(request.token);
     if (!record || record.completed || !record.handle) {
       return {
         ok: false,
-        message: 'Desktop download destination is no longer available.',
+        message: i18n.t('download.destinationUnavailable'),
       };
     }
 
@@ -122,17 +132,18 @@ export class DesktopDownloadWriter {
     } catch (error) {
       return {
         ok: false,
-        message: errorMessage(error, 'Desktop could not write to the destination file.'),
+        message: errorMessage(error, i18n.t('download.writeFailed')),
       };
     }
   }
 
   async complete(token: string): Promise<DesktopDownloadCompleteResponse> {
+    const i18n = this.i18n();
     const record = this.records.get(token);
     if (!record || record.completed || !record.handle) {
       return {
         ok: false,
-        message: 'Desktop download destination is no longer available.',
+        message: i18n.t('download.destinationUnavailable'),
       };
     }
 
@@ -149,12 +160,13 @@ export class DesktopDownloadWriter {
       await this.abort({ token, reason: 'failed' });
       return {
         ok: false,
-        message: errorMessage(error, 'Desktop could not finish the download.'),
+        message: errorMessage(error, i18n.t('download.finishFailed')),
       };
     }
   }
 
   async abort(request: DesktopDownloadAbortRequest): Promise<DesktopDownloadActionResponse> {
+    const i18n = this.i18n();
     const record = this.records.get(request.token);
     if (!record) {
       return { ok: true };
@@ -173,17 +185,18 @@ export class DesktopDownloadWriter {
     } catch (error) {
       return {
         ok: false,
-        message: errorMessage(error, 'Desktop could not clean up the canceled download.'),
+        message: errorMessage(error, i18n.t('download.cleanupFailed')),
       };
     }
   }
 
   async reveal(token: string): Promise<DesktopDownloadActionResponse> {
+    const i18n = this.i18n();
     const record = this.records.get(token);
     if (!record?.completed) {
       return {
         ok: false,
-        message: 'Desktop download is not complete.',
+        message: i18n.t('download.notComplete'),
       };
     }
     shell.showItemInFolder(record.finalPath);
@@ -191,11 +204,12 @@ export class DesktopDownloadWriter {
   }
 
   async open(token: string): Promise<DesktopDownloadActionResponse> {
+    const i18n = this.i18n();
     const record = this.records.get(token);
     if (!record?.completed) {
       return {
         ok: false,
-        message: 'Desktop download is not complete.',
+        message: i18n.t('download.notComplete'),
       };
     }
 

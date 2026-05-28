@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   createDesktopI18n,
   DESKTOP_I18N_DICTIONARIES,
@@ -15,6 +17,60 @@ import {
 } from './index';
 import { isPluralMessage } from './messageTypes';
 import { enUS } from './locales/en-US';
+
+function listSourceFiles(root: string): readonly string[] {
+  const entries = fs.readdirSync(root, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const resolved = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      if (resolved.endsWith(path.join('shared', 'i18n', 'locales'))) {
+        continue;
+      }
+      files.push(...listSourceFiles(resolved));
+      continue;
+    }
+    if (/\.(test|spec)\.[cm]?tsx?$/.test(entry.name)) {
+      continue;
+    }
+    if (/\.[cm]?tsx?$/.test(entry.name)) {
+      files.push(resolved);
+    }
+  }
+  return files;
+}
+
+function collectLiteralTranslationKeysFromSource(root: string): ReadonlyMap<string, readonly string[]> {
+  const directCallPattern = /(?:^|[^\w.])(?:(?:i18n|props\.i18n)\.)?(?:t|tn|translateDesktopKey)\(\s*['"`]([A-Za-z][A-Za-z0-9_.-]*)['"`]/g;
+  const snakeKeyFieldPattern = /\b(?:title|summary|detail|recovery_hint|interrupt_label|interrupt_detail|label|value|content|help|placeholder|description|message|aria_label|window_title|save_label|access_mode_label)_key\s*:\s*['"`]([A-Za-z][A-Za-z0-9_.-]*)['"`]/g;
+  const camelKeyFieldPattern = /\b(?:titleKey|labelKey|valueKey|contentKey|helpKey|placeholderKey|descriptionKey|detailKey|messageKey|ariaLabelKey)\s*:\s*['"`]([A-Za-z][A-Za-z0-9_.-]*)['"`]/g;
+  const typedReturnPattern = /function\s+\w+\([^)]*\)\s*:\s*(?:Desktop(?:Plural)?TranslationKey|[^({;]*\|\s*undefined)[\s\S]*?return\s+['"`]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.-]*)['"`]\s*;/g;
+  const typeAssertionPattern = /['"`]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.-]*)['"`]\s+as\s+Desktop(?:Plural)?TranslationKey\b/g;
+  const found = new Map<string, string[]>();
+
+  for (const file of listSourceFiles(root)) {
+    const source = fs.readFileSync(file, 'utf8');
+    for (const pattern of [
+      directCallPattern,
+      snakeKeyFieldPattern,
+      camelKeyFieldPattern,
+      typedReturnPattern,
+      typeAssertionPattern,
+    ]) {
+      pattern.lastIndex = 0;
+      for (const match of source.matchAll(pattern)) {
+        const key = match[1];
+        if (!key) {
+          continue;
+        }
+        const relativeFile = path.relative(root, file);
+        found.set(key, [...(found.get(key) ?? []), relativeFile]);
+      }
+    }
+  }
+
+  return found;
+}
 
 describe('Desktop shared i18n locale metadata', () => {
   it('defines ten real locales plus the system preference in stable order', () => {
@@ -152,6 +208,18 @@ describe('Desktop shared i18n dictionaries', () => {
       path: 'desktop.openLocalEnvironment',
       message: 'Protected term "Local Environment" must remain unchanged.',
     });
+  });
+
+  it('keeps literal translation keys used by Desktop source files present in the base dictionary', () => {
+    const sourceRoot = path.resolve(process.cwd(), 'src');
+    const keys = collectLiteralTranslationKeysFromSource(sourceRoot);
+    const availableKeys = new Set(flattenDictionaryMessages(enUS).map((entry) => entry.path));
+    const missing = [...keys.entries()]
+      .filter(([key]) => !availableKeys.has(key))
+      .map(([key, files]) => `${key} (${[...new Set(files)].sort().join(', ')})`)
+      .sort();
+
+    expect(missing).toEqual([]);
   });
 });
 

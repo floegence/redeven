@@ -857,8 +857,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('if (process.platform === \'darwin\') {');
     expect(mainSrc).toContain('void requestFinalWindowClose(trackedWindow);');
     expect(mainSrc).toContain("if (shouldConfirmDesktopQuit(impact, source)) {");
-    expect(mainSrc).toContain('buildDesktopLastWindowCloseConfirmationModel(impact)');
-    expect(mainSrc).toContain('buildDesktopQuitConfirmationModel(impact)');
+    expect(mainSrc).toContain('buildDesktopLastWindowCloseConfirmationModel(impact, desktopLanguageState().getSnapshot().resolved_locale)');
+    expect(mainSrc).toContain('buildDesktopQuitConfirmationModel(impact, desktopLanguageState().getSnapshot().resolved_locale)');
     expect(mainSrc).toContain("void requestQuit('last_window_close', win);");
     expect(mainSrc).toContain("void requestQuit('system');");
     expect(mainSrc).toContain("if (process.platform !== 'darwin' && quitPhase === 'idle') {");

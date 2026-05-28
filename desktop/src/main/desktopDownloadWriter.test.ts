@@ -69,6 +69,34 @@ describe('DesktopDownloadWriter', () => {
     await expect(fs.stat(`${finalPath}.download.tmp`)).rejects.toThrow();
   });
 
+  it('localizes the save dialog through the current Desktop language', async () => {
+    const dir = await makeTempDir();
+    const finalPath = path.join(dir, 'report.txt');
+    showSaveDialog.mockResolvedValue({ canceled: false, filePath: finalPath });
+    const { DesktopDownloadWriter } = await import('./desktopDownloadWriter');
+    const writer = new DesktopDownloadWriter(() => 'zh-CN');
+
+    await writer.prepare(null, {
+      task_id: 'task-localized',
+      suggested_name: 'report.txt',
+    });
+
+    expect(showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
+      title: '保存下载',
+      buttonLabel: '保存',
+    }));
+  });
+
+  it('localizes desktop-side download action failures', async () => {
+    const { DesktopDownloadWriter } = await import('./desktopDownloadWriter');
+    const writer = new DesktopDownloadWriter(() => 'zh-CN');
+
+    await expect(writer.reveal('missing-token')).resolves.toMatchObject({
+      ok: false,
+      message: 'Desktop download 尚未完成。',
+    });
+  });
+
   it('cleans up the temp file when aborted', async () => {
     const dir = await makeTempDir();
     const finalPath = path.join(dir, 'cancel.bin');

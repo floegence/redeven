@@ -1,6 +1,8 @@
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
 import { desktopTheme } from './desktopTheme';
 import { desktopWindowTitleBarInsetCSSValue } from '../shared/windowChromePlatform';
+import { createDesktopI18n, type DesktopI18n } from '../shared/i18n/desktopI18n';
+import type { RedevenLocale } from '../shared/i18n/localeMeta';
 
 const BLOCKED_ACTION_ORIGIN = 'https://redeven-desktop.invalid';
 
@@ -13,39 +15,39 @@ function escapeHTML(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-function blockedHeadline(report: LaunchBlockedReport): { title: string; body: string } {
+function blockedHeadline(report: LaunchBlockedReport, i18n: DesktopI18n): { title: string; body: string } {
   if (report.code === 'state_dir_locked') {
     if (report.lock_owner?.local_ui_enabled === true) {
       return {
-        title: 'Redeven is already starting elsewhere',
-        body: 'Another Redeven runtime instance is using the default state directory and appears to provide Local UI. If it is still starting, retry in a moment so Desktop can attach to it.',
+        title: i18n.t('blockedPage.stateDirLockedAttachTitle'),
+        body: i18n.t('blockedPage.stateDirLockedAttachBody'),
       };
     }
     return {
-      title: 'Redeven is already running',
-      body: 'Another Redeven runtime instance is using the default state directory without an attachable Local UI. Stop that runtime or restart it in a Local UI mode, then retry.',
+      title: i18n.t('blockedPage.stateDirLockedNoAttachTitle'),
+      body: i18n.t('blockedPage.stateDirLockedNoAttachBody'),
     };
   }
   if (report.code === 'external_target_unreachable') {
     return {
-      title: 'Redeven target is unavailable',
+      title: i18n.t('blockedPage.targetUnavailableTitle'),
       body: report.message,
     };
   }
   if (report.code === 'startup_invalid') {
     return {
-      title: 'Local Environment startup needs a setting',
+      title: i18n.t('blockedPage.startupInvalidTitle'),
       body: report.message,
     };
   }
   if (report.code === 'startup_failed') {
     return {
-      title: 'Local Environment startup failed',
+      title: i18n.t('blockedPage.startupFailedTitle'),
       body: report.message,
     };
   }
   return {
-    title: 'Redeven Desktop is blocked',
+    title: i18n.t('blockedPage.genericBlockedTitle'),
     body: report.message,
   };
 }
@@ -56,23 +58,30 @@ function actionURL(action: BlockedPageAction): string {
   return `${BLOCKED_ACTION_ORIGIN}/${action}`;
 }
 
-function secondaryAction(report: LaunchBlockedReport): Readonly<{ action: BlockedPageAction; label: string }> {
+function secondaryAction(
+  report: LaunchBlockedReport,
+  i18n: DesktopI18n,
+): Readonly<{ action: BlockedPageAction; label: string }> {
   if (report.code === 'external_target_unreachable' || report.code === 'external_target_invalid') {
     return {
       action: 'connection-center',
-      label: 'Open Environment',
+      label: i18n.t('commandPalette.openEnvironmentTitle'),
     };
   }
   if (report.code === 'startup_invalid' || report.code === 'startup_failed') {
     return {
       action: 'advanced-settings',
-      label: 'Local Environment Settings',
+      label: i18n.t('blockedPage.localEnvironmentSettings'),
     };
   }
   return {
     action: 'advanced-settings',
-    label: 'Local Environment Settings',
+    label: i18n.t('blockedPage.localEnvironmentSettings'),
   };
+}
+
+function escapedDetail(i18n: DesktopI18n, key: Parameters<DesktopI18n['t']>[0], value: string): string {
+  return escapeHTML(i18n.t(key, { value }));
 }
 
 export function isBlockedActionURL(rawURL: string): boolean {
@@ -105,25 +114,27 @@ export function blockedActionFromURL(rawURL: string): BlockedPageAction | null {
 export function buildBlockedPageHTML(
   report: LaunchBlockedReport,
   platform: NodeJS.Platform = process.platform,
+  locale: RedevenLocale = 'en-US',
 ): string {
-  const headline = blockedHeadline(report);
-  const secondary = secondaryAction(report);
+  const i18n = createDesktopI18n(locale);
+  const headline = blockedHeadline(report, i18n);
+  const secondary = secondaryAction(report, i18n);
   const diagnostics = escapeHTML(formatBlockedLaunchDiagnostics(report));
   const details = report.diagnostics?.target_url
-    ? `Target URL: ${escapeHTML(report.diagnostics.target_url)}`
+    ? escapedDetail(i18n, 'blockedPage.targetUrl', report.diagnostics.target_url)
     : report.diagnostics?.config_path
-    ? `Config path: ${escapeHTML(report.diagnostics.config_path)}`
+    ? escapedDetail(i18n, 'blockedPage.configPath', report.diagnostics.config_path)
     : report.diagnostics?.state_dir
-    ? `Default state directory: ${escapeHTML(report.diagnostics.state_dir)}`
-    : 'Desktop could not attach to an existing Local UI instance.';
+    ? escapedDetail(i18n, 'blockedPage.defaultStateDirectory', report.diagnostics.state_dir)
+    : escapeHTML(i18n.t('blockedPage.attachFailedDetail'));
   const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);
 
   return `<!doctype html>
-<html lang="en">
+<html lang="${escapeHTML(locale)}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>Redeven Desktop</title>
+    <title>${escapeHTML(i18n.t('desktop.title'))}</title>
     <style>
       :root {
         color-scheme: light;
@@ -267,22 +278,22 @@ export function buildBlockedPageHTML(
     </style>
   </head>
   <body>
-    <a class="skip-link" href="#blocked-main">Skip to main content</a>
+    <a class="skip-link" href="#blocked-main">${escapeHTML(i18n.t('blockedPage.skipToMainContent'))}</a>
     <main id="blocked-main" tabindex="-1">
       <div id="blocked-summary" role="alert" aria-live="assertive" aria-describedby="blocked-meta" tabindex="-1">
-        <p class="eyebrow">Redeven Desktop</p>
+        <p class="eyebrow">${escapeHTML(i18n.t('desktop.title'))}</p>
         <h1>${escapeHTML(headline.title)}</h1>
         <p>${escapeHTML(headline.body)}</p>
       </div>
       <div id="blocked-meta" class="meta">${details}</div>
-      <nav class="actions" aria-label="Blocked page actions">
-        <a class="button primary" href="${actionURL('retry')}">Retry</a>
+      <nav class="actions" aria-label="${escapeHTML(i18n.t('blockedPage.actionsAriaLabel'))}">
+        <a class="button primary" href="${actionURL('retry')}">${escapeHTML(i18n.t('common.retry'))}</a>
         <a class="button" href="${actionURL(secondary.action)}">${escapeHTML(secondary.label)}</a>
-        <a class="button" href="${actionURL('copy-diagnostics')}">Copy diagnostics</a>
-        <a class="button" href="${actionURL('quit')}">Quit</a>
+        <a class="button" href="${actionURL('copy-diagnostics')}">${escapeHTML(i18n.t('blockedPage.copyDiagnostics'))}</a>
+        <a class="button" href="${actionURL('quit')}">${escapeHTML(i18n.t('common.quit'))}</a>
       </nav>
       <details>
-        <summary>Technical details</summary>
+        <summary>${escapeHTML(i18n.t('blockedPage.technicalDetails'))}</summary>
         <pre>${diagnostics}</pre>
       </details>
     </main>
@@ -299,6 +310,7 @@ export function buildBlockedPageHTML(
 export function blockedPageDataURL(
   report: LaunchBlockedReport,
   platform: NodeJS.Platform = process.platform,
+  locale: RedevenLocale = 'en-US',
 ): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(buildBlockedPageHTML(report, platform))}`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(buildBlockedPageHTML(report, platform, locale))}`;
 }
