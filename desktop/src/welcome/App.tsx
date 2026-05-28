@@ -5916,13 +5916,10 @@ function EnvironmentConnectionCard(props: Readonly<{
               </span>
               <Show when={props.environment.control_plane_label}>
                 {(cpLabel) => (
-                  <>
-                    <span class="text-border/30 select-none ml-1.5" aria-hidden="true">|</span>
-                    <span class="redeven-card-runtime-domain">
-                      <Globe class="h-3 w-3" />
-                      {cpLabel()}
-                    </span>
-                  </>
+                  <span class="redeven-card-runtime-domain ml-1.5">
+                    <Globe class="h-3 w-3" />
+                    {cpLabel()}
+                  </span>
                 )}
               </Show>
             </div>
