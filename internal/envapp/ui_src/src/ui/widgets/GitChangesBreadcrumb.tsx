@@ -7,6 +7,7 @@ import {
   resolveGitChangesBreadcrumbLayout,
   type GitChangesBreadcrumbSegment,
 } from './gitChangesHeaderLayout'
+import { useI18n } from '../i18n'
 
 export interface GitChangesBreadcrumbProps {
   segments: GitChangesBreadcrumbSegment[]
@@ -50,7 +51,12 @@ function GitBreadcrumbLaunchIcon(props: { class?: string }) {
   )
 }
 
-function BreadcrumbEllipsis(props: { segments: GitChangesBreadcrumbSegment[]; onSelect?: (segment: GitChangesBreadcrumbSegment) => void }) {
+function BreadcrumbEllipsis(props: {
+  segments: GitChangesBreadcrumbSegment[]
+  onSelect?: (segment: GitChangesBreadcrumbSegment) => void
+  hiddenPathSegmentsLabel: string
+  showHiddenPathSegmentsLabel: string
+}) {
   const items = createMemo<DropdownItem[]>(() => props.segments.map((segment, index) => ({
     id: `collapsed-${index}`,
     label: segment.label,
@@ -70,7 +76,7 @@ function BreadcrumbEllipsis(props: { segments: GitChangesBreadcrumbSegment[]; on
         type="button"
         disabled
         class={cn(GIT_CHANGES_BREADCRUMB_ITEM_BASE_CLASS, GIT_CHANGES_BREADCRUMB_ANCESTOR_STATIC_CLASS)}
-        title="Hidden path segments"
+        title={props.hiddenPathSegmentsLabel}
       >
         …
       </button>
@@ -83,7 +89,7 @@ function BreadcrumbEllipsis(props: { segments: GitChangesBreadcrumbSegment[]; on
         <button
           type="button"
           class={cn(GIT_CHANGES_BREADCRUMB_ITEM_BASE_CLASS, GIT_CHANGES_BREADCRUMB_ANCESTOR_CLASS)}
-          title="Show hidden path segments"
+          title={props.showHiddenPathSegmentsLabel}
         >
           …
         </button>
@@ -96,6 +102,7 @@ function BreadcrumbEllipsis(props: { segments: GitChangesBreadcrumbSegment[]; on
 }
 
 export function GitChangesBreadcrumb(props: GitChangesBreadcrumbProps) {
+  const i18n = useI18n()
   let containerRef: HTMLElement | undefined
   let separatorMeasureRef: HTMLSpanElement | undefined
   let ellipsisMeasureRef: HTMLButtonElement | undefined
@@ -164,7 +171,7 @@ export function GitChangesBreadcrumb(props: GitChangesBreadcrumbProps) {
   }))
   const canNavigate = () => typeof props.onSelect === 'function'
   const canBrowseFiles = () => typeof props.onBrowseFiles === 'function'
-  const browseFilesTitle = (segment: GitChangesBreadcrumbSegment) => `Open ${segment.label} in Files`
+  const browseFilesTitle = (segment: GitChangesBreadcrumbSegment) => i18n.t('git.changes.openInFiles', { label: segment.label })
   const browseFiles = (segment: GitChangesBreadcrumbSegment) => {
     void props.onBrowseFiles?.(segment)
   }
@@ -173,7 +180,7 @@ export function GitChangesBreadcrumb(props: GitChangesBreadcrumbProps) {
     <nav
       ref={containerRef}
       class={cn('relative flex min-w-0 items-center gap-1 overflow-hidden text-muted-foreground', props.class)}
-      aria-label="Breadcrumb"
+      aria-label={i18n.t('files.breadcrumbLabel')}
     >
       <For each={layout().visible}>
         {(segment, index) => (
@@ -182,7 +189,12 @@ export function GitChangesBreadcrumb(props: GitChangesBreadcrumbProps) {
               <ChevronRight class="h-3 w-3 shrink-0 text-muted-foreground/50" />
             </Show>
             <Show when={layout().shouldCollapse && index() === 1}>
-              <BreadcrumbEllipsis segments={layout().collapsed} onSelect={props.onSelect} />
+              <BreadcrumbEllipsis
+                segments={layout().collapsed}
+                onSelect={props.onSelect}
+                hiddenPathSegmentsLabel={i18n.t('files.hiddenPathSegments')}
+                showHiddenPathSegmentsLabel={i18n.t('files.showHiddenPathSegments')}
+              />
               <ChevronRight class="h-3 w-3 shrink-0 text-muted-foreground/50" />
             </Show>
             <span class={GIT_CHANGES_BREADCRUMB_SEGMENT_GROUP_CLASS}>

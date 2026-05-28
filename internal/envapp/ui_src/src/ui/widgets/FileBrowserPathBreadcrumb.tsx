@@ -10,6 +10,7 @@ import {
   type FileBrowserPathSegment,
 } from './fileBrowserPathLayout'
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface'
+import { useI18n } from '../i18n'
 
 export interface FileBrowserPathBreadcrumbProps {
   class?: string
@@ -26,6 +27,7 @@ const PATH_BREADCRUMB_ANCESTOR_TEXT_CLASS = 'block max-w-[8rem] truncate'
 const PATH_BREADCRUMB_CURRENT_TEXT_CLASS = 'block min-w-0 truncate'
 
 export function FileBrowserPathBreadcrumb(props: FileBrowserPathBreadcrumbProps) {
+  const i18n = useI18n()
   const browser = useFileBrowser()
   let containerRef: HTMLElement | undefined
   let separatorMeasureRef: HTMLSpanElement | undefined
@@ -102,7 +104,7 @@ export function FileBrowserPathBreadcrumb(props: FileBrowserPathBreadcrumbProps)
     <nav
       ref={containerRef}
       class={cn('relative flex min-w-0 items-center gap-1 overflow-hidden', props.class)}
-      aria-label="Breadcrumb"
+      aria-label={i18n.t('files.breadcrumbLabel')}
     >
       <For each={layout().visible}>
         {(segment, index) => (
@@ -114,6 +116,7 @@ export function FileBrowserPathBreadcrumb(props: FileBrowserPathBreadcrumbProps)
               <CollapsedSegments
                 segments={layout().collapsed}
                 onSelect={handleSegmentSelect}
+                showHiddenPathSegmentsLabel={i18n.t('files.showHiddenPathSegments')}
               />
               <ChevronRight class="h-3 w-3 shrink-0 text-muted-foreground/50" />
             </Show>
@@ -123,6 +126,7 @@ export function FileBrowserPathBreadcrumb(props: FileBrowserPathBreadcrumbProps)
               isLast={index() === layout().visible.length - 1}
               onClick={() => handleSegmentSelect(segment)}
               onActivate={props.onCurrentPathActivate}
+              goToPathLabel={i18n.t('files.goToPath')}
             />
           </>
         )}
@@ -166,6 +170,7 @@ export function FileBrowserPathBreadcrumb(props: FileBrowserPathBreadcrumbProps)
 interface CollapsedSegmentsProps {
   segments: FileBrowserPathSegment[]
   onSelect: (segment: FileBrowserPathSegment) => void
+  showHiddenPathSegmentsLabel: string
 }
 
 function CollapsedSegments(props: CollapsedSegmentsProps) {
@@ -188,7 +193,7 @@ function CollapsedSegments(props: CollapsedSegmentsProps) {
           type="button"
           {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
           class={cn(PATH_BREADCRUMB_ITEM_BASE_CLASS, PATH_BREADCRUMB_ANCESTOR_CLASS)}
-          title="Show hidden path segments"
+          title={props.showHiddenPathSegmentsLabel}
         >
           …
         </button>
@@ -206,6 +211,7 @@ interface PathBreadcrumbItemProps {
   isLast: boolean
   onClick: () => void
   onActivate?: () => void
+  goToPathLabel: string
 }
 
 function PathBreadcrumbItem(props: PathBreadcrumbItemProps) {
@@ -223,7 +229,7 @@ function PathBreadcrumbItem(props: PathBreadcrumbItemProps) {
         props.onClick()
       }}
       disabled={props.isLast && !clickableCurrentPath()}
-      title={clickableCurrentPath() ? 'Go to path' : undefined}
+      title={clickableCurrentPath() ? props.goToPathLabel : undefined}
       class={cn(
         PATH_BREADCRUMB_ITEM_BASE_CLASS,
         props.isLast

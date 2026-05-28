@@ -374,9 +374,9 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
           <div class="shrink-0 border-b border-warning/25 bg-warning/10 px-3 py-2 text-xs text-foreground">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div class="min-w-0">
-                <span class="font-semibold text-warning">Synced preview pending</span>
+                <span class="font-semibold text-warning">{i18n.t('filePreview.syncedPreviewPending')}</span>
                 <span class="ml-2 text-muted-foreground">
-                  Another window opened {item().name || item().path}. Keep your draft or switch explicitly.
+                  {i18n.t('filePreview.syncedPreviewPendingDetail', { target: item().name || item().path })}
                 </span>
               </div>
               <div class="flex shrink-0 items-center gap-2">
@@ -390,7 +390,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
                     }
                   }}
                 >
-                  Open synced file
+                  {i18n.t('filePreview.openSyncedFile')}
                 </Button>
                 <Button
                   size="sm"
@@ -400,7 +400,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
                     workbench.setPendingSyncedPreviewItem(props.widgetId, null);
                   }}
                 >
-                  Keep current draft
+                  {i18n.t('filePreview.keepCurrentDraft')}
                 </Button>
               </div>
             </div>

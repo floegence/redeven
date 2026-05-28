@@ -497,18 +497,19 @@ function createMissingGitBranchMessage(
   };
 }
 
-function buildRemoteFileBrowserTitle(path: string, preferredTitle?: string): string {
+function buildRemoteFileBrowserTitle(path: string, preferredTitle?: string, prefix = 'Files'): string {
+  const normalizedPrefix = String(prefix || '').trim() || 'Files';
   const normalizedPreferredTitle = String(preferredTitle ?? '').trim();
   if (normalizedPreferredTitle) {
-    return `Files · ${normalizedPreferredTitle}`;
+    return `${normalizedPrefix} · ${normalizedPreferredTitle}`;
   }
 
   const normalizedPath = normalizeAbsolutePath(path);
   if (!normalizedPath || normalizedPath === '/') {
-    return 'Files';
+    return normalizedPrefix;
   }
 
-  return `Files · ${basenameFromAbsolutePath(normalizedPath)}`;
+  return `${normalizedPrefix} · ${basenameFromAbsolutePath(normalizedPath)}`;
 }
 
 export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
@@ -4041,7 +4042,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       setTitleOverridePath('');
       setTitleOverride('');
     }
-    props.onTitleChange?.(buildRemoteFileBrowserTitle(currentPath, currentPath === overridePath ? titleOverride() : ''));
+    props.onTitleChange?.(buildRemoteFileBrowserTitle(
+      currentPath,
+      currentPath === overridePath ? titleOverride() : '',
+      i18n.t('workbench.widgets.files.defaultTitle'),
+    ));
   });
 
   let lastHandledOpenPathRequestId = '';

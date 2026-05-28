@@ -39,6 +39,12 @@ const notesApiState = vi.hoisted(() => ({
       },
 }));
 
+const notesI18nState = vi.hoisted(() => ({
+  locale: 'zh-CN',
+  localeAccessor: null as null | (() => string),
+  setLocale: null as null | ((locale: string) => void),
+}));
+
 const notesUIState = vi.hoisted(() => ({
   lastProps: null as
     | null
@@ -67,12 +73,26 @@ vi.mock('@floegence/floe-webapp-core/notes', async (importOriginal) => {
           aria-label="Notes overlay"
           data-notes-interaction-mode={String(props.interactionMode ?? '')}
         >
+          <header class="notes-overlay__header">
+            <div class="notes-overlay__header-title">Notes</div>
+            <div class="notes-overlay__header-stat">
+              <span>{props.controller.snapshot().topics.length}</span> topics
+            </div>
+            <div class="notes-overlay__header-stat">
+              <span>{props.controller.snapshot().items.length}</span> live note
+            </div>
+            <div class="notes-overlay__header-stat">
+              <span>{props.controller.snapshot().trash_items.length}</span> trash
+            </div>
+            <button type="button" class="notes-overlay__close" aria-label="Close notes overlay" />
+          </header>
           <div class="notes-overlay__frame" data-floe-notes-boundary="true">
             <aside class="notes-overlay__rail" data-floe-canvas-interactive="true">
               <form class="notes-topic-composer notes-overlay__topic-composer">
                 <input data-testid="notes-topic-input" placeholder="Add topic" />
               </form>
             </aside>
+            <button type="button" class="notes-trash__toggle" aria-label="Open trash dock, 1 items" />
             <div class="notes-page__canvas">
               <div class="notes-canvas__field">
                 {props.controller
@@ -113,6 +133,22 @@ vi.mock('../services/notesApi', () => ({
   clearNotesTrashTopic: notesApiState.clearNotesTrashTopic,
   connectNotesEventStream: notesApiState.connectNotesEventStream,
 }));
+
+vi.mock('../i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../i18n')>();
+  return {
+    ...actual,
+    useI18n: () => {
+      const helpersForLocale = () => actual.createI18nHelpers((notesI18nState.localeAccessor?.() ?? notesI18nState.locale) as any);
+      return {
+        ...actual.createI18nHelpers('zh-CN'),
+        t: (key: any, params?: any) => helpersForLocale().t(key, params),
+        tn: (key: any, count: number, params?: any) => helpersForLocale().tn(key, count, params),
+        rich: (key: any, params?: any) => helpersForLocale().rich(key, params),
+      };
+    },
+  };
+});
 
 function baseTopic(overrides: Partial<NotesTopic> = {}): NotesTopic {
   return {
@@ -189,6 +225,13 @@ describe('Redeven NotesOverlay adapter', () => {
   beforeEach(() => {
     renderDisposers = [];
     notesUIState.lastProps = null;
+    notesI18nState.locale = 'zh-CN';
+    const [locale, setLocale] = createSignal(notesI18nState.locale);
+    notesI18nState.localeAccessor = locale;
+    notesI18nState.setLocale = (nextLocale) => {
+      notesI18nState.locale = nextLocale;
+      setLocale(nextLocale);
+    };
     notesApiState.streamArgs = null;
     notesApiState.getNotesSnapshot.mockReset();
     notesApiState.createNotesTopic.mockReset();
@@ -273,6 +316,8 @@ describe('Redeven NotesOverlay adapter', () => {
       document.body.style.removeProperty(cssVarName);
     }
     document.body.innerHTML = '';
+    notesI18nState.localeAccessor = null;
+    notesI18nState.setLocale = null;
     vi.clearAllMocks();
   });
 
@@ -428,6 +473,43 @@ describe('Redeven NotesOverlay adapter', () => {
 
     expect(notesUIState.lastProps?.interactionMode).toBe('floating');
     expect(notesUIState.lastProps?.allowGlobalHotkeys).toEqual(['mod+.']);
+  });
+
+  it('localizes shared Notes overlay chrome without translating note content', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} />, host);
+    await settle();
+
+    expect(host.querySelector('.notes-overlay')?.getAttribute('aria-label')).toBe('便签');
+    expect(host.querySelector('.notes-overlay__header-title')?.textContent).toBe('便签');
+    expect(host.querySelector('.notes-overlay__close')?.getAttribute('aria-label')).toBe('关闭便签');
+    expect(Array.from(host.querySelectorAll('.notes-overlay__header-stat')).map((entry) => entry.textContent)).toEqual([
+      '1 主题',
+      '1 实时便签',
+      '0 回收站',
+    ]);
+    expect(host.querySelector('.notes-trash__toggle')?.getAttribute('aria-label')).toBe('打开回收站，1 项');
+    expect(host.querySelector('[data-testid="note-note-1"]')?.textContent).toBe('Primary note body');
+  });
+
+  it('relocalizes shared Notes overlay chrome when language changes from an already translated state', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    mountIntoHost(() => <NotesOverlay open onClose={() => undefined} />, host);
+    await settle();
+
+    expect(host.querySelector('.notes-overlay__header-title')?.textContent).toBe('便签');
+    expect(host.querySelector('.notes-topic-composer input')?.getAttribute('placeholder')).toBe('添加主题');
+
+    notesI18nState.setLocale?.('de-DE');
+    await settle();
+
+    expect(host.querySelector('.notes-overlay__header-title')?.textContent).toBe('Notizen');
+    expect(host.querySelector('.notes-topic-composer input')?.getAttribute('placeholder')).toBe('Thema hinzufügen');
+    expect(host.querySelector('[data-testid="note-note-1"]')?.textContent).toBe('Primary note body');
   });
 
   it('keeps the Redeven wrapper thin and delegates note numbering shortcuts to shared floe-webapp notes', () => {

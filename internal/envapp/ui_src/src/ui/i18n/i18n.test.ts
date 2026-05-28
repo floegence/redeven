@@ -368,6 +368,14 @@ describe('Env App i18n dictionaries', () => {
     expect(zhCN.t('chatActivity.noneOfTheAbove')).toBe('以上都不是');
     expect(zhCN.t('chatActivity.readyToContinue')).toBe('可以继续。');
     expect(zhCN.t('filePreview.saveFile')).toBe('保存文件');
+    expect(zhCN.t('shell.nav.terminal')).toBe('终端');
+    expect(zhCN.t('shell.nav.webServices')).toBe('Web服务');
+    expect(zhCN.t('shell.topbar.notesOverlay')).toBe('便签');
+    expect(zhCN.t('workbench.widgets.terminal.label')).toBe('终端');
+    expect(zhCN.t('workbench.widgets.ports.label')).toBe('Web服务');
+    expect(zhCN.t('workbench.contextMenu.addWidget', { label: '终端' })).toBe('添加 终端');
+    expect(zhCN.t('workbench.contextMenu.goToWidget', { label: 'Web服务' })).toBe('转到 Web服务');
+    expect(zhCN.t('deck.presets.terminalFocus')).toBe('终端聚焦');
 
     const deDE = createI18nHelpers('de-DE');
     expect(deDE.t('chatActivity.command')).toBe('Befehl');

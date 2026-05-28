@@ -142,6 +142,36 @@ describe('launcherActionFeedback', () => {
         label: '重新连接 Provider',
       },
     });
+
+    expect(launcherActionFailurePresentation(zhCN, {
+      ok: false,
+      code: 'action_invalid',
+      scope: 'environment',
+      message: 'Desktop could not finish opening https://env.example.invalid: ERR_CONNECTION_REFUSED',
+    })).toMatchObject({
+      message: 'Desktop 未能完成该操作。',
+      tone: 'error',
+    });
+
+    expect(launcherActionFailurePresentation(zhCN, {
+      ok: false,
+      code: 'environment_opening',
+      scope: 'environment',
+      message: 'Desktop is still opening Demo Sandbox. Wait a moment, then try again.',
+    })).toMatchObject({
+      message: '打开正在停止。',
+      tone: 'info',
+    });
+
+    expect(launcherActionFailurePresentation(zhCN, {
+      ok: false,
+      code: 'provider_unreachable',
+      scope: 'control_plane',
+      message: 'This provider cannot be reached right now.',
+    })).toMatchObject({
+      message: 'Desktop 无法将此 Runtime 连接到 Provider Environment。',
+      tone: 'warning',
+    });
   });
 
   it('keeps provider-link failures separate from runtime-start failures', () => {

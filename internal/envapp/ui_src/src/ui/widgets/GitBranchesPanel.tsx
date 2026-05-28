@@ -124,6 +124,7 @@ import {
   type GitMergeBranchDialogState,
 } from "./GitMergeBranchDialog";
 import { resolveGitBranchHeaderLayout } from "./gitBranchHeaderLayout";
+import { useI18n } from "../i18n";
 
 const BRANCH_STATUS_PAGE_SIZE = 200;
 
@@ -733,6 +734,7 @@ function HistoryList(
   >,
 ) {
   const rpc = useRedevenRpc();
+  const i18n = useI18n();
 
   const [commitDetailsByContext, setCommitDetailsByContext] = createSignal<
     Record<string, Record<string, BranchHistoryCommitDetailState>>
@@ -1145,7 +1147,7 @@ function HistoryList(
                                                         >
                                                           <GitShortcutOrbDock>
                                                             <GitShortcutOrbButton
-                                                              label="Ask Flower"
+                                                              label={i18n.t("git.changes.askFlower")}
                                                               tone="flower"
                                                               icon={FlowerIcon}
                                                               size="sm"
@@ -1539,6 +1541,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
 export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const rpc = useRedevenRpc();
   const notification = useNotification();
+  const i18n = useI18n();
   const branchSubviewTabRefs = new Map<GitBranchSubview, HTMLButtonElement>();
   const [branchHeaderTopRowElement, setBranchHeaderTopRowElement] =
     createSignal<HTMLDivElement>();
@@ -1854,7 +1857,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (props.onOpenInTerminal) {
       secondaryShortcuts.push({
         key: "terminal",
-        label: "Terminal",
+        label: i18n.t("git.changes.terminal"),
         tone: "terminal",
         icon: Terminal,
         disabled: !canOpenInTerminal(),
@@ -1870,7 +1873,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (props.onBrowseFiles) {
       secondaryShortcuts.push({
         key: "files",
-        label: "Files",
+        label: i18n.t("git.changes.files"),
         tone: "files",
         icon: Folder,
         disabled: !canBrowseFiles(),

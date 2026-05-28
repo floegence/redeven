@@ -66,7 +66,7 @@ import { AIChatContext, createAIChatContextValue, normalizeModelsResponse } from
 import { AIChatSidebar } from './pages/AIChatSidebar';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { hasRWXPermissions } from './pages/aiPermissions';
-import { redevenDeckWidgets } from './deck/redevenDeckWidgets';
+import { localizedRedevenDeckWidgets } from './deck/redevenDeckWidgets';
 import { useRedevenRpc } from './protocol/redeven_v1';
 import { RuntimeUpdateContext } from './maintenance/RuntimeUpdateContext';
 import { createAgentMaintenanceController } from './maintenance/createAgentMaintenanceController';
@@ -371,7 +371,7 @@ export function EnvAppShell() {
   const headerLogoSrc = createMemo(() =>
     `${import.meta.env.BASE_URL}${theme.resolvedTheme() === 'dark' ? 'logo-dark.svg' : 'logo.svg'}`,
   );
-  widgetRegistry.registerAll(redevenDeckWidgets);
+  widgetRegistry.registerAll(localizedRedevenDeckWidgets(i18n.t));
 
   const [localRuntime, setLocalRuntime] = createSignal<LocalRuntimeInfo | null>(null);
   const isLocalMode = createMemo(() => localRuntime() !== null);

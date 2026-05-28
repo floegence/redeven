@@ -181,7 +181,11 @@ function pickPreferredActiveId(list: TerminalSessionInfo[], preferredId: string 
   return byLastActive[0]?.id ?? null;
 }
 
-function resolveRequestedSessionName(preferredName: string | undefined, workingDir: string, nextIndex: number): string {
+function resolveRequestedSessionName(
+  preferredName: string | undefined,
+  workingDir: string,
+  fallbackName: string,
+): string {
   const normalizedPreferredName = String(preferredName ?? '').trim();
   if (normalizedPreferredName) return normalizedPreferredName;
 
@@ -192,7 +196,7 @@ function resolveRequestedSessionName(preferredName: string | undefined, workingD
     if (basename) return basename;
   }
 
-  return `Terminal ${nextIndex}`;
+  return fallbackName.trim() || 'Terminal';
 }
 
 function buildLogger(): Logger {
@@ -387,10 +391,11 @@ function buildPendingTerminalSessionLabel(session: pending_terminal_session, fal
   return session.name?.trim() ? session.name.trim() : fallbackLabel;
 }
 
-function buildTerminalPanelTitle(session: TerminalSessionInfo | null): string {
+function buildTerminalPanelTitle(session: TerminalSessionInfo | null, terminalLabel: string): string {
+  const titlePrefix = terminalLabel.trim() || 'Terminal';
   const sessionName = String(session?.name ?? '').trim();
   if (sessionName) {
-    return `Terminal · ${sessionName}`;
+    return `${titlePrefix} · ${sessionName}`;
   }
 
   const workingDir = normalizeAskFlowerAbsolutePath(String(session?.workingDir ?? '').trim());
@@ -398,19 +403,20 @@ function buildTerminalPanelTitle(session: TerminalSessionInfo | null): string {
     const parts = workingDir.split('/').filter(Boolean);
     const basename = parts[parts.length - 1] ?? '';
     if (basename) {
-      return `Terminal · ${basename}`;
+      return `${titlePrefix} · ${basename}`;
     }
   }
 
-  return 'Terminal';
+  return titlePrefix;
 }
 
-function buildPendingTerminalPanelTitle(session: pending_terminal_session | null): string {
+function buildPendingTerminalPanelTitle(session: pending_terminal_session | null, terminalLabel: string): string {
+  const titlePrefix = terminalLabel.trim() || 'Terminal';
   const sessionName = String(session?.name ?? '').trim();
   if (sessionName) {
-    return `Terminal · ${sessionName}`;
+    return `${titlePrefix} · ${sessionName}`;
   }
-  return 'Terminal';
+  return titlePrefix;
 }
 
 function normalizeTerminalSessionTimestamp(value: unknown): number {
@@ -2060,9 +2066,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   createEffect(() => {
+    const terminalLabel = i18n.t('terminal.title');
     props.onTitleChange?.(activeSession()
-      ? buildTerminalPanelTitle(activeSession())
-      : buildPendingTerminalPanelTitle(activePendingSession()));
+      ? buildTerminalPanelTitle(activeSession(), terminalLabel)
+      : buildPendingTerminalPanelTitle(activePendingSession(), terminalLabel));
   });
 
   const activeSessionWorkingDir = createMemo(() => {
@@ -2566,7 +2573,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!connected()) return;
     setError(null);
     const nextIndex = sessions().length + pendingTerminalSessions().length + 1;
-    void beginCreateSession(`Terminal ${nextIndex}`, agentHomePathAbs() || '');
+    void beginCreateSession(i18n.t('terminal.terminalName', { index: nextIndex }), agentHomePathAbs() || '');
   };
 
   let lastHandledOpenSessionRequestId = '';
@@ -2593,7 +2600,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       try {
         const nextIndex = sessions().length + pendingTerminalSessions().length + 1;
         await beginCreateSession(
-          resolveRequestedSessionName(request?.preferredName, workingDir, nextIndex),
+          resolveRequestedSessionName(request?.preferredName, workingDir, i18n.t('terminal.terminalName', { index: nextIndex })),
           workingDir,
         );
       } finally {

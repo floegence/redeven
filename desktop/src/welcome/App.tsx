@@ -650,7 +650,58 @@ function localizedGuidanceAction(
 
 function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
   const clean = trimString(message);
+  const localizedMaintenance = localizedRuntimeMaintenanceMessage(i18n, clean);
+  if (localizedMaintenance) {
+    return localizedMaintenance;
+  }
+  const runtimeVersionUpdate = clean.match(/^Update this [Rr]untime from (.+) to (.+) before continuing\.$/u);
+  if (runtimeVersionUpdate) {
+    return i18n.t('runtimeMessage.updateRuntimeVersionBeforeContinuing', {
+      current: runtimeVersionUpdate[1] ?? '',
+      target: runtimeVersionUpdate[2] ?? '',
+    });
+  }
+  const desktopBundledRuntimeUpdate = clean.match(/^Update Redeven Desktop to bring the bundled [Rr]untime from (.+) to (.+)\.$/u);
+  if (desktopBundledRuntimeUpdate) {
+    return i18n.t('runtimeMessage.updateDesktopBundledRuntimeVersion', {
+      current: desktopBundledRuntimeUpdate[1] ?? '',
+      target: desktopBundledRuntimeUpdate[2] ?? '',
+    });
+  }
   return localizedStringByValue(i18n, clean, {
+    'Runtime is not running.': 'runtimeMessage.runtimeIsNotRunning',
+    'Runtime daemon is not running.': 'runtimeMessage.runtimeDaemonNotRunning',
+    'Runtime lock metadata is present but no live runtime is reachable.': 'runtimeMessage.runtimeLockMetadataStale',
+    'Runtime status could not be verified.': 'runtimeMessage.runtimeStatusCouldNotBeVerified',
+    'Start this runtime before connecting it to a provider.': 'runtimeMessage.startRuntimeBeforeProvider',
+    'Start this runtime before opening it.': 'runtimeMessage.startRuntimeBeforeOpening',
+    'Restart this runtime from Desktop so runtime-control can be prepared.': 'runtimeMessage.restartRuntimeForRuntimeControl',
+    'Runtime-control is not available for this runtime.': 'runtimeMessage.runtimeControlUnavailable',
+    'This runtime is owned by another Desktop instance.': 'runtimeMessage.runtimeOwnedByAnotherDesktop',
+    'This runtime is managed by another Desktop instance.': 'runtimeMessage.runtimeManagedByAnotherDesktop',
+    'Open this runtime to prepare the Desktop bridge and provider connection.': 'runtimeMessage.openRuntimePrepareProviderConnection',
+    'Update this runtime before continuing.': 'runtimeMessage.updateRuntimeBeforeContinuing',
+    'Update this incompatible runtime before continuing.': 'runtimeMessage.updateIncompatibleRuntimeBeforeContinuing',
+    'Update Redeven Desktop before continuing with this local runtime.': 'runtimeMessage.updateDesktopBeforeLocalRuntime',
+    'Update the runtime before opening this environment.': 'runtimeMessage.updateRuntimeBeforeOpeningEnvironment',
+    'Update Desktop before opening this environment.': 'runtimeMessage.updateDesktopBeforeOpeningEnvironment',
+    'Update this runtime before opening it with this Desktop.': 'runtimeMessage.updateRuntimeBeforeOpeningWithDesktop',
+    'Runtime maintenance is required before this environment can open.': 'runtimeMessage.runtimeMaintenanceRequiredBeforeOpen',
+    'The Environment App shell is not available in this runtime build. Install the update, then restart the runtime when it is safe to interrupt active work.': 'runtimeMessage.envAppShellUnavailableRuntimeBuild',
+    'Active work may be interrupted. Confirm before changing this runtime.': 'runtimeMessage.confirmActiveWorkBeforeChangingRuntime',
+    'Refresh provider status before opening this environment.': 'runtimeMessage.refreshProviderStatusBeforeOpening',
+    'This Local UI target is unavailable right now.': 'runtimeMessage.localUiTargetUnavailable',
+    'Runtime is not ready to open yet.': 'runtimeMessage.runtimeNotReadyToOpenYet',
+    'Runtime readiness is not available yet.': 'runtimeMessage.runtimeReadinessUnavailable',
+    'Runtime is ready to open.': 'runtimeMessage.runtimeReadyToOpen',
+    'Runtime cannot open this environment yet.': 'runtimeMessage.runtimeCannotOpenEnvironmentYet',
+    'Runtime cannot open this Environment yet.': 'runtimeMessage.runtimeCannotOpenEnvironmentYet',
+    'Runtime is preparing the environment app.': 'runtimeMessage.runtimePreparingEnvironmentApp',
+    'Desktop will wait for the Environment App to finish preparing.': 'runtimeMessage.desktopWaitEnvironmentAppPreparing',
+    'Desktop will try opening this runtime and report upgrade guidance if the runtime rejects the connection.': 'runtimeMessage.desktopTryOpenRuntimeReportUpgrade',
+    'Provider link needs attention.': 'runtimeMessage.providerLinkNeedsAttentionDetail',
+    'Provider link is unavailable for this runtime.': 'runtimeMessage.providerLinkUnavailableDetail',
+    'Choose an available Provider Environment before connecting this runtime.': 'runtimeMessage.providerLinkConnectUnavailableDetail',
     'Runtime is offline or unavailable right now. Start it from its source, then refresh status.': 'runtimeMessage.runtimeOfflineRefresh',
     'Desktop needs fresh provider authorization before it can open or connect this provider Environment.': 'runtimeMessage.providerAuthRequired',
     'Remote open is not ready yet. Open stays separate from runtime start and provider link actions.': 'runtimeMessage.remoteOpenNotReady',
@@ -664,6 +715,7 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'Open becomes available once the runtime package is ready in this running container.': 'runtimeMessage.containerPackageReady',
     'Open becomes available once the runtime is ready on this SSH host.': 'runtimeMessage.sshRuntimeReady',
     'Open becomes available once the runtime is ready on this device.': 'runtimeMessage.localRuntimeReady',
+    'This Local Environment uses the runtime bundled with Redeven Desktop. Open becomes available after the Desktop update handoff refreshes the app and bundled local runtime.': 'runtimeMessage.desktopLocalRuntimeUpdateHandoffReady',
     'Desktop could not connect this runtime to the provider Environment.': 'runtimeMessage.providerLinkFailedDetail',
     'Desktop could not disconnect this runtime from its provider Environment.': 'runtimeMessage.providerUnlinkFailedDetail',
     'Desktop could not refresh the runtime status.': 'runtimeMessage.statusRefreshFailedDetail',
@@ -684,6 +736,58 @@ function localizedRuntimeMessage(i18n: DesktopI18n, message: string): string {
     'The last provider sync is getting old. Refresh to confirm the latest environment status.': 'runtimeMessage.providerStatusStaleDetail',
     'Desktop has active provider authorization and a fresh environment catalog.': 'runtimeMessage.providerAuthorizedDetail',
   });
+}
+
+function localizedRuntimeMaintenanceSubject(i18n: DesktopI18n, subject: string): string {
+  return localizedStringByValue(i18n, subject, {
+    'SSH container runtime': 'runtimeMessage.sshContainerRuntime',
+    'local container runtime': 'runtimeMessage.localContainerRuntime',
+    'SSH runtime': 'runtimeMessage.sshRuntime',
+    'local runtime': 'runtimeMessage.localRuntime',
+    'SSH container Runtime': 'runtimeMessage.sshContainerRuntime',
+    'local container Runtime': 'runtimeMessage.localContainerRuntime',
+    'SSH Runtime': 'runtimeMessage.sshRuntime',
+    'local Runtime': 'runtimeMessage.localRuntime',
+    Runtime: 'runtimeMessage.runtime',
+    runtime: 'runtimeMessage.runtime',
+  });
+}
+
+function localizedRuntimeMaintenanceMessage(i18n: DesktopI18n, message: string): string {
+  const runtimeWord = '[Rr]untime';
+  const environmentWord = '[Ee]nvironment';
+  const modelSource = message.match(new RegExp(`^This (.+) needs an update before Desktop can make your local model settings available here\\\\. Update and restart the ${runtimeWord} first; Open stays separate and becomes available after the ${runtimeWord} is ready\\\\.$`, 'u'));
+  if (modelSource) {
+    return i18n.t('runtimeMessage.modelSourceNeedsUpdateDetail', {
+      subject: localizedRuntimeMaintenanceSubject(i18n, modelSource[1] ?? ''),
+    });
+  }
+  const notRunning = message.match(new RegExp(`^This (.+) is not running\\\\. Start the ${runtimeWord} again; Open becomes available after the ${runtimeWord} reports ready\\\\.$`, 'u'));
+  if (notRunning) {
+    return i18n.t('runtimeMessage.runtimeNotRunningDetail', {
+      subject: localizedRuntimeMaintenanceSubject(i18n, notRunning[1] ?? ''),
+    });
+  }
+  const restartRequired = message.match(new RegExp(`^This (.+) needs a successful restart before it can open this ${environmentWord}\\\\. Restart the ${runtimeWord}, then open it again after it reports ready\\\\.$`, 'u'));
+  if (restartRequired) {
+    return i18n.t('runtimeMessage.runtimeRestartRequiredDetail', {
+      subject: localizedRuntimeMaintenanceSubject(i18n, restartRequired[1] ?? ''),
+    });
+  }
+  const updateRequired = message.match(new RegExp(`^This (.+) needs an update before it can open this ${environmentWord}\\\\. (Update and restart the ${runtimeWord} first|Update the ${runtimeWord} first); Open stays separate and becomes available after the ${runtimeWord} is ready\\\\.$`, 'u'));
+  if (updateRequired) {
+    const action = localizedStringByValue(i18n, updateRequired[2] ?? '', {
+      'Update and restart the runtime first': 'runtimeMessage.updateAndRestartRuntimeFirst',
+      'Update the runtime first': 'runtimeMessage.updateRuntimeFirst',
+      'Update and restart the Runtime first': 'runtimeMessage.updateAndRestartRuntimeFirst',
+      'Update the Runtime first': 'runtimeMessage.updateRuntimeFirst',
+    });
+    return i18n.t('runtimeMessage.runtimeUpdateRequiredDetail', {
+      subject: localizedRuntimeMaintenanceSubject(i18n, updateRequired[1] ?? ''),
+      action,
+    });
+  }
+  return '';
 }
 
 function localizedToastMessage(i18n: DesktopI18n, message: string): string {
@@ -709,6 +813,7 @@ function localizedOverlayTitle(i18n: DesktopI18n, title: string): string {
     'Start the runtime to continue': 'runtimeMessage.startRuntimeTitle',
     'Start the local runtime to continue': 'runtimeMessage.startLocalRuntimeTitle',
     'Desktop model source needs update': 'runtimeMessage.desktopModelSourceNeedsUpdate',
+    'Runtime ready': 'progress.titleRuntimeReady',
     'Runtime restart required': 'runtimeMessage.runtimeRestartRequired',
     'Runtime update required': 'runtimeMessage.runtimeUpdateRequired',
     'Redeven Desktop update required': 'runtimeMessage.desktopUpdateRequired',
@@ -778,6 +883,7 @@ function localizedFactLabel(i18n: DesktopI18n, label: string): string {
     PROVIDER: 'environmentFacts.provider',
     'LOCAL LINK': 'environmentFacts.localLink',
     'ENV ID': 'environmentFacts.environmentId',
+    OWNER: 'environmentFacts.owner',
     Provider: 'environmentFacts.provider',
     'Runtime root': 'environmentFacts.runtimeRoot',
     Bootstrap: 'environmentFacts.bootstrap',
@@ -793,28 +899,115 @@ function localizedFactLabel(i18n: DesktopI18n, label: string): string {
   });
 }
 
-function localizedFactValue(i18n: DesktopI18n, value: string): string {
+function localizedFactValue(i18n: DesktopI18n, label: string, value: string): string {
   const connecting = value.match(/^Connecting through (.+)$/u);
-  if (connecting) {
+  if (label === 'LOCAL LINK' && connecting) {
     return i18n.t('environmentFacts.connectingThrough', { label: connecting[1] ?? '' });
   }
   const disconnecting = value.match(/^Disconnecting from (.+)$/u);
-  if (disconnecting) {
+  if (label === 'LOCAL LINK' && disconnecting) {
     return i18n.t('environmentFacts.disconnectingFrom', { label: disconnecting[1] ?? '' });
   }
   const needsAttention = value.match(/^(.+) needs attention$/u);
-  if (needsAttention) {
+  if (label === 'LOCAL LINK' && needsAttention) {
     return i18n.t('environmentFacts.runtimeNeedsAttention', { label: needsAttention[1] ?? '' });
   }
+  if (label === 'VERSION') {
+    return localizedStringByValue(i18n, value, {
+      UNKNOWN: 'environmentFacts.unknown',
+      Unknown: 'environmentFacts.unknown',
+    });
+  }
+  if (label === 'PROVIDER') {
+    return localizedStringByValue(i18n, value, {
+      None: 'environmentFacts.none',
+    });
+  }
+  if (label === 'ENV ID') {
+    return localizedStringByValue(i18n, value, {
+      UNKNOWN: 'environmentFacts.unknown',
+      Unknown: 'environmentFacts.unknown',
+    });
+  }
+  if (label === 'LOCAL LINK') {
+    return localizedStringByValue(i18n, value, {
+      'No managed runtime linked': 'environmentFacts.noManagedRuntimeLinked',
+    });
+  }
+  if (label === 'RUNS ON') {
+    return localizedStringByValue(i18n, value, {
+      'This device': 'environmentFacts.thisDevice',
+      'Provider remote': 'environmentFacts.providerRemote',
+      'LAN host': 'environmentFacts.lanHost',
+      'Remote host': 'environmentFacts.remoteHost',
+      'Unknown host': 'environmentFacts.unknownHost',
+    });
+  }
+  if (label === 'Bootstrap') {
+    return localizedStringByValue(i18n, value, {
+      'Desktop upload': 'environmentFacts.desktopUpload',
+      'Remote fallback': 'environmentFacts.remoteFallback',
+      Automatic: 'environmentFacts.automatic',
+    });
+  }
+  if (label === 'Source') {
+    return localizedStringByValue(i18n, value, {
+      'Local environment': 'environmentFacts.localEnvironment',
+      'Provider environment': 'environmentFacts.providerEnvironment',
+    });
+  }
+  if (value === '' && label !== 'CONTAINER') {
+    return localizedStringByValue(i18n, value, {});
+  }
+  return value;
+}
+
+function localizedPlaceholderFactValue(i18n: DesktopI18n, value: string): string {
   return localizedStringByValue(i18n, value, {
     UNKNOWN: 'environmentFacts.unknown',
+    Unknown: 'environmentFacts.unknown',
     Unavailable: 'environmentFacts.unavailable',
-    'No managed runtime linked': 'environmentFacts.noManagedRuntimeLinked',
-    'Desktop upload': 'environmentFacts.desktopUpload',
-    'Remote fallback': 'environmentFacts.remoteFallback',
-    Automatic: 'environmentFacts.automatic',
-    'Local environment': 'environmentFacts.localEnvironment',
-    'Provider environment': 'environmentFacts.providerEnvironment',
+    None: 'environmentFacts.none',
+    Saved: 'environmentFacts.saved',
+  });
+}
+
+function localizedRuntimeStartedLabel(i18n: DesktopI18n, value: string): string {
+  const started = value.match(/^Started (.+)$/u);
+  if (started) {
+    return i18n.t('environmentFacts.startedAt', {
+      time: localizedRuntimeStartedRelativeTime(i18n, started[1] ?? ''),
+    });
+  }
+  return localizedStringByValue(i18n, value, {
+    'Start time unavailable': 'environmentFacts.startTimeUnavailable',
+    'Not running': 'environmentFacts.notRunning',
+    Unknown: 'environmentFacts.unknown',
+  });
+}
+
+function localizedRuntimeStartedRelativeTime(i18n: DesktopI18n, value: string): string {
+  if (value === 'Just now') {
+    return i18n.formatRelativeTime(Date.now(), { numeric: 'auto', style: 'short' });
+  }
+  const compactMatch = value.match(/^(\d+)([mhd]) ago$/u);
+  if (!compactMatch) {
+    return value;
+  }
+  const count = Number(compactMatch[1]);
+  if (!Number.isFinite(count) || count <= 0) {
+    return value;
+  }
+  const unit = compactMatch[2] === 'd'
+    ? 'day'
+    : compactMatch[2] === 'h'
+      ? 'hour'
+      : 'minute';
+  const unitMs = unit === 'day' ? 86_400_000 : unit === 'hour' ? 3_600_000 : 60_000;
+  return i18n.formatRelativeTime(Date.now() - count * unitMs, {
+    unit,
+    numeric: 'always',
+    style: 'short',
   });
 }
 
@@ -839,7 +1032,7 @@ function localizedFactActionLabel(i18n: DesktopI18n, label: string): string {
   if (show) {
     return i18n.t('environmentFacts.showLabel', { label: show[1] ?? '' });
   }
-  return label;
+  return localizedCopyLabel(i18n, label) || label;
 }
 
 function localizedFactActionAriaLabel(i18n: DesktopI18n, label: string): string {
@@ -847,7 +1040,7 @@ function localizedFactActionAriaLabel(i18n: DesktopI18n, label: string): string 
   if (showLinked) {
     return i18n.t('environmentFacts.showLinkedRuntime', { label: showLinked[1] ?? '' });
   }
-  return localizedFactActionLabel(i18n, label);
+  return localizedCopyLabel(i18n, label) || localizedFactActionLabel(i18n, label);
 }
 
 function localizedCopyLabel(i18n: DesktopI18n, label: string): string {
@@ -860,13 +1053,23 @@ function localizedCopyLabel(i18n: DesktopI18n, label: string): string {
   });
 }
 
-function englishCopyPrefixForLabel(i18n: DesktopI18n, label: string): string {
+function copiedValueLabel(i18n: DesktopI18n, label: string): string {
   const keyByLocalized = new Map<string, string>([
-    [i18n.t('environmentFacts.localEndpoint'), 'local endpoint'],
-    [i18n.t('environmentFacts.environmentUrl'), 'environment URL'],
-    [i18n.t('environmentFacts.endpoint'), 'endpoint'],
-    [i18n.t('environmentFacts.sshHostLower'), 'SSH host'],
-    [i18n.t('environmentFacts.forwardedUrlLower'), 'forwarded URL'],
+    ['Copy local endpoint', i18n.t('environmentFacts.localEndpoint')],
+    ['Copy environment URL', i18n.t('environmentFacts.environmentUrl')],
+    ['Copy endpoint', i18n.t('environmentFacts.endpoint')],
+    ['Copy SSH host', i18n.t('environmentFacts.sshHostLower')],
+    ['Copy forwarded URL', i18n.t('environmentFacts.forwardedUrlLower')],
+    [i18n.t('environmentFacts.copyLocalEndpoint'), i18n.t('environmentFacts.localEndpoint')],
+    [i18n.t('environmentFacts.copyEnvironmentUrl'), i18n.t('environmentFacts.environmentUrl')],
+    [i18n.t('environmentFacts.copyEndpoint'), i18n.t('environmentFacts.endpoint')],
+    [i18n.t('environmentFacts.copySshHost'), i18n.t('environmentFacts.sshHostLower')],
+    [i18n.t('environmentFacts.copyForwardedUrl'), i18n.t('environmentFacts.forwardedUrlLower')],
+    [i18n.t('environmentFacts.localEndpoint'), i18n.t('environmentFacts.localEndpoint')],
+    [i18n.t('environmentFacts.environmentUrl'), i18n.t('environmentFacts.environmentUrl')],
+    [i18n.t('environmentFacts.endpoint'), i18n.t('environmentFacts.endpoint')],
+    [i18n.t('environmentFacts.sshHostLower'), i18n.t('environmentFacts.sshHostLower')],
+    [i18n.t('environmentFacts.forwardedUrlLower'), i18n.t('environmentFacts.forwardedUrlLower')],
   ]);
   return keyByLocalized.get(label) ?? label;
 }
@@ -878,7 +1081,9 @@ function localizedEnvironmentFact(
   return {
     ...fact,
     label: localizedFactLabel(i18n, fact.label),
-    value: localizedFactValue(i18n, fact.value),
+    value: fact.value_tone === 'placeholder'
+      ? localizedPlaceholderFactValue(i18n, fact.value)
+      : localizedFactValue(i18n, fact.label, fact.value),
     action: fact.action
       ? {
           ...fact.action,
@@ -3109,7 +3314,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       }
       const plan = buildDesktopProviderRuntimeLinkPlan(target, providerEnvironment);
       if (!plan.can_connect) {
-        setErrorMessage('connect', plan.message);
+        setErrorMessage('connect', localizedProviderRuntimeLinkPlanMessage(i18n(), target, providerEnvironment, plan.state));
         return;
       }
     }
@@ -3853,7 +4058,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function copyEnvironmentValue(value: string, copyLabel: string): Promise<void> {
     await copyToClipboard(value);
-    const messageLabel = englishCopyPrefixForLabel(i18n(), trimString(copyLabel).replace(/^Copy\s+/u, ''));
+    const messageLabel = copiedValueLabel(i18n(), trimString(copyLabel));
     showActionToast(messageLabel ? i18n().t('toast.valueCopied', { label: messageLabel }) : i18n().t('environmentCenter.copiedToClipboard'));
   }
 
@@ -6791,7 +6996,7 @@ function EnvironmentConnectionCard(props: Readonly<{
       ...model,
       kind_label: localizedFactLabel(props.i18n, model.kind_label),
       status_label: localizedEnvironmentStatusLabel(props.i18n, model.status_label),
-      target_primary: localizedFactValue(props.i18n, model.target_primary),
+      runtime_started_label: localizedRuntimeStartedLabel(props.i18n, model.runtime_started_label),
     };
   });
   const facts = createMemo(() => buildEnvironmentCardFactsModel(props.environment).map((fact) => (

@@ -16,7 +16,6 @@ export const PROTECTED_TERMS = [
   'E2EE',
   'Flowersec',
   'Local UI',
-  'Web Services',
   'Provider',
 ] as const;
 

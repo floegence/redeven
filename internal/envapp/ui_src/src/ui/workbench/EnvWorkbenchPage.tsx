@@ -540,22 +540,22 @@ function filterStringSetByWidgetIds(values: ReadonlySet<string>, widgetIds: Read
   return changed ? next : values;
 }
 
-function runtimePreviewItemToFileItem(item: RuntimeWorkbenchPreviewItem): FileItem {
+function runtimePreviewItemToFileItem(item: RuntimeWorkbenchPreviewItem, fallbackName: string): FileItem {
   return {
     id: compact(item.id) || item.path,
     type: 'file',
     path: item.path,
-    name: compact(item.name) || basenameFromAbsolutePath(item.path) || 'File',
+    name: compact(item.name) || basenameFromAbsolutePath(item.path) || fallbackName,
     ...(typeof item.size === 'number' ? { size: item.size } : {}),
   };
 }
 
-function fileItemToRuntimePreviewItem(item: FileItem): RuntimeWorkbenchPreviewItem {
+function fileItemToRuntimePreviewItem(item: FileItem, fallbackName: string): RuntimeWorkbenchPreviewItem {
   return {
     id: compact(item.id) || item.path,
     type: 'file',
     path: item.path,
-    name: compact(item.name) || basenameFromAbsolutePath(item.path) || 'File',
+    name: compact(item.name) || basenameFromAbsolutePath(item.path) || fallbackName,
     ...(typeof item.size === 'number' ? { size: item.size } : {}),
   };
 }
@@ -617,6 +617,9 @@ function waitForAbortOrTimeout(signal: AbortSignal, timeoutMs: number): Promise<
 export function EnvWorkbenchPage() {
   const env = useEnvContext();
   const i18n = useI18n();
+  const fileFallbackName = () => i18n.t('filePreview.fileFallback');
+  const filesFallbackTitle = () => i18n.t('workbench.widgets.files.defaultTitle');
+  const previewFallbackTitle = () => i18n.t('workbench.widgets.preview.defaultTitle');
   const localizedWorkbenchWidgetDefinitions = createMemo(() => localizedRedevenWorkbenchWidgets(i18n.t));
   const storageBinding = createMemo(() => resolveEnvAppStorageBinding({
     envID: env.env_id(),
@@ -680,6 +683,7 @@ export function EnvWorkbenchPage() {
       .filter((state) => state.widget_type === 'redeven.preview' && state.state.kind === 'preview' && state.state.item)
       .map((state) => [state.widget_id, runtimePreviewItemToFileItem(
         (state.state as Extract<RuntimeWorkbenchWidgetStateData, { kind: 'preview' }>).item as RuntimeWorkbenchPreviewItem,
+        fileFallbackName(),
       )]),
   ));
   const workbenchCurtainStage = createMemo<WorkbenchProgressCurtainStage>(() => {
@@ -1862,7 +1866,7 @@ export function EnvWorkbenchPage() {
       id: compact(request.item?.id) || previewPath,
       type: 'file',
       path: previewPath,
-      name: compact(request.item?.name) || basenameFromAbsolutePath(previewPath) || 'File',
+      name: compact(request.item?.name) || basenameFromAbsolutePath(previewPath) || fileFallbackName(),
     };
     const previewDefinition = redevenWorkbenchWidgets.find((definition) => definition.type === 'redeven.preview');
     const frameSize = resolveCanvasFrameSize();
@@ -1872,7 +1876,7 @@ export function EnvWorkbenchPage() {
 
     void openWorkbenchPreview({
       request_id: requestId,
-      item: fileItemToRuntimePreviewItem(normalizedItem),
+      item: fileItemToRuntimePreviewItem(normalizedItem, fileFallbackName()),
       open_strategy: openStrategy,
       viewport: {
         ...(viewportCenter ? {
@@ -1902,7 +1906,7 @@ export function EnvWorkbenchPage() {
                 [result.widget_id]: normalizedItem,
               },
             }));
-            updateWidgetTitle(result.widget_id, buildWorkbenchFilePreviewTitle(normalizedItem));
+            updateWidgetTitle(result.widget_id, buildWorkbenchFilePreviewTitle(normalizedItem, previewFallbackTitle()));
             setPreviewOpenRequests((previous) => ({
               ...previous,
               [result.widget_id]: {
@@ -2306,7 +2310,10 @@ export function EnvWorkbenchPage() {
           ? previous
           : { ...previous, [normalizedWidgetId]: normalizedPath }
       ));
-      updateWidgetTitle(normalizedWidgetId, buildWorkbenchFileBrowserTitle({ path: normalizedPath }));
+      updateWidgetTitle(normalizedWidgetId, buildWorkbenchFileBrowserTitle({
+        path: normalizedPath,
+        prefix: filesFallbackTitle(),
+      }));
       if (!runtimeLayoutReady() || !runtimeWidgetExists(normalizedWidgetId, 'redeven.files')) {
         return;
       }
@@ -2361,9 +2368,9 @@ export function EnvWorkbenchPage() {
         };
       });
       if (item) {
-        updateWidgetTitle(normalizedWidgetId, buildWorkbenchFilePreviewTitle(item));
+        updateWidgetTitle(normalizedWidgetId, buildWorkbenchFilePreviewTitle(item, previewFallbackTitle()));
       } else {
-        updateWidgetTitle(normalizedWidgetId, 'Preview');
+        updateWidgetTitle(normalizedWidgetId, previewFallbackTitle());
       }
       if (!runtimeLayoutReady() || !runtimeWidgetExists(normalizedWidgetId, 'redeven.preview')) {
         return;
@@ -2373,7 +2380,7 @@ export function EnvWorkbenchPage() {
           id: compact(item.id) || item.path,
           type: 'file',
           path: item.path,
-          name: compact(item.name) || basenameFromAbsolutePath(item.path) || 'File',
+          name: compact(item.name) || basenameFromAbsolutePath(item.path) || fileFallbackName(),
           ...(typeof item.size === 'number' ? { size: item.size } : {}),
         }
         : null;

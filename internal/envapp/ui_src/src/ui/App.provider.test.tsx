@@ -113,7 +113,7 @@ vi.mock('./services/uiPersistence', () => ({
 
 vi.mock('./deck/redevenDeckPresets', () => ({
   REDEVEN_DECK_LAYOUT_IDS: { default: 'default' },
-  redevenDeckPresets: [],
+  localizedRedevenDeckPresets: () => [],
 }));
 
 describe('App provider composition', () => {

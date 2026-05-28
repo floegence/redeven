@@ -18,11 +18,11 @@ export const zhTWWorkbenchCodex = {
     },
     widgets: {
       files: { label: "檔案", defaultTitle: "檔案" },
-      terminal: { label: "Terminal", defaultTitle: "Terminal" },
+      terminal: { label: "終端", defaultTitle: "終端" },
       preview: { label: "預覽", defaultTitle: "預覽" },
       monitor: { label: "監控", defaultTitle: "監控" },
       codespaces: { label: "Codespaces", defaultTitle: "Codespaces" },
-      ports: { label: "Web Services", defaultTitle: "Web Services" },
+      ports: { label: "Web服務", defaultTitle: "Web服務" },
       flower: { label: "Flower", defaultTitle: "Flower" },
       codex: { label: "Codex", defaultTitle: "Codex" },
     },
@@ -586,8 +586,10 @@ export const jaJPWorkbenchCodex = {
     widgets: {
       ...enLikeWorkbenchCodex.workbench.widgets,
       files: { label: "ファイル", defaultTitle: "ファイル" },
+      terminal: { label: "ターミナル", defaultTitle: "ターミナル" },
       preview: { label: "プレビュー", defaultTitle: "プレビュー" },
       monitor: { label: "モニタリング", defaultTitle: "モニタリング" },
+      ports: { label: "Webサービス", defaultTitle: "Webサービス" },
     },
   },
   codex: {
@@ -643,8 +645,10 @@ export const koKRWorkbenchCodex = {
     widgets: {
       ...enLikeWorkbenchCodex.workbench.widgets,
       files: { label: "파일", defaultTitle: "파일" },
+      terminal: { label: "터미널", defaultTitle: "터미널" },
       preview: { label: "미리보기", defaultTitle: "미리보기" },
       monitor: { label: "모니터링", defaultTitle: "모니터링" },
+      ports: { label: "Web 서비스", defaultTitle: "Web 서비스" },
     },
   },
   codex: {
@@ -700,8 +704,10 @@ export const deDEWorkbenchCodex = {
     widgets: {
       ...enLikeWorkbenchCodex.workbench.widgets,
       files: { label: "Dateien", defaultTitle: "Dateien" },
+      terminal: { label: "Terminal", defaultTitle: "Terminal" },
       preview: { label: "Vorschau", defaultTitle: "Vorschau" },
       monitor: { label: "Monitoring", defaultTitle: "Monitoring" },
+      ports: { label: "Webdienste", defaultTitle: "Webdienste" },
     },
   },
   codex: {
@@ -757,8 +763,10 @@ export const frFRWorkbenchCodex = {
     widgets: {
       ...enLikeWorkbenchCodex.workbench.widgets,
       files: { label: "Fichiers", defaultTitle: "Fichiers" },
+      terminal: { label: "Terminal", defaultTitle: "Terminal" },
       preview: { label: "Aperçu", defaultTitle: "Aperçu" },
       monitor: { label: "Monitoring", defaultTitle: "Monitoring" },
+      ports: { label: "Services web", defaultTitle: "Services web" },
     },
   },
   codex: {
@@ -814,8 +822,10 @@ export const esESWorkbenchCodex = {
     widgets: {
       ...enLikeWorkbenchCodex.workbench.widgets,
       files: { label: "Archivos", defaultTitle: "Archivos" },
+      terminal: { label: "Terminal", defaultTitle: "Terminal" },
       preview: { label: "Vista previa", defaultTitle: "Vista previa" },
       monitor: { label: "Monitorización", defaultTitle: "Monitorización" },
+      ports: { label: "Servicios web", defaultTitle: "Servicios web" },
     },
   },
   codex: {
@@ -871,8 +881,10 @@ export const ptBRWorkbenchCodex = {
     widgets: {
       ...enLikeWorkbenchCodex.workbench.widgets,
       files: { label: "Arquivos", defaultTitle: "Arquivos" },
+      terminal: { label: "Terminal", defaultTitle: "Terminal" },
       preview: { label: "Prévia", defaultTitle: "Prévia" },
       monitor: { label: "Monitoramento", defaultTitle: "Monitoramento" },
+      ports: { label: "Serviços web", defaultTitle: "Serviços web" },
     },
   },
   codex: {
@@ -928,8 +940,10 @@ export const ruRUWorkbenchCodex = {
     widgets: {
       ...enLikeWorkbenchCodex.workbench.widgets,
       files: { label: "Файлы", defaultTitle: "Файлы" },
+      terminal: { label: "Терминал", defaultTitle: "Терминал" },
       preview: { label: "Предпросмотр", defaultTitle: "Предпросмотр" },
       monitor: { label: "Мониторинг", defaultTitle: "Мониторинг" },
+      ports: { label: "Веб-сервисы", defaultTitle: "Веб-сервисы" },
     },
   },
   codex: {
@@ -982,10 +996,10 @@ export const ruRUWorkbenchCodex = {
     statusBanner: {
       ...enLikeWorkbenchCodex.codex.statusBanner,
       droppedUpdates: {
-        one: "Live event stream отбросил {count} best-effort update при догоняющей синхронизации.",
-        few: "Live event stream отбросил {count} best-effort updates при догоняющей синхронизации.",
-        many: "Live event stream отбросил {count} best-effort updates при догоняющей синхронизации.",
-        other: "Live event stream отбросил {count} best-effort updates при догоняющей синхронизации.",
+        one: "Поток событий пропустил {count} обновление с негарантированной доставкой во время догоняющей синхронизации.",
+        few: "Поток событий пропустил {count} обновления с негарантированной доставкой во время догоняющей синхронизации.",
+        many: "Поток событий пропустил {count} обновлений с негарантированной доставкой во время догоняющей синхронизации.",
+        other: "Поток событий пропустил {count} обновления с негарантированной доставкой во время догоняющей синхронизации.",
       },
     },
     pendingRequests: {

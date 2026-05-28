@@ -84,7 +84,11 @@ function allowedProtectedTerm(
   term: RedevenI18nProtectedTerm,
   allowlist: readonly RedevenI18nProtectedTermAllowlistEntry[],
 ): boolean {
-  return allowlist.some((entry) => entry.locale === locale && entry.path === path && entry.term === term);
+  return allowlist.some((entry) => (
+    (entry.locale === locale || entry.locale === '*')
+    && entry.path === path
+    && entry.term === term
+  ));
 }
 
 export function validateDictionaryShape(

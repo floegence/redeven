@@ -1,6 +1,7 @@
 import { cn } from '@floegence/floe-webapp-core';
 import { Show } from 'solid-js';
 import { FileBrowserPathBreadcrumb } from './FileBrowserPathBreadcrumb';
+import { useI18n } from '../i18n';
 
 export type FileBrowserPathControlMode = 'read' | 'edit';
 
@@ -41,6 +42,9 @@ function handlePathInputKeyDown(event: KeyboardEvent, props: FileBrowserPathCont
 }
 
 export function FileBrowserPathControl(props: FileBrowserPathControlProps) {
+  const i18n = useI18n();
+  const goToPathLabel = () => i18n.t('files.goToPath');
+
   return (
     <Show
       when={props.mode === 'edit'}
@@ -50,8 +54,8 @@ export function FileBrowserPathControl(props: FileBrowserPathControlProps) {
         ref={props.inputRef}
         type="text"
         value={props.draft}
-        placeholder="Go to path"
-        aria-label="Go to path"
+        placeholder={goToPathLabel()}
+        aria-label={goToPathLabel()}
         aria-invalid={Boolean(String(props.error ?? '').trim())}
         class={cn(
           'h-full w-full min-w-0 border-0 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground/70',

@@ -1056,6 +1056,7 @@ function runtimeProviderLinkMenuAction(
           label: 'Provider link needs attention',
           enabled: false,
           variant: 'outline',
+          disabled_reason: 'Provider link needs attention.',
         },
       };
     case 'unsupported':
@@ -1068,6 +1069,7 @@ function runtimeProviderLinkMenuAction(
             label: 'Provider link unavailable',
             enabled: false,
             variant: 'outline',
+            disabled_reason: 'Provider link is unavailable for this runtime.',
           },
         };
       }
@@ -1085,6 +1087,7 @@ function runtimeProviderLinkMenuAction(
       label,
       enabled: canConnect,
       variant: 'outline',
+      ...(!canConnect ? { disabled_reason: 'Choose an available Provider Environment before connecting this runtime.' } : {}),
     },
   };
 }
