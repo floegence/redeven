@@ -1647,7 +1647,7 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
         monospace: true,
       },
       {
-        label: 'Environment ID',
+        label: 'ENV ID',
         value: environment.env_public_id ?? '',
         monospace: true,
       },
