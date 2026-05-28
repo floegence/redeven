@@ -1,6 +1,7 @@
 import type { WidgetDefinition, WidgetProps } from '@floegence/floe-webapp-core';
 import { Activity, Code, Files, Globe, Terminal } from '@floegence/floe-webapp-core/icons';
 
+import type { I18nHelpers } from '../i18n';
 import { CodexNavigationIcon } from '../icons/CodexIcon';
 import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
 import { useEnvContext } from '../pages/EnvContext';
@@ -201,3 +202,34 @@ export const redevenDeckWidgets: WidgetDefinition[] = [
     defaultRowSpan: 14,
   },
 ];
+
+function localizedDeckWidgetName(
+  type: WidgetDefinition['type'],
+  t: I18nHelpers['t'],
+): string | null {
+  switch (type) {
+    case 'redeven.files':
+      return t('workbench.widgets.files.label');
+    case 'redeven.terminal':
+      return t('workbench.widgets.terminal.label');
+    case 'redeven.monitor':
+      return t('workbench.widgets.monitor.label');
+    case 'redeven.codespaces':
+      return t('workbench.widgets.codespaces.label');
+    case 'redeven.ports':
+      return t('workbench.widgets.ports.label');
+    case 'redeven.ai':
+      return t('workbench.widgets.flower.label');
+    case 'redeven.codex':
+      return t('workbench.widgets.codex.label');
+    default:
+      return null;
+  }
+}
+
+export function localizedRedevenDeckWidgets(t: I18nHelpers['t']): WidgetDefinition[] {
+  return redevenDeckWidgets.map((definition) => ({
+    ...definition,
+    name: localizedDeckWidgetName(definition.type, t) ?? definition.name,
+  }));
+}

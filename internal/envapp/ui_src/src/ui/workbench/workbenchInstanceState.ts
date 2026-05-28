@@ -218,44 +218,52 @@ export function buildWorkbenchFileBrowserStateScope(widgetId: string): string {
 export function buildWorkbenchTerminalTitle(params: Readonly<{
   sessionName?: string | null;
   workingDir?: string | null;
+  prefix?: string | null;
 }>): string {
+  const prefix = compact(params.prefix) || 'Terminal';
   const sessionName = compact(params.sessionName);
   if (sessionName) {
-    return `Terminal · ${sessionName}`;
+    return `${prefix} · ${sessionName}`;
   }
 
   const workingDir = normalizeAbsolutePath(params.workingDir ?? '');
   if (workingDir && workingDir !== '/') {
-    return `Terminal · ${basenameFromAbsolutePath(workingDir)}`;
+    return `${prefix} · ${basenameFromAbsolutePath(workingDir)}`;
   }
 
-  return 'Terminal';
+  return prefix;
 }
 
 export function buildWorkbenchFileBrowserTitle(params: Readonly<{
   path?: string | null;
   preferredTitle?: string | null;
+  prefix?: string | null;
 }>): string {
+  const prefix = compact(params.prefix) || 'Files';
   const preferredTitle = compact(params.preferredTitle);
   if (preferredTitle) {
-    return `Files · ${preferredTitle}`;
+    return `${prefix} · ${preferredTitle}`;
   }
 
   const normalizedPath = normalizeAbsolutePath(params.path ?? '');
   if (!normalizedPath || normalizedPath === '/') {
-    return 'Files';
+    return prefix;
   }
 
-  return `Files · ${basenameFromAbsolutePath(normalizedPath)}`;
+  return `${prefix} · ${basenameFromAbsolutePath(normalizedPath)}`;
 }
 
-export function buildWorkbenchFilePreviewTitle(item: FileItem | null | undefined): string {
+export function buildWorkbenchFilePreviewTitle(
+  item: FileItem | null | undefined,
+  prefix = 'Preview',
+): string {
+  const normalizedPrefix = compact(prefix) || 'Preview';
   const path = normalizeAbsolutePath(item?.path ?? '');
   const name = compact(item?.name) || (path ? basenameFromAbsolutePath(path) : '');
   if (name) {
-    return `Preview · ${name}`;
+    return `${normalizedPrefix} · ${name}`;
   }
-  return 'Preview';
+  return normalizedPrefix;
 }
 
 export function findWorkbenchPreviewWidgetIdByPath(

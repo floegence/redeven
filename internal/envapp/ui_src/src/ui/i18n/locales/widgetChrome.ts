@@ -55,6 +55,9 @@ export const enUSWidgetChrome = defineDictionary({
     filesystemRootFallback: 'Filesystem Root',
     permissionIntersection: 'The effective permission still intersects with the runtime permission policy, session capability, and OS-level filesystem permissions.',
     goToPath: 'Go to path...',
+    breadcrumbLabel: 'Breadcrumb',
+    hiddenPathSegments: 'Hidden path segments',
+    showHiddenPathSegments: 'Show hidden path segments',
     showHiddenFiles: 'Show hidden files',
     refreshCurrentDirectory: 'Refresh current directory',
     moreFileBrowserOptions: 'More file browser options',
@@ -277,6 +280,7 @@ export const enUSWidgetChrome = defineDictionary({
       terminal: 'Terminal',
       files: 'Files',
       openInTerminal: 'Open in Terminal',
+      openInFiles: 'Open {label} in Files',
       browseFiles: 'Browse Files',
       discardFolderChanges: 'Discard folder changes',
       discardAllChanges: 'Discard all changes',
@@ -623,6 +627,9 @@ export const zhCNWidgetChrome = {
     filesystemRootFallback: '文件系统根目录',
     permissionIntersection: '有效权限仍会与 runtime 权限策略、会话能力和 OS 级文件系统权限取交集。',
     goToPath: '前往路径...',
+    breadcrumbLabel: '面包屑',
+    hiddenPathSegments: '隐藏路径段',
+    showHiddenPathSegments: '显示隐藏路径段',
     showHiddenFiles: '显示隐藏文件',
     refreshCurrentDirectory: '刷新当前目录',
     moreFileBrowserOptions: '更多文件浏览器选项',
@@ -648,7 +655,7 @@ export const zhCNWidgetChrome = {
     menuRename: '重命名',
     menuDelete: '删除',
     menuAskFlower: '询问 Flower',
-    menuOpenInTerminal: '在 Terminal 中打开',
+    menuOpenInTerminal: '在终端中打开',
     menuDownload: '下载',
     menuNew: '新建',
     menuFile: '文件',
@@ -686,7 +693,7 @@ export const zhCNWidgetChrome = {
       createdTitle: '已创建',
       browseFilesUnavailableTitle: '浏览文件不可用',
       invalidDirectoryTitle: '目录无效',
-      invalidDirectoryMessage: '无法解析 Terminal 工作目录。',
+      invalidDirectoryMessage: '无法解析终端工作目录。',
       invalidBrowseDirectoryMessage: '无法解析有效目录路径。',
       copiedTitle: '已复制',
       copyFailedTitle: '复制失败',
@@ -777,7 +784,8 @@ export const zhCNWidgetChrome = {
       reviewScopeThenStage: '审查此范围，然后暂存或放弃。',
       stageThenCommit: '暂存你想保留的内容，然后 commit。',
       askFlower: '询问 Flower',
-      openInTerminal: '在 Terminal 中打开',
+      openInTerminal: '在终端中打开',
+      openInFiles: '在文件中打开 {label}',
       browseFiles: '浏览文件',
       discardFolderChanges: '放弃文件夹变更',
       discardAllChanges: '放弃所有变更',
@@ -934,7 +942,7 @@ export const zhCNWidgetChrome = {
       deletedTitle: '已删除',
       browseFilesUnavailableTitle: '浏览文件不可用',
       invalidDirectoryTitle: '目录无效',
-      invalidTerminalDirectory: '无法解析 Terminal 工作目录。',
+      invalidTerminalDirectory: '无法解析终端工作目录。',
       invalidBrowseDirectory: '无法解析有效目录路径。',
       askFlowerUnavailableTitle: 'Ask Flower 不可用',
       failedToBuildGitContext: '无法构建 Git 上下文。',
@@ -961,22 +969,24 @@ export const zhCNWidgetChrome = {
   },
   terminal: {
     ...enUSWidgetChrome.terminal,
-    creatingAria: '正在创建 terminal',
-    creatingMessage: '正在创建 terminal...',
-    initializing: '正在初始化 terminal...',
-    attaching: '正在附加 terminal...',
+    title: '终端',
+    terminalName: '终端 {index}',
+    creatingAria: '正在创建终端',
+    creatingMessage: '正在创建终端...',
+    initializing: '正在初始化终端...',
+    attaching: '正在附加终端...',
     loadingHistory: '正在加载历史...',
     loadingHistoryProgress: '正在加载历史 {loaded} / {total}',
     failedToOpenFilePreviewTitle: '无法打开文件预览',
-    couldNotOpenFileReference: '无法打开 terminal 文件引用。',
-    creationFailed: 'Terminal 创建失败',
+    couldNotOpenFileReference: '无法打开终端文件引用。',
+    creationFailed: '终端创建失败',
     creationFailedStatus: '创建失败',
-    creatingStatus: '正在创建 terminal',
-    creationFailedMessage: '无法创建此 terminal session。',
-    createSession: '创建 session',
+    creatingStatus: '正在创建终端',
+    creationFailedMessage: '无法创建此终端会话。',
+    createSession: '创建会话',
     retry: '重试',
     dismiss: '关闭',
-    newSession: '新建 session',
+    newSession: '新建会话',
     refresh: '刷新',
     clear: '清除',
     moreOptions: '更多选项',
@@ -987,55 +997,95 @@ export const zhCNWidgetChrome = {
     previousShort: '上一个',
     next: '下一个',
     close: '关闭',
-    loadingSessions: '正在加载 sessions...',
-    noSessionsTitle: '还没有 terminal sessions',
-    noSessionsDescription: '创建第一个 terminal session 以开始运行命令。',
+    loadingSessions: '正在加载会话...',
+    noSessionsTitle: '还没有终端会话',
+    noSessionsDescription: '创建第一个终端会话以开始运行命令。',
     invalidWorkingDirectory: '工作目录无效。',
-    sessionCouldNotBeCreated: 'Terminal session 无法创建。',
+    invalidCreateResponse: '创建响应无效。',
+    sessionCouldNotBeCreated: '终端会话无法创建。',
     hideFloeKeyboard: '隐藏 Floe Keyboard',
     showFloeKeyboard: '显示 Floe Keyboard',
-    terminalSettings: 'Terminal 设置',
+    terminalSettings: '终端设置',
     clipboardUnavailable: '剪贴板不可用。',
     copyFailedTitle: '复制失败',
     failedToCopyClipboard: '无法将文本复制到剪贴板。',
+    largeSelectionSkipped: '由于超过 10 MiB 上传限制，已跳过较大的终端选区附件。',
+    largeSelectionAttached: '较大的终端选区已作为 “{name}” 附加。',
+    noSelectionContextOnly: '未选择终端文本。仅添加工作目录上下文。',
     askFlower: '询问 Flower',
     browseFiles: '浏览文件',
     copySelection: '复制选区',
     executePermissionRequired: '需要执行权限',
-    executePermissionDescription: '由于此会话未授予执行权限，Terminal 已禁用。',
-    statusSession: 'Session',
+    executePermissionDescription: '由于此会话未授予执行权限，终端已禁用。',
+    statusSession: '会话',
     statusHistory: '历史',
     settings: {
       ...enUSWidgetChrome.terminal.settings,
-      title: 'Terminal 设置',
-      description: '自定义 terminal sessions 的默认主题、字体和移动输入行为。',
+      title: '终端设置',
+      description: '自定义终端会话的默认主题、字体和移动输入行为。',
       close: '关闭',
       selected: '已选择',
       tapToUse: '点击使用',
       mobileInputTitle: '移动输入',
-      mobileInputDescription: '为每个移动端 terminal session 选择一个默认输入模式。',
+      mobileInputDescription: '为每个移动端终端会话选择一个默认输入模式。',
       mobileInputNote: '一次只能启用一种模式。使用 Floe Keyboard 可保持系统键盘隐藏，直到你明确切回 System IME。',
       themeTitle: '主题',
-      themeDescription: '选择 terminal 颜色的渲染方式。',
+      themeDescription: '选择终端颜色的渲染方式。',
       systemTheme: '系统主题',
       dark: '深色',
       light: '浅色',
       activityBorderTitle: '活动边框',
-      activityBorderDescription: '控制用于高亮活跃 Workbench terminal 活动的动画边框。',
+      activityBorderDescription: '控制用于高亮活跃 Workbench 终端活动的动画边框。',
       showRunningBorder: '显示运行和活跃边框',
       statusTrackingUnchanged: 'Session、tab 和未读状态跟踪保持不变。',
       shown: '已显示',
       hidden: '已隐藏',
       fontTitle: '字体',
-      sharedWorkbenchFontDescription: '为此 Workbench terminal 选择共享字体族和字号。',
-      localFontDescription: '选择 terminal 字体族并调整全局字号。',
+      sharedWorkbenchFontDescription: '为此 Workbench 终端选择共享字体族和字号。',
+      localFontDescription: '选择终端字体族并调整全局字号。',
       fontSize: '字号',
-      fontSizeDescription: '使用可读字号，同时在屏幕上保留足够的 terminal 历史。',
+      fontSizeDescription: '使用可读字号，同时在屏幕上保留足够的终端历史。',
     },
   },
 } satisfies WidgetChromeMessages;
 
 type GitDialogMessages = Pick<WidgetChromeMessages['git'], 'patchViewer' | 'deleteBranch' | 'stashDelete'>;
+type WidgetChromeCommonMessages = Readonly<{
+  files: Pick<
+    WidgetChromeMessages['files'],
+    | 'browserTitle'
+    | 'filterPlaceholder'
+    | 'breadcrumbLabel'
+    | 'hiddenPathSegments'
+    | 'showHiddenPathSegments'
+    | 'menuAskFlower'
+    | 'menuOpenInTerminal'
+    | 'menuDownload'
+  >;
+  git: Readonly<{
+    changes: Pick<
+      WidgetChromeMessages['git']['changes'],
+      | 'askFlower'
+      | 'terminal'
+      | 'files'
+      | 'openInTerminal'
+      | 'openInFiles'
+      | 'browseFiles'
+    >;
+  }>;
+  terminal: Pick<
+    WidgetChromeMessages['terminal'],
+    | 'title'
+    | 'terminalName'
+    | 'creatingEyebrow'
+    | 'creatingAria'
+    | 'creatingMessage'
+    | 'newSession'
+    | 'askFlower'
+    | 'browseFiles'
+    | 'copySelection'
+  >;
+}>;
 
 function withGitDialogMessages(base: WidgetChromeMessages, messages: GitDialogMessages): WidgetChromeMessages {
   return {
@@ -1054,6 +1104,30 @@ function withGitDialogMessages(base: WidgetChromeMessages, messages: GitDialogMe
         ...base.git.stashDelete,
         ...messages.stashDelete,
       },
+    },
+  };
+}
+
+function withCommonWidgetChromeMessages(
+  base: WidgetChromeMessages,
+  messages: WidgetChromeCommonMessages,
+): WidgetChromeMessages {
+  return {
+    ...base,
+    files: {
+      ...base.files,
+      ...messages.files,
+    },
+    git: {
+      ...base.git,
+      changes: {
+        ...base.git.changes,
+        ...messages.git.changes,
+      },
+    },
+    terminal: {
+      ...base.terminal,
+      ...messages.terminal,
     },
   };
 }
@@ -1112,7 +1186,39 @@ export const zhTWWidgetChrome = withGitDialogMessages(zhCNWidgetChrome, {
   },
 }) satisfies WidgetChromeMessages;
 
-export const jaJPWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
+export const jaJPWidgetChrome = withGitDialogMessages(withCommonWidgetChromeMessages(enUSWidgetChrome, {
+  files: {
+    browserTitle: 'ブラウザー',
+    filterPlaceholder: 'ファイルを絞り込み',
+    breadcrumbLabel: 'パンくず',
+    hiddenPathSegments: '非表示のパスセグメント',
+    showHiddenPathSegments: '非表示のパスセグメントを表示',
+    menuAskFlower: 'Flower に質問',
+    menuOpenInTerminal: 'ターミナルで開く',
+    menuDownload: 'ダウンロード',
+  },
+  git: {
+    changes: {
+      askFlower: 'Flower に質問',
+      terminal: 'ターミナル',
+      files: 'ファイル',
+      openInTerminal: 'ターミナルで開く',
+      openInFiles: '{label} をファイルで開く',
+      browseFiles: 'ファイルを参照',
+    },
+  },
+  terminal: {
+    title: 'ターミナル',
+    terminalName: 'ターミナル {index}',
+    creatingEyebrow: 'ターミナル',
+    creatingAria: 'ターミナルを作成中',
+    creatingMessage: 'ターミナルを作成中...',
+    newSession: '新しいセッション',
+    askFlower: 'Flower に質問',
+    browseFiles: 'ファイルを参照',
+    copySelection: '選択範囲をコピー',
+  },
+}), {
   patchViewer: {
     ...enUSWidgetChrome.git.patchViewer,
     copyFailedTitle: 'コピーに失敗しました',
@@ -1167,7 +1273,39 @@ export const jaJPWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
   },
 }) satisfies WidgetChromeMessages;
 
-export const koKRWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
+export const koKRWidgetChrome = withGitDialogMessages(withCommonWidgetChromeMessages(enUSWidgetChrome, {
+  files: {
+    browserTitle: '브라우저',
+    filterPlaceholder: '파일 필터',
+    breadcrumbLabel: '탐색 경로',
+    hiddenPathSegments: '숨겨진 경로 세그먼트',
+    showHiddenPathSegments: '숨겨진 경로 세그먼트 표시',
+    menuAskFlower: 'Flower에게 묻기',
+    menuOpenInTerminal: '터미널에서 열기',
+    menuDownload: '다운로드',
+  },
+  git: {
+    changes: {
+      askFlower: 'Flower에게 묻기',
+      terminal: '터미널',
+      files: '파일',
+      openInTerminal: '터미널에서 열기',
+      openInFiles: '파일에서 {label} 열기',
+      browseFiles: '파일 찾아보기',
+    },
+  },
+  terminal: {
+    title: '터미널',
+    terminalName: '터미널 {index}',
+    creatingEyebrow: '터미널',
+    creatingAria: '터미널 생성 중',
+    creatingMessage: '터미널 생성 중...',
+    newSession: '새 세션',
+    askFlower: 'Flower에게 묻기',
+    browseFiles: '파일 찾아보기',
+    copySelection: '선택 영역 복사',
+  },
+}), {
   patchViewer: {
     ...enUSWidgetChrome.git.patchViewer,
     copyFailedTitle: '복사 실패',
@@ -1222,7 +1360,39 @@ export const koKRWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
   },
 }) satisfies WidgetChromeMessages;
 
-export const deDEWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
+export const deDEWidgetChrome = withGitDialogMessages(withCommonWidgetChromeMessages(enUSWidgetChrome, {
+  files: {
+    browserTitle: 'Browser',
+    filterPlaceholder: 'Dateien filtern',
+    breadcrumbLabel: 'Breadcrumb',
+    hiddenPathSegments: 'Ausgeblendete Pfadsegmente',
+    showHiddenPathSegments: 'Ausgeblendete Pfadsegmente anzeigen',
+    menuAskFlower: 'Flower fragen',
+    menuOpenInTerminal: 'Im Terminal öffnen',
+    menuDownload: 'Herunterladen',
+  },
+  git: {
+    changes: {
+      askFlower: 'Flower fragen',
+      terminal: 'Terminal',
+      files: 'Dateien',
+      openInTerminal: 'Im Terminal öffnen',
+      openInFiles: '{label} in Dateien öffnen',
+      browseFiles: 'Dateien durchsuchen',
+    },
+  },
+  terminal: {
+    title: 'Terminal',
+    terminalName: 'Terminal {index}',
+    creatingEyebrow: 'Terminal',
+    creatingAria: 'Terminal wird erstellt',
+    creatingMessage: 'Terminal wird erstellt...',
+    newSession: 'Neue Sitzung',
+    askFlower: 'Flower fragen',
+    browseFiles: 'Dateien durchsuchen',
+    copySelection: 'Auswahl kopieren',
+  },
+}), {
   patchViewer: {
     ...enUSWidgetChrome.git.patchViewer,
     copyFailedTitle: 'Kopieren fehlgeschlagen',
@@ -1277,7 +1447,39 @@ export const deDEWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
   },
 }) satisfies WidgetChromeMessages;
 
-export const frFRWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
+export const frFRWidgetChrome = withGitDialogMessages(withCommonWidgetChromeMessages(enUSWidgetChrome, {
+  files: {
+    browserTitle: 'Navigateur',
+    filterPlaceholder: 'Filtrer les fichiers',
+    breadcrumbLabel: 'Fil d’Ariane',
+    hiddenPathSegments: 'Segments de chemin masqués',
+    showHiddenPathSegments: 'Afficher les segments de chemin masqués',
+    menuAskFlower: 'Demander à Flower',
+    menuOpenInTerminal: 'Ouvrir dans le terminal',
+    menuDownload: 'Télécharger',
+  },
+  git: {
+    changes: {
+      askFlower: 'Demander à Flower',
+      terminal: 'Terminal',
+      files: 'Fichiers',
+      openInTerminal: 'Ouvrir dans le terminal',
+      openInFiles: 'Ouvrir {label} dans Fichiers',
+      browseFiles: 'Parcourir les fichiers',
+    },
+  },
+  terminal: {
+    title: 'Terminal',
+    terminalName: 'Terminal {index}',
+    creatingEyebrow: 'Terminal',
+    creatingAria: 'Création du terminal',
+    creatingMessage: 'Création du terminal...',
+    newSession: 'Nouvelle session',
+    askFlower: 'Demander à Flower',
+    browseFiles: 'Parcourir les fichiers',
+    copySelection: 'Copier la sélection',
+  },
+}), {
   patchViewer: {
     ...enUSWidgetChrome.git.patchViewer,
     copyFailedTitle: 'Échec de la copie',
@@ -1332,7 +1534,39 @@ export const frFRWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
   },
 }) satisfies WidgetChromeMessages;
 
-export const esESWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
+export const esESWidgetChrome = withGitDialogMessages(withCommonWidgetChromeMessages(enUSWidgetChrome, {
+  files: {
+    browserTitle: 'Navegador',
+    filterPlaceholder: 'Filtrar archivos',
+    breadcrumbLabel: 'Migas de pan',
+    hiddenPathSegments: 'Segmentos de ruta ocultos',
+    showHiddenPathSegments: 'Mostrar segmentos de ruta ocultos',
+    menuAskFlower: 'Preguntar a Flower',
+    menuOpenInTerminal: 'Abrir en terminal',
+    menuDownload: 'Descargar',
+  },
+  git: {
+    changes: {
+      askFlower: 'Preguntar a Flower',
+      terminal: 'Terminal',
+      files: 'Archivos',
+      openInTerminal: 'Abrir en terminal',
+      openInFiles: 'Abrir {label} en Archivos',
+      browseFiles: 'Explorar archivos',
+    },
+  },
+  terminal: {
+    title: 'Terminal',
+    terminalName: 'Terminal {index}',
+    creatingEyebrow: 'Terminal',
+    creatingAria: 'Creando terminal',
+    creatingMessage: 'Creando terminal...',
+    newSession: 'Nueva sesión',
+    askFlower: 'Preguntar a Flower',
+    browseFiles: 'Explorar archivos',
+    copySelection: 'Copiar selección',
+  },
+}), {
   patchViewer: {
     ...enUSWidgetChrome.git.patchViewer,
     copyFailedTitle: 'Error al copiar',
@@ -1387,7 +1621,39 @@ export const esESWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
   },
 }) satisfies WidgetChromeMessages;
 
-export const ptBRWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
+export const ptBRWidgetChrome = withGitDialogMessages(withCommonWidgetChromeMessages(enUSWidgetChrome, {
+  files: {
+    browserTitle: 'Navegador',
+    filterPlaceholder: 'Filtrar arquivos',
+    breadcrumbLabel: 'Navegação estrutural',
+    hiddenPathSegments: 'Segmentos de caminho ocultos',
+    showHiddenPathSegments: 'Mostrar segmentos de caminho ocultos',
+    menuAskFlower: 'Perguntar ao Flower',
+    menuOpenInTerminal: 'Abrir no terminal',
+    menuDownload: 'Baixar',
+  },
+  git: {
+    changes: {
+      askFlower: 'Perguntar ao Flower',
+      terminal: 'Terminal',
+      files: 'Arquivos',
+      openInTerminal: 'Abrir no terminal',
+      openInFiles: 'Abrir {label} em Arquivos',
+      browseFiles: 'Procurar arquivos',
+    },
+  },
+  terminal: {
+    title: 'Terminal',
+    terminalName: 'Terminal {index}',
+    creatingEyebrow: 'Terminal',
+    creatingAria: 'Criando terminal',
+    creatingMessage: 'Criando terminal...',
+    newSession: 'Nova sessão',
+    askFlower: 'Perguntar ao Flower',
+    browseFiles: 'Procurar arquivos',
+    copySelection: 'Copiar seleção',
+  },
+}), {
   patchViewer: {
     ...enUSWidgetChrome.git.patchViewer,
     copyFailedTitle: 'Falha ao copiar',
@@ -1442,7 +1708,39 @@ export const ptBRWidgetChrome = withGitDialogMessages(enUSWidgetChrome, {
   },
 }) satisfies WidgetChromeMessages;
 
-export const ruRUWidgetChrome = withRussianPluralForms(withGitDialogMessages(enUSWidgetChrome, {
+export const ruRUWidgetChrome = withRussianPluralForms(withGitDialogMessages(withCommonWidgetChromeMessages(enUSWidgetChrome, {
+  files: {
+    browserTitle: 'Браузер',
+    filterPlaceholder: 'Фильтр файлов',
+    breadcrumbLabel: 'Навигационная цепочка',
+    hiddenPathSegments: 'Скрытые сегменты пути',
+    showHiddenPathSegments: 'Показать скрытые сегменты пути',
+    menuAskFlower: 'Спросить Flower',
+    menuOpenInTerminal: 'Открыть в терминале',
+    menuDownload: 'Скачать',
+  },
+  git: {
+    changes: {
+      askFlower: 'Спросить Flower',
+      terminal: 'Терминал',
+      files: 'Файлы',
+      openInTerminal: 'Открыть в терминале',
+      openInFiles: 'Открыть {label} в файлах',
+      browseFiles: 'Просмотреть файлы',
+    },
+  },
+  terminal: {
+    title: 'Терминал',
+    terminalName: 'Терминал {index}',
+    creatingEyebrow: 'Терминал',
+    creatingAria: 'Создание терминала',
+    creatingMessage: 'Создание терминала...',
+    newSession: 'Новый сеанс',
+    askFlower: 'Спросить Flower',
+    browseFiles: 'Просмотреть файлы',
+    copySelection: 'Скопировать выделение',
+  },
+}), {
   patchViewer: {
     ...enUSWidgetChrome.git.patchViewer,
     copyFailedTitle: 'Не удалось скопировать',

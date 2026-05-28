@@ -1616,7 +1616,7 @@ describe('EnvWorkbenchPage', () => {
       .map((item: any) => item.label);
 
     expect(labels).toContain('转到 监控');
-    expect(labels).toContain('添加 Terminal');
+    expect(labels).toContain('添加 终端');
   });
 
   it('keeps workbench tidy actions out of background-mode canvas menus', async () => {

@@ -742,6 +742,13 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('function EnvironmentSplitActionButton');
     expect(appSrc).toContain('function EnvironmentPrimaryActionPanel');
+    expect(appSrc).toContain('function localizedEnvironmentActionPresentation');
+    expect(appSrc).toContain('primary_action: localizedEnvironmentAction(i18n, presentation.primary_action)');
+    expect(appSrc).toContain('localizedEnvironmentOverlay(i18n, presentation.primary_action_overlay)');
+    expect(appSrc).toContain('menu_button_label: localizedEnvironmentActionLabel(i18n, presentation.menu_button_label)');
+    expect(appSrc).toContain('menu_actions: presentation.menu_actions.map((item) => localizedEnvironmentMenuItem(i18n, item))');
+    expect(appSrc).toContain('label: localizedEnvironmentActionLabel(i18n, item.label)');
+    expect(appSrc).toContain('disabled_reason: localizedRuntimeMessage(i18n, action.disabled_reason)');
     expect(appSrc).toContain('const renderPrimaryButton = () => (');
     expect(appSrc).not.toContain('const primaryButton = (');
     expect(appSrc).not.toContain('function openProviderLocalServeDialog');

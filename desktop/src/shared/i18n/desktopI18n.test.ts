@@ -188,6 +188,22 @@ describe('Desktop shared i18n dictionaries', () => {
   it('keeps non-English dictionaries assignable to a widened message shape', () => {
     const zhCN: DesktopTranslationShape = DESKTOP_I18N_DICTIONARIES['zh-CN'];
     expect(zhCN.common.open).toBe('打开');
+    expect(zhCN.environmentFacts.runsOn).toBe('运行于');
+    expect(zhCN.environmentFacts.provider).toBe('提供方');
+    expect(zhCN.environmentFacts.sshHost).toBe('SSH主机');
+    expect(zhCN.environmentFacts.startedAt).toBe('已启动 {time}');
+    expect(zhCN.environmentAction.open).toBe('打开');
+    expect(zhCN.environmentAction.runtimeActions).toBe('Runtime 操作');
+    expect(zhCN.environmentAction.refreshRuntimeStatus).toBe('刷新 Runtime 状态');
+    expect(zhCN.environmentAction.startRuntime).toBe('启动 Runtime');
+    expect(zhCN.environmentAction.stopRuntime).toBe('停止 Runtime');
+    expect(zhCN.environmentAction.restartRuntime).toBe('重启 Runtime');
+    expect(zhCN.environmentAction.updateRuntime).toBe('更新 Runtime');
+    expect(zhCN.runtimeMessage.runtimeReadyOpenDetail).toBe('Runtime 已就绪。现在可以打开。');
+    expect(zhCN.runtimeMessage.restartRuntimeReady).toBe('Desktop 重启 Runtime 并且它报告就绪后，即可打开。');
+    expect(zhCN.connectionDialog.sshHost).toBe('SSH主机');
+    expect(zhCN.connectionDialog.sshContainer).toBe('SSH主机容器');
+    expect(zhCN.runtimeMessage.sshContainerRuntime).toBe('SSH主机容器 Runtime');
   });
 
   it('keeps ru-RU plural messages wired for Russian plural categories', () => {

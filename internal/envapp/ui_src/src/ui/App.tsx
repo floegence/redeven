@@ -14,7 +14,7 @@ import { installDesktopEmbeddedDragRegionSync } from './services/desktopEmbedded
 import { installDesktopWindowChromeDocumentSync } from './services/desktopWindowChrome';
 import { resolveEnvAppStorageBinding } from './services/uiPersistence';
 import { TerminalSessionsLifecycleSync } from './services/terminalSessionsLifecycleSync';
-import { REDEVEN_DECK_LAYOUT_IDS, redevenDeckPresets } from './deck/redevenDeckPresets';
+import { REDEVEN_DECK_LAYOUT_IDS, localizedRedevenDeckPresets } from './deck/redevenDeckPresets';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
 import { I18nProvider, useI18n, type I18nHelpers } from './i18n';
 
@@ -67,7 +67,7 @@ function buildFloeConfig(t: I18nHelpers['t']) {
       storageKey: persistenceBinding.deckStorageKey,
       defaultActiveLayoutId: REDEVEN_DECK_LAYOUT_IDS.default,
       presetsMode: 'mutable',
-      presets: redevenDeckPresets,
+      presets: localizedRedevenDeckPresets(t),
     },
   } as const;
 }

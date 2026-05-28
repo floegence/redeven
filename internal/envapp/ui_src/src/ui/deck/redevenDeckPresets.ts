@@ -1,5 +1,8 @@
 // Deck preset layouts used by the Env App.
 
+import type { FloeConfig } from '@floegence/floe-webapp-core';
+import type { I18nHelpers } from '../i18n';
+
 export const REDEVEN_DECK_LAYOUT_IDS = {
   default: 'redeven-layout-default',
   terminal: 'redeven-layout-terminal',
@@ -71,3 +74,32 @@ export const redevenDeckPresets = [
     ],
   },
 ] as const;
+
+type RedevenDeckPreset = NonNullable<FloeConfig['deck']['presets']>[number];
+
+function localizedDeckPresetName(id: string, t: I18nHelpers['t']): string | null {
+  switch (id) {
+    case REDEVEN_DECK_LAYOUT_IDS.default:
+      return t('deck.presets.default');
+    case REDEVEN_DECK_LAYOUT_IDS.terminal:
+      return t('deck.presets.terminalFocus');
+    case REDEVEN_DECK_LAYOUT_IDS.files:
+      return t('deck.presets.filesFocus');
+    case REDEVEN_DECK_LAYOUT_IDS.monitoring:
+      return t('deck.presets.monitoring');
+    case REDEVEN_DECK_LAYOUT_IDS.flower:
+      return t('deck.presets.flowerPairing');
+    case REDEVEN_DECK_LAYOUT_IDS.codex:
+      return t('deck.presets.codexReview');
+    default:
+      return null;
+  }
+}
+
+export function localizedRedevenDeckPresets(t: I18nHelpers['t']): RedevenDeckPreset[] {
+  return redevenDeckPresets.map((preset) => ({
+    ...preset,
+    name: localizedDeckPresetName(preset.id, t) ?? preset.name,
+    widgets: preset.widgets.map((widget) => ({ ...widget })),
+  }));
+}

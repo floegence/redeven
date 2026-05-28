@@ -76,7 +76,9 @@ export function launcherActionFailurePresentation(
       };
     case 'environment_opening':
       return {
-        message: compact(failure.message) || i18n.t('toast.openingStopping'),
+        message: i18n.locale === 'en-US'
+          ? compact(failure.message) || i18n.t('toast.openingStopping')
+          : i18n.t('toast.openingStopping'),
         tone: 'info',
         refresh_snapshot: refreshSnapshot,
         delivery,
@@ -132,7 +134,9 @@ export function launcherActionFailurePresentation(
     case 'provider_unreachable':
     case 'provider_invalid_response':
       return {
-        message: compact(failure.message) || i18n.t('runtimeMessage.providerLinkFailedDetail'),
+        message: i18n.locale === 'en-US'
+          ? compact(failure.message) || i18n.t('runtimeMessage.providerLinkFailedDetail')
+          : i18n.t('runtimeMessage.providerLinkFailedDetail'),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
@@ -163,7 +167,9 @@ export function launcherActionFailurePresentation(
       };
     default:
       return {
-        message: failure.message,
+        message: i18n.locale === 'en-US'
+          ? compact(failure.message) || i18n.t('toast.actionFailedFallback')
+          : i18n.t('toast.actionFailedFallback'),
         tone: 'error',
         refresh_snapshot: refreshSnapshot,
         delivery,
