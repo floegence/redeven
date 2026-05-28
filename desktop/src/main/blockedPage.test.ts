@@ -51,6 +51,25 @@ describe('blockedPage', () => {
     expect(html).toContain("queueMicrotask(() => blockedSummary.focus())");
   });
 
+  it('renders blocked page chrome in the selected Desktop language', () => {
+    const html = buildBlockedPageHTML({
+      status: 'blocked',
+      code: 'state_dir_locked',
+      message: 'Another Redeven runtime instance is already using this state directory.',
+      lock_owner: {
+        mode: 'hybrid',
+        local_ui_enabled: true,
+      },
+    }, 'linux', 'zh-CN');
+
+    expect(html).toContain('<html lang="zh-CN">');
+    expect(html).toContain('Redeven 已在其他位置启动中');
+    expect(html).toContain('跳到主要内容');
+    expect(html).toContain('复制诊断信息');
+    expect(html).toContain('技术详情');
+    expect(html).toContain('aria-label="页面操作"');
+  });
+
   it('recognizes blocked page action urls', () => {
     expect(isBlockedActionURL('https://redeven-desktop.invalid/retry')).toBe(true);
     expect(blockedActionFromURL('https://redeven-desktop.invalid/copy-diagnostics')).toBe('copy-diagnostics');

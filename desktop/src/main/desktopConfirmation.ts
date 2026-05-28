@@ -13,20 +13,18 @@ function platformAdjustedTitle(
   model: DesktopConfirmationDialogModel,
   platform: NodeJS.Platform,
 ): string {
-  if (platform === 'darwin') {
-    return model.title;
+  if (platform !== 'darwin' && model.platform_action === 'quit_app') {
+    return compact(model.platform_title) || model.title;
   }
-  return model.title === 'Quit Redeven Desktop?'
-    ? 'Exit Redeven Desktop?'
-    : model.title;
+  return model.title;
 }
 
 function platformAdjustedConfirmLabel(
   model: DesktopConfirmationDialogModel,
   platform: NodeJS.Platform,
 ): string {
-  if (platform !== 'darwin' && compact(model.confirm_label) === 'Quit') {
-    return 'Exit';
+  if (platform !== 'darwin' && model.platform_action === 'quit_app') {
+    return compact(model.platform_confirm_label) || model.confirm_label;
   }
   return model.confirm_label;
 }

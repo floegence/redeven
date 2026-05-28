@@ -27,7 +27,13 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 function isPluralLike(value: unknown): value is Readonly<Record<string, string>> {
-  return isRecord(value) && typeof value.other === 'string';
+  if (!isRecord(value) || typeof value.other !== 'string') {
+    return false;
+  }
+  const pluralCategories = new Set(['zero', 'one', 'two', 'few', 'many', 'other']);
+  return Object.entries(value).every(([key, message]) => (
+    pluralCategories.has(key) && typeof message === 'string'
+  ));
 }
 
 function collectLeaves(value: unknown, prefix = ''): Readonly<Record<string, MessageLeaf>> {
@@ -75,6 +81,69 @@ function sameSet(left: Set<string>, right: Set<string>): boolean {
     }
   }
   return true;
+}
+
+function listSourceFiles(root: string): readonly string[] {
+  const entries = fs.readdirSync(root, { withFileTypes: true });
+  const files: string[] = [];
+  for (const entry of entries) {
+    const resolved = path.join(root, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'locales') {
+        continue;
+      }
+      files.push(...listSourceFiles(resolved));
+      continue;
+    }
+    if (/\.(test|spec)\.[cm]?tsx?$/.test(entry.name)) {
+      continue;
+    }
+    if (/\.[cm]?tsx?$/.test(entry.name)) {
+      files.push(resolved);
+    }
+  }
+  return files;
+}
+
+function collectLiteralTranslationKeysFromSource(root: string): ReadonlyMap<string, readonly string[]> {
+  const directCallPattern = /(?:^|[^\w.])(?:(?:i18n|props\.i18n)\.)?(?:t|tn|rich|translateEnvAppKey)\(\s*['"`]([A-Za-z][A-Za-z0-9_.-]*)['"`]/g;
+  const keyFieldPattern = /\b(?:titleKey|labelKey|valueKey|contentKey|helpKey|placeholderKey|descriptionKey|detailKey|messageKey|ariaLabelKey)\s*:\s*['"`]([A-Za-z][A-Za-z0-9_.-]*)['"`]/g;
+  const typedReturnPattern = /function\s+\w+\([^)]*\)\s*:\s*(?:EnvAppTranslationKey|[^({;]*\|\s*undefined)[\s\S]*?return\s+['"`]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.-]*)['"`]\s*;/g;
+  const typeAssertionPattern = /['"`]([A-Za-z][A-Za-z0-9_]*\.[A-Za-z0-9_.-]*)['"`]\s+as\s+EnvAppTranslationKey\b/g;
+  const found = new Map<string, string[]>();
+
+  for (const file of listSourceFiles(root)) {
+    const source = fs.readFileSync(file, 'utf8');
+    for (const pattern of [
+      directCallPattern,
+      keyFieldPattern,
+      typedReturnPattern,
+      typeAssertionPattern,
+    ]) {
+      pattern.lastIndex = 0;
+      for (const match of source.matchAll(pattern)) {
+        const key = match[1];
+        if (!key) {
+          continue;
+        }
+        const relativeFile = path.relative(root, file);
+        found.set(key, [...(found.get(key) ?? []), relativeFile]);
+      }
+    }
+  }
+
+  return found;
+}
+
+function expandDynamicTranslationKeys(keys: ReadonlyMap<string, readonly string[]>): Set<string> {
+  const expanded = new Set(keys.keys());
+  if (expanded.has('chatActivity.status.${status}')) {
+    expanded.delete('chatActivity.status.${status}');
+    for (const status of ['pending', 'running', 'success', 'error', 'waiting', 'info']) {
+      expanded.add(`chatActivity.status.${status}`);
+    }
+  }
+  return expanded;
 }
 
 describe('Env App i18n metadata', () => {
@@ -375,6 +444,19 @@ describe('Env App i18n dictionaries', () => {
       locale: 'xx-TEST',
       term: 'Flower',
     });
+  });
+
+  it('keeps literal translation keys used by UI source files present in the base dictionary', () => {
+    const sourceRoot = path.resolve(process.cwd(), 'src/ui');
+    const keys = collectLiteralTranslationKeysFromSource(sourceRoot);
+    const availableKeys = new Set(Object.keys(collectLeaves(enUS)));
+    const expandedKeys = expandDynamicTranslationKeys(keys);
+    const missing = [...expandedKeys]
+      .filter((key) => !availableKeys.has(key))
+      .map((key) => `${key} (${[...new Set(keys.get(key) ?? ['dynamic key expansion'])].sort().join(', ')})`)
+      .sort();
+
+    expect(missing).toEqual([]);
   });
 });
 

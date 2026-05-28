@@ -70,6 +70,9 @@ describe('desktopQuitImpact', () => {
       confirm_label: 'Quit',
       cancel_label: 'Cancel',
       confirm_tone: 'danger',
+      platform_action: 'quit_app',
+      platform_title: 'Exit Redeven Desktop?',
+      platform_confirm_label: 'Exit',
     });
   });
 
@@ -86,6 +89,24 @@ describe('desktopQuitImpact', () => {
       confirm_label: 'Close Window',
       cancel_label: 'Cancel',
       confirm_tone: 'warning',
+    });
+  });
+
+  it('localizes quit confirmations for the selected Desktop language', () => {
+    const model = buildDesktopQuitConfirmationModel(buildDesktopQuitImpact({
+      environment_window_count: 1,
+      pending_operation_count: 2,
+      running_runtime_count: 1,
+    }), 'zh-CN');
+
+    expect(model).toMatchObject({
+      title: '退出 Redeven Desktop？',
+      message: '这将关闭 1 个 environment 窗口和取消 2 个后台任务。',
+      detail: '1 个 runtime process 会继续运行。',
+      confirm_label: '退出',
+      cancel_label: '取消',
+      platform_title: '退出 Redeven Desktop？',
+      platform_confirm_label: '退出',
     });
   });
 });

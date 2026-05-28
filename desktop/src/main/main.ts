@@ -651,7 +651,7 @@ const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
 const confirmedFinalWindowCloseWebContentsIDs = new Set<number>();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
-const desktopDownloadWriter = new DesktopDownloadWriter();
+const desktopDownloadWriter = new DesktopDownloadWriter(() => desktopLanguageState().getSnapshot().resolved_locale);
 let lastFocusedSessionKey: DesktopSessionKey | null = null;
 let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';
 let desktopPreferencesCache: DesktopPreferences | null = null;
@@ -2412,7 +2412,7 @@ async function requestFinalWindowClose(
   if (shouldConfirmDesktopLastWindowClose(impact)) {
     try {
       const confirmed = await confirmDesktopImpact(
-        buildDesktopLastWindowCloseConfirmationModel(impact),
+        buildDesktopLastWindowCloseConfirmationModel(impact, desktopLanguageState().getSnapshot().resolved_locale),
         win,
       );
       if (!confirmed) {
@@ -2444,7 +2444,7 @@ async function requestQuit(
     quitPhase = 'confirming';
     try {
       const confirmed = await confirmDesktopImpact(
-        buildDesktopQuitConfirmationModel(impact),
+        buildDesktopQuitConfirmationModel(impact, desktopLanguageState().getSnapshot().resolved_locale),
         parentWindow,
       );
       if (!confirmed) {
