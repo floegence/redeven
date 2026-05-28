@@ -397,7 +397,7 @@ export const enUS = {
     version: 'Version',
     provider: 'Provider',
     localLink: 'Local link',
-    environmentId: 'Environment ID',
+    environmentId: 'ENV ID',
     source: 'Source',
     runtimeRoot: 'Runtime root',
     bootstrap: 'Bootstrap',
