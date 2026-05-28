@@ -1825,8 +1825,8 @@ export function registerEnvAIPageSendTests() {
           expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello Flower');
         });
 
-        const nextIndicator = host.querySelector('.streaming-shimmer');
-        expect(nextIndicator).toBe(firstIndicator);
+        expect(host.querySelector('.streaming-shimmer')).toBeNull();
+        expect(host.querySelector('.chat-message-item-assistant .chat-markdown-streaming-cursor-row')).toBeTruthy();
       } finally {
         dispose();
       }
@@ -2084,7 +2084,7 @@ export function registerEnvAIPageSendTests() {
 
         expect(host.querySelectorAll('.chat-message-item-assistant')).toHaveLength(1);
         expect(host.querySelector('.chat-message-item-assistant .chat-markdown-block')).toBeTruthy();
-        expect(assistantRunIndicator(host)).toBeTruthy();
+        expect(host.querySelector('.chat-message-item-assistant .chat-markdown-streaming-cursor-row')).toBeTruthy();
         await waitFor(() => {
           expect(host.querySelector('.chat-message-item-assistant')?.textContent).toContain('Hello Flower');
         });
@@ -2290,7 +2290,7 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('updates the live-run indicator label when lifecycle phase events arrive', async () => {
+    it('keeps lifecycle phase events from mutating the generic live-run indicator label', async () => {
       getActiveRunSnapshotMock.mockResolvedValueOnce(makeStreamingAssistantSnapshot('assistant-active-thread'));
 
       const { host, dispose } = await renderPage();
@@ -2307,7 +2307,7 @@ export function registerEnvAIPageSendTests() {
         });
         await flushAsync();
 
-        expect(assistantRunIndicator(host)?.textContent).toContain('Finalizing...');
+        expect(assistantRunIndicator(host)?.textContent).toContain('Thinking...');
       } finally {
         dispose();
       }

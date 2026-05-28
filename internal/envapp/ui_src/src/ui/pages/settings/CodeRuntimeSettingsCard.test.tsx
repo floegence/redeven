@@ -8,6 +8,8 @@ import { CodeRuntimeSettingsCard, type CodeRuntimeSettingsCardProps } from './Co
 import { browserEditorLocalFailureFromError } from '../../services/browserEditorSetupActivity';
 
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
+  ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
+  ChevronRight: (props: any) => <span class={props.class} data-testid="chevron-right-icon" />,
   Check: (props: any) => <span class={props.class} data-testid="check-icon" />,
   Code: (props: any) => <span class={props.class} data-testid="code-icon" />,
   RefreshIcon: (props: any) => <span class={props.class} data-testid="refresh-icon" />,
