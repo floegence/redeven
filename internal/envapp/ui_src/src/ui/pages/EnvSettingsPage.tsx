@@ -139,7 +139,7 @@ function EnvSettingsPageContent() {
 
       <div class="flex-1 min-h-0 flex">
         <div class={cn('hidden md:flex flex-col border-r w-56 shrink-0 h-full overflow-hidden', redevenSurfaceRoleClass('panel'))}>
-          <div class={cn('p-3 border-b', redevenSurfaceRoleClass('panel'))}>
+          <div class="p-3 border-b">
             <div class="relative">
               <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
               <input

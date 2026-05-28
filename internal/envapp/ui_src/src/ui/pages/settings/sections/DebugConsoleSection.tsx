@@ -1,7 +1,7 @@
 import { createMemo } from 'solid-js';
 import { RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsCard, SettingsPill } from '../SettingsPrimitives';
+import { SettingsSection, SettingsPill } from '../SettingsPrimitives';
 import { EnvDebugConsoleSettingsPanel } from '../../EnvDebugConsoleSettingsPanel';
 import { useI18n } from '../../../i18n';
 
@@ -12,7 +12,7 @@ export function DebugConsoleSection() {
   const debugConsoleEnabled = createMemo(() => ctx.env.debugConsoleEnabled());
 
   return (
-    <SettingsCard
+    <SettingsSection
       icon={RefreshIcon}
       title={i18n.t('debugConsoleSettings.title')}
       description={i18n.t('debugConsoleSettings.description')}
@@ -23,6 +23,6 @@ export function DebugConsoleSection() {
         canInteract={ctx.canInteract()}
         onEnabledChange={(value) => ctx.env.setDebugConsoleEnabled(value)}
       />
-    </SettingsCard>
+    </SettingsSection>
   );
 }

@@ -3,7 +3,7 @@ import { Code } from '@floegence/floe-webapp-core/icons';
 import { Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import {
-  SettingsCard, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
+  SettingsSection, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
   SettingsTableBody, SettingsTableRow, SettingsTableCell, ViewToggle,
   AutoSaveIndicator, JSONEditor, type ViewMode,
 } from '../SettingsPrimitives';
@@ -110,7 +110,7 @@ export function CodespacesSection() {
         onCancel={() => ctx.cancelManagedCodeRuntimeOperation()}
       />
 
-      <SettingsCard
+      <SettingsSection
         icon={Code}
         title={i18n.t('codespacesSettings.title')}
         description={i18n.t('codespacesSettings.description')}
@@ -167,7 +167,7 @@ export function CodespacesSection() {
             </Show>
           </div>
         </Show>
-      </SettingsCard>
+      </SettingsSection>
     </div>
   );
 }

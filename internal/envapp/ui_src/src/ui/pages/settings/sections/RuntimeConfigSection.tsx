@@ -3,7 +3,7 @@ import { Terminal, Plus, Trash } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, Checkbox, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import {
-  SettingsCard, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
+  SettingsSection, SettingsTable, SettingsTableHead, SettingsTableHeaderRow, SettingsTableHeaderCell,
   SettingsTableBody, SettingsTableRow, SettingsTableCell, SettingsPill, ViewToggle,
   AutoSaveIndicator, JSONEditor, SubSectionHeader, type ViewMode,
 } from '../SettingsPrimitives';
@@ -113,7 +113,7 @@ export function RuntimeConfigSection() {
 
   return (
     <>
-      <SettingsCard
+      <SettingsSection
         icon={Terminal}
         title={i18n.t('runtimeConfig.title')}
         description={i18n.t('runtimeConfig.description')}
@@ -215,7 +215,7 @@ export function RuntimeConfigSection() {
             </div>
           </div>
         </Show>
-      </SettingsCard>
+      </SettingsSection>
 
       <ConfirmDialog
         open={Boolean(writeConfirmTarget())}

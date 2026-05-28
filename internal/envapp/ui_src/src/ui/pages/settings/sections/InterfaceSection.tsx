@@ -10,7 +10,7 @@ import {
   useI18n,
   type RedevenLocalePreference,
 } from '../../../i18n';
-import { FieldLabel, InfoRow, SettingsCard } from '../SettingsPrimitives';
+import { FieldLabel, InfoRow, SettingsSection } from '../SettingsPrimitives';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 
 export function InterfaceSection() {
@@ -49,7 +49,7 @@ export function InterfaceSection() {
 
   return (
     <div data-settings-section="interface">
-      <SettingsCard
+      <SettingsSection
         icon={Globe}
         title={i18n.t('settings.interfaceTitle')}
         description={i18n.t('settings.interfaceDescription')}
@@ -81,7 +81,7 @@ export function InterfaceSection() {
             </p>
           </div>
         </div>
-      </SettingsCard>
+      </SettingsSection>
     </div>
   );
 }

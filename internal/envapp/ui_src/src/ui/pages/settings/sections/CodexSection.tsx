@@ -2,7 +2,7 @@ import { Show, createMemo } from 'solid-js';
 import { RefreshIcon, Code } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsCard, SettingsPill, SettingsKeyValueTable } from '../SettingsPrimitives';
+import { SettingsSection, SettingsPill, SettingsKeyValueTable } from '../SettingsPrimitives';
 import type { CodexHostStatus } from '../types';
 import { useI18n } from '../../../i18n';
 
@@ -31,7 +31,7 @@ export function CodexSection() {
   });
 
   return (
-    <SettingsCard
+    <SettingsSection
       icon={RefreshIcon}
       title={i18n.t('codexSettings.title')}
       description={i18n.t('codexSettings.description')}
@@ -74,6 +74,6 @@ export function CodexSection() {
           </div>
         </div>
       </div>
-    </SettingsCard>
+    </SettingsSection>
   );
 }

@@ -1,7 +1,7 @@
 import { Show, createMemo, createSignal } from 'solid-js';
 import { FileCode } from '@floegence/floe-webapp-core/icons';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsCard, ViewToggle, CopyButton, JSONEditor, type ViewMode } from '../SettingsPrimitives';
+import { SettingsSection, ViewToggle, CopyButton, JSONEditor, type ViewMode } from '../SettingsPrimitives';
 import { useI18n } from '../../../i18n';
 
 export function ConfigFileSection() {
@@ -14,7 +14,7 @@ export function ConfigFileSection() {
   const configJSONText = createMemo(() => JSON.stringify({ config_path: configPath() }, null, 2));
 
   return (
-    <SettingsCard
+    <SettingsSection
       icon={FileCode}
       title={i18n.t('settings.configFile.title')}
       description={i18n.t('settings.configFile.description')}
@@ -31,6 +31,6 @@ export function ConfigFileSection() {
         </div>
         <p class="mt-2 text-[11px] text-muted-foreground">{i18n.t('settings.configFile.readOnlyRuntimeManaged')}</p>
       </Show>
-    </SettingsCard>
+    </SettingsSection>
   );
 }

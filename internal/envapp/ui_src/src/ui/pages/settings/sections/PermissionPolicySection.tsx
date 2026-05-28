@@ -3,7 +3,7 @@ import { Shield } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import {
-  SettingsCard, ViewToggle, AutoSaveIndicator, JSONEditor, SubSectionHeader, CodeBadge, type ViewMode,
+  SettingsSection, ViewToggle, AutoSaveIndicator, JSONEditor, SubSectionHeader, CodeBadge, type ViewMode,
 } from '../SettingsPrimitives';
 import { PermissionMatrixTable, PermissionRuleTable } from '../PermissionPolicyTables';
 import { buildPermissionPolicyValue } from '../permissionPolicy';
@@ -90,7 +90,7 @@ export function PermissionPolicySection() {
   const switchView = (next: ViewMode) => setViewMode(next);
 
   return (
-    <SettingsCard
+    <SettingsSection
       icon={Shield}
       title={i18n.t('permissionPolicy.title')}
       description={i18n.t('permissionPolicy.description')}
@@ -146,6 +146,6 @@ export function PermissionPolicySection() {
           </div>
         </div>
       </Show>
-    </SettingsCard>
+    </SettingsSection>
   );
 }

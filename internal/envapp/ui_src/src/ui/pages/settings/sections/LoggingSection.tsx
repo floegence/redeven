@@ -3,7 +3,7 @@ import { Database, FileText, Zap } from '@floegence/floe-webapp-core/icons';
 import { Select } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { ViewToggle, AutoSaveIndicator } from '../SettingsPrimitives';
-import { SettingsCard, CompactField, JSONEditor, type ViewMode as VM } from '../SettingsPrimitives';
+import { SettingsSection, CompactField, JSONEditor, type ViewMode as VM } from '../SettingsPrimitives';
 import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
@@ -68,7 +68,7 @@ export function LoggingSection() {
   };
 
   return (
-    <SettingsCard
+    <SettingsSection
       icon={Database}
       title={i18n.t('loggingSettings.title')}
       description={i18n.t('loggingSettings.description')}
@@ -99,6 +99,6 @@ export function LoggingSection() {
           </CompactField>
         </div>
       </Show>
-    </SettingsCard>
+    </SettingsSection>
   );
 }
