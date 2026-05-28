@@ -20,6 +20,7 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 		RemoteEnabled:    true,
 		DesktopManaged:   true,
 		DesktopOwnerID:   "desktop-owner-report",
+		StartedAtUnixMS:  1778751234567,
 		RuntimeService: runtimeservice.Snapshot{
 			RuntimeVersion:   "v1.2.3",
 			ProtocolVersion:  runtimeservice.ProtocolVersion,
@@ -60,6 +61,9 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	}
 	if !report.RemoteEnabled || !report.DesktopManaged || report.DesktopOwnerID != "desktop-owner-report" || report.EffectiveRunMode != "hybrid" {
 		t.Fatalf("unexpected report: %#v", report)
+	}
+	if report.StartedAtUnixMS != 1778751234567 {
+		t.Fatalf("StartedAtUnixMS = %d", report.StartedAtUnixMS)
 	}
 	if report.RuntimeService.RuntimeVersion != "v1.2.3" || report.RuntimeService.ActiveWorkload.TerminalCount != 1 {
 		t.Fatalf("unexpected runtime service report: %#v", report.RuntimeService)

@@ -499,6 +499,7 @@ type runtimeHealthResp struct {
 	PasswordRequired bool                    `json:"password_required"`
 	DesktopManaged   bool                    `json:"desktop_managed,omitempty"`
 	DesktopOwnerID   string                  `json:"desktop_owner_id,omitempty"`
+	StartedAtUnixMS  int64                   `json:"started_at_unix_ms,omitempty"`
 	RuntimeService   runtimeservice.Snapshot `json:"runtime_service"`
 }
 
@@ -814,6 +815,7 @@ func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 		PasswordRequired: s.accessEnabled(),
 		DesktopManaged:   s.desktopManaged,
 		DesktopOwnerID:   s.desktopOwnerID,
+		StartedAtUnixMS:  s.a.ProcessStartedAtUnixMS(),
 		RuntimeService:   s.runtimeServiceSnapshot(),
 	}})
 }

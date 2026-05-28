@@ -245,6 +245,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   is_opening: boolean;
   runtime_health: DesktopRuntimeHealth;
   runtime_service?: RuntimeServiceSnapshot;
+  runtime_started_at_unix_ms?: number;
   runtime_maintenance?: DesktopRuntimeMaintenanceRequirement;
   runtime_operations: DesktopRuntimeOperationPlans;
   auto_runtime_probe_enabled?: boolean;

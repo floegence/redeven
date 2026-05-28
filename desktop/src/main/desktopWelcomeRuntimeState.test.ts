@@ -89,6 +89,7 @@ describe('desktopWelcomeRuntimeState', () => {
           data: {
             status: 'online',
             password_required: true,
+            started_at_unix_ms: 1778751234567,
             runtime_service: {
               runtime_version: 'v1.4.0',
               service_owner: 'external',
@@ -150,6 +151,7 @@ describe('desktopWelcomeRuntimeState', () => {
               password_required: true,
               effective_run_mode: 'local',
               pid: 4242,
+              started_at_unix_ms: 1778750000000,
             },
             {
               runtimeLifecycleOwner: 'external',
@@ -168,6 +170,7 @@ describe('desktopWelcomeRuntimeState', () => {
         password_required: true,
         diagnostics_enabled: false,
         pid: 4242,
+        started_at_unix_ms: 1778751234567,
         runtime_service: expect.objectContaining({
           open_readiness: { state: 'openable' },
         }),
@@ -393,6 +396,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
           remote_enabled: true,
           effective_run_mode: 'desktop',
           pid: 5252,
+          started_at_unix_ms: 1778751234567,
           desktop_owner_id: 'desktop-owner-1',
           runtime_service: {
             runtime_version: 'v1.4.0',
@@ -439,6 +443,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
         password_required: false,
         diagnostics_enabled: false,
         pid: 5252,
+        started_at_unix_ms: 1778751234567,
         runtime_service: {
           runtime_version: 'v1.4.0',
           runtime_commit: undefined,

@@ -29,10 +29,11 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 		return runtimemanagement.RuntimeAttachStatus{
 			State: runtimemanagement.AttachStateReady,
 			Identity: runtimemanagement.RuntimeInstanceIdentity{
-				StateDir:       layout.StateDir,
-				PID:            os.Getpid(),
-				DesktopManaged: true,
-				DesktopOwnerID: "desktop-owner-health",
+				StateDir:        layout.StateDir,
+				PID:             os.Getpid(),
+				StartedAtUnixMS: 1778751234567,
+				DesktopManaged:  true,
+				DesktopOwnerID:  "desktop-owner-health",
 			},
 			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 				LocalUIURL:       "http://127.0.0.1:23998/",
@@ -84,6 +85,9 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 	}
 	if report.DesktopOwnerID != "desktop-owner-health" {
 		t.Fatalf("DesktopOwnerID = %q", report.DesktopOwnerID)
+	}
+	if report.StartedAtUnixMS != 1778751234567 {
+		t.Fatalf("StartedAtUnixMS = %d", report.StartedAtUnixMS)
 	}
 	if report.RuntimeService.OpenReadiness.State != "openable" {
 		t.Fatalf("OpenReadiness.State = %q", report.RuntimeService.OpenReadiness.State)

@@ -786,6 +786,7 @@ func (c *cli) runCmd(args []string) int {
 				RuntimeControlSocketPath: stateLayout.RuntimeControlSocketPath,
 				DiagnosticsEnabled:       a.DiagnosticsEnabled(),
 				PID:                      os.Getpid(),
+				StartedAtUnixMS:          a.ProcessStartedAtUnixMS(),
 				RuntimeService:           a.RuntimeServiceSnapshot(),
 			}, desktopLaunchStatusReady); err != nil {
 				fmt.Fprintf(c.stderr, "failed to write desktop launch report: %v\n", err)

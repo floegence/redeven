@@ -26,6 +26,7 @@ export type DesktopLocalEnvironmentRuntimeState = Readonly<{
   password_required: boolean;
   diagnostics_enabled: boolean;
   pid: number;
+  started_at_unix_ms?: number;
   runtime_control?: DesktopRuntimeControlEndpoint;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
@@ -116,6 +117,7 @@ function normalizeRuntimeState(
     return undefined;
   }
   const pid = Number(value.pid);
+  const startedAtUnixMS = Number(value.started_at_unix_ms);
   return {
     local_ui_url: localUIURL,
     effective_run_mode: compact(value.effective_run_mode),
@@ -135,6 +137,7 @@ function normalizeRuntimeState(
     password_required: value.password_required === true,
     diagnostics_enabled: value.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
+    started_at_unix_ms: Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? startedAtUnixMS : undefined,
     runtime_control: value.runtime_control,
     runtime_service: normalizeRuntimeServiceSnapshot(value.runtime_service ?? {}, {
       desktopManaged: value.desktop_managed === true,

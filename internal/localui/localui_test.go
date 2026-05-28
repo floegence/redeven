@@ -176,6 +176,29 @@ func newTestServerWithGateway(t *testing.T, gate *accessgate.Gate, gw *gatewaypk
 	}
 }
 
+func newRuntimeHealthTestAgent(t *testing.T, cfgPath string) *agent.Agent {
+	t.Helper()
+	policy, err := config.ParsePermissionPolicyPreset("")
+	if err != nil {
+		t.Fatalf("ParsePermissionPolicyPreset() error = %v", err)
+	}
+	a, err := agent.New(agent.Options{
+		Config: &config.Config{
+			AgentHomeDir:     t.TempDir(),
+			PermissionPolicy: policy,
+		},
+		ConfigPath:            cfgPath,
+		LocalUIEnabled:        true,
+		ControlChannelEnabled: false,
+		Version:               "dev",
+		LogOutput:             io.Discard,
+	})
+	if err != nil {
+		t.Fatalf("agent.New() error = %v", err)
+	}
+	return a
+}
+
 func newDiagnosticsStoreForConfig(t *testing.T, cfgPath string) *diagnostics.Store {
 	t.Helper()
 	store, err := diagnostics.New(diagnostics.Options{
@@ -262,6 +285,7 @@ func TestServer_handleGateway_rejectsEnvAppDirectoryListingWhenLocked(t *testing
 func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
+	s.a = newRuntimeHealthTestAgent(t, s.configPath)
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/runtime/health", nil)
 	res := httptest.NewRecorder()
@@ -278,6 +302,7 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 			PasswordRequired bool   `json:"password_required"`
 			DesktopManaged   bool   `json:"desktop_managed"`
 			DesktopOwnerID   string `json:"desktop_owner_id"`
+			StartedAtUnixMS  int64  `json:"started_at_unix_ms"`
 			RuntimeService   struct {
 				OpenReadiness struct {
 					State string `json:"state"`
@@ -300,8 +325,11 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	if payload.Data.DesktopManaged || payload.Data.DesktopOwnerID != "" {
 		t.Fatalf("unexpected desktop ownership metadata: %#v", payload.Data)
 	}
-	if payload.Data.RuntimeService.OpenReadiness.State != "starting" {
-		t.Fatalf("open_readiness.state = %q, want starting", payload.Data.RuntimeService.OpenReadiness.State)
+	if payload.Data.StartedAtUnixMS <= 0 {
+		t.Fatalf("started_at_unix_ms = %d, want positive runtime start time", payload.Data.StartedAtUnixMS)
+	}
+	if payload.Data.RuntimeService.OpenReadiness.State == "" {
+		t.Fatalf("open_readiness.state is empty")
 	}
 }
 

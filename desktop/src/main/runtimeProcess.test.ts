@@ -163,6 +163,7 @@ describe('runtimeProcess', () => {
       remote_enabled: true,
       desktop_managed: true,
       desktop_owner_id: 'desktop-owner-1',
+      started_at_unix_ms: 1778751234567,
     }))).toMatchObject({
       local_ui_url: 'http://127.0.0.1:43123/',
       runtime_control: {
@@ -171,6 +172,7 @@ describe('runtimeProcess', () => {
         token: 'rtctl_test',
       },
       password_required: true,
+      started_at_unix_ms: 1778751234567,
     });
   });
 

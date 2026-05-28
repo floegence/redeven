@@ -229,6 +229,14 @@ describe('main routing', () => {
     expect(providerOccupancySrc).not.toContain('for (const record of sshEnvironmentRuntimeByKey.values())');
     expect(providerOccupancySrc).not.toContain('for (const record of runtimePlacementBridgeByTargetID.values())');
 
+    const localRecordVerifyStart = mainSrc.indexOf('async function verifyCurrentLocalEnvironmentRuntimeRecord(');
+    const localRecordVerifyEnd = mainSrc.indexOf('function providerRuntimeHealthMap(', localRecordVerifyStart);
+    expect(localRecordVerifyStart).toBeGreaterThanOrEqual(0);
+    expect(localRecordVerifyEnd).toBeGreaterThan(localRecordVerifyStart);
+    const localRecordVerifySrc = mainSrc.slice(localRecordVerifyStart, localRecordVerifyEnd);
+    expect(localRecordVerifySrc).toContain('started_at_unix_ms: startup.started_at_unix_ms ?? currentRecord.startup.started_at_unix_ms');
+    expect(localRecordVerifySrc).not.toContain('started_at_unix_ms: currentRecord.startup.started_at_unix_ms');
+
     const sshProbeStart = mainSrc.indexOf('async function probeSavedSSHRuntimeHealth(');
     const sshProbeEnd = mainSrc.indexOf('function runtimeTargetProbeSource(', sshProbeStart);
     expect(sshProbeStart).toBeGreaterThanOrEqual(0);

@@ -24,8 +24,14 @@ type RuntimeProbeStatus = Readonly<{
   password_required: boolean;
   desktop_managed?: boolean;
   desktop_owner_id?: string;
+  started_at_unix_ms?: number;
   runtime_service?: RuntimeServiceSnapshot;
 }>;
+
+function normalizePositiveInteger(value: unknown): number | undefined {
+  const numberValue = Number(value);
+  return Number.isInteger(numberValue) && numberValue > 0 ? numberValue : undefined;
+}
 
 type EnvAppShellValidation = Readonly<{
   ok: boolean;
@@ -99,6 +105,10 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
       password_required: data.password_required,
       ...(typeof data.desktop_managed === 'boolean' ? { desktop_managed: data.desktop_managed } : {}),
       ...(String(data.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(data.desktop_owner_id).trim() } : {}),
+      ...(() => {
+        const startedAtUnixMS = normalizePositiveInteger(data.started_at_unix_ms);
+        return startedAtUnixMS ? { started_at_unix_ms: startedAtUnixMS } : {};
+      })(),
       ...(data.runtime_service ? { runtime_service: normalizeRuntimeServiceSnapshot(data.runtime_service) } : {}),
     };
   } catch {
@@ -232,6 +242,7 @@ export async function loadExternalLocalUIStartup(
     password_required: status.password_required,
     ...(typeof status.desktop_managed === 'boolean' ? { desktop_managed: status.desktop_managed } : {}),
     ...(String(status.desktop_owner_id ?? '').trim() !== '' ? { desktop_owner_id: String(status.desktop_owner_id).trim() } : {}),
+    ...(status.started_at_unix_ms ? { started_at_unix_ms: status.started_at_unix_ms } : {}),
     ...(status.runtime_service ? { runtime_service: status.runtime_service } : {}),
   };
 }

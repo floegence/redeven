@@ -58,6 +58,7 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		RuntimeControlSocketPath: startup.RuntimeControlSocketPath,
 		DiagnosticsEnabled:       startup.DiagnosticsEnabled,
 		PID:                      startup.PID,
+		StartedAtUnixMS:          startup.StartedAtUnixMS,
 		RuntimeService:           startup.RuntimeService,
 	})
 }
@@ -78,6 +79,7 @@ type runtimeStartupReport struct {
 	RuntimeControlSocketPath string
 	DiagnosticsEnabled       bool
 	PID                      int
+	StartedAtUnixMS          int64
 	RuntimeService           runtimeservice.Snapshot
 }
 
@@ -112,6 +114,7 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 		StateDir:                 status.Identity.StateDir,
 		RuntimeControlSocketPath: status.Diagnostics.ControlSocketPath,
 		PID:                      status.Identity.PID,
+		StartedAtUnixMS:          status.Identity.StartedAtUnixMS,
 		RuntimeService:           status.RuntimeService,
 	}
 }

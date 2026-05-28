@@ -440,6 +440,53 @@ describe('desktopWelcomeState', () => {
     }]);
   });
 
+  it('projects runtime startup time separately from environment access time', () => {
+    const local = testLocalEnvironment({
+      lastUsedAtMS: 1778750000000,
+      currentRuntime: {
+        local_ui_url: 'http://localhost:23998/',
+        effective_run_mode: 'desktop',
+        desktop_managed: true,
+        started_at_unix_ms: 1778751234567,
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+        saved_environments: [{
+          id: 'http://192.168.1.20:24000/',
+          label: 'Team Host',
+          local_ui_url: 'http://192.168.1.20:24000/',
+          pinned: false,
+          created_at_ms: 10,
+          last_used_at_ms: 1778750000000,
+        }],
+      }),
+      savedExternalRuntimeHealth: {
+        'http://192.168.1.20:24000/': {
+          status: 'online',
+          checked_at_unix_ms: 1000,
+          source: 'external_local_ui_probe',
+          local_ui_url: 'http://192.168.1.20:24000/',
+          started_at_unix_ms: 1778752222222,
+        },
+      },
+    });
+
+    expect(snapshot.environments).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: local.id,
+        last_used_at_ms: 1778750000000,
+        runtime_started_at_unix_ms: 1778751234567,
+      }),
+      expect.objectContaining({
+        id: 'http://192.168.1.20:24000/',
+        last_used_at_ms: 1778750000000,
+        runtime_started_at_unix_ms: 1778752222222,
+      }),
+    ]));
+  });
+
   it('keeps the single Local Environment protected', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({

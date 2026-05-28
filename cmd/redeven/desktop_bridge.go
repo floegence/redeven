@@ -46,8 +46,9 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 	bridge := desktopbridge.Server{
 		DialSurface: desktopbridge.NewURLSurfaceDialer(state.Endpoint.LocalUIURL, endpointString(controlEndpoint, func(endpoint runtimemanagement.RuntimeControlEndpoint) string { return endpoint.BaseURL })),
 		Hello: desktopbridge.Hello{
-			RuntimeVersion: Version,
-			RuntimeCommit:  Commit,
+			RuntimeVersion:  Version,
+			RuntimeCommit:   Commit,
+			StartedAtUnixMS: state.Identity.StartedAtUnixMS,
 			LocalUI: desktopbridge.HelloLocalUI{
 				Available: true,
 				BasePath:  "/",

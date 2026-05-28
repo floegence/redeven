@@ -51,6 +51,7 @@ function writeHello(stdout: PassThrough): void {
     payload: {
       protocol_version: 'redeven-desktop-bridge-v1',
       runtime_version: 'v0.0.0-test',
+      started_at_unix_ms: 1778751234567,
       local_ui: {
         available: true,
         base_path: '/',
@@ -110,6 +111,16 @@ async function startMockedSession(command: ReturnType<typeof createMockBridgeCom
 }
 
 describe('runtimePlacementBridgeSession lifecycle', () => {
+  it('carries bridge runtime startup time into the session startup report', async () => {
+    const command = createMockBridgeCommand();
+    const session = await startMockedSession(command);
+    try {
+      expect(session.startup.started_at_unix_ms).toBe(1778751234567);
+    } finally {
+      await session.disconnect();
+    }
+  });
+
   it('bridges loopback HTTP traffic through real placement bridge frames', async () => {
     const command = createMockBridgeCommand();
     const session = await startMockedSession(command);

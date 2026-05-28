@@ -768,6 +768,7 @@ async function refreshStartupReportFromLocalUI(
     password_required: refreshed.password_required,
     desktop_managed: refreshed.desktop_managed ?? startup.desktop_managed,
     desktop_owner_id: refreshed.desktop_owner_id ?? startup.desktop_owner_id,
+    started_at_unix_ms: refreshed.started_at_unix_ms ?? startup.started_at_unix_ms,
     runtime_service: refreshed.runtime_service ?? startup.runtime_service,
     runtime_control: startup.runtime_control,
   };
@@ -1340,6 +1341,7 @@ async function verifyCurrentLocalEnvironmentRuntimeRecord(
         password_required: startup.password_required,
         desktop_managed: startup.desktop_managed ?? currentRecord.startup.desktop_managed,
         desktop_owner_id: startup.desktop_owner_id ?? currentRecord.startup.desktop_owner_id,
+        started_at_unix_ms: startup.started_at_unix_ms ?? currentRecord.startup.started_at_unix_ms,
         effective_run_mode: startup.effective_run_mode ?? currentRecord.startup.effective_run_mode,
         remote_enabled: startup.remote_enabled ?? currentRecord.startup.remote_enabled,
         runtime_service: startup.runtime_service ?? currentRecord.startup.runtime_service,
@@ -1449,6 +1451,7 @@ function managedRuntimePresence(args: Readonly<{
   placement: DesktopRuntimePlacement;
   running: boolean;
   localUIURL: string;
+  startedAtUnixMS?: number;
   openConnectionRequired?: boolean;
   runtimeService?: RuntimeServiceSnapshot;
   runtimeControlStatus: DesktopRuntimeControlStatus;
@@ -1459,6 +1462,7 @@ function managedRuntimePresence(args: Readonly<{
   const runtimePackageState = desktopRuntimePackageStateFromRuntimeService(runtimeService, maintenance);
   const openable = runtimeServiceIsOpenable(runtimeService);
   const openConnectionRequired = args.openConnectionRequired === true;
+  const startedAtUnixMS = Number(args.startedAtUnixMS);
   return {
     target_id: args.targetID,
     placement_target_id: args.placementTargetID,
@@ -1470,6 +1474,7 @@ function managedRuntimePresence(args: Readonly<{
     placement: args.placement,
     running: args.running,
     local_ui_url: args.localUIURL,
+    ...(Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? { started_at_unix_ms: startedAtUnixMS } : {}),
     openable,
     ...(openConnectionRequired ? { open_connection_required: true } : {}),
     ...(runtimePackageState ? { runtime_package_state: runtimePackageState } : {}),
@@ -2529,6 +2534,7 @@ async function localEnvironmentPresenceFromRecord(
     placement,
     running: true,
     localUIURL: record.startup.local_ui_url,
+    startedAtUnixMS: record.startup.started_at_unix_ms,
     runtimeService: record.startup.runtime_service,
     runtimeControlStatus: await runtimeControlStatusForStartup(record.startup),
   });
@@ -2558,7 +2564,10 @@ async function probeLocalEnvironmentRuntimeHealth(
     };
   }
   return {
-    health: onlineRuntimeHealth('local_runtime_probe', runtime.local_ui_url, runtime.runtime_service),
+    health: {
+      ...onlineRuntimeHealth('local_runtime_probe', runtime.local_ui_url, runtime.runtime_service),
+      ...(runtime.started_at_unix_ms ? { started_at_unix_ms: runtime.started_at_unix_ms } : {}),
+    },
   };
 }
 
@@ -2573,7 +2582,10 @@ async function probeSavedExternalRuntimeHealth(
       };
     }
     return {
-      health: onlineRuntimeHealth('external_local_ui_probe', startup.local_ui_url, startup.runtime_service),
+      health: {
+        ...onlineRuntimeHealth('external_local_ui_probe', startup.local_ui_url, startup.runtime_service),
+        ...(startup.started_at_unix_ms ? { started_at_unix_ms: startup.started_at_unix_ms } : {}),
+      },
     };
   } catch {
     return {
@@ -2607,6 +2619,7 @@ async function savedSSHRuntimePresence(
     placement,
     running: true,
     localUIURL: runtimeLocalUIURL,
+    startedAtUnixMS: runtimeRecord.startup.started_at_unix_ms,
     runtimeService,
     runtimeControlStatus: await runtimeControlStatusForStartup(runtimeRecord.startup),
     maintenance,
@@ -2772,6 +2785,7 @@ function runtimeTargetPresenceFromState(
     placement,
     running: state.running,
     localUIURL: state.local_ui_url,
+    startedAtUnixMS: state.startup?.started_at_unix_ms,
     openConnectionRequired: state.open_connection_required === true,
     runtimeService: state.runtime_service,
     runtimeControlStatus: state.runtime_control_status,

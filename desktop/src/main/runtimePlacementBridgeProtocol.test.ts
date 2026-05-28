@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   encodeRuntimePlacementBridgeFrame,
+  parseRuntimePlacementBridgeHello,
   readRuntimePlacementBridgeFrame,
   runtimeControlEndpointFromBridgeHello,
   writeRuntimePlacementBridgeFrame,
@@ -139,5 +140,41 @@ describe('runtimePlacementBridgeProtocol', () => {
       token: 'runtime-control-token',
       desktop_owner_id: 'desktop-owner',
     });
+  });
+
+  it('parses runtime startup time from bridge hello payloads', () => {
+    const hello = parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({
+      protocol_version: 'redeven-desktop-bridge-v1',
+      runtime_version: 'test-runtime',
+      started_at_unix_ms: 1778751234567,
+      local_ui: {
+        available: true,
+        base_path: '/',
+      },
+      runtime_control: {
+        available: false,
+      },
+    })));
+
+    expect(hello).toMatchObject({
+      started_at_unix_ms: 1778751234567,
+    });
+  });
+
+  it('drops invalid bridge hello runtime startup times', () => {
+    const hello = parseRuntimePlacementBridgeHello(Buffer.from(JSON.stringify({
+      protocol_version: 'redeven-desktop-bridge-v1',
+      runtime_version: 'test-runtime',
+      started_at_unix_ms: 0,
+      local_ui: {
+        available: true,
+        base_path: '/',
+      },
+      runtime_control: {
+        available: false,
+      },
+    })));
+
+    expect(hello.started_at_unix_ms).toBeUndefined();
   });
 });

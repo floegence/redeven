@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildDesktopWelcomeSnapshot } from '../main/desktopWelcomeState';
 import {
@@ -245,6 +245,10 @@ function localRuntimePresence(
 }
 
 describe('buildEnvironmentCardModel', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('builds local, provider, URL, and SSH cards from the aggregated launcher entries', () => {
     const local = testLocalEnvironment({
       currentRuntime: {
@@ -631,6 +635,77 @@ describe('buildEnvironmentCardModel', () => {
       defaultFact('VERSION', 'v1.4.3'),
       placeholderFact('PROVIDER'),
     ]);
+  });
+
+  it('labels environment card time from runtime startup time instead of access time', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(1778754834567));
+    const local = testLocalEnvironment({
+      lastUsedAtMS: 1778750000000,
+      currentRuntime: {
+        local_ui_url: 'http://localhost:23998/',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        started_at_unix_ms: 1778751234567,
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+        saved_environments: [{
+          id: 'http://192.168.1.20:24000/',
+          label: 'Team Host',
+          local_ui_url: 'http://192.168.1.20:24000/',
+          pinned: false,
+          created_at_ms: 10,
+          last_used_at_ms: 1778750000000,
+        }],
+      }),
+      savedExternalRuntimeHealth: {
+        'http://192.168.1.20:24000/': {
+          status: 'online',
+          checked_at_unix_ms: 1000,
+          source: 'external_local_ui_probe',
+          local_ui_url: 'http://192.168.1.20:24000/',
+          started_at_unix_ms: 1778753034567,
+        },
+      },
+    });
+
+    const localEntry = snapshot.environments.find((environment) => environment.id === local.id);
+    const externalEntry = snapshot.environments.find((environment) => environment.id === 'http://192.168.1.20:24000/');
+
+    expect(buildEnvironmentCardModel(localEntry!).runtime_started_label).toBe('Started 1h ago');
+    expect(buildEnvironmentCardModel(externalEntry!).runtime_started_label).toBe('Started 30m ago');
+  });
+
+  it('uses non-misleading runtime card time labels when startup time is unavailable', () => {
+    const local = testLocalEnvironment({
+      lastUsedAtMS: 1778750000000,
+      currentRuntime: {
+        local_ui_url: 'http://localhost:23998/',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+      },
+    });
+    const onlineSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+    });
+    const offlineSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment({
+          lastUsedAtMS: 1778750000000,
+        }),
+      }),
+    });
+
+    const onlineEntry = onlineSnapshot.environments.find((environment) => environment.id === local.id);
+    const offlineEntry = offlineSnapshot.environments.find((environment) => environment.kind === 'local_environment');
+
+    expect(buildEnvironmentCardModel(onlineEntry!).runtime_started_label).toBe('Start time unavailable');
+    expect(buildEnvironmentCardModel(offlineEntry!).runtime_started_label).toBe('Not running');
   });
 
   it('keeps version visible when runtime metadata is unavailable', () => {

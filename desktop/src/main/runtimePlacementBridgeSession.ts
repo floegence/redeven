@@ -304,6 +304,7 @@ export async function startRuntimePlacementBridgeSession(
     remote_enabled: runtimeService?.remote_enabled,
     desktop_managed: true,
     desktop_owner_id: compact(args.desktop_owner_id),
+    started_at_unix_ms: hello.started_at_unix_ms,
     runtime_service: runtimeService,
   };
 
