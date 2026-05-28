@@ -2287,6 +2287,40 @@ pre,
 
 /* ── Card header: runtime metadata chip ── */
 
+/* ── L-shaped connector line from title to runtime metadata ── */
+
+.redeven-card-l-line {
+  flex-shrink: 0;
+  width: 0.56rem;
+  height: 0.85rem;
+  display: block;
+}
+
+.redeven-card-l-line path {
+  fill: none;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.redeven-card-l-line[data-tone='success'] path {
+  stroke: color-mix(in srgb, var(--success) 32%, var(--border));
+}
+
+.redeven-card-l-line[data-tone='warning'] path {
+  stroke: color-mix(in srgb, var(--warning) 28%, var(--border));
+}
+
+.redeven-card-l-line[data-tone='primary'] path {
+  stroke: color-mix(in srgb, var(--primary) 28%, var(--border));
+}
+
+.redeven-card-l-line[data-tone='neutral'] path {
+  stroke: color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+/* ── Card header: runtime metadata chip ── */
+
 .redeven-card-runtime-chip {
   display: inline-flex;
   align-items: center;

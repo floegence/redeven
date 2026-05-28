@@ -5909,15 +5909,15 @@ function EnvironmentConnectionCard(props: Readonly<{
             <CardTitle class="truncate text-sm font-semibold leading-5 tracking-[0.01em]" title={props.environment.label}>
               {props.environment.label}
             </CardTitle>
-            <div class="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <span class="redeven-card-runtime-chip">
+            <div class="mt-1.5 flex flex-wrap items-center">
+              <svg class="redeven-card-l-line" data-tone={card().status_tone} viewBox="0 0 12 20"><path d="M 1 0 L 1 10 L 11 10" /></svg><span class="redeven-card-runtime-chip">
                 <span class="redeven-card-runtime-chip__dot" aria-hidden="true" />
                 <span class="redeven-card-runtime-chip__text">{card().runtime_started_label}</span>
               </span>
               <Show when={props.environment.control_plane_label}>
                 {(cpLabel) => (
                   <>
-                    <span class="text-border/30 select-none" aria-hidden="true">|</span>
+                    <span class="text-border/30 select-none ml-1.5" aria-hidden="true">|</span>
                     <span class="redeven-card-runtime-domain">
                       <Globe class="h-3 w-3" />
                       {cpLabel()}
