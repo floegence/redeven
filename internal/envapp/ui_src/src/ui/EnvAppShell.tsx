@@ -155,7 +155,7 @@ import {
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
 import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
-import { notifyDesktopSessionAppReady } from './services/desktopSessionContext';
+import { notifyDesktopSessionAppReady, readDesktopSessionContextSnapshot } from './services/desktopSessionContext';
 import { controlPlaneOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeRendererScopedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
@@ -1780,13 +1780,20 @@ export function EnvAppShell() {
         setLocalAccessChecked(true);
         setLocalAccessChannelReady(localStatus?.password_required !== true);
 
-        const localEnvID = String((rt as any).env_public_id ?? '').trim() || 'env_local';
+        // Prefer the session context env_public_id when desktop is connected to a
+        // non-local environment (provider / SSH / external).
+        const desktopCtx = readDesktopSessionContextSnapshot();
+        const sessionEnvID =
+          (desktopCtx?.env_public_id ?? '').trim() ||
+          (desktopCtx?.local_environment_id ?? '').trim();
+        const localFallbackID = String((rt as any).env_public_id ?? '').trim() || 'env_local';
+        const effectiveEnvID = sessionEnvID || localFallbackID;
         try {
-          sessionStorage.setItem('redeven_env_public_id', localEnvID);
+          sessionStorage.setItem('redeven_env_public_id', effectiveEnvID);
         } catch {
           // ignore
         }
-        setEnvId(localEnvID);
+        setEnvId(effectiveEnvID);
       } else {
         setLocalRuntime(null);
         setLocalAccessStatus(null);
@@ -2211,8 +2218,31 @@ export function EnvAppShell() {
   const envName = () => {
     if (accessGateVisible()) return isLocalMode() ? i18n.t('shell.status.localRuntime') : i18n.t('shell.status.environment');
     if (env.state !== 'ready') return i18n.t('shell.status.loading');
-    return env()?.name || i18n.t('shell.status.environment');
+    const envDetailName = env()?.name;
+    if (envDetailName) return envDetailName;
+    // For non-local environments without a fetched name, fall back to the session context label.
+    const desktopCtx = readDesktopSessionContextSnapshot();
+    if (desktopCtx?.label) return desktopCtx.label;
+    return i18n.t('shell.status.environment');
   };
+
+  const envType = createMemo<'local' | 'ssh' | 'provider' | 'remote'>(() => {
+    const ctx = readDesktopSessionContextSnapshot();
+    if (ctx?.target_kind === 'ssh_environment') return 'ssh';
+    if (ctx?.target_kind === 'local_environment' && ctx?.target_route === 'remote_desktop') return 'provider';
+    if (ctx?.target_kind === 'local_environment' && ctx?.target_route === 'local_host') return 'local';
+    if (ctx?.target_kind === 'external_local_ui') return 'remote';
+    return isLocalMode() ? 'local' : 'remote';
+  });
+
+  const envTypeLabel = createMemo(() => {
+    switch (envType()) {
+      case 'ssh': return 'SSH';
+      case 'provider': return 'Provider';
+      case 'remote': return 'Remote';
+      default: return 'Local';
+    }
+  });
 
   function consoleOrigin(): string {
     try {
@@ -2818,27 +2848,40 @@ export function EnvAppShell() {
       topBarActions={<HeaderActions />}
       bottomBarItems={
         <>
+          {/* Environment identity chip */}
           <div class="flex items-center gap-2 min-w-0">
-            <BottomBarItem class="min-w-0">
-              <span class="truncate">{envName()}</span>
-            </BottomBarItem>
-            <BottomBarItem class="min-w-0">
-              <span class="truncate">{envId() || i18n.t('shell.status.missingEnvId')}</span>
-            </BottomBarItem>
+            <div class="flex items-center gap-1.5 min-w-0 px-2 h-[22px] rounded-md border border-border bg-card shrink-0">
+              <BottomBarItem class="min-w-0 shrink-0">
+                <span class="truncate text-xs font-medium">{envName()}</span>
+              </BottomBarItem>
+              <span class="w-px h-3 bg-border shrink-0" />
+              <BottomBarItem class="min-w-0 shrink-0">
+                <span class="truncate text-[10px] text-muted-foreground font-mono">{envId() || i18n.t('shell.status.missingEnvId')}</span>
+              </BottomBarItem>
+            </div>
+            <span class={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-tight shrink-0 whitespace-nowrap ${
+              envType() === 'local' ? 'bg-primary/10 text-primary' :
+              envType() === 'ssh' ? 'bg-info/10 text-info' :
+              'bg-accent/10 text-accent'
+            }`}>
+              {envTypeLabel()}
+            </span>
           </div>
-          <div class="flex items-center gap-2">
+          <div class="flex-1" />
+          {/* Status + Actions */}
+          <div class="flex items-center gap-1">
             <StatusIndicator status={status()} label={statusLabel()} />
             <Tooltip content={canViewAudit() ? i18n.t('shell.status.auditLog') : i18n.t('shell.status.adminRequired')} placement="top" delay={0}>
               <BottomBarItem
                 onClick={canViewAudit() ? () => setAuditOpen(true) : undefined}
-                class={canViewAudit() ? undefined : 'opacity-60 pointer-events-none'}
+                class={canViewAudit() ? undefined : 'opacity-40 pointer-events-none'}
               >
                 {i18n.t('shell.status.auditLog')}
               </BottomBarItem>
             </Tooltip>
             <BottomBarItem
               onClick={reconnectDisabled() ? undefined : () => void triggerReconnect()}
-              class={reconnectDisabled() ? 'opacity-60 pointer-events-none' : undefined}
+              class={reconnectDisabled() ? 'opacity-40 pointer-events-none' : undefined}
             >
               {reconnectLabel()}
             </BottomBarItem>

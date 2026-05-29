@@ -8,6 +8,7 @@ export interface DesktopSessionContextSnapshot {
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
+  label?: string;
 }
 
 export interface DesktopSessionContextBridge {
@@ -37,6 +38,7 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
   const providerOrigin = compact(candidate.provider_origin);
   const providerID = compact(candidate.provider_id);
   const envPublicID = compact(candidate.env_public_id);
+  const label = compact(candidate.label);
   if (localEnvironmentID === '' || rendererStorageScopeID === '') {
     return null;
   }
@@ -48,6 +50,7 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
     ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
     ...(providerID !== '' ? { provider_id: providerID } : {}),
     ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
+    ...(label !== '' ? { label } : {}),
   };
 }
 
