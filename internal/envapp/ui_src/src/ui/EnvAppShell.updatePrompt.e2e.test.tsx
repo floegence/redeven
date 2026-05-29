@@ -221,7 +221,10 @@ vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
 vi.mock('./pages/AIChatSidebar', () => ({ AIChatSidebar: () => <div /> }));
 vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
-vi.mock('./deck/redevenDeckWidgets', () => ({ redevenDeckWidgets: [] }));
+vi.mock('./deck/redevenDeckWidgets', () => ({
+  localizedRedevenDeckWidgets: () => [],
+  redevenDeckWidgets: [],
+}));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/AskFlowerComposerWindow', () => ({ AskFlowerComposerWindow: () => <div /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));

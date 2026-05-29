@@ -57,7 +57,7 @@ describe('createAgentMaintenanceController', () => {
     let controller!: ReturnType<typeof createAgentMaintenanceController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createAgentMaintenanceController({
-        envId,
+        environmentDetailRequest: () => ({ source: 'controlplane', envId: envId() }),
         canAdmin,
         controlplaneStatus,
         protocolStatus,
@@ -116,7 +116,7 @@ describe('createAgentMaintenanceController', () => {
     let controller!: ReturnType<typeof createAgentMaintenanceController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createAgentMaintenanceController({
-        envId,
+        environmentDetailRequest: () => ({ source: 'controlplane', envId: envId() }),
         canAdmin,
         controlplaneStatus,
         protocolStatus,
@@ -154,12 +154,12 @@ describe('createAgentMaintenanceController', () => {
 
     const [envId] = createSignal('env_desktop_ssh');
     const [canAdmin] = createSignal(true);
-	    const [controlplaneStatus] = createSignal('online');
-	    const [protocolStatus, setProtocolStatus] = createSignal('connected');
-	    const [currentProcessStartedAtMs] = createSignal<number | null>(100);
-	    const [currentVersion] = createSignal('v1.0.0');
-	    const [upgradeRequiresTargetVersion] = createSignal(false);
-	    const oldFailureCompletedAtMs = Date.now() - 60_000;
+    const [controlplaneStatus] = createSignal('online');
+    const [protocolStatus, setProtocolStatus] = createSignal('connected');
+    const [currentProcessStartedAtMs] = createSignal<number | null>(100);
+    const [currentVersion] = createSignal('v1.0.0');
+    const [upgradeRequiresTargetVersion] = createSignal(false);
+    const oldFailureCompletedAtMs = Date.now() - 60_000;
 
     const startUpgradeRequest = vi.fn(async (targetVersion: string) => {
       expect(targetVersion).toBe('');
@@ -172,26 +172,26 @@ describe('createAgentMaintenanceController', () => {
         setProtocolStatus('connected');
         return { status: 'online' };
       });
-	    const refetchCurrentVersion = vi.fn()
-	      .mockResolvedValueOnce({ serverTimeMs: Date.now(), version: 'v1.0.0', processStartedAtMs: 100 })
-	      .mockResolvedValueOnce({
-	        serverTimeMs: Date.now(),
-	        version: 'v1.0.0',
-	        processStartedAtMs: 200,
-	        maintenance: {
-	          kind: 'upgrade' as const,
-	          state: 'failed' as const,
-	          targetVersion: 'v9.9.9',
-	          observedVersion: 'v1.0.0',
-	          message: 'Old update failed.',
-	          completedAtMs: oldFailureCompletedAtMs,
-	        },
-	      });
+    const refetchCurrentVersion = vi.fn()
+      .mockResolvedValueOnce({ serverTimeMs: Date.now(), version: 'v1.0.0', processStartedAtMs: 100 })
+      .mockResolvedValueOnce({
+        serverTimeMs: Date.now(),
+        version: 'v1.0.0',
+        processStartedAtMs: 200,
+        maintenance: {
+          kind: 'upgrade' as const,
+          state: 'failed' as const,
+          targetVersion: 'v9.9.9',
+          observedVersion: 'v1.0.0',
+          message: 'Old update failed.',
+          completedAtMs: oldFailureCompletedAtMs,
+        },
+      });
 
     let controller!: ReturnType<typeof createAgentMaintenanceController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createAgentMaintenanceController({
-        envId,
+        environmentDetailRequest: () => ({ source: 'controlplane', envId: envId() }),
         canAdmin,
         controlplaneStatus,
         protocolStatus,
@@ -221,12 +221,12 @@ describe('createAgentMaintenanceController', () => {
       await vi.advanceTimersByTimeAsync(1_500);
       await promise;
 
-	      expect(startUpgradeRequest).toHaveBeenCalledTimes(1);
-	      expect(controller.error()).toBe(null);
-	      expect(notify.success).toHaveBeenCalledWith('Desktop operation completed', 'Redeven Desktop finished the runtime update request.');
-	      expect(notify.error).not.toHaveBeenCalledWith('Update failed', 'Old update failed.');
-	      expect(notify.success).not.toHaveBeenCalledWith('Updated', expect.any(String));
-	      expect(notify.success).not.toHaveBeenCalledWith('Reconnected', 'The runtime is back online.');
+      expect(startUpgradeRequest).toHaveBeenCalledTimes(1);
+      expect(controller.error()).toBe(null);
+      expect(notify.success).toHaveBeenCalledWith('Desktop operation completed', 'Redeven Desktop finished the runtime update request.');
+      expect(notify.error).not.toHaveBeenCalledWith('Update failed', 'Old update failed.');
+      expect(notify.success).not.toHaveBeenCalledWith('Updated', expect.any(String));
+      expect(notify.success).not.toHaveBeenCalledWith('Reconnected', 'The runtime is back online.');
     } finally {
       dispose();
     }
@@ -268,7 +268,7 @@ describe('createAgentMaintenanceController', () => {
     let controller!: ReturnType<typeof createAgentMaintenanceController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createAgentMaintenanceController({
-        envId,
+        environmentDetailRequest: () => ({ source: 'controlplane', envId: envId() }),
         canAdmin,
         controlplaneStatus,
         protocolStatus,
@@ -325,7 +325,7 @@ describe('createAgentMaintenanceController', () => {
     let controller!: ReturnType<typeof createAgentMaintenanceController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createAgentMaintenanceController({
-        envId,
+        environmentDetailRequest: () => ({ source: 'controlplane', envId: envId() }),
         canAdmin,
         controlplaneStatus,
         protocolStatus,
@@ -388,7 +388,7 @@ describe('createAgentMaintenanceController', () => {
     let controller!: ReturnType<typeof createAgentMaintenanceController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createAgentMaintenanceController({
-        envId,
+        environmentDetailRequest: () => ({ source: 'controlplane', envId: envId() }),
         canAdmin,
         controlplaneStatus,
         protocolStatus,
@@ -441,25 +441,25 @@ describe('createAgentMaintenanceController', () => {
 
     const upgrade = vi.fn(async () => ({ ok: true }));
     const getEnvironment = vi.fn().mockResolvedValue({ status: 'online' });
-	    const refetchCurrentVersion = vi.fn()
-	      .mockResolvedValueOnce({ serverTimeMs: Date.now(), version: 'v1.0.0', processStartedAtMs: 100 })
-	      .mockResolvedValueOnce({
-	        serverTimeMs: Date.now(),
-	        version: 'v1.0.0',
+    const refetchCurrentVersion = vi.fn()
+      .mockResolvedValueOnce({ serverTimeMs: Date.now(), version: 'v1.0.0', processStartedAtMs: 100 })
+      .mockResolvedValueOnce({
+        serverTimeMs: Date.now(),
+        version: 'v1.0.0',
         processStartedAtMs: 100,
         maintenance: {
           kind: 'upgrade' as const,
-	          state: 'failed' as const,
-	          targetVersion: 'v1.1.0',
-	          message: 'Install failed: curl: (6) Could not resolve host.',
-	          completedAtMs: Date.now() + 1,
-	        },
-	      });
+          state: 'failed' as const,
+          targetVersion: 'v1.1.0',
+          message: 'Install failed: curl: (6) Could not resolve host.',
+          completedAtMs: Date.now() + 1,
+        },
+      });
 
     let controller!: ReturnType<typeof createAgentMaintenanceController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createAgentMaintenanceController({
-        envId,
+        environmentDetailRequest: () => ({ source: 'controlplane', envId: envId() }),
         canAdmin,
         controlplaneStatus,
         protocolStatus,
@@ -507,26 +507,26 @@ describe('createAgentMaintenanceController', () => {
     const [currentProcessStartedAtMs] = createSignal<number | null>(100);
     const [currentVersion] = createSignal('v1.0.0');
 
-	    const refetchCurrentVersion = vi.fn()
-	      .mockResolvedValueOnce({ serverTimeMs: Date.now(), version: 'v1.0.0', processStartedAtMs: 100 })
-	      .mockResolvedValueOnce({
+    const refetchCurrentVersion = vi.fn()
+      .mockResolvedValueOnce({ serverTimeMs: Date.now(), version: 'v1.0.0', processStartedAtMs: 100 })
+      .mockResolvedValueOnce({
         serverTimeMs: Date.now(),
         version: 'v1.0.0',
         processStartedAtMs: 200,
         maintenance: {
           kind: 'upgrade' as const,
           state: 'failed' as const,
-	          targetVersion: 'v1.1.0',
-	          observedVersion: 'v1.0.0',
-	          message: 'Update did not take effect: Redeven is running v1.0.0 instead of v1.1.0.',
-	          completedAtMs: Date.now() + 1,
-	        },
-	      });
+          targetVersion: 'v1.1.0',
+          observedVersion: 'v1.0.0',
+          message: 'Update did not take effect: Redeven is running v1.0.0 instead of v1.1.0.',
+          completedAtMs: Date.now() + 1,
+        },
+      });
 
     let controller!: ReturnType<typeof createAgentMaintenanceController>;
     const dispose = createRoot((disposeRoot) => {
       controller = createAgentMaintenanceController({
-        envId,
+        environmentDetailRequest: () => ({ source: 'controlplane', envId: envId() }),
         canAdmin,
         controlplaneStatus,
         protocolStatus,

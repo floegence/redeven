@@ -481,6 +481,31 @@ function createStorageMock(): Storage {
   } as Storage;
 }
 
+type DesktopSessionSource = 'provider_environment' | 'ssh_environment' | 'external_local_ui';
+
+function installDesktopSessionContext(args: Readonly<{
+  sessionSource: DesktopSessionSource;
+  label: string;
+  localEnvironmentID: string;
+  envPublicID?: string;
+}>): void {
+  window.redevenDesktopSessionContext = {
+    getSnapshot: () => ({
+      local_environment_id: args.localEnvironmentID,
+      renderer_storage_scope_id: `desktop:${args.localEnvironmentID}`,
+      target_kind: args.sessionSource === 'ssh_environment'
+        ? 'ssh_environment'
+        : args.sessionSource === 'external_local_ui'
+          ? 'external_local_ui'
+          : 'local_environment',
+      target_route: 'remote_desktop',
+      session_source: args.sessionSource,
+      ...(args.envPublicID ? { env_public_id: args.envPublicID } : {}),
+      label: args.label,
+    }),
+  };
+}
+
 afterEach(() => {
   document.body.innerHTML = '';
   vi.useRealTimers();
@@ -503,6 +528,7 @@ beforeEach(() => {
   layoutIsMobile = false;
   sidebarActiveTabValue = 'deck';
   delete window.redevenDesktopShell;
+  delete window.redevenDesktopSessionContext;
   setSidebarActiveTabMock.mockClear();
   setSidebarCollapsedMock.mockClear();
   reloadCurrentPageMock.mockReset();
@@ -1187,6 +1213,94 @@ describe('EnvAppShell local access gate', () => {
     }
   });
 
+  it('shows Desktop provider identity while loading local runtime details from the local route', async () => {
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    installDesktopSessionContext({
+      sessionSource: 'provider_environment',
+      label: 'Acme Desktop',
+      localEnvironmentID: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_provider',
+      envPublicID: 'env_provider',
+    });
+    getEnvironmentMock.mockImplementation(async (request: { source?: string; envId?: string }) => {
+      return {
+        public_id: request.envId || 'env_local',
+        name: 'Local runtime',
+        namespace_public_id: 'ns_local',
+        status: 'online',
+        lifecycle_status: 'running',
+        permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true },
+      };
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => getEnvironmentMock.mock.calls.length > 0 && (host.textContent?.includes('Acme Desktop') ?? false), 40);
+
+      expect(host.textContent).toContain('Acme Desktop');
+      expect(host.textContent).toContain('env_provider');
+      expect(host.textContent).toContain('Provider');
+      expect(window.sessionStorage.getItem('redeven_env_public_id')).toBe('env_provider');
+      expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'local', envId: 'env_local' });
+      expect(getEnvironmentMock).not.toHaveBeenCalledWith({ source: 'controlplane', envId: 'env_provider' });
+      expect(getEnvironmentMock.mock.calls.every(([request]) => request?.source === 'local')).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  const nonProviderRemoteDesktopCases = [
+    {
+      sessionSource: 'external_local_ui' as const,
+      label: 'External Local UI',
+      localEnvironmentID: 'http://127.0.0.1:24000/',
+      expectedType: 'Remote',
+    },
+    {
+      sessionSource: 'ssh_environment' as const,
+      label: 'SSH Workstation',
+      localEnvironmentID: 'ssh:workstation:2222:key_agent:remote_default',
+      expectedType: 'SSH',
+    },
+  ];
+
+  for (const testCase of nonProviderRemoteDesktopCases) {
+    it(`does not treat remote_desktop ${testCase.sessionSource} sessions as provider identity`, async () => {
+      window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+      getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+      installDesktopSessionContext({
+        sessionSource: testCase.sessionSource,
+        label: testCase.label,
+        localEnvironmentID: testCase.localEnvironmentID,
+      });
+
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+
+      const { EnvAppShell } = await import('./EnvAppShell');
+      const dispose = render(() => <EnvAppShell />, host);
+
+      try {
+        await flushUntil(() => getEnvironmentMock.mock.calls.length > 0 && (host.textContent?.includes(testCase.label) ?? false), 40);
+
+        expect(host.textContent).toContain(testCase.label);
+        expect(host.textContent).toContain(testCase.localEnvironmentID);
+        expect(host.textContent).toContain(testCase.expectedType);
+        expect(host.textContent).not.toContain('Provider');
+        expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'local', envId: 'env_local' });
+        expect(getEnvironmentMock).not.toHaveBeenCalledWith({ source: 'controlplane', envId: testCase.localEnvironmentID });
+        expect(getEnvironmentMock.mock.calls.every(([request]) => request?.source === 'local')).toBe(true);
+      } finally {
+        dispose();
+      }
+    });
+  }
+
   it('switches local direct reconnect into runtime waiting and reconnects after the runtime comes back', async () => {
     vi.useFakeTimers();
     getLocalAccessStatusMock.mockReset();
@@ -1637,7 +1751,7 @@ describe('EnvAppShell remote access gate', () => {
       const artifact = await remoteConnectConfig.getArtifact();
 
       expect(getEnvironmentMock).toHaveBeenCalledTimes(1);
-      expect(getEnvironmentMock).toHaveBeenCalledWith('env_demo');
+      expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'controlplane', envId: 'env_demo' });
       expect(mintEnvProxyEntryTicketMock).toHaveBeenCalledTimes(1);
       expect(mintEnvProxyEntryTicketMock).toHaveBeenCalledWith({
         endpointId: 'env_demo',
@@ -1698,7 +1812,7 @@ describe('EnvAppShell remote access gate', () => {
 
       await expect(remoteConnectConfig.getArtifact()).rejects.toThrow('Runtime is offline.');
       expect(getEnvironmentMock).toHaveBeenCalledTimes(1);
-      expect(getEnvironmentMock).toHaveBeenCalledWith('env_demo');
+      expect(getEnvironmentMock).toHaveBeenCalledWith({ source: 'controlplane', envId: 'env_demo' });
       expect(mintEnvProxyEntryTicketMock).not.toHaveBeenCalled();
       expect(connectArtifactEntryMock).not.toHaveBeenCalled();
     } finally {

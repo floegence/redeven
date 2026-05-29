@@ -2,7 +2,7 @@ import { createMemo, createSignal, onCleanup, type Accessor } from 'solid-js';
 
 import type { RedevenV1Rpc } from '../protocol/redeven_v1/contract';
 import type { SysPingResponse, SysRestartResponse, SysUpgradeResponse } from '../protocol/redeven_v1/sdk/sys';
-import { getEnvironment, type EnvironmentDetail } from '../services/controlplaneApi';
+import { getEnvironment, type EnvironmentDetail, type EnvironmentDetailRequest } from '../services/controlplaneApi';
 import { isReleaseVersion } from './agentVersion';
 import { formatUnknownError, sleep, type MaintenanceKind } from './shared';
 
@@ -32,7 +32,7 @@ export type AgentMaintenanceController = Readonly<{
 }>;
 
 type CreateAgentMaintenanceControllerArgs = Readonly<{
-  envId: Accessor<string>;
+  environmentDetailRequest: Accessor<EnvironmentDetailRequest | null>;
   canAdmin: Accessor<boolean>;
   controlplaneStatus: Accessor<string>;
   protocolStatus: Accessor<string>;
@@ -45,7 +45,7 @@ type CreateAgentMaintenanceControllerArgs = Readonly<{
   upgradeRequiresTargetVersion?: Accessor<boolean>;
   refetchCurrentVersion: () => Promise<SysPingResponse | null>;
   refetchEnvironment?: () => Promise<EnvironmentDetail | null>;
-  getEnvironment?: (envId: string) => Promise<EnvironmentDetail | null>;
+  getEnvironment?: (request: EnvironmentDetailRequest) => Promise<EnvironmentDetail | null>;
 }>;
 
 function normalizeProcessStartedAtMs(value: unknown): number | null {
@@ -156,8 +156,8 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
     setError(null);
     setPolledStatus(null);
 
-    const envId = String(args.envId() ?? '').trim();
-    if (!envId) {
+    const environmentDetailRequest = args.environmentDetailRequest();
+    if (!environmentDetailRequest || !String(environmentDetailRequest.envId ?? '').trim()) {
       const message = 'Missing env context. Please reopen from the control plane.';
       setError(message);
       args.notify.error(nextKind === 'upgrade' ? 'Update failed' : 'Restart failed', message);
@@ -285,7 +285,7 @@ export function createAgentMaintenanceController(args: CreateAgentMaintenanceCon
       }
 
       try {
-        const detail = await loadEnvironment(envId);
+        const detail = await loadEnvironment(environmentDetailRequest);
         const nextStatus = detail?.status ? String(detail.status) : null;
         if (nextStatus) setPolledStatus(nextStatus);
       } catch {

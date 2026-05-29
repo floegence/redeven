@@ -5,6 +5,7 @@ export interface DesktopSessionContextSnapshot {
   renderer_storage_scope_id: string;
   target_kind?: 'local_environment' | 'external_local_ui' | 'ssh_environment';
   target_route?: 'local_host' | 'remote_desktop';
+  session_source?: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui';
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
@@ -35,6 +36,7 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
   const rendererStorageScopeID = compact(candidate.renderer_storage_scope_id);
   const targetKind = compact(candidate.target_kind);
   const targetRoute = compact(candidate.target_route);
+  const sessionSource = compact(candidate.session_source);
   const providerOrigin = compact(candidate.provider_origin);
   const providerID = compact(candidate.provider_id);
   const envPublicID = compact(candidate.env_public_id);
@@ -47,6 +49,7 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
     renderer_storage_scope_id: rendererStorageScopeID,
     ...(targetKind === 'local_environment' || targetKind === 'external_local_ui' || targetKind === 'ssh_environment' ? { target_kind: targetKind } : {}),
     ...(targetRoute === 'local_host' || targetRoute === 'remote_desktop' ? { target_route: targetRoute } : {}),
+    ...(sessionSource === 'local_runtime' || sessionSource === 'provider_environment' || sessionSource === 'ssh_environment' || sessionSource === 'external_local_ui' ? { session_source: sessionSource } : {}),
     ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
     ...(providerID !== '' ? { provider_id: providerID } : {}),
     ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
