@@ -13,6 +13,7 @@ type DesktopAnchoredOverlaySurfaceProps = Readonly<{
   anchorRef: HTMLElement | undefined;
   placement?: DesktopOverlayPlacement;
   constrainToViewport?: boolean;
+  hideArrow?: boolean;
   role?: JSX.HTMLAttributes<HTMLDivElement>['role'];
   ariaModal?: boolean;
   ariaLabel?: string;
@@ -149,10 +150,12 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
         onFocusOut={props.onFocusOut}
       >
         {props.children}
-        <div
-          class={cn('redeven-anchored-overlay-arrow absolute h-0 w-0', desktopOverlayArrowClass(resolvedPlacement()))}
-          style={position() ? desktopOverlayArrowStyle(position()!) : undefined}
-        />
+        {!props.hideArrow && (
+          <div
+            class={cn('redeven-anchored-overlay-arrow absolute h-0 w-0', desktopOverlayArrowClass(resolvedPlacement()))}
+            style={position() ? desktopOverlayArrowStyle(position()!) : undefined}
+          />
+        )}
       </div>
     </Portal>
   );
