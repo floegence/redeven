@@ -4,6 +4,7 @@ import { frFRWorkbenchCodex } from './workbenchCodex';
 import { localeSettingsSectionMessages } from './settingsSections';
 import { frFRFlowerChatSidebar } from './flowerChatSidebar';
 import { frFRActivityChrome } from './activityChrome';
+import { frFRDebugConsole } from './debugConsole';
 
 export const frFR = {
   document: {
@@ -1249,6 +1250,7 @@ export const frFR = {
     localOnlyDescription: "État Local UI uniquement. N’affecte pas la configuration Runtime.",
     frontendOnly: "Frontend uniquement",
   },
+  debugConsole: frFRDebugConsole,
   flowerSettings: {
     description: "Configurer les Providers Flower, les models, les protections d’exécution et les secrets AI locaux.",
     activeBadge: "Actif",

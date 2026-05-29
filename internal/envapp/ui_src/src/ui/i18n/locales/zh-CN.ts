@@ -3,6 +3,7 @@ import { zhCNWidgetChrome } from './widgetChrome';
 import { localeSettingsSectionMessages } from './settingsSections';
 import { zhCNFlowerChatSidebar } from './flowerChatSidebar';
 import { zhCNActivityChrome } from './activityChrome';
+import { zhCNDebugConsole } from './debugConsole';
 
 export const zhCN = {
   document: {
@@ -1543,6 +1544,7 @@ export const zhCN = {
     localOnlyDescription: "仅为 Local UI 状态。不影响 runtime 配置。",
     frontendOnly: "仅前端",
   },
+  debugConsole: zhCNDebugConsole,
   flowerSettings: {
     description: "配置 Flower providers、models、执行保护和本地 AI secrets。",
     activeBadge: "已启用",

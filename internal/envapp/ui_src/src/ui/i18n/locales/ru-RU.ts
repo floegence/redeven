@@ -4,6 +4,7 @@ import { ruRUWorkbenchCodex } from './workbenchCodex';
 import { localeSettingsSectionMessages } from './settingsSections';
 import { ruRUFlowerChatSidebar } from './flowerChatSidebar';
 import { ruRUActivityChrome } from './activityChrome';
+import { ruRUDebugConsole } from './debugConsole';
 
 export const ruRU = {
   document: {
@@ -1265,6 +1266,7 @@ export const ruRU = {
     localOnlyDescription: "Только состояние Local UI. Не влияет на конфигурацию Runtime.",
     frontendOnly: "Только frontend",
   },
+  debugConsole: ruRUDebugConsole,
   flowerSettings: {
     description: "Настройте Providers Flower, models, защиту выполнения и локальные секреты AI.",
     activeBadge: "Активно",

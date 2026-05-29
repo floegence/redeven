@@ -4,6 +4,7 @@ import { jaJPWorkbenchCodex } from './workbenchCodex';
 import { localeSettingsSectionMessages } from './settingsSections';
 import { jaJPFlowerChatSidebar } from './flowerChatSidebar';
 import { jaJPActivityChrome } from './activityChrome';
+import { jaJPDebugConsole } from './debugConsole';
 
 export const jaJP = {
   document: {
@@ -1249,6 +1250,7 @@ export const jaJP = {
     localOnlyDescription: "Local UI 状態のみです。runtime 設定には影響しません。",
     frontendOnly: "フロントエンドのみ",
   },
+  debugConsole: jaJPDebugConsole,
   flowerSettings: {
     description: "Flower providers、models、実行ガード、ローカル AI secrets を設定します。",
     activeBadge: "有効",

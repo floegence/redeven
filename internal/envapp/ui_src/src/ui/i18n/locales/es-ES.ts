@@ -4,6 +4,7 @@ import { esESWorkbenchCodex } from './workbenchCodex';
 import { localeSettingsSectionMessages } from './settingsSections';
 import { esESFlowerChatSidebar } from './flowerChatSidebar';
 import { esESActivityChrome } from './activityChrome';
+import { esESDebugConsole } from './debugConsole';
 
 export const esES = {
   document: {
@@ -1249,6 +1250,7 @@ export const esES = {
     localOnlyDescription: "Solo estado de Local UI. No afecta a la configuración runtime.",
     frontendOnly: "Solo frontend",
   },
+  debugConsole: esESDebugConsole,
   flowerSettings: {
     description: "Configura Providers de Flower, models, protecciones de ejecución y secretos AI locales.",
     activeBadge: "Activo",

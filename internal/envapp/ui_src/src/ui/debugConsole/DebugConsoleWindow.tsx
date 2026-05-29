@@ -11,6 +11,8 @@ import {
 } from '../services/diagnosticsApi';
 import { PersistentFloatingWindow } from '../widgets/PersistentFloatingWindow';
 import { ENV_APP_FLOATING_LAYER, ENV_APP_FLOATING_LAYER_CLASS } from '../utils/envAppLayers';
+import { useI18n, type I18nHelpers } from '../i18n';
+import type { EnvAppTranslationKey } from '../i18n/locales';
 import type { DebugConsoleController, DebugConsoleTrace } from './createDebugConsoleController';
 
 type DebugConsoleTab = 'requests' | 'traces' | 'ui' | 'runtime' | 'export';
@@ -32,8 +34,8 @@ type MetricItem = Readonly<{
 
 type DebugConsoleTabDefinition = Readonly<{
   value: DebugConsoleTab;
-  label: string;
-  description: string;
+  labelKey: EnvAppTranslationKey;
+  descriptionKey: EnvAppTranslationKey;
   tone?: SemanticTone;
   hasCount?: boolean;
 }>;
@@ -41,36 +43,36 @@ type DebugConsoleTabDefinition = Readonly<{
 const DEBUG_CONSOLE_TABS: readonly DebugConsoleTabDefinition[] = [
   {
     value: 'requests',
-    label: 'Requests',
-    description: 'Redeven API and RPC activity',
+    labelKey: 'debugConsole.tabs.requests.label',
+    descriptionKey: 'debugConsole.tabs.requests.description',
     tone: 'info',
     hasCount: true,
   },
   {
     value: 'traces',
-    label: 'Traces',
-    description: 'Grouped API and RPC timelines',
+    labelKey: 'debugConsole.tabs.traces.label',
+    descriptionKey: 'debugConsole.tabs.traces.description',
     tone: 'primary',
     hasCount: true,
   },
   {
     value: 'ui',
-    label: 'UI Performance',
-    description: 'Renderer-only frame and layout signals',
+    labelKey: 'debugConsole.tabs.ui.label',
+    descriptionKey: 'debugConsole.tabs.ui.description',
     tone: 'success',
     hasCount: true,
   },
   {
     value: 'runtime',
-    label: 'Runtime',
-    description: 'Collector state and slow summary',
+    labelKey: 'debugConsole.tabs.runtime.label',
+    descriptionKey: 'debugConsole.tabs.runtime.description',
     tone: 'warning',
     hasCount: true,
   },
   {
     value: 'export',
-    label: 'Export',
-    description: 'Portable debug bundle preview',
+    labelKey: 'debugConsole.tabs.export.label',
+    descriptionKey: 'debugConsole.tabs.export.description',
     tone: 'neutral',
   },
 ] as const;
@@ -210,11 +212,11 @@ function eventFailed(event: DiagnosticsEvent): boolean {
     || compact(eventResponseDetail(event)?.error_message).length > 0;
 }
 
-function eventStatusLabel(event: DiagnosticsEvent): string {
+function eventStatusLabel(event: DiagnosticsEvent, i18n: I18nHelpers): string {
   if (typeof event.status_code === 'number' && event.status_code > 0) {
     return String(event.status_code);
   }
-  return eventFailed(event) ? 'Failed' : '-';
+  return eventFailed(event) ? i18n.t('debugConsole.badges.failed') : '-';
 }
 
 function eventTitle(event: DiagnosticsEvent): string {
@@ -335,40 +337,64 @@ function semanticBadgeStyle(tone: SemanticTone, active = false): JSX.CSSProperti
   };
 }
 
-function detailItemsForEvent(event: DiagnosticsEvent | null): KeyValueItem[] {
+function boolLabel(i18n: I18nHelpers, value: boolean): string {
+  return i18n.t(value ? 'debugConsole.values.yes' : 'debugConsole.values.no');
+}
+
+function enabledLabel(i18n: I18nHelpers, value: boolean): string {
+  return i18n.t(value ? 'debugConsole.values.enabled' : 'debugConsole.values.optional');
+}
+
+function activeLabel(i18n: I18nHelpers, value: boolean): string {
+  return i18n.t(value ? 'debugConsole.values.active' : 'debugConsole.values.inactive');
+}
+
+function supportedLabel(i18n: I18nHelpers, value: boolean): string {
+  return i18n.t(value ? 'debugConsole.values.supported' : 'debugConsole.values.unavailable');
+}
+
+function connectedLabel(i18n: I18nHelpers, value: boolean): string {
+  return i18n.t(value ? 'debugConsole.values.connected' : 'debugConsole.values.disconnected');
+}
+
+function offLabel(i18n: I18nHelpers): string {
+  return i18n.t('debugConsole.values.off');
+}
+
+function detailItemsForEvent(event: DiagnosticsEvent | null, i18n: I18nHelpers): KeyValueItem[] {
   if (!event) {
     return [];
   }
   const request = eventRequestDetail(event);
   const response = eventResponseDetail(event);
   return [
-    { label: 'URL / Operation', value: eventRequestURL(event) || '-', mono: true },
-    { label: 'Transport', value: eventTransport(event) || compact(event.scope) || '-' },
-    { label: 'Source', value: compact(event.source) || 'unknown' },
-    { label: 'Scope', value: compact(event.scope) || '-' },
-    { label: 'Kind', value: compact(event.kind) || '-' },
-    { label: 'Trace ID', value: compact(event.trace_id) || '-', mono: true },
-    { label: 'Status', value: eventStatusLabel(event) },
-    { label: 'Status text', value: compact(response?.status_text) || '-' },
-    { label: 'Duration', value: formatDuration(event.duration_ms) },
-    { label: 'Request type', value: compact(request?.payload_kind) || '-' },
-    { label: 'Response type', value: compact(response?.payload_kind) || '-' },
-    { label: 'When', value: formatTimestamp(event.created_at) },
+    { label: i18n.t('debugConsole.fields.urlOperation'), value: eventRequestURL(event) || '-', mono: true },
+    { label: i18n.t('debugConsole.fields.transport'), value: eventTransport(event) || compact(event.scope) || '-' },
+    { label: i18n.t('debugConsole.fields.source'), value: compact(event.source) || i18n.t('debugConsole.values.unknown') },
+    { label: i18n.t('debugConsole.fields.scope'), value: compact(event.scope) || '-' },
+    { label: i18n.t('debugConsole.fields.kind'), value: compact(event.kind) || '-' },
+    { label: i18n.t('debugConsole.fields.traceId'), value: compact(event.trace_id) || '-', mono: true },
+    { label: i18n.t('debugConsole.fields.status'), value: eventStatusLabel(event, i18n) },
+    { label: i18n.t('debugConsole.fields.statusText'), value: compact(response?.status_text) || '-' },
+    { label: i18n.t('debugConsole.fields.duration'), value: formatDuration(event.duration_ms) },
+    { label: i18n.t('debugConsole.fields.requestType'), value: compact(request?.payload_kind) || '-' },
+    { label: i18n.t('debugConsole.fields.responseType'), value: compact(response?.payload_kind) || '-' },
+    { label: i18n.t('debugConsole.fields.when'), value: formatTimestamp(event.created_at) },
   ];
 }
 
-function detailItemsForTrace(trace: DebugConsoleTrace | null): KeyValueItem[] {
+function detailItemsForTrace(trace: DebugConsoleTrace | null, i18n: I18nHelpers): KeyValueItem[] {
   if (!trace) {
     return [];
   }
   return [
-    { label: 'Trace ID', value: compact(trace.trace_id) || '(generated group)', mono: true },
-    { label: 'Events', value: String(trace.events.length) },
-    { label: 'Status', value: typeof trace.status_code === 'number' ? String(trace.status_code) : '-' },
-    { label: 'Max duration', value: formatDuration(trace.max_duration_ms) },
-    { label: 'Total duration', value: formatDuration(trace.total_duration_ms) },
-    { label: 'First seen', value: formatTimestamp(trace.first_seen_at) },
-    { label: 'Last seen', value: formatTimestamp(trace.last_seen_at) },
+    { label: i18n.t('debugConsole.fields.traceId'), value: compact(trace.trace_id) || i18n.t('debugConsole.values.generatedGroup'), mono: true },
+    { label: i18n.t('debugConsole.fields.events'), value: String(trace.events.length) },
+    { label: i18n.t('debugConsole.fields.status'), value: typeof trace.status_code === 'number' ? String(trace.status_code) : '-' },
+    { label: i18n.t('debugConsole.fields.maxDuration'), value: formatDuration(trace.max_duration_ms) },
+    { label: i18n.t('debugConsole.fields.totalDuration'), value: formatDuration(trace.total_duration_ms) },
+    { label: i18n.t('debugConsole.fields.firstSeen'), value: formatTimestamp(trace.first_seen_at) },
+    { label: i18n.t('debugConsole.fields.lastSeen'), value: formatTimestamp(trace.last_seen_at) },
   ];
 }
 
@@ -518,17 +544,17 @@ function MonoBlock(props: Readonly<{ value: string }>) {
   );
 }
 
-function renderEventBadge(event: DiagnosticsEvent) {
+function renderEventBadge(event: DiagnosticsEvent, i18n: I18nHelpers) {
   if (eventFailed(event)) {
-    return <SettingsPill tone="danger">{eventStatusLabel(event)}</SettingsPill>;
+    return <SettingsPill tone="danger">{eventStatusLabel(event, i18n)}</SettingsPill>;
   }
   if (event.slow) {
-    return <SettingsPill tone="warning">Slow</SettingsPill>;
+    return <SettingsPill tone="warning">{i18n.t('debugConsole.badges.slow')}</SettingsPill>;
   }
   if (compact(event.source) === 'browser') {
-    return <SettingsPill tone="success">Browser</SettingsPill>;
+    return <SettingsPill tone="success">{i18n.t('debugConsole.badges.browser')}</SettingsPill>;
   }
-  return <SettingsPill>{compact(event.source) || 'event'}</SettingsPill>;
+  return <SettingsPill>{compact(event.source) || i18n.t('debugConsole.badges.event')}</SettingsPill>;
 }
 
 function slowSummaryTitle(item: DiagnosticsSummaryItem): string {
@@ -569,24 +595,25 @@ export interface DebugConsoleFooterProps {
 }
 
 export function DebugConsoleFooter(props: DebugConsoleFooterProps) {
+  const i18n = useI18n();
   return (
     <div class="flex w-full min-w-0 flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
       <div class="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-[9px] text-muted-foreground">
         <span class="inline-flex items-center gap-1.5">
           <StatusDot tone={props.controller.runtimeEnabled() ? 'success' : 'warning'} />
-          {props.controller.runtimeEnabled() ? 'Diagnostics active' : 'Diagnostics unavailable'}
+          {props.controller.runtimeEnabled() ? i18n.t('debugConsole.footer.diagnosticsActive') : i18n.t('debugConsole.footer.diagnosticsUnavailable')}
         </span>
         <span class="inline-flex items-center gap-1.5">
           <StatusDot tone={props.controller.streamConnected() ? 'success' : 'default'} />
-          {props.controller.streamConnected() ? 'Streaming updates' : 'Snapshot only'}
+          {props.controller.streamConnected() ? i18n.t('debugConsole.footer.streamingUpdates') : i18n.t('debugConsole.footer.snapshotOnly')}
         </span>
         <span class="inline-flex items-center gap-1.5">
           <StatusDot tone={props.controller.uiMetricsCollecting() ? 'success' : 'default'} />
-          {props.controller.uiMetricsCollecting() ? 'UI probes active' : 'UI probes paused'}
+          {props.controller.uiMetricsCollecting() ? i18n.t('debugConsole.footer.uiProbesActive') : i18n.t('debugConsole.footer.uiProbesPaused')}
         </span>
-        <span>Last snapshot: {formatTimestamp(props.controller.lastSnapshotAt())}</span>
+        <span>{i18n.t('debugConsole.footer.lastSnapshot', { value: formatTimestamp(props.controller.lastSnapshotAt()) })}</span>
       </div>
-      <div class="text-[9px] text-muted-foreground">Focused on Redeven API/RPC traffic. Static assets are excluded. Clear resets the current local capture window.</div>
+      <div class="text-[9px] text-muted-foreground">{i18n.t('debugConsole.footer.focusNote')}</div>
     </div>
   );
 }
@@ -600,6 +627,7 @@ export interface DebugConsolePanelProps {
 }
 
 export function DebugConsolePanel(props: DebugConsolePanelProps) {
+  const i18n = useI18n();
   const [tab, setTab] = createSignal<DebugConsoleTab>('requests');
   const [query, setQuery] = createSignal('');
   const [selectedEventKey, setSelectedEventKey] = createSignal('');
@@ -684,42 +712,42 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
               <div class="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
                 <div class="min-w-0">
                   <div class="flex flex-wrap items-center gap-2">
-                    <span class="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">Live Diagnostics Console</span>
+                    <span class="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">{i18n.t('debugConsole.header.eyebrow')}</span>
                     <SettingsPill tone={props.controller.streamConnected() ? 'success' : 'default'}>
-                      {props.controller.streamConnected() ? 'Streaming' : 'Snapshot'}
+                      {props.controller.streamConnected() ? i18n.t('debugConsole.badges.streaming') : i18n.t('debugConsole.badges.snapshot')}
                     </SettingsPill>
-                    <SettingsPill>{'RPC / API only'}</SettingsPill>
+                    <SettingsPill>{i18n.t('debugConsole.badges.rpcApiOnly')}</SettingsPill>
                   </div>
-                  <div class="mt-1 text-[12px] font-semibold text-foreground">Track Redeven API and RPC request chains without mixing in browser asset noise</div>
+                  <div class="mt-1 text-[12px] font-semibold text-foreground">{i18n.t('debugConsole.header.title')}</div>
                   <div class="mt-1 max-w-3xl text-[10px] leading-5 text-muted-foreground">
-                    Static CSS, JS, document loads, and diagnostics self-requests are excluded so the console stays focused on real operations and their request / response timing.
+                    {i18n.t('debugConsole.header.description')}
                   </div>
                 </div>
 
                   <div class="flex w-full flex-col gap-2 xl:w-[24rem]">
                     <div>
-                      <label class="mb-1 block text-[8px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Search</label>
+                      <label class="mb-1 block text-[8px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{i18n.t('debugConsole.search.label')}</label>
                     <input
                       value={query()}
                       onInput={(event) => setQuery(event.currentTarget.value)}
                       class="w-full rounded-md border border-border/70 bg-background px-3 py-2 text-[10px] text-foreground outline-none transition-colors focus:border-primary/35 focus:ring-2 focus:ring-primary/10"
-                      placeholder="Filter by path, trace id, message, source..."
-                      aria-label="Search diagnostics"
+                      placeholder={i18n.t('debugConsole.search.placeholder')}
+                      aria-label={i18n.t('debugConsole.search.ariaLabel')}
                     />
                   </div>
                   <div class="flex flex-wrap items-center justify-end gap-2">
                     <Button size="sm" variant="outline" class="cursor-pointer text-[10px]" onClick={() => void props.controller.clear()}>
-                      Clear
+                      {i18n.t('debugConsole.actions.clear')}
                     </Button>
                     <Button size="sm" variant="secondary" class="cursor-pointer text-[10px]" onClick={() => void exportBundle()} disabled={props.controller.exporting()}>
-                      {props.controller.exporting() ? 'Exporting...' : 'Export'}
+                      {props.controller.exporting() ? i18n.t('debugConsole.actions.exporting') : i18n.t('debugConsole.actions.export')}
                     </Button>
                     <Button size="sm" variant="secondary" class="cursor-pointer text-[10px]" onClick={() => props.onClose()}>
-                      {props.closeLabel ?? 'Close Console'}
+                      {props.closeLabel ?? i18n.t('debugConsole.actions.closeConsole')}
                     </Button>
                     <Show when={props.showMinimize !== false && props.onMinimize}>
                       <Button size="sm" variant="ghost" class="cursor-pointer text-[10px]" onClick={() => props.onMinimize?.()}>
-                        Minimize
+                        {i18n.t('debugConsole.actions.minimize')}
                       </Button>
                     </Show>
                   </div>
@@ -736,51 +764,60 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
             <div class="border-b border-border/70 bg-background px-4 py-2.5">
               <div class="flex flex-wrap gap-2" role="tablist" aria-orientation="horizontal">
                 <Index each={DEBUG_CONSOLE_TABS}>
-                  {(descriptor) => (
-                    <button
-                      type="button"
-                      role="tab"
-                      aria-selected={tab() === descriptor().value}
-                      class={tabButtonClass(tab() === descriptor().value)}
-                      onClick={() => setTab(descriptor().value)}
-                      style={tab() === descriptor().value ? semanticInteractiveStyle(descriptor().tone ?? 'primary', 'strong') : undefined}
-                    >
-                      <div class="flex items-start justify-between gap-3">
-                        <div class="min-w-0">
-                          <div class={`text-[10px] font-semibold ${tab() === descriptor().value ? 'text-foreground' : 'text-foreground/90'}`}>{descriptor().label}</div>
-                          <div class="mt-0.5 text-[9px] leading-[1rem] text-muted-foreground">{descriptor().description}</div>
+                  {(descriptor) => {
+                    const tabDescriptor = descriptor();
+                    return (
+                      <button
+                        type="button"
+                        role="tab"
+                        aria-selected={tab() === tabDescriptor.value}
+                        class={tabButtonClass(tab() === tabDescriptor.value)}
+                        onClick={() => setTab(tabDescriptor.value)}
+                        style={tab() === tabDescriptor.value ? semanticInteractiveStyle(tabDescriptor.tone ?? 'primary', 'strong') : undefined}
+                      >
+                        <div class="flex items-start justify-between gap-3">
+                          <div class="min-w-0">
+                            <div class={`text-[10px] font-semibold ${tab() === tabDescriptor.value ? 'text-foreground' : 'text-foreground/90'}`}>{i18n.t(tabDescriptor.labelKey)}</div>
+                            <div class="mt-0.5 text-[9px] leading-[1rem] text-muted-foreground">{i18n.t(tabDescriptor.descriptionKey)}</div>
+                          </div>
+                          <Show when={tabDescriptor.hasCount}>
+                            <span class="rounded-md border px-1.5 py-0.5 text-[8px] font-semibold tabular-nums" style={semanticBadgeStyle(tabDescriptor.tone ?? 'neutral', tab() === tabDescriptor.value)}>
+                              {tabCountLabel(tabDescriptor.value)}
+                            </span>
+                          </Show>
                         </div>
-                        <Show when={descriptor().hasCount}>
-                          <span class="rounded-md border px-1.5 py-0.5 text-[8px] font-semibold tabular-nums" style={semanticBadgeStyle(descriptor().tone ?? 'neutral', tab() === descriptor().value)}>
-                            {tabCountLabel(descriptor().value)}
-                          </span>
-                        </Show>
-                      </div>
-                    </button>
-                  )}
+                      </button>
+                    );
+                  }}
                 </Index>
               </div>
             </div>
 
             <main class="min-h-0 flex-1">
-                <Show when={!props.controller.loading()} fallback={<EmptyState title="Loading debug console" message="Fetching the latest diagnostics snapshot." />}>
+                <Show when={!props.controller.loading()} fallback={<EmptyState title={i18n.t('debugConsole.empty.loadingTitle')} message={i18n.t('debugConsole.empty.loadingMessage')} />}>
                   <Show when={tab() === 'requests'}>
                     <div class="flex h-full min-h-0 flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_22rem] xl:grid-rows-1">
                       <section class="min-h-0 flex-1">
                         <TableShell>
                           <div class="border-b border-border/70 px-4 py-3">
-                            <div class="text-[11px] font-semibold text-foreground">Request stream</div>
-                            <div class="mt-1 text-[9px] leading-[1rem] text-muted-foreground">A chronological view of Redeven API and RPC calls with trace correlation, request timing, and live updates. Static assets are filtered out.</div>
+                            <div class="text-[11px] font-semibold text-foreground">{i18n.t('debugConsole.requests.title')}</div>
+                            <div class="mt-1 text-[9px] leading-[1rem] text-muted-foreground">{i18n.t('debugConsole.requests.description')}</div>
                           </div>
                           <Show
                             when={filteredEvents().length > 0}
-                            fallback={<EmptyState title="No request events yet" message="Once gateway or desktop requests flow through this session, they will appear here with trace ids, timing, and scoped metadata." />}
+                            fallback={<EmptyState title={i18n.t('debugConsole.empty.noRequestsTitle')} message={i18n.t('debugConsole.empty.noRequestsMessage')} />}
                           >
                             <div class="min-h-0 flex-1 overflow-auto">
                               <div class="min-w-[46rem]">
                                 <TableHeaderRow
                                   gridClass="grid-cols-[minmax(0,2.2fr)_7rem_8rem_5rem_6rem]"
-                                  columns={['Request', 'Source', 'Trace', 'Status', 'Duration']}
+                                  columns={[
+                                    i18n.t('debugConsole.table.request'),
+                                    i18n.t('debugConsole.table.source'),
+                                    i18n.t('debugConsole.table.trace'),
+                                    i18n.t('debugConsole.table.status'),
+                                    i18n.t('debugConsole.table.duration'),
+                                  ]}
                                 />
                                 <For each={filteredEvents()}>
                                   {(event) => {
@@ -811,10 +848,10 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                                             </div>
                                           </div>
                                           <div class="flex items-start pt-0.5">
-                                            {renderEventBadge(event)}
+                                            {renderEventBadge(event, i18n)}
                                           </div>
                                           <div class="truncate font-mono text-[9px] text-muted-foreground">{compact(event.trace_id) || '-'}</div>
-                                          <div class={`tabular-nums ${eventFailed(event) ? 'font-semibold' : ''}`}>{eventStatusLabel(event)}</div>
+                                          <div class={`tabular-nums ${eventFailed(event) ? 'font-semibold' : ''}`}>{eventStatusLabel(event, i18n)}</div>
                                           <div class={`tabular-nums ${eventFailed(event) ? 'font-semibold' : ''}`}>{formatDuration(event.duration_ms)}</div>
                                         </div>
                                       </button>
@@ -829,32 +866,32 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
 
                       <InspectorShell>
                         <div class="h-full overflow-auto px-4 py-4">
-                          <Show when={selectedEvent()} fallback={<EmptyState title="Select a request" message="Choose a request row to inspect its trace id, message, and payload details." />}>
+                          <Show when={selectedEvent()} fallback={<EmptyState title={i18n.t('debugConsole.empty.selectRequestTitle')} message={i18n.t('debugConsole.empty.selectRequestMessage')} />}>
                             {(event) => (
                               <div class="space-y-4">
-                                <SectionShell title="Overview" description={eventFailureMessage(event()) || 'No extra message was attached to this event.'}>
+                                <SectionShell title={i18n.t('debugConsole.sections.overview')} description={eventFailureMessage(event()) || i18n.t('debugConsole.requests.noExtraMessage')}>
                                   <div class="space-y-3">
                                     <div class="flex flex-wrap items-center gap-2">
                                       <div class={`text-[11px] font-semibold ${eventFailed(event()) ? '' : 'text-foreground'}`} style={eventFailed(event()) ? dangerTextStyle() : undefined}>
                                         {eventTitle(event())}
                                       </div>
-                                      {renderEventBadge(event())}
+                                      {renderEventBadge(event(), i18n)}
                                     </div>
-                                    <DefinitionList items={detailItemsForEvent(event())} />
+                                    <DefinitionList items={detailItemsForEvent(event(), i18n)} />
                                   </div>
                                 </SectionShell>
 
-                                <SectionShell title="Request payload" description="Captured request URL, headers, and payload sent from the browser or RPC layer.">
+                                <SectionShell title={i18n.t('debugConsole.sections.requestPayload')} description={i18n.t('debugConsole.requests.requestPayloadDescription')}>
                                   <Show
                                     when={requestPayloadPreview(event()) != null}
-                                    fallback={<EmptyState title="No request payload" message="This event did not carry a request body, or the payload was not serializable." />}
+                                    fallback={<EmptyState title={i18n.t('debugConsole.empty.noRequestPayloadTitle')} message={i18n.t('debugConsole.empty.noRequestPayloadMessage')} />}
                                   >
                                     <div class="space-y-3">
                                       <DefinitionList
                                         items={[
-                                          { label: 'URL', value: eventRequestURL(event()) || '-', mono: true },
-                                          { label: 'Content type', value: compact(eventRequestDetail(event())?.content_type) || '-' },
-                                          { label: 'Body type', value: compact(eventRequestDetail(event())?.payload_kind) || '-' },
+                                          { label: i18n.t('debugConsole.fields.url'), value: eventRequestURL(event()) || '-', mono: true },
+                                          { label: i18n.t('debugConsole.fields.contentType'), value: compact(eventRequestDetail(event())?.content_type) || '-' },
+                                          { label: i18n.t('debugConsole.fields.bodyType'), value: compact(eventRequestDetail(event())?.payload_kind) || '-' },
                                         ]}
                                       />
                                       <MonoBlock value={prettyJSON(requestPayloadPreview(event()))} />
@@ -862,18 +899,18 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                                   </Show>
                                 </SectionShell>
 
-                                <SectionShell title="Response payload" description="Captured response body, status, and any client-side failure message.">
+                                <SectionShell title={i18n.t('debugConsole.sections.responsePayload')} description={i18n.t('debugConsole.requests.responsePayloadDescription')}>
                                   <Show
                                     when={responsePayloadPreview(event()) != null}
-                                    fallback={<EmptyState title="No response payload" message="This event did not return a body, or the response was streamed without a terminal payload." />}
+                                    fallback={<EmptyState title={i18n.t('debugConsole.empty.noResponsePayloadTitle')} message={i18n.t('debugConsole.empty.noResponsePayloadMessage')} />}
                                   >
                                     <div class="space-y-3">
                                       <DefinitionList
                                         items={[
-                                          { label: 'Status', value: eventStatusLabel(event()) },
-                                          { label: 'Status text', value: compact(eventResponseDetail(event())?.status_text) || '-' },
-                                          { label: 'Content type', value: compact(eventResponseDetail(event())?.content_type) || '-' },
-                                          { label: 'Body type', value: compact(eventResponseDetail(event())?.payload_kind) || '-' },
+                                          { label: i18n.t('debugConsole.fields.status'), value: eventStatusLabel(event(), i18n) },
+                                          { label: i18n.t('debugConsole.fields.statusText'), value: compact(eventResponseDetail(event())?.status_text) || '-' },
+                                          { label: i18n.t('debugConsole.fields.contentType'), value: compact(eventResponseDetail(event())?.content_type) || '-' },
+                                          { label: i18n.t('debugConsole.fields.bodyType'), value: compact(eventResponseDetail(event())?.payload_kind) || '-' },
                                         ]}
                                       />
                                       <MonoBlock value={prettyJSON(responsePayloadPreview(event()))} />
@@ -881,7 +918,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                                   </Show>
                                 </SectionShell>
 
-                                <SectionShell title="Raw event detail" description="Full normalized event detail for low-level inspection and copy/paste debugging.">
+                                <SectionShell title={i18n.t('debugConsole.sections.rawEventDetail')} description={i18n.t('debugConsole.requests.rawEventDetailDescription')}>
                                   <MonoBlock value={prettyJSON(event().detail)} />
                                 </SectionShell>
                               </div>
@@ -897,18 +934,24 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                       <section class="min-h-0 flex-1">
                         <TableShell>
                           <div class="border-b border-border/70 px-4 py-3">
-                            <div class="text-[11px] font-semibold text-foreground">Trace groups</div>
-                            <div class="mt-1 text-[9px] leading-[1rem] text-muted-foreground">Events grouped by trace id so you can follow one request across scopes without scanning the entire feed.</div>
+                            <div class="text-[11px] font-semibold text-foreground">{i18n.t('debugConsole.traces.title')}</div>
+                            <div class="mt-1 text-[9px] leading-[1rem] text-muted-foreground">{i18n.t('debugConsole.traces.description')}</div>
                           </div>
                           <Show
                             when={filteredTraces().length > 0}
-                            fallback={<EmptyState title="No traces yet" message="Traces appear when multiple diagnostics events share the same trace id across the desktop, gateway, and local UI surfaces." />}
+                            fallback={<EmptyState title={i18n.t('debugConsole.empty.noTracesTitle')} message={i18n.t('debugConsole.empty.noTracesMessage')} />}
                           >
                             <div class="min-h-0 flex-1 overflow-auto">
                               <div class="min-w-[46rem]">
                                 <TableHeaderRow
                                   gridClass="grid-cols-[minmax(0,2.4fr)_9rem_5rem_6rem_8rem]"
-                                  columns={['Trace', 'Sources', 'Events', 'Max', 'Last Seen']}
+                                  columns={[
+                                    i18n.t('debugConsole.table.trace'),
+                                    i18n.t('debugConsole.table.sources'),
+                                    i18n.t('debugConsole.table.events'),
+                                    i18n.t('debugConsole.table.max'),
+                                    i18n.t('debugConsole.table.lastSeen'),
+                                  ]}
                                 />
                                 <For each={filteredTraces()}>
                                   {(trace) => (
@@ -922,7 +965,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                                           <div class="min-w-0">
                                           <div class="whitespace-normal break-all font-medium text-foreground">{trace.title}</div>
                                           <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[9px] text-muted-foreground">
-                                            <span class="font-mono">{compact(trace.trace_id) || 'generated group'}</span>
+                                            <span class="font-mono">{compact(trace.trace_id) || i18n.t('debugConsole.values.generatedGroup')}</span>
                                             <span>{trace.scopes.join(', ') || '-'}</span>
                                           </div>
                                         </div>
@@ -942,25 +985,25 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
 
                       <InspectorShell>
                         <div class="h-full overflow-auto px-4 py-4">
-                          <Show when={selectedTrace()} fallback={<EmptyState title="Select a trace" message="Choose a grouped trace to inspect the full request lifecycle and participating scopes." />}>
+                          <Show when={selectedTrace()} fallback={<EmptyState title={i18n.t('debugConsole.empty.selectTraceTitle')} message={i18n.t('debugConsole.empty.selectTraceMessage')} />}>
                             {(trace) => (
                               <div class="space-y-4">
                                 <SectionShell
-                                  title="Trace overview"
-                                  description={`Sources: ${trace().sources.join(', ') || '-'} · Scopes: ${trace().scopes.join(', ') || '-'}`}
+                                  title={i18n.t('debugConsole.sections.traceOverview')}
+                                  description={i18n.t('debugConsole.traces.sourcesScopes', { sources: trace().sources.join(', ') || '-', scopes: trace().scopes.join(', ') || '-' })}
                                 >
                                   <div class="space-y-3">
                                     <div class="flex flex-wrap items-center gap-2">
                                       <div class="text-[11px] font-semibold text-foreground">{trace().title}</div>
                                       <SettingsPill tone={trace().slow ? 'warning' : 'default'}>
-                                        {trace().slow ? 'Slow trace' : 'Trace'}
+                                        {trace().slow ? i18n.t('debugConsole.badges.slowTrace') : i18n.t('debugConsole.badges.trace')}
                                       </SettingsPill>
                                     </div>
-                                    <DefinitionList items={detailItemsForTrace(trace())} />
+                                    <DefinitionList items={detailItemsForTrace(trace(), i18n)} />
                                   </div>
                                 </SectionShell>
 
-                                <SectionShell title="Timeline" description="Ordered events within the selected trace.">
+                                <SectionShell title={i18n.t('debugConsole.sections.timeline')} description={i18n.t('debugConsole.traces.timelineDescription')}>
                                   <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
                                     <For each={trace().events}>
                                       {(event, index) => (
@@ -981,7 +1024,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                                                 </div>
                                               </Show>
                                             </div>
-                                            <div class="shrink-0">{renderEventBadge(event)}</div>
+                                            <div class="shrink-0">{renderEventBadge(event, i18n)}</div>
                                           </div>
                                         </div>
                                       )}
@@ -1001,7 +1044,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                       <div class="space-y-4">
                         <Show when={!props.controller.collectUIMetrics()}>
                           <div class="rounded-md border border-border/70 bg-muted/[0.08] px-3 py-2.5 text-[9px] leading-5 text-muted-foreground">
-                            Core renderer probes stay live while Debug Console is open. Enable <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-foreground">collect_ui_metrics</code> in Settings to add browser-native long-task, layout-shift, paint, navigation, and memory capture to this panel and exported bundles.
+                            {i18n.t('debugConsole.ui.metricsNoticePrefix')} <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-foreground">collect_ui_metrics</code> {i18n.t('debugConsole.ui.metricsNoticeSuffix')}
                           </div>
                         </Show>
 
@@ -1009,100 +1052,100 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                           columnsClass="sm:grid-cols-2 xl:grid-cols-5"
                           items={[
                             {
-                              label: 'FPS',
+                              label: i18n.t('debugConsole.metrics.fps'),
                               value: String(Math.round(props.controller.performanceSnapshot().fps.current || 0)),
-                              note: `Avg ${props.controller.performanceSnapshot().fps.average || 0} · Low ${props.controller.performanceSnapshot().fps.low || 0}`,
+                              note: i18n.t('debugConsole.metrics.avgLow', { avg: props.controller.performanceSnapshot().fps.average || 0, low: props.controller.performanceSnapshot().fps.low || 0 }),
                             },
                             {
-                              label: 'Long Frames',
+                              label: i18n.t('debugConsole.metrics.longFrames'),
                               value: String(props.controller.performanceSnapshot().frame_timing.long_frame_count),
-                              note: `Max gap ${formatDuration(props.controller.performanceSnapshot().frame_timing.max_frame_ms)}`,
+                              note: i18n.t('debugConsole.metrics.maxGap', { value: formatDuration(props.controller.performanceSnapshot().frame_timing.max_frame_ms) }),
                             },
                             {
-                              label: 'Input Delay',
+                              label: i18n.t('debugConsole.metrics.inputDelay'),
                               value: formatDuration(props.controller.performanceSnapshot().interactions.last_paint_delay_ms),
-                              note: `Max ${formatDuration(props.controller.performanceSnapshot().interactions.max_paint_delay_ms)}`,
+                              note: i18n.t('debugConsole.metrics.max', { value: formatDuration(props.controller.performanceSnapshot().interactions.max_paint_delay_ms) }),
                             },
                             {
-                              label: 'DOM Mutations',
+                              label: i18n.t('debugConsole.metrics.domMutations'),
                               value: String(props.controller.performanceSnapshot().dom_activity.mutation_records),
-                              note: `Batches ${props.controller.performanceSnapshot().dom_activity.mutation_batches}`,
+                              note: i18n.t('debugConsole.metrics.batches', { count: props.controller.performanceSnapshot().dom_activity.mutation_batches }),
                             },
                             {
-                              label: 'Long Tasks',
-                              value: props.controller.collectUIMetrics() ? String(props.controller.performanceSnapshot().long_tasks.count) : 'Off',
+                              label: i18n.t('debugConsole.metrics.longTasks'),
+                              value: props.controller.collectUIMetrics() ? String(props.controller.performanceSnapshot().long_tasks.count) : offLabel(i18n),
                               note: props.controller.collectUIMetrics()
-                                ? `Max ${formatDuration(props.controller.performanceSnapshot().long_tasks.max_duration_ms)}`
-                                : 'Advanced browser metrics optional',
+                                ? i18n.t('debugConsole.metrics.max', { value: formatDuration(props.controller.performanceSnapshot().long_tasks.max_duration_ms) })
+                                : i18n.t('debugConsole.ui.advancedMetricsOptional'),
                             },
                           ]}
                         />
 
                         <div class="grid gap-4 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)]">
                           <div class="space-y-4">
-                            <SectionShell title="Renderer probes" description="Always-on local probes for frame timing, interaction-to-paint delay, and DOM churn.">
+                            <SectionShell title={i18n.t('debugConsole.sections.rendererProbes')} description={i18n.t('debugConsole.ui.rendererProbesDescription')}>
                               <DefinitionList
                                 items={[
-                                  { label: 'Collecting', value: props.controller.performanceSnapshot().collecting ? 'Yes' : 'No' },
-                                  { label: 'FPS samples', value: String(props.controller.performanceSnapshot().fps.samples) },
-                                  { label: 'Last frame gap', value: formatDuration(props.controller.performanceSnapshot().frame_timing.last_frame_ms) },
-                                  { label: 'Max frame gap', value: formatDuration(props.controller.performanceSnapshot().frame_timing.max_frame_ms) },
-                                  { label: 'Interactions', value: String(props.controller.performanceSnapshot().interactions.count) },
-                                  { label: 'Last input', value: compact(props.controller.performanceSnapshot().interactions.last_type) || '-' },
-                                  { label: 'Last input delay', value: formatDuration(props.controller.performanceSnapshot().interactions.last_paint_delay_ms) },
-                                  { label: 'Mutation batches', value: String(props.controller.performanceSnapshot().dom_activity.mutation_batches) },
-                                  { label: 'Mutation records', value: String(props.controller.performanceSnapshot().dom_activity.mutation_records) },
-                                  { label: 'Nodes added', value: String(props.controller.performanceSnapshot().dom_activity.nodes_added) },
-                                  { label: 'Nodes removed', value: String(props.controller.performanceSnapshot().dom_activity.nodes_removed) },
-                                  { label: 'Last mutation', value: formatTimestamp(props.controller.performanceSnapshot().dom_activity.last_mutation_at) },
+                                  { label: i18n.t('debugConsole.fields.collecting'), value: boolLabel(i18n, props.controller.performanceSnapshot().collecting) },
+                                  { label: i18n.t('debugConsole.fields.fpsSamples'), value: String(props.controller.performanceSnapshot().fps.samples) },
+                                  { label: i18n.t('debugConsole.fields.lastFrameGap'), value: formatDuration(props.controller.performanceSnapshot().frame_timing.last_frame_ms) },
+                                  { label: i18n.t('debugConsole.fields.maxFrameGap'), value: formatDuration(props.controller.performanceSnapshot().frame_timing.max_frame_ms) },
+                                  { label: i18n.t('debugConsole.fields.interactions'), value: String(props.controller.performanceSnapshot().interactions.count) },
+                                  { label: i18n.t('debugConsole.fields.lastInput'), value: compact(props.controller.performanceSnapshot().interactions.last_type) || '-' },
+                                  { label: i18n.t('debugConsole.fields.lastInputDelay'), value: formatDuration(props.controller.performanceSnapshot().interactions.last_paint_delay_ms) },
+                                  { label: i18n.t('debugConsole.fields.mutationBatches'), value: String(props.controller.performanceSnapshot().dom_activity.mutation_batches) },
+                                  { label: i18n.t('debugConsole.fields.mutationRecords'), value: String(props.controller.performanceSnapshot().dom_activity.mutation_records) },
+                                  { label: i18n.t('debugConsole.fields.nodesAdded'), value: String(props.controller.performanceSnapshot().dom_activity.nodes_added) },
+                                  { label: i18n.t('debugConsole.fields.nodesRemoved'), value: String(props.controller.performanceSnapshot().dom_activity.nodes_removed) },
+                                  { label: i18n.t('debugConsole.fields.lastMutation'), value: formatTimestamp(props.controller.performanceSnapshot().dom_activity.last_mutation_at) },
                                 ]}
                               />
                             </SectionShell>
 
                             <SectionShell
-                              title="Navigation and paints"
+                              title={i18n.t('debugConsole.sections.navigationAndPaints')}
                               description={props.controller.collectUIMetrics()
-                                ? 'Browser timing data captured from the current renderer session.'
-                                : 'Enable collect_ui_metrics to capture browser-native paint, navigation, and memory timing in this panel.'}
+                                ? i18n.t('debugConsole.ui.navigationDescriptionEnabled')
+                                : i18n.t('debugConsole.ui.navigationDescriptionDisabled')}
                             >
                               <DefinitionList
                                 items={[
-                                  { label: 'First paint', value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().paints.first_paint_ms) : 'Off' },
-                                  { label: 'First contentful paint', value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().paints.first_contentful_paint_ms) : 'Off' },
-                                  { label: 'Navigation type', value: props.controller.collectUIMetrics() ? (compact(props.controller.performanceSnapshot().navigation.type) || '-') : 'Off' },
-                                  { label: 'DOMContentLoaded', value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().navigation.dom_content_loaded_ms) : 'Off' },
-                                  { label: 'Load event', value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().navigation.load_event_ms) : 'Off' },
-                                  { label: 'Response end', value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().navigation.response_end_ms) : 'Off' },
-                                  { label: 'JS heap used', value: props.controller.collectUIMetrics() ? formatBytes(props.controller.performanceSnapshot().memory?.used_js_heap_size) : 'Off' },
-                                  { label: 'JS heap total', value: props.controller.collectUIMetrics() ? formatBytes(props.controller.performanceSnapshot().memory?.total_js_heap_size) : 'Off' },
+                                  { label: i18n.t('debugConsole.fields.firstPaint'), value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().paints.first_paint_ms) : offLabel(i18n) },
+                                  { label: i18n.t('debugConsole.fields.firstContentfulPaint'), value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().paints.first_contentful_paint_ms) : offLabel(i18n) },
+                                  { label: i18n.t('debugConsole.fields.navigationType'), value: props.controller.collectUIMetrics() ? (compact(props.controller.performanceSnapshot().navigation.type) || '-') : offLabel(i18n) },
+                                  { label: i18n.t('debugConsole.fields.domContentLoaded'), value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().navigation.dom_content_loaded_ms) : offLabel(i18n) },
+                                  { label: i18n.t('debugConsole.fields.loadEvent'), value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().navigation.load_event_ms) : offLabel(i18n) },
+                                  { label: i18n.t('debugConsole.fields.responseEnd'), value: props.controller.collectUIMetrics() ? formatDuration(props.controller.performanceSnapshot().navigation.response_end_ms) : offLabel(i18n) },
+                                  { label: i18n.t('debugConsole.fields.jsHeapUsed'), value: props.controller.collectUIMetrics() ? formatBytes(props.controller.performanceSnapshot().memory?.used_js_heap_size) : offLabel(i18n) },
+                                  { label: i18n.t('debugConsole.fields.jsHeapTotal'), value: props.controller.collectUIMetrics() ? formatBytes(props.controller.performanceSnapshot().memory?.total_js_heap_size) : offLabel(i18n) },
                                 ]}
                               />
                             </SectionShell>
 
                             <SectionShell
-                              title="Instrumentation support"
+                              title={i18n.t('debugConsole.sections.instrumentationSupport')}
                               description={props.controller.collectUIMetrics()
-                                ? 'Capabilities currently available in this browser process.'
-                                : 'Capabilities shown below are available in this browser, but advanced capture is currently optional.'}
+                                ? i18n.t('debugConsole.ui.instrumentationDescriptionEnabled')
+                                : i18n.t('debugConsole.ui.instrumentationDescriptionDisabled')}
                             >
                               <DefinitionList
                                 items={[
-                                  { label: 'Long tasks', value: props.controller.performanceSnapshot().supported.longtask ? 'Supported' : 'Unavailable' },
-                                  { label: 'Layout shift', value: props.controller.performanceSnapshot().supported.layout_shift ? 'Supported' : 'Unavailable' },
-                                  { label: 'Paint timing', value: props.controller.performanceSnapshot().supported.paint ? 'Supported' : 'Unavailable' },
-                                  { label: 'Navigation timing', value: props.controller.performanceSnapshot().supported.navigation ? 'Supported' : 'Unavailable' },
-                                  { label: 'Memory', value: props.controller.performanceSnapshot().supported.memory ? 'Supported' : 'Unavailable' },
-                                  { label: 'Mutation observer', value: props.controller.performanceSnapshot().supported.mutation_observer ? 'Supported' : 'Unavailable' },
-                                  { label: 'Interaction latency', value: props.controller.performanceSnapshot().supported.interaction_latency ? 'Supported' : 'Unavailable' },
+                                  { label: i18n.t('debugConsole.fields.longTasks'), value: supportedLabel(i18n, props.controller.performanceSnapshot().supported.longtask) },
+                                  { label: i18n.t('debugConsole.fields.layoutShift'), value: supportedLabel(i18n, props.controller.performanceSnapshot().supported.layout_shift) },
+                                  { label: i18n.t('debugConsole.fields.paintTiming'), value: supportedLabel(i18n, props.controller.performanceSnapshot().supported.paint) },
+                                  { label: i18n.t('debugConsole.fields.navigationTiming'), value: supportedLabel(i18n, props.controller.performanceSnapshot().supported.navigation) },
+                                  { label: i18n.t('debugConsole.fields.memory'), value: supportedLabel(i18n, props.controller.performanceSnapshot().supported.memory) },
+                                  { label: i18n.t('debugConsole.fields.mutationObserver'), value: supportedLabel(i18n, props.controller.performanceSnapshot().supported.mutation_observer) },
+                                  { label: i18n.t('debugConsole.fields.interactionLatency'), value: supportedLabel(i18n, props.controller.performanceSnapshot().supported.interaction_latency) },
                                 ]}
                               />
                             </SectionShell>
                           </div>
 
-                          <SectionShell title="Recent UI events" description="A local ring buffer for frame drops, long tasks, and layout spikes.">
+                          <SectionShell title={i18n.t('debugConsole.sections.recentUiEvents')} description={i18n.t('debugConsole.ui.recentEventsDescription')}>
                             <Show
                               when={props.controller.performanceSnapshot().recent_events.length > 0}
-                              fallback={<EmptyState title="No UI spikes recorded" message="When frame drops, long tasks, or layout shifts happen, they will show up here with a small local event log." />}
+                              fallback={<EmptyState title={i18n.t('debugConsole.empty.noUiSpikesTitle')} message={i18n.t('debugConsole.empty.noUiSpikesMessage')} />}
                             >
                               <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
                                 <For each={props.controller.performanceSnapshot().recent_events}>
@@ -1117,7 +1160,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                                           </div>
                                           <div class="mt-2 text-[9px] leading-5 text-muted-foreground">{compact(event.message) || '-'}</div>
                                         </div>
-                                        <div class="shrink-0">{renderEventBadge(event)}</div>
+                                        <div class="shrink-0">{renderEventBadge(event, i18n)}</div>
                                       </div>
                                     </div>
                                   )}
@@ -1136,38 +1179,44 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                         <MetricStrip
                           columnsClass="sm:grid-cols-2 xl:grid-cols-5"
                           items={[
-                            { label: 'Events', value: String(props.controller.stats().total_events) },
-                            { label: 'Runtime', value: String(props.controller.stats().agent_events) },
-                            { label: 'Desktop', value: String(props.controller.stats().desktop_events) },
-                            { label: 'Slow', value: String(props.controller.stats().slow_events) },
-                            { label: 'Traces', value: String(props.controller.stats().trace_count) },
+                            { label: i18n.t('debugConsole.metrics.events'), value: String(props.controller.stats().total_events) },
+                            { label: i18n.t('debugConsole.metrics.runtime'), value: String(props.controller.stats().agent_events) },
+                            { label: i18n.t('debugConsole.metrics.desktop'), value: String(props.controller.stats().desktop_events) },
+                            { label: i18n.t('debugConsole.metrics.slow'), value: String(props.controller.stats().slow_events) },
+                            { label: i18n.t('debugConsole.metrics.traces'), value: String(props.controller.stats().trace_count) },
                           ]}
                         />
 
                         <div class="grid gap-4 xl:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)]">
-                          <SectionShell title="Collector state" description="Frontend console visibility, diagnostics runtime, and current storage location.">
+                          <SectionShell title={i18n.t('debugConsole.sections.collectorState')} description={i18n.t('debugConsole.runtime.collectorStateDescription')}>
                             <DefinitionList
                               items={[
-                                { label: 'Console visible', value: props.controller.enabled() ? 'Yes' : 'No' },
-                                { label: 'Diagnostics runtime', value: props.controller.runtimeEnabled() ? 'Active' : 'Inactive' },
-                                { label: 'Stream', value: props.controller.streamConnected() ? 'Connected' : 'Disconnected' },
-                                { label: 'UI probes', value: props.controller.uiMetricsCollecting() ? 'Active' : 'Inactive' },
-                                { label: 'Advanced UI metrics', value: props.controller.collectUIMetrics() ? 'Enabled' : 'Optional' },
-                                { label: 'State dir', value: compact(props.controller.stateDir()) || '-', mono: true },
-                                { label: 'Last snapshot', value: formatTimestamp(props.controller.lastSnapshotAt()) },
+                                { label: i18n.t('debugConsole.fields.consoleVisible'), value: boolLabel(i18n, props.controller.enabled()) },
+                                { label: i18n.t('debugConsole.fields.diagnosticsRuntime'), value: activeLabel(i18n, props.controller.runtimeEnabled()) },
+                                { label: i18n.t('debugConsole.fields.stream'), value: connectedLabel(i18n, props.controller.streamConnected()) },
+                                { label: i18n.t('debugConsole.fields.uiProbes'), value: activeLabel(i18n, props.controller.uiMetricsCollecting()) },
+                                { label: i18n.t('debugConsole.fields.advancedUiMetrics'), value: enabledLabel(i18n, props.controller.collectUIMetrics()) },
+                                { label: i18n.t('debugConsole.fields.stateDir'), value: compact(props.controller.stateDir()) || '-', mono: true },
+                                { label: i18n.t('debugConsole.fields.lastSnapshot'), value: formatTimestamp(props.controller.lastSnapshotAt()) },
                               ]}
                             />
                           </SectionShell>
 
-                          <SectionShell title="Slow summary" description="Aggregated hotspots from the live in-memory diagnostics buffer.">
+                          <SectionShell title={i18n.t('debugConsole.sections.slowSummary')} description={i18n.t('debugConsole.runtime.slowSummaryDescription')}>
                             <Show
                               when={props.controller.slowSummary().length > 0}
-                              fallback={<EmptyState title="No slow hotspots" message="Slow summaries populate from the same live event buffer shown in the Requests tab." />}
+                              fallback={<EmptyState title={i18n.t('debugConsole.empty.noSlowHotspotsTitle')} message={i18n.t('debugConsole.empty.noSlowHotspotsMessage')} />}
                             >
                               <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
                                 <TableHeaderRow
                                   gridClass="grid-cols-[minmax(0,2fr)_4rem_4rem_6rem_6rem]"
-                                  columns={['Signature', 'Seen', 'Slow', 'Avg', 'Max']}
+                                  columns={[
+                                    i18n.t('debugConsole.table.signature'),
+                                    i18n.t('debugConsole.table.seen'),
+                                    i18n.t('debugConsole.table.slow'),
+                                    i18n.t('debugConsole.table.avg'),
+                                    i18n.t('debugConsole.table.max'),
+                                  ]}
                                 />
                                 <For each={props.controller.slowSummary()}>
                                   {(item) => (
@@ -1201,46 +1250,46 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
                       <div class="space-y-4">
                         <div class="grid gap-4 xl:grid-cols-[minmax(0,0.72fr)_minmax(0,1fr)]">
                           <div class="space-y-4">
-                            <SectionShell title="Bundle contents" description="Portable diagnostics you can attach to reviews, incident threads, or local debugging notes.">
+                            <SectionShell title={i18n.t('debugConsole.sections.bundleContents')} description={i18n.t('debugConsole.export.bundleContentsDescription')}>
                               <DefinitionList
                                 items={[
-                                  { label: 'Last export', value: formatTimestamp(props.controller.lastExportAt()) },
-                                  { label: 'Server events', value: String(props.controller.serverEvents().length) },
-                                  { label: 'Trace groups', value: String(props.controller.traces().length) },
-                                  { label: 'UI events', value: String(props.controller.performanceSnapshot().recent_events.length) },
+                                  { label: i18n.t('debugConsole.fields.lastExport'), value: formatTimestamp(props.controller.lastExportAt()) },
+                                  { label: i18n.t('debugConsole.fields.serverEvents'), value: String(props.controller.serverEvents().length) },
+                                  { label: i18n.t('debugConsole.fields.traceGroups'), value: String(props.controller.traces().length) },
+                                  { label: i18n.t('debugConsole.fields.uiEvents'), value: String(props.controller.performanceSnapshot().recent_events.length) },
                                 ]}
                               />
                             </SectionShell>
 
                             <SectionShell
-                              title="Included sources"
+                              title={i18n.t('debugConsole.sections.includedSources')}
                               description={props.controller.collectUIMetrics()
-                                ? 'The export merges persisted diagnostics with browser-local performance data.'
-                                : 'Core request diagnostics are always exported. Advanced browser-native UI timings join the bundle only when collect_ui_metrics is enabled.'}
+                                ? i18n.t('debugConsole.export.includedSourcesDescriptionEnabled')
+                                : i18n.t('debugConsole.export.includedSourcesDescriptionDisabled')}
                             >
                               <div class="overflow-hidden rounded-md border border-border/70 bg-background shadow-sm">
                                 <div class="border-b border-border/60 px-3 py-2.5 text-xs">
-                                  <div class="font-medium text-foreground">Backend diagnostics</div>
-                                  <div class="mt-1 text-[9px] leading-5 text-muted-foreground">Snapshot summary, runtime event list, desktop event list, and runtime state directory.</div>
+                                  <div class="font-medium text-foreground">{i18n.t('debugConsole.export.backendDiagnosticsTitle')}</div>
+                                  <div class="mt-1 text-[9px] leading-5 text-muted-foreground">{i18n.t('debugConsole.export.backendDiagnosticsDescription')}</div>
                                 </div>
                                 <div class="border-b border-border/60 px-3 py-2.5 text-xs">
-                                  <div class="font-medium text-foreground">Current UI state</div>
+                                  <div class="font-medium text-foreground">{i18n.t('debugConsole.export.currentUiStateTitle')}</div>
                                   <div class="mt-1 text-[9px] leading-5 text-muted-foreground">
                                     <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-foreground">visible</code>
-                                    {' and '}
+                                    {` ${i18n.t('debugConsole.export.and')} `}
                                     <code class="rounded bg-muted px-1.5 py-0.5 font-mono text-[9px] text-foreground">minimized</code>
-                                    {' flags from the current frontend console state. UI metrics are collected automatically while the console is visible.'}
+                                    {` ${i18n.t('debugConsole.export.currentUiStateDescriptionSuffix')}`}
                                   </div>
                                 </div>
                                 <div class="px-3 py-2.5 text-xs">
-                                  <div class="font-medium text-foreground">UI performance snapshot</div>
-                                  <div class="mt-1 text-[9px] leading-5 text-muted-foreground">Renderer-local FPS, long-task, layout-shift, paint, navigation, memory, and recent UI event data.</div>
+                                  <div class="font-medium text-foreground">{i18n.t('debugConsole.export.uiPerformanceSnapshotTitle')}</div>
+                                  <div class="mt-1 text-[9px] leading-5 text-muted-foreground">{i18n.t('debugConsole.export.uiPerformanceSnapshotDescription')}</div>
                                 </div>
                               </div>
                             </SectionShell>
                           </div>
 
-                          <SectionShell title="Bundle preview" description="High-level JSON preview of the current export payload.">
+                          <SectionShell title={i18n.t('debugConsole.sections.bundlePreview')} description={i18n.t('debugConsole.export.bundlePreviewDescription')}>
                             <MonoBlock value={prettyJSON({
                               console_visible: props.controller.enabled(),
                               diagnostics_enabled: props.controller.runtimeEnabled(),
@@ -1255,7 +1304,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
 
                         <div class="flex items-center justify-end">
                           <Button variant="default" class="cursor-pointer text-[10px]" onClick={() => void exportBundle()} disabled={props.controller.exporting()}>
-                            {props.controller.exporting() ? 'Exporting...' : 'Download debug bundle'}
+                            {props.controller.exporting() ? i18n.t('debugConsole.actions.exporting') : i18n.t('debugConsole.actions.downloadBundle')}
                           </Button>
                         </div>
                       </div>
@@ -1268,6 +1317,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
 }
 
 export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleController }>) {
+  const i18n = useI18n();
   return (
     <>
       <Show when={props.controller.enabled() && props.controller.minimized()}>
@@ -1281,9 +1331,9 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
           style={semanticInteractiveStyle(props.controller.streamConnected() ? 'success' : 'warning', 'strong')}
         >
           <StatusDot tone={props.controller.streamConnected() ? 'success' : 'warning'} />
-          <span class="text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground">Debug Console</span>
+          <span class="text-[9px] font-semibold uppercase tracking-[0.14em] text-foreground">{i18n.t('debugConsole.windowTitle')}</span>
           <SettingsPill tone={props.controller.streamConnected() ? 'success' : 'warning'}>
-            {props.controller.streamConnected() ? 'Live' : 'Idle'}
+            {props.controller.streamConnected() ? i18n.t('debugConsole.badges.live') : i18n.t('debugConsole.badges.idle')}
           </SettingsPill>
         </button>
       </Show>
@@ -1296,7 +1346,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
               props.controller.minimize();
             }
           }}
-          title="Debug Console"
+          title={i18n.t('debugConsole.windowTitle')}
           persistenceKey="debug-console-window"
           defaultPosition={{ x: 48, y: 76 }}
           defaultSize={{ width: 1120, height: 720 }}
