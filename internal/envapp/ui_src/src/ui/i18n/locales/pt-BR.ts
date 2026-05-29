@@ -242,6 +242,10 @@ export const ptBR = {
       runtimeUnavailableRetrying: "O Runtime está indisponível agora. Tentando novamente automaticamente.",
       auditLog: "Log de auditoria",
       adminRequired: "Admin necessário",
+      envTypeLocal: "Local",
+      envTypeSSH: "SSH",
+      envTypeProvider: "Provedor",
+      envTypeRemote: "Remoto",
     },
     commandPalette: {
       categories: {

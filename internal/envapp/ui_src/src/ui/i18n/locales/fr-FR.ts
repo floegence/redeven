@@ -242,6 +242,10 @@ export const frFR = {
       runtimeUnavailableRetrying: "La Runtime est indisponible pour le moment. Nouvelle tentative automatique.",
       auditLog: "Journal d'audit",
       adminRequired: "Admin requis",
+      envTypeLocal: "Local",
+      envTypeSSH: "SSH",
+      envTypeProvider: "Fournisseur",
+      envTypeRemote: "Distant",
     },
     commandPalette: {
       categories: {

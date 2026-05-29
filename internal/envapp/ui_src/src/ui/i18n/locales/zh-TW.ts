@@ -242,6 +242,10 @@ export const zhTW = {
       runtimeUnavailableRetrying: "Runtime 目前不可用。正在自動重試。",
       auditLog: "稽核記錄",
       adminRequired: "需要管理員權限",
+      envTypeLocal: "本地",
+      envTypeSSH: "SSH",
+      envTypeProvider: "提供者",
+      envTypeRemote: "遠端",
     },
     commandPalette: {
       categories: {

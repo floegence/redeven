@@ -242,6 +242,10 @@ export const jaJP = {
       runtimeUnavailableRetrying: "Runtime は現在利用できません。自動的に再試行しています。",
       auditLog: "監査ログ",
       adminRequired: "管理者権限が必要です",
+      envTypeLocal: "ローカル",
+      envTypeSSH: "SSH",
+      envTypeProvider: "プロバイダー",
+      envTypeRemote: "リモート",
     },
     commandPalette: {
       categories: {

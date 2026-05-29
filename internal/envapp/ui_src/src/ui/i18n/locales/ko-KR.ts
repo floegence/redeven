@@ -242,6 +242,10 @@ export const koKR = {
       runtimeUnavailableRetrying: "Runtime을 현재 사용할 수 없습니다. 자동으로 재시도 중입니다.",
       auditLog: "감사 로그",
       adminRequired: "관리자 권한 필요",
+      envTypeLocal: "로컬",
+      envTypeSSH: "SSH",
+      envTypeProvider: "제공자",
+      envTypeRemote: "원격",
     },
     commandPalette: {
       categories: {

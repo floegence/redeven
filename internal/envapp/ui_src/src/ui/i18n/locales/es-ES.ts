@@ -242,6 +242,10 @@ export const esES = {
       runtimeUnavailableRetrying: "Runtime no está disponible ahora. Reintentando automáticamente.",
       auditLog: "Registro de auditoría",
       adminRequired: "Se requiere admin",
+      envTypeLocal: "Local",
+      envTypeSSH: "SSH",
+      envTypeProvider: "Proveedor",
+      envTypeRemote: "Remoto",
     },
     commandPalette: {
       categories: {
