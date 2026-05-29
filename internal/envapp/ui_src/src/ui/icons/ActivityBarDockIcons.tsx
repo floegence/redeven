@@ -82,3 +82,33 @@ export function ActivityBarPortsIcon(props: { class?: string }) {
     </svg>
   );
 }
+
+export function ActivityBarSwitchIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
+      <rect x="4" y="6" width="14" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".5" />
+      <path d="M18,7.25 L21,4 L21,10.5 Z" fill="currentColor" fill-opacity=".7" />
+      <rect x="6" y="15.5" width="14" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".5" />
+      <path d="M6,16.75 L3,13.5 L3,20 Z" fill="currentColor" fill-opacity=".7" />
+      <line x1="12" y1="8.5" x2="12" y2="15.5" stroke="currentColor" stroke-opacity=".1" stroke-width=".8" stroke-dasharray="2 2" />
+    </svg>
+  );
+}
+
+export function ActivityBarSettingsIcon(props: { class?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
+      <circle cx="12" cy="12" r="5.5" fill="currentColor" fill-opacity=".06" stroke="currentColor" stroke-opacity=".25" stroke-width=".8" />
+      <rect x="10.5" y="3.5" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".55" />
+      <rect x="10.5" y="18" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".55" />
+      <rect x="3.5" y="10.5" width="2.5" height="3" rx="1.2" fill="currentColor" fill-opacity=".55" />
+      <rect x="18" y="10.5" width="2.5" height="3" rx="1.2" fill="currentColor" fill-opacity=".55" />
+      <g transform="rotate(45 12 12)"><rect x="10.5" y="3.5" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".4" /></g>
+      <g transform="rotate(135 12 12)"><rect x="10.5" y="3.5" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".4" /></g>
+      <g transform="rotate(225 12 12)"><rect x="10.5" y="3.5" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".4" /></g>
+      <g transform="rotate(315 12 12)"><rect x="10.5" y="3.5" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".4" /></g>
+      <circle cx="12" cy="12" r="3" fill="currentColor" fill-opacity=".14" />
+      <circle cx="12" cy="12" r="1.5" fill="currentColor" fill-opacity=".35" />
+    </svg>
+  );
+}
