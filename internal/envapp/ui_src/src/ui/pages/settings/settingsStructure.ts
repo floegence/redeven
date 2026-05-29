@@ -46,7 +46,6 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionMeta[] = Object.freeze([
   { id: 'config', navLabel: 'Config File', icon: FileCode, group: 'overview' },
   { id: 'connection', navLabel: 'Connection', icon: Globe, group: 'overview' },
   { id: 'agent', navLabel: 'Runtime Status', icon: Zap, group: 'overview' },
-  { id: 'interface', navLabel: 'Interface', icon: Globe, group: 'overview' },
   { id: 'runtime', navLabel: 'Shell & Workspace', icon: Terminal, group: 'runtime_configuration' },
   { id: 'logging', navLabel: 'Logging', icon: Database, group: 'runtime_configuration' },
   { id: 'codespaces', navLabel: 'Codespaces & Tooling', icon: Code, group: 'codespaces_tooling' },
@@ -65,7 +64,7 @@ export const SETTINGS_SECTION_META: Readonly<Record<EnvSettingsSection, Settings
 );
 
 export const SETTINGS_GROUPS: readonly SettingsGroupMeta[] = Object.freeze([
-  { id: 'overview', title: 'Overview', sections: ['config', 'connection', 'agent', 'interface'] },
+  { id: 'overview', title: 'Overview', sections: ['config', 'connection', 'agent'] },
   { id: 'runtime_configuration', title: 'Runtime Configuration', sections: ['runtime', 'logging'] },
   { id: 'codespaces_tooling', title: 'Codespaces & Tooling', sections: ['codespaces'] },
   { id: 'security', title: 'Security', sections: ['permission_policy'] },

@@ -32,22 +32,11 @@ export const frFR = {
   },
   language: {
     label: "Langue",
-    preferenceLabel: "Préférence linguistique",
     optionsLabel: "Options de langue",
-    sourceLabel: "Source",
     systemDefault: "Valeur par défaut du système",
     currentResolved: "{language} utilisé",
     updatedTitle: "Langue mise à jour",
     updatedMessage: "Redeven utilisera {language}.",
-    availableCount: {
-      one: "{count} langue",
-      other: "{count} langues",
-    },
-    source: {
-      explicit: "Langue sélectionnée",
-      system: "Valeur par défaut du système",
-      fallback: "Langue de secours",
-    },
   },
   notesOverlay: {
     title: "Notes",
@@ -131,7 +120,6 @@ export const frFR = {
     searchPlaceholder: "Rechercher dans les paramètres",
     filteredSections: "{visible} section(s) sur {total}",
     nav: {
-      interface: "Interface",
       config: "Fichier de configuration",
       connection: "Connexion",
       agent: "État Runtime",
@@ -152,11 +140,6 @@ export const frFR = {
       aiExtensions: "AI et extensions",
       diagnostics: "Diagnostics",
     },
-    interfaceTitle: "Interface",
-    interfaceDescription: "Ajustez les préférences de l'interface Env App.",
-    languageDescription: "Choisissez la langue de l'interface pour cette Env App.",
-    desktopBridgeNote: "Les sessions Env App intégrées suivent Redeven Desktop.",
-    standaloneNote: "Les sessions Env App autonomes enregistrent la langue pour l'origin de ce navigateur.",
     autoSave: {
       saving: "Enregistrement...",
       paused: "Enregistrement automatique suspendu",
@@ -244,7 +227,7 @@ export const frFR = {
       adminRequired: "Admin requis",
       envTypeLocal: "Local",
       envTypeSSH: "SSH",
-      envTypeProvider: "Fournisseur",
+      envTypeProvider: "Provider",
       envTypeRemote: "Distant",
     },
     commandPalette: {

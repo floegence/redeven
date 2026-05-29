@@ -298,6 +298,7 @@ vi.mock('./settings/SettingsPrimitives', () => ({
     </label>
   ),
   CopyButton: (props: any) => <button type="button" data-copy-value={props.value}>Copy</button>,
+  DotIndicator: (props: any) => <span data-dot-indicator={props.active ? 'active' : 'inactive'}>{props.label}</span>,
   FieldLabel: (props: any) => <label>{props.children}</label>,
   InfoRow: (props: any) => (
     <div>
@@ -314,6 +315,14 @@ vi.mock('./settings/SettingsPrimitives', () => ({
     </section>
   ),
   SettingsCard: (props: any) => (
+    <section data-settings-card={props.title}>
+      <h3>{props.title}</h3>
+      <p>{props.description}</p>
+      {props.actions}
+      {props.children}
+    </section>
+  ),
+  SettingsSection: (props: any) => (
     <section data-settings-card={props.title}>
       <h3>{props.title}</h3>
       <p>{props.description}</p>
@@ -411,7 +420,6 @@ describe('EnvSettingsPage', () => {
       'Config File',
       'Connection',
       'Runtime Status',
-      'Interface',
       'Shell & Workspace',
       'Logging',
       'Codespaces & Tooling',
@@ -428,10 +436,8 @@ describe('EnvSettingsPage', () => {
     expect(renderedNavLabels).toEqual(navLabels);
 
     expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
-    expect(host.querySelector('[data-settings-card="Interface"]')).toBeNull();
-    await openSettingsSection(host, 'interface');
-    expect(host.querySelector('[data-settings-card="Interface"]')?.textContent).toContain('Language preference');
-    expect(host.querySelector('[data-settings-card="Interface"]')?.textContent).toContain('System default');
+    expect(host.textContent).not.toContain('Language preference');
+    expect(host.textContent).not.toContain('System default');
 
     const diagnosticsGroup = host.querySelector('[data-settings-group="diagnostics"]');
     expect(diagnosticsGroup?.querySelector('[data-settings-nav-item="debug_console"]')).not.toBeNull();
@@ -449,7 +455,6 @@ describe('EnvSettingsPage', () => {
 
     await openSettingsSection(host, 'debug_console');
     expect(host.querySelector('[data-settings-card="Debug Console"]')).toBeTruthy();
-    expect(host.querySelector('[data-settings-card="Interface"]')).toBeNull();
 
     await openSettingsSection(host, 'codespaces');
     expect(host.querySelector('[data-settings-card="Browser Editor"]')).toBeTruthy();
@@ -460,12 +465,11 @@ describe('EnvSettingsPage', () => {
     await flushPage();
 
     expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
-    expect(host.querySelector('[data-settings-card="Interface"]')).toBeNull();
   });
 
-  it('honors the shell focus request for the Interface section', async () => {
+  it('honors the shell focus request for a Runtime Settings section', async () => {
     const [focusSeq, setFocusSeq] = createSignal(1);
-    const [focusSection] = createSignal('interface');
+    const [focusSection] = createSignal('agent');
     settingsFocusSeqAccessor = focusSeq;
     settingsFocusSectionAccessor = focusSection;
 
@@ -478,7 +482,7 @@ describe('EnvSettingsPage', () => {
     setFocusSeq(2);
     await flushPage();
 
-    expect(host.querySelector('[data-settings-card="Interface"]')).toBeTruthy();
+    expect(host.querySelector('[data-settings-card="Runtime Status"]')).toBeTruthy();
   });
 
   it('renders Runtime Service identity and live-work rows in Runtime Status', async () => {

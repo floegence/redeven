@@ -9,7 +9,6 @@ import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useI18n } from '../i18n';
 import type { EnvSettingsSection } from './EnvContext';
 
-import { InterfaceSection } from './settings/sections/InterfaceSection';
 import { ConfigFileSection } from './settings/sections/ConfigFileSection';
 import { ConnectionSection } from './settings/sections/ConnectionSection';
 import { RuntimeStatusSection } from './settings/sections/RuntimeStatusSection';
@@ -23,7 +22,6 @@ import { CodexSection } from './settings/sections/CodexSection';
 import { DebugConsoleSection } from './settings/sections/DebugConsoleSection';
 
 const NAV_SEARCH_KEYWORDS: Record<EnvSettingsSection, string[]> = {
-  interface: ['language', 'locale', 'translation', 'ui', 'interface', 'system default'],
   config: ['path', 'config file', 'configuration', 'json', 'config_path', 'toml'],
   connection: ['url', 'e2ee', 'psk', 'encryption', 'websocket', 'ws', 'channel', 'environment id', 'instance id', 'control plane'],
   agent: ['version', 'restart', 'upgrade', 'update', 'status', 'maintenance', 'health', 'runtime status', 'compatibility', 'release'],
@@ -49,8 +47,6 @@ function filterNavItems(query: string, items: readonly SettingsNavItem[]): Setti
 
 function navLabel(section: EnvSettingsSection, fallback: string, t: ReturnType<typeof useI18n>['t']): string {
   switch (section) {
-    case 'interface':
-      return t('settings.nav.interface');
     case 'config':
       return t('settings.nav.config');
     case 'connection':
@@ -98,7 +94,6 @@ function groupTitle(groupID: SettingsGroupID, fallback: string, t: ReturnType<ty
 }
 
 const sectionComponents: Record<EnvSettingsSection, () => JSX.Element> = {
-  interface: InterfaceSection,
   config: ConfigFileSection,
   connection: ConnectionSection,
   agent: RuntimeStatusSection,

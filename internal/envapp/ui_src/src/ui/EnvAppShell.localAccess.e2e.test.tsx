@@ -290,6 +290,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   return {
     Activity: Icon,
     ArrowRightLeft: Icon,
+    Check: Icon,
     ChevronDown: Icon,
     Code: Icon,
     Copy: Icon,
@@ -384,7 +385,10 @@ vi.mock('./pages/EnvSettingsPage', async () => {
   };
 });
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
-vi.mock('./deck/redevenDeckWidgets', () => ({ redevenDeckWidgets: [] }));
+vi.mock('./deck/redevenDeckWidgets', () => ({
+  localizedRedevenDeckWidgets: () => [],
+  redevenDeckWidgets: [],
+}));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/AskFlowerComposerWindow', () => ({ AskFlowerComposerWindow: () => <div /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
@@ -502,6 +506,7 @@ beforeEach(() => {
   setSidebarActiveTabMock.mockClear();
   setSidebarCollapsedMock.mockClear();
   reloadCurrentPageMock.mockReset();
+  delete window.redevenDesktopLanguage;
   accessStatusMock.mockReset();
   accessStatusMock.mockImplementation(async () => ({ passwordRequired: true, unlocked: resumeCalls.length > 0 }));
   accessResumeMock.mockReset();
@@ -541,7 +546,9 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell environment entry affordances', () => {
-  it('shows Runtime Settings in the activity bottom area while keeping the header clean and command palette access intact', async () => {
+  it('shows the browser language command in the palette while keeping runtime settings separate', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+
     const host = document.createElement('div');
     document.body.appendChild(host);
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
@@ -559,6 +566,7 @@ describe('EnvAppShell environment entry affordances', () => {
             keybind?: string;
           };
       const runtimeSettingsButton = host.querySelector('[data-activity-id="settings"]') as HTMLButtonElement | null;
+      const languageButton = host.querySelector('[data-envapp-language-trigger="topbar"]') as HTMLButtonElement | null;
 
       expect(runtimeSettingsCommand).toBeTruthy();
       expect(runtimeSettingsCommand?.title).toBe('Open Runtime Settings');
@@ -567,6 +575,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(runtimeSettingsButton?.textContent).toContain('Runtime Settings');
       expect(host.querySelector('[data-activity-id="switch-environment"]')).toBeNull();
       expect(host.querySelector('button[aria-label="Open environment actions"]')).toBeNull();
+      expect(languageButton).toBeTruthy();
 
       setSidebarActiveTabMock.mockClear();
       runtimeSettingsButton?.click();
@@ -575,6 +584,11 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(sidebarActiveTabValue).toBe('settings');
       expect(setSidebarActiveTabMock).toHaveBeenCalled();
       expect(settingsPageState.focusSection).toBe('config');
+
+      languageButton?.click();
+      await flushAsync();
+
+      expect(host.querySelector('[data-envapp-language-menu="topbar"]')).toBeTruthy();
 
       const changeLanguageCommand = commandState.commands.find((command) => command.id === 'redeven.env.changeLanguage') as
         | undefined
@@ -585,7 +599,8 @@ describe('EnvAppShell environment entry affordances', () => {
       changeLanguageCommand?.execute?.();
       await flushAsync();
 
-      expect(settingsPageState.focusSection).toBe('interface');
+      expect(host.querySelector('[data-envapp-language-menu="topbar"]')).toBeTruthy();
+      expect(settingsPageState.focusSection).toBe('config');
 
       runtimeSettingsButton?.click();
       await flushAsync();
@@ -595,6 +610,85 @@ describe('EnvAppShell environment entry affordances', () => {
       dispose();
     }
   }, 10000);
+
+  it('keeps browser language controls available on the access gate without touching runtime settings', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      const trigger = host.querySelector('[data-envapp-language-trigger="access_gate"]') as HTMLButtonElement | null;
+      expect(trigger).toBeTruthy();
+      expect(host.querySelector('[data-envapp-language-trigger="topbar"]')).toBeNull();
+      expect(host.querySelector('[data-envapp-language-menu="access_gate"]')).toBeNull();
+
+      const openLanguageCommand = commandState.commands.find((command) => command.id === 'redeven.env.changeLanguage') as
+        | undefined
+        | {
+            execute?: () => void;
+          };
+      expect(openLanguageCommand).toBeTruthy();
+      openLanguageCommand?.execute?.();
+      await flushAsync();
+
+      expect(host.querySelector('[data-envapp-language-menu="access_gate"]')).toBeTruthy();
+      expect(host.querySelector('[data-envapp-language-menu="topbar"]')).toBeNull();
+
+      trigger?.click();
+      await flushAsync();
+
+      expect(host.querySelector('[data-envapp-language-menu="access_gate"]')).toBeNull();
+      expect(settingsPageState.focusSection).toBe(null);
+      expect(connectMock).not.toHaveBeenCalled();
+      expect(unlockLocalAccessMock).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not register Env App language controls when Desktop owns the language bridge', async () => {
+    const snapshot = {
+      preference: 'zh-CN',
+      resolved_locale: 'zh-CN',
+      source: 'explicit',
+      system_candidates: ['zh-Hans'],
+    } as const;
+    const setPreference = vi.fn(() => snapshot);
+    window.redevenDesktopLanguage = {
+      getSnapshot: () => snapshot,
+      setPreference,
+      subscribe: () => () => undefined,
+    };
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const { I18nProvider } = await import('./i18n');
+    const dispose = render(() => (
+      <I18nProvider>
+        <EnvAppShell />
+      </I18nProvider>
+    ), host);
+
+    try {
+      await flushAsync();
+
+      expect(document.documentElement.lang).toBe('zh-CN');
+      expect(host.querySelector('[data-envapp-language-trigger]')).toBeNull();
+      expect(commandState.commands.find((command) => command.id === 'redeven.env.changeLanguage')).toBeFalsy();
+      expect(setPreference).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+      delete window.redevenDesktopLanguage;
+    }
+  });
 
   it('shows Switch Environment on the activity bottom area and keeps the command palette entry when the desktop bridge is available', async () => {
     const host = document.createElement('div');

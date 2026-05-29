@@ -32,24 +32,11 @@ export const ruRU = {
   },
   language: {
     label: "Язык",
-    preferenceLabel: "Языковые настройки",
     optionsLabel: "Варианты языка",
-    sourceLabel: "Источник",
     systemDefault: "Как в системе",
     currentResolved: "Используется {language}",
     updatedTitle: "Язык обновлен",
     updatedMessage: "Redeven будет использовать {language}.",
-    availableCount: {
-      one: "{count} язык",
-      few: "{count} языка",
-      many: "{count} языков",
-      other: "{count} языка",
-    },
-    source: {
-      explicit: "Выбранный язык",
-      system: "Как в системе",
-      fallback: "Резервный язык",
-    },
   },
   notesOverlay: {
     title: "Заметки",
@@ -133,7 +120,6 @@ export const ruRU = {
     searchPlaceholder: "Поиск настроек",
     filteredSections: "{visible} из {total} разделов",
     nav: {
-      interface: "Интерфейс",
       config: "Файл конфигурации",
       connection: "Подключение",
       agent: "Состояние Runtime",
@@ -154,11 +140,6 @@ export const ruRU = {
       aiExtensions: "AI и расширения",
       diagnostics: "Диагностика",
     },
-    interfaceTitle: "Интерфейс",
-    interfaceDescription: "Настройте параметры интерфейса Env App.",
-    languageDescription: "Выберите язык UI для этого Env App.",
-    desktopBridgeNote: "Встроенные сеансы Env App следуют настройкам Redeven Desktop.",
-    standaloneNote: "Автономные сеансы Env App сохраняют язык для текущего browser origin.",
     autoSave: {
       saving: "Сохранение...",
       paused: "Автосохранение приостановлено",
@@ -246,7 +227,7 @@ export const ruRU = {
       adminRequired: "Требуется admin",
       envTypeLocal: "Локальная",
       envTypeSSH: "SSH",
-      envTypeProvider: "Провайдер",
+      envTypeProvider: "Provider",
       envTypeRemote: "Удалённая",
     },
     commandPalette: {

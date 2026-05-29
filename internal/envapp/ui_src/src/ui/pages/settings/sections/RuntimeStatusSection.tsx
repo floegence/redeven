@@ -49,6 +49,7 @@ export function RuntimeStatusSection() {
   };
   const compatTone = runtimeServiceCompatibilityTone(ctx.runtimeService());
   const compatOk = () => compatTone === 'success';
+  const compatibilityMessage = () => String(ctx.runtimeService()?.compatibilityMessage ?? '').trim();
 
   const version = () => ctx.runtimeUpdate.version.currentVersion() || '—';
   const latestVersion = () => ctx.latestVersion()?.latest_version ? String(ctx.latestVersion()!.latest_version) : '—';
@@ -194,6 +195,9 @@ export function RuntimeStatusSection() {
         </Show>
         <Show when={ctx.upgradeState().message}>
           <div class="text-[11px] text-muted-foreground">{ctx.upgradeState().message}</div>
+        </Show>
+        <Show when={compatibilityMessage()}>
+          <div class="text-[11px] text-muted-foreground">{compatibilityMessage()}</div>
         </Show>
         <Show when={ctx.upgradeState().policy === 'desktop_release' && ctx.upgradeState().releasePageURL}>
           <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.desktopReleasePageHint')}</div>

@@ -170,7 +170,7 @@ import {
   type EnvWorkbenchHandoffAnchor,
 } from './envViewMode';
 import { EnvWorkbenchPage } from './workbench/EnvWorkbenchPage';
-import { useI18n } from './i18n';
+import { LanguagePreferenceMenu, useI18n } from './i18n';
 
 const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
 const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
@@ -643,6 +643,7 @@ export function EnvAppShell() {
 
   const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
+  const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
   const [aiThreadFocusSeq, setAIThreadFocusSeq] = createSignal(0);
   const [aiThreadFocusId, setAIThreadFocusId] = createSignal<string | null>(null);
   let lastWorkbenchPointerAnchor: (EnvWorkbenchHandoffAnchor & { observedAtMs: number }) | null = null;
@@ -2472,14 +2473,20 @@ export function EnvAppShell() {
         icon: Settings,
         execute: () => openSettings(),
       },
-      {
+    );
+
+    if (i18n.source() === 'browser') {
+      list.push({
         id: 'redeven.env.changeLanguage',
         title: i18n.t('shell.commandPalette.changeLanguageTitle'),
         description: i18n.t('shell.commandPalette.changeLanguageDescription'),
-        category: i18n.t('settings.interfaceTitle'),
+        category: i18n.t('language.label'),
         icon: Globe,
-        execute: () => openSettings('interface'),
-      },
+        execute: () => setLanguageMenuOpenSeq((value) => value + 1),
+      });
+    }
+
+    list.push(
       {
         id: 'redeven.env.reconnect',
         title: i18n.t('shell.commandPalette.reconnectTitle'),
@@ -2655,9 +2662,17 @@ export function EnvAppShell() {
             aria-describedby={accessGateRegionDescribedBy()}
             aria-busy={accessPending() || accessUnlocking() || accessRecoveryBusy()}
           >
-            <div class="space-y-2">
-              <h1 id={ACCESS_GATE_IDS.title} class="text-lg font-semibold text-foreground">{accessGateTitle()}</h1>
-              <p id={ACCESS_GATE_IDS.description} class="text-sm leading-6 text-muted-foreground">{accessGateDescription()}</p>
+            <div class="flex items-start justify-between gap-3">
+              <div class="min-w-0 space-y-2">
+                <h1 id={ACCESS_GATE_IDS.title} class="text-lg font-semibold text-foreground">{accessGateTitle()}</h1>
+                <p id={ACCESS_GATE_IDS.description} class="text-sm leading-6 text-muted-foreground">{accessGateDescription()}</p>
+              </div>
+              <LanguagePreferenceMenu
+                variant="access_gate"
+                openRequestSeq={languageMenuOpenSeq}
+                notify={notify}
+                class="shrink-0"
+              />
             </div>
 
             <Show when={accessGatePhase() === 'unlock_required'}>
@@ -2810,6 +2825,13 @@ export function EnvAppShell() {
         <NotesOverlayIcon class="w-4 h-4" />
       </TopBarIconButton>
       <DownloadTaskButton tooltip={topBarTooltip(i18n.t('shell.topbar.downloads'))} />
+      <Show when={!accessGateVisible()}>
+        <LanguagePreferenceMenu
+          variant="topbar"
+          openRequestSeq={languageMenuOpenSeq}
+          notify={notify}
+        />
+      </Show>
       <TopBarIconButton
         label={i18n.t('shell.topbar.toggleTheme')}
         tooltip={topBarTooltip(i18n.t('shell.topbar.toggleTheme'))}

@@ -30,22 +30,11 @@ export const enUS = defineDictionary({
   },
   language: {
     label: 'Language',
-    preferenceLabel: 'Language preference',
     optionsLabel: 'Language options',
-    sourceLabel: 'Source',
     systemDefault: 'System default',
     currentResolved: 'Using {language}',
     updatedTitle: 'Language updated',
     updatedMessage: 'Redeven will use {language}.',
-    availableCount: {
-      one: '{count} language',
-      other: '{count} languages',
-    },
-    source: {
-      explicit: 'Selected language',
-      system: 'System default',
-      fallback: 'Fallback language',
-    },
   },
   notesOverlay: {
     title: 'Notes',
@@ -129,7 +118,6 @@ export const enUS = defineDictionary({
     searchPlaceholder: 'Search settings',
     filteredSections: '{visible} of {total} sections',
     nav: {
-      interface: 'Interface',
       config: 'Config File',
       connection: 'Connection',
       agent: 'Runtime Status',
@@ -150,11 +138,6 @@ export const enUS = defineDictionary({
       aiExtensions: 'AI & Extensions',
       diagnostics: 'Diagnostics',
     },
-    interfaceTitle: 'Interface',
-    interfaceDescription: 'Adjust Env App interface preferences.',
-    languageDescription: 'Choose the UI language for this Env App.',
-    desktopBridgeNote: 'Embedded Env App sessions follow Redeven Desktop.',
-    standaloneNote: 'Standalone Env App sessions save language for this browser origin.',
     autoSave: {
       saving: 'Saving...',
       paused: 'Auto-save paused',

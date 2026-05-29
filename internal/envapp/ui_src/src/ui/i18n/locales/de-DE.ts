@@ -32,22 +32,11 @@ export const deDE = {
   },
   language: {
     label: "Sprache",
-    preferenceLabel: "Spracheinstellung",
     optionsLabel: "Sprachoptionen",
-    sourceLabel: "Quelle",
     systemDefault: "Systemstandard",
     currentResolved: "{language} wird verwendet",
     updatedTitle: "Sprache aktualisiert",
     updatedMessage: "Redeven verwendet {language}.",
-    availableCount: {
-      one: "{count} Sprache",
-      other: "{count} Sprachen",
-    },
-    source: {
-      explicit: "Ausgewählte Sprache",
-      system: "Systemstandard",
-      fallback: "Ausweichsprache",
-    },
   },
   notesOverlay: {
     title: "Notizen",
@@ -131,7 +120,6 @@ export const deDE = {
     searchPlaceholder: "Einstellungen suchen",
     filteredSections: "{visible} von {total} Bereichen",
     nav: {
-      interface: "Oberfläche",
       config: "Konfigurationsdatei",
       connection: "Verbindung",
       agent: "Runtime Status",
@@ -152,11 +140,6 @@ export const deDE = {
       aiExtensions: "AI & Erweiterungen",
       diagnostics: "Diagnose",
     },
-    interfaceTitle: "Oberfläche",
-    interfaceDescription: "Passe die Einstellungen der Env App Oberfläche an.",
-    languageDescription: "Wähle die UI-Sprache für diese Env App.",
-    desktopBridgeNote: "Eingebettete Env App Sitzungen folgen Redeven Desktop.",
-    standaloneNote: "Eigenständige Env App Sitzungen speichern die Sprache für diesen Browser-Origin.",
     autoSave: {
       saving: "Speichern...",
       paused: "Automatisches Speichern pausiert",
@@ -244,7 +227,7 @@ export const deDE = {
       adminRequired: "Admin erforderlich",
       envTypeLocal: "Lokal",
       envTypeSSH: "SSH",
-      envTypeProvider: "Anbieter",
+      envTypeProvider: "Provider",
       envTypeRemote: "Entfernt",
     },
     commandPalette: {
