@@ -56,16 +56,16 @@ export function ActivityBarMonitorIcon(props: { class?: string }) {
 export function ActivityBarCodespacesIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" stroke-opacity=".3" stroke-width="1" fill="currentColor" fill-opacity=".06" />
-      <rect x="5" y="5" width="3.5" height="14" rx="2" fill="currentColor" fill-opacity=".05" />
-      <line x1="8.5" y1="5" x2="8.5" y2="19" stroke="currentColor" stroke-opacity=".08" stroke-width=".5" />
-      <rect x="9.5" y="6" width="3" height="1.5" rx=".75" fill="currentColor" fill-opacity=".65" />
-      <rect x="13" y="6" width="4.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".18" />
-      <rect x="9.5" y="8.5" width="2.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".5" />
-      <rect x="12.5" y="8.5" width="4.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".14" />
-      <rect x="9.5" y="11" width="4.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".12" />
-      <rect x="9.5" y="11" width="2.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".45" />
-      <rect x="9.5" y="13.5" width="3.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".4" />
+      <rect x="5" y="5" width="14" height="14" rx="2" stroke="currentColor" stroke-opacity=".55" stroke-width="1" fill="currentColor" fill-opacity=".12" />
+      <rect x="5" y="5" width="3.5" height="14" rx="2" fill="currentColor" fill-opacity=".1" />
+      <line x1="8.5" y1="5" x2="8.5" y2="19" stroke="currentColor" stroke-opacity=".15" stroke-width=".5" />
+      <rect x="9.5" y="6" width="3" height="1.5" rx=".75" fill="currentColor" fill-opacity=".75" />
+      <rect x="13" y="6" width="4.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".28" />
+      <rect x="9.5" y="8.5" width="2.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".6" />
+      <rect x="12.5" y="8.5" width="4.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".24" />
+      <rect x="9.5" y="11" width="4.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".22" />
+      <rect x="9.5" y="11" width="2.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".55" />
+      <rect x="9.5" y="13.5" width="3.5" height="1.5" rx=".75" fill="currentColor" fill-opacity=".5" />
     </svg>
   );
 }
@@ -73,12 +73,12 @@ export function ActivityBarCodespacesIcon(props: { class?: string }) {
 export function ActivityBarPortsIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <circle cx="12" cy="10" r="5.5" stroke="currentColor" stroke-opacity=".3" stroke-width="1" fill="currentColor" fill-opacity=".06" />
-      <ellipse cx="12" cy="7" rx="6" ry="2" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" fill="none" />
-      <ellipse cx="12" cy="13" rx="6" ry="2" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" fill="none" />
-      <path d="M12 4.5 a 8 8 0 0 0 0 11 a 8 8 0 0 0 0 -11" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" fill="none" />
-      <line x1="12" y1="4.5" x2="12" y2="15.5" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" />
-      <text x="12" y="21" text-anchor="middle" font-family="'Inter','SF Pro Display',-apple-system,sans-serif" font-size="5" font-weight="800" letter-spacing=".4" fill="currentColor" fill-opacity=".55">HTTP</text>
+      <circle cx="12" cy="10" r="5.5" stroke="currentColor" stroke-opacity=".55" stroke-width="1" fill="currentColor" fill-opacity=".12" />
+      <ellipse cx="12" cy="7" rx="6" ry="2" stroke="currentColor" stroke-opacity=".28" stroke-width=".5" fill="none" />
+      <ellipse cx="12" cy="13" rx="6" ry="2" stroke="currentColor" stroke-opacity=".28" stroke-width=".5" fill="none" />
+      <path d="M12 4.5 a 8 8 0 0 0 0 11 a 8 8 0 0 0 0 -11" stroke="currentColor" stroke-opacity=".28" stroke-width=".5" fill="none" />
+      <line x1="12" y1="4.5" x2="12" y2="15.5" stroke="currentColor" stroke-opacity=".28" stroke-width=".5" />
+      <text x="12" y="21" text-anchor="middle" font-family="'Inter','SF Pro Display',-apple-system,sans-serif" font-size="5" font-weight="800" letter-spacing=".4" fill="currentColor" fill-opacity=".7">HTTP</text>
     </svg>
   );
 }
