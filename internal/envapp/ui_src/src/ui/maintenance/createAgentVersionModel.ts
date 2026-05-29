@@ -2,7 +2,7 @@ import { createEffect, createMemo, createResource, createSignal, type Accessor }
 
 import type { RedevenV1Rpc } from '../protocol/redeven_v1/contract';
 import type { SysPingResponse } from '../protocol/redeven_v1/sdk/sys';
-import { getAgentLatestVersion, type AgentLatestVersion } from '../services/controlplaneApi';
+import { getAgentLatestVersion, type AgentLatestVersion, type AgentLatestVersionRequest } from '../services/controlplaneApi';
 import { compareReleaseVersionCore, isReleaseVersion, resolvePreferredTargetVersion } from './agentVersion';
 import { formatUnknownError } from './shared';
 
@@ -30,7 +30,7 @@ export type AgentVersionModel = Readonly<{
 }>;
 
 type CreateAgentVersionModelArgs = Readonly<{
-  envId: Accessor<string>;
+  latestVersionRequest: Accessor<AgentLatestVersionRequest | null>;
   currentPingSource: Accessor<unknown | null>;
   rpc: VersionRpc;
 }>;
@@ -51,8 +51,12 @@ export function createAgentVersionModel(args: CreateAgentVersionModelArgs): Agen
   let latestInFlightEnvId = '';
   let previousEnvId = '';
 
+  const latestRequestKey = (request: AgentLatestVersionRequest | null): string => (
+    request ? `${request.source}:${String(request.envId ?? '').trim()}` : ''
+  );
+
   createEffect(() => {
-    const envId = String(args.envId() ?? '').trim();
+    const envId = latestRequestKey(args.latestVersionRequest());
     if (envId === previousEnvId) return;
     previousEnvId = envId;
     latestRequestToken += 1;
@@ -65,8 +69,9 @@ export function createAgentVersionModel(args: CreateAgentVersionModelArgs): Agen
   });
 
   const loadLatestMeta = async (mode: 'ensure' | 'refetch'): Promise<AgentLatestVersion | null> => {
-    const envId = String(args.envId() ?? '').trim();
-    if (!envId) {
+    const latestVersionRequest = args.latestVersionRequest();
+    const envId = latestRequestKey(latestVersionRequest);
+    if (!latestVersionRequest || !String(latestVersionRequest.envId ?? '').trim()) {
       setLatestMeta(null);
       setLatestMetaLoading(false);
       setLatestMetaError('');
@@ -90,7 +95,7 @@ export function createAgentVersionModel(args: CreateAgentVersionModelArgs): Agen
     let request: Promise<AgentLatestVersion | null> | null = null;
     request = (async () => {
       try {
-        const nextMeta = await getAgentLatestVersion(envId);
+        const nextMeta = await getAgentLatestVersion(latestVersionRequest);
         if (latestRequestToken === requestToken) {
           const normalizedMeta = nextMeta ?? null;
           setLatestMeta(normalizedMeta);
@@ -128,8 +133,8 @@ export function createAgentVersionModel(args: CreateAgentVersionModelArgs): Agen
   const preferredTargetCompareToCurrent = createMemo(() => compareReleaseVersionCore(currentVersion(), preferredTargetVersion()));
 
   createEffect(() => {
-    const envId = String(args.envId() ?? '').trim();
-    if (!envId) return;
+    const request = args.latestVersionRequest();
+    if (!request || !String(request.envId ?? '').trim()) return;
     if (currentPing() == null) return;
     void loadLatestMeta('ensure').catch(() => undefined);
   });

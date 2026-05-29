@@ -165,6 +165,108 @@ describe('controlplaneApi local access flow', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('loads local environment detail only when the caller selects the local source explicitly', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/local/environment') {
+        expect(init?.credentials).toBe('same-origin');
+        return jsonResponse({
+          public_id: 'env_local',
+          name: 'Local Environment',
+          namespace_public_id: 'ns_local',
+          status: 'online',
+          lifecycle_status: 'running',
+        });
+      }
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const out = await mod.getEnvironment({ source: 'local', envId: 'env_provider' });
+
+    expect(out).toMatchObject({
+      public_id: 'env_local',
+      name: 'Local Environment',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes controlplane environment detail explicitly even when local runtime is reachable', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/srv/v1/floeproxy/environments/env_provider') {
+        expect(init?.credentials).toBe('include');
+        return jsonResponse({
+          public_id: 'env_provider',
+          name: 'Provider Demo',
+          namespace_public_id: 'ns_provider',
+          status: 'online',
+          lifecycle_status: 'running',
+        });
+      }
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const out = await mod.getEnvironment({ source: 'controlplane', envId: 'env_provider' });
+
+    expect(out).toMatchObject({
+      public_id: 'env_provider',
+      name: 'Provider Demo',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/local/environment', expect.anything());
+  });
+
+  it('loads local latest-version metadata only when the caller selects the local source explicitly', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/local/agent/version/latest') {
+        expect(init?.credentials).toBe('same-origin');
+        return jsonResponse({
+          latest_version: 'v1.2.0',
+          recommended_version: 'v1.2.0',
+          upgrade_policy: 'self_upgrade',
+        });
+      }
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const out = await mod.getAgentLatestVersion({ source: 'local', envId: 'env_provider' });
+
+    expect(out).toMatchObject({
+      latest_version: 'v1.2.0',
+      recommended_version: 'v1.2.0',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('routes controlplane latest-version metadata explicitly even when local runtime is reachable', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/srv/v1/floeproxy/environments/env_provider/agent/version/latest') {
+        expect(init?.credentials).toBe('include');
+        return jsonResponse({
+          latest_version: 'v2.0.0',
+          recommended_version: 'v2.0.0',
+          upgrade_policy: 'desktop_release',
+        });
+      }
+      throw new Error(`unexpected request: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    const out = await mod.getAgentLatestVersion({ source: 'controlplane', envId: 'env_provider' });
+
+    expect(out).toMatchObject({
+      latest_version: 'v2.0.0',
+      recommended_version: 'v2.0.0',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalledWith('/api/local/agent/version/latest', expect.anything());
+  });
+
   it('redeems entry tickets via the canonical connect artifact contract', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe('/v1/connect/artifact/entry');

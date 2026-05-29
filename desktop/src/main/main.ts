@@ -68,6 +68,7 @@ import {
   type DesktopSessionSummary,
   type DesktopSessionTarget,
 } from './desktopTarget';
+import { desktopSessionContextSnapshotFromTarget } from './desktopSessionContext';
 import {
   buildDesktopRuntimeLaunchPlan,
 } from './desktopLaunch';
@@ -3539,30 +3540,7 @@ function normalizeDesktopSessionAppReadyPayload(value: unknown): DesktopSessionA
 }
 
 function desktopSessionContextSnapshot(sessionRecord: DesktopSessionRecord | null): DesktopSessionContextSnapshot | null {
-  if (!sessionRecord) {
-    return null;
-  }
-
-  const target = sessionRecord.target;
-  if (target.kind === 'local_environment') {
-    return {
-      local_environment_id: target.environment_id,
-      renderer_storage_scope_id: target.route === 'local_host'
-        ? 'local'
-        : target.environment_id,
-      target_kind: target.kind,
-      target_route: target.route,
-      ...(target.provider_origin ? { provider_origin: target.provider_origin } : {}),
-      ...(target.provider_id ? { provider_id: target.provider_id } : {}),
-      ...(target.env_public_id ? { env_public_id: target.env_public_id } : {}),
-    };
-  }
-
-  return {
-    local_environment_id: target.environment_id,
-    renderer_storage_scope_id: target.environment_id,
-    target_kind: target.kind,
-  };
+  return desktopSessionContextSnapshotFromTarget(sessionRecord?.target ?? null);
 }
 
 function markSessionAppReady(

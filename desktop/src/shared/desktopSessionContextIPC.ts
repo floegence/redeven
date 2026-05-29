@@ -6,9 +6,11 @@ export type DesktopSessionContextSnapshot = Readonly<{
   renderer_storage_scope_id: string;
   target_kind?: 'local_environment' | 'external_local_ui' | 'ssh_environment';
   target_route?: 'local_host' | 'remote_desktop';
+  session_source?: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui';
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
+  label?: string;
 }>;
 
 export type DesktopSessionAppReadyState = 'access_gate_interactive' | 'runtime_connected';

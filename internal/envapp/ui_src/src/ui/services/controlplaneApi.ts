@@ -413,20 +413,26 @@ export async function mintLocalDirectConnectArtifact(): Promise<ConnectArtifact>
   };
 }
 
-export async function getEnvironment(envId: string): Promise<EnvironmentDetail | null> {
+export type EnvironmentDetailSource = 'local' | 'controlplane';
+
+export type EnvironmentDetailRequest = Readonly<{
+  source: EnvironmentDetailSource;
+  envId: string;
+}>;
+
+export async function getLocalEnvironment(): Promise<EnvironmentDetail | null> {
+  try {
+    const out = await fetchLocalJSON<EnvironmentDetail>('/api/local/environment', { method: 'GET' });
+    return out ?? null;
+  } catch (error) {
+    if (error instanceof APIError && error.status === 423) return null;
+    throw error;
+  }
+}
+
+export async function getControlplaneEnvironment(envId: string): Promise<EnvironmentDetail | null> {
   const id = envId.trim();
   if (!id) return null;
-
-  const local = await getLocalRuntime();
-  if (local) {
-    try {
-      const out = await fetchLocalJSON<EnvironmentDetail>('/api/local/environment', { method: 'GET' });
-      return out ?? null;
-    } catch (error) {
-      if (error instanceof APIError && error.status === 423) return null;
-      throw error;
-    }
-  }
 
   const out = await fetchJSONWithEnvSessionAutoRecover<EnvironmentDetail>(
     `/api/srv/v1/floeproxy/environments/${encodeURIComponent(id)}`,
@@ -442,20 +448,30 @@ export async function getEnvironment(envId: string): Promise<EnvironmentDetail |
   return out ?? null;
 }
 
-export async function getAgentLatestVersion(envId: string): Promise<AgentLatestVersion | null> {
+export async function getEnvironment(args: EnvironmentDetailRequest): Promise<EnvironmentDetail | null> {
+  return args.source === 'local'
+    ? getLocalEnvironment()
+    : getControlplaneEnvironment(args.envId);
+}
+
+export type AgentLatestVersionRequest = Readonly<{
+  source: EnvironmentDetailSource;
+  envId: string;
+}>;
+
+export async function getLocalAgentLatestVersion(): Promise<AgentLatestVersion | null> {
+  try {
+    const out = await fetchLocalJSON<AgentLatestVersion>('/api/local/agent/version/latest', { method: 'GET' });
+    return out ?? null;
+  } catch (error) {
+    if (error instanceof APIError && error.status === 423) return null;
+    throw error;
+  }
+}
+
+export async function getControlplaneAgentLatestVersion(envId: string): Promise<AgentLatestVersion | null> {
   const id = envId.trim();
   if (!id) return null;
-
-  const local = await getLocalRuntime();
-  if (local) {
-    try {
-      const out = await fetchLocalJSON<AgentLatestVersion>('/api/local/agent/version/latest', { method: 'GET' });
-      return out ?? null;
-    } catch (error) {
-      if (error instanceof APIError && error.status === 423) return null;
-      throw error;
-    }
-  }
 
   const out = await fetchJSONWithEnvSessionAutoRecover<AgentLatestVersion>(
     `/api/srv/v1/floeproxy/environments/${encodeURIComponent(id)}/agent/version/latest`,
@@ -469,6 +485,12 @@ export async function getAgentLatestVersion(envId: string): Promise<AgentLatestV
     },
   );
   return out ?? null;
+}
+
+export async function getAgentLatestVersion(args: AgentLatestVersionRequest): Promise<AgentLatestVersion | null> {
+  return args.source === 'local'
+    ? getLocalAgentLatestVersion()
+    : getControlplaneAgentLatestVersion(args.envId);
 }
 
 export async function mintEnvProxyEntryTicket(args: { endpointId: string; floeApp: string; codeSpaceId: string }): Promise<string> {

@@ -32,9 +32,11 @@ export function bootstrapDesktopSessionContextBridge(): void {
       const rendererStorageScopeID = String(candidate.renderer_storage_scope_id ?? '').trim();
       const targetKind = String(candidate.target_kind ?? '').trim();
       const targetRoute = String(candidate.target_route ?? '').trim();
+      const sessionSource = String(candidate.session_source ?? '').trim();
       const providerOrigin = String(candidate.provider_origin ?? '').trim();
       const providerID = String(candidate.provider_id ?? '').trim();
       const envPublicID = String(candidate.env_public_id ?? '').trim();
+      const label = String(candidate.label ?? '').trim();
       if (localEnvironmentID === '' || rendererStorageScopeID === '') {
         return null;
       }
@@ -43,9 +45,11 @@ export function bootstrapDesktopSessionContextBridge(): void {
         renderer_storage_scope_id: rendererStorageScopeID,
         ...(targetKind === 'local_environment' || targetKind === 'external_local_ui' || targetKind === 'ssh_environment' ? { target_kind: targetKind } : {}),
         ...(targetRoute === 'local_host' || targetRoute === 'remote_desktop' ? { target_route: targetRoute } : {}),
+        ...(sessionSource === 'local_runtime' || sessionSource === 'provider_environment' || sessionSource === 'ssh_environment' || sessionSource === 'external_local_ui' ? { session_source: sessionSource } : {}),
         ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
         ...(providerID !== '' ? { provider_id: providerID } : {}),
         ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
+        ...(label !== '' ? { label } : {}),
       };
     },
     notifyAppReady: (payload) => {

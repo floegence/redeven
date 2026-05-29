@@ -5,7 +5,7 @@ vi.mock('../services/controlplaneApi', () => ({
   getAgentLatestVersion: vi.fn(),
 }));
 
-import { getAgentLatestVersion } from '../services/controlplaneApi';
+import { getAgentLatestVersion, type AgentLatestVersionRequest } from '../services/controlplaneApi';
 import { createAgentVersionModel } from './createAgentVersionModel';
 
 async function flushAsync(): Promise<void> {
@@ -39,7 +39,7 @@ describe('createAgentVersionModel', () => {
     let model!: ReturnType<typeof createAgentVersionModel>;
     const dispose = createRoot((disposeRoot) => {
       model = createAgentVersionModel({
-        envId,
+        latestVersionRequest: () => ({ source: 'local', envId: envId() }),
         currentPingSource,
         rpc: { sys: { ping } },
       });
@@ -55,7 +55,7 @@ describe('createAgentVersionModel', () => {
 
       expect(ping).toHaveBeenCalledTimes(1);
       expect(getLatestVersionMock).toHaveBeenCalledTimes(1);
-      expect(getLatestVersionMock).toHaveBeenCalledWith('env_local');
+      expect(getLatestVersionMock).toHaveBeenCalledWith({ source: 'local', envId: 'env_local' });
       expect(model.latestMeta()?.recommended_version).toBe('v1.1.0');
     } finally {
       dispose();
@@ -80,7 +80,7 @@ describe('createAgentVersionModel', () => {
     let model!: ReturnType<typeof createAgentVersionModel>;
     const dispose = createRoot((disposeRoot) => {
       model = createAgentVersionModel({
-        envId,
+        latestVersionRequest: () => ({ source: 'local', envId: envId() }),
         currentPingSource,
         rpc: { sys: { ping } },
       });
@@ -97,6 +97,55 @@ describe('createAgentVersionModel', () => {
       expect(getLatestVersionMock).toHaveBeenCalledTimes(2);
       expect(nextMeta?.latest_version).toBe('v1.2.0');
       expect(model.latestMeta()?.recommended_version).toBe('v1.2.0');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('invalidates latest metadata when the source changes for the same environment id', async () => {
+    const getLatestVersionMock = vi.mocked(getAgentLatestVersion);
+    getLatestVersionMock.mockReset();
+    getLatestVersionMock
+      .mockResolvedValueOnce({
+        latest_version: 'v1.1.0',
+        recommended_version: 'v1.1.0',
+        upgrade_policy: 'self_upgrade',
+      })
+      .mockResolvedValueOnce({
+        latest_version: 'v2.0.0',
+        recommended_version: 'v2.0.0',
+        upgrade_policy: 'desktop_release',
+      });
+
+    const [latestVersionRequest, setLatestVersionRequest] = createSignal<AgentLatestVersionRequest>({
+      source: 'local' as const,
+      envId: 'env_shared',
+    });
+    const [currentPingSource] = createSignal<unknown | null>({});
+    const ping = vi.fn(async () => ({ serverTimeMs: Date.now(), version: 'v1.0.0' }));
+
+    let model!: ReturnType<typeof createAgentVersionModel>;
+    const dispose = createRoot((disposeRoot) => {
+      model = createAgentVersionModel({
+        latestVersionRequest,
+        currentPingSource,
+        rpc: { sys: { ping } },
+      });
+      return disposeRoot;
+    });
+
+    try {
+      await flushUntil(() => model.latestMeta()?.latest_version === 'v1.1.0');
+
+      setLatestVersionRequest({
+        source: 'controlplane',
+        envId: 'env_shared',
+      });
+      await flushUntil(() => model.latestMeta()?.latest_version === 'v2.0.0');
+
+      expect(getLatestVersionMock).toHaveBeenCalledTimes(2);
+      expect(getLatestVersionMock).toHaveBeenNthCalledWith(1, { source: 'local', envId: 'env_shared' });
+      expect(getLatestVersionMock).toHaveBeenNthCalledWith(2, { source: 'controlplane', envId: 'env_shared' });
     } finally {
       dispose();
     }
@@ -132,7 +181,7 @@ describe('createAgentVersionModel', () => {
     let model!: ReturnType<typeof createAgentVersionModel>;
     const dispose = createRoot((disposeRoot) => {
       model = createAgentVersionModel({
-        envId,
+        latestVersionRequest: () => ({ source: 'local', envId: envId() }),
         currentPingSource,
         rpc: { sys: { ping } },
       });

@@ -69,4 +69,35 @@ describe('bootstrapDesktopSessionContextBridge', () => {
     );
     expect(ipcRendererSend).toHaveBeenCalledTimes(2);
   });
+
+  it('exposes provider session identity fields through the session bridge', async () => {
+    ipcRendererSendSync.mockReturnValue({
+      local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      target_kind: 'local_environment',
+      target_route: 'remote_desktop',
+      session_source: 'provider_environment',
+      provider_origin: ' https://cp.example.invalid ',
+      provider_id: ' provider-1 ',
+      env_public_id: ' env_demo ',
+      label: ' Demo Environment ',
+    });
+
+    const { bootstrapDesktopSessionContextBridge } = await import('./desktopSessionContext');
+
+    bootstrapDesktopSessionContextBridge();
+    const bridge = exposedBridge();
+
+    expect(bridge.getSnapshot()).toEqual({
+      local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      target_kind: 'local_environment',
+      target_route: 'remote_desktop',
+      session_source: 'provider_environment',
+      provider_origin: 'https://cp.example.invalid',
+      provider_id: 'provider-1',
+      env_public_id: 'env_demo',
+      label: 'Demo Environment',
+    });
+  });
 });

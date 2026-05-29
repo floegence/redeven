@@ -141,6 +141,7 @@ import { consumeAccessResumeTokenFromWindow } from './accessResume';
 import { CODE_SPACE_ID_ENV_UI, FLOE_APP_AGENT, FLOE_APP_CODE, FLOE_APP_PORT_FORWARD, type LauncherFloeApp } from './services/floeproxyContract';
 import {
   connectArtifactEntry,
+  type EnvironmentDetailRequest,
   getEnvPublicIDFromSession,
   getLocalAccessStatus,
   getLocalRuntime,
@@ -179,6 +180,20 @@ const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
+
+type EnvSessionSource =
+  | 'local_runtime'
+  | 'provider_environment'
+  | 'ssh_environment'
+  | 'external_local_ui'
+  | 'region_sandbox';
+
+type EnvSessionIdentity = Readonly<{
+  source: EnvSessionSource;
+  displayName: string;
+  displayID: string;
+}>;
+
 type CreateThreadResponse = Readonly<{
   thread: Readonly<{
     thread_id: string;
@@ -546,7 +561,8 @@ export function EnvAppShell() {
     }
 
     try {
-      const detail = await getEnvironment(id);
+      const request = environmentDetailRequest() ?? { source: 'controlplane' as const, envId: id };
+      const detail = await getEnvironment(request);
       return {
         status: String(detail?.status ?? '').trim().toLowerCase() === 'offline' ? 'offline' : 'online',
         access: 'unknown',
@@ -575,15 +591,19 @@ export function EnvAppShell() {
   };
 
   const [envId, setEnvId] = createSignal(getEnvPublicIDFromSession());
+  const environmentDetailRequest = createMemo<EnvironmentDetailRequest | null>(() => {
+    const id = envId() || null;
+    if (!id) return null;
+    if (accessGateVisible()) return null;
+    return {
+      source: isLocalMode() ? 'local' : 'controlplane',
+      envId: isLocalMode() ? localRuntime()?.env_public_id || 'env_local' : id,
+    };
+  });
 
-  const [env, { refetch: refetchEnv }] = createResource<EnvironmentDetail | null, string | null>(
-    () => {
-      const id = envId() || null;
-      if (!id) return null;
-      if (accessGateVisible()) return null;
-      return id;
-    },
-    (id) => (id ? getEnvironment(id) : null),
+  const [env, { refetch: refetchEnv }] = createResource<EnvironmentDetail | null, EnvironmentDetailRequest | null>(
+    environmentDetailRequest,
+    (request) => (request ? getEnvironment(request) : null),
   );
 
   const [manualError, setManualError] = createSignal<string | null>(null);
@@ -1147,7 +1167,7 @@ export function EnvAppShell() {
     // Probe runtime status to avoid grant-audit spam while the runtime is clearly offline.
     let agentStatus: string | null = null;
     try {
-      const detail = await getEnvironment(id);
+      const detail = await getEnvironment({ source: 'controlplane', envId: id });
       // `status` is the only availability source of truth returned by the controlplane API.
       agentStatus = detail?.status ? String(detail.status) : null;
     } catch (e) {
@@ -1269,7 +1289,7 @@ export function EnvAppShell() {
   });
 
   const agentVersionModel = createAgentVersionModel({
-    envId,
+    latestVersionRequest: environmentDetailRequest,
     currentPingSource,
     rpc,
   });
@@ -1361,7 +1381,7 @@ export function EnvAppShell() {
   };
 
   const agentMaintenanceController = createAgentMaintenanceController({
-    envId,
+    environmentDetailRequest,
     canAdmin,
     controlplaneStatus,
     protocolStatus: () => protocol.status(),
@@ -1781,12 +1801,10 @@ export function EnvAppShell() {
         setLocalAccessChecked(true);
         setLocalAccessChannelReady(localStatus?.password_required !== true);
 
-        // Prefer the session context env_public_id when desktop is connected to a
-        // non-local environment (provider / SSH / external).
+        // Desktop provider sessions carry the user-facing controlplane env id;
+        // SSH/external sessions keep their Desktop target id only for display.
         const desktopCtx = readDesktopSessionContextSnapshot();
-        const sessionEnvID =
-          (desktopCtx?.env_public_id ?? '').trim() ||
-          (desktopCtx?.local_environment_id ?? '').trim();
+        const sessionEnvID = (desktopCtx?.env_public_id ?? '').trim();
         const localFallbackID = String((rt as any).env_public_id ?? '').trim() || 'env_local';
         const effectiveEnvID = sessionEnvID || localFallbackID;
         try {
@@ -2216,40 +2234,48 @@ export function EnvAppShell() {
     return items;
   };
 
-  const envName = () => {
-    if (accessGateVisible()) return isLocalMode() ? i18n.t('shell.status.localRuntime') : i18n.t('shell.status.environment');
-
-    // For non-local sessions (provider / SSH / external), prefer the desktop
-    // session context label immediately — env detail fetch may not resolve locally.
+  const envSessionIdentity = createMemo<EnvSessionIdentity>(() => {
     const desktopCtx = readDesktopSessionContextSnapshot();
-    const isNonLocalSession =
-      desktopCtx?.target_kind === 'ssh_environment' ||
-      desktopCtx?.target_kind === 'external_local_ui' ||
-      (desktopCtx?.target_kind === 'local_environment' && desktopCtx?.target_route === 'remote_desktop');
-    if (isNonLocalSession && desktopCtx?.label) return desktopCtx.label;
+    const contextSource = desktopCtx?.session_source;
+    const source: EnvSessionSource =
+      contextSource === 'local_runtime' ||
+      contextSource === 'provider_environment' ||
+      contextSource === 'ssh_environment' ||
+      contextSource === 'external_local_ui'
+        ? contextSource
+        : isLocalMode()
+          ? 'local_runtime'
+          : 'region_sandbox';
+    const displayID =
+      source === 'provider_environment'
+        ? (desktopCtx?.env_public_id ?? '').trim() || envId()
+        : source === 'ssh_environment' || source === 'external_local_ui'
+          ? (desktopCtx?.env_public_id ?? '').trim() || (desktopCtx?.local_environment_id ?? '').trim() || envId()
+          : envId() || (isLocalMode() ? localRuntime()?.env_public_id || 'env_local' : '');
 
-    if (env.state !== 'ready') return i18n.t('shell.status.loading');
+    let displayName = (desktopCtx?.label ?? '').trim();
+    if (!displayName && !accessGateVisible() && env.state === 'ready') {
+      displayName = env()?.name || '';
+    }
+    if (!displayName) {
+      displayName = source === 'local_runtime'
+        ? i18n.t('shell.status.localRuntime')
+        : i18n.t('shell.status.environment');
+    }
 
-    const envDetailName = env()?.name;
-    if (envDetailName) return envDetailName;
-    if (desktopCtx?.label) return desktopCtx.label;
-    return i18n.t('shell.status.environment');
-  };
-
-  const envType = createMemo<'local' | 'ssh' | 'provider' | 'remote'>(() => {
-    const ctx = readDesktopSessionContextSnapshot();
-    if (ctx?.target_kind === 'ssh_environment') return 'ssh';
-    if (ctx?.target_kind === 'local_environment' && ctx?.target_route === 'remote_desktop') return 'provider';
-    if (ctx?.target_kind === 'local_environment' && ctx?.target_route === 'local_host') return 'local';
-    if (ctx?.target_kind === 'external_local_ui') return 'remote';
-    return isLocalMode() ? 'local' : 'remote';
+    return {
+      source,
+      displayName,
+      displayID,
+    };
   });
 
   const envTypeLabel = createMemo(() => {
-    switch (envType()) {
-      case 'ssh': return i18n.t('shell.status.envTypeSSH');
-      case 'provider': return i18n.t('shell.status.envTypeProvider');
-      case 'remote': return i18n.t('shell.status.envTypeRemote');
+    switch (envSessionIdentity().source) {
+      case 'ssh_environment': return i18n.t('shell.status.envTypeSSH');
+      case 'provider_environment': return i18n.t('shell.status.envTypeProvider');
+      case 'external_local_ui':
+      case 'region_sandbox': return i18n.t('shell.status.envTypeRemote');
       default: return i18n.t('shell.status.envTypeLocal');
     }
   });
@@ -2884,29 +2910,29 @@ export function EnvAppShell() {
           <div class="flex items-center gap-2 min-w-0">
             <div class="flex items-center gap-1 min-w-0 pl-1.5 pr-2 rounded-md border border-border bg-white/40 dark:bg-white/[0.08] shrink-0">
               <span class={`shrink-0 w-3.5 h-3.5 flex items-center justify-center ${
-                envType() === 'local' ? 'text-primary' :
-                envType() === 'ssh' ? 'text-info' :
+                envSessionIdentity().source === 'local_runtime' ? 'text-primary' :
+                envSessionIdentity().source === 'ssh_environment' ? 'text-info' :
                 'text-accent'
               }`}>
-                {envType() === 'ssh' ? (
+                {envSessionIdentity().source === 'ssh_environment' ? (
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
-                ) : envType() !== 'local' ? (
+                ) : envSessionIdentity().source !== 'local_runtime' ? (
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg>
                 ) : (
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
                 )}
               </span>
               <BottomBarItem class="min-w-0 shrink-0">
-                <span class="truncate text-[11px] font-medium text-foreground">{envName()}</span>
+                <span class="truncate text-[11px] font-medium text-foreground">{envSessionIdentity().displayName}</span>
               </BottomBarItem>
               <span class="w-px h-3.5 bg-border shrink-0" />
               <BottomBarItem class="min-w-0 shrink-0">
-                <span class="truncate text-[11px] text-muted-foreground">{envId() || i18n.t('shell.status.missingEnvId')}</span>
+                <span class="truncate text-[11px] text-muted-foreground">{envSessionIdentity().displayID || i18n.t('shell.status.missingEnvId')}</span>
               </BottomBarItem>
             </div>
             <span class={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-tight shrink-0 whitespace-nowrap ${
-              envType() === 'local' ? 'bg-primary/10 text-primary' :
-              envType() === 'ssh' ? 'bg-info/10 text-info' :
+              envSessionIdentity().source === 'local_runtime' ? 'bg-primary/10 text-primary' :
+              envSessionIdentity().source === 'ssh_environment' ? 'bg-info/10 text-info' :
               'bg-accent/10 text-accent'
             }`}>
               {envTypeLabel()}
