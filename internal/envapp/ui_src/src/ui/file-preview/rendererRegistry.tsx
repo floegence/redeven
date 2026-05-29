@@ -15,6 +15,8 @@ export type RedevenFilePreviewRendererId =
   | 'pdf'
   | 'docx'
   | 'xlsx'
+  | 'video'
+  | 'audio'
   | 'binary'
   | 'unsupported';
 
@@ -27,6 +29,7 @@ export type RedevenFilePreviewRenderProps = Readonly<{
   saveError?: string | null;
   message?: string;
   objectUrl?: string;
+  resourceUrl?: string;
   bytes?: Uint8Array<ArrayBuffer> | null;
   truncated?: boolean;
   xlsxSheetName?: string;
@@ -80,6 +83,36 @@ function renderImagePreview(props: RedevenFilePreviewRenderProps): JSX.Element {
         alt={props.item?.name ?? 'Preview'}
         class="max-h-full max-w-full object-contain"
       />
+    </div>
+  );
+}
+
+function renderVideoPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
+  return (
+    <div class="flex h-full min-h-[18rem] items-center justify-center bg-black p-3">
+      <video
+        src={props.resourceUrl}
+        controls
+        preload="metadata"
+        class="h-full max-h-full w-full max-w-full cursor-pointer object-contain"
+      >
+        {props.item?.name ?? 'Video preview'}
+      </video>
+    </div>
+  );
+}
+
+function renderAudioPreview(props: RedevenFilePreviewRenderProps): JSX.Element {
+  return (
+    <div class="flex h-full min-h-[12rem] items-center justify-center p-6">
+      <audio
+        src={props.resourceUrl}
+        controls
+        preload="metadata"
+        class="w-full max-w-2xl cursor-pointer"
+      >
+        {props.item?.name ?? 'Audio preview'}
+      </audio>
     </div>
   );
 }
@@ -153,6 +186,16 @@ export const REDEVEN_FILE_PREVIEW_RENDERERS: readonly RedevenFilePreviewRenderer
     id: 'xlsx',
     modes: ['xlsx'],
     render: renderSpreadsheetPreview,
+  },
+  {
+    id: 'video',
+    modes: ['video'],
+    render: renderVideoPreview,
+  },
+  {
+    id: 'audio',
+    modes: ['audio'],
+    render: renderAudioPreview,
   },
   {
     id: 'binary',

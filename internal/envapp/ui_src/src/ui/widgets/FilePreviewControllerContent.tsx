@@ -20,6 +20,7 @@ export function FilePreviewControllerContent(props: FilePreviewControllerContent
       canEdit={props.controller.canEdit()}
       message={props.controller.message()}
       objectUrl={props.controller.objectUrl()}
+      resourceUrl={props.controller.resourceUrl()}
       bytes={props.controller.bytes()}
       truncated={props.controller.truncated()}
       loading={props.controller.loading()}

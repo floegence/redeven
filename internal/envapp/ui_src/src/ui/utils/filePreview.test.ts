@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeFilePreview, previewModeByName } from './filePreview';
+import { describeFilePreview, mimeFromExtDot, previewModeByName } from './filePreview';
 
 describe('describeFilePreview', () => {
   it('classifies source files as code previews with a language when known', () => {
@@ -102,5 +102,29 @@ describe('describeFilePreview', () => {
     expect(previewModeByName('slides.pdf')).toBe('pdf');
     expect(previewModeByName('sheet.xlsx')).toBe('xlsx');
     expect(previewModeByName('archive.bin')).toBe('binary');
+  });
+
+  it('routes browser-playable media files to native media preview modes', () => {
+    expect(previewModeByName('demo.mp4')).toBe('video');
+    expect(previewModeByName('clip.webm')).toBe('video');
+    expect(previewModeByName('movie.mov')).toBe('video');
+    expect(previewModeByName('archive.mkv')).toBe('video');
+    expect(previewModeByName('sound.mp3')).toBe('audio');
+    expect(previewModeByName('voice.m4a')).toBe('audio');
+    expect(previewModeByName('track.flac')).toBe('audio');
+  });
+
+  it('maps media extensions to browser MIME types used by the resource endpoint', () => {
+    expect(mimeFromExtDot('.mp4')).toBe('video/mp4');
+    expect(mimeFromExtDot('.m4v')).toBe('video/x-m4v');
+    expect(mimeFromExtDot('.webm')).toBe('video/webm');
+    expect(mimeFromExtDot('.mov')).toBe('video/quicktime');
+    expect(mimeFromExtDot('.mkv')).toBe('video/x-matroska');
+    expect(mimeFromExtDot('.mp3')).toBe('audio/mpeg');
+    expect(mimeFromExtDot('.m4a')).toBe('audio/mp4');
+    expect(mimeFromExtDot('.aac')).toBe('audio/aac');
+    expect(mimeFromExtDot('.wav')).toBe('audio/wav');
+    expect(mimeFromExtDot('.opus')).toBe('audio/ogg');
+    expect(mimeFromExtDot('.flac')).toBe('audio/flac');
   });
 });

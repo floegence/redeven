@@ -107,6 +107,7 @@ vi.mock('../widgets/createFilePreviewController', () => ({
     closeConfirmMessage: () => '',
     message: () => '',
     objectUrl: () => '',
+    resourceUrl: () => '',
     bytes: () => null,
     truncated: () => false,
     loading: () => false,

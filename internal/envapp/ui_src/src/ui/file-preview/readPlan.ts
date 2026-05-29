@@ -7,6 +7,7 @@ export const REDEVEN_FILE_PREVIEW_LIMITS = {
 } as const;
 
 export type RedevenFilePreviewReadPlan = Readonly<{
+  strategy: 'bytes' | 'resource';
   maxBytes: number;
   readBytes: number;
   rejectOversizedBeforeRead: boolean;
@@ -23,14 +24,29 @@ export function getRedevenFilePreviewOversizedMessage(mode: PreviewMode): string
       return 'This document is too large to preview.';
     case 'xlsx':
       return 'This spreadsheet is too large to preview.';
+    case 'video':
+      return 'This video is too large to preview.';
+    case 'audio':
+      return 'This audio file is too large to preview.';
     default:
       return 'This file is too large to preview.';
   }
 }
 
 export function getRedevenFilePreviewReadPlan(descriptor: FilePreviewDescriptor): RedevenFilePreviewReadPlan {
+  if (descriptor.mode === 'video' || descriptor.mode === 'audio') {
+    return {
+      strategy: 'resource',
+      maxBytes: Number.POSITIVE_INFINITY,
+      readBytes: 0,
+      rejectOversizedBeforeRead: false,
+      oversizedMessage: getRedevenFilePreviewOversizedMessage(descriptor.mode),
+    };
+  }
+
   if (descriptor.mode === 'text') {
     return {
+      strategy: 'bytes',
       maxBytes: REDEVEN_FILE_PREVIEW_LIMITS.textMaxBytes,
       readBytes: REDEVEN_FILE_PREVIEW_LIMITS.textMaxBytes,
       rejectOversizedBeforeRead: false,
@@ -40,6 +56,7 @@ export function getRedevenFilePreviewReadPlan(descriptor: FilePreviewDescriptor)
 
   if (descriptor.mode === 'binary') {
     return {
+      strategy: 'bytes',
       maxBytes: REDEVEN_FILE_PREVIEW_LIMITS.defaultMaxBytes,
       readBytes: REDEVEN_FILE_PREVIEW_LIMITS.sniffBytes,
       rejectOversizedBeforeRead: true,
@@ -48,6 +65,7 @@ export function getRedevenFilePreviewReadPlan(descriptor: FilePreviewDescriptor)
   }
 
   return {
+    strategy: 'bytes',
     maxBytes: REDEVEN_FILE_PREVIEW_LIMITS.defaultMaxBytes,
     readBytes: REDEVEN_FILE_PREVIEW_LIMITS.defaultMaxBytes,
     rejectOversizedBeforeRead: descriptor.mode !== 'unsupported',

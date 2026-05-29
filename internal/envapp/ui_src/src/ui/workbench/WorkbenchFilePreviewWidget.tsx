@@ -433,6 +433,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
         onDiscard={controller.revertCurrent}
         message={controller.message()}
         objectUrl={controller.objectUrl()}
+        resourceUrl={controller.resourceUrl()}
         bytes={controller.bytes()}
         truncated={controller.truncated()}
         loading={controller.loading()}

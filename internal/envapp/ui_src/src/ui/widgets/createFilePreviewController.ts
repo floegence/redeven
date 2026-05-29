@@ -15,6 +15,7 @@ import {
   mimeFromExtDot,
   type FilePreviewDescriptor,
 } from '../utils/filePreview';
+import { buildRedevenFileResourceUrl } from '../utils/filePreviewResource';
 import { openReadFileStreamChannel } from '../utils/fileStreamReader';
 import { getFilePreviewBlockReason } from './FileBrowserShared';
 
@@ -59,6 +60,7 @@ export interface FilePreviewController {
   closeConfirmMessage: Accessor<string>;
   message: Accessor<string>;
   objectUrl: Accessor<string>;
+  resourceUrl: Accessor<string>;
   bytes: Accessor<Uint8Array<ArrayBuffer> | null>;
   truncated: Accessor<boolean>;
   loading: Accessor<boolean>;
@@ -97,6 +99,7 @@ export function createFilePreviewController(params: {
   const [closeConfirmOpen, setCloseConfirmOpen] = createSignal(false);
   const [previewMessage, setPreviewMessage] = createSignal('');
   const [previewObjectUrl, setPreviewObjectUrl] = createSignal('');
+  const [previewResourceUrl, setPreviewResourceUrl] = createSignal('');
   const [previewBytes, setPreviewBytes] = createSignal<Uint8Array<ArrayBuffer> | null>(null);
   const [previewTruncated, setPreviewTruncated] = createSignal(false);
   const [previewLoading, setPreviewLoading] = createSignal(false);
@@ -142,6 +145,7 @@ export function createFilePreviewController(params: {
     }
 
     setPreviewObjectUrl('');
+    setPreviewResourceUrl('');
     setPreviewBytes(null);
     setPreviewText('');
     setPreviewMessage('');
@@ -221,20 +225,33 @@ export function createFilePreviewController(params: {
     const baseDescriptor = describeFilePreview(item.name);
     setPreviewDescriptor(baseDescriptor);
 
-    const client = params.client();
-    if (!client) {
-      setPendingConnectionLoad({ item, seq });
-      setPreviewError(null);
-      setPreviewMessage(CONNECTION_WAITING_MESSAGE);
-      return;
-    }
-
     const fileSize = typeof item.size === 'number' ? item.size : undefined;
     const readPlan = getRedevenFilePreviewReadPlan(baseDescriptor);
     if (fileSize != null && readPlan.rejectOversizedBeforeRead && fileSize > readPlan.maxBytes) {
       setPreviewDescriptor({ mode: 'unsupported' });
       setPreviewMessage(readPlan.oversizedMessage);
       setPreviewLoading(false);
+      return;
+    }
+
+    if (readPlan.strategy === 'resource') {
+      const resourceUrl = buildRedevenFileResourceUrl(item.path);
+      if (!resourceUrl) {
+        setPreviewDescriptor({ mode: 'unsupported' });
+        setPreviewMessage('Preview is not available for this file path.');
+        setPreviewLoading(false);
+        return;
+      }
+      setPreviewResourceUrl(resourceUrl);
+      setPreviewLoading(false);
+      return;
+    }
+
+    const client = params.client();
+    if (!client) {
+      setPendingConnectionLoad({ item, seq });
+      setPreviewError(null);
+      setPreviewMessage(CONNECTION_WAITING_MESSAGE);
       return;
     }
 
@@ -563,6 +580,7 @@ export function createFilePreviewController(params: {
     closeConfirmMessage,
     message: previewMessage,
     objectUrl: previewObjectUrl,
+    resourceUrl: previewResourceUrl,
     bytes: previewBytes,
     truncated: previewTruncated,
     loading: previewLoading,

@@ -1,6 +1,6 @@
 // File preview helpers: extension classification, language resolution, and basic content sniffing.
 
-export type PreviewMode = 'text' | 'markdown' | 'image' | 'pdf' | 'docx' | 'xlsx' | 'binary' | 'unsupported';
+export type PreviewMode = 'text' | 'markdown' | 'image' | 'pdf' | 'docx' | 'xlsx' | 'video' | 'audio' | 'binary' | 'unsupported';
 export type TextPreviewPresentation = 'plain' | 'code';
 
 export interface FilePreviewDescriptor {
@@ -44,6 +44,8 @@ export const IMAGE_PREVIEW_EXTENSIONS = [
 export const PDF_PREVIEW_EXTENSIONS = ['.pdf'] as const;
 export const DOCX_PREVIEW_EXTENSIONS = ['.docx'] as const;
 export const XLSX_PREVIEW_EXTENSIONS = ['.xlsx', '.xls'] as const;
+export const VIDEO_PREVIEW_EXTENSIONS = ['.mp4', '.webm', '.mov', '.m4v', '.ogv', '.mkv'] as const;
+export const AUDIO_PREVIEW_EXTENSIONS = ['.mp3', '.m4a', '.aac', '.wav', '.ogg', '.oga', '.opus', '.flac'] as const;
 
 export const FALLBACK_TEXT_FILE_PREVIEW_DESCRIPTOR: FilePreviewDescriptor = {
   mode: 'text',
@@ -58,6 +60,8 @@ const IMAGE_PREVIEW_EXTENSION_SET = new Set<string>(IMAGE_PREVIEW_EXTENSIONS);
 const PDF_PREVIEW_EXTENSION_SET = new Set<string>(PDF_PREVIEW_EXTENSIONS);
 const DOCX_PREVIEW_EXTENSION_SET = new Set<string>(DOCX_PREVIEW_EXTENSIONS);
 const XLSX_PREVIEW_EXTENSION_SET = new Set<string>(XLSX_PREVIEW_EXTENSIONS);
+const VIDEO_PREVIEW_EXTENSION_SET = new Set<string>(VIDEO_PREVIEW_EXTENSIONS);
+const AUDIO_PREVIEW_EXTENSION_SET = new Set<string>(AUDIO_PREVIEW_EXTENSIONS);
 
 const LANGUAGE_BY_PLAIN_TEXT_EXTENSION: Record<string, string | undefined> = {
   '.md': 'markdown',
@@ -205,6 +209,8 @@ export function describeFilePreview(name: string): FilePreviewDescriptor {
   if (DOCX_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'docx' };
   if (XLSX_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'xlsx' };
   if (IMAGE_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'image' };
+  if (VIDEO_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'video' };
+  if (AUDIO_PREVIEW_EXTENSION_SET.has(ext)) return { mode: 'audio' };
 
   if (Object.prototype.hasOwnProperty.call(SPECIAL_CODE_FILENAMES, basename)) {
     return {
@@ -260,6 +266,32 @@ export function mimeFromExtDot(ext: string): string | undefined {
       return 'image/svg+xml';
     case '.pdf':
       return 'application/pdf';
+    case '.mp4':
+      return 'video/mp4';
+    case '.m4v':
+      return 'video/x-m4v';
+    case '.webm':
+      return 'video/webm';
+    case '.mov':
+      return 'video/quicktime';
+    case '.ogv':
+      return 'video/ogg';
+    case '.mkv':
+      return 'video/x-matroska';
+    case '.mp3':
+      return 'audio/mpeg';
+    case '.aac':
+      return 'audio/aac';
+    case '.m4a':
+      return 'audio/mp4';
+    case '.wav':
+      return 'audio/wav';
+    case '.ogg':
+    case '.oga':
+    case '.opus':
+      return 'audio/ogg';
+    case '.flac':
+      return 'audio/flac';
     case '.docx':
       return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     case '.xlsx':
