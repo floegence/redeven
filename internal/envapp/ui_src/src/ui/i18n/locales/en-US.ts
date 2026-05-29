@@ -1611,6 +1611,7 @@ export const enUS = defineDictionary({
   codespacesSettings: {
     title: 'Codespaces Ports',
     description: 'Configure the port range used for Codespaces instances.',
+    portRange: 'Port range',
     useDefaultRange: 'Use default port range',
     effectiveRange: 'Effective range',
     setting: 'Setting',

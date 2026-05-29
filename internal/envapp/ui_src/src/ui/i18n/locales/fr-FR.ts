@@ -1048,6 +1048,7 @@ export const frFR = {
   codespacesSettings: {
     title: "Ports Codespaces",
     description: "Configurez la plage de ports utilisée par les instances Codespaces.",
+    portRange: "Plage de ports",
     useDefaultRange: "Utiliser la plage de ports par défaut",
     effectiveRange: "Plage effective",
     setting: "Paramètre",

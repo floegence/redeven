@@ -1048,6 +1048,7 @@ export const ptBR = {
   codespacesSettings: {
     title: "Portas do Codespaces",
     description: "Configure a faixa de portas usada pelas instâncias do Codespaces.",
+    portRange: "Faixa de portas",
     useDefaultRange: "Usar faixa de portas padrão",
     effectiveRange: "Faixa efetiva",
     setting: "Configuração",

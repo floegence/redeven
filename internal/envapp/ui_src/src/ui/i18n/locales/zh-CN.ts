@@ -1342,6 +1342,7 @@ export const zhCN = {
   codespacesSettings: {
     title: "Codespaces 端口",
     description: "配置 Codespaces 实例使用的端口范围。",
+    portRange: "端口范围",
     useDefaultRange: "使用默认端口范围",
     effectiveRange: "实际范围",
     setting: "设置",

@@ -1048,6 +1048,7 @@ export const jaJP = {
   codespacesSettings: {
     title: "Codespaces ポート",
     description: "Codespaces インスタンスで使用するポート範囲を設定します。",
+    portRange: "ポート範囲",
     useDefaultRange: "デフォルトのポート範囲を使用",
     effectiveRange: "有効な範囲",
     setting: "設定",

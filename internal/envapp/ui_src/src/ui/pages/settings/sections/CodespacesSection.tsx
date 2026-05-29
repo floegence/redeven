@@ -96,7 +96,7 @@ export function CodespacesSection() {
       >
         {/* Port range card */}
         <div class="rounded-xl border border-border/50 bg-background p-4">
-          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">端口范围</div>
+          <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">{i18n.t('codespacesSettings.portRange')}</div>
           <label class={`flex items-center gap-2 mb-3 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
             <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setDirty(true); }} disabled={!ctx.canInteract()} />
             <span class="text-sm text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>

@@ -541,11 +541,13 @@ export function PermissionDot(props: {
   onExecuteChange?: (v: boolean) => void;
   readonly?: boolean;
 }) {
+  const i18n = useI18n();
+
   return (
     <div class="flex items-center gap-4">
-      <DotIndicator active={props.read} label="读取" onClick={props.readonly ? undefined : () => props.onReadChange?.(!props.read)} />
-      <DotIndicator active={props.write} label="写入" onClick={props.readonly ? undefined : () => props.onWriteChange?.(!props.write)} />
-      <DotIndicator active={props.execute} label="执行" onClick={props.readonly ? undefined : () => props.onExecuteChange?.(!props.execute)} />
+      <DotIndicator active={props.read} label={i18n.t('permissionPolicy.permission.read')} onClick={props.readonly ? undefined : () => props.onReadChange?.(!props.read)} />
+      <DotIndicator active={props.write} label={i18n.t('permissionPolicy.permission.write')} onClick={props.readonly ? undefined : () => props.onWriteChange?.(!props.write)} />
+      <DotIndicator active={props.execute} label={i18n.t('permissionPolicy.permission.execute')} onClick={props.readonly ? undefined : () => props.onExecuteChange?.(!props.execute)} />
     </div>
   );
 }
