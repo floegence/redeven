@@ -145,6 +145,7 @@ import {
   deriveDesktopAccessDraftModel,
 } from '../shared/desktopAccessModel';
 import {
+  buildEnvironmentLibrarySummaryModel,
   buildEnvironmentLibraryLayoutModel,
   buildEnvironmentCardModel,
   buildEnvironmentCardFactsModel,
@@ -547,7 +548,8 @@ function localizedStringByValue(
 function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): string {
   return localizedStringByValue(i18n, label, {
     Open: 'environmentStatus.open',
-    'READY TO OPEN': 'environmentStatus.readyToOpen',
+    OPENING: 'environmentStatus.opening',
+    READY: 'status.ready',
     CHECKING: 'environmentStatus.checking',
     'NOT CHECKED': 'environmentStatus.notChecked',
     'CHECK FAILED': 'environmentStatus.checkFailed',
@@ -1457,6 +1459,11 @@ function localizedOpenActionLabel(i18n: DesktopI18n, action: DesktopEnvironmentO
 function localizedWindowsLabel(i18n: DesktopI18n, count: number): string {
   return i18n.t('launcher.windowsCount', { count });
 }
+
+function localizedVisibleLabel(i18n: DesktopI18n, count: number): string {
+  return i18n.t('launcher.visibleCount', { count });
+}
+
 function languageSourceLabel(i18n: DesktopI18n, source: RedevenLanguageSnapshot['source']): string {
   switch (source) {
     case 'explicit':
@@ -2007,21 +2014,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     return next;
   });
-  const openCount = createMemo(() =>
-    snapshot().environments.filter(e => e.is_open).length
-  );
-  const runningCount = createMemo(() =>
-    snapshot().environments.filter(e => e.runtime_health?.status === 'online').length
-  );
-  const offlineCount = createMemo(() =>
-    snapshot().environments.filter(e => e.runtime_health?.status !== 'online').length
-  );
   const libraryEntries = createMemo(() => (
     filterEnvironmentLibrary(
       snapshot(),
       libraryQuery(),
       librarySourceFilter(),
     )
+  ));
+  const librarySummary = createMemo(() => (
+    buildEnvironmentLibrarySummaryModel(snapshot(), libraryEntries())
   ));
   const providerRuntimeLinkActionLabel = createMemo(() => (
     providerRuntimeLinkConfirmation()?.action === 'disconnect'
@@ -4159,28 +4160,33 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
         bottomBarLeading={(
           <div class="flex items-center gap-2 min-w-0 text-[11px] font-sans">
+            {/* Visible cards */}
+            <span class="flex items-center gap-1 text-muted-foreground shrink-0">
+              <span>{localizedVisibleLabel(i18n(), librarySummary().environment_count)}</span>
+            </span>
+            <span class="text-border shrink-0">·</span>
             {/* Windows */}
             <span class="flex items-center gap-1 text-muted-foreground shrink-0">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
-              <span>{localizedWindowsLabel(i18n(), snapshot().open_windows.length)}</span>
+              <span>{localizedWindowsLabel(i18n(), librarySummary().window_count)}</span>
             </span>
             <span class="text-border shrink-0">·</span>
-            {/* Open (session, matches card "Open" label) */}
+            {/* Ready to open */}
             <span class="flex items-center gap-1 shrink-0">
-              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${openCount() > 0 ? 'border-success bg-success/10' : 'border-muted-foreground/30'}`} />
-              <span class={openCount() > 0 ? 'text-success' : 'text-muted-foreground'}>{openCount()} {i18n().t('environmentStatus.open')}</span>
+              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${librarySummary().ready_count > 0 ? 'border-success bg-success/10' : 'border-muted-foreground/30'}`} />
+              <span class={librarySummary().ready_count > 0 ? 'text-success' : 'text-muted-foreground'}>{librarySummary().ready_count} {i18n().t('launcher.ready')}</span>
             </span>
             <span class="text-border shrink-0">·</span>
-            {/* Running (runtime online) */}
+            {/* Running but not ready */}
             <span class="flex items-center gap-1 text-muted-foreground shrink-0">
-              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${runningCount() > 0 ? 'border-success bg-success/10' : 'border-muted-foreground/30'}`} />
-              <span>{runningCount()} {i18n().t('launcher.running')}</span>
+              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${librarySummary().running_count > 0 ? 'border-primary bg-primary/10' : 'border-muted-foreground/30'}`} />
+              <span>{librarySummary().running_count} {i18n().t('launcher.running')}</span>
             </span>
             <span class="text-border shrink-0">·</span>
-            {/* Offline (runtime not online) */}
+            {/* Needs attention */}
             <span class="flex items-center gap-1 text-muted-foreground shrink-0">
-              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${offlineCount() > 0 ? 'border-warning bg-warning/10' : 'border-muted-foreground/30'}`} />
-              <span>{offlineCount()} {i18n().t('launcher.offline')}</span>
+              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${librarySummary().attention_count > 0 ? 'border-warning bg-warning/10' : 'border-muted-foreground/30'}`} />
+              <span>{librarySummary().attention_count} {i18n().t('launcher.attention')}</span>
             </span>
           </div>
         )}

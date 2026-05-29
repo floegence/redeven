@@ -167,9 +167,11 @@ export const deDE = {
     closeLauncher: "Launcher schließen",
     opening: "Wird geöffnet...",
     focus: "Fokussieren",
+    visibleCount: '{count} sichtbar',
     windowsCount: '{count} Fenster',
+    ready: 'bereit',
     running: 'aktiv',
-    offline: 'offline',
+    attention: 'Aufmerksamkeit',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Environment URL prüfen",
@@ -512,6 +514,7 @@ export const deDE = {
   },
   environmentStatus: {
     open: "Öffnen",
+    opening: "Wird geöffnet",
     readyToOpen: "Bereit zum Öffnen",
     checking: "Wird geprüft",
     notChecked: "Nicht geprüft",

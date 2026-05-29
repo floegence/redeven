@@ -15,6 +15,7 @@ import {
   type DesktopControlPlaneSummary,
   type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
+import type { DesktopRuntimeHealth } from '../shared/desktopRuntimeHealth';
 import type {
   RuntimeServiceOpenReadiness,
   RuntimeServiceProviderLinkBinding,
@@ -36,6 +37,8 @@ import {
   buildEnvironmentCardFactsModel,
   FACT_LABEL_ICONS,
   buildProviderBackedEnvironmentActionModel,
+  buildEnvironmentDisplayStateModel,
+  buildEnvironmentLibrarySummaryModel,
   environmentLibraryCount,
   filterEnvironmentLibrary,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
@@ -244,6 +247,288 @@ function localRuntimePresence(
   };
 }
 
+function runtimeHealth(overrides: Partial<DesktopRuntimeHealth> = {}): DesktopRuntimeHealth {
+  return {
+    status: 'offline',
+    checked_at_unix_ms: 1_000,
+    source: 'local_runtime_probe',
+    offline_reason_code: 'not_started',
+    offline_reason: 'Runtime is not started.',
+    ...overrides,
+  };
+}
+
+describe('buildEnvironmentDisplayStateModel', () => {
+  it('classifies openable online runtimes as ready without calling them open windows', () => {
+    const local = testLocalEnvironment({
+      currentRuntime: {
+        local_ui_url: 'http://localhost:23998/',
+        desktop_managed: true,
+        effective_run_mode: 'desktop',
+        runtime_service: providerRuntimeService({ state: 'openable' }),
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+    });
+    const entry = snapshot.environments.find((environment) => environment.id === local.id);
+
+    expect(entry).toBeTruthy();
+    expect(buildEnvironmentDisplayStateModel(entry!)).toMatchObject({
+      state: 'ready_to_open',
+      summary_bucket: 'ready',
+      status_label: 'READY',
+      status_tone: 'success',
+    });
+  });
+
+  it('keeps real open and opening windows separate from ready-to-open cards', () => {
+    const local = testLocalEnvironment();
+    const openSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+      openSessions: [
+        testLocalEnvironmentSession(local, 'http://localhost:23998/', 'open'),
+      ],
+    });
+    const openingSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+      openSessions: [
+        testLocalEnvironmentSession(local, 'http://localhost:23998/', 'opening'),
+      ],
+    });
+    const openEntry = openSnapshot.environments.find((environment) => environment.id === local.id);
+    const openingEntry = openingSnapshot.environments.find((environment) => environment.id === local.id);
+
+    expect(openEntry).toBeTruthy();
+    expect(openingEntry).toBeTruthy();
+    expect(buildEnvironmentDisplayStateModel(openEntry!)).toMatchObject({
+      state: 'window_open',
+      summary_bucket: 'windows',
+      status_label: 'Open',
+      status_tone: 'success',
+    });
+    expect(buildEnvironmentDisplayStateModel(openingEntry!)).toMatchObject({
+      state: 'window_opening',
+      summary_bucket: null,
+      status_label: 'OPENING',
+      status_tone: 'primary',
+    });
+  });
+
+  it('does not report unchecked or checking runtime probes as attention/offline counts', () => {
+    const unknownSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+    });
+    const checkingSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      localRuntimeHealth: {
+        local: runtimeHealth({
+          freshness: 'checking',
+          offline_reason_code: 'unverified',
+          offline_reason: 'Status check is running.',
+        }),
+      },
+    });
+    const unknownEntry = unknownSnapshot.environments.find((environment) => environment.id === 'local');
+    const checkingEntry = checkingSnapshot.environments.find((environment) => environment.id === 'local');
+
+    expect(unknownEntry).toBeTruthy();
+    expect(checkingEntry).toBeTruthy();
+    expect(buildEnvironmentDisplayStateModel(unknownEntry!)).toMatchObject({
+      state: 'not_checked',
+      summary_bucket: null,
+      status_label: 'NOT CHECKED',
+      status_tone: 'neutral',
+    });
+    expect(buildEnvironmentDisplayStateModel(checkingEntry!)).toMatchObject({
+      state: 'checking',
+      summary_bucket: null,
+      status_label: 'CHECKING',
+      status_tone: 'primary',
+    });
+  });
+
+  it('classifies failed probes, preparing runtimes, and true offline runtimes distinctly', () => {
+    const failedSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      localRuntimeHealth: {
+        local: runtimeHealth({
+          freshness: 'failed',
+          offline_reason_code: 'probe_failed',
+          offline_reason: 'Probe failed.',
+        }),
+      },
+    });
+    const runningSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      managedRuntimePresenceByTargetID: {
+        'local:local': localRuntimePresence(undefined, {
+          openable: false,
+          local_ui_url: 'http://127.0.0.1:24001/',
+        }),
+      },
+    });
+    const offlineSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: testLocalEnvironment(),
+      }),
+      localRuntimeHealth: {
+        local: runtimeHealth({
+          offline_reason_code: 'not_started',
+          offline_reason: 'Runtime is stopped.',
+        }),
+      },
+    });
+    const failedEntry = failedSnapshot.environments.find((environment) => environment.id === 'local');
+    const runningEntry = runningSnapshot.environments.find((environment) => environment.id === 'local');
+    const offlineEntry = offlineSnapshot.environments.find((environment) => environment.id === 'local');
+
+    expect(failedEntry).toBeTruthy();
+    expect(runningEntry).toBeTruthy();
+    expect(offlineEntry).toBeTruthy();
+    expect(buildEnvironmentDisplayStateModel(failedEntry!)).toMatchObject({
+      state: 'blocked',
+      summary_bucket: 'attention',
+      status_label: 'CHECK FAILED',
+      status_tone: 'warning',
+    });
+    expect(buildEnvironmentDisplayStateModel(runningEntry!)).toMatchObject({
+      state: 'running',
+      summary_bucket: 'running',
+      status_label: 'RUNTIME PREPARING',
+      status_tone: 'primary',
+    });
+    expect(buildEnvironmentDisplayStateModel(offlineEntry!)).toMatchObject({
+      state: 'offline',
+      summary_bucket: 'attention',
+      status_label: 'RUNTIME OFFLINE',
+      status_tone: 'warning',
+    });
+  });
+
+  it('classifies provider route states before falling back to runtime probe labels', () => {
+    const readySnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      controlPlanes: [buildControlPlaneSummary({})],
+    });
+    const authSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      controlPlanes: [buildControlPlaneSummary({ syncState: 'auth_required' })],
+    });
+    const unreachableSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      controlPlanes: [buildControlPlaneSummary({ syncState: 'provider_unreachable' })],
+    });
+    const readyEntry = readySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    const authEntry = authSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+    const unreachableEntry = unreachableSnapshot.environments.find((environment) => environment.kind === 'provider_environment');
+
+    expect(readyEntry).toBeTruthy();
+    expect(authEntry).toBeTruthy();
+    expect(unreachableEntry).toBeTruthy();
+    const removedEntry = {
+      ...readyEntry!,
+      id: 'provider_removed',
+      env_public_id: 'env_removed',
+      remote_route_state: 'removed' as const,
+      runtime_health: runtimeHealth({
+        source: 'provider_batch_probe',
+        offline_reason_code: 'environment_removed',
+        offline_reason: 'This environment is no longer published by the provider.',
+      }),
+    };
+
+    expect(buildEnvironmentDisplayStateModel(readyEntry!)).toMatchObject({
+      state: 'ready_to_open',
+      summary_bucket: 'ready',
+      status_label: 'READY',
+      status_tone: 'success',
+    });
+    expect(buildEnvironmentDisplayStateModel(authEntry!)).toMatchObject({
+      state: 'sync_required',
+      summary_bucket: 'attention',
+      status_label: 'RECONNECT REQUIRED',
+      status_tone: 'warning',
+    });
+    expect(buildEnvironmentDisplayStateModel(unreachableEntry!)).toMatchObject({
+      state: 'sync_required',
+      summary_bucket: 'attention',
+      status_label: 'SYNC FAILED',
+      status_tone: 'warning',
+    });
+    expect(buildEnvironmentDisplayStateModel(removedEntry)).toMatchObject({
+      state: 'removed',
+      summary_bucket: 'attention',
+      status_label: 'REMOVED',
+      status_tone: 'warning',
+    });
+  });
+});
+
+describe('buildEnvironmentLibrarySummaryModel', () => {
+  it('summarizes only visible environment entries with shared display-state buckets', () => {
+    const local = testLocalEnvironment();
+    const offlineURL = 'http://192.168.1.12:24000/';
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+        saved_environments: [{
+          id: offlineURL,
+          label: 'Offline LAN',
+          local_ui_url: offlineURL,
+          pinned: false,
+          created_at_ms: 20,
+          last_used_at_ms: 20,
+        }],
+      }),
+      controlPlanes: [buildControlPlaneSummary({})],
+      savedExternalRuntimeHealth: {
+        [offlineURL]: runtimeHealth({
+          source: 'external_local_ui_probe',
+          offline_reason_code: 'external_unreachable',
+          offline_reason: 'The saved Local UI endpoint is unreachable.',
+        }),
+      },
+      openSessions: [
+        testLocalEnvironmentSession(local, 'http://localhost:23998/', 'open'),
+      ],
+    });
+    const visibleEntries = snapshot.environments.filter((environment) => environment.kind !== 'local_environment');
+
+    expect(snapshot.open_windows).toHaveLength(1);
+    expect(buildEnvironmentLibrarySummaryModel(snapshot, visibleEntries)).toEqual({
+      scope: 'visible',
+      environment_count: 2,
+      window_count: 0,
+      ready_count: 1,
+      running_count: 0,
+      attention_count: 1,
+    });
+    expect(buildEnvironmentLibrarySummaryModel(snapshot, snapshot.environments)).toEqual({
+      scope: 'visible',
+      environment_count: 3,
+      window_count: 1,
+      ready_count: 1,
+      running_count: 0,
+      attention_count: 1,
+    });
+  });
+});
+
 describe('buildEnvironmentCardModel', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -448,7 +733,7 @@ describe('buildEnvironmentCardModel', () => {
     }));
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Provider',
-      status_label: 'Open',
+      status_label: 'READY',
       target_primary: 'https://cp.example.invalid/env/env_demo',
       target_secondary: '',
     }));
@@ -989,7 +1274,7 @@ describe('buildEnvironmentCardModel', () => {
       }),
     });
     expect(actionModel).toMatchObject({
-      status_label: 'READY TO OPEN',
+      status_label: 'READY',
       status_tone: 'success',
       action_presentation: {
         primary_action: {
@@ -1061,7 +1346,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(entry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
-      status_label: 'READY TO OPEN',
+      status_label: 'READY',
       status_tone: 'success',
       action_presentation: {
         primary_action: {
@@ -1391,7 +1676,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(entry).toBeTruthy();
     expect(buildEnvironmentCardModel(entry!)).toEqual(expect.objectContaining({
       kind_label: 'SSH Host',
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
       target_secondary: 'http://127.0.0.1:24111/',
     }));
@@ -1406,7 +1691,7 @@ describe('buildEnvironmentCardModel', () => {
     ]);
     const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
     expect(actionModel).toMatchObject({
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
       action_presentation: {
         primary_action: {
@@ -1494,7 +1779,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(entry).toBeTruthy();
     expect(buildEnvironmentCardModel(entry!)).toMatchObject({
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
     });
     expect(buildEnvironmentCardFactsModel(entry!)).toContainEqual(defaultFact('VERSION', 'v0.0.0-dev'));
@@ -1705,7 +1990,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(entry).toBeTruthy();
     expect(entry?.runtime_maintenance).toBeUndefined();
-    expect(buildEnvironmentCardModel(entry!).status_label).toBe('Open');
+    expect(buildEnvironmentCardModel(entry!).status_label).toBe('READY');
     const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
     expect(actionModel.status_label).not.toBe('RESTART REQUIRED');
     expect(actionModel.action_presentation.primary_action).toMatchObject({
@@ -2011,7 +2296,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(staleProviderEntry?.remote_route_state).toBe('ready');
     const staleProviderAction = buildProviderBackedEnvironmentActionModel(staleProviderEntry!);
     expect(staleProviderAction).toMatchObject({
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
       action_presentation: {
         primary_action: {
@@ -2303,7 +2588,7 @@ describe('buildEnvironmentCardModel', () => {
     });
     const readyEntry = readySnapshot.environments.find((environment) => environment.kind === 'provider_environment');
     expect(buildProviderBackedEnvironmentActionModel(readyEntry!)).toEqual({
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -2465,7 +2750,7 @@ describe('buildEnvironmentCardModel', () => {
       }),
     });
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
-      status_label: 'Open',
+      status_label: 'READY',
       action_presentation: {
         primary_action: {
           intent: 'open',
@@ -2626,7 +2911,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(focusableLocalServe).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(focusableLocalServe!)).toEqual({
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
       action_presentation: {
         kind: 'split_button',
@@ -2684,8 +2969,8 @@ describe('buildEnvironmentCardModel', () => {
 
     const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
     expect(actionModel).toMatchObject({
-      status_label: 'Open',
-      status_tone: 'success',
+      status_label: 'OPENING',
+      status_tone: 'primary',
       action_presentation: {
         primary_action: {
           intent: 'opening',
@@ -2745,11 +3030,11 @@ describe('buildEnvironmentCardModel', () => {
     expect(entry).toBeTruthy();
     expect(buildEnvironmentCardModel(entry!)).toEqual(expect.objectContaining({
       kind_label: 'Local',
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
     }));
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
       action_presentation: {
         primary_action: {
@@ -2789,12 +3074,12 @@ describe('buildEnvironmentCardModel', () => {
     const actionModel = buildProviderBackedEnvironmentActionModel(entry!);
     expect(cardModel).toEqual(expect.objectContaining({
       kind_label: 'Local',
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
     }));
     expect(cardModel.status_label).not.toBe('RUNTIME NEEDS UPDATE');
     expect(actionModel).toMatchObject({
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
       action_presentation: {
         primary_action: {
@@ -2830,7 +3115,7 @@ describe('buildEnvironmentCardModel', () => {
 
     expect(entry).toBeTruthy();
     expect(buildProviderBackedEnvironmentActionModel(entry!)).toMatchObject({
-      status_label: 'Open',
+      status_label: 'READY',
       status_tone: 'success',
       action_presentation: {
         primary_action: {

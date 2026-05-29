@@ -525,6 +525,23 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-welcome-shell--spacious');
   });
 
+  it('drives the welcome bottom bar from the Environment Library summary model', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('buildEnvironmentLibrarySummaryModel');
+    expect(appSrc).toContain('const librarySummary = createMemo(() => (');
+    expect(appSrc).toContain('buildEnvironmentLibrarySummaryModel(snapshot(), libraryEntries())');
+    expect(appSrc).toContain('localizedVisibleLabel(i18n(), librarySummary().environment_count)');
+    expect(appSrc).toContain('localizedWindowsLabel(i18n(), librarySummary().window_count)');
+    expect(appSrc).toContain("librarySummary().ready_count} {i18n().t('launcher.ready')");
+    expect(appSrc).toContain("librarySummary().running_count} {i18n().t('launcher.running')");
+    expect(appSrc).toContain("librarySummary().attention_count} {i18n().t('launcher.attention')");
+
+    expect(appSrc).not.toMatch(/\b(?:openCount|runningCount|offlineCount)\b/);
+    expect(appSrc).not.toMatch(/snapshot\(\)\.environments\s*\.filter[\s\S]{0,240}(?:open|running|offline)[\s\S]{0,120}(?:\.length|Count|_count)/);
+    expect(appSrc).not.toContain("i18n().t('launcher.offline')");
+  });
+
   it('uses shared tooltip and compact card-grid helpers for desktop help affordances', () => {
     const appSrc = readWelcomeSource();
 

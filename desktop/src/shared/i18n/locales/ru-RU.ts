@@ -167,9 +167,11 @@ export const ruRU = {
     closeLauncher: "Закрыть Launcher",
     opening: "Открытие...",
     focus: "Фокус",
+    visibleCount: 'Видимо: {count}',
     windowsCount: '{count} окон',
+    ready: 'готово',
     running: 'запущен',
-    offline: 'отключен',
+    attention: 'требует внимания',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Проверьте Environment URL",
@@ -532,6 +534,7 @@ export const ruRU = {
   },
   environmentStatus: {
     open: "Открыть",
+    opening: "Открытие",
     readyToOpen: "Готово к открытию",
     checking: "Проверка",
     notChecked: "Не проверено",

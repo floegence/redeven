@@ -166,9 +166,11 @@ export const enUS = {
     closeLauncher: 'Close Launcher',
     opening: 'Opening...',
     focus: 'Focus',
+    visibleCount: '{count} visible',
     windowsCount: '{count} windows',
+    ready: 'ready',
     running: 'running',
-    offline: 'offline',
+    attention: 'attention',
   },
   issue: {
     remoteEnvironmentInvalidTitle: 'Check the Environment URL',
@@ -343,6 +345,7 @@ export const enUS = {
   },
   environmentStatus: {
     open: 'Open',
+    opening: 'Opening',
     readyToOpen: 'Ready to open',
     checking: 'Checking',
     notChecked: 'Not checked',

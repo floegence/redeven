@@ -167,9 +167,11 @@ export const koKR = {
     closeLauncher: "Launcher 닫기",
     opening: "여는 중...",
     focus: "포커스",
+    visibleCount: '{count}개 표시',
     windowsCount: '{count}개 창',
+    ready: '열 준비됨',
     running: '실행 중',
-    offline: '오프라인',
+    attention: '확인 필요',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Environment URL 확인",
@@ -508,6 +510,7 @@ export const koKR = {
   },
   environmentStatus: {
     open: "열기",
+    opening: "여는 중",
     readyToOpen: "열 준비 완료",
     checking: "확인 중",
     notChecked: "확인 안 됨",

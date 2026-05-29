@@ -167,9 +167,11 @@ export const esES = {
     closeLauncher: "Cerrar Launcher",
     opening: "Abriendo...",
     focus: "Enfocar",
+    visibleCount: '{count} visible(s)',
     windowsCount: '{count} ventana(s)',
+    ready: 'listo',
     running: 'activo',
-    offline: 'inactivo',
+    attention: 'atención',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Comprueba la Environment URL",
@@ -512,6 +514,7 @@ export const esES = {
   },
   environmentStatus: {
     open: "Abrir",
+    opening: "Abriendo",
     readyToOpen: "Listo para abrir",
     checking: "Comprobando",
     notChecked: "Sin comprobar",
