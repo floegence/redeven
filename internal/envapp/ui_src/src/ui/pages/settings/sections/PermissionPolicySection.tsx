@@ -125,7 +125,7 @@ export function PermissionPolicySection() {
                     onReadChange={localRead() && ctx.canInteract() ? (v) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, read: v } : it)); setDirty(true); } : undefined}
                     onWriteChange={localWrite() && ctx.canInteract() ? (v) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, write: v } : it)); setDirty(true); } : undefined}
                     onExecuteChange={localExecute() && ctx.canInteract() ? (v) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, execute: v } : it)); setDirty(true); } : undefined} />
-                  <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive" onClick={() => { setByUser((prev) => prev.filter((_, i) => i !== index())); setDirty(true); }} disabled={!ctx.canInteract()} aria-label="删除" />
+                  <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive" onClick={() => { setByUser((prev) => prev.filter((_, i) => i !== index())); setDirty(true); }} disabled={!ctx.canInteract()} aria-label={i18n.t('permissionPolicy.removeRuleAria', { subject: row.key || i18n.t('permissionPolicy.userHeader') })} />
                 </div>
               )}
             </For>
@@ -149,7 +149,7 @@ export function PermissionPolicySection() {
                     onReadChange={localRead() && ctx.canInteract() ? (v) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, read: v } : it)); setDirty(true); } : undefined}
                     onWriteChange={localWrite() && ctx.canInteract() ? (v) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, write: v } : it)); setDirty(true); } : undefined}
                     onExecuteChange={localExecute() && ctx.canInteract() ? (v) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, execute: v } : it)); setDirty(true); } : undefined} />
-                  <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive" onClick={() => { setByApp((prev) => prev.filter((_, i) => i !== index())); setDirty(true); }} disabled={!ctx.canInteract()} aria-label="删除" />
+                  <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive" onClick={() => { setByApp((prev) => prev.filter((_, i) => i !== index())); setDirty(true); }} disabled={!ctx.canInteract()} aria-label={i18n.t('permissionPolicy.removeRuleAria', { subject: row.key || i18n.t('permissionPolicy.appHeader') })} />
                 </div>
               )}
             </For>

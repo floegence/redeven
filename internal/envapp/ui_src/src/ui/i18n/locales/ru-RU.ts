@@ -1066,6 +1066,7 @@ export const ruRU = {
   codespacesSettings: {
     title: "Порты Codespaces",
     description: "Настройте диапазон портов для экземпляров Codespaces.",
+    portRange: "Диапазон портов",
     useDefaultRange: "Использовать диапазон портов по умолчанию",
     effectiveRange: "Фактический диапазон",
     setting: "Параметр",

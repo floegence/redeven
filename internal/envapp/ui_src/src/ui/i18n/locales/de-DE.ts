@@ -1048,6 +1048,7 @@ export const deDE = {
   codespacesSettings: {
     title: "Codespaces Ports",
     description: "Konfigurieren Sie den Portbereich für Codespaces-Instanzen.",
+    portRange: "Portbereich",
     useDefaultRange: "Standard-Portbereich verwenden",
     effectiveRange: "Wirksamer Bereich",
     setting: "Einstellung",

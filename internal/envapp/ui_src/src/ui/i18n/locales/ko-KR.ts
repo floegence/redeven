@@ -1048,6 +1048,7 @@ export const koKR = {
   codespacesSettings: {
     title: "Codespaces 포트",
     description: "Codespaces 인스턴스에 사용할 포트 범위를 구성합니다.",
+    portRange: "포트 범위",
     useDefaultRange: "기본 포트 범위 사용",
     effectiveRange: "적용 범위",
     setting: "설정",

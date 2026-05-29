@@ -428,7 +428,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
             {runtimeStatusLabel(active?.detection_state, i18n)}
           </SettingsPill>
         ),
-        note: active?.error_message || i18n.t('codeRuntime.notes.codespacesUsingRuntimeSource', { source: runtimeSourceLabel(active?.source, i18n).toLowerCase() }),
+        note: active?.error_message || i18n.t('codeRuntime.notes.codespacesUsingRuntimeSource', { source: runtimeSourceLabel(active?.source, i18n) }),
       },
       {
         label: i18n.t('codeRuntime.rows.activeSource'),

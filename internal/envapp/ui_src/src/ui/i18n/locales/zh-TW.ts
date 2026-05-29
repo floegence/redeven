@@ -1048,6 +1048,7 @@ export const zhTW = {
   codespacesSettings: {
     title: "Codespaces 連接埠",
     description: "設定 Codespaces 執行個體使用的連接埠範圍。",
+    portRange: "連接埠範圍",
     useDefaultRange: "使用預設連接埠範圍",
     effectiveRange: "實際範圍",
     setting: "設定",

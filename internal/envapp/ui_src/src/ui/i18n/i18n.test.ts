@@ -376,9 +376,17 @@ describe('Env App i18n dictionaries', () => {
     expect(zhCN.t('workbench.contextMenu.addWidget', { label: '终端' })).toBe('添加 终端');
     expect(zhCN.t('workbench.contextMenu.goToWidget', { label: 'Web服务' })).toBe('转到 Web服务');
     expect(zhCN.t('deck.presets.terminalFocus')).toBe('终端聚焦');
+    expect(zhCN.t('codespacesSettings.portRange')).toBe('端口范围');
+    expect(zhCN.t('codeRuntime.rows.managedEditorSource')).toBe('托管编辑器来源');
+    expect(zhCN.t('codeRuntime.currentEditorSection')).toBe('当前编辑器');
+    expect(zhCN.t('codeRuntime.useThisVersion')).toBe('使用此版本');
+    expect(zhCN.t('codeRuntime.notes.codespacesUsesSelectedManagedVersion')).toBe('Codespaces 使用已选择的托管 Browser Editor 版本。');
+    expect(zhCN.t('codeRuntime.activity.steps.cache')).toBe('下载到 Desktop');
 
     const deDE = createI18nHelpers('de-DE');
     expect(deDE.t('chatActivity.command')).toBe('Befehl');
+    expect(deDE.t('codespacesSettings.portRange')).toBe('Portbereich');
+    expect(deDE.t('codeRuntime.rows.managedEditorSource')).toBe('Quelle des verwalteten Editors');
 
     const ruRU = createI18nHelpers('ru-RU');
     expect(ruRU.tn('language.availableCount', 1)).toBe('1 язык');

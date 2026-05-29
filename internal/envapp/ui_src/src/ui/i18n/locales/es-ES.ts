@@ -1048,6 +1048,7 @@ export const esES = {
   codespacesSettings: {
     title: "Puertos de Codespaces",
     description: "Configura el rango de puertos usado por las instancias de Codespaces.",
+    portRange: "Rango de puertos",
     useDefaultRange: "Usar rango de puertos predeterminado",
     effectiveRange: "Rango efectivo",
     setting: "Ajuste",
