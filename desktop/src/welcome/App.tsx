@@ -1454,15 +1454,6 @@ function localizedOpenActionLabel(i18n: DesktopI18n, action: DesktopEnvironmentO
   }
 }
 
-function localizedEnvironmentsLabel(i18n: DesktopI18n, count: number): string {
-  return i18n.t('launcher.environmentsCount', { count });
-}
-
-function localizedActiveLabel(i18n: DesktopI18n, count: number): string {
-  if (count <= 0) return i18n.t('launcher.idle');
-  return i18n.t('launcher.environmentsActive', { count });
-}
-
 function localizedWindowsLabel(i18n: DesktopI18n, count: number): string {
   return i18n.t('launcher.windowsCount', { count });
 }
@@ -2016,8 +2007,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     return next;
   });
-  const activeCount = createMemo(() =>
+  const openCount = createMemo(() =>
     snapshot().environments.filter(e => e.is_open).length
+  );
+  const runningCount = createMemo(() =>
+    snapshot().environments.filter(e => e.runtime_health?.status === 'online').length
+  );
+  const offlineCount = createMemo(() =>
+    snapshot().environments.filter(e => e.runtime_health?.status !== 'online').length
   );
   const libraryEntries = createMemo(() => (
     filterEnvironmentLibrary(
@@ -4162,31 +4159,28 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
         bottomBarLeading={(
           <div class="flex items-center gap-2 min-w-0 text-[11px]">
-            {/* Environment count */}
-            <span class="flex items-center gap-1 text-muted-foreground shrink-0">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-              <span>{localizedEnvironmentsLabel(i18n(), snapshot().environments.length)}</span>
-            </span>
-            {/* Dot separator */}
-            <span class="text-border shrink-0">·</span>
-            {/* Active chip — the only colored emphasis */}
-            {(() => {
-              const a = activeCount();
-              return (
-                <span class={`flex items-center gap-1 px-1.5 rounded-full text-[10px] font-medium shrink-0 ${
-                  a > 0 ? 'bg-success/10 text-success' : 'bg-muted/60 text-muted-foreground'
-                }`}>
-                  <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${a > 0 ? 'bg-success' : 'bg-muted-foreground'}`} />
-                  <span>{localizedActiveLabel(i18n(), a)}</span>
-                </span>
-              );
-            })()}
-            {/* Dot separator */}
-            <span class="text-border shrink-0">·</span>
-            {/* Window count */}
+            {/* Windows */}
             <span class="flex items-center gap-1 text-muted-foreground shrink-0">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
               <span>{localizedWindowsLabel(i18n(), snapshot().open_windows.length)}</span>
+            </span>
+            <span class="text-border shrink-0">·</span>
+            {/* Open (session, matches card "Open" label) */}
+            <span class="flex items-center gap-1 shrink-0">
+              <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${openCount() > 0 ? 'bg-success' : 'bg-muted-foreground'}`} />
+              <span class={openCount() > 0 ? 'text-success' : 'text-muted-foreground'}>{openCount()} {i18n().t('environmentStatus.open')}</span>
+            </span>
+            <span class="text-border shrink-0">·</span>
+            {/* Running (runtime online) */}
+            <span class="flex items-center gap-1 text-muted-foreground shrink-0">
+              <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${runningCount() > 0 ? 'bg-success' : 'bg-muted-foreground'}`} />
+              <span>{runningCount()} {i18n().t('launcher.running')}</span>
+            </span>
+            <span class="text-border shrink-0">·</span>
+            {/* Offline (runtime not online) */}
+            <span class="flex items-center gap-1 text-muted-foreground shrink-0">
+              <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${offlineCount() > 0 ? 'bg-warning' : 'bg-muted-foreground'}`} />
+              <span>{offlineCount()} {i18n().t('launcher.offline')}</span>
             </span>
           </div>
         )}
