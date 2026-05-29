@@ -4158,7 +4158,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </div>
         )}
         bottomBarLeading={(
-          <div class="flex items-center gap-2 min-w-0 text-[11px]">
+          <div class="flex items-center gap-2 min-w-0 text-[11px] font-sans">
             {/* Windows */}
             <span class="flex items-center gap-1 text-muted-foreground shrink-0">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
@@ -4167,29 +4167,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             <span class="text-border shrink-0">·</span>
             {/* Open (session, matches card "Open" label) */}
             <span class="flex items-center gap-1 shrink-0">
-              <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${openCount() > 0 ? 'bg-success' : 'bg-muted-foreground'}`} />
+              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${openCount() > 0 ? 'border-success bg-success/10' : 'border-muted-foreground/30'}`} />
               <span class={openCount() > 0 ? 'text-success' : 'text-muted-foreground'}>{openCount()} {i18n().t('environmentStatus.open')}</span>
             </span>
             <span class="text-border shrink-0">·</span>
             {/* Running (runtime online) */}
             <span class="flex items-center gap-1 text-muted-foreground shrink-0">
-              <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${runningCount() > 0 ? 'bg-success' : 'bg-muted-foreground'}`} />
+              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${runningCount() > 0 ? 'border-success bg-success/10' : 'border-muted-foreground/30'}`} />
               <span>{runningCount()} {i18n().t('launcher.running')}</span>
             </span>
             <span class="text-border shrink-0">·</span>
             {/* Offline (runtime not online) */}
             <span class="flex items-center gap-1 text-muted-foreground shrink-0">
-              <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${offlineCount() > 0 ? 'bg-warning' : 'bg-muted-foreground'}`} />
+              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${offlineCount() > 0 ? 'border-warning bg-warning/10' : 'border-muted-foreground/30'}`} />
               <span>{offlineCount()} {i18n().t('launcher.offline')}</span>
             </span>
           </div>
         )}
         bottomBarTrailing={(
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 font-sans">
             {/* Issue warning */}
             <Show when={snapshot().issue}>
               <span class="flex items-center gap-1 px-1.5 rounded-full text-[10px] font-medium bg-warning/10 text-warning shrink-0">
-                <span class="w-1.5 h-1.5 rounded-full bg-warning shrink-0" />
+                <span class="w-2 h-2 rounded-full border-[1.5px] border-warning bg-warning/10 shrink-0" />
                 <span class="truncate max-w-[200px]">{snapshot().issue!.title}</span>
               </span>
             </Show>
