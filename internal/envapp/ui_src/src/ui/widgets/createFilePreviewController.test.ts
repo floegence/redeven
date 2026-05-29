@@ -286,6 +286,89 @@ describe('createFilePreviewController', () => {
     }
   });
 
+  it('opens media previews as resource URLs without waiting for a Flowersec file stream', async () => {
+    const videoFile = {
+      id: '/workspace/demo.mp4',
+      name: 'demo.mp4',
+      path: '/workspace/demo.mp4',
+      type: 'file',
+      size: 128 * 1024 * 1024,
+    } satisfies FileItem;
+    const audioFile = {
+      id: '/workspace/audio.mp3',
+      name: 'audio.mp3',
+      path: '/workspace/audio.mp3',
+      type: 'file',
+    } satisfies FileItem;
+
+    const [client] = createSignal<any>(null);
+    const [rpc] = createSignal({ fs: { writeFile: vi.fn(async () => ({ success: true })) } } as any);
+    const [canWrite] = createSignal(true);
+
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createFilePreviewController({ client, rpc, canWrite });
+      return disposeRoot;
+    });
+
+    try {
+      await controller.openPreview(videoFile);
+      await flushAsync();
+
+      expect(openReadFileStreamChannelMock).not.toHaveBeenCalled();
+      expect(controller.open()).toBe(true);
+      expect(controller.loading()).toBe(false);
+      expect(controller.error()).toBe(null);
+      expect(controller.message()).toBe('');
+      expect(controller.descriptor().mode).toBe('video');
+      expect(controller.resourceUrl()).toBe('/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Fdemo.mp4');
+      expect(controller.bytes()).toBe(null);
+      expect(controller.objectUrl()).toBe('');
+
+      await controller.openPreview(audioFile);
+      await flushAsync();
+
+      expect(openReadFileStreamChannelMock).not.toHaveBeenCalled();
+      expect(controller.descriptor().mode).toBe('audio');
+      expect(controller.resourceUrl()).toBe('/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Faudio.mp3');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('clears stale media resource URLs when switching back to a byte-loaded preview', async () => {
+    const videoFile = { id: '/workspace/demo.mp4', name: 'demo.mp4', path: '/workspace/demo.mp4', type: 'file' } satisfies FileItem;
+    const textFile = { id: '/workspace/demo.ts', name: 'demo.ts', path: '/workspace/demo.ts', type: 'file' } satisfies FileItem;
+
+    openReadFileStreamChannelMock.mockResolvedValue(createTextChannel('const value = 1;\n'));
+
+    const [client] = createSignal({ id: 'client-ready' } as any);
+    const [rpc] = createSignal({ fs: { writeFile: vi.fn(async () => ({ success: true })) } } as any);
+    const [canWrite] = createSignal(true);
+
+    let controller!: ReturnType<typeof createFilePreviewController>;
+    const dispose = createRoot((disposeRoot) => {
+      controller = createFilePreviewController({ client, rpc, canWrite });
+      return disposeRoot;
+    });
+
+    try {
+      await controller.openPreview(videoFile);
+      await flushAsync();
+      expect(controller.resourceUrl()).toBe('/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Fdemo.mp4');
+
+      await controller.openPreview(textFile);
+      await flushAsync();
+
+      expect(openReadFileStreamChannelMock).toHaveBeenCalledTimes(1);
+      expect(controller.descriptor().mode).toBe('text');
+      expect(controller.text()).toBe('const value = 1;\n');
+      expect(controller.resourceUrl()).toBe('');
+    } finally {
+      dispose();
+    }
+  });
+
   it('loads only the newest pending preview after the connection becomes ready', async () => {
     const firstFile = { id: '/workspace/first.ts', name: 'first.ts', path: '/workspace/first.ts', type: 'file' } satisfies FileItem;
     const secondFile = { id: '/workspace/second.ts', name: 'second.ts', path: '/workspace/second.ts', type: 'file' } satisfies FileItem;

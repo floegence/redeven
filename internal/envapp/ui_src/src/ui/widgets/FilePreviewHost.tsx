@@ -90,6 +90,7 @@ export function FilePreviewHost() {
       onDiscard={filePreview.controller.revertCurrent}
       message={filePreview.controller.message()}
       objectUrl={filePreview.controller.objectUrl()}
+      resourceUrl={filePreview.controller.resourceUrl()}
       bytes={filePreview.controller.bytes()}
       truncated={filePreview.controller.truncated()}
       loading={filePreview.controller.loading()}

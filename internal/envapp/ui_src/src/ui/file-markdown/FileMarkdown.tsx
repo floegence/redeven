@@ -16,6 +16,7 @@ import { buildToc, type TocItem } from './tocBuilder';
 import { postProcess } from './postProcess';
 import { parseMarkdown } from './markedConfig';
 import { resolveFileMarkdownLink } from './linkResolver';
+import { buildRedevenFileResourceUrl } from '../utils/filePreviewResource';
 import type { JSX } from 'solid-js';
 
 export interface FileMarkdownFileLinkTarget {
@@ -33,7 +34,6 @@ export interface FileMarkdownProps {
   onUnresolvedLocalLink?: (href: string, reason: string) => void;
 }
 
-const FS_FILE_ENDPOINT = '/_redeven_proxy/api/fs/file';
 const TOC_HEADING_SELECTOR = 'h1.fm-heading, h2.fm-heading, h3.fm-heading, h4.fm-heading';
 const TOC_ACTIVE_ANCHOR_OFFSET_PX = 88;
 const TOC_SCROLL_BOTTOM_EPSILON_PX = 2;
@@ -54,7 +54,7 @@ function resolveImagePaths(markdown: string, mdFilePath: string): string {
     const absPath = dir + '/' + cleaned;
     // Normalize and encode for query string
     const normalized = absPath.replace(/\/+/g, '/');
-    return FS_FILE_ENDPOINT + '?path=' + encodeURIComponent(normalized);
+    return buildRedevenFileResourceUrl(normalized);
   }
 
   // Replace markdown images: ![alt](path)

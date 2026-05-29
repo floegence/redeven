@@ -38,6 +38,7 @@ const filePreviewController = {
   revertCurrent: vi.fn(),
   message: () => '',
   objectUrl: () => '',
+  resourceUrl: () => '',
   bytes: () => null,
   truncated: () => false,
   loading: () => false,

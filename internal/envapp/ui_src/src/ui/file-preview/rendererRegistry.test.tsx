@@ -44,6 +44,8 @@ describe('Redeven file preview renderer registry', () => {
     expect(resolveRedevenFilePreviewRenderer({ mode: 'pdf' }).id).toBe('pdf');
     expect(resolveRedevenFilePreviewRenderer({ mode: 'docx' }).id).toBe('docx');
     expect(resolveRedevenFilePreviewRenderer({ mode: 'xlsx' }).id).toBe('xlsx');
+    expect(resolveRedevenFilePreviewRenderer({ mode: 'video' }).id).toBe('video');
+    expect(resolveRedevenFilePreviewRenderer({ mode: 'audio' }).id).toBe('audio');
     expect(resolveRedevenFilePreviewRenderer({ mode: 'binary' }).id).toBe('binary');
   });
 
@@ -98,5 +100,37 @@ describe('Redeven file preview renderer registry', () => {
     expect(detailsButton).toBeTruthy();
     detailsButton?.click();
     expect(host.textContent).toContain('Preview blocked by policy.');
+  });
+
+  it('renders native media elements with resource URLs', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <>
+        {renderRedevenFilePreviewBody({
+          item: { id: '/workspace/demo.mp4', name: 'demo.mp4', path: '/workspace/demo.mp4', type: 'file' },
+          descriptor: { mode: 'video' },
+          resourceUrl: '/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Fdemo.mp4',
+        })}
+        {renderRedevenFilePreviewBody({
+          item: { id: '/workspace/audio.mp3', name: 'audio.mp3', path: '/workspace/audio.mp3', type: 'file' },
+          descriptor: { mode: 'audio' },
+          resourceUrl: '/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Faudio.mp3',
+        })}
+      </>
+    ), host);
+
+    const video = host.querySelector('video');
+    expect(video).toBeTruthy();
+    expect(video?.getAttribute('controls')).not.toBeNull();
+    expect(video?.getAttribute('preload')).toBe('metadata');
+    expect(video?.getAttribute('src')).toBe('/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Fdemo.mp4');
+
+    const audio = host.querySelector('audio');
+    expect(audio).toBeTruthy();
+    expect(audio?.getAttribute('controls')).not.toBeNull();
+    expect(audio?.getAttribute('preload')).toBe('metadata');
+    expect(audio?.getAttribute('src')).toBe('/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Faudio.mp3');
   });
 });

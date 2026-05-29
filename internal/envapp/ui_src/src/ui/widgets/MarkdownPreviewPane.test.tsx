@@ -49,6 +49,7 @@ function createPreviewContext(openPreview: FilePreviewContextValue['openPreview'
       closeConfirmMessage: empty,
       message: empty,
       objectUrl: empty,
+      resourceUrl: empty,
       bytes: nullValue,
       truncated: boolFalse,
       loading: boolFalse,

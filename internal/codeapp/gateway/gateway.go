@@ -1520,6 +1520,25 @@ func (g *Gateway) appendAudit(meta *session.Meta, action string, status string, 
 	})
 }
 
+const gatewayFSFileEndpointPath = "/_redeven_proxy/api/fs/file"
+
+var fsFileFallbackContentTypes = map[string]string{
+	".aac":  "audio/aac",
+	".flac": "audio/flac",
+	".m4a":  "audio/mp4",
+	".m4v":  "video/x-m4v",
+	".mkv":  "video/x-matroska",
+	".mov":  "video/quicktime",
+	".mp3":  "audio/mpeg",
+	".mp4":  "video/mp4",
+	".oga":  "audio/ogg",
+	".ogg":  "audio/ogg",
+	".ogv":  "video/ogg",
+	".opus": "audio/ogg",
+	".wav":  "audio/wav",
+	".webm": "video/webm",
+}
+
 // handleFSServeFile serves a project file identified by the "path" query parameter.
 // Security: uses filesystem_scope so local preview cannot bypass configured roots.
 func (g *Gateway) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
@@ -1536,8 +1555,7 @@ func (g *Gateway) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 	}
 	resolvedPath := resolved.RealAbs
 
-	ext := strings.ToLower(filepath.Ext(resolvedPath))
-	ct := mime.TypeByExtension(ext)
+	ct := fsFileContentType(resolvedPath)
 	if !isRenderableMime(ct) {
 		http.Error(w, "unsupported file type", http.StatusUnsupportedMediaType)
 		return
@@ -1559,41 +1577,46 @@ func (g *Gateway) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "not a file", http.StatusBadRequest)
 		return
 	}
-	if st.Size() > 50<<20 { // 50 MB
-		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
-		return
-	}
 
 	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("Cache-Control", "private, no-store")
 	http.ServeContent(w, r, filepath.Base(resolvedPath), st.ModTime(), f)
+}
+
+func fsFileContentType(path string) string {
+	ext := strings.ToLower(filepath.Ext(strings.TrimSpace(path)))
+	if ext == "" {
+		return ""
+	}
+	if ct := fsFileFallbackContentTypes[ext]; ct != "" {
+		return ct
+	}
+	if ct := strings.TrimSpace(mime.TypeByExtension(ext)); ct != "" {
+		return ct
+	}
+	return ""
 }
 
 // isRenderableMime returns true for web-browser-renderable content types.
 func isRenderableMime(ct string) bool {
+	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(ct))
+	if err == nil {
+		ct = mediaType
+	}
+	ct = strings.ToLower(strings.TrimSpace(ct))
 	if ct == "" {
 		return false
 	}
 	switch {
 	case strings.HasPrefix(ct, "image/"):
-		return true
+		return ct != "image/svg+xml"
 	case strings.HasPrefix(ct, "video/"):
 		return true
 	case strings.HasPrefix(ct, "audio/"):
 		return true
 	case strings.HasPrefix(ct, "font/"):
 		return true
-	case ct == "text/css", ct == "text/javascript", ct == "application/javascript":
-		return true
-	case strings.HasPrefix(ct, "text/"):
-		return true
 	case ct == "application/pdf":
-		return true
-	case strings.HasPrefix(ct, "application/xml"):
-		return true
-	case strings.HasPrefix(ct, "application/json"):
-		return true
-	case strings.HasSuffix(ct, "+xml"):
 		return true
 	default:
 		return false
@@ -1608,7 +1631,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
-	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/fs/file":
+	case (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == gatewayFSFileEndpointPath:
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return
 		}

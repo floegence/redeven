@@ -31,6 +31,7 @@ export interface FilePreviewPanelProps {
   onDiscard?: () => void;
   message?: string;
   objectUrl?: string;
+  resourceUrl?: string;
   bytes?: Uint8Array<ArrayBuffer> | null;
   truncated?: boolean;
   loading?: boolean;
@@ -78,6 +79,7 @@ export function FilePreviewPanel(props: FilePreviewPanelProps) {
             selectedText={props.selectedText}
             message={props.message}
             objectUrl={props.objectUrl}
+            resourceUrl={props.resourceUrl}
             bytes={props.bytes}
             truncated={props.truncated}
             loading={props.loading}

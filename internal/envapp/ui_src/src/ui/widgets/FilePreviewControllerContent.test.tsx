@@ -46,6 +46,7 @@ describe('FilePreviewControllerContent', () => {
       closeConfirmMessage: () => '',
       message: () => 'preview message',
       objectUrl: () => '',
+      resourceUrl: () => '/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Fdemo.mp4',
       bytes: () => null,
       truncated: () => false,
       loading: () => false,
@@ -84,6 +85,7 @@ describe('FilePreviewControllerContent', () => {
     expect(capturedProps.current.saveError).toBe('save failed');
     expect(capturedProps.current.canEdit).toBe(true);
     expect(capturedProps.current.message).toBe('preview message');
+    expect(capturedProps.current.resourceUrl).toBe('/_redeven_proxy/api/fs/file?path=%2Fworkspace%2Fdemo.mp4');
     expect(capturedProps.current.onCopyPath).toBe(onCopyPath);
     expect(capturedProps.current.showHeader).toBe(false);
     expect(contentRef).toHaveBeenCalledTimes(1);

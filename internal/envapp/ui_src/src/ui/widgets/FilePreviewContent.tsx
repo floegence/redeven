@@ -27,6 +27,7 @@ export interface FilePreviewContentProps {
   selectedText?: string;
   message?: string;
   objectUrl?: string;
+  resourceUrl?: string;
   bytes?: Uint8Array<ArrayBuffer> | null;
   truncated?: boolean;
   loading?: boolean;
