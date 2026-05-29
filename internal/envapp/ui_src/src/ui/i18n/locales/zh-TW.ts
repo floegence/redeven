@@ -32,22 +32,11 @@ export const zhTW = {
   },
   language: {
     label: "語言",
-    preferenceLabel: "語言偏好",
     optionsLabel: "語言選項",
-    sourceLabel: "來源",
     systemDefault: "系統預設",
     currentResolved: "正在使用 {language}",
     updatedTitle: "語言已更新",
     updatedMessage: "Redeven 將使用 {language}。",
-    availableCount: {
-      one: "{count} 種語言",
-      other: "{count} 種語言",
-    },
-    source: {
-      explicit: "已選語言",
-      system: "系統預設",
-      fallback: "備用語言",
-    },
   },
   notesOverlay: {
     title: "便條",
@@ -131,7 +120,6 @@ export const zhTW = {
     searchPlaceholder: "搜尋設定",
     filteredSections: "{visible}/{total} 個區段",
     nav: {
-      interface: "介面",
       config: "設定檔",
       connection: "連線",
       agent: "Runtime 狀態",
@@ -152,11 +140,6 @@ export const zhTW = {
       aiExtensions: "AI 與擴充",
       diagnostics: "診斷",
     },
-    interfaceTitle: "介面",
-    interfaceDescription: "調整 Env App 介面偏好。",
-    languageDescription: "選擇此 Env App 的 UI 語言。",
-    desktopBridgeNote: "嵌入式 Env App 會跟隨 Redeven Desktop。",
-    standaloneNote: "獨立 Env App 會為目前瀏覽器 origin 儲存語言。",
     autoSave: {
       saving: "正在儲存...",
       paused: "自動儲存已暫停",
@@ -244,7 +227,7 @@ export const zhTW = {
       adminRequired: "需要管理員權限",
       envTypeLocal: "本地",
       envTypeSSH: "SSH",
-      envTypeProvider: "提供者",
+      envTypeProvider: "Provider",
       envTypeRemote: "遠端",
     },
     commandPalette: {

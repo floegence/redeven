@@ -32,22 +32,11 @@ export const esES = {
   },
   language: {
     label: "Idioma",
-    preferenceLabel: "Preferencia de idioma",
     optionsLabel: "Opciones de idioma",
-    sourceLabel: "Origen",
     systemDefault: "Predeterminado del sistema",
     currentResolved: "Usando {language}",
     updatedTitle: "Idioma actualizado",
     updatedMessage: "Redeven usará {language}.",
-    availableCount: {
-      one: "{count} idioma",
-      other: "{count} idiomas",
-    },
-    source: {
-      explicit: "Idioma seleccionado",
-      system: "Predeterminado del sistema",
-      fallback: "Idioma de respaldo",
-    },
   },
   notesOverlay: {
     title: "Notas",
@@ -131,7 +120,6 @@ export const esES = {
     searchPlaceholder: "Buscar configuración",
     filteredSections: "{visible} de {total} secciones",
     nav: {
-      interface: "Interfaz",
       config: "Archivo de configuración",
       connection: "Conexión",
       agent: "Estado de Runtime",
@@ -152,11 +140,6 @@ export const esES = {
       aiExtensions: "AI y extensiones",
       diagnostics: "Diagnóstico",
     },
-    interfaceTitle: "Interfaz",
-    interfaceDescription: "Ajusta las preferencias de la interfaz de Env App.",
-    languageDescription: "Elige el idioma de la interfaz para esta Env App.",
-    desktopBridgeNote: "Las sesiones de Env App integradas siguen a Redeven Desktop.",
-    standaloneNote: "Las sesiones independientes de Env App guardan el idioma para este origin del navegador.",
     autoSave: {
       saving: "Guardando...",
       paused: "Guardado automático en pausa",
@@ -244,7 +227,7 @@ export const esES = {
       adminRequired: "Se requiere admin",
       envTypeLocal: "Local",
       envTypeSSH: "SSH",
-      envTypeProvider: "Proveedor",
+      envTypeProvider: "Provider",
       envTypeRemote: "Remoto",
     },
     commandPalette: {

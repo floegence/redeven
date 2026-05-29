@@ -1,5 +1,6 @@
 export { createI18nHelpers, type I18nHelpers } from './createI18n';
 export { I18nProvider, useI18n, type EnvAppI18nContext, type EnvAppLanguageSource } from './I18nProvider';
+export { LanguagePreferenceMenu, type LanguagePreferenceMenuProps, type LanguagePreferenceMenuVariant } from './LanguagePreferenceMenu';
 export {
   DEFAULT_LOCALE,
   LOCALE_META,

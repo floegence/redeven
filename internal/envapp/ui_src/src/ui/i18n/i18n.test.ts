@@ -360,7 +360,6 @@ describe('Env App i18n dictionaries', () => {
   it('formats translated strings and plural messages through the locale helpers', () => {
     const zhCN = createI18nHelpers('zh-CN');
     expect(zhCN.t('language.updatedMessage', { language: '简体中文' })).toBe('Redeven 将使用 简体中文。');
-    expect(zhCN.tn('language.availableCount', 10)).toBe('10 种语言');
     expect(zhCN.t('shell.commandPalette.changeLanguageTitle')).toBe('更改语言');
     expect(zhCN.t('accessGate.notice')).toContain('Runtime');
     expect(zhCN.t('chatChrome.copyMessage')).toBe('复制消息');
@@ -389,9 +388,6 @@ describe('Env App i18n dictionaries', () => {
     expect(deDE.t('codeRuntime.rows.managedEditorSource')).toBe('Quelle des verwalteten Editors');
 
     const ruRU = createI18nHelpers('ru-RU');
-    expect(ruRU.tn('language.availableCount', 1)).toBe('1 язык');
-    expect(ruRU.tn('language.availableCount', 2)).toBe('2 языка');
-    expect(ruRU.tn('language.availableCount', 5)).toBe('5 языков');
     expect(ruRU.tn('runtimeStatus.workload.tasks', 1)).toBe('1 задача');
     expect(ruRU.tn('runtimeStatus.workload.tasks', 2)).toBe('2 задачи');
     expect(ruRU.tn('runtimeStatus.workload.tasks', 5)).toBe('5 задач');
@@ -421,27 +417,33 @@ describe('Env App i18n dictionaries', () => {
     expect(findProtectedTermViolations(
       {
         ...enUS,
-        language: {
-          ...enUS.language,
-          availableCount: {
-            one: '{count} Runtime issue',
-            other: '{count} Runtime issues',
+        runtimeStatus: {
+          ...enUS.runtimeStatus,
+          workload: {
+            ...enUS.runtimeStatus.workload,
+            tasks: {
+              one: '{count} Runtime issue',
+              other: '{count} Runtime issues',
+            },
           },
         },
       },
       {
         ...enUS,
-        language: {
-          ...enUS.language,
-          availableCount: {
-            one: '{count} issue',
-            other: '{count} issues',
+        runtimeStatus: {
+          ...enUS.runtimeStatus,
+          workload: {
+            ...enUS.runtimeStatus.workload,
+            tasks: {
+              one: '{count} issue',
+              other: '{count} issues',
+            },
           },
         },
       },
       'xx-TEST',
     )).toContainEqual({
-      key: 'language.availableCount',
+      key: 'runtimeStatus.workload.tasks',
       locale: 'xx-TEST',
       term: 'Runtime',
     });

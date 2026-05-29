@@ -31,22 +31,11 @@ export const zhCN = {
   },
   language: {
     label: "语言",
-    preferenceLabel: "语言偏好",
     optionsLabel: "语言选项",
-    sourceLabel: "来源",
     systemDefault: "系统默认",
     currentResolved: "正在使用 {language}",
     updatedTitle: "语言已更新",
     updatedMessage: "Redeven 将使用 {language}。",
-    availableCount: {
-      one: "{count} 种语言",
-      other: "{count} 种语言",
-    },
-    source: {
-      explicit: "已选择的语言",
-      system: "系统默认",
-      fallback: "回退语言",
-    },
   },
   notesOverlay: {
     title: "便签",
@@ -130,7 +119,6 @@ export const zhCN = {
     searchPlaceholder: "搜索设置",
     filteredSections: "{visible}/{total} 个分区",
     nav: {
-      interface: "界面",
       config: "配置文件",
       connection: "连接",
       agent: "Runtime 状态",
@@ -151,11 +139,6 @@ export const zhCN = {
       aiExtensions: "AI 与扩展",
       diagnostics: "诊断",
     },
-    interfaceTitle: "界面",
-    interfaceDescription: "调整 Env App 界面偏好。",
-    languageDescription: "选择此 Env App 的 UI 语言。",
-    desktopBridgeNote: "嵌入式 Env App 会跟随 Redeven Desktop。",
-    standaloneNote: "独立 Env App 会为当前浏览器 origin 保存语言。",
     autoSave: {
       saving: "正在保存...",
       paused: "自动保存已暂停",
@@ -243,7 +226,7 @@ export const zhCN = {
       adminRequired: "需要管理员权限",
       envTypeLocal: "本地",
       envTypeSSH: "SSH",
-      envTypeProvider: "提供商",
+      envTypeProvider: "Provider",
       envTypeRemote: "远程",
     },
     commandPalette: {

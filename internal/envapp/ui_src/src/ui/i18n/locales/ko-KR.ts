@@ -32,22 +32,11 @@ export const koKR = {
   },
   language: {
     label: "언어",
-    preferenceLabel: "언어 환경설정",
     optionsLabel: "언어 옵션",
-    sourceLabel: "출처",
     systemDefault: "시스템 기본값",
     currentResolved: "{language} 사용 중",
     updatedTitle: "언어가 업데이트됨",
     updatedMessage: "Redeven에서 {language}를 사용합니다.",
-    availableCount: {
-      one: "{count}개 언어",
-      other: "{count}개 언어",
-    },
-    source: {
-      explicit: "선택한 언어",
-      system: "시스템 기본값",
-      fallback: "대체 언어",
-    },
   },
   notesOverlay: {
     title: "메모",
@@ -131,7 +120,6 @@ export const koKR = {
     searchPlaceholder: "설정 검색",
     filteredSections: "섹션 {total}개 중 {visible}개",
     nav: {
-      interface: "인터페이스",
       config: "구성 파일",
       connection: "연결",
       agent: "Runtime 상태",
@@ -152,11 +140,6 @@ export const koKR = {
       aiExtensions: "AI 및 확장",
       diagnostics: "진단",
     },
-    interfaceTitle: "인터페이스",
-    interfaceDescription: "Env App 인터페이스 환경설정을 조정합니다.",
-    languageDescription: "이 Env App의 UI 언어를 선택합니다.",
-    desktopBridgeNote: "임베디드 Env App 세션은 Redeven Desktop을 따릅니다.",
-    standaloneNote: "독립 실행형 Env App 세션은 현재 브라우저 origin에 언어를 저장합니다.",
     autoSave: {
       saving: "저장 중...",
       paused: "자동 저장 일시 중지됨",
@@ -244,7 +227,7 @@ export const koKR = {
       adminRequired: "관리자 권한 필요",
       envTypeLocal: "로컬",
       envTypeSSH: "SSH",
-      envTypeProvider: "제공자",
+      envTypeProvider: "Provider",
       envTypeRemote: "원격",
     },
     commandPalette: {

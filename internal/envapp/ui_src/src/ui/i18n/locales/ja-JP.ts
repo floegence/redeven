@@ -32,22 +32,11 @@ export const jaJP = {
   },
   language: {
     label: "言語",
-    preferenceLabel: "言語設定",
     optionsLabel: "言語オプション",
-    sourceLabel: "ソース",
     systemDefault: "システム既定",
     currentResolved: "{language} を使用中",
     updatedTitle: "言語を更新しました",
     updatedMessage: "Redeven は {language} を使用します。",
-    availableCount: {
-      one: "{count} 言語",
-      other: "{count} 言語",
-    },
-    source: {
-      explicit: "選択した言語",
-      system: "システム既定",
-      fallback: "フォールバック言語",
-    },
   },
   notesOverlay: {
     title: "付箋",
@@ -131,7 +120,6 @@ export const jaJP = {
     searchPlaceholder: "設定を検索",
     filteredSections: "{total} 件中 {visible} 件のセクション",
     nav: {
-      interface: "インターフェイス",
       config: "設定ファイル",
       connection: "接続",
       agent: "Runtime ステータス",
@@ -152,11 +140,6 @@ export const jaJP = {
       aiExtensions: "AI と拡張",
       diagnostics: "診断",
     },
-    interfaceTitle: "インターフェイス",
-    interfaceDescription: "Env App のインターフェイス設定を調整します。",
-    languageDescription: "この Env App の UI 言語を選択します。",
-    desktopBridgeNote: "埋め込み Env App セッションは Redeven Desktop に従います。",
-    standaloneNote: "スタンドアロン Env App セッションは、このブラウザー origin に言語を保存します。",
     autoSave: {
       saving: "保存中...",
       paused: "自動保存は一時停止中",
@@ -244,7 +227,7 @@ export const jaJP = {
       adminRequired: "管理者権限が必要です",
       envTypeLocal: "ローカル",
       envTypeSSH: "SSH",
-      envTypeProvider: "プロバイダー",
+      envTypeProvider: "Provider",
       envTypeRemote: "リモート",
     },
     commandPalette: {
