@@ -2217,11 +2217,20 @@ export function EnvAppShell() {
 
   const envName = () => {
     if (accessGateVisible()) return isLocalMode() ? i18n.t('shell.status.localRuntime') : i18n.t('shell.status.environment');
+
+    // For non-local sessions (provider / SSH / external), prefer the desktop
+    // session context label immediately — env detail fetch may not resolve locally.
+    const desktopCtx = readDesktopSessionContextSnapshot();
+    const isNonLocalSession =
+      desktopCtx?.target_kind === 'ssh_environment' ||
+      desktopCtx?.target_kind === 'external_local_ui' ||
+      (desktopCtx?.target_kind === 'local_environment' && desktopCtx?.target_route === 'remote_desktop');
+    if (isNonLocalSession && desktopCtx?.label) return desktopCtx.label;
+
     if (env.state !== 'ready') return i18n.t('shell.status.loading');
+
     const envDetailName = env()?.name;
     if (envDetailName) return envDetailName;
-    // For non-local environments without a fetched name, fall back to the session context label.
-    const desktopCtx = readDesktopSessionContextSnapshot();
     if (desktopCtx?.label) return desktopCtx.label;
     return i18n.t('shell.status.environment');
   };
@@ -2237,10 +2246,10 @@ export function EnvAppShell() {
 
   const envTypeLabel = createMemo(() => {
     switch (envType()) {
-      case 'ssh': return 'SSH';
-      case 'provider': return 'Provider';
-      case 'remote': return 'Remote';
-      default: return 'Local';
+      case 'ssh': return i18n.t('shell.status.envTypeSSH');
+      case 'provider': return i18n.t('shell.status.envTypeProvider');
+      case 'remote': return i18n.t('shell.status.envTypeRemote');
+      default: return i18n.t('shell.status.envTypeLocal');
     }
   });
 

@@ -244,6 +244,10 @@ export const ruRU = {
       runtimeUnavailableRetrying: "Runtime сейчас недоступна. Выполняется автоматический повтор.",
       auditLog: "Журнал аудита",
       adminRequired: "Требуется admin",
+      envTypeLocal: "Локальная",
+      envTypeSSH: "SSH",
+      envTypeProvider: "Провайдер",
+      envTypeRemote: "Удалённая",
     },
     commandPalette: {
       categories: {

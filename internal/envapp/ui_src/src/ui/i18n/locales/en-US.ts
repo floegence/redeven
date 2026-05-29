@@ -258,6 +258,10 @@ export const enUS = defineDictionary({
       runtimeUnavailableRetrying: 'The runtime is unavailable right now. Retrying automatically.',
       auditLog: 'Audit log',
       adminRequired: 'Admin required',
+      envTypeLocal: 'Local',
+      envTypeSSH: 'SSH',
+      envTypeProvider: 'Provider',
+      envTypeRemote: 'Remote',
     },
     commandPalette: {
       categories: {

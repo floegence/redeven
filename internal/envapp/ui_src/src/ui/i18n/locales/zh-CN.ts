@@ -241,6 +241,10 @@ export const zhCN = {
       runtimeUnavailableRetrying: "Runtime 当前不可用。正在自动重试。",
       auditLog: "审计日志",
       adminRequired: "需要管理员权限",
+      envTypeLocal: "本地",
+      envTypeSSH: "SSH",
+      envTypeProvider: "提供商",
+      envTypeRemote: "远程",
     },
     commandPalette: {
       categories: {

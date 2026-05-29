@@ -242,6 +242,10 @@ export const deDE = {
       runtimeUnavailableRetrying: "Die Runtime ist derzeit nicht verfügbar. Automatische Wiederholung läuft.",
       auditLog: "Audit-Protokoll",
       adminRequired: "Admin erforderlich",
+      envTypeLocal: "Lokal",
+      envTypeSSH: "SSH",
+      envTypeProvider: "Anbieter",
+      envTypeRemote: "Entfernt",
     },
     commandPalette: {
       categories: {
