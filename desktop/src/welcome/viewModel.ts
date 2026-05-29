@@ -132,6 +132,41 @@ export type EnvironmentCardModel = Readonly<{
   meta: readonly EnvironmentCardMetaItem[];
 }>;
 
+export type EnvironmentRuntimeDisplayState =
+  | 'window_open'
+  | 'window_opening'
+  | 'ready_to_open'
+  | 'running'
+  | 'checking'
+  | 'not_checked'
+  | 'blocked'
+  | 'sync_required'
+  | 'offline'
+  | 'removed';
+
+export type EnvironmentSummaryBucket =
+  | 'windows'
+  | 'ready'
+  | 'running'
+  | 'attention';
+
+export type EnvironmentDisplayStateModel = Readonly<{
+  state: EnvironmentRuntimeDisplayState;
+  summary_bucket: EnvironmentSummaryBucket | null;
+  status_label: string;
+  status_tone: EnvironmentCardTone;
+  runtime_started_label: string;
+}>;
+
+export type EnvironmentLibrarySummaryModel = Readonly<{
+  scope: 'visible';
+  environment_count: number;
+  window_count: number;
+  ready_count: number;
+  running_count: number;
+  attention_count: number;
+}>;
+
 export type EnvironmentActionIntent =
   | 'open'
   | 'focus'
@@ -800,103 +835,223 @@ function runtimeUpdatePresentation(environment: DesktopEnvironmentEntry): Runtim
   };
 }
 
-function runtimeStatusLabel(environment: DesktopEnvironmentEntry): string {
+function environmentRuntimeDisplayState(environment: DesktopEnvironmentEntry): EnvironmentRuntimeDisplayState {
+  if (environment.window_state === 'open') {
+    return 'window_open';
+  }
+  if (environment.window_state === 'opening') {
+    return 'window_opening';
+  }
   if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
-    return 'RECONNECT REQUIRED';
+    return 'sync_required';
   }
   if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
     if (providerRemoteOpenLooksAvailable(environment)) {
-      return 'Open';
+      return 'ready_to_open';
     }
     if (providerRemoteLooksOffline(environment)) {
-      return 'REMOTE OFFLINE';
+      return 'offline';
     }
-    switch (environment.remote_route_state) {
-      case 'auth_required':
-        return 'RECONNECT REQUIRED';
-      case 'provider_unreachable':
-        return 'SYNC FAILED';
-      case 'provider_invalid':
-        return 'INVALID PROVIDER';
-      case 'removed':
-        return 'REMOVED';
-      default:
-        return 'REFRESH NEEDED';
-    }
+    return environment.remote_route_state === 'removed' ? 'removed' : 'sync_required';
   }
   if (environment.runtime_health.freshness === 'checking') {
-    return 'CHECKING';
+    return 'checking';
   }
   if (environment.runtime_health.freshness === 'unknown') {
-    return 'NOT CHECKED';
+    return 'not_checked';
   }
   if (environment.runtime_health.freshness === 'failed') {
-    return 'CHECK FAILED';
+    return 'blocked';
   }
-  if (environmentRuntimeMaintenance(environment)) {
-    const maintenance = environmentRuntimeMaintenance(environment);
+  const maintenance = environmentRuntimeMaintenance(environment);
+  if (maintenance) {
     if (desktopRuntimeMaintenanceIsStaleLock(maintenance)) {
-      return 'RUNTIME OFFLINE';
+      return 'offline';
     }
     if (desktopRuntimeMaintenanceRequiresUpdate(maintenance) && environmentOpenOperationAvailable(environment)) {
-      return 'Open';
+      return 'ready_to_open';
     }
-    return desktopRuntimeMaintenanceRequiresRestart(maintenance)
-      ? 'RESTART REQUIRED'
-      : 'RUNTIME NEEDS UPDATE';
+    return 'blocked';
   }
   if (environment.runtime_health.status !== 'online') {
-    if (environment.runtime_health.offline_reason_code === 'auth_required') {
-      return 'MANUAL AUTH REQUIRED';
-    }
-    if (environment.runtime_health.offline_reason_code === 'unverified') {
-      return 'UNVERIFIED';
-    }
-    if (environment.runtime_health.offline_reason_code === 'container_engine_unavailable') {
-      return 'SETUP REQUIRED';
-    }
-    return 'RUNTIME OFFLINE';
+    return 'offline';
   }
-  if (environmentOpenOperationAvailable(environment)) {
-    return runtimeServiceAllowsOpenAttempt(environmentRuntimeService(environment))
-      ? 'Open'
-      : 'READY TO OPEN';
-  }
-  if (environment.managed_runtime_open_connection_required === true) {
-    return 'READY TO OPEN';
+  if (
+    environmentOpenOperationAvailable(environment)
+    || environment.managed_runtime_open_connection_required === true
+    || runtimeServiceIsOpenable(environmentRuntimeService(environment))
+  ) {
+    return 'ready_to_open';
   }
   const snapshot = environmentRuntimeService(environment);
-  if (runtimeServiceIsOpenable(snapshot)) {
-    return 'Open';
-  }
   if (snapshot?.open_readiness?.state === 'blocked' && !runtimeServiceAllowsOpenAttempt(snapshot)) {
-    return runtimeServiceNeedsRuntimeUpdate(snapshot)
-      ? runtimeUpdatePresentation(environment).status_label
-      : 'RUNTIME BLOCKED';
+    return 'blocked';
   }
-  return 'RUNTIME PREPARING';
+  return 'running';
 }
 
-function runtimeStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCardTone {
-  if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
-    return 'warning';
+function environmentSummaryBucket(
+  state: EnvironmentRuntimeDisplayState,
+): EnvironmentSummaryBucket | null {
+  switch (state) {
+    case 'window_open':
+      return 'windows';
+    case 'ready_to_open':
+      return 'ready';
+    case 'running':
+      return 'running';
+    case 'blocked':
+    case 'sync_required':
+    case 'offline':
+    case 'removed':
+      return 'attention';
+    case 'window_opening':
+    case 'checking':
+    case 'not_checked':
+      return null;
   }
-  if (environment.kind === 'provider_environment' && providerPrimaryRoute(environment) === 'remote_desktop') {
-    return providerRemoteOpenLooksAvailable(environment) ? 'success' : 'warning';
+}
+
+function providerSyncStatusLabel(environment: DesktopEnvironmentEntry): string {
+  switch (environment.remote_route_state) {
+    case 'auth_required':
+      return 'RECONNECT REQUIRED';
+    case 'provider_unreachable':
+      return 'SYNC FAILED';
+    case 'provider_invalid':
+      return 'INVALID PROVIDER';
+    default:
+      return 'REFRESH NEEDED';
   }
-  if (environment.runtime_health.freshness === 'checking') {
-    return 'primary';
+}
+
+function environmentDisplayStatusLabel(
+  environment: DesktopEnvironmentEntry,
+  state: EnvironmentRuntimeDisplayState,
+): string {
+  switch (state) {
+    case 'window_open':
+      return 'Open';
+    case 'window_opening':
+      return 'OPENING';
+    case 'ready_to_open':
+      return 'READY';
+    case 'running':
+      return 'RUNTIME PREPARING';
+    case 'checking':
+      return 'CHECKING';
+    case 'not_checked':
+      return 'NOT CHECKED';
+    case 'removed':
+      return 'REMOVED';
+    case 'sync_required':
+      return environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required'
+        ? 'RECONNECT REQUIRED'
+        : providerSyncStatusLabel(environment);
+    case 'offline':
+      if (environment.kind === 'provider_environment' && providerRemoteLooksOffline(environment)) {
+        return 'REMOTE OFFLINE';
+      }
+      if (environment.runtime_health.offline_reason_code === 'auth_required') {
+        return 'MANUAL AUTH REQUIRED';
+      }
+      if (environment.runtime_health.offline_reason_code === 'unverified') {
+        return 'UNVERIFIED';
+      }
+      if (environment.runtime_health.offline_reason_code === 'container_engine_unavailable') {
+        return 'SETUP REQUIRED';
+      }
+      return 'RUNTIME OFFLINE';
+    case 'blocked': {
+      if (environment.runtime_health.freshness === 'failed') {
+        return 'CHECK FAILED';
+      }
+      const maintenance = environmentRuntimeMaintenance(environment);
+      if (maintenance) {
+        return desktopRuntimeMaintenanceRequiresRestart(maintenance)
+          ? 'RESTART REQUIRED'
+          : runtimeUpdatePresentation(environment).status_label;
+      }
+      const snapshot = environmentRuntimeService(environment);
+      return snapshot?.open_readiness?.state === 'blocked' && runtimeServiceNeedsRuntimeUpdate(snapshot)
+        ? runtimeUpdatePresentation(environment).status_label
+        : 'RUNTIME BLOCKED';
+    }
   }
-  if (environment.runtime_health.freshness === 'unknown') {
-    return 'neutral';
+}
+
+function environmentDisplayStatusTone(state: EnvironmentRuntimeDisplayState): EnvironmentCardTone {
+  switch (state) {
+    case 'window_open':
+    case 'ready_to_open':
+      return 'success';
+    case 'window_opening':
+    case 'checking':
+    case 'running':
+      return 'primary';
+    case 'not_checked':
+      return 'neutral';
+    case 'blocked':
+    case 'sync_required':
+    case 'offline':
+    case 'removed':
+      return 'warning';
   }
-  if (environment.runtime_health.freshness === 'failed') {
-    return 'warning';
+}
+
+export function buildEnvironmentDisplayStateModel(
+  environment: DesktopEnvironmentEntry,
+): EnvironmentDisplayStateModel {
+  const state = environmentRuntimeDisplayState(environment);
+  return {
+    state,
+    summary_bucket: environmentSummaryBucket(state),
+    status_label: environmentDisplayStatusLabel(environment, state),
+    status_tone: environmentDisplayStatusTone(state),
+    runtime_started_label: environmentRuntimeStartedLabel(environment),
+  };
+}
+
+export function buildEnvironmentLibrarySummaryModel(
+  snapshot: DesktopWelcomeSnapshot,
+  entries: readonly DesktopEnvironmentEntry[],
+): EnvironmentLibrarySummaryModel {
+  const visibleEnvironmentIDs = new Set(entries.map((environment) => environment.id));
+  const summary: {
+    ready_count: number;
+    running_count: number;
+    attention_count: number;
+  } = {
+    ready_count: 0,
+    running_count: 0,
+    attention_count: 0,
+  };
+
+  for (const environment of entries) {
+    switch (buildEnvironmentDisplayStateModel(environment).summary_bucket) {
+      case 'ready':
+        summary.ready_count += 1;
+        break;
+      case 'running':
+        summary.running_count += 1;
+        break;
+      case 'attention':
+        summary.attention_count += 1;
+        break;
+      case 'windows':
+      case null:
+        break;
+    }
   }
-  return environment.runtime_health.status === 'online'
-    && (runtimeServiceIsOpenable(environmentRuntimeService(environment)) || environmentOpenOperationAvailable(environment))
-    ? 'success'
-    : 'warning';
+
+  return {
+    scope: 'visible',
+    environment_count: entries.length,
+    window_count: snapshot.open_windows.filter((window) => visibleEnvironmentIDs.has(window.environment_id)).length,
+    ready_count: summary.ready_count,
+    running_count: summary.running_count,
+    attention_count: summary.attention_count,
+  };
 }
 
 function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentActionModel {
@@ -1556,6 +1711,7 @@ export function buildProviderBackedEnvironmentActionModel(
   environment: DesktopEnvironmentEntry,
   _controlPlaneSyncState: DesktopControlPlaneSyncState = environment.control_plane_sync_state ?? 'ready',
 ): ProviderBackedEnvironmentActionModel {
+  const displayState = buildEnvironmentDisplayStateModel(environment);
   const syncState = _controlPlaneSyncState;
   const primaryAction = syncState === 'auth_required' && environment.kind === 'provider_environment'
     ? {
@@ -1575,8 +1731,8 @@ export function buildProviderBackedEnvironmentActionModel(
       }]
     : runtimeMenuActions(environment);
   return {
-    status_label: runtimeStatusLabel(environment),
-    status_tone: runtimeStatusTone(environment),
+    status_label: displayState.status_label,
+    status_tone: displayState.status_tone,
     action_presentation: {
       kind: 'split_button',
       primary_action: primaryAction,
@@ -1637,14 +1793,6 @@ export function buildControlPlaneStatusModel(
   }
 }
 
-export function environmentStatusLabel(environment: DesktopEnvironmentEntry): string {
-  return runtimeStatusLabel(environment);
-}
-
-export function environmentStatusTone(environment: DesktopEnvironmentEntry): EnvironmentCardTone {
-  return runtimeStatusTone(environment);
-}
-
 function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly EnvironmentCardMetaItem[] {
   if (environment.kind === 'local_environment') {
     return [];
@@ -1692,14 +1840,15 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
 }
 
 export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry): EnvironmentCardModel {
+  const displayState = buildEnvironmentDisplayStateModel(environment);
   if (environment.kind === 'local_environment') {
     const localEndpoint = compact(environment.local_ui_url) || compact(environment.local_environment_ui_bind);
     const targetPrimary = localEndpoint || environment.secondary_text || 'Local environment';
     return {
       kind_label: environmentKindLabel(environment),
-      status_label: environmentStatusLabel(environment),
-      status_tone: environmentStatusTone(environment),
-      runtime_started_label: environmentRuntimeStartedLabel(environment),
+      status_label: displayState.status_label,
+      status_tone: displayState.status_tone,
+      runtime_started_label: displayState.runtime_started_label,
       target_primary: targetPrimary,
       target_secondary: '',
       target_primary_monospace: shouldUseMonospaceEndpoint(targetPrimary),
@@ -1716,9 +1865,9 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
       || 'Provider environment';
     return {
       kind_label: 'Provider',
-      status_label: environmentStatusLabel(environment),
-      status_tone: environmentStatusTone(environment),
-      runtime_started_label: environmentRuntimeStartedLabel(environment),
+      status_label: displayState.status_label,
+      status_tone: displayState.status_tone,
+      runtime_started_label: displayState.runtime_started_label,
       target_primary: targetPrimary,
       target_secondary: '',
       target_primary_monospace: shouldUseMonospaceEndpoint(targetPrimary),
@@ -1730,9 +1879,9 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
   if (environment.kind === 'ssh_environment') {
     return {
       kind_label: 'SSH Host',
-      status_label: environmentStatusLabel(environment),
-      status_tone: environmentStatusTone(environment),
-      runtime_started_label: environmentRuntimeStartedLabel(environment),
+      status_label: displayState.status_label,
+      status_tone: displayState.status_tone,
+      runtime_started_label: displayState.runtime_started_label,
       target_primary: environment.secondary_text,
       target_secondary: environment.local_ui_url,
       target_primary_monospace: true,
@@ -1743,9 +1892,9 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
 
   return {
     kind_label: 'Redeven URL',
-    status_label: environmentStatusLabel(environment),
-    status_tone: environmentStatusTone(environment),
-    runtime_started_label: environmentRuntimeStartedLabel(environment),
+    status_label: displayState.status_label,
+    status_tone: displayState.status_tone,
+    runtime_started_label: displayState.runtime_started_label,
     target_primary: environment.local_ui_url || environment.secondary_text,
     target_secondary: '',
     target_primary_monospace: true,

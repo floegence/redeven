@@ -167,9 +167,11 @@ export const ptBR = {
     closeLauncher: "Fechar Launcher",
     opening: "Abrindo...",
     focus: "Focar",
+    visibleCount: '{count} visível(is)',
     windowsCount: '{count} janela(s)',
+    ready: 'pronto',
     running: 'ativo',
-    offline: 'inativo',
+    attention: 'atenção',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Verifique a Environment URL",
@@ -512,6 +514,7 @@ export const ptBR = {
   },
   environmentStatus: {
     open: "Abrir",
+    opening: "Abrindo",
     readyToOpen: "Pronto para abrir",
     checking: "Verificando",
     notChecked: "Não verificado",

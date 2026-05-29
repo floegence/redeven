@@ -167,9 +167,11 @@ export const zhCN = {
     closeLauncher: "关闭 Launcher",
     opening: "打开中...",
     focus: "聚焦",
+    visibleCount: '{count} 个可见',
     windowsCount: '{count} 个窗口',
+    ready: '可打开',
     running: '运行中',
-    offline: '离线',
+    attention: '需处理',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "检查 Environment URL",
@@ -508,6 +510,7 @@ export const zhCN = {
   },
   environmentStatus: {
     open: "打开",
+    opening: "打开中",
     readyToOpen: "可打开",
     checking: "检查中",
     notChecked: "未检查",

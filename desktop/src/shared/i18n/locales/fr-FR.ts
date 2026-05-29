@@ -167,9 +167,11 @@ export const frFR = {
     closeLauncher: "Fermer Launcher",
     opening: "Ouverture...",
     focus: "Activer",
+    visibleCount: '{count} visible(s)',
     windowsCount: '{count} fenêtre(s)',
+    ready: 'prêt',
     running: 'actif',
-    offline: 'inactif',
+    attention: 'attention',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Vérifier l’Environment URL",
@@ -512,6 +514,7 @@ export const frFR = {
   },
   environmentStatus: {
     open: "Ouvrir",
+    opening: "Ouverture",
     readyToOpen: "Prêt à ouvrir",
     checking: "Vérification",
     notChecked: "Non vérifié",

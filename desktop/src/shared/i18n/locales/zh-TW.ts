@@ -167,9 +167,11 @@ export const zhTW = {
     closeLauncher: "關閉 Launcher",
     opening: "開啟中...",
     focus: "聚焦",
+    visibleCount: '{count} 個可見',
     windowsCount: '{count} 個視窗',
+    ready: '可開啟',
     running: '執行中',
-    offline: '離線',
+    attention: '需處理',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "檢查 Environment URL",
@@ -508,6 +510,7 @@ export const zhTW = {
   },
   environmentStatus: {
     open: "開啟",
+    opening: "開啟中",
     readyToOpen: "可開啟",
     checking: "檢查中",
     notChecked: "未檢查",

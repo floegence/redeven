@@ -167,9 +167,11 @@ export const jaJP = {
     closeLauncher: "Launcher を閉じる",
     opening: "開いています...",
     focus: "フォーカス",
+    visibleCount: '{count} 件表示',
     windowsCount: '{count} ウィンドウ',
+    ready: '開けます',
     running: '実行中',
-    offline: 'オフライン',
+    attention: '要対応',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Environment URL を確認",
@@ -508,6 +510,7 @@ export const jaJP = {
   },
   environmentStatus: {
     open: "開く",
+    opening: "開いています",
     readyToOpen: "開く準備完了",
     checking: "確認中",
     notChecked: "未確認",
