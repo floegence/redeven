@@ -470,7 +470,6 @@ describe('buildEnvironmentCardModel', () => {
         ],
       }),
       defaultFact('VERSION', 'v1.4.2'),
-      placeholderFact('PROVIDER'),
     ]);
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
       defaultFact('RUNS ON', 'Provider remote', {
@@ -633,7 +632,6 @@ describe('buildEnvironmentCardModel', () => {
         ],
       }),
       defaultFact('VERSION', 'v1.4.3'),
-      placeholderFact('PROVIDER'),
     ]);
   });
 
@@ -724,8 +722,25 @@ describe('buildEnvironmentCardModel', () => {
         ],
       }),
       placeholderFact('VERSION', 'UNKNOWN'),
-      placeholderFact('PROVIDER'),
     ]);
+  });
+
+  it('hides the provider fact when an environment has no provider display value', () => {
+    const controlPlane = buildControlPlaneSummary({});
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        control_planes: [controlPlane],
+      }),
+      controlPlanes: [controlPlane],
+    });
+    const providerEntry = snapshot.environments.find((environment) => environment.kind === 'provider_environment');
+
+    expect(providerEntry).toBeTruthy();
+    expect(buildEnvironmentCardFactsModel({
+      ...providerEntry!,
+      control_plane_label: '',
+      provider_origin: '',
+    }).map((fact) => fact.label)).not.toContain('PROVIDER');
   });
 
   it('shows container placement facts and hides start when the container is unavailable', () => {

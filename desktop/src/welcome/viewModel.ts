@@ -531,7 +531,7 @@ function orderEnvironmentCardFacts(
 }
 
 function controlPlaneDisplayLabel(environment: DesktopEnvironmentEntry): string {
-  return environment.control_plane_label || environment.provider_origin || '';
+  return compact(environment.control_plane_label) || compact(environment.provider_origin);
 }
 
 function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
@@ -663,6 +663,11 @@ function providerEnvironmentIDFact(environment: DesktopEnvironmentEntry): Enviro
     : buildEnvironmentCardFact('ENV ID', envID, { copy_value: true });
 }
 
+function providerFact(environment: DesktopEnvironmentEntry): EnvironmentCardFactModel | null {
+  const value = controlPlaneDisplayLabel(environment);
+  return value === '' ? null : buildEnvironmentCardFact('PROVIDER', value);
+}
+
 export function buildEnvironmentCardFactsModel(
   environment: DesktopEnvironmentEntry,
 ): readonly EnvironmentCardFactModel[] {
@@ -670,19 +675,21 @@ export function buildEnvironmentCardFactsModel(
   const runsOnOpts = endpoints.length > 0 ? { endpoints } : undefined;
 
   if (environment.kind === 'local_environment') {
+    const provider = providerFact(environment);
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
       ...runtimePlacementFacts(environment),
       runtimeVersionFact(environment),
-      buildPlaceholderEnvironmentCardFact('PROVIDER'),
+      ...(provider ? [provider] : []),
     ]);
   }
 
   if (environment.kind === 'provider_environment') {
+    const provider = providerFact(environment);
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
       runtimeVersionFact(environment),
-      buildEnvironmentCardFact('PROVIDER', controlPlaneDisplayLabel(environment) || 'Unavailable'),
+      ...(provider ? [provider] : []),
       providerLocalLinkFact(environment),
       providerEnvironmentIDFact(environment),
     ]);
