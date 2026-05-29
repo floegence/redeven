@@ -4,6 +4,7 @@ import { deDEWorkbenchCodex } from './workbenchCodex';
 import { localeSettingsSectionMessages } from './settingsSections';
 import { deDEFlowerChatSidebar } from './flowerChatSidebar';
 import { deDEActivityChrome } from './activityChrome';
+import { deDEDebugConsole } from './debugConsole';
 
 export const deDE = {
   document: {
@@ -1249,6 +1250,7 @@ export const deDE = {
     localOnlyDescription: "Nur Local UI Status. Beeinflusst die runtime-Konfiguration nicht.",
     frontendOnly: "Nur Frontend",
   },
+  debugConsole: deDEDebugConsole,
   flowerSettings: {
     description: "Flower providers, models, Ausführungsschutz und lokale AI secrets konfigurieren.",
     activeBadge: "Aktiv",

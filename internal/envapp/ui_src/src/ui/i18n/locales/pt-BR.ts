@@ -4,6 +4,7 @@ import { ptBRWorkbenchCodex } from './workbenchCodex';
 import { localeSettingsSectionMessages } from './settingsSections';
 import { ptBRFlowerChatSidebar } from './flowerChatSidebar';
 import { ptBRActivityChrome } from './activityChrome';
+import { ptBRDebugConsole } from './debugConsole';
 
 export const ptBR = {
   document: {
@@ -1249,6 +1250,7 @@ export const ptBR = {
     localOnlyDescription: "Apenas estado de Local UI. Não afeta a configuração Runtime.",
     frontendOnly: "Somente frontend",
   },
+  debugConsole: ptBRDebugConsole,
   flowerSettings: {
     description: "Configure Providers do Flower, models, proteções de execução e segredos de AI locais.",
     activeBadge: "Ativo",

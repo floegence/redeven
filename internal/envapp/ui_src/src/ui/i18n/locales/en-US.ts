@@ -2,6 +2,7 @@ import { defineDictionary, type DeepWidenMessages, type DotPath } from '../dicti
 import { enUSWidgetChrome } from './widgetChrome';
 import { enUSFlowerChatSidebar } from './flowerChatSidebar';
 import { enUSActivityChrome } from './activityChrome';
+import { enUSDebugConsole } from './debugConsole';
 
 export const enUS = defineDictionary({
   document: {
@@ -1812,6 +1813,7 @@ export const enUS = defineDictionary({
     localOnlyDescription: 'Local UI state only. Does not affect runtime configuration.',
     frontendOnly: 'Frontend only',
   },
+  debugConsole: enUSDebugConsole,
   flowerSettings: {
     description: 'Configure Flower providers, models, execution safeguards, and local AI secrets.',
     activeBadge: 'Active',

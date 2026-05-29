@@ -6,6 +6,32 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DebugConsoleWindow } from './DebugConsoleWindow';
 
+const i18nState = vi.hoisted(() => ({
+  locale: 'en-US',
+}));
+
+vi.mock('../i18n', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../i18n')>();
+  return {
+    ...actual,
+    useI18n: () => {
+      const helpers = actual.createI18nHelpers(i18nState.locale as any);
+      return {
+        ...helpers,
+        snapshot: () => ({
+          preference: i18nState.locale,
+          resolved_locale: i18nState.locale,
+          source: 'explicit',
+        }),
+        locale: () => i18nState.locale,
+        localePreference: () => i18nState.locale,
+        source: () => 'browser',
+        setLocalePreference: vi.fn(),
+      };
+    },
+  };
+});
+
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => (
     <button type="button" disabled={props.disabled} onClick={props.onClick}>
@@ -194,6 +220,7 @@ function createController(overrides: Record<string, unknown> = {}) {
 }
 
 afterEach(() => {
+  i18nState.locale = 'en-US';
   document.body.innerHTML = '';
 });
 
@@ -220,6 +247,30 @@ describe('DebugConsoleWindow', () => {
     uiTab?.click();
 
     expect(host.textContent).toContain('Renderer probes');
+  });
+
+  it('renders floating window chrome and diagnostics labels with the active locale', () => {
+    i18nState.locale = 'zh-CN';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { controller } = createController();
+
+    render(() => <DebugConsoleWindow controller={controller} />, host);
+
+    expect(host.textContent).toContain('调试控制台');
+    expect(host.textContent).toContain('实时诊断控制台');
+    expect(host.textContent).toContain('请求流');
+    expect(host.textContent).toContain('请求 payload');
+    expect(host.textContent).toContain('响应 payload');
+    expect(host.textContent).toContain('清除');
+    expect(host.textContent).toContain('关闭控制台');
+    expect(host.textContent).not.toContain('Static CSS, JS, document loads');
+
+    const uiTab = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('UI 性能'));
+    expect(uiTab).toBeTruthy();
+    uiTab?.click();
+
+    expect(host.textContent).toContain('渲染器探针');
   });
 
   it('invokes clear from the header action', () => {

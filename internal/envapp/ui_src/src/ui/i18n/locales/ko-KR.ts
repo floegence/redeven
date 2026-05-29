@@ -4,6 +4,7 @@ import { koKRWorkbenchCodex } from './workbenchCodex';
 import { localeSettingsSectionMessages } from './settingsSections';
 import { koKRFlowerChatSidebar } from './flowerChatSidebar';
 import { koKRActivityChrome } from './activityChrome';
+import { koKRDebugConsole } from './debugConsole';
 
 export const koKR = {
   document: {
@@ -1249,6 +1250,7 @@ export const koKR = {
     localOnlyDescription: "Local UI 상태에만 적용됩니다. runtime 구성에는 영향을 주지 않습니다.",
     frontendOnly: "프론트엔드 전용",
   },
+  debugConsole: koKRDebugConsole,
   flowerSettings: {
     description: "Flower providers, models, 실행 보호 장치 및 로컬 AI secrets를 구성합니다.",
     activeBadge: "활성",

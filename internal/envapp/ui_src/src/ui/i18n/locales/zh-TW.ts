@@ -4,6 +4,7 @@ import { zhTWWorkbenchCodex } from './workbenchCodex';
 import { localeSettingsSectionMessages } from './settingsSections';
 import { zhTWFlowerChatSidebar } from './flowerChatSidebar';
 import { zhTWActivityChrome } from './activityChrome';
+import { zhTWDebugConsole } from './debugConsole';
 
 export const zhTW = {
   document: {
@@ -1249,6 +1250,7 @@ export const zhTW = {
     localOnlyDescription: "僅為 Local UI 狀態。不影響 runtime 設定。",
     frontendOnly: "僅前端",
   },
+  debugConsole: zhTWDebugConsole,
   flowerSettings: {
     description: "設定 Flower providers、models、執行保護和本地 AI secrets。",
     activeBadge: "已啟用",
