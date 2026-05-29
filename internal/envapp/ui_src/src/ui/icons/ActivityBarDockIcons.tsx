@@ -73,12 +73,12 @@ export function ActivityBarCodespacesIcon(props: { class?: string }) {
 export function ActivityBarPortsIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <circle cx="12" cy="8" r="3.5" stroke="currentColor" stroke-opacity=".3" stroke-width="1" fill="currentColor" fill-opacity=".06" />
-      <ellipse cx="12" cy="5.8" rx="3.8" ry="1.2" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" fill="none" />
-      <ellipse cx="12" cy="10.2" rx="3.8" ry="1.2" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" fill="none" />
-      <path d="M12 4.5 a 5 5 0 0 0 0 7 a 5 5 0 0 0 0 -7" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" fill="none" />
-      <line x1="12" y1="4.5" x2="12" y2="11.5" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" />
-      <text x="12" y="19" text-anchor="middle" font-family="'Inter','SF Pro Display',-apple-system,sans-serif" font-size="4.5" font-weight="700" letter-spacing=".4" fill="currentColor" fill-opacity=".55">HTTP</text>
+      <circle cx="12" cy="10" r="5.5" stroke="currentColor" stroke-opacity=".3" stroke-width="1" fill="currentColor" fill-opacity=".06" />
+      <ellipse cx="12" cy="7" rx="6" ry="2" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" fill="none" />
+      <ellipse cx="12" cy="13" rx="6" ry="2" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" fill="none" />
+      <path d="M12 4.5 a 8 8 0 0 0 0 11 a 8 8 0 0 0 0 -11" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" fill="none" />
+      <line x1="12" y1="4.5" x2="12" y2="15.5" stroke="currentColor" stroke-opacity=".16" stroke-width=".5" />
+      <text x="12" y="21" text-anchor="middle" font-family="'Inter','SF Pro Display',-apple-system,sans-serif" font-size="5" font-weight="800" letter-spacing=".4" fill="currentColor" fill-opacity=".55">HTTP</text>
     </svg>
   );
 }
