@@ -6863,6 +6863,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
           role="menu"
           ariaLabel={props.presentation.menu_button_label}
           interactive
+          hideArrow
           class="redeven-split-menu z-[230] max-w-[min(16rem,calc(100vw-1rem))]"
           onOverlayRef={(element) => {
             menuRef = element;
