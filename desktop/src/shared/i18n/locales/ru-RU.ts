@@ -167,10 +167,9 @@ export const ruRU = {
     closeLauncher: "Закрыть Launcher",
     opening: "Открытие...",
     focus: "Фокус",
-    environmentsCount: '{count} окружений',
-    environmentsActive: '{count} активно',
-    idle: 'Простой',
     windowsCount: '{count} окон',
+    running: 'запущен',
+    offline: 'отключен',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Проверьте Environment URL",
@@ -559,10 +558,6 @@ export const ruRU = {
   environmentAction: {
     open: "Открыть",
     focus: "Фокус",
-      environmentsCount: '{count} environments',
-      environmentsActive: '{count} running',
-      idle: 'Idle',
-      windowsCount: '{count} windows',
     focusRemoteWindow: "Сфокусировать удаленное окно",
     remoteWindowOpening: "Открывается удаленное окно...",
     reconnectProvider: "Переподключить Provider",

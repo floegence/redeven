@@ -167,10 +167,9 @@ export const esES = {
     closeLauncher: "Cerrar Launcher",
     opening: "Abriendo...",
     focus: "Enfocar",
-    environmentsCount: '{count} entornos',
-    environmentsActive: '{count} activo(s)',
-    idle: 'Inactivo',
     windowsCount: '{count} ventana(s)',
+    running: 'activo',
+    offline: 'inactivo',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Comprueba la Environment URL",
@@ -539,10 +538,6 @@ export const esES = {
   environmentAction: {
     open: "Abrir",
     focus: "Enfocar",
-      environmentsCount: '{count} environments',
-      environmentsActive: '{count} running',
-      idle: 'Idle',
-      windowsCount: '{count} windows',
     focusRemoteWindow: "Enfocar ventana remota",
     remoteWindowOpening: "Abriendo ventana remota...",
     reconnectProvider: "Reconectar Provider",

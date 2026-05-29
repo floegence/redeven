@@ -167,10 +167,9 @@ export const jaJP = {
     closeLauncher: "Launcher を閉じる",
     opening: "開いています...",
     focus: "フォーカス",
-    environmentsCount: '{count} 環境',
-    environmentsActive: '{count} アクティブ',
-    idle: 'アイドル',
     windowsCount: '{count} ウィンドウ',
+    running: '実行中',
+    offline: 'オフライン',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Environment URL を確認",
@@ -535,10 +534,6 @@ export const jaJP = {
   environmentAction: {
     open: "開く",
     focus: "フォーカス",
-      environmentsCount: '{count} environments',
-      environmentsActive: '{count} running',
-      idle: 'Idle',
-      windowsCount: '{count} windows',
     focusRemoteWindow: "リモートウィンドウにフォーカス",
     remoteWindowOpening: "リモートウィンドウを開いています...",
     reconnectProvider: "Provider に再接続",

@@ -167,10 +167,9 @@ export const deDE = {
     closeLauncher: "Launcher schließen",
     opening: "Wird geöffnet...",
     focus: "Fokussieren",
-    environmentsCount: '{count} Umgebungen',
-    environmentsActive: '{count} aktiv',
-    idle: 'Inaktiv',
     windowsCount: '{count} Fenster',
+    running: 'aktiv',
+    offline: 'offline',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Environment URL prüfen",
@@ -539,10 +538,6 @@ export const deDE = {
   environmentAction: {
     open: "Öffnen",
     focus: "Fokussieren",
-      environmentsCount: '{count} environments',
-      environmentsActive: '{count} running',
-      idle: 'Idle',
-      windowsCount: '{count} windows',
     focusRemoteWindow: "Remote-Fenster fokussieren",
     remoteWindowOpening: "Remote-Fenster wird geöffnet...",
     reconnectProvider: "Provider erneut verbinden",
