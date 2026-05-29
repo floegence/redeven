@@ -1035,6 +1035,139 @@ body {
   }
 }
 
+/* ── Bottom bar metrics ── */
+
+.redeven-bottom-bar-metric {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.0625rem 0.25rem;
+  border-radius: 0.25rem;
+  font-size: 11px;
+  font-family: inherit;
+  white-space: nowrap;
+  flex-shrink: 0;
+  cursor: default;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.redeven-bottom-bar-metric:hover {
+  background-color: color-mix(in srgb, var(--muted-foreground) 8%, transparent);
+}
+
+.redeven-bottom-bar-metric__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  flex-shrink: 0;
+  border: 1.5px solid color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+  background: transparent;
+  transition:
+    border-color 250ms ease,
+    background-color 250ms ease,
+    box-shadow 250ms ease,
+    transform 250ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* success tone — green glow with breathing animation */
+.redeven-bottom-bar-metric[data-tone='success'] .redeven-bottom-bar-metric__dot {
+  border-color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, transparent);
+  box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--success) 10%, transparent);
+  animation: redeven-bottom-bar-dot-breathe 3s ease-in-out infinite;
+}
+
+/* primary tone — blue subtle glow */
+.redeven-bottom-bar-metric[data-tone='primary'] .redeven-bottom-bar-metric__dot {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  box-shadow: 0 0 0 0.14rem color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+/* warning tone — amber glow, no animation (distinct from success) */
+.redeven-bottom-bar-metric[data-tone='warning'] .redeven-bottom-bar-metric__dot {
+  border-color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--warning) 10%, transparent);
+  animation: redeven-bottom-bar-dot-breathe-warning 4s ease-in-out infinite;
+}
+
+/* neutral tone — muted filled dot */
+.redeven-bottom-bar-metric[data-tone='neutral'] .redeven-bottom-bar-metric__dot {
+  border-color: color-mix(in srgb, var(--muted-foreground) 45%, transparent);
+  background: color-mix(in srgb, var(--muted-foreground) 18%, transparent);
+}
+
+/* zero state — hollow dot, no fill, no animation */
+.redeven-bottom-bar-metric[data-zero] .redeven-bottom-bar-metric__dot {
+  border-color: color-mix(in srgb, var(--muted-foreground) 30%, transparent);
+  background: transparent;
+  box-shadow: none;
+  animation: none;
+}
+
+/* label color transitions */
+.redeven-bottom-bar-metric[data-tone='success'] .redeven-bottom-bar-metric__label {
+  color: color-mix(in srgb, var(--success) 90%, var(--foreground));
+}
+
+.redeven-bottom-bar-metric[data-tone='primary'] .redeven-bottom-bar-metric__label {
+  color: color-mix(in srgb, var(--primary) 85%, var(--foreground));
+}
+
+.redeven-bottom-bar-metric[data-tone='warning'] .redeven-bottom-bar-metric__label {
+  color: color-mix(in srgb, var(--warning) 90%, var(--foreground));
+}
+
+.redeven-bottom-bar-metric[data-zero] .redeven-bottom-bar-metric__label {
+  color: var(--muted-foreground);
+}
+
+/* count number — tabular-nums for stable width, transition for change animation */
+.redeven-bottom-bar-metric__count {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  transition:
+    transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+    color 200ms ease;
+}
+
+.redeven-bottom-bar-metric__count--pop {
+  transform: scale(1.25);
+}
+
+/* metric separator dot */
+.redeven-bottom-bar-metric__sep {
+  color: var(--border);
+  flex-shrink: 0;
+  font-size: 11px;
+  line-height: 1;
+}
+
+@keyframes redeven-bottom-bar-dot-breathe {
+  0%, 100% {
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--success) 10%, transparent);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 0.28rem color-mix(in srgb, var(--success) 5%, transparent);
+    transform: scale(1.08);
+  }
+}
+
+@keyframes redeven-bottom-bar-dot-breathe-warning {
+  0%, 100% {
+    box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--warning) 10%, transparent);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 0 0.26rem color-mix(in srgb, var(--warning) 6%, transparent);
+    transform: scale(1.06);
+  }
+}
+
 /* ── Status badges (bordered, used in provider shelf headers) ── */
 
 .redeven-console-status {
@@ -2508,5 +2641,16 @@ pre,
 
   .redeven-status-indicator__dot {
     animation-duration: 1ms;
+  }
+
+  .redeven-bottom-bar-metric__dot {
+    animation-duration: 1ms;
+    transition-duration: 1ms;
+  }
+
+  .redeven-bottom-bar-metric__count,
+  .redeven-bottom-bar-metric__label,
+  .redeven-bottom-bar-metric {
+    transition-duration: 1ms;
   }
 }
