@@ -98,17 +98,10 @@ export function ActivityBarSwitchIcon(props: { class?: string }) {
 export function ActivityBarSettingsIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <circle cx="12" cy="12" r="5.5" fill="currentColor" fill-opacity=".06" stroke="currentColor" stroke-opacity=".25" stroke-width=".8" />
-      <rect x="10.5" y="3.5" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".55" />
-      <rect x="10.5" y="18" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".55" />
-      <rect x="3.5" y="10.5" width="2.5" height="3" rx="1.2" fill="currentColor" fill-opacity=".55" />
-      <rect x="18" y="10.5" width="2.5" height="3" rx="1.2" fill="currentColor" fill-opacity=".55" />
-      <g transform="rotate(45 12 12)"><rect x="10.5" y="3.5" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".4" /></g>
-      <g transform="rotate(135 12 12)"><rect x="10.5" y="3.5" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".4" /></g>
-      <g transform="rotate(225 12 12)"><rect x="10.5" y="3.5" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".4" /></g>
-      <g transform="rotate(315 12 12)"><rect x="10.5" y="3.5" width="3" height="2.5" rx="1.2" fill="currentColor" fill-opacity=".4" /></g>
-      <circle cx="12" cy="12" r="3" fill="currentColor" fill-opacity=".14" />
-      <circle cx="12" cy="12" r="1.5" fill="currentColor" fill-opacity=".35" />
+      <circle cx="12" cy="12" r="7" fill="none" stroke="currentColor" stroke-opacity=".5" stroke-width="3" stroke-dasharray="3.3 3.3" />
+      <circle cx="12" cy="12" r="5.5" fill="currentColor" fill-opacity=".06" stroke="currentColor" stroke-opacity=".2" stroke-width=".8" />
+      <circle cx="12" cy="12" r="2.5" fill="currentColor" fill-opacity=".14" />
+      <circle cx="12" cy="12" r="1.2" fill="currentColor" fill-opacity=".45" />
     </svg>
   );
 }
