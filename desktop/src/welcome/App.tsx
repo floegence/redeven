@@ -4159,35 +4159,33 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           </div>
         )}
         bottomBarLeading={(
-          <div class="flex items-center gap-2 min-w-0 text-[11px] font-sans">
-            {/* Visible cards */}
-            <span class="flex items-center gap-1 text-muted-foreground shrink-0">
-              <span>{localizedVisibleLabel(i18n(), librarySummary().environment_count)}</span>
+          <div class="flex items-center gap-1.5 min-w-0">
+            <span class="redeven-bottom-bar-metric">
+              <span class="redeven-bottom-bar-metric__label">{localizedVisibleLabel(i18n(), librarySummary().environment_count)}</span>
             </span>
-            <span class="text-border shrink-0">·</span>
-            {/* Windows */}
-            <span class="flex items-center gap-1 text-muted-foreground shrink-0">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
-              <span>{localizedWindowsLabel(i18n(), librarySummary().window_count)}</span>
+            <span class="redeven-bottom-bar-metric__sep">·</span>
+            <span class="redeven-bottom-bar-metric">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+              <span class="redeven-bottom-bar-metric__label">{localizedWindowsLabel(i18n(), librarySummary().window_count)}</span>
             </span>
-            <span class="text-border shrink-0">·</span>
-            {/* Ready to open */}
-            <span class="flex items-center gap-1 shrink-0">
-              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${librarySummary().ready_count > 0 ? 'border-success bg-success/10' : 'border-muted-foreground/30'}`} />
-              <span class={librarySummary().ready_count > 0 ? 'text-success' : 'text-muted-foreground'}>{librarySummary().ready_count} {i18n().t('launcher.ready')}</span>
-            </span>
-            <span class="text-border shrink-0">·</span>
-            {/* Running but not ready */}
-            <span class="flex items-center gap-1 text-muted-foreground shrink-0">
-              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${librarySummary().running_count > 0 ? 'border-primary bg-primary/10' : 'border-muted-foreground/30'}`} />
-              <span>{librarySummary().running_count} {i18n().t('launcher.running')}</span>
-            </span>
-            <span class="text-border shrink-0">·</span>
-            {/* Needs attention */}
-            <span class="flex items-center gap-1 text-muted-foreground shrink-0">
-              <span class={`w-2 h-2 rounded-full border-[1.5px] shrink-0 ${librarySummary().attention_count > 0 ? 'border-warning bg-warning/10' : 'border-muted-foreground/30'}`} />
-              <span>{librarySummary().attention_count} {i18n().t('launcher.attention')}</span>
-            </span>
+            <span class="redeven-bottom-bar-metric__sep">·</span>
+            <BottomBarMetric
+              count={librarySummary().ready_count}
+              label={i18n().t('launcher.ready')}
+              tone="success"
+            />
+            <span class="redeven-bottom-bar-metric__sep">·</span>
+            <BottomBarMetric
+              count={librarySummary().running_count}
+              label={i18n().t('launcher.running')}
+              tone="primary"
+            />
+            <span class="redeven-bottom-bar-metric__sep">·</span>
+            <BottomBarMetric
+              count={librarySummary().attention_count}
+              label={i18n().t('launcher.attention')}
+              tone="warning"
+            />
           </div>
         )}
         bottomBarTrailing={(
@@ -5358,6 +5356,42 @@ function EnvironmentStatusIndicator(props: Readonly<{
     <span class="redeven-status-indicator" data-tone={props.tone}>
       <span class="redeven-status-indicator__dot" aria-hidden="true" />
       {props.children}
+    </span>
+  );
+}
+
+function BottomBarMetric(props: Readonly<{
+  count: number;
+  label: string;
+  tone?: 'success' | 'primary' | 'warning';
+  icon?: JSX.Element;
+}>) {
+  const hasTone = () => props.tone !== undefined && props.count > 0;
+  const [popped, setPopped] = createSignal(false);
+  createEffect(on(() => props.count, () => {
+    if (props.count === 0) return;
+    setPopped(true);
+    const timer = setTimeout(() => setPopped(false), 180);
+    onCleanup(() => clearTimeout(timer));
+  }));
+  return (
+    <span
+      class="redeven-bottom-bar-metric"
+      data-tone={hasTone() ? props.tone : undefined}
+      data-zero={props.count === 0 ? '' : undefined}
+    >
+      {props.icon ?? (
+        <Show when={props.tone !== undefined}>
+          <span class="redeven-bottom-bar-metric__dot" aria-hidden="true" />
+        </Show>
+      )}
+      <span
+        class="redeven-bottom-bar-metric__count"
+        classList={{ 'redeven-bottom-bar-metric__count--pop': popped() }}
+      >
+        {props.count}
+      </span>
+      <span class="redeven-bottom-bar-metric__label">{props.label}</span>
     </span>
   );
 }

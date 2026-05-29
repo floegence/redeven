@@ -533,9 +533,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('buildEnvironmentLibrarySummaryModel(snapshot(), libraryEntries())');
     expect(appSrc).toContain('localizedVisibleLabel(i18n(), librarySummary().environment_count)');
     expect(appSrc).toContain('localizedWindowsLabel(i18n(), librarySummary().window_count)');
-    expect(appSrc).toContain("librarySummary().ready_count} {i18n().t('launcher.ready')");
-    expect(appSrc).toContain("librarySummary().running_count} {i18n().t('launcher.running')");
-    expect(appSrc).toContain("librarySummary().attention_count} {i18n().t('launcher.attention')");
+    expect(appSrc).toContain('count={librarySummary().ready_count}');
+    expect(appSrc).toContain("label={i18n().t('launcher.ready')}");
+    expect(appSrc).toContain('count={librarySummary().running_count}');
+    expect(appSrc).toContain("label={i18n().t('launcher.running')}");
+    expect(appSrc).toContain('count={librarySummary().attention_count}');
+    expect(appSrc).toContain("label={i18n().t('launcher.attention')}");
 
     expect(appSrc).not.toMatch(/\b(?:openCount|runningCount|offlineCount)\b/);
     expect(appSrc).not.toMatch(/snapshot\(\)\.environments\s*\.filter[\s\S]{0,240}(?:open|running|offline)[\s\S]{0,120}(?:\.length|Count|_count)/);
