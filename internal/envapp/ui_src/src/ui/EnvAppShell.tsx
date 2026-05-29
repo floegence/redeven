@@ -2860,7 +2860,7 @@ export function EnvAppShell() {
         <>
           {/* Environment identity chip */}
           <div class="flex items-center gap-2 min-w-0">
-            <div class="flex items-center gap-1 min-w-0 pl-1.5 pr-2 rounded-md border border-border bg-white dark:bg-white/[0.06] shrink-0">
+            <div class="flex items-center gap-1 min-w-0 pl-1.5 pr-2 rounded-md border border-border bg-white/40 dark:bg-white/[0.08] shrink-0">
               <span class={`shrink-0 w-3.5 h-3.5 flex items-center justify-center ${
                 envType() === 'local' ? 'text-primary' :
                 envType() === 'ssh' ? 'text-info' :
