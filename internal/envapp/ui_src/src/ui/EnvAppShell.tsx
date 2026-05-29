@@ -4,7 +4,6 @@ import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-co
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import {
   Activity,
-  ArrowRightLeft,
   Code,
   Copy,
   Files,
@@ -26,6 +25,8 @@ import {
   ActivityBarFolderIcon,
   ActivityBarMonitorIcon,
   ActivityBarPortsIcon,
+  ActivityBarSettingsIcon,
+  ActivityBarSwitchIcon,
   ActivityBarTerminalIcon,
 } from './icons/ActivityBarDockIcons';
 import {
@@ -2191,7 +2192,7 @@ export function EnvAppShell() {
     if (desktopShellBridgeAvailable()) {
       items.push({
         id: 'switch-environment',
-        icon: ArrowRightLeft,
+        icon: ActivityBarSwitchIcon,
         label: i18n.t('shell.nav.switchEnvironment'),
         onClick: () => {
           void openConnectionCenter();
@@ -2200,7 +2201,7 @@ export function EnvAppShell() {
     }
     items.push({
       id: 'settings',
-      icon: Settings,
+      icon: ActivityBarSettingsIcon,
       label: i18n.t('shell.nav.runtimeSettings'),
       onClick: () => openSettings(),
     });
