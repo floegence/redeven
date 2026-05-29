@@ -1458,9 +1458,9 @@ function localizedEnvironmentsLabel(i18n: DesktopI18n, count: number): string {
   return i18n.t('launcher.environmentsCount', { count });
 }
 
-function localizedRunningLabel(i18n: DesktopI18n, count: number): string {
+function localizedActiveLabel(i18n: DesktopI18n, count: number): string {
   if (count <= 0) return i18n.t('launcher.idle');
-  return i18n.t('launcher.environmentsRunning', { count });
+  return i18n.t('launcher.environmentsActive', { count });
 }
 
 function localizedWindowsLabel(i18n: DesktopI18n, count: number): string {
@@ -2016,8 +2016,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     return next;
   });
-  const runningCount = createMemo(() =>
-    snapshot().environments.filter(e => e.is_open || e.is_opening).length
+  const activeCount = createMemo(() =>
+    snapshot().environments.filter(e => e.is_open).length
   );
   const libraryEntries = createMemo(() => (
     filterEnvironmentLibrary(
@@ -4169,15 +4169,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             </span>
             {/* Dot separator */}
             <span class="text-border shrink-0">·</span>
-            {/* Running chip — the only colored emphasis */}
+            {/* Active chip — the only colored emphasis */}
             {(() => {
-              const r = runningCount();
+              const a = activeCount();
               return (
                 <span class={`flex items-center gap-1 px-1.5 rounded-full text-[10px] font-medium shrink-0 ${
-                  r > 0 ? 'bg-success/10 text-success' : 'bg-muted/60 text-muted-foreground'
+                  a > 0 ? 'bg-success/10 text-success' : 'bg-muted/60 text-muted-foreground'
                 }`}>
-                  <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${r > 0 ? 'bg-success' : 'bg-muted-foreground'}`} />
-                  <span>{localizedRunningLabel(i18n(), r)}</span>
+                  <span class={`w-1.5 h-1.5 rounded-full shrink-0 ${a > 0 ? 'bg-success' : 'bg-muted-foreground'}`} />
+                  <span>{localizedActiveLabel(i18n(), a)}</span>
                 </span>
               );
             })()}
