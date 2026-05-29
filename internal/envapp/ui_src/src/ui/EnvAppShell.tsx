@@ -2860,7 +2860,7 @@ export function EnvAppShell() {
         <>
           {/* Environment identity chip */}
           <div class="flex items-center gap-2 min-w-0">
-            <div class="flex items-center gap-1 min-w-0 pl-1.5 pr-2 rounded-md border border-border bg-muted/40 shrink-0">
+            <div class="flex items-center gap-1 min-w-0 pl-1.5 pr-2 rounded-md border border-border bg-card shrink-0">
               <span class={`shrink-0 w-3.5 h-3.5 flex items-center justify-center ${
                 envType() === 'local' ? 'text-primary' :
                 envType() === 'ssh' ? 'text-info' :
@@ -2904,7 +2904,7 @@ export function EnvAppShell() {
             </Tooltip>
             <BottomBarItem
               onClick={reconnectDisabled() ? undefined : () => void triggerReconnect()}
-              class={reconnectDisabled() ? 'opacity-40 pointer-events-none' : undefined}
+              class={reconnectDisabled() ? 'opacity-40 pointer-events-none' : 'bg-primary/10 text-primary'}
             >
               {reconnectLabel()}
             </BottomBarItem>
