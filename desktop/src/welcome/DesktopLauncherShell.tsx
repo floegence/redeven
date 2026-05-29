@@ -10,6 +10,8 @@ export type DesktopLauncherShellProps = Readonly<{
   trailingActions?: JSX.Element;
   bottomBarLeading?: JSX.Element;
   bottomBarTrailing?: JSX.Element;
+  /** Tailwind height class for the bottom bar, defaults to 'h-7' (28px). */
+  bottomBarHeight?: string;
   children: JSX.Element;
 }>;
 
@@ -57,7 +59,7 @@ export function DesktopLauncherShell(props: DesktopLauncherShellProps) {
 
       <div class="relative min-h-0 min-w-0 flex-1 overflow-hidden">{props.children}</div>
 
-      <BottomBar class="safe-left safe-right">
+      <BottomBar class="safe-left safe-right" height={props.bottomBarHeight ?? 'h-7'}>
         <div class="flex min-w-0 items-center gap-2">{props.bottomBarLeading}</div>
         <div class="flex items-center gap-2">{props.bottomBarTrailing}</div>
       </BottomBar>

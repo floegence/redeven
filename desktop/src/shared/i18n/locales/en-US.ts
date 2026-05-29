@@ -166,6 +166,10 @@ export const enUS = {
     closeLauncher: 'Close Launcher',
     opening: 'Opening...',
     focus: 'Focus',
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
   },
   issue: {
     remoteEnvironmentInvalidTitle: 'Check the Environment URL',
@@ -366,6 +370,10 @@ export const enUS = {
   environmentAction: {
     open: 'Open',
     focus: 'Focus',
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
     focusRemoteWindow: 'Focus remote window',
     remoteWindowOpening: 'Remote window opening...',
     reconnectProvider: 'Reconnect Provider',

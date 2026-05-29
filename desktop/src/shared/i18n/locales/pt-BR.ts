@@ -167,6 +167,10 @@ export const ptBR = {
     closeLauncher: "Fechar Launcher",
     opening: "Abrindo...",
     focus: "Focar",
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Verifique a Environment URL",
@@ -535,6 +539,10 @@ export const ptBR = {
   environmentAction: {
     open: "Abrir",
     focus: "Focar",
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
     focusRemoteWindow: "Focar janela remota",
     remoteWindowOpening: "Abrindo janela remota...",
     reconnectProvider: "Reconectar Provider",

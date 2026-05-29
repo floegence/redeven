@@ -167,6 +167,10 @@ export const frFR = {
     closeLauncher: "Fermer Launcher",
     opening: "Ouverture...",
     focus: "Activer",
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Vérifier l’Environment URL",
@@ -535,6 +539,10 @@ export const frFR = {
   environmentAction: {
     open: "Ouvrir",
     focus: "Activer",
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
     focusRemoteWindow: "Activer la fenêtre distante",
     remoteWindowOpening: "Ouverture de la fenêtre distante...",
     reconnectProvider: "Reconnecter le Provider",

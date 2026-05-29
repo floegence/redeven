@@ -167,6 +167,10 @@ export const koKR = {
     closeLauncher: "Launcher 닫기",
     opening: "여는 중...",
     focus: "포커스",
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "Environment URL 확인",
@@ -531,6 +535,10 @@ export const koKR = {
   environmentAction: {
     open: "열기",
     focus: "포커스",
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
     focusRemoteWindow: "원격 창 포커스",
     remoteWindowOpening: "원격 창을 여는 중...",
     reconnectProvider: "Provider 다시 연결",
