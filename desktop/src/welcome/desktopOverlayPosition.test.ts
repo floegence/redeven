@@ -123,4 +123,38 @@ describe('desktopOverlayPosition', () => {
     expect(position.left).toBe(-82);
     expect(position.arrowOffset).toBe(100);
   });
+
+  it('keeps a top overlay above the anchor while shifting it inside the left viewport edge', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(6, 18, 24, 24),
+      overlayWidth: 200,
+      overlayHeight: 70,
+      viewportWidth: 220,
+      viewportHeight: 400,
+      preferredPlacement: 'top',
+      allowMainAxisOverflow: true,
+    });
+
+    expect(position.placement).toBe('top');
+    expect(position.top).toBe(-60);
+    expect(position.left).toBe(8);
+    expect(position.arrowOffset).toBe(12);
+  });
+
+  it('keeps a top overlay above the anchor while shifting it inside the right viewport edge', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(186, 18, 24, 24),
+      overlayWidth: 200,
+      overlayHeight: 70,
+      viewportWidth: 220,
+      viewportHeight: 400,
+      preferredPlacement: 'top',
+      allowMainAxisOverflow: true,
+    });
+
+    expect(position.placement).toBe('top');
+    expect(position.top).toBe(-60);
+    expect(position.left).toBe(12);
+    expect(position.arrowOffset).toBe(186);
+  });
 });

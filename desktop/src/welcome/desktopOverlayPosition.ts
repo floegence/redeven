@@ -38,9 +38,11 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
   viewportHeight: number;
   preferredPlacement?: DesktopOverlayPlacement;
   constrainToViewport?: boolean;
+  allowMainAxisOverflow?: boolean;
 }>): DesktopAnchoredOverlayPosition {
   const preferredPlacement = options.preferredPlacement ?? 'top';
   const constrainToViewport = options.constrainToViewport ?? true;
+  const allowMainAxisOverflow = options.allowMainAxisOverflow ?? false;
   const margin = 8;
   const gap = 8;
   const arrowInset = 12;
@@ -61,7 +63,7 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
     preferredPlacement === 'top' || preferredPlacement === 'bottom' ? 'left' : 'top',
   ] as const;
 
-  const placement = constrainToViewport
+  const placement = constrainToViewport && !allowMainAxisOverflow
     ? orderedPlacements.find((candidate) => {
       const requiredSpace = candidate === 'top' || candidate === 'bottom'
         ? options.overlayHeight
@@ -93,8 +95,16 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
   }
 
   if (constrainToViewport) {
-    left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
-    top = clamp(top, margin, options.viewportHeight - options.overlayHeight - margin);
+    if (allowMainAxisOverflow) {
+      if (placement === 'top' || placement === 'bottom') {
+        left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
+      } else {
+        top = clamp(top, margin, options.viewportHeight - options.overlayHeight - margin);
+      }
+    } else {
+      left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
+      top = clamp(top, margin, options.viewportHeight - options.overlayHeight - margin);
+    }
   }
 
   return {
