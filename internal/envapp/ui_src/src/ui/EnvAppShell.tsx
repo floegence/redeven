@@ -22,6 +22,13 @@ import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
 import { CodexNavigationIcon } from './icons/CodexIcon';
 import {
+  ActivityBarCodespacesIcon,
+  ActivityBarFolderIcon,
+  ActivityBarMonitorIcon,
+  ActivityBarPortsIcon,
+  ActivityBarTerminalIcon,
+} from './icons/ActivityBarDockIcons';
+import {
   BottomBarItem,
   DisplayModePageShell,
   DisplayModeSwitcher,
@@ -2134,12 +2141,12 @@ export function EnvAppShell() {
     const items: ActivityBarItem[] = [];
 
     items.push(
-      { id: 'terminal', icon: Terminal, label: i18n.t('shell.nav.terminal'), collapseBehavior: 'preserve' },
-      { id: 'monitor', icon: Activity, label: i18n.t('shell.nav.monitoring'), collapseBehavior: 'preserve' },
+      { id: 'terminal', icon: ActivityBarTerminalIcon, label: i18n.t('shell.nav.terminal'), collapseBehavior: 'preserve' },
+      { id: 'monitor', icon: ActivityBarMonitorIcon, label: i18n.t('shell.nav.monitoring'), collapseBehavior: 'preserve' },
       layout.isMobile()
         ? {
             id: 'files',
-            icon: Files,
+            icon: ActivityBarFolderIcon,
             label: i18n.t('shell.nav.fileBrowser'),
             collapseBehavior: 'preserve',
             onClick: () => {
@@ -2152,9 +2159,9 @@ export function EnvAppShell() {
               toggleFilesMobileSidebar();
             },
           }
-        : { id: 'files', icon: Files, label: i18n.t('shell.nav.fileBrowser'), collapseBehavior: 'preserve' },
-      { id: 'codespaces', icon: Code, label: i18n.t('shell.nav.codespaces'), collapseBehavior: 'preserve' },
-      { id: 'ports', icon: Globe, label: i18n.t('shell.nav.webServices'), collapseBehavior: 'preserve' },
+        : { id: 'files', icon: ActivityBarFolderIcon, label: i18n.t('shell.nav.fileBrowser'), collapseBehavior: 'preserve' },
+      { id: 'codespaces', icon: ActivityBarCodespacesIcon, label: i18n.t('shell.nav.codespaces'), collapseBehavior: 'preserve' },
+      { id: 'ports', icon: ActivityBarPortsIcon, label: i18n.t('shell.nav.webServices'), collapseBehavior: 'preserve' },
     );
     if (canUseFlower()) {
       items.push({
