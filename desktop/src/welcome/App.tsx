@@ -6417,15 +6417,15 @@ function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: str
   }
 }
 
-function splitMenuItemTone(intent: EnvironmentActionIntent): string {
+function splitMenuItemToneData(intent: EnvironmentActionIntent): string {
   switch (intent) {
     case 'stop_runtime':
-      return 'light-dark(#dc2626, #f87171)';
+      return 'danger';
     case 'start_runtime':
     case 'connect_provider_runtime':
-      return 'light-dark(#2563eb, #60a5fa)';
+      return 'primary';
     case 'disconnect_provider_runtime':
-      return 'light-dark(#7c3aed, #a78bfa)';
+      return 'accent';
     default:
       return '';
   }
@@ -6871,13 +6871,13 @@ function EnvironmentSplitActionButton(props: Readonly<{
           <For each={props.presentation.menu_actions}>
             {(item: EnvironmentActionMenuItemModel) => {
               const icon = () => splitMenuIcon(item.action.intent);
-              const toneColor = () => splitMenuItemTone(item.action.intent);
+              const tone = () => splitMenuItemToneData(item.action.intent);
               return (
                 <button
                     type="button"
                     role="menuitem"
                     class="redeven-split-menu-item"
-                    style={toneColor() ? { color: toneColor() } : undefined}
+                    data-tone={tone() || undefined}
                     disabled={!item.action.enabled}
                     title={!item.action.enabled ? item.action.disabled_reason : undefined}
                     aria-describedby={!item.action.enabled && item.action.disabled_reason ? `${props.environmentID}-${item.id}-disabled-reason` : undefined}
@@ -6890,7 +6890,7 @@ function EnvironmentSplitActionButton(props: Readonly<{
                       {(Icon) => {
                         const MenuIcon = Icon();
                         return (
-                          <span class="redeven-split-menu-item-icon opacity-70">
+                          <span class="redeven-split-menu-item-icon">
                             <MenuIcon />
                           </span>
                         );
