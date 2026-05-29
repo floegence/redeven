@@ -1,19 +1,21 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.6.12",
-    "previous_release": "v0.6.11",
-    "reviewed_at": "2026-05-26",
-    "review_id": "desktop-drag-region-refresh-scope-v1",
-    "summary": "Desktop embedded drag-region synchronization now ignores Workbench subtree mutations that cannot affect window chrome drag or no-drag regions.",
+    "release_version": "v0.6.13",
+    "previous_release": "v0.6.12",
+    "reviewed_at": "2026-05-29",
+    "review_id": "desktop-envapp-localization-and-runtime-presence-v1",
+    "summary": "Desktop and Env App now ship broader localization, refined settings and dock presentation, runtime start-time presence, and updated UI dependencies without changing the Runtime Service protocol window.",
     "checked_surfaces": [
-      "Desktop embedded drag-region mutation routing only schedules snapshot refreshes for top-bar, explicit drag-root, or explicit no-drag marker changes",
-      "Workbench subtree mutations outside drag-region anchors no longer force repeated drag-region DOM scans or layout reads",
-      "ResizeObserver-backed geometry refreshes, titlebar drag roots, and no-drag blocker behavior continue to use the existing Desktop embedded drag-region host contract",
-      "Desktop preload drag-region host messages keep the same snapshot payload shape and continue to accept renderer refreshes through the existing bridge",
-      "Env App Workbench wheel ownership, text selection ownership, widget pointer routing, runtime-control, Local UI health, startup reports, provider link, and desktop bridge protocol fields keep the same compatibility window"
+      "Runtime Service snapshot schema, protocol version, compatibility epoch, minimum Desktop version, and minimum Runtime version are unchanged from v0.6.12",
+      "Desktop attach/start flows still normalize startup reports through the existing Runtime Service snapshot path and only add optional runtime start-time presentation metadata outside the Runtime Service contract",
+      "Local UI health continues to return the same required fields; started_at_unix_ms is optional and older Desktop clients can ignore it safely",
+      "Desktop runtime placement, container runtime replacement before update, provider link, runtime-control endpoint, and open readiness continue to use the existing compatibility checks",
+      "Env App maintenance UI, settings surfaces, dock icons, file preview, chat streaming, workbench wheel ownership, and text selection ownership keep their existing Runtime Service expectations",
+      "SSH runtime bootstrap and remote startup report handling continue to consume the same normalized Runtime Service snapshot fields",
+      "Desktop and Env App localization dictionaries, protected term checks, and floe-webapp dependency upgrades do not alter Runtime Service JSON semantics"
     ],
-    "same_window_rationale": "The release changes only Desktop renderer-side drag-region refresh scheduling. It does not add, remove, or change any Runtime Service JSON fields, protocol version, runtime-control endpoint, startup report shape, Local UI health surface, provider-link surface, or desktop bridge framing. Existing Desktop hosts continue to receive the same drag-region snapshot contract, with fewer irrelevant Workbench mutation-triggered refreshes."
+    "same_window_rationale": "The Runtime Service contract itself has no source changes in this release: protocol_version remains redeven-runtime-v1, compatibility_epoch remains 5, and both minimum version fields remain v0.7.0. The new runtime start-time values are optional presentation metadata on Desktop bridge and Local UI health responses, not required Runtime Service fields, so older clients keep their previous behavior while newer clients can display richer presence state. The large Env App, Desktop UI, localization, dependency, and presentation updates were reviewed against attach/start, Local UI health, startup reports, provider link, Env App maintenance UI, SSH runtime bootstrap, and runtime-control surfaces without finding a protocol-window change."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,
