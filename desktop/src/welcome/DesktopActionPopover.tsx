@@ -134,7 +134,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
           open={rendered()}
           anchorRef={anchorRef}
           placement="top"
-          constrainToViewport={false}
+          allowMainAxisOverflow
           role="dialog"
           ariaModal={false}
           ariaLabel={props.popoverAriaLabel}

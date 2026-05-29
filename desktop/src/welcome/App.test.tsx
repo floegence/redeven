@@ -763,7 +763,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('primary_action_overlay');
     expect(appSrc).toContain('<DesktopActionPopover');
     expect(actionPopoverSrc).toContain('placement="top"');
-    expect(actionPopoverSrc).toContain('constrainToViewport={false}');
+    expect(actionPopoverSrc).toContain('allowMainAxisOverflow');
     expect(actionPopoverSrc).not.toContain('placement?: DesktopOverlayPlacement');
     expect(actionPopoverSrc).not.toContain('props.placement');
     expect(appSrc).toContain('<DesktopAnchoredOverlaySurface');
@@ -835,7 +835,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-split-menu-item');
     expect(styles).toContain('.redeven-action-popover-frame');
     expect(styles).toContain('--redeven-action-popover-border');
-    expect(styles).toContain('--redeven-action-popover-width: min(20rem, calc(100vw - 1rem));');
+    expect(styles).toContain('--redeven-action-popover-width: min(19rem, calc(100vw - 1rem));');
     expect(styles).toContain('width: 100%;');
     expect(styles).toContain('.redeven-action-popover > *');
     expect(styles).toContain('.redeven-action-popover__notice-detail');
