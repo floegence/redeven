@@ -167,6 +167,10 @@ export const zhCN = {
     closeLauncher: "关闭 Launcher",
     opening: "打开中...",
     focus: "聚焦",
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "检查 Environment URL",
@@ -531,6 +535,10 @@ export const zhCN = {
   environmentAction: {
     open: "打开",
     focus: "聚焦",
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
     focusRemoteWindow: "聚焦远程窗口",
     remoteWindowOpening: "远程窗口打开中...",
     reconnectProvider: "重新连接 Provider",

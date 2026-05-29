@@ -167,6 +167,10 @@ export const zhTW = {
     closeLauncher: "關閉 Launcher",
     opening: "開啟中...",
     focus: "聚焦",
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
   },
   issue: {
     remoteEnvironmentInvalidTitle: "檢查 Environment URL",
@@ -531,6 +535,10 @@ export const zhTW = {
   environmentAction: {
     open: "開啟",
     focus: "聚焦",
+      environmentsCount: '{count} environments',
+      environmentsRunning: '{count} running',
+      idle: 'Idle',
+      windowsCount: '{count} windows',
     focusRemoteWindow: "聚焦遠端視窗",
     remoteWindowOpening: "遠端視窗開啟中...",
     reconnectProvider: "重新連接 Provider",
