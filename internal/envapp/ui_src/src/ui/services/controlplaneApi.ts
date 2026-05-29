@@ -418,7 +418,7 @@ export async function getEnvironment(envId: string): Promise<EnvironmentDetail |
   if (!id) return null;
 
   const local = await getLocalRuntime();
-  if (local && id === 'env_local') {
+  if (local) {
     try {
       const out = await fetchLocalJSON<EnvironmentDetail>('/api/local/environment', { method: 'GET' });
       return out ?? null;

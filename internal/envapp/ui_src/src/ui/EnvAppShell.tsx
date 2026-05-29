@@ -2834,6 +2834,7 @@ export function EnvAppShell() {
       sidebarMode={viewMode() === 'activity' ? 'auto' : 'hidden'}
       slotClassNames={{
         sidebar: viewMode() === 'activity' && layout.sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
+        bottomBarHeight: 'h-7',
       }}
       resolveSidebarVisibilityMotion={({ currentActiveId, nextActiveId, isMobile }) => (
         resolveEnvSidebarVisibilityMotion({
@@ -2859,13 +2860,13 @@ export function EnvAppShell() {
         <>
           {/* Environment identity chip */}
           <div class="flex items-center gap-2 min-w-0">
-            <div class="flex items-center gap-1.5 min-w-0 px-2 h-[22px] rounded-md border border-border bg-card shrink-0">
+            <div class="flex items-center gap-1.5 min-w-0 px-2 rounded-md border border-border bg-card shrink-0">
               <BottomBarItem class="min-w-0 shrink-0">
-                <span class="truncate text-xs font-medium">{envName()}</span>
+                <span class="truncate text-[11px] font-medium text-foreground">{envName()}</span>
               </BottomBarItem>
-              <span class="w-px h-3 bg-border shrink-0" />
+              <span class="w-px h-3.5 bg-border shrink-0" />
               <BottomBarItem class="min-w-0 shrink-0">
-                <span class="truncate text-[10px] text-muted-foreground font-mono">{envId() || i18n.t('shell.status.missingEnvId')}</span>
+                <span class="truncate text-[11px] text-muted-foreground">{envId() || i18n.t('shell.status.missingEnvId')}</span>
               </BottomBarItem>
             </div>
             <span class={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold leading-tight shrink-0 whitespace-nowrap ${
@@ -2878,7 +2879,7 @@ export function EnvAppShell() {
           </div>
           <div class="flex-1" />
           {/* Status + Actions */}
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-0.5">
             <StatusIndicator status={status()} label={statusLabel()} />
             <Tooltip content={canViewAudit() ? i18n.t('shell.status.auditLog') : i18n.t('shell.status.adminRequired')} placement="top" delay={0}>
               <BottomBarItem
