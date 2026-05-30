@@ -337,8 +337,11 @@ async function readJSONFile<T>(filePath: string): Promise<T | null> {
     return JSON.parse(raw) as T;
   } catch (error: unknown) {
     const nodeError = error as NodeJS.ErrnoException;
-    if (nodeError?.code === 'ENOENT' || error instanceof SyntaxError) {
+    if (nodeError?.code === 'ENOENT') {
       return null;
+    }
+    if (error instanceof SyntaxError) {
+      throw new Error(`Invalid Flower Host state file: ${filePath}. ${error.message}`);
     }
     throw error;
   }
@@ -442,7 +445,7 @@ function normalizeFlowerHostThread(value: unknown): DesktopFlowerHostThread | nu
     ?? messages.reduce((max, message) => Math.max(max, message.created_at_ms), 0);
   return {
     thread_id: threadID,
-    title: compact(candidate.title) || messages[0]?.content.slice(0, 80) || 'New chat',
+    title: compact(candidate.title) || messages[0]?.content.slice(0, 80) || 'Untitled conversation',
     model_id: compact(candidate.model_id),
     created_at_ms: positiveInteger(candidate.created_at_ms) ?? messages[0]?.created_at_ms ?? updatedAt,
     updated_at_ms: updatedAt,

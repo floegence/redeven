@@ -307,6 +307,15 @@ type DesktopSettingsBridge = Readonly<{
   cancel: () => void;
 }>;
 
+type DesktopFlowerHostProviderDraftForm = Readonly<{
+  provider_id: string;
+  model_name: string;
+  provider_type: DesktopFlowerHostSettingsDraft['config']['providers'][number]['type'];
+  context_window: string;
+  base_url: string;
+  api_key: string;
+}>;
+
 export type DesktopWelcomeRuntime = Readonly<{
   launcher: DesktopLauncherBridge;
   settings: DesktopSettingsBridge;
@@ -428,6 +437,34 @@ const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
 const ACTION_TOAST_TTL_MS = 4_000;
 const GUIDANCE_SUCCESS_DISMISS_MS = 720;
 const GUIDANCE_SESSION_CLEAR_MS = 220;
+
+function splitDesktopFlowerHostModelID(modelID: string): Readonly<{ provider_id: string; model_name: string }> {
+  const clean = trimString(modelID);
+  const slashIndex = clean.indexOf('/');
+  if (slashIndex <= 0 || slashIndex >= clean.length - 1) {
+    return { provider_id: '', model_name: '' };
+  }
+  return {
+    provider_id: clean.slice(0, slashIndex),
+    model_name: clean.slice(slashIndex + 1),
+  };
+}
+
+function draftFormFromDesktopFlowerHostConfig(
+  config: DesktopFlowerHostSettingsSnapshot['config'],
+): DesktopFlowerHostProviderDraftForm {
+  const currentModel = splitDesktopFlowerHostModelID(config.current_model_id);
+  const provider = config.providers.find((item) => item.id === currentModel.provider_id) ?? config.providers[0] ?? null;
+  const model = provider?.models.find((item) => item.model_name === currentModel.model_name) ?? provider?.models[0] ?? null;
+  return {
+    provider_id: provider?.id ?? 'default',
+    model_name: model?.model_name ?? '',
+    provider_type: provider?.type ?? 'openai_compatible',
+    context_window: model?.context_window ? String(model.context_window) : '',
+    base_url: provider?.base_url ?? '',
+    api_key: '',
+  };
+}
 
 const FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT: RedevenLanguageSnapshot = {
   preference: SYSTEM_LOCALE_PREFERENCE,
@@ -4167,7 +4204,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             <TopBarIconButton
               label="Flower"
               tooltip="Flower"
-              class={snapshot().surface === 'flower_host' ? 'bg-primary/10 text-primary' : ''}
+              class={cn('rounded-full', snapshot().surface === 'flower_host' ? 'bg-primary/10 text-primary' : '')}
               aria-current={snapshot().surface === 'flower_host' ? 'page' : undefined}
               onClick={() => void openFlowerHostSurface()}
             >
@@ -7957,15 +7994,17 @@ function FlowerHostSurface(_props: Readonly<{
   const [chatSubmitError, setChatSubmitError] = createSignal('');
   const [chatRunning, setChatRunning] = createSignal(false);
   const [historyFilter, setHistoryFilter] = createSignal('');
-  const [draft, setDraft] = createSignal({
+  const [draft, setDraft] = createSignal<DesktopFlowerHostProviderDraftForm>({
     provider_id: 'default',
     model_name: '',
     provider_type: 'openai_compatible' as DesktopFlowerHostSettingsDraft['config']['providers'][number]['type'],
+    context_window: '',
     base_url: '',
     api_key: '',
   });
   const [sidePanel, setSidePanel] = createSignal<'chat' | 'settings' | 'targets' | 'diagnostics'>('chat');
-  const activeProvider = createMemo(() => snapshot()?.config.providers.find((provider) => provider.id === draft().provider_id) ?? snapshot()?.config.providers[0] ?? null);
+  const activeProvider = createMemo(() => snapshot()?.config.providers.find((provider) => provider.id === draft().provider_id) ?? null);
+  const activeProviderSecret = createMemo(() => snapshot()?.provider_secrets.find((secret) => secret.provider_id === draft().provider_id) ?? null);
   const currentModelID = createMemo(() => trimString(snapshot()?.config.current_model_id));
   const configuredSecretCount = createMemo(() => snapshot()?.provider_secrets.filter((secret) => secret.provider_api_key_configured).length ?? 0);
   const readyForChat = createMemo(() => Boolean(snapshot()?.config.enabled && currentModelID()));
@@ -7990,7 +8029,7 @@ function FlowerHostSurface(_props: Readonly<{
       return;
     }
     setThreads(result.threads);
-    setSelectedThreadID((current) => (result.threads.some((thread) => thread.thread_id === current) ? current : result.threads[0]?.thread_id ?? ''));
+    setSelectedThreadID((current) => (current && !result.threads.some((thread) => thread.thread_id === current) ? '' : current));
   };
 
   createEffect(() => {
@@ -8001,15 +8040,7 @@ function FlowerHostSurface(_props: Readonly<{
     void bridge.loadFlowerHostSettings().then((result) => {
       if (result.ok) {
         setSnapshot(result.snapshot);
-        const provider = result.snapshot.config.providers[0];
-        const model = provider?.models[0];
-        setDraft({
-          provider_id: provider?.id ?? 'default',
-          model_name: model?.model_name ?? '',
-          provider_type: provider?.type ?? 'openai_compatible',
-          base_url: provider?.base_url ?? '',
-          api_key: '',
-        });
+        setDraft(draftFormFromDesktopFlowerHostConfig(result.snapshot.config));
         setLoadError('');
         return;
       }
@@ -8031,25 +8062,52 @@ function FlowerHostSurface(_props: Readonly<{
     const current = draft();
     const providerID = trimString(current.provider_id) || 'default';
     const modelName = trimString(current.model_name);
+    const contextWindowText = trimString(current.context_window);
+    const parsedContextWindow = contextWindowText === '' ? 0 : Number.parseInt(contextWindowText, 10);
+    const contextWindow = Number.isSafeInteger(parsedContextWindow) && parsedContextWindow > 0 ? parsedContextWindow : null;
+    if (current.provider_type === 'openai_compatible' && contextWindow == null) {
+      setSaveError('Context window is required for OpenAI-compatible providers.');
+      return;
+    }
+    const contextWindowPatch: Partial<DesktopFlowerHostSettingsDraft['config']['providers'][number]['models'][number]> = contextWindow == null ? {} : {
+      context_window: contextWindow,
+    };
     const existingConfig = snapshot()?.config;
     const originalProviderID = activeProvider()?.id ?? providerID;
+    const existingProvider = existingConfig?.providers.find((provider) => provider.id === originalProviderID) ?? null;
+    const existingModels = existingProvider?.models ?? [];
+    const existingModel = existingModels.find((model) => model.model_name === modelName) ?? existingModels[0] ?? null;
     const existingProviders = existingConfig?.providers ?? [];
     const keepExistingProvider = (provider: (typeof existingProviders)[number]): DesktopFlowerHostSettingsDraft['config']['providers'][number] => ({
       ...provider,
       provider_api_key: '',
       provider_api_key_mode: 'keep',
     });
+    const editedModels: DesktopFlowerHostSettingsDraft['config']['providers'][number]['models'] = modelName
+      ? (
+          existingModels.length > 0
+            ? existingModels.map((model, index) => (model === existingModel || (index === 0 && !existingModels.some((candidate) => candidate.model_name === modelName))
+                ? {
+                    ...model,
+                    model_name: modelName,
+                    ...contextWindowPatch,
+                  }
+                : model))
+            : [{
+                model_name: modelName,
+                ...contextWindowPatch,
+              }]
+        )
+      : existingModels;
     const editedProvider: DesktopFlowerHostSettingsDraft['config']['providers'][number] | null = modelName ? {
+      ...(existingProvider ?? {}),
       id: providerID,
-      name: providerID,
+      name: existingProvider?.name ?? providerID,
       type: current.provider_type,
       base_url: current.base_url,
       provider_api_key: current.api_key,
       provider_api_key_mode: trimString(current.api_key) ? 'replace' : 'keep',
-      models: [{
-        model_name: modelName,
-        context_window: 128_000,
-      }],
+      models: editedModels,
     } : null;
     const providers: DesktopFlowerHostSettingsDraft['config']['providers'] = editedProvider
       ? (
@@ -8218,8 +8276,28 @@ function FlowerHostSurface(_props: Readonly<{
           <Input value={draft().provider_id} onInput={(event) => setDraft((current) => ({ ...current, provider_id: event.currentTarget.value }))} />
         </label>
         <label class="space-y-1.5">
+          <span class="text-xs font-medium text-muted-foreground">Provider type</span>
+          <select
+            class="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+            value={draft().provider_type}
+            onChange={(event) => setDraft((current) => ({ ...current, provider_type: event.currentTarget.value as DesktopFlowerHostProviderDraftForm['provider_type'] }))}
+          >
+            <option value="openai_compatible">OpenAI-compatible</option>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="moonshot">Moonshot</option>
+            <option value="chatglm">ChatGLM</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="qwen">Qwen</option>
+          </select>
+        </label>
+        <label class="space-y-1.5">
           <span class="text-xs font-medium text-muted-foreground">Model name</span>
           <Input value={draft().model_name} onInput={(event) => setDraft((current) => ({ ...current, model_name: event.currentTarget.value }))} />
+        </label>
+        <label class="space-y-1.5">
+          <span class="text-xs font-medium text-muted-foreground">Context window</span>
+          <Input inputMode="numeric" value={draft().context_window} placeholder="Required for OpenAI-compatible providers" onInput={(event) => setDraft((current) => ({ ...current, context_window: event.currentTarget.value }))} />
         </label>
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-muted-foreground">Base URL</span>
@@ -8227,7 +8305,7 @@ function FlowerHostSurface(_props: Readonly<{
         </label>
         <label class="space-y-1.5">
           <span class="text-xs font-medium text-muted-foreground">API key</span>
-          <Input type="password" value={draft().api_key} placeholder={snapshot()?.provider_secrets[0]?.provider_api_key_configured ? 'Stored key will be kept' : 'Paste provider API key'} onInput={(event) => setDraft((current) => ({ ...current, api_key: event.currentTarget.value }))} />
+          <Input type="password" value={draft().api_key} placeholder={activeProviderSecret()?.provider_api_key_configured ? 'Stored key will be kept' : 'Paste provider API key'} onInput={(event) => setDraft((current) => ({ ...current, api_key: event.currentTarget.value }))} />
         </label>
       </div>
       <Show when={saveError()}>
@@ -8292,24 +8370,30 @@ function FlowerHostSurface(_props: Readonly<{
           </div>
         </div>
         <div class="flex items-center gap-2">
-          <DesktopTooltip content="New chat" placement="bottom" delay={0}>
+          <DesktopTooltip content="Compose" placement="bottom" delay={0}>
             <button
               type="button"
-              class="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-border/70 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="New chat"
+              class={cn(
+                'flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                sidePanel() === 'chat' && !selectedThreadID()
+                  ? 'border-primary/30 bg-primary/10 text-primary'
+                  : 'border-border/70 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
+              )}
+              aria-label="Compose with Flower"
+              aria-current={sidePanel() === 'chat' && !selectedThreadID() ? 'page' : undefined}
               onClick={startNewThread}
             >
-              <Plus class="h-4 w-4" />
+              <span aria-hidden="true" class="text-base leading-none">✿</span>
             </button>
           </DesktopTooltip>
           {iconPanelButton('settings', 'Settings', Settings)}
           {iconPanelButton('targets', 'Targets', Globe)}
           {iconPanelButton('diagnostics', 'Diagnostics', AlertCircle)}
-          <DesktopTooltip content="Refresh history" placement="bottom" delay={0}>
+          <DesktopTooltip content="Refresh conversations" placement="bottom" delay={0}>
             <button
               type="button"
               class="ml-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-border/70 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Refresh history"
+              aria-label="Refresh conversations"
               onClick={() => void refreshThreads()}
             >
               <Refresh class="h-4 w-4" />
@@ -8321,7 +8405,7 @@ function FlowerHostSurface(_props: Readonly<{
           <Input class="pl-9" value={historyFilter()} placeholder="Search chats..." onInput={(event) => setHistoryFilter(event.currentTarget.value)} />
         </label>
         <div class="min-h-0 flex-1 space-y-2 overflow-auto">
-          <For each={filteredThreads()} fallback={<div class="rounded-md border border-dashed p-6 text-sm text-muted-foreground">No Flower chats yet.</div>}>
+          <For each={filteredThreads()} fallback={<div class="rounded-md border border-dashed p-6 text-sm text-muted-foreground">No conversations yet.</div>}>
             {historyRow}
           </For>
         </div>
@@ -8329,11 +8413,19 @@ function FlowerHostSurface(_props: Readonly<{
       <section class="min-w-0 flex-1 overflow-auto p-5">
         <Show when={sidePanel() === 'chat'}>
           <div class="mx-auto flex max-w-3xl flex-col gap-4">
+            <Show when={loadError()}>
+              <div role="alert" class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+                {loadError()}
+                <button type="button" class="ml-2 cursor-pointer font-medium underline underline-offset-2" onClick={() => setSidePanel('diagnostics')}>
+                  Diagnostics
+                </button>
+              </div>
+            </Show>
             <div class="flex items-start justify-between gap-4">
               <div>
-                <h2 class="text-xl font-semibold text-foreground">{selectedThread()?.title || 'New chat'}</h2>
+                <h2 class="text-xl font-semibold text-foreground">{selectedThread()?.title || 'Ask Flower'}</h2>
                 <p class="mt-2 text-sm leading-6 text-muted-foreground">
-                  Start a host-level Flower chat or continue any conversation from the history rail.
+                  Ask Flower across your environments and continue where you left off.
                 </p>
               </div>
               <Tag variant={readyForChat() ? 'success' : 'warning'}>
@@ -8370,7 +8462,7 @@ function FlowerHostSurface(_props: Readonly<{
             <div class="flex justify-end gap-2">
               <Button variant="outline" onClick={openSettingsFromChat}>Settings</Button>
               <Button variant="primary" icon={Play} disabled={chatRunning() || !readyForChat() || !trimString(chatDraft())} onClick={() => void submitChat()}>
-                {chatRunning() ? 'Sending' : selectedThreadID() ? 'Send' : 'New chat'}
+                {chatRunning() ? 'Sending' : 'Send'}
               </Button>
             </div>
           </div>
