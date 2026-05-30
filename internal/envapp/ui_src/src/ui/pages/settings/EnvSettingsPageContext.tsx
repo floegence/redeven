@@ -124,7 +124,7 @@ export interface EnvSettingsPageContextValue {
   hideLoadingCurtain: () => void;
 }
 
-const EnvSettingsPageCtx = createContext<EnvSettingsPageContextValue>();
+export const EnvSettingsPageCtx = createContext<EnvSettingsPageContextValue>();
 
 export function useEnvSettingsPage(): EnvSettingsPageContextValue {
   const ctx = useContext(EnvSettingsPageCtx);
@@ -134,7 +134,7 @@ export function useEnvSettingsPage(): EnvSettingsPageContextValue {
 
 // ── Provider ──
 
-export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
+export function EnvSettingsPageProvider(props: { children: JSX.Element; initialSection?: EnvSettingsSection }) {
   const env = useEnvContext();
   const runtimeUpdate = useRuntimeUpdateContext();
   const protocol = useProtocol();
@@ -161,7 +161,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element }) {
   const canAdmin = createMemo(() => !!env.env()?.permissions?.can_admin || !!env.env()?.permissions?.is_owner);
 
   // Navigation
-  const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>('config');
+  const [activeSection, setActiveSection] = createSignal<EnvSettingsSection>(props.initialSection ?? 'config');
   const [searchQuery, setSearchQuery] = createSignal('');
 
   createEffect(() => {

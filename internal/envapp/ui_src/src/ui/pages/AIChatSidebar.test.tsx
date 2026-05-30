@@ -72,6 +72,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     History: Icon,
     Plus: Icon,
     Refresh: Icon,
+    Settings: Icon,
     Sparkles: Icon,
     Trash: Icon,
     X: Icon,
@@ -93,11 +94,14 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
-  Button: (props: any) => (
-    <button type="button" onClick={props.onClick} disabled={props.disabled}>
-      {props.children}
+  Button: (props: any) => {
+    const { children, icon: _icon, variant: _variant, size: _size, class: className, ...rest } = props;
+    return (
+    <button type="button" class={className} {...rest}>
+      {children}
     </button>
-  ),
+    );
+  },
   Checkbox: (props: any) => (
     <input
       type="checkbox"
@@ -388,5 +392,28 @@ describe('AIChatSidebar', () => {
     expect(scrollRegion?.className).toContain('overscroll-contain');
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
+  });
+
+  it('renders current-env history and settings from the same Flower component rail', () => {
+    aiContextStub.threads = makeThreadsResource([
+      makeThread({
+        thread_id: 'thread-current-env',
+        working_dir: '/workspace/project',
+      }),
+    ]);
+    const openSettings = vi.fn();
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <AIChatSidebar scope="current_env" showTopActions={false} onOpenSettings={openSettings} />, host);
+
+    const settingsButton = host.querySelector('[data-testid="flower-sidebar-settings"]') as HTMLButtonElement | null;
+    const threadCard = host.querySelector('[data-thread-id="thread-current-env"]') as HTMLDivElement | null;
+
+    expect(host.textContent).toContain('Current env conversations');
+    expect(threadCard).toBeTruthy();
+    expect(settingsButton).toBeTruthy();
+    settingsButton?.click();
+    expect(openSettings).toHaveBeenCalledTimes(1);
   });
 });

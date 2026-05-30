@@ -380,7 +380,13 @@ export function buildEnvironmentLibraryLayoutModel(args: Readonly<{
 }
 
 export function surfaceTitle(surface: DesktopLauncherSurface): string {
-  return surface === 'environment_settings' ? 'Environment Settings' : 'Connect Environment';
+  if (surface === 'environment_settings') {
+    return 'Environment Settings';
+  }
+  if (surface === 'flower_host') {
+    return 'Flower';
+  }
+  return 'Connect Environment';
 }
 
 export function shellStatus(snapshot: DesktopWelcomeSnapshot, i18n?: DesktopI18n): Readonly<{

@@ -1,5 +1,5 @@
 import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { Copy, History, Plus, Refresh, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Copy, History, Plus, Refresh, Settings, Trash, X } from '@floegence/floe-webapp-core/icons';
 import { FlowerSoftAuraIcon } from '../icons/FlowerSoftAuraIcon';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
@@ -16,7 +16,7 @@ import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surf
 import { FloatingContextMenu, type FloatingContextMenuItem } from '../widgets/FloatingContextMenu';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { useI18n, type I18nHelpers } from '../i18n';
-import { projectFlowerThreadListItem } from '../flower/threadList';
+import { filterFlowerThreadListItems, projectFlowerThreadListItem } from '../flower/threadList';
 import type { FlowerThreadListItem } from '../flower/contracts';
 
 const THREAD_RAIL_CONTENT_CLASS = 'flex h-full min-h-0 flex-col overflow-hidden';
@@ -264,7 +264,13 @@ async function loadAllThreads(): Promise<ThreadView[]> {
  * AI chat sidebar thread list.
  * Uses floe-webapp SidebarContent as the container with custom thread card rendering.
  */
-export function AIChatSidebar() {
+export type AIChatSidebarScope = 'current_env' | 'all';
+
+export function AIChatSidebar(props: {
+  scope?: AIChatSidebarScope;
+  showTopActions?: boolean;
+  onOpenSettings?: () => void;
+} = {}) {
   const ctx = useAIChatContext();
   const env = useEnvContext();
   const protocol = useProtocol();
@@ -636,6 +642,8 @@ export function AIChatSidebar() {
     }
   };
 
+  const scope = () => props.scope ?? 'all';
+  const showTopActions = () => props.showTopActions ?? true;
   const threadList = createMemo(() => ctx.threads()?.threads ?? []);
   const flowerThreadById = createMemo(() => {
     const currentEnvPublicId = String(env.env_id() ?? '').trim();
@@ -644,8 +652,19 @@ export function AIChatSidebar() {
       projectFlowerThreadListItem(thread, { currentEnvPublicId }),
     ]));
   });
-  const groupedThreads = createMemo(() => groupThreadsByDate(threadList()));
-  const showGroupHeaders = createMemo(() => threadList().length >= 5);
+  const visibleThreads = createMemo(() => {
+    if (scope() === 'all') return threadList();
+    const currentEnvPublicId = String(env.env_id() ?? '').trim();
+    const projected = Array.from(flowerThreadById().values());
+    const visibleIds = new Set(
+      filterFlowerThreadListItems(projected, 'current_env', currentEnvPublicId)
+        .map((item) => String(item.thread_id ?? '').trim())
+        .filter(Boolean),
+    );
+    return threadList().filter((thread) => visibleIds.has(String(thread.thread_id ?? '').trim()));
+  });
+  const groupedThreads = createMemo(() => groupThreadsByDate(visibleThreads()));
+  const showGroupHeaders = createMemo(() => visibleThreads().length >= 5);
   const hasThreadSnapshot = createMemo(() => ctx.threads() != null);
   const showInitialLoading = createMemo(() => ctx.threads.loading && !hasThreadSnapshot());
   const showThreadsError = createMemo(() => !!ctx.threads.error && !hasThreadSnapshot());
@@ -653,31 +672,77 @@ export function AIChatSidebar() {
   return (
     <>
       <SidebarContent class={THREAD_RAIL_CONTENT_CLASS}>
-        {/* Top action buttons */}
-        <div class="shrink-0 px-1 pb-1 flex items-center gap-1">
-          <Button
-            variant="primary"
-            size="sm"
-            class="flex-1 justify-start gap-2 h-8 shadow-sm"
-            icon={Plus}
-            onClick={() => ctx.enterDraftChat()}
-            disabled={!canOpenFlowerChats()}
-          >
-            {i18n.t('flowerChat.sidebar.newChat')}
-          </Button>
-          <Tooltip content={i18n.t('flowerChat.sidebar.manageChats')} placement="bottom" delay={0}>
+        <Show
+          when={showTopActions()}
+          fallback={
+            <div class="shrink-0 px-1 pb-2">
+              <div class="flex items-center justify-between gap-2 rounded-lg border border-sidebar-border/60 bg-sidebar/70 px-2.5 py-2">
+                <div class="min-w-0">
+                  <div class="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-sidebar-foreground/75">
+                    {scope() === 'current_env' ? i18n.t('flowerChat.sidebar.currentEnvConversations') : i18n.t('flowerChat.sidebar.allFlowerHistory')}
+                  </div>
+                  <div class="mt-0.5 text-[10.5px] text-sidebar-foreground/45">
+                    {scope() === 'current_env' ? i18n.t('flowerChat.sidebar.currentEnvConversationsHint') : i18n.t('flowerChat.sidebar.allFlowerHistoryHint')}
+                  </div>
+                </div>
+                <div class="flex shrink-0 items-center gap-1">
+                  <Tooltip content={i18n.t('flowerChat.sidebar.manageChats')} placement="bottom" delay={0}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      class="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                      onClick={openManager}
+                      disabled={!canOpenFlowerChats()}
+                      aria-label={i18n.t('flowerChat.sidebar.manageChats')}
+                    >
+                      <History class="w-3.5 h-3.5" />
+                    </Button>
+                  </Tooltip>
+                  {props.onOpenSettings ? (
+                    <Tooltip content={i18n.t('flowerChat.sidebar.flowerSettings')} placement="bottom" delay={0}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        class="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground"
+                        onClick={props.onOpenSettings}
+                        disabled={!canOpenFlowerChats()}
+                        aria-label={i18n.t('flowerChat.sidebar.flowerSettings')}
+                        data-testid="flower-sidebar-settings"
+                      >
+                        <Settings class="w-3.5 h-3.5" />
+                      </Button>
+                    </Tooltip>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          }
+        >
+          <div class="shrink-0 px-1 pb-1 flex items-center gap-1">
             <Button
-              variant="outline"
-              size="icon"
-              class="h-8 w-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
-              onClick={openManager}
+              variant="primary"
+              size="sm"
+              class="flex-1 justify-start gap-2 h-8 shadow-sm"
+              icon={Plus}
+              onClick={() => ctx.enterDraftChat()}
               disabled={!canOpenFlowerChats()}
-              aria-label={i18n.t('flowerChat.sidebar.manageChats')}
             >
-              <History class="w-3.5 h-3.5" />
+              {i18n.t('flowerChat.sidebar.newChat')}
             </Button>
-          </Tooltip>
-        </div>
+            <Tooltip content={i18n.t('flowerChat.sidebar.manageChats')} placement="bottom" delay={0}>
+              <Button
+                variant="outline"
+                size="icon"
+                class="h-8 w-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
+                onClick={openManager}
+                disabled={!canOpenFlowerChats()}
+                aria-label={i18n.t('flowerChat.sidebar.manageChats')}
+              >
+                <History class="w-3.5 h-3.5" />
+              </Button>
+            </Tooltip>
+          </div>
+        </Show>
 
         <div class="min-h-0 flex flex-1 flex-col overflow-hidden">
           <Show
@@ -698,10 +763,10 @@ export function AIChatSidebar() {
               }
             >
               <Show
-                when={threadList().length > 0}
+                when={visibleThreads().length > 0}
                 fallback={<EmptyState i18n={i18n} />}
               >
-                <SidebarSection title={i18n.t('flowerChat.sidebar.conversations')} class={THREAD_RAIL_SECTION_CLASS}>
+                <SidebarSection title={scope() === 'current_env' ? i18n.t('flowerChat.sidebar.currentEnvConversations') : i18n.t('flowerChat.sidebar.conversations')} class={THREAD_RAIL_SECTION_CLASS}>
                   <div
                     {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
                     data-testid="flower-thread-scroll-region"

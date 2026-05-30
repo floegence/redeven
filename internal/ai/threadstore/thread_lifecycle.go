@@ -88,8 +88,15 @@ func deleteThreadScopedRowsTx(ctx context.Context, tx *sql.Tx, endpointID string
 		`DELETE FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM ai_thread_todos WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`,
+		`DELETE FROM ai_flower_thread_metadata WHERE endpoint_id = ? AND thread_id = ?`,
+		`DELETE FROM ai_flower_transfers WHERE endpoint_id = ? AND (source_thread_id = ? OR destination_thread_id = ?)`,
+		`DELETE FROM ai_flower_handoffs WHERE endpoint_id = ? AND (source_thread_id = ? OR destination_thread_id = ?)`,
 	} {
-		if _, err := tx.ExecContext(ctx, q, endpointID, threadID); err != nil {
+		args := []any{endpointID, threadID}
+		if strings.Contains(q, " OR destination_thread_id") {
+			args = []any{endpointID, threadID, threadID}
+		}
+		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 			return fmt.Errorf("delete thread state rows failed: %w", err)
 		}
 	}

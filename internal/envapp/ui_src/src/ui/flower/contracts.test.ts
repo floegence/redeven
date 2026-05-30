@@ -45,6 +45,67 @@ describe('Flower contracts', () => {
     expect(decision.allowed_actions).toEqual(['start_thread']);
   });
 
+  it('carries host offline, cross-env, env-local, and read-only UI states as chips and blockers', () => {
+    const offline = buildFlowerRouterDecision({
+      decisionId: 'offline',
+      route: 'blocked',
+      reasonCode: 'host_unavailable',
+      hostPresence: { host_id: 'env_a', host_kind: 'env_local', state: 'offline' },
+      uiChips: [
+        { kind: 'host', label: 'Host offline', tone: 'danger' },
+        { kind: 'source', label: 'Source: New chat', tone: 'muted' },
+        { kind: 'targets', label: 'No target context', tone: 'muted' },
+        { kind: 'mode', label: 'Flower host is offline.', tone: 'danger' },
+      ],
+      blocker: { code: 'host_unavailable', message: 'Flower host is offline.' },
+    });
+    const envLocal = buildFlowerRouterDecision({
+      decisionId: 'env-local',
+      route: 'env_local',
+      reasonCode: 'current_env_only',
+      hostPresence: { host_id: 'env_a', host_kind: 'env_local', state: 'online' },
+      uiChips: [
+        { kind: 'host', label: 'Host online', tone: 'normal' },
+        { kind: 'source', label: 'Source: /workspace/app', tone: 'normal' },
+        { kind: 'targets', label: 'Target: current env', tone: 'normal' },
+        { kind: 'mode', label: 'Act mode', tone: 'normal' },
+      ],
+    });
+    const crossEnv = buildFlowerRouterDecision({
+      decisionId: 'cross-env',
+      route: 'blocked',
+      reasonCode: 'cross_env_requires_flower_host',
+      hostPresence: { host_id: 'env_a', host_kind: 'env_local', state: 'online' },
+      uiChips: [
+        { kind: 'host', label: 'Host online', tone: 'normal' },
+        { kind: 'source', label: 'Source: env_b', tone: 'normal' },
+        { kind: 'targets', label: 'Cross-env target: env_b', tone: 'danger' },
+        { kind: 'mode', label: 'Cross-env actions require Flower Host.', tone: 'danger' },
+      ],
+      blocker: { code: 'cross_env_requires_flower_host', message: 'Cross-env actions require Flower Host.' },
+    });
+    const readOnly = buildFlowerRouterDecision({
+      decisionId: 'read-only',
+      route: 'blocked',
+      reasonCode: 'thread_read_only',
+      hostPresence: { host_id: 'env_a', host_kind: 'env_local', state: 'online' },
+      uiChips: [
+        { kind: 'host', label: 'Host online', tone: 'normal' },
+        { kind: 'source', label: 'Source: Current environment', tone: 'normal' },
+        { kind: 'targets', label: 'Target: current env', tone: 'normal' },
+        { kind: 'mode', label: 'This environment is read-only.', tone: 'warning' },
+      ],
+      blocker: { code: 'thread_read_only', message: 'This environment is read-only.' },
+    });
+
+    expect(offline.host_presence?.state).toBe('offline');
+    expect(offline.blocker?.code).toBe('host_unavailable');
+    expect(envLocal.route).toBe('env_local');
+    expect(envLocal.blocker).toBeNull();
+    expect(crossEnv.blocker?.code).toBe('cross_env_requires_flower_host');
+    expect(readOnly.ui_chips.find((chip) => chip.kind === 'mode')?.tone).toBe('warning');
+  });
+
   it('standardizes UI action disabled and confirmation semantics', () => {
     expect(createFlowerAction({
       kind: 'apply_transfer',

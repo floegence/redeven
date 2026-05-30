@@ -54,6 +54,14 @@ import {
   type DesktopSavedSSHEnvironment,
 } from './desktopPreferences';
 import {
+  createDesktopFlowerHostSafeStorageSecretCodec,
+  defaultDesktopFlowerHostPaths,
+  listDesktopFlowerHostThreads,
+  loadDesktopFlowerHostSettings,
+  saveDesktopFlowerHostSettings,
+  sendDesktopFlowerHostChat,
+} from './desktopFlowerHostState';
+import {
   buildLocalEnvironmentDesktopTarget,
   buildManagedLocalRuntimeDesktopTarget,
   desktopSessionKeyFromRuntimeTargetID,
@@ -242,6 +250,18 @@ import {
   type DesktopSettingsDraft,
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
+import {
+  LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL,
+  LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL,
+  SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  type DesktopFlowerHostSendChatRequest,
+  type DesktopFlowerHostSettingsDraft,
+  type ListDesktopFlowerHostThreadsResult,
+  type LoadDesktopFlowerHostSettingsResult,
+  type SendDesktopFlowerHostChatResult,
+  type SaveDesktopFlowerHostSettingsResult,
+} from '../shared/flowerHostSettingsIPC';
 import {
   DESKTOP_STATE_GET_CHANNEL,
   DESKTOP_STATE_KEYS_CHANNEL,
@@ -2159,6 +2179,14 @@ function preferencesPaths() {
 
 function preferencesCodec() {
   return createSafeStorageSecretCodec(safeStorage);
+}
+
+function flowerHostPaths() {
+  return defaultDesktopFlowerHostPaths();
+}
+
+function flowerHostCodec() {
+  return createDesktopFlowerHostSafeStorageSecretCodec(safeStorage);
 }
 
 function desktopStateStore(): DesktopStateStore {
@@ -11179,6 +11207,14 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         selectedEnvironmentID: request.environment_id,
         stealAppFocus: true,
       });
+    case 'open_flower_host':
+      return openUtilityWindow('launcher', {
+        surface: 'flower_host',
+        issue: null,
+        stealAppFocus: true,
+      }).then((result) => (
+        result.ok ? launcherActionSuccess('opened_flower_host', { utilityWindowKind: 'launcher' }) : result
+      ));
     case 'focus_environment_window':
       return focusEnvironmentWindow(request.session_key);
     case 'open_provider_environment':
@@ -11792,6 +11828,58 @@ if (!app.requestSingleInstanceLock()) {
       });
       await persistDesktopPreferences(next);
       return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  ipcMain.handle(LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL, async (): Promise<LoadDesktopFlowerHostSettingsResult> => {
+    try {
+      return {
+        ok: true,
+        snapshot: await loadDesktopFlowerHostSettings(flowerHostPaths()),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  ipcMain.handle(SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL, async (_event, draft: DesktopFlowerHostSettingsDraft): Promise<SaveDesktopFlowerHostSettingsResult> => {
+    try {
+      return {
+        ok: true,
+        snapshot: await saveDesktopFlowerHostSettings(flowerHostPaths(), draft, flowerHostCodec()),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  ipcMain.handle(LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL, async (): Promise<ListDesktopFlowerHostThreadsResult> => {
+    try {
+      return {
+        ok: true,
+        threads: await listDesktopFlowerHostThreads(flowerHostPaths()),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  ipcMain.handle(SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL, async (_event, request: DesktopFlowerHostSendChatRequest): Promise<SendDesktopFlowerHostChatResult> => {
+    try {
+      return {
+        ok: true,
+        thread: await sendDesktopFlowerHostChat(flowerHostPaths(), request, flowerHostCodec()),
+      };
     } catch (error) {
       return {
         ok: false,

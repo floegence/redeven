@@ -678,7 +678,7 @@ PRAGMA user_version=1;
 		t.Fatalf("missing migrated queued turn column %q", "context_action_json")
 	}
 
-	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_activity_items", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers"} {
+	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_activity_items", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers", "ai_flower_thread_metadata", "ai_flower_transfers", "ai_flower_handoffs"} {
 		var exists int
 		if err := s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
@@ -697,6 +697,78 @@ WHERE type = 'table' AND name = ?
 
 	var version int
 	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
+		t.Fatalf("read user_version: %v", err)
+	}
+	if version != CurrentSchemaVersion() {
+		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
+	}
+}
+
+func TestStore_MigrateFromV27AddsFlowerTables(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	schema := threadstoreSchemaSpec()
+	tx, err := raw.Begin()
+	if err != nil {
+		_ = raw.Close()
+		t.Fatalf("begin v27 migration setup: %v", err)
+	}
+	for _, migration := range schema.Migrations {
+		if migration.ToVersion > 27 {
+			break
+		}
+		if err := migration.Apply(tx); err != nil {
+			_ = tx.Rollback()
+			_ = raw.Close()
+			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
+		}
+	}
+	if _, err := tx.Exec(`PRAGMA user_version=27;`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("set user_version v27: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = raw.Close()
+		t.Fatalf("commit v27 migration setup: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open with v28 migration: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	for _, table := range []string{"ai_flower_thread_metadata", "ai_flower_transfers", "ai_flower_handoffs"} {
+		if !tableExistsForTest(t, s.db, table) {
+			t.Fatalf("missing migrated Flower table %q", table)
+		}
+	}
+	for _, indexName := range []string{
+		"idx_ai_flower_thread_metadata_owner",
+		"idx_ai_flower_thread_metadata_parent",
+		"idx_ai_flower_transfers_idempotency",
+		"idx_ai_flower_transfers_source",
+		"idx_ai_flower_transfers_destination",
+		"idx_ai_flower_handoffs_idempotency",
+		"idx_ai_flower_handoffs_source",
+		"idx_ai_flower_handoffs_destination",
+	} {
+		if !indexExistsForTest(t, s.db, indexName) {
+			t.Fatalf("missing migrated Flower index %q", indexName)
+		}
+	}
+
+	var version int
+	if err := s.db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
 	if version != CurrentSchemaVersion() {
@@ -1080,6 +1152,44 @@ INSERT INTO ai_messages(
 	}); err != nil {
 		t.Fatalf("UpsertProviderCapability: %v", err)
 	}
+	if err := s.UpsertFlowerThreadMetadata(ctx, FlowerThreadMetadata{
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		OwnerKind:       "handoff",
+		OwnerID:         "handoff_1",
+		ContextJSON:     `{"source":"test"}`,
+		ActionJSON:      `{"action_id":"assistant.ask.flower"}`,
+		UpdatedAtUnixMs: 115,
+	}); err != nil {
+		t.Fatalf("UpsertFlowerThreadMetadata: %v", err)
+	}
+	if _, err := s.InsertFlowerTransfer(ctx, FlowerTransferRecord{
+		TransferID:          "transfer_delete_1",
+		EndpointID:          endpointID,
+		SourceThreadID:      threadID,
+		DestinationThreadID: "th_other",
+		IdempotencyKey:      "transfer_delete_1",
+		ManifestHash:        "sha256:manifest",
+		ApprovalHash:        "sha256:approval",
+		PlanJSON:            `{"items":[]}`,
+		CreatedAtUnixMs:     116,
+		UpdatedAtUnixMs:     116,
+	}); err != nil {
+		t.Fatalf("InsertFlowerTransfer: %v", err)
+	}
+	if _, err := s.InsertFlowerHandoff(ctx, FlowerHandoffRecord{
+		HandoffID:           "handoff_delete_1",
+		EndpointID:          endpointID,
+		SourceThreadID:      "th_other",
+		DestinationThreadID: threadID,
+		IdempotencyKey:      "handoff_delete_1",
+		EnvelopeHash:        "sha256:envelope",
+		EnvelopeJSON:        `{"envelope_id":"handoff_delete_1"}`,
+		CreatedAtUnixMs:     117,
+		UpdatedAtUnixMs:     117,
+	}); err != nil {
+		t.Fatalf("InsertFlowerHandoff: %v", err)
+	}
 
 	if err := s.DeleteThread(ctx, endpointID, threadID); err != nil {
 		t.Fatalf("DeleteThread: %v", err)
@@ -1108,6 +1218,9 @@ INSERT INTO ai_messages(
 		"ai_run_events":                     countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_run_events WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_activity_items":                 countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_activity_items WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_thread_checkpoints":             countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_checkpoints WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_flower_thread_metadata":         countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_flower_thread_metadata WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
+		"ai_flower_transfers":               countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_flower_transfers WHERE endpoint_id = ? AND (source_thread_id = ? OR destination_thread_id = ?)`, endpointID, threadID, threadID),
+		"ai_flower_handoffs":                countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_flower_handoffs WHERE endpoint_id = ? AND (source_thread_id = ? OR destination_thread_id = ?)`, endpointID, threadID, threadID),
 		"ai_tool_calls": countRowsForTest(t, s.db, `
 SELECT COUNT(1)
 FROM ai_tool_calls tc
@@ -2219,6 +2332,16 @@ SELECT COUNT(1)
 FROM sqlite_master
 WHERE type = 'table' AND name = ?
 `, tableName) == 1
+}
+
+func indexExistsForTest(t *testing.T, db *sql.DB, indexName string) bool {
+	t.Helper()
+
+	return countRowsForTest(t, db, `
+SELECT COUNT(1)
+FROM sqlite_master
+WHERE type = 'index' AND name = ?
+`, indexName) == 1
 }
 
 func tableHasColumnForTest(t *testing.T, db *sql.DB, tableName string, columnName string) bool {

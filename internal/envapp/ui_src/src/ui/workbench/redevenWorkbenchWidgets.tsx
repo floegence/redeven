@@ -11,7 +11,6 @@ import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
 import { EnvAIPage } from '../pages/EnvAIPage';
-import { AIChatSidebar } from '../pages/AIChatSidebar';
 import { EnvCodespacesPage } from '../pages/EnvCodespacesPage';
 import { EnvPortForwardsPage } from '../pages/EnvPortForwardsPage';
 import { hasRWXPermissions } from '../pages/aiPermissions';
@@ -162,11 +161,9 @@ function FlowerWidget(_props: RedevenWorkbenchWidgetBodyProps) {
         />
       )}
     >
-      <EnvWorkbenchConversationShell
-        railLabel={i18n.t('workbench.notices.flowerThreads')}
-        rail={<AIChatSidebar />}
-        workbench={<EnvAIPage />}
-      />
+      <div class="redeven-workbench-body-surface relative h-full min-h-0 min-w-0">
+        <EnvAIPage />
+      </div>
     </Show>
   );
 }

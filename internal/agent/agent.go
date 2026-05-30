@@ -883,12 +883,14 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		}
 	}
 
-	if meta.FloeApp == FloeAppRedevenFlower && !meta.CanRead {
+	if meta.FloeApp == FloeAppRedevenFlower && (!meta.CanRead || !meta.CanWrite || !meta.CanExecute) {
 		a.log.Warn("insufficient permissions for Flower Host session; ignoring",
 			"channel_id", channelID,
 			"user_public_id", meta.UserPublicID,
 			"code_space_id", strings.TrimSpace(meta.CodeSpaceID),
 			"can_read", meta.CanRead,
+			"can_write", meta.CanWrite,
+			"can_execute", meta.CanExecute,
 		)
 		return
 	}
@@ -1078,9 +1080,44 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 		return a.serveCodeAppSession(ctx, sess, meta)
 	case FloeAppRedevenPortForward:
 		return a.servePortForwardSession(ctx, sess, meta)
+	case FloeAppRedevenFlower:
+		return a.serveFlowerHostSession(ctx, sess, meta)
 	default:
 		return a.serveRedevenAgentSession(ctx, sess, meta)
 	}
+}
+
+func (a *Agent) serveFlowerHostSession(ctx context.Context, sess endpoint.Session, meta *session.Meta) error {
+	if a == nil || meta == nil {
+		return errors.New("invalid args")
+	}
+	if sess == nil {
+		return errors.New("missing session")
+	}
+	if !isValidFlowerHostSessionBinding(meta) {
+		return errors.New("invalid Flower Host session binding")
+	}
+	if !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
+		return errors.New("read/write/execute permission required")
+	}
+
+	srv, err := serve.New(serve.Options{
+		OnError: func(err error) {
+			if err == nil {
+				return
+			}
+			a.log.Warn("flower host stream error", "channel_id", meta.ChannelID, "code_space_id", meta.CodeSpaceID, "error", err)
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	srv.Handle("rpc", func(ctx context.Context, stream io.ReadWriteCloser) {
+		a.serveFlowerHostRPCStream(ctx, stream, meta)
+	})
+
+	return srv.ServeSession(ctx, sess)
 }
 
 func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, meta *session.Meta) error {
@@ -1304,6 +1341,15 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 
 	// Sessions domain (active Flowersec channel sessions).
 	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
+
+	_ = srv.Serve(ctx)
+}
+
+func (a *Agent) serveFlowerHostRPCStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta) {
+	router := rpc.NewRouter()
+	srv := rpc.NewServer(stream, router)
+
+	accessrpc.New(a.accessGate).Register(router, meta)
 
 	_ = srv.Serve(ctx)
 }

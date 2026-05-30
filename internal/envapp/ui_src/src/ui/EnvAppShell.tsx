@@ -68,11 +68,11 @@ import { EnvFileBrowserPage } from './pages/EnvFileBrowserPage';
 import { EnvCodespacesPage } from './pages/EnvCodespacesPage';
 import { EnvPortForwardsPage } from './pages/EnvPortForwardsPage';
 import { EnvAIPage } from './pages/EnvAIPage';
+import { AIChatSidebar } from './pages/AIChatSidebar';
 import { CodexPage } from './codex/CodexPage';
 import { CodexProvider } from './codex/CodexProvider';
 import { CodexSidebar } from './codex/CodexSidebar';
 import { AIChatContext, createAIChatContextValue, normalizeModelsResponse } from './pages/AIChatContext';
-import { AIChatSidebar } from './pages/AIChatSidebar';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { hasRWXPermissions } from './pages/aiPermissions';
 import { localizedRedevenDeckWidgets } from './deck/redevenDeckWidgets';
@@ -2935,7 +2935,7 @@ export function EnvAppShell() {
         viewMode() !== 'activity'
           ? <></>
           : activeTab === 'ai' && canUseFlower()
-          ? <AIChatSidebar />
+            ? <AIChatSidebar scope="current_env" showTopActions={false} onOpenSettings={() => openSettings('ai')} />
           : activeTab === 'codex' && canUseCodex()
             ? <CodexSidebar />
             : <></>
