@@ -5,6 +5,7 @@ import { createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvSettingsPage } from './EnvSettingsPage';
+import type { EnvSettingsPageContextValue } from './settings/EnvSettingsPageContext';
 import { SETTINGS_GROUPS, SETTINGS_NAV_ITEMS } from './settings/settingsStructure';
 
 const notificationMocks = vi.hoisted(() => ({
@@ -465,6 +466,73 @@ describe('EnvSettingsPage', () => {
     await flushPage();
 
     expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
+  });
+
+  it('can render with an existing settings provider context instead of shadowing it', async () => {
+    render(() => (
+      <EnvSettingsPage
+        context={{
+          env: {} as EnvSettingsPageContextValue['env'],
+          protocol: {} as EnvSettingsPageContextValue['protocol'],
+          notify: {} as EnvSettingsPageContextValue['notify'],
+          runtimeUpdate: {} as EnvSettingsPageContextValue['runtimeUpdate'],
+          settings: Object.assign(() => null, { loading: false, error: null, state: 'ready' }) as EnvSettingsPageContextValue['settings'],
+          refreshSettings: async () => undefined,
+          mutateSettings: () => undefined,
+          saveSettings: async () => ({ settings: null, aiUpdate: null }) as any,
+          codexStatus: Object.assign(() => null, { loading: false, error: null, state: 'ready' }) as EnvSettingsPageContextValue['codexStatus'],
+          refreshCodexStatus: () => undefined,
+          codeRuntimeStatus: Object.assign(() => null, { loading: false, error: null, state: 'ready' }) as EnvSettingsPageContextValue['codeRuntimeStatus'],
+          refreshCodeRuntimeStatus: () => undefined,
+          canInteract: () => true,
+          canAdmin: () => true,
+          activeSection: () => 'ai',
+          setActiveSection: vi.fn(),
+          searchQuery: () => '',
+          setSearchQuery: vi.fn(),
+          latestVersion: () => null,
+          latestVersionLoading: () => false,
+          latestVersionError: () => null,
+          maintenanceContext: () => null,
+          upgradeState: () => null,
+          displayedStatus: () => 'online',
+          maintenanceStage: () => '',
+          maintenanceError: () => null,
+          maintaining: () => false,
+          isUpgrading: () => false,
+          isRestarting: () => false,
+          runtimeService: () => null,
+          activeWorkSummary: () => 'No active work',
+          runtimeDesktopModelSourceBinding: () => null,
+          statusLabel: () => 'Online',
+          targetVersionInput: () => '',
+          setTargetVersionInput: vi.fn(),
+          targetUpgradeVersion: () => '',
+          targetUpgradeVersionValid: () => false,
+          canStartRestart: () => false,
+          canStartUpgrade: () => false,
+          startRestart: async () => undefined,
+          startUpgrade: async () => undefined,
+          refreshSettingsPage: async () => undefined,
+          codeRuntimeActionLoading: () => false,
+          codeRuntimeCancelLoading: () => false,
+          codeRuntimeSelectionLoadingVersion: () => null,
+          codeRuntimeRemoveVersionLoading: () => null,
+          codeRuntimeLocalPrepareFailure: () => null,
+          canManageCodeRuntime: () => false,
+          prepareManagedCodeRuntime: () => undefined,
+          cancelManagedCodeRuntimeOperation: () => undefined,
+          selectManagedCodeRuntimeVersion: () => undefined,
+          removeManagedCodeRuntimeVersion: () => undefined,
+          showLoadingCurtain: () => undefined,
+          hideLoadingCurtain: () => undefined,
+        }}
+      />
+    ), host);
+    await flushPage();
+
+    expect(host.querySelector('[data-settings-card="Flower"]')).toBeTruthy();
+    expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/settings', { method: 'GET' });
   });
 
   it('honors the shell focus request for a Runtime Settings section', async () => {

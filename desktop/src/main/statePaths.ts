@@ -2,6 +2,7 @@ import os from 'node:os';
 import path from 'node:path';
 
 const LOCAL_ENVIRONMENT_DIR = 'local-environment';
+const FLOWER_HOST_DIR = 'flower';
 
 export type DesktopLocalEnvironmentStateLayout = Readonly<{
   stateRoot: string;
@@ -14,6 +15,15 @@ export type DesktopLocalEnvironmentStateLayout = Readonly<{
   auditDir: string;
   appsDir: string;
   gatewayDir: string;
+}>;
+
+export type DesktopFlowerHostStateLayout = Readonly<{
+  stateRoot: string;
+  stateDir: string;
+  configPath: string;
+  secretsFile: string;
+  targetCacheFile: string;
+  threadsFile: string;
 }>;
 
 export function resolveStateRoot(
@@ -65,4 +75,21 @@ export function localEnvironmentStateLayout(
   override?: string,
 ): DesktopLocalEnvironmentStateLayout {
   return defaultLocalEnvironmentStateLayout(env, homedir, override);
+}
+
+export function flowerHostStateLayout(
+  env: NodeJS.ProcessEnv = process.env,
+  homedir: () => string = os.homedir,
+  override?: string,
+): DesktopFlowerHostStateLayout {
+  const stateRoot = resolveStateRoot(env, homedir, override);
+  const stateDir = path.join(stateRoot, FLOWER_HOST_DIR);
+  return {
+    stateRoot,
+    stateDir,
+    configPath: path.join(stateDir, 'config.json'),
+    secretsFile: path.join(stateDir, 'secrets.json'),
+    targetCacheFile: path.join(stateDir, 'target-cache.json'),
+    threadsFile: path.join(stateDir, 'threads.json'),
+  };
 }

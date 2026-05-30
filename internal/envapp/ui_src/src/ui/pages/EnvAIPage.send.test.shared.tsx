@@ -3,6 +3,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createI18nHelpers } from '../i18n';
+import type { RuntimeUpdateContextValue } from '../maintenance/RuntimeUpdateContext';
 import type { AskFlowerIntent } from './askFlowerIntent';
 import { buildAskFlowerDraftMarkdown } from '../utils/askFlowerContextTemplate';
 
@@ -163,6 +164,43 @@ const envContextValue = {
   focusAIThread: () => {},
 };
 
+const runtimeUpdateContextValue: RuntimeUpdateContextValue = {
+  version: {
+    currentPing: () => null,
+    currentPingLoading: () => false,
+    currentProcessStartedAtMs: () => null,
+    runtimeService: () => undefined,
+    currentVersion: () => '',
+    currentVersionValid: () => false,
+    latestMeta: () => null,
+    latestMetaLoading: () => false,
+    latestMetaError: () => '',
+    preferredTargetVersion: () => '',
+    preferredTargetVersionValid: () => false,
+    preferredTargetCompareToCurrent: () => null,
+    updateAvailable: () => false,
+    ensureLatestVersionLoaded: async () => null,
+    refetchLatestVersion: async () => null,
+    refetchCurrentVersion: async () => null,
+  },
+  maintenance: {
+    kind: () => null,
+    targetVersion: () => '',
+    maintaining: () => false,
+    isUpgrading: () => false,
+    isRestarting: () => false,
+    error: () => null,
+    polledStatus: () => null,
+    displayedStatus: () => '',
+    stage: () => null,
+    clearError: () => {},
+    startUpgrade: async () => {},
+    startRestart: async () => {},
+  },
+  maintenanceContext: () => null,
+  refetchMaintenanceContext: async () => null,
+};
+
 const aiState = {
   activeThreadId: '' as string,
   activeThread: null as MockThread | null,
@@ -306,7 +344,6 @@ function createMockResource<T>(value: T | null = null, loading = false, error: u
 const aiContextValue = new Proxy({
   settings: createMockResource(),
   models: createMockResource(),
-  threads: createMockResource(),
   aiEnabled: () => true,
   modelsReady: () => true,
   modelOptions: () => [{ value: 'model-test', label: 'Model Test', source: 'runtime_config', sourceLabel: 'Runtime config' }],
@@ -322,6 +359,23 @@ const aiContextValue = new Proxy({
   selectThreadModel: vi.fn(),
   selectedSendModel: () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test',
   activeThreadModelLocked: () => false,
+  threads: createMockResource({
+    threads: [
+      {
+        thread_id: 'thread-1',
+        title: 'Thread 1',
+        model_id: 'model-test',
+        execution_mode: 'act',
+        working_dir: '/workspace',
+        queued_turn_count: 0,
+        run_status: 'idle',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 2000,
+        last_message_at_unix_ms: 2000,
+        last_message_preview: 'preview',
+      },
+    ],
+  }),
   activeThreadId: () => {
     threadSelectionVersion();
     return aiState.activeThreadId || null;
@@ -364,6 +418,12 @@ const aiContextValue = new Proxy({
   },
   createThread: async () => ({ thread_id: 'thread-created' }),
   creatingThread: () => false,
+  enterDraftChat: () => {
+    aiState.activeThreadId = '';
+    aiState.activeThread = null;
+    touchThreadSelection();
+  },
+  clearActiveThreadPersistence: vi.fn(),
   ensureThreadForSend: async () => {
     if (aiState.activeThreadId) return aiState.activeThreadId;
     aiState.activeThreadId = 'thread-created';
@@ -477,16 +537,30 @@ vi.mock('@floegence/floe-webapp-core', async () => {
 vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
+    AlertTriangle: Icon,
+    Bot: Icon,
     CheckCircle: Icon,
     ChevronUp: Icon,
     Code: Icon,
+    Database: Icon,
+    FileCode: Icon,
     FileText: Icon,
+    Globe: Icon,
+    History: Icon,
+    Layers: Icon,
     Pencil: Icon,
+    Plus: Icon,
+    Refresh: Icon,
+    RefreshIcon: Icon,
+    Search: Icon,
     Settings: Icon,
+    Shield: Icon,
     Sparkles: Icon,
     Stop: Icon,
     Terminal: Icon,
     Trash: Icon,
+    X: Icon,
+    Zap: Icon,
   };
 });
 
@@ -612,6 +686,11 @@ vi.mock('./AIChatContext', () => ({
   useAIChatContext: () => aiContextValue,
 }));
 
+vi.mock('../maintenance/RuntimeUpdateContext', () => ({
+  RuntimeUpdateContext: createContext(runtimeUpdateContextValue),
+  useRuntimeUpdateContext: () => runtimeUpdateContextValue,
+}));
+
 vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     fs: {
@@ -635,6 +714,27 @@ vi.mock('../services/gatewayApi', () => ({
   prepareGatewayRequestInit: prepareGatewayRequestInitMock,
   uploadGatewayFile: uploadGatewayFileMock,
 }));
+
+vi.mock('../services/codeRuntimeApi', () => {
+  const idleStatus = {
+    active_runtime: { detection_state: 'ready', present: true, source: 'managed' },
+    managed_runtime: { detection_state: 'ready', present: true, source: 'managed' },
+    managed_prefix: '',
+    shared_runtime_root: '',
+    managed_runtime_source: 'managed',
+    installed_versions: [],
+    operation: { state: 'idle' },
+    updated_at_unix_ms: 0,
+  };
+  return {
+    fetchCodeRuntimeStatus: vi.fn(async () => idleStatus),
+    cancelCodeRuntimeOperation: vi.fn(async () => idleStatus),
+    selectCodeRuntimeVersion: vi.fn(async () => idleStatus),
+    removeCodeRuntimeVersion: vi.fn(async () => idleStatus),
+    codeRuntimeOperationNeedsAttention: () => false,
+    codeRuntimeOperationSucceeded: () => false,
+  };
+});
 
 vi.mock('./aiPermissions', () => ({
   hasRWXPermissions: (env: { permissions?: { can_read?: boolean; can_write?: boolean; can_execute?: boolean } } | null | undefined) => Boolean(
@@ -676,7 +776,23 @@ function resetScenario() {
   askFlowerIntentValue = null;
   aiContextValue.settings = createMockResource();
   aiContextValue.models = createMockResource();
-  aiContextValue.threads = createMockResource();
+  aiContextValue.threads = createMockResource({
+    threads: [
+      {
+        thread_id: 'thread-1',
+        title: 'Thread 1',
+        model_id: 'model-test',
+        execution_mode: 'act',
+        working_dir: '/workspace',
+        queued_turn_count: 0,
+        run_status: 'idle',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 2000,
+        last_message_at_unix_ms: 2000,
+        last_message_preview: 'preview',
+      },
+    ],
+  });
   aiContextValue.aiEnabled = () => true;
   aiContextValue.modelsReady = () => true;
   aiContextValue.modelOptions = () => [{ value: 'model-test', label: 'Model Test', source: 'runtime_config', sourceLabel: 'Runtime config' }];
@@ -691,6 +807,12 @@ function resetScenario() {
   aiContextValue.selectedThreadModel = () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test';
   aiContextValue.selectThreadModel = vi.fn();
   aiContextValue.selectedSendModel = () => String(aiState.activeThread?.model_id ?? 'model-test').trim() || 'model-test';
+  aiContextValue.enterDraftChat = () => {
+    aiState.activeThreadId = '';
+    aiState.activeThread = null;
+    touchThreadSelection();
+  };
+  aiContextValue.clearActiveThreadPersistence = vi.fn();
   aiContextValue.activeThreadModelLocked = () => false;
   aiState.activeThreadId = 'thread-1';
   aiState.activeThread = {
@@ -1369,6 +1491,46 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
+    it('keeps New chat, current env conversations, all history, and settings behind one circular Flower entry', async () => {
+      aiState.activeThreadId = '';
+      aiState.activeThread = null;
+
+      const { host, dispose } = await renderPage();
+      try {
+        const rail = host.querySelector('.flower-component-rail');
+        const entry = host.querySelector('.flower-component-entry-orb');
+        const newChatButton = host.querySelector('button[aria-label="New chat"]') as HTMLButtonElement | null;
+        const currentEnvButton = host.querySelector('button[aria-label="Current env"]') as HTMLButtonElement | null;
+        const historyButton = host.querySelector('button[aria-label="All history"]') as HTMLButtonElement | null;
+        const settingsButton = host.querySelector('button[aria-label="Settings"]') as HTMLButtonElement | null;
+
+        expect(rail).toBeTruthy();
+        expect(entry?.className).toContain('rounded');
+        expect(newChatButton).toBeTruthy();
+        expect(currentEnvButton).toBeTruthy();
+        expect(historyButton).toBeTruthy();
+        expect(settingsButton).toBeTruthy();
+        expect(newChatButton?.getAttribute('title')).toContain('without environment context');
+        expect(currentEnvButton?.classList.contains('flower-component-nav-item')).toBe(true);
+        expect(historyButton?.classList.contains('flower-component-nav-item')).toBe(true);
+        expect(settingsButton?.classList.contains('flower-component-nav-item')).toBe(true);
+
+        historyButton?.click();
+        await flushAsync();
+        expect(host.textContent).toContain('All Flower history');
+
+        currentEnvButton?.click();
+        await flushAsync();
+        expect(host.textContent).toContain('Current env conversations');
+
+        settingsButton?.click();
+        await flushAsync();
+        expect(host.textContent).toContain(i18n.t('settings.nav.flower'));
+      } finally {
+        dispose();
+      }
+    }, 20000);
+
     it('keeps a loaded Flower thread hidden until the transcript bottom commit completes', async () => {
       const raf = createRafHarness();
       vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
@@ -1716,6 +1878,127 @@ export function registerEnvAIPageSendTests() {
             }),
           }),
         }));
+      } finally {
+        dispose();
+      }
+    });
+
+    it('starts new chats without env context while Ask Flower chips carry router context', async () => {
+      aiState.activeThreadId = '';
+      aiState.activeThread = null;
+      aiContextValue.draftWorkingDir = () => '';
+      const ensureThreadForSend = vi.fn(async () => {
+        aiState.activeThreadId = 'thread-new-no-context';
+        aiState.activeThread = {
+          thread_id: 'thread-new-no-context',
+          title: 'New chat',
+          model_id: 'model-test',
+          execution_mode: 'act',
+          working_dir: '',
+          queued_turn_count: 0,
+          run_status: 'idle',
+        };
+        touchThreadSelection();
+        return 'thread-new-no-context';
+      });
+      aiContextValue.ensureThreadForSend = ensureThreadForSend;
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'plain new chat');
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        expect(ensureThreadForSend).toHaveBeenCalledWith({ executionMode: 'act' });
+        expect(sendUserTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+          threadId: 'thread-new-no-context',
+          input: expect.objectContaining({
+            text: 'plain new chat',
+            contextAction: undefined,
+          }),
+        }));
+        expect(host.querySelector('[data-testid="flower-router-chip-source"]')?.textContent).toContain('New chat');
+        expect(host.querySelector('[data-testid="flower-router-chip-targets"]')?.textContent).toContain('No target context');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('shows router chips from the Ask Flower context action in Host Source Targets Mode order', async () => {
+      askFlowerIntentValue = {
+        id: 'ask-flower-chip-test',
+        source: 'file_preview',
+        mode: 'append',
+        suggestedWorkingDirAbs: '/workspace/app',
+        contextItems: [{
+          kind: 'file_selection',
+          path: '/workspace/app/src/main.ts',
+          selection: 'selected text',
+          selectionChars: 13,
+        }],
+        pendingAttachments: [],
+        notes: [],
+        contextAction: {
+          schema_version: 2,
+          action_id: 'assistant.ask.flower',
+          provider: 'flower',
+          target: { target_id: 'current', locality: 'auto' },
+          source: { surface: 'file_preview' },
+          execution_context: {
+            current_target_id: 'env-1',
+            source_env_public_id: 'env-1',
+            host_hint: 'auto',
+            session_source: 'provider_environment',
+          },
+          context: [{
+            kind: 'file_selection',
+            path: '/workspace/app/src/main.ts',
+            selection: 'selected text',
+            selection_chars: 13,
+          }],
+          presentation: { label: 'Ask Flower', priority: 100 },
+          suggested_working_dir_abs: '/workspace/app',
+        },
+      };
+      askFlowerIntentSeqValue = 1;
+
+      const { host, dispose } = await renderPage();
+      try {
+        await flushAsync();
+
+        const chips = Array.from(host.querySelectorAll('[data-testid^="flower-router-chip-"]'));
+        expect(chips.map((chip) => chip.getAttribute('data-testid'))).toEqual([
+          'flower-router-chip-host',
+          'flower-router-chip-source',
+          'flower-router-chip-targets',
+          'flower-router-chip-mode',
+        ]);
+        expect(chips.map((chip) => chip.textContent)).toEqual([
+          expect.stringContaining('Host online'),
+          expect.stringContaining('/workspace/app/src/main.ts'),
+          expect.stringContaining('current env'),
+          expect.stringContaining('Act mode'),
+        ]);
+        for (const chip of chips) {
+          expect(chip.getAttribute('tabindex')).toBeNull();
+        }
+      } finally {
+        dispose();
+      }
+    });
+
+    it('falls back to env-local for direct Env App chats when Flower Host is unavailable', async () => {
+      protocolState.status = 'disconnected';
+      aiState.activeThreadId = '';
+      aiState.activeThread = null;
+
+      const { host, dispose } = await renderPage();
+      try {
+        await flushAsync();
+
+        expect(host.querySelector('[data-testid="flower-router-chip-host"]')?.textContent).toContain('Host offline');
+        expect(host.querySelector('[data-testid="flower-router-chip-mode"]')?.textContent).toContain('Act mode');
+        expect(host.textContent).not.toContain(i18n.t('flowerChat.router.hostOfflineBlocker'));
       } finally {
         dispose();
       }
@@ -2857,6 +3140,7 @@ export function registerEnvAIPageSendTests() {
         dispose();
       }
     });
+
   });
 
   describe('EnvAIPage queued follow-ups panel visibility', () => {

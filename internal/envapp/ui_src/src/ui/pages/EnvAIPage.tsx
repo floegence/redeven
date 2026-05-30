@@ -6,7 +6,9 @@ import {
   ChevronUp,
   Code,
   FileText,
+  History,
   Pencil,
+  Plus,
   Settings,
   Stop,
   Terminal,
@@ -41,6 +43,8 @@ import {
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
 import { useAIChatContext, type AIModelOption } from './AIChatContext';
+import { AIChatSidebar, type AIChatSidebarScope } from './AIChatSidebar';
+import { EnvSettingsPage } from './EnvSettingsPage';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { Tooltip } from '../primitives/Tooltip';
 import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '../services/gatewayApi';
@@ -94,6 +98,14 @@ import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from '../workb
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 import { useI18n, type I18nHelpers } from '../i18n';
 import type { EnvAppTranslationKey } from '../i18n/locales';
+import {
+  buildFlowerRouterDecision,
+  type FlowerChipTone,
+  type FlowerRouterDecision,
+  type FlowerRouterReasonCode,
+  type FlowerRoute,
+  type FlowerUIChip,
+} from '../flower/contracts';
 
 type ExecutionMode = 'act' | 'plan';
 type FlowerThreadRevealPhase = 'idle' | 'loading' | 'committing' | 'visible';
@@ -189,6 +201,7 @@ const AIChatInput: Component<{
   workingDirTitle?: string;
   workingDirLocked?: boolean;
   workingDirDisabled?: boolean;
+  routerDecision?: FlowerRouterDecision;
   onPickWorkingDir?: () => void;
   onSendIntent?: (intent: SendIntent) => void;
   getSendBlockReason?: (content: string, attachments: Attachment[]) => string | null;
@@ -481,6 +494,24 @@ const AIChatInput: Component<{
 
         <div class="flower-chat-input-meta">
           <div class="flower-chat-input-meta-rail" role="toolbar" aria-label={i18n.t('flowerChat.composer.secondaryActionsLabel')}>
+            <For each={props.routerDecision?.ui_chips ?? []}>
+              {(chip) => (
+                <Tooltip content={chip.label} placement="top" delay={0}>
+                  <span
+                    data-testid={`flower-router-chip-${chip.kind}`}
+                    class={cn(
+                      'flower-chat-chip flower-router-chip',
+                      `flower-router-chip-${chip.tone}`,
+                    )}
+                    aria-label={chip.label}
+                    title={chip.label}
+                  >
+                    {chip.label}
+                  </span>
+                </Tooltip>
+              )}
+            </For>
+
             <Show when={props.onPickWorkingDir}>
               <button
                 type="button"
@@ -1399,6 +1430,97 @@ const MessageListWithEmptyState: Component<MessageListWithEmptyStateProps> = (pr
   );
 };
 
+type FlowerPanel = 'chat' | AIChatSidebarScope | 'settings';
+
+const FlowerComponentRail: Component<{
+  active: FlowerPanel;
+  onChange: (panel: FlowerPanel) => void;
+}> = (props) => {
+  const ai = useAIChatContext();
+  const i18n = useI18n();
+  const navItems: Array<{
+    id: FlowerPanel;
+    label: string;
+    description: string;
+    icon: Component<{ class?: string }>;
+    onClick?: () => void;
+  }> = [
+    {
+      id: 'chat',
+      label: i18n.t('flowerChat.component.newChat'),
+      description: i18n.t('flowerChat.component.newChatHint'),
+      icon: Plus,
+      onClick: () => {
+        ai.enterDraftChat();
+        props.onChange('chat');
+      },
+    },
+    {
+      id: 'current_env',
+      label: i18n.t('flowerChat.component.currentEnvConversations'),
+      description: i18n.t('flowerChat.component.currentEnvConversationsHint'),
+      icon: FlowerIcon,
+    },
+    {
+      id: 'all',
+      label: i18n.t('flowerChat.component.allFlowerHistory'),
+      description: i18n.t('flowerChat.component.allFlowerHistoryHint'),
+      icon: History,
+    },
+    {
+      id: 'settings',
+      label: i18n.t('flowerChat.component.flowerSettings'),
+      description: i18n.t('flowerChat.component.flowerSettingsHint'),
+      icon: Settings,
+    },
+  ];
+
+  return (
+    <aside class="flower-component-rail" aria-label={i18n.t('flowerChat.component.railAriaLabel')}>
+      <div class="flower-component-rail-brand">
+        <span class="flower-component-entry-orb rounded-full" aria-hidden="true">
+          <FlowerIcon class="h-7 w-7 text-primary" />
+        </span>
+        <div class="min-w-0">
+          <div class="truncate text-sm font-semibold text-foreground">{i18n.t('aiChrome.flowerTitle')}</div>
+          <div class="truncate text-[11px] text-muted-foreground">{i18n.t('flowerChat.component.railSubtitle')}</div>
+        </div>
+      </div>
+      <nav class="flower-component-rail-nav" aria-label={i18n.t('flowerChat.component.navigationAriaLabel')}>
+        <For each={navItems}>
+          {(item) => {
+            const Icon = item.icon;
+            const active = () => props.active === item.id || (item.id === 'chat' && props.active === 'chat');
+            return (
+              <Tooltip content={item.description} placement="right" delay={0}>
+                <button
+                  type="button"
+                  class={cn('flower-component-nav-item', active() && 'flower-component-nav-item-active')}
+                  aria-label={item.label}
+                  aria-current={active() ? 'page' : undefined}
+                  title={item.description}
+                  onClick={() => {
+                    item.onClick?.();
+                    if (!item.onClick) props.onChange(item.id);
+                  }}
+                >
+                  <span class="flower-component-nav-icon">
+                    <Icon class="h-4 w-4" />
+                  </span>
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-[12px] font-semibold">{item.label}</span>
+                    <span class="block truncate text-[10.5px] opacity-70">{item.description}</span>
+                  </span>
+                </button>
+              </Tooltip>
+            );
+          }}
+        </For>
+      </nav>
+    </aside>
+  );
+};
+
 /**
  * AI chat page — renders only the workbench area (header + messages + input).
  * Thread navigation may live either in Shell's sidebar (activity mode) or inline inside deck/workbench surfaces.
@@ -1480,8 +1602,9 @@ export function EnvAIPage() {
   const hasLiveAssistantTail = createMemo(() => liveAssistantSurfaceActive() || liveAssistantTailMessage() !== null);
   const [chatReady, setChatReady] = createSignal(false);
   const [chatInputApi, setChatInputApi] = createSignal<AIChatInputApi | null>(null);
+  const [flowerPanel, setFlowerPanel] = createSignal<'chat' | AIChatSidebarScope | 'settings'>('chat');
   let queuedAskFlowerIntents: AskFlowerIntent[] = [];
-  let pendingAskFlowerContext: { action: ContextActionEnvelope; expectedText: string } | undefined;
+  const [pendingAskFlowerContext, setPendingAskFlowerContext] = createSignal<{ action: ContextActionEnvelope; expectedText: string } | undefined>(undefined);
   let messageAreaRef: HTMLDivElement | undefined;
 
   // Working dir (draft-only; locked after thread creation)
@@ -2036,6 +2159,11 @@ export function EnvAIPage() {
 
     return plan.kind === 'error' ? plan.description : null;
   };
+  const composerSendBlockReason = (content: string, attachments: Attachment[]): string | null => {
+    const routerBlocker = flowerRouterDecision().blocker;
+    if (routerBlocker) return routerBlocker.message;
+    return waitingUserComposerSendBlockReason(content, attachments);
+  };
 
   const activeWorkingDir = createMemo(() => {
     const tid = String(ai.activeThreadId() ?? '').trim();
@@ -2054,6 +2182,115 @@ export function EnvAIPage() {
       !String(homePath() ?? '').trim(),
   );
   const workingDirPickerInitialPath = createMemo(() => toPickerTreePath(activeWorkingDir(), homePath()));
+  const currentEnvPublicID = createMemo(() => String(env.env_id() ?? '').trim());
+  const pendingContextAction = createMemo(() => pendingAskFlowerContext()?.action ?? null);
+  const sourceLabelForContextAction = (action: ContextActionEnvelope | null): string => {
+    if (!action) return i18n.t('flowerChat.router.newChatSource');
+    const first = action.context[0];
+    if (!first) return i18n.t('flowerChat.router.currentEnvSource');
+    if (first.kind === 'file_path' || first.kind === 'file_selection') {
+      return first.path;
+    }
+    if (first.kind === 'terminal_selection') {
+      return first.working_dir;
+    }
+    if (first.kind === 'process_snapshot') {
+      return first.name;
+    }
+    return first.title;
+  };
+  const blockerMessageForReason = (reason: FlowerRouterReasonCode): string => {
+    switch (reason) {
+      case 'host_unavailable':
+        return i18n.t('flowerChat.router.hostOfflineBlocker');
+      case 'cross_env_requires_flower_host':
+        return i18n.t('flowerChat.router.crossEnvBlocker');
+      case 'thread_read_only':
+        return i18n.t('flowerChat.router.readOnlyBlocker');
+      default:
+        return i18n.t('flowerChat.router.genericBlocker');
+    }
+  };
+  const flowerRouterDecision = createMemo<FlowerRouterDecision>(() => {
+    const action = pendingContextAction();
+    const currentEnv = currentEnvPublicID();
+    const sourceEnv = String(action?.execution_context?.source_env_public_id ?? currentEnv).trim();
+    const targetID = String(action?.target?.target_id ?? action?.execution_context?.current_target_id ?? (currentEnv || 'current')).trim();
+    const hasContextAction = !!action;
+    const crossEnv = hasContextAction && !!currentEnv && !!sourceEnv && sourceEnv !== currentEnv;
+    const hostOnline = protocol.status() === 'connected' && ai.aiEnabled();
+    const readOnly = permissionReady() && !canRWX();
+    let route: FlowerRoute = 'env_local';
+    let reasonCode: FlowerRouterReasonCode = 'current_env_only';
+    let blocker: FlowerRouterDecision['blocker'] = null;
+    const chips: FlowerUIChip[] = [];
+
+    if (readOnly) {
+      route = 'blocked';
+      reasonCode = 'thread_read_only';
+    } else if (crossEnv) {
+      route = hostOnline ? 'flower_host' : 'blocked';
+      reasonCode = hostOnline ? 'host_available' : 'host_unavailable';
+    } else {
+      route = hostOnline && !hasContextAction ? 'flower_host' : 'env_local';
+      reasonCode = hasContextAction || !hostOnline ? 'current_env_only' : 'host_available';
+    }
+
+    if (route === 'blocked') {
+      blocker = {
+        code: reasonCode,
+        message: blockerMessageForReason(reasonCode),
+      };
+    }
+
+    const chipToneForBlocker: FlowerChipTone = route === 'blocked'
+      ? reasonCode === 'thread_read_only' ? 'warning' : 'danger'
+      : 'normal';
+    chips.push({
+      kind: 'host',
+      label: hostOnline ? i18n.t('flowerChat.router.hostOnline') : i18n.t('flowerChat.router.hostOffline'),
+      tone: hostOnline ? 'normal' : route === 'env_local' ? 'warning' : 'danger',
+    });
+    chips.push({
+      kind: 'source',
+      label: i18n.t('flowerChat.router.sourceChip', { source: sourceLabelForContextAction(action) }),
+      tone: hasContextAction ? 'normal' : 'muted',
+    });
+    chips.push({
+      kind: 'targets',
+      label: crossEnv
+        ? i18n.t('flowerChat.router.crossEnvTargetChip', { target: targetID })
+        : hasContextAction
+          ? i18n.t('flowerChat.router.currentEnvTargetChip')
+          : i18n.t('flowerChat.router.noTargetChip'),
+      tone: crossEnv ? 'danger' : hasContextAction ? 'normal' : 'muted',
+    });
+    chips.push({
+      kind: 'mode',
+      label: route === 'blocked'
+        ? blocker?.message ?? blockerMessageForReason(reasonCode)
+        : executionMode() === 'plan'
+          ? i18n.t('flowerChat.router.planModeChip')
+          : i18n.t('flowerChat.router.actModeChip'),
+      tone: route === 'blocked' ? chipToneForBlocker : 'normal',
+    });
+
+    return buildFlowerRouterDecision({
+      decisionId: `env-flower-${route}-${reasonCode}`,
+      route,
+      reasonCode,
+      hostPresence: {
+        host_id: currentEnv || 'current',
+        host_kind: 'env_local',
+        carrier_kind: 'server',
+        state: hostOnline ? 'online' : 'offline',
+      },
+      currentTargetId: targetID,
+      allowedActions: route === 'blocked' ? ['view_thread'] : ['start_thread', 'continue_thread'],
+      uiChips: chips,
+      blocker,
+    });
+  });
 
   const applyAskFlowerIntent = (intent: AskFlowerIntent): boolean => {
     const inputApi = chatInputApi();
@@ -2079,12 +2316,12 @@ export function EnvAIPage() {
     if (intent.pendingAttachments.length > 0) {
       inputApi.addAttachmentFiles(intent.pendingAttachments);
     }
-    pendingAskFlowerContext = intent.contextAction
+    setPendingAskFlowerContext(intent.contextAction
       ? {
           action: intent.contextAction,
           expectedText: draftText.trim(),
         }
-      : undefined;
+      : undefined);
 
     if (suggestedWorkingDirAbs) {
       if (workingDirLocked()) {
@@ -3294,6 +3531,12 @@ export function EnvAIPage() {
       rollbackRejectedComposerSend(context);
       throw new Error(i18n.t('flowerChat.permissions.rwxRequired'));
     }
+    const routerBlocker = flowerRouterDecision().blocker;
+    if (routerBlocker) {
+      notify.error(i18n.t('flowerChat.notifications.aiUnavailableTitle'), routerBlocker.message);
+      rollbackRejectedComposerSend(context);
+      throw new Error(routerBlocker.message);
+    }
     if (!ai.aiEnabled()) {
       notify.error(i18n.t('flowerChat.notifications.aiNotConfiguredTitle'), i18n.t('flowerChat.notifications.configureModelOrDesktopMessage'));
       rollbackRejectedComposerSend(context);
@@ -3385,8 +3628,8 @@ export function EnvAIPage() {
       const rid = String(resp.runId ?? '').trim();
       const responseKind = String(resp.kind ?? '').trim().toLowerCase();
       const consumedWaitingPromptId = String(resp.consumedWaitingPromptId ?? '').trim();
-      if (context.contextAction && pendingAskFlowerContext?.action === context.contextAction) {
-        pendingAskFlowerContext = undefined;
+      if (context.contextAction && pendingAskFlowerContext()?.action === context.contextAction) {
+        setPendingAskFlowerContext(undefined);
       }
       if (consumedWaitingPromptId) {
         ai.consumeWaitingPrompt(tid, consumedWaitingPromptId);
@@ -3451,12 +3694,12 @@ export function EnvAIPage() {
       const intent = nextSendIntent;
       nextSendIntent = 'default';
       sendIntentByMessageId.set(userMessageId, intent);
-      const pendingContext = pendingAskFlowerContext;
+      const pendingContext = pendingAskFlowerContext();
       if (pendingContext && content.trim() === pendingContext.expectedText) {
         contextActionByMessageId.set(userMessageId, pendingContext.action);
-        pendingAskFlowerContext = undefined;
+        setPendingAskFlowerContext(undefined);
       } else if (pendingContext) {
-        pendingAskFlowerContext = undefined;
+        setPendingAskFlowerContext(undefined);
       }
 
       const sourceFollowupId = String(loadedDraftFollowupID() ?? '').trim();
@@ -3608,7 +3851,7 @@ export function EnvAIPage() {
     }
 
     if (itemId === 'settings') {
-      env.openSettings('ai');
+      setFlowerPanel('settings');
     }
   };
 
@@ -3661,6 +3904,25 @@ export function EnvAIPage() {
           }}
         />
 
+        <div class="flower-component-shell">
+          <FlowerComponentRail active={flowerPanel()} onChange={setFlowerPanel} />
+          <main class="flower-component-main">
+            <Show
+              when={flowerPanel() !== 'settings'}
+              fallback={<EnvSettingsPage initialSection="ai" />}
+            >
+              <Show
+                when={flowerPanel() !== 'all' && flowerPanel() !== 'current_env'}
+                fallback={
+                  <div class="flower-history-panel">
+                    <AIChatSidebar
+                      scope={flowerPanel() === 'current_env' ? 'current_env' : 'all'}
+                      showTopActions={false}
+                      onOpenSettings={() => setFlowerPanel('settings')}
+                    />
+                  </div>
+                }
+              >
         <Show
           when={permissionReady()}
           fallback={
@@ -4256,11 +4518,12 @@ export function EnvAIPage() {
                           workingDirTitle={activeWorkingDir() || workingDirLabel() || i18n.t('flowerChat.workingDir.label')}
                           workingDirLocked={workingDirLocked()}
                           workingDirDisabled={workingDirDisabled()}
+                          routerDecision={flowerRouterDecision()}
                           onPickWorkingDir={() => setWorkingDirPickerOpen(true)}
                           onSendIntent={(intent) => {
                             nextSendIntent = intent;
                           }}
-                          getSendBlockReason={waitingUserComposerSendBlockReason}
+                          getSendBlockReason={composerSendBlockReason}
                           onApiReady={setChatInputApi}
                         />
                       </div>
@@ -4375,6 +4638,10 @@ export function EnvAIPage() {
         </Show>
           </Show>
         </Show>
+              </Show>
+            </Show>
+          </main>
+        </div>
 
         {/* Rename dialog */}
         <Dialog

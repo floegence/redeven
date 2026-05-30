@@ -6,7 +6,6 @@ import { CodexNavigationIcon } from '../icons/CodexIcon';
 import { FlowerNavigationIcon } from '../icons/FlowerSoftAuraIcon';
 import { useEnvContext } from '../pages/EnvContext';
 import { EnvAIPage } from '../pages/EnvAIPage';
-import { AIChatSidebar } from '../pages/AIChatSidebar';
 import { EnvCodespacesPage } from '../pages/EnvCodespacesPage';
 import { EnvPortForwardsPage } from '../pages/EnvPortForwardsPage';
 import { hasRWXPermissions } from '../pages/aiPermissions';
@@ -89,12 +88,7 @@ function FlowerWidget(props: WidgetProps) {
       unavailableTitle={i18n.t('workbench.notices.flowerRwxTitle')}
       unavailableDescription={i18n.t('workbench.notices.flowerRwxDescription')}
     >
-      <EnvDeckConversationShell
-        widgetId={props.widgetId}
-        railLabel={i18n.t('workbench.notices.flowerThreads')}
-        rail={<AIChatSidebar />}
-        workbench={<EnvAIPage />}
-      />
+      <EnvAIPage />
     </EnvDeckSingletonSurface>
   );
 }

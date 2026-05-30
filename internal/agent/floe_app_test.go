@@ -35,14 +35,34 @@ func TestSupportedFloeAppsIncludeFlowerExplicitly(t *testing.T) {
 	}
 }
 
+func TestFlowerHostSessionUsesDedicatedHandler(t *testing.T) {
+	a := &Agent{
+		log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	meta := &session.Meta{
+		ChannelID:   "ch_flower_handler",
+		FloeApp:     FloeAppRedevenFlower,
+		CodeSpaceID: "flower-host",
+		SessionKind: sessionKindFlowerHostRPC,
+		CanRead:     true,
+		CanWrite:    true,
+		CanExecute:  true,
+	}
+
+	err := a.serveFlowerHostSession(t.Context(), nil, meta)
+	if err == nil || err.Error() != "missing session" {
+		t.Fatalf("serveFlowerHostSession(nil) error = %v, want missing session", err)
+	}
+}
+
 func TestFlowerHostGrantNotifyAppliesLocalPermissionClamp(t *testing.T) {
-	readOnly := config.PermissionSet{Read: true, Write: false, Execute: false}
+	fullAccess := config.PermissionSet{Read: true, Write: true, Execute: true}
 	a := &Agent{
 		cfg: &config.Config{
 			EnvironmentID: "env_test",
 			PermissionPolicy: &config.PermissionPolicy{
 				SchemaVersion: 1,
-				LocalMax:      &readOnly,
+				LocalMax:      &fullAccess,
 			},
 		},
 		log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -76,8 +96,50 @@ func TestFlowerHostGrantNotifyAppliesLocalPermissionClamp(t *testing.T) {
 	if got == nil {
 		t.Fatalf("Flower Host session was not accepted")
 	}
-	if !got.meta.CanRead || got.meta.CanWrite || got.meta.CanExecute {
-		t.Fatalf("clamped permissions = R:%v W:%v X:%v, want read-only", got.meta.CanRead, got.meta.CanWrite, got.meta.CanExecute)
+	if !got.meta.CanRead || !got.meta.CanWrite || !got.meta.CanExecute {
+		t.Fatalf("clamped permissions = R:%v W:%v X:%v, want full access", got.meta.CanRead, got.meta.CanWrite, got.meta.CanExecute)
+	}
+}
+
+func TestFlowerHostGrantNotifyRejectsLocalPermissionClampBelowRWX(t *testing.T) {
+	readOnly := config.PermissionSet{Read: true, Write: false, Execute: false}
+	a := &Agent{
+		cfg: &config.Config{
+			EnvironmentID: "env_test",
+			PermissionPolicy: &config.PermissionPolicy{
+				SchemaVersion: 1,
+				LocalMax:      &readOnly,
+			},
+		},
+		log:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		sessions: map[string]*activeSession{},
+	}
+
+	notify := session.GrantServerNotify{
+		GrantServer: &controlv1.ChannelInitGrant{ChannelId: "ch_flower_read_only"},
+		SessionMeta: &session.Meta{
+			ChannelID:    "ch_flower_read_only",
+			EndpointID:   "env_test",
+			FloeApp:      FloeAppRedevenFlower,
+			CodeSpaceID:  "flower-host",
+			SessionKind:  sessionKindFlowerHostRPC,
+			UserPublicID: "u_test",
+			CanRead:      true,
+			CanWrite:     true,
+			CanExecute:   true,
+		},
+	}
+	payload, err := json.Marshal(notify)
+	if err != nil {
+		t.Fatalf("json.Marshal notify: %v", err)
+	}
+
+	a.handleGrantNotify(t.Context(), payload)
+
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if got := a.sessions["ch_flower_read_only"]; got != nil {
+		t.Fatalf("Flower Host session below RWX was accepted: %#v", got.meta)
 	}
 }
 
@@ -99,9 +161,9 @@ func TestFlowerHostGrantNotifyNormalizesFloeAppBeforePermissionChecks(t *testing
 			CodeSpaceID:  "flower-host",
 			SessionKind:  sessionKindFlowerHostRPC,
 			UserPublicID: "u_test",
-			CanRead:      false,
+			CanRead:      true,
 			CanWrite:     true,
-			CanExecute:   true,
+			CanExecute:   false,
 		},
 	}
 	payload, err := json.Marshal(notify)
@@ -114,7 +176,7 @@ func TestFlowerHostGrantNotifyNormalizesFloeAppBeforePermissionChecks(t *testing
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if got := a.sessions["ch_flower_trimmed"]; got != nil {
-		t.Fatalf("Flower Host session without read permission was accepted after floe_app trim: %#v", got.meta)
+		t.Fatalf("Flower Host session without execute permission was accepted after floe_app trim: %#v", got.meta)
 	}
 }
 

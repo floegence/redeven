@@ -1008,7 +1008,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain("kind: 'continue_launcher_operation'");
     expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
     expect(appSrc).toContain("showActionToast(progress.open_progress ? i18n().t('toast.openingStopping') : i18n().t('toast.runtimeStartupStopping'), 'info');");
-    expect(appSrc).toContain('cancelOperation={(progress) => {\n            void cancelLauncherOperation(progress);');
+    expect(appSrc).toMatch(/cancelOperation=\{\(progress\) => \{\s+void cancelLauncherOperation\(progress\);/u);
     expect(appSrc).toContain('cancelOperation: (progress: DesktopLauncherActionProgress) => void;');
     expect(appSrc).toContain("case 'cleanup_failed':\n      return i18n.t('progress.cleanupNeedsAttention');");
     expect(appSrc).toContain('props.progress.cancelable === true && props.progress.status === \'running\'');

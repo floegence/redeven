@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 27
+	threadstoreCurrentSchemaVersion = 28
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -55,6 +55,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 24, ToVersion: 25, Apply: migrateThreadstoreToV25},
 			{FromVersion: 25, ToVersion: 26, Apply: migrateThreadstoreToV26},
 			{FromVersion: 26, ToVersion: 27, Apply: migrateThreadstoreToV27},
+			{FromVersion: 27, ToVersion: 28, Apply: migrateThreadstoreToV28},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -239,6 +240,10 @@ func migrateThreadstoreToV26(tx *sql.Tx) error {
 
 func migrateThreadstoreToV27(tx *sql.Tx) error {
 	return ensureFollowupContextActionJSONTx(tx)
+}
+
+func migrateThreadstoreToV28(tx *sql.Tx) error {
+	return ensureFlowerTransferHandoffTablesTx(tx)
 }
 
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
@@ -808,6 +813,61 @@ CREATE INDEX IF NOT EXISTS idx_ai_upload_refs_upload ON ai_upload_refs(endpoint_
 	return nil
 }
 
+func ensureFlowerTransferHandoffTablesTx(tx *sql.Tx) error {
+	if _, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS ai_flower_thread_metadata (
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  owner_kind TEXT NOT NULL DEFAULT '',
+  owner_id TEXT NOT NULL DEFAULT '',
+  parent_thread_id TEXT NOT NULL DEFAULT '',
+  parent_run_id TEXT NOT NULL DEFAULT '',
+  context_json TEXT NOT NULL DEFAULT '{}',
+  action_json TEXT NOT NULL DEFAULT '{}',
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(endpoint_id, thread_id)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_flower_thread_metadata_owner ON ai_flower_thread_metadata(endpoint_id, owner_kind, owner_id);
+CREATE INDEX IF NOT EXISTS idx_ai_flower_thread_metadata_parent ON ai_flower_thread_metadata(endpoint_id, parent_thread_id, parent_run_id);
+
+CREATE TABLE IF NOT EXISTS ai_flower_transfers (
+  transfer_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  source_thread_id TEXT NOT NULL DEFAULT '',
+  destination_thread_id TEXT NOT NULL DEFAULT '',
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  manifest_hash TEXT NOT NULL DEFAULT '',
+  approval_hash TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'planned',
+  plan_json TEXT NOT NULL DEFAULT '{}',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_flower_transfers_idempotency ON ai_flower_transfers(endpoint_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_ai_flower_transfers_source ON ai_flower_transfers(endpoint_id, source_thread_id, updated_at_unix_ms DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_flower_transfers_destination ON ai_flower_transfers(endpoint_id, destination_thread_id, updated_at_unix_ms DESC);
+
+CREATE TABLE IF NOT EXISTS ai_flower_handoffs (
+  handoff_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  source_thread_id TEXT NOT NULL DEFAULT '',
+  destination_thread_id TEXT NOT NULL DEFAULT '',
+  idempotency_key TEXT NOT NULL DEFAULT '',
+  envelope_hash TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'created',
+  envelope_json TEXT NOT NULL DEFAULT '{}',
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_flower_handoffs_idempotency ON ai_flower_handoffs(endpoint_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS idx_ai_flower_handoffs_source ON ai_flower_handoffs(endpoint_id, source_thread_id, updated_at_unix_ms DESC);
+CREATE INDEX IF NOT EXISTS idx_ai_flower_handoffs_destination ON ai_flower_handoffs(endpoint_id, destination_thread_id, updated_at_unix_ms DESC);
+`); err != nil {
+		return err
+	}
+	return nil
+}
+
 func ensureColumnTx(tx *sql.Tx, tableName string, columnName string, stmt string) error {
 	has, err := columnExists(tx, tableName, columnName)
 	if err != nil {
@@ -842,6 +902,9 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"provider_capabilities",
 		"ai_uploads",
 		"ai_upload_refs",
+		"ai_flower_thread_metadata",
+		"ai_flower_transfers",
+		"ai_flower_handoffs",
 	}
 	for _, tableName := range requiredTables {
 		exists, err := sqliteutil.TableExistsTx(tx, tableName)
@@ -960,6 +1023,20 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_upload_refs": {
 			"id", "endpoint_id", "upload_id", "thread_id", "ref_kind", "ref_id", "created_at_unix_ms",
 		},
+		"ai_flower_thread_metadata": {
+			"endpoint_id", "thread_id", "owner_kind", "owner_id", "parent_thread_id",
+			"parent_run_id", "context_json", "action_json", "updated_at_unix_ms",
+		},
+		"ai_flower_transfers": {
+			"transfer_id", "endpoint_id", "source_thread_id", "destination_thread_id",
+			"idempotency_key", "manifest_hash", "approval_hash", "state", "plan_json",
+			"created_at_unix_ms", "updated_at_unix_ms",
+		},
+		"ai_flower_handoffs": {
+			"handoff_id", "endpoint_id", "source_thread_id", "destination_thread_id",
+			"idempotency_key", "envelope_hash", "state", "envelope_json",
+			"created_at_unix_ms", "updated_at_unix_ms",
+		},
 	}
 	for tableName, columns := range requiredColumns {
 		for _, columnName := range columns {
@@ -1003,6 +1080,14 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"idx_ai_upload_refs_unique_ref",
 		"idx_ai_upload_refs_thread_upload",
 		"idx_ai_upload_refs_upload",
+		"idx_ai_flower_thread_metadata_owner",
+		"idx_ai_flower_thread_metadata_parent",
+		"idx_ai_flower_transfers_idempotency",
+		"idx_ai_flower_transfers_source",
+		"idx_ai_flower_transfers_destination",
+		"idx_ai_flower_handoffs_idempotency",
+		"idx_ai_flower_handoffs_source",
+		"idx_ai_flower_handoffs_destination",
 	}
 	for _, indexName := range requiredIndexes {
 		exists, err := sqliteutil.IndexExistsTx(tx, indexName)

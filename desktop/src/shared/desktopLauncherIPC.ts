@@ -42,7 +42,7 @@ export const DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL = 'redeven-desktop:launche
 export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
 export type DesktopWelcomeIssueScope = 'local_environment' | 'remote_environment' | 'startup';
-export type DesktopLauncherSurface = 'connect_environment' | 'environment_settings';
+export type DesktopLauncherSurface = 'connect_environment' | 'environment_settings' | 'flower_host';
 export type DesktopEnvironmentEntryKind = 'local_environment' | 'provider_environment' | 'external_local_ui' | 'ssh_environment';
 export type DesktopEnvironmentEntryTag = 'Open' | 'Saved' | 'Local' | 'Provider' | '';
 export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'saved';
@@ -83,6 +83,7 @@ export type DesktopLauncherActionOutcome =
   | 'refreshed_all_environment_runtimes'
   | 'opened_utility_window'
   | 'focused_utility_window'
+  | 'opened_flower_host'
   | 'started_control_plane_connect'
   | 'refreshed_control_plane'
   | 'deleted_control_plane'
@@ -136,6 +137,7 @@ export type DesktopLauncherActionKind =
   | 'set_saved_ssh_environment_pinned'
   | 'set_saved_runtime_target_pinned'
   | 'open_environment_settings'
+  | 'open_flower_host'
   | 'focus_environment_window'
   | 'refresh_control_plane'
   | 'delete_control_plane'
@@ -500,6 +502,9 @@ export type DesktopLauncherActionRequest = Readonly<
       environment_id: string;
     }
   | {
+      kind: 'open_flower_host';
+    }
+  | {
       kind: 'focus_environment_window';
       session_key: string;
     }
@@ -734,6 +739,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
   const kind = compact(candidate.kind) as DesktopLauncherActionKind;
   switch (kind) {
     case 'close_launcher_or_quit':
+      return { kind };
+    case 'open_flower_host':
       return { kind };
     case 'open_environment_settings': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);

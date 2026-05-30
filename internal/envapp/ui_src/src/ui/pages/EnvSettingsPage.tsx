@@ -3,7 +3,7 @@ import { cn } from '@floegence/floe-webapp-core';
 import { Search, X, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Select } from '@floegence/floe-webapp-core/ui';
 
-import { EnvSettingsPageProvider, useEnvSettingsPage } from './settings/EnvSettingsPageContext';
+import { EnvSettingsPageCtx, EnvSettingsPageProvider, useEnvSettingsPage, type EnvSettingsPageContextValue } from './settings/EnvSettingsPageContext';
 import { SETTINGS_NAV_ITEMS, SETTINGS_GROUPS, type SettingsGroupID, type SettingsNavItem } from './settings/settingsStructure';
 import { redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useI18n } from '../i18n';
@@ -107,8 +107,8 @@ const sectionComponents: Record<EnvSettingsSection, () => JSX.Element> = {
   debug_console: DebugConsoleSection,
 };
 
-function EnvSettingsPageContent() {
-  const ctx = useEnvSettingsPage();
+function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue } = {}) {
+  const ctx = props.context ?? useEnvSettingsPage();
   const i18n = useI18n();
 
   const localizedItems = createMemo(() => (
@@ -230,9 +230,16 @@ function EnvSettingsPageContent() {
   );
 }
 
-export function EnvSettingsPage() {
+export function EnvSettingsPage(props: { initialSection?: EnvSettingsSection; context?: EnvSettingsPageContextValue } = {}) {
+  if (props.context) {
+    return (
+      <EnvSettingsPageCtx.Provider value={props.context}>
+        <EnvSettingsPageContent context={props.context} />
+      </EnvSettingsPageCtx.Provider>
+    );
+  }
   return (
-    <EnvSettingsPageProvider>
+    <EnvSettingsPageProvider initialSection={props.initialSection}>
       <EnvSettingsPageContent />
     </EnvSettingsPageProvider>
   );
