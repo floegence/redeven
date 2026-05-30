@@ -122,6 +122,20 @@ describe('DesktopWelcomeShell', () => {
     });
   });
 
+  it('keeps Flower chat creation anchored to the flower entry instead of exposing a second New chat button', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('label="Flower"');
+    expect(appSrc).toContain("class={cn('rounded-full'");
+    expect(appSrc).toContain('aria-label="Compose with Flower"');
+    expect(appSrc).toContain("{chatRunning() ? 'Sending' : 'Send'}");
+    expect(appSrc).toContain("setSelectedThreadID((current) => (current && !result.threads.some((thread) => thread.thread_id === current) ? '' : current));");
+    expect(appSrc).toContain('activeProviderSecret()?.provider_api_key_configured');
+    expect(appSrc).not.toContain('aria-label="New chat"');
+    expect(appSrc).not.toContain("{chatRunning() ? 'Sending' : selectedThreadID() ? 'Send' : 'New chat'}");
+    expect(appSrc).not.toContain('history rail');
+  });
+
   it('describes Local Environment Settings inside the same shell model', () => {
     const local = testLocalEnvironment({
       access: testLocalAccess({

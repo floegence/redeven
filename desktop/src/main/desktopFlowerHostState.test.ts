@@ -92,6 +92,16 @@ describe('desktopFlowerHostState', () => {
     });
   });
 
+  it('surfaces malformed Flower Host state instead of replacing it with defaults', async () => {
+    await withTempFlowerRoot(async (root) => {
+      const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+      await fs.mkdir(path.dirname(paths.configPath), { recursive: true });
+      await fs.writeFile(paths.configPath, '{not-json', 'utf8');
+
+      await expect(loadDesktopFlowerHostSettings(paths)).rejects.toThrow(`Invalid Flower Host state file: ${paths.configPath}`);
+    });
+  });
+
   it('validates Flower Host config shape and rejects stale current model ids', () => {
     expect(validateDesktopFlowerHostConfig(validDraft().config)).toEqual(expect.objectContaining({
       enabled: true,
