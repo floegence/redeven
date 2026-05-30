@@ -512,6 +512,7 @@ export const frFR = {
     runtimeApp: "Runtime",
     codeApp: "Code",
     portForwardApp: "Port Forward",
+    flowerApp: "Flower Host",
     copiedTitle: "Copié",
     copiedMessage: "{label} copié dans le presse-papiers",
     copyFailedTitle: "Échec de la copie",

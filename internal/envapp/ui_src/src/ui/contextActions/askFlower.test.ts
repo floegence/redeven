@@ -17,7 +17,7 @@ describe('Ask Flower context actions', () => {
     });
 
     expect(action).toMatchObject({
-      schema_version: 1,
+      schema_version: 2,
       action_id: 'assistant.ask.flower',
       provider: 'flower',
       target: {
@@ -37,5 +37,35 @@ describe('Ask Flower context actions', () => {
       ],
       suggested_working_dir_abs: '/workspace/repo',
     });
+  });
+
+  it('carries execution context as routing hints, not permissions', () => {
+    const action = buildAskFlowerContextAction({
+      source: 'file_browser',
+      suggestedWorkingDirAbs: '/workspace/repo',
+      executionContext: {
+        current_target_id: 'cp:https%3A%2F%2Fexample.test:env:env_a',
+        source_env_public_id: 'env_a',
+        host_hint: 'auto',
+        session_source: 'provider_environment',
+      },
+      contextItems: [
+        {
+          kind: 'file_path',
+          path: '/workspace/repo',
+          isDirectory: true,
+          rootLabel: 'Workspace',
+        },
+      ],
+    });
+
+    expect(action.execution_context).toEqual({
+      current_target_id: 'cp:https%3A%2F%2Fexample.test:env:env_a',
+      source_env_public_id: 'env_a',
+      host_hint: 'auto',
+      session_source: 'provider_environment',
+    });
+    expect(JSON.stringify(action)).not.toContain('can_write');
+    expect(JSON.stringify(action)).not.toContain('grant');
   });
 });

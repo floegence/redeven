@@ -687,6 +687,22 @@ describe('main routing', () => {
     expect(openSrc).toContain('prepareProviderRemoteOpenSession(preferences, environment)');
   });
 
+  it('keeps provider environment open remote-only when Flower is first-class', () => {
+    const mainSrc = readMainSource();
+
+    const openStart = mainSrc.indexOf('async function openProviderEnvironmentFromLauncher(');
+    const openEnd = mainSrc.indexOf('async function focusEnvironmentWindow(', openStart);
+    expect(openStart).toBeGreaterThanOrEqual(0);
+    expect(openEnd).toBeGreaterThan(openStart);
+    const openSrc = mainSrc.slice(openStart, openEnd);
+
+    expect(openSrc).toContain('prepareProviderRemoteOpenSession(preferences, environment)');
+    expect(openSrc).not.toContain('startDesktopModelSourceForStartup');
+    expect(openSrc).not.toContain('runEnvironmentRuntimeLifecycleFromLauncher');
+    expect(openSrc).not.toContain('startRuntimePlacementBridgeSession');
+    expect(openSrc).not.toContain('resolveProviderRuntimeLinkTarget');
+  });
+
   it('syncs linked provider health after runtime lifecycle changes', () => {
     const mainSrc = readMainSource();
 

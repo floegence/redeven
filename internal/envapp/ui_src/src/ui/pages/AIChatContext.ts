@@ -1150,6 +1150,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   const enterDraftChat = () => {
     setDraftMode(true);
     setActiveThreadId(null);
+    setDraftWorkingDir('');
   };
 
   // Allow external send flows (e.g., Ask Flower composer) to force-focus the newly created thread.

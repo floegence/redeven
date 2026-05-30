@@ -512,6 +512,7 @@ export const ptBR = {
     runtimeApp: "Runtime",
     codeApp: "Code",
     portForwardApp: "Port Forward",
+    flowerApp: "Flower Host",
     copiedTitle: "Copiado",
     copiedMessage: "{label} copiado para a área de transferência",
     copyFailedTitle: "Falha ao copiar",

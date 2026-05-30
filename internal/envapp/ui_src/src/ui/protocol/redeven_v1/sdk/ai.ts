@@ -1,4 +1,5 @@
 import type { StreamEvent } from '../../../chat';
+import type { ContextActionEnvelope } from '../../../contextActions/protocol';
 
 export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'transcript_message' | 'transcript_reset' | 'thread_summary';
 
@@ -67,6 +68,7 @@ export type AISendUserTurnRequest = {
       mimeType: string;
       url: string;
     }>;
+    contextAction?: ContextActionEnvelope;
   };
   options: {
     maxSteps: number;

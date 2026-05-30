@@ -806,6 +806,7 @@ export const zhCN = {
     runtimeApp: "Runtime",
     codeApp: "Code",
     portForwardApp: "Port Forward",
+    flowerApp: "Flower Host",
     copiedTitle: "已复制",
     copiedMessage: "{label} 已复制到剪贴板",
     copyFailedTitle: "复制失败",

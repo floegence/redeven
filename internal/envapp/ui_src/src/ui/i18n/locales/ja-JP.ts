@@ -512,6 +512,7 @@ export const jaJP = {
     runtimeApp: "Runtime",
     codeApp: "Code",
     portForwardApp: "Port Forward",
+    flowerApp: "Flower Host",
     copiedTitle: "コピーしました",
     copiedMessage: "{label} をクリップボードにコピーしました",
     copyFailedTitle: "コピーに失敗しました",

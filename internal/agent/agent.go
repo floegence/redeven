@@ -58,7 +58,34 @@ const (
 	FloeAppRedevenCode  = "com.floegence.redeven.code"
 	// FloeAppRedevenPortForward proxies an arbitrary HTTP service reachable from the agent.
 	FloeAppRedevenPortForward = "com.floegence.redeven.portforward"
+	// FloeAppRedevenFlower is used by Flower Host target sessions.
+	FloeAppRedevenFlower = "com.floegence.redeven.flower"
 )
+
+const (
+	sessionKindFlowerHostRPC = "flower_host_rpc"
+	reservedEnvUICodeSpaceID = "env-ui"
+)
+
+func isSupportedFloeApp(floeApp string) bool {
+	switch strings.TrimSpace(floeApp) {
+	case FloeAppRedevenAgent, FloeAppRedevenCode, FloeAppRedevenPortForward, FloeAppRedevenFlower:
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidFlowerHostSessionBinding(meta *session.Meta) bool {
+	if meta == nil {
+		return false
+	}
+	codeSpaceID := strings.TrimSpace(meta.CodeSpaceID)
+	return strings.TrimSpace(meta.SessionKind) == sessionKindFlowerHostRPC &&
+		codeSpaceID != "" &&
+		codeSpaceID != reservedEnvUICodeSpaceID &&
+		codeapp.IsValidCodeSpaceID(codeSpaceID)
+}
 
 const (
 	maintenanceOpNone    int32 = 0
@@ -767,8 +794,17 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		a.log.Warn("grant_server channel_id mismatch", "channel_id", channelID)
 		return
 	}
-	if floeApp != FloeAppRedevenAgent && floeApp != FloeAppRedevenCode && floeApp != FloeAppRedevenPortForward {
+	if !isSupportedFloeApp(floeApp) {
 		a.log.Warn("unsupported floe_app; ignoring session", "floe_app", floeApp, "channel_id", channelID)
+		return
+	}
+	meta.FloeApp = floeApp
+	if floeApp == FloeAppRedevenFlower && !isValidFlowerHostSessionBinding(meta) {
+		a.log.Warn("invalid Flower Host session binding",
+			"channel_id", channelID,
+			"code_space_id", strings.TrimSpace(meta.CodeSpaceID),
+			"session_kind", strings.TrimSpace(meta.SessionKind),
+		)
 		return
 	}
 
@@ -845,6 +881,16 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 			)
 			return
 		}
+	}
+
+	if meta.FloeApp == FloeAppRedevenFlower && !meta.CanRead {
+		a.log.Warn("insufficient permissions for Flower Host session; ignoring",
+			"channel_id", channelID,
+			"user_public_id", meta.UserPublicID,
+			"code_space_id", strings.TrimSpace(meta.CodeSpaceID),
+			"can_read", meta.CanRead,
+		)
+		return
 	}
 
 	// Freeze the metadata snapshot used for auditing/UI and for the session runtime.

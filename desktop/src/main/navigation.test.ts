@@ -25,4 +25,15 @@ describe('navigation', () => {
     expect(isAllowedAppNavigation('https://example.com', 'http://127.0.0.1:43123/')).toBe(false);
     expect(isAllowedAppNavigation('http://127.0.0.1:43124/', 'http://127.0.0.1:43123/')).toBe(false);
   });
+
+  it('allows Flower Host sandbox navigation inside the same remote session family', () => {
+    expect(isAllowedAppNavigation(
+      'https://fh-flower-host.us.redeven-sandbox.test/',
+      'https://env-0123456789abcdef0123456789abcdef.us.redeven-sandbox.test/',
+    )).toBe(true);
+    expect(isAllowedAppNavigation(
+      'https://fh-flower-host.eu.redeven-sandbox.test/',
+      'https://env-0123456789abcdef0123456789abcdef.us.redeven-sandbox.test/',
+    )).toBe(false);
+  });
 });

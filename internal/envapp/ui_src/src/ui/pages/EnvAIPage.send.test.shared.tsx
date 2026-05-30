@@ -3,6 +3,8 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createI18nHelpers } from '../i18n';
+import type { AskFlowerIntent } from './askFlowerIntent';
+import { buildAskFlowerDraftMarkdown } from '../utils/askFlowerContextTemplate';
 
 type MockThread = {
   thread_id: string;
@@ -126,6 +128,9 @@ const envResource = (() => {
   return resource;
 })();
 
+let askFlowerIntentSeqValue = 0;
+let askFlowerIntentValue: AskFlowerIntent | null = null;
+
 const envContextValue = {
   env_id: () => 'env-1',
   env: envResource,
@@ -149,8 +154,8 @@ const envContextValue = {
   openSettings: () => {},
   settingsFocusSeq: () => 0,
   settingsFocusSection: () => null,
-  askFlowerIntentSeq: () => 0,
-  askFlowerIntent: () => null,
+  askFlowerIntentSeq: () => askFlowerIntentSeqValue,
+  askFlowerIntent: () => askFlowerIntentValue,
   injectAskFlowerIntent: () => {},
   openAskFlowerComposer: () => {},
   aiThreadFocusSeq: () => 0,
@@ -667,6 +672,8 @@ function resetScenario() {
   envResource.latest.permissions.can_execute = true;
   envResource.latest.permissions.can_admin = true;
   envResource.latest.permissions.is_owner = true;
+  askFlowerIntentSeqValue = 0;
+  askFlowerIntentValue = null;
   aiContextValue.settings = createMockResource();
   aiContextValue.models = createMockResource();
   aiContextValue.threads = createMockResource();
@@ -1531,7 +1538,7 @@ export function registerEnvAIPageSendTests() {
         expect(actions?.querySelector('[aria-label="More actions"]')).toBeTruthy();
         expect(host.textContent).toContain('Rename chat');
         expect(host.textContent).toContain('Delete chat');
-        expect(host.textContent).toContain('AI settings');
+        expect(host.textContent).toContain('Flower settings');
 
         expect(dock).toBeTruthy();
         expect(dockTrack).toBeTruthy();
@@ -1642,6 +1649,140 @@ export function registerEnvAIPageSendTests() {
           dispose();
         }
       });
+    });
+
+    it('carries unchanged Ask Flower context actions through the real send flow', async () => {
+      const intent: AskFlowerIntent = {
+        id: 'ask-flower-test',
+        source: 'file_browser',
+        mode: 'append',
+        suggestedWorkingDirAbs: '/workspace/app',
+        contextItems: [{
+          kind: 'file_path',
+          path: '/workspace/app',
+          isDirectory: true,
+          rootLabel: 'Workspace',
+        }],
+        pendingAttachments: [],
+        notes: [],
+        contextAction: {
+          schema_version: 2,
+          action_id: 'assistant.ask.flower',
+          provider: 'flower',
+          target: {
+            target_id: 'current',
+            locality: 'auto',
+          },
+          source: {
+            surface: 'file_browser',
+          },
+          execution_context: {
+            current_target_id: 'env_a',
+            source_env_public_id: 'env_a',
+            host_hint: 'auto',
+            session_source: 'provider_environment',
+          },
+          context: [{
+            kind: 'file_path',
+            path: '/workspace/app',
+            is_directory: true,
+            root_label: 'Workspace',
+          }],
+          presentation: {
+            label: 'Ask Flower',
+            priority: 100,
+          },
+          suggested_working_dir_abs: '/workspace/app',
+        },
+      };
+      askFlowerIntentValue = intent;
+      askFlowerIntentSeqValue = 1;
+
+      const { host, dispose } = await renderPage();
+      try {
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        const expectedDraft = buildAskFlowerDraftMarkdown({ intent, includeSuggestedWorkingDir: true });
+        expect(sendUserTurnMock).toHaveBeenCalledTimes(1);
+        expect(sendUserTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+          input: expect.objectContaining({
+            text: expectedDraft,
+            contextAction: expect.objectContaining({
+              action_id: 'assistant.ask.flower',
+              execution_context: expect.objectContaining({
+                source_env_public_id: 'env_a',
+              }),
+            }),
+          }),
+        }));
+      } finally {
+        dispose();
+      }
+    });
+
+    it('does not attach stale Ask Flower context after the user rewrites the draft', async () => {
+      askFlowerIntentValue = {
+        id: 'ask-flower-stale-test',
+        source: 'file_browser',
+        mode: 'append',
+        suggestedWorkingDirAbs: '/workspace/app',
+        contextItems: [{
+          kind: 'file_path',
+          path: '/workspace/app',
+          isDirectory: true,
+          rootLabel: 'Workspace',
+        }],
+        pendingAttachments: [],
+        notes: [],
+        contextAction: {
+          schema_version: 2,
+          action_id: 'assistant.ask.flower',
+          provider: 'flower',
+          target: {
+            target_id: 'current',
+            locality: 'auto',
+          },
+          source: {
+            surface: 'file_browser',
+          },
+          execution_context: {
+            current_target_id: 'env_a',
+            source_env_public_id: 'env_a',
+            host_hint: 'auto',
+            session_source: 'provider_environment',
+          },
+          context: [{
+            kind: 'file_path',
+            path: '/workspace/app',
+            is_directory: true,
+            root_label: 'Workspace',
+          }],
+          presentation: {
+            label: 'Ask Flower',
+            priority: 100,
+          },
+          suggested_working_dir_abs: '/workspace/app',
+        },
+      };
+      askFlowerIntentSeqValue = 1;
+
+      const { host, dispose } = await renderPage();
+      try {
+        inputComposer(host, 'plain follow-up after editing the injected draft');
+        submitComposer(host, 'button', 'Send message');
+        await flushAsync();
+
+        expect(sendUserTurnMock).toHaveBeenCalledTimes(1);
+        expect(sendUserTurnMock).toHaveBeenCalledWith(expect.objectContaining({
+          input: expect.objectContaining({
+            text: 'plain follow-up after editing the injected draft',
+            contextAction: undefined,
+          }),
+        }));
+      } finally {
+        dispose();
+      }
     });
 
     it('shows the assistant placeholder immediately after send when realtime start arrives', async () => {

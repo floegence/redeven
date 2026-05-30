@@ -300,6 +300,7 @@ type RunInput struct {
 	MessageID               string                          `json:"message_id,omitempty"`
 	Text                    string                          `json:"text"`
 	Attachments             []RunAttachmentIn               `json:"attachments"`
+	ContextAction           *ContextActionEnvelope          `json:"context_action,omitempty"`
 	StructuredResponse      *RequestUserInputResponseRecord `json:"-"`
 	SecretAnswers           []RequestUserInputSecretAnswer  `json:"-"`
 	InteractionContractSeed interactionContract             `json:"-"`

@@ -1332,6 +1332,9 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		"resolved_model":  model,
 		"thread_locked":   prepared.threadModelLocked,
 	})
+	if payload := contextActionRunEventPayload(req.Input.ContextAction); payload != nil {
+		r.persistRunEvent("flower.context_action.received", RealtimeStreamKindLifecycle, payload)
+	}
 
 	structuredResponseContinuation := req.Input.StructuredResponse != nil && strings.TrimSpace(existingOpenGoal) != ""
 	policyDecision := classifyRunPolicy(effectiveCurrentInput.PublicText, req.Input.Attachments, existingOpenGoal, structuredResponseContinuation, func() (runPolicyDecision, error) {

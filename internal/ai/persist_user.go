@@ -80,11 +80,12 @@ func buildUserMessageJSON(messageID string, input RunInput, uploadInfoByURL map[
 	}
 
 	msg := persistedMessage{
-		ID:        id,
-		Role:      "user",
-		Blocks:    blocks,
-		Status:    "complete",
-		Timestamp: createdAtUnixMs,
+		ID:            id,
+		Role:          "user",
+		Blocks:        blocks,
+		Status:        "complete",
+		Timestamp:     createdAtUnixMs,
+		ContextAction: normalizeContextActionEnvelope(input.ContextAction),
 	}
 	b, err := json.Marshal(msg)
 	if err != nil {

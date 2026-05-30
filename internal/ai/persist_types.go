@@ -5,12 +5,13 @@ package ai
 // The JSON shape is aligned with @floegence/floe-webapp-core/chat Message + MessageBlock types (camelCase).
 
 type persistedMessage struct {
-	ID        string `json:"id"`
-	Role      string `json:"role"`
-	Blocks    []any  `json:"blocks"`
-	Status    string `json:"status"`
-	Timestamp int64  `json:"timestamp"`
-	Error     string `json:"error,omitempty"`
+	ID            string                 `json:"id"`
+	Role          string                 `json:"role"`
+	Blocks        []any                  `json:"blocks"`
+	Status        string                 `json:"status"`
+	Timestamp     int64                  `json:"timestamp"`
+	Error         string                 `json:"error,omitempty"`
+	ContextAction *ContextActionEnvelope `json:"contextAction,omitempty"`
 }
 
 type persistedMarkdownBlock struct {

@@ -512,6 +512,7 @@ export const ruRU = {
     runtimeApp: "Runtime",
     codeApp: "Code",
     portForwardApp: "Port Forward",
+    flowerApp: "Flower Host",
     copiedTitle: "Скопировано",
     copiedMessage: "{label} скопировано в буфер обмена",
     copyFailedTitle: "Не удалось скопировать",

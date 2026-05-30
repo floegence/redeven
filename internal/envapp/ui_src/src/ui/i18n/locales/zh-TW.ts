@@ -512,6 +512,7 @@ export const zhTW = {
     runtimeApp: "Runtime",
     codeApp: "Code",
     portForwardApp: "Port Forward",
+    flowerApp: "Flower Host",
     copiedTitle: "已複製",
     copiedMessage: "{label} 已複製到剪貼簿",
     copyFailedTitle: "複製失敗",

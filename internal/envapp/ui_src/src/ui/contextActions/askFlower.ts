@@ -4,6 +4,7 @@ import {
   createCurrentRuntimeTarget,
   type ContextActionContextItem,
   type ContextActionEnvelope,
+  type ContextActionExecutionContext,
 } from './protocol';
 
 function toContextActionItem(item: AskFlowerContextItem): ContextActionContextItem {
@@ -55,6 +56,7 @@ export function buildAskFlowerContextAction(params: {
   contextItems: AskFlowerContextItem[];
   suggestedWorkingDirAbs?: string;
   surfaceId?: string;
+  executionContext?: ContextActionExecutionContext;
 }): ContextActionEnvelope {
   return {
     schema_version: CONTEXT_ACTION_SCHEMA_VERSION,
@@ -65,6 +67,7 @@ export function buildAskFlowerContextAction(params: {
       surface: params.source,
       surface_id: params.surfaceId,
     },
+    execution_context: params.executionContext,
     context: params.contextItems.map((item) => toContextActionItem(item)),
     presentation: {
       label: 'Ask Flower',
