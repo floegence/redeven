@@ -33,7 +33,6 @@ export type CreateRedevenWorkbenchCanvasPresetOptions = Readonly<{
 type PresetWidgetSpec = Readonly<{
   widgetType: WorkbenchWidgetType;
   widgetId: string;
-  x: number;
   y: number;
 }>;
 
@@ -55,11 +54,13 @@ const CORE_WIDGET_TYPES = new Set<WorkbenchWidgetType>([
 ]);
 
 const WIDGET_SPECS: readonly PresetWidgetSpec[] = [
-  { widgetType: 'redeven.files', widgetId: 'widget-initial-files', x: 160, y: 420 },
-  { widgetType: 'redeven.terminal', widgetId: 'widget-initial-terminal', x: 1300, y: 420 },
-  { widgetType: 'redeven.monitor', widgetId: 'widget-initial-monitor', x: 2480, y: 420 },
+  { widgetType: 'redeven.files', widgetId: 'widget-initial-files', y: 420 },
+  { widgetType: 'redeven.terminal', widgetId: 'widget-initial-terminal', y: 420 },
+  { widgetType: 'redeven.monitor', widgetId: 'widget-initial-monitor', y: 420 },
 ];
 
+const WIDGET_STAGE_LEFT = 160;
+const WIDGET_STAGE_GAP = 80;
 const STICKY_WIDTH = 310;
 const STICKY_HEIGHT = 172;
 const STICKY_SPECS: readonly PresetStickySpec[] = [
@@ -113,22 +114,24 @@ function createPresetWidgets(
   createdAtUnixMs: number,
 ): RuntimeWorkbenchLayoutWidget[] {
   const definitions = coreWidgetDefinitionByType(options);
-  return WIDGET_SPECS
-    .map((spec, index) => {
-      const definition = definitions.get(spec.widgetType);
-      if (!definition) return null;
-      return {
-        widget_id: spec.widgetId,
-        widget_type: definition.type,
-        x: spec.x,
-        y: spec.y,
-        width: definition.defaultSize.width,
-        height: definition.defaultSize.height,
-        z_index: 20 + index,
-        created_at_unix_ms: createdAtUnixMs + index,
-      };
-    })
-    .filter((widget): widget is RuntimeWorkbenchLayoutWidget => widget !== null);
+  let nextX = WIDGET_STAGE_LEFT;
+  const widgets: RuntimeWorkbenchLayoutWidget[] = [];
+  for (const spec of WIDGET_SPECS) {
+    const definition = definitions.get(spec.widgetType);
+    if (!definition) continue;
+    widgets.push({
+      widget_id: spec.widgetId,
+      widget_type: definition.type,
+      x: nextX,
+      y: spec.y,
+      width: definition.defaultSize.width,
+      height: definition.defaultSize.height,
+      z_index: 20 + widgets.length,
+      created_at_unix_ms: createdAtUnixMs + widgets.length,
+    });
+    nextX += definition.defaultSize.width + WIDGET_STAGE_GAP;
+  }
+  return widgets;
 }
 
 function createPresetStickyNotes(createdAtUnixMs: number): WorkbenchStickyNoteItem[] {
