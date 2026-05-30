@@ -11,7 +11,7 @@ const widgetDefinitions = [
     icon: () => null,
     body: () => null,
     defaultTitle: 'Files',
-    defaultSize: { width: 1080, height: 700 },
+    defaultSize: { width: 1200, height: 800 },
     singleton: false,
   },
   {
@@ -20,7 +20,7 @@ const widgetDefinitions = [
     icon: () => null,
     body: () => null,
     defaultTitle: 'Terminal',
-    defaultSize: { width: 1120, height: 680 },
+    defaultSize: { width: 1120, height: 780 },
     singleton: false,
   },
   {
@@ -29,7 +29,7 @@ const widgetDefinitions = [
     icon: () => null,
     body: () => null,
     defaultTitle: 'Monitoring',
-    defaultSize: { width: 1040, height: 640 },
+    defaultSize: { width: 1040, height: 800 },
     singleton: true,
   },
   {
@@ -116,6 +116,17 @@ describe('workbenchInitialCanvas', () => {
     });
 
     expect(new Set(layout.widgets.map((widget) => widget.y)).size).toBe(1);
+    const sortedWidgets = layout.widgets.slice().sort((left, right) => left.x - right.x);
+    expect(sortedWidgets.map((widget) => widget.widget_type)).toEqual([
+      'redeven.files',
+      'redeven.terminal',
+      'redeven.monitor',
+    ]);
+    for (let index = 1; index < sortedWidgets.length; index += 1) {
+      const previous = sortedWidgets[index - 1]!;
+      const current = sortedWidgets[index]!;
+      expect(current.x - (previous.x + previous.width)).toBe(80);
+    }
     for (const left of layout.widgets) {
       for (const right of layout.widgets) {
         if (left.widget_id === right.widget_id) continue;
