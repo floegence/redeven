@@ -28,6 +28,10 @@ function splitHostname(hostname: string): string[] {
     .filter(Boolean);
 }
 
+function isSupportedSandboxID(id: string): boolean {
+  return id.startsWith('env-') || id.startsWith('cs-') || id.startsWith('pf-') || id.startsWith('fh-');
+}
+
 function deriveControlPlaneBaseDomainFromSandboxBaseDomain(sandboxBaseDomain: string): string | null {
   const labels = splitHostname(sandboxBaseDomain);
   if (labels.length < 2) {
@@ -72,7 +76,7 @@ function parseSandboxFamily(hostname: string): RemoteSessionFamily | null {
   if (!sandboxID || !region || !rest[0]?.endsWith('-sandbox')) {
     return null;
   }
-  if (!sandboxID.startsWith('env-') && !sandboxID.startsWith('cs-') && !sandboxID.startsWith('pf-')) {
+  if (!isSupportedSandboxID(sandboxID)) {
     return null;
   }
   const sandboxBaseDomain = rest.join('.');
@@ -127,7 +131,7 @@ function isSandboxHostInFamily(hostname: string, family: RemoteSessionFamily): b
   if (!sandboxID || region !== family.region) {
     return false;
   }
-  if (!sandboxID.startsWith('env-') && !sandboxID.startsWith('cs-') && !sandboxID.startsWith('pf-')) {
+  if (!isSupportedSandboxID(sandboxID)) {
     return false;
   }
   return rest.join('.') === family.sandbox_base_domain;
@@ -165,6 +169,10 @@ export function isAllowedAppNavigation(input: string, allowedBaseURL: string): b
     }
     if (normalizeHTTPPort(candidate) !== normalizeHTTPPort(allowed)) {
       return false;
+    }
+    const remoteFamily = parseRemoteSessionFamily(allowed.hostname);
+    if (remoteFamily) {
+      return isSandboxHostInFamily(candidate.hostname, remoteFamily) || isRuntimeHostInFamily(candidate.hostname, remoteFamily);
     }
     if (!isSupportedLocalHostname(allowed.hostname) || !isSupportedLocalHostname(candidate.hostname)) {
       return false;

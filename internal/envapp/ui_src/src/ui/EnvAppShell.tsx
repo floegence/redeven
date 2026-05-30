@@ -60,6 +60,7 @@ import {
   type OpenTerminalInDirectoryRequest,
 } from './pages/EnvContext';
 import type { AskFlowerIntent } from './pages/askFlowerIntent';
+import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { EnvDeckPage } from './pages/EnvDeckPage';
 import { EnvTerminalPage } from './pages/EnvTerminalPage';
 import { EnvMonitorPage } from './pages/EnvMonitorPage';
@@ -612,7 +613,7 @@ export function EnvAppShell() {
   const canViewAudit = createMemo(() => Boolean(env()?.permissions?.can_admin));
   const canAdmin = createMemo(() => Boolean(env()?.permissions?.can_admin || env()?.permissions?.is_owner));
   const controlplaneStatus = createMemo(() => String(env()?.status ?? '').trim());
-  const canUseFlower = createMemo(() => env.state === 'ready' && hasRWXPermissions(env()));
+  const canUseFlower = createMemo(() => !accessGateVisible());
   const canUseCodex = createMemo(() => env.state === 'ready' && hasRWXPermissions(env()));
 
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
@@ -743,8 +744,46 @@ export function EnvAppShell() {
     void debugConsole.closeConsole();
   };
 
+  const askFlowerExecutionContext = (): ContextActionExecutionContext => {
+    const desktopCtx = readDesktopSessionContextSnapshot();
+    const sessionSource = desktopCtx?.session_source;
+    const normalizedSessionSource =
+      sessionSource === 'local_runtime' ||
+      sessionSource === 'provider_environment' ||
+      sessionSource === 'ssh_environment' ||
+      sessionSource === 'external_local_ui'
+        ? sessionSource
+        : isLocalMode()
+          ? 'local_runtime'
+          : 'region_sandbox';
+    const sourceEnvPublicID = String(desktopCtx?.env_public_id ?? envId() ?? '').trim()
+      || (isLocalMode() ? String(localRuntime()?.env_public_id ?? '').trim() : '');
+    return {
+      current_target_id: sourceEnvPublicID || 'current',
+      source_env_public_id: sourceEnvPublicID || undefined,
+      host_hint: 'auto',
+      session_source: normalizedSessionSource,
+    };
+  };
+
+  const withAskFlowerExecutionContext = (intent: AskFlowerIntent): AskFlowerIntent => {
+    if (!intent.contextAction) {
+      return intent;
+    }
+    return {
+      ...intent,
+      contextAction: {
+        ...intent.contextAction,
+        execution_context: {
+          ...intent.contextAction.execution_context,
+          ...askFlowerExecutionContext(),
+        },
+      },
+    };
+  };
+
   const injectAskFlowerIntent = (intent: AskFlowerIntent) => {
-    setAskFlowerIntent(intent);
+    setAskFlowerIntent(withAskFlowerExecutionContext(intent));
     setAskFlowerIntentSeq((n) => n + 1);
   };
 
@@ -818,7 +857,7 @@ export function EnvAppShell() {
       notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
-    setAskFlowerComposerIntent(intent);
+    setAskFlowerComposerIntent(withAskFlowerExecutionContext(intent));
     setAskFlowerComposerAnchor(anchor ?? null);
     setAskFlowerComposerOpen(true);
   };
@@ -969,7 +1008,7 @@ export function EnvAppShell() {
     const currentModel = String(models?.current_model ?? '').trim();
     if (currentModel && allowed.has(currentModel)) return currentModel;
 
-    throw new Error('No current Flower model is selected. Choose a current model in Runtime Settings or Local Environment Settings first.');
+    throw new Error('No current Flower model is selected. Choose a model in Flower settings first.');
   };
 
   const validateAskFlowerWorkingDir = async (workingDir: string): Promise<string> => {
@@ -1063,6 +1102,7 @@ export function EnvAppShell() {
         input: {
           text: finalPrompt,
           attachments: uploadedAttachments,
+          contextAction: intent.contextAction,
         },
         options: {
           maxSteps: 10,

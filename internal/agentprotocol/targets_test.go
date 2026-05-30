@@ -23,6 +23,9 @@ func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
+	if err := os.MkdirAll(layout.StateDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
 
 	if err := config.Save(layout.ConfigPath, &config.Config{
 		ControlplaneBaseURL:      "https://region.example.invalid",
@@ -96,8 +99,8 @@ func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
 	}
 	assertHasCapability(t, target.Capabilities, CapabilityLocalUI)
 	assertHasCapability(t, target.Capabilities, CapabilityRemoteControl)
-	assertHasCapability(t, target.Capabilities, CapabilityFlower)
 	assertHasCapability(t, target.Capabilities, CapabilityCodexGateway)
+	assertLacksCapability(t, target.Capabilities, CapabilityFlower)
 }
 
 func TestDiscoverTargetsWithoutConfigReturnsInspectableTarget(t *testing.T) {
@@ -118,6 +121,109 @@ func TestDiscoverTargetsWithoutConfigReturnsInspectableTarget(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(stateRoot, "local-environment")); err == nil {
 		t.Fatalf("discovery should not create state directories")
 	}
+}
+
+func TestDiscoverTargetsAdvertisesFlowerFromBoundDesktopModelSource(t *testing.T) {
+	t.Parallel()
+
+	stateRoot, err := os.MkdirTemp("/tmp", "rdv-targets-model-source-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer func() { _ = os.RemoveAll(stateRoot) }()
+	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
+	if err := os.MkdirAll(layout.StateDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	statusServer, err := runtimemanagement.NewServer(layout.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
+		return runtimemanagement.RuntimeAttachStatus{
+			State: runtimemanagement.AttachStateReady,
+			Identity: runtimemanagement.RuntimeInstanceIdentity{
+				StateDir:       layout.StateDir,
+				DesktopManaged: true,
+			},
+			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+				LocalUIURL: "http://127.0.0.1:23998/",
+			},
+			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
+				Capabilities: runtimeservice.Capabilities{
+					DesktopModelSource: runtimeservice.Capability{Supported: true},
+				},
+				Bindings: runtimeservice.Bindings{
+					DesktopModelSource: runtimeservice.Binding{
+						State:      runtimeservice.BindingStateBound,
+						ModelCount: 2,
+					},
+				},
+			}),
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	if err := statusServer.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer func() { _ = statusServer.Close() }()
+
+	catalog, err := DiscoverTargets(DiscoverTargetsOptions{StateRoot: stateRoot})
+	if err != nil {
+		t.Fatalf("DiscoverTargets() error = %v", err)
+	}
+	assertHasCapability(t, catalog.Targets[0].Capabilities, CapabilityFlower)
+}
+
+func TestDiscoverTargetsDoesNotAdvertiseFlowerForUnboundDesktopModelSource(t *testing.T) {
+	t.Parallel()
+
+	stateRoot, err := os.MkdirTemp("/tmp", "rdv-targets-model-source-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer func() { _ = os.RemoveAll(stateRoot) }()
+	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
+	statusServer, err := runtimemanagement.NewServer(layout.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
+		return runtimemanagement.RuntimeAttachStatus{
+			State: runtimemanagement.AttachStateReady,
+			Identity: runtimemanagement.RuntimeInstanceIdentity{
+				StateDir:       layout.StateDir,
+				DesktopManaged: true,
+			},
+			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+				LocalUIURL: "http://127.0.0.1:23998/",
+			},
+			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
+				Capabilities: runtimeservice.Capabilities{
+					DesktopModelSource: runtimeservice.Capability{Supported: true},
+				},
+				Bindings: runtimeservice.Bindings{
+					DesktopModelSource: runtimeservice.Binding{
+						State:      runtimeservice.BindingStateUnbound,
+						ModelCount: 2,
+					},
+				},
+			}),
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	if err := statusServer.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer func() { _ = statusServer.Close() }()
+
+	catalog, err := DiscoverTargets(DiscoverTargetsOptions{StateRoot: stateRoot})
+	if err != nil {
+		t.Fatalf("DiscoverTargets() error = %v", err)
+	}
+	assertLacksCapability(t, catalog.Targets[0].Capabilities, CapabilityFlower)
 }
 
 func TestResolveTarget(t *testing.T) {
@@ -154,4 +260,13 @@ func assertHasCapability(t *testing.T, capabilities []string, want string) {
 		}
 	}
 	t.Fatalf("missing capability %q in %#v", want, capabilities)
+}
+
+func assertLacksCapability(t *testing.T, capabilities []string, want string) {
+	t.Helper()
+	for _, got := range capabilities {
+		if got == want {
+			t.Fatalf("unexpected capability %q in %#v", want, capabilities)
+		}
+	}
 }

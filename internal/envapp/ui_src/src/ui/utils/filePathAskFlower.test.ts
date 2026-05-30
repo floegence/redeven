@@ -30,7 +30,7 @@ describe('filePathAskFlower', () => {
       pendingAttachments: [],
       notes: [],
       contextAction: {
-        schema_version: 1,
+        schema_version: 2,
         action_id: 'assistant.ask.flower',
         provider: 'flower',
         target: {

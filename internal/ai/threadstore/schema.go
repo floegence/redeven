@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 26
+	threadstoreCurrentSchemaVersion = 27
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -54,6 +54,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 23, ToVersion: 24, Apply: migrateThreadstoreToV24},
 			{FromVersion: 24, ToVersion: 25, Apply: migrateThreadstoreToV25},
 			{FromVersion: 25, ToVersion: 26, Apply: migrateThreadstoreToV26},
+			{FromVersion: 26, ToVersion: 27, Apply: migrateThreadstoreToV27},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -234,6 +235,10 @@ func migrateThreadstoreToV25(tx *sql.Tx) error {
 
 func migrateThreadstoreToV26(tx *sql.Tx) error {
 	return migrateLegacyToolCallTranscriptBlocksTx(tx)
+}
+
+func migrateThreadstoreToV27(tx *sql.Tx) error {
+	return ensureFollowupContextActionJSONTx(tx)
 }
 
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
@@ -690,6 +695,7 @@ CREATE TABLE IF NOT EXISTS ai_queued_turns (
   model_id TEXT NOT NULL DEFAULT '',
   text_content TEXT NOT NULL DEFAULT '',
   attachments_json TEXT NOT NULL DEFAULT '[]',
+  context_action_json TEXT NOT NULL DEFAULT '',
   options_json TEXT NOT NULL DEFAULT '{}',
   session_meta_json TEXT NOT NULL DEFAULT '{}',
   created_by_user_public_id TEXT NOT NULL DEFAULT '',
@@ -702,6 +708,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_queued_turns_message_id ON ai_queued_tu
 		return err
 	}
 	return ensureColumnTx(tx, "ai_queued_turns", "channel_id", `ALTER TABLE ai_queued_turns ADD COLUMN channel_id TEXT NOT NULL DEFAULT ''`)
+}
+
+func ensureFollowupContextActionJSONTx(tx *sql.Tx) error {
+	return ensureColumnTx(tx, "ai_queued_turns", "context_action_json", `ALTER TABLE ai_queued_turns ADD COLUMN context_action_json TEXT NOT NULL DEFAULT ''`)
 }
 
 func ensureFollowupSessionMetaJSONTx(tx *sql.Tx) error {
@@ -904,9 +914,9 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		},
 		"ai_queued_turns": {
 			"queue_id", "endpoint_id", "thread_id", "channel_id", "lane", "sort_index",
-			"message_id", "model_id", "text_content", "attachments_json", "options_json",
-			"session_meta_json", "created_by_user_public_id", "created_by_user_email", "created_at_unix_ms",
-			"updated_at_unix_ms",
+			"message_id", "model_id", "text_content", "attachments_json", "context_action_json",
+			"options_json", "session_meta_json", "created_by_user_public_id", "created_by_user_email",
+			"created_at_unix_ms", "updated_at_unix_ms",
 		},
 		"transcript_messages": {
 			"id", "thread_id", "endpoint_id", "message_id", "role", "author_user_public_id",

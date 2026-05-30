@@ -169,6 +169,8 @@ func runtimePresentationAppLabel(floeApp string) string {
 		return "Code"
 	case agent.FloeAppRedevenPortForward:
 		return "Port Forward"
+	case agent.FloeAppRedevenFlower:
+		return "Flower Host"
 	default:
 		return "Session"
 	}

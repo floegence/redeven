@@ -1,4 +1,4 @@
-export const CONTEXT_ACTION_SCHEMA_VERSION = 1 as const;
+export const CONTEXT_ACTION_SCHEMA_VERSION = 2 as const;
 
 export type ContextActionID =
   | 'assistant.ask.flower'
@@ -14,7 +14,13 @@ export type ContextActionLocality =
   | 'local_model_remote_target'
   | 'remote_runtime';
 
-export type ContextActionSurface = 'file_browser' | 'terminal' | 'file_preview' | 'monitoring' | 'git_browser';
+export type ContextActionSurface =
+  | 'file_browser'
+  | 'terminal'
+  | 'file_preview'
+  | 'monitoring'
+  | 'git_browser'
+  | 'editor_preview';
 
 export type ContextActionTarget = Readonly<{
   target_id: string;
@@ -24,6 +30,13 @@ export type ContextActionTarget = Readonly<{
 export type ContextActionSource = Readonly<{
   surface: ContextActionSurface;
   surface_id?: string;
+}>;
+
+export type ContextActionExecutionContext = Readonly<{
+  current_target_id?: string;
+  source_env_public_id?: string;
+  host_hint?: 'auto' | 'flower_host' | 'env_local';
+  session_source?: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui' | 'region_sandbox';
 }>;
 
 export type ContextActionPresentation = Readonly<{
@@ -75,6 +88,7 @@ export type ContextActionEnvelope = Readonly<{
   provider?: ContextActionProvider;
   target: ContextActionTarget;
   source: ContextActionSource;
+  execution_context?: ContextActionExecutionContext;
   context: ContextActionContextItem[];
   presentation: ContextActionPresentation;
   suggested_working_dir_abs?: string;

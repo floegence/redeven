@@ -1,6 +1,12 @@
 import type { ContextActionEnvelope } from '../contextActions/protocol';
 
-export type AskFlowerIntentSource = 'file_browser' | 'terminal' | 'file_preview' | 'monitoring' | 'git_browser';
+export type AskFlowerIntentSource =
+  | 'file_browser'
+  | 'terminal'
+  | 'file_preview'
+  | 'monitoring'
+  | 'git_browser'
+  | 'editor_preview';
 
 export type AskFlowerIntentMode = 'append' | 'replace';
 

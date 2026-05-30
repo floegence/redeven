@@ -16,6 +16,8 @@ import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surf
 import { FloatingContextMenu, type FloatingContextMenuItem } from '../widgets/FloatingContextMenu';
 import { writeTextToClipboard } from '../utils/clipboard';
 import { useI18n, type I18nHelpers } from '../i18n';
+import { projectFlowerThreadListItem } from '../flower/threadList';
+import type { FlowerThreadListItem } from '../flower/contracts';
 
 const THREAD_RAIL_CONTENT_CLASS = 'flex h-full min-h-0 flex-col overflow-hidden';
 const THREAD_RAIL_SECTION_CLASS = 'min-h-0 flex flex-1 flex-col overflow-hidden [&>div:last-child]:flex [&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:flex-col [&>div:last-child]:overflow-hidden';
@@ -272,6 +274,7 @@ export function AIChatSidebar() {
   const permissionReady = () => env.env.state === 'ready';
   const canRWX = createMemo(() => hasRWXPermissions(env.env()));
   const canManageChats = createMemo(() => permissionReady() && canRWX());
+  const canOpenFlowerChats = createMemo(() => protocol.status() === 'connected');
   const ensureRWX = (): boolean => {
     if (!permissionReady()) {
       notify.error(i18n.t('shell.notifications.notReadyTitle'), i18n.t('shell.notifications.loadingEnvironmentPermissions'));
@@ -634,6 +637,13 @@ export function AIChatSidebar() {
   };
 
   const threadList = createMemo(() => ctx.threads()?.threads ?? []);
+  const flowerThreadById = createMemo(() => {
+    const currentEnvPublicId = String(env.env_id() ?? '').trim();
+    return new Map(threadList().map((thread) => [
+      String(thread.thread_id ?? '').trim(),
+      projectFlowerThreadListItem(thread, { currentEnvPublicId }),
+    ]));
+  });
   const groupedThreads = createMemo(() => groupThreadsByDate(threadList()));
   const showGroupHeaders = createMemo(() => threadList().length >= 5);
   const hasThreadSnapshot = createMemo(() => ctx.threads() != null);
@@ -651,7 +661,7 @@ export function AIChatSidebar() {
             class="flex-1 justify-start gap-2 h-8 shadow-sm"
             icon={Plus}
             onClick={() => ctx.enterDraftChat()}
-            disabled={protocol.status() !== 'connected' || !canManageChats()}
+            disabled={!canOpenFlowerChats()}
           >
             {i18n.t('flowerChat.sidebar.newChat')}
           </Button>
@@ -661,7 +671,7 @@ export function AIChatSidebar() {
               size="icon"
               class="h-8 w-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
               onClick={openManager}
-              disabled={protocol.status() !== 'connected' || !canManageChats()}
+              disabled={!canOpenFlowerChats()}
               aria-label={i18n.t('flowerChat.sidebar.manageChats')}
             >
               <History class="w-3.5 h-3.5" />
@@ -715,6 +725,7 @@ export function AIChatSidebar() {
                                   return (
                                     <ThreadCard
                                       thread={thread()}
+                                      flowerThread={flowerThreadById().get(threadID())}
                                       active={threadID() === ctx.activeThreadId()}
                                       isRunning={ctx.isThreadRunning(threadID())}
                                       unread={ctx.isThreadUnread(threadID())}
@@ -1009,6 +1020,7 @@ export function AIChatSidebar() {
 
 function ThreadCard(props: {
   thread: ThreadView;
+  flowerThread?: FlowerThreadListItem;
   active: boolean;
   isRunning: boolean;
   unread: boolean;
@@ -1030,6 +1042,11 @@ function ThreadCard(props: {
 
   const title = () => props.thread.title?.trim() || props.i18n.t('flowerChat.sidebar.untitledChat');
   const preview = () => props.thread.last_message_preview?.trim() || '';
+  const flowerMeta = () => {
+    const item = props.flowerThread;
+    if (!item) return '';
+    return String(item.read_only_reason ?? item.source_label ?? item.summary ?? '').trim();
+  };
   const timeStr = () => fmtShortTime(props.thread.updated_at_unix_ms, props.i18n);
   const indicatorMode = (): 'running' | 'unread' | 'none' => {
     if (props.isRunning) return 'running';
@@ -1089,14 +1106,17 @@ function ThreadCard(props: {
           </div>
 
           {/* Preview text / running state */}
-          <Show when={status() === 'running'} fallback={
-            <Show when={!!preview()}>
-              <p class="truncate text-[11px] leading-tight text-muted-foreground/50">{preview()}</p>
+            <Show when={status() === 'running'} fallback={
+              <Show when={!!preview()}>
+                <p class="truncate text-[11px] leading-tight text-muted-foreground/50">{preview()}</p>
+              </Show>
+            }>
+              <ProcessingIndicator variant="minimal" status={props.i18n.t('flowerChat.sidebar.working')} class="h-3.5" />
             </Show>
-          }>
-            <ProcessingIndicator variant="minimal" status={props.i18n.t('flowerChat.sidebar.working')} class="h-3.5" />
-          </Show>
-        </div>
+            <Show when={!!flowerMeta()}>
+              <p class="truncate text-[10px] leading-tight text-muted-foreground/45">{flowerMeta()}</p>
+            </Show>
+          </div>
       </button>
 
       <div class="pointer-events-none absolute right-2.5 top-2 flex h-5 min-w-7 items-center justify-end">

@@ -512,6 +512,7 @@ export const esES = {
     runtimeApp: "Runtime",
     codeApp: "Code",
     portForwardApp: "Port Forward",
+    flowerApp: "Flower Host",
     copiedTitle: "Copiado",
     copiedMessage: "{label} copiado al portapapeles",
     copyFailedTitle: "Error al copiar",

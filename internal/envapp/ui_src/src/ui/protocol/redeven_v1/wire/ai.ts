@@ -1,3 +1,5 @@
+import type { ContextActionEnvelope } from '../../../contextActions/protocol';
+
 export type wire_ai_attachment = {
   name: string;
   mime_type: string;
@@ -65,6 +67,7 @@ export type wire_ai_send_user_turn_req = {
     message_id?: string;
     text: string;
     attachments: wire_ai_attachment[];
+    context_action?: ContextActionEnvelope;
   };
   options: {
     max_steps: number;

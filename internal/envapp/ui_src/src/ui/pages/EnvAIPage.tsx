@@ -54,6 +54,7 @@ import {
 } from './aiDataNormalizers';
 import { hasRWXPermissions } from './aiPermissions';
 import type { AskFlowerIntent } from './askFlowerIntent';
+import type { ContextActionEnvelope } from '../contextActions/protocol';
 import { buildAskFlowerDraftMarkdown, mergeAskFlowerDraft } from '../utils/askFlowerContextTemplate';
 import { createClientId } from '../utils/clientId';
 import {
@@ -1469,6 +1470,7 @@ export function EnvAIPage() {
   const sendIntentByMessageId = new Map<string, SendIntent>();
   const sourceFollowupIDByMessageId = new Map<string, string>();
   const draftSnapshotByMessageId = new Map<string, AIChatInputDraftSnapshot>();
+  const contextActionByMessageId = new Map<string, ContextActionEnvelope>();
   const activeThreadRunning = createMemo(() => ai.isThreadRunning(ai.activeThreadId()));
   const liveAssistantSurfaceActive = createMemo(() => (
     sendPending()
@@ -1479,6 +1481,7 @@ export function EnvAIPage() {
   const [chatReady, setChatReady] = createSignal(false);
   const [chatInputApi, setChatInputApi] = createSignal<AIChatInputApi | null>(null);
   let queuedAskFlowerIntents: AskFlowerIntent[] = [];
+  let pendingAskFlowerContext: { action: ContextActionEnvelope; expectedText: string } | undefined;
   let messageAreaRef: HTMLDivElement | undefined;
 
   // Working dir (draft-only; locked after thread creation)
@@ -1539,10 +1542,7 @@ export function EnvAIPage() {
 
     draftWorkingDirInitializedForHome = true;
     const currentRaw = String(ai.draftWorkingDir() ?? '').trim();
-    if (!currentRaw) {
-      ai.setDraftWorkingDir(root);
-      return;
-    }
+    if (!currentRaw) return;
 
     const normalizedCurrent = normalizeAskFlowerAbsolutePath(currentRaw);
     const currentCandidate = normalizedCurrent || currentRaw;
@@ -1555,7 +1555,7 @@ export function EnvAIPage() {
         return;
       }
 
-      ai.setDraftWorkingDir(root);
+      ai.setDraftWorkingDir('');
     })();
   });
 
@@ -2079,6 +2079,12 @@ export function EnvAIPage() {
     if (intent.pendingAttachments.length > 0) {
       inputApi.addAttachmentFiles(intent.pendingAttachments);
     }
+    pendingAskFlowerContext = intent.contextAction
+      ? {
+          action: intent.contextAction,
+          expectedText: draftText.trim(),
+        }
+      : undefined;
 
     if (suggestedWorkingDirAbs) {
       if (workingDirLocked()) {
@@ -3053,12 +3059,14 @@ export function EnvAIPage() {
     sendIntent?: SendIntent;
     sourceFollowupId?: string;
     sourceDraftSnapshot?: AIChatInputDraftSnapshot;
+    contextAction?: ContextActionEnvelope;
   };
 
   type PendingSendContext = {
     sendIntent: SendIntent;
     sourceFollowupId: string;
     sourceDraftSnapshot?: AIChatInputDraftSnapshot;
+    contextAction?: ContextActionEnvelope;
     hasOptimisticMessage: boolean;
   };
 
@@ -3085,12 +3093,14 @@ export function EnvAIPage() {
         ? String(sourceFollowupIDByMessageId.get(id) ?? fallback?.sourceFollowupId ?? '').trim()
         : String(fallback?.sourceFollowupId ?? '').trim(),
       sourceDraftSnapshot: id ? (draftSnapshotByMessageId.get(id) ?? fallback?.sourceDraftSnapshot) : fallback?.sourceDraftSnapshot,
+      contextAction: id ? (contextActionByMessageId.get(id) ?? fallback?.contextAction) : fallback?.contextAction,
       hasOptimisticMessage: id ? true : Boolean(fallback?.hasOptimisticMessage),
     };
     if (id) {
       sendIntentByMessageId.delete(id);
       sourceFollowupIDByMessageId.delete(id);
       draftSnapshotByMessageId.delete(id);
+      contextActionByMessageId.delete(id);
     }
     return context;
   };
@@ -3272,6 +3282,7 @@ export function EnvAIPage() {
       sendIntent: opts.sendIntent ?? 'default',
       sourceFollowupId: String(opts.sourceFollowupId ?? '').trim(),
       sourceDraftSnapshot: opts.sourceDraftSnapshot,
+      contextAction: opts.contextAction,
       hasOptimisticMessage: Boolean(String(opts.userMessageId ?? '').trim()),
     };
     if (!chat) {
@@ -3351,6 +3362,7 @@ export function EnvAIPage() {
           messageId: userMessageId || undefined,
           text: userText,
           attachments: attIn,
+          contextAction: context.contextAction,
         },
         options: { maxSteps: 10, mode: executionMode() },
         queueAfterWaitingUser: sendIntent === 'queue_after_waiting_user' ? true : undefined,
@@ -3373,6 +3385,9 @@ export function EnvAIPage() {
       const rid = String(resp.runId ?? '').trim();
       const responseKind = String(resp.kind ?? '').trim().toLowerCase();
       const consumedWaitingPromptId = String(resp.consumedWaitingPromptId ?? '').trim();
+      if (context.contextAction && pendingAskFlowerContext?.action === context.contextAction) {
+        pendingAskFlowerContext = undefined;
+      }
       if (consumedWaitingPromptId) {
         ai.consumeWaitingPrompt(tid, consumedWaitingPromptId);
       } else if (waitingPromptId && sendIntent !== 'queue_after_waiting_user') {
@@ -3436,6 +3451,13 @@ export function EnvAIPage() {
       const intent = nextSendIntent;
       nextSendIntent = 'default';
       sendIntentByMessageId.set(userMessageId, intent);
+      const pendingContext = pendingAskFlowerContext;
+      if (pendingContext && content.trim() === pendingContext.expectedText) {
+        contextActionByMessageId.set(userMessageId, pendingContext.action);
+        pendingAskFlowerContext = undefined;
+      } else if (pendingContext) {
+        pendingAskFlowerContext = undefined;
+      }
 
       const sourceFollowupId = String(loadedDraftFollowupID() ?? '').trim();
       if (sourceFollowupId) {
@@ -3474,6 +3496,7 @@ export function EnvAIPage() {
         sendIntent: context.sendIntent,
         sourceFollowupId: context.sourceFollowupId || undefined,
         sourceDraftSnapshot: context.sourceDraftSnapshot,
+        contextAction: context.contextAction,
       });
     },
     onUploadAttachment: uploadAttachment,

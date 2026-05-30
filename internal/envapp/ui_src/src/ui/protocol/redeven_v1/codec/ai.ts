@@ -242,6 +242,7 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
             }))
             .filter((it) => !!it.url.trim())
         : [],
+      context_action: req.input?.contextAction,
     },
     options: {
       max_steps: Number(req.options?.maxSteps ?? 0),

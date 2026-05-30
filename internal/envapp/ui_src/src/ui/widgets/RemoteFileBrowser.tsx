@@ -10,7 +10,6 @@ import {
   type FileItem,
 } from '@floegence/floe-webapp-core/file-browser';
 import { Button, ConfirmDialog, Dropdown, type DropdownItem } from '@floegence/floe-webapp-core/ui';
-import type { Client } from '@floegence/flowersec-core';
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import {
   useRedevenRpc,
@@ -29,8 +28,6 @@ import {
   type GitWorkspaceSection,
   type GitWorkspaceSummary,
 } from '../protocol/redeven_v1';
-import { getExtDot, mimeFromExtDot } from '../utils/filePreview';
-import { readFileBytesOnce } from '../utils/fileStreamReader';
 import { useEnvContext } from '../pages/EnvContext';
 import { useDownloadManager } from '../downloads/DownloadContext';
 import { buildRuntimeFileDownloadCommand } from '../downloads/downloadCommands';
@@ -41,7 +38,6 @@ import {
   basenameFromAbsolutePath,
   normalizeAbsolutePath,
 } from '../utils/askFlowerPath';
-import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
 import { pathInputIncludesHiddenSegment } from '../utils/fileBrowserPathInput';
 import { fetchFilesystemSettings, saveFilesystemRootWritePermission } from '../services/filesystemScopeSettings';
 import {
@@ -192,8 +188,6 @@ type CreateEntryDraft = {
 
 let createdEntryRevealSeq = 0;
 
-const ASK_FLOWER_MAX_ATTACHMENTS = 5;
-const ASK_FLOWER_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 const GIT_COMMIT_PAGE_SIZE = 50;
 const GIT_WORKSPACE_PAGE_SIZE = 200;
 const PAGE_SIDEBAR_DEFAULT_WIDTH = 240;
@@ -4322,81 +4316,9 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   };
 
-  const createAttachmentFromFileItem = async (
-    item: FileItem,
-    client: Client,
-  ): Promise<{ file: File | null; note?: string }> => {
-    if (item.type !== 'file') return { file: null };
-
-    const normalizedPath = normalizeAbsolutePath(item.path);
-    const declaredSize = typeof item.size === 'number' && Number.isFinite(item.size) ? Math.max(0, Math.floor(item.size)) : null;
-    if (declaredSize != null && declaredSize > ASK_FLOWER_ATTACHMENT_MAX_BYTES) {
-      return {
-        file: null,
-        note: `Skipped "${item.name}" because it exceeds the 10 MiB upload limit.`,
-      };
-    }
-
-    const readMaxBytes = declaredSize != null ? Math.min(declaredSize, ASK_FLOWER_ATTACHMENT_MAX_BYTES + 1) : ASK_FLOWER_ATTACHMENT_MAX_BYTES + 1;
-    try {
-      const { bytes, meta } = await readFileBytesOnce({
-        client,
-        path: normalizedPath,
-        maxBytes: readMaxBytes,
-      });
-
-      const reportedSize = Number(meta.file_size ?? declaredSize ?? bytes.byteLength);
-      const exceedsLimit = (Number.isFinite(reportedSize) && reportedSize > ASK_FLOWER_ATTACHMENT_MAX_BYTES) || bytes.byteLength > ASK_FLOWER_ATTACHMENT_MAX_BYTES || !!meta.truncated;
-      if (exceedsLimit) {
-        return {
-          file: null,
-          note: `Skipped "${item.name}" because it exceeds the 10 MiB upload limit.`,
-        };
-      }
-
-      const mime = mimeFromExtDot(getExtDot(item.name)) ?? 'application/octet-stream';
-      const file = setAskFlowerAttachmentSourcePath(new File([bytes], item.name || 'attachment', {
-        type: mime,
-        lastModified: item.modifiedAt?.getTime() ?? Date.now(),
-      }), normalizedPath);
-      return { file };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return {
-        file: null,
-        note: `Skipped "${item.name}" because it could not be read (${msg || 'unknown error'}).`,
-      };
-    }
-  };
-
   const askFlowerFromFileBrowser = async (items: FileItem[]) => {
     const normalizedItems = items.filter((item) => String(item.path ?? '').trim());
     if (normalizedItems.length <= 0) return;
-
-    const notes: string[] = [];
-    const pendingAttachments: File[] = [];
-    const fileCandidates = normalizedItems.filter((item) => item.type === 'file');
-
-    if (fileCandidates.length > ASK_FLOWER_MAX_ATTACHMENTS) {
-      notes.push(`Attached only the first ${ASK_FLOWER_MAX_ATTACHMENTS} files. Remaining files are added as path context only.`);
-    }
-
-    const attachmentCandidates = fileCandidates.slice(0, ASK_FLOWER_MAX_ATTACHMENTS);
-    const client = protocol.client();
-    if (attachmentCandidates.length > 0 && !client) {
-      notes.push('Skipped file attachments because the connection is not ready.');
-    }
-
-    if (client) {
-      for (const fileItem of attachmentCandidates) {
-        const result = await createAttachmentFromFileItem(fileItem, client);
-        if (result.file) {
-          pendingAttachments.push(result.file);
-        } else if (result.note) {
-          notes.push(result.note);
-        }
-      }
-    }
 
     const result = buildFilePathAskFlowerIntent({
       items: normalizedItems.map((item) => ({
@@ -4405,8 +4327,6 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
         rootLabel: matchFilesystemRoot(item.path, filesystemRoots())?.label,
       })),
       fallbackWorkingDirAbs: currentBrowserPath(),
-      pendingAttachments,
-      notes,
     });
     if (!result.intent) {
       notification.error(i18n.t('files.notifications.askFlowerUnavailableTitle'), result.error ?? i18n.t('files.notifications.failedToResolveSelectedFilePaths'));

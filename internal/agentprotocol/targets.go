@@ -10,6 +10,7 @@ import (
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimemanagement"
+	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 const (
@@ -73,9 +74,6 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 		if target.EnvPublicID != "" && target.ControlplaneBaseURL != "" {
 			target.Capabilities = append(target.Capabilities, CapabilityRemoteControl)
 		}
-		if cfg.AI != nil && strings.TrimSpace(cfg.AI.CurrentModelID) != "" {
-			target.Capabilities = append(target.Capabilities, CapabilityFlower)
-		}
 	} else {
 		target.UnavailableReasonCode = "config_missing"
 	}
@@ -105,11 +103,25 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 			CapabilityGit,
 			CapabilityCodexGateway,
 		)
+		if runtimeHasBoundDesktopModelSource(runtimeStatus.RuntimeService) {
+			target.Capabilities = append(target.Capabilities, CapabilityFlower)
+		}
 		target.UnavailableReasonCode = ""
 	}
 
 	target.Capabilities = sortedUniqueStrings(target.Capabilities)
 	return TargetCatalog{Targets: []TargetDescriptor{target}}, nil
+}
+
+func runtimeHasBoundDesktopModelSource(snapshot runtimeservice.Snapshot) bool {
+	if !snapshot.Capabilities.DesktopModelSource.Supported {
+		return false
+	}
+	binding := snapshot.Bindings.DesktopModelSource
+	if binding.State != runtimeservice.BindingStateBound {
+		return false
+	}
+	return binding.ModelCount > 0
 }
 
 func ResolveTarget(catalog TargetCatalog, rawTarget string) (TargetDescriptor, error) {

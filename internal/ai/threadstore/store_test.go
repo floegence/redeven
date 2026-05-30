@@ -674,6 +674,9 @@ PRAGMA user_version=1;
 			t.Fatalf("missing migrated column %q", col)
 		}
 	}
+	if !tableHasColumnForTest(t, s.db, "ai_queued_turns", "context_action_json") {
+		t.Fatalf("missing migrated queued turn column %q", "context_action_json")
+	}
 
 	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_activity_items", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers"} {
 		var exists int
@@ -2216,4 +2219,33 @@ SELECT COUNT(1)
 FROM sqlite_master
 WHERE type = 'table' AND name = ?
 `, tableName) == 1
+}
+
+func tableHasColumnForTest(t *testing.T, db *sql.DB, tableName string, columnName string) bool {
+	t.Helper()
+
+	rows, err := db.Query(`PRAGMA table_info(` + tableName + `)`)
+	if err != nil {
+		t.Fatalf("PRAGMA table_info(%s): %v", tableName, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name string
+		var typ string
+		var notNull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
+			t.Fatalf("scan table_info(%s): %v", tableName, err)
+		}
+		if strings.TrimSpace(name) == columnName {
+			return true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("table_info(%s) rows: %v", tableName, err)
+	}
+	return false
 }

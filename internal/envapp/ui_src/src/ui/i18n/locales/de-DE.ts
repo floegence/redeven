@@ -512,6 +512,7 @@ export const deDE = {
     runtimeApp: "Runtime",
     codeApp: "Code",
     portForwardApp: "Port Forward",
+    flowerApp: "Flower Host",
     copiedTitle: "Kopiert",
     copiedMessage: "{label} in die Zwischenablage kopiert",
     copyFailedTitle: "Kopieren fehlgeschlagen",

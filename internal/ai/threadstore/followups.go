@@ -37,6 +37,7 @@ func scanFollowup(scanner interface{ Scan(...any) error }) (QueuedTurn, error) {
 		&rec.ModelID,
 		&rec.TextContent,
 		&rec.AttachmentsJSON,
+		&rec.ContextActionJSON,
 		&rec.OptionsJSON,
 		&rec.SessionMetaJSON,
 		&rec.CreatedByUserPublicID,
@@ -120,7 +121,7 @@ func listFollowupsByLaneTx(ctx context.Context, tx *sql.Tx, endpointID string, t
 		limit = 500
 	}
 	rows, err := tx.QueryContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
@@ -148,7 +149,7 @@ LIMIT ?
 func getFollowupByLaneAndMessageIDTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, lane string, messageID string) (QueuedTurn, error) {
 	lane = normalizeFollowupLane(lane)
 	row := tx.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ? AND message_id = ?
@@ -252,11 +253,11 @@ func createFollowupTx(ctx context.Context, tx *sql.Tx, rec QueuedTurn) (QueuedTu
 
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO ai_queued_turns(
-  queue_id, endpoint_id, thread_id, channel_id, lane, sort_index, message_id, model_id, text_content, attachments_json, options_json, session_meta_json,
+  queue_id, endpoint_id, thread_id, channel_id, lane, sort_index, message_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
   created_by_user_public_id, created_by_user_email, created_at_unix_ms, updated_at_unix_ms
 )
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.QueueID, rec.EndpointID, rec.ThreadID, rec.ChannelID, rec.Lane, rec.SortIndex, rec.MessageID, rec.ModelID, rec.TextContent, rec.AttachmentsJSON, rec.OptionsJSON, rec.SessionMetaJSON,
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, rec.QueueID, rec.EndpointID, rec.ThreadID, rec.ChannelID, rec.Lane, rec.SortIndex, rec.MessageID, rec.ModelID, rec.TextContent, rec.AttachmentsJSON, rec.ContextActionJSON, rec.OptionsJSON, rec.SessionMetaJSON,
 		rec.CreatedByUserPublicID, rec.CreatedByUserEmail, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs)
 	if err != nil {
 		if !isUniqueConstraintError(err) {
@@ -393,7 +394,7 @@ func (s *Store) ListFollowupsByLane(ctx context.Context, endpointID string, thre
 		limit = 500
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?

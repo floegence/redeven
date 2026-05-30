@@ -33,6 +33,18 @@ func marshalQueuedTurnAttachments(items []RunAttachmentIn) string {
 	return string(b)
 }
 
+func marshalQueuedTurnContextAction(action *ContextActionEnvelope) string {
+	action = normalizeContextActionEnvelope(action)
+	if action == nil {
+		return ""
+	}
+	b, err := json.Marshal(action)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
 func marshalQueuedTurnOptions(opts RunOptions) string {
 	b, err := json.Marshal(opts)
 	if err != nil {
@@ -106,6 +118,18 @@ func unmarshalQueuedTurnAttachments(raw string) []RunAttachmentIn {
 	return cleaned
 }
 
+func unmarshalQueuedTurnContextAction(raw string) *ContextActionEnvelope {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var out ContextActionEnvelope
+	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+		return nil
+	}
+	return normalizeContextActionEnvelope(&out)
+}
+
 func unmarshalQueuedTurnOptions(raw string) RunOptions {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -155,9 +179,10 @@ func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadExecuti
 		ThreadID: strings.TrimSpace(rec.ThreadID),
 		Model:    strings.TrimSpace(rec.ModelID),
 		Input: RunInput{
-			MessageID:   strings.TrimSpace(rec.MessageID),
-			Text:        strings.TrimSpace(rec.TextContent),
-			Attachments: unmarshalQueuedTurnAttachments(rec.AttachmentsJSON),
+			MessageID:     strings.TrimSpace(rec.MessageID),
+			Text:          strings.TrimSpace(rec.TextContent),
+			Attachments:   unmarshalQueuedTurnAttachments(rec.AttachmentsJSON),
+			ContextAction: unmarshalQueuedTurnContextAction(rec.ContextActionJSON),
 		},
 		Options: options,
 	}
@@ -235,6 +260,7 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		ModelID:               strings.TrimSpace(req.Model),
 		TextContent:           strings.TrimSpace(normalizedInput.Text),
 		AttachmentsJSON:       marshalQueuedTurnAttachments(normalizedInput.Attachments),
+		ContextActionJSON:     marshalQueuedTurnContextAction(normalizedInput.ContextAction),
 		OptionsJSON:           marshalQueuedTurnOptions(req.Options),
 		SessionMetaJSON:       marshalQueuedTurnSessionMeta(meta),
 		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),

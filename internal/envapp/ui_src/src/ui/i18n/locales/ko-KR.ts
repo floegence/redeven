@@ -512,6 +512,7 @@ export const koKR = {
     runtimeApp: "Runtime",
     codeApp: "Code",
     portForwardApp: "Port Forward",
+    flowerApp: "Flower Host",
     copiedTitle: "복사됨",
     copiedMessage: "{label}이(가) 클립보드에 복사되었습니다",
     copyFailedTitle: "복사 실패",

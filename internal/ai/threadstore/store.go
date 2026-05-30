@@ -138,10 +138,11 @@ type QueuedTurn struct {
 	MessageID string `json:"message_id"`
 	ModelID   string `json:"model_id"`
 
-	TextContent     string `json:"text_content"`
-	AttachmentsJSON string `json:"attachments_json"`
-	OptionsJSON     string `json:"options_json"`
-	SessionMetaJSON string `json:"session_meta_json"`
+	TextContent       string `json:"text_content"`
+	AttachmentsJSON   string `json:"attachments_json"`
+	ContextActionJSON string `json:"context_action_json"`
+	OptionsJSON       string `json:"options_json"`
+	SessionMetaJSON   string `json:"session_meta_json"`
 
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
@@ -891,7 +892,7 @@ func (s *Store) GetQueuedTurn(ctx context.Context, endpointID string, threadID s
 	}
 
 	row := s.db.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
@@ -1169,7 +1170,7 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
 
 func getNextQueuedTurnTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (*QueuedTurn, error) {
 	row := tx.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
