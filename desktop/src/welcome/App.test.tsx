@@ -126,13 +126,14 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain("aria-label={i18n().t('flowerSurface.chat.entryLabel')}");
-    expect(appSrc).toContain("class={cn('redeven-flower-topbar-button', snapshot().surface === 'flower_host' && 'text-primary')}");
+    expect(appSrc).toContain("when={snapshot().surface !== 'flower_host'}");
+    expect(appSrc).toContain('class="redeven-flower-topbar-button"');
     expect(appSrc).not.toContain("class={cn('rounded-full'");
     expect(appSrc).toContain('<FlowerIcon class="h-5 w-5" />');
     expect(appSrc).not.toContain('<FlowerNavigationIcon class="h-5 w-5" />');
     expect(appSrc).toContain('copy={createDesktopFlowerSurfaceCopy(i18n())}');
     expect(appSrc).toContain("hostDisplayName: i18n().t('flowerSurface.host.thisHost')");
-    expect(appSrc).toContain("import { FlowerIcon, FlowerSurface } from '../../../internal/flower_ui/src';");
+    expect(appSrc).toContain("import { FlowerIcon, FlowerSoftAuraIcon, FlowerSurface } from '../../../internal/flower_ui/src';");
     expect(appSrc).not.toContain('aria-label="Compose with Flower"');
     expect(appSrc).not.toContain('function FlowerHostSurface');
     expect(appSrc).not.toContain('✿');
@@ -634,6 +635,38 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-console-icon-button');
     expect(styles).toContain('.redeven-console-chip-button');
     expect(styles).toContain('cursor: pointer;');
+  });
+
+  it('adds a polished card-level Flower composer without replacing the global Flower surface', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain('function EnvironmentFlowerComposerWindow');
+    expect(appSrc).toContain('const [environmentFlowerComposer, setEnvironmentFlowerComposer]');
+    expect(appSrc).toContain('openEnvironmentFlowerComposer(props.environment');
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.askFlowerForLabel', { label: props.environment.label })");
+    expect(appSrc).toContain('sendFlowerPrompt={sendEnvironmentFlowerPrompt}');
+    expect(appSrc).toContain('buildEnvironmentFlowerPrompt(i18n(), environment, cleanPrompt)');
+    expect(appSrc).toContain('props.runtime.settings.sendFlowerHostChat');
+    expect(appSrc).toContain('From Desktop Environment: ${environment.label}');
+    expect(appSrc).toContain('await props.openFlowerHostSurface();');
+    expect(appSrc).toContain('class="redeven-environment-card__flower-button"');
+    expect(appSrc).toContain('FlowerSoftAuraIcon');
+    expect(appSrc).toContain('<FloatingWindow');
+    expect(appSrc).toContain('class="redeven-environment-flower-window');
+    expect(appSrc).toContain('class="redeven-environment-flower-window__context"');
+    expect(appSrc).toContain('class="redeven-environment-flower-window__textarea flower-chat-input-textarea"');
+    expect(appSrc).toContain("class={cn('redeven-environment-flower-window__send chat-input-send-btn flower-chat-input-send-btn'");
+    expect(appSrc).not.toContain('EnvironmentFlowerCardPopover');
+    expect(appSrc).not.toContain('PersistentFloatingWindow');
+    expect(styles).toContain('.redeven-environment-card__flower-button');
+    expect(styles).toContain('border: 0;');
+    expect(styles).toContain('.redeven-environment-card__flower-button:hover .redeven-environment-card__flower-icon');
+    expect(styles).toContain('animation: redeven-flower-intro-spin');
+    expect(styles).toContain('.redeven-environment-flower-window__dock');
+    expect(styles).toContain('.redeven-environment-flower-window__composer');
+    expect(appSrc).toContain('flower-chat-input-floating');
+    expect(styles).not.toContain('.redeven-flower-card-popover-surface');
   });
 
   it('renders desktop tooltips through a body-level portal so dialogs do not clip them', () => {
