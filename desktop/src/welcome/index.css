@@ -359,6 +359,265 @@ body {
   word-break: break-word;
 }
 
+.redeven-environment-card__flower-button {
+  display: inline-flex;
+  width: 1.875rem;
+  height: 1.875rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 9999px;
+  background: transparent;
+  color: color-mix(in srgb, var(--primary) 72%, var(--muted-foreground) 28%);
+  cursor: pointer;
+  padding: 0;
+  transition:
+    color 160ms ease,
+    opacity 160ms ease,
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.redeven-environment-card__flower-button:hover,
+.redeven-environment-card__flower-button:focus-visible {
+  color: var(--primary);
+  opacity: 1;
+  outline: none;
+  transform: translateY(-1px) scale(1.04);
+}
+
+.redeven-environment-card__flower-aura {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+.redeven-environment-card__flower-glow {
+  opacity: 0;
+  transition: opacity 180ms ease, filter 180ms ease;
+}
+
+.redeven-environment-card__flower-icon {
+  width: 92%;
+  height: 92%;
+  transform-origin: 50% 50%;
+}
+
+.redeven-environment-card__flower-button:hover .redeven-environment-card__flower-glow,
+.redeven-environment-card__flower-button:focus-visible .redeven-environment-card__flower-glow {
+  opacity: 0.9;
+  filter: blur(5px);
+}
+
+.redeven-environment-card__flower-button:hover .redeven-environment-card__flower-icon,
+.redeven-environment-card__flower-button:focus-visible .redeven-environment-card__flower-icon {
+  animation: redeven-flower-intro-spin 1.05s cubic-bezier(0.22, 1, 0.36, 1) 1;
+}
+
+.redeven-environment-flower-window {
+  overflow: hidden;
+  border-radius: 0.85rem;
+}
+
+.redeven-environment-flower-window__body {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--background);
+}
+
+.redeven-environment-flower-window__scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.65rem 0.7rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--background) 92%, var(--card)), color-mix(in srgb, var(--background) 86%, var(--card)));
+}
+
+.redeven-environment-flower-window__message {
+  display: flex;
+  max-width: 40rem;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.62rem;
+  margin: 0 auto;
+}
+
+.redeven-environment-flower-window__avatar {
+  display: inline-flex;
+  width: 1.45rem;
+  height: 1.45rem;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.2rem;
+}
+
+.redeven-environment-flower-window__avatar-aura {
+  width: 1.45rem;
+  height: 1.45rem;
+}
+
+.redeven-environment-flower-window__avatar-glow {
+  inset: 8%;
+  opacity: 0.68;
+  filter: blur(3px);
+}
+
+.redeven-environment-flower-window__bubble {
+  min-width: 0;
+  max-width: min(100%, 37rem);
+  border-radius: 0.9rem;
+  border-top-left-radius: 0.32rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 99%, var(--background)), color-mix(in srgb, var(--card) 95%, var(--background)));
+  box-shadow: 0 10px 22px -24px color-mix(in srgb, var(--foreground) 34%, transparent);
+  padding: 0.62rem 0.72rem;
+}
+
+.redeven-environment-flower-window__eyebrow,
+.redeven-environment-flower-window__context-label,
+.redeven-environment-flower-window__composer-heading > span:first-child {
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.25;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--primary) 70%, var(--muted-foreground) 30%);
+}
+
+.redeven-environment-flower-window__question {
+  margin-top: 0.32rem;
+  color: var(--foreground);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.redeven-environment-flower-window__context {
+  display: grid;
+  min-width: 0;
+  gap: 0.25rem;
+  margin-top: 0.55rem;
+  border-radius: 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  background: color-mix(in srgb, var(--background) 72%, transparent);
+  padding: 0.5rem 0.6rem;
+}
+
+.redeven-environment-flower-window__context-name,
+.redeven-environment-flower-window__context-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-environment-flower-window__context-name {
+  color: var(--foreground);
+  font-size: 0.76rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.redeven-environment-flower-window__context-detail {
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
+.redeven-environment-flower-window__dock {
+  flex-shrink: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: color-mix(in srgb, var(--background) 96%, transparent);
+  box-shadow: 0 -14px 30px -30px color-mix(in srgb, var(--foreground) 32%, transparent);
+  padding: 0.45rem 0.55rem calc(0.45rem + env(safe-area-inset-bottom, 0px));
+}
+
+.redeven-environment-flower-window__composer {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 0.58rem;
+}
+
+.redeven-environment-flower-window__composer-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.28rem;
+}
+
+.redeven-environment-flower-window__composer-heading > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-environment-flower-window__input-shell {
+  position: relative;
+  min-width: 0;
+}
+
+.redeven-environment-flower-window__textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3.6rem;
+  max-height: 22vh;
+  resize: vertical;
+  padding: 0.15rem 2.95rem 1.65rem 0.2rem !important;
+  color: var(--foreground);
+  font-size: 0.78rem !important;
+  line-height: 1.5 !important;
+}
+
+.redeven-environment-flower-window__textarea::placeholder {
+  color: color-mix(in srgb, var(--muted-foreground) 82%, transparent);
+  font-size: 0.72rem;
+}
+
+.redeven-environment-flower-window__send {
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  z-index: 1;
+  min-width: 2.1rem;
+  min-height: 2.1rem;
+  justify-content: center;
+  border-radius: 0.68rem;
+  padding: 0.42rem;
+}
+
+.redeven-environment-flower-window__send:not(:disabled) {
+  cursor: pointer;
+}
+
+.redeven-environment-flower-window__error {
+  position: absolute;
+  right: 3rem;
+  bottom: 0.46rem;
+  left: 0.25rem;
+  overflow: hidden;
+  color: var(--error);
+  font-size: 0.6875rem;
+  line-height: 1.2;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-environment-card__flower-button:hover .redeven-environment-card__flower-icon,
+  .redeven-environment-card__flower-button:focus-visible .redeven-environment-card__flower-icon {
+    animation: none;
+  }
+}
+
 
 .redeven-new-environment-card:hover {
   transform: translateY(-2px) scale(1.01);

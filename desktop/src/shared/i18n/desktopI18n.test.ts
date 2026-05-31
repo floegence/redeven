@@ -210,6 +210,9 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.runtimeMessage.runtimeReadyOpenDetail).toBe('Runtime 已就绪。现在可以打开。');
     expect(zhCN.runtimeMessage.restartRuntimeReady).toBe('Desktop 重启 Runtime 并且它报告就绪后，即可打开。');
     expect(zhCN.shell.backToEnvironments).toBe('返回 Environments');
+    expect(zhCN.environmentCenter.askFlowerForLabel).toBe('询问 Flower：{label}');
+    expect(zhCN.environmentCenter.askFlowerCardTitle).toBe('询问 Flower');
+    expect(zhCN.toast.flowerPromptQueued).toBe('已发送给 Flower。');
     expect(zhCN.connectionDialog.sshHost).toBe('SSH主机');
     expect(zhCN.connectionDialog.sshContainer).toBe('SSH主机容器');
     expect(zhCN.runtimeMessage.sshContainerRuntime).toBe('SSH主机容器 Runtime');
@@ -242,11 +245,18 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.emptyState.explainTitle).toBe('解釋程式碼');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.threadList.refreshLabel).toBe('重新整理對話');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.settings.backToChat).toBe('返回聊天');
+    expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].environmentCenter.askFlowerCardTitle).toBe('詢問 Flower');
+    expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].environmentCenter.askFlowerCardReplyHint).toBe('回覆 Flower');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.conversationsAria).toBe('Flower conversations');
+    expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerCardTitle).toBe('Ask Flower');
+    expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerCardReplyHint).toBe('Reply to Flower');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].shell.backToEnvironments).toBe('Back to Environments');
     expect(DESKTOP_I18N_DICTIONARIES['ja-JP'].flowerSurface.threadList.title).toBe('会話');
+    expect(DESKTOP_I18N_DICTIONARIES['ja-JP'].environmentCenter.askFlowerCardTitle).toBe('Flower に聞く');
     expect(DESKTOP_I18N_DICTIONARIES['fr-FR'].flowerSurface.threadList.title).toBe('Discussions');
+    expect(DESKTOP_I18N_DICTIONARIES['fr-FR'].environmentCenter.askFlowerCardTitle).toBe('Demander à Flower');
     expect(DESKTOP_I18N_DICTIONARIES['ru-RU'].flowerSurface.threadList.title).toBe('Беседы');
+    expect(DESKTOP_I18N_DICTIONARIES['ru-RU'].environmentCenter.askFlowerCardTitle).toBe('Спросить Flower');
   });
 
   it('keeps ru-RU plural messages wired for Russian plural categories', () => {
