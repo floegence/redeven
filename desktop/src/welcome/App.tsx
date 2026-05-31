@@ -2053,6 +2053,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
   const [environmentFlowerComposer, setEnvironmentFlowerComposer] = createSignal<EnvironmentFlowerComposerState | null>(null);
+  const [focusedFlowerThreadID, setFocusedFlowerThreadID] = createSignal('');
   const deleteTargetOperation = createMemo(() => {
     const target = deleteTarget();
     if (!target) {
@@ -4221,18 +4222,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  async function sendEnvironmentFlowerPrompt(environment: DesktopEnvironmentEntry, prompt: string): Promise<void> {
+  async function sendEnvironmentFlowerPrompt(environment: DesktopEnvironmentEntry, prompt: string): Promise<string> {
     const cleanPrompt = trimString(prompt);
     if (!cleanPrompt) {
-      return;
+      return '';
     }
     const result = await props.runtime.settings.sendFlowerHostChat({
       prompt: buildEnvironmentFlowerPrompt(i18n(), environment, cleanPrompt),
+      reply_mode: 'background',
     });
     if (!result.ok) {
       throw new Error(result.error);
     }
+    setFocusedFlowerThreadID(result.thread.thread_id);
     showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
+    return result.thread.thread_id;
   }
 
   function openEnvironmentFlowerComposer(environment: DesktopEnvironmentEntry, anchor?: { x: number; y: number }): void {
@@ -4448,6 +4452,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               threadSourceLabel: i18n().t('flowerSurface.host.thisHost'),
             })}
             copy={createDesktopFlowerSurfaceCopy(i18n())}
+            focusThreadID={focusedFlowerThreadID()}
           />
         </Show>
       </DesktopLauncherShell>
@@ -5562,11 +5567,12 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
   i18n: DesktopI18n;
   state: EnvironmentFlowerComposerState | null;
   onClose: () => void;
-  sendFlowerPrompt: (environment: DesktopEnvironmentEntry, prompt: string) => Promise<void>;
+  sendFlowerPrompt: (environment: DesktopEnvironmentEntry, prompt: string) => Promise<string>;
   openFlowerHostSurface: () => Promise<void>;
 }>) {
   const [prompt, setPrompt] = createSignal('');
   const [validationError, setValidationError] = createSignal('');
+  const [isComposing, setIsComposing] = createSignal(false);
   const [sending, setSending] = createSignal(false);
   const [viewport, setViewport] = createSignal(currentViewportSize());
   const environment = createMemo(() => props.state?.environment ?? null);
@@ -5584,6 +5590,26 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
       setPrompt('');
       setValidationError('');
     }
+  });
+
+  createEffect(() => {
+    if (!props.state || typeof document === 'undefined') {
+      return;
+    }
+
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      if (sending()) {
+        return;
+      }
+      const target = event.target instanceof Element ? event.target : null;
+      if (target?.closest('.redeven-environment-flower-window')) {
+        return;
+      }
+      props.onClose();
+    };
+
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
+    onCleanup(() => document.removeEventListener('pointerdown', handleOutsidePointerDown, true));
   });
 
   createEffect(() => {
@@ -5628,6 +5654,13 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
     }
   };
 
+  const shouldSubmitOnEnterKeydown = (event: KeyboardEvent): boolean => {
+    if (event.isComposing || isComposing()) {
+      return false;
+    }
+    return event.key === 'Enter' && !event.shiftKey;
+  };
+
   return (
     <Show when={environment()} keyed>
       {(current) => (
@@ -5664,11 +5697,14 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
                     {props.i18n.t('environmentCenter.askFlowerCardDescription')}
                   </div>
                   <div class="redeven-environment-flower-window__context">
-                    <div class="redeven-environment-flower-window__context-label">{props.i18n.t('environmentCenter.askFlowerCardContextLabel')}</div>
-                    <div class="redeven-environment-flower-window__context-name">{current.label}</div>
-                    <Show when={contextSummary()}>
-                      {(summary) => <div class="redeven-environment-flower-window__context-detail">{summary()}</div>}
-                    </Show>
+                    <div class="redeven-environment-flower-window__context-accent" aria-hidden="true" />
+                    <div class="redeven-environment-flower-window__context-copy">
+                      <div class="redeven-environment-flower-window__context-label">{props.i18n.t('environmentCenter.askFlowerCardContextLabel')}</div>
+                      <div class="redeven-environment-flower-window__context-name">{current.label}</div>
+                      <Show when={contextSummary()}>
+                        {(summary) => <div class="redeven-environment-flower-window__context-detail">{summary()}</div>}
+                      </Show>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -5692,8 +5728,16 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
                         setValidationError('');
                       }
                     }}
+                    onCompositionStart={() => setIsComposing(true)}
+                    onCompositionEnd={(event) => {
+                      setIsComposing(false);
+                      setPrompt(event.currentTarget.value);
+                      if (validationError()) {
+                        setValidationError('');
+                      }
+                    }}
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter' && !event.shiftKey) {
+                      if (shouldSubmitOnEnterKeydown(event)) {
                         event.preventDefault();
                         void sendToFlower();
                       }

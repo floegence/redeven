@@ -109,12 +109,14 @@ export type DesktopFlowerHostThread = Readonly<{
   model_id: string;
   created_at_ms: number;
   updated_at_ms: number;
+  status?: 'idle' | 'running' | 'failed';
   messages: readonly DesktopFlowerHostChatMessage[];
 }>;
 
 export type DesktopFlowerHostSendChatRequest = Readonly<{
   thread_id?: string;
   prompt: string;
+  reply_mode?: 'await' | 'background';
 }>;
 
 export type ListDesktopFlowerHostThreadsResult = Readonly<

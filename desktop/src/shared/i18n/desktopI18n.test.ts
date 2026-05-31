@@ -212,6 +212,10 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.shell.backToEnvironments).toBe('返回 Environments');
     expect(zhCN.environmentCenter.askFlowerForLabel).toBe('询问 Flower：{label}');
     expect(zhCN.environmentCenter.askFlowerCardTitle).toBe('询问 Flower');
+    expect(zhCN.environmentCenter.askFlowerCardEyebrow).toBe('Flower 已就绪');
+    expect(zhCN.environmentCenter.askFlowerCardDescription).toBe('想让我先看这个 Environment 的哪一部分？');
+    expect(zhCN.environmentCenter.askFlowerCardContextLabel).toBe('已关联上下文');
+    expect('askFlowerCardReadyHint' in zhCN.environmentCenter).toBe(false);
     expect(zhCN.toast.flowerPromptQueued).toBe('已发送给 Flower。');
     expect(zhCN.connectionDialog.sshHost).toBe('SSH主机');
     expect(zhCN.connectionDialog.sshContainer).toBe('SSH主机容器');
@@ -249,6 +253,8 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].environmentCenter.askFlowerCardReplyHint).toBe('回覆 Flower');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.conversationsAria).toBe('Flower conversations');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerCardTitle).toBe('Ask Flower');
+    expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerCardDescription).toBe('What should we look into for this Environment?');
+    expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerCardContextLabel).toBe('Linked context');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].environmentCenter.askFlowerCardReplyHint).toBe('Reply to Flower');
     expect(DESKTOP_I18N_DICTIONARIES['en-US'].shell.backToEnvironments).toBe('Back to Environments');
     expect(DESKTOP_I18N_DICTIONARIES['ja-JP'].flowerSurface.threadList.title).toBe('会話');

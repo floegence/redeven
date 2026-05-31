@@ -373,11 +373,87 @@ describe('desktopFlowerHostState', () => {
         );
 
         expect(thread.thread_id).toBe('flower_thread_id_1');
+        expect(thread.status).toBe('idle');
         expect(thread.messages.map((message) => message.content)).toEqual(['hello flower', 'hello from Flower']);
         await expect(listDesktopFlowerHostThreads(paths)).resolves.toEqual([thread]);
         expect(await fs.stat(paths.threadsFile)).toBeTruthy();
         await expect(fs.stat(path.join(paths.stateRoot, 'local-environment', 'threads.json'))).rejects.toMatchObject({
           code: 'ENOENT',
+        });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  it('can return immediately with a running thread while the assistant reply continues in the background', async () => {
+    await withTempFlowerRoot(async (root) => {
+      const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+      const codec = createDesktopFlowerHostPlaintextSecretCodec();
+      await saveDesktopFlowerHostSettings(paths, validDraft({
+        providers: [
+          {
+            id: 'openai',
+            name: 'OpenAI',
+            type: 'openai',
+            base_url: 'https://flower.example.invalid/v1',
+            models: [{ model_name: 'gpt-5-mini', context_window: 400_000 }],
+            provider_api_key: 'sk-demo-secret',
+            provider_api_key_mode: 'replace',
+          },
+        ],
+      }), codec);
+      const originalFetch = globalThis.fetch;
+      let releaseFetch: ((value: Response) => void) | undefined;
+      const fetchStarted = new Promise<void>((resolve) => {
+        globalThis.fetch = (async () => {
+          resolve();
+          return new Promise<Response>((release) => {
+            releaseFetch = release;
+          });
+        }) as typeof fetch;
+      });
+
+      try {
+        const thread = await sendDesktopFlowerHostChat(
+          paths,
+          { prompt: 'hello background', reply_mode: 'background' },
+          codec,
+          (() => {
+            let now = 3000;
+            return () => {
+              now += 1;
+              return now;
+            };
+          })(),
+          (() => {
+            let i = 30;
+            return () => {
+              i += 1;
+              return `id_${i}`;
+            };
+          })(),
+        );
+
+        expect(thread.status).toBe('running');
+        expect(thread.messages.map((message) => message.content)).toEqual(['hello background']);
+        await expect(listDesktopFlowerHostThreads(paths)).resolves.toEqual([thread]);
+
+        await fetchStarted;
+        releaseFetch?.(new Response(JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: 'background response',
+              },
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+        await vi.waitFor(async () => {
+          const [completed] = await listDesktopFlowerHostThreads(paths);
+          expect(completed?.status).toBe('idle');
+          expect(completed?.messages.map((message) => message.content)).toEqual(['hello background', 'background response']);
         });
       } finally {
         globalThis.fetch = originalFetch;
