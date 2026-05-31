@@ -1,7 +1,9 @@
 import { plural } from '../messageTypes';
 import type { DesktopTranslationShape } from './en-US';
+import { flowerSurfaceFrFR } from './flowerSurface';
 
 export const frFR = {
+  flowerSurface: flowerSurfaceFrFR,
   common: {
     open: "Ouvrir",
     save: "Enregistrer",
@@ -105,6 +107,7 @@ export const frFR = {
     },
     commandSearchPlaceholder: "Rechercher des commandes Desktop...",
     openRedevenDashboard: "Ouvrir Redeven Dashboard",
+    backToEnvironments: "Retour aux Environments",
     useDarkTheme: "Utiliser le thème sombre",
     useLightTheme: "Utiliser le thème clair",
   },

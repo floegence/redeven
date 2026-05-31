@@ -17,8 +17,6 @@ import {
   Sun,
   Terminal,
 } from '@floegence/floe-webapp-core/icons';
-import { FlowerIcon } from './icons/FlowerIcon';
-import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
 import { CodexNavigationIcon } from './icons/CodexIcon';
 import {
   ActivityBarCodespacesIcon,
@@ -29,6 +27,7 @@ import {
   ActivityBarSwitchIcon,
   ActivityBarTerminalIcon,
 } from './icons/ActivityBarDockIcons';
+import { FlowerNavigationIcon } from './icons/FlowerSoftAuraIcon';
 import {
   BottomBarItem,
   DisplayModePageShell,
@@ -53,6 +52,7 @@ import {
   EnvContext,
   type AskFlowerComposerAnchor,
   type EnvDeckSurfaceActivationRequest,
+  type EnvSettingsOrigin,
   type EnvSettingsSection,
   type EnvWorkbenchOverviewEntryRequest,
   type EnvWorkbenchFilePreviewActivationRequest,
@@ -68,7 +68,6 @@ import { EnvFileBrowserPage } from './pages/EnvFileBrowserPage';
 import { EnvCodespacesPage } from './pages/EnvCodespacesPage';
 import { EnvPortForwardsPage } from './pages/EnvPortForwardsPage';
 import { EnvAIPage } from './pages/EnvAIPage';
-import { AIChatSidebar } from './pages/AIChatSidebar';
 import { CodexPage } from './codex/CodexPage';
 import { CodexProvider } from './codex/CodexProvider';
 import { CodexSidebar } from './codex/CodexSidebar';
@@ -664,6 +663,7 @@ export function EnvAppShell() {
 
   const [settingsFocusSeq, setSettingsFocusSeq] = createSignal(0);
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
+  const [settingsOrigin, setSettingsOrigin] = createSignal<EnvSettingsOrigin>(null);
   const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
   const [aiThreadFocusSeq, setAIThreadFocusSeq] = createSignal(0);
   const [aiThreadFocusId, setAIThreadFocusId] = createSignal<string | null>(null);
@@ -725,11 +725,20 @@ export function EnvAppShell() {
     });
   });
 
-  const openSettings = (section?: EnvSettingsSection) => {
+  const openSettings = (section?: EnvSettingsSection, options?: { origin?: EnvSettingsOrigin }) => {
     setSettingsFocusSection(section ?? 'config');
     setSettingsFocusSeq((n) => n + 1);
     setViewMode('activity');
+    setSettingsOrigin(options?.origin ?? null);
     activateActivitySurface('settings', { persist: false });
+  };
+
+  const returnFromSettingsOrigin = () => {
+    const origin = settingsOrigin();
+    setSettingsOrigin(null);
+    if (origin?.kind === 'flower') {
+      openSurface(origin.returnSurfaceId, { reason: 'direct_navigation', focus: true, ensureVisible: true });
+    }
   };
 
   const openDebugConsole = () => {
@@ -1990,7 +1999,7 @@ export function EnvAppShell() {
       { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
       { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
     ];
-    list.push({ id: 'ai', name: i18n.t('shell.nav.flower'), icon: FlowerIcon, component: EnvAIPage, sidebar: { order: 6, fullScreen: false, renderIn: 'main' } });
+    list.push({ id: 'ai', name: i18n.t('shell.nav.flower'), icon: FlowerNavigationIcon, component: EnvAIPage, sidebar: { order: 6, fullScreen: false, renderIn: 'main' } });
     list.push({ id: 'codex', name: i18n.t('shell.nav.codex'), icon: CodexNavigationIcon, component: CodexPage, sidebar: { order: 7, fullScreen: false, renderIn: 'main' } });
     list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: Settings, component: EnvSettingsPage, sidebar: { order: 99, fullScreen: true } });
     return list;
@@ -2018,6 +2027,7 @@ export function EnvAppShell() {
 
   const activateActivitySurface = (surface: EnvSurfaceId | 'settings', opts?: { persist?: boolean }) => {
     if (surface !== 'settings') {
+      setSettingsOrigin(null);
       setLastActivitySurface(surface);
       setLastRequestedSurface(surface);
       if (opts?.persist !== false) {
@@ -2919,7 +2929,7 @@ export function EnvAppShell() {
 
   const renderActivityShell = () => (
     <Shell
-      sidebarMode={viewMode() === 'activity' ? 'auto' : 'hidden'}
+      sidebarMode={viewMode() === 'activity' && layout.sidebarActiveTab() !== 'ai' ? 'auto' : 'hidden'}
       slotClassNames={{
         sidebar: viewMode() === 'activity' && layout.sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
         bottomBarHeight: 'h-7',
@@ -2934,8 +2944,6 @@ export function EnvAppShell() {
       sidebarContent={(activeTab) =>
         viewMode() !== 'activity'
           ? <></>
-          : activeTab === 'ai' && canUseFlower()
-            ? <AIChatSidebar scope="current_env" showTopActions={false} onOpenSettings={() => openSettings('ai')} />
           : activeTab === 'codex' && canUseCodex()
             ? <CodexSidebar />
             : <></>
@@ -3110,6 +3118,8 @@ export function EnvAppShell() {
         settingsSeq,
         bumpSettingsSeq,
         openSettings,
+        settingsOrigin,
+        returnFromSettingsOrigin,
         debugConsoleEnabled: debugConsole.enabled,
         setDebugConsoleEnabled,
         openDebugConsole,

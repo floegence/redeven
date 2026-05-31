@@ -7,7 +7,7 @@ export function ProviderBrandIcon(props: { type: AIProviderType; class?: string 
   const brand = () => providerBrandForType(props.type);
   const def = () => brand().icon;
 
-  const iconClass = () => cn('shrink-0', props.class);
+  const iconClass = () => cn('inline-flex shrink-0 items-center justify-center', props.class);
 
   return (
     <Switch>

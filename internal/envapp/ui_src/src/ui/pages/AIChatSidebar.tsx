@@ -1,15 +1,14 @@
-import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { Copy, History, Plus, Refresh, Settings, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Index, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { Copy, Refresh, X } from '@floegence/floe-webapp-core/icons';
 import { FlowerSoftAuraIcon } from '../icons/FlowerSoftAuraIcon';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { SnakeLoader } from '@floegence/floe-webapp-core/loading';
 import { SidebarContent, SidebarSection } from '@floegence/floe-webapp-core/layout';
-import { Button, Checkbox, ConfirmDialog, Dialog, ProcessingIndicator, SegmentedControl } from '@floegence/floe-webapp-core/ui';
+import { ConfirmDialog, ProcessingIndicator } from '@floegence/floe-webapp-core/ui';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { Motion } from 'solid-motionone';
-import { fetchGatewayJSON, prepareGatewayRequestInit } from '../services/gatewayApi';
-import { Tooltip } from '../primitives/Tooltip';
-import { useAIChatContext, type ListThreadsResponse, type ThreadRunStatus, type ThreadView } from './AIChatContext';
+import { prepareGatewayRequestInit } from '../services/gatewayApi';
+import { useAIChatContext, type ThreadRunStatus, type ThreadView } from './AIChatContext';
 import { useEnvContext } from './EnvContext';
 import { hasRWXPermissions } from './aiPermissions';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
@@ -46,20 +45,9 @@ function fmtShortTime(ms: number, i18n: I18nHelpers): string {
   }
 }
 
-// Full timestamp used by the management dialog table.
-function fmtDetailTime(ms: number, i18n: I18nHelpers): string {
-  if (!ms) return i18n.t('flowerChat.sidebar.time.empty');
-  try {
-    return i18n.formatDateTime(ms, { dateStyle: 'medium', timeStyle: 'short' });
-  } catch {
-    return i18n.t('flowerChat.sidebar.time.empty');
-  }
-}
-
 // Time group type.
 type TimeGroup = 'today' | 'yesterday' | 'this_week' | 'older';
 
-type ThreadAgePreset = 'all' | 'older_1d' | 'older_1w' | 'older_1m';
 type DeleteThreadResult = 'deleted' | 'busy';
 
 // Group threads by date (only when total count >= 5).
@@ -184,30 +172,9 @@ function normalizeThreadStatus(raw: string | null | undefined): ThreadRunStatus 
   return 'idle';
 }
 
-function isActiveThreadStatus(status: ThreadRunStatus): boolean {
-  return status === 'accepted' || status === 'running' || status === 'waiting_approval' || status === 'waiting_user' || status === 'recovering' || status === 'finalizing';
-}
-
-function normalizeThreadAgePreset(value: string): ThreadAgePreset {
-  const v = String(value ?? '').trim();
-  if (v === 'older_1d' || v === 'older_1w' || v === 'older_1m') return v;
-  return 'all';
-}
-
-function threadMatchesAgePreset(thread: ThreadView, preset: ThreadAgePreset, nowUnixMs: number): boolean {
-  if (preset === 'all') return true;
-  const ts = threadSortTime(thread);
-  if (!ts) return false;
-  const ageMs = nowUnixMs - ts;
-  if (preset === 'older_1d') return ageMs >= 86400000;
-  if (preset === 'older_1w') return ageMs >= 7 * 86400000;
-  if (preset === 'older_1m') return ageMs >= 30 * 86400000;
-  return true;
-}
-
-async function requestDeleteThread(threadID: string, force: boolean): Promise<DeleteThreadResult> {
+async function requestDeleteThread(threadID: string, force: boolean, requestFailedMessage: string): Promise<DeleteThreadResult> {
   const tid = String(threadID ?? '').trim();
-  if (!tid) throw new Error('missing thread_id');
+  if (!tid) throw new Error(requestFailedMessage);
 
   const url = `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}${force ? '?force=true' : ''}`;
   const resp = await fetch(url, await prepareGatewayRequestInit({ method: 'DELETE' }));
@@ -226,38 +193,9 @@ async function requestDeleteThread(threadID: string, force: boolean): Promise<De
     throw new Error(String(data?.error ?? `HTTP ${resp.status}`));
   }
   if (data?.ok === false) {
-    throw new Error(String(data?.error ?? 'Request failed'));
+    throw new Error(String(data?.error ?? requestFailedMessage));
   }
   return 'deleted';
-}
-
-async function loadAllThreads(): Promise<ThreadView[]> {
-  const out: ThreadView[] = [];
-  const seen = new Set<string>();
-  const pageLimit = 200;
-  let cursor = '';
-
-  for (let page = 0; page < 50; page += 1) {
-    const params = new URLSearchParams();
-    params.set('limit', String(pageLimit));
-    if (cursor) params.set('cursor', cursor);
-
-    const result = await fetchGatewayJSON<ListThreadsResponse>(`/_redeven_proxy/api/ai/threads?${params.toString()}`, { method: 'GET' });
-    const list = Array.isArray(result.threads) ? result.threads : [];
-
-    for (const thread of list) {
-      const tid = String(thread.thread_id ?? '').trim();
-      if (!tid || seen.has(tid)) continue;
-      seen.add(tid);
-      out.push(thread);
-    }
-
-    const nextCursor = String(result.next_cursor ?? '').trim();
-    if (!nextCursor || list.length < pageLimit || nextCursor === cursor) break;
-    cursor = nextCursor;
-  }
-
-  return out;
 }
 
 /**
@@ -268,8 +206,8 @@ export type AIChatSidebarScope = 'current_env' | 'all';
 
 export function AIChatSidebar(props: {
   scope?: AIChatSidebarScope;
-  showTopActions?: boolean;
-  onOpenSettings?: () => void;
+  onNewChat?: () => void;
+  onThreadSelect?: () => void;
 } = {}) {
   const ctx = useAIChatContext();
   const env = useEnvContext();
@@ -280,7 +218,6 @@ export function AIChatSidebar(props: {
   const permissionReady = () => env.env.state === 'ready';
   const canRWX = createMemo(() => hasRWXPermissions(env.env()));
   const canManageChats = createMemo(() => permissionReady() && canRWX());
-  const canOpenFlowerChats = createMemo(() => protocol.status() === 'connected');
   const ensureRWX = (): boolean => {
     if (!permissionReady()) {
       notify.error(i18n.t('shell.notifications.notReadyTitle'), i18n.t('shell.notifications.loadingEnvironmentPermissions'));
@@ -300,22 +237,12 @@ export function AIChatSidebar(props: {
   const [deleteForce, setDeleteForce] = createSignal(false);
   const [deleting, setDeleting] = createSignal(false);
 
-  // Manager dialog state.
-  const [managerOpen, setManagerOpen] = createSignal(false);
-  const [managerLoading, setManagerLoading] = createSignal(false);
-  const [managerError, setManagerError] = createSignal('');
-  const [managerThreads, setManagerThreads] = createSignal<ThreadView[]>([]);
-  const [managerAgePreset, setManagerAgePreset] = createSignal<ThreadAgePreset>('all');
-  const [managerSelection, setManagerSelection] = createSignal<Record<string, true>>({});
-  const [managerDeleteConfirmOpen, setManagerDeleteConfirmOpen] = createSignal(false);
-  const [managerDeleting, setManagerDeleting] = createSignal(false);
   const [threadContextMenu, setThreadContextMenu] = createSignal<{
     x: number;
     y: number;
     thread: ThreadView;
   } | null>(null);
   let threadContextMenuEl: HTMLDivElement | null = null;
-  let managerLoadVersion = 0;
 
   const openDelete = (threadId: string, title: string) => {
     setDeleteThreadId(threadId);
@@ -332,7 +259,7 @@ export function AIChatSidebar(props: {
     setDeleting(true);
     try {
       const force = deleteForce();
-      const result = await requestDeleteThread(tid, force);
+      const result = await requestDeleteThread(tid, force, i18n.t('flowerChat.errors.requestFailed'));
       if (result === 'busy') {
         setDeleteForce(true);
         return;
@@ -347,13 +274,6 @@ export function AIChatSidebar(props: {
         ctx.enterDraftChat();
       }
 
-      setManagerThreads((prev) => prev.filter((thread) => thread.thread_id !== tid));
-      setManagerSelection((prev) => {
-        if (!prev[tid]) return prev;
-        const next = { ...prev };
-        delete next[tid];
-        return next;
-      });
       ctx.bumpThreadsSeq();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -362,41 +282,6 @@ export function AIChatSidebar(props: {
       setDeleting(false);
     }
   };
-
-  const loadManagerThreads = async () => {
-    const version = ++managerLoadVersion;
-    setManagerLoading(true);
-    setManagerError('');
-
-    try {
-      const list = await loadAllThreads();
-      if (version !== managerLoadVersion) return;
-
-      const sorted = [...list].sort((a, b) => threadSortTime(b) - threadSortTime(a));
-      setManagerThreads(sorted);
-      setManagerSelection((prev) => {
-        const valid = new Set(sorted.map((thread) => thread.thread_id));
-        const next: Record<string, true> = {};
-        for (const tid of Object.keys(prev)) {
-          if (valid.has(tid)) next[tid] = true;
-        }
-        return next;
-      });
-    } catch (e) {
-      if (version !== managerLoadVersion) return;
-      const msg = e instanceof Error ? e.message : String(e);
-      setManagerError(msg || i18n.t('flowerChat.errors.requestFailed'));
-    } finally {
-      if (version === managerLoadVersion) {
-        setManagerLoading(false);
-      }
-    }
-  };
-
-  createEffect(() => {
-    if (!managerOpen()) return;
-    void loadManagerThreads();
-  });
 
   createEffect(() => {
     const menu = threadContextMenu();
@@ -425,13 +310,6 @@ export function AIChatSidebar(props: {
       window.removeEventListener('keydown', onKeyDown);
     });
   });
-
-  const openManager = () => {
-    setManagerSelection({});
-    setManagerAgePreset('all');
-    setManagerError('');
-    setManagerOpen(true);
-  };
 
   const openThreadContextMenu = (event: MouseEvent, thread: ThreadView) => {
     event.preventDefault();
@@ -492,158 +370,7 @@ export function AIChatSidebar(props: {
     },
   ];
 
-  const managerStatusFor = (thread: ThreadView): ThreadRunStatus => {
-    const persisted = normalizeThreadStatus(thread.run_status);
-    if (!ctx.isThreadRunning(thread.thread_id)) return persisted;
-    if (persisted === 'accepted' || persisted === 'waiting_approval' || persisted === 'recovering' || persisted === 'finalizing') {
-      return persisted;
-    }
-    return 'running';
-  };
-
-  const managerFilteredThreads = createMemo(() => {
-    const preset = managerAgePreset();
-    const list = managerThreads();
-    if (preset === 'all') return list;
-    const now = Date.now();
-    return list.filter((thread) => threadMatchesAgePreset(thread, preset, now));
-  });
-
-  const managerSelectedThreads = createMemo(() => {
-    const selected = managerSelection();
-    return managerThreads().filter((thread) => !!selected[thread.thread_id]);
-  });
-
-  const managerSelectedCount = createMemo(() => managerSelectedThreads().length);
-  const managerFilteredSelectedCount = createMemo(() => {
-    const selected = managerSelection();
-    let count = 0;
-    for (const thread of managerFilteredThreads()) {
-      if (selected[thread.thread_id]) count += 1;
-    }
-    return count;
-  });
-  const managerHasFilteredSelection = createMemo(() => managerFilteredSelectedCount() > 0);
-  const managerAllFilteredSelected = createMemo(() => {
-    const visible = managerFilteredThreads();
-    if (visible.length === 0) return false;
-    return managerFilteredSelectedCount() === visible.length;
-  });
-  const managerSelectedRunningCount = createMemo(() => {
-    let count = 0;
-    for (const thread of managerSelectedThreads()) {
-      if (isActiveThreadStatus(managerStatusFor(thread))) count += 1;
-    }
-    return count;
-  });
-
-  const setManagerThreadSelected = (threadID: string, checked: boolean) => {
-    const tid = String(threadID ?? '').trim();
-    if (!tid) return;
-    setManagerSelection((prev) => {
-      const next = { ...prev };
-      if (checked) {
-        next[tid] = true;
-      } else {
-        delete next[tid];
-      }
-      return next;
-    });
-  };
-
-  const setFilteredThreadsSelected = (checked: boolean) => {
-    const visibleIDs = managerFilteredThreads().map((thread) => thread.thread_id);
-    if (visibleIDs.length === 0) return;
-
-    setManagerSelection((prev) => {
-      const next = { ...prev };
-      for (const tid of visibleIDs) {
-        if (checked) {
-          next[tid] = true;
-        } else {
-          delete next[tid];
-        }
-      }
-      return next;
-    });
-  };
-
-  const clearManagerSelection = () => {
-    setManagerSelection({});
-  };
-
-  const doBulkDelete = async () => {
-    const targets = managerSelectedThreads();
-    if (targets.length === 0) {
-      setManagerDeleteConfirmOpen(false);
-      return;
-    }
-    if (!ensureRWX()) {
-      setManagerDeleteConfirmOpen(false);
-      return;
-    }
-
-    setManagerDeleting(true);
-    try {
-      let deleted = 0;
-      let forced = 0;
-      let failed = 0;
-      const deletedIDs = new Set<string>();
-
-      for (const thread of targets) {
-        const tid = String(thread.thread_id ?? '').trim();
-        if (!tid) continue;
-
-        try {
-          const result = await requestDeleteThread(tid, false);
-          if (result === 'busy') {
-            await requestDeleteThread(tid, true);
-            forced += 1;
-          }
-          deleted += 1;
-          deletedIDs.add(tid);
-        } catch {
-          failed += 1;
-        }
-      }
-
-      if (deletedIDs.size > 0) {
-        const activeID = String(ctx.activeThreadId() ?? '').trim();
-        if (activeID && deletedIDs.has(activeID)) {
-          ctx.clearActiveThreadPersistence();
-          ctx.enterDraftChat();
-        }
-
-        setManagerThreads((prev) => prev.filter((thread) => !deletedIDs.has(thread.thread_id)));
-        setManagerSelection((prev) => {
-          const next = { ...prev };
-          for (const tid of deletedIDs) {
-            delete next[tid];
-          }
-          return next;
-        });
-        ctx.bumpThreadsSeq();
-      }
-
-      if (failed === 0) {
-        const details = forced > 0
-          ? i18n.t('flowerChat.sidebar.bulkDelete.deletedWithForcedDetails', { deleted, forced })
-          : i18n.tn('flowerChat.sidebar.bulkDelete.deletedDetails', deleted);
-        notify.success(i18n.t('flowerChat.sidebar.bulkDelete.deletedTitle'), details);
-        setManagerDeleteConfirmOpen(false);
-      } else {
-        notify.error(
-          i18n.t('flowerChat.sidebar.bulkDelete.someFailedTitle'),
-          i18n.t('flowerChat.sidebar.bulkDelete.partialFailed', { deleted, failed }),
-        );
-      }
-    } finally {
-      setManagerDeleting(false);
-    }
-  };
-
   const scope = () => props.scope ?? 'all';
-  const showTopActions = () => props.showTopActions ?? true;
   const threadList = createMemo(() => ctx.threads()?.threads ?? []);
   const flowerThreadById = createMemo(() => {
     const currentEnvPublicId = String(env.env_id() ?? '').trim();
@@ -672,77 +399,21 @@ export function AIChatSidebar(props: {
   return (
     <>
       <SidebarContent class={THREAD_RAIL_CONTENT_CLASS}>
-        <Show
-          when={showTopActions()}
-          fallback={
-            <div class="shrink-0 px-1 pb-2">
-              <div class="flex items-center justify-between gap-2 rounded-lg border border-sidebar-border/60 bg-sidebar/70 px-2.5 py-2">
-                <div class="min-w-0">
-                  <div class="truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-sidebar-foreground/75">
-                    {scope() === 'current_env' ? i18n.t('flowerChat.sidebar.currentEnvConversations') : i18n.t('flowerChat.sidebar.allFlowerHistory')}
-                  </div>
-                  <div class="mt-0.5 text-[10.5px] text-sidebar-foreground/45">
-                    {scope() === 'current_env' ? i18n.t('flowerChat.sidebar.currentEnvConversationsHint') : i18n.t('flowerChat.sidebar.allFlowerHistoryHint')}
-                  </div>
-                </div>
-                <div class="flex shrink-0 items-center gap-1">
-                  <Tooltip content={i18n.t('flowerChat.sidebar.manageChats')} placement="bottom" delay={0}>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      class="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                      onClick={openManager}
-                      disabled={!canOpenFlowerChats()}
-                      aria-label={i18n.t('flowerChat.sidebar.manageChats')}
-                    >
-                      <History class="w-3.5 h-3.5" />
-                    </Button>
-                  </Tooltip>
-                  {props.onOpenSettings ? (
-                    <Tooltip content={i18n.t('flowerChat.sidebar.flowerSettings')} placement="bottom" delay={0}>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        class="h-7 w-7 text-sidebar-foreground/70 hover:text-sidebar-foreground"
-                        onClick={props.onOpenSettings}
-                        disabled={!canOpenFlowerChats()}
-                        aria-label={i18n.t('flowerChat.sidebar.flowerSettings')}
-                        data-testid="flower-sidebar-settings"
-                      >
-                        <Settings class="w-3.5 h-3.5" />
-                      </Button>
-                    </Tooltip>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-          }
-        >
-          <div class="shrink-0 px-1 pb-1 flex items-center gap-1">
-            <Button
-              variant="primary"
-              size="sm"
-              class="flex-1 justify-start gap-2 h-8 shadow-sm"
-              icon={Plus}
-              onClick={() => ctx.enterDraftChat()}
-              disabled={!canOpenFlowerChats()}
-            >
-              {i18n.t('flowerChat.sidebar.newChat')}
-            </Button>
-            <Tooltip content={i18n.t('flowerChat.sidebar.manageChats')} placement="bottom" delay={0}>
-              <Button
-                variant="outline"
-                size="icon"
-                class="h-8 w-8 border-sidebar-border/60 bg-sidebar hover:bg-sidebar-accent/60 text-sidebar-foreground/80 hover:text-sidebar-foreground transition-all duration-150"
-                onClick={openManager}
-                disabled={!canOpenFlowerChats()}
-                aria-label={i18n.t('flowerChat.sidebar.manageChats')}
-              >
-                <History class="w-3.5 h-3.5" />
-              </Button>
-            </Tooltip>
-          </div>
-        </Show>
+        <div class="shrink-0 px-1 pb-1 flex justify-stretch">
+          <button
+            type="button"
+            class="flower-chat-sidebar-new-chat-button"
+            onClick={() => {
+              ctx.enterDraftChat();
+              props.onNewChat?.();
+            }}
+            aria-label={i18n.t('aiChrome.newChat')}
+            title={i18n.t('aiChrome.newChat')}
+          >
+            <FlowerSoftAuraIcon class="h-8 w-8 shrink-0" iconClass="redeven-flower-soft-aura-nav-svg" glowClass="redeven-flower-soft-aura-nav-glow" />
+            <span class="flower-chat-sidebar-new-chat-label">{i18n.t('aiChrome.newChat')}</span>
+          </button>
+        </div>
 
         <div class="min-h-0 flex flex-1 flex-col overflow-hidden">
           <Show
@@ -766,7 +437,22 @@ export function AIChatSidebar(props: {
                 when={visibleThreads().length > 0}
                 fallback={<EmptyState i18n={i18n} />}
               >
-                <SidebarSection title={scope() === 'current_env' ? i18n.t('flowerChat.sidebar.currentEnvConversations') : i18n.t('flowerChat.sidebar.conversations')} class={THREAD_RAIL_SECTION_CLASS}>
+                <SidebarSection
+                  title={scope() === 'current_env' ? i18n.t('flowerChat.sidebar.currentEnvConversations') : i18n.t('flowerChat.sidebar.conversations')}
+                  actions={(
+                    <button
+                      type="button"
+                      class="flower-host-thread-refresh-button inline-flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45"
+                      aria-label={i18n.t('flowerChat.sidebar.refresh')}
+                      title={i18n.t('flowerChat.sidebar.refresh')}
+                      disabled={ctx.threads.loading}
+                      onClick={() => ctx.bumpThreadsSeq()}
+                    >
+                      <Refresh class={`h-3.5 w-3.5 ${ctx.threads.loading ? 'animate-spin' : ''}`} />
+                    </button>
+                  )}
+                  class={THREAD_RAIL_SECTION_CLASS}
+                >
                   <div
                     {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
                     data-testid="flower-thread-scroll-region"
@@ -800,6 +486,7 @@ export function AIChatSidebar(props: {
                                       onClick={() => {
                                         setThreadContextMenu(null);
                                         ctx.selectThreadId(threadID());
+                                        props.onThreadSelect?.();
                                       }}
                                       onContextMenu={(event) => openThreadContextMenu(event, thread())}
                                       onDelete={() => openDelete(threadID(), thread().title)}
@@ -819,219 +506,6 @@ export function AIChatSidebar(props: {
           </Show>
         </div>
       </SidebarContent>
-
-      {/* Chat manager dialog */}
-      <Dialog
-        open={managerOpen()}
-        onOpenChange={(open) => {
-          if (!open) {
-            setManagerDeleteConfirmOpen(false);
-          }
-          setManagerOpen(open);
-        }}
-        title={i18n.t('flowerChat.sidebar.manager.title')}
-        description={i18n.t('flowerChat.sidebar.manager.description')}
-        class="max-w-5xl h-[78vh] max-h-[78vh]"
-        footer={
-          <div class="w-full flex flex-wrap items-center justify-between gap-2">
-            <div class="text-xs text-muted-foreground">
-              {i18n.tn('flowerChat.sidebar.manager.selectedCount', managerSelectedCount())}
-            </div>
-            <div class="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                icon={Refresh}
-                onClick={() => void loadManagerThreads()}
-                disabled={managerLoading() || managerDeleting()}
-              >
-                {i18n.t('flowerChat.sidebar.manager.refresh')}
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                icon={Trash}
-                onClick={() => setManagerDeleteConfirmOpen(true)}
-                disabled={managerSelectedCount() === 0 || managerDeleting() || protocol.status() !== 'connected'}
-              >
-                {i18n.t('flowerChat.sidebar.manager.deleteSelected')}
-              </Button>
-            </div>
-          </div>
-        }
-      >
-        <div class="h-full min-h-0 flex flex-col gap-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <SegmentedControl
-              value={managerAgePreset()}
-              onChange={(value) => setManagerAgePreset(normalizeThreadAgePreset(value))}
-              size="sm"
-              options={[
-                { value: 'all', label: i18n.t('flowerChat.sidebar.manager.filter.all') },
-                { value: 'older_1d', label: i18n.t('flowerChat.sidebar.manager.filter.olderOneDay') },
-                { value: 'older_1w', label: i18n.t('flowerChat.sidebar.manager.filter.olderOneWeek') },
-                { value: 'older_1m', label: i18n.t('flowerChat.sidebar.manager.filter.olderOneMonth') },
-              ]}
-            />
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() => setFilteredThreadsSelected(true)}
-              disabled={managerFilteredThreads().length === 0 || managerLoading()}
-            >
-              {i18n.t('flowerChat.sidebar.manager.selectFiltered')}
-            </Button>
-            <Button
-              size="xs"
-              variant="ghost"
-              onClick={clearManagerSelection}
-              disabled={managerSelectedCount() === 0}
-            >
-              {i18n.t('flowerChat.sidebar.manager.clearSelection')}
-            </Button>
-            <div class="ml-auto text-xs text-muted-foreground">
-              {i18n.t('flowerChat.sidebar.manager.shownTotal', {
-                shown: i18n.formatNumber(managerFilteredThreads().length),
-                total: i18n.formatNumber(managerThreads().length),
-              })}
-            </div>
-          </div>
-
-          <div class="rounded-md border border-border/70 overflow-hidden flex-1 min-h-0">
-            <Show
-              when={!managerLoading()}
-              fallback={
-                <div class="px-3 py-5 text-xs text-muted-foreground flex items-center gap-2">
-                  <SnakeLoader size="sm" />
-                  <span>{i18n.t('flowerChat.sidebar.loadingChats')}</span>
-                </div>
-              }
-            >
-              <Show
-                when={!managerError()}
-                fallback={<div class="px-3 py-4 text-xs text-error break-words">{managerError()}</div>}
-              >
-                <Show
-                  when={managerThreads().length > 0}
-                  fallback={<div class="px-3 py-6 text-xs text-muted-foreground">{i18n.t('flowerChat.sidebar.manager.noChats')}</div>}
-                >
-                  <Show
-                    when={managerFilteredThreads().length > 0}
-                    fallback={<div class="px-3 py-6 text-xs text-muted-foreground">{i18n.t('flowerChat.sidebar.manager.noFilterMatches')}</div>}
-                  >
-                    <div {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS} class="h-full overflow-auto">
-                      <table class="w-full table-fixed text-xs">
-                        <thead class="sticky top-0 bg-card/95 backdrop-blur-sm text-muted-foreground">
-                          <tr class="text-left border-b border-border/70">
-                            <th class="w-10 py-2 pl-3 pr-2">
-                              <Checkbox
-                                checked={managerAllFilteredSelected()}
-                                indeterminate={!managerAllFilteredSelected() && managerHasFilteredSelection()}
-                                onChange={(checked) => setFilteredThreadsSelected(checked)}
-                                disabled={managerFilteredThreads().length === 0}
-                              />
-                            </th>
-                            <th class="w-[52%] py-2 pr-3">{i18n.t('flowerChat.sidebar.manager.tableTitle')}</th>
-                            <th class="w-32 py-2 pr-3">{i18n.t('flowerChat.sidebar.manager.tableStatus')}</th>
-                            <th class="w-44 py-2 pr-3">{i18n.t('flowerChat.sidebar.manager.tableUpdated')}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <For each={managerFilteredThreads()}>
-                            {(thread) => {
-                              const threadID = thread.thread_id;
-                              const selected = () => !!managerSelection()[threadID];
-                              const status = () => managerStatusFor(thread);
-                              const title = () => thread.title?.trim() || i18n.t('flowerChat.sidebar.untitledChat');
-                              const preview = () => thread.last_message_preview?.trim() || '';
-
-                              return (
-                                <tr class={`border-b border-border/50 last:border-b-0 ${selected() ? 'bg-muted/40' : ''}`}>
-                                  <td class="py-2.5 pl-3 pr-2 align-top">
-                                    <Checkbox
-                                      checked={selected()}
-                                      onChange={(checked) => setManagerThreadSelected(threadID, checked)}
-                                    />
-                                  </td>
-                                  <td class="w-[52%] py-2.5 pr-3 align-top">
-                                    <div class="min-w-0 max-w-full">
-                                      <div class="flex items-center gap-2 min-w-0">
-                                        <button
-                                          type="button"
-                                          class="block w-full text-xs font-medium truncate text-left hover:underline"
-                                          onClick={() => {
-                                            ctx.selectThreadId(threadID);
-                                            setManagerOpen(false);
-                                          }}
-                                          title={title()}
-                                        >
-                                          {title()}
-                                        </button>
-                                        <Show when={threadID === ctx.activeThreadId()}>
-                                          <span class="text-[10px] rounded border border-primary/30 bg-primary/10 text-primary px-1.5 py-0.5">
-                                            {i18n.t('flowerChat.sidebar.manager.active')}
-                                          </span>
-                                        </Show>
-                                      </div>
-                                      <Show when={!!preview()}>
-                                        <p class="text-[11px] text-muted-foreground/70 truncate mt-0.5">{preview()}</p>
-                                      </Show>
-                                    </div>
-                                  </td>
-                                  <td class="py-2.5 pr-3 align-top">
-                                    <div class="inline-flex items-center gap-1.5 text-muted-foreground">
-                                      <span class={`w-1.5 h-1.5 rounded-full ${statusDotClass(status())}`} />
-                                      <span>{statusLabel(status(), i18n) || i18n.t('flowerChat.sidebar.status.idle')}</span>
-                                    </div>
-                                  </td>
-                                  <td class="py-2.5 pr-3 align-top text-muted-foreground whitespace-nowrap">
-                                    {fmtDetailTime(threadSortTime(thread), i18n)}
-                                  </td>
-                                </tr>
-                              );
-                            }}
-                          </For>
-                        </tbody>
-                      </table>
-                    </div>
-                  </Show>
-                </Show>
-              </Show>
-            </Show>
-          </div>
-        </div>
-      </Dialog>
-
-      {/* Batch delete confirmation */}
-      <ConfirmDialog
-        open={managerDeleteConfirmOpen()}
-        onOpenChange={(open) => {
-          if (!open) {
-            setManagerDeleteConfirmOpen(false);
-            return;
-          }
-          if (managerSelectedCount() > 0) {
-            setManagerDeleteConfirmOpen(true);
-          }
-        }}
-        title={i18n.t('flowerChat.sidebar.bulkDelete.title')}
-        confirmText={i18n.tn('flowerChat.sidebar.bulkDelete.confirm', managerSelectedCount())}
-        variant="destructive"
-        loading={managerDeleting()}
-        onConfirm={() => void doBulkDelete()}
-      >
-        <div class="space-y-2">
-          <p class="text-sm">
-            {i18n.tn('flowerChat.sidebar.bulkDelete.prompt', managerSelectedCount())}
-          </p>
-          <Show when={managerSelectedRunningCount() > 0}>
-            <p class="text-xs text-muted-foreground">
-              {i18n.tn('flowerChat.sidebar.bulkDelete.runningWarning', managerSelectedRunningCount())}
-            </p>
-          </Show>
-          <p class="text-xs text-muted-foreground">{i18n.t('flowerChat.sidebar.delete.cannotUndo')}</p>
-        </div>
-      </ConfirmDialog>
 
       {/* Single delete confirmation dialog */}
       <ConfirmDialog

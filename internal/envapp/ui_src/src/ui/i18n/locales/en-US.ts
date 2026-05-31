@@ -116,6 +116,7 @@ export const enUS = defineDictionary({
   },
   settings: {
     runtimeTitle: 'Runtime Settings',
+    backToFlower: 'Back to Flower',
     searchPlaceholder: 'Search settings',
     filteredSections: '{visible} of {total} sections',
     nav: {
@@ -848,19 +849,6 @@ export const enUS = defineDictionary({
   },
   flowerChat: {
     sidebar: enUSFlowerChatSidebar,
-    component: {
-      railAriaLabel: 'Flower component',
-      navigationAriaLabel: 'Flower navigation',
-      railSubtitle: 'Chats, history, and settings',
-      newChat: 'New chat',
-      newChatHint: 'Start without environment context',
-      currentEnvConversations: 'Current env',
-      currentEnvConversationsHint: 'Conversations tied to this environment',
-      allFlowerHistory: 'All history',
-      allFlowerHistoryHint: 'Browse every Flower conversation',
-      flowerSettings: 'Settings',
-      flowerSettingsHint: 'Configure Flower models and policies',
-    },
     composer: {
       typeMessagePlaceholder: 'Type a message...',
       dropFilesHere: 'Drop files here',
@@ -963,25 +951,29 @@ export const enUS = defineDictionary({
       weather: {
         title: 'Plan a weather-aware day',
         description: 'Compare the forecast and make a practical schedule.',
+        prompt: 'Check the latest weather for Toronto, Canada. Include:\n- current conditions\n- hourly forecast for the next 12 hours\n- daily forecast for the next 3 days\n- rain/snow probability and feels-like temperature\n- what to wear and whether to carry an umbrella\nCite source URLs with update timestamps.',
       },
       trip: {
         title: 'Build a weekend trip',
         description: 'Balance places, timing, budget, and travel constraints.',
+        prompt: 'Help me choose a travel destination through guided Q&A.\nUse ask_user one question at a time with concise explicit choices (best choice first).\nCover budget, trip length, weather preference, travel pace, and visa constraints.\nAfter enough info, recommend top 3 destinations with pros/cons, best season, and budget range.',
       },
       project: {
         title: 'Untangle a project',
         description: 'Turn scattered goals into a focused execution plan.',
+        prompt: 'Analyze the current repository and provide:\n1. a concise project introduction (what it does and who it is for)\n2. a module map and responsibilities\n3. local run/build/test commands\n4. key file paths as evidence',
       },
       techRoute: {
         title: 'Map a technical route',
         description: 'Review options and pick the next implementation step.',
+        prompt: 'Analyze this project\'s key technical routes and output:\n- authentication flow\n- control-plane vs data-plane flow\n- deployment path\n- observability and operational checkpoints\nFor each route, include steps, key files, and main risks.',
       },
     },
     emptyChat: {
       title: 'What should Flower help with today?',
       description: 'Start with a question, attach context, or queue a follow-up while Flower is waiting for input.',
-      sendHint: 'Enter to send',
-      newlineHint: 'Shift+Enter for a new line',
+      sendHint: 'send',
+      newlineHint: 'new line',
     },
     followups: {
       queueForLater: 'Queue for later',

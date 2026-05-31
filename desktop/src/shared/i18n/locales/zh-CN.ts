@@ -1,7 +1,9 @@
 import { plural } from '../messageTypes';
 import type { DesktopTranslationShape } from './en-US';
+import { flowerSurfaceZhCN } from './flowerSurface';
 
 export const zhCN = {
+  flowerSurface: flowerSurfaceZhCN,
   common: {
     open: "打开",
     save: "保存",
@@ -105,6 +107,7 @@ export const zhCN = {
     },
     commandSearchPlaceholder: "搜索 Desktop 命令...",
     openRedevenDashboard: "打开 Redeven Dashboard",
+    backToEnvironments: "返回 Environments",
     useDarkTheme: "使用深色主题",
     useLightTheme: "使用浅色主题",
   },

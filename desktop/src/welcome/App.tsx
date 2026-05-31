@@ -5,6 +5,7 @@ import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-c
 import {
   AlertCircle,
   AlertTriangle,
+  ArrowLeft,
   Check,
   ChevronDown,
   ChevronRight,
@@ -88,23 +89,13 @@ import {
   normalizeDesktopLocalUIPasswordMode,
   type DesktopLocalUIPasswordMode,
   type DesktopSettingsDraft,
-  type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
-import type {
-  DesktopFlowerHostThread,
-  ListDesktopFlowerHostThreadsResult,
-  SendDesktopFlowerHostChatResult,
-  DesktopFlowerHostSendChatRequest,
-  DesktopFlowerHostSettingsDraft,
-  DesktopFlowerHostSettingsSnapshot,
-  LoadDesktopFlowerHostSettingsResult,
-  SaveDesktopFlowerHostSettingsResult,
-} from '../shared/flowerHostSettingsIPC';
 import {
   runtimeServiceIsOpenable,
   type RuntimeServiceSnapshot,
   type RuntimeServiceWorkload,
 } from '../shared/runtimeService';
+import { FlowerIcon, FlowerSurface } from '../../../internal/flower_ui/src';
 import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
   openConnectionPhaseSequence,
@@ -288,6 +279,11 @@ import {
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
 import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnimation';
+import {
+  createDesktopFlowerSurfaceAdapter,
+  type DesktopSettingsBridge,
+} from './flower/desktopFlowerSurfaceAdapter';
+import { createDesktopFlowerSurfaceCopy } from './flower/desktopFlowerSurfaceCopy';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -296,24 +292,6 @@ type DesktopLauncherBridge = Readonly<{
   performAction: (request: DesktopLauncherActionRequest) => Promise<DesktopLauncherActionResult>;
   subscribeActionProgress?: (listener: (progress: DesktopLauncherActionProgress) => void) => (() => void);
   subscribeSnapshot: (listener: (snapshot: DesktopWelcomeSnapshot) => void) => (() => void);
-}>;
-
-type DesktopSettingsBridge = Readonly<{
-  save: (draft: DesktopSettingsDraft) => Promise<SaveDesktopSettingsResult>;
-  loadFlowerHostSettings?: () => Promise<LoadDesktopFlowerHostSettingsResult>;
-  saveFlowerHostSettings?: (draft: DesktopFlowerHostSettingsDraft) => Promise<SaveDesktopFlowerHostSettingsResult>;
-  listFlowerHostThreads?: () => Promise<ListDesktopFlowerHostThreadsResult>;
-  sendFlowerHostChat?: (request: DesktopFlowerHostSendChatRequest) => Promise<SendDesktopFlowerHostChatResult>;
-  cancel: () => void;
-}>;
-
-type DesktopFlowerHostProviderDraftForm = Readonly<{
-  provider_id: string;
-  model_name: string;
-  provider_type: DesktopFlowerHostSettingsDraft['config']['providers'][number]['type'];
-  context_window: string;
-  base_url: string;
-  api_key: string;
 }>;
 
 export type DesktopWelcomeRuntime = Readonly<{
@@ -437,34 +415,6 @@ const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
 const ACTION_TOAST_TTL_MS = 4_000;
 const GUIDANCE_SUCCESS_DISMISS_MS = 720;
 const GUIDANCE_SESSION_CLEAR_MS = 220;
-
-function splitDesktopFlowerHostModelID(modelID: string): Readonly<{ provider_id: string; model_name: string }> {
-  const clean = trimString(modelID);
-  const slashIndex = clean.indexOf('/');
-  if (slashIndex <= 0 || slashIndex >= clean.length - 1) {
-    return { provider_id: '', model_name: '' };
-  }
-  return {
-    provider_id: clean.slice(0, slashIndex),
-    model_name: clean.slice(slashIndex + 1),
-  };
-}
-
-function draftFormFromDesktopFlowerHostConfig(
-  config: DesktopFlowerHostSettingsSnapshot['config'],
-): DesktopFlowerHostProviderDraftForm {
-  const currentModel = splitDesktopFlowerHostModelID(config.current_model_id);
-  const provider = config.providers.find((item) => item.id === currentModel.provider_id) ?? config.providers[0] ?? null;
-  const model = provider?.models.find((item) => item.model_name === currentModel.model_name) ?? provider?.models[0] ?? null;
-  return {
-    provider_id: provider?.id ?? 'default',
-    model_name: model?.model_name ?? '',
-    provider_type: provider?.type ?? 'openai_compatible',
-    context_window: model?.context_window ? String(model.context_window) : '',
-    base_url: provider?.base_url ?? '',
-    api_key: '',
-  };
-}
 
 const FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT: RedevenLanguageSnapshot = {
   preference: SYSTEM_LOCALE_PREFERENCE,
@@ -1670,7 +1620,15 @@ function desktopLauncherBridge(): DesktopLauncherBridge | null {
 
 function desktopSettingsBridge(): DesktopSettingsBridge | null {
   const candidate = window.redevenDesktopSettings;
-  if (!candidate || typeof candidate.save !== 'function' || typeof candidate.cancel !== 'function') {
+  if (
+    !candidate
+    || typeof candidate.save !== 'function'
+    || typeof candidate.cancel !== 'function'
+    || typeof candidate.loadFlowerHostSettings !== 'function'
+    || typeof candidate.saveFlowerHostSettings !== 'function'
+    || typeof candidate.listFlowerHostThreads !== 'function'
+    || typeof candidate.sendFlowerHostChat !== 'function'
+  ) {
     return null;
   }
   return candidate;
@@ -4172,6 +4130,25 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
+  async function openEnvironmentCenterSurface(): Promise<void> {
+    await performLauncherAction({
+      kind: 'open_environment_center',
+    });
+  }
+
+  const topBarLogoLabel = () => (
+    snapshot().surface === 'flower_host'
+      ? i18n().t('shell.backToEnvironments')
+      : i18n().t('shell.openRedevenDashboard')
+  );
+  const activateTopBarLogo = () => {
+    if (snapshot().surface === 'flower_host') {
+      void openEnvironmentCenterSurface();
+      return;
+    }
+    openRedevenDashboard();
+  };
+
   return (
     <>
       <DesktopCommandRegistrar
@@ -4190,7 +4167,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         skipLinkLabel={i18n().t('shell.accessibility.skipLinkLabel')}
         topBarLabel={i18n().t('shell.accessibility.topBarLabel')}
         logo={(
-          <TopBarIconButton label={i18n().t('shell.openRedevenDashboard')} onClick={() => openRedevenDashboard()}>
+          <TopBarIconButton label={topBarLogoLabel()} onClick={activateTopBarLogo}>
             <img
               src={headerLogoSrc()}
               alt="Redeven"
@@ -4201,15 +4178,28 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
         trailingActions={(
           <div class="flex items-center gap-1">
-            <TopBarIconButton
-              label="Flower"
-              tooltip="Flower"
-              class={cn('rounded-full', snapshot().surface === 'flower_host' ? 'bg-primary/10 text-primary' : '')}
+            <Show when={snapshot().surface === 'flower_host'}>
+              <button
+                type="button"
+                class="redeven-flower-back-button"
+                aria-label={i18n().t('shell.backToEnvironments')}
+                title={i18n().t('shell.backToEnvironments')}
+                onClick={() => void openEnvironmentCenterSurface()}
+              >
+                <ArrowLeft class="h-3.5 w-3.5" />
+                <span>{i18n().t('shell.backToEnvironments')}</span>
+              </button>
+            </Show>
+            <button
+              type="button"
+              class={cn('redeven-flower-topbar-button', snapshot().surface === 'flower_host' && 'text-primary')}
+              aria-label={i18n().t('flowerSurface.chat.entryLabel')}
+              title={i18n().t('flowerSurface.chat.entryLabel')}
               aria-current={snapshot().surface === 'flower_host' ? 'page' : undefined}
               onClick={() => void openFlowerHostSurface()}
             >
-              <span aria-hidden="true" class="text-base leading-none">✿</span>
-            </TopBarIconButton>
+              <FlowerIcon class="h-5 w-5" />
+            </button>
             <DesktopLanguagePicker
               openRequest={languagePickerOpenRequest()}
               snapshot={languageSnapshot()}
@@ -4336,7 +4326,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             />
           )}
         >
-          <FlowerHostSurface i18n={i18n()} />
+          <FlowerSurface
+            adapter={createDesktopFlowerSurfaceAdapter(props.runtime.settings, {
+              hostDisplayName: i18n().t('flowerSurface.host.thisHost'),
+              hostSubtitle: i18n().t('flowerSurface.host.subtitle'),
+              threadSourceLabel: i18n().t('flowerSurface.host.thisHost'),
+            })}
+            copy={createDesktopFlowerSurfaceCopy(i18n())}
+          />
         </Show>
       </DesktopLauncherShell>
 
@@ -7981,501 +7978,7 @@ const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
   'max-h-[calc(100dvh-1rem)] w-[min(52rem,96vw)]',
 );
 
-function FlowerHostSurface(_props: Readonly<{
-  i18n: DesktopI18n;
-}>): JSX.Element {
-  const [loadError, setLoadError] = createSignal('');
-  const [saveError, setSaveError] = createSignal('');
-  const [savedAt, setSavedAt] = createSignal<number | null>(null);
-  const [snapshot, setSnapshot] = createSignal<DesktopFlowerHostSettingsSnapshot | null>(null);
-  const [threads, setThreads] = createSignal<readonly DesktopFlowerHostThread[]>([]);
-  const [selectedThreadID, setSelectedThreadID] = createSignal('');
-  const [chatDraft, setChatDraft] = createSignal('');
-  const [chatSubmitError, setChatSubmitError] = createSignal('');
-  const [chatRunning, setChatRunning] = createSignal(false);
-  const [historyFilter, setHistoryFilter] = createSignal('');
-  const [draft, setDraft] = createSignal<DesktopFlowerHostProviderDraftForm>({
-    provider_id: 'default',
-    model_name: '',
-    provider_type: 'openai_compatible' as DesktopFlowerHostSettingsDraft['config']['providers'][number]['type'],
-    context_window: '',
-    base_url: '',
-    api_key: '',
-  });
-  const [sidePanel, setSidePanel] = createSignal<'chat' | 'settings' | 'targets' | 'diagnostics'>('chat');
-  const activeProvider = createMemo(() => snapshot()?.config.providers.find((provider) => provider.id === draft().provider_id) ?? null);
-  const activeProviderSecret = createMemo(() => snapshot()?.provider_secrets.find((secret) => secret.provider_id === draft().provider_id) ?? null);
-  const currentModelID = createMemo(() => trimString(snapshot()?.config.current_model_id));
-  const configuredSecretCount = createMemo(() => snapshot()?.provider_secrets.filter((secret) => secret.provider_api_key_configured).length ?? 0);
-  const readyForChat = createMemo(() => Boolean(snapshot()?.config.enabled && currentModelID()));
-  const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
-  const filteredThreads = createMemo(() => {
-    const filter = trimString(historyFilter()).toLowerCase();
-    if (!filter) {
-      return threads();
-    }
-    return threads().filter((thread) => `${thread.title} ${thread.model_id}`.toLowerCase().includes(filter));
-  });
-
-  const refreshThreads = async () => {
-    const bridge = desktopSettingsBridge();
-    if (!bridge?.listFlowerHostThreads) {
-      setLoadError('Flower history is unavailable in this build.');
-      return;
-    }
-    const result = await bridge.listFlowerHostThreads();
-    if (!result.ok) {
-      setLoadError(result.error);
-      return;
-    }
-    setThreads(result.threads);
-    setSelectedThreadID((current) => (current && !result.threads.some((thread) => thread.thread_id === current) ? '' : current));
-  };
-
-  createEffect(() => {
-    const bridge = desktopSettingsBridge();
-    if (!bridge?.loadFlowerHostSettings) {
-      return;
-    }
-    void bridge.loadFlowerHostSettings().then((result) => {
-      if (result.ok) {
-        setSnapshot(result.snapshot);
-        setDraft(draftFormFromDesktopFlowerHostConfig(result.snapshot.config));
-        setLoadError('');
-        return;
-      }
-      setLoadError(result.error);
-    }).catch((error) => {
-      setLoadError(getErrorMessage(error));
-    });
-    void refreshThreads().catch((error) => {
-      setLoadError(getErrorMessage(error));
-    });
-  });
-
-  const saveSettings = async () => {
-    const bridge = desktopSettingsBridge();
-    if (!bridge?.saveFlowerHostSettings) {
-      setSaveError('Flower settings are unavailable in this build.');
-      return;
-    }
-    const current = draft();
-    const providerID = trimString(current.provider_id) || 'default';
-    const modelName = trimString(current.model_name);
-    const contextWindowText = trimString(current.context_window);
-    const parsedContextWindow = contextWindowText === '' ? 0 : Number.parseInt(contextWindowText, 10);
-    const contextWindow = Number.isSafeInteger(parsedContextWindow) && parsedContextWindow > 0 ? parsedContextWindow : null;
-    if (current.provider_type === 'openai_compatible' && contextWindow == null) {
-      setSaveError('Context window is required for OpenAI-compatible providers.');
-      return;
-    }
-    const contextWindowPatch: Partial<DesktopFlowerHostSettingsDraft['config']['providers'][number]['models'][number]> = contextWindow == null ? {} : {
-      context_window: contextWindow,
-    };
-    const existingConfig = snapshot()?.config;
-    const originalProviderID = activeProvider()?.id ?? providerID;
-    const existingProvider = existingConfig?.providers.find((provider) => provider.id === originalProviderID) ?? null;
-    const existingModels = existingProvider?.models ?? [];
-    const existingModel = existingModels.find((model) => model.model_name === modelName) ?? existingModels[0] ?? null;
-    const existingProviders = existingConfig?.providers ?? [];
-    const keepExistingProvider = (provider: (typeof existingProviders)[number]): DesktopFlowerHostSettingsDraft['config']['providers'][number] => ({
-      ...provider,
-      provider_api_key: '',
-      provider_api_key_mode: 'keep',
-    });
-    const editedModels: DesktopFlowerHostSettingsDraft['config']['providers'][number]['models'] = modelName
-      ? (
-          existingModels.length > 0
-            ? existingModels.map((model, index) => (model === existingModel || (index === 0 && !existingModels.some((candidate) => candidate.model_name === modelName))
-                ? {
-                    ...model,
-                    model_name: modelName,
-                    ...contextWindowPatch,
-                  }
-                : model))
-            : [{
-                model_name: modelName,
-                ...contextWindowPatch,
-              }]
-        )
-      : existingModels;
-    const editedProvider: DesktopFlowerHostSettingsDraft['config']['providers'][number] | null = modelName ? {
-      ...(existingProvider ?? {}),
-      id: providerID,
-      name: existingProvider?.name ?? providerID,
-      type: current.provider_type,
-      base_url: current.base_url,
-      provider_api_key: current.api_key,
-      provider_api_key_mode: trimString(current.api_key) ? 'replace' : 'keep',
-      models: editedModels,
-    } : null;
-    const providers: DesktopFlowerHostSettingsDraft['config']['providers'] = editedProvider
-      ? (
-          existingProviders.some((provider) => provider.id === originalProviderID)
-            ? existingProviders.map((provider) => (provider.id === originalProviderID
-                ? editedProvider
-                : keepExistingProvider(provider)))
-            : [
-                ...existingProviders.map(keepExistingProvider),
-                editedProvider,
-              ]
-        )
-      : existingProviders.map(keepExistingProvider);
-    const currentModelID = modelName
-      ? `${providerID}/${modelName}`
-      : trimString(existingConfig?.current_model_id);
-    const config: DesktopFlowerHostSettingsDraft['config'] = {
-      schema_version: 1,
-      enabled: currentModelID !== '' && providers.length > 0,
-      current_model_id: currentModelID,
-      execution_policy: existingConfig?.execution_policy ?? {
-        require_user_approval: true,
-        block_dangerous_commands: true,
-      },
-      terminal_exec_policy: existingConfig?.terminal_exec_policy ?? {
-        default_timeout_ms: 120_000,
-        max_timeout_ms: 600_000,
-      },
-      providers,
-    };
-    const result = await bridge.saveFlowerHostSettings({ config });
-    if (!result.ok) {
-      setSaveError(result.error);
-      return;
-    }
-    setSnapshot(result.snapshot);
-    setSaveError('');
-    setSavedAt(Date.now());
-    setDraft((currentDraft) => ({ ...currentDraft, api_key: '' }));
-  };
-
-  const submitChat = async () => {
-    const prompt = trimString(chatDraft());
-    setChatSubmitError('');
-    if (!snapshot()) {
-      setChatSubmitError('Flower settings are still loading.');
-      return;
-    }
-    if (!readyForChat()) {
-      setChatSubmitError('Configure a provider and model before starting a Flower chat.');
-      setSidePanel('settings');
-      return;
-    }
-    if (!prompt) {
-      setChatSubmitError('Enter a message before sending.');
-      return;
-    }
-    const bridge = desktopSettingsBridge();
-    if (!bridge?.sendFlowerHostChat) {
-      setChatSubmitError('Flower chat is unavailable in this build.');
-      return;
-    }
-    setChatRunning(true);
-    try {
-      const result = await bridge.sendFlowerHostChat({
-        thread_id: selectedThreadID() || undefined,
-        prompt,
-      });
-      if (!result.ok) {
-        setChatSubmitError(result.error);
-        return;
-      }
-      setThreads((current) => [result.thread, ...current.filter((thread) => thread.thread_id !== result.thread.thread_id)]);
-      setSelectedThreadID(result.thread.thread_id);
-      setChatDraft('');
-      setSidePanel('chat');
-    } catch (error) {
-      setChatSubmitError(getErrorMessage(error));
-    } finally {
-      setChatRunning(false);
-    }
-  };
-
-  const openSettingsFromChat = () => {
-    setSaveError('');
-    setSidePanel('settings');
-  };
-
-  const startNewThread = () => {
-    setSelectedThreadID('');
-    setChatDraft('');
-    setChatSubmitError('');
-    setSidePanel('chat');
-  };
-
-  const selectThread = (threadID: string) => {
-    setSelectedThreadID(threadID);
-    setChatSubmitError('');
-    setSidePanel('chat');
-  };
-
-  const iconPanelButton = (
-    panel: 'settings' | 'targets' | 'diagnostics',
-    label: string,
-    icon: (props?: { class?: string }) => JSX.Element,
-  ) => {
-    const Icon = icon;
-    return (
-      <DesktopTooltip content={label} placement="bottom" delay={0}>
-        <button
-          type="button"
-          class={cn(
-            'flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-            sidePanel() === panel ? 'border-primary/30 bg-primary/10 text-primary' : 'border-border/70 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-          )}
-          aria-label={label}
-          aria-current={sidePanel() === panel ? 'page' : undefined}
-          onClick={() => setSidePanel(panel)}
-        >
-          <Icon class="h-4 w-4" />
-        </button>
-      </DesktopTooltip>
-    );
-  };
-
-  const messageBubble = (message: DesktopFlowerHostThread['messages'][number]) => (
-    <div class={cn('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}>
-      <div class={cn(
-        'max-w-[78%] whitespace-pre-wrap rounded-lg px-3 py-2 text-sm leading-6',
-        message.role === 'user' ? 'bg-primary text-primary-foreground' : 'border bg-card text-foreground',
-      )}>
-        {message.content}
-      </div>
-    </div>
-  );
-
-  const diagnosticsView = () => (
-    <div class="space-y-3">
-      <h2 class="text-sm font-semibold text-foreground">Diagnostics</h2>
-      <dl class="grid gap-3 text-sm">
-        <div class="rounded-md border p-3"><dt class="text-muted-foreground">Config</dt><dd class="mt-1 font-mono">{snapshot()?.config.enabled ? 'enabled' : 'disabled'}</dd></div>
-        <div class="rounded-md border p-3"><dt class="text-muted-foreground">Providers</dt><dd class="mt-1 font-mono">{snapshot()?.config.providers.length ?? 0}</dd></div>
-        <div class="rounded-md border p-3"><dt class="text-muted-foreground">Secrets</dt><dd class="mt-1 font-mono">{snapshot()?.provider_secrets.filter((secret) => secret.provider_api_key_configured).length ?? 0} configured</dd></div>
-        <div class="rounded-md border p-3"><dt class="text-muted-foreground">Targets</dt><dd class="mt-1 font-mono">{snapshot()?.target_cache.entries.length ?? 0}</dd></div>
-        <div class="rounded-md border p-3"><dt class="text-muted-foreground">Current model</dt><dd class="mt-1 break-all font-mono">{currentModelID() || 'not configured'}</dd></div>
-        <div class="rounded-md border p-3"><dt class="text-muted-foreground">Active provider</dt><dd class="mt-1 break-all font-mono">{activeProvider()?.id ?? 'none'}</dd></div>
-      </dl>
-      <Show when={loadError()}>
-        <div role="alert" class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{loadError()}</div>
-      </Show>
-      <div class="rounded-md border p-3 text-sm text-muted-foreground">
-        {configuredSecretCount()} provider secret{configuredSecretCount() === 1 ? '' : 's'} configured in secure storage.
-      </div>
-    </div>
-  );
-
-  const settingsView = () => (
-    <div class="space-y-4">
-      <div>
-        <h2 class="text-sm font-semibold text-foreground">Settings</h2>
-        <p class="mt-1 text-sm text-muted-foreground">Settings live under ~/.redeven/flower and do not require the local Environment runtime.</p>
-      </div>
-      <div class="grid gap-3">
-        <label class="space-y-1.5">
-          <span class="text-xs font-medium text-muted-foreground">Provider ID</span>
-          <Input value={draft().provider_id} onInput={(event) => setDraft((current) => ({ ...current, provider_id: event.currentTarget.value }))} />
-        </label>
-        <label class="space-y-1.5">
-          <span class="text-xs font-medium text-muted-foreground">Provider type</span>
-          <select
-            class="h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
-            value={draft().provider_type}
-            onChange={(event) => setDraft((current) => ({ ...current, provider_type: event.currentTarget.value as DesktopFlowerHostProviderDraftForm['provider_type'] }))}
-          >
-            <option value="openai_compatible">OpenAI-compatible</option>
-            <option value="openai">OpenAI</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="moonshot">Moonshot</option>
-            <option value="chatglm">ChatGLM</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="qwen">Qwen</option>
-          </select>
-        </label>
-        <label class="space-y-1.5">
-          <span class="text-xs font-medium text-muted-foreground">Model name</span>
-          <Input value={draft().model_name} onInput={(event) => setDraft((current) => ({ ...current, model_name: event.currentTarget.value }))} />
-        </label>
-        <label class="space-y-1.5">
-          <span class="text-xs font-medium text-muted-foreground">Context window</span>
-          <Input inputMode="numeric" value={draft().context_window} placeholder="Required for OpenAI-compatible providers" onInput={(event) => setDraft((current) => ({ ...current, context_window: event.currentTarget.value }))} />
-        </label>
-        <label class="space-y-1.5">
-          <span class="text-xs font-medium text-muted-foreground">Base URL</span>
-          <Input value={draft().base_url} onInput={(event) => setDraft((current) => ({ ...current, base_url: event.currentTarget.value }))} />
-        </label>
-        <label class="space-y-1.5">
-          <span class="text-xs font-medium text-muted-foreground">API key</span>
-          <Input type="password" value={draft().api_key} placeholder={activeProviderSecret()?.provider_api_key_configured ? 'Stored key will be kept' : 'Paste provider API key'} onInput={(event) => setDraft((current) => ({ ...current, api_key: event.currentTarget.value }))} />
-        </label>
-      </div>
-      <Show when={saveError()}>
-        <div role="alert" class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{saveError()}</div>
-      </Show>
-      <Show when={savedAt()}>
-        <div role="status" class="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">Flower settings saved.</div>
-      </Show>
-      <div class="flex justify-end">
-        <Button variant="primary" onClick={() => void saveSettings()}>Save</Button>
-      </div>
-    </div>
-  );
-
-  const targetsView = () => (
-    <div class="space-y-3">
-      <h2 class="text-sm font-semibold text-foreground">Targets</h2>
-      <For each={snapshot()?.target_cache.entries ?? []} fallback={<div class="rounded-md border border-dashed p-6 text-sm text-muted-foreground">No targets cached yet.</div>}>
-        {(target) => (
-          <div class="rounded-md border p-3 text-sm">
-            <div class="flex items-center justify-between gap-3">
-              <div class="font-medium text-foreground">{target.label || target.target_id}</div>
-              <Tag variant="neutral">Cached</Tag>
-            </div>
-            <div class="mt-1 font-mono text-xs text-muted-foreground">{target.target_url || target.target_id}</div>
-            <div class="mt-1 text-xs text-muted-foreground">Last seen {new Date(target.last_seen_at_unix_ms).toLocaleString()}</div>
-          </div>
-        )}
-      </For>
-    </div>
-  );
-
-  const historyRow = (thread: DesktopFlowerHostThread) => (
-    <button
-      type="button"
-      class={cn(
-        'w-full cursor-pointer rounded-md border p-3 text-left transition-colors',
-        selectedThreadID() === thread.thread_id ? 'border-primary/40 bg-primary/10' : 'hover:bg-muted/40',
-      )}
-      aria-current={selectedThreadID() === thread.thread_id ? 'page' : undefined}
-      onClick={() => selectThread(thread.thread_id)}
-    >
-      <div class="truncate text-sm font-medium text-foreground">{thread.title}</div>
-      <div class="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-        <span class="font-mono">{thread.model_id || 'model pending'}</span>
-        <span>{new Date(thread.updated_at_ms).toLocaleString()}</span>
-      </div>
-    </button>
-  );
-
-  return (
-    <main id="redeven-desktop-flower-host" class="flex h-full min-h-0 min-w-0 overflow-hidden bg-background">
-      <Show when={loadError()}>
-        <div role="alert" class="sr-only">{loadError()}</div>
-      </Show>
-      <aside class="flex w-80 shrink-0 flex-col gap-3 border-r border-border/60 p-3">
-        <div class="mb-2 flex items-center gap-3">
-          <span class="flex h-10 w-10 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-xl text-primary" aria-hidden="true">✿</span>
-          <div class="min-w-0">
-            <h1 class="truncate text-sm font-semibold text-foreground">Flower</h1>
-            <p class="truncate text-xs text-muted-foreground">Global assistant host</p>
-          </div>
-        </div>
-        <div class="flex items-center gap-2">
-          <DesktopTooltip content="Compose" placement="bottom" delay={0}>
-            <button
-              type="button"
-              class={cn(
-                'flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                sidePanel() === 'chat' && !selectedThreadID()
-                  ? 'border-primary/30 bg-primary/10 text-primary'
-                  : 'border-border/70 text-muted-foreground hover:bg-muted/50 hover:text-foreground',
-              )}
-              aria-label="Compose with Flower"
-              aria-current={sidePanel() === 'chat' && !selectedThreadID() ? 'page' : undefined}
-              onClick={startNewThread}
-            >
-              <span aria-hidden="true" class="text-base leading-none">✿</span>
-            </button>
-          </DesktopTooltip>
-          {iconPanelButton('settings', 'Settings', Settings)}
-          {iconPanelButton('targets', 'Targets', Globe)}
-          {iconPanelButton('diagnostics', 'Diagnostics', AlertCircle)}
-          <DesktopTooltip content="Refresh conversations" placement="bottom" delay={0}>
-            <button
-              type="button"
-              class="ml-auto flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-border/70 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Refresh conversations"
-              onClick={() => void refreshThreads()}
-            >
-              <Refresh class="h-4 w-4" />
-            </button>
-          </DesktopTooltip>
-        </div>
-        <label class="relative block">
-          <Search class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input class="pl-9" value={historyFilter()} placeholder="Search chats..." onInput={(event) => setHistoryFilter(event.currentTarget.value)} />
-        </label>
-        <div class="min-h-0 flex-1 space-y-2 overflow-auto">
-          <For each={filteredThreads()} fallback={<div class="rounded-md border border-dashed p-6 text-sm text-muted-foreground">No conversations yet.</div>}>
-            {historyRow}
-          </For>
-        </div>
-      </aside>
-      <section class="min-w-0 flex-1 overflow-auto p-5">
-        <Show when={sidePanel() === 'chat'}>
-          <div class="mx-auto flex max-w-3xl flex-col gap-4">
-            <Show when={loadError()}>
-              <div role="alert" class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-                {loadError()}
-                <button type="button" class="ml-2 cursor-pointer font-medium underline underline-offset-2" onClick={() => setSidePanel('diagnostics')}>
-                  Diagnostics
-                </button>
-              </div>
-            </Show>
-            <div class="flex items-start justify-between gap-4">
-              <div>
-                <h2 class="text-xl font-semibold text-foreground">{selectedThread()?.title || 'Ask Flower'}</h2>
-                <p class="mt-2 text-sm leading-6 text-muted-foreground">
-                  Ask Flower across your environments and continue where you left off.
-                </p>
-              </div>
-              <Tag variant={readyForChat() ? 'success' : 'warning'}>
-                {readyForChat() ? 'Ready' : 'Setup needed'}
-              </Tag>
-            </div>
-            <Show when={!readyForChat()}>
-              <div role="status" class="rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
-                Flower needs a provider, model, and saved settings before this entry can start a chat.
-                <button type="button" class="ml-2 cursor-pointer font-medium underline underline-offset-2" onClick={openSettingsFromChat}>
-                  Open Settings
-                </button>
-              </div>
-            </Show>
-            <Show when={selectedThread()}>
-              {(thread) => (
-                <div class="flex max-h-[46vh] min-h-64 flex-col gap-3 overflow-auto rounded-md border bg-muted/10 p-3">
-                  <For each={thread().messages}>{messageBubble}</For>
-                </div>
-              )}
-            </Show>
-            <textarea
-              class="min-h-32 w-full resize-y rounded-md border border-input bg-background p-3 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              placeholder="Ask Flower anything..."
-              value={chatDraft()}
-              onInput={(event) => {
-                setChatDraft(event.currentTarget.value);
-                setChatSubmitError('');
-              }}
-            />
-            <Show when={chatSubmitError()}>
-              <div role="alert" class="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{chatSubmitError()}</div>
-            </Show>
-            <div class="flex justify-end gap-2">
-              <Button variant="outline" onClick={openSettingsFromChat}>Settings</Button>
-              <Button variant="primary" icon={Play} disabled={chatRunning() || !readyForChat() || !trimString(chatDraft())} onClick={() => void submitChat()}>
-                {chatRunning() ? 'Sending' : 'Send'}
-              </Button>
-            </div>
-          </div>
-        </Show>
-        <Show when={sidePanel() === 'settings'}>{settingsView()}</Show>
-        <Show when={sidePanel() === 'targets'}>{targetsView()}</Show>
-        <Show when={sidePanel() === 'diagnostics'}>{diagnosticsView()}</Show>
-      </section>
-    </main>
-  );
-}
-
-	const CONNECTION_DIALOG_CLASS = cn(
+const CONNECTION_DIALOG_CLASS = cn(
 	  'flex max-w-none flex-col overflow-hidden rounded-md p-0',
 	  '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
 	  '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:overflow-auto [&>div:nth-child(2)]:pt-2',

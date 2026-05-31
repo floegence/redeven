@@ -1,7 +1,9 @@
 import { plural } from '../messageTypes';
 import type { DesktopTranslationShape } from './en-US';
+import { flowerSurfaceDeDE } from './flowerSurface';
 
 export const deDE = {
+  flowerSurface: flowerSurfaceDeDE,
   common: {
     open: "Öffnen",
     save: "Speichern",
@@ -105,6 +107,7 @@ export const deDE = {
     },
     commandSearchPlaceholder: "Desktop-Befehle suchen...",
     openRedevenDashboard: "Redeven Dashboard öffnen",
+    backToEnvironments: "Zurück zu Environments",
     useDarkTheme: "Dunkles Theme verwenden",
     useLightTheme: "Helles Theme verwenden",
   },

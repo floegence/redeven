@@ -992,6 +992,8 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canExec
     settingsSeq: options?.settingsSeq ?? (() => 0),
     bumpSettingsSeq: options?.bumpSettingsSeq ?? (() => {}),
     openSettings: () => {},
+    settingsOrigin: () => null,
+    returnFromSettingsOrigin: () => {},
     debugConsoleEnabled: () => false,
     setDebugConsoleEnabled: () => {},
     openDebugConsole: () => {},
@@ -3063,7 +3065,7 @@ describe('RemoteFileBrowser persistence', () => {
       moreButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      const goToPathItem = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.includes('Go to path...')) as HTMLButtonElement | undefined;
+      const goToPathItem = Array.from(document.body.querySelectorAll('button')).find((node) => node.textContent?.includes('Go to path')) as HTMLButtonElement | undefined;
       expect(goToPathItem).toBeTruthy();
       goToPathItem!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();

@@ -1,7 +1,9 @@
 import { plural } from '../messageTypes';
 import type { DesktopTranslationShape } from './en-US';
+import { flowerSurfaceRuRU } from './flowerSurface';
 
 export const ruRU = {
+  flowerSurface: flowerSurfaceRuRU,
   common: {
     open: "Открыть",
     save: "Сохранить",
@@ -105,6 +107,7 @@ export const ruRU = {
     },
     commandSearchPlaceholder: "Поиск команд Desktop...",
     openRedevenDashboard: "Открыть Redeven Dashboard",
+    backToEnvironments: "Вернуться к Environments",
     useDarkTheme: "Использовать темную тему",
     useLightTheme: "Использовать светлую тему",
   },

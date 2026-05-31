@@ -86,6 +86,11 @@ describe('desktopLauncherIPC', () => {
       environment_id: 'local',
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_environment_center',
+    })).toEqual({
+      kind: 'open_environment_center',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'start_environment_runtime',
       environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
       runtime_target_id: ' local:container:docker:container-stable-id:abc12345 ',

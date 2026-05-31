@@ -1,7 +1,9 @@
 import { plural } from '../messageTypes';
 import type { DesktopTranslationShape } from './en-US';
+import { flowerSurfaceJaJP } from './flowerSurface';
 
 export const jaJP = {
+  flowerSurface: flowerSurfaceJaJP,
   common: {
     open: "開く",
     save: "保存",
@@ -105,6 +107,7 @@ export const jaJP = {
     },
     commandSearchPlaceholder: "Desktop コマンドを検索...",
     openRedevenDashboard: "Redeven Dashboard を開く",
+    backToEnvironments: "Environments に戻る",
     useDarkTheme: "ダークテーマを使用",
     useLightTheme: "ライトテーマを使用",
   },

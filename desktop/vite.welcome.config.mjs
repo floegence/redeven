@@ -12,6 +12,13 @@ export default defineConfig({
   base: './',
   plugins: [solid(), tailwindcss()],
   publicDir: false,
+  resolve: {
+    alias: [
+      { find: /^@floegence\/floe-webapp-core\/(icons|layout|loading|ui)$/, replacement: path.resolve(desktopDir, 'node_modules', '@floegence', 'floe-webapp-core', 'dist', '$1.js') },
+      { find: /^@floegence\/floe-webapp-core$/, replacement: path.resolve(desktopDir, 'node_modules', '@floegence', 'floe-webapp-core', 'dist', 'index.js') },
+    ],
+    dedupe: ['solid-js'],
+  },
   build: {
     outDir: path.resolve(desktopDir, 'dist', 'welcome'),
     emptyOutDir: true,

@@ -40,6 +40,8 @@ export type DesktopFlowerHostProvider = Readonly<{
 export type DesktopFlowerHostProviderDraft = DesktopFlowerHostProvider & Readonly<{
   provider_api_key?: string;
   provider_api_key_mode?: DesktopFlowerHostSecretMode;
+  web_search_api_key?: string;
+  web_search_api_key_mode?: DesktopFlowerHostSecretMode;
 }>;
 
 export type DesktopFlowerHostExecutionPolicy = Readonly<{
@@ -70,6 +72,7 @@ export type DesktopFlowerHostSettingsDraft = Readonly<{
 export type DesktopFlowerHostProviderSecretState = Readonly<{
   provider_id: string;
   provider_api_key_configured: boolean;
+  web_search_api_key_configured: boolean;
 }>;
 
 export type DesktopFlowerHostTargetCacheEntry = Readonly<{

@@ -22,6 +22,14 @@ const DESKTOP_TRANSLATION_ROOTS = new Set(
   Object.keys(enUS).filter((key) => key !== 'plural'),
 );
 
+const FLOWER_SURFACE_ENGLISH_COPY_ALLOWLIST = new Set([
+  'chat.entryLabel',
+  'settings.apiKey',
+  'settings.dialogAPIKey',
+  'settings.dialogBaseURL',
+  'settings.dialogBraveAPIKey',
+]);
+
 function listSourceFiles(root: string): readonly string[] {
   const entries = fs.readdirSync(root, { withFileTypes: true });
   const files: string[] = [];
@@ -201,9 +209,44 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.environmentAction.updateRuntime).toBe('更新 Runtime');
     expect(zhCN.runtimeMessage.runtimeReadyOpenDetail).toBe('Runtime 已就绪。现在可以打开。');
     expect(zhCN.runtimeMessage.restartRuntimeReady).toBe('Desktop 重启 Runtime 并且它报告就绪后，即可打开。');
+    expect(zhCN.shell.backToEnvironments).toBe('返回 Environments');
     expect(zhCN.connectionDialog.sshHost).toBe('SSH主机');
     expect(zhCN.connectionDialog.sshContainer).toBe('SSH主机容器');
     expect(zhCN.runtimeMessage.sshContainerRuntime).toBe('SSH主机容器 Runtime');
+  });
+
+  it('keeps Flower surface copy localized for every supported Desktop locale', () => {
+    const enFlowerRows = new Map(
+      flattenDictionaryMessages(enUS.flowerSurface).map((row) => [row.path, row.value]),
+    );
+
+    for (const locale of REDEVEN_SUPPORTED_LOCALES) {
+      const copy = DESKTOP_I18N_DICTIONARIES[locale].flowerSurface;
+      expect(copy.chat.newChat.length).toBeGreaterThan(0);
+      expect(copy.threadList.refreshLabel.length).toBeGreaterThan(0);
+      expect(copy.emptyState.reviewPrompt.length).toBeGreaterThan(0);
+      expect(copy.settings.addProvider.length).toBeGreaterThan(0);
+      expect(copy.settings.backToChat.length).toBeGreaterThan(0);
+      if (locale !== 'en-US') {
+        expect(copy.chat.send, locale).not.toBe(enUS.flowerSurface.chat.send);
+        const englishMatches = flattenDictionaryMessages(copy)
+          .filter((row) => (
+            row.value === enFlowerRows.get(row.path)
+            && !FLOWER_SURFACE_ENGLISH_COPY_ALLOWLIST.has(row.path)
+          ))
+          .map((row) => row.path);
+        expect(englishMatches, locale).toEqual([]);
+      }
+    }
+    expect(DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.emptyState.explainTitle).toBe('解释代码');
+    expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.emptyState.explainTitle).toBe('解釋程式碼');
+    expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.threadList.refreshLabel).toBe('重新整理對話');
+    expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.settings.backToChat).toBe('返回聊天');
+    expect(DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.conversationsAria).toBe('Flower conversations');
+    expect(DESKTOP_I18N_DICTIONARIES['en-US'].shell.backToEnvironments).toBe('Back to Environments');
+    expect(DESKTOP_I18N_DICTIONARIES['ja-JP'].flowerSurface.threadList.title).toBe('会話');
+    expect(DESKTOP_I18N_DICTIONARIES['fr-FR'].flowerSurface.threadList.title).toBe('Discussions');
+    expect(DESKTOP_I18N_DICTIONARIES['ru-RU'].flowerSurface.threadList.title).toBe('Беседы');
   });
 
   it('keeps ru-RU plural messages wired for Russian plural categories', () => {

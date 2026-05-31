@@ -1,0 +1,441 @@
+import type { FlowerProviderType, FlowerThreadStatus } from './contracts/flowerSurfaceContracts';
+import type { FlowerProviderModelNoteKey } from './settings/providerModelNotes';
+import { localizedFlowerProviderModelNote } from './settings/providerModelNotes';
+import type { FlowerProviderTypeLabels } from './settings/providerTypeLabels';
+import { localizedFlowerProviderTypeLabels } from './settings/providerTypeLabels';
+
+export type FlowerThreadTimeGroup = 'today' | 'yesterday' | 'this_week' | 'older';
+
+export type FlowerEmptyStateSuggestionCopy = Readonly<{
+  title: string;
+  description: string;
+  prompt: string;
+}>;
+
+export type FlowerEmptyStateCopy = Readonly<{
+  title: string;
+  description: string;
+  suggestions: readonly FlowerEmptyStateSuggestionCopy[];
+  sendKeyLabel: string;
+  newLineKeyLabel: string;
+}>;
+
+export type FlowerThreadListCopy = Readonly<{
+  title: string;
+  description: string;
+  refreshLabel: string;
+  searchPlaceholder: string;
+  empty: string;
+  untitled: string;
+  working: string;
+  deleteLabel: (title: string) => string;
+  now: string;
+  minutes: (count: number) => string;
+  hours: (count: number) => string;
+  days: (count: number) => string;
+  statuses: Readonly<Record<FlowerThreadStatus, string>>;
+  groups: Readonly<Record<FlowerThreadTimeGroup, string>>;
+}>;
+
+export type FlowerAutoSaveCopy = Readonly<{
+  saving: string;
+  saveFailed: string;
+  unsaved: string;
+  saved: string;
+  ready: string;
+}>;
+
+export type FlowerSettingsCopy = Readonly<{
+  title: string;
+  backToChat: string;
+  description: string;
+  active: string;
+  disabled: string;
+  enable: string;
+  disable: string;
+  disabledNotice: string;
+  currentModel: string;
+  noModelSelected: string;
+  text: string;
+  imageInput: string;
+  selectModelPlaceholder: string;
+  userApprovalTitle: string;
+  userApprovalDescription: string;
+  on: string;
+  off: string;
+  dangerousCommandsTitle: string;
+  dangerousCommandsDescription: string;
+  blocked: string;
+  allowed: string;
+  providersTitle: string;
+  providersDescription: string;
+  addProvider: string;
+  noProviders: string;
+  defaultProvider: string;
+  editProvider: string;
+  removeProvider: string;
+  apiKey: string;
+  ready: string;
+  needsKey: string;
+  models: string;
+  web: string;
+  vision: string;
+  terminalLimitsTitle: string;
+  terminalLimitsDescription: string;
+  defaultTimeout: string;
+  maximumTimeout: string;
+  dangerousBlockingOff: string;
+  webSearchNotSupported: string;
+  webSearchDisabled: string;
+  openAIBuiltIn: string;
+  braveSearch: string;
+  needsBraveKey: string;
+  providerTypeLabels: FlowerProviderTypeLabels;
+  builtInWebSearch: Readonly<Record<Exclude<FlowerProviderType, 'anthropic' | 'openai_compatible'>, string>>;
+  autoSave: FlowerAutoSaveCopy;
+  validation: Readonly<{
+    providerIDRequired: string;
+    providerIDNoSlash: string;
+    duplicateProviderID: (providerID: string) => string;
+    providerRequiresBaseURL: (providerName: string) => string;
+    providerInvalidBaseURL: (providerName: string) => string;
+    providerBaseURLProtocol: (providerName: string) => string;
+    providerNeedsModel: (providerName: string) => string;
+    providerUnnamedModel: (providerName: string) => string;
+    modelNameNoSlash: string;
+    duplicateModel: (providerName: string, modelName: string) => string;
+    modelNeedsContextWindow: (modelName: string) => string;
+    selectCurrentModel: string;
+    currentModelUnavailable: (modelID: string) => string;
+    terminalTimeoutPositive: string;
+    terminalTimeoutOrder: string;
+  }>;
+  dialog: FlowerProviderDialogCopy;
+}>;
+
+export type FlowerProviderDialogCopy = Readonly<{
+  addTitle: string;
+  editTitle: string;
+  discard: string;
+  saveProvider: string;
+  providerRemoved: string;
+  providerTypeTitle: string;
+  providerTypeDescription: string;
+  current: string;
+  collapse: string;
+  configure: string;
+  providerTypeLabels: FlowerProviderTypeLabels;
+  providerTypeHints: Readonly<Record<FlowerProviderType, string>>;
+  connectionTitle: string;
+  connectionDescription: string;
+  connectionName: string;
+  apiKey: string;
+  storedKeyKept: string;
+  requiredBeforeUse: string;
+  pasteAPIKey: string;
+  required: string;
+  baseURL: string;
+  webSearch: string;
+  disabled: string;
+  openAIBuiltIn: string;
+  braveSearch: string;
+  requiredForBraveSearch: string;
+  braveAPIKey: string;
+  storedBraveKeyKept: string;
+  pasteBraveAPIKey: string;
+  keyReady: string;
+  needsKey: string;
+  braveKeyReady: string;
+  needsBraveKey: string;
+  builtInWebSearch: Readonly<Record<Exclude<FlowerProviderType, 'anthropic' | 'openai_compatible'>, string>>;
+  recommendedModelsTitle: string;
+  recommendedModelsDescription: string;
+  modelNote: (noteKey: FlowerProviderModelNoteKey | undefined) => string;
+  enableAll: string;
+  customModelProvider: string;
+  contextSuffix: string;
+  outputSuffix: string;
+  add: string;
+  remove: string;
+  text: string;
+  imageInput: string;
+  enabled: string;
+  customModelPlaceholder: string;
+  curatedPresetsOnly: string;
+  addCustomModel: string;
+  enabledModelsTitle: string;
+  enabledModelsDescription: string;
+  noEnabledModels: string;
+  unnamedModel: string;
+  textAndImage: string;
+  textOnly: string;
+  modelIDPending: string;
+  advancedTitle: string;
+  advancedDescription: string;
+  show: string;
+  hide: string;
+  providerIDPending: string;
+  modelName: string;
+  contextWindow: string;
+  maxOutput: string;
+  effectiveContextPercent: string;
+}>;
+
+export type FlowerSurfaceCopy = Readonly<{
+  chat: Readonly<{
+    loadingSettings: string;
+    configureProviderBeforeChat: string;
+    enterMessageBeforeSending: string;
+    titleFallback: string;
+    ready: string;
+    setupNeeded: string;
+    settingsLabel: string;
+    needsProviderNotice: string;
+    openSettings: string;
+    placeholder: string;
+    fromHost: (host: string) => string;
+    send: string;
+    conversationsAria: string;
+    entryLabel: string;
+    newChat: string;
+  }>;
+  threadList: FlowerThreadListCopy;
+  emptyState: FlowerEmptyStateCopy;
+  settings: FlowerSettingsCopy;
+}>;
+
+export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
+  chat: {
+    loadingSettings: 'Flower settings are still loading.',
+    configureProviderBeforeChat: 'Configure a provider and model before starting a Flower chat.',
+    enterMessageBeforeSending: 'Enter a message before sending.',
+    titleFallback: 'Ask Flower',
+    ready: 'Ready',
+    setupNeeded: 'Setup needed',
+    settingsLabel: 'Flower settings',
+    needsProviderNotice: 'Flower needs a provider, model, and required provider keys before this host can start a chat.',
+    openSettings: 'Open Settings',
+    placeholder: 'Ask Flower anything...',
+    fromHost: (host) => `From ${host}`,
+    send: 'Send',
+    conversationsAria: 'Flower conversations',
+    entryLabel: 'Flower',
+    newChat: 'New chat',
+  },
+  threadList: {
+    title: 'Conversations',
+    description: 'History follows Flower, not a single runtime.',
+    refreshLabel: 'Refresh conversations',
+    searchPlaceholder: 'Search conversations...',
+    empty: 'No conversations yet.',
+    untitled: 'Untitled chat',
+    working: 'Working',
+    deleteLabel: (title) => `Delete ${title}`,
+    now: 'now',
+    minutes: (count) => `${count}m`,
+    hours: (count) => `${count}h`,
+    days: (count) => `${count}d`,
+    statuses: {
+      idle: 'Idle',
+      running: 'Running',
+      waiting_user: 'Waiting for input',
+      waiting_approval: 'Waiting for approval',
+      failed: 'Failed',
+      success: 'Done',
+      read_only: 'Read only',
+    },
+    groups: {
+      today: 'Today',
+      yesterday: 'Yesterday',
+      this_week: 'This week',
+      older: 'Older',
+    },
+  },
+  emptyState: {
+    title: 'Ask Flower',
+    description: 'Flower can work from this host, inspect remembered environments, and prepare actions before runtimes do any read or write.',
+    suggestions: [
+      {
+        title: 'Review a workspace',
+        description: 'Ask Flower to inspect a project, summarize risks, and suggest next steps.',
+        prompt: 'Review the selected workspace and tell me the highest-value next step.',
+      },
+      {
+        title: 'Plan a transfer',
+        description: 'Let Flower prepare a cross-environment transfer plan before any write happens.',
+        prompt: 'Prepare a safe transfer plan for the current selection.',
+      },
+      {
+        title: 'Explain code',
+        description: 'Send files or folders and ask Flower to explain the architecture.',
+        prompt: 'Explain the architecture of the selected code and call out the key boundaries.',
+      },
+      {
+        title: 'Polish a workflow',
+        description: 'Turn a rough operational idea into a concrete, auditable checklist.',
+        prompt: 'Turn this workflow into a concrete checklist with verification steps.',
+      },
+    ],
+    sendKeyLabel: 'send',
+    newLineKeyLabel: 'new line',
+  },
+  settings: {
+    title: 'Flower Settings',
+    backToChat: 'Back to chat',
+    description: 'Configure models and execution policy for this Flower Host.',
+    active: 'Active',
+    disabled: 'Disabled',
+    enable: 'Enable',
+    disable: 'Disable',
+    disabledNotice: 'Flower is disabled on this host. Provider settings are kept, but chat stays unavailable until Flower is enabled.',
+    currentModel: 'Current model',
+    noModelSelected: 'No model selected',
+    text: 'Text',
+    imageInput: 'Image input',
+    selectModelPlaceholder: 'Select model',
+    userApprovalTitle: 'User approval',
+    userApprovalDescription: 'Ask before sensitive runtime actions.',
+    on: 'On',
+    off: 'Off',
+    dangerousCommandsTitle: 'Dangerous commands',
+    dangerousCommandsDescription: 'Reject destructive terminal operations by policy.',
+    blocked: 'Blocked',
+    allowed: 'Allowed',
+    providersTitle: 'Providers',
+    providersDescription: 'Provider cards mirror the original Flower AI settings page and keep model capability details visible.',
+    addProvider: 'Add provider',
+    noProviders: 'No providers yet. Add OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen, or a compatible gateway.',
+    defaultProvider: 'Default',
+    editProvider: 'Edit provider',
+    removeProvider: 'Remove provider',
+    apiKey: 'API Key',
+    ready: 'Ready',
+    needsKey: 'Needs key',
+    models: 'Models',
+    web: 'Web',
+    vision: 'Vision',
+    terminalLimitsTitle: 'Terminal execution limits',
+    terminalLimitsDescription: 'Timeouts are enforced before a connected runtime executes commands.',
+    defaultTimeout: 'Default timeout (ms)',
+    maximumTimeout: 'Maximum timeout (ms)',
+    dangerousBlockingOff: 'Dangerous command blocking is currently off.',
+    webSearchNotSupported: 'Not supported',
+    webSearchDisabled: 'Disabled',
+    openAIBuiltIn: 'OpenAI built-in',
+    braveSearch: 'Brave Search',
+    needsBraveKey: 'Needs Brave key',
+    providerTypeLabels: localizedFlowerProviderTypeLabels('en-US'),
+    builtInWebSearch: {
+      openai: 'OpenAI built-in web search',
+      moonshot: 'Kimi built-in web search',
+      chatglm: 'GLM built-in web search',
+      deepseek: 'DeepSeek built-in web search',
+      qwen: 'Qwen built-in web search',
+    },
+    autoSave: {
+      saving: 'Saving',
+      saveFailed: 'Save failed',
+      unsaved: 'Unsaved',
+      saved: 'Saved',
+      ready: 'Ready',
+    },
+    validation: {
+      providerIDRequired: 'Provider ID is required.',
+      providerIDNoSlash: 'Provider ID must not contain a slash.',
+      duplicateProviderID: (providerID) => `Duplicate provider ID: ${providerID}`,
+      providerRequiresBaseURL: (providerName) => `${providerName} requires a base URL.`,
+      providerInvalidBaseURL: (providerName) => `${providerName} has an invalid base URL.`,
+      providerBaseURLProtocol: (providerName) => `${providerName} base URL must use http or https.`,
+      providerNeedsModel: (providerName) => `${providerName} needs at least one model.`,
+      providerUnnamedModel: (providerName) => `${providerName} has an unnamed model.`,
+      modelNameNoSlash: 'Model names must not contain a slash.',
+      duplicateModel: (providerName, modelName) => `${providerName} has a duplicate model: ${modelName}.`,
+      modelNeedsContextWindow: (modelName) => `${modelName} needs a context window.`,
+      selectCurrentModel: 'Select a current model before saving Flower settings.',
+      currentModelUnavailable: (modelID) => `Current model is not available: ${modelID}.`,
+      terminalTimeoutPositive: 'Terminal execution timeouts must be positive millisecond values.',
+      terminalTimeoutOrder: 'Default terminal timeout must be less than or equal to the maximum timeout.',
+    },
+    dialog: {
+      addTitle: 'Add provider',
+      editTitle: 'Edit provider',
+      discard: 'Discard',
+      saveProvider: 'Save provider',
+      providerRemoved: 'Provider was removed.',
+      providerTypeTitle: 'Provider type',
+      providerTypeDescription: 'Choose the native provider or custom OpenAI-compatible gateway Flower should use.',
+      current: 'Current',
+      collapse: 'Collapse',
+      configure: 'Configure',
+      providerTypeLabels: localizedFlowerProviderTypeLabels('en-US'),
+      providerTypeHints: {
+        openai: 'Native connection',
+        anthropic: 'Native connection',
+        moonshot: 'Native connection',
+        chatglm: 'Native connection',
+        deepseek: 'Native connection',
+        qwen: 'Native connection',
+        openai_compatible: 'Custom gateway',
+      },
+      connectionTitle: 'Connection',
+      connectionDescription: 'Credentials and endpoints are stored with Flower Host configuration.',
+      connectionName: 'Connection name',
+      apiKey: 'API key',
+      storedKeyKept: 'Stored key will be kept',
+      requiredBeforeUse: 'Required before use',
+      pasteAPIKey: 'Paste API key',
+      required: 'Required',
+      baseURL: 'Base URL',
+      webSearch: 'Web search',
+      disabled: 'Disabled',
+      openAIBuiltIn: 'OpenAI built-in',
+      braveSearch: 'Brave Search',
+      requiredForBraveSearch: 'Required for Brave Search',
+      braveAPIKey: 'Brave API key',
+      storedBraveKeyKept: 'Stored Brave key will be kept',
+      pasteBraveAPIKey: 'Paste Brave API key',
+      keyReady: 'Key ready',
+      needsKey: 'Needs key',
+      braveKeyReady: 'Brave key ready',
+      needsBraveKey: 'Needs Brave key',
+      builtInWebSearch: {
+        openai: 'OpenAI built-in web search',
+        moonshot: 'Kimi built-in web search',
+        chatglm: 'GLM built-in web search',
+        deepseek: 'DeepSeek built-in web search',
+        qwen: 'Qwen built-in web search',
+      },
+      recommendedModelsTitle: 'Recommended models',
+      recommendedModelsDescription: 'Start from maintained presets, then fine tune limits in Advanced.',
+      modelNote: (noteKey) => localizedFlowerProviderModelNote('en-US', noteKey),
+      enableAll: 'Enable all',
+      customModelProvider: 'This provider uses custom model names.',
+      contextSuffix: 'context',
+      outputSuffix: 'output',
+      add: 'Add',
+      remove: 'Remove',
+      text: 'Text',
+      imageInput: 'Image input',
+      enabled: 'Enabled',
+      customModelPlaceholder: 'Custom model name',
+      curatedPresetsOnly: 'Curated presets only',
+      addCustomModel: 'Add custom model',
+      enabledModelsTitle: 'Enabled models',
+      enabledModelsDescription: 'These models can be selected as the current Flower model.',
+      noEnabledModels: 'No enabled models.',
+      unnamedModel: 'Unnamed model',
+      textAndImage: 'Text + Image',
+      textOnly: 'Text only',
+      modelIDPending: 'Model ID pending',
+      advancedTitle: 'Advanced model metadata',
+      advancedDescription: 'Edit context windows, output limits, model names, and image input flags.',
+      show: 'Show',
+      hide: 'Hide',
+      providerIDPending: 'Provider ID pending',
+      modelName: 'Model name',
+      contextWindow: 'Context window',
+      maxOutput: 'Max output',
+      effectiveContextPercent: 'Effective context %',
+    },
+  },
+};

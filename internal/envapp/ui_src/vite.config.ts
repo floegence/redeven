@@ -6,6 +6,13 @@ import solid from 'vite-plugin-solid';
 
 export default defineConfig({
   plugins: [wasm(), solid(), tailwindcss()],
+  resolve: {
+    alias: [
+      { find: /^@floegence\/floe-webapp-core\/(icons|layout|loading|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
+      { find: /^@floegence\/floe-webapp-core$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/index.js') },
+    ],
+    dedupe: ['solid-js'],
+  },
   optimizeDeps: {
     exclude: [
       '@floegence/floe-webapp-core',

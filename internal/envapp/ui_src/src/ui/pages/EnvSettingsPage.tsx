@@ -1,6 +1,6 @@
 import { For, Show, createMemo, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Search, X, RefreshIcon } from '@floegence/floe-webapp-core/icons';
+import { ChevronLeft, Search, X, RefreshIcon } from '@floegence/floe-webapp-core/icons';
 import { Button, Select } from '@floegence/floe-webapp-core/ui';
 
 import { EnvSettingsPageCtx, EnvSettingsPageProvider, useEnvSettingsPage, type EnvSettingsPageContextValue } from './settings/EnvSettingsPageContext';
@@ -119,11 +119,23 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
   ));
   const filteredItems = createMemo(() => filterNavItems(ctx.searchQuery(), localizedItems()));
   const ActiveSection = createMemo(() => sectionComponents[ctx.activeSection()]);
+  const returnToFlower = createMemo(() => ctx.env.settingsOrigin()?.kind === 'flower');
 
   return (
     <div class={cn('relative h-full min-h-0 flex flex-col', redevenSurfaceRoleClass('main'))}>
       <div class={cn('flex items-center justify-between gap-3 border-b px-4 py-2.5 shrink-0', redevenSurfaceRoleClass('panelStrong'))}>
         <div class="flex items-center gap-3 min-w-0">
+          <Show when={returnToFlower()}>
+            <button
+              type="button"
+              class="inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label={i18n.t('settings.backToFlower')}
+              title={i18n.t('settings.backToFlower')}
+              onClick={() => ctx.env.returnFromSettingsOrigin()}
+            >
+              <ChevronLeft class="h-4 w-4" />
+            </button>
+          </Show>
           <h1 class="text-sm font-semibold text-foreground tracking-tight truncate">{i18n.t('settings.runtimeTitle')}</h1>
         </div>
         <Button size="sm" variant="outline" onClick={() => void ctx.refreshSettingsPage()} disabled={ctx.settings.loading} class="gap-1.5 shrink-0">

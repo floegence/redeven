@@ -112,6 +112,32 @@ export default [
     },
   },
   {
+    basePath: "../../..",
+    files: ["internal/flower_ui/src/**/*.{ts,tsx}"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: "latest",
+        sourceType: "module",
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+      globals: {
+        ...browserGlobals,
+        ...nodeGlobals,
+      },
+    },
+    plugins: {
+      "@typescript-eslint": tsPlugin,
+      solid,
+    },
+    rules: {
+      ...baseTypeScriptRules,
+      "solid/no-innerhtml": "error",
+    },
+  },
+  {
     files: ["src/ui/**/*.{ts,tsx}"],
     ignores: [
       "src/**/*.test.{ts,tsx}",

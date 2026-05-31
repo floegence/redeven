@@ -1,15 +1,17 @@
 import { For, Show, createEffect, createMemo, createSignal } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { ChevronDown } from '@floegence/floe-webapp-core/icons';
 import { Button, Checkbox, Dialog, Input, Select } from '@floegence/floe-webapp-core/ui';
+import { localizedFlowerProviderModelNote } from '../../../../../../flower_ui/src/settings/providerModelNotes';
 import {
   AI_PROVIDER_TYPE_OPTIONS,
   defaultBaseURLForProviderType,
   formatTokenCountForLocale,
   modelID,
   modelSupportsImageInput,
+  localizedProviderTypeLabel,
   providerNeedsWebSearchConfig,
   providerSupportsCustomModelNames,
-  providerTypeLabel,
   providerUsesCustomConnectionName,
   providerTypeRequiresBaseURL,
 } from './aiCatalog';
@@ -112,6 +114,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
       ? i18n.t('flowerProviderDialog.customGatewayDescription')
       : i18n.t('flowerProviderDialog.nativeConnectionDescription')
   );
+  const providerTypeDisplayLabel = (providerType: AIProviderType): string => localizedProviderTypeLabel(providerType, i18n.locale());
   const formatTokenCount = (tokenCount: number) => formatTokenCountForLocale(tokenCount, i18n.locale());
 
   return (
@@ -159,6 +162,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                     {(item) => {
                       const active = () => provider().type === item.value;
                       const expanded = () => expandedProviderType() === item.value;
+                      const panelID = `flower-provider-type-${item.value}`;
                       return (
                         <div class={cn('rounded-lg border bg-background transition', expanded() ? 'border-primary/50 ring-1 ring-primary/15' : 'border-border')}>
                           <button
@@ -169,19 +173,21 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                             )}
                             onClick={() => toggleProviderType(item.value)}
                             disabled={!props.canInteract}
+                            aria-expanded={expanded()}
+                            aria-controls={panelID}
                           >
                             <div class={cn('flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg', active() ? 'bg-background' : 'bg-muted/60')}>
                               <ProviderBrandIcon type={item.value} class="h-5 w-5" />
                             </div>
                             <div class="min-w-0 flex-1">
                               <div class="flex items-center justify-between gap-2">
-                                <div class="text-sm font-semibold text-foreground">{item.label}</div>
+                                <div class="text-sm font-semibold text-foreground">{providerTypeDisplayLabel(item.value)}</div>
                                 <div class="flex items-center gap-2 text-xs text-muted-foreground">
                                   <Show when={active()}>
                                     <span>{i18n.t('flowerProviderDialog.currentProviderType')}</span>
                                   </Show>
                                   <span>{providerTypeExpandLabel(active(), expanded())}</span>
-                                  <span class={cn('transition-transform', expanded() ? 'rotate-180' : '')}>⌄</span>
+                                  <ChevronDown class={cn('h-3.5 w-3.5 transition-transform', expanded() ? 'rotate-180' : '')} />
                                 </div>
                               </div>
                               <div class="mt-1 text-[11px] text-muted-foreground">{providerTypeDescription(item.value)}</div>
@@ -189,7 +195,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                           </button>
 
                           <Show when={expanded()}>
-                            <div class="border-t border-border/80 p-4 overflow-y-auto" style="max-height:50vh">
+                            <div id={panelID} class="border-t border-border/80 p-4 overflow-y-auto" style="max-height:50vh">
                               <div class="space-y-5">
                                 <section class="space-y-3">
                                   <SubSectionHeader
@@ -203,7 +209,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                         <Input
                                           value={provider().name}
                                           onInput={(event) => props.onChangeName(event.currentTarget.value)}
-                                          placeholder={providerTypeLabel(provider().type)}
+                                          placeholder={providerTypeDisplayLabel(provider().type)}
                                           size="sm"
                                           class="w-full"
                                           disabled={!props.canInteract}
@@ -274,7 +280,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                     <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
                                       {props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
                                     </SettingsPill>
-                                    <SettingsPill>{providerTypeLabel(provider().type)}</SettingsPill>
+                                    <SettingsPill>{providerTypeDisplayLabel(provider().type)}</SettingsPill>
                                     <Show when={localizedProviderBuiltInWebSearchLabel(i18n, provider().type)}>
                                       {(label) => <SettingsPill tone="success">{label()}</SettingsPill>}
                                     </Show>
@@ -328,8 +334,8 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                                   <CapabilityTag active>{i18n.t('flowerProviderDialog.enabledCapability')}</CapabilityTag>
                                                 </Show>
                                               </div>
-                                              <Show when={preset.note}>
-                                                <div class="mt-2 text-[11px] text-muted-foreground">{preset.note}</div>
+                                              <Show when={localizedFlowerProviderModelNote(i18n.locale(), preset.note_key)}>
+                                                {(note) => <div class="mt-2 text-[11px] text-muted-foreground">{note()}</div>}
                                               </Show>
                                             </div>
                                           );

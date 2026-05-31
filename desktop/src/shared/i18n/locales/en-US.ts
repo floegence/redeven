@@ -1,6 +1,8 @@
 import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage } from '../messageTypes';
+import { flowerSurfaceEnUS } from './flowerSurface';
 
 export const enUS = {
+  flowerSurface: flowerSurfaceEnUS,
   common: {
     open: 'Open',
     save: 'Save',
@@ -104,6 +106,7 @@ export const enUS = {
     },
     commandSearchPlaceholder: 'Search desktop commands...',
     openRedevenDashboard: 'Open Redeven Dashboard',
+    backToEnvironments: 'Back to Environments',
     useDarkTheme: 'Use dark theme',
     useLightTheme: 'Use light theme',
   },

@@ -744,7 +744,8 @@ type settingsUpdateView struct {
 }
 
 type settingsAISecretsView struct {
-	ProviderAPIKeySet map[string]bool `json:"provider_api_key_set"`
+	ProviderAPIKeySet          map[string]bool `json:"provider_api_key_set"`
+	WebSearchProviderAPIKeySet map[string]bool `json:"web_search_provider_api_key_set"`
 }
 
 type settingsConnectionView struct {
@@ -1225,8 +1226,19 @@ func (g *Gateway) toSettingsView(cfg *config.Config) settingsView {
 				ids = append(ids, id)
 			}
 			if len(ids) > 0 {
-				if set, err := secrets.GetAIProviderAPIKeySet(ids); err == nil {
-					out.AISecrets = &settingsAISecretsView{ProviderAPIKeySet: set}
+				providerSet, providerErr := secrets.GetAIProviderAPIKeySet(ids)
+				webSearchSet, webSearchErr := secrets.GetWebSearchProviderAPIKeySet(ids)
+				if providerErr == nil || webSearchErr == nil {
+					out.AISecrets = &settingsAISecretsView{
+						ProviderAPIKeySet:          map[string]bool{},
+						WebSearchProviderAPIKeySet: map[string]bool{},
+					}
+					if providerErr == nil {
+						out.AISecrets.ProviderAPIKeySet = providerSet
+					}
+					if webSearchErr == nil {
+						out.AISecrets.WebSearchProviderAPIKeySet = webSearchSet
+					}
 				}
 			}
 		}
@@ -2875,7 +2887,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "failed to load web search provider key status"})
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"provider_api_key_set": set}})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"web_search_provider_api_key_set": set}})
 		return
 
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/web_search_provider_keys":
@@ -2938,7 +2950,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		g.appendAudit(meta, "web_search_provider_key_update", "success", map[string]any{"providers": touched}, nil)
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"provider_api_key_set": set}})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"web_search_provider_api_key_set": set}})
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/skills":

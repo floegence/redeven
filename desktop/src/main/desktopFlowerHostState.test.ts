@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { DesktopFlowerHostSettingsDraft } from '../shared/flowerHostSettingsIPC';
 import {
@@ -137,6 +137,7 @@ describe('desktopFlowerHostState', () => {
         {
           provider_id: 'openai',
           provider_api_key_configured: true,
+          web_search_api_key_configured: false,
         },
       ]);
       expect(JSON.stringify(saved)).not.toContain('sk-demo-secret');
@@ -176,7 +177,96 @@ describe('desktopFlowerHostState', () => {
       id: 'openai',
       provider_api_key: '',
       provider_api_key_mode: 'replace',
+      web_search_api_key: '',
     }));
+  });
+
+  it('stores and redacts web search provider secrets independently from model provider keys', async () => {
+    await withTempFlowerRoot(async (root) => {
+      const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+      const codec = createDesktopFlowerHostPlaintextSecretCodec();
+      const draft = validDraft({
+        current_model_id: 'custom/gpt-5-mini',
+        providers: [
+          {
+            id: 'custom',
+            name: 'Custom',
+            type: 'openai_compatible',
+            base_url: 'https://flower.example.invalid/v1',
+            web_search: { mode: 'brave' },
+            models: [{ model_name: 'gpt-5-mini', context_window: 400_000 }],
+            provider_api_key: 'sk-demo-secret',
+            provider_api_key_mode: 'replace',
+            web_search_api_key: 'brave-demo-secret',
+            web_search_api_key_mode: 'replace',
+          },
+        ],
+      });
+
+      const saved = await saveDesktopFlowerHostSettings(paths, draft, codec);
+
+      expect(saved.provider_secrets).toEqual([
+        {
+          provider_id: 'custom',
+          provider_api_key_configured: true,
+          web_search_api_key_configured: true,
+        },
+      ]);
+      expect(JSON.stringify(saved)).not.toContain('brave-demo-secret');
+      expect(await fs.readFile(paths.configPath, 'utf8')).not.toContain('brave-demo-secret');
+      expect(await fs.readFile(paths.secretsFile, 'utf8')).toContain('brave-demo-secret');
+      expect(JSON.stringify(redactDesktopFlowerHostSettingsDraft(draft))).not.toContain('brave-demo-secret');
+    });
+  });
+
+  it('clears web search secrets without removing the model provider key', async () => {
+    await withTempFlowerRoot(async (root) => {
+      const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+      const codec = createDesktopFlowerHostPlaintextSecretCodec();
+      const draft = validDraft({
+        current_model_id: 'custom/gpt-5-mini',
+        providers: [
+          {
+            id: 'custom',
+            name: 'Custom',
+            type: 'openai_compatible',
+            base_url: 'https://flower.example.invalid/v1',
+            web_search: { mode: 'brave' },
+            models: [{ model_name: 'gpt-5-mini', context_window: 400_000 }],
+            provider_api_key: 'sk-demo-secret',
+            provider_api_key_mode: 'replace',
+            web_search_api_key: 'brave-demo-secret',
+            web_search_api_key_mode: 'replace',
+          },
+        ],
+      });
+      await saveDesktopFlowerHostSettings(paths, draft, codec);
+
+      const saved = await saveDesktopFlowerHostSettings(paths, {
+        config: {
+          ...draft.config,
+          providers: [
+            {
+              ...draft.config.providers[0],
+              web_search: { mode: 'disabled' },
+              provider_api_key: '',
+              provider_api_key_mode: 'keep',
+              web_search_api_key: '',
+              web_search_api_key_mode: 'clear',
+            },
+          ],
+        },
+      }, codec);
+
+      expect(saved.provider_secrets).toEqual([
+        {
+          provider_id: 'custom',
+          provider_api_key_configured: true,
+          web_search_api_key_configured: false,
+        },
+      ]);
+      expect(await fs.readFile(paths.secretsFile, 'utf8')).not.toContain('brave-demo-secret');
+    });
   });
 
   it('refuses to encode provider secrets when secure storage is unavailable', () => {
@@ -289,6 +379,349 @@ describe('desktopFlowerHostState', () => {
         await expect(fs.stat(path.join(paths.stateRoot, 'local-environment', 'threads.json'))).rejects.toMatchObject({
           code: 'ENOENT',
         });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  it('adds Brave Search context when a provider enables Brave web search', async () => {
+    await withTempFlowerRoot(async (root) => {
+      const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+      const codec = createDesktopFlowerHostPlaintextSecretCodec();
+      await saveDesktopFlowerHostSettings(paths, validDraft({
+        current_model_id: 'custom/gpt-5-mini',
+        providers: [
+          {
+            id: 'custom',
+            name: 'Custom',
+            type: 'openai_compatible',
+            base_url: 'https://flower.example.invalid/v1',
+            web_search: { mode: 'brave' },
+            models: [{ model_name: 'gpt-5-mini', context_window: 400_000 }],
+            provider_api_key: 'sk-demo-secret',
+            provider_api_key_mode: 'replace',
+            web_search_api_key: 'brave-demo-secret',
+            web_search_api_key_mode: 'replace',
+          },
+        ],
+      }), codec);
+
+      const originalFetch = globalThis.fetch;
+      const calls: string[] = [];
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push(String(input));
+        if (String(input).startsWith('https://api.search.brave.com/res/v1/web/search?')) {
+          expect(init?.headers).toEqual(expect.objectContaining({
+            'x-subscription-token': 'brave-demo-secret',
+          }));
+          return new Response(JSON.stringify({
+            web: {
+              results: [
+                {
+                  title: 'Redeven release notes',
+                  url: 'https://example.test/redeven',
+                  description: 'Latest Redeven details.',
+                },
+              ],
+            },
+          }), { status: 200, headers: { 'content-type': 'application/json' } });
+        }
+        expect(String(input)).toBe('https://flower.example.invalid/v1/chat/completions');
+        expect(String(init?.body)).toContain('Redeven release notes');
+        expect(String(init?.body)).toContain('hello flower');
+        return new Response(JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: 'search-aware response',
+              },
+            },
+          ],
+        }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }) as typeof fetch;
+
+      try {
+        const thread = await sendDesktopFlowerHostChat(
+          paths,
+          { prompt: 'hello flower' },
+          codec,
+          (() => {
+            let now = 2000;
+            return () => {
+              now += 1;
+              return now;
+            };
+          })(),
+          (() => {
+            let i = 20;
+            return () => {
+              i += 1;
+              return `id_${i}`;
+            };
+          })(),
+        );
+
+        expect(calls).toHaveLength(2);
+        expect(thread.messages.map((message) => message.content)).toEqual(['hello flower', 'search-aware response']);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  it('fails before network calls when required Flower provider secrets are missing', async () => {
+    await withTempFlowerRoot(async (root) => {
+      const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+      const codec = createDesktopFlowerHostPlaintextSecretCodec();
+      await saveDesktopFlowerHostSettings(paths, validDraft({
+        providers: [
+          {
+            id: 'openai',
+            name: 'OpenAI',
+            type: 'openai',
+            models: [{ model_name: 'gpt-5-mini', context_window: 400_000 }],
+            provider_api_key: '',
+            provider_api_key_mode: 'clear',
+          },
+        ],
+      }), codec);
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn() as unknown as typeof fetch;
+      try {
+        await expect(sendDesktopFlowerHostChat(paths, { prompt: 'hello flower' }, codec))
+          .rejects
+          .toThrow('Flower provider "openai" is missing an API key.');
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  it('fails before provider calls when Brave Search is enabled without a Brave key', async () => {
+    await withTempFlowerRoot(async (root) => {
+      const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+      const codec = createDesktopFlowerHostPlaintextSecretCodec();
+      await saveDesktopFlowerHostSettings(paths, validDraft({
+        current_model_id: 'custom/gpt-5-mini',
+        providers: [
+          {
+            id: 'custom',
+            name: 'Custom',
+            type: 'openai_compatible',
+            base_url: 'https://flower.example.invalid/v1',
+            web_search: { mode: 'brave' },
+            models: [{ model_name: 'gpt-5-mini', context_window: 400_000 }],
+            provider_api_key: 'sk-demo-secret',
+            provider_api_key_mode: 'replace',
+            web_search_api_key: '',
+            web_search_api_key_mode: 'clear',
+          },
+        ],
+      }), codec);
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn() as unknown as typeof fetch;
+      try {
+        await expect(sendDesktopFlowerHostChat(paths, { prompt: 'hello web' }, codec))
+          .rejects
+          .toThrow('Flower provider "custom" is missing a Brave Search API key.');
+        expect(globalThis.fetch).not.toHaveBeenCalled();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  it('uses OpenAI Responses when a compatible provider enables built-in web search', async () => {
+    await withTempFlowerRoot(async (root) => {
+      const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+      const codec = createDesktopFlowerHostPlaintextSecretCodec();
+      await saveDesktopFlowerHostSettings(paths, validDraft({
+        current_model_id: 'custom/gpt-5-mini',
+        providers: [
+          {
+            id: 'custom',
+            name: 'Custom',
+            type: 'openai_compatible',
+            base_url: 'https://flower.example.invalid/v1',
+            web_search: { mode: 'openai_builtin' },
+            models: [{ model_name: 'gpt-5-mini', context_window: 400_000 }],
+            provider_api_key: 'sk-demo-secret',
+            provider_api_key_mode: 'replace',
+          },
+        ],
+      }), codec);
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe('https://flower.example.invalid/v1/responses');
+        const body = JSON.parse(String(init?.body ?? '{}')) as { tools?: readonly { type?: string }[] };
+        expect(body.tools).toEqual([{ type: 'web_search_preview' }]);
+        return new Response(JSON.stringify({ output_text: 'responses web result' }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }) as typeof fetch;
+
+      try {
+        const thread = await sendDesktopFlowerHostChat(paths, { prompt: 'hello web' }, codec);
+
+        expect(thread.messages.map((message) => message.content)).toEqual(['hello web', 'responses web result']);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
+
+  it('uses native provider built-in web search request payloads', async () => {
+    const cases = [
+      {
+        providerID: 'openai',
+        providerName: 'OpenAI',
+        type: 'openai' as const,
+        modelName: 'gpt-5-mini',
+        url: 'https://api.openai.com/v1/responses',
+        response: { output_text: 'openai web result' },
+        expectBody: (body: Record<string, unknown>) => {
+          expect(body.tools).toEqual([{ type: 'web_search_preview' }]);
+        },
+      },
+      {
+        providerID: 'moonshot',
+        providerName: 'Moonshot',
+        type: 'moonshot' as const,
+        modelName: 'kimi-k2.6',
+        baseURL: 'https://api.moonshot.cn/v1',
+        url: 'https://api.moonshot.cn/v1/chat/completions',
+        response: { choices: [{ message: { content: 'kimi web result' } }] },
+        expectBody: (body: Record<string, unknown>) => {
+          expect(body.tools).toEqual([
+            {
+              type: 'builtin_function',
+              function: { name: '$web_search' },
+            },
+          ]);
+          expect(body.thinking).toEqual({ type: 'disabled' });
+        },
+      },
+      {
+        providerID: 'chatglm',
+        providerName: 'ChatGLM',
+        type: 'chatglm' as const,
+        modelName: 'glm-5.1',
+        baseURL: 'https://api.z.ai/api/paas/v4/',
+        url: 'https://api.z.ai/api/paas/v4/chat/completions',
+        response: { choices: [{ message: { content: 'glm web result' } }] },
+        expectBody: (body: Record<string, unknown>) => {
+          expect(body.tools).toEqual([
+            {
+              type: 'web_search',
+              web_search: { search_result: true },
+            },
+          ]);
+        },
+      },
+      {
+        providerID: 'deepseek',
+        providerName: 'DeepSeek',
+        type: 'deepseek' as const,
+        modelName: 'deepseek-v4-pro',
+        baseURL: 'https://api.deepseek.com',
+        url: 'https://api.deepseek.com/chat/completions',
+        response: { choices: [{ message: { content: 'deepseek web result' } }] },
+        expectBody: (body: Record<string, unknown>) => {
+          expect(body.enable_search).toBe(true);
+        },
+      },
+      {
+        providerID: 'qwen',
+        providerName: 'Qwen',
+        type: 'qwen' as const,
+        modelName: 'qwen3.6-plus',
+        baseURL: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
+        url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/responses',
+        response: { output_text: 'qwen web result' },
+        expectBody: (body: Record<string, unknown>) => {
+          expect(body.tools).toEqual([{ type: 'web_search' }]);
+        },
+      },
+    ];
+
+    for (const item of cases) {
+      await withTempFlowerRoot(async (root) => {
+        const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+        const codec = createDesktopFlowerHostPlaintextSecretCodec();
+        await saveDesktopFlowerHostSettings(paths, validDraft({
+          current_model_id: `${item.providerID}/${item.modelName}`,
+          providers: [
+            {
+              id: item.providerID,
+              name: item.providerName,
+              type: item.type,
+              ...(item.baseURL ? { base_url: item.baseURL } : {}),
+              models: [{ model_name: item.modelName, context_window: 400_000 }],
+              provider_api_key: `${item.providerID}-secret`,
+              provider_api_key_mode: 'replace',
+            },
+          ],
+        }), codec);
+
+        const originalFetch = globalThis.fetch;
+        globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+          expect(String(input)).toBe(item.url);
+          expect(init?.headers).toEqual(expect.objectContaining({
+            authorization: `Bearer ${item.providerID}-secret`,
+            'content-type': 'application/json',
+          }));
+          const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+          expect(body.model).toBe(item.modelName);
+          item.expectBody(body);
+          return new Response(JSON.stringify(item.response), { status: 200, headers: { 'content-type': 'application/json' } });
+        }) as typeof fetch;
+
+        try {
+          const thread = await sendDesktopFlowerHostChat(paths, { prompt: `hello ${item.providerID}` }, codec);
+
+          expect(thread.messages[1]?.content).toContain('web result');
+        } finally {
+          globalThis.fetch = originalFetch;
+        }
+      });
+    }
+  });
+
+  it('does not duplicate the Anthropic v1 path when a saved base URL already includes it', async () => {
+    await withTempFlowerRoot(async (root) => {
+      const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+      const codec = createDesktopFlowerHostPlaintextSecretCodec();
+      await saveDesktopFlowerHostSettings(paths, validDraft({
+        current_model_id: 'anthropic/claude-sonnet',
+        providers: [
+          {
+            id: 'anthropic',
+            name: 'Anthropic',
+            type: 'anthropic',
+            base_url: 'https://api.anthropic.com/v1',
+            models: [{ model_name: 'claude-sonnet', context_window: 200_000 }],
+            provider_api_key: 'anthropic-demo-secret',
+            provider_api_key_mode: 'replace',
+          },
+        ],
+      }), codec);
+
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toBe('https://api.anthropic.com/v1/messages');
+        expect(init?.headers).toEqual(expect.objectContaining({
+          'x-api-key': 'anthropic-demo-secret',
+        }));
+        return new Response(JSON.stringify({ content: [{ text: 'anthropic response' }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }) as typeof fetch;
+
+      try {
+        const thread = await sendDesktopFlowerHostChat(paths, { prompt: 'hello claude' }, codec);
+
+        expect(thread.messages.map((message) => message.content)).toEqual(['hello claude', 'anthropic response']);
       } finally {
         globalThis.fetch = originalFetch;
       }

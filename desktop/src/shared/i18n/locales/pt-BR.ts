@@ -1,7 +1,9 @@
 import { plural } from '../messageTypes';
 import type { DesktopTranslationShape } from './en-US';
+import { flowerSurfacePtBR } from './flowerSurface';
 
 export const ptBR = {
+  flowerSurface: flowerSurfacePtBR,
   common: {
     open: "Abrir",
     save: "Salvar",
@@ -105,6 +107,7 @@ export const ptBR = {
     },
     commandSearchPlaceholder: "Pesquisar comandos do Desktop...",
     openRedevenDashboard: "Abrir Redeven Dashboard",
+    backToEnvironments: "Voltar para Environments",
     useDarkTheme: "Usar tema escuro",
     useLightTheme: "Usar tema claro",
   },

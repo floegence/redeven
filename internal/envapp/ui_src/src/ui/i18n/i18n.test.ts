@@ -344,6 +344,23 @@ describe('Env App i18n dictionaries', () => {
     }
   });
 
+  it('keeps old Flower sidebar navigation copy out of the active dictionary shape', () => {
+    const keys = Object.keys(collectLeaves(enUS));
+    expect(keys).not.toContain('flowerChat.component.navigationAriaLabel');
+    expect(keys).not.toContain('flowerChat.component.allFlowerHistory');
+    expect(keys).not.toContain('flowerChat.sidebar.allFlowerHistory');
+    expect(keys).not.toContain('flowerChat.sidebar.bulkDelete.title');
+  });
+
+  it('keeps Flower return navigation copy localized', () => {
+    expect(dictionaries['en-US'].settings.backToFlower).toBe('Back to Flower');
+    expect(dictionaries['zh-CN'].settings.backToFlower).toBe('返回 Flower');
+    expect(dictionaries['zh-TW'].settings.backToFlower).toBe('返回 Flower');
+    expect(dictionaries['ja-JP'].settings.backToFlower).toBe('Flower に戻る');
+    expect(dictionaries['fr-FR'].settings.backToFlower).toBe('Retour à Flower');
+    expect(dictionaries['ru-RU'].settings.backToFlower).toBe('Вернуться к Flower');
+  });
+
   it('keeps ru-RU plural messages wired for Russian plural categories', () => {
     const ruLeaves = collectLeaves(dictionaries['ru-RU']);
     for (const [key, value] of Object.entries(ruLeaves)) {
