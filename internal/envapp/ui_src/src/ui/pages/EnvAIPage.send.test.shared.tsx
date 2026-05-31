@@ -131,6 +131,7 @@ const envResource = (() => {
 
 let askFlowerIntentSeqValue = 0;
 let askFlowerIntentValue: AskFlowerIntent | null = null;
+const openSettingsMock = vi.fn();
 
 const envContextValue = {
   env_id: () => 'env-1',
@@ -152,7 +153,9 @@ const envContextValue = {
   consumeWorkbenchSurfaceActivation: () => {},
   settingsSeq: () => 0,
   bumpSettingsSeq: () => {},
-  openSettings: () => {},
+  openSettings: (...args: unknown[]) => openSettingsMock(...args),
+  settingsOrigin: () => null,
+  returnFromSettingsOrigin: () => {},
   settingsFocusSeq: () => 0,
   settingsFocusSection: () => null,
   askFlowerIntentSeq: () => askFlowerIntentSeqValue,
@@ -1203,6 +1206,39 @@ export function registerEnvAIPageSendTests() {
         expect(badge?.className).toContain('rounded-full');
         expect(badge?.className).toContain('border');
         expect(badge?.className).not.toContain('rounded-2xl');
+
+        const settingsButton = Array.from(host.querySelectorAll('button')).find((button) => (
+          button.textContent?.includes(i18n.t('flowerChat.emptyStates.openRuntimeSettings'))
+        )) as HTMLButtonElement | undefined;
+        expect(settingsButton).toBeTruthy();
+
+        settingsButton?.click();
+        await flushAsync();
+
+        expect(openSettingsMock).toHaveBeenCalledWith('ai', { origin: { kind: 'flower', returnSurfaceId: 'ai' } });
+      } finally {
+        dispose();
+      }
+    }, 20000);
+
+    it('keeps the failed-settings CTA tied back to the Flower origin', async () => {
+      aiContextValue.aiEnabled = () => false;
+      aiContextValue.settings = createMockResource(null, false, new Error('settings offline'));
+
+      const { host, dispose } = await renderPage();
+      try {
+        expect(host.textContent).toContain(i18n.t('flowerChat.emptyStates.settingsFailedTitle'));
+        expect(host.textContent).toContain('settings offline');
+
+        const settingsButton = Array.from(host.querySelectorAll('button')).find((button) => (
+          button.textContent?.includes(i18n.t('flowerChat.emptyStates.openRuntimeSettings'))
+        )) as HTMLButtonElement | undefined;
+        expect(settingsButton).toBeTruthy();
+
+        settingsButton?.click();
+        await flushAsync();
+
+        expect(openSettingsMock).toHaveBeenCalledWith('ai', { origin: { kind: 'flower', returnSurfaceId: 'ai' } });
       } finally {
         dispose();
       }
@@ -1491,41 +1527,34 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('keeps New chat, current env conversations, all history, and settings behind one circular Flower entry', async () => {
+    it('keeps the Flower entry and the thread list in the Flower sidebar while settings stay in the header menu', async () => {
       aiState.activeThreadId = '';
       aiState.activeThread = null;
 
       const { host, dispose } = await renderPage();
       try {
-        const rail = host.querySelector('.flower-component-rail');
-        const entry = host.querySelector('.flower-component-entry-orb');
-        const newChatButton = host.querySelector('button[aria-label="New chat"]') as HTMLButtonElement | null;
-        const currentEnvButton = host.querySelector('button[aria-label="Current env"]') as HTMLButtonElement | null;
-        const historyButton = host.querySelector('button[aria-label="All history"]') as HTMLButtonElement | null;
-        const settingsButton = host.querySelector('button[aria-label="Settings"]') as HTMLButtonElement | null;
+        const sidebar = host.querySelector('.flower-component-thread-rail');
+        const flowerEntryButton = host.querySelector(`button[aria-label="${i18n.t('aiChrome.newChat')}"]`) as HTMLButtonElement | null;
+        const threadList = host.querySelector('[data-testid="flower-thread-scroll-region"]');
+        const railNavItems = host.querySelectorAll('.flower-component-nav-item');
 
-        expect(rail).toBeTruthy();
-        expect(entry?.className).toContain('rounded');
-        expect(newChatButton).toBeTruthy();
-        expect(currentEnvButton).toBeTruthy();
-        expect(historyButton).toBeTruthy();
-        expect(settingsButton).toBeTruthy();
-        expect(newChatButton?.getAttribute('title')).toContain('without environment context');
-        expect(currentEnvButton?.classList.contains('flower-component-nav-item')).toBe(true);
-        expect(historyButton?.classList.contains('flower-component-nav-item')).toBe(true);
-        expect(settingsButton?.classList.contains('flower-component-nav-item')).toBe(true);
+        expect(sidebar).toBeTruthy();
+        expect(flowerEntryButton).toBeTruthy();
+        expect(threadList).toBeTruthy();
+        expect(railNavItems).toHaveLength(0);
+        expect(host.querySelector('.flower-component-entry-orb')).toBeNull();
+        expect(host.querySelector('button[aria-label="Compose"]')).toBeNull();
 
-        historyButton?.click();
+        const moreButton = host.querySelector('button[aria-label="More actions"]') as HTMLButtonElement | null;
+        expect(moreButton).toBeTruthy();
+        moreButton?.click();
         await flushAsync();
-        expect(host.textContent).toContain('All Flower history');
-
-        currentEnvButton?.click();
+        const settingsMenuItem = host.querySelector('[data-testid="dropdown-item-settings"]') as HTMLElement | null;
+        settingsMenuItem?.click();
         await flushAsync();
-        expect(host.textContent).toContain('Current env conversations');
 
-        settingsButton?.click();
-        await flushAsync();
-        expect(host.textContent).toContain(i18n.t('settings.nav.flower'));
+        expect(openSettingsMock).toHaveBeenCalledWith('ai', { origin: { kind: 'flower', returnSurfaceId: 'ai' } });
+        expect(host.querySelector('.settings-layout')).toBeNull();
       } finally {
         dispose();
       }

@@ -31,8 +31,23 @@ type DesktopFlowerHostSecretsFile = Readonly<{
   providers?: readonly Readonly<{
     provider_id?: unknown;
     provider_api_key?: StoredSecret;
+    web_search_api_key?: StoredSecret;
   }>[];
 }>;
+
+type FlowerProviderRequestMessage = Readonly<{
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}>;
+
+type DesktopFlowerHostWebSearchRuntimeMode =
+  | 'disabled'
+  | 'openai_responses_builtin'
+  | 'kimi_builtin'
+  | 'glm_web_search_tool'
+  | 'deepseek_native'
+  | 'qwen_responses_web_search'
+  | 'external_brave';
 
 export type DesktopFlowerHostSecretCodec = Readonly<{
   encodeSecret: (value: string) => StoredSecret;
@@ -271,10 +286,15 @@ export function redactDesktopFlowerHostSettingsDraft(
     config: {
       ...draft.config,
       providers: draft.config.providers.map((provider) => {
-        const { provider_api_key: _providerAPIKey, ...rest } = provider;
+        const {
+          provider_api_key: _providerAPIKey,
+          web_search_api_key: _webSearchAPIKey,
+          ...rest
+        } = provider;
         return {
           ...rest,
           provider_api_key: '',
+          web_search_api_key: '',
         };
       }),
     },
@@ -352,23 +372,29 @@ async function writeJSONFile(filePath: string, value: unknown): Promise<void> {
   await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
 }
 
-function configuredProviderSecretIDs(secrets: DesktopFlowerHostSecretsFile | null): Set<string> {
+function configuredProviderSecretIDs(
+  secrets: DesktopFlowerHostSecretsFile | null,
+  key: 'provider_api_key' | 'web_search_api_key',
+): Set<string> {
   const ids = new Set<string>();
   for (const entry of secrets?.providers ?? []) {
     const providerID = compact(entry.provider_id);
-    if (providerID && entry.provider_api_key) {
+    if (providerID && entry[key]) {
       ids.add(providerID);
     }
   }
   return ids;
 }
 
-function providerSecretsByID(secrets: DesktopFlowerHostSecretsFile | null): Map<string, StoredSecret> {
+function providerSecretsByID(
+  secrets: DesktopFlowerHostSecretsFile | null,
+  key: 'provider_api_key' | 'web_search_api_key',
+): Map<string, StoredSecret> {
   const out = new Map<string, StoredSecret>();
   for (const entry of secrets?.providers ?? []) {
     const providerID = compact(entry.provider_id);
-    if (providerID && entry.provider_api_key) {
-      out.set(providerID, entry.provider_api_key);
+    if (providerID && entry[key]) {
+      out.set(providerID, entry[key]);
     }
   }
   return out;
@@ -496,12 +522,14 @@ export async function loadDesktopFlowerHostSettings(
 ): Promise<DesktopFlowerHostSettingsSnapshot> {
   const config = validateDesktopFlowerHostConfig(await readJSONFile(paths.configPath));
   const secrets = await readJSONFile<DesktopFlowerHostSecretsFile>(paths.secretsFile);
-  const configuredSecretIDs = configuredProviderSecretIDs(secrets);
+  const configuredSecretIDs = configuredProviderSecretIDs(secrets, 'provider_api_key');
+  const configuredWebSearchSecretIDs = configuredProviderSecretIDs(secrets, 'web_search_api_key');
   return {
     config,
     provider_secrets: config.providers.map((provider): DesktopFlowerHostProviderSecretState => ({
       provider_id: provider.id,
       provider_api_key_configured: configuredSecretIDs.has(provider.id),
+      web_search_api_key_configured: configuredWebSearchSecretIDs.has(provider.id),
     })),
     target_cache: await loadDesktopFlowerHostTargetCache(paths),
   };
@@ -517,6 +545,59 @@ function defaultProviderBaseURL(type: DesktopFlowerHostProviderType): string {
   }
 }
 
+function anthropicMessagesURL(provider: DesktopFlowerHostProvider): string {
+  const baseURL = (provider.base_url || defaultProviderBaseURL(provider.type)).replace(/\/+$/, '');
+  return baseURL.endsWith('/v1') ? `${baseURL}/messages` : `${baseURL}/v1/messages`;
+}
+
+function isOfficialOpenAIEndpoint(baseURL: string): boolean {
+  const cleanBaseURL = compact(baseURL);
+  if (!cleanBaseURL) {
+    return true;
+  }
+  try {
+    return new URL(cleanBaseURL).hostname.toLowerCase() === 'api.openai.com';
+  } catch {
+    return false;
+  }
+}
+
+function resolveDesktopFlowerHostWebSearchMode(
+  provider: DesktopFlowerHostProvider,
+  modelName: string,
+): DesktopFlowerHostWebSearchRuntimeMode {
+  const model = compact(modelName);
+  switch (provider.type) {
+    case 'openai':
+      return isOfficialOpenAIEndpoint(provider.base_url || defaultProviderBaseURL(provider.type))
+        ? 'openai_responses_builtin'
+        : 'disabled';
+    case 'moonshot':
+      return model === 'kimi-k2.6' ? 'kimi_builtin' : 'disabled';
+    case 'chatglm':
+      return model === 'glm-5.1' ? 'glm_web_search_tool' : 'disabled';
+    case 'deepseek':
+      return model === 'deepseek-v4-pro' || model === 'deepseek-v4-flash' ? 'deepseek_native' : 'disabled';
+    case 'qwen':
+      return model === 'qwen3.6-plus'
+        || model === 'qwen3.6-plus-2026-04-02'
+        || model === 'qwen3.6-flash'
+        || model === 'qwen3.6-flash-2026-04-16'
+        ? 'qwen_responses_web_search'
+        : 'disabled';
+    case 'openai_compatible':
+      if (provider.web_search?.mode === 'openai_builtin') {
+        return 'openai_responses_builtin';
+      }
+      if (provider.web_search?.mode === 'brave') {
+        return 'external_brave';
+      }
+      return 'disabled';
+    default:
+      return 'disabled';
+  }
+}
+
 function activeFlowerProvider(config: DesktopFlowerHostConfig): { provider: DesktopFlowerHostProvider; modelName: string } {
   const [providerID, ...modelParts] = compact(config.current_model_id).split('/');
   const modelName = modelParts.join('/');
@@ -525,6 +606,20 @@ function activeFlowerProvider(config: DesktopFlowerHostConfig): { provider: Desk
     throw new Error('Configure a Flower provider and model before starting a chat.');
   }
   return { provider, modelName };
+}
+
+function normalizeProviderMessages(
+  messages: readonly DesktopFlowerHostThread['messages'][number][],
+  systemContext: string,
+): readonly FlowerProviderRequestMessage[] {
+  const history = messages.map((message): FlowerProviderRequestMessage => ({
+    role: message.role,
+    content: message.content,
+  }));
+  if (!systemContext) {
+    return history;
+  }
+  return [{ role: 'system', content: systemContext }, ...history];
 }
 
 function extractOpenAICompatibleText(value: unknown): string {
@@ -562,26 +657,137 @@ function extractOpenAICompatibleText(value: unknown): string {
   return typeof choiceText === 'string' ? choiceText.trim() : '';
 }
 
+function extractBraveWebSearchContext(value: unknown): string {
+  if (!value || typeof value !== 'object') {
+    return '';
+  }
+  const web = (value as { web?: { results?: readonly unknown[] } }).web;
+  const results = Array.isArray(web?.results) ? web.results.slice(0, 5) : [];
+  const lines = results
+    .map((entry, index) => {
+      if (!entry || typeof entry !== 'object') {
+        return '';
+      }
+      const record = entry as { title?: unknown; url?: unknown; description?: unknown };
+      const title = compact(record.title);
+      const url = compact(record.url);
+      const description = compact(record.description);
+      if (!title && !description) {
+        return '';
+      }
+      return [
+        `${index + 1}. ${title || url || 'Untitled result'}`,
+        url ? `URL: ${url}` : '',
+        description ? `Summary: ${description}` : '',
+      ].filter(Boolean).join('\n');
+    })
+    .filter(Boolean);
+  return lines.join('\n\n');
+}
+
+async function requestBraveWebSearchContext(args: {
+  apiKey: string;
+  query: string;
+}): Promise<string> {
+  const params = new URLSearchParams({
+    q: args.query,
+    count: '5',
+    text_decorations: 'false',
+  });
+  const response = await fetch(`https://api.search.brave.com/res/v1/web/search?${params.toString()}`, {
+    method: 'GET',
+    headers: {
+      accept: 'application/json',
+      'x-subscription-token': args.apiKey,
+    },
+  });
+  const payload = await response.json().catch(() => null) as unknown;
+  if (!response.ok) {
+    throw new Error(`Flower Brave Search request failed with HTTP ${response.status}.`);
+  }
+  return extractBraveWebSearchContext(payload);
+}
+
+async function buildWebSearchSystemContext(args: {
+  providerID: string;
+  prompt: string;
+  webSearchMode: DesktopFlowerHostWebSearchRuntimeMode;
+  webSearchAPIKey?: string;
+}): Promise<string> {
+  if (args.webSearchMode !== 'external_brave') {
+    return '';
+  }
+  const apiKey = compact(args.webSearchAPIKey);
+  if (!apiKey) {
+    throw new Error(`Flower provider "${args.providerID}" is missing a Brave Search API key.`);
+  }
+  const context = await requestBraveWebSearchContext({ apiKey, query: args.prompt });
+  if (!context) {
+    return '';
+  }
+  return [
+    'Use the following Brave Search results as fresh external context when they are relevant.',
+    'Do not claim that a result proves something beyond its title, URL, and summary.',
+    '',
+    context,
+  ].join('\n');
+}
+
 async function requestOpenAICompatibleChat(args: {
   provider: DesktopFlowerHostProvider;
   modelName: string;
   apiKey: string;
-  messages: readonly DesktopFlowerHostThread['messages'][number][];
+  messages: readonly FlowerProviderRequestMessage[];
+  webSearchMode: DesktopFlowerHostWebSearchRuntimeMode;
 }): Promise<string> {
   const baseURL = (args.provider.base_url || defaultProviderBaseURL(args.provider.type)).replace(/\/+$/, '');
+  const body: Record<string, unknown> = {
+    model: args.modelName,
+    messages: args.messages,
+  };
+  decorateDesktopFlowerHostChatCompletionBody(body, args.webSearchMode);
   const response = await fetch(`${baseURL}/chat/completions`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${args.apiKey}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({
-      model: args.modelName,
-      messages: args.messages.map((message) => ({
-        role: message.role,
-        content: message.content,
-      })),
-    }),
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => null) as unknown;
+  if (!response.ok) {
+    throw new Error(`Flower provider request failed with HTTP ${response.status}.`);
+  }
+  const text = extractOpenAICompatibleText(payload);
+  if (!text) {
+    throw new Error('Flower provider returned an empty response.');
+  }
+  return text;
+}
+
+async function requestOpenAIResponsesChat(args: {
+  provider: DesktopFlowerHostProvider;
+  modelName: string;
+  apiKey: string;
+  messages: readonly FlowerProviderRequestMessage[];
+  webSearchMode: DesktopFlowerHostWebSearchRuntimeMode;
+}): Promise<string> {
+  const baseURL = (args.provider.base_url || defaultProviderBaseURL(args.provider.type)).replace(/\/+$/, '');
+  const body: Record<string, unknown> = {
+    model: args.modelName,
+    input: args.messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+    })),
+  };
+  decorateDesktopFlowerHostResponsesBody(body, args.webSearchMode);
+  const response = await fetch(`${baseURL}/responses`, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${args.apiKey}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => null) as unknown;
   if (!response.ok) {
@@ -598,10 +804,15 @@ async function requestAnthropicChat(args: {
   provider: DesktopFlowerHostProvider;
   modelName: string;
   apiKey: string;
-  messages: readonly DesktopFlowerHostThread['messages'][number][];
+  messages: readonly FlowerProviderRequestMessage[];
 }): Promise<string> {
-  const baseURL = (args.provider.base_url || defaultProviderBaseURL(args.provider.type)).replace(/\/+$/, '');
-  const response = await fetch(`${baseURL}/v1/messages`, {
+  const system = args.messages
+    .filter((message) => message.role === 'system')
+    .map((message) => message.content)
+    .join('\n\n')
+    .trim();
+  const conversation = args.messages.filter((message) => message.role !== 'system');
+  const response = await fetch(anthropicMessagesURL(args.provider), {
     method: 'POST',
     headers: {
       'anthropic-version': '2023-06-01',
@@ -611,7 +822,8 @@ async function requestAnthropicChat(args: {
     body: JSON.stringify({
       model: args.modelName,
       max_tokens: 4096,
-      messages: args.messages.map((message) => ({
+      ...(system ? { system } : {}),
+      messages: conversation.map((message) => ({
         role: message.role,
         content: message.content,
       })),
@@ -636,12 +848,70 @@ async function requestFlowerHostAssistantMessage(args: {
   provider: DesktopFlowerHostProvider;
   modelName: string;
   apiKey: string;
-  messages: readonly DesktopFlowerHostThread['messages'][number][];
+  messages: readonly FlowerProviderRequestMessage[];
+  webSearchMode: DesktopFlowerHostWebSearchRuntimeMode;
 }): Promise<string> {
   if (args.provider.type === 'anthropic') {
     return requestAnthropicChat(args);
   }
+  if (args.webSearchMode === 'openai_responses_builtin' || args.webSearchMode === 'qwen_responses_web_search') {
+    return requestOpenAIResponsesChat(args);
+  }
   return requestOpenAICompatibleChat(args);
+}
+
+function decorateDesktopFlowerHostChatCompletionBody(
+  body: Record<string, unknown>,
+  webSearchMode: DesktopFlowerHostWebSearchRuntimeMode,
+): void {
+  switch (webSearchMode) {
+    case 'kimi_builtin':
+      body.tools = [
+        ...(Array.isArray(body.tools) ? body.tools : []),
+        {
+          type: 'builtin_function',
+          function: { name: '$web_search' },
+        },
+      ];
+      body.thinking = { type: 'disabled' };
+      break;
+    case 'glm_web_search_tool':
+      body.tools = [
+        ...(Array.isArray(body.tools) ? body.tools : []),
+        {
+          type: 'web_search',
+          web_search: { search_result: true },
+        },
+      ];
+      break;
+    case 'deepseek_native':
+      body.enable_search = true;
+      break;
+    default:
+      break;
+  }
+}
+
+function decorateDesktopFlowerHostResponsesBody(
+  body: Record<string, unknown>,
+  webSearchMode: DesktopFlowerHostWebSearchRuntimeMode,
+): void {
+  switch (webSearchMode) {
+    case 'openai_responses_builtin':
+      body.tools = [
+        ...(Array.isArray(body.tools) ? body.tools : []),
+        { type: 'web_search_preview' },
+      ];
+      break;
+    case 'qwen_responses_web_search':
+      body.tools = [
+        ...(Array.isArray(body.tools) ? body.tools : []),
+        { type: 'web_search' },
+      ];
+      break;
+    default:
+      break;
+  }
 }
 
 export async function sendDesktopFlowerHostChat(
@@ -657,11 +927,15 @@ export async function sendDesktopFlowerHostChat(
   }
   const snapshot = await loadDesktopFlowerHostSettings(paths);
   const { provider, modelName } = activeFlowerProvider(snapshot.config);
-  const secret = providerSecretsByID(await readJSONFile<DesktopFlowerHostSecretsFile>(paths.secretsFile)).get(provider.id);
+  const secretsFile = await readJSONFile<DesktopFlowerHostSecretsFile>(paths.secretsFile);
+  const secret = providerSecretsByID(secretsFile, 'provider_api_key').get(provider.id);
   if (!secret) {
     throw new Error(`Flower provider "${provider.id}" is missing an API key.`);
   }
   const apiKey = codec.decodeSecret(secret);
+  const webSearchSecret = providerSecretsByID(secretsFile, 'web_search_api_key').get(provider.id);
+  const webSearchAPIKey = webSearchSecret ? codec.decodeSecret(webSearchSecret) : '';
+  const webSearchMode = resolveDesktopFlowerHostWebSearchMode(provider, modelName);
   const threads = [...await listDesktopFlowerHostThreads(paths)];
   const threadID = compact(request.thread_id) || `flower_thread_${idFactory()}`;
   const existingIndex = threads.findIndex((thread) => thread.thread_id === threadID);
@@ -673,11 +947,18 @@ export async function sendDesktopFlowerHostChat(
     created_at_ms: now(),
   };
   const baseMessages = [...existing?.messages ?? [], userMessage];
+  const systemContext = await buildWebSearchSystemContext({
+    providerID: provider.id,
+    prompt,
+    webSearchMode,
+    webSearchAPIKey,
+  });
   const assistantText = await requestFlowerHostAssistantMessage({
     provider,
     modelName,
     apiKey,
-    messages: baseMessages,
+    messages: normalizeProviderMessages(baseMessages, systemContext),
+    webSearchMode,
   });
   const assistantMessage = {
     id: `msg_${idFactory()}`,
@@ -715,30 +996,59 @@ export async function saveDesktopFlowerHostSettings(
     ...draft.config,
     providers: draftProviders(draft),
   });
-  const existingSecrets = providerSecretsByID(await readJSONFile<DesktopFlowerHostSecretsFile>(paths.secretsFile));
+  const existingProviderSecrets = providerSecretsByID(await readJSONFile<DesktopFlowerHostSecretsFile>(paths.secretsFile), 'provider_api_key');
+  const existingWebSearchSecrets = providerSecretsByID(await readJSONFile<DesktopFlowerHostSecretsFile>(paths.secretsFile), 'web_search_api_key');
   const draftByProviderID = new Map(draftProviders(draft).map((provider) => [compact(provider.id), provider] as const));
   const nextSecrets: DesktopFlowerHostSecretsFile = {
     version: 1,
     providers: config.providers
       .map((provider) => {
         const providerDraft = draftByProviderID.get(provider.id);
-        const mode = normalizeDesktopFlowerHostSecretMode(
+        const providerMode = normalizeDesktopFlowerHostSecretMode(
           providerDraft?.provider_api_key_mode,
-          existingSecrets.has(provider.id) ? 'keep' : 'replace',
+          existingProviderSecrets.has(provider.id) ? 'keep' : 'replace',
         );
-        if (mode === 'clear') {
-          return null;
-        }
-        if (mode === 'replace') {
+        const webSearchMode = normalizeDesktopFlowerHostSecretMode(
+          providerDraft?.web_search_api_key_mode,
+          existingWebSearchSecrets.has(provider.id) ? 'keep' : 'replace',
+        );
+        const entry: {
+          provider_id: string;
+          provider_api_key?: StoredSecret;
+          web_search_api_key?: StoredSecret;
+        } = { provider_id: provider.id };
+
+        if (providerMode === 'replace') {
           const typedSecret = compact(providerDraft?.provider_api_key);
-          return typedSecret
-            ? { provider_id: provider.id, provider_api_key: codec.encodeSecret(typedSecret) }
-            : null;
+          if (typedSecret) {
+            entry.provider_api_key = codec.encodeSecret(typedSecret);
+          }
+        } else if (providerMode === 'keep') {
+          const existing = existingProviderSecrets.get(provider.id);
+          if (existing) {
+            entry.provider_api_key = existing;
+          }
         }
-        const existing = existingSecrets.get(provider.id);
-        return existing ? { provider_id: provider.id, provider_api_key: existing } : null;
+
+        if (webSearchMode === 'replace') {
+          const typedSecret = compact(providerDraft?.web_search_api_key);
+          if (typedSecret) {
+            entry.web_search_api_key = codec.encodeSecret(typedSecret);
+          }
+        } else if (webSearchMode === 'keep') {
+          const existing = existingWebSearchSecrets.get(provider.id);
+          if (existing) {
+            entry.web_search_api_key = existing;
+          }
+        }
+
+        return entry.provider_api_key || entry.web_search_api_key ? entry : null;
       })
-      .filter((entry): entry is { provider_id: string; provider_api_key: StoredSecret } => entry != null),
+      .filter((entry): entry is {
+        provider_id: string;
+        provider_api_key?: StoredSecret;
+        web_search_api_key?: StoredSecret;
+      } => entry != null),
   };
 
   await writeJSONFile(paths.configPath, config);

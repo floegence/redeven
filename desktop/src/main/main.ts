@@ -11215,6 +11215,14 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       }).then((result) => (
         result.ok ? launcherActionSuccess('opened_flower_host', { utilityWindowKind: 'launcher' }) : result
       ));
+    case 'open_environment_center':
+      return openUtilityWindow('launcher', {
+        surface: 'connect_environment',
+        issue: null,
+        stealAppFocus: true,
+      }).then((result) => (
+        result.ok ? launcherActionSuccess('opened_environment_center', { utilityWindowKind: 'launcher' }) : result
+      ));
     case 'focus_environment_window':
       return focusEnvironmentWindow(request.session_key);
     case 'open_provider_environment':

@@ -40,6 +40,8 @@ const envContextMocks = vi.hoisted(() => ({
   connectionOverlayMessage: vi.fn(() => 'Connecting to runtime...'),
   settingsFocusSeq: vi.fn(() => 0),
   settingsFocusSection: vi.fn(() => null),
+  settingsOrigin: vi.fn((): { kind: 'flower'; returnSurfaceId: 'ai' } | null => null),
+  returnFromSettingsOrigin: vi.fn(),
   bumpSettingsSeq: vi.fn(),
 }));
 
@@ -107,6 +109,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 vi.mock('@floegence/floe-webapp-core/icons', () => ({
   AlertTriangle: icon('AlertTriangle'),
   Bot: icon('Bot'),
+  ChevronLeft: icon('ChevronLeft'),
   Code: icon('Code'),
   Database: icon('Database'),
   FileCode: icon('FileCode'),
@@ -250,6 +253,8 @@ vi.mock('./EnvContext', () => ({
     connectionOverlayMessage: envContextMocks.connectionOverlayMessage,
     settingsFocusSeq: envContextMocks.settingsFocusSeq,
     settingsFocusSection: envContextMocks.settingsFocusSection,
+    settingsOrigin: envContextMocks.settingsOrigin,
+    returnFromSettingsOrigin: envContextMocks.returnFromSettingsOrigin,
     bumpSettingsSeq: envContextMocks.bumpSettingsSeq,
   }),
 }));
@@ -260,7 +265,12 @@ vi.mock('./EnvDebugConsoleSettingsPanel', () => ({
 
 vi.mock('./settings/AIProviderDialog', () => ({
   AIProviderDialog: (props: any) => (
-    <div data-testid="ai-provider-dialog" data-open={props.open ? 'true' : 'false'}>
+    <div
+      data-testid="ai-provider-dialog"
+      data-open={props.open ? 'true' : 'false'}
+      data-provider-key-set={props.keySet ? 'true' : 'false'}
+      data-web-search-key-set={props.webSearchKeySet ? 'true' : 'false'}
+    >
       <button type="button" onClick={props.onConfirm} disabled={!props.open || !props.canInteract || !props.canAdmin || props.aiSaving}>
         Confirm provider
       </button>
@@ -382,6 +392,8 @@ describe('EnvSettingsPage', () => {
     settingsFocusSectionAccessor = () => null;
     envContextMocks.settingsFocusSeq.mockImplementation(() => settingsFocusSeqAccessor());
     envContextMocks.settingsFocusSection.mockImplementation(() => settingsFocusSectionAccessor() as any);
+    envContextMocks.settingsOrigin.mockReturnValue(null);
+    envContextMocks.returnFromSettingsOrigin.mockReset();
     desktopCodeWorkspaceMocks.prepareAvailable.mockReset();
     desktopCodeWorkspaceMocks.prepareAvailable.mockReturnValue(true);
     desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockReset();
@@ -472,7 +484,10 @@ describe('EnvSettingsPage', () => {
     render(() => (
       <EnvSettingsPage
         context={{
-          env: {} as EnvSettingsPageContextValue['env'],
+          env: {
+            settingsOrigin: () => null,
+            returnFromSettingsOrigin: vi.fn(),
+          } as unknown as EnvSettingsPageContextValue['env'],
           protocol: {} as EnvSettingsPageContextValue['protocol'],
           notify: {} as EnvSettingsPageContextValue['notify'],
           runtimeUpdate: {} as EnvSettingsPageContextValue['runtimeUpdate'],
@@ -533,6 +548,27 @@ describe('EnvSettingsPage', () => {
 
     expect(host.querySelector('[data-settings-card="Flower"]')).toBeTruthy();
     expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/settings', { method: 'GET' });
+  });
+
+  it('shows an icon-only back to Flower only for settings opened from Flower', async () => {
+    envContextMocks.settingsOrigin.mockReturnValue({ kind: 'flower', returnSurfaceId: 'ai' });
+
+    render(() => <EnvSettingsPage initialSection="ai" />, host);
+    await flushPage();
+
+    const back = host.querySelector('button[aria-label="Back to Flower"]') as HTMLButtonElement | null;
+    expect(back).toBeTruthy();
+    expect(back?.textContent?.trim()).toBe('');
+
+    back?.click();
+    expect(envContextMocks.returnFromSettingsOrigin).toHaveBeenCalledTimes(1);
+
+    host.innerHTML = '';
+    envContextMocks.settingsOrigin.mockReturnValue(null);
+    render(() => <EnvSettingsPage initialSection="ai" />, host);
+    await flushPage();
+
+    expect(host.querySelector('button[aria-label="Back to Flower"]')).toBeNull();
   });
 
   it('honors the shell focus request for a Runtime Settings section', async () => {
@@ -656,9 +692,26 @@ describe('EnvSettingsPage', () => {
               },
             ],
           },
+          {
+            id: 'custom',
+            name: 'Custom gateway',
+            type: 'openai_compatible',
+            base_url: 'https://llm.example.invalid/v1',
+            web_search: { mode: 'brave' },
+            models: [
+              {
+                model_name: 'custom-model',
+                context_window: 128000,
+                input_modalities: ['text'],
+              },
+            ],
+          },
         ],
       },
-      ai_secrets: { provider_api_key_set: { openai: true } },
+      ai_secrets: {
+        provider_api_key_set: { openai: true, custom: true },
+        web_search_provider_api_key_set: { openai: false, custom: true },
+      },
     };
 
     (gatewayMocks.fetchGatewayJSON as any).mockImplementation(async (url: string) => {
@@ -666,10 +719,10 @@ describe('EnvSettingsPage', () => {
         return structuredClone(settingsResponse);
       }
       if (url === '/_redeven_proxy/api/ai/provider_keys/status') {
-        return { provider_api_key_set: { openai: true } };
+        return { provider_api_key_set: { openai: true, custom: true } };
       }
       if (url === '/_redeven_proxy/api/ai/web_search_provider_keys/status') {
-        return { provider_api_key_set: {} };
+        return { web_search_provider_api_key_set: { openai: false, custom: true } };
       }
       if (url === '/_redeven_proxy/api/ai/provider_bundle') {
         return {
@@ -691,12 +744,16 @@ describe('EnvSettingsPage', () => {
       expect(button).toBeTruthy();
       expect(button?.disabled).toBe(false);
     });
-    const editButton = host.querySelector('button[aria-label="Edit provider"]') as HTMLButtonElement;
+    expect(host.textContent).toContain('OpenAI Compatible');
+    const editButton = host.querySelectorAll('button[aria-label="Edit provider"]')[1] as HTMLButtonElement;
     editButton?.click();
     await flushPage();
 
     await vi.waitFor(() => {
-      expect(host.querySelector('[data-testid="ai-provider-dialog"]')?.getAttribute('data-open')).toBe('true');
+      const dialog = host.querySelector('[data-testid="ai-provider-dialog"]');
+      expect(dialog?.getAttribute('data-open')).toBe('true');
+      expect(dialog?.getAttribute('data-provider-key-set')).toBe('true');
+      expect(dialog?.getAttribute('data-web-search-key-set')).toBe('true');
     });
 
     const confirmButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Confirm provider'));

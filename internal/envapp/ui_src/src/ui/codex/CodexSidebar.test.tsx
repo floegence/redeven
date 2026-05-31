@@ -355,6 +355,8 @@ function renderSurface(host: HTMLDivElement) {
         settingsSeq,
         bumpSettingsSeq: () => setSettingsSeq((current) => current + 1),
         openSettings: () => undefined,
+        settingsOrigin: () => null,
+        returnFromSettingsOrigin: () => undefined,
         debugConsoleEnabled: () => false,
         setDebugConsoleEnabled: () => undefined,
         openDebugConsole: () => undefined,

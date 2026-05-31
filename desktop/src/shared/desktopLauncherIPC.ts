@@ -84,6 +84,7 @@ export type DesktopLauncherActionOutcome =
   | 'opened_utility_window'
   | 'focused_utility_window'
   | 'opened_flower_host'
+  | 'opened_environment_center'
   | 'started_control_plane_connect'
   | 'refreshed_control_plane'
   | 'deleted_control_plane'
@@ -138,6 +139,7 @@ export type DesktopLauncherActionKind =
   | 'set_saved_runtime_target_pinned'
   | 'open_environment_settings'
   | 'open_flower_host'
+  | 'open_environment_center'
   | 'focus_environment_window'
   | 'refresh_control_plane'
   | 'delete_control_plane'
@@ -505,6 +507,9 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'open_flower_host';
     }
   | {
+      kind: 'open_environment_center';
+    }
+  | {
       kind: 'focus_environment_window';
       session_key: string;
     }
@@ -741,6 +746,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'close_launcher_or_quit':
       return { kind };
     case 'open_flower_host':
+      return { kind };
+    case 'open_environment_center':
       return { kind };
     case 'open_environment_settings': {
       const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);

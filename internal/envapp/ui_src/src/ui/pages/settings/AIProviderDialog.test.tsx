@@ -96,7 +96,7 @@ function makeProps(overrides: Partial<AIProviderDialogProps> = {}): AIProviderDi
         max_output_tokens: 128000,
         effective_context_window_percent: 95,
         input_modalities: ['text', 'image'],
-        note: 'Latest preset',
+        note_key: 'openai_gpt_54_professional',
       },
     ],
     onOpenChange: vi.fn(),
@@ -226,7 +226,7 @@ describe('AIProviderDialog', () => {
                 context_window: 128000,
                 max_output_tokens: 4096,
                 input_modalities: ['text'],
-                note: 'Already enabled',
+                note_key: 'openai_gpt_5_stable',
               },
               {
                 model_name: 'preset-model',
@@ -244,7 +244,7 @@ describe('AIProviderDialog', () => {
       host,
     );
 
-    clickButton(host, 'OpenAI Compatible');
+    clickButton(host, 'OpenAI-compatible');
     clickButton(host, 'Remove');
     expect(onRemoveRecommendedPreset).toHaveBeenCalledWith('custom-model');
 
@@ -279,7 +279,7 @@ describe('AIProviderDialog', () => {
       host,
     );
 
-    clickButton(host, 'OpenAI Compatible');
+    clickButton(host, 'OpenAI-compatible');
     expect(host.textContent).toContain('Web Search');
     expect(host.textContent).toContain('Brave API Key');
   });

@@ -160,6 +160,10 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   ),
   Shell: (props: any) => {
     const env = useContext(EnvContextMock as any) as {
+      activeSurface?: () => string;
+      openSettings?: (section?: string, options?: { origin?: { kind: 'flower'; returnSurfaceId: 'ai' } }) => void;
+      returnFromSettingsOrigin?: () => void;
+      settingsOrigin?: () => { kind?: string } | null;
       settingsFocusSeq?: () => number;
       settingsFocusSection?: () => string | null;
     } | undefined;
@@ -206,6 +210,26 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
             : null}
         </div>
         {props.bottomBarItems}
+        <div
+          data-testid="mock-env-context-state"
+          data-active-surface={env?.activeSurface?.() ?? ''}
+          data-settings-origin={env?.settingsOrigin?.()?.kind ?? ''}
+        >
+          <button
+            type="button"
+            data-testid="mock-context-open-flower-settings"
+            onClick={() => env?.openSettings?.('ai', { origin: { kind: 'flower', returnSurfaceId: 'ai' } })}
+          >
+            Open Flower Settings
+          </button>
+          <button
+            type="button"
+            data-testid="mock-context-return-from-settings"
+            onClick={() => env?.returnFromSettingsOrigin?.()}
+          >
+            Return From Settings
+          </button>
+        </div>
         <div data-testid="shell-sidebar" data-floe-shell-slot="sidebar" class={props.slotClassNames?.sidebar} />
         <div data-floe-shell-slot="content-area">
           <main data-floe-shell-slot="main">{props.children}</main>
@@ -362,7 +386,24 @@ vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div /> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({ EnvFileBrowserPage: () => <div /> }));
 vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div /> }));
 vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div /> }));
-vi.mock('./pages/EnvAIPage', () => ({ EnvAIPage: () => <div /> }));
+vi.mock('./pages/EnvAIPage', () => ({
+  EnvAIPage: () => {
+    const env = useContext(EnvContextMock as any) as {
+      openSettings?: (section?: string, options?: { origin?: { kind: 'flower'; returnSurfaceId: 'ai' } }) => void;
+    } | undefined;
+    return (
+      <div data-testid="ai-page">
+        <button
+          type="button"
+          data-testid="mock-open-flower-settings"
+          onClick={() => env?.openSettings?.('ai', { origin: { kind: 'flower', returnSurfaceId: 'ai' } })}
+        >
+          Open Flower Settings
+        </button>
+      </div>
+    );
+  },
+}));
 vi.mock('./codex/CodexPage', () => ({ CodexPage: () => <div /> }));
 vi.mock('./codex/CodexProvider', () => ({ CodexProvider: (props: any) => <>{props.children}</> }));
 vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
@@ -374,12 +415,20 @@ vi.mock('./pages/EnvSettingsPage', async () => {
       const env = useContext(EnvContext);
       settingsPageState.focusSeq = env?.settingsFocusSeq() ?? 0;
       settingsPageState.focusSection = env?.settingsFocusSection() ?? null;
+      const origin = env?.settingsOrigin?.() ?? null;
       return (
         <div
           data-testid="settings-page"
           data-focus-seq={String(settingsPageState.focusSeq)}
           data-focus-section={settingsPageState.focusSection ?? ''}
-        />
+          data-origin={origin?.kind ?? ''}
+        >
+          {origin?.kind === 'flower' ? (
+            <button type="button" data-testid="mock-back-to-flower" onClick={() => env?.returnFromSettingsOrigin?.()}>
+              Back to Flower
+            </button>
+          ) : null}
+        </div>
       );
     },
   };
@@ -572,6 +621,44 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell environment entry affordances', () => {
+  it('returns Flower-origin runtime settings to Flower and clears the origin on normal settings entry', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-testid="mock-context-open-flower-settings"]') as HTMLButtonElement | null)?.click();
+      await flushAsync();
+
+      const flowerContextState = host.querySelector('[data-testid="mock-env-context-state"]') as HTMLElement | null;
+      expect(sidebarActiveTabValue).toBe('settings');
+      expect(flowerContextState?.dataset.settingsOrigin).toBe('flower');
+
+      (host.querySelector('[data-testid="mock-context-return-from-settings"]') as HTMLButtonElement | null)?.click();
+      await flushAsync();
+
+      expect(sidebarActiveTabValue).toBe('ai');
+      expect((host.querySelector('[data-testid="mock-env-context-state"]') as HTMLElement | null)?.dataset.settingsOrigin).toBe('');
+
+      (host.querySelector('[data-activity-id="settings"]') as HTMLButtonElement | null)?.click();
+      await flushAsync();
+
+      expect(sidebarActiveTabValue).toBe('settings');
+      expect((host.querySelector('[data-testid="mock-env-context-state"]') as HTMLElement | null)?.dataset.settingsOrigin).toBe('');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('shows the browser language command in the palette while keeping runtime settings separate', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 

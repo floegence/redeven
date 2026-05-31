@@ -1449,6 +1449,53 @@ func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 			t.Fatalf("openai set=%v, want=false", set["openai"])
 		}
 	}
+
+	// web search status uses its own explicit response field.
+	{
+		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/web_search_provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":"brave-test"}]}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("set web search key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal web search update: %v", err)
+		}
+		data, _ := resp["data"].(map[string]any)
+		set, _ := data["web_search_provider_api_key_set"].(map[string]any)
+		if set["openai"] != true {
+			t.Fatalf("openai web search set=%v, want=true", set["openai"])
+		}
+		if _, ok := data["provider_api_key_set"]; ok {
+			t.Fatalf("web search endpoint must not reuse provider_api_key_set: %#v", data)
+		}
+	}
+
+	{
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/web_search_provider_keys/status", bytes.NewBufferString(`{"provider_ids":["openai","anthropic"]}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("web search status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+		var resp map[string]any
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal web search status: %v", err)
+		}
+		data, _ := resp["data"].(map[string]any)
+		set, _ := data["web_search_provider_api_key_set"].(map[string]any)
+		if set["openai"] != true {
+			t.Fatalf("openai web search set=%v, want=true", set["openai"])
+		}
+		if set["anthropic"] != false {
+			t.Fatalf("anthropic web search set=%v, want=false", set["anthropic"])
+		}
+	}
 }
 
 func TestGateway_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
@@ -1622,7 +1669,7 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	// Set key first.
+	// Set keys first.
 	{
 		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":"sk-test"}]}`))
 		req.Header.Set("Origin", envOrigin)
@@ -1632,8 +1679,17 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 			t.Fatalf("set key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 		}
 	}
+	{
+		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/web_search_provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":"brave-test"}]}`))
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		gw.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("set web search key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+		}
+	}
 
-	// Settings should include ai_secrets.provider_api_key_set without leaking secrets.
+	// Settings should include separate AI secret status maps without leaking secrets.
 	{
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
 		req.Header.Set("Origin", envOrigin)
@@ -1652,6 +1708,10 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 		keySet, _ := aiSecrets["provider_api_key_set"].(map[string]any)
 		if keySet["openai"] != true {
 			t.Fatalf("openai set=%v, want=true", keySet["openai"])
+		}
+		webSearchKeySet, _ := aiSecrets["web_search_provider_api_key_set"].(map[string]any)
+		if webSearchKeySet["openai"] != true {
+			t.Fatalf("openai web search set=%v, want=true", webSearchKeySet["openai"])
 		}
 
 		conn, _ := data["connection"].(map[string]any)

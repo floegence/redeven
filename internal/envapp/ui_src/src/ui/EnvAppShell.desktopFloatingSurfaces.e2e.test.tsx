@@ -35,6 +35,7 @@ const connectMock = vi.fn(async () => {
 });
 
 vi.mock('@floegence/floe-webapp-core', () => ({
+  cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
   deferAfterPaint: (fn: () => void) => setTimeout(fn, 0),
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {}, getKeybindDisplay: (keybind: string) => keybind }),
   useDeck: () => ({
@@ -324,7 +325,10 @@ vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
 vi.mock('./pages/AIChatSidebar', () => ({ AIChatSidebar: () => <div /> }));
 vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
-vi.mock('./deck/redevenDeckWidgets', () => ({ redevenDeckWidgets: [] }));
+vi.mock('./deck/redevenDeckWidgets', () => ({
+  localizedRedevenDeckWidgets: () => [],
+  redevenDeckWidgets: [],
+}));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div data-testid="file-preview-host" /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div data-testid="file-browser-host" /> }));

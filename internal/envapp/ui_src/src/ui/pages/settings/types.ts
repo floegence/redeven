@@ -1,3 +1,5 @@
+import type { FlowerProviderModelNoteKey } from '../../../../../../flower_ui/src/settings/providerModelNotes';
+
 export type PermissionSet = Readonly<{ read: boolean; write: boolean; execute: boolean }>;
 
 export type PermissionPolicy = Readonly<{
@@ -57,7 +59,10 @@ export type AIConfig = Readonly<{
   terminal_exec_policy?: AITerminalExecPolicy;
 }>;
 
-export type AISecretsView = Readonly<{ provider_api_key_set: Record<string, boolean> }>;
+export type AISecretsView = Readonly<{
+  provider_api_key_set: Record<string, boolean>;
+  web_search_provider_api_key_set: Record<string, boolean>;
+}>;
 
 export type AIRuntimeStatus = Readonly<{
   remote_configured?: boolean;
@@ -276,7 +281,7 @@ export type AIProviderModelPreset = Readonly<{
   max_output_tokens?: number;
   effective_context_window_percent?: number;
   input_modalities?: readonly AIInputModality[];
-  note?: string;
+  note_key?: FlowerProviderModelNoteKey;
 }>;
 
 export type AIProviderPreset = Readonly<{

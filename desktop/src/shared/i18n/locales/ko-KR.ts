@@ -1,7 +1,9 @@
 import { plural } from '../messageTypes';
 import type { DesktopTranslationShape } from './en-US';
+import { flowerSurfaceKoKR } from './flowerSurface';
 
 export const koKR = {
+  flowerSurface: flowerSurfaceKoKR,
   common: {
     open: "열기",
     save: "저장",
@@ -105,6 +107,7 @@ export const koKR = {
     },
     commandSearchPlaceholder: "Desktop 명령 검색...",
     openRedevenDashboard: "Redeven Dashboard 열기",
+    backToEnvironments: "Environments로 돌아가기",
     useDarkTheme: "다크 테마 사용",
     useLightTheme: "라이트 테마 사용",
   },

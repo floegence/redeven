@@ -87,7 +87,10 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   SidebarContent: (props: any) => <div data-testid="sidebar-content" class={props.class}>{props.children}</div>,
   SidebarSection: (props: any) => (
     <section data-testid="sidebar-section" class={props.class}>
-      <div>{props.title}</div>
+      <div>
+        <span>{props.title}</span>
+        {props.actions}
+      </div>
       <div>{props.children}</div>
     </section>
   ),
@@ -198,6 +201,7 @@ describe('AIChatSidebar', () => {
       activeThreadId: () => null,
       isThreadRunning: () => false,
       isThreadUnread: () => false,
+      aiEnabled: () => true,
       selectThreadId: vi.fn(),
       enterDraftChat: vi.fn(),
       clearActiveThreadPersistence: vi.fn(),
@@ -260,7 +264,7 @@ describe('AIChatSidebar', () => {
     expect(indicator?.getAttribute('data-thread-indicator')).toBe('none');
   });
 
-  it('renders a dedicated delete button outside the thread selection button', () => {
+  it('renders a dedicated delete button outside the thread selection button', async () => {
     aiContextStub.threads = makeThreadsResource([
       makeThread({
         thread_id: 'thread-delete',
@@ -279,6 +283,7 @@ describe('AIChatSidebar', () => {
     expect(threadCard?.querySelector('button button')).toBeNull();
 
     deleteButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(host.textContent).toContain('Delete ');
     expect(host.textContent).toContain('"Conversation"?');
   });
@@ -304,7 +309,7 @@ describe('AIChatSidebar', () => {
       clientX: 40,
       clientY: 56,
     }));
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
     expect(menu).toBeTruthy();
@@ -326,7 +331,7 @@ describe('AIChatSidebar', () => {
       clientX: 44,
       clientY: 60,
     }));
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     const copyWorkingDirButton = Array.from(host.querySelectorAll('[role="menu"] button')).find((button) =>
       button.textContent?.includes('Copy working directory')
@@ -358,7 +363,7 @@ describe('AIChatSidebar', () => {
       clientX: 40,
       clientY: 56,
     }));
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
 
     const copyWorkingDirButton = Array.from(host.querySelectorAll('[role="menu"] button')).find((button) =>
       button.textContent?.includes('Copy working directory')
@@ -394,26 +399,82 @@ describe('AIChatSidebar', () => {
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
   });
 
-  it('renders current-env history and settings from the same Flower component rail', () => {
+  it('keeps current-env rail limited to the Flower conversation list', () => {
     aiContextStub.threads = makeThreadsResource([
       makeThread({
         thread_id: 'thread-current-env',
         working_dir: '/workspace/project',
       }),
     ]);
-    const openSettings = vi.fn();
 
     const host = document.createElement('div');
     document.body.appendChild(host);
-    render(() => <AIChatSidebar scope="current_env" showTopActions={false} onOpenSettings={openSettings} />, host);
+    render(() => <AIChatSidebar scope="current_env" />, host);
 
     const settingsButton = host.querySelector('[data-testid="flower-sidebar-settings"]') as HTMLButtonElement | null;
+    const manageButton = Array.from(host.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'Manage chats') ?? null;
+    const newChatButton = Array.from(host.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'New Chat') ?? null;
     const threadCard = host.querySelector('[data-thread-id="thread-current-env"]') as HTMLDivElement | null;
 
     expect(host.textContent).toContain('Current env conversations');
+    expect(newChatButton).toBeTruthy();
+    expect(newChatButton?.textContent).toContain('New Chat');
+    expect(newChatButton?.className).toContain('flower-chat-sidebar-new-chat-button');
     expect(threadCard).toBeTruthy();
-    expect(settingsButton).toBeTruthy();
-    settingsButton?.click();
-    expect(openSettings).toHaveBeenCalledTimes(1);
+    expect(settingsButton).toBeNull();
+    expect(manageButton).toBeNull();
+  });
+
+  it('keeps the flower new-chat entry clickable even when chat cannot submit yet', () => {
+    protocolState.status = 'disconnected';
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <AIChatSidebar />, host);
+
+    const newChatButton = Array.from(host.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'New Chat') as HTMLButtonElement | undefined;
+
+    expect(newChatButton).toBeTruthy();
+    expect(newChatButton?.disabled).toBe(false);
+
+    newChatButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(aiContextStub.enterDraftChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the flower new-chat entry clickable before AI is configured', () => {
+    aiContextStub.aiEnabled = () => false;
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <AIChatSidebar />, host);
+
+    const newChatButton = Array.from(host.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'New Chat') as HTMLButtonElement | undefined;
+
+    expect(newChatButton).toBeTruthy();
+    expect(newChatButton?.disabled).toBe(false);
+
+    newChatButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+    expect(aiContextStub.enterDraftChat).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps refresh as a quiet icon action in the thread rail', () => {
+    aiContextStub.threads = makeThreadsResource([
+      makeThread({
+        thread_id: 'thread-refresh',
+      }),
+    ]);
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <AIChatSidebar />, host);
+
+    const refreshButton = Array.from(host.querySelectorAll('button')).find((button) => button.getAttribute('aria-label') === 'Refresh') as HTMLButtonElement | undefined;
+
+    expect(refreshButton).toBeTruthy();
+    expect(refreshButton?.className).toContain('flower-host-thread-refresh-button');
+    refreshButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(aiContextStub.bumpThreadsSeq).toHaveBeenCalledTimes(1);
   });
 });

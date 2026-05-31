@@ -6,11 +6,21 @@ import type {
   AIProviderType,
 } from './types';
 import { AI_PROVIDER_ICON_DEFINITIONS, type AIProviderIconDefinition } from './providerBrandIcons';
+import {
+  FLOWER_PROVIDER_PRESETS,
+  FLOWER_PROVIDER_TYPES,
+  defaultFlowerContextWindowForProviderType,
+  flowerBuiltInWebSearchLabel,
+  flowerProviderNeedsWebSearchConfig,
+  flowerProviderSupportsCustomModels,
+  flowerProviderTypeRequiresBaseURL,
+  flowerProviderUsesCustomName,
+} from '../../../../../../flower_ui/src/settings/providerCatalog';
+import { localizedFlowerProviderTypeLabels } from '../../../../../../flower_ui/src/settings/providerTypeLabels';
 
-export const DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW = 128000;
+export const DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW = defaultFlowerContextWindowForProviderType('openai_compatible') ?? 128000;
 export const DEFAULT_EFFECTIVE_CONTEXT_WINDOW_PERCENT = 95;
 export const DEFAULT_INPUT_MODALITIES: readonly AIInputModality[] = ['text'];
-export const VISION_INPUT_MODALITIES: readonly AIInputModality[] = ['text', 'image'];
 
 export type AIProviderBrand = Readonly<{
   type: AIProviderType;
@@ -20,143 +30,54 @@ export type AIProviderBrand = Readonly<{
   icon: AIProviderIconDefinition;
 }>;
 
-const AI_PROVIDER_TYPE_ORDER: readonly AIProviderType[] = [
-  'openai',
-  'anthropic',
-  'moonshot',
-  'chatglm',
-  'deepseek',
-  'qwen',
-  'openai_compatible',
-];
+const AI_PROVIDER_TYPE_ORDER = FLOWER_PROVIDER_TYPES.map((item) => item.value as AIProviderType);
 
-export const AI_PROVIDER_BRANDS: Record<AIProviderType, AIProviderBrand> = {
-  openai: {
-    type: 'openai',
-    label: 'OpenAI',
-    description: 'Native connection',
-    customConnectionName: false,
-    icon: AI_PROVIDER_ICON_DEFINITIONS.openai,
-  },
-  anthropic: {
-    type: 'anthropic',
-    label: 'Anthropic',
-    description: 'Native connection',
-    customConnectionName: false,
-    icon: AI_PROVIDER_ICON_DEFINITIONS.anthropic,
-  },
-  moonshot: {
-    type: 'moonshot',
-    label: 'Moonshot',
-    description: 'Native connection',
-    customConnectionName: false,
-    icon: AI_PROVIDER_ICON_DEFINITIONS.moonshot,
-  },
-  chatglm: {
-    type: 'chatglm',
-    label: 'ChatGLM',
-    description: 'Native connection',
-    customConnectionName: false,
-    icon: AI_PROVIDER_ICON_DEFINITIONS.chatglm,
-  },
-  deepseek: {
-    type: 'deepseek',
-    label: 'DeepSeek',
-    description: 'Native connection',
-    customConnectionName: false,
-    icon: AI_PROVIDER_ICON_DEFINITIONS.deepseek,
-  },
-  qwen: {
-    type: 'qwen',
-    label: 'Qwen',
-    description: 'Native connection',
-    customConnectionName: false,
-    icon: AI_PROVIDER_ICON_DEFINITIONS.qwen,
-  },
-  openai_compatible: {
-    type: 'openai_compatible',
-    label: 'OpenAI Compatible',
-    description: 'Custom gateway',
-    customConnectionName: true,
-    icon: AI_PROVIDER_ICON_DEFINITIONS.openai_compatible,
-  },
-};
+function toAIInputModalities(raw: readonly string[] | undefined): readonly AIInputModality[] {
+  const modalities = (raw ?? DEFAULT_INPUT_MODALITIES)
+    .map((item) => String(item ?? '').trim().toLowerCase())
+    .filter((item): item is AIInputModality => item === 'text' || item === 'image');
+  return modalities.length > 0 ? [...new Set(modalities)] : DEFAULT_INPUT_MODALITIES;
+}
+
+function toAIProviderPreset(providerType: AIProviderType): AIProviderPreset {
+  const preset = FLOWER_PROVIDER_PRESETS[providerType];
+  return {
+    type: providerType,
+    name: preset.name,
+    default_base_url: preset.default_base_url,
+    web_search: preset.web_search,
+    models: preset.models.map((model) => ({
+      model_name: model.model_name,
+      context_window: Number(model.context_window ?? 0),
+      ...(model.max_output_tokens ? { max_output_tokens: model.max_output_tokens } : {}),
+      ...(model.effective_context_window_percent ? { effective_context_window_percent: model.effective_context_window_percent } : {}),
+      input_modalities: toAIInputModalities(model.input_modalities),
+      ...(model.note_key ? { note_key: model.note_key } : {}),
+    })),
+  };
+}
+
+export const AI_PROVIDER_BRANDS: Record<AIProviderType, AIProviderBrand> = Object.fromEntries(
+  FLOWER_PROVIDER_TYPES.map((item) => {
+    const providerType = item.value as AIProviderType;
+    return [providerType, {
+      type: providerType,
+      label: item.label,
+      description: item.hint,
+      customConnectionName: providerType === 'openai_compatible',
+      icon: AI_PROVIDER_ICON_DEFINITIONS[providerType],
+    }];
+  }),
+) as Record<AIProviderType, AIProviderBrand>;
 
 export const AI_PROVIDER_TYPE_OPTIONS: ReadonlyArray<{ value: AIProviderType; label: string; description: string }> = AI_PROVIDER_TYPE_ORDER.map((providerType) => {
   const brand = AI_PROVIDER_BRANDS[providerType];
   return { value: brand.type, label: brand.label, description: brand.description };
 });
 
-export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset> = {
-  openai: {
-    type: 'openai',
-    name: 'OpenAI',
-    default_base_url: 'https://api.openai.com/v1',
-    models: [
-      { model_name: 'gpt-5.5', context_window: 1050000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Latest frontier model for complex reasoning and coding' },
-      { model_name: 'gpt-5.4', context_window: 1050000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Affordable frontier model for professional work' },
-      { model_name: 'gpt-5.4-mini', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Fast, cost-effective GPT-5.4 variant' },
-      { model_name: 'gpt-5.4-nano', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Low-cost option for simple high-volume tasks' },
-      { model_name: 'gpt-5.2', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Previous flagship model' },
-      { model_name: 'gpt-5.2-mini', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Cost-effective flagship variant' },
-      { model_name: 'gpt-5', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Stable flagship' },
-      { model_name: 'gpt-5-mini', context_window: 400000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Stable lightweight option' },
-    ],
-  },
-  anthropic: {
-    type: 'anthropic',
-    name: 'Anthropic',
-    default_base_url: 'https://api.anthropic.com/v1',
-    models: [
-      { model_name: 'claude-opus-4-7', context_window: 1000000, max_output_tokens: 128000, input_modalities: VISION_INPUT_MODALITIES, note: 'Most capable Claude model for complex agentic coding' },
-      { model_name: 'claude-sonnet-4-6', context_window: 1000000, max_output_tokens: 64000, input_modalities: VISION_INPUT_MODALITIES, note: 'Best balance of speed and intelligence' },
-      { model_name: 'claude-haiku-4-5-20251001', context_window: 200000, max_output_tokens: 64000, input_modalities: VISION_INPUT_MODALITIES, note: 'Fastest current Claude model' },
-    ],
-  },
-  moonshot: {
-    type: 'moonshot',
-    name: 'Moonshot',
-    default_base_url: 'https://api.moonshot.cn/v1',
-    models: [
-      { model_name: 'kimi-k2.6', context_window: 256000, max_output_tokens: 96000, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current Kimi flagship with built-in web search' },
-    ],
-  },
-  chatglm: {
-    type: 'chatglm',
-    name: 'ChatGLM',
-    default_base_url: 'https://api.z.ai/api/paas/v4/',
-    models: [
-      { model_name: 'glm-5.1', context_window: 200000, max_output_tokens: 128000, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current GLM flagship with built-in web search' },
-    ],
-  },
-  deepseek: {
-    type: 'deepseek',
-    name: 'DeepSeek',
-    default_base_url: 'https://api.deepseek.com',
-    models: [
-      { model_name: 'deepseek-v4-pro', context_window: 1000000, max_output_tokens: 384000, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current V4 flagship model' },
-      { model_name: 'deepseek-v4-flash', context_window: 1000000, max_output_tokens: 384000, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current V4 fast model' },
-    ],
-  },
-  qwen: {
-    type: 'qwen',
-    name: 'Qwen',
-    default_base_url: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1',
-    models: [
-      { model_name: 'qwen3.6-plus', context_window: 1000000, max_output_tokens: 65536, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current Qwen3.6 Plus with built-in web search' },
-      { model_name: 'qwen3.6-plus-2026-04-02', context_window: 1000000, max_output_tokens: 65536, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Pinned Qwen3.6 Plus snapshot with built-in web search' },
-      { model_name: 'qwen3.6-flash', context_window: 1000000, max_output_tokens: 65536, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Current Qwen3.6 Flash with built-in web search' },
-      { model_name: 'qwen3.6-flash-2026-04-16', context_window: 1000000, max_output_tokens: 65536, input_modalities: DEFAULT_INPUT_MODALITIES, note: 'Pinned Qwen3.6 Flash snapshot with built-in web search' },
-    ],
-  },
-  openai_compatible: {
-    type: 'openai_compatible',
-    name: 'OpenAI compatible',
-    default_base_url: 'https://api.example.com/v1',
-    web_search: { mode: 'disabled' },
-    models: [],
-  },
-};
+export const AI_PROVIDER_PRESET_CATALOG: Record<AIProviderType, AIProviderPreset> = Object.fromEntries(
+  AI_PROVIDER_TYPE_ORDER.map((providerType) => [providerType, toAIProviderPreset(providerType)]),
+) as Record<AIProviderType, AIProviderPreset>;
 
 export function modelID(providerID: string, modelName: string): string {
   const pid = String(providerID ?? '').trim();
@@ -166,7 +87,7 @@ export function modelID(providerID: string, modelName: string): string {
 }
 
 export function providerTypeRequiresBaseURL(providerType: AIProviderType): boolean {
-  return providerType === 'moonshot' || providerType === 'chatglm' || providerType === 'deepseek' || providerType === 'qwen' || providerType === 'openai_compatible';
+  return flowerProviderTypeRequiresBaseURL(providerType);
 }
 
 export function providerPresetForType(providerType: AIProviderType): AIProviderPreset {
@@ -181,8 +102,12 @@ export function providerTypeLabel(providerType: AIProviderType): string {
   return providerBrandForType(providerType).label;
 }
 
+export function localizedProviderTypeLabel(providerType: AIProviderType, locale: string | undefined): string {
+  return localizedFlowerProviderTypeLabels(locale)[providerType] ?? providerTypeLabel(providerType);
+}
+
 export function providerUsesCustomConnectionName(providerType: AIProviderType): boolean {
-  return providerBrandForType(providerType).customConnectionName;
+  return flowerProviderUsesCustomName(providerType);
 }
 
 export function providerDisplayName(row: Pick<AIProviderRow, 'name' | 'type'>, fallback = 'Provider'): string {
@@ -190,6 +115,17 @@ export function providerDisplayName(row: Pick<AIProviderRow, 'name' | 'type'>, f
     return String(row.name ?? '').trim() || fallback;
   }
   return providerTypeLabel(row.type);
+}
+
+export function localizedProviderDisplayName(
+  row: Pick<AIProviderRow, 'name' | 'type'>,
+  locale: string | undefined,
+  fallback = 'Provider',
+): string {
+  if (providerUsesCustomConnectionName(row.type)) {
+    return String(row.name ?? '').trim() || fallback;
+  }
+  return localizedProviderTypeLabel(row.type, locale);
 }
 
 export function recommendedModelsForProviderType(providerType: AIProviderType): readonly AIProviderModelPreset[] {
@@ -221,8 +157,7 @@ export function normalizeContextWindowByProvider(providerType: AIProviderType, r
 }
 
 export function defaultContextWindowForProviderType(providerType: AIProviderType): number | undefined {
-  if (providerType === 'openai_compatible') return DEFAULT_OPENAI_COMPAT_CONTEXT_WINDOW;
-  return undefined;
+  return defaultFlowerContextWindowForProviderType(providerType);
 }
 
 export function normalizeEffectiveContextPercent(raw: unknown): number | undefined {
@@ -257,28 +192,15 @@ export function defaultBaseURLForProviderType(providerType: AIProviderType): str
 }
 
 export function providerNeedsWebSearchConfig(providerType: AIProviderType): boolean {
-  return providerType === 'openai_compatible';
+  return flowerProviderNeedsWebSearchConfig(providerType);
 }
 
 export function providerSupportsCustomModelNames(providerType: AIProviderType): boolean {
-  return providerType === 'openai' || providerType === 'anthropic' || providerType === 'openai_compatible';
+  return flowerProviderSupportsCustomModels(providerType);
 }
 
 export function providerBuiltInWebSearchLabel(providerType: AIProviderType): string | undefined {
-  switch (providerType) {
-    case 'openai':
-      return 'OpenAI built-in web search';
-    case 'moonshot':
-      return 'Kimi built-in web search';
-    case 'chatglm':
-      return 'GLM built-in web search';
-    case 'deepseek':
-      return 'DeepSeek built-in web search';
-    case 'qwen':
-      return 'Qwen built-in web search';
-    default:
-      return undefined;
-  }
+  return flowerBuiltInWebSearchLabel(providerType) || undefined;
 }
 
 export function cloneAIProviderRow(row: AIProviderRow): AIProviderRow {

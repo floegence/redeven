@@ -1,0 +1,890 @@
+.flower-component-shell {
+  --flower-thread-rail-base: var(--redeven-surface-panel, var(--sidebar, var(--card)));
+  --flower-thread-rail-surface: color-mix(in srgb, var(--flower-thread-rail-base) 88%, var(--foreground) 12%);
+  --flower-thread-rail-border: color-mix(in srgb, var(--redeven-surface-panel-border, var(--border)) 78%, var(--foreground) 22%);
+  --flower-thread-rail-foreground: color-mix(in srgb, var(--foreground) 92%, var(--flower-thread-rail-surface) 8%);
+  --flower-thread-rail-muted: color-mix(in srgb, var(--flower-thread-rail-foreground) 58%, var(--flower-thread-rail-surface) 42%);
+  --flower-thread-rail-subtle: color-mix(in srgb, var(--flower-thread-rail-foreground) 42%, var(--flower-thread-rail-surface) 58%);
+  --flower-thread-rail-control: color-mix(in srgb, var(--flower-thread-rail-surface) 82%, var(--background) 18%);
+  --flower-thread-rail-control-border: color-mix(in srgb, var(--flower-thread-rail-border) 68%, transparent);
+  --flower-thread-rail-accent: color-mix(in srgb, var(--primary) 9%, var(--flower-thread-rail-control));
+  --flower-thread-rail-accent-strong: color-mix(in srgb, var(--primary) 15%, var(--flower-thread-rail-control));
+  display: grid;
+  grid-template-columns: minmax(15.25rem, 17rem) minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--redeven-surface-main, var(--background));
+}
+
+.dark .flower-component-shell,
+html.dark .flower-component-shell {
+  --flower-thread-rail-surface: color-mix(in srgb, var(--flower-thread-rail-base) 78%, black 22%);
+  --flower-thread-rail-border: color-mix(in srgb, var(--redeven-surface-panel-border, var(--border)) 76%, black 24%);
+  --flower-thread-rail-foreground: color-mix(in srgb, var(--foreground) 88%, var(--flower-thread-rail-surface) 12%);
+  --flower-thread-rail-muted: color-mix(in srgb, var(--flower-thread-rail-foreground) 62%, var(--flower-thread-rail-surface) 38%);
+  --flower-thread-rail-subtle: color-mix(in srgb, var(--flower-thread-rail-foreground) 44%, var(--flower-thread-rail-surface) 56%);
+  --flower-thread-rail-control: color-mix(in srgb, var(--flower-thread-rail-surface) 82%, white 5%);
+  --flower-thread-rail-control-border: color-mix(in srgb, var(--flower-thread-rail-border) 84%, white 8%);
+  --flower-thread-rail-accent: color-mix(in srgb, var(--primary) 12%, var(--flower-thread-rail-control));
+  --flower-thread-rail-accent-strong: color-mix(in srgb, var(--primary) 18%, var(--flower-thread-rail-control));
+}
+
+.flower-component-thread-rail {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  border-right: 1px solid var(--flower-thread-rail-border);
+  background: var(--flower-thread-rail-surface);
+  color: var(--flower-thread-rail-foreground);
+  overflow: hidden;
+}
+
+.flower-host-sidebar-actions {
+  display: flex;
+  min-width: 0;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: stretch;
+  padding: 0.75rem 0.75rem 0.5rem;
+}
+
+.flower-host-new-chat-button {
+  display: inline-flex;
+  width: 100%;
+  min-width: 0;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  cursor: pointer;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--flower-thread-rail-control-border));
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--primary) 7%, var(--flower-thread-rail-control));
+  color: var(--flower-thread-rail-foreground);
+  padding: 0.25rem 0.75rem 0.25rem 0.375rem;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease,
+    filter 150ms ease;
+}
+
+.flower-host-new-chat-button:hover,
+.flower-host-new-chat-button:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--flower-thread-rail-control-border));
+  background: color-mix(in srgb, var(--primary) 12%, var(--flower-thread-rail-control));
+  box-shadow: 0 10px 24px -20px color-mix(in srgb, var(--primary) 55%, transparent);
+  filter: saturate(1.08);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.flower-host-new-chat-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.flower-host-thread-list {
+  flex: 1 1 auto;
+  overflow: hidden;
+  background: transparent;
+}
+
+.flower-component-main {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.flower-host-chat-shell {
+  --flower-chat-surface: var(--redeven-surface-main, var(--background));
+  --flower-chat-surface-soft: var(--redeven-surface-panel-soft, var(--card));
+  --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated, var(--card));
+  --flower-chat-surface-border: var(--redeven-surface-panel-border, var(--border));
+  --flower-chat-dock-track-max-width: 56rem;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  flex-direction: column;
+  background: var(--flower-chat-surface);
+}
+
+.flower-host-chat-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-height: 3rem;
+  background: color-mix(in srgb, var(--flower-chat-surface) 92%, transparent);
+  padding: 0.5rem 0.75rem;
+}
+
+.flower-host-chat-header-title {
+  min-width: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.flower-host-chat-header-actions {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.375rem;
+  overflow: hidden;
+}
+
+.flower-host-header-icon-button {
+  display: inline-flex;
+  width: 1.875rem;
+  height: 1.875rem;
+  flex: 0 0 auto;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: var(--muted-foreground);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.flower-host-header-icon-button:hover,
+.flower-host-header-icon-button:focus-visible {
+  background: color-mix(in srgb, var(--muted) 58%, transparent);
+  color: var(--foreground);
+  outline: none;
+}
+
+.flower-host-chat-main {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.flower-host-chat-transcript {
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 1rem;
+  scrollbar-gutter: stable;
+}
+
+.flower-host-chat-bottom-dock {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  background: transparent;
+  padding: 0 0.75rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+.flower-host-chat-bottom-dock::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1.5rem;
+  pointer-events: none;
+  box-shadow: 0 -20px 32px -28px color-mix(in srgb, var(--foreground) 30%, transparent);
+}
+
+.flower-host-chat-bottom-dock-track {
+  position: relative;
+  width: min(100%, var(--flower-chat-dock-track-max-width));
+  margin: 0 auto;
+}
+
+.flower-host-surface {
+  --flower-chat-surface: var(--redeven-surface-main, var(--background));
+  --flower-chat-surface-soft: var(--redeven-surface-panel-soft, var(--card));
+  --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated, var(--card));
+  --flower-chat-surface-border: var(--redeven-surface-panel-border, var(--border));
+  color: var(--foreground);
+}
+
+.flower-host-panel {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--flower-chat-surface, var(--background));
+}
+
+.flower-host-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.flower-host-thread-card {
+  border-color: transparent;
+  background: transparent;
+  color: var(--flower-thread-rail-foreground);
+}
+
+.flower-host-thread-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 15%, var(--flower-thread-rail-control-border));
+  background: color-mix(in srgb, var(--flower-thread-rail-accent) 72%, transparent);
+}
+
+.flower-host-thread-card-active {
+  border-color: color-mix(in srgb, var(--primary) 26%, var(--flower-thread-rail-control-border));
+  background: var(--flower-thread-rail-accent-strong);
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.flower-host-thread-list-title {
+  color: var(--flower-thread-rail-foreground);
+}
+
+.flower-host-thread-list-description,
+.flower-host-thread-card-preview,
+.flower-host-thread-card-meta,
+.flower-host-thread-card-time,
+.flower-host-thread-group-label {
+  color: var(--flower-thread-rail-muted);
+}
+
+.flower-host-thread-search-input {
+  border-color: var(--flower-thread-rail-control-border);
+  background: var(--flower-thread-rail-control);
+  color: var(--flower-thread-rail-foreground);
+}
+
+.flower-host-thread-search-input::placeholder {
+  color: var(--flower-thread-rail-subtle);
+}
+
+.flower-host-thread-empty {
+  border-color: var(--flower-thread-rail-control-border);
+  color: var(--flower-thread-rail-muted);
+}
+
+.flower-host-thread-refresh-button {
+  width: 1.625rem;
+  height: 1.625rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--flower-thread-rail-subtle);
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    opacity 150ms ease,
+    color 150ms ease;
+}
+
+.flower-component-thread-rail:not(:hover):not(:focus-within) .flower-host-thread-refresh-button:not(:disabled) {
+  opacity: 0.42;
+}
+
+.flower-host-thread-refresh-button:hover,
+.flower-host-thread-refresh-button:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 12%, var(--flower-thread-rail-control-border));
+  background: color-mix(in srgb, var(--flower-thread-rail-accent) 82%, transparent);
+  color: var(--flower-thread-rail-foreground);
+}
+
+.flower-host-composer {
+  border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
+  border-radius: 1rem;
+  border-color: color-mix(in srgb, var(--redeven-stroke-overlay, var(--border)) 72%, transparent);
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 88%, transparent);
+  box-shadow:
+    0 12px 28px -20px color-mix(in srgb, black 38%, transparent),
+    0 2px 10px -8px color-mix(in srgb, var(--foreground) 28%, transparent);
+  backdrop-filter: blur(14px);
+}
+
+.flower-host-composer textarea {
+  min-height: 5rem;
+  resize: none;
+  outline: none;
+  background: transparent;
+}
+
+.flower-host-provider-card {
+  border-color: color-mix(in srgb, var(--border) 72%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, transparent), color-mix(in srgb, var(--background) 94%, transparent));
+}
+
+.flower-settings-surface {
+  --flower-settings-panel: var(--redeven-surface-panel, var(--card));
+  --flower-settings-panel-soft: var(--redeven-surface-panel-soft, var(--card));
+  --flower-settings-panel-elevated: var(--redeven-surface-panel-elevated, var(--card));
+  --flower-settings-border: var(--redeven-surface-panel-border, var(--border));
+  container-type: inline-size;
+  background: var(--flower-chat-surface, var(--redeven-surface-main, var(--background)));
+}
+
+.flower-settings-frame {
+  width: min(100%, 72rem);
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.flower-settings-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.25rem 0 0.875rem;
+  flex-wrap: wrap;
+}
+
+.flower-settings-current-model {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--flower-settings-border));
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--primary) 5%, var(--flower-settings-panel-elevated));
+  padding: 1.125rem;
+}
+
+.flower-settings-current-model-icon {
+  display: flex;
+  width: 3rem;
+  height: 3rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 72%, transparent);
+  border-radius: 0.75rem;
+  background: var(--flower-chat-surface, var(--background));
+}
+
+.flower-settings-model-select {
+  width: min(18rem, 32vw);
+  flex: 0 0 auto;
+}
+
+.flower-settings-select {
+  width: 100%;
+  height: 2.25rem;
+  cursor: pointer;
+  border: 1px solid var(--input);
+  border-radius: 0.5rem;
+  background: var(--background);
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  outline: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    background-color 150ms ease;
+}
+
+.flower-settings-select:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--input));
+}
+
+.flower-settings-select:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.flower-settings-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.flower-settings-input {
+  width: 100%;
+  height: 2.25rem;
+  border: 1px solid var(--input);
+  border-radius: 0.5rem;
+  background: var(--background);
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  outline: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.flower-settings-input:focus-visible {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+.flower-settings-dot-pill {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.375rem;
+  color: var(--muted-foreground);
+}
+
+.flower-settings-dot-pill::before {
+  content: '';
+  width: 0.375rem;
+  height: 0.375rem;
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted-foreground) 48%, transparent);
+}
+
+.flower-settings-dot-pill-active::before {
+  background: var(--success, #16a34a);
+}
+
+.flower-settings-policy-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 0.875rem;
+}
+
+.flower-settings-policy-card {
+  display: flex;
+  min-width: 0;
+  cursor: pointer;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 86%, transparent);
+  border-radius: 0.75rem;
+  background: var(--flower-settings-panel);
+  padding: 0.875rem;
+  text-align: left;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.flower-settings-policy-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 26%, var(--flower-settings-border));
+  background: color-mix(in srgb, var(--primary) 4%, var(--flower-settings-panel));
+  transform: translateY(-1px);
+}
+
+.flower-settings-policy-icon {
+  display: flex;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+}
+
+.flower-settings-policy-icon-blue {
+  background: color-mix(in srgb, var(--info, #2563eb) 12%, transparent);
+  color: var(--info, #2563eb);
+}
+
+.flower-settings-policy-icon-amber {
+  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
+  color: var(--warning, #f59e0b);
+}
+
+.flower-settings-state-pill {
+  flex: 0 0 auto;
+  border-radius: 9999px;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.flower-settings-state-pill-active {
+  color: var(--success, #16a34a);
+}
+
+.flower-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(16rem, 24rem) minmax(0, 1fr);
+  gap: 0.875rem;
+  margin-top: 0.875rem;
+}
+
+.flower-settings-section {
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 86%, transparent);
+  border-radius: 0.75rem;
+  background: var(--flower-settings-panel);
+}
+
+.flower-settings-section {
+  padding: 0.875rem;
+}
+
+.flower-settings-section-heading {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.flower-settings-provider-gallery {
+  display: grid;
+  gap: 0.625rem;
+}
+
+.flower-settings-provider-card {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 76%, transparent);
+  border-radius: 0.625rem;
+  background: var(--flower-settings-panel-elevated);
+  padding: 0.75rem;
+  text-align: left;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.flower-settings-provider-card-active {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--flower-settings-border));
+  background: color-mix(in srgb, var(--primary) 8%, var(--flower-settings-panel-elevated));
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+.flower-settings-provider-brand {
+  display: flex;
+  width: 2.5rem;
+  height: 2.5rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  background: var(--flower-chat-surface, var(--background));
+}
+
+[data-flower-provider-brand] > svg,
+[data-provider-brand] > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.flower-settings-model-code {
+  max-width: 9.5rem;
+  overflow: hidden;
+  border-radius: 0.25rem;
+  background: var(--muted);
+  padding: 0.125rem 0.375rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-settings-model-code-active {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.flower-settings-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.flower-settings-terminal-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 70%, transparent);
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--flower-settings-panel-soft) 72%, transparent);
+  padding: 0.75rem;
+}
+
+
+.flower-host-empty-state {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.flower-host-empty-hero {
+  max-width: 32rem;
+  margin-bottom: 2rem;
+  text-align: center;
+}
+
+.flower-host-empty-suggestions {
+  display: grid;
+  width: 100%;
+  max-width: 42rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.flower-host-empty-hint {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 2rem;
+  font-size: 0.75rem;
+  color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
+}
+
+.redeven-flower-soft-aura {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  isolation: isolate;
+}
+
+.redeven-flower-soft-aura-primary {
+  color: var(--primary);
+}
+
+.redeven-flower-soft-aura-current {
+  color: inherit;
+}
+
+.redeven-flower-soft-aura-glow {
+  position: absolute;
+  inset: 4%;
+  pointer-events: none;
+  background:
+    radial-gradient(72% 72% at 50% 50%, rgb(249 178 104 / 0.76) 0%, rgb(251 191 122 / 0.6) 34%, rgb(253 224 171 / 0.36) 60%, transparent 84%),
+    radial-gradient(44% 44% at 50% 50%, rgb(245 158 11 / 0.56) 0%, rgb(251 191 36 / 0.28) 52%, transparent 76%);
+  filter: blur(5px);
+  opacity: 1;
+  transform: translateZ(0);
+}
+
+.redeven-flower-soft-aura-svg {
+  position: relative;
+  z-index: 1;
+  width: 76%;
+  height: 76%;
+  flex-shrink: 0;
+}
+
+.redeven-flower-soft-aura-nav-glow {
+  inset: -4%;
+  filter: blur(6px);
+}
+
+.redeven-flower-soft-aura-nav-svg {
+  width: 88%;
+  height: 88%;
+}
+
+.redeven-flower-soft-aura-workbench-glow {
+  inset: -1%;
+  filter: blur(4.5px);
+  opacity: 0.92;
+}
+
+.redeven-flower-soft-aura-workbench-svg {
+  width: 84%;
+  height: 84%;
+}
+
+.redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {
+  inset: -6%;
+  filter: blur(6px);
+}
+
+.redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-svg {
+  width: 86%;
+  height: 86%;
+}
+
+.redeven-flower-soft-aura-lg .redeven-flower-soft-aura-glow {
+  inset: -2%;
+  filter: blur(9px);
+  opacity: 1;
+}
+
+.redeven-flower-soft-aura-lg .redeven-flower-soft-aura-svg {
+  width: 64%;
+  height: 64%;
+}
+
+html.dark .redeven-flower-soft-aura-nav-glow,
+html.dark .redeven-flower-soft-aura-avatar .redeven-flower-soft-aura-glow {
+  opacity: 0;
+  filter: none;
+}
+
+html.dark .redeven-flower-soft-aura-workbench-glow {
+  opacity: 0.42;
+  filter: blur(4px);
+}
+
+@media (max-width: 640px) {
+  .flower-component-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(9.5rem, 30vh) minmax(0, 1fr);
+  }
+
+  .flower-component-thread-rail {
+    border-right: 0;
+    border-bottom: 1px solid var(--flower-thread-rail-border);
+  }
+
+  .flower-host-chat-header {
+    min-height: 3rem;
+    padding: 0.5rem 0.625rem;
+    gap: 0.625rem;
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+
+  .flower-host-chat-header-actions {
+    gap: 0.25rem;
+    flex: 0 0 auto;
+    flex-wrap: nowrap;
+  }
+
+  .flower-host-model-tag {
+    display: none !important;
+  }
+
+  .flower-settings-frame {
+    padding: 0.75rem;
+  }
+
+  .flower-settings-title-row,
+  .flower-settings-current-model {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .flower-settings-current-model {
+    gap: 0.75rem;
+  }
+
+  .flower-settings-model-select {
+    width: 100%;
+  }
+
+  .flower-settings-policy-grid,
+  .flower-settings-grid,
+  .flower-settings-editor-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .flower-host-empty-state {
+    justify-content: flex-start;
+    padding: 1rem;
+    padding-top: 1.25rem;
+  }
+
+  .flower-host-empty-suggestions {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .flower-host-empty-hint {
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.625rem 1rem;
+    margin-top: 1.25rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .flower-host-status-tag {
+    display: none !important;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1024px) {
+  .flower-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .flower-settings-model-select {
+    width: min(18rem, 40vw);
+  }
+}
+
+@container (max-width: 760px) {
+  .flower-settings-title-row,
+  .flower-settings-current-model {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .flower-settings-model-select {
+    width: 100%;
+  }
+
+  .flower-settings-policy-grid,
+  .flower-settings-provider-gallery,
+  .flower-settings-editor-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}
+
+@keyframes redeven-flower-intro-spin {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  70% {
+    transform: rotate(390deg) scale(1.12);
+  }
+  100% {
+    transform: rotate(360deg) scale(1);
+  }
+}
+
+@keyframes redeven-flower-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.redeven-flower-icon-spin {
+  transform-origin: 50% 50%;
+  will-change: transform;
+  animation: redeven-flower-intro-spin 1.2s cubic-bezier(0.22, 1, 0.36, 1) 0.15s 1;
+}
+
+.redeven-flower-icon-breathe {
+  will-change: transform;
+  animation: redeven-flower-breathe 2.8s ease-in-out 1.35s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-flower-icon-spin,
+  .redeven-flower-icon-breathe {
+    animation: none !important;
+    transform: none !important;
+  }
+}

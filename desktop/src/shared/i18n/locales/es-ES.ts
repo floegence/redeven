@@ -1,7 +1,9 @@
 import { plural } from '../messageTypes';
 import type { DesktopTranslationShape } from './en-US';
+import { flowerSurfaceEsES } from './flowerSurface';
 
 export const esES = {
+  flowerSurface: flowerSurfaceEsES,
   common: {
     open: "Abrir",
     save: "Guardar",
@@ -105,6 +107,7 @@ export const esES = {
     },
     commandSearchPlaceholder: "Buscar comandos de Desktop...",
     openRedevenDashboard: "Abrir Redeven Dashboard",
+    backToEnvironments: "Volver a Environments",
     useDarkTheme: "Usar tema oscuro",
     useLightTheme: "Usar tema claro",
   },

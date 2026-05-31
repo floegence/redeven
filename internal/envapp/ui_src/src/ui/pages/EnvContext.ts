@@ -26,6 +26,17 @@ export type EnvSettingsSection =
   | 'ai'
   | 'codex';
 
+export type EnvSettingsOrigin =
+  | {
+      kind: 'flower';
+      returnSurfaceId: Extract<EnvSurfaceId, 'ai'>;
+    }
+  | null;
+
+export type OpenEnvSettingsOptions = {
+  origin?: EnvSettingsOrigin;
+};
+
 export type AskFlowerComposerAnchor = {
   x: number;
   y: number;
@@ -113,7 +124,9 @@ export type EnvContextValue = {
 
   settingsSeq: () => number;
   bumpSettingsSeq: () => void;
-  openSettings: (section?: EnvSettingsSection) => void;
+  openSettings: (section?: EnvSettingsSection, options?: OpenEnvSettingsOptions) => void;
+  settingsOrigin: () => EnvSettingsOrigin;
+  returnFromSettingsOrigin: () => void;
   debugConsoleEnabled: () => boolean;
   setDebugConsoleEnabled: (enabled: boolean) => void;
   openDebugConsole: () => void;

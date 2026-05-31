@@ -80,4 +80,36 @@ export default [
       },
     },
   },
+  {
+    basePath: '..',
+    files: ['internal/flower_ui/src/**/*.{ts,tsx}'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tsPlugin,
+    },
+    rules: baseTypeScriptRules,
+  },
+  {
+    basePath: '..',
+    files: ['internal/flower_ui/src/**/*.test.ts', 'internal/flower_ui/src/**/*.test.tsx'],
+    languageOptions: {
+      globals: {
+        ...globals.node,
+        ...vitestGlobals,
+      },
+    },
+  },
 ];

@@ -122,18 +122,33 @@ describe('DesktopWelcomeShell', () => {
     });
   });
 
-  it('keeps Flower chat creation anchored to the flower entry instead of exposing a second New chat button', () => {
+  it('keeps the outer Flower entry icon-only while chat creation lives inside the shared surface', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('label="Flower"');
-    expect(appSrc).toContain("class={cn('rounded-full'");
-    expect(appSrc).toContain('aria-label="Compose with Flower"');
-    expect(appSrc).toContain("{chatRunning() ? 'Sending' : 'Send'}");
-    expect(appSrc).toContain("setSelectedThreadID((current) => (current && !result.threads.some((thread) => thread.thread_id === current) ? '' : current));");
-    expect(appSrc).toContain('activeProviderSecret()?.provider_api_key_configured');
-    expect(appSrc).not.toContain('aria-label="New chat"');
-    expect(appSrc).not.toContain("{chatRunning() ? 'Sending' : selectedThreadID() ? 'Send' : 'New chat'}");
+    expect(appSrc).toContain("aria-label={i18n().t('flowerSurface.chat.entryLabel')}");
+    expect(appSrc).toContain("class={cn('redeven-flower-topbar-button', snapshot().surface === 'flower_host' && 'text-primary')}");
+    expect(appSrc).not.toContain("class={cn('rounded-full'");
+    expect(appSrc).toContain('<FlowerIcon class="h-5 w-5" />');
+    expect(appSrc).not.toContain('<FlowerNavigationIcon class="h-5 w-5" />');
+    expect(appSrc).toContain('copy={createDesktopFlowerSurfaceCopy(i18n())}');
+    expect(appSrc).toContain("hostDisplayName: i18n().t('flowerSurface.host.thisHost')");
+    expect(appSrc).toContain("import { FlowerIcon, FlowerSurface } from '../../../internal/flower_ui/src';");
+    expect(appSrc).not.toContain('aria-label="Compose with Flower"');
+    expect(appSrc).not.toContain('function FlowerHostSurface');
+    expect(appSrc).not.toContain('✿');
     expect(appSrc).not.toContain('history rail');
+  });
+
+  it('routes the Redeven mark back to Environments while Flower owns the main surface', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('async function openEnvironmentCenterSurface(): Promise<void>');
+    expect(appSrc).toContain("kind: 'open_environment_center'");
+    expect(appSrc).toContain("snapshot().surface === 'flower_host'");
+    expect(appSrc).toContain("i18n().t('shell.backToEnvironments')");
+    expect(appSrc).toContain('class="redeven-flower-back-button"');
+    expect(appSrc).toContain('<ArrowLeft class="h-3.5 w-3.5" />');
+    expect(appSrc).toContain('<TopBarIconButton label={topBarLogoLabel()} onClick={activateTopBarLogo}>');
   });
 
   it('describes Local Environment Settings inside the same shell model', () => {

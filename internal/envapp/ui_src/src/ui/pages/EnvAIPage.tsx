@@ -6,9 +6,7 @@ import {
   ChevronUp,
   Code,
   FileText,
-  History,
   Pencil,
-  Plus,
   Settings,
   Stop,
   Terminal,
@@ -43,8 +41,7 @@ import {
 import { RpcError, useProtocol } from '@floegence/floe-webapp-protocol';
 import { useEnvContext } from './EnvContext';
 import { useAIChatContext, type AIModelOption } from './AIChatContext';
-import { AIChatSidebar, type AIChatSidebarScope } from './AIChatSidebar';
-import { EnvSettingsPage } from './EnvSettingsPage';
+import { AIChatSidebar } from './AIChatSidebar';
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { Tooltip } from '../primitives/Tooltip';
 import { fetchGatewayJSON, prepareGatewayRequestInit, uploadGatewayFile } from '../services/gatewayApi';
@@ -1222,7 +1219,7 @@ interface SuggestionItem {
   icon: Component<{ class?: string }>;
   titleKey: EnvAppTranslationKey;
   descriptionKey: EnvAppTranslationKey;
-  prompt: string;
+  promptKey: EnvAppTranslationKey;
 }
 
 const SUGGESTIONS: SuggestionItem[] = [
@@ -1230,51 +1227,25 @@ const SUGGESTIONS: SuggestionItem[] = [
     icon: Terminal,
     titleKey: 'flowerChat.suggestions.weather.title',
     descriptionKey: 'flowerChat.suggestions.weather.description',
-    prompt: [
-      'Check the latest weather for Toronto, Canada. Include:',
-      '- current conditions',
-      '- hourly forecast for the next 12 hours',
-      '- daily forecast for the next 3 days',
-      '- rain/snow probability and feels-like temperature',
-      '- what to wear and whether to carry an umbrella',
-      'Cite source URLs with update timestamps.',
-    ].join('\n'),
+    promptKey: 'flowerChat.suggestions.weather.prompt',
   },
   {
     icon: CheckCircle,
     titleKey: 'flowerChat.suggestions.trip.title',
     descriptionKey: 'flowerChat.suggestions.trip.description',
-    prompt: [
-      'Help me choose a travel destination through guided Q&A.',
-      'Use ask_user one question at a time with concise explicit choices (best choice first).',
-      'Cover budget, trip length, weather preference, travel pace, and visa constraints.',
-      'After enough info, recommend top 3 destinations with pros/cons, best season, and budget range.',
-    ].join('\n'),
+    promptKey: 'flowerChat.suggestions.trip.prompt',
   },
   {
     icon: FileText,
     titleKey: 'flowerChat.suggestions.project.title',
     descriptionKey: 'flowerChat.suggestions.project.description',
-    prompt: [
-      'Analyze the current repository and provide:',
-      '1) a concise project introduction (what it does and who it is for)',
-      '2) a module map and responsibilities',
-      '3) local run/build/test commands',
-      '4) key file paths as evidence',
-    ].join('\n'),
+    promptKey: 'flowerChat.suggestions.project.prompt',
   },
   {
     icon: Code,
     titleKey: 'flowerChat.suggestions.techRoute.title',
     descriptionKey: 'flowerChat.suggestions.techRoute.description',
-    prompt: [
-      'Analyze this project\'s key technical routes and output:',
-      '- authentication flow',
-      '- control-plane vs data-plane flow',
-      '- deployment path',
-      '- observability and operational checkpoints',
-      'For each route, include steps, key files, and main risks.',
-    ].join('\n'),
+    promptKey: 'flowerChat.suggestions.techRoute.prompt',
   },
 ];
 
@@ -1343,7 +1314,7 @@ const EmptyChat: Component<EmptyChatProps> = (props) => {
           {(item, i) => (
             <Motion.button
               type="button"
-              onClick={() => props.onSuggestionClick(item.prompt)}
+              onClick={() => props.onSuggestionClick(i18n.t(item.promptKey))}
               disabled={props.disabled}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1430,97 +1401,6 @@ const MessageListWithEmptyState: Component<MessageListWithEmptyStateProps> = (pr
   );
 };
 
-type FlowerPanel = 'chat' | AIChatSidebarScope | 'settings';
-
-const FlowerComponentRail: Component<{
-  active: FlowerPanel;
-  onChange: (panel: FlowerPanel) => void;
-}> = (props) => {
-  const ai = useAIChatContext();
-  const i18n = useI18n();
-  const navItems: Array<{
-    id: FlowerPanel;
-    label: string;
-    description: string;
-    icon: Component<{ class?: string }>;
-    onClick?: () => void;
-  }> = [
-    {
-      id: 'chat',
-      label: i18n.t('flowerChat.component.newChat'),
-      description: i18n.t('flowerChat.component.newChatHint'),
-      icon: Plus,
-      onClick: () => {
-        ai.enterDraftChat();
-        props.onChange('chat');
-      },
-    },
-    {
-      id: 'current_env',
-      label: i18n.t('flowerChat.component.currentEnvConversations'),
-      description: i18n.t('flowerChat.component.currentEnvConversationsHint'),
-      icon: FlowerIcon,
-    },
-    {
-      id: 'all',
-      label: i18n.t('flowerChat.component.allFlowerHistory'),
-      description: i18n.t('flowerChat.component.allFlowerHistoryHint'),
-      icon: History,
-    },
-    {
-      id: 'settings',
-      label: i18n.t('flowerChat.component.flowerSettings'),
-      description: i18n.t('flowerChat.component.flowerSettingsHint'),
-      icon: Settings,
-    },
-  ];
-
-  return (
-    <aside class="flower-component-rail" aria-label={i18n.t('flowerChat.component.railAriaLabel')}>
-      <div class="flower-component-rail-brand">
-        <span class="flower-component-entry-orb rounded-full" aria-hidden="true">
-          <FlowerIcon class="h-7 w-7 text-primary" />
-        </span>
-        <div class="min-w-0">
-          <div class="truncate text-sm font-semibold text-foreground">{i18n.t('aiChrome.flowerTitle')}</div>
-          <div class="truncate text-[11px] text-muted-foreground">{i18n.t('flowerChat.component.railSubtitle')}</div>
-        </div>
-      </div>
-      <nav class="flower-component-rail-nav" aria-label={i18n.t('flowerChat.component.navigationAriaLabel')}>
-        <For each={navItems}>
-          {(item) => {
-            const Icon = item.icon;
-            const active = () => props.active === item.id || (item.id === 'chat' && props.active === 'chat');
-            return (
-              <Tooltip content={item.description} placement="right" delay={0}>
-                <button
-                  type="button"
-                  class={cn('flower-component-nav-item', active() && 'flower-component-nav-item-active')}
-                  aria-label={item.label}
-                  aria-current={active() ? 'page' : undefined}
-                  title={item.description}
-                  onClick={() => {
-                    item.onClick?.();
-                    if (!item.onClick) props.onChange(item.id);
-                  }}
-                >
-                  <span class="flower-component-nav-icon">
-                    <Icon class="h-4 w-4" />
-                  </span>
-                  <span class="min-w-0 flex-1">
-                    <span class="block truncate text-[12px] font-semibold">{item.label}</span>
-                    <span class="block truncate text-[10.5px] opacity-70">{item.description}</span>
-                  </span>
-                </button>
-              </Tooltip>
-            );
-          }}
-        </For>
-      </nav>
-    </aside>
-  );
-};
-
 /**
  * AI chat page — renders only the workbench area (header + messages + input).
  * Thread navigation may live either in Shell's sidebar (activity mode) or inline inside deck/workbench surfaces.
@@ -1602,7 +1482,6 @@ export function EnvAIPage() {
   const hasLiveAssistantTail = createMemo(() => liveAssistantSurfaceActive() || liveAssistantTailMessage() !== null);
   const [chatReady, setChatReady] = createSignal(false);
   const [chatInputApi, setChatInputApi] = createSignal<AIChatInputApi | null>(null);
-  const [flowerPanel, setFlowerPanel] = createSignal<'chat' | AIChatSidebarScope | 'settings'>('chat');
   let queuedAskFlowerIntents: AskFlowerIntent[] = [];
   const [pendingAskFlowerContext, setPendingAskFlowerContext] = createSignal<{ action: ContextActionEnvelope; expectedText: string } | undefined>(undefined);
   let messageAreaRef: HTMLDivElement | undefined;
@@ -3851,7 +3730,7 @@ export function EnvAIPage() {
     }
 
     if (itemId === 'settings') {
-      setFlowerPanel('settings');
+      env.openSettings('ai', { origin: { kind: 'flower', returnSurfaceId: 'ai' } });
     }
   };
 
@@ -3905,24 +3784,10 @@ export function EnvAIPage() {
         />
 
         <div class="flower-component-shell">
-          <FlowerComponentRail active={flowerPanel()} onChange={setFlowerPanel} />
+          <aside class="flower-component-thread-rail" aria-label={i18n.t('flowerChat.sidebar.conversations')}>
+            <AIChatSidebar scope="all" />
+          </aside>
           <main class="flower-component-main">
-            <Show
-              when={flowerPanel() !== 'settings'}
-              fallback={<EnvSettingsPage initialSection="ai" />}
-            >
-              <Show
-                when={flowerPanel() !== 'all' && flowerPanel() !== 'current_env'}
-                fallback={
-                  <div class="flower-history-panel">
-                    <AIChatSidebar
-                      scope={flowerPanel() === 'current_env' ? 'current_env' : 'all'}
-                      showTopActions={false}
-                      onOpenSettings={() => setFlowerPanel('settings')}
-                    />
-                  </div>
-                }
-              >
         <Show
           when={permissionReady()}
           fallback={
@@ -3955,12 +3820,12 @@ export function EnvAIPage() {
             <Show
               when={ai.aiEnabled() || ai.settings.loading}
               fallback={
-                // Fallback: AI is disabled and settings are not loading.
-                // Further distinguish: settings error vs not configured vs not yet resolved.
+                // AI is disabled and settings are not loading.
+                // Further distinguish settings error, not configured, and not yet resolved states.
                 <Show
                   when={ai.settings.error}
                   fallback={
-                    // No settings error: either settings are loaded but AI is not configured,
+                    // No settings error means settings are loaded but AI is not configured,
                     // or settings are still unresolved. In both cases, show a clear CTA.
                     <Motion.div
                       class="flex flex-col items-center justify-center h-full p-8 text-center"
@@ -3977,7 +3842,7 @@ export function EnvAIPage() {
                       <div class="text-sm text-muted-foreground mb-6 max-w-[320px]">
                         {i18n.t('flowerChat.emptyStates.notConfiguredDescription')}
                       </div>
-                      <Button size="md" variant="default" onClick={() => env.openSettings('ai')}>
+                      <Button size="md" variant="default" onClick={() => env.openSettings('ai', { origin: { kind: 'flower', returnSurfaceId: 'ai' } })}>
                         <Settings class="w-4 h-4 mr-2" />
                         {i18n.t('flowerChat.emptyStates.openRuntimeSettings')}
                       </Button>
@@ -4004,7 +3869,7 @@ export function EnvAIPage() {
                     <div class="text-sm text-muted-foreground mb-6 max-w-[360px]">
                       {ai.settings.error instanceof Error ? ai.settings.error.message : String(ai.settings.error)}
                     </div>
-                    <Button size="md" variant="default" onClick={() => env.openSettings('ai')}>
+                    <Button size="md" variant="default" onClick={() => env.openSettings('ai', { origin: { kind: 'flower', returnSurfaceId: 'ai' } })}>
                       <Settings class="w-4 h-4 mr-2" />
                       {i18n.t('flowerChat.emptyStates.openRuntimeSettings')}
                     </Button>
@@ -4017,6 +3882,7 @@ export function EnvAIPage() {
                 {/* Header */}
                 <div class="chat-header flower-chat-header border-b border-border/80 backdrop-blur-md">
                   <div class="chat-header-title flower-chat-header-title">
+                    <FlowerIcon class="h-5 w-5 shrink-0 text-primary" />
                     <span class="truncate font-medium">{ai.activeThreadTitle()}</span>
                   </div>
                   <div class="flower-chat-header-actions">
@@ -4638,8 +4504,6 @@ export function EnvAIPage() {
         </Show>
           </Show>
         </Show>
-              </Show>
-            </Show>
           </main>
         </div>
 
