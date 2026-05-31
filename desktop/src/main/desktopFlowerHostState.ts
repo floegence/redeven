@@ -475,6 +475,7 @@ function normalizeFlowerHostThread(value: unknown): DesktopFlowerHostThread | nu
     model_id: compact(candidate.model_id),
     created_at_ms: positiveInteger(candidate.created_at_ms) ?? messages[0]?.created_at_ms ?? updatedAt,
     updated_at_ms: updatedAt,
+    status: candidate.status === 'running' || candidate.status === 'failed' ? candidate.status : 'idle',
     messages,
   };
 }
@@ -515,6 +516,20 @@ async function saveDesktopFlowerHostThreads(
   threads: readonly DesktopFlowerHostThread[],
 ): Promise<void> {
   await writeJSONFile(paths.threadsFile, normalizeFlowerHostThreadsFile({ threads }));
+}
+
+async function replaceDesktopFlowerHostThread(
+  paths: DesktopFlowerHostPaths,
+  thread: DesktopFlowerHostThread,
+): Promise<void> {
+  const threads = [...await listDesktopFlowerHostThreads(paths)];
+  const existingIndex = threads.findIndex((item) => item.thread_id === thread.thread_id);
+  if (existingIndex >= 0) {
+    threads[existingIndex] = thread;
+  } else {
+    threads.unshift(thread);
+  }
+  await saveDesktopFlowerHostThreads(paths, threads);
 }
 
 export async function loadDesktopFlowerHostSettings(
@@ -947,40 +962,68 @@ export async function sendDesktopFlowerHostChat(
     created_at_ms: now(),
   };
   const baseMessages = [...existing?.messages ?? [], userMessage];
-  const systemContext = await buildWebSearchSystemContext({
-    providerID: provider.id,
-    prompt,
-    webSearchMode,
-    webSearchAPIKey,
-  });
-  const assistantText = await requestFlowerHostAssistantMessage({
-    provider,
-    modelName,
-    apiKey,
-    messages: normalizeProviderMessages(baseMessages, systemContext),
-    webSearchMode,
-  });
-  const assistantMessage = {
-    id: `msg_${idFactory()}`,
-    role: 'assistant' as const,
-    content: assistantText,
-    created_at_ms: now(),
-  };
-  const nextThread: DesktopFlowerHostThread = {
+  const pendingThread: DesktopFlowerHostThread = {
     thread_id: threadID,
     title: existing?.title || prompt.slice(0, 80),
     model_id: snapshot.config.current_model_id,
     created_at_ms: existing?.created_at_ms ?? userMessage.created_at_ms,
-    updated_at_ms: assistantMessage.created_at_ms,
-    messages: [...baseMessages, assistantMessage],
+    updated_at_ms: userMessage.created_at_ms,
+    status: 'running',
+    messages: baseMessages,
   };
   if (existingIndex >= 0) {
-    threads[existingIndex] = nextThread;
+    threads[existingIndex] = pendingThread;
   } else {
-    threads.unshift(nextThread);
+    threads.unshift(pendingThread);
   }
   await saveDesktopFlowerHostThreads(paths, threads);
-  return nextThread;
+
+  const completeThread = async (): Promise<DesktopFlowerHostThread> => {
+    try {
+      const systemContext = await buildWebSearchSystemContext({
+        providerID: provider.id,
+        prompt,
+        webSearchMode,
+        webSearchAPIKey,
+      });
+      const assistantText = await requestFlowerHostAssistantMessage({
+        provider,
+        modelName,
+        apiKey,
+        messages: normalizeProviderMessages(baseMessages, systemContext),
+        webSearchMode,
+      });
+      const assistantMessage = {
+        id: `msg_${idFactory()}`,
+        role: 'assistant' as const,
+        content: assistantText,
+        created_at_ms: now(),
+      };
+      const nextThread: DesktopFlowerHostThread = {
+        ...pendingThread,
+        updated_at_ms: assistantMessage.created_at_ms,
+        status: 'idle',
+        messages: [...baseMessages, assistantMessage],
+      };
+      await replaceDesktopFlowerHostThread(paths, nextThread);
+      return nextThread;
+    } catch (error) {
+      const failedThread: DesktopFlowerHostThread = {
+        ...pendingThread,
+        updated_at_ms: now(),
+        status: 'failed',
+      };
+      await replaceDesktopFlowerHostThread(paths, failedThread);
+      throw error;
+    }
+  };
+
+  if (request.reply_mode === 'background') {
+    void completeThread().catch(() => undefined);
+    return pendingThread;
+  }
+
+  return completeThread();
 }
 
 function draftProviders(draft: DesktopFlowerHostSettingsDraft): readonly DesktopFlowerHostProviderDraft[] {

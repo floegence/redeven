@@ -152,8 +152,9 @@ describe('Flower surface adapter for the host', () => {
   });
 
   it('projects Desktop threads into shared Flower thread snapshots', () => {
-    expect(mapDesktopFlowerThread(desktopThread())).toMatchObject({
+    expect(mapDesktopFlowerThread({ ...desktopThread(), status: 'running' })).toMatchObject({
       thread_id: 'thread-1',
+      status: 'running',
       source_label: 'this host',
       target_labels: [],
       messages: [

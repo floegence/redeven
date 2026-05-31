@@ -8,6 +8,7 @@ import type {
   DesktopFlowerHostProvider,
   DesktopFlowerHostProviderDraft,
   DesktopFlowerHostProviderModel,
+  DesktopFlowerHostSendChatRequest,
   DesktopFlowerHostSettingsDraft,
   DesktopFlowerHostSettingsSnapshot,
   DesktopFlowerHostTargetCacheEntry,
@@ -40,7 +41,7 @@ export type DesktopSettingsBridge = Readonly<{
     | { ok: true; threads: readonly DesktopFlowerHostThread[] }
     | { ok: false; error: string }
   >;
-  sendFlowerHostChat: (request: { thread_id?: string; prompt: string }) => Promise<
+  sendFlowerHostChat: (request: DesktopFlowerHostSendChatRequest) => Promise<
     | { ok: true; thread: DesktopFlowerHostThread }
     | { ok: false; error: string }
   >;
@@ -164,7 +165,7 @@ export function mapDesktopFlowerThread(thread: DesktopFlowerHostThread, sourceLa
     model_id: thread.model_id,
     created_at_ms: thread.created_at_ms,
     updated_at_ms: thread.updated_at_ms,
-    status: 'idle',
+    status: thread.status ?? 'idle',
     source_label: sourceLabel,
     target_labels: [],
     messages: thread.messages.map(mapMessage),

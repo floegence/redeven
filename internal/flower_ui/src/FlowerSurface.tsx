@@ -1,5 +1,5 @@
 import type { Component } from 'solid-js';
-import { For, Show, createMemo, createSignal, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Send, Settings } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
@@ -32,6 +32,7 @@ function getErrorMessage(error: unknown): string {
 export type FlowerSurfaceProps = Readonly<{
   adapter: FlowerSurfaceAdapter;
   copy?: FlowerSurfaceCopy;
+  focusThreadID?: string;
   class?: string;
 }>;
 
@@ -50,8 +51,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
+  const [isComposing, setIsComposing] = createSignal(false);
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
+  const selectedThreadRunning = createMemo(() => selectedThread()?.status === 'running');
   const threadItems = createMemo(() => threads().map(projectFlowerThreadListItem));
   const currentModelID = createMemo(() => trimString(snapshot()?.config.current_model_id));
   const activeProvider = createMemo(() => {
@@ -76,7 +79,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       const next = await props.adapter.listThreads();
       setThreads(next);
-      setSelectedThreadID((current) => (current && !next.some((thread) => thread.thread_id === current) ? '' : current));
+      const focusedThreadID = trimString(props.focusThreadID);
+      setSelectedThreadID((current) => {
+        if (focusedThreadID && next.some((thread) => thread.thread_id === focusedThreadID)) {
+          return focusedThreadID;
+        }
+        return current && !next.some((thread) => thread.thread_id === current) ? '' : current;
+      });
     } finally {
       setThreadsRefreshing(false);
     }
@@ -95,6 +104,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   onMount(() => {
     void loadSurface();
+  });
+
+  createEffect(() => {
+    const focusedThreadID = trimString(props.focusThreadID);
+    if (!focusedThreadID) {
+      return;
+    }
+    if (threads().some((thread) => thread.thread_id === focusedThreadID)) {
+      setSelectedThreadID(focusedThreadID);
+      returnToChat();
+    }
+  });
+
+  createEffect(() => {
+    const threadID = selectedThreadID();
+    if (!threadID || !selectedThreadRunning()) {
+      return;
+    }
+    const timer = window.setInterval(() => {
+      void refreshThreads();
+    }, 1200);
+    onCleanup(() => window.clearInterval(timer));
   });
 
   const saveSettings = async (draft: FlowerSettingsDraft) => {
@@ -166,6 +197,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSelectedThreadID(threadID);
     setChatSubmitError('');
     returnToChat();
+  };
+
+  const shouldSubmitOnEnterKeydown = (event: KeyboardEvent): boolean => {
+    if (event.isComposing || isComposing()) {
+      return false;
+    }
+    return event.key === 'Enter' && !event.shiftKey;
   };
 
   const messageBubble = (message: FlowerThreadSnapshot['messages'][number]) => (
@@ -241,8 +279,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   setChatDraft(event.currentTarget.value);
                   setChatSubmitError('');
                 }}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={() => setIsComposing(false)}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
+                  if (shouldSubmitOnEnterKeydown(event)) {
                     event.preventDefault();
                     void submitChat();
                   }
