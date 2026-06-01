@@ -290,7 +290,8 @@ describe('desktopFlowerHostState', () => {
             target_url: 'http://127.0.0.1:24000/',
             last_seen_at_unix_ms: 123,
             metadata: {
-              route: 'local_host',
+              target_kind: 'provider_environment',
+              connect_state: 'connectable',
             },
           },
         ],
@@ -305,12 +306,75 @@ describe('desktopFlowerHostState', () => {
             target_url: 'http://127.0.0.1:24000/',
             last_seen_at_unix_ms: 123,
             metadata: {
-              route: 'local_host',
+              target_kind: 'provider_environment',
+              connect_state: 'connectable',
             },
           },
         ],
       });
       expect(paths.targetCacheFile).toBe(path.join(root, '.redeven', 'flower', 'target-cache.json'));
+    });
+  });
+
+  it('sanitizes legacy target cache metadata before exposing settings snapshots', async () => {
+    await withTempFlowerRoot(async (root) => {
+      const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+      await fs.mkdir(paths.stateDir, { recursive: true });
+      await fs.writeFile(paths.targetCacheFile, `${JSON.stringify({
+        version: 1,
+        entries: [
+          {
+            target_id: 'cp:test:env:env_a',
+            label: 'Env A',
+            target_url: 'https://region.example.test/_redeven_boot/#redeven=boot-payload',
+            last_seen_at_unix_ms: 123,
+            metadata: {
+              target_kind: 'provider_environment',
+              provider_origin: 'https://region.example.test',
+              provider_id: 'reference_provider',
+              env_public_id: 'env_a',
+              namespace_public_id: 'ns_a',
+              runtime_status: 'online',
+              connect_state: 'connectable',
+              capabilities: ['files', '', 'terminal', 'files'],
+              last_connected_at_unix_ms: 456,
+              last_connect_error: {
+                code: 'offline',
+                message: 'Offline',
+                at_unix_ms: 789,
+                entry_ticket: 'entry-ticket-must-not-leak',
+              },
+              control_plane_access_token: 'provider-token-must-not-leak',
+              bootstrap_ticket: 'boot-ticket-must-not-leak',
+              e2ee_psk: 'psk-must-not-leak',
+            },
+          },
+        ],
+      })}\n`);
+
+      const cache = await loadDesktopFlowerHostTargetCache(paths);
+      const settings = await loadDesktopFlowerHostSettings(paths);
+
+      expect(cache.entries[0]?.metadata).toEqual({
+        target_kind: 'provider_environment',
+        provider_origin: 'https://region.example.test',
+        provider_id: 'reference_provider',
+        env_public_id: 'env_a',
+        namespace_public_id: 'ns_a',
+        runtime_status: 'online',
+        connect_state: 'connectable',
+        capabilities: ['files', 'terminal'],
+        last_connected_at_unix_ms: 456,
+        last_connect_error: {
+          code: 'offline',
+          message: 'Offline',
+          at_unix_ms: 789,
+        },
+      });
+      expect(JSON.stringify(settings.target_cache)).not.toContain('provider-token-must-not-leak');
+      expect(JSON.stringify(settings.target_cache)).not.toContain('boot-ticket-must-not-leak');
+      expect(JSON.stringify(settings.target_cache)).not.toContain('entry-ticket-must-not-leak');
+      expect(JSON.stringify(settings.target_cache)).not.toContain('psk-must-not-leak');
     });
   });
 

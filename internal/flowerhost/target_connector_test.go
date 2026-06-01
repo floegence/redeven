@@ -5,82 +5,71 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	controlv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/controlplane/v1"
 )
 
-func TestTargetConnectorOpensFlowerTargetSession(t *testing.T) {
+func TestTargetConnectorRequestsCarrierBrokerOnly(t *testing.T) {
 	t.Parallel()
 
 	var seenPath string
 	var seenAuth string
-	var seenCapabilities []string
+	var seenBody targetBrokerOpenSessionRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seenPath = r.URL.Path
 		seenAuth = r.Header.Get("authorization")
-		var request struct {
-			RequiredCapabilities []string `json:"required_capabilities"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		if err := json.NewDecoder(r.Body).Decode(&seenBody); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		seenCapabilities = request.RequiredCapabilities
 		w.Header().Set("content-type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"entry_ticket":  "ticket_1",
-			"target_id":     "cp:test:env:env_a",
-			"floe_app":      "com.floegence.redeven.flower",
-			"session_kind":  "flower_host_rpc",
-			"code_space_id": "flower-host:test",
-			"env_public_id": "env_a",
-			"can_read":      true,
-			"can_write":     true,
-			"can_execute":   false,
-			"capability": map[string]any{
-				"can_read":    true,
-				"can_write":   true,
-				"can_execute": false,
+			"ok": true,
+			"data": TargetSessionGrant{
+				TargetID:       "cp:test:env:env_a",
+				ProviderOrigin: "http://provider.example.test",
+				EnvPublicID:    "env_a",
+				GrantClient: &controlv1.ChannelInitGrant{
+					ChannelId: "ch_target",
+				},
+				Capabilities: TargetSessionCapabilities{
+					CanRead:  true,
+					CanWrite: true,
+				},
+				ExpiresAtUnixMs: int64(4102444800000),
 			},
-			"expires_at_unix_ms": int64(4102444800000),
 		})
 	}))
 	defer server.Close()
 
 	connector := NewTargetConnector(TargetConnectorOptions{
-		HostID: "flower-host:test",
-		ResolveAccessToken: func(_ context.Context, providerOrigin string) (string, bool, error) {
-			if providerOrigin != server.URL {
-				t.Fatalf("provider origin=%q", providerOrigin)
-			}
-			return "access-token", true, nil
-		},
+		BrokerURL:   server.URL,
+		BrokerToken: "broker-token",
 	})
-	session, err := connector.OpenTargetSession(context.Background(), FlowerTargetRef{
+	grant, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
 		TargetID:       "cp:test:env:env_a",
-		ProviderOrigin: server.URL,
+		ProviderOrigin: "http://provider.example.test",
+		ProviderID:     "reference_provider",
 		EnvPublicID:    "env_a",
 	}, []string{"read", "write"})
 	if err != nil {
-		t.Fatalf("OpenTargetSession: %v", err)
+		t.Fatalf("OpenTargetGrant: %v", err)
 	}
-	if seenPath != "/api/rcpp/v1/environments/env_a/flower/target-session" {
-		t.Fatalf("path=%q", seenPath)
+	if strings.Contains(seenPath, "/flower/"+"target-session") || seenPath != "/v1/targets/open-session" {
+		t.Fatalf("path=%q, want carrier broker path", seenPath)
 	}
-	if seenAuth != "Bearer access-token" {
+	if seenAuth != "Bearer broker-token" {
 		t.Fatalf("authorization=%q", seenAuth)
 	}
-	if len(seenCapabilities) != 2 || seenCapabilities[0] != "read" || seenCapabilities[1] != "write" {
-		t.Fatalf("required_capabilities=%v", seenCapabilities)
+	if seenBody.TargetID != "cp:test:env:env_a" || seenBody.EnvPublicID != "env_a" || seenBody.ProviderOrigin != "http://provider.example.test" {
+		t.Fatalf("request body=%#v", seenBody)
 	}
-	if session.SessionID != "ticket_1" || session.SessionKind != "flower_host_rpc" || session.FloeApp != "com.floegence.redeven.flower" {
-		t.Fatalf("session=%#v", session)
+	if len(seenBody.RequiredCapabilities) != 2 || seenBody.RequiredCapabilities[0] != "read" || seenBody.RequiredCapabilities[1] != "write" {
+		t.Fatalf("required_capabilities=%v", seenBody.RequiredCapabilities)
 	}
-	if session.TargetID != "cp:test:env:env_a" || session.EnvPublicID != "env_a" || session.ChannelID != "flower-host:test" {
-		t.Fatalf("session binding=%#v", session)
-	}
-	if !session.Capabilities.CanRead || !session.Capabilities.CanWrite || session.Capabilities.CanExecute {
-		t.Fatalf("capabilities=%#v", session.Capabilities)
+	if grant.GrantClient == nil || grant.GrantClient.ChannelId != "ch_target" {
+		t.Fatalf("grant=%#v", grant)
 	}
 }
 
@@ -88,11 +77,10 @@ func TestTargetConnectorRejectsInvalidRequiredCapability(t *testing.T) {
 	t.Parallel()
 
 	connector := NewTargetConnector(TargetConnectorOptions{
-		ResolveAccessToken: func(context.Context, string) (string, bool, error) {
-			return "access-token", true, nil
-		},
+		BrokerURL:   "http://127.0.0.1:1",
+		BrokerToken: "broker-token",
 	})
-	_, err := connector.OpenTargetSession(context.Background(), FlowerTargetRef{
+	_, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
 		TargetID:       "cp:test:env:env_a",
 		ProviderOrigin: "https://region.example.test",
 		EnvPublicID:    "env_a",
@@ -102,74 +90,32 @@ func TestTargetConnectorRejectsInvalidRequiredCapability(t *testing.T) {
 	}
 }
 
-func TestTargetConnectorRejectsSessionForDifferentTarget(t *testing.T) {
+func TestTargetConnectorRejectsGrantForDifferentTarget(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("content-type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"entry_ticket":       "ticket_1",
-			"target_id":          "cp:test:env:env_b",
-			"floe_app":           "com.floegence.redeven.flower",
-			"session_kind":       "flower_host_rpc",
-			"code_space_id":      "flower-host:test",
-			"env_public_id":      "env_a",
-			"capability":         map[string]any{"can_read": true},
-			"expires_at_unix_ms": int64(4102444800000),
+			"ok": true,
+			"data": TargetSessionGrant{
+				TargetID:        "cp:test:env:env_b",
+				ProviderOrigin:  "http://provider.example.test",
+				EnvPublicID:     "env_a",
+				GrantClient:     &controlv1.ChannelInitGrant{ChannelId: "ch_target"},
+				Capabilities:    TargetSessionCapabilities{CanRead: true},
+				ExpiresAtUnixMs: int64(4102444800000),
+			},
 		})
 	}))
 	defer server.Close()
 
 	connector := NewTargetConnector(TargetConnectorOptions{
-		ResolveAccessToken: func(context.Context, string) (string, bool, error) {
-			return "access-token", true, nil
-		},
-	})
-	_, err := connector.OpenTargetSession(context.Background(), FlowerTargetRef{
-		TargetID:       "cp:test:env:env_a",
-		ProviderOrigin: server.URL,
-		EnvPublicID:    "env_a",
-	}, []string{"read"})
-	if got := TargetConnectReason(err); got != "target_unsupported" {
-		t.Fatalf("reason=%q err=%v, want target_unsupported", got, err)
-	}
-}
-
-func TestTargetConnectorRejectsEntryGrantForDifferentChannel(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("content-type", "application/json")
-		switch r.URL.Path {
-		case "/api/rcpp/v1/environments/env_a/flower/target-session":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"entry_ticket":       "ticket_1",
-				"target_id":          "cp:test:env:env_a",
-				"floe_app":           "com.floegence.redeven.flower",
-				"session_kind":       "flower_host_rpc",
-				"code_space_id":      "flower-host:test",
-				"env_public_id":      "env_a",
-				"capability":         map[string]any{"can_read": true},
-				"expires_at_unix_ms": int64(4102444800000),
-			})
-		case "/v1/channel/init/entry":
-			_ = json.NewEncoder(w).Encode(map[string]any{
-				"grant_client": &controlv1.ChannelInitGrant{ChannelId: "different-channel"},
-			})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer server.Close()
-
-	connector := NewTargetConnector(TargetConnectorOptions{
-		ResolveAccessToken: func(context.Context, string) (string, bool, error) {
-			return "access-token", true, nil
-		},
+		BrokerURL:   server.URL,
+		BrokerToken: "broker-token",
 	})
 	_, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
 		TargetID:       "cp:test:env:env_a",
-		ProviderOrigin: server.URL,
+		ProviderOrigin: "http://provider.example.test",
 		EnvPublicID:    "env_a",
 	}, []string{"read"})
 	if got := TargetConnectReason(err); got != "target_unsupported" {
@@ -177,44 +123,11 @@ func TestTargetConnectorRejectsEntryGrantForDifferentChannel(t *testing.T) {
 	}
 }
 
-func TestTargetConnectorRejectsLegacyTopLevelCapabilities(t *testing.T) {
-	t.Parallel()
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("content-type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"entry_ticket":       "ticket_1",
-			"floe_app":           "com.floegence.redeven.flower",
-			"session_kind":       "flower_host_rpc",
-			"code_space_id":      "flower-host:test",
-			"can_read":           true,
-			"can_write":          true,
-			"can_execute":        true,
-			"expires_at_unix_ms": int64(4102444800000),
-		})
-	}))
-	defer server.Close()
-
-	connector := NewTargetConnector(TargetConnectorOptions{
-		ResolveAccessToken: func(context.Context, string) (string, bool, error) {
-			return "access-token", true, nil
-		},
-	})
-	_, err := connector.OpenTargetSession(context.Background(), FlowerTargetRef{
-		TargetID:       "cp:test:env:env_a",
-		ProviderOrigin: server.URL,
-		EnvPublicID:    "env_a",
-	}, []string{"read"})
-	if got := TargetConnectReason(err); got != "target_unauthorized" {
-		t.Fatalf("reason=%q err=%v, want target_unauthorized", got, err)
-	}
-}
-
-func TestTargetConnectorFailsClosedWithoutAuthorization(t *testing.T) {
+func TestTargetConnectorFailsClosedWithoutBroker(t *testing.T) {
 	t.Parallel()
 
 	connector := NewTargetConnector(TargetConnectorOptions{})
-	_, err := connector.OpenTargetSession(context.Background(), FlowerTargetRef{
+	_, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
 		TargetID:       "cp:test:env:env_a",
 		ProviderOrigin: "https://region.example.test",
 		EnvPublicID:    "env_a",
@@ -228,16 +141,20 @@ func TestTargetConnectorMapsOfflineTargetToUnreachable(t *testing.T) {
 	t.Parallel()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		http.Error(w, "offline", http.StatusServiceUnavailable)
+		w.Header().Set("content-type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok":    false,
+			"error": "target is offline",
+		})
 	}))
 	defer server.Close()
 
 	connector := NewTargetConnector(TargetConnectorOptions{
-		ResolveAccessToken: func(context.Context, string) (string, bool, error) {
-			return "access-token", true, nil
-		},
+		BrokerURL:   server.URL,
+		BrokerToken: "broker-token",
 	})
-	_, err := connector.OpenTargetSession(context.Background(), FlowerTargetRef{
+	_, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
 		TargetID:       "cp:test:env:env_a",
 		ProviderOrigin: server.URL,
 		EnvPublicID:    "env_a",

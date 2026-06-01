@@ -33,7 +33,10 @@ type Paths struct {
 type SecretResolver interface {
 	ResolveProviderAPIKey(ctx context.Context, providerID string) (string, bool, error)
 	ResolveWebSearchProviderAPIKey(ctx context.Context, providerID string) (string, bool, error)
-	ResolveControlPlaneAccessToken(ctx context.Context, providerOrigin string) (string, bool, error)
+}
+
+type TargetSessionBroker interface {
+	TargetSessionBrokerEndpoint() (baseURL string, token string)
 }
 
 type ConfigStore struct {
@@ -127,18 +130,17 @@ func (s *ConfigStore) LoadTargetCache(ctx context.Context) (TargetCache, error) 
 	if cache.Entries == nil {
 		cache.Entries = []TargetCacheEntry{}
 	}
-	for i := range cache.Entries {
-		cache.Entries[i].TargetID = strings.TrimSpace(cache.Entries[i].TargetID)
-		cache.Entries[i].Label = strings.TrimSpace(cache.Entries[i].Label)
-		cache.Entries[i].TargetURL = strings.TrimSpace(cache.Entries[i].TargetURL)
-	}
-	return cache, nil
+	return sanitizeTargetCache(cache), nil
 }
 
 func (s *ConfigStore) SaveTargetCache(ctx context.Context, cache TargetCache) error {
 	if s == nil {
 		return errors.New("nil config store")
 	}
+	return writeJSON(s.paths.TargetCachePath, sanitizeTargetCache(cache))
+}
+
+func sanitizeTargetCache(cache TargetCache) TargetCache {
 	cache.Version = 1
 	if cache.Entries == nil {
 		cache.Entries = []TargetCacheEntry{}
@@ -147,8 +149,93 @@ func (s *ConfigStore) SaveTargetCache(ctx context.Context, cache TargetCache) er
 		cache.Entries[i].TargetID = strings.TrimSpace(cache.Entries[i].TargetID)
 		cache.Entries[i].Label = strings.TrimSpace(cache.Entries[i].Label)
 		cache.Entries[i].TargetURL = strings.TrimSpace(cache.Entries[i].TargetURL)
+		cache.Entries[i].Metadata = sanitizeTargetCacheMetadata(cache.Entries[i].Metadata)
 	}
-	return writeJSON(s.paths.TargetCachePath, cache)
+	return cache
+}
+
+func sanitizeTargetCacheMetadata(raw json.RawMessage) json.RawMessage {
+	if len(raw) == 0 {
+		return nil
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(raw, &metadata); err != nil || metadata == nil {
+		return nil
+	}
+	out := map[string]any{}
+	for _, key := range []string{
+		"target_kind",
+		"provider_origin",
+		"provider_id",
+		"env_public_id",
+		"namespace_public_id",
+		"runtime_status",
+		"connect_state",
+	} {
+		if value := strings.TrimSpace(fmt.Sprint(metadata[key])); value != "" && value != "<nil>" {
+			out[key] = value
+		}
+	}
+	if rawCapabilities, ok := metadata["capabilities"].([]any); ok {
+		seen := map[string]struct{}{}
+		capabilities := []string{}
+		for _, item := range rawCapabilities {
+			value := strings.TrimSpace(fmt.Sprint(item))
+			if value == "" || value == "<nil>" {
+				continue
+			}
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			capabilities = append(capabilities, value)
+		}
+		if len(capabilities) > 0 {
+			out["capabilities"] = capabilities
+		}
+	}
+	if value := int64FromCacheMetadata(metadata["last_connected_at_unix_ms"]); value > 0 {
+		out["last_connected_at_unix_ms"] = value
+	}
+	if rawError, ok := metadata["last_connect_error"].(map[string]any); ok {
+		connectError := map[string]any{}
+		if value := strings.TrimSpace(fmt.Sprint(rawError["code"])); value != "" && value != "<nil>" {
+			connectError["code"] = value
+		}
+		if value := strings.TrimSpace(fmt.Sprint(rawError["message"])); value != "" && value != "<nil>" {
+			connectError["message"] = value
+		}
+		if value := int64FromCacheMetadata(rawError["at_unix_ms"]); value > 0 {
+			connectError["at_unix_ms"] = value
+		}
+		if len(connectError) > 0 {
+			out["last_connect_error"] = connectError
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	clean, err := json.Marshal(out)
+	if err != nil {
+		return nil
+	}
+	return clean
+}
+
+func int64FromCacheMetadata(value any) int64 {
+	switch v := value.(type) {
+	case float64:
+		return int64(v)
+	case int64:
+		return v
+	case int:
+		return int64(v)
+	case json.Number:
+		n, _ := v.Int64()
+		return n
+	default:
+		return 0
+	}
 }
 
 func (s *ConfigStore) LoadIdentity(ctx context.Context) (HostIdentity, error) {

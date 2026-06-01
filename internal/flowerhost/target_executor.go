@@ -52,10 +52,10 @@ func (e *TargetExecutor) ExecuteTargetTool(ctx context.Context, call ai.TargetTo
 	if err != nil {
 		return ai.TargetToolResult{}, targetToolExecutionError{err: err}
 	}
-	if !sessionGrantsCapabilities(grant.Session, call.RequiredCapabilities) {
+	if !sessionGrantsCapabilities(grant, call.RequiredCapabilities) {
 		return ai.TargetToolResult{}, targetToolExecutionError{err: targetConnectError{code: "target_unauthorized", message: "Target session does not grant the required tool capability."}}
 	}
-	client, err := fsclient.Connect(runCtx, grant.GrantClient, fsclient.WithOrigin(strings.TrimSpace(target.ProviderOrigin)))
+	client, err := fsclient.Connect(runCtx, grant.GrantClient, fsclient.WithOrigin(strings.TrimSpace(grant.ProviderOrigin)))
 	if err != nil {
 		return ai.TargetToolResult{}, targetToolExecutionError{err: targetConnectError{code: "target_unreachable", message: err.Error()}}
 	}
@@ -149,24 +149,12 @@ func (e *TargetExecutor) resolveTarget(ctx context.Context, targetID string, req
 		if strings.TrimSpace(target.ProviderOrigin) == "" || strings.TrimSpace(target.EnvPublicID) == "" {
 			return FlowerTargetRef{}, targetConnectError{code: "target_unsupported", message: "Target is missing provider origin or environment identity."}
 		}
-		if !targetSupportsFlowerRPC(target) {
-			return FlowerTargetRef{}, targetConnectError{code: "target_unsupported", message: "Target does not advertise Flower RPC support."}
-		}
 		if !targetAdvertisesCapabilities(target, requiredCapabilities) {
 			return FlowerTargetRef{}, targetConnectError{code: "target_unsupported", message: "Target does not advertise the required tool capability."}
 		}
 		return target, nil
 	}
 	return FlowerTargetRef{}, targetConnectError{code: "target_unreachable", message: "Target is not available to this Flower Host."}
-}
-
-func targetSupportsFlowerRPC(target FlowerTargetRef) bool {
-	for _, capability := range target.Capabilities {
-		if strings.TrimSpace(capability) == TargetCapabilityFlowerRPC {
-			return true
-		}
-	}
-	return false
 }
 
 func targetAdvertisesCapabilities(target FlowerTargetRef, required []string) bool {
@@ -203,7 +191,7 @@ func targetHasAnyCapability(target FlowerTargetRef, capabilities ...string) bool
 	return false
 }
 
-func sessionGrantsCapabilities(session FlowerTargetSession, required []string) bool {
+func sessionGrantsCapabilities(session TargetSessionGrant, required []string) bool {
 	for _, capability := range required {
 		switch strings.TrimSpace(strings.ToLower(capability)) {
 		case "", "read":

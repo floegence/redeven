@@ -9,6 +9,7 @@ import {
   createDesktopFlowerHostPlaintextSecretCodec,
   defaultDesktopFlowerHostPaths,
 } from './desktopFlowerHostState';
+import { startFlowerHostSecretResolver } from './flowerHostSecretResolver';
 
 type MockChild = EventEmitter & {
   stdout: EventEmitter & { setEncoding: (encoding: string) => void };
@@ -117,11 +118,46 @@ describe('Flower Host bridge lifecycle', () => {
       expect(spawnCalls[0]?.args).not.toContain('--secret-resolver-token');
       expect(spawnCalls[0]?.args).toContain('--secret-resolver-token-env');
       expect(spawnCalls[0]?.options.env?.REDEVEN_FLOWER_HOST_SECRET_RESOLVER_TOKEN).toBe('resolver-token');
+      expect(JSON.stringify(spawnCalls[0])).not.toContain('desktop-access-token');
 
       await bridge.shutdownFlowerHostBridge();
 
       expect(spawnedChildren[0]?.kill).toHaveBeenCalledWith('SIGTERM');
       expect(secretResolverClosed).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('passes the carrier target broker into the loopback resolver without exposing provider tokens to the child', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    try {
+      const bridge = await import('./flowerHostBridge');
+      const openTargetSession = vi.fn(async () => ({
+        target_id: 'cp:test:env:env_a',
+        provider_origin: 'https://region.example.test',
+        env_public_id: 'env_a',
+        grant_client: { channel_id: 'ch_target' },
+        capabilities: {
+          can_read: true,
+          can_write: false,
+          can_execute: false,
+        },
+        expires_at_unix_ms: 4_102_444_800_000,
+      }));
+
+      await bridge.ensureFlowerHostBridge({
+        ...bridgeArgs(root),
+        openTargetSession,
+      });
+
+      expect(startFlowerHostSecretResolver).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        openTargetSession,
+      );
+      expect(JSON.stringify(spawnCalls[0])).not.toContain('control_plane_' + 'access_token');
+      expect(JSON.stringify(spawnCalls[0])).not.toContain('provider-access-token');
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

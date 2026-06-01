@@ -784,8 +784,6 @@ func runtimeSessionAppLabel(floeApp string) string {
 		return "Code"
 	case "com.floegence.redeven.portforward":
 		return "Port Forward"
-	case "com.floegence.redeven.flower":
-		return "Flower Host"
 	default:
 		return "Session"
 	}

@@ -59,33 +59,15 @@ const (
 	FloeAppRedevenCode  = "com.floegence.redeven.code"
 	// FloeAppRedevenPortForward proxies an arbitrary HTTP service reachable from the agent.
 	FloeAppRedevenPortForward = "com.floegence.redeven.portforward"
-	// FloeAppRedevenFlower is used by Flower Host target sessions.
-	FloeAppRedevenFlower = "com.floegence.redeven.flower"
-)
-
-const (
-	sessionKindFlowerHostRPC = "flower_host_rpc"
-	reservedEnvUICodeSpaceID = "env-ui"
 )
 
 func isSupportedFloeApp(floeApp string) bool {
 	switch strings.TrimSpace(floeApp) {
-	case FloeAppRedevenAgent, FloeAppRedevenCode, FloeAppRedevenPortForward, FloeAppRedevenFlower:
+	case FloeAppRedevenAgent, FloeAppRedevenCode, FloeAppRedevenPortForward:
 		return true
 	default:
 		return false
 	}
-}
-
-func isValidFlowerHostSessionBinding(meta *session.Meta) bool {
-	if meta == nil {
-		return false
-	}
-	codeSpaceID := strings.TrimSpace(meta.CodeSpaceID)
-	return strings.TrimSpace(meta.SessionKind) == sessionKindFlowerHostRPC &&
-		codeSpaceID != "" &&
-		codeSpaceID != reservedEnvUICodeSpaceID &&
-		codeapp.IsValidCodeSpaceID(codeSpaceID)
 }
 
 const (
@@ -804,14 +786,6 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		return
 	}
 	meta.FloeApp = floeApp
-	if floeApp == FloeAppRedevenFlower && !isValidFlowerHostSessionBinding(meta) {
-		a.log.Warn("invalid Flower Host session binding",
-			"channel_id", channelID,
-			"code_space_id", strings.TrimSpace(meta.CodeSpaceID),
-			"session_kind", strings.TrimSpace(meta.SessionKind),
-		)
-		return
-	}
 
 	// Clamp control-plane granted permissions using the local endpoint cap.
 	declared := config.PermissionSet{
@@ -886,18 +860,6 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 			)
 			return
 		}
-	}
-
-	if meta.FloeApp == FloeAppRedevenFlower && !flowerHostSessionHasAnyToolPermission(meta) {
-		a.log.Warn("insufficient permissions for Flower Host session; ignoring",
-			"channel_id", channelID,
-			"user_public_id", meta.UserPublicID,
-			"code_space_id", strings.TrimSpace(meta.CodeSpaceID),
-			"can_read", meta.CanRead,
-			"can_write", meta.CanWrite,
-			"can_execute", meta.CanExecute,
-		)
-		return
 	}
 
 	// Freeze the metadata snapshot used for auditing/UI and for the session runtime.
@@ -1085,44 +1047,9 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 		return a.serveCodeAppSession(ctx, sess, meta)
 	case FloeAppRedevenPortForward:
 		return a.servePortForwardSession(ctx, sess, meta)
-	case FloeAppRedevenFlower:
-		return a.serveFlowerHostSession(ctx, sess, meta)
 	default:
 		return a.serveRedevenAgentSession(ctx, sess, meta)
 	}
-}
-
-func (a *Agent) serveFlowerHostSession(ctx context.Context, sess endpoint.Session, meta *session.Meta) error {
-	if a == nil || meta == nil {
-		return errors.New("invalid args")
-	}
-	if sess == nil {
-		return errors.New("missing session")
-	}
-	if !isValidFlowerHostSessionBinding(meta) {
-		return errors.New("invalid Flower Host session binding")
-	}
-	if !flowerHostSessionHasAnyToolPermission(meta) {
-		return errors.New("read, write, or execute permission required")
-	}
-
-	srv, err := serve.New(serve.Options{
-		OnError: func(err error) {
-			if err == nil {
-				return
-			}
-			a.log.Warn("flower host stream error", "channel_id", meta.ChannelID, "code_space_id", meta.CodeSpaceID, "error", err)
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	srv.Handle("rpc", func(ctx context.Context, stream io.ReadWriteCloser) {
-		a.serveFlowerHostRPCStream(ctx, stream, meta)
-	})
-
-	return srv.ServeSession(ctx, sess)
 }
 
 func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, meta *session.Meta) error {
@@ -1344,17 +1271,6 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 		}
 	}
 
-	// Sessions domain (active Flowersec channel sessions).
-	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
-
-	_ = srv.Serve(ctx)
-}
-
-func (a *Agent) serveFlowerHostRPCStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta) {
-	router := rpc.NewRouter()
-	srv := rpc.NewServer(stream, router)
-
-	accessrpc.New(a.accessGate).Register(router, meta)
 	flowerhostrpc.NewService(flowerhostrpc.Options{
 		Logger:          a.log,
 		StateDir:        a.stateDir,
@@ -1365,11 +1281,10 @@ func (a *Agent) serveFlowerHostRPCStream(ctx context.Context, stream io.ReadWrit
 		AIConfig:        a.cfg.AI,
 	}).RegisterWithAccessGate(router, meta, a.accessGate)
 
-	_ = srv.Serve(ctx)
-}
+	// Sessions domain (active Flowersec channel sessions).
+	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)
 
-func flowerHostSessionHasAnyToolPermission(meta *session.Meta) bool {
-	return meta != nil && (meta.CanRead || meta.CanWrite || meta.CanExecute)
+	_ = srv.Serve(ctx)
 }
 
 func (a *Agent) prepareAccessProxyUpstream(ctx context.Context, meta *session.Meta, upstream string) (string, func(), error) {

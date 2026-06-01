@@ -29,7 +29,7 @@ function splitHostname(hostname: string): string[] {
 }
 
 function isSupportedSandboxID(id: string): boolean {
-  return id.startsWith('env-') || id.startsWith('cs-') || id.startsWith('pf-') || id.startsWith('fh-');
+  return id.startsWith('env-') || id.startsWith('cs-') || id.startsWith('pf-');
 }
 
 function deriveControlPlaneBaseDomainFromSandboxBaseDomain(sandboxBaseDomain: string): string | null {

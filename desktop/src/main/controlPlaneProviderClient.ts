@@ -149,20 +149,28 @@ function providerErrorMessage(status: number, body: unknown): string {
   return `Provider request failed (${status}).`;
 }
 
-async function fetchProviderJSON(
+export async function fetchProviderJSON(
   url: string,
   options: Readonly<{
     method?: 'GET' | 'POST';
     bearerToken?: string;
     body?: unknown;
+    extraHeaders?: Readonly<Record<string, string>>;
     operationLabel: string;
     transport?: DesktopProviderTransport;
   }>,
-): Promise<unknown> {
+): Promise<Readonly<{ body: unknown; headers: Readonly<Record<string, string>>; status: number }>> {
   const headers = new Headers({
     Accept: 'application/json',
     'Cache-Control': 'no-store',
   });
+  for (const [name, value] of Object.entries(options.extraHeaders ?? {})) {
+    const cleanName = compact(name);
+    const cleanValue = String(value ?? '').trim();
+    if (cleanName !== '' && cleanValue !== '') {
+      headers.set(cleanName, cleanValue);
+    }
+  }
   const bearerToken = compact(options.bearerToken);
   if (bearerToken !== '') {
     headers.set('Authorization', `Bearer ${bearerToken}`);
@@ -191,7 +199,11 @@ async function fetchProviderJSON(
       },
     );
   }
-  return body;
+  return {
+    body,
+    headers: response.headers,
+    status: response.status,
+  };
 }
 
 function normalizeProviderOpenSessionResponse(
@@ -310,7 +322,7 @@ export async function fetchProviderDiscovery(
   requestOptions: ProviderClientRequestOptions = {},
 ): Promise<DesktopControlPlaneProvider> {
   const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
-  const body = await fetchProviderJSON(providerRequestURL(normalizedOrigin, PROVIDER_DISCOVERY_PATH), {
+  const { body } = await fetchProviderJSON(providerRequestURL(normalizedOrigin, PROVIDER_DISCOVERY_PATH), {
     operationLabel: 'the provider discovery document',
     transport: requestOptions.transport,
   });
@@ -329,7 +341,7 @@ export async function exchangeProviderDesktopConnectAuthorization(
   authorization: ProviderDesktopConnectAuthorization,
   requestOptions: ProviderClientRequestOptions = {},
 ): Promise<ProviderDesktopConnectExchangeResult> {
-  const body = await fetchProviderJSON(
+  const { body } = await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH),
     {
       method: 'POST',
@@ -349,7 +361,7 @@ export async function refreshProviderDesktopAccessToken(
   refreshToken: string,
   requestOptions: ProviderClientRequestOptions = {},
 ): Promise<ProviderDesktopTokenRefreshResult> {
-  const body = await fetchProviderJSON(
+  const { body } = await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_DESKTOP_TOKEN_REFRESH_PATH),
     {
       method: 'POST',
@@ -386,7 +398,7 @@ export async function fetchProviderAccount(
   accessToken: string,
   requestOptions: ProviderClientRequestOptions = {},
 ): Promise<DesktopControlPlaneAccount> {
-  const body = await fetchProviderJSON(
+  const { body } = await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_ME_PATH),
     {
       bearerToken: accessToken,
@@ -409,7 +421,7 @@ export async function fetchProviderEnvironments(
   accessToken: string,
   requestOptions: ProviderClientRequestOptions = {},
 ): Promise<readonly DesktopProviderEnvironment[]> {
-  const body = await fetchProviderJSON(
+  const { body } = await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_ENVIRONMENTS_PATH),
     {
       bearerToken: accessToken,
@@ -438,7 +450,7 @@ export async function queryProviderEnvironmentRuntimeHealth(
   if (envPublicIDs.length === 0) {
     return [];
   }
-  const body = await fetchProviderJSON(
+  const { body } = await fetchProviderJSON(
     providerRequestURL(provider.provider_origin, PROVIDER_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH),
     {
       method: 'POST',
@@ -469,7 +481,7 @@ export async function requestDesktopOpenSession(
   if (cleanEnvPublicID === '') {
     throw new Error('Environment ID is required.');
   }
-  const body = await fetchProviderJSON(
+  const { body } = await fetchProviderJSON(
     providerRequestURL(
       provider.provider_origin,
       `${PROVIDER_ENVIRONMENTS_PATH}/${encodeURIComponent(cleanEnvPublicID)}${PROVIDER_DESKTOP_OPEN_SESSION_PATH_SUFFIX}`,
@@ -490,4 +502,12 @@ export async function requestDesktopOpenSession(
 
 export function providerBootstrapExchangeURL(providerOrigin: string): string {
   return providerRequestURL(providerOrigin, PROVIDER_BOOTSTRAP_EXCHANGE_PATH);
+}
+
+export function providerFloeproxyBootExchangeURL(providerOrigin: string): string {
+  return providerRequestURL(providerOrigin, '/api/srv/v1/floeproxy/boot/exchange');
+}
+
+export function providerFloeproxyEntryURL(providerOrigin: string): string {
+  return providerRequestURL(providerOrigin, '/api/srv/v1/floeproxy/entry');
 }

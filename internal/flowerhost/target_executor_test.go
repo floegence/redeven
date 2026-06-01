@@ -13,7 +13,7 @@ import (
 func TestTargetAdvertisesCapabilitiesRequiresFilesForReadAndWrite(t *testing.T) {
 	t.Parallel()
 
-	gitOnly := FlowerTargetRef{Capabilities: []string{TargetCapabilityFlowerRPC, TargetCapabilityGit}}
+	gitOnly := FlowerTargetRef{Capabilities: []string{TargetCapabilityGit}}
 	if targetAdvertisesCapabilities(gitOnly, []string{"read"}) {
 		t.Fatalf("git-only target must not satisfy file read capability")
 	}
@@ -21,7 +21,7 @@ func TestTargetAdvertisesCapabilitiesRequiresFilesForReadAndWrite(t *testing.T) 
 		t.Fatalf("git-only target must not satisfy file write capability")
 	}
 
-	files := FlowerTargetRef{Capabilities: []string{TargetCapabilityFlowerRPC, TargetCapabilityFiles}}
+	files := FlowerTargetRef{Capabilities: []string{TargetCapabilityFiles}}
 	if !targetAdvertisesCapabilities(files, []string{"read", "write"}) {
 		t.Fatalf("files target should satisfy file read/write capabilities")
 	}
@@ -56,7 +56,7 @@ func TestResolveTargetRejectsTargetWithoutFileCapabilityForFileRead(t *testing.T
 			Metadata: json.RawMessage(`{
 				"provider_origin": "https://region.example.test",
 				"env_public_id": "env_a",
-				"capabilities": ["flower_rpc", "git"]
+				"capabilities": ["git"]
 			}`),
 		}},
 	}); err != nil {
