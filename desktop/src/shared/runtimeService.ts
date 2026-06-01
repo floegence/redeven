@@ -34,6 +34,7 @@ export type RuntimeServiceCapability = Readonly<{
 export type RuntimeServiceCapabilities = Readonly<{
   desktop_model_source: RuntimeServiceCapability;
   provider_link: RuntimeServiceCapability;
+  runtime_gateway?: RuntimeServiceCapability;
 }>;
 
 export type RuntimeServiceBindingState = 'unbound' | 'connecting' | 'bound' | 'unsupported' | 'error' | 'expired';
@@ -305,6 +306,7 @@ export function normalizeRuntimeServiceSnapshot(
     : {};
   const desktopModelSourceCapability = normalizeCapability(capabilitiesRecord.desktop_model_source);
   const providerLinkCapability = normalizeCapability(capabilitiesRecord.provider_link);
+  const runtimeGatewayCapability = normalizeCapability(capabilitiesRecord.runtime_gateway);
   const bindingsRecord = record.bindings && typeof record.bindings === 'object'
     ? record.bindings as Record<string, unknown>
     : {};
@@ -340,6 +342,7 @@ export function normalizeRuntimeServiceSnapshot(
     capabilities: {
       desktop_model_source: desktopModelSourceCapability,
       provider_link: providerLinkCapability,
+      runtime_gateway: runtimeGatewayCapability,
     },
     bindings: {
       desktop_model_source: normalizeBinding(bindingsRecord.desktop_model_source, desktopModelSourceCapability),
@@ -462,6 +465,11 @@ export function runtimeServiceProviderLinkBinding(
 export function runtimeServiceSupportsProviderLink(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
   return snapshot?.capabilities?.provider_link?.supported === true
     && (snapshot.capabilities.provider_link.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
+}
+
+export function runtimeServiceSupportsRuntimeGateway(snapshot: RuntimeServiceSnapshot | null | undefined): boolean {
+  return snapshot?.capabilities?.runtime_gateway?.supported === true
+    && (snapshot.capabilities.runtime_gateway.bind_method || 'runtime_control_v1') === 'runtime_control_v1';
 }
 
 export function runtimeServiceProviderConnectionState(

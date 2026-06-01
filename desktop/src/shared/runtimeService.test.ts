@@ -15,6 +15,7 @@ import {
   runtimeServiceProviderLinkMatches,
   runtimeServiceSupportsDesktopModelSource,
   runtimeServiceSupportsProviderLink,
+  runtimeServiceSupportsRuntimeGateway,
 } from './runtimeService';
 
 describe('runtimeService', () => {
@@ -223,6 +224,31 @@ describe('runtimeService', () => {
       provider_id: 'example_control_plane',
       env_public_id: 'env_other',
     })).toBe(false);
+  });
+
+  it('normalizes Runtime Gateway capability while keeping old snapshots unsupported', () => {
+    const supported = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v1.2.3',
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      capabilities: {
+        runtime_gateway: {
+          supported: true,
+        },
+      },
+      active_workload: {},
+    });
+    const legacy = normalizeRuntimeServiceSnapshot({
+      runtime_version: 'v1.2.2',
+      compatibility: 'compatible',
+      open_readiness: { state: 'openable' },
+      active_workload: {},
+    });
+
+    expect(runtimeServiceSupportsRuntimeGateway(supported)).toBe(true);
+    expect(supported.capabilities?.runtime_gateway?.bind_method).toBe('runtime_control_v1');
+    expect(runtimeServiceSupportsRuntimeGateway(legacy)).toBe(false);
+    expect(legacy.capabilities?.runtime_gateway).toEqual({ supported: false });
   });
 
   it('marks Provider Link unsupported when runtime capability is absent', () => {

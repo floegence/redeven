@@ -195,6 +195,41 @@ func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.
 	}
 }
 
+func TestNormalizeSnapshotNormalizesRuntimeGatewayCapability(t *testing.T) {
+	snapshot := NormalizeSnapshot(Snapshot{
+		ProtocolVersion: ProtocolVersion,
+		ServiceOwner:    OwnerDesktop,
+		DesktopManaged:  true,
+		Compatibility:   CompatibilityCompatible,
+		Capabilities: Capabilities{
+			RuntimeGateway: Capability{Supported: true},
+		},
+	})
+
+	if !snapshot.Capabilities.RuntimeGateway.Supported {
+		t.Fatalf("RuntimeGateway.Supported = false, want true")
+	}
+	if snapshot.Capabilities.RuntimeGateway.BindMethod != RuntimeControlBindMethodV1 {
+		t.Fatalf("BindMethod = %q, want %q", snapshot.Capabilities.RuntimeGateway.BindMethod, RuntimeControlBindMethodV1)
+	}
+}
+
+func TestNormalizeSnapshotKeepsMissingRuntimeGatewayCapabilityUnsupported(t *testing.T) {
+	snapshot := NormalizeSnapshot(Snapshot{
+		ProtocolVersion: ProtocolVersion,
+		ServiceOwner:    OwnerDesktop,
+		DesktopManaged:  true,
+		Compatibility:   CompatibilityCompatible,
+	})
+
+	if snapshot.Capabilities.RuntimeGateway.Supported {
+		t.Fatalf("RuntimeGateway.Supported = true, want false")
+	}
+	if snapshot.Capabilities.RuntimeGateway.BindMethod != "" {
+		t.Fatalf("BindMethod = %q, want empty", snapshot.Capabilities.RuntimeGateway.BindMethod)
+	}
+}
+
 func TestNormalizeSnapshotPreservesProviderLinkRemoteEnabledFact(t *testing.T) {
 	snapshot := NormalizeSnapshot(Snapshot{
 		ProtocolVersion: ProtocolVersion,
