@@ -106,6 +106,11 @@ export type FlowerThreadSnapshot = Readonly<{
   thread_id: string;
   title: string;
   model_id: string;
+  home_host_id?: string;
+  home_host_kind?: 'global' | 'env_local';
+  origin_env_public_id?: string;
+  primary_target_id?: string;
+  active_target_ids?: readonly string[];
   created_at_ms: number;
   updated_at_ms: number;
   status?: FlowerThreadStatus;
@@ -126,9 +131,55 @@ export type FlowerThreadListItem = Readonly<{
   read_only_reason?: string;
 }>;
 
+export type FlowerHandlerRef = Readonly<{
+  handler_id: string;
+  handler_kind: 'global' | 'env_local';
+  display_name: string;
+  carrier_kind?: 'desktop' | 'server' | 'runtime';
+  state: 'online' | 'unreachable';
+  selection_source?: 'router_default' | 'user_selected';
+  supports_thread_kinds: readonly string[];
+  allowed_target_ids: readonly string[];
+}>;
+
+export type FlowerRouterDecision = Readonly<{
+  decision_id: string;
+  decision_revision: number;
+  route: 'flower_host' | 'env_local' | 'blocked' | 'needs_clarification';
+  reason_code: string;
+  selected_handler: FlowerHandlerRef | null;
+  available_handlers: readonly FlowerHandlerRef[];
+  handler_selection: Readonly<{
+    can_switch: boolean;
+    lock_reason?: string | null;
+    requires_user_visible_confirmation: boolean;
+  }>;
+  decision_scope: Readonly<{
+    thread_kind: 'chat' | 'task';
+    context_envelope_id?: string | null;
+    client_surface: string;
+    primary_target_id?: string | null;
+  }>;
+  ui_chips: readonly Readonly<{ kind: string; label: string; tone: string }>[];
+  blocker?: Readonly<{ code: string; message: string }> | null;
+}>;
+
+export type FlowerResolveHandlerInput = Readonly<{
+  thread_kind?: 'chat' | 'task';
+  context_envelope_id?: string | null;
+  client_surface?: string;
+  primary_target_id?: string | null;
+  requested_handler_id?: string;
+}>;
+
 export type FlowerSendMessageInput = Readonly<{
   thread_id?: string;
   prompt: string;
+  decision?: FlowerRouterDecision | null;
+}>;
+
+export type FlowerSendMessageFailure = Error & Readonly<{
+  fresh_decision?: FlowerRouterDecision;
 }>;
 
 export type FlowerSurfaceHostDescriptor = Readonly<{
@@ -144,5 +195,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
+  loadThread?: (threadID: string) => Promise<FlowerThreadSnapshot>;
+  resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   sendMessage: (input: FlowerSendMessageInput) => Promise<FlowerThreadSnapshot>;
 }>;

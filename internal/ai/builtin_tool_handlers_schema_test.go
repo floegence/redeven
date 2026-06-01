@@ -67,6 +67,45 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 	}
 }
 
+func TestBuiltInToolDefinitions_TargetScopedToolsExposeTargetID(t *testing.T) {
+	t.Parallel()
+
+	targetScoped := map[string]bool{
+		"file.read":     true,
+		"file.edit":     true,
+		"file.write":    true,
+		"apply_patch":   true,
+		"terminal.exec": true,
+	}
+	seen := map[string]bool{}
+	for _, def := range builtInToolDefinitions() {
+		if !targetScoped[def.Name] {
+			continue
+		}
+		seen[def.Name] = true
+		var schema map[string]any
+		if err := json.Unmarshal(def.InputSchema, &schema); err != nil {
+			t.Fatalf("%s parse schema: %v", def.Name, err)
+		}
+		props, ok := schema["properties"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s schema missing properties", def.Name)
+		}
+		targetID, ok := props["target_id"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s schema missing target_id", def.Name)
+		}
+		if fmt.Sprint(targetID["type"]) != "string" {
+			t.Fatalf("%s target_id type=%v, want string", def.Name, targetID["type"])
+		}
+	}
+	for name := range targetScoped {
+		if !seen[name] {
+			t.Fatalf("target-scoped tool %s not found", name)
+		}
+	}
+}
+
 func validateProviderRootSchema(t *testing.T, toolName string, schema map[string]any) {
 	t.Helper()
 	disallowed := []string{"oneOf", "anyOf", "allOf", "enum", "not"}

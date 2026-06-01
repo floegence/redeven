@@ -452,11 +452,20 @@ func builtInToolDefinitions() []ToolDef {
 		b, _ := json.Marshal(m)
 		return b
 	}
+	targetIDProperty := map[string]any{"type": "string", "description": "Target environment id selected by Flower before the thread starts."}
+	withTargetID := func(properties map[string]any) map[string]any {
+		out := make(map[string]any, len(properties)+1)
+		for key, value := range properties {
+			out[key] = value
+		}
+		out["target_id"] = targetIDProperty
+		return out
+	}
 	defs := []ToolDef{
 		{
 			Name:             "file.read",
 			Description:      "Read a project-scoped file from disk. Use this as the primary file inspection tool before editing.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to read. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Optional 1-based starting line for partial reads."}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit, "description": "Optional maximum number of lines to return for partial reads."}}, "required": []string{"file_path"}, "additionalProperties": false}),
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to read. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Optional 1-based starting line for partial reads."}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit, "description": "Optional maximum number of lines to return for partial reads."}}), "required": []string{"file_path"}, "additionalProperties": false}),
 			ParallelSafe:     true,
 			Mutating:         false,
 			RequiresApproval: false,
@@ -467,7 +476,7 @@ func builtInToolDefinitions() []ToolDef {
 		{
 			Name:             "file.edit",
 			Description:      "Edit a project-scoped text file by replacing an exact old_string with new_string. Use this as the primary deterministic in-place editing tool.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to edit. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "old_string": map[string]any{"type": "string", "minLength": 1, "description": "Exact text to replace."}, "new_string": map[string]any{"type": "string", "description": "Replacement text. It must differ from old_string."}, "replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence instead of requiring a single exact match."}}, "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to edit. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "old_string": map[string]any{"type": "string", "minLength": 1, "description": "Exact text to replace."}, "new_string": map[string]any{"type": "string", "description": "Replacement text. It must differ from old_string."}, "replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence instead of requiring a single exact match."}}), "required": []string{"file_path", "old_string", "new_string"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         true,
 			RequiresApproval: true,
@@ -478,7 +487,7 @@ func builtInToolDefinitions() []ToolDef {
 		{
 			Name:             "file.write",
 			Description:      "Write the full content of a project-scoped text file. Use this to create files or replace an entire file deterministically.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to write. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "content": map[string]any{"type": "string", "description": "Full file content to write."}}, "required": []string{"file_path", "content"}, "additionalProperties": false}),
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to write. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "content": map[string]any{"type": "string", "description": "Full file content to write."}}), "required": []string{"file_path", "content"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         true,
 			RequiresApproval: true,
@@ -489,7 +498,7 @@ func builtInToolDefinitions() []ToolDef {
 		{
 			Name:             "apply_patch",
 			Description:      "Apply a patch to files on the local machine. This is a compatibility editing tool; prefer file.edit or file.write for normal changes. Use ONLY the canonical Begin/End Patch format with relative paths. The patch must be one document from `*** Begin Patch` to `*** End Patch` using `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"patch": map[string]any{"type": "string", "description": "Entire patch text in canonical Begin/End Patch format. Start with `*** Begin Patch`, end with `*** End Patch`, use relative paths, and include file operations such as `*** Update File:` plus `@@` hunks."}}, "required": []string{"patch"}, "additionalProperties": false}),
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "Entire patch text in canonical Begin/End Patch format. Start with `*** Begin Patch`, end with `*** End Patch`, use relative paths, and include file operations such as `*** Update File:` plus `@@` hunks."}}), "required": []string{"patch"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         true,
 			RequiresApproval: true,
@@ -500,7 +509,7 @@ func builtInToolDefinitions() []ToolDef {
 		{
 			Name:             "terminal.exec",
 			Description:      "Execute a shell command on the local machine. Defaults to the run working directory. When timeout_ms is omitted, the runtime applies a 2-minute default timeout; any requested timeout is capped at 10 minutes.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 600000}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 600000}, "description": map[string]any{"type": "string", "maxLength": 200}}), "required": []string{"command"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         false,
 			RequiresApproval: false,

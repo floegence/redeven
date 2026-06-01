@@ -117,8 +117,9 @@ describe('shared Flower UI boundary', () => {
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
 
     expect(settingsSrc).toContain('flower-settings-current-model');
-    expect(settingsSrc).toContain('flower-settings-policy-grid');
+    expect(settingsSrc).toContain('flower-settings-policy-section');
     expect(settingsSrc).toContain('flower-settings-provider-gallery');
+    expect(settingsSrc).toContain('flower-settings-disabled-guide');
     expect(settingsSrc).toContain('FlowerProviderBrandIcon');
     expect(settingsSrc).toContain('FlowerAutoSaveIndicator');
     expect(settingsSrc).toContain('aria-label={copy().backToChat}');
@@ -129,6 +130,7 @@ describe('shared Flower UI boundary', () => {
     expect(settingsSrc).not.toContain('Save changes');
     expect(cssSrc).toContain('--flower-chat-surface: var(--redeven-surface-main, var(--background));');
     expect(cssSrc).toContain('flower-settings-current-model');
+    expect(cssSrc).not.toContain('.flower-settings-provider-card {\\n  display: flex;\\n  min-width: 0;\\n  align-items: flex-start;\\n  gap: 0.75rem;\\n  border: 1px');
   });
 
   it('keeps Env App icon imports as re-exports from the shared Flower icon source', () => {

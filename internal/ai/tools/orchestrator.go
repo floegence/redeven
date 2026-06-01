@@ -49,8 +49,15 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 		if code == "" {
 			code = "invalid_arguments"
 		}
+		errorCode := ErrorCodeInvalidArguments
+		switch code {
+		case "missing_target_id":
+			errorCode = ErrorCodeTargetRequired
+		case "target_executor_unavailable":
+			errorCode = ErrorCodeTargetUnavailable
+		}
 		out := &ToolError{
-			Code:      ErrorCodeInvalidArguments,
+			Code:      errorCode,
 			Message:   strings.TrimSpace(err.Error()),
 			Retryable: false,
 			Meta: map[string]any{

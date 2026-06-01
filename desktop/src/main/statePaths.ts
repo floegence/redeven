@@ -23,7 +23,6 @@ export type DesktopFlowerHostStateLayout = Readonly<{
   configPath: string;
   secretsFile: string;
   targetCacheFile: string;
-  threadsFile: string;
 }>;
 
 export function resolveStateRoot(
@@ -90,6 +89,5 @@ export function flowerHostStateLayout(
     configPath: path.join(stateDir, 'config.json'),
     secretsFile: path.join(stateDir, 'secrets.json'),
     targetCacheFile: path.join(stateDir, 'target-cache.json'),
-    threadsFile: path.join(stateDir, 'threads.json'),
   };
 }

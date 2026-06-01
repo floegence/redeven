@@ -79,6 +79,36 @@ function desktopThread(): DesktopFlowerHostThread {
   };
 }
 
+function desktopDecision() {
+  return {
+    decision_id: 'decision-1',
+    decision_revision: 1,
+    route: 'flower_host' as const,
+    reason_code: 'host_available',
+    selected_handler: {
+      handler_id: 'flower-host',
+      handler_kind: 'global' as const,
+      display_name: 'Flower Host',
+      carrier_kind: 'desktop' as const,
+      state: 'online' as const,
+      selection_source: 'router_default' as const,
+      supports_thread_kinds: ['chat'],
+      allowed_target_ids: [],
+    },
+    available_handlers: [],
+    handler_selection: {
+      can_switch: false,
+      requires_user_visible_confirmation: true,
+    },
+    decision_scope: {
+      thread_kind: 'chat' as const,
+      client_surface: 'flower_surface',
+    },
+    ui_chips: [],
+    blocker: null,
+  };
+}
+
 describe('Flower surface adapter for the host', () => {
   it('maps Desktop settings to the shared Flower snapshot without dropping model metadata', () => {
     const snapshot = mapDesktopFlowerSnapshot(desktopSnapshot());
@@ -124,6 +154,7 @@ describe('Flower surface adapter for the host', () => {
     const loadFlowerHostSettings = vi.fn(async () => ({ ok: true as const, snapshot: desktopSnapshot() }));
     const saveFlowerHostSettings = vi.fn(async () => ({ ok: true as const, snapshot: desktopSnapshot() }));
     const listFlowerHostThreads = vi.fn(async () => ({ ok: true as const, threads: [desktopThread()] }));
+    const resolveFlowerHostHandler = vi.fn(async () => ({ ok: true as const, decision: desktopDecision() }));
     const sendFlowerHostChat = vi.fn(async () => ({ ok: true as const, thread: desktopThread() }));
     const bridge: DesktopSettingsBridge = {
       save: vi.fn(),
@@ -131,6 +162,8 @@ describe('Flower surface adapter for the host', () => {
       loadFlowerHostSettings,
       saveFlowerHostSettings,
       listFlowerHostThreads,
+      loadFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
+      resolveFlowerHostHandler,
       sendFlowerHostChat,
     };
     const adapter = createDesktopFlowerSurfaceAdapter(bridge);
@@ -143,12 +176,68 @@ describe('Flower surface adapter for the host', () => {
         providers: [],
       },
     })).resolves.toMatchObject({ config: { current_model_id: 'default/gpt-4.1' } });
+    await expect(adapter.resolveHandler()).resolves.toMatchObject({ decision_id: 'decision-1' });
     await expect(adapter.sendMessage({ prompt: 'hello' })).resolves.toMatchObject({ thread_id: 'thread-1' });
 
     expect(loadFlowerHostSettings).toHaveBeenCalledTimes(1);
     expect(saveFlowerHostSettings).toHaveBeenCalledTimes(1);
     expect(listFlowerHostThreads).toHaveBeenCalledTimes(1);
+    expect(resolveFlowerHostHandler).toHaveBeenCalledTimes(1);
     expect(sendFlowerHostChat).toHaveBeenCalledWith({ thread_id: undefined, prompt: 'hello' });
+  });
+
+  it('passes the visible handler decision when creating a new host thread', async () => {
+    const decision = desktopDecision();
+    const sendFlowerHostChat = vi.fn(async () => ({ ok: true as const, thread: desktopThread() }));
+    const bridge: DesktopSettingsBridge = {
+      save: vi.fn(),
+      cancel: vi.fn(),
+      loadFlowerHostSettings: vi.fn(async () => ({ ok: true as const, snapshot: desktopSnapshot() })),
+      saveFlowerHostSettings: vi.fn(async () => ({ ok: true as const, snapshot: desktopSnapshot() })),
+      listFlowerHostThreads: vi.fn(async () => ({ ok: true as const, threads: [] })),
+      loadFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
+      resolveFlowerHostHandler: vi.fn(async () => ({ ok: true as const, decision })),
+      sendFlowerHostChat,
+    };
+    const adapter = createDesktopFlowerSurfaceAdapter(bridge);
+
+    await adapter.sendMessage({ prompt: 'hello', decision });
+
+    expect(sendFlowerHostChat).toHaveBeenCalledWith({
+      thread_id: undefined,
+      prompt: 'hello',
+      decision_id: 'decision-1',
+      decision_revision: 1,
+      selected_handler_id: 'flower-host',
+      thread_kind: 'chat',
+      primary_target_id: undefined,
+      client_surface: 'flower_surface',
+    });
+  });
+
+  it('preserves fresh handler decisions returned by create failures', async () => {
+    const decision = desktopDecision();
+    const sendFlowerHostChat = vi.fn(async () => ({
+      ok: false as const,
+      error: 'DECISION_REVISION_EXPIRED: Flower handler selection is no longer current.',
+      fresh_decision: decision,
+    }));
+    const bridge: DesktopSettingsBridge = {
+      save: vi.fn(),
+      cancel: vi.fn(),
+      loadFlowerHostSettings: vi.fn(async () => ({ ok: true as const, snapshot: desktopSnapshot() })),
+      saveFlowerHostSettings: vi.fn(async () => ({ ok: true as const, snapshot: desktopSnapshot() })),
+      listFlowerHostThreads: vi.fn(async () => ({ ok: true as const, threads: [] })),
+      loadFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
+      resolveFlowerHostHandler: vi.fn(async () => ({ ok: true as const, decision })),
+      sendFlowerHostChat,
+    };
+    const adapter = createDesktopFlowerSurfaceAdapter(bridge);
+
+    await expect(adapter.sendMessage({ prompt: 'hello', decision })).rejects.toMatchObject({
+      message: 'DECISION_REVISION_EXPIRED: Flower handler selection is no longer current.',
+      fresh_decision: decision,
+    });
   });
 
   it('projects Desktop threads into shared Flower thread snapshots', () => {

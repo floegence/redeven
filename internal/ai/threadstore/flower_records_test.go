@@ -29,15 +29,20 @@ func TestStore_FlowerThreadMetadataTransferAndHandoffRoundTrip(t *testing.T) {
 	}
 
 	if err := s.UpsertFlowerThreadMetadata(ctx, FlowerThreadMetadata{
-		EndpointID:      "env_1",
-		ThreadID:        "th_dest",
-		OwnerKind:       "handoff",
-		OwnerID:         "handoff_1",
-		ParentThreadID:  "th_src",
-		ParentRunID:     "run_src",
-		ContextJSON:     `{"source":"files"}`,
-		ActionJSON:      `{"action_id":"assistant.ask.flower"}`,
-		UpdatedAtUnixMs: 100,
+		EndpointID:          "env_1",
+		ThreadID:            "th_dest",
+		OwnerKind:           "handoff",
+		OwnerID:             "handoff_1",
+		ParentThreadID:      "th_src",
+		ParentRunID:         "run_src",
+		ContextJSON:         `{"source":"files"}`,
+		ActionJSON:          `{"action_id":"assistant.ask.flower"}`,
+		HomeHostID:          "flower-host:test",
+		HomeHostKind:        "global",
+		OriginEnvPublicID:   "env_a",
+		PrimaryTargetID:     "cp:test:env_a",
+		ActiveTargetIDsJSON: `["cp:test:env_a"]`,
+		UpdatedAtUnixMs:     100,
 	}); err != nil {
 		t.Fatalf("UpsertFlowerThreadMetadata: %v", err)
 	}
@@ -47,6 +52,9 @@ func TestStore_FlowerThreadMetadataTransferAndHandoffRoundTrip(t *testing.T) {
 	}
 	if meta == nil || meta.OwnerKind != "handoff" || meta.ParentThreadID != "th_src" || meta.ContextJSON == "" {
 		t.Fatalf("unexpected metadata: %#v", meta)
+	}
+	if meta.HomeHostID != "flower-host:test" || meta.HomeHostKind != "global" || meta.PrimaryTargetID != "cp:test:env_a" {
+		t.Fatalf("unexpected ownership metadata: %#v", meta)
 	}
 
 	plan, err := flowertransfer.BuildTransferPlan(flowertransfer.TransferManifest{

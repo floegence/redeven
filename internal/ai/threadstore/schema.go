@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 28
+	threadstoreCurrentSchemaVersion = 29
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -56,6 +56,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 25, ToVersion: 26, Apply: migrateThreadstoreToV26},
 			{FromVersion: 26, ToVersion: 27, Apply: migrateThreadstoreToV27},
 			{FromVersion: 27, ToVersion: 28, Apply: migrateThreadstoreToV28},
+			{FromVersion: 28, ToVersion: 29, Apply: migrateThreadstoreToV29},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -244,6 +245,10 @@ func migrateThreadstoreToV27(tx *sql.Tx) error {
 
 func migrateThreadstoreToV28(tx *sql.Tx) error {
 	return ensureFlowerTransferHandoffTablesTx(tx)
+}
+
+func migrateThreadstoreToV29(tx *sql.Tx) error {
+	return ensureFlowerThreadMetadataOwnershipColumnsTx(tx)
 }
 
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
@@ -825,6 +830,11 @@ CREATE TABLE IF NOT EXISTS ai_flower_thread_metadata (
   context_json TEXT NOT NULL DEFAULT '{}',
   action_json TEXT NOT NULL DEFAULT '{}',
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  home_host_id TEXT NOT NULL DEFAULT '',
+  home_host_kind TEXT NOT NULL DEFAULT '',
+  origin_env_public_id TEXT NOT NULL DEFAULT '',
+  primary_target_id TEXT NOT NULL DEFAULT '',
+  active_target_ids_json TEXT NOT NULL DEFAULT '[]',
   PRIMARY KEY(endpoint_id, thread_id)
 );
 CREATE INDEX IF NOT EXISTS idx_ai_flower_thread_metadata_owner ON ai_flower_thread_metadata(endpoint_id, owner_kind, owner_id);
@@ -864,6 +874,32 @@ CREATE INDEX IF NOT EXISTS idx_ai_flower_handoffs_source ON ai_flower_handoffs(e
 CREATE INDEX IF NOT EXISTS idx_ai_flower_handoffs_destination ON ai_flower_handoffs(endpoint_id, destination_thread_id, updated_at_unix_ms DESC);
 `); err != nil {
 		return err
+	}
+	return nil
+}
+
+func ensureFlowerThreadMetadataOwnershipColumnsTx(tx *sql.Tx) error {
+	columns := []struct {
+		name string
+		def  string
+	}{
+		{name: "home_host_id", def: "TEXT NOT NULL DEFAULT ''"},
+		{name: "home_host_kind", def: "TEXT NOT NULL DEFAULT ''"},
+		{name: "origin_env_public_id", def: "TEXT NOT NULL DEFAULT ''"},
+		{name: "primary_target_id", def: "TEXT NOT NULL DEFAULT ''"},
+		{name: "active_target_ids_json", def: "TEXT NOT NULL DEFAULT '[]'"},
+	}
+	for _, column := range columns {
+		has, err := sqliteutil.ColumnExistsTx(tx, "ai_flower_thread_metadata", column.name)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := tx.Exec(fmt.Sprintf(`ALTER TABLE ai_flower_thread_metadata ADD COLUMN %s %s`, column.name, column.def)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -1026,6 +1062,8 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_flower_thread_metadata": {
 			"endpoint_id", "thread_id", "owner_kind", "owner_id", "parent_thread_id",
 			"parent_run_id", "context_json", "action_json", "updated_at_unix_ms",
+			"home_host_id", "home_host_kind", "origin_env_public_id", "primary_target_id",
+			"active_target_ids_json",
 		},
 		"ai_flower_transfers": {
 			"transfer_id", "endpoint_id", "source_thread_id", "destination_thread_id",

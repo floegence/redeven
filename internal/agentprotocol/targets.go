@@ -10,7 +10,6 @@ import (
 
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/runtimemanagement"
-	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
 const (
@@ -26,7 +25,6 @@ const (
 	CapabilityTerminal      = "terminal"
 	CapabilityMonitor       = "monitor"
 	CapabilityGit           = "git"
-	CapabilityFlower        = "flower"
 	CapabilityCodexGateway  = "codex_gateway"
 )
 
@@ -103,25 +101,11 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 			CapabilityGit,
 			CapabilityCodexGateway,
 		)
-		if runtimeHasBoundDesktopModelSource(runtimeStatus.RuntimeService) {
-			target.Capabilities = append(target.Capabilities, CapabilityFlower)
-		}
 		target.UnavailableReasonCode = ""
 	}
 
 	target.Capabilities = sortedUniqueStrings(target.Capabilities)
 	return TargetCatalog{Targets: []TargetDescriptor{target}}, nil
-}
-
-func runtimeHasBoundDesktopModelSource(snapshot runtimeservice.Snapshot) bool {
-	if !snapshot.Capabilities.DesktopModelSource.Supported {
-		return false
-	}
-	binding := snapshot.Bindings.DesktopModelSource
-	if binding.State != runtimeservice.BindingStateBound {
-		return false
-	}
-	return binding.ModelCount > 0
 }
 
 func ResolveTarget(catalog TargetCatalog, rawTarget string) (TargetDescriptor, error) {

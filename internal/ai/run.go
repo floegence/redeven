@@ -68,6 +68,8 @@ type runOptions struct {
 	ForceReadonlyExec     bool
 	NoUserInteraction     bool
 	SkillManager          *skillManager
+	ToolTargetPolicy      ToolTargetPolicy
+	TargetToolExecutor    TargetToolExecutor
 
 	terminalExecRunner func(ctx context.Context, inv terminalExecInvocation) (terminalExecOutcome, error)
 }
@@ -163,6 +165,8 @@ type run struct {
 	toolAllowlist         map[string]struct{}
 	forceReadonlyExec     bool
 	noUserInteraction     bool
+	toolTargetPolicy      ToolTargetPolicy
+	targetToolExecutor    TargetToolExecutor
 
 	skillManager    *skillManager
 	subagentManager *subagentManager
@@ -232,6 +236,8 @@ func newRun(opts runOptions) *run {
 		activityOrder:             make([]string, 0, 16),
 		subagentDepth:             opts.SubagentDepth,
 		forceReadonlyExec:         opts.ForceReadonlyExec,
+		toolTargetPolicy:          normalizeToolTargetPolicy(opts.ToolTargetPolicy),
+		targetToolExecutor:        opts.TargetToolExecutor,
 		skillManager:              opts.SkillManager,
 		noUserInteraction:         opts.NoUserInteraction,
 		allowSubagentDelegate: func() bool {
@@ -3008,6 +3014,9 @@ func (r *run) emitSourcesToolBlock(source string) {
 }
 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, toolName string, args map[string]any) (any, error) {
+	if r.shouldRouteTargetTool(toolName) {
+		return r.execTargetTool(ctx, toolID, toolName, args)
+	}
 	switch toolName {
 	case "file.read":
 		if meta == nil || !meta.CanRead {
@@ -3235,6 +3244,76 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", toolName)
 	}
+}
+
+func (r *run) shouldRouteTargetTool(toolName string) bool {
+	return toolRequiresTarget(toolName) && r.toolTargetPolicy.requiresExplicitTarget()
+}
+
+func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string, args map[string]any) (any, error) {
+	policy := normalizeToolTargetPolicy(r.toolTargetPolicy)
+	targetID := targetIDFromToolArgs(args, policy.DefaultTargetID)
+	if strings.TrimSpace(targetID) == "" {
+		return nil, &targetToolPolicyError{
+			code:   "missing_target_id",
+			tool:   toolName,
+			target: "",
+		}
+	}
+	if r.targetToolExecutor == nil {
+		return nil, &targetToolPolicyError{
+			code:   "target_executor_unavailable",
+			tool:   toolName,
+			target: targetID,
+		}
+	}
+	forwardedArgs := StripTargetToolArgs(args)
+	rawArgs, err := json.Marshal(forwardedArgs)
+	if err != nil {
+		return nil, errors.New("invalid args")
+	}
+	result, err := r.targetToolExecutor.ExecuteTargetTool(ctx, TargetToolCall{
+		ToolCallID:           strings.TrimSpace(toolID),
+		TargetID:             targetID,
+		ToolName:             strings.TrimSpace(toolName),
+		Arguments:            rawArgs,
+		RequiredCapabilities: requiredTargetCapabilities(toolName),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.Result, nil
+}
+
+type targetToolPolicyError struct {
+	code   string
+	tool   string
+	target string
+}
+
+func (e *targetToolPolicyError) Error() string {
+	switch strings.TrimSpace(e.code) {
+	case "missing_target_id":
+		return "target_id is required for target-scoped Flower tools"
+	case "target_executor_unavailable":
+		return "target tool executor is unavailable"
+	default:
+		return "target tool policy denied the tool call"
+	}
+}
+
+func (e *targetToolPolicyError) InvalidArgumentsCode() string {
+	return e.code
+}
+
+func (e *targetToolPolicyError) InvalidArgumentsMeta() map[string]any {
+	out := map[string]any{
+		"tool_name": strings.TrimSpace(e.tool),
+	}
+	if strings.TrimSpace(e.target) != "" {
+		out["target_id"] = strings.TrimSpace(e.target)
+	}
+	return out
 }
 
 var (

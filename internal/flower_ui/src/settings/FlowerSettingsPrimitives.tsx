@@ -1,5 +1,5 @@
 import type { Component, JSX } from 'solid-js';
-import { Show, createMemo } from 'solid-js';
+import { Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Check } from '@floegence/floe-webapp-core/icons';
 
@@ -11,15 +11,18 @@ export const FlowerSubSectionHeader: Component<{
   description?: string;
   actions?: JSX.Element;
 }> = (props) => (
-  <div class="flex min-w-0 items-start justify-between gap-3">
-    <div class="min-w-0">
-      <h3 class="text-sm font-semibold text-foreground">{props.title}</h3>
+  <div class="flower-settings-subsection-header">
+    <div class="flower-settings-subsection-copy">
+      <div class="flower-settings-subsection-title-row">
+        <h3 class="flower-settings-subsection-title">{props.title}</h3>
+        <span class="flower-settings-subsection-rule" aria-hidden="true" />
+      </div>
       <Show when={props.description}>
-        <p class="mt-1 text-xs leading-5 text-muted-foreground">{props.description}</p>
+        <p class="flower-settings-subsection-description">{props.description}</p>
       </Show>
     </div>
     <Show when={props.actions}>
-      <div class="flex flex-shrink-0 items-center gap-2">{props.actions}</div>
+      <div class="flower-settings-subsection-actions">{props.actions}</div>
     </Show>
   </div>
 );
@@ -70,11 +73,32 @@ export const FlowerAutoSaveIndicator: Component<{
   savedAt?: number | null;
 }> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings.autoSave;
+  const [lastVisibleSavedAt, setLastVisibleSavedAt] = createSignal<number | null>(null);
+  const [showSaved, setShowSaved] = createSignal(false);
+  let savedTimer: number | undefined;
+
+  createEffect(() => {
+    const savedAt = props.savedAt ?? null;
+    if (!savedAt || savedAt === lastVisibleSavedAt()) return;
+    setLastVisibleSavedAt(savedAt);
+    setShowSaved(true);
+    if (savedTimer != null) {
+      window.clearTimeout(savedTimer);
+    }
+    savedTimer = window.setTimeout(() => {
+      setShowSaved(false);
+      savedTimer = undefined;
+    }, 1800);
+  });
+  onCleanup(() => {
+    if (savedTimer != null) window.clearTimeout(savedTimer);
+  });
+
   const label = createMemo(() => {
     if (props.saving) return copy().saving;
     if (props.error) return copy().saveFailed;
     if (props.dirty) return copy().unsaved;
-    if (props.savedAt) return copy().saved;
+    if (showSaved()) return copy().saved;
     return copy().ready;
   });
   const tone = createMemo<'default' | 'success' | 'warning'>(() => {
@@ -84,13 +108,15 @@ export const FlowerAutoSaveIndicator: Component<{
   });
 
   return (
-    <FlowerSettingsPill tone={tone()}>
-      <span class="inline-flex min-w-0 items-center gap-1.5">
-        <Show when={props.error} fallback={<Check class="h-3 w-3" />}>
-          <AlertTriangle class="h-3 w-3" />
-        </Show>
-        {label()}
-      </span>
-    </FlowerSettingsPill>
+    <Show when={props.error || props.dirty || props.saving || showSaved()}>
+      <FlowerSettingsPill tone={tone()}>
+        <span class="inline-flex min-w-0 items-center gap-1.5">
+          <Show when={props.error} fallback={<Check class="h-3 w-3" />}>
+            <AlertTriangle class="h-3 w-3" />
+          </Show>
+          {label()}
+        </span>
+      </FlowerSettingsPill>
+    </Show>
   );
 };

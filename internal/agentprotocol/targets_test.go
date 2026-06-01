@@ -100,7 +100,6 @@ func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
 	assertHasCapability(t, target.Capabilities, CapabilityLocalUI)
 	assertHasCapability(t, target.Capabilities, CapabilityRemoteControl)
 	assertHasCapability(t, target.Capabilities, CapabilityCodexGateway)
-	assertLacksCapability(t, target.Capabilities, CapabilityFlower)
 }
 
 func TestDiscoverTargetsWithoutConfigReturnsInspectableTarget(t *testing.T) {
@@ -123,7 +122,7 @@ func TestDiscoverTargetsWithoutConfigReturnsInspectableTarget(t *testing.T) {
 	}
 }
 
-func TestDiscoverTargetsAdvertisesFlowerFromBoundDesktopModelSource(t *testing.T) {
+func TestDiscoverTargetsDoesNotAdvertiseFlowerFromBoundDesktopModelSource(t *testing.T) {
 	t.Parallel()
 
 	stateRoot, err := os.MkdirTemp("/tmp", "rdv-targets-model-source-*")
@@ -173,7 +172,7 @@ func TestDiscoverTargetsAdvertisesFlowerFromBoundDesktopModelSource(t *testing.T
 	if err != nil {
 		t.Fatalf("DiscoverTargets() error = %v", err)
 	}
-	assertHasCapability(t, catalog.Targets[0].Capabilities, CapabilityFlower)
+	assertLacksCapability(t, catalog.Targets[0].Capabilities, "flower")
 }
 
 func TestDiscoverTargetsDoesNotAdvertiseFlowerForUnboundDesktopModelSource(t *testing.T) {
@@ -223,7 +222,7 @@ func TestDiscoverTargetsDoesNotAdvertiseFlowerForUnboundDesktopModelSource(t *te
 	if err != nil {
 		t.Fatalf("DiscoverTargets() error = %v", err)
 	}
-	assertLacksCapability(t, catalog.Targets[0].Capabilities, CapabilityFlower)
+	assertLacksCapability(t, catalog.Targets[0].Capabilities, "flower")
 }
 
 func TestResolveTarget(t *testing.T) {

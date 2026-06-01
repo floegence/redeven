@@ -63,6 +63,9 @@ import type {
   DesktopSettingsSurfaceSnapshot,
 } from '../shared/desktopSettingsSurface';
 import type {
+  DesktopFlowerHostRouterDecision,
+} from '../shared/flowerHostSettingsIPC';
+import type {
   DesktopEnvironmentEntry,
   DesktopEnvironmentOpenAction,
   DesktopLauncherActionProgress,
@@ -930,6 +933,64 @@ function buildEnvironmentFlowerPrompt(
   return lines.join('\n');
 }
 
+function environmentFlowerPrimaryTargetID(environment: DesktopEnvironmentEntry): string {
+  return trimString(environment.env_public_id)
+    || trimString(environment.provider_runtime_link_target?.id)
+    || trimString(environment.managed_runtime_target_id)
+    || trimString(environment.managed_runtime_placement_target_id)
+    || trimString(environment.id);
+}
+
+function buildEnvironmentFlowerContextEnvelope(environment: DesktopEnvironmentEntry): {
+  id: string;
+  provider: string;
+  raw: Record<string, unknown>;
+} {
+  const targetID = environmentFlowerPrimaryTargetID(environment);
+  const actionID = `desktop-env-${targetID}`;
+  return {
+    id: actionID,
+    provider: 'desktop_welcome',
+    raw: {
+      schema_version: 2,
+      action_id: actionID,
+      provider: 'desktop_welcome',
+      target: {
+        target_id: targetID,
+        locality: 'auto',
+      },
+      source: {
+        surface: 'desktop_welcome_environment_card',
+        surface_id: trimString(environment.id),
+      },
+      execution_context: {
+        current_target_id: targetID,
+        source_env_public_id: trimString(environment.env_public_id),
+        host_hint: 'auto',
+        session_source: 'desktop_welcome',
+      },
+      context: [
+        {
+          kind: 'text_snapshot',
+          title: environment.label,
+          detail: environmentFlowerContextSummary(createDesktopI18n('en-US'), environment),
+          content: [
+            `Environment: ${environment.label}`,
+            `Environment ID: ${environment.id}`,
+            trimString(environment.local_ui_url) ? `Local UI URL: ${trimString(environment.local_ui_url)}` : '',
+            trimString(environment.env_public_id) ? `Env public ID: ${trimString(environment.env_public_id)}` : '',
+          ].filter(Boolean).join('\n'),
+        },
+      ],
+      presentation: {
+        label: environment.label,
+        priority: 100,
+        status_label: 'Ready',
+      },
+    },
+  };
+}
+
 type EnvironmentFlowerComposerState = Readonly<{
   environment: DesktopEnvironmentEntry;
   anchor?: { x: number; y: number };
@@ -1717,6 +1778,8 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
     || typeof candidate.loadFlowerHostSettings !== 'function'
     || typeof candidate.saveFlowerHostSettings !== 'function'
     || typeof candidate.listFlowerHostThreads !== 'function'
+    || typeof candidate.loadFlowerHostThread !== 'function'
+    || typeof candidate.resolveFlowerHostHandler !== 'function'
     || typeof candidate.sendFlowerHostChat !== 'function'
   ) {
     return null;
@@ -4222,16 +4285,47 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  async function sendEnvironmentFlowerPrompt(environment: DesktopEnvironmentEntry, prompt: string): Promise<string> {
+  async function resolveEnvironmentFlowerHandler(environment: DesktopEnvironmentEntry): Promise<DesktopFlowerHostRouterDecision> {
+    const envelope = buildEnvironmentFlowerContextEnvelope(environment);
+    const result = await props.runtime.settings.resolveFlowerHostHandler({
+      thread_kind: 'task',
+      context_envelope_id: envelope.id,
+      client_surface: 'welcome_ask_flower',
+      primary_target_id: environmentFlowerPrimaryTargetID(environment),
+    });
+    if (!result.ok) {
+      throw new Error(result.error);
+    }
+    return result.decision;
+  }
+
+  async function sendEnvironmentFlowerPrompt(
+    environment: DesktopEnvironmentEntry,
+    prompt: string,
+    decision: DesktopFlowerHostRouterDecision,
+  ): Promise<string> {
     const cleanPrompt = trimString(prompt);
     if (!cleanPrompt) {
       return '';
     }
+    const envelope = buildEnvironmentFlowerContextEnvelope(environment);
     const result = await props.runtime.settings.sendFlowerHostChat({
       prompt: buildEnvironmentFlowerPrompt(i18n(), environment, cleanPrompt),
       reply_mode: 'background',
+      decision_id: decision.decision_id,
+      decision_revision: decision.decision_revision,
+      selected_handler_id: decision.selected_handler?.handler_id,
+      thread_kind: decision.decision_scope.thread_kind,
+      primary_target_id: decision.decision_scope.primary_target_id,
+      context_envelope: envelope,
+      client_surface: decision.decision_scope.client_surface,
+      context_action: envelope.raw,
     });
     if (!result.ok) {
+      if ('fresh_decision' in result) {
+        // Surface stale routing state through the existing composer validation path.
+        throw Object.assign(new Error(result.error), { fresh_decision: result.fresh_decision });
+      }
       throw new Error(result.error);
     }
     setFocusedFlowerThreadID(result.thread.thread_id);
@@ -4461,8 +4555,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         i18n={i18n()}
         state={environmentFlowerComposer()}
         onClose={closeEnvironmentFlowerComposer}
+        resolveFlowerHandler={resolveEnvironmentFlowerHandler}
         sendFlowerPrompt={sendEnvironmentFlowerPrompt}
-        openFlowerHostSurface={openFlowerHostSurface}
+        openFlowerHostSurface={async () => {
+          closeEnvironmentFlowerComposer();
+          await openFlowerHostSurface();
+        }}
       />
 
       <DesktopActionToastViewport
@@ -5567,11 +5665,15 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
   i18n: DesktopI18n;
   state: EnvironmentFlowerComposerState | null;
   onClose: () => void;
-  sendFlowerPrompt: (environment: DesktopEnvironmentEntry, prompt: string) => Promise<string>;
+  resolveFlowerHandler: (environment: DesktopEnvironmentEntry) => Promise<DesktopFlowerHostRouterDecision>;
+  sendFlowerPrompt: (environment: DesktopEnvironmentEntry, prompt: string, decision: DesktopFlowerHostRouterDecision) => Promise<string>;
   openFlowerHostSurface: () => Promise<void>;
 }>) {
   const [prompt, setPrompt] = createSignal('');
   const [validationError, setValidationError] = createSignal('');
+  const [handlerDecision, setHandlerDecision] = createSignal<DesktopFlowerHostRouterDecision | null>(null);
+  const [handlerResolving, setHandlerResolving] = createSignal(false);
+  const [handlerError, setHandlerError] = createSignal('');
   const [isComposing, setIsComposing] = createSignal(false);
   const [sending, setSending] = createSignal(false);
   const [viewport, setViewport] = createSignal(currentViewportSize());
@@ -5582,14 +5684,64 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
   });
   const sizing = createMemo(() => resolveEnvironmentFlowerWindowSizing(viewport()));
   const position = createMemo(() => resolveEnvironmentFlowerWindowPosition(props.state?.anchor, sizing()));
-  const canSend = createMemo(() => trimString(prompt()) !== '' && !sending());
+  const selectedHandler = createMemo(() => handlerDecision()?.selected_handler ?? null);
+  const handlerReady = createMemo(() => {
+    const decision = handlerDecision();
+    return !!decision?.selected_handler && !decision.blocker && decision.route !== 'blocked';
+  });
+  const handlerNeedsSetup = createMemo(() => {
+    const decision = handlerDecision();
+    return decision?.reason_code === 'host_not_configured' || decision?.blocker?.code === 'host_not_configured';
+  });
+  const canSend = createMemo(() => trimString(prompt()) !== '' && !sending() && handlerReady());
   let textareaRef: HTMLTextAreaElement | undefined;
+  let handlerRequestSeq = 0;
+
+  const resolveCurrentHandler = (current = environment()) => {
+    handlerRequestSeq += 1;
+    const seq = handlerRequestSeq;
+    setHandlerDecision(null);
+    setHandlerError('');
+    setValidationError('');
+    if (!current) {
+      setHandlerResolving(false);
+      return;
+    }
+    setHandlerResolving(true);
+    void props.resolveFlowerHandler(current)
+      .then((decision) => {
+        if (seq !== handlerRequestSeq) {
+          return;
+        }
+        setHandlerDecision(decision);
+        setHandlerError(decision.blocker?.message ?? '');
+      })
+      .catch((error) => {
+        if (seq !== handlerRequestSeq) {
+          return;
+        }
+        setHandlerError(getErrorMessage(error));
+      })
+      .finally(() => {
+        if (seq === handlerRequestSeq) {
+          setHandlerResolving(false);
+        }
+      });
+  };
 
   createEffect(() => {
     if (!props.state) {
       setPrompt('');
       setValidationError('');
+      setHandlerDecision(null);
+      setHandlerError('');
+      setHandlerResolving(false);
     }
+  });
+
+  createEffect(() => {
+    const current = environment();
+    resolveCurrentHandler(current);
   });
 
   createEffect(() => {
@@ -5640,14 +5792,26 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
       requestAnimationFrame(() => textareaRef?.focus());
       return;
     }
+    const decision = handlerDecision();
+    if (!decision?.selected_handler || decision.blocker || decision.route === 'blocked') {
+      setValidationError(handlerError() || props.i18n.t('flowerSurface.chat.handlerUnavailable'));
+      return;
+    }
     setSending(true);
     try {
-      await props.sendFlowerPrompt(current, message);
+      await props.sendFlowerPrompt(current, message, decision);
       await props.openFlowerHostSurface();
       setPrompt('');
       props.onClose();
     } catch (error) {
-      setValidationError(getErrorMessage(error));
+      let displayError = getErrorMessage(error);
+      if (typeof error === 'object' && error && 'fresh_decision' in error) {
+        const freshDecision = (error as { fresh_decision?: DesktopFlowerHostRouterDecision }).fresh_decision ?? null;
+        setHandlerDecision(freshDecision);
+        displayError = freshDecision?.blocker?.message ?? displayError;
+        setHandlerError(displayError);
+      }
+      setValidationError(displayError);
       requestAnimationFrame(() => textareaRef?.focus());
     } finally {
       setSending(false);
@@ -5709,56 +5873,87 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
                 </div>
               </div>
             </div>
-            <div class="redeven-environment-flower-window__dock">
-              <div class="redeven-environment-flower-window__composer flower-chat-input-floating chat-input-container">
-                <div class="redeven-environment-flower-window__composer-heading">
-                  <span>{props.i18n.t('environmentCenter.askFlowerCardPromptLabel')}</span>
-                  <span>{sending() ? props.i18n.t('environmentCenter.askFlowerCardSending') : props.i18n.t('environmentCenter.askFlowerCardReplyHint')}</span>
+            <Show
+              when={!handlerNeedsSetup()}
+              fallback={(
+                <div class="redeven-environment-flower-window__dock">
+                  <div class="redeven-environment-flower-window__setup">
+                    <div class="redeven-environment-flower-window__setup-copy">
+                      <div class="redeven-environment-flower-window__setup-title">{props.i18n.t('flowerSurface.chat.setupNeeded')}</div>
+                      <div class="redeven-environment-flower-window__setup-description">{props.i18n.t('flowerSurface.chat.needsProviderNotice')}</div>
+                    </div>
+                    <button
+                      type="button"
+                      class="redeven-environment-flower-window__setup-button"
+                      disabled={sending()}
+                      onClick={() => void props.openFlowerHostSurface()}
+                    >
+                      <Settings class="h-3.5 w-3.5" />
+                      <span>{props.i18n.t('flowerSurface.chat.openSettings')}</span>
+                    </button>
+                  </div>
                 </div>
-                <div class="redeven-environment-flower-window__input-shell">
-                  <textarea
-                    ref={textareaRef}
-                    class="redeven-environment-flower-window__textarea flower-chat-input-textarea"
-                    value={prompt()}
-                    placeholder={props.i18n.t('environmentCenter.askFlowerCardPlaceholder')}
-                    disabled={sending()}
-                    onInput={(event) => {
-                      setPrompt(event.currentTarget.value);
-                      if (validationError()) {
-                        setValidationError('');
-                      }
-                    }}
-                    onCompositionStart={() => setIsComposing(true)}
-                    onCompositionEnd={(event) => {
-                      setIsComposing(false);
-                      setPrompt(event.currentTarget.value);
-                      if (validationError()) {
-                        setValidationError('');
-                      }
-                    }}
-                    onKeyDown={(event) => {
-                      if (shouldSubmitOnEnterKeydown(event)) {
-                        event.preventDefault();
-                        void sendToFlower();
-                      }
-                    }}
-                  />
-                  <Show when={validationError()}>
-                    {(error) => <div class="redeven-environment-flower-window__error">{error()}</div>}
-                  </Show>
-                  <button
-                    type="button"
-                    class={cn('redeven-environment-flower-window__send chat-input-send-btn flower-chat-input-send-btn', canSend() && 'chat-input-send-btn-active')}
-                    disabled={!canSend()}
-                    aria-label={props.i18n.t('environmentCenter.askFlowerCardSend')}
-                    title={props.i18n.t('environmentCenter.askFlowerCardSend')}
-                    onClick={() => void sendToFlower()}
-                  >
-                    <Send class="h-3.5 w-3.5" />
-                  </button>
+              )}
+            >
+              <div class="redeven-environment-flower-window__dock">
+                <div class="redeven-environment-flower-window__composer flower-chat-input-floating chat-input-container">
+                  <div class="redeven-environment-flower-window__composer-heading">
+                    <span>{props.i18n.t('environmentCenter.askFlowerCardPromptLabel')}</span>
+                    <span>{sending() ? props.i18n.t('environmentCenter.askFlowerCardSending') : props.i18n.t('environmentCenter.askFlowerCardReplyHint')}</span>
+                  </div>
+                  <div class="redeven-environment-flower-window__handler" data-unavailable={!handlerReady() && !handlerResolving() ? '' : undefined}>
+                    <span class="redeven-environment-flower-window__handler-label">{props.i18n.t('flowerSurface.chat.handlerSelectionLabel')}</span>
+                    <span class="redeven-environment-flower-window__handler-chip">
+                      {handlerResolving()
+                        ? props.i18n.t('flowerSurface.chat.handlerResolving')
+                        : selectedHandler()?.display_name || props.i18n.t('flowerSurface.chat.handlerUnavailable')}
+                    </span>
+                  </div>
+                  <div class="redeven-environment-flower-window__input-shell">
+                    <textarea
+                      ref={textareaRef}
+                      class="redeven-environment-flower-window__textarea flower-chat-input-textarea"
+                      value={prompt()}
+                      placeholder={props.i18n.t('environmentCenter.askFlowerCardPlaceholder')}
+                      disabled={sending()}
+                      onInput={(event) => {
+                        setPrompt(event.currentTarget.value);
+                        if (validationError()) {
+                          setValidationError('');
+                        }
+                      }}
+                      onCompositionStart={() => setIsComposing(true)}
+                      onCompositionEnd={(event) => {
+                        setIsComposing(false);
+                        setPrompt(event.currentTarget.value);
+                        if (validationError()) {
+                          setValidationError('');
+                        }
+                      }}
+                      onKeyDown={(event) => {
+                        if (shouldSubmitOnEnterKeydown(event)) {
+                          event.preventDefault();
+                          void sendToFlower();
+                        }
+                      }}
+                    />
+                    <Show when={validationError()}>
+                      {(error) => <div class="redeven-environment-flower-window__error">{error()}</div>}
+                    </Show>
+                    <button
+                      type="button"
+                      class={cn('redeven-environment-flower-window__send chat-input-send-btn flower-chat-input-send-btn', canSend() && 'chat-input-send-btn-active')}
+                      disabled={!canSend()}
+                      aria-label={props.i18n.t('environmentCenter.askFlowerCardSend')}
+                      title={props.i18n.t('environmentCenter.askFlowerCardSend')}
+                      onClick={() => void sendToFlower()}
+                    >
+                      <Send class="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            </Show>
           </div>
         </FloatingWindow>
       )}

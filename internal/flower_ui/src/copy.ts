@@ -52,6 +52,7 @@ export type FlowerSettingsCopy = Readonly<{
   active: string;
   disabled: string;
   enable: string;
+  setup: string;
   disable: string;
   disabledNotice: string;
   currentModel: string;
@@ -194,8 +195,13 @@ export type FlowerSurfaceCopy = Readonly<{
     openSettings: string;
     placeholder: string;
     fromHost: (host: string) => string;
+    handlerSelectionLabel: string;
+    handlerResolving: string;
+    handlerUnavailable: string;
+    handlerRetry: string;
     send: string;
     conversationsAria: string;
+    resizeConversationsLabel: string;
     entryLabel: string;
     newChat: string;
   }>;
@@ -207,18 +213,23 @@ export type FlowerSurfaceCopy = Readonly<{
 export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   chat: {
     loadingSettings: 'Flower settings are still loading.',
-    configureProviderBeforeChat: 'Configure a provider and model before starting a Flower chat.',
+    configureProviderBeforeChat: 'Set up a model provider to start chatting.',
     enterMessageBeforeSending: 'Enter a message before sending.',
     titleFallback: 'Ask Flower',
     ready: 'Ready',
-    setupNeeded: 'Setup needed',
+    setupNeeded: 'Set up Flower',
     settingsLabel: 'Flower settings',
-    needsProviderNotice: 'Flower needs a provider, model, and required provider keys before this host can start a chat.',
+    needsProviderNotice: 'Choose a provider, model, and API key once. Flower will use that setup for new chats from this host.',
     openSettings: 'Open Settings',
     placeholder: 'Ask Flower anything...',
     fromHost: (host) => `From ${host}`,
+    handlerSelectionLabel: 'Handled by',
+    handlerResolving: 'Choosing Flower...',
+    handlerUnavailable: 'Flower handler unavailable',
+    handlerRetry: 'Retry',
     send: 'Send',
     conversationsAria: 'Flower conversations',
+    resizeConversationsLabel: 'Resize conversations',
     entryLabel: 'Flower',
     newChat: 'New chat',
   },
@@ -283,10 +294,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     title: 'Flower Settings',
     backToChat: 'Back to chat',
     description: 'Configure models and execution policy for this Flower Host.',
-    active: 'Active',
+    active: 'Flower is enabled on this host',
     disabled: 'Disabled',
     enable: 'Enable',
-    disable: 'Disable',
+    setup: 'Set up Flower',
+    disable: 'Disable Flower',
     disabledNotice: 'Flower is disabled on this host. Provider settings are kept, but chat stays unavailable until Flower is enabled.',
     currentModel: 'Current model',
     noModelSelected: 'No model selected',

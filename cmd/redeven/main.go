@@ -72,6 +72,8 @@ func (c *cli) run(args []string) int {
 		return c.desktopRuntimeStopCmd(args[1:])
 	case "desktop-model-source":
 		return c.desktopModelSourceCmd(args[1:])
+	case "flower-host":
+		return c.flowerHostCmd(args[1:])
 	case "search":
 		return c.searchCmd(args[1:])
 	case "knowledge":
