@@ -15,13 +15,15 @@ const (
 type ErrorCode string
 
 const (
-	ErrorCodeNotFound         ErrorCode = "NOT_FOUND"
-	ErrorCodeInvalidPath      ErrorCode = "INVALID_PATH"
-	ErrorCodeInvalidArguments ErrorCode = "INVALID_ARGUMENTS"
-	ErrorCodePermissionDenied ErrorCode = "PERMISSION_DENIED"
-	ErrorCodeTimeout          ErrorCode = "TIMEOUT"
-	ErrorCodeCanceled         ErrorCode = "CANCELED"
-	ErrorCodeUnknown          ErrorCode = "UNKNOWN"
+	ErrorCodeNotFound          ErrorCode = "NOT_FOUND"
+	ErrorCodeInvalidPath       ErrorCode = "INVALID_PATH"
+	ErrorCodeInvalidArguments  ErrorCode = "INVALID_ARGUMENTS"
+	ErrorCodePermissionDenied  ErrorCode = "PERMISSION_DENIED"
+	ErrorCodeTargetRequired    ErrorCode = "TARGET_REQUIRED"
+	ErrorCodeTargetUnavailable ErrorCode = "TARGET_UNAVAILABLE"
+	ErrorCodeTimeout           ErrorCode = "TIMEOUT"
+	ErrorCodeCanceled          ErrorCode = "CANCELED"
+	ErrorCodeUnknown           ErrorCode = "UNKNOWN"
 )
 
 // ToolError carries structured tool failure metadata.

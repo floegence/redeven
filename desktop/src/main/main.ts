@@ -56,11 +56,16 @@ import {
 import {
   createDesktopFlowerHostSafeStorageSecretCodec,
   defaultDesktopFlowerHostPaths,
-  listDesktopFlowerHostThreads,
-  loadDesktopFlowerHostSettings,
-  saveDesktopFlowerHostSettings,
-  sendDesktopFlowerHostChat,
 } from './desktopFlowerHostState';
+import {
+  listFlowerHostThreadsViaBridge,
+  loadFlowerHostThreadViaBridge,
+  loadFlowerHostSettingsViaBridge,
+  saveFlowerHostSettingsViaBridge,
+  sendFlowerHostChatResultViaBridge,
+  resolveFlowerHostHandlerViaBridge,
+  shutdownFlowerHostBridge,
+} from './flowerHostBridge';
 import {
   buildLocalEnvironmentDesktopTarget,
   buildManagedLocalRuntimeDesktopTarget,
@@ -252,13 +257,18 @@ import {
 } from '../shared/settingsIPC';
 import {
   LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL,
+  LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL,
   SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL,
   SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  type DesktopFlowerHostResolveHandlerRequest,
   type DesktopFlowerHostSendChatRequest,
   type DesktopFlowerHostSettingsDraft,
   type ListDesktopFlowerHostThreadsResult,
+  type LoadDesktopFlowerHostThreadResult,
   type LoadDesktopFlowerHostSettingsResult,
+  type ResolveDesktopFlowerHostHandlerResult,
   type SendDesktopFlowerHostChatResult,
   type SaveDesktopFlowerHostSettingsResult,
 } from '../shared/flowerHostSettingsIPC';
@@ -2187,6 +2197,30 @@ function flowerHostPaths() {
 
 function flowerHostCodec() {
   return createDesktopFlowerHostSafeStorageSecretCodec(safeStorage);
+}
+
+function flowerHostBridgeArgs() {
+  return {
+    executablePath: bundledRuntimeExecutablePath(),
+    paths: flowerHostPaths(),
+    codec: flowerHostCodec(),
+    resolveControlPlaneAccessToken: resolveFlowerHostControlPlaneAccessToken,
+    tempRoot: app.getPath('temp'),
+    onLog: (stream: 'stdout' | 'stderr', chunk: string) => {
+      const text = compact(chunk);
+      if (text) console.log(`[redeven:flower-host:${stream}] ${text}`);
+    },
+  };
+}
+
+async function resolveFlowerHostControlPlaneAccessToken(providerOrigin: string): Promise<string> {
+  const preferences = await loadDesktopPreferencesCached();
+  const controlPlane = savedControlPlaneByOrigin(preferences, providerOrigin);
+  if (!controlPlane) {
+    return '';
+  }
+  const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
+  return compact(authorized.accessToken);
 }
 
 function desktopStateStore(): DesktopStateStore {
@@ -11413,6 +11447,9 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   await Promise.allSettled([...sessionCloseTasks.values()]);
   await Promise.allSettled(sshDisconnectPromises);
   await Promise.allSettled(runtimePlacementDisconnectPromises);
+  await shutdownFlowerHostBridge().catch((error) => {
+    console.warn('[redeven:flower-host] failed to shut down cleanly:', error);
+  });
   await Promise.race([
     Promise.allSettled([
       ...pendingSSHStartPromises,
@@ -11847,7 +11884,7 @@ if (!app.requestSingleInstanceLock()) {
     try {
       return {
         ok: true,
-        snapshot: await loadDesktopFlowerHostSettings(flowerHostPaths()),
+        snapshot: await loadFlowerHostSettingsViaBridge(flowerHostBridgeArgs()),
       };
     } catch (error) {
       return {
@@ -11860,7 +11897,10 @@ if (!app.requestSingleInstanceLock()) {
     try {
       return {
         ok: true,
-        snapshot: await saveDesktopFlowerHostSettings(flowerHostPaths(), draft, flowerHostCodec()),
+        snapshot: await saveFlowerHostSettingsViaBridge({
+          ...flowerHostBridgeArgs(),
+          draft,
+        }),
       };
     } catch (error) {
       return {
@@ -11873,7 +11913,39 @@ if (!app.requestSingleInstanceLock()) {
     try {
       return {
         ok: true,
-        threads: await listDesktopFlowerHostThreads(flowerHostPaths()),
+        threads: await listFlowerHostThreadsViaBridge(flowerHostBridgeArgs()),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  ipcMain.handle(LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL, async (_event, threadID: string): Promise<LoadDesktopFlowerHostThreadResult> => {
+    try {
+      return {
+        ok: true,
+        thread: await loadFlowerHostThreadViaBridge({
+          ...flowerHostBridgeArgs(),
+          threadID,
+        }),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  });
+  ipcMain.handle(RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL, async (_event, request?: DesktopFlowerHostResolveHandlerRequest): Promise<ResolveDesktopFlowerHostHandlerResult> => {
+    try {
+      return {
+        ok: true,
+        decision: await resolveFlowerHostHandlerViaBridge({
+          ...flowerHostBridgeArgs(),
+          request,
+        }),
       };
     } catch (error) {
       return {
@@ -11884,9 +11956,35 @@ if (!app.requestSingleInstanceLock()) {
   });
   ipcMain.handle(SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL, async (_event, request: DesktopFlowerHostSendChatRequest): Promise<SendDesktopFlowerHostChatResult> => {
     try {
+      const result = await sendFlowerHostChatResultViaBridge({
+        ...flowerHostBridgeArgs(),
+        request,
+      });
+      if (result.create_failure) {
+        const code = compact(result.create_failure.error?.code);
+        const message = compact(result.create_failure.error?.message);
+        const error = [code, message].filter(Boolean).join(': ') || 'Flower handler selection is no longer available.';
+        if (result.create_failure.fresh_decision) {
+          return {
+            ok: false,
+            error,
+            fresh_decision: result.create_failure.fresh_decision,
+          };
+        }
+        return {
+          ok: false,
+          error,
+        };
+      }
+      if (!result.thread) {
+        return {
+          ok: false,
+          error: 'Flower Host did not return a conversation.',
+        };
+      }
       return {
         ok: true,
-        thread: await sendDesktopFlowerHostChat(flowerHostPaths(), request, flowerHostCodec()),
+        thread: result.thread,
       };
     } catch (error) {
       return {

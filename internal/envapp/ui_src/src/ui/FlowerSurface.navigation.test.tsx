@@ -5,7 +5,13 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FlowerSurface } from '../../../../flower_ui/src';
-import type { FlowerSurfaceAdapter, FlowerSettingsSnapshot, FlowerThreadSnapshot } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type {
+  FlowerRouterDecision,
+  FlowerSettingsDraft,
+  FlowerSurfaceAdapter,
+  FlowerSettingsSnapshot,
+  FlowerThreadSnapshot,
+} from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...values: Array<string | false | null | undefined>) => values.filter(Boolean).join(' '),
@@ -22,6 +28,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Code: Icon,
     FolderOpen: Icon,
     GitBranch: Icon,
+    GripVertical: Icon,
     Pencil: Icon,
     Plus: Icon,
     Refresh: Icon,
@@ -95,11 +102,15 @@ function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function settingsSnapshot(configured = true): FlowerSettingsSnapshot {
   return {
     config: {
       schema_version: 1,
-      enabled: true,
+      enabled: configured,
       current_model_id: 'openai/gpt-5.2',
       execution_policy: {
         require_user_approval: true,
@@ -159,6 +170,52 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
   };
 }
 
+function decision(): FlowerRouterDecision {
+  return {
+    decision_id: 'decision-1',
+    decision_revision: 1,
+    route: 'flower_host',
+    reason_code: 'host_available',
+    selected_handler: {
+      handler_id: 'host',
+      handler_kind: 'global',
+      display_name: 'This host',
+      carrier_kind: 'desktop',
+      state: 'online',
+      selection_source: 'router_default',
+      supports_thread_kinds: ['chat'],
+      allowed_target_ids: [],
+    },
+    available_handlers: [],
+    handler_selection: {
+      can_switch: false,
+      requires_user_visible_confirmation: true,
+    },
+    decision_scope: {
+      thread_kind: 'chat',
+      client_surface: 'flower_surface',
+    },
+    ui_chips: [{ kind: 'host', label: 'Using Flower Host', tone: 'normal' }],
+    blocker: null,
+  };
+}
+
+function blockedDecision(): FlowerRouterDecision {
+  return {
+    ...decision(),
+    decision_id: 'decision-blocked',
+    route: 'blocked',
+    reason_code: 'host_not_configured',
+    selected_handler: null,
+    available_handlers: [],
+    ui_chips: [{ kind: 'host', label: 'Flower needs setup', tone: 'warning' }],
+    blocker: {
+      code: 'host_not_configured',
+      message: 'Configure Flower before chatting.',
+    },
+  };
+}
+
 function adapter(configured = true): FlowerSurfaceAdapter {
   return {
     host: {
@@ -174,7 +231,35 @@ function adapter(configured = true): FlowerSurfaceAdapter {
       thread(),
       thread({ thread_id: 'thread-2', title: 'Review branch', updated_at_ms: 3 }),
     ]),
+    resolveHandler: vi.fn(async () => decision()),
     sendMessage: vi.fn(async () => thread()),
+  };
+}
+
+function mutableSettingsAdapter(configured = true): FlowerSurfaceAdapter & Readonly<{
+  saveSettings: ReturnType<typeof vi.fn>;
+}> {
+  let snapshot = settingsSnapshot(configured);
+  return {
+    ...adapter(configured),
+    loadSettings: vi.fn(async () => snapshot),
+    saveSettings: vi.fn(async (draft: FlowerSettingsDraft) => {
+      snapshot = {
+        ...snapshot,
+        config: {
+          ...draft.config,
+          providers: draft.config.providers.map((provider) => ({
+            id: provider.id,
+            name: provider.name,
+            type: provider.type,
+            base_url: provider.base_url,
+            web_search: provider.web_search,
+            models: provider.models,
+          })),
+        },
+      };
+      return snapshot;
+    }),
   };
 }
 
@@ -241,7 +326,72 @@ describe('FlowerSurface navigation', () => {
     expect(host.querySelector('.flower-host-chat-header-title')?.textContent).toBe('Deploy plan');
   });
 
-  it('keeps new chat in the composer when the provider is not ready', async () => {
+  it('keeps enable guidance beside the disabled notice and only shows saved feedback briefly', async () => {
+    const surfaceAdapter = mutableSettingsAdapter(false);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <FlowerSurface adapter={surfaceAdapter} />, host);
+    await flush();
+
+    (host.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(host.querySelector('.flower-settings-title-feedback')?.textContent).toBe('');
+    expect(host.querySelector('.flower-settings-disabled-guide')?.textContent).toContain('Flower is disabled on this host.');
+    expect(host.querySelector('.flower-settings-disabled-guide')?.textContent).toContain('Enable');
+    expect(host.textContent).not.toContain('Flower is enabled on this host');
+    expect(host.querySelector('.flower-settings-current-model')).toBeNull();
+
+    const enableButton = Array.from(host.querySelectorAll('.flower-settings-disabled-guide button'))
+      .find((button) => button.textContent?.includes('Enable')) as HTMLButtonElement | undefined;
+    enableButton?.click();
+    await wait(850);
+    await flush();
+
+    expect(surfaceAdapter.saveSettings).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('.flower-settings-disabled-guide')).toBeNull();
+    expect(host.textContent).not.toContain('Flower is enabled on this host');
+    expect(host.querySelector('.flower-settings-title-feedback')?.textContent).toContain('Disable Flower');
+    expect(host.querySelector('.flower-settings-title-feedback')?.textContent).toContain('Saved');
+
+    await wait(1850);
+    await flush();
+
+    expect(host.querySelector('.flower-settings-title-feedback')?.textContent).toBe('Disable Flower');
+  }, 5000);
+
+  it('opens provider setup instead of enabling a disabled Flower with no model', async () => {
+    const surfaceAdapter = mutableSettingsAdapter(false);
+    const emptySnapshot: FlowerSettingsSnapshot = {
+      ...settingsSnapshot(false),
+      config: {
+        ...settingsSnapshot(false).config,
+        current_model_id: '',
+        providers: [],
+      },
+      provider_secrets: [],
+    };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <FlowerSurface adapter={{
+      ...surfaceAdapter,
+      loadSettings: vi.fn(async () => emptySnapshot),
+      saveSettings: vi.fn(async () => emptySnapshot),
+    }} />, host);
+    await flush();
+
+    (host.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(host.querySelector('.flower-settings-disabled-guide')?.textContent).toContain('Set up Flower');
+    (Array.from(host.querySelectorAll('.flower-settings-disabled-guide button'))
+      .find((button) => button.textContent?.includes('Set up Flower')) as HTMLButtonElement).click();
+    await flush();
+
+    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Provider type');
+  });
+
+  it('guides setup from new chat when the provider is not ready', async () => {
     const host = renderSurface(false);
     await flush();
 
@@ -254,8 +404,10 @@ describe('FlowerSurface navigation', () => {
 
     expect(host.querySelector('.flower-host-chat-shell')).toBeTruthy();
     expect(host.querySelector('.flower-host-chat-header-title')?.textContent).toBe('Ask Flower');
-    expect(host.textContent).toContain('Flower needs a provider, model, and required provider keys before this host can start a chat.');
-    expect((host.querySelector('.flower-host-composer button') as HTMLButtonElement | null)?.disabled).toBe(true);
+    expect(host.querySelector('.flower-host-setup-guide')?.textContent).toContain('Set up Flower');
+    expect(host.querySelector('.flower-host-setup-guide')?.textContent).toContain('Choose a provider, model, and API key once.');
+    expect(host.querySelector('.flower-host-handler-error')).toBeNull();
+    expect(host.textContent).not.toContain('Flower handler unavailable');
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
     textarea!.value = 'hello';
@@ -263,8 +415,84 @@ describe('FlowerSurface navigation', () => {
     textarea!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await flush();
 
-    expect(host.querySelector('.flower-host-chat-shell')).toBeTruthy();
-    expect(host.querySelector('.flower-component-main > div[aria-hidden="true"] button[aria-label="Back to chat"]')).toBeTruthy();
-    expect(host.textContent).toContain('Configure a provider and model before starting a Flower chat.');
+    expect(host.querySelector('.flower-host-chat-shell')).toBeNull();
+    expect(host.querySelector('button[aria-label="Back to chat"]')).toBeTruthy();
+  });
+
+  it('shows handler errors near the composer instead of pretending a host is selected', async () => {
+    const failingAdapter = {
+      ...adapter(true),
+      resolveHandler: vi.fn(async () => blockedDecision()),
+    };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <FlowerSurface adapter={failingAdapter} />, host);
+    await flush();
+
+    expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Flower handler unavailable');
+    expect(host.querySelector('.flower-host-handler-error')?.textContent).toContain('Configure Flower before chatting.');
+    expect(host.querySelector('.flower-host-handler-retry')?.textContent).toContain('Retry');
+    expect((Array.from(host.querySelectorAll('.flower-host-composer button')) as HTMLButtonElement[])
+      .some((button) => button.textContent?.includes('Send') && button.disabled)).toBe(true);
+  });
+
+  it('switches handlers before the first message and keeps the selected thread decision-free', async () => {
+    const secondDecision: FlowerRouterDecision = {
+      ...decision(),
+      decision_id: 'decision-2',
+      selected_handler: {
+        ...decision().selected_handler!,
+        handler_id: 'host-2',
+        display_name: 'Lab Flower',
+        selection_source: 'user_selected',
+      },
+      available_handlers: [
+        decision().selected_handler!,
+        {
+          ...decision().selected_handler!,
+          handler_id: 'host-2',
+          display_name: 'Lab Flower',
+        },
+      ],
+      handler_selection: {
+        can_switch: true,
+        requires_user_visible_confirmation: true,
+      },
+    };
+    const resolveHandler = vi.fn(async (input?: any) => (input?.requested_handler_id === 'host-2' ? secondDecision : {
+      ...decision(),
+      available_handlers: secondDecision.available_handlers,
+      handler_selection: secondDecision.handler_selection,
+    }));
+    const sendMessage = vi.fn(async () => thread());
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <FlowerSurface adapter={{
+      ...adapter(true),
+      resolveHandler,
+      sendMessage,
+    }} />, host);
+    await flush();
+
+    const selector = host.querySelector('.flower-host-handler-picker select') as HTMLSelectElement;
+    selector.value = 'host-2';
+    selector.dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+
+    expect(resolveHandler).toHaveBeenCalledWith(expect.objectContaining({ requested_handler_id: 'host-2' }));
+
+    (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+    await flush();
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'continue';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      thread_id: 'thread-1',
+      prompt: 'continue',
+      decision: null,
+    }));
   });
 });

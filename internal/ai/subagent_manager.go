@@ -1186,6 +1186,8 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			ToolAllowlist:         append([]string(nil), task.allowedTools...),
 			ForceReadonlyExec:     task.forceReadonlyExec,
 			NoUserInteraction:     true,
+			ToolTargetPolicy:      m.parent.toolTargetPolicy,
+			TargetToolExecutor:    m.parent.targetToolExecutor,
 		})
 
 		req := RunRequest{

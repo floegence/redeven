@@ -55,6 +55,9 @@ type Options struct {
 
 	Config *config.AIConfig
 
+	ToolTargetPolicy   ToolTargetPolicy
+	TargetToolExecutor TargetToolExecutor
+
 	// PersistOpTimeout is the per-operation timeout for threadstore persistence
 	// (SQLite reads/writes). It must NOT be tied to a run's overall lifetime, since
 	// runs can take much longer than persistence should ever be allowed to block.
@@ -110,6 +113,9 @@ type Service struct {
 
 	resolveProviderKey  func(providerID string) (string, bool, error)
 	resolveWebSearchKey func(providerID string) (string, bool, error)
+
+	toolTargetPolicy   ToolTargetPolicy
+	targetToolExecutor TargetToolExecutor
 
 	mu                      sync.Mutex
 	activeRunByTh           map[string]string // <endpoint_id>:<thread_id> -> run_id
@@ -214,6 +220,10 @@ func NewService(opts Options) (*Service, error) {
 	if resolveWebSearchKey == nil {
 		resolveWebSearchKey = func(string) (string, bool, error) { return "", false, nil }
 	}
+	toolTargetPolicy := normalizeToolTargetPolicy(opts.ToolTargetPolicy)
+	if toolTargetPolicy.requiresExplicitTarget() && opts.TargetToolExecutor == nil {
+		return nil, errors.New("explicit target tool policy requires TargetToolExecutor")
+	}
 	maxWall := opts.RunMaxWallTime
 	if maxWall <= 0 {
 		maxWall = defaultRunMaxWallTime
@@ -268,6 +278,8 @@ func NewService(opts Options) (*Service, error) {
 		streamWriteTO:                streamWTO,
 		resolveProviderKey:           resolveProviderKey,
 		resolveWebSearchKey:          resolveWebSearchKey,
+		toolTargetPolicy:             toolTargetPolicy,
+		targetToolExecutor:           opts.TargetToolExecutor,
 		activeRunByTh:                make(map[string]string),
 		runs:                         make(map[string]*run),
 		realtimeWriters:              make(map[*rpc.Server]*aiSinkWriter),
@@ -357,6 +369,59 @@ func (s *Service) Enabled() bool {
 	enabled := s.cfg != nil || (s.desktopModelSource != nil && s.desktopModelSource.hasBinding())
 	s.mu.Unlock()
 	return enabled
+}
+
+func (s *Service) ToolTargetPolicy() ToolTargetPolicy {
+	if s == nil {
+		return normalizeToolTargetPolicy(ToolTargetPolicy{})
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return normalizeToolTargetPolicy(s.toolTargetPolicy)
+}
+
+func (s *Service) UpsertFlowerThreadMetadata(ctx context.Context, rec threadstore.FlowerThreadMetadata) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	pctx, cancel := context.WithTimeout(ctx, persistTO)
+	defer cancel()
+	return db.UpsertFlowerThreadMetadata(pctx, rec)
+}
+
+func (s *Service) GetFlowerThreadMetadata(ctx context.Context, endpointID string, threadID string) (*threadstore.FlowerThreadMetadata, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	persistTO := s.persistOpTO
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
+	pctx, cancel := context.WithTimeout(ctx, persistTO)
+	defer cancel()
+	return db.GetFlowerThreadMetadata(pctx, endpointID, threadID)
 }
 
 func (s *Service) RuntimeStatus(ctx context.Context) *AIRuntimeStatus {
@@ -1135,6 +1200,8 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		ToolAllowlist:       append([]string(nil), req.Options.ToolAllowlist...),
 		ForceReadonlyExec:   req.Options.ForceReadonlyExec,
 		NoUserInteraction:   req.Options.NoUserInteraction,
+		ToolTargetPolicy:    s.toolTargetPolicy,
+		TargetToolExecutor:  s.targetToolExecutor,
 		OnStreamEvent: func(ev any) {
 			if !finalizingThreadStatePublished && isFinalizingLifecycleStreamEvent(ev) {
 				finalizingThreadStatePublished = true

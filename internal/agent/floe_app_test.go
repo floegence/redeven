@@ -101,7 +101,7 @@ func TestFlowerHostGrantNotifyAppliesLocalPermissionClamp(t *testing.T) {
 	}
 }
 
-func TestFlowerHostGrantNotifyRejectsLocalPermissionClampBelowRWX(t *testing.T) {
+func TestFlowerHostGrantNotifyAcceptsReadOnlyTargetSession(t *testing.T) {
 	readOnly := config.PermissionSet{Read: true, Write: false, Execute: false}
 	a := &Agent{
 		cfg: &config.Config{
@@ -138,12 +138,16 @@ func TestFlowerHostGrantNotifyRejectsLocalPermissionClampBelowRWX(t *testing.T) 
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if got := a.sessions["ch_flower_read_only"]; got != nil {
-		t.Fatalf("Flower Host session below RWX was accepted: %#v", got.meta)
+	got := a.sessions["ch_flower_read_only"]
+	if got == nil {
+		t.Fatalf("Flower Host read-only session was not accepted")
+	}
+	if !got.meta.CanRead || got.meta.CanWrite || got.meta.CanExecute {
+		t.Fatalf("clamped permissions = R:%v W:%v X:%v, want read-only", got.meta.CanRead, got.meta.CanWrite, got.meta.CanExecute)
 	}
 }
 
-func TestFlowerHostGrantNotifyNormalizesFloeAppBeforePermissionChecks(t *testing.T) {
+func TestFlowerHostGrantNotifyNormalizesFloeAppBeforeCapabilityClamp(t *testing.T) {
 	a := &Agent{
 		cfg: &config.Config{
 			EnvironmentID: "env_test",
@@ -175,8 +179,12 @@ func TestFlowerHostGrantNotifyNormalizesFloeAppBeforePermissionChecks(t *testing
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if got := a.sessions["ch_flower_trimmed"]; got != nil {
-		t.Fatalf("Flower Host session without execute permission was accepted after floe_app trim: %#v", got.meta)
+	got := a.sessions["ch_flower_trimmed"]
+	if got == nil {
+		t.Fatalf("Flower Host session without execute permission was not accepted after floe_app trim")
+	}
+	if !got.meta.CanRead || !got.meta.CanWrite || got.meta.CanExecute {
+		t.Fatalf("clamped permissions = R:%v W:%v X:%v, want read/write", got.meta.CanRead, got.meta.CanWrite, got.meta.CanExecute)
 	}
 }
 

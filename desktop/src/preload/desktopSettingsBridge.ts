@@ -10,13 +10,18 @@ import {
 } from '../shared/settingsIPC';
 import {
   LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL,
+  LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL,
   SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL,
   SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  type DesktopFlowerHostResolveHandlerRequest,
   type DesktopFlowerHostSendChatRequest,
   type DesktopFlowerHostSettingsDraft,
   type ListDesktopFlowerHostThreadsResult,
+  type LoadDesktopFlowerHostThreadResult,
   type LoadDesktopFlowerHostSettingsResult,
+  type ResolveDesktopFlowerHostHandlerResult,
   type SendDesktopFlowerHostChatResult,
   type SaveDesktopFlowerHostSettingsResult,
 } from '../shared/flowerHostSettingsIPC';
@@ -31,6 +36,10 @@ export function bootstrapDesktopSettingsBridge(): void {
       ipcRenderer.invoke(SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL, draft),
     listFlowerHostThreads: (): Promise<ListDesktopFlowerHostThreadsResult> =>
       ipcRenderer.invoke(LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL),
+    loadFlowerHostThread: (threadID: string): Promise<LoadDesktopFlowerHostThreadResult> =>
+      ipcRenderer.invoke(LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL, threadID),
+    resolveFlowerHostHandler: (request?: DesktopFlowerHostResolveHandlerRequest): Promise<ResolveDesktopFlowerHostHandlerResult> =>
+      ipcRenderer.invoke(RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL, request),
     sendFlowerHostChat: (request: DesktopFlowerHostSendChatRequest): Promise<SendDesktopFlowerHostChatResult> =>
       ipcRenderer.invoke(SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL, request),
     cancel: (): void => {

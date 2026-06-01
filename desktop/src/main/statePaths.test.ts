@@ -41,7 +41,6 @@ describe('statePaths', () => {
       configPath: '/Users/tester/.redeven/flower/config.json',
       secretsFile: '/Users/tester/.redeven/flower/secrets.json',
       targetCacheFile: '/Users/tester/.redeven/flower/target-cache.json',
-      threadsFile: '/Users/tester/.redeven/flower/threads.json',
     });
   });
 });

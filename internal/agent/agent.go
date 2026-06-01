@@ -33,6 +33,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/filesystemscope"
+	"github.com/floegence/redeven/internal/flowerhostrpc"
 	"github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/gitrepo"
 	"github.com/floegence/redeven/internal/monitor"
@@ -156,6 +157,8 @@ type Agent struct {
 
 	agentHomeAbs       string
 	filesystemScope    *filesystemscope.Registry
+	shell              string
+	stateDir           string
 	configPath         string
 	instanceID         string
 	binaryPath         string
@@ -257,6 +260,8 @@ func New(opts Options) (*Agent, error) {
 		buildTime:              strings.TrimSpace(opts.BuildTime),
 		agentHomeAbs:           agentHomeAbs,
 		filesystemScope:        filesystemScope,
+		shell:                  shell,
+		stateDir:               stateDir,
 		configPath:             cfgPathAbs,
 		instanceID:             strings.TrimSpace(opts.InstanceID),
 		binaryPath:             currentExecutablePath(),
@@ -883,7 +888,7 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		}
 	}
 
-	if meta.FloeApp == FloeAppRedevenFlower && (!meta.CanRead || !meta.CanWrite || !meta.CanExecute) {
+	if meta.FloeApp == FloeAppRedevenFlower && !flowerHostSessionHasAnyToolPermission(meta) {
 		a.log.Warn("insufficient permissions for Flower Host session; ignoring",
 			"channel_id", channelID,
 			"user_public_id", meta.UserPublicID,
@@ -1097,8 +1102,8 @@ func (a *Agent) serveFlowerHostSession(ctx context.Context, sess endpoint.Sessio
 	if !isValidFlowerHostSessionBinding(meta) {
 		return errors.New("invalid Flower Host session binding")
 	}
-	if !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-		return errors.New("read/write/execute permission required")
+	if !flowerHostSessionHasAnyToolPermission(meta) {
+		return errors.New("read, write, or execute permission required")
 	}
 
 	srv, err := serve.New(serve.Options{
@@ -1350,8 +1355,21 @@ func (a *Agent) serveFlowerHostRPCStream(ctx context.Context, stream io.ReadWrit
 	srv := rpc.NewServer(stream, router)
 
 	accessrpc.New(a.accessGate).Register(router, meta)
+	flowerhostrpc.NewService(flowerhostrpc.Options{
+		Logger:          a.log,
+		StateDir:        a.stateDir,
+		AgentHomeDir:    a.agentHomeAbs,
+		WorkingDir:      a.agentHomeAbs,
+		FilesystemScope: a.filesystemScope,
+		Shell:           a.shell,
+		AIConfig:        a.cfg.AI,
+	}).RegisterWithAccessGate(router, meta, a.accessGate)
 
 	_ = srv.Serve(ctx)
+}
+
+func flowerHostSessionHasAnyToolPermission(meta *session.Meta) bool {
+	return meta != nil && (meta.CanRead || meta.CanWrite || meta.CanExecute)
 }
 
 func (a *Agent) prepareAccessProxyUpstream(ctx context.Context, meta *session.Meta, upstream string) (string, func(), error) {

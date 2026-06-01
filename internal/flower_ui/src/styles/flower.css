@@ -10,11 +10,15 @@
   --flower-thread-rail-accent: color-mix(in srgb, var(--primary) 9%, var(--flower-thread-rail-control));
   --flower-thread-rail-accent-strong: color-mix(in srgb, var(--primary) 15%, var(--flower-thread-rail-control));
   display: grid;
-  grid-template-columns: minmax(15.25rem, 17rem) minmax(0, 1fr);
+  grid-template-columns: var(--flower-thread-rail-width, 17rem) 0 minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   height: 100%;
   background: var(--redeven-surface-main, var(--background));
+}
+
+.flower-component-shell-resizing {
+  user-select: none;
 }
 
 .dark .flower-component-shell,
@@ -39,6 +43,44 @@ html.dark .flower-component-shell {
   background: var(--flower-thread-rail-surface);
   color: var(--flower-thread-rail-foreground);
   overflow: hidden;
+}
+
+.flower-component-rail-resizer {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  width: 0;
+  min-width: 0;
+  cursor: col-resize;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--flower-thread-rail-muted) 72%, transparent);
+  outline: none;
+}
+
+.flower-component-rail-resizer::before {
+  content: '';
+  position: absolute;
+  inset: 0 -0.375rem;
+}
+
+.flower-component-rail-resizer svg {
+  position: absolute;
+  opacity: 0;
+  transition:
+    color 150ms ease,
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+
+.flower-component-rail-resizer:hover svg,
+.flower-component-rail-resizer:focus-visible svg,
+.flower-component-shell-resizing .flower-component-rail-resizer svg {
+  color: color-mix(in srgb, var(--primary) 76%, var(--flower-thread-rail-foreground) 24%);
+  opacity: 1;
+  transform: scale(1.04);
 }
 
 .flower-host-sidebar-actions {
@@ -167,6 +209,181 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--muted) 58%, transparent);
   color: var(--foreground);
   outline: none;
+}
+
+.flower-host-composer-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.flower-host-handler-stack {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.flower-host-handler-selection {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.flower-host-handler-picker {
+  position: relative;
+  display: inline-grid;
+  max-width: min(24rem, 100%);
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr) 1rem;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted) 34%, transparent);
+  color: var(--foreground);
+  padding: 0.25rem 0.55rem 0.25rem 0.65rem;
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease;
+}
+
+.flower-host-handler-picker:hover,
+.flower-host-handler-picker:focus-within {
+  background: color-mix(in srgb, var(--primary) 8%, var(--muted) 32%);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.flower-host-handler-picker-value {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.flower-host-handler-picker-icon {
+  width: 1rem;
+  height: 1rem;
+  color: color-mix(in srgb, var(--muted-foreground) 76%, var(--foreground) 24%);
+}
+
+.flower-host-handler-picker select {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.flower-host-handler-picker select:disabled {
+  cursor: not-allowed;
+}
+
+.flower-host-handler-selection-label {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.flower-host-handler-chip {
+  max-width: 14rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-host-handler-error-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.flower-host-handler-error {
+  max-width: min(28rem, 100%);
+  min-width: 0;
+  overflow: hidden;
+  color: var(--warning);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.flower-host-handler-retry {
+  flex: 0 0 auto;
+  cursor: pointer;
+  border: 0;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  color: color-mix(in srgb, var(--primary) 72%, var(--foreground) 28%);
+  padding: 0.1875rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+@media (max-width: 640px) {
+  .flower-host-composer-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .flower-host-composer-footer > .button,
+  .flower-host-composer-footer > button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+.flower-host-handler-retry:hover {
+  background: color-mix(in srgb, var(--primary) 15%, var(--muted) 26%);
+  color: color-mix(in srgb, var(--primary) 86%, var(--foreground) 14%);
+}
+
+.flower-host-setup-inline {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.flower-host-setup-inline span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-host-decision-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 14rem;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted) 42%, transparent);
+  color: var(--muted-foreground);
+  overflow: hidden;
+  padding: 0.1875rem 0.5rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 600;
 }
 
 .flower-host-chat-main {
@@ -329,14 +546,16 @@ html.dark .flower-component-shell {
   --flower-settings-panel-soft: var(--redeven-surface-panel-soft, var(--card));
   --flower-settings-panel-elevated: var(--redeven-surface-panel-elevated, var(--card));
   --flower-settings-border: var(--redeven-surface-panel-border, var(--border));
+  --flower-settings-divider: color-mix(in srgb, var(--flower-settings-border) 58%, transparent);
+  --flower-settings-tint: color-mix(in srgb, var(--primary) 4%, transparent);
   container-type: inline-size;
   background: var(--flower-chat-surface, var(--redeven-surface-main, var(--background)));
 }
 
 .flower-settings-frame {
-  width: min(100%, 72rem);
+  width: min(100%, 68rem);
   margin: 0 auto;
-  padding: 1rem;
+  padding: 1.125rem 1.25rem 1.5rem;
 }
 
 .flower-settings-title-row {
@@ -349,32 +568,161 @@ html.dark .flower-component-shell {
   flex-wrap: wrap;
 }
 
-.flower-settings-current-model {
+.flower-settings-title-feedback {
   display: flex;
+  min-height: 1.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.flower-settings-disabled-guide {
+  display: grid;
+  width: min(100%, 36rem);
+  min-width: 0;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.875rem 1rem;
+  margin: clamp(2rem, 12vh, 5rem) auto 0;
+  padding: 0.25rem;
+}
+
+.flower-settings-disabled-icon {
+  display: flex;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 13%, var(--flower-chat-surface, var(--background)));
+  color: var(--warning, #f59e0b);
+}
+
+.flower-settings-disabled-copy {
+  min-width: 0;
+}
+
+.flower-settings-disabled-copy h3 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 1.0625rem;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.flower-settings-disabled-copy p {
+  margin: 0.35rem 0 0;
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.flower-settings-disabled-guide > .button,
+.flower-settings-disabled-guide > button {
+  grid-column: 2;
+  justify-self: start;
+  margin-top: 0.125rem;
+}
+
+.flower-settings-inline-action {
+  cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 72%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--flower-settings-panel-elevated) 58%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  padding: 0.25rem 0.625rem;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.flower-settings-inline-action:hover,
+.flower-settings-inline-action:focus-visible {
+  border-color: color-mix(in srgb, var(--destructive) 26%, var(--flower-settings-border));
+  background: color-mix(in srgb, var(--destructive) 6%, transparent);
+  color: var(--destructive);
+  outline: none;
+  text-decoration: none;
+}
+
+.flower-settings-inline-action:disabled {
+  cursor: not-allowed;
+  color: var(--muted-foreground);
+  opacity: 0.62;
+  text-decoration: none;
+}
+
+.flower-settings-current-model {
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
   min-width: 0;
   align-items: center;
-  gap: 1rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 20%, var(--flower-settings-border));
-  border-radius: 0.75rem;
-  background: color-mix(in srgb, var(--primary) 5%, var(--flower-settings-panel-elevated));
-  padding: 1.125rem;
+  column-gap: 1rem;
+  margin-top: 0.25rem;
+  background: color-mix(in srgb, var(--flower-settings-panel-elevated) 42%, transparent);
+  padding: 1.125rem 1.125rem;
 }
 
 .flower-settings-current-model-icon {
   display: flex;
-  width: 3rem;
-  height: 3rem;
+  width: 2.75rem;
+  height: 2.75rem;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 72%, transparent);
-  border-radius: 0.75rem;
-  background: var(--flower-chat-surface, var(--background));
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--primary) 7%, var(--flower-settings-panel-elevated));
 }
 
-.flower-settings-model-select {
-  width: min(18rem, 32vw);
-  flex: 0 0 auto;
+.flower-settings-current-model-body {
+  min-width: 0;
+}
+
+.flower-settings-model-picker {
+  position: relative;
+  display: inline-grid;
+  max-width: min(100%, 38rem);
+  min-width: 0;
+  grid-template-columns: minmax(0, auto) 1rem;
+  align-items: center;
+  column-gap: 0.35rem;
+  margin-top: 0.25rem;
+  cursor: pointer;
+  color: var(--foreground);
+}
+
+.flower-settings-model-picker-label {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-settings-model-picker-icon {
+  width: 1rem;
+  height: 1rem;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
+}
+
+.flower-settings-model-picker:hover .flower-settings-model-picker-label,
+.flower-settings-model-picker:focus-within .flower-settings-model-picker-label {
+  color: color-mix(in srgb, var(--primary) 78%, var(--foreground) 22%);
+}
+
+.flower-settings-model-picker select {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.flower-settings-model-picker select:disabled {
+  cursor: not-allowed;
 }
 
 .flower-settings-select {
@@ -410,11 +758,12 @@ html.dark .flower-component-shell {
 
 .flower-settings-input {
   width: 100%;
-  height: 2.25rem;
-  border: 1px solid var(--input);
-  border-radius: 0.5rem;
-  background: var(--background);
-  padding: 0 0.75rem;
+  height: 2.125rem;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--input) 82%, transparent);
+  border-radius: 0;
+  background: transparent;
+  padding: 0 0.125rem;
   font-size: 0.875rem;
   color: var(--foreground);
   outline: none;
@@ -425,7 +774,7 @@ html.dark .flower-component-shell {
 
 .flower-settings-input:focus-visible {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 18%, transparent);
+  box-shadow: 0 1px 0 0 var(--primary);
 }
 
 .flower-settings-dot-pill {
@@ -449,45 +798,55 @@ html.dark .flower-component-shell {
   background: var(--success, #16a34a);
 }
 
-.flower-settings-policy-grid {
+.flower-settings-policy-section {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
-  margin-top: 0.875rem;
+  margin-top: 0.625rem;
 }
 
 .flower-settings-policy-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
   min-width: 0;
   cursor: pointer;
   align-items: flex-start;
-  gap: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 86%, transparent);
-  border-radius: 0.75rem;
-  background: var(--flower-settings-panel);
-  padding: 0.875rem;
+  column-gap: 0.75rem;
+  border: 0;
+  background: color-mix(in srgb, var(--flower-settings-panel-elevated) 28%, transparent);
+  padding: 0.95rem 1rem;
   text-align: left;
   transition:
-    border-color 150ms ease,
     background-color 150ms ease,
-    box-shadow 150ms ease,
-    transform 150ms ease;
+    color 150ms ease;
+}
+
+.flower-settings-policy-card:nth-child(odd) {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+.flower-settings-policy-card:nth-child(even) {
+  padding-left: 1rem;
+  padding-right: 1rem;
 }
 
 .flower-settings-policy-card:hover {
-  border-color: color-mix(in srgb, var(--primary) 26%, var(--flower-settings-border));
-  background: color-mix(in srgb, var(--primary) 4%, var(--flower-settings-panel));
-  transform: translateY(-1px);
+  background: color-mix(in srgb, var(--primary) 4%, transparent);
 }
 
 .flower-settings-policy-icon {
   display: flex;
-  width: 2rem;
-  height: 2rem;
+  width: 1.875rem;
+  height: 1.875rem;
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  border-radius: 0.5rem;
+  border-radius: 9999px;
+}
+
+.flower-settings-policy-copy {
+  min-width: 0;
 }
 
 .flower-settings-policy-icon-blue {
@@ -521,13 +880,50 @@ html.dark .flower-component-shell {
 
 .flower-settings-section {
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 86%, transparent);
-  border-radius: 0.75rem;
-  background: var(--flower-settings-panel);
 }
 
-.flower-settings-section {
-  padding: 0.875rem;
+.flower-settings-subsection-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
+  align-items: end;
+  gap: 0.75rem;
+}
+
+.flower-settings-subsection-copy {
+  min-width: 0;
+}
+
+.flower-settings-subsection-title-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.flower-settings-subsection-title {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 0.925rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.flower-settings-subsection-rule {
+  display: none;
+}
+
+.flower-settings-subsection-description {
+  margin: 0.35rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.flower-settings-subsection-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .flower-settings-section-heading {
@@ -542,39 +938,71 @@ html.dark .flower-component-shell {
 .flower-settings-provider-gallery {
   display: grid;
   gap: 0.625rem;
+  margin-top: 0.85rem;
 }
 
 .flower-settings-provider-card {
-  display: flex;
+  display: grid;
+  grid-template-columns: 3.25rem minmax(0, 1fr);
   min-width: 0;
   align-items: flex-start;
-  gap: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 76%, transparent);
-  border-radius: 0.625rem;
-  background: var(--flower-settings-panel-elevated);
-  padding: 0.75rem;
+  column-gap: 0.75rem;
+  border: 0;
+  background: transparent;
+  padding: 0.9rem 1rem;
   text-align: left;
   transition:
-    border-color 150ms ease,
     background-color 150ms ease,
-    box-shadow 150ms ease;
+    color 150ms ease;
 }
 
 .flower-settings-provider-card-active {
-  border-color: color-mix(in srgb, var(--primary) 42%, var(--flower-settings-border));
-  background: color-mix(in srgb, var(--primary) 8%, var(--flower-settings-panel-elevated));
-  box-shadow: inset 3px 0 0 var(--primary);
+  background: color-mix(in srgb, var(--primary) 4%, var(--flower-settings-panel-elevated) 24%);
 }
 
 .flower-settings-provider-brand {
   display: flex;
-  width: 2.5rem;
-  height: 2.5rem;
-  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
+  justify-self: center;
   align-items: center;
   justify-content: center;
-  border-radius: 0.625rem;
-  background: var(--flower-chat-surface, var(--background));
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--flower-settings-panel-elevated) 88%, transparent);
+}
+
+.flower-settings-provider-body {
+  min-width: 0;
+}
+
+.flower-settings-provider-topline {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.flower-settings-provider-title {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+}
+
+.flower-settings-provider-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.125rem;
+  margin-top: -0.125rem;
+}
+
+.flower-settings-provider-empty {
+  padding: 1rem 0;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
 }
 
 [data-flower-provider-brand] > svg,
@@ -611,14 +1039,58 @@ html.dark .flower-component-shell {
 
 .flower-settings-terminal-grid {
   display: grid;
-  gap: 0.75rem;
-  margin-top: 0.875rem;
-  border: 1px solid color-mix(in srgb, var(--flower-settings-border) 70%, transparent);
-  border-radius: 0.625rem;
-  background: color-mix(in srgb, var(--flower-settings-panel-soft) 72%, transparent);
-  padding: 0.75rem;
+  gap: 0.625rem;
+  margin-top: 0.85rem;
 }
 
+.flower-settings-terminal-row {
+  display: grid;
+  grid-template-columns: minmax(10rem, 14rem) minmax(12rem, 24rem);
+  min-width: 0;
+  align-items: center;
+  column-gap: 1rem;
+  background: color-mix(in srgb, var(--flower-settings-panel-elevated) 28%, transparent);
+  padding: 0.875rem 1rem;
+}
+
+.flower-settings-terminal-label {
+  min-width: 0;
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.flower-settings-policy-section,
+.flower-settings-providers-section,
+.flower-settings-terminal-section {
+  margin-top: 1.6rem;
+  padding-top: 0;
+}
+
+.flower-settings-policy-section {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.flower-settings-warning-strip,
+.flower-settings-error-strip {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.625rem;
+  margin-top: 1rem;
+  border-left: 0.1875rem solid color-mix(in srgb, var(--warning, #f59e0b) 68%, var(--foreground) 5%);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 8%, transparent);
+  padding: 0.75rem 0.875rem;
+}
+
+.flower-settings-error-strip {
+  display: block;
+  border-left-color: color-mix(in srgb, var(--destructive) 72%, var(--foreground) 4%);
+  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+  color: var(--destructive);
+  font-size: 0.875rem;
+}
 
 .flower-host-empty-state {
   display: flex;
@@ -650,6 +1122,70 @@ html.dark .flower-component-shell {
   margin-top: 2rem;
   font-size: 0.75rem;
   color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
+}
+
+.flower-host-setup-guide {
+  width: min(100%, 32rem);
+  margin: min(13vh, 6.5rem) auto 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  background:
+    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 44%);
+  padding: 1.25rem 1.6rem;
+  text-align: center;
+}
+
+.flower-host-setup-copy {
+  display: grid;
+  max-width: 28rem;
+  gap: 0.45rem;
+}
+
+.flower-host-setup-copy h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 1.0625rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.flower-host-setup-copy p {
+  margin: 0;
+  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
+  font-size: 0.8125rem;
+  line-height: 1.65;
+}
+
+.flower-host-setup-primary {
+  display: inline-flex;
+  height: 2.15rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--foreground) 90%, var(--primary) 10%);
+  color: var(--background);
+  padding: 0 0.82rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  box-shadow: 0 12px 24px -20px color-mix(in srgb, var(--foreground) 55%, transparent);
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.flower-host-setup-primary:hover,
+.flower-host-setup-primary:focus-visible {
+  background: color-mix(in srgb, var(--foreground) 84%, var(--primary) 16%);
+  box-shadow: 0 14px 28px -20px color-mix(in srgb, var(--foreground) 64%, transparent);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .redeven-flower-soft-aura {
@@ -748,6 +1284,10 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     grid-template-rows: minmax(9.5rem, 30vh) minmax(0, 1fr);
   }
 
+  .flower-component-rail-resizer {
+    display: none;
+  }
+
   .flower-component-thread-rail {
     border-right: 0;
     border-bottom: 1px solid var(--flower-thread-rail-border);
@@ -767,10 +1307,6 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     flex-wrap: nowrap;
   }
 
-  .flower-host-model-tag {
-    display: none !important;
-  }
-
   .flower-settings-frame {
     padding: 0.75rem;
   }
@@ -778,21 +1314,69 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-settings-title-row,
   .flower-settings-current-model {
     align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .flower-settings-title-feedback {
+    min-height: 0;
+    justify-content: flex-start;
+  }
+
+  .flower-settings-disabled-guide {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 1.5rem;
+    text-align: center;
+  }
+
+  .flower-settings-disabled-icon,
+  .flower-settings-disabled-guide > .button,
+  .flower-settings-disabled-guide > button {
+    grid-column: 1;
+    justify-self: center;
   }
 
   .flower-settings-current-model {
-    gap: 0.75rem;
+    row-gap: 0.75rem;
+    padding-inline: 0;
   }
 
-  .flower-settings-model-select {
+  .flower-settings-model-picker {
     width: 100%;
   }
 
-  .flower-settings-policy-grid,
-  .flower-settings-grid,
-  .flower-settings-editor-grid {
+  .flower-settings-subsection-header {
     grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .flower-settings-subsection-actions {
+    justify-content: flex-start;
+  }
+
+  .flower-settings-policy-section,
+  .flower-settings-grid,
+  .flower-settings-editor-grid,
+  .flower-settings-terminal-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .flower-settings-policy-card:nth-child(odd),
+  .flower-settings-policy-card:nth-child(even) {
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
+  }
+
+  .flower-settings-provider-card,
+  .flower-settings-terminal-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.75rem;
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
+  }
+
+  .flower-settings-provider-topline {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .flower-host-empty-state {
@@ -812,11 +1396,14 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     gap: 0.625rem 1rem;
     margin-top: 1.25rem;
   }
-}
 
-@media (max-width: 420px) {
-  .flower-host-status-tag {
-    display: none !important;
+  .flower-host-setup-guide {
+    margin-top: 1rem;
+    padding: 1.25rem;
+  }
+
+  .flower-host-setup-inline span {
+    white-space: normal;
   }
 }
 
@@ -825,26 +1412,43 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .flower-settings-model-select {
-    width: min(18rem, 40vw);
-  }
 }
 
 @container (max-width: 760px) {
   .flower-settings-title-row,
   .flower-settings-current-model {
     align-items: stretch;
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .flower-settings-model-select {
+  .flower-settings-model-picker {
     width: 100%;
   }
 
-  .flower-settings-policy-grid,
+  .flower-settings-subsection-header {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .flower-settings-policy-section,
   .flower-settings-provider-gallery,
-  .flower-settings-editor-grid {
+  .flower-settings-editor-grid,
+  .flower-settings-terminal-grid {
     grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .flower-settings-policy-card:nth-child(odd),
+  .flower-settings-policy-card:nth-child(even) {
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
+  }
+
+  .flower-settings-provider-card,
+  .flower-settings-terminal-row {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0.75rem;
+    padding-right: 0.5rem;
+    padding-left: 0.5rem;
   }
 }
 

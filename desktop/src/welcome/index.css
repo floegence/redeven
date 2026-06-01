@@ -579,6 +579,150 @@ body {
   white-space: nowrap;
 }
 
+.redeven-environment-flower-window__handler {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.35rem;
+  margin: -0.02rem 0 0.36rem;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  line-height: 1.2;
+}
+
+.redeven-environment-flower-window__handler-label {
+  flex: 0 0 auto;
+  font-weight: 650;
+}
+
+.redeven-environment-flower-window__handler-chip {
+  min-width: 0;
+  max-width: 10.5rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 9%, var(--muted) 42%);
+  color: color-mix(in srgb, var(--foreground) 84%, var(--primary) 16%);
+  padding: 0.16rem 0.46rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 680;
+}
+
+.redeven-environment-flower-window__handler[data-unavailable] .redeven-environment-flower-window__handler-chip {
+  background: color-mix(in srgb, var(--warning) 14%, var(--muted) 44%);
+  color: color-mix(in srgb, var(--warning) 66%, var(--foreground) 34%);
+}
+
+.redeven-environment-flower-window__handler-error {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--error);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-environment-flower-window__handler-retry {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  color: color-mix(in srgb, var(--primary) 72%, var(--foreground) 28%);
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 720;
+  line-height: 1;
+  padding: 0.18rem 0.42rem;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.redeven-environment-flower-window__handler-retry:hover {
+  background: color-mix(in srgb, var(--primary) 15%, var(--muted) 26%);
+  color: color-mix(in srgb, var(--primary) 86%, var(--foreground) 14%);
+  transform: translateY(-1px);
+}
+
+.redeven-environment-flower-window__handler-retry:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none;
+}
+
+.redeven-environment-flower-window__setup {
+  display: flex;
+  max-width: 40rem;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0 auto;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: 0.9rem;
+  background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 42%),
+    color-mix(in srgb, var(--card) 72%, transparent);
+  padding: 0.78rem 0.86rem;
+}
+
+.redeven-environment-flower-window__setup-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.redeven-environment-flower-window__setup-title {
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 720;
+  line-height: 1.3;
+}
+
+.redeven-environment-flower-window__setup-description {
+  overflow: hidden;
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.redeven-environment-flower-window__setup-button {
+  display: inline-flex;
+  height: 2rem;
+  flex: 0 0 auto;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--foreground) 90%, var(--primary) 10%);
+  color: var(--background);
+  padding: 0 0.7rem;
+  font-size: 0.7rem;
+  font-weight: 730;
+  line-height: 1;
+  box-shadow: 0 10px 22px -18px color-mix(in srgb, var(--foreground) 58%, transparent);
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease;
+}
+
+.redeven-environment-flower-window__setup-button:hover,
+.redeven-environment-flower-window__setup-button:focus-visible {
+  background: color-mix(in srgb, var(--foreground) 84%, var(--primary) 16%);
+  box-shadow: 0 12px 24px -18px color-mix(in srgb, var(--foreground) 66%, transparent);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.redeven-environment-flower-window__setup-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+}
+
 .redeven-environment-flower-window__input-shell {
   position: relative;
   min-width: 0;
