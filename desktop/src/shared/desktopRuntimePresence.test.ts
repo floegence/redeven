@@ -479,6 +479,25 @@ describe('desktopRuntimePresence', () => {
     }
   });
 
+  it('keeps Gateway cards on the Runtime Gateway path instead of provider tunnel operations', () => {
+    const plans = buildDesktopRuntimeOperationPlans({
+      surface: 'gateway_card',
+      running: true,
+      openable: true,
+    });
+
+    expect(plans.open).toMatchObject({
+      availability: 'available',
+      method: 'runtime_gateway',
+    });
+    expect(plans.refresh).toMatchObject({
+      availability: 'available',
+      method: 'runtime_gateway',
+      label: 'Refresh Gateway status',
+    });
+    expect(JSON.stringify(plans)).not.toContain('provider_tunnel');
+  });
+
   it('routes container updates through the host/container management channel', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'managed_runtime_card',

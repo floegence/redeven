@@ -210,6 +210,8 @@ func NewURLSurfaceDialer(localUIURL string, runtimeControlURL string) SurfaceDia
 			addr = localUIAddr
 		case StreamSurfaceRuntimeControl:
 			addr = runtimeControlAddr
+		case StreamSurfaceGatewayProtocol:
+			addr = localUIAddr
 		default:
 			return nil, fmt.Errorf("unknown bridge surface %q", surface)
 		}

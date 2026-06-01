@@ -81,6 +81,32 @@ describe('windowLifecycleDiagnostics', () => {
     });
   });
 
+  it('strips URL credentials, query, and hash from lifecycle diagnostics', () => {
+    const context = buildWindowLifecycleContext({
+      role: 'session_root',
+      surface: 'session',
+      stateKey: 'session:gateway',
+      targetURL: 'https://user:pass@gateway.example/session?proof=secret#artifact',
+      preloadPath: '/Applications/Redeven.app/Contents/Resources/app.asar/dist/preload.js',
+      webContents: {
+        id: 20,
+        getURL: () => 'https://gateway.example/session?signature=secret#proof',
+        mainFrame: {
+          origin: 'https://gateway.example',
+          url: 'https://gateway.example/frame?private_key=secret#proof',
+        },
+      },
+    });
+
+    expect(context).toMatchObject({
+      target_url: 'https://gateway.example/session',
+      current_url: 'https://gateway.example/session',
+      main_frame_url: 'https://gateway.example/frame',
+    });
+    expect(JSON.stringify(context)).not.toContain('secret');
+    expect(JSON.stringify(context)).not.toContain('proof');
+  });
+
   it('adds console, preload, and renderer-exit details on top of context', () => {
     const context = {
       role: 'launcher',

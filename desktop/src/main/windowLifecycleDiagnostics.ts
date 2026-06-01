@@ -44,13 +44,30 @@ function cleanNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function cleanURL(value: unknown): string | undefined {
+  const raw = cleanString(value);
+  if (!raw) {
+    return undefined;
+  }
+  try {
+    const url = new URL(raw);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
 function safeCurrentURL(webContents: DiagnosticWebContentsLike, preferredURL?: string): string | undefined {
-  const direct = cleanString(preferredURL);
+  const direct = cleanURL(preferredURL);
   if (direct) {
     return direct;
   }
   try {
-    return cleanString(webContents.getURL());
+    return cleanURL(webContents.getURL());
   } catch {
     return undefined;
   }
@@ -61,7 +78,7 @@ function frameDetail(prefix: string, frame: DiagnosticFrameLike | null | undefin
     return {};
   }
   return {
-    [`${prefix}_url`]: cleanString(frame.url),
+    [`${prefix}_url`]: cleanURL(frame.url),
     [`${prefix}_origin`]: cleanString(frame.origin),
     [`${prefix}_name`]: cleanString(frame.name),
     [`${prefix}_process_id`]: cleanNumber(frame.processId),
@@ -93,7 +110,7 @@ export function buildWindowLifecycleContext(input: WindowLifecycleContextInput):
     role: input.role,
     surface: input.surface,
     state_key: cleanString(input.stateKey),
-    target_url: cleanString(input.targetURL),
+    target_url: cleanURL(input.targetURL),
     current_url: safeCurrentURL(input.webContents, input.currentURL),
     preload_path: cleanString(input.preloadPath),
     webcontents_id: cleanNumber(input.webContents.id),

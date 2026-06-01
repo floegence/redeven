@@ -8,21 +8,28 @@ import (
 )
 
 func TestCatalogResponseUsesSnakeCaseWireNames(t *testing.T) {
-	payload, err := json.Marshal(NewCatalogResponse([]Environment{{
-		EnvPublicID: " env_demo ",
-		Name:        " Demo ",
-		State:       EnvironmentStateAvailable,
+	payload, err := json.Marshal(NewCatalogResponse(GatewayMetadata{
+		GatewayID:                   " gateway_demo ",
+		DisplayName:                 " Demo Gateway ",
+		Status:                      GatewayStatusOnline,
+		Capabilities:                []GatewayCapability{GatewayCapabilityEnvCatalog},
+		GatewayPublicKeyFingerprint: " SHA256:demo ",
+	}, []Environment{{
+		GatewayEnvID: " env_demo ",
+		DisplayName:  " Demo ",
+		State:        EnvironmentStateAvailable,
+		Capabilities: []EnvironmentCapability{EnvironmentCapabilityOpen},
 	}}))
 	if err != nil {
 		t.Fatalf("Marshal() error = %v", err)
 	}
 	body := string(payload)
-	for _, want := range []string{"protocol_version", "env_public_id"} {
+	for _, want := range []string{"protocol_version", "gateway_id", "gateway_env_id", "display_name", "env_kind", "gateway_public_key_fingerprint"} {
 		if !strings.Contains(body, `"`+want+`"`) {
 			t.Fatalf("JSON body %s does not contain %q", body, want)
 		}
 	}
-	for _, forbidden := range []string{"EnvPublicID", "clientSessionID"} {
+	for _, forbidden := range []string{"EnvPublicID", "env_public_id", "clientSessionID"} {
 		if strings.Contains(body, forbidden) {
 			t.Fatalf("JSON body %s contains non-wire field %q", body, forbidden)
 		}
@@ -30,11 +37,85 @@ func TestCatalogResponseUsesSnakeCaseWireNames(t *testing.T) {
 }
 
 func TestOpenSessionRequestValidation(t *testing.T) {
-	if err := ValidateOpenSessionRequest(OpenSessionRequest{EnvPublicID: " env_demo "}); err != nil {
+	if err := ValidateProtocolVersion(""); err != ErrUnsupportedProtocolVersion {
+		t.Fatalf("ValidateProtocolVersion() error = %v, want %v", err, ErrUnsupportedProtocolVersion)
+	}
+	if err := ValidateProtocolVersion(Version); err != nil {
+		t.Fatalf("ValidateProtocolVersion() error = %v", err)
+	}
+	if err := ValidateProtocolVersion(" " + Version + " "); err != ErrUnsupportedProtocolVersion {
+		t.Fatalf("ValidateProtocolVersion() error = %v, want strict mismatch error", err)
+	}
+	if err := ValidateOpenSessionRequest(OpenSessionRequest{
+		GatewayEnvID:        " env_demo ",
+		RequestedCapability: RequestedCapabilityEnvApp,
+		ClientNonce:         " nonce_demo ",
+	}); err != nil {
 		t.Fatalf("ValidateOpenSessionRequest() error = %v", err)
 	}
-	if err := ValidateOpenSessionRequest(OpenSessionRequest{}); err != ErrMissingEnvPublicID {
-		t.Fatalf("ValidateOpenSessionRequest() error = %v, want %v", err, ErrMissingEnvPublicID)
+	if err := ValidateOpenSessionRequest(OpenSessionRequest{}); err != ErrMissingGatewayEnvID {
+		t.Fatalf("ValidateOpenSessionRequest() error = %v, want %v", err, ErrMissingGatewayEnvID)
+	}
+	if err := ValidateOpenSessionRequest(OpenSessionRequest{
+		GatewayEnvID: "env_demo",
+	}); err != ErrMissingRequestedCapability {
+		t.Fatalf("ValidateOpenSessionRequest() error = %v, want %v", err, ErrMissingRequestedCapability)
+	}
+	if err := ValidateOpenSessionRequest(OpenSessionRequest{
+		GatewayEnvID:        "env_demo",
+		RequestedCapability: RequestedCapabilityEnvApp,
+	}); err != ErrMissingClientNonce {
+		t.Fatalf("ValidateOpenSessionRequest() error = %v, want %v", err, ErrMissingClientNonce)
+	}
+}
+
+func TestCatalogNormalization(t *testing.T) {
+	resp := NewCatalogResponse(GatewayMetadata{
+		GatewayID:    " gateway_demo ",
+		DisplayName:  " Demo Gateway ",
+		Status:       "bad",
+		Capabilities: []GatewayCapability{GatewayCapabilityEnvCatalog, "bad", GatewayCapabilityEnvCatalog},
+	}, []Environment{
+		{
+			GatewayEnvID: " env_demo ",
+			State:        "bad",
+			Capabilities: []EnvironmentCapability{
+				EnvironmentCapabilityOpen,
+				"bad",
+				EnvironmentCapabilityOpen,
+			},
+			Origin: EnvironmentOrigin{Kind: "bad", Label: " Target "},
+		},
+		{GatewayEnvID: " "},
+	})
+
+	if resp.Gateway.GatewayID != "gateway_demo" {
+		t.Fatalf("GatewayID = %q", resp.Gateway.GatewayID)
+	}
+	if resp.Gateway.Status != GatewayStatusUnknown {
+		t.Fatalf("Gateway status = %q", resp.Gateway.Status)
+	}
+	if got := resp.Gateway.Capabilities; !reflect.DeepEqual(got, []GatewayCapability{GatewayCapabilityEnvCatalog}) {
+		t.Fatalf("Gateway capabilities = %#v", got)
+	}
+	if len(resp.Environments) != 1 {
+		t.Fatalf("Environments length = %d, want 1", len(resp.Environments))
+	}
+	env := resp.Environments[0]
+	if env.GatewayEnvID != "env_demo" || env.DisplayName != "env_demo" {
+		t.Fatalf("Environment identity = %#v", env)
+	}
+	if env.State != EnvironmentStateUnknown {
+		t.Fatalf("State = %q", env.State)
+	}
+	if env.EnvKind != EnvironmentKindReachableEnv {
+		t.Fatalf("EnvKind = %q", env.EnvKind)
+	}
+	if env.Origin.Kind != EnvironmentOriginKindNetworkTarget || env.Origin.Label != "Target" {
+		t.Fatalf("Origin = %#v", env.Origin)
+	}
+	if got := env.Capabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen}) {
+		t.Fatalf("Environment capabilities = %#v", got)
 	}
 }
 
@@ -42,9 +123,18 @@ func TestRuntimeGatewayWireContractsDoNotExposeSecrets(t *testing.T) {
 	types := []reflect.Type{
 		reflect.TypeOf(CatalogRequest{}),
 		reflect.TypeOf(CatalogResponse{}),
+		reflect.TypeOf(GatewayMetadata{}),
 		reflect.TypeOf(Environment{}),
+		reflect.TypeOf(EnvironmentOrigin{}),
 		reflect.TypeOf(OpenSessionRequest{}),
 		reflect.TypeOf(OpenSessionResponse{}),
+		reflect.TypeOf(GatewayConnectArtifact{}),
+		reflect.TypeOf(DiagnosticsHint{}),
+		reflect.TypeOf(PairingChallengeRequest{}),
+		reflect.TypeOf(PairingChallengeResponse{}),
+		reflect.TypeOf(PairingCompleteRequest{}),
+		reflect.TypeOf(PairingCompleteResponse{}),
+		reflect.TypeOf(ErrorEnvelope{}),
 	}
 	for _, typ := range types {
 		assertNoSecretWireFields(t, typ)
@@ -58,7 +148,7 @@ func assertNoSecretWireFields(t *testing.T, typ reflect.Type) {
 		tag := field.Tag.Get("json")
 		wireName := strings.Split(tag, ",")[0]
 		name := strings.ToLower(field.Name + " " + wireName)
-		if strings.Contains(name, "token") || strings.Contains(name, "secret") {
+		if strings.Contains(name, "token") || strings.Contains(name, "secret") || strings.Contains(name, "bearer") {
 			t.Fatalf("%s.%s exposes forbidden credential-shaped wire field %q", typ.Name(), field.Name, wireName)
 		}
 	}

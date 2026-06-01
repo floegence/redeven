@@ -843,6 +843,7 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('function desktopSessionEntryURL(target: DesktopSessionTarget, startup: StartupReport): string');
     expect(mainSrc).toContain("target.kind === 'local_environment' && target.route === 'remote_desktop'");
+    expect(mainSrc).toContain("if (target.kind === 'gateway_environment') {\n    return startup.local_ui_url;\n  }");
     expect(mainSrc).toContain('return buildLocalUIEnvAppEntryURL(startup.local_ui_url);');
     expect(mainSrc).toContain('const entryURL = desktopSessionEntryURL(target, startup);');
     expect(mainSrc).toContain('const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics');
@@ -908,6 +909,64 @@ describe('main routing', () => {
     expect(mainSrc).toContain("void requestQuit('last_window_close', win);");
     expect(mainSrc).toContain("void requestQuit('system');");
     expect(mainSrc).toContain("if (process.platform !== 'darwin' && quitPhase === 'idle') {");
+  });
+
+  it('keeps Gateway pairing behind native confirmation and verified completion proof', () => {
+    const mainSrc = readMainSource();
+    const pairStart = mainSrc.indexOf('async function pairGatewayFromLauncher(');
+    const deleteStart = mainSrc.indexOf('async function deleteGatewayFromLauncher(', pairStart);
+    expect(pairStart).toBeGreaterThanOrEqual(0);
+    expect(deleteStart).toBeGreaterThan(pairStart);
+    const pairSrc = mainSrc.slice(pairStart, deleteStart);
+
+    expect(pairSrc).toContain('const challenge = await client.pairingChallenge(record, pairingChallengeRequest(material));');
+    expect(pairSrc).toContain('const fingerprint = assertGatewayPairingChallenge({');
+    expect(pairSrc).toContain('const confirmed = await confirmDesktopImpact({');
+    expect(pairSrc).toContain("if (!confirmed) {\n    throw new Error('Gateway pairing was canceled.');\n  }");
+    expect(pairSrc).toContain('const completion = await client.completePairing(record, buildPairingCompleteRequest(material, challenge));');
+    expect(pairSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion);');
+    expect(pairSrc).toContain('completeGatewayPairing({');
+    expect(pairSrc).toContain('user_confirmed: true');
+    expect(pairSrc.indexOf('const fingerprint = assertGatewayPairingChallenge({')).toBeLessThan(
+      pairSrc.indexOf('const confirmed = await confirmDesktopImpact({'),
+    );
+    expect(pairSrc.indexOf('assertGatewayPairingCompleteResponse(material, challenge, completion);')).toBeLessThan(
+      pairSrc.indexOf('completeGatewayPairing({'),
+    );
+    expect(pairSrc.indexOf('completeGatewayPairing({')).toBeLessThan(
+      pairSrc.indexOf('gatewayStore().updateTrustProfile(record.gateway_id, trustProfile);'),
+    );
+    expect(mainSrc).toContain("case 'pair_gateway':");
+    expect(mainSrc).not.toContain('request.user_confirmed');
+  });
+
+  it('opens Gateway environments only through Gateway open-session without provider fallback', () => {
+    const mainSrc = readMainSource();
+    const openStart = mainSrc.indexOf('async function openGatewayEnvironmentFromLauncher(');
+    const providerStart = mainSrc.indexOf('async function openProviderRemoteEnvironmentRecord(', openStart);
+    expect(openStart).toBeGreaterThanOrEqual(0);
+    expect(providerStart).toBeGreaterThan(openStart);
+    const openSrc = mainSrc.slice(openStart, providerStart);
+
+    expect(openSrc).toContain('const issued = await gatewayLifecycleManager().openSessionWithBridge(record, {');
+    expect(openSrc).toContain("requested_capability: 'env_app'");
+    expect(openSrc).toContain('const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);');
+    expect(openSrc).toContain('await installGatewayLocalAccessCookies(artifactURL, response.set_cookie_headers);');
+    expect(openSrc).toContain('buildGatewayDesktopTarget({');
+    expect(openSrc).toContain('gatewaySessionID: response.gateway_session_id');
+    expect(openSrc).toContain('gatewayManagedSessionStartup(artifactURL)');
+    expect(openSrc).toContain("location: 'runtime_gateway'");
+    expect(openSrc).not.toContain('openRemoteEnvironmentFromLauncher');
+    expect(openSrc).not.toContain('openProviderEnvironmentFromLauncher');
+    expect(openSrc).not.toContain('openProviderEnvironmentWithOpenSession');
+    expect(openSrc).not.toContain('openProviderRemoteEnvironmentRecord');
+    expect(openSrc.indexOf('const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);')).toBeLessThan(
+      openSrc.indexOf('await installGatewayLocalAccessCookies(artifactURL, response.set_cookie_headers);'),
+    );
+    expect(openSrc.indexOf('await installGatewayLocalAccessCookies(artifactURL, response.set_cookie_headers);')).toBeLessThan(
+      openSrc.indexOf('const sessionRecord = await createSessionRecord(openTarget, startup'),
+    );
+    expect(mainSrc).toContain("case 'open_gateway_environment':\n      return openGatewayEnvironmentFromLauncher(request);");
   });
 
   it('parses Control Plane deep links through PKCE authorization state instead of bearer handoff tickets', () => {

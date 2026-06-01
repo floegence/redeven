@@ -100,4 +100,31 @@ describe('bootstrapDesktopSessionContextBridge', () => {
       label: 'Demo Environment',
     });
   });
+
+  it('preserves Gateway session identity fields through the session bridge', async () => {
+    ipcRendererSendSync.mockReturnValue({
+      local_environment_id: 'gateway:gw_demo:env:env_demo',
+      renderer_storage_scope_id: 'gateway:gw_demo:env:env_demo',
+      target_kind: 'gateway_environment',
+      target_route: 'remote_desktop',
+      session_source: 'runtime_gateway',
+      env_public_id: ' env_demo ',
+      label: ' Gateway Environment ',
+    });
+
+    const { bootstrapDesktopSessionContextBridge } = await import('./desktopSessionContext');
+
+    bootstrapDesktopSessionContextBridge();
+    const bridge = exposedBridge();
+
+    expect(bridge.getSnapshot()).toEqual({
+      local_environment_id: 'gateway:gw_demo:env:env_demo',
+      renderer_storage_scope_id: 'gateway:gw_demo:env:env_demo',
+      target_kind: 'gateway_environment',
+      target_route: 'remote_desktop',
+      session_source: 'runtime_gateway',
+      env_public_id: 'env_demo',
+      label: 'Gateway Environment',
+    });
+  });
 });

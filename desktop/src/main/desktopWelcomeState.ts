@@ -9,6 +9,7 @@ import {
   type DesktopPreferences,
 } from './desktopPreferences';
 import type { DesktopSessionLifecycle, DesktopSessionSummary } from './desktopTarget';
+import type { GatewayDesktopTarget } from './desktopTarget';
 import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
 import type {
   DesktopEnvironmentEntry,
@@ -21,7 +22,8 @@ import type {
   DesktopWelcomeIssue,
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
-import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import type { DesktopGatewaySource } from '../shared/desktopGateway';
+import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
 import {
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
@@ -91,6 +93,7 @@ import {
   type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
 import { normalizeLocalUIBaseURL } from './localUIURL';
+import { aggregateDesktopEnvironmentEntries } from './environmentAggregator';
 
 export {
   desktopProviderRuntimeLinkTargetID,
@@ -105,6 +108,7 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   savedSSHRuntimeHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   savedRuntimeTargetHealth?: Readonly<Record<string, DesktopRuntimeHealth>>;
   managedRuntimePresenceByTargetID?: Readonly<Record<string, DesktopManagedRuntimePresence>>;
+  gatewaySources?: readonly DesktopGatewaySource[];
   actionProgress?: DesktopWelcomeSnapshot['action_progress'];
   operations?: DesktopWelcomeSnapshot['operations'];
   surface?: DesktopLauncherSurface;
@@ -494,6 +498,22 @@ function providerRuntimeOperations(openable: boolean): DesktopRuntimeOperationPl
     running: openable,
     openable,
   });
+}
+
+function gatewayRuntimeOperations(openable: boolean): DesktopRuntimeOperationPlans {
+  return buildDesktopRuntimeOperationPlans({
+    surface: 'gateway_card',
+    running: openable,
+    openable,
+  });
+}
+
+function gatewaySessionTarget(session: DesktopSessionSummary): GatewayDesktopTarget | null {
+  return session.target.kind === 'gateway_environment' ? session.target : null;
+}
+
+function gatewaySessionEnvironmentEntryID(target: GatewayDesktopTarget): string {
+  return `gateway:${target.gateway_id}:env:${target.gateway_env_id}`;
 }
 
 function openSessionByURL(
@@ -1442,6 +1462,9 @@ function buildProviderEnvironmentEntry(
     provider_origin: environment.provider_origin,
     provider_id: environment.provider_id,
     env_public_id: environment.env_public_id,
+    provider_source_id: routeDetails.controlPlane
+      ? desktopControlPlaneKey(routeDetails.controlPlane.provider.provider_origin, routeDetails.controlPlane.provider.provider_id)
+      : undefined,
     remote_environment_url: remoteEnvironmentURL || undefined,
     provider_status: routeDetails.providerEnvironment?.status ?? environment.remote_catalog_entry?.status,
     provider_lifecycle_status: routeDetails.providerEnvironment?.lifecycle_status ?? environment.remote_catalog_entry?.lifecycle_status,
@@ -1560,6 +1583,47 @@ function buildEnvironmentEntries(
         runtimeLinkTargets,
       )
     )),
+    ...openSessions.flatMap((session) => {
+      const target = gatewaySessionTarget(session);
+      if (!target) {
+        return [];
+      }
+      return [{
+        id: gatewaySessionEnvironmentEntryID(target),
+        kind: 'gateway_environment' as const,
+        label: target.label,
+        local_ui_url: session.entry_url ?? session.startup?.local_ui_url ?? '',
+        secondary_text: target.gateway_label,
+        gateway_id: target.gateway_id,
+        gateway_label: target.gateway_label,
+        gateway_env_id: target.gateway_env_id,
+        gateway_status: 'online' as const,
+        gateway_connection_kind: undefined,
+        gateway_trust_state: 'paired' as const,
+        gateway_environment_state: 'available' as const,
+        gateway_environment_capabilities: ['open'] as const,
+        pinned: false,
+        tag: 'Open' as const,
+        category: 'gateway' as const,
+        window_state: environmentWindowState(session),
+        is_open: sessionIsOpen(session),
+        is_opening: sessionIsOpening(session),
+        runtime_health: onlineRuntimeHealth(
+          'gateway_runtime_probe',
+          session.entry_url ?? session.startup?.local_ui_url ?? '',
+          session.startup?.runtime_service,
+        ),
+        runtime_service: session.startup?.runtime_service,
+        runtime_operations: gatewayRuntimeOperations(true),
+        open_session_key: session.session_key,
+        open_session_lifecycle: sessionLifecycle(session),
+        open_action: sessionIsOpen(session) ? 'focus' as const : sessionIsOpening(session) ? 'opening' as const : 'open' as const,
+        can_edit: false,
+        can_delete: false,
+        created_at_ms: session.startup?.started_at_unix_ms ?? Date.now(),
+        last_used_at_ms: session.startup?.started_at_unix_ms ?? Date.now(),
+      }];
+    }),
   ];
 
   const catalog = preferences.saved_environments;
@@ -1908,7 +1972,7 @@ export function buildDesktopWelcomeSnapshot(
   const openSessions = sortOpenSessions(args.openSessions ?? []);
   const issue = args.issue ?? null;
   const surface = args.surface ?? 'connect_environment';
-  const environments = buildEnvironmentEntries(
+  const baseEnvironments = buildEnvironmentEntries(
     snapshotPreferences,
     controlPlanes,
     openSessions,
@@ -1918,6 +1982,13 @@ export function buildDesktopWelcomeSnapshot(
     args.savedRuntimeTargetHealth ?? {},
     args.managedRuntimePresenceByTargetID ?? {},
   );
+  const gatewaySources = args.gatewaySources ?? [];
+  const environments = sortEnvironmentEntriesByStableOrder(aggregateDesktopEnvironmentEntries({
+    entries: baseEnvironments,
+    controlPlanes,
+    gatewaySources,
+    localLabel: snapshotPreferences.local_environment.label,
+  }));
   const selectedEnvironmentID = args.selectedEnvironmentID ?? '';
   const selectedLocalEnvironment = findLocalEnvironmentByID(snapshotPreferences, selectedEnvironmentID);
   const selectedProviderEnvironment = selectedLocalEnvironment
@@ -1969,6 +2040,7 @@ export function buildDesktopWelcomeSnapshot(
     close_action: openSessions.length > 0 ? 'close_launcher' : 'quit',
     open_windows: buildOpenEnvironmentWindows(openSessions),
     environments,
+    gateway_sources: gatewaySources,
     control_planes: controlPlanes,
     action_progress: args.actionProgress ?? [],
     operations: args.operations ?? [],

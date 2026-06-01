@@ -25,6 +25,11 @@ function localForwardURL(port: number): string {
   return `http://127.0.0.1:${port}/`;
 }
 
+type RuntimePlacementLoopbackRoute = Readonly<{
+  surface: 'local_ui' | 'runtime_control' | 'gateway_protocol';
+  prefix: string;
+}>;
+
 class LoopbackHeaderTooLargeError extends Error {
   constructor() {
     super('Loopback request header is too large.');
@@ -32,14 +37,35 @@ class LoopbackHeaderTooLargeError extends Error {
   }
 }
 
-function normalizeRuntimeControlRequestHeader(buffer: Buffer): Buffer {
+function routeForLoopbackFirstChunk(firstChunk: Buffer): RuntimePlacementLoopbackRoute {
+  const requestHead = firstChunk.toString('latin1', 0, Math.min(firstChunk.length, 256));
+  if (requestHead.includes(' /__redeven_runtime_gateway')) {
+    return {
+      surface: 'gateway_protocol',
+      prefix: '/__redeven_runtime_gateway',
+    };
+  }
+  if (requestHead.includes(' /__redeven_runtime_control')) {
+    return {
+      surface: 'runtime_control',
+      prefix: '/__redeven_runtime_control',
+    };
+  }
+  return {
+    surface: 'local_ui',
+    prefix: '',
+  };
+}
+
+function normalizePrefixedRequestHeader(buffer: Buffer, prefix: string): Buffer {
   const firstLineEnd = buffer.indexOf('\r\n', 0, 'latin1');
   if (firstLineEnd < 0) {
     return buffer;
   }
   const text = buffer.toString('latin1');
   const firstLine = text.slice(0, firstLineEnd);
-  const match = /^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)\s+\/__redeven_runtime_control(\/[^\s]*)?\s+(HTTP\/1\.[01])$/u.exec(firstLine);
+  const cleanPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
+  const match = new RegExp(`^(GET|HEAD|POST|PUT|PATCH|DELETE|OPTIONS)\\s+${cleanPrefix}(/[^\\s]*)?\\s+(HTTP/1\\.[01])$`, 'u').exec(firstLine);
   if (!match) {
     return buffer;
   }
@@ -47,7 +73,7 @@ function normalizeRuntimeControlRequestHeader(buffer: Buffer): Buffer {
   return Buffer.from(`${match[1]} ${nextPath} ${match[3]}${text.slice(firstLineEnd)}`, 'latin1');
 }
 
-function runtimeControlRequestContentLength(header: Buffer): number {
+function prefixedRequestContentLength(header: Buffer): number {
   const text = header.toString('latin1');
   const match = /\r\ncontent-length:\s*(\d+)\s*(?=\r\n)/iu.exec(text);
   if (!match) {
@@ -57,16 +83,18 @@ function runtimeControlRequestContentLength(header: Buffer): number {
   return Number.isSafeInteger(length) && length > 0 ? length : 0;
 }
 
-function runtimeControlRequestNeedsRawTunnel(header: Buffer): boolean {
+function prefixedRequestNeedsRawTunnel(header: Buffer): boolean {
   const text = header.toString('latin1');
   return /\r\nconnection:[^\r\n]*\bupgrade\b/iu.test(text) &&
     /\r\nupgrade:\s*[^\r\n]+/iu.test(text);
 }
 
-class RuntimeControlRequestStreamNormalizer {
+class PrefixedRequestStreamNormalizer {
   private pendingHeader = Buffer.alloc(0);
   private remainingBodyBytes = 0;
   private rawTunnel = false;
+
+  constructor(private readonly prefix: string) {}
 
   push(chunk: Buffer): Buffer[] {
     if (this.rawTunnel) {
@@ -99,9 +127,9 @@ class RuntimeControlRequestStreamNormalizer {
         const headerLength = headerEnd + HTTP_HEADER_END.length;
         const header = this.pendingHeader.subarray(0, headerLength);
         const rest = this.pendingHeader.subarray(headerLength);
-        output.push(normalizeRuntimeControlRequestHeader(header));
+        output.push(normalizePrefixedRequestHeader(header, this.prefix));
 
-        if (runtimeControlRequestNeedsRawTunnel(header)) {
+        if (prefixedRequestNeedsRawTunnel(header)) {
           if (rest.length > 0) {
             output.push(rest);
           }
@@ -113,7 +141,7 @@ class RuntimeControlRequestStreamNormalizer {
         // Runtime-control callers in Desktop use Content-Length. Keeping that
         // boundary explicit lets the proxy normalize each keep-alive request
         // without growing a general HTTP chunked-transfer parser here.
-        const contentLength = runtimeControlRequestContentLength(header);
+        const contentLength = prefixedRequestContentLength(header);
         const bodyLength = Math.min(contentLength, rest.length);
         if (bodyLength > 0) {
           output.push(rest.subarray(0, bodyLength));
@@ -180,16 +208,15 @@ export async function startRuntimePlacementLoopbackProxy(
     socket.on('error', closeSocket);
 
     const openStream = (firstChunk: Buffer) => {
-      const isRuntimeControl = firstChunk.toString('latin1', 0, Math.min(firstChunk.length, 128))
-        .includes(' /__redeven_runtime_control');
+      const route = routeForLoopbackFirstChunk(firstChunk);
       let stream: ReturnType<RuntimePlacementBridgeSessionHandle['openStream']>;
       try {
-        stream = bridge.openStream(isRuntimeControl ? 'runtime_control' : 'local_ui');
+        stream = bridge.openStream(route.surface);
       } catch {
         socket.end(LOOPBACK_BRIDGE_UNAVAILABLE_RESPONSE);
         return;
       }
-      const requestNormalizer = isRuntimeControl ? new RuntimeControlRequestStreamNormalizer() : null;
+      const requestNormalizer = route.prefix ? new PrefixedRequestStreamNormalizer(route.prefix) : null;
       let bridgeWriteQueue = Promise.resolve();
       let closing = false;
 

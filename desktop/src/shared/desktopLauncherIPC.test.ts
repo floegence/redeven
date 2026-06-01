@@ -259,6 +259,117 @@ describe('desktopLauncherIPC', () => {
       environment_id: 'env-1',
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'upsert_gateway',
+      gateway_id: ' gw-demo ',
+      display_name: ' Lab Gateway ',
+      gateway_url: ' https://gateway.example/path?token=leak ',
+      allow_loopback_http: true,
+      user_confirmed: true,
+    })).toEqual({
+      kind: 'upsert_gateway',
+      gateway_id: 'gw-demo',
+      display_name: 'Lab Gateway',
+      connection_kind: 'url',
+      gateway_url: 'https://gateway.example/path?token=leak',
+      allow_loopback_http: true,
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'upsert_gateway',
+      gateway_id: ' gw-ssh ',
+      display_name: ' SSH Gateway ',
+      connection_kind: 'ssh_host',
+      ssh_destination: ' dev@bastion ',
+      ssh_port: ' 2222 ',
+      auth_mode: ' password ',
+      connect_timeout_seconds: '15',
+      runtime_root: ' /opt/redeven ',
+      bootstrap_strategy: ' desktop_upload ',
+      release_base_url: ' https://mirror.example/releases?token=drop ',
+      gateway_url: ' https://gateway.example/path?token=must-not-cross ',
+      proof: 'renderer-proof-must-not-cross',
+      client_private_key: 'renderer-private-key-must-not-cross',
+    })).toEqual({
+      kind: 'upsert_gateway',
+      gateway_id: 'gw-ssh',
+      display_name: 'SSH Gateway',
+      connection_kind: 'ssh_host',
+      ssh_destination: 'dev@bastion',
+      ssh_port: 2222,
+      auth_mode: 'key_agent',
+      connect_timeout_seconds: 15,
+      runtime_root: '/opt/redeven',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: 'https://mirror.example/releases',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'upsert_gateway',
+      gateway_id: ' gw-container ',
+      display_name: ' Container Gateway ',
+      connection_kind: 'ssh_container',
+      ssh_destination: ' bastion ',
+      ssh_port: '',
+      auth_mode: 'key_agent',
+      connect_timeout_seconds: '',
+      container_engine: 'podman',
+      container_id: ' container-123 ',
+      container_ref: '',
+      container_label: ' api-net ',
+      runtime_root: ' /workspace/.redeven ',
+      artifact_nonce: 'renderer-artifact-nonce-must-not-cross',
+      private_key: 'renderer-private-key-must-not-cross',
+    })).toEqual({
+      kind: 'upsert_gateway',
+      gateway_id: 'gw-container',
+      display_name: 'Container Gateway',
+      connection_kind: 'ssh_container',
+      ssh_destination: 'bastion',
+      ssh_port: null,
+      auth_mode: 'key_agent',
+      connect_timeout_seconds: 10,
+      container_engine: 'podman',
+      container_id: 'container-123',
+      container_ref: 'api-net',
+      container_label: 'api-net',
+      runtime_root: '/workspace/.redeven',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'pair_gateway',
+      gateway_id: ' gw-demo ',
+      user_confirmed: true,
+      proof: 'renderer-proof-must-not-cross',
+    })).toEqual({
+      kind: 'pair_gateway',
+      gateway_id: 'gw-demo',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_gateway_environment',
+      environment_id: ' gateway:gw-demo:env:env-demo ',
+      gateway_id: ' gw-demo ',
+      gateway_env_id: ' env-demo ',
+      label: ' Demo Gateway Env ',
+      connect_artifact: {
+        proof: 'renderer-proof-must-not-cross',
+        artifact_nonce: 'renderer-artifact-nonce-must-not-cross',
+        url: 'https://gateway.example/session',
+      },
+      gateway_session_id: 'renderer-gateway-session-must-not-cross',
+      client_nonce: 'renderer-nonce-must-not-cross',
+      client_private_key: 'renderer-private-key-must-not-cross',
+    })).toEqual({
+      kind: 'open_gateway_environment',
+      environment_id: 'gateway:gw-demo:env:env-demo',
+      gateway_id: 'gw-demo',
+      gateway_env_id: 'env-demo',
+      label: 'Demo Gateway Env',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'delete_gateway',
+      gateway_id: ' gw-demo ',
+    })).toEqual({
+      kind: 'delete_gateway',
+      gateway_id: 'gw-demo',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'start_control_plane_connect',
       provider_origin: ' https://cp.example.invalid/root ',
       display_label: ' Example Control Plane ',
@@ -529,6 +640,16 @@ describe('desktopLauncherIPC', () => {
       kind: 'set_provider_environment_pinned',
       environment_id: '   ',
     })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'upsert_gateway', gateway_url: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'pair_gateway', gateway_id: '   ', user_confirmed: true })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_gateway_environment',
+      environment_id: 'gateway:gw-demo:env:env-demo',
+      gateway_id: 'gw-demo',
+      gateway_env_id: '',
+      label: 'Demo',
+    })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_saved_environment', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest(null)).toBeNull();
   });

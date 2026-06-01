@@ -27,6 +27,7 @@ type MissingRuntimeControlStatus = Extract<DesktopRuntimeControlStatus, Readonly
 export type DesktopRuntimeOperationPlanningSurface =
   | 'managed_runtime_card'
   | 'provider_card'
+  | 'gateway_card'
   | 'external_local_ui';
 
 export type DesktopRuntimeOperationPlannerInput = Readonly<{
@@ -125,6 +126,18 @@ export function buildDesktopRuntimeOperationPlans(
         message: input.openable ? undefined : 'Refresh provider status before opening this environment.',
       }),
       refresh: desktopRuntimeOperationPlan('refresh', 'available', 'provider_tunnel'),
+    };
+  }
+  if (input.surface === 'gateway_card') {
+    return {
+      ...hidden,
+      open: desktopRuntimeOperationPlan('open', input.openable ? 'available' : 'blocked', 'runtime_gateway', {
+        reasonCode: input.openable ? undefined : 'gateway_route_unavailable',
+        message: input.openable ? undefined : 'Refresh Gateway status before opening this environment.',
+      }),
+      refresh: desktopRuntimeOperationPlan('refresh', 'available', 'runtime_gateway', {
+        label: 'Refresh Gateway status',
+      }),
     };
   }
   if (input.surface === 'external_local_ui') {

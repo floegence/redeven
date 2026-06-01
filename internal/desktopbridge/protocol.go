@@ -59,8 +59,9 @@ type RuntimeControl struct {
 type StreamSurface string
 
 const (
-	StreamSurfaceLocalUI        StreamSurface = "local_ui"
-	StreamSurfaceRuntimeControl StreamSurface = "runtime_control"
+	StreamSurfaceLocalUI         StreamSurface = "local_ui"
+	StreamSurfaceRuntimeControl  StreamSurface = "runtime_control"
+	StreamSurfaceGatewayProtocol StreamSurface = "gateway_protocol"
 )
 
 type StreamOpen struct {

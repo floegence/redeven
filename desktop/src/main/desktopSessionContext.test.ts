@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildExternalLocalUIDesktopTarget,
+  buildGatewayDesktopTarget,
   buildLocalEnvironmentDesktopTarget,
   buildProviderEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
@@ -70,5 +71,26 @@ describe('desktopSessionContext', () => {
       session_source: 'ssh_environment',
       label: 'SSH Lab',
     });
+  });
+
+  it('publishes Gateway sessions as runtime_gateway without artifacts or proofs', () => {
+    const snapshot = desktopSessionContextSnapshotFromTarget(buildGatewayDesktopTarget({
+      gatewayID: 'bastion',
+      gatewayLabel: 'Bastion Gateway',
+      gatewayEnvID: 'env_demo',
+      label: 'Demo Env',
+      gatewaySessionID: 'gws_demo',
+    }));
+
+    expect(snapshot).toMatchObject({
+      local_environment_id: 'gateway:bastion:env:env_demo',
+      renderer_storage_scope_id: 'gateway:bastion:env:env_demo',
+      target_kind: 'gateway_environment',
+      session_source: 'runtime_gateway',
+      label: 'Demo Env',
+    });
+    expect(JSON.stringify(snapshot)).not.toContain('gws_demo');
+    expect(JSON.stringify(snapshot)).not.toContain('proof');
+    expect(JSON.stringify(snapshot)).not.toContain('artifact');
   });
 });

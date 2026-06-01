@@ -72,6 +72,7 @@ import {
 } from './flowerHostBridge';
 import {
   buildLocalEnvironmentDesktopTarget,
+  buildGatewayDesktopTarget,
   buildManagedLocalRuntimeDesktopTarget,
   desktopSessionKeyFromRuntimeTargetID,
   buildExternalLocalUIDesktopTarget,
@@ -106,6 +107,30 @@ import {
 } from './desktopWelcomeState';
 import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRuntimeState';
 import { defaultDesktopStateStorePath, DesktopStateStore } from './desktopStateStore';
+import {
+  GatewayStore,
+  defaultGatewayStorePath,
+  gatewayBindingAudience,
+  gatewayRecordToSource,
+  gatewayRecordToSourceWithCatalog,
+  gatewayRecordToSourceWithError,
+  normalizeGatewayBaseURL,
+  stableGatewayID,
+  type GatewayRecord,
+  type GatewayTrustProfile,
+} from './gatewayStore';
+import {
+  buildPairingCompleteRequest,
+  assertGatewayPairingChallenge,
+  assertGatewayPairingCompleteResponse,
+  completeGatewayPairing,
+  createGatewayPairingMaterial,
+  pairingChallengeRequest,
+  type GatewaySecretStore,
+} from './gatewayTrust';
+import { GatewayClientError, GatewayURLClient, redactGatewayDiagnosticValue } from './gatewayClient';
+import { GatewayLifecycleManager } from './gatewayLifecycleManager';
+import { gatewaySessionArtifactURL } from './gatewaySessionArtifact';
 import { DesktopThemeState } from './desktopThemeState';
 import { DesktopLanguageState } from './desktopLanguageState';
 import { loadOrCreateDesktopRuntimeOwnerID } from './desktopRuntimeOwner';
@@ -692,6 +717,8 @@ let lastFocusedSessionKey: DesktopSessionKey | null = null;
 let quitPhase: 'idle' | 'confirming' | 'requested' | 'shutting_down' = 'idle';
 let desktopPreferencesCache: DesktopPreferences | null = null;
 let desktopStateStoreCache: DesktopStateStore | null = null;
+let gatewayStoreCache: GatewayStore | null = null;
+let gatewayLifecycleManagerCache: GatewayLifecycleManager | null = null;
 let desktopThemeStateCache: DesktopThemeState | null = null;
 let desktopLanguageStateCache: DesktopLanguageState | null = null;
 let desktopRuntimeOwnerIDTask: Promise<string> | null = null;
@@ -2240,6 +2267,92 @@ function preferencesCodec() {
   return createSafeStorageSecretCodec(safeStorage);
 }
 
+function gatewayStore(): GatewayStore {
+  if (!gatewayStoreCache) {
+    gatewayStoreCache = new GatewayStore(defaultGatewayStorePath(preferencesPaths().stateRoot));
+  }
+  return gatewayStoreCache;
+}
+
+function gatewaySecretsFilePath(): string {
+  return path.join(preferencesPaths().stateRoot, 'local-environment', 'gateway', 'gateway-secrets.json');
+}
+
+async function readGatewaySecretsFile(): Promise<Record<string, { encoding: string; data: string }>> {
+  try {
+    const raw = await fs.readFile(gatewaySecretsFilePath(), 'utf8');
+    const parsed = JSON.parse(raw) as { version?: unknown; secrets?: unknown };
+    const secrets = parsed.secrets && typeof parsed.secrets === 'object'
+      ? parsed.secrets as Record<string, { encoding: string; data: string }>
+      : {};
+    return Object.fromEntries(Object.entries(secrets).filter(([key, value]) => (
+      compact(key) !== ''
+      && !!value
+      && typeof value === 'object'
+      && typeof value.encoding === 'string'
+      && typeof value.data === 'string'
+    )));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return {};
+    }
+    throw error;
+  }
+}
+
+async function writeGatewaySecretsFile(secrets: Record<string, { encoding: string; data: string }>): Promise<void> {
+  const filePath = gatewaySecretsFilePath();
+  await fs.mkdir(path.dirname(filePath), { recursive: true, mode: 0o700 });
+  await fs.writeFile(filePath, `${JSON.stringify({ version: 1, secrets }, null, 2)}\n`, { mode: 0o600 });
+}
+
+function gatewaySecretStore(): GatewaySecretStore {
+  const codec = preferencesCodec();
+  return {
+    writeSecret: async (key, value) => {
+      const cleanKey = compact(key);
+      if (!cleanKey) {
+        return;
+      }
+      const secrets = await readGatewaySecretsFile();
+      secrets[cleanKey] = codec.encodeSecret(String(value ?? ''));
+      await writeGatewaySecretsFile(secrets);
+    },
+    readSecret: async (key) => {
+      const cleanKey = compact(key);
+      if (!cleanKey) {
+        return '';
+      }
+      const secret = (await readGatewaySecretsFile())[cleanKey];
+      return secret ? codec.decodeSecret(secret) : '';
+    },
+    deleteSecret: async (key) => {
+      const cleanKey = compact(key);
+      if (!cleanKey) {
+        return;
+      }
+      const secrets = await readGatewaySecretsFile();
+      delete secrets[cleanKey];
+      await writeGatewaySecretsFile(secrets);
+    },
+  };
+}
+
+function gatewayLifecycleManager(): GatewayLifecycleManager {
+  if (!gatewayLifecycleManagerCache) {
+    gatewayLifecycleManagerCache = new GatewayLifecycleManager({
+      secret_store: gatewaySecretStore(),
+      runtime_release_tag: resolveSSHRuntimeReleaseTag(),
+      release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
+      asset_cache_root: desktopRuntimePackageCacheRoot(),
+      temp_root: app.getPath('temp'),
+      source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
+      desktop_owner_id: desktopRuntimeOwnerID,
+    });
+  }
+  return gatewayLifecycleManagerCache;
+}
+
 function flowerHostPaths() {
   return defaultDesktopFlowerHostPaths();
 }
@@ -2367,6 +2480,30 @@ function cookieHeaderFromSetCookie(headers: Readonly<Record<string, string>>): s
     .join(',');
   const match = raw.match(/__Host-redeven_env_session=([^;,]+)/u);
   return match ? `__Host-redeven_env_session=${match[1]}` : '';
+}
+
+async function installGatewayLocalAccessCookies(
+  targetURL: string,
+  setCookieHeaders: readonly string[] | undefined,
+): Promise<void> {
+  const rawCookie = (setCookieHeaders ?? []).find((value) => /^redeven_local_access=/iu.test(compact(value)));
+  if (!rawCookie) {
+    return;
+  }
+  const token = compact(rawCookie.match(/^redeven_local_access=([^;,]+)/iu)?.[1]);
+  if (!token) {
+    return;
+  }
+  const parsed = new URL(targetURL);
+  await session.defaultSession.cookies.set({
+    url: `${parsed.protocol}//${parsed.host}/`,
+    name: 'redeven_local_access',
+    value: token,
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: parsed.protocol === 'https:',
+  });
 }
 
 function normalizeProviderEnvelopeData<T>(body: unknown, label: string): T {
@@ -2921,6 +3058,9 @@ function desktopSessionEntryURL(target: DesktopSessionTarget, startup: StartupRe
   if (target.kind === 'local_environment' && target.route === 'remote_desktop') {
     return startup.local_ui_url;
   }
+  if (target.kind === 'gateway_environment') {
+    return startup.local_ui_url;
+  }
   return buildLocalUIEnvAppEntryURL(startup.local_ui_url);
 }
 
@@ -3385,6 +3525,7 @@ function launcherActionRefreshScope(
   switch (actionKind) {
     case 'open_local_environment':
     case 'open_remote_environment':
+    case 'open_gateway_environment':
     case 'open_ssh_environment':
     case 'start_environment_runtime':
     case 'restart_environment_runtime':
@@ -3400,6 +3541,9 @@ function launcherActionRefreshScope(
     case 'delete_saved_environment':
     case 'delete_saved_ssh_environment':
     case 'delete_saved_runtime_target':
+    case 'upsert_gateway':
+    case 'pair_gateway':
+    case 'delete_gateway':
       return { force: true, mode: 'auto', targetEnvironmentIDs: targetScope };
     default:
       return null;
@@ -3432,6 +3576,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
   );
   const healthSnapshot = welcomeRuntimeHealthStore.snapshot();
   const state = currentUtilityWindowState(kind);
+  const gatewaySources = await loadGatewaySourcesForWelcome();
   return buildDesktopWelcomeSnapshot({
     preferences,
     controlPlanes: currentControlPlaneSummaries(preferences),
@@ -3441,6 +3586,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
     savedSSHRuntimeHealth: healthSnapshot.savedSSHRuntimeHealth,
     savedRuntimeTargetHealth: healthSnapshot.savedRuntimeTargetHealth,
     managedRuntimePresenceByTargetID: healthSnapshot.managedRuntimePresenceByTargetID,
+    gatewaySources,
     actionProgress: launcherOperations.progressItems(),
     operations: launcherOperations.operations(),
     surface: state.surface,
@@ -3448,6 +3594,138 @@ async function buildCurrentDesktopWelcomeSnapshot(
     issue: overrides.issue ?? state.issue,
     selectedEnvironmentID: state.selectedEnvironmentID,
   });
+}
+
+async function loadGatewaySourcesForWelcome() {
+  const records = await gatewayStore().list();
+  return Promise.all(records.map(async (record) => {
+    if (!record.trust_profile) {
+      return gatewayRecordToSource(record);
+    }
+    try {
+      const catalog = await gatewayLifecycleManager().catalog(record, { timeoutMs: 5_000 });
+      return gatewayRecordToSourceWithCatalog(record, {
+        display_name: catalog.gateway.display_name,
+        status: catalog.gateway.status,
+        environments: catalog.environments,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return gatewayRecordToSourceWithError(
+        record,
+        message,
+        error instanceof GatewayClientError ? error.code : (error as { code?: unknown })?.code as string | undefined,
+      );
+    }
+  }));
+}
+
+async function upsertGatewayFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway' }>,
+): Promise<GatewayRecord> {
+  const nextConnection = (() => {
+    switch (request.connection_kind) {
+      case 'url':
+        return {
+          kind: 'url' as const,
+          base_url: normalizeGatewayBaseURL(request.gateway_url),
+          allow_loopback_http: request.allow_loopback_http,
+        };
+      case 'ssh_host':
+        return {
+          kind: 'ssh_host' as const,
+          ssh_destination: request.ssh_destination,
+          ...(request.ssh_port == null ? {} : { ssh_port: request.ssh_port }),
+          auth_mode: 'key_agent' as const,
+          ...(request.connect_timeout_seconds == null ? {} : { connect_timeout_seconds: request.connect_timeout_seconds }),
+          runtime_root: request.runtime_root,
+          bootstrap_strategy: request.bootstrap_strategy,
+          ...(compact(request.release_base_url) ? { release_base_url: request.release_base_url } : {}),
+        };
+      case 'ssh_container':
+        return {
+          kind: 'ssh_container' as const,
+          ssh_destination: request.ssh_destination,
+          ...(request.ssh_port == null ? {} : { ssh_port: request.ssh_port }),
+          auth_mode: 'key_agent' as const,
+          ...(request.connect_timeout_seconds == null ? {} : { connect_timeout_seconds: request.connect_timeout_seconds }),
+          container_engine: request.container_engine,
+          container_id: request.container_id,
+          container_ref: request.container_ref,
+          container_label: request.container_label,
+          runtime_root: request.runtime_root,
+        };
+    }
+  })();
+  const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(nextConnection));
+  const existing = await gatewayStore().get(gatewayID);
+  if (existing?.trust_profile && gatewayBindingAudience(existing.connection) !== gatewayBindingAudience(nextConnection)) {
+    await gatewaySecretStore().deleteSecret(existing.trust_profile.paired_client_private_key_ref);
+    await gatewayLifecycleManager().clear(existing);
+  }
+  return gatewayStore().upsert({
+    gateway_id: gatewayID,
+    display_name: request.display_name,
+    connection: nextConnection,
+  });
+}
+
+async function pairGatewayFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, { kind: 'pair_gateway' }>,
+): Promise<GatewayTrustProfile> {
+  const record = await gatewayStore().get(request.gateway_id);
+  if (!record) {
+    throw new Error('Gateway was not found.');
+  }
+  const secretStore = gatewaySecretStore();
+  const client = record.connection.kind === 'url'
+    ? new GatewayURLClient(secretStore)
+    : await gatewayLifecycleManager().bridgeClient(record);
+  const material = createGatewayPairingMaterial(record);
+  const challenge = await client.pairingChallenge(record, pairingChallengeRequest(material));
+  const fingerprint = assertGatewayPairingChallenge({
+    record,
+    material,
+    challenge,
+  });
+  const confirmed = await confirmDesktopImpact({
+    title: 'Pair Gateway',
+    message: `Confirm the identity for ${record.display_name}`,
+    detail: [
+      `Gateway: ${record.display_name}`,
+      `Endpoint: ${gatewayBindingAudience(record.connection)}`,
+      `Fingerprint: ${fingerprint}`,
+      challenge.pairing_code ? `Pairing code: ${challenge.pairing_code}` : '',
+    ].filter(Boolean).join('\n'),
+    confirm_label: 'Pair Gateway',
+    cancel_label: 'Cancel',
+    confirm_tone: 'warning',
+  }, currentParentWindow());
+  if (!confirmed) {
+    throw new Error('Gateway pairing was canceled.');
+  }
+  const completion = await client.completePairing(record, buildPairingCompleteRequest(material, challenge));
+  assertGatewayPairingCompleteResponse(material, challenge, completion);
+  const trustProfile = await completeGatewayPairing({
+    record,
+    material,
+    challenge,
+    user_confirmed: true,
+    secret_store: secretStore,
+  });
+  await gatewayStore().updateTrustProfile(record.gateway_id, trustProfile);
+  return trustProfile;
+}
+
+async function deleteGatewayFromLauncher(gatewayID: string): Promise<GatewayRecord | null> {
+  const existing = await gatewayStore().get(gatewayID);
+  if (existing?.trust_profile) {
+    await gatewaySecretStore().deleteSecret(existing.trust_profile.paired_client_private_key_ref);
+  }
+  if (existing) {
+    await gatewayLifecycleManager().clear(existing);
+  }
+  return gatewayStore().delete(gatewayID);
 }
 
 function reserveDesktopWelcomeSnapshotGeneration(): number {
@@ -3738,14 +4016,14 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
   win.webContents.on('did-finish-load', () => {
     recordWindowLifecycle(args.diagnostics, 'loading_finished', 'browser window finished loading', {
       role: args.role,
-      url: win.webContents.getURL(),
+      url: stripSensitiveURLPayload(win.webContents.getURL()),
     });
     args.onDidFinishLoad?.(win);
   });
   win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
     recordWindowLifecycle(args.diagnostics, 'loading_failed', errorDescription || 'browser window failed to load', {
       role: args.role,
-      url: validatedURL,
+      url: stripSensitiveURLPayload(validatedURL),
       error_code: errorCode,
       main_frame: isMainFrame,
     });
@@ -4111,6 +4389,8 @@ async function createSessionRecord(
         : 'runtime_started'
       : target.kind === 'ssh_environment'
         ? 'ssh_environment_connected'
+        : target.kind === 'gateway_environment'
+          ? 'runtime_gateway_connected'
         : 'external_target_connected',
     target.kind === 'local_environment'
       ? options.attached === true
@@ -4122,6 +4402,8 @@ async function createSessionRecord(
           : 'desktop opened a Desktop-owned Local Environment session'
       : target.kind === 'ssh_environment'
         ? 'desktop opened an SSH-bootstrapped environment session'
+        : target.kind === 'gateway_environment'
+          ? 'desktop opened an environment session through a Runtime Gateway'
         : 'desktop connected to an external Redeven Local UI target',
     {
       target_url: safeAllowedBaseURL,
@@ -7169,6 +7451,202 @@ function remoteManagedSessionStartup(remoteSessionURL: string): StartupReport {
       },
     },
   };
+}
+
+function gatewayManagedSessionStartup(localUIURL: string): StartupReport {
+  return {
+    ...remoteManagedSessionStartup(localUIURL),
+    effective_run_mode: 'runtime_gateway',
+    diagnostics_enabled: true,
+  };
+}
+
+function gatewayOpenFailureSummary(error: unknown): string {
+  if (error instanceof GatewayClientError) {
+    return error.message;
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function openGatewayEnvironmentFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_gateway_environment' }>>,
+): Promise<DesktopLauncherActionResult> {
+  const record = await gatewayStore().get(request.gateway_id);
+  if (!record) {
+    return launcherActionFailure(
+      'environment_missing',
+      'environment',
+      'This Gateway is no longer available.',
+      {
+        environmentID: request.environment_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  const target = buildGatewayDesktopTarget({
+    gatewayID: record.gateway_id,
+    gatewayLabel: record.display_name,
+    gatewayEnvID: request.gateway_env_id,
+    label: request.label,
+  });
+  const existingSession = liveSession(target.session_key);
+  if (existingSession) {
+    if (existingSession.lifecycle === 'opening') {
+      return launcherActionFailureForOpeningSession(existingSession, {
+        environmentID: request.environment_id,
+      });
+    }
+    resetLauncherIssueState();
+    focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
+    return launcherActionSuccess('focused_environment_window', {
+      sessionKey: existingSession.session_key,
+    });
+  }
+
+  const operationKey = `${target.session_key}:open`;
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'open_gateway_environment',
+    subject_kind: 'gateway',
+    subject_id: record.gateway_id,
+    environment_id: request.environment_id,
+    environment_label: request.label,
+    phase: 'checking_runtime_record',
+    title: 'Checking Gateway route',
+    detail: 'Desktop is asking the Gateway for a signed environment session.',
+    open_progress: buildOpenConnectionProgress({
+      hostAccess: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '' },
+      phase: 'checking_runtime_record',
+      environmentID: request.environment_id,
+      environmentLabel: request.label,
+      targetID: target.session_key,
+      targetLabel: request.label,
+      targetDetail: record.display_name,
+      location: 'runtime_gateway',
+    }),
+    cancelable: true,
+    interrupt_label: 'Stop opening',
+    interrupt_detail: 'Desktop is stopping this Gateway open request before opening the environment window.',
+    interrupt_kind: 'stop_opening',
+  });
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+
+  try {
+    const clientNonce = crypto.randomBytes(24).toString('base64url');
+    const issued = await gatewayLifecycleManager().openSessionWithBridge(record, {
+      gateway_env_id: request.gateway_env_id,
+      requested_capability: 'env_app',
+      client_nonce: clientNonce,
+    }, { signal });
+    const { response, bridge_session: bridgeSession } = issued;
+    const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);
+    await installGatewayLocalAccessCookies(artifactURL, response.set_cookie_headers);
+    const openTarget = buildGatewayDesktopTarget({
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      gatewayEnvID: request.gateway_env_id,
+      label: request.label,
+      gatewaySessionID: response.gateway_session_id,
+    });
+    launcherOperations.update(operationKey, {
+      phase: 'checking_env_app_readiness',
+      title: 'Checking Gateway session',
+      detail: 'Desktop verified the Gateway artifact and is checking the environment app route.',
+      open_progress: buildOpenConnectionProgress({
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: '' },
+        phase: 'checking_env_app_readiness',
+        environmentID: request.environment_id,
+        environmentLabel: request.label,
+        targetID: openTarget.session_key,
+        targetLabel: request.label,
+        targetDetail: record.display_name,
+        location: 'runtime_gateway',
+      }),
+    });
+    const startup = gatewayManagedSessionStartup(artifactURL);
+    launcherOperations.update(operationKey, {
+      phase: 'opening_window',
+      title: 'Opening environment',
+      detail: 'Desktop is opening the Gateway environment window.',
+      open_progress: buildOpenConnectionProgress({
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: '' },
+        phase: 'opening_window',
+        environmentID: request.environment_id,
+        environmentLabel: request.label,
+        targetID: openTarget.session_key,
+        targetLabel: request.label,
+        targetDetail: record.display_name,
+        location: 'runtime_gateway',
+      }),
+    });
+    const sessionRecord = await createSessionRecord(openTarget, startup, { stealAppFocus: true });
+    await waitForSessionInitialLoad(sessionRecord);
+    resetLauncherIssueState();
+    launcherOperations.finish(operationKey, 'succeeded', {
+      phase: 'open_ready',
+      title: 'Environment open',
+      detail: 'Desktop opened this Gateway environment.',
+      open_progress: buildOpenConnectionProgress({
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: '' },
+        phase: 'open_ready',
+        environmentID: request.environment_id,
+        environmentLabel: request.label,
+        targetID: openTarget.session_key,
+        targetLabel: request.label,
+        targetDetail: record.display_name,
+        location: 'runtime_gateway',
+      }),
+    });
+    scheduleLauncherOperationRemoval(operationKey);
+    return launcherActionSuccess('opened_environment_window', {
+      sessionKey: openTarget.session_key,
+    });
+  } catch (error) {
+    const redacted = redactGatewayDiagnosticValue({
+      error,
+      gateway_id: request.gateway_id,
+      gateway_env_id: request.gateway_env_id,
+    });
+    const failure = desktopOperationFailurePresentation({
+      code: 'environment_open_failed',
+      title: 'Gateway Open Failed',
+      summary: gatewayOpenFailureSummary(error),
+      targetLabel: request.label,
+      detail: typeof redacted === 'string' ? redacted : undefined,
+    });
+    launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
+      phase: signal?.aborted ? 'canceled' : 'failed',
+      title: signal?.aborted ? 'Open canceled' : 'Open failed',
+      detail: signal?.aborted ? 'Desktop canceled this Gateway open request.' : failure.summary,
+      open_progress: buildOpenConnectionProgress({
+        hostAccess: { kind: 'local_host' },
+        placement: { kind: 'host_process', runtime_root: '' },
+        phase: signal?.aborted ? 'canceled' : 'failed',
+        environmentID: request.environment_id,
+        environmentLabel: request.label,
+        targetID: target.session_key,
+        targetLabel: request.label,
+        targetDetail: record.display_name,
+        location: 'runtime_gateway',
+      }),
+      ...(signal?.aborted ? {} : { failure }),
+    });
+    scheduleLauncherOperationRemoval(operationKey);
+    return launcherActionFailure(
+      'action_invalid',
+      'environment',
+      failure.summary,
+      {
+        environmentID: request.environment_id,
+        shouldRefreshSnapshot: true,
+        failure,
+      },
+    );
+  }
 }
 
 async function openProviderRemoteEnvironmentRecord(
@@ -11595,10 +12073,39 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return focusEnvironmentWindow(request.session_key);
     case 'open_provider_environment':
       return openProviderEnvironmentFromLauncher(request);
+    case 'open_gateway_environment':
+      return openGatewayEnvironmentFromLauncher(request);
     case 'refresh_control_plane':
       return refreshControlPlaneFromLauncher(request);
     case 'delete_control_plane':
       return deleteControlPlaneFromLauncher(request);
+    case 'upsert_gateway':
+      try {
+        await upsertGatewayFromLauncher(request);
+        return launcherActionSuccess('saved_gateway');
+      } catch (error) {
+        return launcherActionFailure(
+          'action_invalid',
+          'dialog',
+          error instanceof Error ? error.message : String(error),
+          { shouldRefreshSnapshot: true },
+        );
+      }
+    case 'pair_gateway':
+      try {
+        await pairGatewayFromLauncher(request);
+        return launcherActionSuccess('paired_gateway');
+      } catch (error) {
+        return launcherActionFailure(
+          'action_invalid',
+          'dialog',
+          error instanceof Error ? error.message : String(error),
+          { shouldRefreshSnapshot: true },
+        );
+      }
+    case 'delete_gateway':
+      await deleteGatewayFromLauncher(request.gateway_id);
+      return launcherActionSuccess('deleted_gateway');
     case 'save_local_environment_settings':
       try {
         await saveLocalEnvironmentSettingsFromWelcome({

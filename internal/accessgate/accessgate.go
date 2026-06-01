@@ -288,6 +288,32 @@ func (g *Gate) MintLocalSessionWithSubject(password string, subject string) (*Lo
 	}, nil
 }
 
+func (g *Gate) MintTrustedLocalSession(meta session.Meta) (*LocalSessionResult, error) {
+	if g == nil || !g.enabled {
+		return &LocalSessionResult{Unlocked: true}, nil
+	}
+	now := time.Now()
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.cleanupExpiredLocked(now)
+
+	sessionToken, expiresAt, err := g.mintLocalSessionLocked(now)
+	if err != nil {
+		return nil, err
+	}
+	resumeToken, resumeExpiresAt, err := g.mintResumeTokenLocked(now, meta)
+	if err != nil {
+		return nil, err
+	}
+	return &LocalSessionResult{
+		Unlocked:             true,
+		SessionToken:         sessionToken,
+		SessionExpiresAtUnix: expiresAt.UnixMilli(),
+		ResumeToken:          resumeToken,
+		ResumeExpiresAtUnix:  resumeExpiresAt.UnixMilli(),
+	}, nil
+}
+
 func (g *Gate) MintLocalSessionFromResumeToken(resumeToken string, meta session.Meta) (*LocalSessionResult, error) {
 	if g == nil || !g.enabled {
 		return &LocalSessionResult{Unlocked: true}, nil
