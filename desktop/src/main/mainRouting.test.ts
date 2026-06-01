@@ -642,8 +642,11 @@ describe('main routing', () => {
     expect(materialStart).toBeGreaterThanOrEqual(0);
     expect(materialEnd).toBeGreaterThan(materialStart);
     const materialSrc = mainSrc.slice(materialStart, materialEnd);
+    expect(mainSrc).toContain('type ProviderDesktopSessionMaterialOptions = Readonly<{');
+    expect(mainSrc).toContain('requireRemoteRouteReady?: boolean;');
     expect(materialSrc).toContain('requestDesktopOpenSession(');
-    expect(materialSrc).not.toContain('launcherActionFailureForRemoteRouteState');
+    expect(materialSrc).toContain('if (options.requireRemoteRouteReady === true) {');
+    expect(materialSrc).toContain('launcherActionFailureForRemoteRouteState');
 
     const remoteOpenStart = mainSrc.indexOf('async function prepareProviderRemoteOpenSession(');
     const remoteOpenEnd = mainSrc.indexOf('function providerEnvironmentFailureContext', remoteOpenStart);
@@ -662,6 +665,27 @@ describe('main routing', () => {
     expect(connectSrc).not.toContain('prepareProviderRemoteOpenSession');
     expect(connectSrc).not.toContain('launcherActionFailureForRemoteRouteState');
     expect(connectSrc).not.toContain('openProviderEnvironmentFromLauncher');
+
+    const flowerTargetStart = mainSrc.indexOf('async function openFlowerHostTargetSession(');
+    const flowerTargetEnd = mainSrc.indexOf('function desktopStateStore()', flowerTargetStart);
+    expect(flowerTargetStart).toBeGreaterThanOrEqual(0);
+    expect(flowerTargetEnd).toBeGreaterThan(flowerTargetStart);
+    const flowerTargetSrc = mainSrc.slice(flowerTargetStart, flowerTargetEnd);
+    expect(flowerTargetSrc).toContain('requestProviderDesktopSessionMaterial(preferences, environment, {\n    requireRemoteRouteReady: true,\n  })');
+    expect(flowerTargetSrc).toContain('stripSensitiveURLPayload(material.remoteSessionURL)');
+    expect(flowerTargetSrc).not.toContain('targetURL: latest.environment.environment_url || material.remoteSessionURL');
+    expect(flowerTargetSrc).toContain("const bootTicket = compact(bootPayload.boot_ticket);");
+    expect(flowerTargetSrc).toContain('bearerToken: bootTicket');
+    expect(flowerTargetSrc).toContain('bearerToken: entryTicket');
+    expect(flowerTargetSrc).toContain('normalizeFlowerHostRequiredCapabilities(request.required_capabilities);');
+    expect(flowerTargetSrc).toContain('capabilities: envAppTargetSessionCapabilities()');
+    expect(mainSrc).toContain('function envAppTargetSessionCapabilities()');
+    expect(mainSrc).not.toContain('function targetSessionCapabilitiesFor(');
+    expect(flowerTargetSrc).not.toContain('bootstrap_ticket: bootTicket');
+    expect(flowerTargetSrc).not.toContain('entry_ticket: entryTicket');
+    expect(flowerTargetSrc).not.toContain('control_plane_access_token');
+    expect(flowerTargetSrc).not.toContain('provider_access_token');
+    expect(flowerTargetSrc).not.toContain('e2ee_psk');
 
     const disconnectStart = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(');
     const disconnectEnd = mainSrc.indexOf('async function cancelLauncherOperationFromLauncher(', disconnectStart);
@@ -822,7 +846,13 @@ describe('main routing', () => {
     expect(mainSrc).toContain('return buildLocalUIEnvAppEntryURL(startup.local_ui_url);');
     expect(mainSrc).toContain('const entryURL = desktopSessionEntryURL(target, startup);');
     expect(mainSrc).toContain('const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics');
-    expect(mainSrc).toContain('allowed_base_url: startup.local_ui_url');
+    expect(mainSrc).toContain('const safeAllowedBaseURL = stripSensitiveURLPayload(startup.local_ui_url) || startup.local_ui_url;');
+    expect(mainSrc).toContain('allowed_base_url: safeAllowedBaseURL');
+    expect(mainSrc).toContain('function rendererSafeStartupReport(startup: StartupReport): StartupReport');
+    expect(mainSrc).toContain('entry_url: rendererSafeSessionURL(session)');
+    expect(mainSrc).toContain('startup: rendererSafeStartupReport(session.startup)');
+    expect(mainSrc).toContain('url.search = \'\';');
+    expect(mainSrc).toContain('url.hash = \'\';');
     expect(mainSrc).toContain('await rootWindow.loadURL(sessionRecord.entry_url);');
   });
 

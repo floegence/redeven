@@ -140,15 +140,7 @@ func BuildTransferPlan(manifest TransferManifest, destination TransferDestinatio
 		DestRootPath:    destination.RootPath,
 		Items:           make([]TransferPlanItem, 0, len(manifest.Items)),
 		ConflictSummary: map[string]int{},
-		Policy: TransferPolicySummary{
-			SkipUnchanged:     policy.SkipUnchanged,
-			SkipExisting:      policy.SkipExisting,
-			AllowOverwrite:    policy.AllowOverwrite,
-			RequireApproval:   policy.RequireApproval,
-			MaxItemBytes:      policy.MaxItemBytes,
-			SkipDirectories:   policy.SkipDirectories,
-			SkipMissingParent: policy.SkipMissingParent,
-		},
+		Policy:          TransferPolicySummary(policy),
 	}
 	plan.ManifestHash = mustStableHash(manifest)
 	plannedDirs := indexManifestDirectories(destination.RootPath, manifest.Items)

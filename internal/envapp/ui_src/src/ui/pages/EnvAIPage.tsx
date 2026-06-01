@@ -15,7 +15,7 @@ export function EnvAIPage() {
   const env = useEnvContext();
   const rpc = useRedevenRpc();
   const i18n = useI18n();
-  const [focusedThreadID, setFocusedThreadID] = createSignal('');
+  const [focusedThreadID] = createSignal('');
   const adapter = createMemo(() => createEnvLocalFlowerSurfaceAdapter({
     envPublicID: trim(env.env_id()),
     envLabel: trim(env.env()?.name) || trim(env.env_id()) || 'This environment',

@@ -6,6 +6,10 @@ import {
   type DesktopFlowerHostPaths,
   resolveDesktopFlowerHostSecret,
 } from './desktopFlowerHostState';
+import type {
+  DesktopFlowerHostTargetSessionGrant,
+  DesktopFlowerHostTargetSessionRequest,
+} from './flowerHostBridge';
 
 type SecretResolverServer = Readonly<{
   baseURL: string;
@@ -36,14 +40,31 @@ function writeJSON(response: ServerResponse, status: number, value: unknown): vo
   response.end(`${JSON.stringify(value)}\n`);
 }
 
+function targetSessionGrantPayload(
+  grant: DesktopFlowerHostTargetSessionGrant,
+): DesktopFlowerHostTargetSessionGrant {
+  return {
+    target_id: grant.target_id,
+    provider_origin: grant.provider_origin,
+    env_public_id: grant.env_public_id,
+    grant_client: grant.grant_client,
+    capabilities: {
+      can_read: grant.capabilities.can_read,
+      can_write: grant.capabilities.can_write,
+      can_execute: grant.capabilities.can_execute,
+    },
+    expires_at_unix_ms: grant.expires_at_unix_ms,
+  };
+}
+
 export async function startFlowerHostSecretResolver(
   paths: DesktopFlowerHostPaths,
   codec: DesktopFlowerHostSecretCodec,
-  resolveControlPlaneAccessToken?: (providerOrigin: string) => Promise<string>,
+  openTargetSession?: (request: DesktopFlowerHostTargetSessionRequest) => Promise<DesktopFlowerHostTargetSessionGrant>,
 ): Promise<SecretResolverServer> {
   const token = `fhs_${crypto.randomBytes(24).toString('base64url')}`;
   const server = http.createServer(async (request, response) => {
-    if (request.method !== 'POST' || request.url !== '/v1/secrets/resolve') {
+    if (request.method !== 'POST' || (request.url !== '/v1/secrets/resolve' && request.url !== '/v1/targets/open-session')) {
       writeJSON(response, 404, { ok: false, error: 'not found' });
       return;
     }
@@ -52,29 +73,24 @@ export async function startFlowerHostSecretResolver(
       return;
     }
     try {
-      const body = await readRequestJSON(request) as { provider_id?: unknown; provider_origin?: unknown; kind?: unknown };
-      const providerID = compact(body.provider_id);
-      const providerOrigin = compact(body.provider_origin);
-      const kind = compact(body.kind);
-      if (kind !== 'provider_api_key' && kind !== 'web_search_api_key' && kind !== 'control_plane_access_token') {
-        writeJSON(response, 400, { ok: false, error: 'unsupported secret kind' });
-        return;
-      }
-      if (kind === 'control_plane_access_token') {
-        if (providerOrigin === '') {
-          writeJSON(response, 400, { ok: false, error: 'provider_origin is required' });
+      if (request.url === '/v1/targets/open-session') {
+        if (!openTargetSession) {
+          writeJSON(response, 503, { ok: false, error: 'target session broker is unavailable' });
           return;
         }
-        if (!resolveControlPlaneAccessToken) {
-          writeJSON(response, 200, { ok: true, configured: false });
-          return;
-        }
-        const value = await resolveControlPlaneAccessToken(providerOrigin);
+        const body = await readRequestJSON(request) as DesktopFlowerHostTargetSessionRequest;
+        const grant = await openTargetSession(body);
         writeJSON(response, 200, {
           ok: true,
-          configured: value !== '',
-          ...(value ? { value } : {}),
+          data: targetSessionGrantPayload(grant),
         });
+        return;
+      }
+      const body = await readRequestJSON(request) as { provider_id?: unknown; kind?: unknown };
+      const providerID = compact(body.provider_id);
+      const kind = compact(body.kind);
+      if (kind !== 'provider_api_key' && kind !== 'web_search_api_key') {
+        writeJSON(response, 400, { ok: false, error: 'unsupported secret kind' });
         return;
       }
       const value = await resolveDesktopFlowerHostSecret(

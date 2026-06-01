@@ -53,14 +53,47 @@ type FlowerHostBridgeArgs = Readonly<{
   executablePath: string;
   paths: DesktopFlowerHostPaths;
   codec: DesktopFlowerHostSecretCodec;
-  resolveControlPlaneAccessToken?: (providerOrigin: string) => Promise<string>;
+  openTargetSession?: (request: DesktopFlowerHostTargetSessionRequest) => Promise<DesktopFlowerHostTargetSessionGrant>;
   tempRoot?: string;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
+}>;
+
+export type DesktopFlowerHostTargetSessionRequest = Readonly<{
+  target_id?: unknown;
+  provider_origin?: unknown;
+  provider_id?: unknown;
+  env_public_id?: unknown;
+  required_capabilities?: unknown;
+  reason?: unknown;
+}>;
+
+export type DesktopFlowerHostTargetSessionGrant = Readonly<{
+  target_id: string;
+  provider_origin: string;
+  env_public_id: string;
+  grant_client: unknown;
+  capabilities: Readonly<{
+    can_read: boolean;
+    can_write: boolean;
+    can_execute: boolean;
+  }>;
+  expires_at_unix_ms: number;
 }>;
 
 const STARTUP_REPORT_POLL_MS = 100;
 const FLOWER_HOST_STARTUP_TIMEOUT_MS = 10_000;
 const FLOWER_HOST_REQUEST_TIMEOUT_MS = 15_000;
+const FLOWER_HOST_ENV_ALLOWLIST = [
+  'HOME',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'LOGNAME',
+  'PATH',
+  'SHELL',
+  'TMPDIR',
+  'USER',
+] as const;
 
 let clientTask: Promise<FlowerHostClient> | null = null;
 let activeClient: FlowerHostClient | null = null;
@@ -96,13 +129,25 @@ function normalizeStartupReport(raw: unknown): FlowerHostStartupReport | null {
   if (!hostID || !baseURL || !token) {
     return null;
   }
-    return {
-      status: 'ready',
-      host_id: hostID,
-      base_url: baseURL,
-      token,
-      attached: Boolean(record.attached),
-    };
+  return {
+    status: 'ready',
+    host_id: hostID,
+    base_url: baseURL,
+    token,
+    attached: Boolean(record.attached),
+  };
+}
+
+function flowerHostChildEnv(secretResolverTokenEnv: string, secretResolverToken: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of FLOWER_HOST_ENV_ALLOWLIST) {
+    const value = process.env[key];
+    if (value !== undefined && value !== '') {
+      env[key] = value;
+    }
+  }
+  env[secretResolverTokenEnv] = secretResolverToken;
+  return env;
 }
 
 async function readStartupReport(reportFile: string): Promise<FlowerHostStartupReport | null> {
@@ -223,7 +268,7 @@ export async function shutdownFlowerHostBridge(): Promise<void> {
 }
 
 async function startFlowerHostBridge(args: FlowerHostBridgeArgs): Promise<FlowerHostClient> {
-  const secretResolver = await startFlowerHostSecretResolver(args.paths, args.codec, args.resolveControlPlaneAccessToken);
+  const secretResolver = await startFlowerHostSecretResolver(args.paths, args.codec, args.openTargetSession);
   const tempDir = await fs.mkdtemp(path.join(args.tempRoot ?? os.tmpdir(), 'redeven-flower-host-'));
   const reportFile = path.join(tempDir, 'startup-report.json');
   const secretResolverTokenEnv = 'REDEVEN_FLOWER_HOST_SECRET_RESOLVER_TOKEN';
@@ -241,10 +286,7 @@ async function startFlowerHostBridge(args: FlowerHostBridgeArgs): Promise<Flower
     secretResolverTokenEnv,
   ], {
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: {
-      ...process.env,
-      [secretResolverTokenEnv]: secretResolver.token,
-    },
+    env: flowerHostChildEnv(secretResolverTokenEnv, secretResolver.token),
   }) as unknown as FlowerHostProcess;
 
   let spawnError: Error | null = null;

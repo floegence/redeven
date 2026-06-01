@@ -9,6 +9,7 @@ import {
   fetchProviderDiscovery,
   fetchProviderEnvironments,
   exchangeProviderDesktopConnectAuthorization,
+  requestDesktopOpenSession,
 } from './controlPlaneProviderClient';
 import { normalizeDesktopControlPlaneProvider } from '../shared/controlPlaneProvider';
 
@@ -151,6 +152,37 @@ describe('controlPlaneProviderClient', () => {
       body_text: JSON.stringify({
         authorization_code: 'code_demo',
         code_verifier: 'verifier_demo',
+      }),
+    }));
+  });
+
+  it('requests provider-neutral desktop open session material', async () => {
+    const provider = normalizeDesktopControlPlaneProvider({
+      protocol_version: 'rcpp-v1',
+      provider_id: 'example_control_plane',
+      display_name: 'Example Control Plane',
+      provider_origin: 'https://dev.redeven.test',
+      documentation_url: 'https://redeven.test/docs/control-plane-providers',
+    });
+    expect(provider).not.toBeNull();
+
+    const transport = vi.fn<DesktopProviderTransport>().mockResolvedValueOnce(response(200, JSON.stringify({
+      bootstrap_ticket: 'boot_ticket_demo',
+      remote_session_url: 'https://env.dev.redeven.test/_redeven_boot/#redeven=abc',
+      expires_at_unix_ms: 1_710_000_000_000,
+    })));
+
+    await expect(requestDesktopOpenSession(provider!, 'access-token', ' env_demo ', { transport })).resolves.toEqual({
+      bootstrap_ticket: 'boot_ticket_demo',
+      remote_session_url: 'https://env.dev.redeven.test/_redeven_boot/#redeven=abc',
+      expires_at_unix_ms: 1_710_000_000_000,
+    });
+
+    expect(transport).toHaveBeenCalledWith(expect.objectContaining({
+      url: 'https://dev.redeven.test/api/rcpp/v1/environments/env_demo/desktop/open-session',
+      method: 'POST',
+      headers: expect.objectContaining({
+        authorization: 'Bearer access-token',
       }),
     }));
   });

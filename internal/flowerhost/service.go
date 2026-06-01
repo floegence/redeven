@@ -16,12 +16,14 @@ import (
 )
 
 const hostEndpointID = "flower-host"
+const hostLocalFloeAppID = "redeven.flower.host"
 
 type ServiceOptions struct {
 	Logger         *slog.Logger
 	Paths          Paths
 	Identity       HostIdentity
 	SecretResolver SecretResolver
+	TargetBroker   TargetSessionBroker
 	AgentHomeDir   string
 	Shell          string
 }
@@ -74,16 +76,26 @@ func NewService(ctx context.Context, opts ServiceOptions) (*Service, error) {
 		return nil, err
 	}
 	resolver := opts.SecretResolver
+	brokerURL := ""
+	brokerToken := ""
+	if opts.TargetBroker != nil {
+		brokerURL, brokerToken = opts.TargetBroker.TargetSessionBrokerEndpoint()
+	} else if endpoint, ok := resolver.(TargetSessionBroker); ok {
+		brokerURL, brokerToken = endpoint.TargetSessionBrokerEndpoint()
+	}
 	catalog := NewTargetCatalog(store)
 	connector := NewTargetConnector(TargetConnectorOptions{
-		HostID: strings.TrimSpace(identity.HostID),
-		ResolveAccessToken: func(ctx context.Context, providerOrigin string) (string, bool, error) {
-			if resolver == nil {
-				return "", false, nil
-			}
-			return resolver.ResolveControlPlaneAccessToken(ctx, providerOrigin)
-		},
+		BrokerURL:   brokerURL,
+		BrokerToken: brokerToken,
 	})
+	svc := &Service{
+		log:      logger,
+		paths:    opts.Paths,
+		identity: identity,
+		store:    store,
+		resolver: resolver,
+		router:   NewRouter(identity),
+	}
 	aiSvc, err := ai.NewService(ai.Options{
 		Logger:          logger,
 		StateDir:        opts.Paths.StateDir,
@@ -98,6 +110,16 @@ func NewService(ctx context.Context, opts ServiceOptions) (*Service, error) {
 			Catalog:   catalog,
 			Connector: connector,
 		}),
+		ToolTargetPolicyForRun: func(_ *session.Meta, _ threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata) ai.ToolTargetPolicy {
+			defaultTargetID := ""
+			if flowerMeta != nil {
+				defaultTargetID = strings.TrimSpace(flowerMeta.PrimaryTargetID)
+			}
+			return ai.ToolTargetPolicy{
+				Mode:            ai.ToolTargetModeExplicitTarget,
+				DefaultTargetID: defaultTargetID,
+			}
+		},
 		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
 			if resolver == nil {
 				return "", false, nil
@@ -114,17 +136,23 @@ func NewService(ctx context.Context, opts ServiceOptions) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	svc := &Service{
-		log:      logger,
-		paths:    opts.Paths,
-		identity: identity,
-		store:    store,
-		resolver: resolver,
-		router:   NewRouter(identity),
-		ai:       aiSvc,
-	}
+	svc.ai = aiSvc
 	svc.refreshRouterHealth(ctx, doc)
 	return svc, nil
+}
+
+func (s *Service) primaryTargetIDForThread(ctx context.Context, threadID string) string {
+	if s == nil || s.ai == nil {
+		return ""
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	meta, err := s.ai.GetFlowerThreadMetadata(ctx, hostEndpointID, threadID)
+	if err != nil || meta == nil {
+		return ""
+	}
+	return strings.TrimSpace(meta.PrimaryTargetID)
 }
 
 func (s *Service) Close() error {
@@ -138,7 +166,7 @@ func (s *Service) Meta() *session.Meta {
 	return &session.Meta{
 		ChannelID:         "flower-host-loopback",
 		EndpointID:        hostEndpointID,
-		FloeApp:           "com.floegence.redeven.flower",
+		FloeApp:           hostLocalFloeAppID,
 		SessionKind:       "flower_host",
 		UserPublicID:      strings.TrimSpace(s.identity.UserPublicID),
 		UserEmail:         "",

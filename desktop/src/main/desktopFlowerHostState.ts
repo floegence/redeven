@@ -83,6 +83,61 @@ function positiveInteger(value: unknown): number | undefined {
   return Math.round(parsed);
 }
 
+function normalizeTargetCacheMetadata(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  const stringKeys = [
+    'target_kind',
+    'provider_origin',
+    'provider_id',
+    'env_public_id',
+    'namespace_public_id',
+    'runtime_status',
+    'connect_state',
+  ] as const;
+  for (const key of stringKeys) {
+    const clean = compact(candidate[key]);
+    if (clean) {
+      out[key] = clean;
+    }
+  }
+  if (Array.isArray(candidate.capabilities)) {
+    const capabilities = Array.from(new Set(candidate.capabilities
+      .map((item) => compact(item))
+      .filter((item) => item !== '')));
+    if (capabilities.length > 0) {
+      out.capabilities = capabilities;
+    }
+  }
+  const lastConnectedAt = positiveInteger(candidate.last_connected_at_unix_ms);
+  if (lastConnectedAt != null) {
+    out.last_connected_at_unix_ms = lastConnectedAt;
+  }
+  if (candidate.last_connect_error && typeof candidate.last_connect_error === 'object' && !Array.isArray(candidate.last_connect_error)) {
+    const raw = candidate.last_connect_error as Record<string, unknown>;
+    const error: Record<string, unknown> = {};
+    const code = compact(raw.code);
+    const message = compact(raw.message);
+    const atUnixMS = positiveInteger(raw.at_unix_ms);
+    if (code) {
+      error.code = code;
+    }
+    if (message) {
+      error.message = message;
+    }
+    if (atUnixMS != null) {
+      error.at_unix_ms = atUnixMS;
+    }
+    if (Object.keys(error).length > 0) {
+      out.last_connect_error = error;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function normalizeBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === 'boolean' ? value : fallback;
 }
@@ -414,14 +469,13 @@ function normalizeTargetCacheEntry(value: unknown): DesktopFlowerHostTargetCache
   if (!targetID) {
     return null;
   }
+  const metadata = normalizeTargetCacheMetadata(candidate.metadata);
   return {
     target_id: targetID,
     label: compact(candidate.label),
     target_url: compact(candidate.target_url),
     last_seen_at_unix_ms: positiveInteger(candidate.last_seen_at_unix_ms) ?? Date.now(),
-    ...(candidate.metadata && typeof candidate.metadata === 'object' && !Array.isArray(candidate.metadata)
-      ? { metadata: candidate.metadata }
-      : {}),
+    ...(metadata ? { metadata } : {}),
   };
 }
 

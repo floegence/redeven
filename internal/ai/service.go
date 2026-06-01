@@ -55,8 +55,9 @@ type Options struct {
 
 	Config *config.AIConfig
 
-	ToolTargetPolicy   ToolTargetPolicy
-	TargetToolExecutor TargetToolExecutor
+	ToolTargetPolicy       ToolTargetPolicy
+	TargetToolExecutor     TargetToolExecutor
+	ToolTargetPolicyForRun func(meta *session.Meta, thread threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata) ToolTargetPolicy
 
 	// PersistOpTimeout is the per-operation timeout for threadstore persistence
 	// (SQLite reads/writes). It must NOT be tied to a run's overall lifetime, since
@@ -114,8 +115,9 @@ type Service struct {
 	resolveProviderKey  func(providerID string) (string, bool, error)
 	resolveWebSearchKey func(providerID string) (string, bool, error)
 
-	toolTargetPolicy   ToolTargetPolicy
-	targetToolExecutor TargetToolExecutor
+	toolTargetPolicy       ToolTargetPolicy
+	targetToolExecutor     TargetToolExecutor
+	toolTargetPolicyForRun func(meta *session.Meta, thread threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata) ToolTargetPolicy
 
 	mu                      sync.Mutex
 	activeRunByTh           map[string]string // <endpoint_id>:<thread_id> -> run_id
@@ -280,6 +282,7 @@ func NewService(opts Options) (*Service, error) {
 		resolveWebSearchKey:          resolveWebSearchKey,
 		toolTargetPolicy:             toolTargetPolicy,
 		targetToolExecutor:           opts.TargetToolExecutor,
+		toolTargetPolicyForRun:       opts.ToolTargetPolicyForRun,
 		activeRunByTh:                make(map[string]string),
 		runs:                         make(map[string]*run),
 		realtimeWriters:              make(map[*rpc.Server]*aiSinkWriter),
@@ -1122,6 +1125,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 
 	s.mu.Lock()
 	db := s.threadsDB
+	toolTargetPolicyForRun := s.toolTargetPolicyForRun
 	s.mu.Unlock()
 	if db == nil {
 		return nil, errors.New("threads store not ready")
@@ -1135,6 +1139,15 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	}
 	if th == nil {
 		return nil, errors.New("thread not found")
+	}
+	var flowerMeta *threadstore.FlowerThreadMetadata
+	if toolTargetPolicyForRun != nil {
+		pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
+		flowerMeta, err = db.GetFlowerThreadMetadata(pctx, endpointID, threadID)
+		cancelPersist()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	runWorkingDir := strings.TrimSpace(th.WorkingDir)
@@ -1171,6 +1184,10 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		return nil, err
 	}
 	finalizingThreadStatePublished := false
+	toolTargetPolicy := s.toolTargetPolicy
+	if toolTargetPolicyForRun != nil {
+		toolTargetPolicy = normalizeToolTargetPolicy(toolTargetPolicyForRun(metaRef, *th, flowerMeta))
+	}
 	r := newRun(runOptions{
 		Log:                 s.log,
 		StateDir:            s.stateDir,
@@ -1200,7 +1217,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		ToolAllowlist:       append([]string(nil), req.Options.ToolAllowlist...),
 		ForceReadonlyExec:   req.Options.ForceReadonlyExec,
 		NoUserInteraction:   req.Options.NoUserInteraction,
-		ToolTargetPolicy:    s.toolTargetPolicy,
+		ToolTargetPolicy:    toolTargetPolicy,
 		TargetToolExecutor:  s.targetToolExecutor,
 		OnStreamEvent: func(ev any) {
 			if !finalizingThreadStatePublished && isFinalizingLifecycleStreamEvent(ev) {

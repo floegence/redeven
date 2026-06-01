@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	controlv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/controlplane/v1"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -116,11 +117,10 @@ const (
 	TargetConnectUnauthorized = "unauthorized"
 	TargetConnectUnsupported  = "unsupported"
 
-	TargetCapabilityFiles     = "files"
-	TargetCapabilityTerminal  = "terminal"
-	TargetCapabilityGit       = "git"
-	TargetCapabilityMonitor   = "monitor"
-	TargetCapabilityFlowerRPC = "flower_rpc"
+	TargetCapabilityFiles    = "files"
+	TargetCapabilityTerminal = "terminal"
+	TargetCapabilityGit      = "git"
+	TargetCapabilityMonitor  = "monitor"
 )
 
 type FlowerTargetRef struct {
@@ -145,22 +145,19 @@ type TargetConnectError struct {
 	AtUnixMs int64  `json:"at_unix_ms"`
 }
 
-type FlowerTargetSessionCapability struct {
+type TargetSessionCapabilities struct {
 	CanRead    bool `json:"can_read"`
 	CanWrite   bool `json:"can_write"`
 	CanExecute bool `json:"can_execute"`
-	CanAdmin   bool `json:"can_admin"`
 }
 
-type FlowerTargetSession struct {
-	SessionID       string                        `json:"session_id"`
-	TargetID        string                        `json:"target_id"`
-	ChannelID       string                        `json:"channel_id"`
-	EnvPublicID     string                        `json:"env_public_id"`
-	SessionKind     string                        `json:"session_kind"`
-	FloeApp         string                        `json:"floe_app"`
-	Capabilities    FlowerTargetSessionCapability `json:"capabilities"`
-	ExpiresAtUnixMs int64                         `json:"expires_at_unix_ms"`
+type TargetSessionGrant struct {
+	TargetID        string                      `json:"target_id"`
+	ProviderOrigin  string                      `json:"provider_origin,omitempty"`
+	EnvPublicID     string                      `json:"env_public_id"`
+	GrantClient     *controlv1.ChannelInitGrant `json:"grant_client"`
+	Capabilities    TargetSessionCapabilities   `json:"capabilities"`
+	ExpiresAtUnixMs int64                       `json:"expires_at_unix_ms"`
 }
 
 type TargetToolCall struct {

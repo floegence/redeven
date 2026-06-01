@@ -273,12 +273,12 @@ describe('RuntimeMonitorPanel', () => {
           canExecute: true,
         },
         {
-          channelId: 'ch-flower',
-          userPublicID: 'user_flower',
-          userEmail: 'flower@example.com',
-          floeApp: 'com.floegence.redeven.flower',
-          codeSpaceID: 'flower-host',
-          sessionKind: 'flower_host_rpc',
+          channelId: 'ch-custom',
+          userPublicID: 'user_custom',
+          userEmail: 'custom@example.com',
+          floeApp: 'com.example.custom',
+          codeSpaceID: 'custom-target',
+          sessionKind: 'custom_rpc',
           tunnelUrl: '',
           createdAtUnixMs: 1,
           connectedAtUnixMs: 4,
@@ -294,8 +294,8 @@ describe('RuntimeMonitorPanel', () => {
 
     expect(host.textContent).toContain('Show internal (2)');
     expect(host.textContent).toContain('ch-code');
-    expect(host.textContent).toContain('ch-flower');
-    expect(host.textContent).toContain('Flower Host');
+    expect(host.textContent).toContain('ch-custom');
+    expect(host.textContent).toContain('com.example.custom');
     expect(host.textContent).not.toContain('ch-env-rpc');
     expect(host.textContent).not.toContain('ch-env-proxy');
 

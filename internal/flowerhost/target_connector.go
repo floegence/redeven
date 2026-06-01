@@ -10,22 +10,35 @@ import (
 	"net/url"
 	"strings"
 	"time"
-
-	controlv1 "github.com/floegence/flowersec/flowersec-go/gen/flowersec/controlplane/v1"
 )
-
-const flowerTargetSessionPathSuffix = "/flower/target-session"
 
 type TargetConnector struct {
 	client      *http.Client
-	hostID      string
-	accessToken func(ctx context.Context, providerOrigin string) (string, bool, error)
+	brokerURL   string
+	brokerToken string
 }
 
 type TargetConnectorOptions struct {
-	HTTPClient         *http.Client
-	HostID             string
-	ResolveAccessToken func(ctx context.Context, providerOrigin string) (string, bool, error)
+	HTTPClient  *http.Client
+	BrokerURL   string
+	BrokerToken string
+}
+
+type targetBrokerOpenSessionRequest struct {
+	TargetID             string            `json:"target_id"`
+	ProviderOrigin       string            `json:"provider_origin,omitempty"`
+	ProviderID           string            `json:"provider_id,omitempty"`
+	EnvPublicID          string            `json:"env_public_id"`
+	RequiredCapabilities []string          `json:"required_capabilities"`
+	Reason               map[string]string `json:"reason,omitempty"`
+	Metadata             map[string]any    `json:"metadata,omitempty"`
+}
+
+type targetBrokerOpenSessionResponse struct {
+	OK         bool                `json:"ok"`
+	Data       *TargetSessionGrant `json:"data,omitempty"`
+	Configured bool                `json:"configured,omitempty"`
+	Error      string              `json:"error,omitempty"`
 }
 
 func NewTargetConnector(opts TargetConnectorOptions) *TargetConnector {
@@ -35,180 +48,98 @@ func NewTargetConnector(opts TargetConnectorOptions) *TargetConnector {
 	}
 	return &TargetConnector{
 		client:      client,
-		hostID:      strings.TrimSpace(opts.HostID),
-		accessToken: opts.ResolveAccessToken,
+		brokerURL:   strings.TrimRight(strings.TrimSpace(opts.BrokerURL), "/"),
+		brokerToken: strings.TrimSpace(opts.BrokerToken),
 	}
 }
 
-func (c *TargetConnector) OpenTargetSession(ctx context.Context, target FlowerTargetRef, requiredCapabilities []string) (FlowerTargetSession, error) {
+func (c *TargetConnector) OpenTargetGrant(ctx context.Context, target FlowerTargetRef, requiredCapabilities []string) (TargetSessionGrant, error) {
 	if c == nil {
-		return FlowerTargetSession{}, errors.New("target connector not initialized")
+		return TargetSessionGrant{}, errors.New("target connector not initialized")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	providerOrigin, err := canonicalProviderOrigin(target.ProviderOrigin)
 	if err != nil {
-		return FlowerTargetSession{}, err
+		return TargetSessionGrant{}, err
 	}
 	envPublicID := strings.TrimSpace(target.EnvPublicID)
-	if strings.TrimSpace(target.TargetID) == "" || envPublicID == "" {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unsupported", message: "Target does not include provider origin and environment identity."}
+	targetID := strings.TrimSpace(target.TargetID)
+	if targetID == "" || envPublicID == "" {
+		return TargetSessionGrant{}, targetConnectError{code: "target_unsupported", message: "Target does not include provider origin and environment identity."}
 	}
-	if c.accessToken == nil {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unauthorized", message: "No provider authorization is available for this Flower Host."}
-	}
-	token, ok, err := c.accessToken(ctx, providerOrigin)
-	if err != nil {
-		return FlowerTargetSession{}, err
-	}
-	if !ok || strings.TrimSpace(token) == "" {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unauthorized", message: "Provider authorization is missing for this target."}
+	if c.brokerURL == "" || c.brokerToken == "" {
+		return TargetSessionGrant{}, targetConnectError{code: "target_unauthorized", message: "No carrier session broker is available for this Flower Host."}
 	}
 	capabilities, err := normalizeTargetCapabilities(requiredCapabilities)
 	if err != nil {
-		return FlowerTargetSession{}, err
+		return TargetSessionGrant{}, err
 	}
-	body, err := json.Marshal(map[string]any{
-		"flower_host_id":        c.hostID,
-		"required_capabilities": capabilities,
+	body, err := json.Marshal(targetBrokerOpenSessionRequest{
+		TargetID:             targetID,
+		ProviderOrigin:       providerOrigin,
+		ProviderID:           strings.TrimSpace(target.ProviderID),
+		EnvPublicID:          envPublicID,
+		RequiredCapabilities: capabilities,
 	})
 	if err != nil {
-		return FlowerTargetSession{}, err
+		return TargetSessionGrant{}, err
 	}
-	targetURL := providerOrigin + "/api/rcpp/v1/environments/" + url.PathEscape(envPublicID) + flowerTargetSessionPathSuffix
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, targetURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.brokerURL+"/v1/targets/open-session", bytes.NewReader(body))
 	if err != nil {
-		return FlowerTargetSession{}, err
+		return TargetSessionGrant{}, err
 	}
 	req.Header.Set("content-type", "application/json")
-	req.Header.Set("authorization", "Bearer "+strings.TrimSpace(token))
+	req.Header.Set("authorization", "Bearer "+c.brokerToken)
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unreachable", message: err.Error()}
+		return TargetSessionGrant{}, targetConnectError{code: "target_unreachable", message: err.Error()}
 	}
 	defer resp.Body.Close()
+	var payload targetBrokerOpenSessionResponse
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return TargetSessionGrant{}, err
+	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unauthorized", message: "Provider rejected the Flower target session request."}
+		return TargetSessionGrant{}, targetConnectError{code: "target_unauthorized", message: "Carrier broker rejected the target session request."}
 	}
 	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusConflict || resp.StatusCode == http.StatusServiceUnavailable {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unreachable", message: fmt.Sprintf("Target runtime is not reachable (HTTP %d).", resp.StatusCode)}
+		return TargetSessionGrant{}, targetConnectError{code: "target_unreachable", message: brokerErrorMessage(payload, fmt.Sprintf("Target runtime is not reachable (HTTP %d).", resp.StatusCode))}
 	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unreachable", message: fmt.Sprintf("Target session request failed with HTTP %d.", resp.StatusCode)}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 || !payload.OK {
+		return TargetSessionGrant{}, targetConnectError{code: "target_unreachable", message: brokerErrorMessage(payload, fmt.Sprintf("Target session broker failed with HTTP %d.", resp.StatusCode))}
 	}
-	var payload struct {
-		EntryTicket     string                        `json:"entry_ticket"`
-		TargetID        string                        `json:"target_id"`
-		FloeApp         string                        `json:"floe_app"`
-		SessionKind     string                        `json:"session_kind"`
-		CodeSpaceID     string                        `json:"code_space_id"`
-		EndpointID      string                        `json:"endpoint_id"`
-		EnvPublicID     string                        `json:"env_public_id"`
-		CanRead         bool                          `json:"can_read"`
-		CanWrite        bool                          `json:"can_write"`
-		CanExecute      bool                          `json:"can_execute"`
-		Capability      FlowerTargetSessionCapability `json:"capability"`
-		ExpiresAtUnixMs int64                         `json:"expires_at_unix_ms"`
+	if payload.Data == nil {
+		return TargetSessionGrant{}, targetConnectError{code: "target_unsupported", message: "Carrier broker returned an incomplete target session."}
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return FlowerTargetSession{}, err
+	grant := *payload.Data
+	if got := strings.TrimSpace(grant.TargetID); got != "" && got != targetID {
+		return TargetSessionGrant{}, targetConnectError{code: "target_unsupported", message: "Carrier broker returned a target session for a different target."}
 	}
-	if strings.TrimSpace(payload.SessionKind) != "flower_host_rpc" || strings.TrimSpace(payload.FloeApp) != "com.floegence.redeven.flower" {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unsupported", message: "Provider returned a non-Flower target session."}
+	if got := strings.TrimSpace(grant.EnvPublicID); got != "" && got != envPublicID {
+		return TargetSessionGrant{}, targetConnectError{code: "target_unsupported", message: "Carrier broker returned a target session for a different environment."}
 	}
-	if strings.TrimSpace(payload.EntryTicket) == "" || strings.TrimSpace(payload.CodeSpaceID) == "" {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unsupported", message: "Provider returned an incomplete Flower target session."}
+	if grant.GrantClient == nil || strings.TrimSpace(grant.GrantClient.ChannelId) == "" {
+		return TargetSessionGrant{}, targetConnectError{code: "target_unsupported", message: "Carrier broker returned an incomplete target grant."}
 	}
-	if got := strings.TrimSpace(firstNonEmpty(payload.EnvPublicID, payload.EndpointID)); got != "" && got != envPublicID {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unsupported", message: "Provider returned a Flower target session for a different environment."}
+	if grant.ExpiresAtUnixMs <= time.Now().UnixMilli() {
+		return TargetSessionGrant{}, targetConnectError{code: "target_unauthorized", message: "Carrier broker returned an expired target session."}
 	}
-	if got := strings.TrimSpace(payload.TargetID); got != "" && got != strings.TrimSpace(target.TargetID) {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unsupported", message: "Provider returned a Flower target session for a different target."}
+	if !capabilityGrantsRequired(grant.Capabilities, capabilities) {
+		return TargetSessionGrant{}, targetConnectError{code: "target_unauthorized", message: "Carrier broker did not grant the requested target capabilities."}
 	}
-	if payload.ExpiresAtUnixMs <= time.Now().UnixMilli() {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unauthorized", message: "Provider returned an expired Flower target session."}
-	}
-	capability := payload.Capability
-	if !capabilityGrantsRequired(capability, capabilities) {
-		return FlowerTargetSession{}, targetConnectError{code: "target_unauthorized", message: "Provider did not grant the requested Flower target capabilities."}
-	}
-	return FlowerTargetSession{
-		SessionID:       strings.TrimSpace(payload.EntryTicket),
-		TargetID:        strings.TrimSpace(target.TargetID),
-		ChannelID:       strings.TrimSpace(payload.CodeSpaceID),
-		EnvPublicID:     envPublicID,
-		SessionKind:     strings.TrimSpace(payload.SessionKind),
-		FloeApp:         strings.TrimSpace(payload.FloeApp),
-		Capabilities:    capability,
-		ExpiresAtUnixMs: payload.ExpiresAtUnixMs,
-	}, nil
+	grant.TargetID = targetID
+	grant.ProviderOrigin = providerOrigin
+	grant.EnvPublicID = envPublicID
+	return grant, nil
 }
 
-type TargetGrant struct {
-	Session     FlowerTargetSession
-	GrantClient *controlv1.ChannelInitGrant
-}
-
-func (c *TargetConnector) OpenTargetGrant(ctx context.Context, target FlowerTargetRef, requiredCapabilities []string) (TargetGrant, error) {
-	session, err := c.OpenTargetSession(ctx, target, requiredCapabilities)
-	if err != nil {
-		return TargetGrant{}, err
+func brokerErrorMessage(payload targetBrokerOpenSessionResponse, fallback string) string {
+	if message := strings.TrimSpace(payload.Error); message != "" {
+		return message
 	}
-	grantClient, err := c.exchangeEntryTicket(ctx, target, session)
-	if err != nil {
-		return TargetGrant{}, err
-	}
-	return TargetGrant{Session: session, GrantClient: grantClient}, nil
-}
-
-func (c *TargetConnector) exchangeEntryTicket(ctx context.Context, target FlowerTargetRef, session FlowerTargetSession) (*controlv1.ChannelInitGrant, error) {
-	if c == nil {
-		return nil, errors.New("target connector not initialized")
-	}
-	providerOrigin, err := canonicalProviderOrigin(target.ProviderOrigin)
-	if err != nil {
-		return nil, err
-	}
-	body, err := json.Marshal(map[string]string{
-		"endpoint_id": strings.TrimSpace(target.EnvPublicID),
-		"floe_app":    "com.floegence.redeven.flower",
-	})
-	if err != nil {
-		return nil, err
-	}
-	entryURL := providerOrigin + "/v1/channel/init/entry?endpoint_id=" + url.QueryEscape(strings.TrimSpace(target.EnvPublicID))
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, entryURL, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("content-type", "application/json")
-	req.Header.Set("authorization", "Bearer "+strings.TrimSpace(session.SessionID))
-	req.Header.Set("origin", providerOrigin)
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, targetConnectError{code: "target_unreachable", message: err.Error()}
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, targetConnectError{code: "target_unauthorized", message: "Provider rejected the Flower entry ticket."}
-	}
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, targetConnectError{code: "target_unreachable", message: fmt.Sprintf("Flower entry ticket exchange failed with HTTP %d.", resp.StatusCode)}
-	}
-	var payload struct {
-		GrantClient *controlv1.ChannelInitGrant `json:"grant_client"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return nil, err
-	}
-	if payload.GrantClient == nil || strings.TrimSpace(payload.GrantClient.ChannelId) == "" {
-		return nil, targetConnectError{code: "target_unsupported", message: "Provider returned an incomplete Flower grant."}
-	}
-	if strings.TrimSpace(payload.GrantClient.ChannelId) != strings.TrimSpace(session.ChannelID) {
-		return nil, targetConnectError{code: "target_unsupported", message: "Provider returned a Flower grant for a different channel."}
-	}
-	return payload.GrantClient, nil
+	return fallback
 }
 
 func canonicalProviderOrigin(raw string) (string, error) {
@@ -251,7 +182,7 @@ func normalizeTargetCapabilities(capabilities []string) ([]string, error) {
 	return out, nil
 }
 
-func capabilityGrantsRequired(capability FlowerTargetSessionCapability, required []string) bool {
+func capabilityGrantsRequired(capability TargetSessionCapabilities, required []string) bool {
 	for _, item := range required {
 		switch strings.TrimSpace(strings.ToLower(item)) {
 		case "":

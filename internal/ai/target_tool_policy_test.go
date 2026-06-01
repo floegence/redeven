@@ -6,8 +6,11 @@ import (
 	"io"
 	"log/slog"
 	"testing"
+	"time"
 
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -113,6 +116,70 @@ func TestHandleToolCall_LocalRuntimePolicyKeepsExistingToolBehavior(t *testing.T
 	}
 	if outcome == nil || !outcome.Success {
 		t.Fatalf("outcome=%#v, want local runtime success", outcome)
+	}
+}
+
+func TestPrepareRunUsesThreadScopedTargetPolicy(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingTargetToolExecutor{}
+	svc, err := NewService(Options{
+		Logger:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		StateDir:         t.TempDir(),
+		AgentHomeDir:     t.TempDir(),
+		Shell:            "/bin/bash",
+		Config:           testTargetToolPolicyConfig(),
+		PersistOpTimeout: 2 * time.Second,
+		ToolTargetPolicy: ToolTargetPolicy{
+			Mode: ToolTargetModeExplicitTarget,
+		},
+		TargetToolExecutor: executor,
+		ToolTargetPolicyForRun: func(_ *session.Meta, thread threadstore.Thread, _ *threadstore.FlowerThreadMetadata) ToolTargetPolicy {
+			return ToolTargetPolicy{
+				Mode:            ToolTargetModeExplicitTarget,
+				DefaultTargetID: "cp:test:env:" + thread.ThreadID,
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	meta := &session.Meta{
+		ChannelID:  "ch_target_policy_test",
+		EndpointID: "env_target_policy_test",
+		CanRead:    true,
+		CanWrite:   true,
+		CanExecute: true,
+	}
+	thread, err := svc.CreateThread(context.Background(), meta, "target policy", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	prepared, err := svc.prepareRun(meta, "run_target_policy", RunStartRequest{
+		ThreadID: thread.ThreadID,
+		Input:    RunInput{Text: "check policy"},
+		Options:  RunOptions{MaxSteps: 1},
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("prepareRun: %v", err)
+	}
+	if got := prepared.r.toolTargetPolicy.DefaultTargetID; got != "cp:test:env:"+thread.ThreadID {
+		t.Fatalf("run default target id=%q", got)
+	}
+}
+
+func testTargetToolPolicyConfig() *config.AIConfig {
+	return &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
+		Providers: []config.AIProvider{{
+			ID:      "openai",
+			Name:    "OpenAI",
+			Type:    "openai",
+			BaseURL: "https://api.openai.com/v1",
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+		}},
 	}
 }
 

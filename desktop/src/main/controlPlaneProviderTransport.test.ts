@@ -21,12 +21,14 @@ describe('controlPlaneProviderTransport', () => {
   });
 
   it('uses Electron net.fetch and returns normalized response metadata', async () => {
+    const headers = new Headers({
+      'content-type': 'application/json',
+      'cache-control': 'no-store',
+    });
+    headers.append('set-cookie', '__Host-redeven_env_session=session_demo; Path=/; HttpOnly; SameSite=Strict');
     electronState.netFetch.mockResolvedValueOnce(new Response('{"ok":true}', {
       status: 200,
-      headers: {
-        'content-type': 'application/json',
-        'cache-control': 'no-store',
-      },
+      headers,
     }));
 
     const response = await electronDesktopProviderTransport({
@@ -43,6 +45,7 @@ describe('controlPlaneProviderTransport', () => {
       headers: {
         'cache-control': 'no-store',
         'content-type': 'application/json',
+        'set-cookie': '__Host-redeven_env_session=session_demo; Path=/; HttpOnly; SameSite=Strict',
       },
       body_text: '{"ok":true}',
     });

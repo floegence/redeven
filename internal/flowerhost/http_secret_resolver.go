@@ -18,10 +18,13 @@ type HTTPSecretResolver struct {
 	Timeout time.Duration
 }
 
+func (r HTTPSecretResolver) TargetSessionBrokerEndpoint() (baseURL string, token string) {
+	return strings.TrimRight(strings.TrimSpace(r.BaseURL), "/"), strings.TrimSpace(r.Token)
+}
+
 type secretResolveRequest struct {
-	ProviderID     string `json:"provider_id,omitempty"`
-	ProviderOrigin string `json:"provider_origin,omitempty"`
-	Kind           string `json:"kind"`
+	ProviderID string `json:"provider_id,omitempty"`
+	Kind       string `json:"kind"`
 }
 
 type secretResolveResponse struct {
@@ -37,10 +40,6 @@ func (r HTTPSecretResolver) ResolveProviderAPIKey(ctx context.Context, providerI
 
 func (r HTTPSecretResolver) ResolveWebSearchProviderAPIKey(ctx context.Context, providerID string) (string, bool, error) {
 	return r.resolve(ctx, providerID, "web_search_api_key")
-}
-
-func (r HTTPSecretResolver) ResolveControlPlaneAccessToken(ctx context.Context, providerOrigin string) (string, bool, error) {
-	return r.resolve(ctx, providerOrigin, "control_plane_access_token")
 }
 
 func (r HTTPSecretResolver) resolve(ctx context.Context, providerID string, kind string) (string, bool, error) {
@@ -62,12 +61,7 @@ func (r HTTPSecretResolver) resolve(ctx context.Context, providerID string, kind
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	request := secretResolveRequest{Kind: kind}
-	if strings.TrimSpace(kind) == "control_plane_access_token" {
-		request.ProviderOrigin = providerID
-	} else {
-		request.ProviderID = providerID
-	}
+	request := secretResolveRequest{ProviderID: providerID, Kind: kind}
 	body, err := json.Marshal(request)
 	if err != nil {
 		return "", false, err

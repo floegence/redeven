@@ -87,7 +87,6 @@ function formatAppLabel(floeApp: string, i18n: ReturnType<typeof useI18n>): stri
   if (v === 'com.floegence.redeven.agent') return i18n.t('runtimeMonitor.runtimeApp');
   if (v === 'com.floegence.redeven.code') return i18n.t('runtimeMonitor.codeApp');
   if (v === 'com.floegence.redeven.portforward') return i18n.t('runtimeMonitor.portForwardApp');
-  if (v === 'com.floegence.redeven.flower') return i18n.t('runtimeMonitor.flowerApp');
   return v || '-';
 }
 

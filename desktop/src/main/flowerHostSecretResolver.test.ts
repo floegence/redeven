@@ -21,9 +21,17 @@ afterEach(async () => {
 async function postJSON(baseURL: string, token: string, body: unknown): Promise<{
   status: number;
   payload: unknown;
+  path?: string;
+}> {
+  return postJSONPath(baseURL, token, '/v1/secrets/resolve', body);
+}
+
+async function postJSONPath(baseURL: string, token: string, route: string, body: unknown): Promise<{
+  status: number;
+  payload: unknown;
 }> {
   return new Promise((resolve, reject) => {
-    const request = http.request(`${baseURL}/v1/secrets/resolve`, {
+    const request = http.request(`${baseURL}${route}`, {
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`,
@@ -105,39 +113,79 @@ describe('Flower Host secret resolver', () => {
     });
   });
 
-  it('resolves provider-origin control plane tokens from the target cache', async () => {
+  it('rejects control-plane token resolution and keeps provider authorization outside the child process', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-secret-resolver-test-'));
     closers.push(() => fs.rm(root, { recursive: true, force: true }));
     const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
     const codec = createDesktopFlowerHostPlaintextSecretCodec();
-    await fs.mkdir(paths.stateDir, { recursive: true });
-    await fs.writeFile(paths.targetCacheFile, `${JSON.stringify({
-      version: 1,
-      entries: [{
-        target_id: 'cp:test:env:env_a',
-        label: 'Env A',
-        target_url: 'https://region.example.test/app/env_a',
-        last_seen_at_unix_ms: Date.now(),
-        metadata: {
-          provider_origin: 'https://region.example.test',
-          control_plane_access_token: 'region-token',
-        },
-      }],
-    })}\n`);
-    const resolver = await startFlowerHostSecretResolver(
-      paths,
-      codec,
-      async (providerOrigin) => (providerOrigin === 'https://region.example.test' ? 'region-token' : ''),
-    );
+    const resolver = await startFlowerHostSecretResolver(paths, codec);
     closers.push(resolver.close);
 
     const response = await postJSON(resolver.baseURL, resolver.token, {
       provider_origin: 'https://region.example.test',
-      kind: 'control_plane_access_token',
+      kind: 'control_plane_' + 'access_token',
+    });
+    expect(response).toEqual({
+      status: 400,
+      payload: { ok: false, error: 'unsupported secret kind' },
+    });
+  });
+
+  it('routes target session requests to the carrier broker without exposing provider tokens', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-secret-resolver-test-'));
+    closers.push(() => fs.rm(root, { recursive: true, force: true }));
+    const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+    const codec = createDesktopFlowerHostPlaintextSecretCodec();
+    const resolver = await startFlowerHostSecretResolver(paths, codec, async (request) => {
+      expect(request).toMatchObject({
+        target_id: 'cp:test:env:env_a',
+        env_public_id: 'env_a',
+      });
+      return {
+        target_id: 'cp:test:env:env_a',
+        provider_origin: 'https://region.example.test',
+        env_public_id: 'env_a',
+        grant_client: { channel_id: 'ch_target' },
+        bootstrap_ticket: 'boot-ticket-must-not-leak',
+        entry_ticket: 'entry-ticket-must-not-leak',
+        provider_access_token: 'provider-token-must-not-leak',
+        e2ee_psk: 'psk-must-not-leak',
+        capabilities: {
+          can_read: true,
+          can_write: false,
+          can_execute: false,
+        },
+        expires_at_unix_ms: 4_102_444_800_000,
+      };
+    });
+    closers.push(resolver.close);
+
+    const response = await postJSONPath(resolver.baseURL, resolver.token, '/v1/targets/open-session', {
+      target_id: 'cp:test:env:env_a',
+      env_public_id: 'env_a',
     });
     expect(response).toEqual({
       status: 200,
-      payload: { ok: true, configured: true, value: 'region-token' },
+      payload: {
+        ok: true,
+        data: {
+          target_id: 'cp:test:env:env_a',
+          provider_origin: 'https://region.example.test',
+          env_public_id: 'env_a',
+          grant_client: { channel_id: 'ch_target' },
+          capabilities: {
+            can_read: true,
+            can_write: false,
+            can_execute: false,
+          },
+          expires_at_unix_ms: 4_102_444_800_000,
+        },
+      },
     });
+    const serialized = JSON.stringify(response);
+    expect(serialized).not.toContain('boot-ticket-must-not-leak');
+    expect(serialized).not.toContain('entry-ticket-must-not-leak');
+    expect(serialized).not.toContain('provider-token-must-not-leak');
+    expect(serialized).not.toContain('psk-must-not-leak');
   });
 });

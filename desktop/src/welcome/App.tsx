@@ -934,7 +934,12 @@ function buildEnvironmentFlowerPrompt(
 }
 
 function environmentFlowerPrimaryTargetID(environment: DesktopEnvironmentEntry): string {
-  return trimString(environment.env_public_id)
+  const providerOrigin = trimString(environment.provider_origin);
+  const envPublicID = trimString(environment.env_public_id);
+  if (environment.kind === 'provider_environment' && providerOrigin && envPublicID) {
+    return `cp:${encodeURIComponent(providerOrigin)}:env:${encodeURIComponent(envPublicID)}`;
+  }
+  return envPublicID
     || trimString(environment.provider_runtime_link_target?.id)
     || trimString(environment.managed_runtime_target_id)
     || trimString(environment.managed_runtime_placement_target_id)
@@ -957,6 +962,10 @@ function buildEnvironmentFlowerContextEnvelope(environment: DesktopEnvironmentEn
       provider: 'desktop_welcome',
       target: {
         target_id: targetID,
+        target_kind: environment.kind === 'provider_environment' ? 'provider_environment' : 'desktop_environment',
+        provider_origin: trimString(environment.provider_origin),
+        provider_id: trimString(environment.provider_id),
+        env_public_id: trimString(environment.env_public_id),
         locality: 'auto',
       },
       source: {

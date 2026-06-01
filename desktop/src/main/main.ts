@@ -56,6 +56,8 @@ import {
 import {
   createDesktopFlowerHostSafeStorageSecretCodec,
   defaultDesktopFlowerHostPaths,
+  loadDesktopFlowerHostTargetCache,
+  saveDesktopFlowerHostTargetCache,
 } from './desktopFlowerHostState';
 import {
   listFlowerHostThreadsViaBridge,
@@ -65,6 +67,8 @@ import {
   sendFlowerHostChatResultViaBridge,
   resolveFlowerHostHandlerViaBridge,
   shutdownFlowerHostBridge,
+  type DesktopFlowerHostTargetSessionGrant,
+  type DesktopFlowerHostTargetSessionRequest,
 } from './flowerHostBridge';
 import {
   buildLocalEnvironmentDesktopTarget,
@@ -215,6 +219,7 @@ import {
   refreshProviderDesktopAccessToken,
   revokeProviderDesktopAuthorization,
   requestDesktopOpenSession,
+  fetchProviderJSON,
 } from './controlPlaneProviderClient';
 import {
   buildControlPlaneAuthorizationBrowserURL,
@@ -1129,6 +1134,32 @@ type ProviderDesktopSessionMaterial = Readonly<{
   label: string;
 }>;
 
+type ProviderDesktopSessionMaterialOptions = Readonly<{
+  requireRemoteRouteReady?: boolean;
+}>;
+
+type FlowerHostBootPayload = Readonly<{
+  v?: unknown;
+  env_public_id?: unknown;
+  floe_app?: unknown;
+  code_space_id?: unknown;
+  boot_ticket?: unknown;
+}>;
+
+type FlowerHostParsedBootPayload = Readonly<{
+  sandboxOrigin: string;
+  payload: FlowerHostBootPayload;
+}>;
+
+type ProviderEnvAppEntryTicketResponse = Readonly<{
+  entry_ticket?: unknown;
+  expires_at_unix_ms?: unknown;
+}>;
+
+type ProviderTargetGrantResponse = Readonly<{
+  grant_client?: unknown;
+}>;
+
 function launcherActionFailureForMissingProviderEnvironment(
   environment: DesktopProviderEnvironmentRecord,
 ): DesktopLauncherActionFailure {
@@ -1187,8 +1218,26 @@ async function resolveProviderDesktopSessionTarget(
 async function requestProviderDesktopSessionMaterial(
   preferences: DesktopPreferences,
   environment: DesktopProviderEnvironmentRecord,
+  options: ProviderDesktopSessionMaterialOptions = {},
 ): Promise<ProviderDesktopSessionMaterial> {
   const target = await resolveProviderDesktopSessionTarget(preferences, environment);
+  const latestState = controlPlaneRouteSnapshot(
+    target.preferences,
+    environment.provider_origin,
+    environment.provider_id,
+    environment.env_public_id,
+  );
+  if (options.requireRemoteRouteReady === true) {
+    const routeFailure = launcherActionFailureForRemoteRouteState(latestState.remoteRouteState, {
+      environmentID: environment.id,
+      providerOrigin: environment.provider_origin,
+      providerID: environment.provider_id,
+      envPublicID: environment.env_public_id,
+    });
+    if (routeFailure) {
+      throw routeFailure;
+    }
+  }
   const authorized = await ensureControlPlaneAccessToken(target.preferences, target.controlPlane);
   const openSession = await requestDesktopOpenSession(
     authorized.controlPlane.provider,
@@ -2204,7 +2253,7 @@ function flowerHostBridgeArgs() {
     executablePath: bundledRuntimeExecutablePath(),
     paths: flowerHostPaths(),
     codec: flowerHostCodec(),
-    resolveControlPlaneAccessToken: resolveFlowerHostControlPlaneAccessToken,
+    openTargetSession: openFlowerHostTargetSession,
     tempRoot: app.getPath('temp'),
     onLog: (stream: 'stdout' | 'stderr', chunk: string) => {
       const text = compact(chunk);
@@ -2213,14 +2262,297 @@ function flowerHostBridgeArgs() {
   };
 }
 
-async function resolveFlowerHostControlPlaneAccessToken(providerOrigin: string): Promise<string> {
-  const preferences = await loadDesktopPreferencesCached();
-  const controlPlane = savedControlPlaneByOrigin(preferences, providerOrigin);
-  if (!controlPlane) {
+function normalizeFlowerHostRequiredCapabilities(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const item of value) {
+    const capability = compact(item).toLowerCase();
+    if (capability !== 'read' && capability !== 'write' && capability !== 'execute') {
+      throw new Error('Target capability request is invalid.');
+    }
+    if (!seen.has(capability)) {
+      seen.add(capability);
+      out.push(capability);
+    }
+  }
+  return out;
+}
+
+function envAppTargetSessionCapabilities(): DesktopFlowerHostTargetSessionGrant['capabilities'] {
+  return {
+    can_read: true,
+    can_write: false,
+    can_execute: false,
+  };
+}
+
+function providerNeutralSessionURL(origin: string, pathname: string, search = ''): string {
+  const url = new URL(pathname, normalizeControlPlaneOrigin(origin));
+  url.search = search;
+  url.hash = '';
+  return url.toString();
+}
+
+function stripSensitiveURLPayload(rawURL: string): string {
+  const cleanURL = compact(rawURL);
+  if (!cleanURL) {
     return '';
   }
-  const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
-  return compact(authorized.accessToken);
+  try {
+    const url = new URL(cleanURL);
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  } catch {
+    return '';
+  }
+}
+
+function rendererSafeStartupReport(startup: StartupReport): StartupReport {
+  const localUIURL = stripSensitiveURLPayload(startup.local_ui_url);
+  const localUIURLs = startup.local_ui_urls
+    .map((url) => stripSensitiveURLPayload(url))
+    .filter((url) => url !== '');
+  return {
+    ...startup,
+    local_ui_url: localUIURL,
+    local_ui_urls: localUIURLs.length > 0 ? localUIURLs : localUIURL ? [localUIURL] : [],
+  };
+}
+
+function rendererSafeSessionURL(session: DesktopSessionRecord): string {
+  return stripSensitiveURLPayload(session.entry_url) || stripSensitiveURLPayload(session.startup.local_ui_url);
+}
+
+function parseFlowerHostBootPayload(remoteSessionURL: string): FlowerHostParsedBootPayload {
+  const parsed = new URL(remoteSessionURL);
+  const sandboxOrigin = normalizeControlPlaneOrigin(parsed.origin);
+  const hash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash;
+  const params = new URLSearchParams(hash);
+  const encoded = params.get('redeven') ?? '';
+  if (!encoded) {
+    throw new Error('Provider remote session URL is missing its boot payload.');
+  }
+  const normalized = encoded.replace(/-/gu, '+').replace(/_/gu, '/');
+  const padded = `${normalized}${'='.repeat((4 - normalized.length % 4) % 4)}`;
+  const payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as unknown;
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Provider remote session boot payload is invalid.');
+  }
+  return {
+    sandboxOrigin,
+    payload: payload as FlowerHostBootPayload,
+  };
+}
+
+function providerSandboxHeaders(sandboxOrigin: string): Readonly<Record<string, string>> {
+  const origin = normalizeControlPlaneOrigin(sandboxOrigin);
+  const { protocol, host } = new URL(origin);
+  return {
+    Origin: origin,
+    'X-Forwarded-Proto': protocol.replace(':', ''),
+    Host: host,
+  };
+}
+
+function cookieHeaderFromSetCookie(headers: Readonly<Record<string, string>>): string {
+  const raw = Object.entries(headers)
+    .filter(([name]) => name.toLowerCase() === 'set-cookie')
+    .map(([, value]) => value)
+    .join(',');
+  const match = raw.match(/__Host-redeven_env_session=([^;,]+)/u);
+  return match ? `__Host-redeven_env_session=${match[1]}` : '';
+}
+
+function normalizeProviderEnvelopeData<T>(body: unknown, label: string): T {
+  if (!body || typeof body !== 'object') {
+    throw new Error(`Provider returned an invalid ${label}.`);
+  }
+  const record = body as { success?: unknown; data?: unknown };
+  if (record.success === false) {
+    throw new Error(`Provider rejected ${label}.`);
+  }
+  return (record.success === true ? record.data : body) as T;
+}
+
+async function rememberFlowerHostProviderTarget(input: Readonly<{
+  targetID: string;
+  providerOrigin: string;
+  providerID: string;
+  envPublicID: string;
+  label: string;
+  targetURL: string;
+}>): Promise<void> {
+  const paths = flowerHostPaths();
+  const targetID = compact(input.targetID);
+  if (!targetID) {
+    return;
+  }
+  const cache = await loadDesktopFlowerHostTargetCache(paths);
+  const nextEntry = {
+    target_id: targetID,
+    label: compact(input.label) || compact(input.envPublicID) || targetID,
+    target_url: compact(input.targetURL),
+    last_seen_at_unix_ms: Date.now(),
+    metadata: {
+      target_kind: 'provider_environment',
+      provider_origin: normalizeControlPlaneOrigin(input.providerOrigin),
+      provider_id: compact(input.providerID),
+      env_public_id: compact(input.envPublicID),
+      connect_state: 'connectable',
+    },
+  };
+  await saveDesktopFlowerHostTargetCache(paths, {
+    version: 1,
+    entries: [
+      nextEntry,
+      ...cache.entries.filter((entry) => compact(entry.target_id) !== targetID),
+    ],
+  });
+}
+
+function grantExpiresAtUnixMS(grant: unknown): number {
+  const raw = grant && typeof grant === 'object'
+    ? Number((grant as Record<string, unknown>).channel_init_expire_at_unix_s)
+    : 0;
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return Date.now() + 60_000;
+  }
+  return Math.floor(raw * 1000);
+}
+
+async function openFlowerHostTargetSession(
+  request: DesktopFlowerHostTargetSessionRequest,
+): Promise<DesktopFlowerHostTargetSessionGrant> {
+  const targetID = compact(request.target_id);
+  const providerOrigin = normalizeControlPlaneOrigin(compact(request.provider_origin));
+  const providerID = compact(request.provider_id);
+  const envPublicID = compact(request.env_public_id);
+  if (!targetID || !providerOrigin || !providerID || !envPublicID) {
+    throw new Error('Target session request is incomplete.');
+  }
+  normalizeFlowerHostRequiredCapabilities(request.required_capabilities);
+  const preferences = await loadDesktopPreferencesCached();
+  const environment = findProviderEnvironmentByID(
+    preferences,
+    desktopProviderEnvironmentID(providerOrigin, envPublicID),
+  );
+  if (!environment) {
+    throw new Error('Target environment is not available in this Desktop provider catalog.');
+  }
+  if (environment.provider_id !== providerID) {
+    throw new Error('Target provider identity does not match the saved environment.');
+  }
+  const material = await requestProviderDesktopSessionMaterial(preferences, environment, {
+    requireRemoteRouteReady: true,
+  });
+  if (material.controlPlane.provider.provider_id !== providerID) {
+    throw new Error('Target provider identity does not match the saved authorization.');
+  }
+  const latest = controlPlaneRouteSnapshot(
+    material.preferences,
+    providerOrigin,
+    providerID,
+    envPublicID,
+  );
+  if (!latest.environment) {
+    throw new Error('Target environment is no longer visible to this Desktop authorization.');
+  }
+  if (latest.remoteRouteState !== 'ready') {
+    throw new Error('Target environment is not currently reachable through this Desktop authorization.');
+  }
+  if (!material.remoteSessionURL) {
+    throw new Error('Provider did not return remote session material for target access.');
+  }
+  await rememberFlowerHostProviderTarget({
+    targetID,
+    providerOrigin,
+    providerID,
+    envPublicID,
+    label: latest.environment.label || environment.label,
+    targetURL: latest.environment.environment_url || stripSensitiveURLPayload(material.remoteSessionURL),
+  });
+  const parsedBoot = parseFlowerHostBootPayload(material.remoteSessionURL);
+  const bootPayload = parsedBoot.payload;
+  const bootTicket = compact(bootPayload.boot_ticket);
+  if (
+    Number(bootPayload.v) !== 2
+    || compact(bootPayload.env_public_id) !== envPublicID
+    || compact(bootPayload.floe_app) !== 'com.floegence.redeven.agent'
+    || compact(bootPayload.code_space_id) !== 'env-ui'
+    || bootTicket === ''
+  ) {
+    throw new Error('Provider remote session boot payload is invalid for Flower target access.');
+  }
+  const sandboxOrigin = parsedBoot.sandboxOrigin;
+  const sandboxHeaders = providerSandboxHeaders(sandboxOrigin);
+  const bootExchange = await fetchProviderJSON(providerNeutralSessionURL(sandboxOrigin, '/api/srv/v1/floeproxy/boot/exchange'), {
+    method: 'POST',
+    bearerToken: bootTicket,
+    operationLabel: 'the provider environment boot exchange',
+    extraHeaders: sandboxHeaders,
+  });
+  const sessionCookie = cookieHeaderFromSetCookie(bootExchange.headers);
+  if (!sessionCookie) {
+    throw new Error('Provider did not return a target environment session cookie.');
+  }
+  const entryResponse = await fetchProviderJSON(providerNeutralSessionURL(sandboxOrigin, '/api/srv/v1/floeproxy/entry'), {
+    method: 'POST',
+    body: {
+      endpoint_id: envPublicID,
+      floe_app: 'com.floegence.redeven.agent',
+      code_space_id: 'env-ui',
+      session_kind: 'envapp_rpc',
+    },
+    operationLabel: 'the provider environment entry ticket',
+    extraHeaders: {
+      ...sandboxHeaders,
+      Cookie: sessionCookie,
+    },
+  });
+  const entry = normalizeProviderEnvelopeData<ProviderEnvAppEntryTicketResponse>(
+    entryResponse.body,
+    'target entry ticket response',
+  );
+  const entryTicket = compact(entry.entry_ticket);
+  if (!entryTicket) {
+    throw new Error('Provider returned an incomplete target entry ticket.');
+  }
+  const grantResponse = await fetchProviderJSON(providerNeutralSessionURL(
+    sandboxOrigin,
+    '/v1/channel/init/entry',
+    `?endpoint_id=${encodeURIComponent(envPublicID)}`,
+  ), {
+    method: 'POST',
+    bearerToken: entryTicket,
+    body: {
+      endpoint_id: envPublicID,
+      floe_app: 'com.floegence.redeven.agent',
+    },
+    operationLabel: 'the provider target grant',
+    extraHeaders: sandboxHeaders,
+  });
+  const grantBody = normalizeProviderEnvelopeData<ProviderTargetGrantResponse>(
+    grantResponse.body,
+    'target grant response',
+  );
+  const grantClient = grantBody.grant_client;
+  if (!grantClient || typeof grantClient !== 'object' || !compact((grantClient as Record<string, unknown>).channel_id)) {
+    throw new Error('Provider returned an incomplete target grant.');
+  }
+  return {
+    target_id: targetID,
+    provider_origin: providerOrigin,
+    env_public_id: envPublicID,
+    grant_client: grantClient,
+    capabilities: envAppTargetSessionCapabilities(),
+    expires_at_unix_ms: Math.min(grantExpiresAtUnixMS(grantClient), Number(entry.expires_at_unix_ms) || Number.MAX_SAFE_INTEGER),
+  };
 }
 
 function desktopStateStore(): DesktopStateStore {
@@ -2560,8 +2892,8 @@ function openSessionSummaries(): readonly DesktopSessionSummary[] {
       session_key: session.session_key,
       target: session.target,
       lifecycle: session.lifecycle,
-      entry_url: session.entry_url,
-      startup: session.startup,
+      entry_url: rendererSafeSessionURL(session),
+      startup: rendererSafeStartupReport(session.startup),
       runtime_lifecycle_owner: session.runtime_handle?.lifecycle_owner,
       runtime_launch_mode: session.runtime_handle?.launch_mode,
     }));
@@ -3718,6 +4050,8 @@ async function createSessionRecord(
     stateDirOverride: desktopDiagnosticsStateDirForTarget(target, startup),
   });
   const entryURL = desktopSessionEntryURL(target, startup);
+  const safeEntryURL = stripSensitiveURLPayload(entryURL) || entryURL;
+  const safeAllowedBaseURL = stripSensitiveURLPayload(startup.local_ui_url) || startup.local_ui_url;
   const initialLoad = createInitialLoadDeferred();
   let sessionRecord!: DesktopSessionRecord;
   const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics, {
@@ -3735,7 +4069,7 @@ async function createSessionRecord(
       }
       void failOpeningSession(
         sessionRecord,
-        sessionOpenFailureMessage(details.validatedURL || entryURL, details.errorDescription),
+        sessionOpenFailureMessage(stripSensitiveURLPayload(details.validatedURL) || safeEntryURL, details.errorDescription),
       );
     },
   });
@@ -3744,7 +4078,7 @@ async function createSessionRecord(
     target,
     startup,
     entry_url: entryURL,
-    allowed_base_url: startup.local_ui_url,
+    allowed_base_url: safeAllowedBaseURL,
     root_window: rootWindow,
     child_windows: new Map(),
     diagnostics,
@@ -3790,7 +4124,7 @@ async function createSessionRecord(
         ? 'desktop opened an SSH-bootstrapped environment session'
         : 'desktop connected to an external Redeven Local UI target',
     {
-      target_url: startup.local_ui_url,
+      target_url: safeAllowedBaseURL,
       attached: options.attached === true,
       effective_run_mode: startup.effective_run_mode ?? '',
     },
@@ -10405,7 +10739,7 @@ async function restartManagedRuntimeFromShell(webContentsID: number): Promise<De
   });
   sessionRecord.startup = prepared.launch.managedRuntime.startup;
   updateLocalEnvironmentRuntimeRecord(environment, sessionRecord.startup, sessionRecord.runtime_handle);
-  sessionRecord.allowed_base_url = prepared.launch.managedRuntime.startup.local_ui_url;
+  sessionRecord.allowed_base_url = stripSensitiveURLPayload(prepared.launch.managedRuntime.startup.local_ui_url) || prepared.launch.managedRuntime.startup.local_ui_url;
   sessionRecord.target = buildLocalEnvironmentDesktopTarget(environment, { route: 'local_host' });
   sessionRecord.entry_url = desktopSessionEntryURL(sessionRecord.target, sessionRecord.startup);
   await sessionRecord.diagnostics.configureRuntime(sessionRecord.startup, sessionRecord.allowed_base_url);
@@ -10546,7 +10880,7 @@ async function restartSSHRuntimeFromShell(
 
   sessionRecord.runtime_handle = openRecord.runtime_handle;
   sessionRecord.startup = openRecord.startup;
-  sessionRecord.allowed_base_url = openRecord.local_forward_url;
+  sessionRecord.allowed_base_url = stripSensitiveURLPayload(openRecord.local_forward_url) || openRecord.local_forward_url;
   const nextTarget = buildSSHDesktopTarget(openRecord.details, {
     environmentID: openRecord.environment_id,
     label: openRecord.label,

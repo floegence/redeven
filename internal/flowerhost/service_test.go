@@ -23,10 +23,6 @@ func (staticSecretResolver) ResolveWebSearchProviderAPIKey(context.Context, stri
 	return "", false, nil
 }
 
-func (staticSecretResolver) ResolveControlPlaneAccessToken(context.Context, string) (string, bool, error) {
-	return "control-plane-token", true, nil
-}
-
 type mutableSecretResolver struct {
 	configured bool
 }
@@ -40,10 +36,6 @@ func (r *mutableSecretResolver) ResolveProviderAPIKey(context.Context, string) (
 
 func (r *mutableSecretResolver) ResolveWebSearchProviderAPIKey(context.Context, string) (string, bool, error) {
 	return "", false, nil
-}
-
-func (r *mutableSecretResolver) ResolveControlPlaneAccessToken(context.Context, string) (string, bool, error) {
-	return "control-plane-token", true, nil
 }
 
 func newTestService(t *testing.T) *Service {
@@ -543,6 +535,12 @@ func TestCreateThreadPreservesContextActionInThreadTranscript(t *testing.T) {
 	}
 	if meta.OriginEnvPublicID != "env_a" {
 		t.Fatalf("origin env=%q, want env_a", meta.OriginEnvPublicID)
+	}
+	if got := svc.ai.ToolTargetPolicy().DefaultTargetID; got != "" {
+		t.Fatalf("service-level default target=%q, want empty", got)
+	}
+	if got := svc.primaryTargetIDForThread(context.Background(), result.ThreadID); got != "env_a" {
+		t.Fatalf("thread default target=%q, want env_a", got)
 	}
 	messages, err := svc.ai.ListThreadMessages(context.Background(), svc.Meta(), result.ThreadID, 20, 0)
 	if err != nil {
