@@ -64,6 +64,7 @@ type Capability struct {
 type Capabilities struct {
 	DesktopModelSource Capability `json:"desktop_model_source"`
 	ProviderLink       Capability `json:"provider_link"`
+	RuntimeGateway     Capability `json:"runtime_gateway"`
 }
 
 type BindingState string
@@ -226,6 +227,7 @@ func NormalizeSnapshot(snapshot Snapshot) Snapshot {
 func NormalizeCapabilities(capabilities Capabilities) Capabilities {
 	capabilities.DesktopModelSource = NormalizeCapability(capabilities.DesktopModelSource)
 	capabilities.ProviderLink = NormalizeCapability(capabilities.ProviderLink)
+	capabilities.RuntimeGateway = NormalizeCapability(capabilities.RuntimeGateway)
 	return capabilities
 }
 

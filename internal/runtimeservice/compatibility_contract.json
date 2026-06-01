@@ -1,20 +1,20 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "v0.7.0",
-    "previous_release": "v0.6.13",
-    "reviewed_at": "2026-05-30",
-    "review_id": "workbench-default-sizing-v1",
-    "summary": "Workbench default widget sizing now gives Files, Terminal, and Monitoring more usable first-run space while preserving the existing Runtime Service protocol window.",
+    "release_version": "unreleased",
+    "previous_release": "v0.7.0",
+    "reviewed_at": "2026-06-01",
+    "review_id": "runtime-gateway-skeleton-v1",
+    "summary": "Runtime Service snapshots now include an optional Runtime Gateway capability while preserving the existing compatibility window.",
     "checked_surfaces": [
-      "Runtime Service snapshot schema, protocol version, compatibility epoch, minimum Desktop version, and minimum Runtime version are unchanged from v0.6.13",
-      "Desktop attach/start flows still normalize startup reports through the existing Runtime Service snapshot path without changing required Runtime Service fields",
-      "Local UI health and sys.ping continue to return the same required compatibility fields, with no new Runtime Service JSON semantics required by the Workbench sizing change",
-      "Env App Workbench initial canvas, widget catalog defaults, widget persistence, and add-widget sizing were reviewed as UI layout behavior rather than Runtime Service protocol behavior",
-      "Env App maintenance UI, settings surfaces, file browser, terminal, monitoring, wheel ownership, and text selection ownership keep their existing Runtime Service expectations",
-      "SSH runtime bootstrap, remote startup report handling, runtime-control endpoint discovery, provider link, and open readiness continue to consume the same normalized Runtime Service snapshot fields"
+      "Runtime Service snapshot schema adds only the optional capabilities.runtime_gateway field and keeps protocol_version redeven-runtime-v1",
+      "Go snapshot normalization treats missing runtime_gateway as unsupported so older startup reports and health snapshots remain readable",
+      "Desktop shared Runtime Service normalization treats missing runtime_gateway as unsupported while preserving existing provider link and desktop model source capability behavior",
+      "Runtime Gateway catalog and open-session skeletons define credential-free wire contracts and do not connect Portal or Metaserver authorization",
+      "Desktop Welcome registry and tab UI are intentionally not wired in this slice; no existing open flow consumes runtime_gateway yet",
+      "Compatibility epoch, minimum Desktop version, and minimum Runtime version remain unchanged because this is an additive optional capability"
     ],
-    "same_window_rationale": "The Runtime Service contract itself has no source changes in this release: protocol_version remains redeven-runtime-v1, compatibility_epoch remains 5, and both minimum version fields remain v0.7.0. The release changes adjust Workbench widget catalog default sizes and first-run canvas placement so Files, Terminal, and Monitoring have more usable visual space; those values are local Env App layout metadata and do not add, remove, or reinterpret Runtime Service snapshot fields. Desktop attach/start, Local UI health, startup reports, sys.ping, Env App maintenance UI, SSH runtime bootstrap, provider link, runtime-control, and open readiness were reviewed with no compatibility-window change required."
+    "same_window_rationale": "The new runtime_gateway field is an additive optional capability under the existing Runtime Service snapshot envelope. Older runtimes omit it and new Desktop code normalizes the omission to unsupported; older Desktop versions ignore the extra JSON field from newer runtimes. No required field, protocol version, compatibility epoch, minimum Desktop version, or minimum Runtime version changes are needed for this skeleton."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,
