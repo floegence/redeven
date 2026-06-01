@@ -62,6 +62,8 @@ import type {
   DesktopAccessMode,
   DesktopSettingsSurfaceSnapshot,
 } from '../shared/desktopSettingsSurface';
+import type { DesktopGatewaySource } from '../shared/desktopGateway';
+import type { DesktopGatewayConnectionKind } from '../shared/desktopGateway';
 import type {
   DesktopFlowerHostRouterDecision,
 } from '../shared/flowerHostSettingsIPC';
@@ -155,14 +157,21 @@ import {
   buildEnvironmentLibraryLayoutModel,
   buildEnvironmentCardModel,
   buildEnvironmentCardFactsModel,
+  buildGatewayRowModel,
+  buildGatewaySourceRowModel,
   ICON_ENDPOINTS,
   buildControlPlaneStatusModel,
   buildProviderBackedEnvironmentActionModel,
   capabilityUnavailableMessage,
   environmentLibraryCount,
   environmentProviderFilterValue,
+  filterGatewayEnvironmentEntries,
   filterEnvironmentLibrary,
+  gatewayEnvironmentCount,
+  gatewaySourceFilterOptions,
+  gatewaySourceFilterValue,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
+  GATEWAY_ENVIRONMENT_LIBRARY_FILTER,
   PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
   SSH_ENVIRONMENT_LIBRARY_FILTER,
   runtimeTargetEnvironmentLibraryFilterTargetID,
@@ -171,6 +180,7 @@ import {
   type EnvironmentActionIntent,
   type EnvironmentActionModel,
   type EnvironmentActionMenuItemModel,
+  type GatewaySourceActionModel,
   type EnvironmentGuidanceActionModel,
   type EnvironmentCardEndpointModel,
   type EnvironmentCardFactActionModel,
@@ -375,6 +385,26 @@ type RuntimeContainerConnectionDialogState = Readonly<{
   auto_runtime_probe_configurable: boolean;
 }>;
 
+type GatewaySetupDialogState = Readonly<{
+  mode: 'create' | 'edit';
+  gateway_id: string;
+  display_name: string;
+  connection_kind: DesktopGatewayConnectionKind;
+  gateway_url: string;
+  allow_loopback_http: boolean;
+  ssh_destination: string;
+  ssh_port: string;
+  auth_mode: DesktopSSHAuthMode;
+  connect_timeout_seconds: string;
+  bootstrap_strategy: DesktopSSHBootstrapStrategy;
+  release_base_url: string;
+  container_engine: DesktopContainerEngine;
+  container_id: string;
+  container_ref: string;
+  container_label: string;
+  runtime_root: string;
+}>;
+
 type ConnectionDialogKind = 'external_local_ui' | 'ssh_environment' | 'local_container_runtime' | 'ssh_container_runtime';
 type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null;
 type SSHPasswordConnectionDialogState = SSHConnectionDialogState | RuntimeContainerConnectionDialogState;
@@ -414,6 +444,8 @@ type ProviderRuntimeLinkConfirmationState = Readonly<{
   environment: DesktopEnvironmentEntry;
   action: ProviderRuntimeLinkConfirmationAction;
 }>;
+
+type LauncherActionErrorTarget = 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' | 'gateway_dialog';
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
 const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
@@ -498,6 +530,7 @@ function buildDesktopFloeConfig(i18n: DesktopI18n) {
 const ENVIRONMENT_CENTER_TABS: readonly Readonly<{ value: EnvironmentCenterTab; labelKey: DesktopTranslationKey }>[] = [
   { value: 'environments', labelKey: 'environmentCenter.environmentsSection' },
   { value: 'control_planes', labelKey: 'desktop.provider' },
+  { value: 'gateways', labelKey: 'environmentCenter.gatewaysSection' },
 ];
 
 function trimString(value: unknown): string {
@@ -569,6 +602,11 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     'MANUAL AUTH REQUIRED': 'environmentStatus.manualAuthRequired',
     UNVERIFIED: 'environmentStatus.unverified',
     'SETUP REQUIRED': 'environmentStatus.setupRequired',
+    'PAIRING REQUIRED': 'environmentStatus.pairingRequired',
+    'TRUST CHANGED': 'environmentStatus.trustChanged',
+    'RESOLVE GATEWAY': 'environmentStatus.resolveGateway',
+    'GATEWAY OFFLINE': 'environmentStatus.gatewayOffline',
+    STOPPED: 'environmentStatus.stopped',
     'RESTART REQUIRED': 'environmentStatus.restartRequired',
     'RUNTIME NEEDS UPDATE': 'environmentStatus.runtimeNeedsUpdate',
     'RUNTIME BLOCKED': 'environmentStatus.runtimeBlocked',
@@ -593,6 +631,12 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Refresh runtime status': 'environmentAction.refreshRuntimeStatus',
     'Refresh Runtime status': 'environmentAction.refreshRuntimeStatus',
     'Refresh provider status': 'environmentAction.refreshProviderStatus',
+    'Refresh Gateway status': 'environmentAction.refreshRuntimeStatus',
+    Resolve: 'environmentAction.continue',
+    Pair: 'environmentAction.pairGateway',
+    'Set up': 'environmentStatus.setupRequired',
+    Manage: 'environmentAction.manageInDesktop',
+    Start: 'environmentAction.startRuntime',
     'Start runtime': 'environmentAction.startRuntime',
     'Start Runtime': 'environmentAction.startRuntime',
     'Stop runtime': 'environmentAction.stopRuntime',
@@ -892,6 +936,7 @@ function localizedFactLabel(i18n: DesktopI18n, label: string): string {
     'ENV ID': 'environmentFacts.environmentId',
     OWNER: 'environmentFacts.owner',
     Provider: 'environmentFacts.provider',
+    Gateway: 'environmentCenter.gatewaysSection',
     'Runtime root': 'environmentFacts.runtimeRoot',
     Bootstrap: 'environmentFacts.bootstrap',
     Source: 'environmentFacts.source',
@@ -1484,6 +1529,33 @@ function createRuntimeContainerConnectionDialogState(
     auto_runtime_probe_configurable: kind === 'local_container_runtime'
       ? false
       : overrides.auto_runtime_probe_configurable !== false,
+  };
+}
+
+function createGatewaySetupDialogState(
+  overrides: Partial<GatewaySetupDialogState> = {},
+): GatewaySetupDialogState {
+  const connectionKind = overrides.connection_kind ?? 'url';
+  return {
+    mode: overrides.mode ?? 'create',
+    gateway_id: trimString(overrides.gateway_id),
+    display_name: trimString(overrides.display_name),
+    connection_kind: connectionKind,
+    gateway_url: trimString(overrides.gateway_url),
+    allow_loopback_http: overrides.allow_loopback_http === true,
+    ssh_destination: trimString(overrides.ssh_destination),
+    ssh_port: trimString(overrides.ssh_port),
+    auth_mode: connectionKind === 'url'
+      ? ((trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE)
+      : 'key_agent',
+    connect_timeout_seconds: trimString(overrides.connect_timeout_seconds),
+    bootstrap_strategy: (trimString(overrides.bootstrap_strategy) as DesktopSSHBootstrapStrategy) || DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+    release_base_url: trimString(overrides.release_base_url),
+    container_engine: overrides.container_engine ?? 'docker',
+    container_id: trimString(overrides.container_id),
+    container_ref: trimString(overrides.container_ref) || trimString(overrides.container_label) || trimString(overrides.container_id),
+    container_label: trimString(overrides.container_label),
+    runtime_root: trimString(overrides.runtime_root) || (overrides.connection_kind === 'ssh_container' ? '/root/.redeven' : DEFAULT_DESKTOP_SSH_RUNTIME_ROOT),
   };
 }
 
@@ -2113,6 +2185,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [busyState, setBusyState] = createSignal<DesktopLauncherBusyState>(IDLE_LAUNCHER_BUSY_STATE);
   const [settingsDraftSession, setSettingsDraftSession] = createSignal(createDesktopSettingsDraftSession(props.snapshot.settings_surface));
   const [connectionDialogState, setConnectionDialogState] = createSignal<ConnectionDialogState>(null);
+  const [gatewaySetupDialogState, setGatewaySetupDialogState] = createSignal<GatewaySetupDialogState | null>(null);
+  const [gatewaySetupDialogError, setGatewaySetupDialogError] = createSignal('');
+  const [gatewaySetupDialogFieldErrors, setGatewaySetupDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
   const [sshConfigHosts, setSSHConfigHosts] = createSignal<readonly DesktopSSHConfigHost[]>([]);
   const [sshConfigHostsLoaded, setSSHConfigHostsLoaded] = createSignal(false);
   const [runtimeContainerOptions, setRuntimeContainerOptions] = createSignal<readonly DesktopRuntimeContainerOption[]>([]);
@@ -2138,6 +2213,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
   const [librarySourceFilter, setLibrarySourceFilter] = createSignal('');
   const [libraryQuery, setLibraryQuery] = createSignal('');
+  const [gatewaySourceFilter, setGatewaySourceFilter] = createSignal('');
+  const [gatewayQuery, setGatewayQuery] = createSignal('');
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
   const [environmentFailures, setEnvironmentFailures] = createSignal<ReadonlyMap<string, EnvironmentFailureState>>(new Map());
   const actionToastTimers = new Map<number, number>();
@@ -2170,6 +2247,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (environmentLibraryCount(snapshot(), '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER) > 0) {
       next.add(PROVIDER_ENVIRONMENT_LIBRARY_FILTER);
     }
+    if (environmentLibraryCount(snapshot(), '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER) > 0) {
+      next.add(GATEWAY_ENVIRONMENT_LIBRARY_FILTER);
+    }
     if (environmentLibraryCount(snapshot(), '', URL_ENVIRONMENT_LIBRARY_FILTER) > 0) {
       next.add(URL_ENVIRONMENT_LIBRARY_FILTER);
     }
@@ -2192,6 +2272,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       snapshot(),
       libraryQuery(),
       librarySourceFilter(),
+    )
+  ));
+  const gatewayEntries = createMemo(() => (
+    filterGatewayEnvironmentEntries(
+      snapshot(),
+      gatewayQuery(),
+      gatewaySourceFilter(),
     )
   ));
   const librarySummary = createMemo(() => (
@@ -2251,6 +2338,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   createEffect(() => {
     document.title = i18n().t('desktop.title');
+  });
+
+  createEffect(() => {
+    const activeSourceFilter = gatewaySourceFilter();
+    if (activeSourceFilter === '') {
+      return;
+    }
+    const available = new Set(gatewaySourceFilterOptions(snapshot()).map((option) => option.value));
+    if (!available.has(activeSourceFilter)) {
+      setGatewaySourceFilter('');
+    }
   });
 
   createEffect(() => {
@@ -2410,9 +2508,32 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   });
 
+  createEffect(() => {
+    const kind = gatewaySetupDialogState()?.connection_kind;
+    if ((kind === 'ssh_host' || kind === 'ssh_container') && !sshConfigHostsLoaded()) {
+      void refreshSSHConfigHosts();
+    }
+  });
+
   async function refreshRuntimeContainerOptions(force = false): Promise<void> {
-    const state = connectionDialogState();
-    if (state?.connection_kind !== 'local_container_runtime' && state?.connection_kind !== 'ssh_container_runtime') {
+    const connectionState = connectionDialogState();
+    const gatewayState = gatewaySetupDialogState();
+    const state = connectionState?.connection_kind === 'local_container_runtime' || connectionState?.connection_kind === 'ssh_container_runtime'
+      ? connectionState
+      : gatewayState?.connection_kind === 'ssh_container'
+        ? createRuntimeContainerConnectionDialogState(gatewayState.mode, 'ssh_container_runtime', {
+            ssh_destination: gatewayState.ssh_destination,
+            ssh_port: gatewayState.ssh_port,
+            auth_mode: gatewayState.auth_mode,
+            connect_timeout_seconds: gatewayState.connect_timeout_seconds,
+            container_engine: gatewayState.container_engine,
+            container_id: gatewayState.container_id,
+            container_ref: gatewayState.container_ref,
+            container_label: gatewayState.container_label,
+            runtime_root: gatewayState.runtime_root,
+          })
+        : null;
+    if (!state) {
       setRuntimeContainerOptions([]);
       setRuntimeContainerOptionsError('');
       setRuntimeContainerOptionsKey('');
@@ -2459,15 +2580,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         setRuntimeContainerOptions(result.containers);
         setRuntimeContainerOptionsError('');
         const currentDialogState = connectionDialogState();
+        const currentGatewayState = gatewaySetupDialogState();
         const selectedID = trimString(
           currentDialogState?.connection_kind === 'local_container_runtime' || currentDialogState?.connection_kind === 'ssh_container_runtime'
             ? currentDialogState.container_id
-            : '',
+            : currentGatewayState?.connection_kind === 'ssh_container'
+              ? currentGatewayState.container_id
+              : '',
         );
         const selectedRef = trimString(
           currentDialogState?.connection_kind === 'local_container_runtime' || currentDialogState?.connection_kind === 'ssh_container_runtime'
             ? currentDialogState.container_ref || currentDialogState.container_label
-            : '',
+            : currentGatewayState?.connection_kind === 'ssh_container'
+              ? currentGatewayState.container_ref || currentGatewayState.container_label
+              : '',
         );
         if (selectedID !== '' && !result.containers.some((container) => container.container_id === selectedID)) {
           const referenceMatches = selectedRef === ''
@@ -2484,6 +2610,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 return current;
               }
               if (current.container_engine !== state.container_engine) {
+                return current;
+              }
+              return {
+                ...current,
+                container_id: match.container_id,
+                container_ref: match.container_ref,
+                container_label: match.container_label,
+              };
+            });
+            setGatewaySetupDialogState((current) => {
+              if (current?.connection_kind !== 'ssh_container' || current.container_engine !== state.container_engine) {
                 return current;
               }
               return {
@@ -2516,7 +2653,27 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   createEffect(on(
-    () => runtimeContainerOptionsRequestKey(connectionDialogState()),
+    () => {
+      const connectionState = connectionDialogState();
+      if (connectionState?.connection_kind === 'local_container_runtime' || connectionState?.connection_kind === 'ssh_container_runtime') {
+        return runtimeContainerOptionsRequestKey(connectionState);
+      }
+      const gatewayState = gatewaySetupDialogState();
+      if (gatewayState?.connection_kind !== 'ssh_container') {
+        return '';
+      }
+      return runtimeContainerOptionsRequestKey(createRuntimeContainerConnectionDialogState(gatewayState.mode, 'ssh_container_runtime', {
+        ssh_destination: gatewayState.ssh_destination,
+        ssh_port: gatewayState.ssh_port,
+        auth_mode: gatewayState.auth_mode,
+        connect_timeout_seconds: gatewayState.connect_timeout_seconds,
+        container_engine: gatewayState.container_engine,
+        container_id: gatewayState.container_id,
+        container_ref: gatewayState.container_ref,
+        container_label: gatewayState.container_label,
+        runtime_root: gatewayState.runtime_root,
+      }));
+    },
     () => {
       void refreshRuntimeContainerOptions();
     },
@@ -2619,7 +2776,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function handleLauncherActionFailure(
     failure: Extract<DesktopLauncherActionResult, Readonly<{ ok: false }>>,
-    errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog',
+    errorTarget: LauncherActionErrorTarget,
     requestEnvID?: string,
   ): Promise<void> {
     const presentation = launcherActionFailurePresentation(i18n(), failure);
@@ -2702,17 +2859,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function resetMessages(): void {
     setSettingsError('');
     setConnectionDialogError('');
+    setGatewaySetupDialogError('');
     setControlPlaneDialogError('');
   }
 
   function showConnectEnvironment(message = ''): void {
     setConnectionDialogState(null);
+    setGatewaySetupDialogState(null);
     setControlPlaneDialogState(null);
     if (trimString(message) !== '') {
       showActionToast(message, 'info');
     }
     setSettingsError('');
     setConnectionDialogError('');
+    setGatewaySetupDialogError('');
     setControlPlaneDialogError('');
     if (snapshot().surface === 'connect_environment') {
       return;
@@ -2737,6 +2897,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     resetMessages();
     setConnectionDialogState(null);
+    setGatewaySetupDialogState(null);
     setControlPlaneDialogState(null);
     setBusyState({
       action: 'open_environment_settings',
@@ -2758,6 +2919,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   function openLanguageSettings(): void {
     resetMessages();
     setConnectionDialogState(null);
+    setGatewaySetupDialogState(null);
     setControlPlaneDialogState(null);
     setLanguageSettingsOpen(true);
   }
@@ -2778,6 +2940,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setSettingsError('');
     setConnectionDialogError('');
     setConnectionDialogFieldErrors({});
+    setGatewaySetupDialogState(null);
     setControlPlaneDialogError('');
     setControlPlaneDialogState(null);
     if (preferredKind === 'ssh_environment') {
@@ -2793,6 +2956,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogState(createExternalURLConnectionDialogState('create', {
       external_local_ui_url: trimString(snapshot().suggested_remote_url),
     }));
+  }
+
+  function openCreateGatewaySetup(gateway?: DesktopGatewaySource): void {
+    if (snapshot().surface !== 'connect_environment') {
+      showConnectEnvironment(i18n().t('environmentCenter.addGatewayLauncherPrompt'));
+      return;
+    }
+    resetMessages();
+    setActiveCenterTab('gateways');
+    setConnectionDialogState(null);
+    setControlPlaneDialogState(null);
+    setGatewaySetupDialogFieldErrors({});
+    setGatewaySetupDialogState(createGatewaySetupDialogState(gateway
+      ? {
+          mode: 'edit',
+          gateway_id: gateway.gateway_id,
+          display_name: gateway.display_name,
+          connection_kind: gateway.connection_kind,
+          gateway_url: gateway.gateway_url ?? '',
+          allow_loopback_http: gateway.allow_loopback_http === true,
+        }
+      : {}));
+    setLanguageSettingsOpen(false);
   }
 
   function startEditingEnvironment(environment: DesktopEnvironmentEntry): void {
@@ -2853,6 +3039,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setConnectionDialogFieldErrors({});
   }
 
+  function closeGatewaySetupDialog(): void {
+    setGatewaySetupDialogState(null);
+    setGatewaySetupDialogError('');
+    setGatewaySetupDialogFieldErrors({});
+  }
+
   function openCreateControlPlaneDialog(message = ''): void {
     if (snapshot().surface !== 'connect_environment') {
       showConnectEnvironment(message || i18n().t('environmentCenter.addProviderLauncherPrompt'));
@@ -2860,6 +3052,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
     setActiveCenterTab('control_planes');
     setConnectionDialogState(null);
+    setGatewaySetupDialogState(null);
     if (trimString(message) !== '') {
       showActionToast(message, 'info');
     }
@@ -2970,6 +3163,39 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
+  function updateGatewaySetupDialogField(name: keyof GatewaySetupDialogState, value: string | boolean): void {
+    setGatewaySetupDialogState((current) => {
+      if (!current) {
+        return current;
+      }
+      const nextValue = typeof value === 'boolean' ? value : trimString(value);
+      if (name === 'connection_kind') {
+        const nextKind = nextValue as DesktopGatewayConnectionKind;
+        return createGatewaySetupDialogState({
+          ...current,
+          connection_kind: nextKind,
+          auth_mode: nextKind === 'url' ? current.auth_mode : 'key_agent',
+          runtime_root: nextKind === 'ssh_container'
+            ? (current.runtime_root === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT ? '/root/.redeven' : current.runtime_root)
+            : (current.runtime_root === '/root/.redeven' ? DEFAULT_DESKTOP_SSH_RUNTIME_ROOT : current.runtime_root),
+        });
+      }
+      if (name === 'container_engine') {
+        return {
+          ...current,
+          container_engine: nextValue as DesktopContainerEngine,
+          container_id: '',
+          container_ref: '',
+          container_label: '',
+        };
+      }
+      return {
+        ...current,
+        [name]: nextValue,
+      };
+    });
+  }
+
   function switchSSHBootstrapStrategy(strategy: DesktopSSHBootstrapStrategy): void {
     setConnectionDialogState((current) => {
       if (
@@ -3017,7 +3243,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  function setErrorMessage(target: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog', message: string): void {
+  function setErrorMessage(target: LauncherActionErrorTarget, message: string): void {
     if (target === 'connect') {
       showActionToast(message, 'error');
       return;
@@ -3030,6 +3256,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       setControlPlaneDialogError(message);
       return;
     }
+    if (target === 'gateway_dialog') {
+      setGatewaySetupDialogError(message);
+      return;
+    }
     if (target === 'dialog') {
       setConnectionDialogError(message);
       return;
@@ -3038,7 +3268,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function performLauncherAction(
     request: DesktopLauncherActionRequest,
-    errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' = 'connect',
+    errorTarget: LauncherActionErrorTarget = 'connect',
   ): Promise<Extract<DesktopLauncherActionResult, Readonly<{ ok: true }>> | null> {
     resetMessages();
     setBusyState(busyStateForLauncherRequest(request));
@@ -3064,7 +3294,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function focusEnvironmentWindow(
     sessionKey: string,
-    errorTarget: 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' = 'connect',
+    errorTarget: LauncherActionErrorTarget = 'connect',
   ): Promise<boolean> {
     const result = await performLauncherAction({
       kind: 'focus_environment_window',
@@ -3603,6 +3833,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (environment.kind === 'provider_environment') {
       return openProviderEnvironment(environment, errorTarget, route);
     }
+    if (environment.kind === 'gateway_environment') {
+      return openGatewayEnvironment(environment, errorTarget);
+    }
     if (environment.kind === 'ssh_environment') {
       const details = environment.ssh_details;
       if (!details) {
@@ -3640,6 +3873,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return true;
       case 'disconnect_provider_runtime':
         requestProviderRuntimeLinkConfirmation(environment, 'disconnect');
+        return true;
+      case 'resolve_gateway':
+        await pairGateway(environment.gateway_id ?? '');
         return true;
       case 'opening':
       default:
@@ -4023,6 +4259,121 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     } finally {
       setBusyState(IDLE_LAUNCHER_BUSY_STATE);
     }
+  }
+
+  function validateGatewaySetupDialogFields(state: GatewaySetupDialogState): Partial<Record<string, string>> {
+    const errors: Partial<Record<string, string>> = {};
+    if (!trimString(state.display_name)) {
+      errors.display_name = i18n().t('connectionDialog.validationGatewayNameRequired');
+    }
+    if (state.connection_kind === 'url' && !trimString(state.gateway_url)) {
+      errors.gateway_url = i18n().t('connectionDialog.validationGatewayUrlRequired');
+    }
+    if ((state.connection_kind === 'ssh_host' || state.connection_kind === 'ssh_container') && !trimString(state.ssh_destination)) {
+      errors.ssh_destination = i18n().t('connectionDialog.validationSshDestinationRequired');
+    }
+    if ((state.connection_kind === 'ssh_host' || state.connection_kind === 'ssh_container') && !trimString(state.runtime_root)) {
+      errors.runtime_root = i18n().t('connectionDialog.validationRuntimeRootRequired');
+    }
+    if (state.connection_kind === 'ssh_container' && !trimString(state.container_id)) {
+      errors.container_id = i18n().t('connectionDialog.validationChooseContainer');
+    }
+    return errors;
+  }
+
+  async function saveGatewayFromDialog(): Promise<void> {
+    const state = gatewaySetupDialogState();
+    if (!state) {
+      return;
+    }
+    const errors = validateGatewaySetupDialogFields(state);
+    setGatewaySetupDialogFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
+    setGatewaySetupDialogFieldErrors({});
+    const base = {
+      kind: 'upsert_gateway',
+      gateway_id: trimString(state.gateway_id) || undefined,
+      display_name: trimString(state.display_name),
+    } as const;
+    const action: DesktopLauncherActionRequest = state.connection_kind === 'url'
+      ? {
+          ...base,
+          connection_kind: 'url',
+          gateway_url: trimString(state.gateway_url),
+          allow_loopback_http: state.allow_loopback_http,
+        }
+      : state.connection_kind === 'ssh_host'
+        ? {
+            ...base,
+            connection_kind: 'ssh_host',
+            ssh_destination: trimString(state.ssh_destination),
+            ssh_port: trimString(state.ssh_port) === '' ? null : Number.parseInt(trimString(state.ssh_port), 10),
+            auth_mode: 'key_agent',
+            connect_timeout_seconds: trimString(state.connect_timeout_seconds) === '' ? null : Number(trimString(state.connect_timeout_seconds)),
+            runtime_root: trimString(state.runtime_root),
+            bootstrap_strategy: state.bootstrap_strategy,
+            release_base_url: trimString(state.release_base_url),
+          }
+        : {
+            ...base,
+            connection_kind: 'ssh_container',
+            ssh_destination: trimString(state.ssh_destination),
+            ssh_port: trimString(state.ssh_port) === '' ? null : Number.parseInt(trimString(state.ssh_port), 10),
+            auth_mode: 'key_agent',
+            connect_timeout_seconds: trimString(state.connect_timeout_seconds) === '' ? null : Number(trimString(state.connect_timeout_seconds)),
+            container_engine: state.container_engine,
+            container_id: trimString(state.container_id),
+            container_ref: trimString(state.container_ref) || trimString(state.container_label) || trimString(state.container_id),
+            container_label: trimString(state.container_label) || trimString(state.container_id),
+            runtime_root: trimString(state.runtime_root),
+          };
+    const result = await performLauncherAction(action, 'gateway_dialog');
+    if (result?.outcome === 'saved_gateway') {
+      await refreshSnapshot();
+      closeGatewaySetupDialog();
+      showActionToast(i18n().t('toast.gatewaySaved'));
+    }
+  }
+
+  async function pairGateway(gatewayID: string): Promise<void> {
+    const cleanGatewayID = trimString(gatewayID);
+    if (cleanGatewayID === '') {
+      setErrorMessage('connect', i18n().t('environmentCenter.resolveGatewayError'));
+      return;
+    }
+    const result = await performLauncherAction({
+      kind: 'pair_gateway',
+      gateway_id: cleanGatewayID,
+    });
+    if (result?.outcome === 'paired_gateway') {
+      await refreshSnapshot();
+      showActionToast(i18n().t('toast.gatewayPaired'));
+    }
+  }
+
+  async function openGatewayEnvironment(
+    environment: DesktopEnvironmentEntry,
+    errorTarget: 'connect' | 'dialog' = 'connect',
+  ): Promise<boolean> {
+    if (environment.is_open && environment.open_session_key) {
+      return focusEnvironmentWindow(environment.open_session_key, errorTarget);
+    }
+    const gatewayID = trimString(environment.gateway_id);
+    const gatewayEnvID = trimString(environment.gateway_env_id);
+    if (gatewayID === '' || gatewayEnvID === '') {
+      setErrorMessage(errorTarget, i18n().t('environmentCenter.resolveGatewayError'));
+      return false;
+    }
+    const result = await performLauncherAction({
+      kind: 'open_gateway_environment',
+      environment_id: environment.id,
+      gateway_id: gatewayID,
+      gateway_env_id: gatewayEnvID,
+      label: environment.label,
+    }, errorTarget);
+    return result?.outcome === 'opened_environment_window' || result?.outcome === 'focused_environment_window';
   }
 
   function validateConnectionDialogFields(state: ConnectionDialogState): Partial<Record<string, string>> {
@@ -4494,12 +4845,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               librarySourceFilter={librarySourceFilter()}
               libraryQuery={libraryQuery()}
               libraryEntries={libraryEntries()}
+              gatewaySourceFilter={gatewaySourceFilter()}
+              gatewayQuery={gatewayQuery()}
+              gatewayEntries={gatewayEntries()}
               setLibrarySourceFilter={setLibrarySourceFilter}
               setLibraryQuery={setLibraryQuery}
+              setGatewaySourceFilter={setGatewaySourceFilter}
+              setGatewayQuery={setGatewayQuery}
               runEnvironmentCardFactAction={runEnvironmentCardFactAction}
               openLocalEnvironment={openPrimaryLocalEnvironment}
               openSettingsSurface={openSettingsSurface}
               openCreateConnectionDialog={openCreateConnectionDialog}
+              openCreateGatewaySetup={openCreateGatewaySetup}
+              pairGateway={pairGateway}
               openCreateControlPlaneDialog={openCreateControlPlaneDialog}
               refreshAllEnvironmentRuntimes={refreshAllEnvironmentRuntimes}
               openRemoteEnvironment={openRemoteEnvironment}
@@ -4533,6 +4891,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 void copyLauncherOperationDiagnostics(progress);
               }}
               controlPlanes={controlPlanes()}
+              gatewaySources={snapshot().gateway_sources}
               viewControlPlaneEnvironments={focusProviderEnvironments}
               reconnectControlPlane={reconnectControlPlane}
               refreshControlPlane={refreshControlPlane}
@@ -4634,6 +4993,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         removeSSHPassword={removeSSHPasswordFromConnectionDialog}
         clearFieldErrors={() => setConnectionDialogFieldErrors({})}
         onSave={saveConnectionFromDialog}
+      />
+
+      <GatewaySetupDialog
+        i18n={i18n()}
+        state={gatewaySetupDialogState()}
+        sshConfigHosts={sshConfigHosts()}
+        containerOptions={runtimeContainerOptions()}
+        containerOptionsLoading={runtimeContainerOptionsLoading()}
+        containerOptionsError={runtimeContainerOptionsError()}
+        error={gatewaySetupDialogError()}
+        fieldErrors={gatewaySetupDialogFieldErrors()}
+        busyState={busyState()}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeGatewaySetupDialog();
+          }
+        }}
+        updateField={updateGatewaySetupDialogField}
+        refreshContainerOptions={() => {
+          void refreshRuntimeContainerOptions(true);
+        }}
+        clearFieldErrors={() => setGatewaySetupDialogFieldErrors({})}
+        onSave={saveGatewayFromDialog}
       />
 
       <ControlPlaneDialog
@@ -4918,12 +5300,19 @@ function ConnectEnvironmentSurface(props: Readonly<{
   librarySourceFilter: string;
   libraryQuery: string;
   libraryEntries: readonly DesktopEnvironmentEntry[];
+  gatewaySourceFilter: string;
+  gatewayQuery: string;
+  gatewayEntries: readonly DesktopEnvironmentEntry[];
   setLibrarySourceFilter: (value: string) => void;
   setLibraryQuery: (value: string) => void;
+  setGatewaySourceFilter: (value: string) => void;
+  setGatewayQuery: (value: string) => void;
   runEnvironmentCardFactAction: (action: EnvironmentCardFactActionModel) => void;
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
+  pairGateway: (gatewayID: string) => Promise<void>;
   openCreateControlPlaneDialog: (message?: string) => void;
   refreshAllEnvironmentRuntimes: () => Promise<void>;
   openRemoteEnvironment: (
@@ -4964,6 +5353,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   controlPlanes: readonly DesktopControlPlaneSummary[];
+  gatewaySources: readonly DesktopGatewaySource[];
   viewControlPlaneEnvironments: (controlPlane: DesktopControlPlaneSummary) => void;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
@@ -4983,6 +5373,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
   ));
   const providerSourceCount = createMemo(() => (
     environmentLibraryCount(props.snapshot, '', PROVIDER_ENVIRONMENT_LIBRARY_FILTER)
+  ));
+  const gatewaySourceCount = createMemo(() => (
+    environmentLibraryCount(props.snapshot, '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER)
   ));
   const urlSourceCount = createMemo(() => (
     environmentLibraryCount(props.snapshot, '', URL_ENVIRONMENT_LIBRARY_FILTER)
@@ -5004,6 +5397,13 @@ function ConnectEnvironmentSurface(props: Readonly<{
         value: PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
         label: props.i18n.t('environmentCenter.providerFilter'),
         count: providerSourceCount(),
+      });
+    }
+    if (gatewaySourceCount() > 0) {
+      options.push({
+        value: GATEWAY_ENVIRONMENT_LIBRARY_FILTER,
+        label: props.i18n.t('environmentCenter.gatewayFilter'),
+        count: gatewaySourceCount(),
       });
     }
     if (urlSourceCount() > 0) {
@@ -5045,6 +5445,13 @@ function ConnectEnvironmentSurface(props: Readonly<{
   const controlPlaneEnvironmentCount = createMemo(() => (
     props.controlPlanes.reduce((total, controlPlane) => total + controlPlane.environments.length, 0)
   ));
+  const visibleGatewayEnvironmentCount = createMemo(() => (
+    gatewayEnvironmentCount(props.snapshot, props.gatewayQuery, props.gatewaySourceFilter)
+  ));
+  const totalGatewayEnvironmentCount = createMemo(() => (
+    gatewayEnvironmentCount(props.snapshot, '', '')
+  ));
+  const gatewayFilterOptions = createMemo(() => gatewaySourceFilterOptions(props.snapshot));
   const showQuickAddCards = createMemo(() => (
     trimString(props.libraryQuery) === ''
     && trimString(props.librarySourceFilter) === ''
@@ -5069,8 +5476,11 @@ function ConnectEnvironmentSurface(props: Readonly<{
   const useSpaciousControlPlaneLayout = createMemo(() => (
     props.activeTab === 'control_planes' && props.controlPlanes.length > 0
   ));
+  const useSpaciousGatewayLayout = createMemo(() => (
+    props.activeTab === 'gateways' && props.gatewaySources.length > 0
+  ));
   const useSpaciousWelcomeShell = createMemo(() => (
-    useSpaciousEnvironmentLibraryLayout() || useSpaciousControlPlaneLayout()
+    useSpaciousEnvironmentLibraryLayout() || useSpaciousControlPlaneLayout() || useSpaciousGatewayLayout()
   ));
 
   return (
@@ -5090,16 +5500,29 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 </p>
               </div>
               <div class="flex items-center gap-2">
-                <Show when={props.activeTab === 'environments'}>
+                <Show when={props.activeTab === 'environments' || props.activeTab === 'gateways'}>
                   <div class="relative w-full sm:w-[14.5rem]">
                     <Search class="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={props.libraryQuery}
-                      onInput={(event) => props.setLibraryQuery(event.currentTarget.value)}
-                      placeholder={props.i18n.t('environmentCenter.searchPlaceholder')}
-                      size="sm"
-                      class="w-full pl-9"
-                    />
+                    <Show
+                      when={props.activeTab === 'gateways'}
+                      fallback={(
+                        <Input
+                          value={props.libraryQuery}
+                          onInput={(event) => props.setLibraryQuery(event.currentTarget.value)}
+                          placeholder={props.i18n.t('environmentCenter.searchPlaceholder')}
+                          size="sm"
+                          class="w-full pl-9"
+                        />
+                      )}
+                    >
+                      <Input
+                        value={props.gatewayQuery}
+                        onInput={(event) => props.setGatewayQuery(event.currentTarget.value)}
+                        placeholder={props.i18n.t('environmentCenter.gatewaySearchPlaceholder')}
+                        size="sm"
+                        class="w-full pl-9"
+                      />
+                    </Show>
                   </div>
                 </Show>
                 <Show when={props.activeTab === 'environments'}>
@@ -5119,18 +5542,22 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     </span>
                   </DesktopTooltip>
                 </Show>
-                <Show
-                  when={props.activeTab === 'environments'}
-                  fallback={(
-                    <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
-                      <Plus class="mr-1 h-3.5 w-3.5" />
-                      {props.i18n.t('environmentCenter.connectProvider')}
-                    </Button>
-                  )}
-                >
+                <Show when={props.activeTab === 'environments'}>
                   <Button size="sm" variant="default" onClick={() => props.openCreateConnectionDialog()}>
                     <Plus class="mr-1 h-3.5 w-3.5" />
                     {props.i18n.t('environmentCenter.newEnvironmentShort')}
+                  </Button>
+                </Show>
+                <Show when={props.activeTab === 'control_planes'}>
+                  <Button size="sm" variant="default" onClick={() => props.openCreateControlPlaneDialog()}>
+                    <Plus class="mr-1 h-3.5 w-3.5" />
+                    {props.i18n.t('environmentCenter.connectProvider')}
+                  </Button>
+                </Show>
+                <Show when={props.activeTab === 'gateways'}>
+                  <Button size="sm" variant="default" onClick={() => props.openCreateGatewaySetup()}>
+                    <Plus class="mr-1 h-3.5 w-3.5" />
+                    {props.i18n.t('environmentCenter.addGateway')}
                   </Button>
                 </Show>
               </div>
@@ -5153,91 +5580,95 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 </For>
               </div>
               <div class="flex flex-wrap items-center gap-2">
-                <Show
-                  when={props.activeTab === 'environments'}
-                  fallback={(
-                    <div class="flex items-center gap-2 text-xs text-muted-foreground">
-                      <span>{props.i18n.t('environmentCenter.providersCount', { count: props.controlPlanes.length })}</span>
-                      <span class="text-border">·</span>
-                      <span>{props.i18n.t('environmentCenter.environmentsCount', { count: controlPlaneEnvironmentCount() })}</span>
-                    </div>
-                  )}
-                >
-                  <button
-                    type="button"
-                    class="redeven-provider-pill"
-                    data-active={props.librarySourceFilter === ''}
-                    aria-pressed={props.librarySourceFilter === ''}
-                    onClick={() => props.setLibrarySourceFilter('')}
-                  >
-                    {props.i18n.t('environmentCenter.allFilter')} ({layoutReferenceEnvironmentCount()})
-                  </button>
-                  <For each={sourceFilterOptions()}>
-                    {(option) => (
-                      <button
-                        type="button"
-                        class="redeven-provider-pill"
-                        data-active={props.librarySourceFilter === option.value}
-                        aria-pressed={props.librarySourceFilter === option.value}
-                        onClick={() => props.setLibrarySourceFilter(option.value)}
-                      >
-                        {option.label} ({option.count})
-                      </button>
-                    )}
-                  </For>
-                  <Show when={activeNonCategoryFilterChipLabel() !== ''}>
+                <Show when={props.activeTab === 'environments'}>
+                  <>
                     <button
                       type="button"
-                      class="redeven-runtime-chip"
-                      data-active="true"
-                      aria-pressed="true"
+                      class="redeven-provider-pill"
+                      data-active={props.librarySourceFilter === ''}
+                      aria-pressed={props.librarySourceFilter === ''}
                       onClick={() => props.setLibrarySourceFilter('')}
                     >
-                      <svg
-                        class="h-3 w-3"
-                        viewBox="0 0 15 15"
-                        fill="none"
-                        aria-hidden="true"
-                      >
-                        <path
-                          d="M11.7816 4.03157C12.0062 3.80702 12.0062 3.44295 11.7816 3.2184C11.5571 2.99385 11.193 2.99385 10.9685 3.2184L7.50005 6.68682L4.03164 3.2184C3.80708 2.99385 3.44301 2.99385 3.21846 3.2184C2.99391 3.44295 2.99391 3.80702 3.21846 4.03157L6.68688 7.49999L3.21846 10.9684C2.99391 11.193 2.99391 11.557 3.21846 11.7816C3.44301 12.0061 3.80708 12.0061 4.03164 11.7816L7.50005 8.31316L10.9685 11.7816C11.193 12.0061 11.5571 12.0061 11.7816 11.7816C12.0062 11.557 12.0062 11.193 11.7816 10.9684L8.31322 7.49999L11.7816 4.03157Z"
-                          fill="currentColor"
-                          fill-rule="evenodd"
-                          clip-rule="evenodd"
-                        />
-                      </svg>
-                      {activeNonCategoryFilterChipLabel()}
+                      {props.i18n.t('environmentCenter.allFilter')} ({layoutReferenceEnvironmentCount()})
                     </button>
-                  </Show>
-                  <div class="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
-                    <span>{props.i18n.t('environmentCenter.shownCount', { count: visibleEnvironmentCount() })}</span>
-                    <Show when={props.snapshot.open_windows.length > 0}>
-                      <span class="text-border">·</span>
-                      <span>{props.i18n.t('environmentCenter.liveCount', { count: props.snapshot.open_windows.length })}</span>
+                    <For each={sourceFilterOptions()}>
+                      {(option) => (
+                        <button
+                          type="button"
+                          class="redeven-provider-pill"
+                          data-active={props.librarySourceFilter === option.value}
+                          aria-pressed={props.librarySourceFilter === option.value}
+                          onClick={() => props.setLibrarySourceFilter(option.value)}
+                        >
+                          {option.label} ({option.count})
+                        </button>
+                      )}
+                    </For>
+                    <Show when={activeNonCategoryFilterChipLabel() !== ''}>
+                      <button
+                        type="button"
+                        class="redeven-runtime-chip"
+                        data-active="true"
+                        aria-pressed="true"
+                        onClick={() => props.setLibrarySourceFilter('')}
+                      >
+                        <X class="h-3 w-3" />
+                        {activeNonCategoryFilterChipLabel()}
+                      </button>
                     </Show>
+                    <div class="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
+                      <span>{props.i18n.t('environmentCenter.shownCount', { count: visibleEnvironmentCount() })}</span>
+                      <Show when={props.snapshot.open_windows.length > 0}>
+                        <span class="text-border">·</span>
+                        <span>{props.i18n.t('environmentCenter.liveCount', { count: props.snapshot.open_windows.length })}</span>
+                      </Show>
+                    </div>
+                  </>
+                </Show>
+                <Show when={props.activeTab === 'control_planes'}>
+                  <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{props.i18n.t('environmentCenter.providersCount', { count: props.controlPlanes.length })}</span>
+                    <span class="text-border">·</span>
+                    <span>{props.i18n.t('environmentCenter.environmentsCount', { count: controlPlaneEnvironmentCount() })}</span>
                   </div>
+                </Show>
+                <Show when={props.activeTab === 'gateways'}>
+                  <>
+                    <button
+                      type="button"
+                      class="redeven-provider-pill"
+                      data-active={props.gatewaySourceFilter === ''}
+                      aria-pressed={props.gatewaySourceFilter === ''}
+                      onClick={() => props.setGatewaySourceFilter('')}
+                    >
+                      {props.i18n.t('environmentCenter.allFilter')} ({totalGatewayEnvironmentCount()})
+                    </button>
+                    <For each={gatewayFilterOptions()}>
+                      {(option) => (
+                        <button
+                          type="button"
+                          class="redeven-provider-pill"
+                          data-active={props.gatewaySourceFilter === option.value}
+                          aria-pressed={props.gatewaySourceFilter === option.value}
+                          onClick={() => props.setGatewaySourceFilter(option.value)}
+                        >
+                          {option.label} ({option.count})
+                        </button>
+                      )}
+                    </For>
+                    <div class="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
+                      <span>{props.i18n.t('environmentCenter.gatewaysCount', { count: props.gatewaySources.length })}</span>
+                      <span class="text-border">·</span>
+                      <span>{props.i18n.t('environmentCenter.shownCount', { count: visibleGatewayEnvironmentCount() })}</span>
+                    </div>
+                  </>
                 </Show>
               </div>
             </div>
           </header>
 
           <div class="space-y-3">
-            <Show
-              when={props.activeTab === 'environments'}
-              fallback={(
-                <ControlPlanesPanel
-                  i18n={props.i18n}
-                  controlPlanes={props.controlPlanes}
-                  busyState={props.busyState}
-                  openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
-                  environments={props.snapshot.environments}
-                  viewControlPlaneEnvironments={props.viewControlPlaneEnvironments}
-                  reconnectControlPlane={props.reconnectControlPlane}
-                  refreshControlPlane={props.refreshControlPlane}
-                  deleteControlPlane={props.deleteControlPlane}
-                />
-              )}
-            >
+            <Show when={props.activeTab === 'environments'}>
               <EnvironmentCardsPanel
                 i18n={props.i18n}
                 entries={props.libraryEntries}
@@ -5263,6 +5694,31 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 copyOperationDiagnostics={props.copyOperationDiagnostics}
                 environmentFailures={props.environmentFailures}
                 dismissEnvironmentFailure={props.dismissEnvironmentFailure}
+              />
+            </Show>
+            <Show when={props.activeTab === 'control_planes'}>
+              <ControlPlanesPanel
+                i18n={props.i18n}
+                controlPlanes={props.controlPlanes}
+                busyState={props.busyState}
+                openCreateControlPlaneDialog={props.openCreateControlPlaneDialog}
+                environments={props.snapshot.environments}
+                viewControlPlaneEnvironments={props.viewControlPlaneEnvironments}
+                reconnectControlPlane={props.reconnectControlPlane}
+                refreshControlPlane={props.refreshControlPlane}
+                deleteControlPlane={props.deleteControlPlane}
+              />
+            </Show>
+            <Show when={props.activeTab === 'gateways'}>
+              <GatewaySourcesPanel
+                i18n={props.i18n}
+                gatewaySources={props.gatewaySources}
+                gatewayEntries={props.gatewayEntries}
+                gatewaySourceFilter={props.gatewaySourceFilter}
+                gatewayQuery={props.gatewayQuery}
+                openCreateGatewaySetup={props.openCreateGatewaySetup}
+                pairGateway={props.pairGateway}
+                runLocalEnvironmentAction={props.runLocalEnvironmentAction}
               />
             </Show>
           </div>
@@ -8533,6 +8989,240 @@ function ControlPlaneShelf(props: Readonly<{
   );
 }
 
+function GatewaySourcesPanel(props: Readonly<{
+  i18n: DesktopI18n;
+  gatewaySources: readonly DesktopGatewaySource[];
+  gatewayEntries: readonly DesktopEnvironmentEntry[];
+  gatewaySourceFilter: string;
+  gatewayQuery: string;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
+  pairGateway: (gatewayID: string) => Promise<void>;
+  runLocalEnvironmentAction: (
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+    errorTarget?: 'connect' | 'dialog' | 'settings',
+  ) => Promise<boolean>;
+}>) {
+  const entryGatewayIDs = createMemo(() => new Set(props.gatewayEntries.map((entry) => entry.gateway_id ?? '')));
+  const visibleGatewaySources = createMemo(() => {
+    const gatewayIDs = entryGatewayIDs();
+    const query = trimString(props.gatewayQuery);
+    const hasQuery = query !== '';
+    return props.gatewaySources.filter((gateway) => {
+      if (props.gatewaySourceFilter !== '' && gatewaySourceFilterValue(gateway.gateway_id) !== props.gatewaySourceFilter) {
+        return false;
+      }
+      return !hasQuery
+        || gatewayIDs.has(gateway.gateway_id)
+        || gatewaySourceMatchesQuery(gateway, query);
+    });
+  });
+
+  return (
+    <Show
+      when={props.gatewaySources.length > 0}
+      fallback={(
+        <div class="redeven-empty-panel rounded-lg border border-dashed border-border/70 bg-card/70 px-5 py-8 text-center">
+          <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-md border border-border/70 bg-muted/20 text-muted-foreground">
+            <ShieldCheck class="h-5 w-5" />
+          </div>
+          <div class="mt-4 text-sm font-semibold text-foreground">{props.i18n.t('environmentCenter.noGatewaysTitle')}</div>
+          <div class="mx-auto mt-1 max-w-md text-xs text-muted-foreground">{props.i18n.t('environmentCenter.noGatewaysDescription')}</div>
+          <Button
+            size="sm"
+            variant="default"
+            class="mt-4"
+            onClick={() => props.openCreateGatewaySetup()}
+          >
+            <Plus class="mr-1 h-3.5 w-3.5" />
+            {props.i18n.t('environmentCenter.addGateway')}
+          </Button>
+        </div>
+      )}
+    >
+      <Show
+        when={visibleGatewaySources().length > 0}
+        fallback={(
+          <div class="redeven-empty-panel rounded-lg border border-dashed border-border/70 bg-card/70 px-5 py-8 text-center">
+            <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-md border border-border/70 bg-muted/20 text-muted-foreground">
+              <Search class="h-5 w-5" />
+            </div>
+            <div class="mt-4 text-sm font-semibold text-foreground">{props.i18n.t('environmentCenter.noMatchingGatewaysTitle')}</div>
+            <div class="mx-auto mt-1 max-w-md text-xs text-muted-foreground">{props.i18n.t('environmentCenter.noMatchingGatewaysDescription')}</div>
+          </div>
+        )}
+      >
+        <div class="space-y-3">
+          <For each={visibleGatewaySources()}>
+            {(gateway) => (
+              <GatewaySourceRow
+                i18n={props.i18n}
+                gateway={gateway}
+                gatewayEntries={props.gatewayEntries.filter((entry) => entry.gateway_id === gateway.gateway_id)}
+                openCreateGatewaySetup={props.openCreateGatewaySetup}
+                pairGateway={props.pairGateway}
+                runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
+    </Show>
+  );
+}
+
+function gatewaySourceMatchesQuery(gateway: DesktopGatewaySource, query: string): boolean {
+  const normalizedQuery = trimString(query).toLowerCase();
+  if (normalizedQuery === '') {
+    return true;
+  }
+  const searchable = [
+    gateway.gateway_id,
+    gateway.display_name,
+    gateway.connection_kind,
+    gateway.endpoint_label,
+    gateway.status,
+    gateway.status_message,
+  ];
+  return searchable.some((value) => trimString(value).toLowerCase().includes(normalizedQuery));
+}
+
+function GatewaySourceRow(props: Readonly<{
+  i18n: DesktopI18n;
+  gateway: DesktopGatewaySource;
+  gatewayEntries: readonly DesktopEnvironmentEntry[];
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
+  pairGateway: (gatewayID: string) => Promise<void>;
+  runLocalEnvironmentAction: (
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+    errorTarget?: 'connect' | 'dialog' | 'settings',
+  ) => Promise<boolean>;
+}>) {
+  const row = createMemo(() => buildGatewaySourceRowModel(props.gateway));
+  const primaryActionLabel = createMemo(() => localizedEnvironmentActionLabel(props.i18n, row().primary_action.label));
+
+  return (
+    <section class="redeven-gateway-row rounded-lg border border-border bg-card">
+      <div class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex min-w-0 items-center gap-3">
+          <ConsoleIconTile><ShieldCheck class="h-4 w-4" /></ConsoleIconTile>
+          <div class="min-w-0">
+            <div class="flex flex-wrap items-center gap-2">
+              <div class="truncate text-sm font-semibold tracking-tight text-foreground">{row().label}</div>
+              <EnvironmentStatusIndicator tone={row().status_tone}>
+                {localizedEnvironmentStatusLabel(props.i18n, row().status_label)}
+              </EnvironmentStatusIndicator>
+              <ConsoleBadge>{row().transport_label}</ConsoleBadge>
+              <ConsoleBadge>{props.i18n.t('environmentCenter.gatewayEnvsBadge', { count: row().environment_count })}</ConsoleBadge>
+            </div>
+            <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <Show when={row().endpoint_label}>
+                <span class="font-mono text-[11px]">{row().endpoint_label}</span>
+              </Show>
+              <span>{props.i18n.t('environmentCenter.gatewayManagedByDesktop')}</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="default"
+            disabled={!row().primary_action.enabled}
+            onClick={() => {
+              void runGatewaySourceAction(row().primary_action, props.gateway, props.openCreateGatewaySetup, props.pairGateway);
+            }}
+          >
+            {primaryActionLabel()}
+          </Button>
+        </div>
+      </div>
+      <Show when={props.gatewayEntries.length > 0}>
+        <div class="border-t border-border/70 px-4 py-2">
+          <div class="redeven-gateway-env-list">
+            <For each={props.gatewayEntries}>
+              {(environment) => (
+                <GatewayEnvironmentInlineRow
+                  i18n={props.i18n}
+                  environment={environment}
+                  runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+                />
+              )}
+            </For>
+          </div>
+        </div>
+      </Show>
+    </section>
+  );
+}
+
+function GatewayEnvironmentInlineRow(props: Readonly<{
+  i18n: DesktopI18n;
+  environment: DesktopEnvironmentEntry;
+  runLocalEnvironmentAction: (
+    environment: DesktopEnvironmentEntry,
+    action: EnvironmentActionModel,
+    errorTarget?: 'connect' | 'dialog' | 'settings',
+  ) => Promise<boolean>;
+}>) {
+  const model = createMemo(() => buildGatewaySourceEnvironmentRow(props.i18n, props.environment));
+  return (
+    <div class="redeven-gateway-env-row">
+      <div class="min-w-0">
+        <div class="truncate text-xs font-medium text-foreground">{model().environment_label}</div>
+        <div class="truncate text-[11px] text-muted-foreground">{model().source_label}</div>
+      </div>
+      <div class="hidden min-w-0 text-[11px] text-muted-foreground sm:block">
+        <span class="truncate">{model().endpoint_label}</span>
+      </div>
+      <EnvironmentStatusIndicator tone={model().status_tone}>
+        {localizedEnvironmentStatusLabel(props.i18n, model().status_label)}
+      </EnvironmentStatusIndicator>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={!model().primary_action.enabled}
+        onClick={() => {
+          void props.runLocalEnvironmentAction(props.environment, model().primary_action, 'connect');
+        }}
+      >
+        {localizedEnvironmentActionLabel(props.i18n, model().primary_action.label)}
+      </Button>
+    </div>
+  );
+}
+
+function runGatewaySourceAction(
+  action: GatewaySourceActionModel,
+  gateway: DesktopGatewaySource,
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void,
+  pairGateway: (gatewayID: string) => Promise<void>,
+): Promise<void> | void {
+  if (!action.enabled) {
+    return;
+  }
+  switch (action.intent) {
+    case 'setup_gateway':
+    case 'manage_gateway':
+      openCreateGatewaySetup(gateway);
+      return;
+    case 'pair_gateway':
+    case 'resolve_gateway':
+      return pairGateway(gateway.gateway_id);
+  }
+}
+
+function buildGatewaySourceEnvironmentRow(
+  _i18n: DesktopI18n,
+  environment: DesktopEnvironmentEntry,
+) {
+  return buildGatewaySourceEnvironmentRowModel(environment);
+}
+
+function buildGatewaySourceEnvironmentRowModel(environment: DesktopEnvironmentEntry) {
+  return buildGatewayRowModel(environment);
+}
+
 const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
   'flex max-w-none flex-col overflow-hidden rounded-md p-0',
   '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
@@ -10046,6 +10736,332 @@ function ConnectionDialog(props: Readonly<{
             <div class="text-[11px] text-destructive">{props.fieldErrors.label}</div>
           </Show>
         </div>
+
+        <Show when={props.error}>
+          <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {props.error}
+          </div>
+        </Show>
+      </div>
+    </Dialog>
+  );
+}
+
+function GatewaySetupDialog(props: Readonly<{
+  i18n: DesktopI18n;
+  state: GatewaySetupDialogState | null;
+  sshConfigHosts: readonly DesktopSSHConfigHost[];
+  containerOptions: readonly DesktopRuntimeContainerOption[];
+  containerOptionsLoading: boolean;
+  containerOptionsError: string;
+  error: string;
+  fieldErrors: Partial<Record<string, string>>;
+  busyState: DesktopLauncherBusyState;
+  onOpenChange: (open: boolean) => void;
+  updateField: (name: keyof GatewaySetupDialogState, value: string | boolean) => void;
+  refreshContainerOptions: () => void;
+  clearFieldErrors: () => void;
+  onSave: () => Promise<void>;
+}>) {
+  const isOpen = createMemo(() => props.state !== null);
+  const connectionKind = createMemo(() => props.state?.connection_kind ?? 'url');
+  const isSSHBacked = createMemo(() => connectionKind() === 'ssh_host' || connectionKind() === 'ssh_container');
+  const isContainer = createMemo(() => connectionKind() === 'ssh_container');
+  return (
+    <Dialog
+      open={isOpen()}
+      onOpenChange={props.onOpenChange}
+      title={props.i18n.t('connectionDialog.addGatewayTitle')}
+      class={CONNECTION_DIALOG_CLASS}
+      footer={(
+        <div class="flex justify-end gap-2">
+          <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>
+            {props.i18n.t('common.cancel')}
+          </Button>
+          <Button
+            size="sm"
+            variant="default"
+            loading={busyStateMatchesAction(props.busyState, 'upsert_gateway')}
+            onClick={() => {
+              void props.onSave();
+            }}
+          >
+            <Save class="mr-1 h-3.5 w-3.5" />
+            {props.i18n.t('connectionDialog.saveGateway')}
+          </Button>
+        </div>
+      )}
+    >
+      <div class="space-y-5">
+        <div class="space-y-1.5">
+          <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {props.i18n.t('connectionDialog.gatewayTransport')}
+          </div>
+          <SegmentedControl
+            value={connectionKind()}
+            onChange={(value) => {
+              props.updateField('connection_kind', value);
+              props.clearFieldErrors();
+            }}
+            options={[
+              { value: 'url', label: props.i18n.t('connectionDialog.gatewayTransportUrl') },
+              { value: 'ssh_host', label: props.i18n.t('connectionDialog.gatewayTransportSshHost') },
+              { value: 'ssh_container', label: props.i18n.t('connectionDialog.gatewayTransportSshContainer') },
+            ]}
+            size="sm"
+          />
+          <div class="rounded-md border border-dashed border-border/40 bg-muted/10 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
+            {connectionKind() === 'url'
+              ? props.i18n.t('connectionDialog.gatewayUrlHelp')
+              : connectionKind() === 'ssh_host'
+                ? props.i18n.t('connectionDialog.gatewaySshHostHelp')
+                : props.i18n.t('connectionDialog.gatewaySshContainerHelp')}
+          </div>
+        </div>
+
+        <Show when={connectionKind() === 'url'}>
+          <div class="redeven-dialog-section">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              {props.i18n.t('connectionDialog.connectionUrl')}
+            </div>
+            <div class="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+              <div class="space-y-1.5">
+                <label for="gateway-url" class="block text-xs font-medium text-foreground">
+                  {props.i18n.t('connectionDialog.gatewayUrl')} <span class="text-destructive">*</span>
+                </label>
+                <Input
+                  id="gateway-url"
+                  value={props.state?.gateway_url ?? ''}
+                  onInput={(event) => {
+                    props.updateField('gateway_url', event.currentTarget.value);
+                    props.clearFieldErrors();
+                  }}
+                  placeholder={props.i18n.t('connectionDialog.gatewayUrlPlaceholder')}
+                  size="sm"
+                  class={cn('w-full', props.fieldErrors.gateway_url && 'border-destructive ring-1 ring-destructive/20')}
+                  spellcheck={false}
+                  autofocus
+                />
+                <Show when={props.fieldErrors.gateway_url}>
+                  <div class="text-[11px] text-destructive">{props.fieldErrors.gateway_url}</div>
+                </Show>
+              </div>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={isSSHBacked()}>
+          <div class="redeven-dialog-section">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              {props.i18n.t('connectionDialog.sshHostSection')}
+            </div>
+            <div class="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+              <div class="grid gap-3 sm:grid-cols-[minmax(0,1fr)_7.5rem]">
+                <div class="space-y-1.5">
+                  <label for="gateway-ssh-destination" class="block text-xs font-medium text-foreground">
+                    {props.i18n.t('connectionDialog.sshDestination')} <span class="text-destructive">*</span>
+                  </label>
+                  <SSHDestinationCombobox
+                    i18n={props.i18n}
+                    value={props.state?.ssh_destination ?? ''}
+                    hosts={props.sshConfigHosts}
+                    autofocus={connectionKind() !== 'url' && props.state?.mode === 'create'}
+                    class={props.fieldErrors.ssh_destination && 'border-destructive ring-1 ring-destructive/20'}
+                    onInput={(value) => {
+                      props.updateField('ssh_destination', value);
+                      props.clearFieldErrors();
+                    }}
+                    onSelectHost={(host) => {
+                      props.updateField('ssh_destination', host.alias);
+                      props.updateField('ssh_port', host.port == null ? '' : String(host.port));
+                    }}
+                  />
+                  <Show when={props.fieldErrors.ssh_destination}>
+                    <div class="text-[11px] text-destructive">{props.fieldErrors.ssh_destination}</div>
+                  </Show>
+                </div>
+                <div class="space-y-1.5">
+                  <label for="gateway-ssh-port" class="block text-xs font-medium text-foreground">{props.i18n.t('settings.portLabel')}</label>
+                  <Input
+                    id="gateway-ssh-port"
+                    value={props.state?.ssh_port ?? ''}
+                    onInput={(event) => {
+                      props.updateField('ssh_port', event.currentTarget.value.replace(/\D/g, ''));
+                      props.clearFieldErrors();
+                    }}
+                    placeholder="22"
+                    inputMode="numeric"
+                    size="sm"
+                    class={cn('w-full', props.fieldErrors.ssh_port && 'border-destructive ring-1 ring-destructive/20')}
+                  />
+                </div>
+              </div>
+              <div class="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
+                <div class="space-y-1.5">
+                  <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.authentication')}</label>
+                  <SegmentedControl
+                    value="key_agent"
+                    onChange={() => props.updateField('auth_mode', 'key_agent')}
+                    options={[
+                      { value: 'key_agent', label: props.i18n.t('connectionDialog.keyAgent') },
+                    ]}
+                    size="sm"
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <label for="gateway-ssh-connect-timeout" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.connectTimeoutShort')}</label>
+                  <Input
+                    id="gateway-ssh-connect-timeout"
+                    value={props.state?.connect_timeout_seconds ?? ''}
+                    onInput={(event) => props.updateField('connect_timeout_seconds', event.currentTarget.value.replace(/[^\d.]/g, ''))}
+                    placeholder={String(DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS)}
+                    size="sm"
+                    class="w-full"
+                    spellcheck={false}
+                  />
+                </div>
+              </div>
+              <div class="mt-3 space-y-1.5">
+                <label for="gateway-runtime-root" class="block text-xs font-medium text-foreground">
+                  {props.i18n.t('connectionDialog.runtimeRoot')} <span class="text-destructive">*</span>
+                </label>
+                <Input
+                  id="gateway-runtime-root"
+                  value={props.state?.runtime_root ?? ''}
+                  onInput={(event) => {
+                    props.updateField('runtime_root', event.currentTarget.value);
+                    props.clearFieldErrors();
+                  }}
+                  placeholder={isContainer() ? '/root/.redeven' : DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}
+                  size="sm"
+                  class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive ring-1 ring-destructive/20')}
+                  spellcheck={false}
+                />
+                <Show when={props.fieldErrors.runtime_root}>
+                  <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_root}</div>
+                </Show>
+              </div>
+              <Show when={connectionKind() === 'ssh_host'}>
+                <div class="mt-3 grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
+                  <div class="space-y-1.5">
+                    <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.bootstrapDelivery')}</label>
+                    <SegmentedControl
+                      value={props.state?.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY}
+                      onChange={(value) => props.updateField('bootstrap_strategy', value)}
+                      options={[
+                        { value: 'auto', label: props.i18n.t('connectionDialog.automatic') },
+                        { value: 'desktop_upload', label: props.i18n.t('connectionDialog.desktopUpload') },
+                        { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteFallback') },
+                      ]}
+                      size="sm"
+                    />
+                  </div>
+                  <div class="space-y-1.5">
+                    <label for="gateway-release-base-url" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.releaseBaseUrl')}</label>
+                    <Input
+                      id="gateway-release-base-url"
+                      value={props.state?.release_base_url ?? ''}
+                      onInput={(event) => props.updateField('release_base_url', event.currentTarget.value)}
+                      placeholder="https://github.com/floegence/redeven/releases"
+                      size="sm"
+                      class="w-full"
+                      spellcheck={false}
+                    />
+                  </div>
+                </div>
+              </Show>
+            </div>
+          </div>
+        </Show>
+
+        <Show when={isContainer()}>
+          <div class="redeven-dialog-section">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              {props.i18n.t('connectionDialog.container')}
+            </div>
+            <div class="mt-2 rounded-md border border-border/70 bg-muted/20 px-3 py-3 transition-[border-color,background-color,box-shadow] duration-150 hover:border-primary/25 hover:shadow-[0_4px_16px_-12px_color-mix(in_srgb,var(--foreground)_20%,transparent)]">
+              <div class="grid gap-3 sm:grid-cols-[10rem_minmax(0,1fr)]">
+                <div class="space-y-1.5">
+                  <div class="flex h-7 items-center">
+                    <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.engine')}</label>
+                  </div>
+                  <SegmentedControl
+                    value={props.state?.container_engine ?? 'docker'}
+                    onChange={(value) => {
+                      props.updateField('container_engine', value);
+                      props.clearFieldErrors();
+                    }}
+                    options={[
+                      { value: 'docker', label: 'Docker' },
+                      { value: 'podman', label: 'Podman' },
+                    ]}
+                    size="sm"
+                  />
+                </div>
+                <ContainerPicker
+                  i18n={props.i18n}
+                  selectedContainerID={props.state?.container_id ?? ''}
+                  selectedContainerRef={props.state?.container_ref ?? ''}
+                  selectedContainerLabel={props.state?.container_label ?? ''}
+                  containers={props.containerOptions}
+                  loading={props.containerOptionsLoading}
+                  disabled={trimString(props.state?.ssh_destination) === ''}
+                  error={props.containerOptionsError}
+                  emptyMessage={trimString(props.state?.ssh_destination) === ''
+                    ? props.i18n.t('connectionDialog.chooseSshBeforeContainers')
+                    : props.i18n.t('connectionDialog.noRunningContainers')}
+                  fieldError={props.fieldErrors.container_id}
+                  onRefresh={props.refreshContainerOptions}
+                  onSelect={(container) => {
+                    props.updateField('container_id', container.container_id);
+                    props.updateField('container_ref', container.container_ref);
+                    props.updateField('container_label', container.container_label);
+                    props.clearFieldErrors();
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </Show>
+
+        <div class="space-y-1.5 rounded-md border border-dashed border-border/30 bg-background/40 px-3 py-3">
+          <label for="gateway-name" class="block text-xs font-medium text-foreground">
+            {props.i18n.t('connectionDialog.gatewayName')} <span class="text-destructive">*</span>
+          </label>
+          <Input
+            id="gateway-name"
+            value={props.state?.display_name ?? ''}
+            onInput={(event) => {
+              props.updateField('display_name', event.currentTarget.value);
+              props.clearFieldErrors();
+            }}
+            placeholder={props.i18n.t('connectionDialog.gatewayNamePlaceholder')}
+            size="sm"
+            class={cn('w-full', props.fieldErrors.display_name && 'border-destructive ring-1 ring-destructive/20')}
+          />
+          <Show when={props.fieldErrors.display_name}>
+            <div class="text-[11px] text-destructive">{props.fieldErrors.display_name}</div>
+          </Show>
+        </div>
+
+        <Show when={connectionKind() === 'url'}>
+          <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
+            <div class="flex items-start justify-between gap-4">
+              <div class="min-w-0">
+                <div class="text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.allowLoopbackHttp')}</div>
+                <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                  {props.i18n.t('connectionDialog.allowLoopbackHttpHelp')}
+                </div>
+              </div>
+              <Checkbox
+                checked={props.state?.allow_loopback_http === true}
+                onChange={(enabled) => props.updateField('allow_loopback_http', enabled)}
+                label={props.i18n.t('connectionDialog.enabled')}
+                size="sm"
+              />
+            </div>
+          </div>
+        </Show>
 
         <Show when={props.error}>
           <div role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive">

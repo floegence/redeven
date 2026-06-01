@@ -33,7 +33,7 @@ export type RuntimePlacementBridgeFrame = Readonly<{
   payload: Buffer;
 }>;
 
-export type RuntimePlacementBridgeSurface = 'local_ui' | 'runtime_control';
+export type RuntimePlacementBridgeSurface = 'local_ui' | 'runtime_control' | 'gateway_protocol';
 
 export type RuntimePlacementBridgeHello = Readonly<{
   protocol_version: typeof RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION;

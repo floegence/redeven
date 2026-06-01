@@ -152,6 +152,75 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<TopBarIconButton label={topBarLogoLabel()} onClick={activateTopBarLogo}>');
   });
 
+  it('keeps Gateways as a third Environment Center tab with independent query and filter state', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain("{ value: 'gateways', labelKey: 'environmentCenter.gatewaysSection' }");
+    expect(appSrc).toContain('const [gatewaySourceFilter, setGatewaySourceFilter] = createSignal');
+    expect(appSrc).toContain('const [gatewayQuery, setGatewayQuery] = createSignal');
+    expect(appSrc).toContain('filterGatewayEnvironmentEntries(');
+    expect(appSrc).toContain('<GatewaySourcesPanel');
+    expect(appSrc).toContain("props.activeTab === 'gateways'");
+    expect(appSrc).toContain('gatewaySourceFilterValue,');
+    expect(appSrc).not.toContain("fallback={(\n                <ControlPlanesPanel");
+  });
+
+  it('keeps Gateway setup and source actions out of the legacy Redeven URL dialog', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('function openCreateGatewaySetup(gateway?: DesktopGatewaySource): void');
+    expect(appSrc).toContain("setActiveCenterTab('gateways')");
+    expect(appSrc).toContain('<GatewaySetupDialog');
+    expect(appSrc).toContain("kind: 'upsert_gateway'");
+    expect(appSrc).toContain("auth_mode: 'key_agent'");
+    expect(appSrc).toContain("performLauncherAction(action, 'gateway_dialog');");
+    expect(appSrc).toContain('onClick={() => props.openCreateGatewaySetup()}');
+    expect(appSrc).toContain('function runGatewaySourceAction(');
+    expect(appSrc).toContain("case 'manage_gateway':");
+    expect(appSrc).toContain('runGatewaySourceAction(row().primary_action, props.gateway, props.openCreateGatewaySetup, props.pairGateway);');
+    expect(appSrc).toContain("case 'pair_gateway':\n    case 'resolve_gateway':\n      return pairGateway(gateway.gateway_id);");
+    const addGatewayLabel = "props.i18n.t('environmentCenter.addGateway')";
+    const addGatewayLabelOffsets: number[] = [];
+    let searchOffset = 0;
+    for (;;) {
+      const nextOffset = appSrc.indexOf(addGatewayLabel, searchOffset);
+      if (nextOffset < 0) {
+        break;
+      }
+      addGatewayLabelOffsets.push(nextOffset);
+      searchOffset = nextOffset + addGatewayLabel.length;
+    }
+    expect(addGatewayLabelOffsets).toHaveLength(2);
+    for (const offset of addGatewayLabelOffsets) {
+      const buttonPrefix = appSrc.slice(Math.max(0, offset - 240), offset);
+      expect(buttonPrefix).toContain('props.openCreateGatewaySetup()');
+      expect(buttonPrefix).not.toContain('openCreateConnectionDialog');
+    }
+  });
+
+  it('does not let Gateway environment open fall back to remote URL actions', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain("if (environment.kind === 'gateway_environment') {\n      return openGatewayEnvironment(environment, errorTarget);\n    }");
+    expect(appSrc).toContain("kind: 'open_gateway_environment'");
+    expect(appSrc).toContain("gateway_id: gatewayID");
+    expect(appSrc).toContain("gateway_env_id: gatewayEnvID");
+    expect(appSrc).toContain("case 'resolve_gateway':\n        await pairGateway(environment.gateway_id ?? '');\n        return true;");
+    expect(appSrc).toContain("kind: 'pair_gateway'");
+    expect(appSrc).not.toContain("gateway_environment') {\n      return openRemoteEnvironment");
+  });
+
+  it('filters Gateway source rows with the Gateways tab source filter and query', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('const entryGatewayIDs = createMemo(() => new Set(props.gatewayEntries.map((entry) => entry.gateway_id ?? \'\')));');
+    expect(appSrc).toContain("gatewaySourceFilterValue(gateway.gateway_id) !== props.gatewaySourceFilter");
+    expect(appSrc).toContain('|| gatewaySourceMatchesQuery(gateway, query);');
+    expect(appSrc).toContain('function gatewaySourceMatchesQuery(gateway: DesktopGatewaySource, query: string): boolean');
+    expect(appSrc).toContain('gateway.endpoint_label,');
+    expect(appSrc).toContain('noMatchingGatewaysTitle');
+  });
+
   it('describes Local Environment Settings inside the same shell model', () => {
     const local = testLocalEnvironment({
       access: testLocalAccess({
@@ -1271,6 +1340,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: props.i18n.t('connectionDialog.passwordPrompt')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.localSshPassword')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.localSshPasswordHelp')");
+    expect(appSrc).toContain('value="key_agent"');
     expect(appSrc).toContain('variant="default"');
     expect(appSrc).not.toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');");
     expect(appSrc).not.toContain('<Show when={showCreateConnectAction()}>');

@@ -150,7 +150,21 @@ function isSensitiveKey(key: string): boolean {
   if (!lowered) {
     return false;
   }
-  return ['token', 'secret', 'password', 'authorization', 'cookie', 'api_key', 'apikey', 'psk'].some((fragment) => lowered.includes(fragment));
+  return [
+    'token',
+    'secret',
+    'password',
+    'authorization',
+    'cookie',
+    'api_key',
+    'apikey',
+    'psk',
+    'proof',
+    'signature',
+    'private_key',
+    'artifact_nonce',
+    'connect_artifact',
+  ].some((fragment) => lowered.includes(fragment));
 }
 
 function sanitizeDetailValue(value: unknown): unknown {

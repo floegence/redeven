@@ -35,6 +35,10 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 			Supported:  a.desktopManaged,
 			BindMethod: runtimeservice.RuntimeControlBindMethodV1,
 		},
+		RuntimeGateway: runtimeservice.Capability{
+			Supported:  true,
+			BindMethod: runtimeservice.RuntimeControlBindMethodV1,
+		},
 	}
 	if !a.desktopManaged {
 		capabilities.ProviderLink = runtimeservice.Capability{

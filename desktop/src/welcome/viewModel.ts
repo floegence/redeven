@@ -14,6 +14,13 @@ import {
   runtimeServiceNeedsRuntimeUpdate,
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
+import {
+  desktopGatewayConnectionKindLabel,
+  desktopGatewayNeedsResolution,
+  desktopGatewaySourceID,
+  desktopGatewayStatusLabel,
+  type DesktopGatewaySource,
+} from '../shared/desktopGateway';
 import { buildDesktopProviderRuntimeLinkPlan } from '../shared/providerRuntimeLinkPlanner';
 import {
   normalizeDesktopProviderRuntimeLinkTargetID,
@@ -44,7 +51,7 @@ export type DesktopWelcomeShellViewModel = Readonly<{
   settings_save_key: string;
 }>;
 
-export type EnvironmentCenterTab = 'environments' | 'control_planes';
+export type EnvironmentCenterTab = 'environments' | 'control_planes' | 'gateways';
 export type EnvironmentCardTone = 'neutral' | 'primary' | 'success' | 'warning';
 export type EnvironmentLibraryLayoutDensity = 'compact' | 'spacious';
 
@@ -121,7 +128,7 @@ export const FACT_LABEL_ICONS: Record<string, string> = {
 };
 
 export type EnvironmentCardModel = Readonly<{
-  kind_label: 'Local' | 'Provider' | 'Redeven URL' | 'SSH Host';
+  kind_label: 'Local' | 'Provider' | 'Gateway' | 'Redeven URL' | 'SSH Host';
   status_label: string;
   status_tone: EnvironmentCardTone;
   runtime_started_label: string;
@@ -171,6 +178,7 @@ export type EnvironmentActionIntent =
   | 'open'
   | 'focus'
   | 'opening'
+  | 'resolve_gateway'
   | 'reconnect_provider'
   | 'connect_provider_runtime'
   | 'disconnect_provider_runtime'
@@ -259,9 +267,12 @@ export const COMPACT_ENVIRONMENT_GRID_GAP_REM = 1;
 export const SPACIOUS_ENVIRONMENT_GRID_GAP_REM = 1.125;
 export const LOCAL_ENVIRONMENT_LIBRARY_FILTER = '__local__';
 export const PROVIDER_ENVIRONMENT_LIBRARY_FILTER = '__provider__';
+export const GATEWAY_ENVIRONMENT_LIBRARY_FILTER = '__gateway__';
 export const URL_ENVIRONMENT_LIBRARY_FILTER = '__url__';
 export const SSH_ENVIRONMENT_LIBRARY_FILTER = '__ssh__';
 export const RUNTIME_TARGET_ENVIRONMENT_LIBRARY_FILTER_PREFIX = '__runtime_target__:';
+
+export const GATEWAY_SOURCE_FILTER_PREFIX = '__gateway_source__:';
 
 export function capabilityUnavailableMessage(label: string): string {
   return `Connect to an Environment first to open ${label}.`;
@@ -430,6 +441,7 @@ export function buildDesktopWelcomeShellViewModel(
 
 export function isRemoteEnvironmentEntry(environment: DesktopEnvironmentEntry): boolean {
   return environment.kind === 'provider_environment'
+    || environment.kind === 'gateway_environment'
     || environment.kind === 'external_local_ui'
     || environment.kind === 'ssh_environment';
 }
@@ -440,6 +452,8 @@ export function environmentKindLabel(environment: DesktopEnvironmentEntry): Envi
       return 'SSH Host';
     case 'provider_environment':
       return 'Provider';
+    case 'gateway_environment':
+      return 'Gateway';
     case 'local_environment':
       return 'Local';
     case 'external_local_ui':
@@ -450,11 +464,26 @@ export function environmentKindLabel(environment: DesktopEnvironmentEntry): Envi
 }
 
 export function environmentSourceLabel(environment: DesktopEnvironmentEntry): string {
+  const explicitSource = compact(environment.environment_source?.label);
+  if (explicitSource) {
+    switch (environment.environment_source?.kind) {
+      case 'provider':
+        return `Provider: ${explicitSource}`;
+      case 'gateway':
+        return `Gateway: ${explicitSource}`;
+      case 'local':
+        return explicitSource;
+      default:
+        break;
+    }
+  }
   switch (environment.category) {
     case 'local':
       return 'Local Environment';
     case 'provider':
       return 'Provider';
+    case 'gateway':
+      return `Gateway: ${compact(environment.gateway_label) || 'Gateway'}`;
     case 'saved':
       return 'Saved';
     default:
@@ -581,6 +610,11 @@ function environmentRunsOnLabel(environment: DesktopEnvironmentEntry): string {
   }
   if (environment.kind === 'provider_environment') {
     return 'Provider remote';
+  }
+  if (environment.kind === 'gateway_environment') {
+    return compact(environment.gateway_environment_origin?.label)
+      || compact(environment.gateway_label)
+      || 'Gateway';
   }
   if (environment.kind === 'ssh_environment') {
     return environment.secondary_text || 'Unknown';
@@ -736,6 +770,16 @@ export function buildEnvironmentCardFactsModel(
     ]);
   }
 
+  if (environment.kind === 'gateway_environment') {
+    return orderEnvironmentCardFacts([
+      buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
+      buildEnvironmentCardFact('GATEWAY', environmentSourceLabel(environment)),
+      compact(environment.gateway_env_id) !== ''
+        ? buildEnvironmentCardFact('ENV ID', environment.gateway_env_id ?? '', { copy_value: true })
+        : buildPlaceholderEnvironmentCardFact('ENV ID', 'UNKNOWN'),
+    ]);
+  }
+
   if (environment.kind === 'ssh_environment') {
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
@@ -848,6 +892,26 @@ function environmentRuntimeDisplayState(environment: DesktopEnvironmentEntry): E
   if (environment.window_state === 'opening') {
     return 'window_opening';
   }
+  if (environment.kind === 'gateway_environment') {
+    if (environment.gateway_status === 'online' && environment.gateway_environment_state === 'available') {
+      return 'ready_to_open';
+    }
+    if (environment.gateway_status === 'online' && environment.gateway_environment_state === 'stopped') {
+      return 'offline';
+    }
+    if (
+      environment.gateway_status === 'installing'
+      || environment.gateway_status === 'starting'
+      || environment.gateway_status === 'updating'
+      || environment.gateway_environment_state === 'starting'
+    ) {
+      return 'running';
+    }
+    if (environment.gateway_environment_state === 'archived') {
+      return 'removed';
+    }
+    return 'sync_required';
+  }
   if (environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required') {
     return 'sync_required';
   }
@@ -951,10 +1015,27 @@ function environmentDisplayStatusLabel(
     case 'removed':
       return 'REMOVED';
     case 'sync_required':
+      if (environment.kind === 'gateway_environment') {
+        if (environment.gateway_status === 'pairing_required') {
+          return 'PAIRING REQUIRED';
+        }
+        if (environment.gateway_status === 'trust_changed') {
+          return 'TRUST CHANGED';
+        }
+        if (environment.gateway_status === 'needs_setup') {
+          return 'SETUP REQUIRED';
+        }
+        return 'RESOLVE GATEWAY';
+      }
       return environment.kind === 'provider_environment' && environment.control_plane_sync_state === 'auth_required'
         ? 'RECONNECT REQUIRED'
         : providerSyncStatusLabel(environment);
     case 'offline':
+      if (environment.kind === 'gateway_environment') {
+        return environment.gateway_environment_state === 'stopped'
+          ? 'STOPPED'
+          : 'GATEWAY OFFLINE';
+      }
       if (environment.kind === 'provider_environment' && providerRemoteLooksOffline(environment)) {
         return 'REMOTE OFFLINE';
       }
@@ -1075,6 +1156,47 @@ function primaryWindowAction(environment: DesktopEnvironmentEntry): EnvironmentA
       label: 'Open',
       enabled: false,
       variant: 'default',
+    };
+  }
+  if (environment.kind === 'gateway_environment') {
+    if (desktopGatewayNeedsResolution(environment.gateway_status ?? 'unknown')) {
+      return {
+        intent: 'resolve_gateway',
+        label: 'Resolve',
+        enabled: true,
+        variant: 'default',
+      };
+    }
+    const openPlan = environment.runtime_operations.open;
+    if (openPlan.availability === 'available') {
+      return {
+        intent: 'open',
+        label: openPlan.label || 'Open',
+        enabled: true,
+        variant: 'default',
+        runtime_operation: openPlan.operation,
+        runtime_operation_method: openPlan.method,
+      };
+    }
+    const startPlan = environment.runtime_operations.start;
+    if (environment.gateway_environment_state === 'stopped' && startPlan.availability === 'available') {
+      return {
+        intent: 'start_runtime',
+        label: startPlan.label || 'Start',
+        enabled: true,
+        variant: 'default',
+        runtime_operation: startPlan.operation,
+        runtime_operation_method: startPlan.method,
+      };
+    }
+    return {
+      intent: 'unavailable',
+      label: environment.gateway_environment_state === 'stopped' ? 'Start' : 'Open',
+      enabled: false,
+      variant: 'default',
+      runtime_operation: openPlan.operation,
+      runtime_operation_method: openPlan.method,
+      disabled_reason: openPlan.message,
     };
   }
   const primaryRoute = environment.kind === 'provider_environment' ? providerPrimaryRoute(environment) : '';
@@ -1323,6 +1445,19 @@ function runtimeOperationMenuItem(plan: DesktopRuntimeOperationPlan | undefined)
 
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
   const items: EnvironmentActionMenuItemModel[] = [];
+  if (environment.kind === 'gateway_environment') {
+    const refreshPlan = environment.runtime_operations.refresh;
+    return [{
+      id: 'refresh_runtime',
+      label: 'Refresh Gateway status',
+      action: {
+        intent: 'refresh_runtime',
+        label: 'Refresh Gateway status',
+        enabled: refreshPlan?.availability !== 'blocked',
+        variant: 'outline',
+      },
+    }];
+  }
   const remoteRouteAction = providerRemoteRouteMenuAction(environment);
   const runtimeProviderLinkAction = runtimeProviderLinkMenuAction(environment);
   if (remoteRouteAction) {
@@ -1817,6 +1952,25 @@ function environmentCardMeta(environment: DesktopEnvironmentEntry): readonly Env
       },
     ].filter((item) => item.value !== '');
   }
+  if (environment.kind === 'gateway_environment') {
+    return [
+      {
+        label: 'Gateway',
+        value: environment.gateway_label ?? '',
+      },
+      {
+        label: 'Transport',
+        value: environment.gateway_connection_kind
+          ? desktopGatewayConnectionKindLabel(environment.gateway_connection_kind)
+          : '',
+      },
+      {
+        label: 'Gateway Env ID',
+        value: environment.gateway_env_id ?? '',
+        monospace: true,
+      },
+    ].filter((item) => item.value !== '');
+  }
   if (environment.kind === 'ssh_environment') {
     return [
       {
@@ -1882,6 +2036,21 @@ export function buildEnvironmentCardModel(environment: DesktopEnvironmentEntry):
     };
   }
 
+  if (environment.kind === 'gateway_environment') {
+    const endpoint = compact(environment.gateway_endpoint_label);
+    return {
+      kind_label: 'Gateway',
+      status_label: displayState.status_label,
+      status_tone: displayState.status_tone,
+      runtime_started_label: displayState.runtime_started_label,
+      target_primary: environmentSourceLabel(environment),
+      target_secondary: endpoint || environment.secondary_text,
+      target_primary_monospace: false,
+      target_secondary_monospace: endpoint !== '',
+      meta: environmentCardMeta(environment),
+    };
+  }
+
   if (environment.kind === 'ssh_environment') {
     return {
       kind_label: 'SSH Host',
@@ -1924,6 +2093,10 @@ export function environmentMatchesLibrarySearch(
     environment.control_plane_label ?? '',
     environment.provider_origin ?? '',
     environment.env_public_id ?? '',
+    environment.gateway_label ?? '',
+    environment.gateway_env_id ?? '',
+    environment.gateway_endpoint_label ?? '',
+    environment.gateway_environment_origin?.label ?? '',
     environment.ssh_details?.ssh_destination ?? '',
     environment.ssh_details?.runtime_root ?? '',
     environment.ssh_details?.release_base_url ?? '',
@@ -1987,6 +2160,9 @@ export function environmentMatchesProviderFilter(
   if (activeFilter === PROVIDER_ENVIRONMENT_LIBRARY_FILTER) {
     return environment.kind === 'provider_environment';
   }
+  if (activeFilter === GATEWAY_ENVIRONMENT_LIBRARY_FILTER) {
+    return environment.kind === 'gateway_environment';
+  }
   if (activeFilter === URL_ENVIRONMENT_LIBRARY_FILTER) {
     return environment.kind === 'external_local_ui';
   }
@@ -1994,7 +2170,14 @@ export function environmentMatchesProviderFilter(
     return environment.kind === 'ssh_environment';
   }
   const environmentFilter = environmentProviderFilterValue(environment);
-  return environmentFilter === activeFilter;
+  if (environmentFilter === activeFilter) {
+    return true;
+  }
+  if (activeFilter.startsWith(GATEWAY_SOURCE_FILTER_PREFIX)) {
+    return environment.kind === 'gateway_environment'
+      && environment.environment_source?.source_id === activeFilter.slice(GATEWAY_SOURCE_FILTER_PREFIX.length);
+  }
+  return false;
 }
 
 export function filterEnvironmentLibrary(
@@ -2017,4 +2200,167 @@ export function environmentLibraryCount(
   providerFilter = '',
 ): number {
   return filterEnvironmentLibrary(snapshot, query, providerFilter).length;
+}
+
+export type GatewaySourceFilterOption = Readonly<{
+  value: string;
+  label: string;
+  count: number;
+}>;
+
+export function gatewaySourceFilterValue(gatewayID: string): string {
+  const sourceID = desktopGatewaySourceID(gatewayID);
+  return sourceID ? `${GATEWAY_SOURCE_FILTER_PREFIX}${sourceID}` : '';
+}
+
+export function gatewaySourceFilterSourceID(filterValue: string): string {
+  const clean = compact(filterValue);
+  return clean.startsWith(GATEWAY_SOURCE_FILTER_PREFIX)
+    ? clean.slice(GATEWAY_SOURCE_FILTER_PREFIX.length)
+    : '';
+}
+
+export function gatewayEnvironmentEntries(
+  snapshot: DesktopWelcomeSnapshot,
+): readonly DesktopEnvironmentEntry[] {
+  return snapshot.environments.filter((entry) => entry.kind === 'gateway_environment');
+}
+
+export function filterGatewayEnvironmentEntries(
+  snapshot: DesktopWelcomeSnapshot,
+  query = '',
+  sourceFilter = '',
+): readonly DesktopEnvironmentEntry[] {
+  return gatewayEnvironmentEntries(snapshot).filter((entry) => (
+    environmentMatchesLibrarySearch(entry, query)
+    && environmentMatchesProviderFilter(entry, sourceFilter)
+  ));
+}
+
+export function gatewayEnvironmentCount(
+  snapshot: DesktopWelcomeSnapshot,
+  query = '',
+  sourceFilter = '',
+): number {
+  return filterGatewayEnvironmentEntries(snapshot, query, sourceFilter).length;
+}
+
+export function gatewaySourceFilterOptions(
+  snapshot: DesktopWelcomeSnapshot,
+): readonly GatewaySourceFilterOption[] {
+  return snapshot.gateway_sources
+    .map((gateway) => {
+      const value = gatewaySourceFilterValue(gateway.gateway_id);
+      return value
+        ? {
+            value,
+            label: gateway.display_name || gateway.gateway_id,
+            count: snapshot.environments.filter((entry) => (
+              entry.kind === 'gateway_environment'
+              && entry.environment_source?.source_id === gatewaySourceFilterSourceID(value)
+            )).length,
+          }
+        : null;
+    })
+    .filter((option): option is GatewaySourceFilterOption => option !== null)
+    .sort((left, right) => (
+      left.label.toLowerCase().localeCompare(right.label.toLowerCase())
+      || left.value.localeCompare(right.value)
+    ));
+}
+
+export type GatewayRowModel = Readonly<{
+  id: string;
+  gateway_id: string;
+  gateway_label: string;
+  environment_label: string;
+  source_label: string;
+  transport_label: string;
+  status_label: string;
+  status_tone: EnvironmentCardTone;
+  endpoint_label: string;
+  primary_action: EnvironmentActionModel;
+}>;
+
+export type GatewaySourceActionIntent = 'manage_gateway' | 'pair_gateway' | 'resolve_gateway' | 'setup_gateway';
+
+export type GatewaySourceActionModel = Readonly<{
+  intent: GatewaySourceActionIntent;
+  label: string;
+  enabled: boolean;
+  variant: 'default' | 'outline';
+  disabled_reason?: string;
+}>;
+
+export function buildGatewayRowModel(environment: DesktopEnvironmentEntry): GatewayRowModel {
+  const status = buildEnvironmentDisplayStateModel(environment);
+  const action = buildProviderBackedEnvironmentActionModel(environment).action_presentation.primary_action;
+  return {
+    id: environment.id,
+    gateway_id: compact(environment.gateway_id),
+    gateway_label: compact(environment.gateway_label) || 'Gateway',
+    environment_label: environment.label,
+    source_label: environmentSourceLabel(environment),
+    transport_label: environment.gateway_connection_kind
+      ? desktopGatewayConnectionKindLabel(environment.gateway_connection_kind)
+      : 'Gateway transport',
+    status_label: status.status_label,
+    status_tone: status.status_tone,
+    endpoint_label: compact(environment.gateway_endpoint_label) || compact(environment.secondary_text),
+    primary_action: action,
+  };
+}
+
+export type GatewaySourceRowModel = Readonly<{
+  gateway_id: string;
+  label: string;
+  transport_label: string;
+  status_label: string;
+  status_tone: EnvironmentCardTone;
+  endpoint_label: string;
+  environment_count: number;
+  primary_action: GatewaySourceActionModel;
+}>;
+
+export function buildGatewaySourceRowModel(
+  gateway: DesktopGatewaySource,
+): GatewaySourceRowModel {
+  const needsResolution = desktopGatewayNeedsResolution(gateway.status);
+  const needsSetup = gateway.status === 'needs_setup';
+  const needsPairing = gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired';
+  const actionIntent: GatewaySourceActionIntent = needsSetup
+    ? 'setup_gateway'
+    : needsPairing
+      ? 'pair_gateway'
+      : needsResolution
+        ? 'resolve_gateway'
+        : 'manage_gateway';
+  const actionLabel = needsSetup
+    ? 'Set up'
+    : needsPairing
+      ? 'Pair'
+      : needsResolution
+        ? 'Resolve'
+        : 'Manage';
+  return {
+    gateway_id: gateway.gateway_id,
+    label: gateway.display_name || gateway.gateway_id,
+    transport_label: desktopGatewayConnectionKindLabel(gateway.connection_kind),
+    status_label: desktopGatewayStatusLabel(gateway.status),
+    status_tone: gateway.status === 'online'
+      ? 'success'
+      : gateway.status === 'installing' || gateway.status === 'starting' || gateway.status === 'updating'
+        ? 'primary'
+        : needsResolution
+          ? 'warning'
+          : 'neutral',
+    endpoint_label: compact(gateway.endpoint_label),
+    environment_count: gateway.environments.length,
+    primary_action: {
+      intent: actionIntent,
+      label: actionLabel,
+      enabled: true,
+      variant: 'default',
+    },
+  };
 }

@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildExternalLocalUIDesktopTarget,
+  buildGatewayDesktopTarget,
   buildLocalEnvironmentDesktopTarget,
   buildProviderEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
   controlPlaneDesktopSessionKey,
   desktopSessionStateKeyFragment,
   externalLocalUIDesktopSessionKey,
+  gatewayDesktopSessionKey,
   sshDesktopSessionKey,
 } from './desktopTarget';
 import {
@@ -126,6 +128,26 @@ describe('desktopTarget', () => {
       release_base_url: 'https://mirror.example.invalid/releases',
       connect_timeout_seconds: 10,
       forwarded_local_ui_url: 'http://127.0.0.1:41111/',
+    });
+  });
+
+  it('builds Gateway targets with stable Gateway-scoped session keys', () => {
+    expect(gatewayDesktopSessionKey(' bastion ', ' env/demo ')).toBe('gateway:bastion:env:env%2Fdemo');
+    expect(buildGatewayDesktopTarget({
+      gatewayID: ' bastion ',
+      gatewayLabel: ' Bastion Gateway ',
+      gatewayEnvID: ' env/demo ',
+      label: ' Demo Env ',
+      gatewaySessionID: ' gws_123 ',
+    })).toEqual({
+      kind: 'gateway_environment',
+      session_key: 'gateway:bastion:env:env%2Fdemo',
+      environment_id: 'gateway:bastion:env:env/demo',
+      label: 'Demo Env',
+      gateway_id: 'bastion',
+      gateway_label: 'Bastion Gateway',
+      gateway_env_id: 'env/demo',
+      gateway_session_id: 'gws_123',
     });
   });
 });

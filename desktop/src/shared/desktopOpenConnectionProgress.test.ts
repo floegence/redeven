@@ -67,6 +67,12 @@ describe('desktopOpenConnectionProgress', () => {
       'opening_window',
       'open_ready',
     ]);
+    expect(openConnectionPhaseSequence('runtime_gateway')).toEqual([
+      'checking_runtime_record',
+      'checking_env_app_readiness',
+      'opening_window',
+      'open_ready',
+    ]);
   });
 
   it('builds bounded stage metadata for the current Desktop Open session', () => {

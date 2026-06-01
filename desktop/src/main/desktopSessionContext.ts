@@ -26,7 +26,11 @@ export function desktopSessionContextSnapshotFromTarget(target: DesktopSessionTa
     local_environment_id: target.environment_id,
     renderer_storage_scope_id: target.environment_id,
     target_kind: target.kind,
-    session_source: target.kind === 'ssh_environment' ? 'ssh_environment' : 'external_local_ui',
+    session_source: target.kind === 'ssh_environment'
+      ? 'ssh_environment'
+      : target.kind === 'gateway_environment'
+        ? 'runtime_gateway'
+        : 'external_local_ui',
     label: target.label,
   };
 }

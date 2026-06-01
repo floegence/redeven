@@ -51,13 +51,15 @@ export type DesktopRuntimeOfflineReasonCode =
   | 'binding_replaced'
   | 'environment_removed'
   | 'environment_inactive'
-  | 'external_unreachable';
+  | 'external_unreachable'
+  | 'gateway_unavailable';
 
 export type DesktopRuntimeHealthSource =
   | 'local_runtime_probe'
   | 'provider_batch_probe'
   | 'external_local_ui_probe'
-  | 'ssh_runtime_probe';
+  | 'ssh_runtime_probe'
+  | 'gateway_runtime_probe';
 
 export type DesktopEnvironmentWindowState = 'closed' | 'opening' | 'open';
 

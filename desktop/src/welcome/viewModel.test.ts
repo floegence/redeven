@@ -35,6 +35,8 @@ import {
   buildEnvironmentCardModel,
   buildEnvironmentCardEndpointsModel,
   buildEnvironmentCardFactsModel,
+  buildGatewayRowModel,
+  buildGatewaySourceRowModel,
   FACT_LABEL_ICONS,
   buildProviderBackedEnvironmentActionModel,
   buildEnvironmentDisplayStateModel,
@@ -42,6 +44,11 @@ import {
   environmentLibraryCount,
   filterEnvironmentLibrary,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
+  GATEWAY_ENVIRONMENT_LIBRARY_FILTER,
+  filterGatewayEnvironmentEntries,
+  gatewayEnvironmentCount,
+  gatewaySourceFilterOptions,
+  gatewaySourceFilterValue,
   PROVIDER_ENVIRONMENT_LIBRARY_FILTER,
   runtimeTargetEnvironmentLibraryFilterTargetID,
   runtimeTargetEnvironmentLibraryFilterValue,
@@ -49,6 +56,7 @@ import {
   URL_ENVIRONMENT_LIBRARY_FILTER,
   splitPinnedEnvironmentEntries,
 } from './viewModel';
+import type { DesktopGatewaySource } from '../shared/desktopGateway';
 
 function defaultFact(label: string, value: string, extras?: Record<string, unknown>) {
   const labelIcon = FACT_LABEL_ICONS[label];
@@ -254,6 +262,28 @@ function runtimeHealth(overrides: Partial<DesktopRuntimeHealth> = {}): DesktopRu
     source: 'local_runtime_probe',
     offline_reason_code: 'not_started',
     offline_reason: 'Runtime is not started.',
+    ...overrides,
+  };
+}
+
+function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewaySource {
+  return {
+    gateway_id: 'bastion',
+    display_name: 'Bastion',
+    connection_kind: 'url',
+    status: 'online',
+    trust_state: 'paired',
+    endpoint_label: 'https://gateway.example.invalid',
+    created_at_ms: 10,
+    updated_at_ms: 20,
+    environments: [{
+      gateway_env_id: 'finance',
+      display_name: 'Finance Dashboard',
+      env_kind: 'reachable_env',
+      state: 'available',
+      capabilities: ['open'],
+      origin: { kind: 'network_target', label: 'Finance subnet' },
+    }],
     ...overrides,
   };
 }
@@ -3254,6 +3284,144 @@ describe('buildEnvironmentCardModel', () => {
       layout_reference_count: 5,
       density: 'spacious',
       column_count: 5,
+    });
+  });
+});
+
+describe('Gateway view models', () => {
+  it('filters Gateway environments by category, Gateway source, and query', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [
+        gatewaySource(),
+        gatewaySource({
+          gateway_id: 'office',
+          display_name: 'Office',
+          endpoint_label: 'ssh://office',
+          environments: [{
+            gateway_env_id: 'office-demo',
+            display_name: 'Office Demo',
+            env_kind: 'reachable_env',
+            state: 'available',
+            capabilities: ['open'],
+            origin: { kind: 'ssh_target', label: 'Office bastion' },
+          }],
+        }),
+      ],
+    });
+
+    expect(environmentLibraryCount(snapshot, '', GATEWAY_ENVIRONMENT_LIBRARY_FILTER)).toBe(2);
+    expect(filterGatewayEnvironmentEntries(snapshot, 'finance', '')).toEqual([
+      expect.objectContaining({
+        gateway_env_id: 'finance',
+        gateway_label: 'Bastion',
+      }),
+    ]);
+    expect(filterGatewayEnvironmentEntries(
+      snapshot,
+      '',
+      gatewaySourceFilterValue('office'),
+    )).toEqual([
+      expect.objectContaining({
+        gateway_env_id: 'office-demo',
+        gateway_label: 'Office',
+      }),
+    ]);
+    expect(gatewayEnvironmentCount(snapshot, 'gateway.example', '')).toBe(1);
+    expect(gatewaySourceFilterOptions(snapshot)).toEqual([
+      {
+        value: gatewaySourceFilterValue('bastion'),
+        label: 'Bastion',
+        count: 1,
+      },
+      {
+        value: gatewaySourceFilterValue('office'),
+        label: 'Office',
+        count: 1,
+      },
+    ]);
+  });
+
+  it('projects Gateway rows with source label, status, and primary action', () => {
+    const readySnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [gatewaySource()],
+    });
+    const offlineSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [gatewaySource({
+        status: 'trust_changed',
+        trust_state: 'trust_changed',
+      })],
+    });
+    const readyEntry = readySnapshot.environments.find((entry) => entry.kind === 'gateway_environment');
+    const offlineEntry = offlineSnapshot.environments.find((entry) => entry.kind === 'gateway_environment');
+
+    expect(readyEntry).toBeTruthy();
+    expect(offlineEntry).toBeTruthy();
+    expect(buildEnvironmentCardModel(readyEntry!)).toMatchObject({
+      kind_label: 'Gateway',
+      status_label: 'READY',
+      target_primary: 'Gateway: Bastion',
+      target_secondary: 'https://gateway.example.invalid',
+    });
+    expect(buildGatewayRowModel(readyEntry!)).toMatchObject({
+      source_label: 'Gateway: Bastion',
+      transport_label: 'URL transport',
+      status_label: 'READY',
+      primary_action: expect.objectContaining({
+        intent: 'open',
+        label: 'Open',
+        enabled: true,
+        runtime_operation: 'open',
+        runtime_operation_method: 'runtime_gateway',
+      }),
+    });
+    expect(buildEnvironmentCardFactsModel(readyEntry!)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'GATEWAY', value: 'Gateway: Bastion' }),
+      expect.objectContaining({ label: 'ENV ID', value: 'finance' }),
+    ]));
+    expect(buildEnvironmentCardFactsModel(readyEntry!).map((fact) => fact.label)).not.toContain('PROVIDER');
+    expect(buildGatewayRowModel(offlineEntry!)).toMatchObject({
+      status_label: 'TRUST CHANGED',
+      status_tone: 'warning',
+      primary_action: expect.objectContaining({
+        intent: 'resolve_gateway',
+        label: 'Resolve',
+        enabled: true,
+      }),
+    });
+  });
+
+  it('projects Gateway source rows without exposing transport secrets', () => {
+    expect(buildGatewaySourceRowModel(gatewaySource({
+      status: 'pairing_required',
+      trust_state: 'unpaired',
+    }))).toMatchObject({
+      status_label: 'Pairing required',
+      primary_action: expect.objectContaining({
+        intent: 'pair_gateway',
+        label: 'Pair',
+      }),
+    });
+    expect(buildGatewaySourceRowModel(gatewaySource({
+      gateway_id: 'lab',
+      display_name: 'Lab Docker',
+      connection_kind: 'ssh_container',
+      status: 'needs_setup',
+      endpoint_label: 'lab-host / app-network-runner',
+    }))).toMatchObject({
+      gateway_id: 'lab',
+      label: 'Lab Docker',
+      transport_label: 'SSH container',
+      status_label: 'Needs setup',
+      status_tone: 'warning',
+      endpoint_label: 'lab-host / app-network-runner',
+      environment_count: 1,
+      primary_action: expect.objectContaining({
+        intent: 'setup_gateway',
+        label: 'Set up',
+      }),
     });
   });
 });

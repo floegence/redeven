@@ -1,7 +1,15 @@
 import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
-import { normalizeDesktopSSHConnectTimeoutSeconds, type DesktopSSHEnvironmentDetails } from './desktopSSH';
+import {
+  normalizeDesktopSSHBootstrapStrategy,
+  normalizeDesktopSSHConnectTimeoutSeconds,
+  normalizeDesktopSSHDestination,
+  normalizeDesktopSSHPort,
+  normalizeDesktopSSHReleaseBaseURL,
+  normalizeDesktopSSHRuntimeRoot,
+  type DesktopSSHEnvironmentDetails,
+} from './desktopSSH';
 import type {
   DesktopControlPlaneSyncState,
   DesktopLocalRouteState,
@@ -20,9 +28,21 @@ import type { DesktopOperationFailurePresentation } from './desktopOperationFail
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
+import type {
+  DesktopEnvironmentSource,
+  DesktopGatewayConnectionKind,
+  DesktopGatewayEnvironment,
+  DesktopGatewayEnvironmentCapability,
+  DesktopGatewayEnvironmentState,
+  DesktopGatewaySource,
+  DesktopGatewayStatus,
+  DesktopGatewayTrustState,
+} from './desktopGateway';
 import {
   normalizeDesktopRuntimeHostAccess,
   normalizeDesktopRuntimePlacement,
+  normalizeDesktopContainerEngine,
+  type DesktopContainerEngine,
   type DesktopRuntimeHostAccess,
   type DesktopRuntimePlacement,
   type DesktopRuntimeTargetID,
@@ -39,13 +59,13 @@ export const DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL = 'redeven-desktop:launcher
 export const DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL = 'redeven-desktop:launcher-snapshot-updated';
 export const DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL = 'redeven-desktop:launcher-action-progress';
 
-export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment';
+export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
 export type DesktopWelcomeEntryReason = 'app_launch' | 'switch_environment' | 'connect_failed' | 'blocked';
 export type DesktopWelcomeIssueScope = 'local_environment' | 'remote_environment' | 'startup';
 export type DesktopLauncherSurface = 'connect_environment' | 'environment_settings' | 'flower_host';
-export type DesktopEnvironmentEntryKind = 'local_environment' | 'provider_environment' | 'external_local_ui' | 'ssh_environment';
-export type DesktopEnvironmentEntryTag = 'Open' | 'Saved' | 'Local' | 'Provider' | '';
-export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'saved';
+export type DesktopEnvironmentEntryKind = 'local_environment' | 'provider_environment' | 'gateway_environment' | 'external_local_ui' | 'ssh_environment';
+export type DesktopEnvironmentEntryTag = 'Open' | 'Saved' | 'Local' | 'Provider' | 'Gateway' | 'Resolve' | '';
+export type DesktopEnvironmentEntryCategory = 'local' | 'provider' | 'gateway' | 'saved';
 export type DesktopEnvironmentOpenAction = 'open' | 'opening' | 'focus';
 export type DesktopLauncherCloseAction = 'quit' | 'close_launcher';
 export type DesktopLocalEnvironmentStateRoute = 'local_host' | 'remote_desktop';
@@ -66,6 +86,7 @@ export type DesktopLauncherOperationSubjectKind =
   | 'external_local_ui'
   | 'ssh_environment'
   | 'runtime_target'
+  | 'gateway'
   | 'control_plane';
 export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
@@ -88,6 +109,9 @@ export type DesktopLauncherActionOutcome =
   | 'started_control_plane_connect'
   | 'refreshed_control_plane'
   | 'deleted_control_plane'
+  | 'saved_gateway'
+  | 'paired_gateway'
+  | 'deleted_gateway'
   | 'saved_environment'
   | 'deleted_environment'
   | 'closed_launcher'
@@ -119,6 +143,7 @@ export type DesktopLauncherActionFailureCode =
 export type DesktopLauncherActionKind =
   | 'open_local_environment'
   | 'open_provider_environment'
+  | 'open_gateway_environment'
   | 'open_remote_environment'
   | 'open_ssh_environment'
   | 'prepare_environment_open'
@@ -143,6 +168,9 @@ export type DesktopLauncherActionKind =
   | 'focus_environment_window'
   | 'refresh_control_plane'
   | 'delete_control_plane'
+  | 'upsert_gateway'
+  | 'pair_gateway'
+  | 'delete_gateway'
   | 'save_local_environment_settings'
   | 'upsert_saved_environment'
   | 'upsert_saved_ssh_environment'
@@ -234,6 +262,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
+  provider_source_id?: string;
   remote_environment_url?: string;
   provider_status?: string;
   provider_lifecycle_status?: string;
@@ -245,6 +274,19 @@ export type DesktopEnvironmentEntry = Readonly<{
   remote_state_reason?: string;
   ssh_details?: DesktopSSHEnvironmentDetails;
   ssh_password_configured?: boolean;
+  gateway_id?: string;
+  gateway_label?: string;
+  gateway_env_id?: string;
+  gateway_status?: DesktopGatewayStatus;
+  gateway_connection_kind?: DesktopGatewayConnectionKind;
+  gateway_trust_state?: DesktopGatewayTrustState;
+  gateway_status_message?: string;
+  gateway_endpoint_label?: string;
+  gateway_environment_state?: DesktopGatewayEnvironmentState;
+  gateway_environment_kind?: DesktopGatewayEnvironment['env_kind'];
+  gateway_environment_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
+  gateway_environment_origin?: DesktopGatewayEnvironment['origin'];
+  environment_source?: DesktopEnvironmentSource;
   pinned: boolean;
   control_plane_label?: string;
   tag: DesktopEnvironmentEntryTag;
@@ -276,6 +318,7 @@ export type DesktopWelcomeSnapshot = Readonly<{
   close_action: DesktopLauncherCloseAction;
   open_windows: readonly DesktopOpenEnvironmentWindow[];
   environments: readonly DesktopEnvironmentEntry[];
+  gateway_sources: readonly DesktopGatewaySource[];
   control_planes: readonly DesktopControlPlaneSummary[];
   action_progress: readonly DesktopLauncherActionProgress[];
   operations: readonly DesktopLauncherOperationSnapshot[];
@@ -418,6 +461,13 @@ export type DesktopLauncherActionRequest = Readonly<
       route?: 'auto' | DesktopLocalEnvironmentStateRoute;
     }
   | {
+      kind: 'open_gateway_environment';
+      environment_id: string;
+      gateway_id: string;
+      gateway_env_id: string;
+      label: string;
+    }
+  | {
       kind: 'open_remote_environment';
       external_local_ui_url: string;
       environment_id?: string;
@@ -522,6 +572,50 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'delete_control_plane';
       provider_origin: string;
       provider_id: string;
+    }
+  | {
+      kind: 'upsert_gateway';
+      gateway_id?: string;
+      display_name: string;
+      connection_kind: 'url';
+      gateway_url: string;
+      allow_loopback_http: boolean;
+    }
+  | {
+      kind: 'upsert_gateway';
+      gateway_id?: string;
+      display_name: string;
+      connection_kind: 'ssh_host';
+      ssh_destination: string;
+      ssh_port: number | null;
+      auth_mode: Extract<DesktopSSHEnvironmentDetails['auth_mode'], 'key_agent'>;
+      connect_timeout_seconds: number | null;
+      runtime_root: string;
+      bootstrap_strategy: DesktopSSHEnvironmentDetails['bootstrap_strategy'];
+      release_base_url: string;
+    }
+  | {
+      kind: 'upsert_gateway';
+      gateway_id?: string;
+      display_name: string;
+      connection_kind: 'ssh_container';
+      ssh_destination: string;
+      ssh_port: number | null;
+      auth_mode: Extract<DesktopSSHEnvironmentDetails['auth_mode'], 'key_agent'>;
+      connect_timeout_seconds: number | null;
+      container_engine: DesktopContainerEngine;
+      container_id: string;
+      container_ref: string;
+      container_label: string;
+      runtime_root: string;
+    }
+  | {
+      kind: 'pair_gateway';
+      gateway_id: string;
+    }
+  | {
+      kind: 'delete_gateway';
+      gateway_id: string;
     }
   | {
       kind: 'save_local_environment_settings';
@@ -795,6 +889,22 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         })(),
       };
     }
+    case 'open_gateway_environment': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      const gatewayEnvID = compact((candidate as { gateway_env_id?: unknown }).gateway_env_id);
+      const label = compact((candidate as { label?: unknown }).label);
+      if (environmentID === '' || gatewayID === '' || gatewayEnvID === '' || label === '') {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
+        gateway_id: gatewayID,
+        gateway_env_id: gatewayEnvID,
+        label,
+      };
+    }
     case 'connect_provider_runtime':
     case 'disconnect_provider_runtime': {
       // IMPORTANT: Provider-link IPC must preserve the exact runtime target the
@@ -1007,6 +1117,87 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         kind,
         provider_origin: providerOrigin,
         provider_id: providerID,
+      };
+    }
+    case 'upsert_gateway': {
+      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id) || undefined;
+      const displayName = compact((candidate as { display_name?: unknown }).display_name);
+      const connectionKind = compact((candidate as { connection_kind?: unknown }).connection_kind);
+      if (connectionKind === '' || connectionKind === 'url') {
+        const gatewayURL = compact((candidate as { gateway_url?: unknown }).gateway_url);
+        if (gatewayURL === '') {
+          return null;
+        }
+        return {
+          kind,
+          gateway_id: gatewayID,
+          display_name: displayName,
+          connection_kind: 'url',
+          gateway_url: gatewayURL,
+          allow_loopback_http: (candidate as { allow_loopback_http?: unknown }).allow_loopback_http === true,
+        };
+      }
+      if (connectionKind === 'ssh_host') {
+        try {
+          return {
+            kind,
+            gateway_id: gatewayID,
+            display_name: displayName,
+            connection_kind: 'ssh_host',
+            ssh_destination: normalizeDesktopSSHDestination((candidate as { ssh_destination?: unknown }).ssh_destination),
+            ssh_port: normalizeDesktopSSHPort((candidate as { ssh_port?: unknown }).ssh_port),
+            auth_mode: 'key_agent',
+            connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
+            runtime_root: normalizeDesktopSSHRuntimeRoot((candidate as { runtime_root?: unknown }).runtime_root),
+            bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy),
+            release_base_url: normalizeDesktopSSHReleaseBaseURL((candidate as { release_base_url?: unknown }).release_base_url),
+          };
+        } catch {
+          return null;
+        }
+      }
+      if (connectionKind === 'ssh_container') {
+        const containerID = compact((candidate as { container_id?: unknown }).container_id);
+        if (containerID === '') {
+          return null;
+        }
+        try {
+          return {
+            kind,
+            gateway_id: gatewayID,
+            display_name: displayName,
+            connection_kind: 'ssh_container',
+            ssh_destination: normalizeDesktopSSHDestination((candidate as { ssh_destination?: unknown }).ssh_destination),
+            ssh_port: normalizeDesktopSSHPort((candidate as { ssh_port?: unknown }).ssh_port),
+            auth_mode: 'key_agent',
+            connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
+            container_engine: normalizeDesktopContainerEngine((candidate as { container_engine?: unknown }).container_engine),
+            container_id: containerID,
+            container_ref: compact((candidate as { container_ref?: unknown }).container_ref) || compact((candidate as { container_label?: unknown }).container_label) || containerID,
+            container_label: compact((candidate as { container_label?: unknown }).container_label) || containerID,
+            runtime_root: normalizeDesktopSSHRuntimeRoot((candidate as { runtime_root?: unknown }).runtime_root),
+          };
+        } catch {
+          return null;
+        }
+      }
+      return null;
+    }
+    case 'pair_gateway':
+    case 'delete_gateway': {
+      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      if (gatewayID === '') {
+        return null;
+      }
+      if (kind === 'pair_gateway') {
+        return {
+          kind,
+          gateway_id: gatewayID,
+        };
+      }
+      return {
+        kind,
+        gateway_id: gatewayID,
       };
     }
     case 'upsert_saved_environment':

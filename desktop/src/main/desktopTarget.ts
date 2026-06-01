@@ -20,9 +20,9 @@ import {
 import type { DesktopProviderEnvironmentRecord } from '../shared/desktopProviderEnvironment';
 import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
-export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment';
+export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
 export type DesktopLocalEnvironmentStateSessionRoute = 'local_host' | 'remote_desktop';
-export type DesktopSessionKey = `env:${string}:${DesktopLocalEnvironmentStateSessionRoute}` | `url:${string}` | `ssh:${string}`;
+export type DesktopSessionKey = `env:${string}:${DesktopLocalEnvironmentStateSessionRoute}` | `url:${string}` | `ssh:${string}` | `gateway:${string}:env:${string}`;
 export type DesktopSessionLifecycle = 'opening' | 'open' | 'closing';
 
 export type LocalEnvironmentDesktopTarget = Readonly<{
@@ -62,7 +62,18 @@ export type SSHDesktopTarget = Readonly<{
   forwarded_local_ui_url: string;
 }>;
 
-export type DesktopSessionTarget = LocalEnvironmentDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget;
+export type GatewayDesktopTarget = Readonly<{
+  kind: 'gateway_environment';
+  session_key: `gateway:${string}:env:${string}`;
+  environment_id: string;
+  label: string;
+  gateway_id: string;
+  gateway_label: string;
+  gateway_env_id: string;
+  gateway_session_id?: string;
+}>;
+
+export type DesktopSessionTarget = LocalEnvironmentDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget | GatewayDesktopTarget;
 
 export type DesktopSessionSummary = Readonly<{
   session_key: DesktopSessionKey;
@@ -127,6 +138,18 @@ export function externalLocalUIDesktopSessionKey(rawURL: string): DesktopSession
 
 export function sshDesktopSessionKey(rawDetails: DesktopSSHEnvironmentDetails): `ssh:${string}` {
   return buildSSHEnvironmentID(rawDetails);
+}
+
+export function gatewayDesktopSessionKey(
+  gatewayID: string,
+  gatewayEnvID: string,
+): `gateway:${string}:env:${string}` {
+  const cleanGatewayID = compact(gatewayID);
+  const cleanGatewayEnvID = compact(gatewayEnvID);
+  if (cleanGatewayID === '' || cleanGatewayEnvID === '') {
+    throw new Error('Gateway id and environment id are required.');
+  }
+  return `gateway:${encodeURIComponent(cleanGatewayID)}:env:${encodeURIComponent(cleanGatewayEnvID)}`;
 }
 
 export function desktopSessionStateKeyFragment(sessionKey: DesktopSessionKey): string {
@@ -260,6 +283,31 @@ export function buildSSHDesktopTarget(
     release_base_url: details.release_base_url,
     connect_timeout_seconds: details.connect_timeout_seconds,
     forwarded_local_ui_url: forwardedLocalUIURL,
+  };
+}
+
+export function buildGatewayDesktopTarget(input: Readonly<{
+  gatewayID: string;
+  gatewayLabel?: string;
+  gatewayEnvID: string;
+  label?: string;
+  gatewaySessionID?: string;
+}>): GatewayDesktopTarget {
+  const gatewayID = compact(input.gatewayID);
+  const gatewayEnvID = compact(input.gatewayEnvID);
+  if (gatewayID === '' || gatewayEnvID === '') {
+    throw new Error('Gateway id and environment id are required.');
+  }
+  const label = compact(input.label) || gatewayEnvID;
+  return {
+    kind: 'gateway_environment',
+    session_key: gatewayDesktopSessionKey(gatewayID, gatewayEnvID),
+    environment_id: `gateway:${gatewayID}:env:${gatewayEnvID}`,
+    label,
+    gateway_id: gatewayID,
+    gateway_label: compact(input.gatewayLabel) || gatewayID,
+    gateway_env_id: gatewayEnvID,
+    gateway_session_id: compact(input.gatewaySessionID) || undefined,
   };
 }
 

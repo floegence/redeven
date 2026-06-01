@@ -182,6 +182,76 @@ describe("DesktopDiagnosticsRecorder", () => {
     }
   });
 
+  it("does not track Gateway protocol routes even when the session URL shares the same origin", async () => {
+    const stateDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "redeven-desktop-diagnostics-gateway-routes-"),
+    );
+    try {
+      const recorder = new DesktopDiagnosticsRecorder();
+      await recorder.configureRuntime(
+        {
+          local_ui_url: "https://gateway.example/session/env-app",
+          local_ui_urls: ["https://gateway.example/session/env-app"],
+          state_dir: stateDir,
+          diagnostics_enabled: true,
+        },
+        "https://gateway.example/session/env-app",
+      );
+
+      expect(
+        recorder.startRequest({
+          requestID: 12,
+          method: "POST",
+          url: "https://gateway.example/gateway/v1/open-session",
+          requestHeaders: {
+            "x-redeven-request-signature": "signature-secret",
+          },
+        }),
+      ).toBeNull();
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("redacts Gateway-sensitive lifecycle detail keys", async () => {
+    const stateDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), "redeven-desktop-diagnostics-gateway-redaction-"),
+    );
+    try {
+      const recorder = new DesktopDiagnosticsRecorder();
+      await recorder.configureRuntime(
+        {
+          local_ui_url: "https://gateway.example/session/env-app",
+          local_ui_urls: ["https://gateway.example/session/env-app"],
+          state_dir: stateDir,
+          diagnostics_enabled: true,
+        },
+        "https://gateway.example/session/env-app",
+      );
+
+      await recorder.recordLifecycle("gateway_artifact_seen", "artifact received", {
+        proof: "proof-secret",
+        signature: "signature-secret",
+        private_key: "PRIVATE KEY",
+        artifact_nonce: "artifact-nonce-secret",
+        connect_artifact: { url: "https://gateway.example/session?proof=secret" },
+      });
+
+      const raw = await fs.readFile(
+        path.join(stateDir, "diagnostics", "desktop-events.jsonl"),
+        "utf8",
+      );
+      expect(raw).toContain("[redacted]");
+      expect(raw).not.toContain("proof-secret");
+      expect(raw).not.toContain("signature-secret");
+      expect(raw).not.toContain("PRIVATE KEY");
+      expect(raw).not.toContain("artifact-nonce-secret");
+      expect(raw).not.toContain("https://gateway.example/session?proof=secret");
+    } finally {
+      await fs.rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
   it("can enable request tracking from a response header after startup began disabled", async () => {
     const stateDir = await fs.mkdtemp(
       path.join(os.tmpdir(), "redeven-desktop-diagnostics-header-enable-"),

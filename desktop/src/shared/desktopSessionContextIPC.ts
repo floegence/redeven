@@ -4,9 +4,9 @@ export const DESKTOP_SESSION_APP_READY_CHANNEL = 'redeven-desktop:session-app-re
 export type DesktopSessionContextSnapshot = Readonly<{
   local_environment_id: string;
   renderer_storage_scope_id: string;
-  target_kind?: 'local_environment' | 'external_local_ui' | 'ssh_environment';
+  target_kind?: 'local_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
   target_route?: 'local_host' | 'remote_desktop';
-  session_source?: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui';
+  session_source?: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui' | 'runtime_gateway';
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;

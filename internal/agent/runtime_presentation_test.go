@@ -58,4 +58,7 @@ func TestRuntimePresentationSessionsExposeConnectedSessionSummary(t *testing.T) 
 	if snapshot.ActiveWorkload.SessionCount != 2 || snapshot.ActiveWorkload.PortForwardCount != 1 {
 		t.Fatalf("ActiveWorkload = %#v, want 2 sessions and 1 port forward", snapshot.ActiveWorkload)
 	}
+	if !snapshot.Capabilities.RuntimeGateway.Supported || snapshot.Capabilities.RuntimeGateway.BindMethod == "" {
+		t.Fatalf("RuntimeGateway capability = %#v, want supported runtime-control binding", snapshot.Capabilities.RuntimeGateway)
+	}
 }
