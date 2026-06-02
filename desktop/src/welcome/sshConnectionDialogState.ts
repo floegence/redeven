@@ -1,9 +1,11 @@
 export type SSHConnectionDialogStateSnapshot = Readonly<{
   mode: 'create' | 'edit';
-  connection_kind: 'external_local_ui' | 'ssh_environment';
-  environment_id: string;
+  connection_kind: 'external_local_ui' | 'ssh_environment' | 'ssh_host' | 'ssh_container';
+  environment_id?: string;
+  gateway_id?: string;
   runtime_root?: string;
   release_base_url?: string;
+  connect_timeout_seconds?: string | number | null;
 }> | null;
 
 export type SSHConnectionDialogAdvancedState = Readonly<{
@@ -19,19 +21,31 @@ export function sshConnectionDialogStateKey(state: SSHConnectionDialogStateSnaps
   if (!state) {
     return 'closed';
   }
-  return `${state.mode}:${state.connection_kind}:${state.environment_id}`;
+  const identity = compact(state.environment_id) || compact(state.gateway_id) || 'new';
+  return `${state.mode}:${state.connection_kind}:${identity}`;
+}
+
+type SSHAdvancedDisclosureSnapshot = Exclude<SSHConnectionDialogStateSnapshot, null> & Readonly<{
+  connection_kind: 'ssh_environment' | 'ssh_host' | 'ssh_container';
+}>;
+
+function hasSSHAdvancedDisclosure(state: SSHConnectionDialogStateSnapshot): state is SSHAdvancedDisclosureSnapshot {
+  return !!state
+    && (
+      state.connection_kind === 'ssh_environment'
+      || state.connection_kind === 'ssh_host'
+      || state.connection_kind === 'ssh_container'
+    );
 }
 
 export function defaultSSHConnectionDialogAdvancedOpen(state: SSHConnectionDialogStateSnapshot): boolean {
-  return Boolean(
-    state
-    && state.connection_kind === 'ssh_environment'
-    && (
-      state.mode === 'edit'
-      || compact(state.runtime_root) !== ''
-      || compact(state.release_base_url) !== ''
-    ),
-  );
+  if (!hasSSHAdvancedDisclosure(state)) {
+    return false;
+  }
+  return state.mode === 'edit'
+    || compact(state.runtime_root) !== ''
+    || compact(state.release_base_url) !== ''
+    || compact(state.connect_timeout_seconds) !== '';
 }
 
 export function syncSSHConnectionDialogAdvancedState(
@@ -39,7 +53,7 @@ export function syncSSHConnectionDialogAdvancedState(
   state: SSHConnectionDialogStateSnapshot,
 ): SSHConnectionDialogAdvancedState {
   const stateKey = sshConnectionDialogStateKey(state);
-  if (!state || state.connection_kind !== 'ssh_environment') {
+  if (!hasSSHAdvancedDisclosure(state)) {
     return {
       open: false,
       initialized_for_state_key: stateKey,

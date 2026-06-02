@@ -798,6 +798,7 @@ export const enUS = {
     storedSshPasswordWillBeRemoved: 'The stored SSH password will be removed on save.',
     advanced: 'Advanced',
     advancedDescription: 'Runtime root, package delivery, and release mirror for this SSH host.',
+    gatewayContainerAdvancedDescription: 'Runtime root and SSH timeout for this Gateway container.',
     shown: 'Shown',
     hidden: 'Hidden',
     bootstrapDelivery: 'Bootstrap Delivery',

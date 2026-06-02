@@ -400,6 +400,7 @@ export const ruRU = {
     storedSshPasswordWillBeRemoved: "Сохраненный SSH-пароль будет удален при сохранении.",
     advanced: "Дополнительно",
     advancedDescription: "Корень Runtime, доставка пакетов и release mirror для этого SSH-хоста.",
+    gatewayContainerAdvancedDescription: "Корень Runtime и SSH timeout для этого Gateway-контейнера.",
     shown: "Показано",
     hidden: "Скрыто",
     bootstrapDelivery: "Доставка bootstrap",

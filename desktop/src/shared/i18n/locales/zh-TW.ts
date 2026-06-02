@@ -400,6 +400,7 @@ export const zhTW = {
     storedSshPasswordWillBeRemoved: "儲存時會移除已儲存的 SSH 密碼。",
     advanced: "進階",
     advancedDescription: "此 SSH主機的 Runtime root、package delivery 和 release mirror。",
+    gatewayContainerAdvancedDescription: "此 Gateway 容器的 Runtime root 和 SSH timeout。",
     shown: "已顯示",
     hidden: "已隱藏",
     bootstrapDelivery: "Bootstrap Delivery",

@@ -400,6 +400,7 @@ export const ptBR = {
     storedSshPasswordWillBeRemoved: "A senha SSH salva será removida ao salvar.",
     advanced: "Avançado",
     advancedDescription: "Raiz Runtime, entrega de pacote e mirror de release para este host SSH.",
+    gatewayContainerAdvancedDescription: "Raiz Runtime e timeout SSH para este contêiner Gateway.",
     shown: "Visível",
     hidden: "Oculto",
     bootstrapDelivery: "Entrega bootstrap",

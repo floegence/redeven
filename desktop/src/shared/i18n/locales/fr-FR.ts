@@ -400,6 +400,7 @@ export const frFR = {
     storedSshPasswordWillBeRemoved: "Le mot de passe SSH enregistré sera supprimé lors de l’enregistrement.",
     advanced: "Avancé",
     advancedDescription: "Racine Runtime, livraison des paquets et miroir de release pour cet hôte SSH.",
+    gatewayContainerAdvancedDescription: "Racine Runtime et timeout SSH pour ce conteneur Gateway.",
     shown: "Affiché",
     hidden: "Masqué",
     bootstrapDelivery: "Livraison bootstrap",

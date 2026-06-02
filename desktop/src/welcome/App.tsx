@@ -203,6 +203,7 @@ import {
 import {
   syncSSHConnectionDialogAdvancedState,
   type SSHConnectionDialogAdvancedState,
+  type SSHConnectionDialogStateSnapshot,
 } from './sshConnectionDialogState';
 import { DesktopAnchoredListbox } from './DesktopAnchoredListbox';
 import {
@@ -10910,6 +10911,56 @@ function GatewaySetupDialog(props: Readonly<{
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'url');
   const isSSHBacked = createMemo(() => connectionKind() === 'ssh_host' || connectionKind() === 'ssh_container');
   const isContainer = createMemo(() => connectionKind() === 'ssh_container');
+  const [advancedState, setAdvancedState] = createSignal<SSHConnectionDialogAdvancedState>({
+    open: false,
+    initialized_for_state_key: 'closed',
+  });
+  const showSSHAdvanced = createMemo(() => isSSHBacked() && advancedState().open);
+  const gatewayBootstrapStrategy = createMemo(() => (
+    props.state?.connection_kind === 'ssh_host'
+      ? props.state.bootstrap_strategy
+      : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY
+  ));
+  const gatewayReleaseBaseURLLabel = createMemo(() => (
+    trimString(
+      props.state?.connection_kind === 'ssh_host'
+        ? props.state.release_base_url
+        : '',
+    ) === ''
+      ? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL
+      : props.i18n.t('connectionDialog.customMirror')
+  ));
+  const gatewayBootstrapSummaryLabel = createMemo(() => {
+    switch (gatewayBootstrapStrategy()) {
+      case 'desktop_upload':
+        return gatewayReleaseBaseURLLabel();
+      case 'remote_install':
+        return props.i18n.t('connectionDialog.remoteFallback');
+      default:
+        return props.i18n.t('connectionDialog.automatic');
+    }
+  });
+  const gatewayAdvancedDescription = createMemo(() => (
+    connectionKind() === 'ssh_host'
+      ? props.i18n.t('connectionDialog.advancedDescription')
+      : props.i18n.t('connectionDialog.gatewayContainerAdvancedDescription')
+  ));
+
+  createEffect(() => {
+    const state = props.state;
+    const snapshot: SSHConnectionDialogStateSnapshot = state?.connection_kind === 'ssh_host' || state?.connection_kind === 'ssh_container'
+      ? {
+          mode: state.mode,
+          connection_kind: state.connection_kind,
+          gateway_id: state.gateway_id,
+          runtime_root: state.runtime_root,
+          release_base_url: state.release_base_url,
+          connect_timeout_seconds: state.connect_timeout_seconds,
+        }
+      : null;
+    setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(current, snapshot));
+  });
+
   return (
     <Dialog
       open={isOpen()}
@@ -11039,7 +11090,7 @@ function GatewaySetupDialog(props: Readonly<{
                   />
                 </div>
               </div>
-              <div class="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem]">
+              <div class="mt-3 space-y-1.5">
                 <div class="space-y-1.5">
                   <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.authentication')}</label>
                   <SegmentedControl
@@ -11057,18 +11108,6 @@ function GatewaySetupDialog(props: Readonly<{
                   <Show when={props.fieldErrors.auth_mode}>
                     <div class="text-[11px] text-destructive">{props.fieldErrors.auth_mode}</div>
                   </Show>
-                </div>
-                <div class="space-y-1.5">
-                  <label for="gateway-ssh-connect-timeout" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.connectTimeoutShort')}</label>
-                  <Input
-                    id="gateway-ssh-connect-timeout"
-                    value={props.state?.connect_timeout_seconds ?? ''}
-                    onInput={(event) => props.updateField('connect_timeout_seconds', event.currentTarget.value.replace(/[^\d.]/g, ''))}
-                    placeholder={String(DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS)}
-                    size="sm"
-                    class="w-full"
-                    spellcheck={false}
-                  />
                 </div>
               </div>
               <Show when={(props.state?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE) === 'password'}>
@@ -11097,58 +11136,108 @@ function GatewaySetupDialog(props: Readonly<{
                   </Show>
                 </div>
               </Show>
-              <div class="mt-3 space-y-1.5">
-                <label for="gateway-runtime-root" class="block text-xs font-medium text-foreground">
-                  {props.i18n.t('connectionDialog.runtimeRoot')}
-                </label>
-                <Input
-                  id="gateway-runtime-root"
-                  value={props.state?.runtime_root ?? ''}
-                  onInput={(event) => {
-                    props.updateField('runtime_root', event.currentTarget.value);
-                    props.clearFieldErrors();
-                  }}
-                  placeholder={DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL}
-                  size="sm"
-                  class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive ring-1 ring-destructive/20')}
-                  spellcheck={false}
-                />
-                <div class="text-[11px] text-muted-foreground">
-                  {props.i18n.t('connectionDialog.runtimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}
+              <div class="mt-3 overflow-hidden rounded-md border border-border/70 bg-background/80">
+                <button
+                  type="button"
+                  class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left"
+                  onClick={() => setAdvancedState((current) => ({ ...current, open: !current.open }))}
+                >
+                  <div>
+                    <div class="text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.advanced')}</div>
+                    <div class="mt-1 text-[11px] text-muted-foreground">
+                      {gatewayAdvancedDescription()}
+                    </div>
+                  </div>
+                  <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                    {showSSHAdvanced() ? props.i18n.t('connectionDialog.shown') : props.i18n.t('connectionDialog.hidden')}
+                  </Tag>
+                </button>
+                <div class={cn(
+                  'redeven-dialog-collapse',
+                  showSSHAdvanced() && 'redeven-dialog-collapse--open',
+                )}>
+                  <div>
+                    <div class="border-t border-border/70 px-3 py-3">
+                      <div class="space-y-3">
+                        <Show when={connectionKind() === 'ssh_host'}>
+                          <div class="space-y-1.5">
+                            <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.bootstrapDelivery')}</label>
+                            <SegmentedControl
+                              value={gatewayBootstrapStrategy()}
+                              onChange={(value) => props.updateField('bootstrap_strategy', value)}
+                              options={[
+                                { value: 'auto', label: props.i18n.t('connectionDialog.automatic') },
+                                { value: 'desktop_upload', label: props.i18n.t('connectionDialog.desktopUpload') },
+                                { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteFallback') },
+                              ]}
+                              size="sm"
+                            />
+                            <div class="text-[11px] text-muted-foreground">
+                              {props.i18n.t('connectionDialog.bootstrapHelp')}{' '}
+                              <span class="font-medium text-foreground">{props.i18n.t('connectionDialog.source', { source: gatewayBootstrapSummaryLabel() })}</span>
+                            </div>
+                          </div>
+                        </Show>
+                        <div class="space-y-1.5">
+                          <label for="gateway-runtime-root" class="block text-xs font-medium text-foreground">
+                            {props.i18n.t('connectionDialog.runtimeRoot')}
+                          </label>
+                          <Input
+                            id="gateway-runtime-root"
+                            value={props.state?.runtime_root ?? ''}
+                            onInput={(event) => {
+                              props.updateField('runtime_root', event.currentTarget.value);
+                              props.clearFieldErrors();
+                            }}
+                            placeholder={DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL}
+                            size="sm"
+                            class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive ring-1 ring-destructive/20')}
+                            spellcheck={false}
+                          />
+                          <div class="text-[11px] text-muted-foreground">
+                            {props.i18n.t('connectionDialog.runtimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}
+                          </div>
+                          <Show when={props.fieldErrors.runtime_root}>
+                            <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_root}</div>
+                          </Show>
+                        </div>
+                        <Show when={connectionKind() === 'ssh_host'}>
+                          <div class="space-y-1.5">
+                            <label for="gateway-release-base-url" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.releaseBaseUrl')}</label>
+                            <Input
+                              id="gateway-release-base-url"
+                              value={props.state?.release_base_url ?? ''}
+                              onInput={(event) => props.updateField('release_base_url', event.currentTarget.value)}
+                              placeholder="https://github.com/floegence/redeven/releases"
+                              size="sm"
+                              class="w-full"
+                              spellcheck={false}
+                            />
+                            <div class="text-[11px] text-muted-foreground">
+                              {props.i18n.t('connectionDialog.releaseBaseUrlHelp', { url: DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL })}
+                            </div>
+                          </div>
+                        </Show>
+                        <div class="space-y-1.5">
+                          <label for="gateway-ssh-connect-timeout" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.connectTimeout')}</label>
+                          <Input
+                            id="gateway-ssh-connect-timeout"
+                            value={props.state?.connect_timeout_seconds ?? ''}
+                            onInput={(event) => props.updateField('connect_timeout_seconds', event.currentTarget.value.replace(/[^\d.]/g, ''))}
+                            placeholder={String(DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS)}
+                            size="sm"
+                            class="w-28"
+                            spellcheck={false}
+                          />
+                          <div class="text-[11px] text-muted-foreground">
+                            {props.i18n.t('connectionDialog.connectTimeoutHelp', { seconds: DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS })}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <Show when={props.fieldErrors.runtime_root}>
-                  <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_root}</div>
-                </Show>
               </div>
-              <Show when={connectionKind() === 'ssh_host'}>
-                <div class="mt-3 grid gap-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
-                  <div class="space-y-1.5">
-                    <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.bootstrapDelivery')}</label>
-                    <SegmentedControl
-                      value={props.state?.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY}
-                      onChange={(value) => props.updateField('bootstrap_strategy', value)}
-                      options={[
-                        { value: 'auto', label: props.i18n.t('connectionDialog.automatic') },
-                        { value: 'desktop_upload', label: props.i18n.t('connectionDialog.desktopUpload') },
-                        { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteFallback') },
-                      ]}
-                      size="sm"
-                    />
-                  </div>
-                  <div class="space-y-1.5">
-                    <label for="gateway-release-base-url" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.releaseBaseUrl')}</label>
-                    <Input
-                      id="gateway-release-base-url"
-                      value={props.state?.release_base_url ?? ''}
-                      onInput={(event) => props.updateField('release_base_url', event.currentTarget.value)}
-                      placeholder="https://github.com/floegence/redeven/releases"
-                      size="sm"
-                      class="w-full"
-                      spellcheck={false}
-                    />
-                  </div>
-                </div>
-              </Show>
             </div>
           </div>
         </Show>

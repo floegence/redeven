@@ -400,6 +400,7 @@ export const koKR = {
     storedSshPasswordWillBeRemoved: "저장 시 저장된 SSH 암호가 제거됩니다.",
     advanced: "고급",
     advancedDescription: "이 SSH 호스트의 Runtime root, package delivery 및 release mirror.",
+    gatewayContainerAdvancedDescription: "이 Gateway container의 Runtime root 및 SSH timeout.",
     shown: "표시됨",
     hidden: "숨김",
     bootstrapDelivery: "Bootstrap Delivery",
