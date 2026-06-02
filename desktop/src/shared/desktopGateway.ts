@@ -2,6 +2,7 @@ import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
 import type { DesktopContainerEngine } from './desktopRuntimePlacement';
 
 export type DesktopGatewayConnectionKind = 'url' | 'ssh_host' | 'ssh_container';
+export type DesktopGatewayManagementCapability = 'access_only' | 'managed_ssh_host' | 'managed_ssh_container';
 
 export type DesktopGatewayStatus =
   | 'unknown'
@@ -57,10 +58,37 @@ export type DesktopGatewayEnvironment = Readonly<{
   last_seen_at_unix_ms?: number;
 }>;
 
+export type DesktopGatewayRuntimeStatus =
+  | 'not_applicable'
+  | 'unknown'
+  | 'not_started'
+  | 'starting'
+  | 'ready'
+  | 'ssh_unreachable'
+  | 'container_unavailable'
+  | 'runtime_needs_update'
+  | 'bridge_unavailable'
+  | 'error';
+
+export type DesktopGatewayRuntimeState = Readonly<{
+  status: DesktopGatewayRuntimeStatus;
+  can_start: boolean;
+  can_stop: boolean;
+  can_restart: boolean;
+  can_update: boolean;
+  can_pair_after_start: boolean;
+  runtime_target_id?: string;
+  runtime_state_root?: string;
+  message?: string;
+  checked_at_unix_ms?: number;
+  lifecycle_operation_key?: string;
+}>;
+
 export type DesktopGatewaySource = Readonly<{
   gateway_id: string;
   display_name: string;
   connection_kind: DesktopGatewayConnectionKind;
+  management_capability: DesktopGatewayManagementCapability;
   status: DesktopGatewayStatus;
   trust_state?: DesktopGatewayTrustState;
   status_message?: string;
@@ -73,6 +101,7 @@ export type DesktopGatewaySource = Readonly<{
   container_id?: string;
   container_ref?: string;
   container_label?: string;
+  runtime_state?: DesktopGatewayRuntimeState;
   created_at_ms: number;
   updated_at_ms: number;
   environments: readonly DesktopGatewayEnvironment[];
@@ -115,6 +144,26 @@ export function desktopGatewayConnectionKindLabel(kind: DesktopGatewayConnection
     case 'ssh_container':
       return 'SSH container';
   }
+}
+
+export function desktopGatewayManagementCapability(
+  kind: DesktopGatewayConnectionKind,
+): DesktopGatewayManagementCapability {
+  switch (kind) {
+    case 'url':
+      return 'access_only';
+    case 'ssh_host':
+      return 'managed_ssh_host';
+    case 'ssh_container':
+      return 'managed_ssh_container';
+  }
+}
+
+export function desktopGatewayCanManageRuntime(
+  gateway: Pick<DesktopGatewaySource, 'management_capability'>,
+): boolean {
+  return gateway.management_capability === 'managed_ssh_host'
+    || gateway.management_capability === 'managed_ssh_container';
 }
 
 export function desktopGatewayStatusLabel(status: DesktopGatewayStatus): string {

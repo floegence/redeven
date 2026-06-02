@@ -256,6 +256,7 @@ export const deDE = {
     providerLocalLinksBadge: "{count} lokale Links",
     providerSynced: "Synchronisiert {time}",
     gatewayManagedByDesktop: "Managed locally by Desktop",
+    gatewayAccessOnlyByDesktop: "Access-only Gateway",
     viewEnvironments: "Environments anzeigen",
     reconnect: "Neu verbinden",
     removeProvider: "Provider entfernen",

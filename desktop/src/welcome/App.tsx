@@ -62,7 +62,7 @@ import type {
   DesktopAccessMode,
   DesktopSettingsSurfaceSnapshot,
 } from '../shared/desktopSettingsSurface';
-import type { DesktopGatewaySource } from '../shared/desktopGateway';
+import { desktopGatewayCanManageRuntime, type DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopGatewayConnectionKind } from '../shared/desktopGateway';
 import type {
   DesktopFlowerHostRouterDecision,
@@ -72,6 +72,7 @@ import type {
   DesktopEnvironmentOpenAction,
   DesktopLauncherActionProgress,
   DesktopLauncherActionKind,
+  DesktopGatewayStartRequiredPayload,
   DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
   DesktopLauncherCloseAction,
@@ -289,6 +290,7 @@ import {
   busyStateMatchesAction,
   busyStateMatchesControlPlane,
   busyStateMatchesEnvironment,
+  busyStateMatchesGateway,
   IDLE_LAUNCHER_BUSY_STATE,
   selectedSnapshotOpenConnectionProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
@@ -2257,6 +2259,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [gatewaySetupDialogState, setGatewaySetupDialogState] = createSignal<GatewaySetupDialogState | null>(null);
   const [gatewaySetupDialogError, setGatewaySetupDialogError] = createSignal('');
   const [gatewaySetupDialogFieldErrors, setGatewaySetupDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
+  const [gatewayStartRequiredDialog, setGatewayStartRequiredDialog] = createSignal<DesktopGatewayStartRequiredPayload | null>(null);
   const [sshConfigHosts, setSSHConfigHosts] = createSignal<readonly DesktopSSHConfigHost[]>([]);
   const [sshConfigHostsLoaded, setSSHConfigHostsLoaded] = createSignal(false);
   const [runtimeContainerOptions, setRuntimeContainerOptions] = createSignal<readonly DesktopRuntimeContainerOption[]>([]);
@@ -2848,6 +2851,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: LauncherActionErrorTarget,
     requestEnvID?: string,
   ): Promise<void> {
+    if (failure.code === 'gateway_start_required' && failure.gateway_start_required_payload) {
+      setGatewayStartRequiredDialog(failure.gateway_start_required_payload);
+      if (failure.should_refresh_snapshot === true) {
+        try {
+          await refreshSnapshot();
+        } catch (error) {
+          setErrorMessage(errorTarget, getErrorMessage(error));
+        }
+      }
+      return;
+    }
     const presentation = launcherActionFailurePresentation(i18n(), failure);
     if (presentation.refresh_snapshot) {
       try {
@@ -2973,6 +2987,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: environmentID,
       provider_origin: '',
       provider_id: '',
+      gateway_id: '',
       request_started_at_unix_ms: Date.now(),
       progress: null,
     });
@@ -3990,8 +4005,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         requestProviderRuntimeLinkConfirmation(environment, 'disconnect');
         return true;
       case 'resolve_gateway':
-        await pairGateway(environment.gateway_id ?? '');
-        return true;
+        if (environment.kind === 'gateway_environment') {
+          const gateway = snapshot().gateway_sources.find((source) => source.gateway_id === (environment.gateway_id ?? ''));
+          if (gateway) {
+            openCreateGatewaySetup(gateway);
+            return true;
+          }
+        }
+        return false;
       case 'opening':
       default:
         return false;
@@ -4201,6 +4222,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: '',
       provider_origin: '',
       provider_id: '',
+      gateway_id: '',
       request_started_at_unix_ms: Date.now(),
       progress: null,
     });
@@ -4247,6 +4269,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: trimString(request.environment_id),
       provider_origin: '',
       provider_id: '',
+      gateway_id: '',
       request_started_at_unix_ms: Date.now(),
       progress: null,
     });
@@ -4287,6 +4310,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: trimString(request.environment_id),
       provider_origin: '',
       provider_id: '',
+      gateway_id: '',
       request_started_at_unix_ms: Date.now(),
       progress: null,
     });
@@ -4332,6 +4356,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: trimString(request.environment_id),
       provider_origin: '',
       provider_id: '',
+      gateway_id: '',
       request_started_at_unix_ms: Date.now(),
       progress: null,
     });
@@ -4487,6 +4512,62 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (result?.outcome === 'paired_gateway') {
       await refreshSnapshot();
       showActionToast(i18n().t('toast.gatewayPaired'));
+    }
+  }
+
+  async function runGatewayRuntimeAction(
+    gatewayID: string,
+    kind: Extract<DesktopLauncherActionKind, 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'>,
+  ): Promise<void> {
+    const cleanGatewayID = trimString(gatewayID);
+    if (cleanGatewayID === '') {
+      setErrorMessage('connect', i18n().t('environmentCenter.resolveGatewayError'));
+      return;
+    }
+    const result = await performLauncherAction({ kind, gateway_id: cleanGatewayID } as DesktopLauncherActionRequest);
+    if (!result) {
+      return;
+    }
+    await refreshSnapshot();
+    switch (result.outcome) {
+      case 'started_gateway_runtime':
+        showActionToast('Gateway started.');
+        break;
+      case 'stopped_gateway_runtime':
+        showActionToast('Gateway stopped.', 'info');
+        break;
+      case 'restarted_gateway_runtime':
+        showActionToast('Gateway restarted.');
+        break;
+      case 'updated_gateway_runtime':
+        showActionToast('Gateway updated.');
+        break;
+      case 'refreshed_gateway_catalog':
+        showActionToast('Gateway catalog refreshed.', 'info');
+        break;
+      default:
+        break;
+    }
+  }
+
+  function closeGatewayStartRequiredDialog(): void {
+    setGatewayStartRequiredDialog(null);
+  }
+
+  async function confirmGatewayStartRequiredDialog(): Promise<void> {
+    const payload = gatewayStartRequiredDialog();
+    if (!payload) {
+      return;
+    }
+    const result = await performLauncherAction(payload.retry_action);
+    if (result?.outcome === 'paired_gateway') {
+      showActionToast(i18n().t('toast.gatewayPaired'));
+    } else if (result?.outcome === 'refreshed_gateway_catalog') {
+      showActionToast('Gateway catalog refreshed.', 'info');
+    }
+    if (result) {
+      closeGatewayStartRequiredDialog();
+      await refreshSnapshot();
     }
   }
 
@@ -4733,6 +4814,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       environment_id: target.id,
       provider_origin: '',
       provider_id: '',
+      gateway_id: '',
       request_started_at_unix_ms: Date.now(),
       progress: null,
     });
@@ -4995,6 +5077,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               openCreateConnectionDialog={openCreateConnectionDialog}
               openCreateGatewaySetup={openCreateGatewaySetup}
               pairGateway={pairGateway}
+              runGatewayRuntimeAction={runGatewayRuntimeAction}
               openCreateControlPlaneDialog={openCreateControlPlaneDialog}
               refreshAllEnvironmentRuntimes={refreshAllEnvironmentRuntimes}
               openRemoteEnvironment={openRemoteEnvironment}
@@ -5216,6 +5299,38 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             {i18n().t('confirm.removeProviderQuestion', { label: deleteControlPlaneTarget() ? controlPlaneName(deleteControlPlaneTarget()!) : '' })}
           </p>
           <p class="text-xs text-muted-foreground">{i18n().t('confirm.removeProviderDescription')}</p>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={gatewayStartRequiredDialog() !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeGatewayStartRequiredDialog();
+          }
+        }}
+        title={gatewayStartRequiredTitle(gatewayStartRequiredDialog())}
+        confirmText={gatewayStartRequiredConfirmText(gatewayStartRequiredDialog())}
+        loading={busyStateMatchesAction(busyState(), gatewayStartRequiredDialog()?.retry_action.kind ?? '')}
+        onConfirm={() => void confirmGatewayStartRequiredDialog()}
+      >
+        <div class="space-y-3">
+          <p class="text-sm">
+            {gatewayStartRequiredMessage(gatewayStartRequiredDialog())}
+          </p>
+          <Show when={gatewayStartRequiredDialog()?.runtime_state}>
+            {(runtimeState) => (
+              <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                <div class="font-medium text-foreground">{gatewayRuntimeStateLabel(runtimeState().status)}</div>
+                <Show when={runtimeState().message}>
+                  {(message) => <div class="mt-1">{message()}</div>}
+                </Show>
+                <Show when={runtimeState().runtime_state_root}>
+                  {(stateRoot) => <div class="mt-1 font-mono text-[11px]">{stateRoot()}</div>}
+                </Show>
+              </div>
+            )}
+          </Show>
         </div>
       </ConfirmDialog>
 
@@ -5451,6 +5566,10 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
   pairGateway: (gatewayID: string) => Promise<void>;
+  runGatewayRuntimeAction: (
+    gatewayID: string,
+    kind: Extract<DesktopLauncherActionKind, 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'>,
+  ) => Promise<void>;
   openCreateControlPlaneDialog: (message?: string) => void;
   refreshAllEnvironmentRuntimes: () => Promise<void>;
   openRemoteEnvironment: (
@@ -5852,10 +5971,12 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 i18n={props.i18n}
                 gatewaySources={props.gatewaySources}
                 gatewayEntries={props.gatewayEntries}
+                busyState={props.busyState}
                 gatewaySourceFilter={props.gatewaySourceFilter}
                 gatewayQuery={props.gatewayQuery}
                 openCreateGatewaySetup={props.openCreateGatewaySetup}
                 pairGateway={props.pairGateway}
+                runGatewayRuntimeAction={props.runGatewayRuntimeAction}
                 runLocalEnvironmentAction={props.runLocalEnvironmentAction}
               />
             </Show>
@@ -9131,10 +9252,15 @@ function GatewaySourcesPanel(props: Readonly<{
   i18n: DesktopI18n;
   gatewaySources: readonly DesktopGatewaySource[];
   gatewayEntries: readonly DesktopEnvironmentEntry[];
+  busyState: DesktopLauncherBusyState;
   gatewaySourceFilter: string;
   gatewayQuery: string;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
   pairGateway: (gatewayID: string) => Promise<void>;
+  runGatewayRuntimeAction: (
+    gatewayID: string,
+    kind: Extract<DesktopLauncherActionKind, 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'>,
+  ) => Promise<void>;
   runLocalEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -9197,8 +9323,10 @@ function GatewaySourcesPanel(props: Readonly<{
                 i18n={props.i18n}
                 gateway={gateway}
                 gatewayEntries={props.gatewayEntries.filter((entry) => entry.gateway_id === gateway.gateway_id)}
+                busyState={props.busyState}
                 openCreateGatewaySetup={props.openCreateGatewaySetup}
                 pairGateway={props.pairGateway}
+                runGatewayRuntimeAction={props.runGatewayRuntimeAction}
                 runLocalEnvironmentAction={props.runLocalEnvironmentAction}
               />
             )}
@@ -9229,8 +9357,13 @@ function GatewaySourceRow(props: Readonly<{
   i18n: DesktopI18n;
   gateway: DesktopGatewaySource;
   gatewayEntries: readonly DesktopEnvironmentEntry[];
+  busyState: DesktopLauncherBusyState;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
   pairGateway: (gatewayID: string) => Promise<void>;
+  runGatewayRuntimeAction: (
+    gatewayID: string,
+    kind: Extract<DesktopLauncherActionKind, 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'>,
+  ) => Promise<void>;
   runLocalEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -9239,6 +9372,7 @@ function GatewaySourceRow(props: Readonly<{
 }>) {
   const row = createMemo(() => buildGatewaySourceRowModel(props.gateway));
   const primaryActionLabel = createMemo(() => localizedEnvironmentActionLabel(props.i18n, row().primary_action.label));
+  const primaryBusy = createMemo(() => gatewaySourceActionBusy(props.busyState, props.gateway.gateway_id, row().primary_action));
 
   return (
     <section class="redeven-gateway-row rounded-lg border border-border bg-card">
@@ -9258,21 +9392,41 @@ function GatewaySourceRow(props: Readonly<{
               <Show when={row().endpoint_label}>
                 <span class="font-mono text-[11px]">{row().endpoint_label}</span>
               </Show>
-              <span>{props.i18n.t('environmentCenter.gatewayManagedByDesktop')}</span>
+              <span>{props.i18n.t(desktopGatewayCanManageRuntime(props.gateway)
+                ? 'environmentCenter.gatewayManagedByDesktop'
+                : 'environmentCenter.gatewayAccessOnlyByDesktop')}</span>
             </div>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center justify-end gap-2">
           <Button
             size="sm"
             variant="default"
+            loading={primaryBusy()}
             disabled={!row().primary_action.enabled}
             onClick={() => {
-              void runGatewaySourceAction(row().primary_action, props.gateway, props.openCreateGatewaySetup, props.pairGateway);
+              void runGatewaySourceAction(row().primary_action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayRuntimeAction);
             }}
           >
+            <GatewaySourceActionIcon intent={row().primary_action.intent} />
             {primaryActionLabel()}
           </Button>
+          <For each={row().secondary_actions}>
+            {(action) => (
+              <Button
+                size="sm"
+                variant={action.variant}
+                loading={gatewaySourceActionBusy(props.busyState, props.gateway.gateway_id, action)}
+                disabled={!action.enabled}
+                onClick={() => {
+                  void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayRuntimeAction);
+                }}
+              >
+                <GatewaySourceActionIcon intent={action.intent} />
+                {localizedEnvironmentActionLabel(props.i18n, action.label)}
+              </Button>
+            )}
+          </For>
         </div>
       </div>
       <Show when={props.gatewayEntries.length > 0}>
@@ -9335,6 +9489,10 @@ function runGatewaySourceAction(
   gateway: DesktopGatewaySource,
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void,
   pairGateway: (gatewayID: string) => Promise<void>,
+  runGatewayRuntimeAction: (
+    gatewayID: string,
+    kind: Extract<DesktopLauncherActionKind, 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'>,
+  ) => Promise<void>,
 ): Promise<void> | void {
   if (!action.enabled) {
     return;
@@ -9345,8 +9503,125 @@ function runGatewaySourceAction(
       openCreateGatewaySetup(gateway);
       return;
     case 'pair_gateway':
-    case 'resolve_gateway':
       return pairGateway(gateway.gateway_id);
+    case 'resolve_gateway':
+      openCreateGatewaySetup(gateway);
+      return;
+    case 'start_gateway_runtime':
+      return runGatewayRuntimeAction(gateway.gateway_id, 'start_gateway_runtime');
+    case 'stop_gateway_runtime':
+      return runGatewayRuntimeAction(gateway.gateway_id, 'stop_gateway_runtime');
+    case 'restart_gateway_runtime':
+      return runGatewayRuntimeAction(gateway.gateway_id, 'restart_gateway_runtime');
+    case 'update_gateway_runtime':
+      return runGatewayRuntimeAction(gateway.gateway_id, 'update_gateway_runtime');
+    case 'refresh_gateway_catalog':
+      return runGatewayRuntimeAction(gateway.gateway_id, 'refresh_gateway_catalog');
+  }
+}
+
+function gatewaySourceLauncherActionKind(
+  action: GatewaySourceActionModel,
+): Extract<DesktopLauncherActionKind, 'pair_gateway' | 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'> | null {
+  switch (action.intent) {
+    case 'pair_gateway':
+      return 'pair_gateway';
+    case 'start_gateway_runtime':
+      return 'start_gateway_runtime';
+    case 'stop_gateway_runtime':
+      return 'stop_gateway_runtime';
+    case 'restart_gateway_runtime':
+      return 'restart_gateway_runtime';
+    case 'update_gateway_runtime':
+      return 'update_gateway_runtime';
+    case 'refresh_gateway_catalog':
+      return 'refresh_gateway_catalog';
+    default:
+      return null;
+  }
+}
+
+function gatewaySourceActionBusy(
+  busyState: DesktopLauncherBusyState,
+  gatewayID: string,
+  action: GatewaySourceActionModel,
+): boolean {
+  const actionKind = gatewaySourceLauncherActionKind(action);
+  return actionKind !== null && busyStateMatchesGateway(busyState, gatewayID, [actionKind]);
+}
+
+function gatewayStartRequiredTitle(payload: DesktopGatewayStartRequiredPayload | null): string {
+  switch (payload?.reason) {
+    case 'open_gateway_environment':
+      return 'Start Gateway to Open';
+    case 'refresh_gateway_catalog':
+      return 'Start Gateway to Refresh';
+    default:
+      return 'Start Gateway to Pair';
+  }
+}
+
+function gatewayStartRequiredConfirmText(payload: DesktopGatewayStartRequiredPayload | null): string {
+  switch (payload?.reason) {
+    case 'open_gateway_environment':
+      return 'Start Gateway & Open';
+    case 'refresh_gateway_catalog':
+      return 'Start Gateway & Refresh';
+    default:
+      return 'Start Gateway & Pair';
+  }
+}
+
+function gatewayStartRequiredMessage(payload: DesktopGatewayStartRequiredPayload | null): string {
+  const label = payload?.gateway_label || 'This Gateway';
+  switch (payload?.reason) {
+    case 'open_gateway_environment':
+      return `${label} must be running before Desktop can open this Gateway Environment.`;
+    case 'refresh_gateway_catalog':
+      return `${label} must be running before Desktop can refresh its Environment catalog.`;
+    default:
+      return `${label} must be running before Desktop can pair with it.`;
+  }
+}
+
+function gatewayRuntimeStateLabel(status: string): string {
+  switch (status) {
+    case 'not_started':
+      return 'Gateway Runtime is not started';
+    case 'runtime_needs_update':
+      return 'Gateway Runtime needs an update';
+    case 'ssh_unreachable':
+      return 'SSH host is unreachable';
+    case 'container_unavailable':
+      return 'Container is unavailable';
+    case 'bridge_unavailable':
+      return 'Gateway bridge is unavailable';
+    case 'ready':
+      return 'Gateway Runtime is ready';
+    default:
+      return 'Gateway Runtime needs attention';
+  }
+}
+
+function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionModel['intent'] }>) {
+  switch (props.intent) {
+    case 'start_gateway_runtime':
+      return <Play class="mr-1 h-3.5 w-3.5" />;
+    case 'stop_gateway_runtime':
+      return <Stop class="mr-1 h-3.5 w-3.5" />;
+    case 'restart_gateway_runtime':
+      return <Refresh class="mr-1 h-3.5 w-3.5" />;
+    case 'update_gateway_runtime':
+      return <Save class="mr-1 h-3.5 w-3.5" />;
+    case 'refresh_gateway_catalog':
+      return <Refresh class="mr-1 h-3.5 w-3.5" />;
+    case 'manage_gateway':
+    case 'setup_gateway':
+      return <Settings class="mr-1 h-3.5 w-3.5" />;
+    case 'pair_gateway':
+      return <ShieldCheck class="mr-1 h-3.5 w-3.5" />;
+    case 'resolve_gateway':
+      return <AlertTriangle class="mr-1 h-3.5 w-3.5" />;
   }
 }
 

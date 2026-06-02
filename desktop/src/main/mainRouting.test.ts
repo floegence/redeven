@@ -922,7 +922,8 @@ describe('main routing', () => {
     expect(pairSrc).toContain('const challenge = await client.pairingChallenge(record, pairingChallengeRequest(material));');
     expect(pairSrc).toContain('const fingerprint = assertGatewayPairingChallenge({');
     expect(pairSrc).toContain('const confirmed = await confirmDesktopImpact({');
-    expect(pairSrc).toContain("if (!confirmed) {\n    throw new Error('Gateway pairing was canceled.');\n  }");
+    expect(pairSrc).toContain("if (!confirmed) {");
+    expect(pairSrc).toContain("return launcherActionFailure(\n      'action_invalid',\n      'dialog',\n      'Gateway pairing was canceled.'");
     expect(pairSrc).toContain('const completion = await client.completePairing(record, buildPairingCompleteRequest(material, challenge));');
     expect(pairSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion);');
     expect(pairSrc).toContain('completeGatewayPairing({');
@@ -950,6 +951,8 @@ describe('main routing', () => {
 
     expect(openSrc).toContain('const issued = await gatewayLifecycleManager().openSessionWithBridge(record, {');
     expect(openSrc).toContain("requested_capability: 'env_app'");
+    expect(openSrc).toContain("if (error instanceof GatewayRuntimeStartRequiredError || error instanceof GatewayNotManageableError) {\n      launcherOperations.remove(operationKey);");
+    expect(openSrc).toContain("return launcherActionFailure(\n        gatewayRuntimeFailureCode(error),\n        'environment',");
     expect(openSrc).toContain('const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);');
     expect(openSrc).toContain('await installGatewayLocalAccessCookies(artifactURL, response.set_cookie_headers);');
     expect(openSrc).toContain('buildGatewayDesktopTarget({');

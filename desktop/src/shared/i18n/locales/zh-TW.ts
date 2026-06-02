@@ -256,6 +256,7 @@ export const zhTW = {
     providerLocalLinksBadge: "{count} 个 local links",
     providerSynced: "已同步 {time}",
     gatewayManagedByDesktop: "Managed locally by Desktop",
+    gatewayAccessOnlyByDesktop: "Access-only Gateway",
     viewEnvironments: "查看 Environments",
     reconnect: "重新连接",
     removeProvider: "移除 Provider",

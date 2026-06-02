@@ -31,6 +31,11 @@ export type BusyAction =
   | 'refresh_control_plane'
   | 'upsert_gateway'
   | 'pair_gateway'
+  | 'start_gateway_runtime'
+  | 'stop_gateway_runtime'
+  | 'restart_gateway_runtime'
+  | 'update_gateway_runtime'
+  | 'refresh_gateway_catalog'
   | 'delete_gateway'
   | 'set_local_environment_pinned'
   | 'set_provider_environment_pinned'
@@ -51,6 +56,7 @@ export type DesktopLauncherBusyState = Readonly<{
   environment_id: string;
   provider_origin: string;
   provider_id: string;
+  gateway_id: string;
   request_started_at_unix_ms: number;
   progress: DesktopLauncherActionProgress | null;
 }>;
@@ -60,6 +66,7 @@ export const IDLE_LAUNCHER_BUSY_STATE: DesktopLauncherBusyState = {
   environment_id: '',
   provider_origin: '',
   provider_id: '',
+  gateway_id: '',
   request_started_at_unix_ms: 0,
   progress: null,
 };
@@ -85,6 +92,7 @@ export function busyStateForLauncherRequest(
         environment_id: '',
         provider_origin: '',
         provider_id: '',
+        gateway_id: '',
         progress: null,
       });
     case 'upsert_saved_environment':
@@ -95,6 +103,7 @@ export function busyStateForLauncherRequest(
         environment_id: request.environment_id ?? '',
         provider_origin: '',
         provider_id: '',
+        gateway_id: '',
         progress: null,
       });
     case 'delete_saved_environment':
@@ -105,6 +114,7 @@ export function busyStateForLauncherRequest(
         environment_id: request.environment_id,
         provider_origin: '',
         provider_id: '',
+        gateway_id: '',
         progress: null,
       });
     case 'refresh_control_plane':
@@ -114,6 +124,7 @@ export function busyStateForLauncherRequest(
         environment_id: '',
         provider_origin: request.provider_origin,
         provider_id: request.provider_id,
+        gateway_id: '',
         progress: null,
       });
     case 'cancel_launcher_operation':
@@ -123,6 +134,7 @@ export function busyStateForLauncherRequest(
         environment_id: '',
         provider_origin: '',
         provider_id: '',
+        gateway_id: '',
         progress: null,
       });
     case 'start_control_plane_connect':
@@ -131,6 +143,7 @@ export function busyStateForLauncherRequest(
         environment_id: '',
         provider_origin: request.provider_origin,
         provider_id: '',
+        gateway_id: '',
         progress: null,
       });
     default:
@@ -139,6 +152,7 @@ export function busyStateForLauncherRequest(
         environment_id: 'environment_id' in request ? request.environment_id ?? '' : '',
         provider_origin: '',
         provider_id: '',
+        gateway_id: 'gateway_id' in request ? request.gateway_id ?? '' : '',
         progress: null,
       });
   }
@@ -515,6 +529,17 @@ export function busyStateMatchesControlPlane(
     return false;
   }
   if (providerID !== '' && state.provider_id !== '' && state.provider_id !== providerID) {
+    return false;
+  }
+  return actions === undefined ? true : busyStateMatchesAnyAction(state, actions);
+}
+
+export function busyStateMatchesGateway(
+  state: DesktopLauncherBusyState,
+  gatewayID: string,
+  actions?: readonly BusyAction[],
+): boolean {
+  if (state.gateway_id === '' || state.gateway_id !== gatewayID) {
     return false;
   }
   return actions === undefined ? true : busyStateMatchesAnyAction(state, actions);

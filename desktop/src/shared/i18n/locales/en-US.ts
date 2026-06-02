@@ -255,6 +255,7 @@ export const enUS = {
     providerLocalLinksBadge: '{count} local links',
     providerSynced: 'Synced {time}',
     gatewayManagedByDesktop: 'Managed locally by Desktop',
+    gatewayAccessOnlyByDesktop: "Access-only Gateway",
     viewEnvironments: 'View Environments',
     reconnect: 'Reconnect',
     removeProvider: 'Remove Provider',

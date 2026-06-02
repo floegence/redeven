@@ -199,8 +199,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('onClick={() => props.openCreateGatewaySetup()}');
     expect(appSrc).toContain('function runGatewaySourceAction(');
     expect(appSrc).toContain("case 'manage_gateway':");
-    expect(appSrc).toContain('runGatewaySourceAction(row().primary_action, props.gateway, props.openCreateGatewaySetup, props.pairGateway);');
-    expect(appSrc).toContain("case 'pair_gateway':\n    case 'resolve_gateway':\n      return pairGateway(gateway.gateway_id);");
+    expect(appSrc).toContain('runGatewaySourceAction(row().primary_action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayRuntimeAction);');
+    expect(appSrc).toContain("desktopGatewayCanManageRuntime(props.gateway)\n                ? 'environmentCenter.gatewayManagedByDesktop'\n                : 'environmentCenter.gatewayAccessOnlyByDesktop'");
+    expect(appSrc).toContain("case 'pair_gateway':\n      return pairGateway(gateway.gateway_id);\n    case 'resolve_gateway':\n      openCreateGatewaySetup(gateway);");
+    expect(appSrc).toContain("case 'start_gateway_runtime':");
+    expect(appSrc).toContain("case 'refresh_gateway_catalog':");
     const addGatewayLabel = "props.i18n.t('environmentCenter.addGateway')";
     const addGatewayLabelOffsets: number[] = [];
     let searchOffset = 0;
@@ -227,7 +230,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("kind: 'open_gateway_environment'");
     expect(appSrc).toContain("gateway_id: gatewayID");
     expect(appSrc).toContain("gateway_env_id: gatewayEnvID");
-    expect(appSrc).toContain("case 'resolve_gateway':\n        await pairGateway(environment.gateway_id ?? '');\n        return true;");
+    expect(appSrc).toContain("case 'resolve_gateway':\n        if (environment.kind === 'gateway_environment') {");
+    expect(appSrc).toContain('openCreateGatewaySetup(gateway);');
+    expect(appSrc).not.toContain("case 'resolve_gateway':\n        await pairGateway(environment.gateway_id ?? '');");
     expect(appSrc).toContain("kind: 'pair_gateway'");
     expect(appSrc).not.toContain("gateway_environment') {\n      return openRemoteEnvironment");
   });

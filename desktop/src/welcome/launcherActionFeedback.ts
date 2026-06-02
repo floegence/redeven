@@ -165,6 +165,13 @@ export function launcherActionFailurePresentation(
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
+    case 'gateway_start_required':
+      return {
+        message: '',
+        tone: 'info',
+        refresh_snapshot: refreshSnapshot,
+        delivery,
+      };
     default:
       return {
         message: i18n.locale === 'en-US'

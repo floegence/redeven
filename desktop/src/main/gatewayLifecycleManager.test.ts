@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const lifecycleMocks = vi.hoisted(() => ({
   ensureManagedSSHRuntimeReady: vi.fn(),
+  probeManagedSSHRuntimeStatus: vi.fn(),
+  stopManagedSSHRuntimeProcess: vi.fn(),
   ensureRuntimePlacementReady: vi.fn(),
   startRuntimePlacementBridgeSession: vi.fn(),
 }));
@@ -11,6 +13,8 @@ vi.mock('./sshRuntime', async () => {
   return {
     ...actual,
     ensureManagedSSHRuntimeReady: lifecycleMocks.ensureManagedSSHRuntimeReady,
+    probeManagedSSHRuntimeStatus: lifecycleMocks.probeManagedSSHRuntimeStatus,
+    stopManagedSSHRuntimeProcess: lifecycleMocks.stopManagedSSHRuntimeProcess,
   };
 });
 
@@ -30,7 +34,11 @@ vi.mock('./runtimePlacementBridgeSession', async () => {
   };
 });
 
-import { GatewayLifecycleManager } from './gatewayLifecycleManager';
+import {
+  GatewayLifecycleManager,
+  GatewayRuntimeStartRequiredError,
+  GatewayRuntimeUnavailableError,
+} from './gatewayLifecycleManager';
 import type { GatewayRecord } from './gatewayStore';
 import type { GatewaySecretStore } from './gatewayTrust';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
@@ -90,6 +98,8 @@ function manager(progress: string[] = [], secretStore = memorySecretStore()): Ga
 describe('GatewayLifecycleManager', () => {
   beforeEach(() => {
     lifecycleMocks.ensureManagedSSHRuntimeReady.mockReset();
+    lifecycleMocks.probeManagedSSHRuntimeStatus.mockReset();
+    lifecycleMocks.stopManagedSSHRuntimeProcess.mockReset();
     lifecycleMocks.ensureRuntimePlacementReady.mockReset();
     lifecycleMocks.startRuntimePlacementBridgeSession.mockReset();
     lifecycleMocks.ensureManagedSSHRuntimeReady.mockResolvedValue({
@@ -101,6 +111,11 @@ describe('GatewayLifecycleManager', () => {
       disconnect: vi.fn(),
       stop: vi.fn(),
     });
+    lifecycleMocks.probeManagedSSHRuntimeStatus.mockResolvedValue({
+      status: 'not_running',
+      message: 'Gateway Runtime is not running.',
+    });
+    lifecycleMocks.stopManagedSSHRuntimeProcess.mockResolvedValue(undefined);
     lifecycleMocks.ensureRuntimePlacementReady.mockResolvedValue({
       runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       probe: { status: 'ready' },
@@ -128,7 +143,7 @@ describe('GatewayLifecycleManager', () => {
       updated_at_ms: 1,
     };
 
-    await manager(progress).bridgeClient(record);
+    await manager(progress).bridgeClient(record, { startPolicy: 'start_if_needed' });
 
     expect(lifecycleMocks.ensureManagedSSHRuntimeReady).toHaveBeenCalledTimes(1);
     expect(lifecycleMocks.ensureManagedSSHRuntimeReady).toHaveBeenCalledWith(expect.objectContaining({
@@ -182,7 +197,7 @@ describe('GatewayLifecycleManager', () => {
       updated_at_ms: 1,
     };
 
-    await manager().bridgeClient(record);
+    await manager().bridgeClient(record, { startPolicy: 'start_if_needed' });
 
     expect(lifecycleMocks.ensureManagedSSHRuntimeReady).toHaveBeenCalledWith(expect.objectContaining({
       target: expect.objectContaining({
@@ -231,8 +246,8 @@ describe('GatewayLifecycleManager', () => {
       session_cache: sessionCache,
     });
 
-    await lifecycle.bridgeClient(first);
-    await lifecycle.bridgeClient(second);
+    await lifecycle.bridgeClient(first, { startPolicy: 'start_if_needed' });
+    await lifecycle.bridgeClient(second, { startPolicy: 'start_if_needed' });
 
     const regularSSHRuntimeTarget = desktopRuntimeTargetID({
       kind: 'ssh_host',
@@ -279,7 +294,7 @@ describe('GatewayLifecycleManager', () => {
 
     await manager([], memorySecretStore([
       ['gateway-ssh-password:gw_password', 'secret-password'],
-    ])).bridgeClient(record);
+    ])).bridgeClient(record, { startPolicy: 'start_if_needed' });
 
     expect(lifecycleMocks.ensureManagedSSHRuntimeReady).toHaveBeenCalledWith(expect.objectContaining({
       target: expect.objectContaining({
@@ -290,6 +305,59 @@ describe('GatewayLifecycleManager', () => {
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
       ssh_password: 'secret-password',
     }));
+  });
+
+  it('requires explicit start policy only when an SSH Gateway is startable but not running', async () => {
+    const record: GatewayRecord = {
+      schema_version: 1,
+      gateway_id: 'gw_bastion',
+      display_name: 'Bastion',
+      connection: {
+        kind: 'ssh_host',
+        ssh_destination: 'bastion.internal',
+        auth_mode: 'key_agent',
+        runtime_root: '/opt/redeven',
+      },
+      created_at_ms: 1,
+      updated_at_ms: 1,
+    };
+
+    await expect(manager().ensureGatewayReady(record, { startPolicy: 'require_ready' }))
+      .rejects.toBeInstanceOf(GatewayRuntimeStartRequiredError);
+
+    expect(lifecycleMocks.probeManagedSSHRuntimeStatus).toHaveBeenCalledWith(expect.objectContaining({
+      runtimeStateRoot: '/opt/redeven/gateways/gw_bastion',
+    }));
+    expect(lifecycleMocks.ensureManagedSSHRuntimeReady).not.toHaveBeenCalled();
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
+  });
+
+  it('reports unreachable SSH Gateways as unavailable instead of asking to start them', async () => {
+    lifecycleMocks.probeManagedSSHRuntimeStatus.mockResolvedValue({
+      status: 'failed',
+      message: 'SSH connection to "bastion.internal" failed.',
+    });
+    const record: GatewayRecord = {
+      schema_version: 1,
+      gateway_id: 'gw_bastion',
+      display_name: 'Bastion',
+      connection: {
+        kind: 'ssh_host',
+        ssh_destination: 'bastion.internal',
+        auth_mode: 'key_agent',
+        runtime_root: '/opt/redeven',
+      },
+      created_at_ms: 1,
+      updated_at_ms: 1,
+    };
+
+    await expect(manager().ensureGatewayReady(record, { startPolicy: 'require_ready' })).rejects.toMatchObject({
+      code: 'gateway_runtime_unreachable',
+      message: 'SSH connection to "bastion.internal" failed.',
+    } satisfies Partial<GatewayRuntimeUnavailableError>);
+
+    expect(lifecycleMocks.ensureManagedSSHRuntimeReady).not.toHaveBeenCalled();
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
   });
 
   it('prepares SSH container Gateways through runtime placement and exec-stream bridge only', async () => {
@@ -322,7 +390,7 @@ describe('GatewayLifecycleManager', () => {
       updated_at_ms: 1,
     };
 
-    await manager(progress).bridgeClient(record);
+    await manager(progress).bridgeClient(record, { startPolicy: 'start_if_needed' });
 
     expect(lifecycleMocks.ensureManagedSSHRuntimeReady).not.toHaveBeenCalled();
     expect(lifecycleMocks.ensureRuntimePlacementReady).toHaveBeenCalledWith(expect.objectContaining({
@@ -393,7 +461,10 @@ describe('GatewayLifecycleManager', () => {
       updated_at_ms: 1,
     };
 
-    await expect(manager().bridgeClient(record)).rejects.toThrow('host unavailable');
+    await expect(manager().bridgeClient(record, { startPolicy: 'start_if_needed' })).rejects.toMatchObject({
+      code: 'gateway_runtime_start_failed',
+      message: 'host unavailable',
+    } satisfies Partial<GatewayRuntimeUnavailableError>);
 
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
   });
@@ -416,8 +487,33 @@ describe('GatewayLifecycleManager', () => {
       updated_at_ms: 1,
     };
 
-    await expect(manager().bridgeClient(record)).rejects.toThrow('container unavailable');
+    await expect(manager().bridgeClient(record, { startPolicy: 'start_if_needed' })).rejects.toMatchObject({
+      code: 'gateway_container_unavailable',
+      message: 'container unavailable',
+    } satisfies Partial<GatewayRuntimeUnavailableError>);
 
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
+  });
+
+  it('reports bridge attach failures with structured Gateway bridge errors', async () => {
+    lifecycleMocks.startRuntimePlacementBridgeSession.mockRejectedValue(new Error('bridge refused'));
+    const record: GatewayRecord = {
+      schema_version: 1,
+      gateway_id: 'gw_bastion',
+      display_name: 'Bastion',
+      connection: {
+        kind: 'ssh_host',
+        ssh_destination: 'bastion.internal',
+        auth_mode: 'key_agent',
+        runtime_root: '/opt/redeven',
+      },
+      created_at_ms: 1,
+      updated_at_ms: 1,
+    };
+
+    await expect(manager().bridgeClient(record, { startPolicy: 'start_if_needed' })).rejects.toMatchObject({
+      code: 'gateway_bridge_unavailable',
+      message: 'bridge refused',
+    } satisfies Partial<GatewayRuntimeUnavailableError>);
   });
 });

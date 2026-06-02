@@ -256,6 +256,7 @@ export const ptBR = {
     providerLocalLinksBadge: "{count} links locais",
     providerSynced: "Sincronizado {time}",
     gatewayManagedByDesktop: "Managed locally by Desktop",
+    gatewayAccessOnlyByDesktop: "Access-only Gateway",
     viewEnvironments: "Ver Environments",
     reconnect: "Reconectar",
     removeProvider: "Remover Provider",

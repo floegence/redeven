@@ -15,6 +15,7 @@ import {
   type RuntimeServiceSnapshot,
 } from '../shared/runtimeService';
 import {
+  desktopGatewayCanManageRuntime,
   desktopGatewayConnectionKindLabel,
   desktopGatewayNeedsResolution,
   desktopGatewaySourceID,
@@ -2282,7 +2283,16 @@ export type GatewayRowModel = Readonly<{
   primary_action: EnvironmentActionModel;
 }>;
 
-export type GatewaySourceActionIntent = 'manage_gateway' | 'pair_gateway' | 'resolve_gateway' | 'setup_gateway';
+export type GatewaySourceActionIntent =
+  | 'manage_gateway'
+  | 'pair_gateway'
+  | 'resolve_gateway'
+  | 'setup_gateway'
+  | 'start_gateway_runtime'
+  | 'stop_gateway_runtime'
+  | 'restart_gateway_runtime'
+  | 'update_gateway_runtime'
+  | 'refresh_gateway_catalog';
 
 export type GatewaySourceActionModel = Readonly<{
   intent: GatewaySourceActionIntent;
@@ -2320,47 +2330,126 @@ export type GatewaySourceRowModel = Readonly<{
   endpoint_label: string;
   environment_count: number;
   primary_action: GatewaySourceActionModel;
+  secondary_actions: readonly GatewaySourceActionModel[];
 }>;
+
+function gatewaySourceAction(
+  intent: GatewaySourceActionIntent,
+  label: string,
+  variant: GatewaySourceActionModel['variant'] = 'outline',
+  enabled = true,
+  disabledReason?: string,
+): GatewaySourceActionModel {
+  return {
+    intent,
+    label,
+    enabled,
+    variant,
+    ...(disabledReason ? { disabled_reason: disabledReason } : {}),
+  };
+}
+
+function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourceActionModel {
+  const runtime = gateway.runtime_state;
+  const runtimeStatus = runtime?.status ?? 'unknown';
+  const needsSetup = gateway.status === 'needs_setup';
+  const needsPairing = gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired';
+  const needsResolution = desktopGatewayNeedsResolution(gateway.status);
+  const manageable = desktopGatewayCanManageRuntime(gateway);
+
+  if (needsSetup) {
+    return gatewaySourceAction('setup_gateway', 'Set up', 'default');
+  }
+  if (manageable && (
+    runtimeStatus === 'ssh_unreachable'
+    || runtimeStatus === 'container_unavailable'
+    || runtimeStatus === 'bridge_unavailable'
+    || runtimeStatus === 'error'
+  )) {
+    return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default');
+  }
+  if (manageable && runtimeStatus === 'starting') {
+    return gatewaySourceAction('start_gateway_runtime', 'Starting...', 'default', false);
+  }
+  if (manageable && runtimeStatus === 'runtime_needs_update') {
+    return gatewaySourceAction('update_gateway_runtime', 'Update Gateway', 'default', runtime?.can_update !== false);
+  }
+  if (manageable && runtimeStatus === 'not_started' && !needsPairing) {
+    return gatewaySourceAction('start_gateway_runtime', 'Start Gateway', 'default', runtime?.can_start !== false);
+  }
+  if (needsPairing) {
+    return gatewaySourceAction('pair_gateway', 'Pair Gateway', 'default');
+  }
+  if (needsResolution) {
+    return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default');
+  }
+  return gatewaySourceAction('refresh_gateway_catalog', 'Refresh', 'default');
+}
+
+function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource, primary: GatewaySourceActionModel): readonly GatewaySourceActionModel[] {
+  const runtime = gateway.runtime_state;
+  const runtimeStatus = runtime?.status ?? 'unknown';
+  const manageable = desktopGatewayCanManageRuntime(gateway);
+  const needsPairing = gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired';
+  const actions: GatewaySourceActionModel[] = [];
+
+  const add = (action: GatewaySourceActionModel) => {
+    if (action.intent !== primary.intent) {
+      actions.push(action);
+    }
+  };
+
+  if (manageable) {
+    if (runtimeStatus === 'not_started' && (runtime?.can_start === true || needsPairing)) {
+      add(gatewaySourceAction('start_gateway_runtime', 'Start Gateway', 'outline', runtime?.can_start !== false));
+    }
+    if (runtimeStatus === 'ready' && runtime?.can_stop === true) {
+      add(gatewaySourceAction('stop_gateway_runtime', 'Stop', 'outline'));
+    }
+    if (runtime?.can_restart === true) {
+      add(gatewaySourceAction('restart_gateway_runtime', 'Restart', 'outline'));
+    }
+    if (runtimeStatus === 'ready' && runtime?.can_update === true) {
+      add(gatewaySourceAction('update_gateway_runtime', 'Update', 'outline'));
+    }
+    if (runtimeStatus === 'ready' && primary.intent !== 'refresh_gateway_catalog') {
+      add(gatewaySourceAction('refresh_gateway_catalog', 'Refresh', 'outline'));
+    }
+  } else if (primary.intent !== 'refresh_gateway_catalog' && gateway.status === 'online') {
+    add(gatewaySourceAction('refresh_gateway_catalog', 'Refresh', 'outline'));
+  }
+
+  add(gatewaySourceAction('manage_gateway', 'Manage', 'outline'));
+  return actions;
+}
 
 export function buildGatewaySourceRowModel(
   gateway: DesktopGatewaySource,
 ): GatewaySourceRowModel {
   const needsResolution = desktopGatewayNeedsResolution(gateway.status);
-  const needsSetup = gateway.status === 'needs_setup';
-  const needsPairing = gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired';
-  const actionIntent: GatewaySourceActionIntent = needsSetup
-    ? 'setup_gateway'
-    : needsPairing
-      ? 'pair_gateway'
-      : needsResolution
-        ? 'resolve_gateway'
-        : 'manage_gateway';
-  const actionLabel = needsSetup
-    ? 'Set up'
-    : needsPairing
-      ? 'Pair'
-      : needsResolution
-        ? 'Resolve'
-        : 'Manage';
+  const runtimeStatus = gateway.runtime_state?.status;
+  const primaryAction = gatewaySourcePrimaryAction(gateway);
   return {
     gateway_id: gateway.gateway_id,
     label: gateway.display_name || gateway.gateway_id,
     transport_label: desktopGatewayConnectionKindLabel(gateway.connection_kind),
-    status_label: desktopGatewayStatusLabel(gateway.status),
+    status_label: runtimeStatus === 'not_started'
+      ? 'Not started'
+      : runtimeStatus === 'runtime_needs_update'
+        ? 'Update available'
+        : desktopGatewayStatusLabel(gateway.status),
     status_tone: gateway.status === 'online'
       ? 'success'
       : gateway.status === 'installing' || gateway.status === 'starting' || gateway.status === 'updating'
         ? 'primary'
+        : runtimeStatus === 'not_started' || runtimeStatus === 'runtime_needs_update'
+          ? 'warning'
         : needsResolution
           ? 'warning'
           : 'neutral',
     endpoint_label: compact(gateway.endpoint_label),
     environment_count: gateway.environments.length,
-    primary_action: {
-      intent: actionIntent,
-      label: actionLabel,
-      enabled: true,
-      variant: 'default',
-    },
+    primary_action: primaryAction,
+    secondary_actions: gatewaySourceSecondaryActions(gateway, primaryAction),
   };
 }

@@ -256,6 +256,7 @@ export const ruRU = {
     providerLocalLinksBadge: "{count} локальных связей",
     providerSynced: "Синхронизировано {time}",
     gatewayManagedByDesktop: "Managed locally by Desktop",
+    gatewayAccessOnlyByDesktop: "Access-only Gateway",
     viewEnvironments: "Показать Environments",
     reconnect: "Переподключить",
     removeProvider: "Удалить Provider",
