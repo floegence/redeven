@@ -199,9 +199,18 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('onClick={() => props.openCreateGatewaySetup()}');
     expect(appSrc).toContain('function runGatewaySourceAction(');
     expect(appSrc).toContain("case 'manage_gateway':");
-    expect(appSrc).toContain('runGatewaySourceAction(row().primary_action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayRuntimeAction);');
+    expect(appSrc).toContain('selectedSnapshotRuntimeLifecycleProgressForGateway(props.gateway.gateway_id, props.actionProgress)');
+    expect(appSrc).toContain('<GatewaySourceActionGuidePanel');
+    expect(appSrc).toContain('<EnvironmentProgressPanel');
+    expect(appSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? \'start_if_needed\' : undefined');
+    expect(appSrc).toContain('gatewaySourceActionStartsWorkflow(action)');
+    expect(appSrc).toContain("'Start Gateway & Pair'");
+    expect(appSrc).toContain("'Start Gateway & Refresh'");
+    expect(appSrc).toContain("case 'refresh_status':\n                          void props.runGatewayRuntimeAction(props.gateway.gateway_id, 'refresh_gateway_catalog');");
+    expect(appSrc).toContain("case 'manage_desktop_update':\n                        case 'retry':\n                          break;");
     expect(appSrc).toContain('row().management_label');
-    expect(appSrc).toContain("case 'pair_gateway':\n      return pairGateway(gateway.gateway_id);\n    case 'resolve_gateway':\n      openCreateGatewaySetup(gateway);");
+    expect(appSrc).toContain("case 'pair_gateway':");
+    expect(appSrc).toContain("case 'resolve_gateway':\n      openCreateGatewaySetup(gateway);");
     expect(appSrc).toContain("case 'start_gateway_runtime':");
     expect(appSrc).toContain("case 'refresh_gateway_catalog':");
     const addGatewayLabel = "props.i18n.t('environmentCenter.addGateway')";
@@ -239,13 +248,21 @@ describe('DesktopWelcomeShell', () => {
 
   it('filters Gateway source rows with the Gateways tab source filter and query', () => {
     const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('const entryGatewayIDs = createMemo(() => new Set(props.gatewayEntries.map((entry) => entry.gateway_id ?? \'\')));');
+    expect(appSrc).toContain('const gatewaySourcesByID = createMemo(() => {');
+    expect(appSrc).toContain('const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.gateway_id));');
+    expect(appSrc).toContain('<For each={visibleGatewaySourceIDs()}>');
+    expect(appSrc).toContain('gatewayEntriesByGatewayID()[gatewayID] ?? []');
     expect(appSrc).toContain("gatewaySourceFilterValue(gateway.gateway_id) !== props.gatewaySourceFilter");
     expect(appSrc).toContain('|| gatewaySourceMatchesQuery(gateway, query);');
     expect(appSrc).toContain('function gatewaySourceMatchesQuery(gateway: DesktopGatewaySource, query: string): boolean');
     expect(appSrc).toContain('gateway.endpoint_label,');
     expect(appSrc).toContain('noMatchingGatewaysTitle');
+    expect(styles).toContain('.redeven-gateway-grid');
+    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.5rem), 22rem));');
+    expect(styles).toContain('.redeven-gateway-card {\n  animation: none;');
   });
 
   it('describes Local Environment Settings inside the same shell model', () => {
@@ -727,15 +744,25 @@ describe('DesktopWelcomeShell', () => {
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('function GatewaySourceCard');
-    expect(appSrc).toContain('class="redeven-environment-library redeven-gateway-library"');
-    expect(appSrc).toContain('<div class="redeven-environment-grid">');
+    expect(appSrc).toContain('class="redeven-gateway-library"');
+    expect(appSrc).toContain('<div class="redeven-gateway-grid">');
     expect(appSrc).toContain('redeven-environment-card redeven-gateway-card');
     expect(appSrc).toContain('row().guidance.title');
     expect(appSrc).toContain('row().guidance.detail');
+    expect(appSrc).toContain('selectedSnapshotRuntimeLifecycleProgressForGateway(props.gateway.gateway_id, props.actionProgress)');
+    expect(appSrc).toContain('<GatewaySourceActionGuidePanel');
+    expect(appSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? \'start_if_needed\' : undefined');
+    expect(appSrc).toContain('const continueActionLabel = createMemo(() => {');
+    expect(appSrc).toContain("'Start Gateway & Pair'");
+    expect(appSrc).toContain("'Start Gateway & Refresh'");
+    expect(appSrc).toContain("case 'refresh_status':\n                          void props.runGatewayRuntimeAction(props.gateway.gateway_id, 'refresh_gateway_catalog');");
     expect(appSrc).toContain('redeven-gateway-card__secondary-actions');
     expect(appSrc).toContain('gatewayStartRequiredNextStep');
     expect(appSrc).not.toContain('function GatewaySourceRow');
     expect(appSrc).not.toContain('redeven-gateway-row');
+    expect(styles).toContain('.redeven-gateway-grid');
+    expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.5rem), 22rem));');
+    expect(styles).toContain('.redeven-gateway-card {\n  animation: none;');
     expect(styles).toContain('.redeven-gateway-card__guidance');
     expect(styles).toContain('.redeven-gateway-card__env-list');
     expect(styles).toContain('.redeven-gateway-card__secondary-actions');

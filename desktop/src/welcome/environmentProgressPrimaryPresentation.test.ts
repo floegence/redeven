@@ -259,6 +259,20 @@ describe('environmentProgressPrimaryPresentation', () => {
       label: 'Stopping...',
       icon: 'stop',
     });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'pair_gateway', operation: 'start', status: 'running', phase: 'starting_runtime_process' }),
+    )).toMatchObject({
+      kind: 'progress_trigger',
+      label: 'Pairing...',
+      icon: 'play',
+    });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'refresh_gateway_catalog', operation: 'start', status: 'running', phase: 'starting_runtime_process' }),
+    )).toMatchObject({
+      kind: 'progress_trigger',
+      label: 'Refreshing...',
+      icon: 'play',
+    });
   });
 
   it('releases the primary trigger for successful or canceled lifecycle progress', () => {
@@ -323,6 +337,12 @@ describe('environmentProgressPrimaryPresentation', () => {
     expect(environmentProgressPrimaryPresentation(
       lifecycleActionProgress({ action: 'update_environment_runtime', operation: 'update', status: 'failed', phase: 'runtime_up_to_date' }),
     )).toMatchObject({ label: 'Update failed' });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'pair_gateway', operation: 'start', status: 'failed', phase: 'starting_runtime_process' }),
+    )).toMatchObject({ label: 'Pair failed' });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'refresh_gateway_catalog', operation: 'start', status: 'failed', phase: 'starting_runtime_process' }),
+    )).toMatchObject({ label: 'Refresh failed' });
   });
 
   it('applies the same primary ownership rules to open connection progress', () => {
