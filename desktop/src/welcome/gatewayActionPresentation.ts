@@ -1,0 +1,489 @@
+import {
+  desktopGatewayCanManageRuntime,
+  desktopGatewayConnectionKindLabel,
+  type DesktopGatewaySource,
+} from '../shared/desktopGateway';
+import type {
+  DesktopGatewayResolveFocus,
+  DesktopGatewayStartPolicy,
+  DesktopLauncherActionProgress,
+  DesktopLauncherActionRequest,
+} from '../shared/desktopLauncherIPC';
+import type { GatewaySourceActionModel } from './viewModel';
+
+type GatewayManagedActionKind =
+  | 'start_gateway_runtime'
+  | 'stop_gateway_runtime'
+  | 'restart_gateway_runtime'
+  | 'update_gateway_runtime'
+  | 'refresh_gateway_status'
+  | 'refresh_gateway_catalog'
+  | 'pair_gateway';
+
+export type GatewayActionExecutionMode = 'direct' | 'guide' | 'confirm' | 'progress' | 'attention';
+
+export type GatewayActionPanelKind =
+  | 'none'
+  | 'pair_ready'
+  | 'start_and_pair'
+  | 'update_then_pair'
+  | 'resolve_before_pair'
+  | 'access_only_pair'
+  | 'start_gateway'
+  | 'stop_gateway_confirm'
+  | 'restart_gateway_confirm'
+  | 'update_gateway_confirm'
+  | 'refresh_status'
+  | 'start_and_refresh_catalog'
+  | 'failure_recovery';
+
+export type GatewayActionPanelFact = Readonly<{
+  label: string;
+  value: string;
+  tone?: 'neutral' | 'warning' | 'error';
+}>;
+
+export type GatewayActionAffectedSession = Readonly<{
+  session_key: string;
+  label: string;
+}>;
+
+export type GatewayActionPanelModel = Readonly<{
+  kind: GatewayActionPanelKind;
+  execution_mode: GatewayActionExecutionMode;
+  tone: 'neutral' | 'primary' | 'warning' | 'error';
+  eyebrow: string;
+  title: string;
+  detail: string;
+  aria_label: string;
+  facts: readonly GatewayActionPanelFact[];
+  affected_sessions: readonly GatewayActionAffectedSession[];
+  overflow_session_count: number;
+  continuation_action?: DesktopLauncherActionRequest;
+  resolve_focus?: DesktopGatewayResolveFocus;
+  primary_action?: GatewaySourceActionModel;
+  secondary_actions: readonly GatewaySourceActionModel[];
+}>;
+
+export type BuildGatewayActionPresentationInput = Readonly<{
+  gateway: DesktopGatewaySource;
+  clicked_action: GatewaySourceActionModel | Readonly<{ intent: 'refresh_gateway_status'; label: string; enabled: boolean; variant: 'outline' }>;
+  active_progress?: DesktopLauncherActionProgress | null;
+  retained_failure?: DesktopLauncherActionProgress | null;
+  affected_sessions?: readonly GatewayActionAffectedSession[];
+}>;
+
+function gatewaySourceAction(
+  intent: GatewaySourceActionModel['intent'],
+  label: string,
+  variant: GatewaySourceActionModel['variant'] = 'outline',
+  enabled = true,
+): GatewaySourceActionModel {
+  return { intent, label, variant, enabled };
+}
+
+function gatewayRuntimeAction(
+  intent: GatewayManagedActionKind,
+  label: string,
+  variant: GatewaySourceActionModel['variant'] = 'outline',
+  enabled = true,
+): GatewaySourceActionModel {
+  return gatewaySourceAction(intent as GatewaySourceActionModel['intent'], label, variant, enabled);
+}
+
+function compact(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+function needsPairing(gateway: DesktopGatewaySource): boolean {
+  return gateway.status === 'pairing_required'
+    || gateway.status === 'trust_changed'
+    || gateway.trust_state === 'unpaired'
+    || gateway.trust_state === 'revoked'
+    || gateway.trust_state === 'trust_changed';
+}
+
+function runtimeStatus(gateway: DesktopGatewaySource): string {
+  return gateway.runtime_state?.status ?? (gateway.connection_kind === 'url' ? 'not_applicable' : 'unknown');
+}
+
+function runtimeStatusLabel(status: string): string {
+  switch (status) {
+    case 'not_applicable':
+      return 'Access-only';
+    case 'not_started':
+      return 'Not started';
+    case 'starting':
+      return 'Starting';
+    case 'ready':
+      return 'Ready';
+    case 'ssh_unreachable':
+      return 'SSH unreachable';
+    case 'container_unavailable':
+      return 'Container unavailable';
+    case 'runtime_needs_update':
+      return 'Update required';
+    case 'bridge_unavailable':
+      return 'Bridge unavailable';
+    case 'error':
+      return 'Needs attention';
+    default:
+      return 'Unknown';
+  }
+}
+
+function trustStateLabel(gateway: DesktopGatewaySource): string {
+  switch (gateway.trust_state) {
+    case 'paired':
+      return 'Paired';
+    case 'trust_changed':
+      return 'Review required';
+    case 'revoked':
+      return 'Revoked';
+    case 'unpaired':
+    default:
+      return 'Not paired';
+  }
+}
+
+function defaultFacts(gateway: DesktopGatewaySource): readonly GatewayActionPanelFact[] {
+  const status = runtimeStatus(gateway);
+  return [
+    { label: 'Runtime', value: runtimeStatusLabel(status), tone: status === 'ready' || status === 'not_applicable' ? 'neutral' : 'warning' },
+    { label: 'Trust', value: trustStateLabel(gateway), tone: gateway.trust_state === 'paired' ? 'neutral' : 'warning' },
+    { label: 'Transport', value: desktopGatewayConnectionKindLabel(gateway.connection_kind) },
+    { label: 'Endpoint', value: compact(gateway.endpoint_label) || compact(gateway.gateway_url) || gateway.gateway_id },
+    ...(gateway.ssh_details?.ssh_destination ? [{ label: 'Host', value: gateway.ssh_details.ssh_destination }] : []),
+    ...(gateway.container_label || gateway.container_ref || gateway.container_id
+      ? [{ label: 'Container', value: compact(gateway.container_label) || compact(gateway.container_ref) || compact(gateway.container_id) }]
+      : []),
+  ];
+}
+
+function continuationActionFor(
+  gateway: DesktopGatewaySource,
+  action: BuildGatewayActionPresentationInput['clicked_action'],
+  startPolicy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>,
+): DesktopLauncherActionRequest | undefined {
+  switch (action.intent) {
+    case 'pair_gateway':
+      return {
+        kind: 'pair_gateway',
+        gateway_id: gateway.gateway_id,
+        ...(startPolicy ? { start_policy: startPolicy } : {}),
+      };
+    case 'refresh_gateway_catalog':
+      return {
+        kind: 'refresh_gateway_catalog',
+        gateway_id: gateway.gateway_id,
+        ...(startPolicy ? { start_policy: startPolicy } : {}),
+      };
+    case 'refresh_gateway_status':
+      return {
+        kind: 'refresh_gateway_status',
+        gateway_id: gateway.gateway_id,
+      };
+    case 'start_gateway_runtime':
+    case 'stop_gateway_runtime':
+    case 'restart_gateway_runtime':
+    case 'update_gateway_runtime':
+      return {
+        kind: action.intent,
+        gateway_id: gateway.gateway_id,
+      } as DesktopLauncherActionRequest;
+    default:
+      return undefined;
+  }
+}
+
+function resolveFocusForGateway(gateway: DesktopGatewaySource): DesktopGatewayResolveFocus | undefined {
+  if (gateway.connection_kind === 'url') {
+    return 'url_endpoint';
+  }
+  switch (runtimeStatus(gateway)) {
+    case 'ssh_unreachable':
+      return 'ssh_host';
+    case 'container_unavailable':
+      return 'container';
+    default:
+      return undefined;
+  }
+}
+
+function buildPanel(
+  input: Omit<GatewayActionPanelModel, 'facts' | 'affected_sessions' | 'overflow_session_count' | 'secondary_actions'>
+  & Readonly<{
+    gateway: DesktopGatewaySource;
+    facts?: readonly GatewayActionPanelFact[];
+    affected_sessions?: readonly GatewayActionAffectedSession[];
+    secondary_actions?: readonly GatewaySourceActionModel[];
+  }>,
+): GatewayActionPanelModel {
+  const sessions = input.affected_sessions ?? [];
+  const visibleSessions = sessions.slice(0, 5);
+  return {
+    kind: input.kind,
+    execution_mode: input.execution_mode,
+    tone: input.tone,
+    eyebrow: input.eyebrow,
+    title: input.title,
+    detail: input.detail,
+    aria_label: input.aria_label,
+    facts: input.facts ?? defaultFacts(input.gateway),
+    affected_sessions: visibleSessions,
+    overflow_session_count: Math.max(0, sessions.length - visibleSessions.length),
+    ...(input.continuation_action ? { continuation_action: input.continuation_action } : {}),
+    ...(input.resolve_focus ? { resolve_focus: input.resolve_focus } : {}),
+    ...(input.primary_action ? { primary_action: input.primary_action } : {}),
+    secondary_actions: input.secondary_actions ?? [],
+  };
+}
+
+function confirmationPanelKind(action: string): GatewayActionPanelKind {
+  switch (action) {
+    case 'stop_gateway_runtime':
+      return 'stop_gateway_confirm';
+    case 'restart_gateway_runtime':
+      return 'restart_gateway_confirm';
+    default:
+      return 'update_gateway_confirm';
+  }
+}
+
+function actionLabel(action: string): string {
+  switch (action) {
+    case 'stop_gateway_runtime':
+      return 'Stop Gateway';
+    case 'restart_gateway_runtime':
+      return 'Restart Gateway';
+    case 'update_gateway_runtime':
+      return 'Update Gateway';
+    case 'refresh_gateway_status':
+      return 'Refresh status';
+    case 'refresh_gateway_catalog':
+      return 'Refresh catalog';
+    default:
+      return 'Pair Gateway';
+  }
+}
+
+export function buildGatewayActionPresentation(
+  input: BuildGatewayActionPresentationInput,
+): GatewayActionPanelModel {
+  const { gateway, clicked_action: action } = input;
+  const manageable = desktopGatewayCanManageRuntime(gateway);
+  const status = runtimeStatus(gateway);
+  const isPairAction = action.intent === 'pair_gateway';
+  const isCatalogRefresh = action.intent === 'refresh_gateway_catalog';
+  const pairingNeeded = needsPairing(gateway);
+
+  if (input.active_progress) {
+    return buildPanel({
+      gateway,
+      kind: 'none',
+      execution_mode: 'progress',
+      tone: 'primary',
+      eyebrow: 'Running',
+      title: input.active_progress.title || actionLabel(action.intent),
+      detail: input.active_progress.detail || `Desktop is working on ${gateway.display_name}.`,
+      aria_label: 'Gateway operation progress',
+    });
+  }
+
+  if (input.retained_failure) {
+    return buildPanel({
+      gateway,
+      kind: 'failure_recovery',
+      execution_mode: 'attention',
+      tone: 'error',
+      eyebrow: 'Needs attention',
+      title: input.retained_failure.title || `${actionLabel(action.intent)} failed`,
+      detail: input.retained_failure.failure?.summary || input.retained_failure.detail || `Desktop could not complete this Gateway action.`,
+      aria_label: 'Gateway action needs attention',
+    });
+  }
+
+  if (action.intent === 'setup_gateway' || action.intent === 'manage_gateway') {
+    return buildPanel({
+      gateway,
+      kind: 'none',
+      execution_mode: 'direct',
+      tone: 'neutral',
+      eyebrow: 'Settings',
+      title: 'Manage Gateway',
+      detail: 'Review this Gateway configuration.',
+      aria_label: 'Manage Gateway',
+      primary_action: action as GatewaySourceActionModel,
+    });
+  }
+
+  if (action.intent === 'resolve_gateway') {
+    return buildPanel({
+      gateway,
+      kind: 'resolve_before_pair',
+      execution_mode: 'guide',
+      tone: 'warning',
+      eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
+      title: 'Resolve Gateway',
+      detail: gateway.runtime_state?.message || gateway.status_message || 'Review this Gateway configuration before retrying.',
+      aria_label: 'Resolve Gateway',
+      resolve_focus: resolveFocusForGateway(gateway),
+      primary_action: action as GatewaySourceActionModel,
+      secondary_actions: [gatewayRuntimeAction('refresh_gateway_status', 'Refresh status', 'outline', true)],
+    });
+  }
+
+  if (action.intent === 'refresh_gateway_status') {
+    return buildPanel({
+      gateway,
+      kind: 'refresh_status',
+      execution_mode: 'direct',
+      tone: 'neutral',
+      eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
+      title: 'Refresh Gateway status',
+      detail: manageable
+        ? 'Desktop will check runtime reachability, version, and management state without refreshing the catalog.'
+        : 'Desktop will check whether this external Gateway endpoint is reachable without changing trust or catalog data.',
+      aria_label: 'Refresh Gateway status',
+      continuation_action: continuationActionFor(gateway, action),
+      primary_action: gatewayRuntimeAction('refresh_gateway_status', 'Refresh status', 'default', action.enabled),
+    });
+  }
+
+  if ((action.intent === 'stop_gateway_runtime' || action.intent === 'restart_gateway_runtime' || action.intent === 'update_gateway_runtime') && manageable) {
+    const label = actionLabel(action.intent);
+    const sessions = input.affected_sessions ?? [];
+    return buildPanel({
+      gateway,
+      kind: confirmationPanelKind(action.intent),
+      execution_mode: 'confirm',
+      tone: sessions.length > 0 ? 'warning' : 'neutral',
+      eyebrow: 'Managed Gateway',
+      title: label,
+      detail: sessions.length > 0
+        ? `${sessions.length} environment session${sessions.length === 1 ? '' : 's'} opened through this Gateway will be disconnected.`
+        : `Desktop will ${label.toLowerCase()} on the configured target.`,
+      aria_label: label,
+      affected_sessions: sessions,
+      continuation_action: {
+        kind: action.intent,
+        gateway_id: gateway.gateway_id,
+        impact_acknowledged: true,
+      } as DesktopLauncherActionRequest,
+      primary_action: gatewaySourceAction(action.intent, label, 'default', action.enabled),
+      secondary_actions: [gatewaySourceAction('manage_gateway', 'Cancel', 'outline', true)],
+    });
+  }
+
+  if (isPairAction && gateway.connection_kind === 'url') {
+    return buildPanel({
+      gateway,
+      kind: 'access_only_pair',
+      execution_mode: 'guide',
+      tone: 'primary',
+      eyebrow: 'Access-only Gateway',
+      title: gateway.trust_state === 'revoked' ? 'Review Gateway identity' : 'Pair access-only Gateway',
+      detail: 'Desktop can pair with this Gateway and refresh its catalog, but runtime management stays on the Gateway host.',
+      aria_label: 'Pair access-only Gateway',
+      continuation_action: continuationActionFor(gateway, action),
+      primary_action: gatewaySourceAction('pair_gateway', 'Pair Gateway', 'default', action.enabled),
+      secondary_actions: [gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true)],
+    });
+  }
+
+  if ((isPairAction || isCatalogRefresh) && manageable && status === 'not_started') {
+    const continueLabel = isCatalogRefresh ? 'Start Gateway & Refresh' : 'Start Gateway & Pair';
+    return buildPanel({
+      gateway,
+      kind: isCatalogRefresh ? 'start_and_refresh_catalog' : 'start_and_pair',
+      execution_mode: 'guide',
+      tone: 'warning',
+      eyebrow: 'Managed Gateway',
+      title: isCatalogRefresh ? 'Start before refreshing' : 'Start and pair Gateway',
+      detail: isCatalogRefresh
+        ? 'Desktop can start this Gateway runtime, then refresh the environment catalog automatically.'
+        : 'Desktop can start this Gateway runtime, then continue pairing automatically.',
+      aria_label: isCatalogRefresh ? 'Start Gateway before refreshing catalog' : 'Start Gateway before pairing',
+      continuation_action: continuationActionFor(gateway, action, 'start_if_needed'),
+      primary_action: gatewaySourceAction('start_gateway_runtime', 'Start Gateway', 'default', gateway.runtime_state?.can_start !== false),
+      secondary_actions: [gatewayRuntimeAction(action.intent as GatewayManagedActionKind, continueLabel, 'outline', action.enabled)],
+    });
+  }
+
+  if (isPairAction && manageable && status === 'runtime_needs_update') {
+    return buildPanel({
+      gateway,
+      kind: 'update_then_pair',
+      execution_mode: 'guide',
+      tone: 'warning',
+      eyebrow: 'Managed Gateway',
+      title: 'Update Gateway before pairing',
+      detail: 'Desktop needs to update this Gateway runtime before it can safely pair and trust the catalog.',
+      aria_label: 'Update Gateway before pairing',
+      continuation_action: continuationActionFor(gateway, action, 'start_if_needed'),
+      primary_action: gatewaySourceAction('update_gateway_runtime', 'Update Gateway', 'default', gateway.runtime_state?.can_update !== false),
+      secondary_actions: [gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true)],
+    });
+  }
+
+  if (isPairAction && manageable && (status === 'ssh_unreachable' || status === 'container_unavailable' || status === 'bridge_unavailable' || status === 'error')) {
+    return buildPanel({
+      gateway,
+      kind: 'resolve_before_pair',
+      execution_mode: 'guide',
+      tone: 'warning',
+      eyebrow: 'Managed Gateway',
+      title: 'Resolve Gateway before pairing',
+      detail: gateway.runtime_state?.message || 'Desktop needs a reachable Gateway runtime before it can pair.',
+      aria_label: 'Resolve Gateway before pairing',
+      resolve_focus: resolveFocusForGateway(gateway),
+      primary_action: gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default', true),
+      secondary_actions: [gatewayRuntimeAction('refresh_gateway_status', 'Refresh status', 'outline', true)],
+    });
+  }
+
+  if (isPairAction && pairingNeeded) {
+    return buildPanel({
+      gateway,
+      kind: 'pair_ready',
+      execution_mode: 'guide',
+      tone: gateway.trust_state === 'revoked' || gateway.trust_state === 'trust_changed' ? 'warning' : 'primary',
+      eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
+      title: gateway.trust_state === 'revoked' || gateway.trust_state === 'trust_changed' ? 'Review Gateway identity' : 'Pair this Gateway',
+      detail: 'Desktop will verify this Gateway identity, ask you to confirm the fingerprint, then trust the environment catalog it manages.',
+      aria_label: 'Pair this Gateway',
+      continuation_action: continuationActionFor(gateway, action),
+      primary_action: gatewaySourceAction('pair_gateway', 'Pair Gateway', 'default', action.enabled),
+      secondary_actions: [gatewayRuntimeAction('refresh_gateway_status', 'Refresh status', 'outline', true)],
+    });
+  }
+
+  if (isCatalogRefresh && manageable && status !== 'ready') {
+    return buildPanel({
+      gateway,
+      kind: 'resolve_before_pair',
+      execution_mode: 'guide',
+      tone: 'warning',
+      eyebrow: 'Managed Gateway',
+      title: 'Gateway needs attention',
+      detail: gateway.runtime_state?.message || 'Desktop needs this Gateway runtime ready before refreshing the catalog.',
+      aria_label: 'Resolve Gateway before refreshing catalog',
+      resolve_focus: resolveFocusForGateway(gateway),
+      primary_action: gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default', true),
+      secondary_actions: [gatewayRuntimeAction('refresh_gateway_status', 'Refresh status', 'outline', true)],
+    });
+  }
+
+  return buildPanel({
+    gateway,
+    kind: 'none',
+    execution_mode: 'direct',
+    tone: 'neutral',
+    eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
+    title: actionLabel(action.intent),
+    detail: `Desktop will run ${actionLabel(action.intent).toLowerCase()} for ${gateway.display_name}.`,
+    aria_label: actionLabel(action.intent),
+    continuation_action: continuationActionFor(gateway, action),
+    primary_action: action as GatewaySourceActionModel,
+  });
+}

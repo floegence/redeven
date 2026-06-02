@@ -20,6 +20,8 @@ type CreateLauncherOperationInput = Readonly<{
   subject_id: string;
   environment_id?: string;
   environment_label?: string;
+  gateway_id?: string;
+  gateway_environment_id?: string;
   provider_origin?: string;
   provider_id?: string;
   status?: DesktopLauncherOperationStatus;
@@ -30,6 +32,7 @@ type CreateLauncherOperationInput = Readonly<{
   detail_key?: DesktopTranslationKey;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
+  step_progress?: DesktopLauncherOperationSnapshot['step_progress'];
   cancelable?: boolean;
   interrupt_label?: string;
   interrupt_label_key?: DesktopTranslationKey;
@@ -73,6 +76,8 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     subject_id: snapshot.subject_id,
     environment_id: snapshot.environment_id,
     environment_label: snapshot.environment_label,
+    gateway_id: snapshot.gateway_id,
+    gateway_environment_id: snapshot.gateway_environment_id,
     started_at_unix_ms: snapshot.started_at_unix_ms,
     updated_at_unix_ms: snapshot.updated_at_unix_ms,
     status: snapshot.status,
@@ -83,6 +88,7 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     detail_key: snapshot.detail_key,
     ...(snapshot.lifecycle_progress ? { lifecycle_progress: snapshot.lifecycle_progress } : {}),
     ...(snapshot.open_progress ? { open_progress: snapshot.open_progress } : {}),
+    ...(snapshot.step_progress ? { step_progress: snapshot.step_progress } : {}),
     cancelable: snapshot.cancelable,
     interrupt_label: snapshot.interrupt_label,
     interrupt_label_key: snapshot.interrupt_label_key,
@@ -284,6 +290,8 @@ export class LauncherOperationRegistry {
       subject_generation: this.currentSubjectGeneration(input.subject_kind, subjectID),
       environment_id: compact(input.environment_id) || undefined,
       environment_label: compact(input.environment_label) || undefined,
+      gateway_id: compact(input.gateway_id) || undefined,
+      gateway_environment_id: compact(input.gateway_environment_id) || undefined,
       provider_origin: compact(input.provider_origin) || undefined,
       provider_id: compact(input.provider_id) || undefined,
       started_at_unix_ms: startedAtUnixMs,
@@ -296,6 +304,7 @@ export class LauncherOperationRegistry {
       detail_key: input.detail_key ?? openProgressDetailKey(input.open_progress),
       ...(input.lifecycle_progress ? { lifecycle_progress: input.lifecycle_progress } : {}),
       ...(input.open_progress ? { open_progress: input.open_progress } : {}),
+      ...(input.step_progress ? { step_progress: input.step_progress } : {}),
       cancelable: input.cancelable === true,
       interrupt_label: compact(input.interrupt_label) || undefined,
       interrupt_label_key: input.interrupt_label_key,

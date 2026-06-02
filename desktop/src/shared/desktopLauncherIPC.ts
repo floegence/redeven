@@ -82,6 +82,20 @@ export type DesktopLauncherOperationStatus =
   | 'cleanup_failed'
   | 'failed'
   | 'succeeded';
+export type DesktopStepProgressStepStatus = 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled';
+export type DesktopStepProgressStep = Readonly<{
+  id: string;
+  backend_event?: string;
+  label: string;
+  label_key?: DesktopTranslationKey;
+  status: DesktopStepProgressStepStatus;
+  detail?: string;
+  detail_key?: DesktopTranslationKey;
+}>;
+export type DesktopStepProgress = Readonly<{
+  active_step_id: string;
+  steps: readonly DesktopStepProgressStep[];
+}>;
 export type DesktopLauncherOperationSubjectKind =
   | 'local_environment'
   | 'provider_environment'
@@ -118,12 +132,13 @@ export type DesktopLauncherActionOutcome =
   | 'restarted_gateway_runtime'
   | 'updated_gateway_runtime'
   | 'refreshed_gateway_catalog'
+  | 'refreshed_gateway_status'
   | 'deleted_gateway'
   | 'saved_environment'
   | 'deleted_environment'
   | 'closed_launcher'
   | 'quit_app';
-export type DesktopLauncherActionFailureScope = 'environment' | 'control_plane' | 'dialog' | 'global';
+export type DesktopLauncherActionFailureScope = 'environment' | 'control_plane' | 'gateway' | 'dialog' | 'global';
 export type DesktopLauncherActionFailureCode =
   | 'session_stale'
   | 'environment_opening'
@@ -193,6 +208,7 @@ export type DesktopLauncherActionKind =
   | 'restart_gateway_runtime'
   | 'update_gateway_runtime'
   | 'refresh_gateway_catalog'
+  | 'refresh_gateway_status'
   | 'delete_gateway'
   | 'save_local_environment_settings'
   | 'upsert_saved_environment'
@@ -268,6 +284,12 @@ export type DesktopGatewayStartRequiredRetryAction = Readonly<
       start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
     }
 >;
+export type DesktopGatewayResolveFocus =
+  | 'url_endpoint'
+  | 'ssh_host'
+  | 'ssh_auth'
+  | 'container'
+  | 'identity_trust';
 
 export type DesktopGatewayStartRequiredPayload = Readonly<{
   gateway_id: string;
@@ -441,6 +463,8 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   subject_generation: number;
   environment_id?: string;
   environment_label?: string;
+  gateway_id?: string;
+  gateway_environment_id?: string;
   provider_origin?: string;
   provider_id?: string;
   started_at_unix_ms: number;
@@ -453,6 +477,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   detail_key?: DesktopTranslationKey;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
+  step_progress?: DesktopStepProgress;
   cancelable: boolean;
   interrupt_label?: string;
   interrupt_label_key?: DesktopTranslationKey;
@@ -470,10 +495,24 @@ export type DesktopLauncherOperationNextAction = Readonly<
       operation_key: string;
       label: string;
       label_key?: DesktopTranslationKey;
+      retry_action?: DesktopLauncherActionRequest;
     }
   | {
       kind: 'refresh_status';
       environment_id?: string;
+      label: string;
+      label_key?: DesktopTranslationKey;
+    }
+  | {
+      kind: 'refresh_gateway_status';
+      gateway_id: string;
+      label: string;
+      label_key?: DesktopTranslationKey;
+    }
+  | {
+      kind: 'refresh_gateway_catalog';
+      gateway_id: string;
+      start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
       label: string;
       label_key?: DesktopTranslationKey;
     }
@@ -493,6 +532,28 @@ export type DesktopLauncherOperationNextAction = Readonly<
       kind: 'update_runtime';
       environment_id: string;
       label: string;
+      label_key?: DesktopTranslationKey;
+    }
+  | {
+      kind: 'update_gateway_runtime';
+      gateway_id: string;
+      label: string;
+      label_key?: DesktopTranslationKey;
+    }
+  | {
+      kind: 'resolve_gateway';
+      gateway_id: string;
+      resolve_focus?: DesktopGatewayResolveFocus;
+      label: string;
+      label_key?: DesktopTranslationKey;
+    }
+  | {
+      kind: 'open_gateway_environment';
+      gateway_id: string;
+      environment_id: string;
+      gateway_env_id: string;
+      label: string;
+      start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
       label_key?: DesktopTranslationKey;
     }
   | {
@@ -680,13 +741,20 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'stop_gateway_runtime';
       gateway_id: string;
+      impact_acknowledged?: boolean;
     }
   | {
       kind: 'restart_gateway_runtime';
       gateway_id: string;
+      impact_acknowledged?: boolean;
     }
   | {
       kind: 'update_gateway_runtime';
+      gateway_id: string;
+      impact_acknowledged?: boolean;
+    }
+  | {
+      kind: 'refresh_gateway_status';
       gateway_id: string;
     }
   | {
@@ -765,11 +833,18 @@ export type DesktopLauncherActionFailure = Readonly<{
   scope: DesktopLauncherActionFailureScope;
   message: string;
   environment_id?: string;
+  gateway_id?: string;
+  gateway_label?: string;
+  gateway_environment_id?: string;
+  operation_key?: string;
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
   should_refresh_snapshot?: boolean;
   failure?: DesktopOperationFailurePresentation;
+  retry_action?: DesktopLauncherActionRequest;
+  continuation_action?: DesktopLauncherActionRequest;
+  resolve_focus?: DesktopGatewayResolveFocus;
   gateway_start_required_payload?: DesktopGatewayStartRequiredPayload;
 }>;
 
@@ -779,6 +854,8 @@ export type DesktopLauncherActionProgress = Readonly<{
   action: DesktopLauncherActionKind;
   environment_id?: string;
   environment_label?: string;
+  gateway_id?: string;
+  gateway_environment_id?: string;
   operation_key?: string;
   subject_kind?: DesktopLauncherOperationSubjectKind;
   subject_id?: string;
@@ -792,6 +869,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   detail_key?: DesktopTranslationKey;
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
+  step_progress?: DesktopStepProgress;
   cancelable?: boolean;
   interrupt_label?: string;
   interrupt_label_key?: DesktopTranslationKey;
@@ -831,6 +909,7 @@ function normalizeGatewayStartPolicy(
   const policy = compact(value) as DesktopGatewayStartPolicy;
   return allowed.includes(policy) ? policy : undefined;
 }
+
 
 function normalizeDesktopLauncherRuntimeTarget(
   candidate: Record<string, unknown>,
@@ -1289,6 +1368,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
     case 'stop_gateway_runtime':
     case 'restart_gateway_runtime':
     case 'update_gateway_runtime':
+    case 'refresh_gateway_status':
     case 'refresh_gateway_catalog':
     case 'delete_gateway': {
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
@@ -1312,6 +1392,21 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           kind,
           gateway_id: gatewayID,
           ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
+        };
+      }
+      if (kind === 'stop_gateway_runtime' || kind === 'restart_gateway_runtime' || kind === 'update_gateway_runtime') {
+        return {
+          kind,
+          gateway_id: gatewayID,
+          ...(((candidate as { impact_acknowledged?: unknown }).impact_acknowledged === true)
+            ? { impact_acknowledged: true }
+            : {}),
+        } as DesktopLauncherActionRequest;
+      }
+      if (kind === 'refresh_gateway_status') {
+        return {
+          kind,
+          gateway_id: gatewayID,
         };
       }
       return {

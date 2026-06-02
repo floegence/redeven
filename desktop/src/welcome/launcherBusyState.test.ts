@@ -29,6 +29,7 @@ import {
   IDLE_LAUNCHER_BUSY_STATE,
   launcherProgressBlocksPrimaryAction,
   reconcileBusyStateWithActionProgressSnapshot,
+  selectedSnapshotGatewayProgress,
   selectedSnapshotOpenConnectionProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForGateway,
@@ -139,6 +140,7 @@ function gatewayRuntimeLifecycleActionProgress(input: Readonly<{
   operationKey?: string;
   startedAt?: number;
   updatedAt?: number;
+  stepProgress?: DesktopLauncherActionProgress['step_progress'];
 }> = {}): DesktopLauncherActionProgress {
   const gatewayID = input.gatewayID ?? 'gw-demo';
   return {
@@ -152,6 +154,7 @@ function gatewayRuntimeLifecycleActionProgress(input: Readonly<{
     phase: 'starting_runtime_process',
     title: 'Starting Gateway',
     detail: 'Desktop is starting the Gateway runtime.',
+    ...(input.stepProgress ? { step_progress: input.stepProgress } : {}),
     lifecycle_progress: runtimeLifecycleProgress({
       location: 'ssh_host',
       operation: 'start',
@@ -1111,6 +1114,38 @@ describe('launcherBusyState', () => {
       kind: 'attention_trigger',
       label: 'Pair failed',
     });
+  });
+
+  it('selects Gateway card progress from step progress when a Gateway workflow is running', () => {
+    const runningGatewayProgress = gatewayRuntimeLifecycleActionProgress({
+      gatewayID: 'gw-demo',
+      action: 'pair_gateway',
+      operationKey: 'gw-demo:pair',
+      stepProgress: {
+        active_step_id: 'fetching_pairing_challenge',
+        steps: [
+          { id: 'checking_gateway_runtime', label: 'Checking Gateway runtime', status: 'succeeded' },
+          { id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge', status: 'running' },
+        ],
+      },
+    });
+    const retainedFailure = {
+      ...gatewayRuntimeLifecycleActionProgress({
+        gatewayID: 'gw-demo',
+        action: 'pair_gateway',
+        status: 'failed',
+        operationKey: 'gw-demo:pair:failed',
+      }),
+      step_progress: {
+        active_step_id: 'fetching_pairing_challenge',
+        steps: [
+          { id: 'checking_gateway_runtime', label: 'Checking Gateway runtime', status: 'succeeded' },
+          { id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge', status: 'failed' },
+        ],
+      },
+    } satisfies DesktopLauncherActionProgress;
+
+    expect(selectedSnapshotGatewayProgress('gw-demo', [retainedFailure, runningGatewayProgress])).toBe(runningGatewayProgress);
   });
 
   it('does not treat Gateway Environment open progress as Gateway source runtime lifecycle progress', () => {

@@ -387,6 +387,8 @@ import {
   type DesktopLauncherActionProgress,
   type DesktopLauncherOperationSnapshot,
   type DesktopLauncherOperationStatus,
+  type DesktopStepProgress,
+  type DesktopStepProgressStepStatus,
   normalizeDesktopLauncherActionRequest,
   type DesktopLauncherActionFailure,
   type DesktopLauncherActionFailureCode,
@@ -2090,11 +2092,18 @@ function launcherActionFailure(
   message: string,
   options: Readonly<{
     environmentID?: string;
+    gatewayID?: string;
+    gatewayLabel?: string;
+    gatewayEnvironmentID?: string;
+    operationKey?: string;
     providerOrigin?: string;
     providerID?: string;
     envPublicID?: string;
     shouldRefreshSnapshot?: boolean;
     failure?: DesktopOperationFailurePresentation;
+    retryAction?: DesktopLauncherActionRequest;
+    continuationAction?: DesktopLauncherActionRequest;
+    resolveFocus?: DesktopLauncherActionFailure['resolve_focus'];
     gatewayStartRequiredPayload?: DesktopLauncherActionFailure['gateway_start_required_payload'];
   }> = {},
 ): DesktopLauncherActionFailure {
@@ -2105,11 +2114,18 @@ function launcherActionFailure(
     scope,
     message: compact(failure?.summary) || compact(message),
     environment_id: compact(options.environmentID) || undefined,
+    gateway_id: compact(options.gatewayID) || undefined,
+    gateway_label: compact(options.gatewayLabel) || undefined,
+    gateway_environment_id: compact(options.gatewayEnvironmentID) || undefined,
+    operation_key: compact(options.operationKey) || undefined,
     provider_origin: compact(options.providerOrigin) || undefined,
     provider_id: compact(options.providerID) || undefined,
     env_public_id: compact(options.envPublicID) || undefined,
     should_refresh_snapshot: options.shouldRefreshSnapshot === true || undefined,
     ...(failure ? { failure } : {}),
+    ...(options.retryAction ? { retry_action: options.retryAction } : {}),
+    ...(options.continuationAction ? { continuation_action: options.continuationAction } : {}),
+    ...(options.resolveFocus ? { resolve_focus: options.resolveFocus } : {}),
     ...(options.gatewayStartRequiredPayload ? { gateway_start_required_payload: options.gatewayStartRequiredPayload } : {}),
   };
 }
@@ -3563,6 +3579,7 @@ function launcherActionRefreshScope(
     case 'restart_gateway_runtime':
     case 'update_gateway_runtime':
     case 'refresh_gateway_catalog':
+    case 'refresh_gateway_status':
     case 'delete_gateway':
       return { force: true, mode: 'auto', targetEnvironmentIDs: targetScope };
     default:
@@ -3815,10 +3832,14 @@ function gatewayStartRequiredFailure(
 ): DesktopLauncherActionFailure {
   return launcherActionFailure(
     'gateway_start_required',
-    'dialog',
+    'gateway',
     message,
     {
       shouldRefreshSnapshot: true,
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      retryAction,
+      resolveFocus: gatewayResolveFocusForRuntimeState(runtimeState),
       gatewayStartRequiredPayload: {
         gateway_id: record.gateway_id,
         gateway_label: record.display_name,
@@ -3842,17 +3863,58 @@ function gatewayLauncherFailureFromError(
   if (error instanceof GatewayNotManageableError) {
     return launcherActionFailure(
       'gateway_not_manageable',
-      'dialog',
+      'gateway',
       error.message,
-      { shouldRefreshSnapshot: true },
+      {
+        shouldRefreshSnapshot: true,
+        gatewayID: record.gateway_id,
+        gatewayLabel: record.display_name,
+        retryAction: options.retryAction,
+      },
     );
   }
   return launcherActionFailure(
     gatewayRuntimeFailureCode(error),
-    'dialog',
+    'gateway',
     error instanceof Error ? error.message : String(error),
-    { shouldRefreshSnapshot: true },
+    {
+      shouldRefreshSnapshot: true,
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      retryAction: options.retryAction,
+      resolveFocus: gatewayResolveFocusForRuntimeFailure(error),
+    },
   );
+}
+
+function gatewayResolveFocusForRuntimeState(
+  runtimeState: DesktopGatewayStartRequiredPayload['runtime_state'] | undefined,
+): DesktopLauncherActionFailure['resolve_focus'] | undefined {
+  switch (runtimeState?.status) {
+    case 'ssh_unreachable':
+      return 'ssh_host';
+    case 'container_unavailable':
+      return 'container';
+    case 'bridge_unavailable':
+    case 'runtime_needs_update':
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
+function gatewayResolveFocusForRuntimeFailure(error: unknown): DesktopLauncherActionFailure['resolve_focus'] | undefined {
+  if (error instanceof GatewayRuntimeUnavailableError) {
+    switch (error.code) {
+      case 'gateway_container_unavailable':
+        return 'container';
+      case 'gateway_runtime_unreachable':
+        return 'ssh_host';
+      case 'gateway_bridge_unavailable':
+        return undefined;
+    }
+  }
+  return undefined;
 }
 
 function gatewayRuntimeFailureCode(error: unknown): DesktopLauncherActionFailureCode {
@@ -3860,6 +3922,149 @@ function gatewayRuntimeFailureCode(error: unknown): DesktopLauncherActionFailure
     return error.code;
   }
   return 'gateway_runtime_unreachable';
+}
+
+function gatewayLauncherActionFailureCode(error: unknown): DesktopLauncherActionFailureCode {
+  if (error instanceof GatewayRuntimeStartRequiredError) {
+    return 'gateway_start_required';
+  }
+  if (error instanceof GatewayNotManageableError) {
+    return 'gateway_not_manageable';
+  }
+  if (error instanceof GatewayClientError) {
+    return 'gateway_catalog_failed';
+  }
+  return gatewayRuntimeFailureCode(error);
+}
+
+type GatewayWorkflowStepID =
+  | 'checking_gateway_runtime'
+  | 'fetching_pairing_challenge'
+  | 'waiting_for_identity_confirmation'
+  | 'saving_trust_profile'
+  | 'refreshing_gateway_catalog'
+  | 'gateway_paired'
+  | 'refreshing_gateway_status'
+  | 'gateway_status_refreshed';
+
+type GatewayWorkflowStepDefinition = Readonly<{
+  id: GatewayWorkflowStepID;
+  label: string;
+  backendEvent: string;
+}>;
+
+const GATEWAY_PAIR_WORKFLOW_STEPS: readonly GatewayWorkflowStepDefinition[] = [
+  { id: 'checking_gateway_runtime', label: 'Checking Gateway runtime', backendEvent: 'gateway.runtime.check' },
+  { id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge', backendEvent: 'gateway.pair.challenge' },
+  { id: 'waiting_for_identity_confirmation', label: 'Waiting for identity confirmation', backendEvent: 'gateway.pair.confirm' },
+  { id: 'saving_trust_profile', label: 'Saving trust profile', backendEvent: 'gateway.pair.trust' },
+  { id: 'refreshing_gateway_catalog', label: 'Refreshing Gateway catalog', backendEvent: 'gateway.catalog.refresh' },
+  { id: 'gateway_paired', label: 'Gateway paired', backendEvent: 'gateway.pair.done' },
+];
+
+const GATEWAY_STATUS_WORKFLOW_STEPS: readonly GatewayWorkflowStepDefinition[] = [
+  { id: 'refreshing_gateway_status', label: 'Refreshing Gateway status', backendEvent: 'gateway.status.refresh' },
+  { id: 'gateway_status_refreshed', label: 'Gateway status refreshed', backendEvent: 'gateway.status.done' },
+];
+
+function gatewayStepProgress(
+  steps: readonly GatewayWorkflowStepDefinition[],
+  activeStepID: GatewayWorkflowStepID,
+  status: DesktopStepProgressStepStatus = 'running',
+): DesktopStepProgress {
+  const activeIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepID));
+  return {
+    active_step_id: activeStepID,
+    steps: steps.map((step, index) => ({
+      id: step.id,
+      backend_event: step.backendEvent,
+      label: step.label,
+      status: index < activeIndex
+        ? 'succeeded'
+        : index === activeIndex
+          ? status
+          : 'pending',
+    })),
+  };
+}
+
+function completeGatewayStepProgress(
+  steps: readonly GatewayWorkflowStepDefinition[],
+  activeStepID: GatewayWorkflowStepID,
+): DesktopStepProgress {
+  const activeIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepID));
+  return {
+    active_step_id: activeStepID,
+    steps: steps.map((step, index) => ({
+      id: step.id,
+      backend_event: step.backendEvent,
+      label: step.label,
+      status: index <= activeIndex ? 'succeeded' : 'pending',
+    })),
+  };
+}
+
+function failGatewayStepProgress(
+  steps: readonly GatewayWorkflowStepDefinition[],
+  activeStepID: GatewayWorkflowStepID,
+  detail: string,
+): DesktopStepProgress {
+  const activeIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepID));
+  return {
+    active_step_id: activeStepID,
+    steps: steps.map((step, index) => ({
+      id: step.id,
+      backend_event: step.backendEvent,
+      label: step.label,
+      status: index < activeIndex ? 'succeeded' : index === activeIndex ? 'failed' : 'pending',
+      ...(index === activeIndex ? { detail } : {}),
+    })),
+  };
+}
+
+function gatewayOperationFailureNextActions(
+  operationKey: string,
+  input: Readonly<{
+    retryAction?: DesktopLauncherActionRequest;
+    gatewayID: string;
+    resolveFocus?: DesktopLauncherActionFailure['resolve_focus'];
+    includeUpdate?: boolean;
+  }>,
+): readonly DesktopLauncherOperationNextAction[] {
+  return [
+    ...(input.retryAction ? [{
+      kind: 'retry' as const,
+      operation_key: operationKey,
+      retry_action: input.retryAction,
+      label: 'Retry',
+    }] : []),
+    {
+      kind: 'refresh_gateway_status' as const,
+      gateway_id: input.gatewayID,
+      label: 'Refresh status',
+    },
+    ...(input.includeUpdate ? [{
+      kind: 'update_gateway_runtime' as const,
+      gateway_id: input.gatewayID,
+      label: 'Update Gateway',
+    }] : []),
+    {
+      kind: 'resolve_gateway' as const,
+      gateway_id: input.gatewayID,
+      ...(input.resolveFocus ? { resolve_focus: input.resolveFocus } : {}),
+      label: 'Resolve Gateway',
+    },
+    {
+      kind: 'copy_diagnostics' as const,
+      operation_key: operationKey,
+      label: 'Copy log',
+    },
+    {
+      kind: 'dismiss' as const,
+      operation_key: operationKey,
+      label: 'Dismiss',
+    },
+  ];
 }
 
 type GatewayLifecycleOperationContext = Readonly<{
@@ -4016,104 +4221,182 @@ async function pairGatewayFromLauncher(
       { shouldRefreshSnapshot: true },
     );
   }
+  const operationKey = `${record.gateway_id}:pair`;
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'pair_gateway',
+    subject_kind: 'gateway',
+    subject_id: record.gateway_id,
+    gateway_id: record.gateway_id,
+    phase: 'checking_gateway_runtime',
+    title: 'Pair Gateway',
+    detail: `Desktop is checking ${record.display_name} before pairing.`,
+    step_progress: gatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, 'checking_gateway_runtime'),
+    cancelable: true,
+    interrupt_label: 'Cancel',
+    interrupt_detail: 'Desktop is canceling this Gateway pairing request.',
+    interrupt_kind: 'generic',
+  });
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  const retryAction: Extract<DesktopLauncherActionRequest, { kind: 'pair_gateway' }> = {
+    kind: 'pair_gateway',
+    gateway_id: record.gateway_id,
+    start_policy: request.start_policy ?? (record.connection.kind === 'url' ? undefined : 'start_if_needed'),
+  };
+  const finishPairFailure = (
+    error: unknown,
+    activeStepID: GatewayWorkflowStepID,
+    summary: string,
+    code: DesktopLauncherActionFailureCode = gatewayRuntimeFailureCode(error),
+  ): DesktopLauncherActionFailure => {
+    const failure = desktopFailureFromError(error, {
+      code: 'operation_failed',
+      title: 'Pair Gateway Failed',
+      summary,
+      targetLabel: record.display_name,
+    });
+    launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
+      phase: activeStepID,
+      title: signal?.aborted ? 'Pair canceled' : 'Pair failed',
+      detail: signal?.aborted ? 'Desktop canceled this Gateway pairing request.' : failure.summary,
+      step_progress: signal?.aborted
+        ? gatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, activeStepID, 'canceled')
+        : failGatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, activeStepID, failure.summary),
+      ...(signal?.aborted ? {} : {
+        failure,
+        next_actions: gatewayOperationFailureNextActions(operationKey, {
+          retryAction,
+          gatewayID: record.gateway_id,
+          resolveFocus: gatewayResolveFocusForRuntimeFailure(error),
+          includeUpdate: code === 'gateway_runtime_update_failed',
+        }),
+      }),
+    });
+    if (signal?.aborted) {
+      scheduleLauncherOperationRemoval(operationKey);
+      return launcherActionFailure('action_invalid', 'gateway', 'Gateway pairing was canceled.', {
+        gatewayID: record.gateway_id,
+        gatewayLabel: record.display_name,
+        operationKey,
+        shouldRefreshSnapshot: true,
+      });
+    }
+    return launcherActionFailure(code, 'gateway', failure.summary, {
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      operationKey,
+      failure,
+      retryAction,
+      resolveFocus: gatewayResolveFocusForRuntimeFailure(error),
+      shouldRefreshSnapshot: true,
+    });
+  };
   const secretStore = gatewaySecretStore();
   let client;
-  let lifecycleContext: GatewayLifecycleOperationContext | null = null;
   try {
     if (record.connection.kind === 'url') {
       client = new GatewayURLClient(secretStore);
     } else {
-      if (request.start_policy === 'start_if_needed') {
-        lifecycleContext = createGatewayLifecycleOperationContext(record, {
-          operationKey: `${gatewayRuntimeTargetDescriptor(record).target_id}:pair`,
-          action: 'pair_gateway',
-          title: 'Starting Gateway',
-          detail: `Desktop is starting ${record.display_name} before pairing.`,
-          interruptLabel: 'Cancel',
-          interruptDetail: 'Desktop is canceling this Gateway pairing request.',
-        });
-      }
       client = await gatewayLifecycleManager().ensureGatewayReady(record, {
         startPolicy: gatewayStartPolicyForRequest(request.start_policy),
-        signal: lifecycleContext?.signal,
-        onProgress: lifecycleContext?.onProgress,
+        signal,
+        onProgress: (progress) => {
+          launcherOperations.update(operationKey, {
+            phase: 'checking_gateway_runtime',
+            title: 'Pair Gateway',
+            detail: progress.detail,
+            step_progress: gatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, 'checking_gateway_runtime'),
+          });
+        },
       }).then((session) => session.client);
     }
   } catch (error) {
-    if (lifecycleContext) {
-      const failure = desktopFailureFromError(error, {
-        code: 'operation_failed',
-        title: 'Pair Gateway Failed',
-        summary: `Desktop could not start ${record.display_name} before pairing.`,
-        targetLabel: record.display_name,
-      });
-      finishGatewayLifecycleOperationContext(lifecycleContext, {
-        status: lifecycleContext.signal?.aborted ? 'canceled' : 'failed',
-        title: lifecycleContext.signal?.aborted ? 'Pair canceled' : 'Pair failed',
-        detail: lifecycleContext.signal?.aborted ? 'Desktop canceled this Gateway pairing request.' : failure.summary,
-        failure: lifecycleContext.signal?.aborted ? undefined : failure,
-      });
-    }
-    return gatewayLauncherFailureFromError(error, record, 'pair_gateway', {
-      retryAction: {
-        kind: 'pair_gateway',
-        gateway_id: record.gateway_id,
-        start_policy: 'start_if_needed',
-      },
-    });
+    return finishPairFailure(error, 'checking_gateway_runtime', `Desktop could not prepare ${record.display_name} for pairing.`);
   }
   const material = createGatewayPairingMaterial(record);
-  const challenge = await client.pairingChallenge(record, pairingChallengeRequest(material));
-  const fingerprint = assertGatewayPairingChallenge({
-    record,
-    material,
-    challenge,
-  });
-  const confirmed = await confirmDesktopImpact({
-    title: 'Pair Gateway',
-    message: `Confirm the identity for ${record.display_name}`,
-    detail: [
-      `Gateway: ${record.display_name}`,
-      `Endpoint: ${gatewayBindingAudience(record.connection)}`,
-      `Fingerprint: ${fingerprint}`,
-      challenge.pairing_code ? `Pairing code: ${challenge.pairing_code}` : '',
-    ].filter(Boolean).join('\n'),
-    confirm_label: 'Pair Gateway',
-    cancel_label: 'Cancel',
-    confirm_tone: 'warning',
-  }, currentParentWindow());
-  if (!confirmed) {
-    if (lifecycleContext) {
-      finishGatewayLifecycleOperationContext(lifecycleContext, {
-        status: 'canceled',
+  let challenge;
+  try {
+    launcherOperations.update(operationKey, {
+      phase: 'fetching_pairing_challenge',
+      title: 'Pair Gateway',
+      detail: `Desktop is fetching the identity challenge from ${record.display_name}.`,
+      step_progress: gatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, 'fetching_pairing_challenge'),
+    });
+    challenge = await client.pairingChallenge(record, pairingChallengeRequest(material));
+    const fingerprint = assertGatewayPairingChallenge({
+      record,
+      material,
+      challenge,
+    });
+    launcherOperations.update(operationKey, {
+      phase: 'waiting_for_identity_confirmation',
+      title: 'Pair Gateway',
+      detail: 'Desktop is waiting for you to confirm the Gateway identity.',
+      step_progress: gatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, 'waiting_for_identity_confirmation'),
+    });
+    const confirmed = await confirmDesktopImpact({
+      title: 'Pair Gateway',
+      message: `Confirm the identity for ${record.display_name}`,
+      detail: [
+        `Gateway: ${record.display_name}`,
+        `Endpoint: ${gatewayBindingAudience(record.connection)}`,
+        `Fingerprint: ${fingerprint}`,
+        challenge.pairing_code ? `Pairing code: ${challenge.pairing_code}` : '',
+      ].filter(Boolean).join('\n'),
+      confirm_label: 'Pair Gateway',
+      cancel_label: 'Cancel',
+      confirm_tone: 'warning',
+    }, currentParentWindow());
+    if (!confirmed) {
+      launcherOperations.finish(operationKey, 'canceled', {
+        phase: 'waiting_for_identity_confirmation',
         title: 'Pair canceled',
         detail: 'Gateway pairing was canceled.',
+        step_progress: gatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, 'waiting_for_identity_confirmation', 'canceled'),
       });
+      scheduleLauncherOperationRemoval(operationKey);
+      return launcherActionSuccess('canceled_launcher_operation');
     }
-    return launcherActionFailure(
-      'action_invalid',
-      'dialog',
-      'Gateway pairing was canceled.',
-      { shouldRefreshSnapshot: true },
-    );
-  }
-  const completion = await client.completePairing(record, buildPairingCompleteRequest(material, challenge));
-  assertGatewayPairingCompleteResponse(material, challenge, completion);
-  const trustProfile = await completeGatewayPairing({
-    record,
-    material,
-    challenge,
-    user_confirmed: true,
-    secret_store: secretStore,
-  });
-  await gatewayStore().updateTrustProfile(record.gateway_id, trustProfile);
-  if (lifecycleContext) {
-    finishGatewayLifecycleOperationContext(lifecycleContext, {
-      status: 'succeeded',
-      title: 'Gateway paired',
-      detail: `Desktop paired ${record.display_name}.`,
+    launcherOperations.update(operationKey, {
+      phase: 'saving_trust_profile',
+      title: 'Pair Gateway',
+      detail: 'Desktop is saving the trusted Gateway identity.',
+      step_progress: gatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, 'saving_trust_profile'),
     });
+    const completion = await client.completePairing(record, buildPairingCompleteRequest(material, challenge));
+    assertGatewayPairingCompleteResponse(material, challenge, completion);
+    const trustProfile = await completeGatewayPairing({
+      record,
+      material,
+      challenge,
+      user_confirmed: true,
+      secret_store: secretStore,
+    });
+    await gatewayStore().updateTrustProfile(record.gateway_id, trustProfile);
+    launcherOperations.update(operationKey, {
+      phase: 'refreshing_gateway_catalog',
+      title: 'Pair Gateway',
+      detail: 'Desktop is refreshing the Gateway catalog after pairing.',
+      step_progress: gatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, 'refreshing_gateway_catalog'),
+    });
+    await gatewayLifecycleManager().refreshCatalog(record, {
+      timeoutMs: 10_000,
+      startPolicy: record.connection.kind === 'url' ? undefined : 'require_ready',
+      signal,
+    });
+  } catch (error) {
+    const current = launcherOperations.get(operationKey);
+    const stepID = (current?.phase as GatewayWorkflowStepID | undefined) ?? 'fetching_pairing_challenge';
+    return finishPairFailure(error, stepID, `Desktop could not pair ${record.display_name}.`);
   }
+  launcherOperations.finish(operationKey, 'succeeded', {
+    phase: 'gateway_paired',
+    title: 'Gateway paired',
+    detail: `Desktop paired ${record.display_name}.`,
+    step_progress: completeGatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, 'gateway_paired'),
+  });
+  scheduleLauncherOperationRemoval(operationKey);
+  broadcastDesktopWelcomeSnapshots();
   return launcherActionSuccess('paired_gateway');
 }
 
@@ -4125,26 +4408,6 @@ function gatewayOpenSessionSummaries(gatewayID: string): readonly DesktopSession
   ));
 }
 
-async function confirmGatewayRuntimeSessionImpact(
-  record: GatewayRecord,
-  actionLabel: string,
-): Promise<boolean> {
-  const sessions = gatewayOpenSessionSummaries(record.gateway_id);
-  if (sessions.length <= 0) {
-    return true;
-  }
-  return confirmDesktopImpact({
-    title: `${actionLabel} Gateway`,
-    message: `${actionLabel} ${record.display_name}?`,
-    detail: [
-      `${sessions.length} environment session${sessions.length === 1 ? '' : 's'} opened through this Gateway will be disconnected.`,
-      ...sessions.slice(0, 5).map((session) => `- ${session.target.label}`),
-    ].join('\n'),
-    confirm_label: actionLabel,
-    cancel_label: 'Cancel',
-    confirm_tone: 'warning',
-  }, currentParentWindow());
-}
 
 async function refreshGatewayCatalogFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'refresh_gateway_catalog' }>,
@@ -4209,6 +4472,89 @@ async function refreshGatewayCatalogFromLauncher(
   }
 }
 
+async function refreshGatewayStatusFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, { kind: 'refresh_gateway_status' }>,
+): Promise<DesktopLauncherActionResult> {
+  const record = await gatewayStore().get(request.gateway_id);
+  if (!record) {
+    return launcherActionFailure('environment_missing', 'dialog', 'Gateway was not found.', {
+      shouldRefreshSnapshot: true,
+    });
+  }
+  const operationKey = `${record.gateway_id}:refresh_status`;
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'refresh_gateway_status',
+    subject_kind: 'gateway',
+    subject_id: record.gateway_id,
+    gateway_id: record.gateway_id,
+    phase: 'refreshing_gateway_status',
+    title: 'Refresh Gateway status',
+    detail: `Desktop is checking ${record.display_name}.`,
+    step_progress: gatewayStepProgress(GATEWAY_STATUS_WORKFLOW_STEPS, 'refreshing_gateway_status'),
+    cancelable: true,
+    interrupt_label: 'Cancel',
+    interrupt_detail: 'Desktop is canceling this Gateway status refresh.',
+    interrupt_kind: 'generic',
+  });
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  try {
+    await gatewayLifecycleManager().inspectRuntime(record, signal);
+    launcherOperations.finish(operationKey, 'succeeded', {
+      phase: 'gateway_status_refreshed',
+      title: 'Gateway status refreshed',
+      detail: `Desktop refreshed ${record.display_name} status.`,
+      step_progress: completeGatewayStepProgress(GATEWAY_STATUS_WORKFLOW_STEPS, 'gateway_status_refreshed'),
+    });
+    scheduleLauncherOperationRemoval(operationKey);
+    broadcastDesktopWelcomeSnapshots();
+    return launcherActionSuccess('refreshed_gateway_status');
+  } catch (error) {
+    const failure = desktopFailureFromError(error, {
+      code: 'operation_failed',
+      title: 'Refresh Gateway Status Failed',
+      summary: `Desktop could not refresh ${record.display_name} status.`,
+      targetLabel: record.display_name,
+    });
+    launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
+      phase: 'refreshing_gateway_status',
+      title: signal?.aborted ? 'Refresh status canceled' : 'Refresh status failed',
+      detail: signal?.aborted ? 'Desktop canceled this Gateway status refresh.' : failure.summary,
+      step_progress: signal?.aborted
+        ? gatewayStepProgress(GATEWAY_STATUS_WORKFLOW_STEPS, 'refreshing_gateway_status', 'canceled')
+        : failGatewayStepProgress(GATEWAY_STATUS_WORKFLOW_STEPS, 'refreshing_gateway_status', failure.summary),
+      ...(signal?.aborted ? {} : {
+        failure,
+        next_actions: gatewayOperationFailureNextActions(operationKey, {
+          retryAction: {
+            kind: 'refresh_gateway_status',
+            gateway_id: record.gateway_id,
+          },
+          gatewayID: record.gateway_id,
+          resolveFocus: gatewayResolveFocusForRuntimeFailure(error),
+        }),
+      }),
+    });
+    if (signal?.aborted) {
+      scheduleLauncherOperationRemoval(operationKey);
+      return launcherActionSuccess('canceled_launcher_operation');
+    }
+    broadcastDesktopWelcomeSnapshots();
+    return launcherActionFailure(gatewayLauncherActionFailureCode(error), 'gateway', failure.summary, {
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      operationKey,
+      failure,
+      retryAction: {
+        kind: 'refresh_gateway_status',
+        gateway_id: record.gateway_id,
+      },
+      resolveFocus: gatewayResolveFocusForRuntimeFailure(error),
+      shouldRefreshSnapshot: true,
+    });
+  }
+}
+
 async function runGatewayRuntimeActionFromLauncher(
   request: Extract<DesktopLauncherActionRequest, {
     kind: 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime';
@@ -4230,8 +4576,16 @@ async function runGatewayRuntimeActionFromLauncher(
   }
   const actionLabel = gatewayRuntimeActionLabel(request.kind);
   if ((request.kind === 'stop_gateway_runtime' || request.kind === 'restart_gateway_runtime' || request.kind === 'update_gateway_runtime')
-    && !(await confirmGatewayRuntimeSessionImpact(record, actionLabel))) {
-    return launcherActionFailure('confirmation_required', 'dialog', `${actionLabel} Gateway was canceled.`, {
+    && gatewayOpenSessionSummaries(record.gateway_id).length > 0
+    && request.impact_acknowledged !== true) {
+    return launcherActionFailure('confirmation_required', 'gateway', `${actionLabel} Gateway requires confirmation because active Gateway sessions will be disconnected.`, {
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      retryAction: {
+        kind: request.kind,
+        gateway_id: record.gateway_id,
+        impact_acknowledged: true,
+      } as DesktopLauncherActionRequest,
       shouldRefreshSnapshot: true,
     });
   }
@@ -4291,15 +4645,15 @@ async function runGatewayRuntimeActionFromLauncher(
   try {
     if (request.kind === 'start_gateway_runtime') {
       await gatewayLifecycleManager().startGateway(record, { signal, onProgress });
-      await gatewayLifecycleManager().refreshCatalog(record, { signal, startPolicy: 'require_ready' }).catch(() => undefined);
+      await gatewayLifecycleManager().refreshCatalog(record, { signal, startPolicy: 'require_ready' });
     } else if (request.kind === 'stop_gateway_runtime') {
       await gatewayLifecycleManager().stopGateway(record, { signal, onProgress });
     } else if (request.kind === 'restart_gateway_runtime') {
       await gatewayLifecycleManager().restartGateway(record, { signal, onProgress });
-      await gatewayLifecycleManager().refreshCatalog(record, { signal, startPolicy: 'require_ready' }).catch(() => undefined);
+      await gatewayLifecycleManager().refreshCatalog(record, { signal, startPolicy: 'require_ready' });
     } else {
       await gatewayLifecycleManager().updateGateway(record, { signal, onProgress });
-      await gatewayLifecycleManager().refreshCatalog(record, { signal, startPolicy: 'require_ready' }).catch(() => undefined);
+      await gatewayLifecycleManager().refreshCatalog(record, { signal, startPolicy: 'require_ready' });
     }
     const terminalPhase: DesktopRuntimeLifecyclePhase = request.kind === 'stop_gateway_runtime'
       ? 'runtime_stopped'
@@ -4368,8 +4722,19 @@ async function runGatewayRuntimeActionFromLauncher(
     if (signal?.aborted) {
       return launcherActionSuccess('canceled_launcher_operation');
     }
-    return launcherActionFailure(code, 'dialog', failure.summary, {
+    return launcherActionFailure(code, 'gateway', failure.summary, {
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      operationKey,
       failure,
+      retryAction: {
+        kind: request.kind,
+        gateway_id: record.gateway_id,
+        ...((request.kind === 'stop_gateway_runtime' || request.kind === 'restart_gateway_runtime' || request.kind === 'update_gateway_runtime')
+          ? { impact_acknowledged: true }
+          : {}),
+      } as DesktopLauncherActionRequest,
+      resolveFocus: gatewayResolveFocusForRuntimeFailure(error),
       shouldRefreshSnapshot: true,
     });
   }
@@ -5888,11 +6253,15 @@ function updateRuntimeLifecycleOperation(
     });
     const currentStep = workflow.progress().active_step_id;
     const currentStatus = workflow.stepStates().find((step) => step.id === input.phase)?.status;
+    const currentStepIndex = workflow.currentStepIDs().indexOf(currentStep);
+    const nextStepIndex = workflow.currentStepIDs().indexOf(input.phase);
     let update: ReturnType<RuntimeLifecycleWorkflow['observeStep']> | ReturnType<RuntimeLifecycleWorkflow['beginStep']>;
     if (currentStep === input.phase && currentStatus === 'running') {
       update = workflow.observeStep(input.phase, input.detail);
     } else if (currentStatus === 'succeeded' || currentStatus === 'failed') {
       update = null;
+    } else if (currentStepIndex >= 0 && nextStepIndex > currentStepIndex) {
+      update = workflow.advanceToStep(input.phase, input.detail);
     } else {
       update = workflow.beginStep(input.phase, input.detail);
     }
@@ -6623,7 +6992,7 @@ async function startSSHEnvironmentRuntimeRecord(
             targetLabel: label,
             decision: lifecycleOperation === 'update' ? 'runtime_already_current' : 'existing_runtime_openable',
           });
-          readyWorkflow.beginStep('checking_runtime_service', 'Desktop is verifying the existing SSH runtime service.');
+          readyWorkflow.advanceToStep('checking_runtime_service', 'Desktop is verifying the existing SSH runtime service.');
           readyWorkflow.completeStep('checking_runtime_service');
           const attachedHandle: DesktopSessionRuntimeHandle = {
             runtime_kind: 'ssh',
@@ -8380,7 +8749,41 @@ async function openGatewayEnvironmentFromLauncher(
     });
   } catch (error) {
     if (error instanceof GatewayRuntimeStartRequiredError || error instanceof GatewayNotManageableError) {
-      launcherOperations.remove(operationKey);
+      const failure = desktopFailureFromError(error, {
+        code: 'operation_failed',
+        title: 'Open Gateway Environment Failed',
+        summary: error instanceof Error ? error.message : String(error),
+        targetLabel: record.display_name,
+      });
+      launcherOperations.finish(operationKey, 'failed', {
+        phase: 'checking_runtime_record',
+        title: 'Open failed',
+        detail: failure.summary,
+        open_progress: buildOpenConnectionProgress({
+          hostAccess: { kind: 'local_host' },
+          placement: { kind: 'host_process', runtime_root: '' },
+          phase: 'failed',
+          environmentID: request.environment_id,
+          environmentLabel: request.label,
+          targetID: target.session_key,
+          targetLabel: request.label,
+          targetDetail: record.display_name,
+          location: 'runtime_gateway',
+        }),
+        failure,
+        next_actions: gatewayOperationFailureNextActions(operationKey, {
+          retryAction: {
+            kind: 'open_gateway_environment',
+            environment_id: request.environment_id,
+            gateway_id: request.gateway_id,
+            gateway_env_id: request.gateway_env_id,
+            label: request.label,
+            start_policy: 'start_if_needed',
+          },
+          gatewayID: record.gateway_id,
+          resolveFocus: gatewayResolveFocusForRuntimeFailure(error),
+        }),
+      });
       return gatewayLauncherFailureFromError(error, record, 'open_gateway_environment', {
         retryAction: {
           kind: 'open_gateway_environment',
@@ -8407,9 +8810,13 @@ async function openGatewayEnvironmentFromLauncher(
       });
       return launcherActionFailure(
         gatewayRuntimeFailureCode(error),
-        'environment',
+        'gateway',
         gatewayFailure.summary,
         {
+          gatewayID: record.gateway_id,
+          gatewayLabel: record.display_name,
+          gatewayEnvironmentID: request.gateway_env_id,
+          operationKey,
           environmentID: request.environment_id,
           shouldRefreshSnapshot: true,
           failure: gatewayFailure,
@@ -8443,14 +8850,34 @@ async function openGatewayEnvironmentFromLauncher(
         targetDetail: record.display_name,
         location: 'runtime_gateway',
       }),
-      ...(signal?.aborted ? {} : { failure }),
+      ...(signal?.aborted ? {} : {
+        failure,
+        next_actions: gatewayOperationFailureNextActions(operationKey, {
+          retryAction: {
+            kind: 'open_gateway_environment',
+            environment_id: request.environment_id,
+            gateway_id: request.gateway_id,
+            gateway_env_id: request.gateway_env_id,
+            label: request.label,
+            start_policy: record.connection.kind === 'url' ? undefined : 'start_if_needed',
+          },
+          gatewayID: record.gateway_id,
+          resolveFocus: gatewayResolveFocusForRuntimeFailure(error),
+        }),
+      }),
     });
-    scheduleLauncherOperationRemoval(operationKey);
+    if (signal?.aborted) {
+      scheduleLauncherOperationRemoval(operationKey);
+    }
     return launcherActionFailure(
       'action_invalid',
-      'environment',
+      'gateway',
       failure.summary,
       {
+        gatewayID: record.gateway_id,
+        gatewayLabel: record.display_name,
+        gatewayEnvironmentID: request.gateway_env_id,
+        operationKey,
         environmentID: request.environment_id,
         shouldRefreshSnapshot: true,
         failure,
@@ -12912,6 +13339,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
       return runGatewayRuntimeActionFromLauncher(request);
     case 'refresh_gateway_catalog':
       return refreshGatewayCatalogFromLauncher(request);
+    case 'refresh_gateway_status':
+      return refreshGatewayStatusFromLauncher(request);
     case 'delete_gateway':
       await deleteGatewayFromLauncher(request.gateway_id);
       return launcherActionSuccess('deleted_gateway');
