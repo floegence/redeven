@@ -427,6 +427,57 @@ describe('GatewayURLClient', () => {
     });
   });
 
+  it('preserves Gateway public key wire text in pairing challenges', async () => {
+    const base: GatewayRecord = {
+      schema_version: 1,
+      gateway_id: 'gw_demo',
+      display_name: 'Demo Gateway',
+      connection: {
+        kind: 'url',
+        base_url: '',
+        allow_loopback_http: true,
+      },
+      created_at_ms: 1,
+      updated_at_ms: 1,
+    };
+    let material!: ReturnType<typeof createGatewayPairingMaterial>;
+    let gatewayPublicKeyWire = '';
+    const gatewayMaterial = createGatewayPairingMaterial(base);
+    const server = await startServer((_request, _body, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        ok: true,
+        data: bridgePairingChallengeResponse({
+          material,
+          gatewayID: base.gateway_id,
+          gatewayPrivateKey: gatewayMaterial.client_private_key,
+          gatewayPublicKey: gatewayPublicKeyWire,
+          gatewayNonce: 'gateway-nonce',
+        }),
+      }));
+    });
+    cleanupServers.add(server);
+    const record: GatewayRecord = {
+      ...base,
+      connection: {
+        kind: 'url',
+        base_url: server.baseURL,
+        allow_loopback_http: true,
+      },
+    };
+    material = createGatewayPairingMaterial(record);
+    gatewayPublicKeyWire = `${gatewayMaterial.client_public_key.trim()}\n`;
+
+    const challenge = await new GatewayURLClient(memorySecretStore()).pairingChallenge(record, {
+      protocol_version: 'redeven-runtime-gateway-v1',
+      client_nonce: material.client_nonce,
+      client_public_key: material.client_public_key,
+      binding_audience: material.binding_audience,
+    });
+
+    expect(challenge.gateway_public_key).toBe(gatewayPublicKeyWire);
+  });
+
   it('does not reflect Gateway error bodies or messages into thrown errors', async () => {
     for (const payload of [
       'plain proof-secret signature-secret private_key-secret',

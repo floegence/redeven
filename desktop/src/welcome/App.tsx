@@ -9815,8 +9815,8 @@ function GatewaySourceCard(props: Readonly<{
           </div>
         </Show>
       </CardContent>
-      <CardFooter class="mt-auto flex flex-col gap-2 border-t border-border/60 px-4 pb-3 pt-3">
-        <div class="flex w-full items-center gap-2">
+      <CardFooter class="redeven-gateway-card__footer mt-auto flex flex-col gap-2 border-t border-border/60 px-4 pb-3 pt-3">
+        <div class="redeven-gateway-card__footer-row">
           <DesktopActionPopover
             open={actionPopoverOpen()}
             onOpenChange={(open) => {
@@ -9924,7 +9924,7 @@ function GatewaySourceCard(props: Readonly<{
                 )}
               </Show>
             )}
-            anchorClass="flex min-w-0 flex-1"
+            anchorClass="redeven-gateway-card__primary-anchor"
             popoverAriaLabel={
               progressPanelVisible()
                 ? (visibleGatewayProgress() ? localizedProgressTitle(props.i18n, visibleGatewayProgress()!) : 'Gateway progress')
@@ -9937,7 +9937,7 @@ function GatewaySourceCard(props: Readonly<{
                 <Button
                   size="sm"
                   variant="default"
-                  class="min-w-0 flex-1 justify-center"
+                  class="redeven-gateway-card__primary-button min-w-0 justify-center"
                   loading={primaryBusy()}
                   disabled={!row().primary_action.enabled}
                   aria-haspopup={buildGatewayActionPresentation({
@@ -9959,7 +9959,7 @@ function GatewaySourceCard(props: Readonly<{
                   size="sm"
                   variant="default"
                   class={cn(
-                    'min-w-0 flex-1 justify-center',
+                    'redeven-gateway-card__primary-button min-w-0 justify-center',
                     progressTriggerClassName(presentation()),
                   )}
                   aria-haspopup="dialog"
@@ -9975,19 +9975,19 @@ function GatewaySourceCard(props: Readonly<{
               )}
             </Show>
           </DesktopActionPopover>
-          <DesktopTooltip content={props.i18n.t('common.settings')} placement="top">
-            <span>
-              <ConsoleActionIconButton
-                title={props.i18n.t('common.settings')}
-                aria-label={`Manage ${row().label}`}
-                onClick={() => props.openCreateGatewaySetup(props.gateway)}
-              >
-                <Settings class="h-3.5 w-3.5" />
-                </ConsoleActionIconButton>
-              </span>
-          </DesktopTooltip>
-          <Show when={secondaryActions().length > 0}>
-            <div class="flex items-center gap-1">
+          <div class="redeven-gateway-card__footer-actions">
+            <DesktopTooltip content={props.i18n.t('common.settings')} placement="top">
+              <span>
+                <ConsoleActionIconButton
+                  title={props.i18n.t('common.settings')}
+                  aria-label={`Manage ${row().label}`}
+                  onClick={() => props.openCreateGatewaySetup(props.gateway)}
+                >
+                  <Settings class="h-3.5 w-3.5" />
+                  </ConsoleActionIconButton>
+                </span>
+            </DesktopTooltip>
+            <Show when={secondaryActions().length > 0}>
               <Show when={quickSecondaryActions().length > 0}>
                 <For each={quickSecondaryActions()}>
                   {(action) => (
@@ -10067,8 +10067,8 @@ function GatewaySourceCard(props: Readonly<{
                   </Show>
                 </span>
               </Show>
-            </div>
-          </Show>
+            </Show>
+          </div>
         </div>
       </CardFooter>
     </Card>
