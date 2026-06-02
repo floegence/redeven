@@ -80,6 +80,35 @@ function signedChallenge(
   };
 }
 
+function signedRuntimeStyleChallenge(
+  material: ReturnType<typeof createGatewayPairingMaterial>,
+  gatewayMaterial: ReturnType<typeof createGatewayPairingMaterial>,
+) {
+  const gatewayPublicKey = gatewayMaterial.client_public_key.trim();
+  const gatewayPublicKeyWire = `${gatewayPublicKey}\n`;
+  const challenge = {
+    protocol_version: 'redeven-runtime-gateway-v1',
+    gateway_id: 'gw_demo',
+    gateway_public_key: gatewayPublicKeyWire,
+    gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(gatewayPublicKey),
+    gateway_nonce: 'gateway-nonce',
+    expires_at_unix_ms: 2_000,
+  };
+  return {
+    ...challenge,
+    signature: signGatewayPayload(gatewayMaterial.client_private_key, pairingChallengePayload({
+      protocol_version: challenge.protocol_version,
+      client_nonce: material.client_nonce,
+      gateway_nonce: challenge.gateway_nonce,
+      gateway_id: challenge.gateway_id,
+      binding_audience: material.binding_audience,
+      client_public_key: material.client_public_key.trim(),
+      gateway_public_key: gatewayPublicKeyWire,
+      expires_at_unix_ms: challenge.expires_at_unix_ms,
+    })),
+  };
+}
+
 describe('gatewayTrust', () => {
   it('requires explicit user confirmation before saving pairing material', async () => {
     const store = memorySecretStore();
@@ -192,6 +221,23 @@ describe('gatewayTrust', () => {
       challenge: { ...challenge, signature: 'invalid' },
       now_unix_ms: 1_000,
     })).toThrow('Gateway pairing challenge signature is invalid');
+  });
+
+  it('accepts runtime pairing challenges signed over trimmed PEM keys', () => {
+    const record = gatewayRecord();
+    const material = createGatewayPairingMaterial(record);
+    const gatewayMaterial = createGatewayPairingMaterial(record);
+    const challenge = signedRuntimeStyleChallenge(material, gatewayMaterial);
+
+    expect(assertGatewayPairingChallenge({
+      record,
+      material: {
+        ...material,
+        client_public_key: `${material.client_public_key.trim()}\n`,
+      },
+      challenge,
+      now_unix_ms: 1_000,
+    })).toBe(challenge.gateway_public_key_fingerprint);
   });
 
   it('verifies pairing completion responses before the private key is persisted', () => {

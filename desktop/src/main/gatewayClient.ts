@@ -616,10 +616,11 @@ function normalizePairingChallengeResponse(value: unknown): GatewayPairingChalle
     throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway pairing challenge response is invalid.');
   }
   const candidate = value as Record<string, unknown>;
+  const gatewayPublicKey = typeof candidate.gateway_public_key === 'string' ? candidate.gateway_public_key : '';
   const response = {
     protocol_version: typeof candidate.protocol_version === 'string' ? candidate.protocol_version : '',
     gateway_id: compact(candidate.gateway_id),
-    gateway_public_key: compact(candidate.gateway_public_key),
+    gateway_public_key: gatewayPublicKey,
     gateway_public_key_fingerprint: compact(candidate.gateway_public_key_fingerprint) || undefined,
     gateway_nonce: compact(candidate.gateway_nonce),
     pairing_code: compact(candidate.pairing_code) || undefined,
@@ -629,7 +630,7 @@ function normalizePairingChallengeResponse(value: unknown): GatewayPairingChalle
   if (
     response.protocol_version !== GATEWAY_PROTOCOL_VERSION
     || !response.gateway_id
-    || !response.gateway_public_key
+    || !compact(response.gateway_public_key)
     || !response.gateway_nonce
     || !Number.isFinite(response.expires_at_unix_ms)
     || !response.signature

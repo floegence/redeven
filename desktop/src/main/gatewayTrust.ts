@@ -124,7 +124,7 @@ export function gatewayPublicKeyFingerprint(publicKey: string): string {
 }
 
 export function gatewayClientKeyID(publicKey: string): string {
-  return `gck_${sha256Base64URL(publicKey).slice(0, 24)}`;
+  return `gck_${sha256Base64URL(compact(publicKey)).slice(0, 24)}`;
 }
 
 export function createGatewayPairingMaterial(record: GatewayRecord): GatewayPairingMaterial {
@@ -132,11 +132,13 @@ export function createGatewayPairingMaterial(record: GatewayRecord): GatewayPair
     publicKeyEncoding: { type: 'spki', format: 'pem' },
     privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   });
-  const clientKeyID = gatewayClientKeyID(pair.publicKey);
+  const clientPublicKey = compact(pair.publicKey);
+  const clientPrivateKey = compact(pair.privateKey);
+  const clientKeyID = gatewayClientKeyID(clientPublicKey);
   return {
     client_nonce: randomBase64URL(24),
-    client_public_key: pair.publicKey,
-    client_private_key: pair.privateKey,
+    client_public_key: clientPublicKey,
+    client_private_key: clientPrivateKey,
     client_key_id: clientKeyID,
     private_key_ref: `gateway-client-key:${record.gateway_id}:${clientKeyID}`,
     binding_audience: gatewayBindingAudience(record.connection),
@@ -152,7 +154,7 @@ export function pairingChallengeRequest(material: GatewayPairingMaterial): Reado
   return {
     protocol_version: 'redeven-runtime-gateway-v1',
     client_nonce: material.client_nonce,
-    client_public_key: material.client_public_key,
+    client_public_key: compact(material.client_public_key),
     binding_audience: material.binding_audience,
   };
 }
@@ -278,7 +280,7 @@ export function assertGatewayPairingChallengeSignature(
     gateway_nonce: challenge.gateway_nonce,
     gateway_id: challenge.gateway_id,
     binding_audience: material.binding_audience,
-    client_public_key: material.client_public_key,
+    client_public_key: compact(material.client_public_key),
     gateway_public_key: challenge.gateway_public_key,
     expires_at_unix_ms: challenge.expires_at_unix_ms,
   });
@@ -402,7 +404,7 @@ export async function completeGatewayPairing(input: Readonly<{
     paired_client_key_id: input.material.client_key_id,
     paired_client_private_key_ref: input.material.private_key_ref,
     gateway_id: input.record.gateway_id,
-    gateway_public_key: input.challenge.gateway_public_key,
+    gateway_public_key: compact(input.challenge.gateway_public_key),
     gateway_public_key_fingerprint: expectedFingerprint,
     binding_audience: input.material.binding_audience,
     created_at_unix_ms: now,
