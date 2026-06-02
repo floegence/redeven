@@ -412,6 +412,7 @@ export const deDE = {
     source: "Quelle: {source}",
     runtimeRoot: "Runtime-Root",
     runtimeRootHelp: "Leer lassen, um den .redeven-Root des Remote-Benutzers zu verwenden: {root}.",
+    gatewayRuntimeRootHelp: "Leer lassen, um Gateway-Daten unter {root} mit einem isolierten Gateway-Profil zu halten.",
     releaseBaseUrl: "Release-Basis-URL",
     releaseBaseUrlHelp: "Leer lassen, um {url} zu verwenden. Lege einen internen Release-Mirror fest, wenn dieser Desktop GitHub nicht direkt nutzen kann.",
     connectTimeout: "Verbindungs-Timeout (Sekunden)",

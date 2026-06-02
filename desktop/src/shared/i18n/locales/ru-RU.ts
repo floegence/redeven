@@ -412,6 +412,7 @@ export const ruRU = {
     source: "Источник: {source}",
     runtimeRoot: "Корень Runtime",
     runtimeRootHelp: "Оставьте пустым, чтобы использовать .redeven root удаленного пользователя: {root}.",
+    gatewayRuntimeRootHelp: "Оставьте пустым, чтобы хранить данные Gateway в {root} с изолированным профилем Gateway.",
     releaseBaseUrl: "Базовый URL release",
     releaseBaseUrlHelp: "Оставьте пустым, чтобы использовать {url}. Укажите внутренний release mirror, если этот Desktop не может напрямую использовать GitHub.",
     connectTimeout: "Тайм-аут подключения (секунды)",

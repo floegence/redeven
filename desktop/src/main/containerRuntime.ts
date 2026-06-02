@@ -48,6 +48,15 @@ export function containerRuntimeRootShellPrelude(variableName = 'runtime_root'):
     '  fi',
     `  ${variableName}="\${HOME%/}/.redeven"`,
     'fi',
+    `case "$${variableName}" in`,
+    `  ${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/*)`,
+    '    if [ -z "${HOME:-}" ]; then',
+    '      echo "container HOME is unavailable; set Runtime Root to an absolute .redeven path" >&2',
+    '      exit 1',
+    '    fi',
+    `    ${variableName}="\${HOME%/}/.redeven/\${${variableName}#${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/}"`,
+    '    ;;',
+    'esac',
   ].join('\n');
 }
 
@@ -537,14 +546,15 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
   container_id: string;
   runtime_binary_path: string;
   runtime_root: string;
+  runtime_state_root?: string;
   desktop_owner_id: string;
 }>): readonly string[] {
   const startDriver = [
     'set -eu',
-    'runtime_root="$1"',
-    containerRuntimeRootShellPrelude(),
+    'state_root="$1"',
+    containerRuntimeRootShellPrelude('state_root'),
     'runtime_binary_path="$2"',
-    'exec "$runtime_binary_path" run --mode desktop --desktop-managed --presentation machine --state-root "$runtime_root" --local-ui-bind 127.0.0.1:0',
+    'exec "$runtime_binary_path" run --mode desktop --desktop-managed --presentation machine --state-root "$state_root" --local-ui-bind 127.0.0.1:0',
   ].join('\n');
   return containerRuntimeExecCommandWithMode({
     engine: input.engine,
@@ -557,7 +567,7 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
       '-c',
       startDriver,
       'redeven-container-runtime-start',
-      input.runtime_root,
+      input.runtime_state_root ?? input.runtime_root,
       input.runtime_binary_path,
     ],
   }, { detached: true, interactive: false });
@@ -568,13 +578,14 @@ export function containerRuntimeDaemonStatusCommand(input: Readonly<{
   container_id: string;
   runtime_binary_path: string;
   runtime_root: string;
+  runtime_state_root?: string;
 }>): readonly string[] {
   const statusDriver = [
     'set -eu',
-    'runtime_root="$1"',
-    containerRuntimeRootShellPrelude(),
+    'state_root="$1"',
+    containerRuntimeRootShellPrelude('state_root'),
     'runtime_binary_path="$2"',
-    'exec "$runtime_binary_path" desktop-runtime-status --state-root "$runtime_root"',
+    'exec "$runtime_binary_path" desktop-runtime-status --state-root "$state_root"',
   ].join('\n');
   return containerRuntimeExecCommand({
     engine: input.engine,
@@ -584,7 +595,7 @@ export function containerRuntimeDaemonStatusCommand(input: Readonly<{
       '-c',
       statusDriver,
       'redeven-container-runtime-status',
-      input.runtime_root,
+      input.runtime_state_root ?? input.runtime_root,
       input.runtime_binary_path,
     ],
   });
@@ -595,13 +606,14 @@ export function containerRuntimeDaemonStopCommand(input: Readonly<{
   container_id: string;
   runtime_binary_path: string;
   runtime_root: string;
+  runtime_state_root?: string;
 }>): readonly string[] {
   const stopDriver = [
     'set -eu',
-    'runtime_root="$1"',
-    containerRuntimeRootShellPrelude(),
+    'state_root="$1"',
+    containerRuntimeRootShellPrelude('state_root'),
     'runtime_binary_path="$2"',
-    'exec "$runtime_binary_path" desktop-runtime-stop --state-root "$runtime_root"',
+    'exec "$runtime_binary_path" desktop-runtime-stop --state-root "$state_root"',
   ].join('\n');
   return containerRuntimeExecCommand({
     engine: input.engine,
@@ -611,7 +623,7 @@ export function containerRuntimeDaemonStopCommand(input: Readonly<{
       '-c',
       stopDriver,
       'redeven-container-runtime-stop',
-      input.runtime_root,
+      input.runtime_state_root ?? input.runtime_root,
       input.runtime_binary_path,
     ],
   });

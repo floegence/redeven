@@ -11195,7 +11195,7 @@ function GatewaySetupDialog(props: Readonly<{
                             spellcheck={false}
                           />
                           <div class="text-[11px] text-muted-foreground">
-                            {props.i18n.t('connectionDialog.runtimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}
+                            {props.i18n.t('connectionDialog.gatewayRuntimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}
                           </div>
                           <Show when={props.fieldErrors.runtime_root}>
                             <div class="text-[11px] text-destructive">{props.fieldErrors.runtime_root}</div>

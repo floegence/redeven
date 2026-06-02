@@ -23,6 +23,7 @@ export type DesktopRuntimePlacement =
   | Readonly<{
       kind: 'host_process';
       runtime_root: string;
+      runtime_state_root?: string;
       bootstrap_strategy?: DesktopSSHBootstrapStrategy;
       release_base_url?: string;
     }>
@@ -33,6 +34,7 @@ export type DesktopRuntimePlacement =
       container_ref: string;
       container_label: string;
       runtime_root: string;
+      runtime_state_root?: string;
       bridge_strategy: 'exec_stream';
     }>;
 
@@ -62,6 +64,11 @@ function normalizeOptionalRuntimeRoot(value: unknown): string {
     throw new Error('Runtime root must be a single line.');
   }
   return text;
+}
+
+function normalizeOptionalRuntimeStateRoot(value: unknown): string | undefined {
+  const text = normalizeOptionalRuntimeRoot(value);
+  return text === '' ? undefined : text;
 }
 
 function normalizeRuntimeRoot(value: unknown, label: string): string {
@@ -106,9 +113,11 @@ export function normalizeDesktopRuntimePlacement(value: unknown): DesktopRuntime
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const kind = compact(record.kind);
   if (kind === 'host_process' || kind === '') {
+    const runtimeStateRoot = normalizeOptionalRuntimeStateRoot(record.runtime_state_root);
     return {
       kind: 'host_process',
       runtime_root: normalizeOptionalRuntimeRoot(record.runtime_root),
+      ...(runtimeStateRoot ? { runtime_state_root: runtimeStateRoot } : {}),
       bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy(record.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY),
       release_base_url: normalizeDesktopSSHReleaseBaseURL(record.release_base_url),
     };
@@ -117,6 +126,7 @@ export function normalizeDesktopRuntimePlacement(value: unknown): DesktopRuntime
     const containerID = normalizeTokenComponent(record.container_id, 'Container ID');
     const containerLabel = compact(record.container_label) || containerID;
     const containerRef = compact(record.container_ref) || containerLabel || containerID;
+    const runtimeStateRoot = normalizeOptionalRuntimeStateRoot(record.runtime_state_root);
     return {
       kind: 'container_process',
       container_engine: normalizeDesktopContainerEngine(record.container_engine),
@@ -124,10 +134,15 @@ export function normalizeDesktopRuntimePlacement(value: unknown): DesktopRuntime
       container_ref: normalizeTokenComponent(containerRef, 'Container reference'),
       container_label: containerLabel,
       runtime_root: normalizeRuntimeRoot(record.runtime_root, 'Container runtime root'),
+      ...(runtimeStateRoot ? { runtime_state_root: runtimeStateRoot } : {}),
       bridge_strategy: 'exec_stream',
     };
   }
   throw new Error('Runtime placement must be host_process or container_process.');
+}
+
+export function desktopRuntimePlacementStateRoot(placement: DesktopRuntimePlacement): string {
+  return compact(placement.runtime_state_root) || placement.runtime_root;
 }
 
 function hashRuntimeRoot(runtimeRoot: string): string {
@@ -163,15 +178,15 @@ export function desktopRuntimeTargetID(
 ): DesktopRuntimeTargetID {
   if (hostAccess.kind === 'local_host') {
     if (placement.kind === 'container_process') {
-      return `local:container:${encoded(placement.container_engine)}:${encoded(desktopRuntimeContainerReference(placement))}:${hashRuntimeRoot(placement.runtime_root)}`;
+      return `local:container:${encoded(placement.container_engine)}:${encoded(desktopRuntimeContainerReference(placement))}:${hashRuntimeRoot(desktopRuntimePlacementStateRoot(placement))}`;
     }
     return `local:host:${encoded(compact(fallbackLocalID) || 'local')}`;
   }
   const sshAuthority = normalizedSSHAuthority(hostAccess.ssh);
   if (placement.kind === 'container_process') {
-    return `ssh:container:${encoded(sshAuthority)}:${encoded(placement.container_engine)}:${encoded(desktopRuntimeContainerReference(placement))}:${hashRuntimeRoot(placement.runtime_root)}`;
+    return `ssh:container:${encoded(sshAuthority)}:${encoded(placement.container_engine)}:${encoded(desktopRuntimeContainerReference(placement))}:${hashRuntimeRoot(desktopRuntimePlacementStateRoot(placement))}`;
   }
-  return `ssh:host:${encoded(sshAuthority)}:${hashRuntimeRoot(placement.runtime_root)}`;
+  return `ssh:host:${encoded(sshAuthority)}:${hashRuntimeRoot(desktopRuntimePlacementStateRoot(placement))}`;
 }
 
 export function desktopRuntimeTargetAutoStatusDetectionConfigurable(

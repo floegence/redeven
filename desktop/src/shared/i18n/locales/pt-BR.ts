@@ -412,6 +412,7 @@ export const ptBR = {
     source: "Origem: {source}",
     runtimeRoot: "Raiz Runtime",
     runtimeRootHelp: "Deixe em branco para usar a raiz .redeven do usuário remoto: {root}.",
+    gatewayRuntimeRootHelp: "Deixe em branco para manter os dados do Gateway em {root} com um perfil de Gateway isolado.",
     releaseBaseUrl: "URL base de releases",
     releaseBaseUrlHelp: "Deixe em branco para usar {url}. Configure um mirror interno de releases quando este Desktop não puder usar o GitHub diretamente.",
     connectTimeout: "Tempo limite de conexão (segundos)",

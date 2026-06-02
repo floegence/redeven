@@ -1,5 +1,6 @@
 export const DEFAULT_DESKTOP_SSH_RUNTIME_ROOT = 'remote_default';
 export const DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL = '~/.redeven';
+export const DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR = 'gateways';
 export const DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY = 'auto';
 export const DEFAULT_DESKTOP_SSH_AUTH_MODE = 'key_agent';
 export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL = '';
@@ -26,6 +27,14 @@ export type DesktopSSHEnvironmentDetails = DesktopSSHHostAccessDetails & Desktop
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function runtimeRootPathSegment(value: unknown): string {
+  const text = compact(value);
+  if (text === '' || text === '.' || text === '..' || /[\r\n]/u.test(text)) {
+    throw new Error('Runtime root path segment must be a non-empty safe token.');
+  }
+  return encodeURIComponent(text);
 }
 
 export function normalizeDesktopSSHDestination(value: unknown): string {
@@ -74,6 +83,13 @@ export function normalizeDesktopSSHRuntimeRoot(value: unknown): string {
     throw new Error('Runtime root must be an absolute path or use the default remote .redeven.');
   }
   return text;
+}
+
+export function desktopSSHRuntimeRootSubpath(runtimeRoot: unknown, ...segments: readonly string[]): string {
+  const root = normalizeDesktopSSHRuntimeRoot(runtimeRoot);
+  const suffix = segments.map(runtimeRootPathSegment).join('/');
+  const cleanRoot = root.replace(/\/+$/u, '');
+  return cleanRoot === '' ? suffix : `${cleanRoot}/${suffix}`;
 }
 
 export function normalizeDesktopSSHBootstrapStrategy(value: unknown): DesktopSSHBootstrapStrategy {

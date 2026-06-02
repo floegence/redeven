@@ -189,6 +189,8 @@ describe('DesktopWelcomeShell', () => {
     expect(gatewayAdvancedCollapseOffset).toBeGreaterThan(-1);
     expect(gatewayDialogSrc).toContain('syncSSHConnectionDialogAdvancedState');
     expect(gatewayDialogSrc).toContain('gatewayAdvancedDescription()');
+    expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayRuntimeRootHelp'");
+    expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.runtimeRootHelp'");
     expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.connectTimeoutShort')");
     expect(gatewayDialogSrc.indexOf('id="gateway-runtime-root"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
     expect(gatewayDialogSrc.indexOf('id="gateway-ssh-connect-timeout"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
