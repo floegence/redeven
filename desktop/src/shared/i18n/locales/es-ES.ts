@@ -400,6 +400,7 @@ export const esES = {
     storedSshPasswordWillBeRemoved: "La contraseña SSH guardada se eliminará al guardar.",
     advanced: "Avanzado",
     advancedDescription: "Raíz Runtime, entrega de paquetes y mirror de release para este host SSH.",
+    gatewayContainerAdvancedDescription: "Raíz Runtime y timeout SSH para este contenedor Gateway.",
     shown: "Visible",
     hidden: "Oculto",
     bootstrapDelivery: "Entrega bootstrap",

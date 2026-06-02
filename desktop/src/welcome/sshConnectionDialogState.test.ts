@@ -15,6 +15,14 @@ describe('sshConnectionDialogState', () => {
       runtime_root: '',
       release_base_url: '',
     })).toBe('create:ssh_environment:new-ssh');
+
+    expect(sshConnectionDialogStateKey({
+      mode: 'create',
+      connection_kind: 'ssh_container',
+      gateway_id: '',
+      runtime_root: '',
+      release_base_url: '',
+    })).toBe('create:ssh_container:new');
   });
 
   it('defaults the advanced section open only when existing SSH state needs to stay visible', () => {
@@ -40,6 +48,24 @@ describe('sshConnectionDialogState', () => {
       environment_id: 'mirror-ssh',
       runtime_root: '',
       release_base_url: 'https://mirror.example.invalid/releases',
+    })).toBe(true);
+
+    expect(defaultSSHConnectionDialogAdvancedOpen({
+      mode: 'create',
+      connection_kind: 'ssh_host',
+      gateway_id: 'gateway-1',
+      runtime_root: '',
+      release_base_url: '',
+      connect_timeout_seconds: '',
+    })).toBe(false);
+
+    expect(defaultSSHConnectionDialogAdvancedOpen({
+      mode: 'create',
+      connection_kind: 'ssh_container',
+      gateway_id: 'gateway-2',
+      runtime_root: '',
+      release_base_url: '',
+      connect_timeout_seconds: 45,
     })).toBe(true);
   });
 
@@ -71,6 +97,22 @@ describe('sshConnectionDialogState', () => {
       runtime_root: '',
       release_base_url: 'https://mirror.example.invalid/releases',
     })).toEqual(userOpened);
+
+    const gatewayInitialized = syncSSHConnectionDialogAdvancedState(
+      { open: false, initialized_for_state_key: 'closed' },
+      {
+        mode: 'create',
+        connection_kind: 'ssh_host',
+        gateway_id: '',
+        runtime_root: '',
+        release_base_url: '',
+      },
+    );
+
+    expect(gatewayInitialized).toEqual({
+      open: false,
+      initialized_for_state_key: 'create:ssh_host:new',
+    });
   });
 
   it('reinitializes advanced visibility only when the dialog identity changes', () => {

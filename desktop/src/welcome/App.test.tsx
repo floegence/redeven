@@ -182,6 +182,17 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('ssh_password_configured: gateway.ssh_password_configured === true');
     expect(appSrc).toContain('removeSSHPassword={removeSSHPasswordFromGatewaySetupDialog}');
     expect(appSrc).toContain('auth_mode: state.auth_mode');
+    const gatewayDialogStart = appSrc.indexOf('function GatewaySetupDialog');
+    const gatewayDialogEnd = appSrc.indexOf('function ControlPlaneDialog');
+    const gatewayDialogSrc = appSrc.slice(gatewayDialogStart, gatewayDialogEnd);
+    const gatewayAdvancedCollapseOffset = gatewayDialogSrc.indexOf("'redeven-dialog-collapse'");
+    expect(gatewayAdvancedCollapseOffset).toBeGreaterThan(-1);
+    expect(gatewayDialogSrc).toContain('syncSSHConnectionDialogAdvancedState');
+    expect(gatewayDialogSrc).toContain('gatewayAdvancedDescription()');
+    expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.connectTimeoutShort')");
+    expect(gatewayDialogSrc.indexOf('id="gateway-runtime-root"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
+    expect(gatewayDialogSrc.indexOf('id="gateway-ssh-connect-timeout"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
+    expect(gatewayDialogSrc.indexOf('id="gateway-release-base-url"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
     expect(appSrc).toContain("performLauncherAction(action, 'gateway_dialog');");
     expect(appSrc).toContain('onClick={() => props.openCreateGatewaySetup()}');
     expect(appSrc).toContain('function runGatewaySourceAction(');

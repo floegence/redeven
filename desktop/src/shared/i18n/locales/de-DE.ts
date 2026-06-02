@@ -400,6 +400,7 @@ export const deDE = {
     storedSshPasswordWillBeRemoved: "Das gespeicherte SSH-Passwort wird beim Speichern entfernt.",
     advanced: "Erweitert",
     advancedDescription: "Runtime-Root, Paketbereitstellung und Release-Mirror für diesen SSH-Host.",
+    gatewayContainerAdvancedDescription: "Runtime-Root und SSH-Timeout für diesen Gateway-Container.",
     shown: "Angezeigt",
     hidden: "Ausgeblendet",
     bootstrapDelivery: "Bootstrap-Bereitstellung",

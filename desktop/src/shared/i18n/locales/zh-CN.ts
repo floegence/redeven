@@ -400,6 +400,7 @@ export const zhCN = {
     storedSshPasswordWillBeRemoved: "保存时会移除已保存的 SSH 密码。",
     advanced: "高级",
     advancedDescription: "此 SSH主机的 Runtime root、package delivery 和 release mirror。",
+    gatewayContainerAdvancedDescription: "此 Gateway 容器的 Runtime root 和 SSH timeout。",
     shown: "已显示",
     hidden: "已隐藏",
     bootstrapDelivery: "Bootstrap Delivery",
