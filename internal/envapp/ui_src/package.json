@@ -21,7 +21,7 @@
     "@floegence/floe-webapp-core": "^0.36.65",
     "@floegence/floe-webapp-protocol": "^0.36.65",
     "@floegence/floeterm-terminal-web": "^0.5.2",
-    "@floegence/flowersec-core": "^0.19.5",
+    "@floegence/flowersec-core": "^0.19.6",
     "@fontsource/iosevka": "^5.2.5",
     "@solidjs/router": "^0.15.3",
     "diff": "^8.0.3",
@@ -41,7 +41,7 @@
     "solid-motionone": "^1.0.4"
   },
   "overrides": {
-    "@floegence/flowersec-core": "^0.19.5",
+    "@floegence/flowersec-core": "^0.19.6",
     "dompurify": "^3.4.0",
     "flatted": "^3.4.2",
     "lodash-es": "^4.18.1",
@@ -56,7 +56,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@floegence/flowersec-core": "^0.19.5",
+      "@floegence/flowersec-core": "^0.19.6",
       "dompurify": "^3.4.0",
       "flatted": "^3.4.2",
       "lodash-es": "^4.18.1",
@@ -81,7 +81,7 @@
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
-    "@vitest/browser": "^3.2.4",
+    "@vitest/browser": "^4.1.8",
     "eslint": "^9.39.4",
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.4.0",
@@ -94,6 +94,6 @@
     "vite": "^6.4.2",
     "vite-plugin-solid": "^2.11.0",
     "vite-plugin-wasm": "^3.6.0",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.8"
   }
 }

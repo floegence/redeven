@@ -714,16 +714,19 @@ describe('CodexComposerShell', () => {
       toJSON: () => ({}),
     }) as DOMRect;
 
-    textarea.value = 'Review this diff with a longer autosize payload';
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    await flushAsync();
-    await flushAsync();
+    try {
+      textarea.value = 'Review this diff with a longer autosize payload';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
 
-    expect(pretextMocks.prepare).toHaveBeenCalled();
-    expect(pretextMocks.layout).toHaveBeenCalled();
-    expect(textarea.style.height).toBe('156px');
-    requestFrameSpy.mockRestore();
-    cancelFrameSpy.mockRestore();
-    dispose();
+      await vi.waitFor(() => {
+        expect(pretextMocks.prepare).toHaveBeenCalled();
+        expect(pretextMocks.layout).toHaveBeenCalled();
+        expect(textarea.style.height).toBe('156px');
+      });
+    } finally {
+      requestFrameSpy.mockRestore();
+      cancelFrameSpy.mockRestore();
+      dispose();
+    }
   });
 });

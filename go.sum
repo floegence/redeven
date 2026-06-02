@@ -58,8 +58,8 @@ github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
 github.com/floegence/floeterm/terminal-go v0.4.15 h1:DT1NFSPh4d319g4yJthO9Zue0x8l2cpDo3gjdZLWtdY=
 github.com/floegence/floeterm/terminal-go v0.4.15/go.mod h1:FuWaEZBecnX+s8j3u+iW4ImBeNu7LvVbeSAQf9diNy0=
-github.com/floegence/flowersec/flowersec-go v0.19.5 h1:whS6icwYYeMo28Y8+lVSsNwKV/AzqsqV+w3oP1UuXkY=
-github.com/floegence/flowersec/flowersec-go v0.19.5/go.mod h1:ih2yrL0PQ2kj/YE+42IaEWO9lDDaWAFDfcH3ARIVVoM=
+github.com/floegence/flowersec/flowersec-go v0.19.6 h1:8CpLv4CcDTrncfW7J1gIxSl4nBtb6rgI85+JRgTsajA=
+github.com/floegence/flowersec/flowersec-go v0.19.6/go.mod h1:ih2yrL0PQ2kj/YE+42IaEWO9lDDaWAFDfcH3ARIVVoM=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
 github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { For, Show, createSignal } from 'solid-js';
-import { render } from 'solid-js/web';
+import { render as solidRender } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 
@@ -722,6 +722,13 @@ vi.mock('../utils/clipboard', () => ({
 const originalGetBoundingClientRect = HTMLElement.prototype.getBoundingClientRect;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+const solidRenderDisposers: Array<() => void> = [];
+
+const render: typeof solidRender = (...args) => {
+  const dispose = solidRender(...args);
+  solidRenderDisposers.push(dispose);
+  return dispose;
+};
 
 type TestTerminalHistoryPage = {
   chunks: Array<{ sequence: number; timestampMs: number; data: Uint8Array }>;
@@ -762,8 +769,35 @@ async function settleTerminalPanel() {
 
 async function settleTerminalPanelAfterPaint() {
   await settleTerminalPanel();
-  await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  if (vi.isFakeTimers()) {
+    await vi.advanceTimersByTimeAsync(1);
+  } else {
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+  }
   await settleTerminalPanel();
+}
+
+async function drainTerminalPanelAsyncWork() {
+  for (let i = 0; i < 5; i += 1) {
+    await settleTerminalPanelAfterPaint();
+  }
+}
+
+async function waitForTerminalPanelCondition(assertion: () => void, attempts = 50) {
+  let lastError: unknown;
+  for (let i = 0; i < attempts; i += 1) {
+    await settleTerminalPanelAfterPaint();
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (lastError) {
+    throw lastError;
+  }
+  throw new Error('Timed out waiting for terminal panel condition');
 }
 
 function emitTerminalData(sessionId: string, data: string, sequence?: number) {
@@ -803,6 +837,30 @@ function findPendingTerminalTabStatus(host: HTMLElement, label: string, status: 
 
 function findTerminalWorkIndicator(host: HTMLElement): HTMLElement | null {
   return host.querySelector('.redeven-terminal-work-indicator');
+}
+
+function installRequestAnimationFrameMock(mode: 'microtask' | 'timer' = 'microtask') {
+  let nextAnimationFrameId = 0;
+  const pendingAnimationFrames = new Map<number, FrameRequestCallback>();
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    const id = ++nextAnimationFrameId;
+    pendingAnimationFrames.set(id, callback);
+    const run = () => {
+      const pending = pendingAnimationFrames.get(id);
+      if (!pending) return;
+      pendingAnimationFrames.delete(id);
+      pending(0);
+    };
+    if (mode === 'timer') {
+      setTimeout(run, 0);
+    } else {
+      queueMicrotask(run);
+    }
+    return id;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => {
+    pendingAnimationFrames.delete(id);
+  });
 }
 
 describe('TerminalPanel', () => {
@@ -923,22 +981,7 @@ describe('TerminalPanel', () => {
     sessionsCoordinatorMocks.deleteSession.mockClear();
     sessionsCoordinatorMocks.updateSessionMeta.mockClear();
 
-    let nextAnimationFrameId = 0;
-    const pendingAnimationFrames = new Map<number, FrameRequestCallback>();
-    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-      const id = ++nextAnimationFrameId;
-      pendingAnimationFrames.set(id, callback);
-      queueMicrotask(() => {
-        const pending = pendingAnimationFrames.get(id);
-        if (!pending) return;
-        pendingAnimationFrames.delete(id);
-        pending(0);
-      });
-      return id;
-    });
-    vi.stubGlobal('cancelAnimationFrame', (id: number) => {
-      pendingAnimationFrames.delete(id);
-    });
+    installRequestAnimationFrameMock();
     if (typeof PointerEvent === 'undefined') {
       class TestPointerEvent extends MouseEvent {
         pointerId: number;
@@ -974,7 +1017,11 @@ describe('TerminalPanel', () => {
     });
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    for (const dispose of solidRenderDisposers.splice(0).reverse()) {
+      dispose();
+    }
+    await drainTerminalPanelAsyncWork();
     document.body.innerHTML = '';
     layoutState.mobile = false;
     terminalEnvPermissionsState.canRead = true;
@@ -2054,41 +2101,67 @@ describe('TerminalPanel', () => {
   });
 
   it('replays terminal history page-by-page and shows progress while a later page is loading', async () => {
+    vi.useFakeTimers();
+    installRequestAnimationFrameMock('timer');
+
+    const sessionId = 'history-session';
+    terminalSessionsState.sessions = [
+      {
+        id: sessionId,
+        name: 'History terminal',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+    ];
+
     let releaseSecondPage: (page: TestTerminalHistoryPage) => void = () => {};
     const secondPage = new Promise<TestTerminalHistoryPage>((resolve) => {
       releaseSecondPage = resolve;
     });
+    const firstPage = makeTerminalHistoryPage({
+      chunks: [
+        {
+          sequence: 1,
+          timestampMs: 10,
+          data: textEncoder.encode('alpha'),
+        },
+      ],
+      nextStartSeq: 2,
+      hasMore: true,
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredBytes: 5,
+      totalBytes: 10,
+    });
     transportMocks.historyPage.mockReset();
-    transportMocks.historyPage
-      .mockResolvedValueOnce(makeTerminalHistoryPage({
-        chunks: [
-          {
-            sequence: 1,
-            timestampMs: 10,
-            data: textEncoder.encode('alpha'),
-          },
-        ],
-        nextStartSeq: 2,
-        hasMore: true,
-        firstSequence: 1,
-        lastSequence: 1,
-        coveredBytes: 5,
-        totalBytes: 10,
-      }))
-      .mockReturnValueOnce(secondPage);
+    transportMocks.historyPage.mockImplementation((id: string, cursor: number) => {
+      if (id !== sessionId) {
+        return Promise.resolve(makeTerminalHistoryPage());
+      }
+      if (cursor === 0) {
+        return Promise.resolve(firstPage);
+      }
+      if (cursor === 2) {
+        return secondPage;
+      }
+      return Promise.resolve(makeTerminalHistoryPage());
+    });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => <TerminalPanel variant="deck" />, host);
-    await vi.waitFor(() => {
-      expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.historyPage.mock.calls).toContainEqual([sessionId, 2, -1]);
     });
 
-    await new Promise<void>((resolve) => setTimeout(resolve, 170));
+    await vi.advanceTimersByTimeAsync(170);
+    await settleTerminalPanel();
     expect(host.textContent).toContain('Loading history 5 B / 10 B');
 
-    const core = terminalCoreInstances[0];
+    const core = terminalCoreInstances.find((entry) => host.contains(entry.container));
     expect(core?.clear).toHaveBeenCalled();
     expect(core?.startHistoryReplay).toHaveBeenCalledWith(120_000);
 
@@ -2107,15 +2180,18 @@ describe('TerminalPanel', () => {
       totalBytes: 10,
     }));
 
-    await vi.waitFor(() => {
+    await waitForTerminalPanelCondition(() => {
       expect(core?.endHistoryReplay).toHaveBeenCalled();
     });
-    await vi.waitFor(() => {
+    await waitForTerminalPanelCondition(() => {
       expect(core?.write).toHaveBeenCalledTimes(2);
     });
 
-    expect(transportMocks.historyPage).toHaveBeenNthCalledWith(1, 'session-1', 0, -1);
-    expect(transportMocks.historyPage).toHaveBeenNthCalledWith(2, 'session-1', 2, -1);
+    const historySessionCalls = transportMocks.historyPage.mock.calls.filter((call) => call[0] === sessionId);
+    expect(historySessionCalls).toEqual([
+      [sessionId, 0, -1],
+      [sessionId, 2, -1],
+    ]);
     expect(core?.write.mock.calls.map((call: unknown[]) => decodeTerminalWrite(call[0]))).toEqual(['alpha', 'omega']);
   });
 
