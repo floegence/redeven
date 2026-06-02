@@ -33,9 +33,10 @@ vi.mock('./runtimePlacementBridgeSession', async () => {
 import { GatewayLifecycleManager } from './gatewayLifecycleManager';
 import type { GatewayRecord } from './gatewayStore';
 import type { GatewaySecretStore } from './gatewayTrust';
+import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 
-function memorySecretStore(): GatewaySecretStore {
-  const values = new Map<string, string>();
+function memorySecretStore(seed: readonly (readonly [string, string])[] = []): GatewaySecretStore {
+  const values = new Map<string, string>(seed);
   return {
     writeSecret: (key, value) => {
       values.set(key, value);
@@ -70,9 +71,9 @@ function fakeBridgeSession() {
   };
 }
 
-function manager(progress: string[] = []): GatewayLifecycleManager {
+function manager(progress: string[] = [], secretStore = memorySecretStore()): GatewayLifecycleManager {
   return new GatewayLifecycleManager({
-    secret_store: memorySecretStore(),
+    secret_store: secretStore,
     runtime_release_tag: 'v1.2.3',
     release_base_url: 'https://releases.example.invalid',
     asset_cache_root: '/tmp/redeven-assets',
@@ -160,6 +161,70 @@ describe('GatewayLifecycleManager', () => {
       fallback_local_id: 'gw_bastion',
     }));
     expect(progress).toEqual(['checking_host', 'opening_bridge', 'gateway_ready']);
+  });
+
+  it('uses the remote default state root for SSH host Gateway bridges', async () => {
+    const record: GatewayRecord = {
+      schema_version: 1,
+      gateway_id: 'gw_home',
+      display_name: 'Home Gateway',
+      connection: {
+        kind: 'ssh_host',
+        ssh_destination: 'bastion.internal',
+        auth_mode: 'key_agent',
+        runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+        bootstrap_strategy: 'auto',
+      },
+      created_at_ms: 1,
+      updated_at_ms: 1,
+    };
+
+    await manager().bridgeClient(record);
+
+    expect(lifecycleMocks.ensureManagedSSHRuntimeReady).toHaveBeenCalledWith(expect.objectContaining({
+      target: expect.objectContaining({
+        runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+      }),
+    }));
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
+      placement: expect.objectContaining({
+        kind: 'host_process',
+        runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+      }),
+      runtime_binary_path: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+    }));
+  });
+
+  it('passes stored SSH passwords through Gateway host runtime and bridge setup', async () => {
+    const record: GatewayRecord = {
+      schema_version: 1,
+      gateway_id: 'gw_password',
+      display_name: 'Password Gateway',
+      connection: {
+        kind: 'ssh_host',
+        ssh_destination: 'bastion.internal',
+        auth_mode: 'password',
+        ssh_password_configured: true,
+        ssh_password_ref: 'gateway-ssh-password:gw_password',
+        runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+      },
+      created_at_ms: 1,
+      updated_at_ms: 1,
+    };
+
+    await manager([], memorySecretStore([
+      ['gateway-ssh-password:gw_password', 'secret-password'],
+    ])).bridgeClient(record);
+
+    expect(lifecycleMocks.ensureManagedSSHRuntimeReady).toHaveBeenCalledWith(expect.objectContaining({
+      target: expect.objectContaining({
+        auth_mode: 'password',
+      }),
+      sshPassword: 'secret-password',
+    }));
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
+      ssh_password: 'secret-password',
+    }));
   });
 
   it('prepares SSH container Gateways through runtime placement and exec-stream bridge only', async () => {

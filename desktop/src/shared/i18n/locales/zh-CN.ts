@@ -374,7 +374,7 @@ export const zhCN = {
     environmentUrl: "Environment URL",
     gatewayTransport: "Gateway Transport",
     gatewayName: "Gateway Name",
-    gatewayNamePlaceholder: "Remote lab Gateway",
+    gatewayNamePlaceholder: "Gateway-devbox",
     gatewayUrl: "Gateway URL",
     gatewayUrlPlaceholder: "https://gateway.example.com",
     gatewayUrlHelp: "Desktop talks directly to this Gateway and lists only the environments the Gateway manages. Provider and Region routes are not used for Gateway traffic.",
@@ -453,6 +453,7 @@ export const zhCN = {
     validationChooseContainer: "请选择运行中的容器。",
     validationChooseContainerFromList: "请从当前列表中选择运行中的容器。",
     validationRuntimeRootRequired: "Runtime root 为必填项。",
+    validationSshPasswordRequired: "使用密码认证时必须填写 SSH 密码。",
   },
   confirm: {
     deleteConnectionTitle: "删除 Connection",

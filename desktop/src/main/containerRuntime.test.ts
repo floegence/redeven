@@ -17,6 +17,7 @@ import {
   type DesktopRuntimeContainerResolver,
 } from './containerRuntime';
 import { DesktopHostCommandNotFoundError } from './desktopHostCommand';
+import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 
 describe('containerRuntime', () => {
   it('parses Docker inspect records into stable container facts', () => {
@@ -149,6 +150,8 @@ describe('containerRuntime', () => {
       '/root/.redeven',
       'v1.2.3',
     ]));
+    expect(probeCommand.join('\n')).toContain(`if [ "$runtime_root_raw" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`);
+    expect(probeCommand.join('\n')).toContain('runtime_root="${HOME%/}/.redeven"');
     expect(probeCommand.join('\n')).toContain('runtime/managed');
     expect(probeCommand.join('\n')).toContain('managed-runtime.stamp');
     expect(probeCommand.join('\n')).toContain('slot_release_tag=');
@@ -200,8 +203,8 @@ describe('containerRuntime', () => {
     expect(containerRuntimeDaemonStartCommand({
       engine: 'docker',
       container_id: 'dev',
-      runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
-      runtime_root: '/root/.redeven',
+      runtime_binary_path: '/home/app/.redeven/runtime/managed/bin/redeven',
+      runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
       desktop_owner_id: 'desktop-owner',
     })).toEqual([
       'docker',
@@ -210,47 +213,46 @@ describe('containerRuntime', () => {
       '--env',
       'REDEVEN_DESKTOP_OWNER_ID=desktop-owner',
       'dev',
-      '/root/.redeven/runtime/managed/bin/redeven',
-      'run',
-      '--mode',
-      'desktop',
-      '--desktop-managed',
-      '--presentation',
-      'machine',
-      '--state-root',
-      '/root/.redeven',
-      '--local-ui-bind',
-      '127.0.0.1:0',
+      'sh',
+      '-c',
+      expect.stringContaining(`if [ "$runtime_root" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`),
+      'redeven-container-runtime-start',
+      DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+      '/home/app/.redeven/runtime/managed/bin/redeven',
     ]);
     expect(containerRuntimeDaemonStatusCommand({
       engine: 'docker',
       container_id: 'dev',
-      runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
-      runtime_root: '/root/.redeven',
+      runtime_binary_path: '/home/app/.redeven/runtime/managed/bin/redeven',
+      runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
     })).toEqual([
       'docker',
       'exec',
       '-i',
       'dev',
-      '/root/.redeven/runtime/managed/bin/redeven',
-      'desktop-runtime-status',
-      '--state-root',
-      '/root/.redeven',
+      'sh',
+      '-c',
+      expect.stringContaining(`if [ "$runtime_root" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`),
+      'redeven-container-runtime-status',
+      DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+      '/home/app/.redeven/runtime/managed/bin/redeven',
     ]);
     expect(containerRuntimeDaemonStopCommand({
       engine: 'docker',
       container_id: 'dev',
-      runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
-      runtime_root: '/root/.redeven',
+      runtime_binary_path: '/home/app/.redeven/runtime/managed/bin/redeven',
+      runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
     })).toEqual([
       'docker',
       'exec',
       '-i',
       'dev',
-      '/root/.redeven/runtime/managed/bin/redeven',
-      'desktop-runtime-stop',
-      '--state-root',
-      '/root/.redeven',
+      'sh',
+      '-c',
+      expect.stringContaining(`if [ "$runtime_root" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`),
+      'redeven-container-runtime-stop',
+      DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+      '/home/app/.redeven/runtime/managed/bin/redeven',
     ]);
   });
 
@@ -273,20 +275,24 @@ describe('containerRuntime', () => {
       'exec',
       '-i',
       'dev',
-      '/root/.redeven/runtime/managed/bin/redeven',
-      'desktop-runtime-stop',
-      '--state-root',
+      'sh',
+      '-c',
+      expect.stringContaining('desktop-runtime-stop --state-root "$runtime_root"'),
+      'redeven-container-runtime-stop',
       '/root/.redeven',
+      '/root/.redeven/runtime/managed/bin/redeven',
     ]);
     expect(statusCommand).toEqual([
       'docker',
       'exec',
       '-i',
       'dev',
-      '/root/.redeven/runtime/managed/bin/redeven',
-      'desktop-runtime-status',
-      '--state-root',
+      'sh',
+      '-c',
+      expect.stringContaining('desktop-runtime-status --state-root "$runtime_root"'),
+      'redeven-container-runtime-status',
       '/root/.redeven',
+      '/root/.redeven/runtime/managed/bin/redeven',
     ]);
     expect(stopCommand.join(' ')).not.toContain('docker stop');
     expect(stopCommand.join(' ')).not.toContain('podman stop');

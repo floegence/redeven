@@ -168,11 +168,20 @@ describe('DesktopWelcomeShell', () => {
   it('keeps Gateway setup and source actions out of the legacy Redeven URL dialog', () => {
     const appSrc = readWelcomeSource();
 
+    expect(appSrc).toContain('function suggestGatewayDisplayName(state: GatewaySetupDialogState | null): string | null');
+    expect(appSrc).toContain("return seed === '' ? null : `Gateway-${seed}`;");
+    expect(appSrc).toContain('display_name_touched: overrides.display_name_touched === true');
+    expect(appSrc).toContain("runtimeRoot = trimString(state.runtime_root) || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT");
+    expect(appSrc).toContain("placeholder={DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL}");
+    expect(appSrc).not.toContain("placeholder={isContainer() ? '/root/.redeven' : DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}");
+    expect(appSrc).not.toContain("runtime_root: trimString(overrides.runtime_root) || (overrides.connection_kind === 'ssh_container' ? '/root/.redeven' : DEFAULT_DESKTOP_SSH_RUNTIME_ROOT)");
     expect(appSrc).toContain('function openCreateGatewaySetup(gateway?: DesktopGatewaySource): void');
     expect(appSrc).toContain("setActiveCenterTab('gateways')");
     expect(appSrc).toContain('<GatewaySetupDialog');
     expect(appSrc).toContain("kind: 'upsert_gateway'");
-    expect(appSrc).toContain("auth_mode: 'key_agent'");
+    expect(appSrc).toContain('ssh_password_configured: gateway.ssh_password_configured === true');
+    expect(appSrc).toContain('removeSSHPassword={removeSSHPasswordFromGatewaySetupDialog}');
+    expect(appSrc).toContain('auth_mode: state.auth_mode');
     expect(appSrc).toContain("performLauncherAction(action, 'gateway_dialog');");
     expect(appSrc).toContain('onClick={() => props.openCreateGatewaySetup()}');
     expect(appSrc).toContain('function runGatewaySourceAction(');
@@ -1340,7 +1349,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: props.i18n.t('connectionDialog.passwordPrompt')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.localSshPassword')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.localSshPasswordHelp')");
-    expect(appSrc).toContain('value="key_agent"');
+    expect(appSrc).toContain('value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE : DEFAULT_DESKTOP_SSH_AUTH_MODE}');
     expect(appSrc).toContain('variant="default"');
     expect(appSrc).not.toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');");
     expect(appSrc).not.toContain('<Show when={showCreateConnectAction()}>');

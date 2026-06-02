@@ -122,6 +122,43 @@ describe('GatewayStore', () => {
     expect(stableGatewayID('https://gateway.example/')).toMatch(/^gw_[A-Za-z0-9_-]{24}$/u);
   });
 
+  it('projects SSH Gateway details without leaking password secret refs', () => {
+    const record = normalizeGatewayStoreSnapshot({
+      gateways: [{
+        gateway_id: 'gw_ssh',
+        display_name: 'SSH Gateway',
+        connection: {
+          kind: 'ssh_host',
+          ssh_destination: 'bastion',
+          ssh_port: 2222,
+          auth_mode: 'password',
+          ssh_password_configured: true,
+          ssh_password_ref: 'gateway-ssh-password:gw_ssh',
+          runtime_root: 'remote_default',
+          bootstrap_strategy: 'auto',
+        },
+      }],
+    }, 1).gateways[0] as GatewayRecord;
+
+    expect(record.connection).toMatchObject({
+      auth_mode: 'password',
+      ssh_password_configured: true,
+      ssh_password_ref: 'gateway-ssh-password:gw_ssh',
+    });
+    const source = gatewayRecordToSource(record);
+    expect(source).toMatchObject({
+      connection_kind: 'ssh_host',
+      ssh_details: expect.objectContaining({
+        ssh_destination: 'bastion',
+        ssh_port: 2222,
+        auth_mode: 'password',
+        runtime_root: 'remote_default',
+      }),
+      ssh_password_configured: true,
+    });
+    expect(JSON.stringify(source)).not.toContain('gateway-ssh-password');
+  });
+
   it('drops stale trust profiles when the Gateway connection identity changes', async () => {
     const root = await createTempRoot();
     cleanupRoots.add(root);
