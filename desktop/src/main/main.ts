@@ -444,6 +444,7 @@ import {
 import { buildDesktopRuntimeOperationPlans } from '../shared/desktopRuntimeOperationPlanner';
 import { desktopRuntimePackageStateFromRuntimeService } from '../shared/desktopRuntimePackageState';
 import {
+  desktopRuntimePlacementStateRoot,
   desktopRuntimeTargetID,
   desktopRuntimeTargetAutoStatusDetectionEnabled,
   type DesktopRuntimeHostAccess,
@@ -1817,6 +1818,7 @@ async function inspectRuntimePlacementTargetState(
           engine: resolution.placement.container_engine,
           container_id: resolution.placement.container_id,
           runtime_root: resolution.placement.runtime_root,
+          runtime_state_root: desktopRuntimePlacementStateRoot(resolution.placement),
           runtime_binary_path: probe.binary_path,
         }), commandOptions());
         const report = parseLaunchReport(statusResult.stdout);
@@ -5588,6 +5590,7 @@ async function assertContainerRuntimeStopped(input: Readonly<{
     engine: input.placement.container_engine,
     container_id: input.placement.container_id,
     runtime_root: input.placement.runtime_root,
+    runtime_state_root: desktopRuntimePlacementStateRoot(input.placement),
     runtime_binary_path: input.runtimeBinaryPath,
   }), { signal: input.signal });
   assertRuntimeStopVerifiedFromLaunchReport(parseLaunchReport(statusResult.stdout));
@@ -8757,6 +8760,7 @@ async function stopRuntimePlacementLiveDaemonForReplacement(input: Readonly<{
     engine: input.liveDaemon.placement.container_engine,
     container_id: input.liveDaemon.placement.container_id,
     runtime_root: input.liveDaemon.placement.runtime_root,
+    runtime_state_root: desktopRuntimePlacementStateRoot(input.liveDaemon.placement),
     runtime_binary_path: input.liveDaemon.runtime_binary_path,
   }), { signal: input.signal });
   updateRuntimeLifecycleOperation(input.liveDaemon.target_id, input.lifecycleAttemptOwner, {
@@ -10182,6 +10186,7 @@ async function stopEnvironmentRuntimeFromLauncher(
         engine: runtimePlacement.container_engine,
         container_id: runtimePlacement.container_id,
         runtime_root: runtimePlacement.runtime_root,
+        runtime_state_root: desktopRuntimePlacementStateRoot(runtimePlacement),
         runtime_binary_path: binaryPath,
       }), { signal });
       updateRuntimeLifecycleOperation(targetID, lifecycleAttemptOwner, {

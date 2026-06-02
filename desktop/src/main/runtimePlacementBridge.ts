@@ -1,6 +1,7 @@
-import type {
-  DesktopRuntimeHostAccess,
-  DesktopRuntimePlacement,
+import {
+  type DesktopRuntimeHostAccess,
+  type DesktopRuntimePlacement,
+  desktopRuntimePlacementStateRoot,
 } from '../shared/desktopRuntimePlacement';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import {
@@ -36,40 +37,70 @@ function desktopBridgeCommand(
 
 function hostProcessDesktopBridgeCommand(
   runtimeBinaryPath: string,
+  installRoot: string,
   stateRoot: string,
 ): readonly string[] {
   const cleanStateRoot = compact(stateRoot);
   if (cleanStateRoot === '') {
     return desktopBridgeCommand(runtimeBinaryPath);
   }
+  const cleanInstallRoot = compact(installRoot) || cleanStateRoot;
   const bridgeDriver = [
     'set -eu',
-    'runtime_root="$1"',
-    `if [ "$runtime_root" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`,
+    'install_root="$1"',
+    `if [ "$install_root" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`,
     '  if [ -z "${HOME:-}" ]; then',
     '    echo "host HOME is unavailable; set Runtime Root to an absolute .redeven path" >&2',
     '    exit 1',
     '  fi',
-    '  runtime_root="${HOME%/}/.redeven"',
+    '  install_root="${HOME%/}/.redeven"',
     'fi',
+    'case "$install_root" in',
+    `  ${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/*)`,
+    '    if [ -z "${HOME:-}" ]; then',
+    '      echo "host HOME is unavailable; set Runtime Root to an absolute .redeven path" >&2',
+    '      exit 1',
+    '    fi',
+    `    install_root="\${HOME%/}/.redeven/\${install_root#${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/}"`,
+    '    ;;',
+    'esac',
     'runtime_binary_path="$2"',
     `if [ "$runtime_binary_path" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`,
-    '  runtime_binary_path="${runtime_root%/}/runtime/managed/bin/redeven"',
+    '  runtime_binary_path="${install_root%/}/runtime/managed/bin/redeven"',
     'fi',
-    'exec "$runtime_binary_path" desktop-bridge --state-root "$runtime_root"',
+    'state_root="$3"',
+    `if [ "$state_root" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`,
+    '  if [ -z "${HOME:-}" ]; then',
+    '    echo "host HOME is unavailable; set Runtime State Root to an absolute .redeven path" >&2',
+    '    exit 1',
+    '  fi',
+    '  state_root="${HOME%/}/.redeven"',
+    'fi',
+    'case "$state_root" in',
+    `  ${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/*)`,
+    '    if [ -z "${HOME:-}" ]; then',
+    '      echo "host HOME is unavailable; set Runtime State Root to an absolute .redeven path" >&2',
+    '      exit 1',
+    '    fi',
+    `    state_root="\${HOME%/}/.redeven/\${state_root#${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/}"`,
+    '    ;;',
+    'esac',
+    'exec "$runtime_binary_path" desktop-bridge --state-root "$state_root"',
   ].join('\n');
   return [
     'sh',
     '-c',
     bridgeDriver,
     'redeven-host-desktop-bridge',
-    cleanStateRoot,
+    cleanInstallRoot,
     runtimeBinaryPath,
+    cleanStateRoot,
   ];
 }
 
 function containerDesktopBridgeCommand(
   runtimeBinaryPath: string,
+  installRoot: string,
   stateRoot: string,
 ): readonly string[] {
   const bridgeDriver = [
@@ -77,15 +108,18 @@ function containerDesktopBridgeCommand(
     'runtime_root="$1"',
     containerRuntimeRootShellPrelude(),
     'runtime_binary_path="$2"',
-    'exec "$runtime_binary_path" desktop-bridge --state-root "$runtime_root"',
+    'state_root="$3"',
+    containerRuntimeRootShellPrelude('state_root'),
+    'exec "$runtime_binary_path" desktop-bridge --state-root "$state_root"',
   ].join('\n');
   return [
     'sh',
     '-c',
     bridgeDriver,
     'redeven-container-desktop-bridge',
-    stateRoot,
+    installRoot,
     runtimeBinaryPath,
+    stateRoot,
   ];
 }
 
@@ -98,12 +132,13 @@ export function buildRuntimePlacementBridgePlan(input: Readonly<{
   runtime_binary_path?: string;
 }>): RuntimePlacementBridgePlan {
   const runtimeBinaryPath = compact(input.runtime_binary_path) || 'redeven';
+  const stateRoot = desktopRuntimePlacementStateRoot(input.placement);
   if (input.placement.kind === 'host_process') {
     return {
       host_access: input.host_access,
       placement: input.placement,
       bridge_kind: 'host_process',
-      command: hostProcessDesktopBridgeCommand(runtimeBinaryPath, input.placement.runtime_root),
+      command: hostProcessDesktopBridgeCommand(runtimeBinaryPath, input.placement.runtime_root, stateRoot),
       requires_published_port: false,
       exposes_loopback_only: true,
     };
@@ -123,7 +158,7 @@ export function buildRuntimePlacementBridgePlan(input: Readonly<{
       // binary path. Do not fall back to PATH lookup; Start Runtime owns
       // install, daemon startup, and health readiness before this bridge
       // attach stream starts.
-      argv: containerDesktopBridgeCommand(runtimeBinaryPath, input.placement.runtime_root),
+      argv: containerDesktopBridgeCommand(runtimeBinaryPath, input.placement.runtime_root, stateRoot),
     }),
     requires_published_port: false,
     exposes_loopback_only: true,

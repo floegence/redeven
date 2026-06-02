@@ -34,6 +34,7 @@ import { GatewayLifecycleManager } from './gatewayLifecycleManager';
 import type { GatewayRecord } from './gatewayStore';
 import type { GatewaySecretStore } from './gatewayTrust';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
+import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
 function memorySecretStore(seed: readonly (readonly [string, string])[] = []): GatewaySecretStore {
   const values = new Map<string, string>(seed);
@@ -140,6 +141,7 @@ describe('GatewayLifecycleManager', () => {
         bootstrap_strategy: 'desktop_upload',
         release_base_url: 'https://mirror.example.invalid/releases',
       }),
+      runtimeStateRoot: '/opt/redeven/gateways/gw_bastion',
       runtimeReleaseTag: 'v1.2.3',
       tempRoot: '/tmp/redeven-temp',
       assetCacheRoot: '/tmp/redeven-assets',
@@ -153,6 +155,7 @@ describe('GatewayLifecycleManager', () => {
       placement: expect.objectContaining({
         kind: 'host_process',
         runtime_root: '/opt/redeven',
+        runtime_state_root: '/opt/redeven/gateways/gw_bastion',
         bootstrap_strategy: 'desktop_upload',
       }),
       runtime_binary_path: '/opt/redeven/runtime/managed/bin/redeven',
@@ -163,7 +166,7 @@ describe('GatewayLifecycleManager', () => {
     expect(progress).toEqual(['checking_host', 'opening_bridge', 'gateway_ready']);
   });
 
-  it('uses the remote default state root for SSH host Gateway bridges', async () => {
+  it('uses a Gateway profile state root for SSH host Gateway bridges', async () => {
     const record: GatewayRecord = {
       schema_version: 1,
       gateway_id: 'gw_home',
@@ -185,13 +188,75 @@ describe('GatewayLifecycleManager', () => {
       target: expect.objectContaining({
         runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
       }),
+      runtimeStateRoot: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_home`,
     }));
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
       placement: expect.objectContaining({
         kind: 'host_process',
         runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+        runtime_state_root: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_home`,
       }),
       runtime_binary_path: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+    }));
+  });
+
+  it('keeps Gateway SSH host sessions isolated from regular SSH runtimes on the same install root', async () => {
+    const sessionCache = new Map();
+    const first: GatewayRecord = {
+      schema_version: 1,
+      gateway_id: 'gw_first',
+      display_name: 'First Gateway',
+      connection: {
+        kind: 'ssh_host',
+        ssh_destination: 'bastion.internal',
+        auth_mode: 'key_agent',
+        runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+      },
+      created_at_ms: 1,
+      updated_at_ms: 1,
+    };
+    const second: GatewayRecord = {
+      ...first,
+      gateway_id: 'gw_second',
+      display_name: 'Second Gateway',
+    };
+    const lifecycle = new GatewayLifecycleManager({
+      secret_store: memorySecretStore(),
+      runtime_release_tag: 'v1.2.3',
+      release_base_url: 'https://releases.example.invalid',
+      asset_cache_root: '/tmp/redeven-assets',
+      temp_root: '/tmp/redeven-temp',
+      source_runtime_root: '/Applications/Redeven.app/Contents/Resources',
+      desktop_owner_id: vi.fn(async () => 'desktop-owner'),
+      session_cache: sessionCache,
+    });
+
+    await lifecycle.bridgeClient(first);
+    await lifecycle.bridgeClient(second);
+
+    const regularSSHRuntimeTarget = desktopRuntimeTargetID({
+      kind: 'ssh_host',
+      ssh: {
+        ssh_destination: 'bastion.internal',
+        ssh_port: null,
+        auth_mode: 'key_agent',
+        connect_timeout_seconds: 15,
+      },
+    }, { kind: 'host_process', runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT });
+    expect([...sessionCache.keys()]).toHaveLength(2);
+    expect([...sessionCache.keys()][0]).not.toBe([...sessionCache.keys()][1]);
+    expect([...sessionCache.keys()]).not.toContain(regularSSHRuntimeTarget);
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      placement: expect.objectContaining({
+        runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+        runtime_state_root: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_first`,
+      }),
+    }));
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      placement: expect.objectContaining({
+        runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+        runtime_state_root: `${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_second`,
+      }),
     }));
   });
 
@@ -277,6 +342,7 @@ describe('GatewayLifecycleManager', () => {
         container_ref: 'dev-container',
         container_label: 'dev-container',
         runtime_root: '/root/.redeven',
+        runtime_state_root: '/root/.redeven/gateways/gw_container',
         bridge_strategy: 'exec_stream',
       },
       ssh_password: '',
@@ -293,6 +359,8 @@ describe('GatewayLifecycleManager', () => {
         kind: 'container_process',
         container_id: 'container-stable-id',
         bridge_strategy: 'exec_stream',
+        runtime_root: '/root/.redeven',
+        runtime_state_root: '/root/.redeven/gateways/gw_container',
       }),
       runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       desktop_owner_id: 'desktop-owner',

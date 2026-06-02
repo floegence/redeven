@@ -255,6 +255,7 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   target: DesktopSSHEnvironmentDetails;
   runtimeReleaseTag: string;
   desktopOwnerID: string;
+  runtimeStateRoot?: string;
   sshPassword?: string;
   sshBinary?: string;
   installScriptURL?: string;
@@ -545,12 +546,48 @@ function buildRemoteInstallRootShell(): string {
     'else',
     '  runtime_root="$runtime_root_raw"',
     'fi',
+    'case "$runtime_root" in',
+    `  ${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/*)`,
+    '    if [ -z "${HOME:-}" ]; then',
+    '      echo "remote HOME is unavailable; set Runtime Root to an absolute .redeven path" >&2',
+    '      exit 1',
+    '    fi',
+    `    runtime_root="\${HOME%/}/.redeven/\${runtime_root#${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/}"`,
+    '    ;;',
+    'esac',
   ].join('\n');
 }
 
-function buildManagedSSHRuntimePathShell(): string {
+function buildRemoteStateRootShell(): string {
   return [
-    'target_release_tag="${2:-}"',
+    'state_root_raw="${2:-}"',
+    'if [ -z "$state_root_raw" ]; then',
+    '  state_root_raw="$runtime_root_raw"',
+    'fi',
+    `if [ "$state_root_raw" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`,
+    '  if [ -z "${HOME:-}" ]; then',
+    '    echo "remote HOME is unavailable; set Runtime State Root to an absolute .redeven path" >&2',
+    '    exit 1',
+    '  fi',
+    '  state_root="${HOME%/}/.redeven"',
+    'else',
+    '  state_root="$state_root_raw"',
+    'fi',
+    'case "$state_root" in',
+    `  ${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/*)`,
+    '    if [ -z "${HOME:-}" ]; then',
+    '      echo "remote HOME is unavailable; set Runtime State Root to an absolute .redeven path" >&2',
+    '      exit 1',
+    '    fi',
+    `    state_root="\${HOME%/}/.redeven/\${state_root#${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/}"`,
+    '    ;;',
+    'esac',
+  ].join('\n');
+}
+
+function buildManagedSSHRuntimePathShell(targetReleaseTagArg = '2'): string {
+  return [
+    `target_release_tag="\${${targetReleaseTagArg}:-}"`,
     'managed_root="${runtime_root%/}/runtime/managed"',
     'bin_dir="${managed_root}/bin"',
     'binary="${bin_dir}/redeven"',
@@ -939,13 +976,13 @@ export function buildManagedSSHStartScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
-    buildManagedSSHRuntimePathShell(),
-    'state_root="${runtime_root%/}"',
-    'session_token="$3"',
-    'desktop_owner_id="${4:-}"',
-    'session_dir="${runtime_root%/}/runtime/sessions/${session_token}"',
+    buildRemoteStateRootShell(),
+    buildManagedSSHRuntimePathShell('3'),
+    'session_token="$4"',
+    'desktop_owner_id="${5:-}"',
+    'session_dir="${state_root%/}/runtime/sessions/${session_token}"',
     'report_path="${session_dir}/startup-report.json"',
-    'log_dir="${runtime_root%/}/runtime/logs"',
+    'log_dir="${state_root%/}/runtime/logs"',
     'log_path="${log_dir}/runtime-${session_token}.log"',
     'mkdir -p "$state_root" "$session_dir" "$log_dir"',
     'rm -f "$report_path"',
@@ -971,8 +1008,9 @@ export function buildManagedSSHReportReadScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
-    'session_token="$2"',
-    'report_path="${runtime_root%/}/runtime/sessions/${session_token}/startup-report.json"',
+    buildRemoteStateRootShell(),
+    'session_token="$3"',
+    'report_path="${state_root%/}/runtime/sessions/${session_token}/startup-report.json"',
     'if [ ! -f "$report_path" ]; then',
     '  exit 1',
     'fi',
@@ -984,8 +1022,8 @@ function buildManagedSSHRuntimeStatusScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
-    buildManagedSSHRuntimePathShell(),
-    'state_root="${runtime_root%/}"',
+    buildRemoteStateRootShell(),
+    buildManagedSSHRuntimePathShell('3'),
     'if [ ! -x "$binary" ]; then',
     '  exit 127',
     'fi',
@@ -997,6 +1035,7 @@ export async function probeManagedSSHRuntimeStatus(
   args: Readonly<{
     target: DesktopSSHEnvironmentDetails;
     runtimeReleaseTag: string;
+    runtimeStateRoot?: string;
     sshPassword?: string;
     sshBinary?: string;
     tempRoot?: string;
@@ -1030,6 +1069,7 @@ export async function probeManagedSSHRuntimeStatus(
         ...sshTargetArgs(target),
         remoteShellCommand(buildManagedSSHRuntimeStatusScript(), 'redeven-ssh-runtime-status', [
           target.runtime_root,
+          args.runtimeStateRoot ?? target.runtime_root,
           runtimeReleaseTag,
         ]),
       ],
@@ -2215,6 +2255,7 @@ async function ensureRemoteRuntimeInstalled(args: Readonly<{
 async function waitForRemoteStartupReport(args: Readonly<{
   sshBinary: string;
   target: DesktopSSHEnvironmentDetails;
+  runtimeStateRoot?: string;
   controlSocketPath: string;
   connectTimeoutSeconds: number;
   auth: SSHCommandAuthContext;
@@ -2254,6 +2295,7 @@ async function waitForRemoteStartupReport(args: Readonly<{
         ...sshTargetArgs(args.target),
         remoteShellCommand(script, 'redeven-ssh-read-report', [
           args.target.runtime_root,
+          args.runtimeStateRoot ?? args.target.runtime_root,
           args.sessionToken,
         ]),
       ],
@@ -2378,6 +2420,7 @@ function runtimeIdentityMismatchDiagnostic(
   startup: StartupReport,
   args: Readonly<{
     target: DesktopSSHEnvironmentDetails;
+    runtimeStateRoot?: string;
     runtimeReleaseTag: string;
     desktopOwnerID: string;
   }>,
@@ -2388,7 +2431,7 @@ function runtimeIdentityMismatchDiagnostic(
     expected_runtime_version: args.runtimeReleaseTag,
     observed_runtime_version: compact(runtimeService?.runtime_version) || undefined,
     ...(Number.isInteger(pid) && pid > 0 ? { observed_pid: pid } : {}),
-    state_dir: compact(startup.state_dir) || compact(args.target.runtime_root) || undefined,
+    state_dir: compact(startup.state_dir) || compact(args.runtimeStateRoot) || compact(args.target.runtime_root) || undefined,
     runtime_control_base_url: compact(startup.runtime_control?.base_url) || undefined,
     binary_path: managedSSHRuntimeBinaryPath(args.target),
     desktop_owner_id: compact(startup.desktop_owner_id) || compact(startup.runtime_control?.desktop_owner_id) || args.desktopOwnerID,
@@ -2670,6 +2713,7 @@ async function startManagedSSHRuntimeInternal(
         ...sshTargetArgs(target),
         remoteShellCommand(buildManagedSSHStartScript(), 'redeven-ssh-start', [
           target.runtime_root,
+          args.runtimeStateRoot ?? target.runtime_root,
           runtimeReleaseTag,
           sessionToken,
           desktopOwnerID,
@@ -2688,6 +2732,7 @@ async function startManagedSSHRuntimeInternal(
       const launch = await waitForRemoteStartupReport({
         sshBinary,
         target,
+        runtimeStateRoot: args.runtimeStateRoot,
         controlSocketPath,
         connectTimeoutSeconds,
         auth,
@@ -2723,6 +2768,7 @@ async function startManagedSSHRuntimeInternal(
       if (replacementAttempted) {
         const identityDiagnostic = runtimeIdentityMismatchDiagnostic(launch.startup, {
           target,
+          runtimeStateRoot: args.runtimeStateRoot,
           runtimeReleaseTag,
           desktopOwnerID,
         });

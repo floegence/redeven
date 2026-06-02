@@ -2,8 +2,10 @@ import {
   DEFAULT_DESKTOP_SSH_AUTH_MODE,
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS,
+  DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+  desktopSSHRuntimeRootSubpath,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import {
@@ -153,6 +155,7 @@ export class GatewayLifecycleManager {
       const target = gatewaySSHDetails(record);
       await ensureManagedSSHRuntimeReady({
         target,
+        runtimeStateRoot: gatewayRuntimeStateRoot(record),
         runtimeReleaseTag: this.options.runtime_release_tag,
         tempRoot: this.options.temp_root,
         assetCacheRoot: this.options.asset_cache_root,
@@ -235,6 +238,7 @@ function gatewayPlacement(record: GatewayRecord): DesktopRuntimePlacement {
     return {
       kind: 'host_process',
       runtime_root: record.connection.runtime_root,
+      runtime_state_root: gatewayRuntimeStateRoot(record),
       bootstrap_strategy: record.connection.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
       release_base_url: record.connection.release_base_url ?? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
     };
@@ -247,10 +251,22 @@ function gatewayPlacement(record: GatewayRecord): DesktopRuntimePlacement {
       container_ref: record.connection.container_ref ?? record.connection.container_label ?? record.connection.container_id,
       container_label: record.connection.container_label ?? record.connection.container_id,
       runtime_root: record.connection.runtime_root,
+      runtime_state_root: gatewayRuntimeStateRoot(record),
       bridge_strategy: 'exec_stream',
     };
   }
   throw new Error('URL Gateways do not use runtime placement.');
+}
+
+function gatewayRuntimeStateRoot(record: GatewayRecord): string {
+  if (record.connection.kind === 'url') {
+    throw new Error('URL Gateways do not use runtime state roots.');
+  }
+  return desktopSSHRuntimeRootSubpath(
+    record.connection.runtime_root,
+    DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR,
+    record.gateway_id,
+  );
 }
 
 function gatewayLifecycleTargetID(record: GatewayRecord): string {

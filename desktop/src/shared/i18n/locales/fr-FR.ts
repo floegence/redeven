@@ -412,6 +412,7 @@ export const frFR = {
     source: "Source : {source}",
     runtimeRoot: "Racine Runtime",
     runtimeRootHelp: "Laissez vide pour utiliser la racine .redeven de l’utilisateur distant : {root}.",
+    gatewayRuntimeRootHelp: "Laissez vide pour conserver les données du Gateway sous {root} avec un profil Gateway isolé.",
     releaseBaseUrl: "URL de base des releases",
     releaseBaseUrlHelp: "Laissez vide pour utiliser {url}. Définissez un miroir de release interne lorsque ce Desktop ne peut pas utiliser GitHub directement.",
     connectTimeout: "Délai de connexion (secondes)",

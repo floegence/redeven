@@ -412,6 +412,7 @@ export const esES = {
     source: "Origen: {source}",
     runtimeRoot: "Raíz Runtime",
     runtimeRootHelp: "Déjalo en blanco para usar la raíz .redeven del usuario remoto: {root}.",
+    gatewayRuntimeRootHelp: "Déjalo en blanco para mantener los datos del Gateway bajo {root} con un perfil de Gateway aislado.",
     releaseBaseUrl: "URL base de releases",
     releaseBaseUrlHelp: "Déjalo en blanco para usar {url}. Configura un mirror interno de releases cuando este Desktop no pueda usar GitHub directamente.",
     connectTimeout: "Tiempo de espera de conexión (segundos)",

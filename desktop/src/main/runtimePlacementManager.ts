@@ -1,6 +1,7 @@
 import {
   type DesktopRuntimeHostAccess,
   type DesktopRuntimePlacement,
+  desktopRuntimePlacementStateRoot,
 } from '../shared/desktopRuntimePlacement';
 import {
   buildDesktopRuntimeMaintenanceRequirement,
@@ -148,6 +149,7 @@ async function waitForContainerRuntimeDaemon(args: Readonly<{
         engine: args.placement.container_engine,
         container_id: args.placement.container_id,
         runtime_root: args.placement.runtime_root,
+        runtime_state_root: desktopRuntimePlacementStateRoot(args.placement),
         runtime_binary_path: args.runtime_binary_path,
       }), { signal: args.signal });
       report = parseLaunchReport(result.stdout);
@@ -214,6 +216,7 @@ async function startContainerRuntimeDaemon(args: Readonly<{
     engine: args.placement.container_engine,
     container_id: args.placement.container_id,
     runtime_root: args.placement.runtime_root,
+    runtime_state_root: desktopRuntimePlacementStateRoot(args.placement),
     runtime_binary_path: args.runtime_binary_path,
     desktop_owner_id: compact(args.desktop_owner_id),
   }), { signal: args.signal });

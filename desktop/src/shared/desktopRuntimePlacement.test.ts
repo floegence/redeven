@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   desktopRuntimeContainerReference,
+  desktopRuntimePlacementStateRoot,
   desktopRuntimeTargetID,
   desktopRuntimeTargetAutoStatusDetectionConfigurable,
   desktopRuntimeTargetAutoStatusDetectionEnabled,
@@ -87,6 +88,33 @@ describe('desktopRuntimePlacement', () => {
     expect(desktopRuntimeTargetID(localHost, { kind: 'host_process', runtime_root: '' }, 'local')).toBe('local:host:local');
     expect(desktopRuntimeTargetID(localHost, container)).toMatch(/^local:container:podman:dev-container:/u);
     expect(desktopRuntimeTargetID(sshHost, container)).toMatch(/^ssh:container:root%40gzcom:podman:dev-container:/u);
+  });
+
+  it('uses runtime state roots for target identity without changing install roots', () => {
+    const sshHost = normalizeDesktopRuntimeHostAccess({
+      kind: 'ssh_host',
+      ssh: {
+        ssh_destination: 'bastion',
+        auth_mode: 'key_agent',
+      },
+    });
+    const regularPlacement = normalizeDesktopRuntimePlacement({
+      kind: 'host_process',
+      runtime_root: 'remote_default',
+    });
+    const gatewayPlacement = normalizeDesktopRuntimePlacement({
+      kind: 'host_process',
+      runtime_root: 'remote_default',
+      runtime_state_root: 'remote_default/gateways/gw_demo',
+    });
+
+    expect(desktopRuntimePlacementStateRoot(regularPlacement)).toBe('remote_default');
+    expect(desktopRuntimePlacementStateRoot(gatewayPlacement)).toBe('remote_default/gateways/gw_demo');
+    expect(gatewayPlacement).toMatchObject({
+      runtime_root: 'remote_default',
+      runtime_state_root: 'remote_default/gateways/gw_demo',
+    });
+    expect(desktopRuntimeTargetID(sshHost, gatewayPlacement)).not.toBe(desktopRuntimeTargetID(sshHost, regularPlacement));
   });
 
   it('treats local container status detection as automatic rather than configurable', () => {

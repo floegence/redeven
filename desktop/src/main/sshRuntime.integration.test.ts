@@ -326,6 +326,18 @@ function remoteScriptArgs() {
   return words.slice(index + 1);
 }
 
+function remoteRuntimeStateRoot() {
+  return remoteScriptArgs()[1] || remoteScriptArgs()[0] || 'remote_default';
+}
+
+function remoteStartSessionToken() {
+  return remoteScriptArgs()[3] || args[args.length - 1] || '';
+}
+
+function remoteInstallReleaseTag() {
+  return remoteScriptArgs()[1] || 'v1.2.3';
+}
+
 function terminateLater(event, cleanup) {
   const finish = () => {
     appendLog(event);
@@ -344,7 +356,7 @@ function writeProbeResult() {
   const installed = state.installed === true;
   const status = installed ? 'ready' : 'missing_binary';
   const reason = installed ? 'desktop-managed runtime slot is ready' : 'managed runtime binary is missing';
-  const releaseTag = remoteScriptArgs()[1] || args[args.length - 1] || 'v0.0.0';
+  const releaseTag = remoteInstallReleaseTag() || args[args.length - 1] || 'v0.0.0';
   const installedVersion = String(state.installed_version || releaseTag);
   process.stdout.write([
     'status=' + status,
@@ -529,9 +541,9 @@ if (args.includes('-M') && args.includes('-N')) {
     case 'redeven-ssh-remote-install':
       appendLog('remote_install', {
         install_script_url: remoteScriptArgs()[2] || args[args.length - 1] || '',
-        release_tag: remoteScriptArgs()[1] || '',
+        release_tag: remoteInstallReleaseTag(),
       });
-      writeState({ ...readState(), installed: true, installed_version: remoteScriptArgs()[1] || 'v1.2.3' });
+      writeState({ ...readState(), installed: true, installed_version: remoteInstallReleaseTag() });
       process.exit(0);
       break;
     case 'redeven-ssh-upload-archive':
@@ -546,7 +558,7 @@ if (args.includes('-M') && args.includes('-N')) {
         process.stderr.write('simulated upload install failure\n');
         process.exit(2);
       }
-      writeState({ ...readState(), installed: true, installed_version: remoteScriptArgs()[1] || 'v1.2.3' });
+      writeState({ ...readState(), installed: true, installed_version: remoteInstallReleaseTag() });
       process.exit(0);
       break;
     case 'redeven-ssh-cleanup-path':
@@ -554,7 +566,7 @@ if (args.includes('-M') && args.includes('-N')) {
       process.exit(0);
       break;
     case 'redeven-ssh-start':
-      appendLog('start_runtime', { session_token: remoteScriptArgs()[2] || args[args.length - 1] || '' });
+      appendLog('start_runtime', { session_token: remoteStartSessionToken(), state_root: remoteRuntimeStateRoot() });
       if (scenario === 'blocked_report') {
         process.exit(1);
       }
@@ -876,7 +888,7 @@ describe('sshRuntime integration', () => {
       expect(probe.status).toBe('ready');
       const events = await readFakeSSHEvents(fixture);
       const statusEvent = events.find((event) => event.event === 'runtime_status');
-      expect(statusEvent?.data?.script_args).toEqual(['remote_default', 'v1.2.3']);
+      expect(statusEvent?.data?.script_args).toEqual(['remote_default', 'remote_default', 'v1.2.3']);
     } finally {
       await removeFakeSSHFixture(fixture);
     }

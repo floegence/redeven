@@ -412,6 +412,7 @@ export const jaJP = {
     source: "Source: {source}",
     runtimeRoot: "Runtime Root",
     runtimeRootHelp: "Leave blank to use the remote user's .redeven root: {root}.",
+    gatewayRuntimeRootHelp: "Leave blank to keep Gateway data under {root} with an isolated Gateway profile.",
     releaseBaseUrl: "Release Base URL",
     releaseBaseUrlHelp: "Leave blank to use {url}. Set an internal release mirror when this Desktop cannot use GitHub directly.",
     connectTimeout: "Connect Timeout (seconds)",

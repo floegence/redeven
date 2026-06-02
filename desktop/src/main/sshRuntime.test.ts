@@ -82,9 +82,11 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHStartScript()).toContain('printf "%s\\n" "$!" > "${session_dir}/launcher.pid"');
     expect(buildManagedSSHStartScript()).not.toContain('exec "$binary" run');
     expect(buildManagedSSHStartScript()).not.toContain('trap cleanup');
-    expect(buildManagedSSHStartScript()).toContain('state_root="${runtime_root%/}"');
-    expect(buildManagedSSHStartScript()).toContain('session_dir="${runtime_root%/}/runtime/sessions/${session_token}"');
-    expect(buildManagedSSHStartScript()).toContain('log_dir="${runtime_root%/}/runtime/logs"');
+    expect(buildManagedSSHStartScript()).toContain('state_root_raw="${2:-}"');
+    expect(buildManagedSSHStartScript()).toContain('target_release_tag="${3:-}"');
+    expect(buildManagedSSHStartScript()).toContain('session_token="$4"');
+    expect(buildManagedSSHStartScript()).toContain('session_dir="${state_root%/}/runtime/sessions/${session_token}"');
+    expect(buildManagedSSHStartScript()).toContain('log_dir="${state_root%/}/runtime/logs"');
     expect(buildManagedSSHStartScript()).toContain('binary="${bin_dir}/redeven"');
     expect(buildManagedSSHStartScript()).toContain('managed_root="${runtime_root%/}/runtime/managed"');
     expect(buildManagedSSHStartScript()).not.toContain('runtime/releases/${target_release_tag}/bin/redeven');
@@ -98,6 +100,8 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHUploadedInstallScript()).toContain('uploaded Redeven archive did not contain redeven');
     expect(buildManagedSSHUploadedInstallScript()).toContain('write_runtime_stamp "desktop_upload" "$target_release_tag"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('runtime_root="${HOME%/}/.redeven"');
+    expect(buildManagedSSHStartScript()).toContain('state_root="${HOME%/}/.redeven/${state_root#remote_default/}"');
+    expect(buildManagedSSHStartScript()).toContain('setsid "$binary" run --state-root "$state_root"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('managed_root="${runtime_root%/}/runtime/managed"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('binary="${bin_dir}/redeven"');
     expect(buildManagedSSHRemoteInstallScript()).not.toContain('release_root="${runtime_root%/}/runtime/releases/${release_tag}"');
@@ -105,7 +109,9 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHRemoteInstallScript()).toContain('force_install="${4:-0}"');
     expect(buildManagedSSHRemoteInstallScript()).toContain('if [ "$force_install" = "1" ] || ! runtime_is_compatible; then');
     expect(buildManagedSSHRemoteInstallScript()).toContain('write_runtime_stamp "remote_install" "$target_release_tag"');
-    expect(buildManagedSSHReportReadScript()).toContain('runtime/sessions/${session_token}/startup-report.json');
+    expect(buildManagedSSHReportReadScript()).toContain('state_root_raw="${2:-}"');
+    expect(buildManagedSSHReportReadScript()).toContain('session_token="$3"');
+    expect(buildManagedSSHReportReadScript()).toContain('report_path="${state_root%/}/runtime/sessions/${session_token}/startup-report.json"');
     expect(buildManagedSSHStopScript()).toContain('kill "$pid"');
     expect(buildManagedSSHStopScript()).toContain('kill -KILL "$pid"');
     expect(buildManagedSSHStopScript()).toContain('runtime process $pid is still running after stop');

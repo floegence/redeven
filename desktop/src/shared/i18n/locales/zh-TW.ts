@@ -412,6 +412,7 @@ export const zhTW = {
     source: "來源：{source}",
     runtimeRoot: "Runtime Root",
     runtimeRootHelp: "留空時使用遠端使用者的 .redeven root：{root}。",
+    gatewayRuntimeRootHelp: "留空時將 Gateway 資料保存在 {root} 下，並使用隔離的 Gateway profile。",
     releaseBaseUrl: "Release Base URL",
     releaseBaseUrlHelp: "留空時使用 {url}。當此 Desktop 不能直接存取 GitHub 時，可設定內部 release mirror。",
     connectTimeout: "連線逾時（秒）",

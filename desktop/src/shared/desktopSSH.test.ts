@@ -5,6 +5,7 @@ import {
   DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   desktopSSHAuthority,
   desktopSSHEnvironmentID,
+  desktopSSHRuntimeRootSubpath,
   desktopSSHRuntimeAffectingSettingsMatch,
   normalizeDesktopSSHAuthMode,
   normalizeDesktopSSHBootstrapStrategy,
@@ -56,6 +57,13 @@ describe('desktopSSH', () => {
     expect(() => normalizeDesktopSSHRuntimeRoot('relative/path')).toThrow(
       'Runtime root must be an absolute path or use the default remote .redeven.',
     );
+  });
+
+  it('builds runtime subpaths under the normalized SSH runtime root', () => {
+    expect(desktopSSHRuntimeRootSubpath('', 'gateways', 'gw_demo')).toBe(`${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_demo`);
+    expect(desktopSSHRuntimeRootSubpath('~/.redeven', 'gateways', 'gw_demo')).toBe(`${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw_demo`);
+    expect(desktopSSHRuntimeRootSubpath('/opt/redeven/', 'gateways', 'gw_demo')).toBe('/opt/redeven/gateways/gw_demo');
+    expect(desktopSSHRuntimeRootSubpath(DEFAULT_DESKTOP_SSH_RUNTIME_ROOT, 'gateways', 'gw/unsafe')).toBe(`${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/gateways/gw%2Funsafe`);
   });
 
   it('normalizes bootstrap delivery and release base URL inputs', () => {

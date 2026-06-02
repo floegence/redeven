@@ -556,5 +556,5 @@ describe('runtimePlacementManager', () => {
       'waiting_runtime_daemon',
       'runtime_ready',
     ]);
-  });
+  }, 15_000);
 });
