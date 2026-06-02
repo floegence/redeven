@@ -724,6 +724,13 @@ describe('desktopLauncherIPC', () => {
       gateway_id: 'gw-demo',
       start_policy: 'start_if_needed',
     });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'refresh_gateway_status',
+      gateway_id: ' gw-demo ',
+    })).toEqual({
+      kind: 'refresh_gateway_status',
+      gateway_id: 'gw-demo',
+    });
     for (const kind of [
       'start_gateway_runtime',
       'stop_gateway_runtime',

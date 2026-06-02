@@ -276,6 +276,32 @@ export class RuntimeLifecycleWorkflow {
     };
   }
 
+  advanceToStep(
+    stepID: DesktopRuntimeLifecycleStepID,
+    detail = '',
+    attemptCount?: number,
+  ): RuntimeLifecycleStepUpdate {
+    const nextIndex = this.stepIndex(stepID);
+    if (nextIndex < 0) {
+      throw new Error(`Runtime lifecycle step "${stepID}" is not in the current execution plan.`);
+    }
+    for (const phase of this.plan.slice(0, nextIndex)) {
+      const state = this.states.get(phase);
+      if (state?.status === 'failed') {
+        throw new Error(`Runtime lifecycle step "${stepID}" cannot start because "${phase}" has failed.`);
+      }
+      this.setStepState(phase, 'succeeded', state?.detail, state?.attempt_count);
+    }
+    this.activeStepID = stepID;
+    this.failedStepID = null;
+    this.setStepState(stepID, 'running', detail, attemptCount);
+    return {
+      title: '',
+      detail,
+      progress: this.progress(),
+    };
+  }
+
   observeStep(
     stepID: DesktopRuntimeLifecycleStepID,
     detail = '',

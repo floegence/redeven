@@ -35,6 +35,7 @@ export type BusyAction =
   | 'stop_gateway_runtime'
   | 'restart_gateway_runtime'
   | 'update_gateway_runtime'
+  | 'refresh_gateway_status'
   | 'refresh_gateway_catalog'
   | 'delete_gateway'
   | 'set_local_environment_pinned'
@@ -274,7 +275,8 @@ export function gatewayMatchesActionProgress(
     return false;
   }
   const progressSubjectID = String(progress.subject_id ?? '').trim();
-  return progress.subject_kind === 'gateway' && progressSubjectID === cleanGatewayID;
+  const progressGatewayID = String(progress.gateway_id ?? '').trim();
+  return progress.subject_kind === 'gateway' && (progressSubjectID === cleanGatewayID || progressGatewayID === cleanGatewayID);
 }
 
 export function gatewayMatchesRuntimeLifecycleProgress(
@@ -298,10 +300,24 @@ export function gatewaySourceMatchesRuntimeLifecycleProgress(
     case 'restart_gateway_runtime':
     case 'update_gateway_runtime':
     case 'refresh_gateway_catalog':
+    case 'refresh_gateway_status':
       return true;
     default:
       return false;
   }
+}
+
+export function gatewaySourceMatchesCardProgress(
+  gatewayID: string,
+  progress: DesktopLauncherActionProgress | null | undefined,
+): boolean {
+  if (!gatewayMatchesActionProgress(gatewayID, progress)) {
+    return false;
+  }
+  if (progress?.step_progress || progress?.lifecycle_progress) {
+    return true;
+  }
+  return progress?.action === 'open_gateway_environment' && progress.open_progress !== undefined;
 }
 
 export function busyStateMatchesActionProgress(
@@ -382,6 +398,16 @@ export function selectedSnapshotRuntimeLifecycleProgressForGateway(
   return selectLauncherProgress(
     progressItems,
     (progress) => gatewaySourceMatchesRuntimeLifecycleProgress(gatewayID, progress),
+  );
+}
+
+export function selectedSnapshotGatewayProgress(
+  gatewayID: string,
+  progressItems: readonly DesktopLauncherActionProgress[],
+): DesktopLauncherActionProgress | null {
+  return selectLauncherProgress(
+    progressItems,
+    (progress) => gatewaySourceMatchesCardProgress(gatewayID, progress),
   );
 }
 

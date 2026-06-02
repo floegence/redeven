@@ -236,6 +236,32 @@ describe('RuntimeLifecycleWorkflow', () => {
     ]);
   });
 
+  it('advances external progress to a later observed step without leaving the previous step running', () => {
+    const subject = workflow();
+
+    subject.beginStep('checking_host', 'Checking SSH host');
+    const servicePlan = runtimeLifecyclePlanIncludingStep({
+      location: 'ssh_host',
+      operation: 'restart',
+      currentSteps: subject.currentStepIDs(),
+      step: 'checking_runtime_service',
+    });
+    subject.ensureStepPlanned('checking_runtime_service', {
+      state: servicePlan.state,
+      steps: servicePlan.steps.map((step) => step.id),
+      omitted_steps: servicePlan.omitted_steps,
+    });
+
+    expect(subject.advanceToStep('checking_runtime_service', 'Opening Gateway bridge').progress.active_step_id)
+      .toBe('checking_runtime_service');
+    expect(subject.progress().steps.map((step) => [step.id, step.status])).toEqual([
+      ['checking_host', 'succeeded'],
+      ['checking_runtime_package', 'succeeded'],
+      ['checking_runtime_service', 'running'],
+      ['runtime_ready', 'pending'],
+    ]);
+  });
+
   it('preserves completed stop history when a local container update decision moves from running to stopped', () => {
     const subject = containerWorkflow();
 

@@ -2292,6 +2292,7 @@ export type GatewaySourceActionIntent =
   | 'stop_gateway_runtime'
   | 'restart_gateway_runtime'
   | 'update_gateway_runtime'
+  | 'refresh_gateway_status'
   | 'refresh_gateway_catalog';
 
 export type GatewaySourceActionModel = Readonly<{

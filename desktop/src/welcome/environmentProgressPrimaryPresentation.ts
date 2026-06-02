@@ -172,6 +172,7 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): s
     case 'pair_gateway':
       return 'Pairing...';
     case 'refresh_gateway_catalog':
+    case 'refresh_gateway_status':
       return 'Refreshing...';
     default:
       return 'Starting...';
@@ -253,6 +254,7 @@ function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): st
     case 'pair_gateway':
       return 'Pair failed';
     case 'refresh_gateway_catalog':
+    case 'refresh_gateway_status':
       return 'Refresh failed';
     default:
       return 'Needs attention';

@@ -2528,6 +2528,16 @@ body {
   color: var(--popover-foreground);
 }
 
+.redeven-environment-progress__step-detail {
+  display: block;
+  padding-bottom: 0.35rem;
+  color: var(--muted-foreground);
+  font-size: 0.675rem;
+  line-height: 1.35;
+  opacity: 0.88;
+  overflow-wrap: anywhere;
+}
+
 .redeven-environment-progress__step:last-child .redeven-environment-progress__step-line {
   background: transparent;
 }
@@ -3199,16 +3209,58 @@ pre,
   text-align: center;
 }
 
-.redeven-gateway-card__secondary-actions {
-  display: flex;
-  width: 100%;
-  flex-wrap: wrap;
-  gap: 0.4rem;
+.redeven-gateway-action-panel__facts {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
 }
 
-.redeven-gateway-card__secondary-action {
-  flex: 1 1 7rem;
+.redeven-gateway-action-panel__fact {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  gap: 0.55rem;
+  align-items: baseline;
+  border-radius: 0.35rem;
+  background: color-mix(in srgb, var(--muted) 17%, transparent);
+  padding: 0.35rem 0.45rem;
+  font-size: 0.7rem;
+}
+
+.redeven-gateway-action-panel__fact-label {
+  color: var(--muted-foreground);
+  font-weight: 650;
+}
+
+.redeven-gateway-action-panel__fact-value {
   min-width: 0;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
+}
+
+.redeven-gateway-action-panel__fact-value[data-tone='warning'] {
+  color: color-mix(in srgb, var(--warning) 82%, var(--foreground));
+}
+
+.redeven-gateway-action-panel__fact-value[data-tone='error'] {
+  color: color-mix(in srgb, var(--error) 82%, var(--foreground));
+}
+
+.redeven-gateway-action-panel__sessions {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.45rem;
+}
+
+.redeven-gateway-action-panel__session {
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--warning) 9%, var(--card));
+  padding: 0.3rem 0.45rem;
+  color: var(--foreground);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ── Kind tag refinement ── */

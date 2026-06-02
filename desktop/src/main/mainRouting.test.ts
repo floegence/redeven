@@ -345,6 +345,9 @@ describe('main routing', () => {
     expect(updateLifecycleEnd).toBeGreaterThan(updateLifecycleStart);
     const updateLifecycleSrc = mainSrc.slice(updateLifecycleStart, updateLifecycleEnd);
     expect(updateLifecycleSrc).toContain('owner: LauncherOperationAttemptIdentity');
+    expect(updateLifecycleSrc).toContain('const currentStepIndex = workflow.currentStepIDs().indexOf(currentStep);');
+    expect(updateLifecycleSrc).toContain('const nextStepIndex = workflow.currentStepIDs().indexOf(input.phase);');
+    expect(updateLifecycleSrc).toContain('update = workflow.advanceToStep(input.phase, input.detail);');
     expect(updateLifecycleSrc).toContain('launcherOperations.updateCurrentAttempt(operationKey, owner');
 
     const removalStart = mainSrc.indexOf('function scheduleCurrentLauncherOperationRemoval(');
@@ -919,13 +922,13 @@ describe('main routing', () => {
     expect(deleteStart).toBeGreaterThan(pairStart);
     const pairSrc = mainSrc.slice(pairStart, deleteStart);
 
-    expect(pairSrc).toContain('const challenge = await client.pairingChallenge(record, pairingChallengeRequest(material));');
+    expect(pairSrc).toContain('challenge = await client.pairingChallenge(record, pairingChallengeRequest(material));');
     expect(pairSrc).toContain('const fingerprint = assertGatewayPairingChallenge({');
     expect(pairSrc).toContain('const confirmed = await confirmDesktopImpact({');
     expect(pairSrc).toContain("if (!confirmed) {");
-    expect(pairSrc).toContain("status: 'canceled'");
+    expect(pairSrc).toContain("launcherOperations.finish(operationKey, 'canceled', {");
     expect(pairSrc).not.toContain("status: 'failed',\n        title: 'Pair canceled'");
-    expect(pairSrc).toContain("return launcherActionFailure(\n      'action_invalid',\n      'dialog',\n      'Gateway pairing was canceled.'");
+    expect(pairSrc).toContain("return launcherActionSuccess('canceled_launcher_operation');");
     expect(pairSrc).toContain('const completion = await client.completePairing(record, buildPairingCompleteRequest(material, challenge));');
     expect(pairSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion);');
     expect(pairSrc).toContain('completeGatewayPairing({');
@@ -953,8 +956,9 @@ describe('main routing', () => {
 
     expect(openSrc).toContain('const issued = await gatewayLifecycleManager().openSessionWithBridge(record, {');
     expect(openSrc).toContain("requested_capability: 'env_app'");
-    expect(openSrc).toContain("if (error instanceof GatewayRuntimeStartRequiredError || error instanceof GatewayNotManageableError) {\n      launcherOperations.remove(operationKey);");
-    expect(openSrc).toContain("return launcherActionFailure(\n        gatewayRuntimeFailureCode(error),\n        'environment',");
+    expect(openSrc).toContain('if (error instanceof GatewayRuntimeStartRequiredError || error instanceof GatewayNotManageableError) {');
+    expect(openSrc).toContain("next_actions: gatewayOperationFailureNextActions(operationKey, {");
+    expect(openSrc).toContain("return gatewayLauncherFailureFromError(error, record, 'open_gateway_environment', {");
     expect(openSrc).toContain('const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);');
     expect(openSrc).toContain('await installGatewayLocalAccessCookies(artifactURL, response.set_cookie_headers);');
     expect(openSrc).toContain('buildGatewayDesktopTarget({');
