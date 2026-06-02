@@ -77,6 +77,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Code: Icon,
     FolderOpen: Icon,
     GitBranch: Icon,
+    GripVertical: Icon,
     Pencil: Icon,
     Plus: Icon,
     Refresh: Icon,
@@ -197,9 +198,10 @@ export function registerEnvAIPageSendTests() {
       try {
         expect(host.querySelector('.flower-component-thread-rail')).toBeTruthy();
         expect(host.querySelector('button[aria-label="New chat"]')?.textContent).toContain('New chat');
-        expect(host.querySelector('.flower-host-chat-header-title')?.textContent).toContain('Describe what you need');
-        expect(host.textContent).not.toContain('Ready');
-        expect(host.textContent).not.toContain('Using Flower Host');
+        const chatHeader = host.querySelector('.flower-host-chat-header');
+        expect(chatHeader?.querySelector('.flower-host-chat-header-title')?.textContent).toContain('Describe what you need');
+        expect(chatHeader?.textContent).not.toContain('Ready');
+        expect(chatHeader?.textContent).not.toContain('Using Flower Host');
         expect(host.querySelector('button[aria-label="Settings"]')).toBeTruthy();
       } finally {
         dispose();
