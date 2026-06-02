@@ -16,6 +16,8 @@ import {
 
 describe('desktopSSH', () => {
   it('normalizes SSH environment details and defaults the remote runtime root', () => {
+    expect(normalizeDesktopSSHRuntimeRoot('~/.redeven')).toBe(DEFAULT_DESKTOP_SSH_RUNTIME_ROOT);
+    expect(normalizeDesktopSSHRuntimeRoot('$HOME/.redeven')).toBe(DEFAULT_DESKTOP_SSH_RUNTIME_ROOT);
     expect(normalizeDesktopSSHEnvironmentDetails({
       ssh_destination: '  devbox  ',
       ssh_port: normalizeDesktopSSHPort(''),

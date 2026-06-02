@@ -10,6 +10,7 @@ import {
   selectLatestDesktopWelcomeSnapshot,
 } from './desktopLauncherIPC';
 import type { DesktopLauncherActionProgress, DesktopLauncherOperationSnapshot } from './desktopLauncherIPC';
+import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from './desktopSSH';
 import { runtimeLifecycleProgress } from './desktopRuntimeLifecycleProgress';
 
 describe('desktopLauncherIPC', () => {
@@ -281,8 +282,10 @@ describe('desktopLauncherIPC', () => {
       ssh_destination: ' dev@bastion ',
       ssh_port: ' 2222 ',
       auth_mode: ' password ',
+      ssh_password: ' secret ',
+      ssh_password_mode: 'replace',
       connect_timeout_seconds: '15',
-      runtime_root: ' /opt/redeven ',
+      runtime_root: ' ~/.redeven ',
       bootstrap_strategy: ' desktop_upload ',
       release_base_url: ' https://mirror.example/releases?token=drop ',
       gateway_url: ' https://gateway.example/path?token=must-not-cross ',
@@ -295,9 +298,11 @@ describe('desktopLauncherIPC', () => {
       connection_kind: 'ssh_host',
       ssh_destination: 'dev@bastion',
       ssh_port: 2222,
-      auth_mode: 'key_agent',
+      auth_mode: 'password',
+      ssh_password: ' secret ',
+      ssh_password_mode: 'replace',
       connect_timeout_seconds: 15,
-      runtime_root: '/opt/redeven',
+      runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
       bootstrap_strategy: 'desktop_upload',
       release_base_url: 'https://mirror.example/releases',
     });
@@ -314,7 +319,7 @@ describe('desktopLauncherIPC', () => {
       container_id: ' container-123 ',
       container_ref: '',
       container_label: ' api-net ',
-      runtime_root: ' /workspace/.redeven ',
+      runtime_root: ' ',
       artifact_nonce: 'renderer-artifact-nonce-must-not-cross',
       private_key: 'renderer-private-key-must-not-cross',
     })).toEqual({
@@ -325,12 +330,14 @@ describe('desktopLauncherIPC', () => {
       ssh_destination: 'bastion',
       ssh_port: null,
       auth_mode: 'key_agent',
+      ssh_password: '',
+      ssh_password_mode: 'replace',
       connect_timeout_seconds: 10,
       container_engine: 'podman',
       container_id: 'container-123',
       container_ref: 'api-net',
       container_label: 'api-net',
-      runtime_root: '/workspace/.redeven',
+      runtime_root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'pair_gateway',

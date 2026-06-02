@@ -3,6 +3,7 @@ import {
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
+  DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import {
@@ -21,7 +22,7 @@ import {
   type GatewayOpenSessionResponse,
 } from './gatewayClient';
 import { gatewayEnvAppBridgeRouteID } from './gatewaySessionArtifact';
-import type { GatewayRecord } from './gatewayStore';
+import { gatewayRecordSSHPasswordRef, type GatewayRecord } from './gatewayStore';
 import type { GatewaySecretStore } from './gatewayTrust';
 
 type GatewayLifecycleSession = Readonly<{
@@ -117,14 +118,15 @@ export class GatewayLifecycleManager {
     }
     const hostAccess = gatewayHostAccess(record);
     const placement = gatewayPlacement(record);
-    const runtimeBinaryPath = await this.ensureRuntimeReady(record, hostAccess, placement, signal);
+    const sshPassword = await this.gatewaySSHPassword(record);
+    const runtimeBinaryPath = await this.ensureRuntimeReady(record, hostAccess, placement, sshPassword, signal);
     this.emit('opening_bridge', 'Opening Gateway bridge', 'Desktop is opening the Gateway protocol stream through the existing runtime placement bridge.');
     const bridgeSession = await startRuntimePlacementBridgeSession({
       host_access: hostAccess,
       placement,
       runtime_binary_path: runtimeBinaryPath,
       desktop_owner_id: await this.options.desktop_owner_id(),
-      ssh_password: '',
+      ssh_password: sshPassword,
       fallback_local_id: record.gateway_id,
       signal,
     });
@@ -143,6 +145,7 @@ export class GatewayLifecycleManager {
     record: GatewayRecord,
     hostAccess: DesktopRuntimeHostAccess,
     placement: DesktopRuntimePlacement,
+    sshPassword: string,
     signal?: AbortSignal,
   ): Promise<string> {
     if (record.connection.kind === 'ssh_host') {
@@ -154,7 +157,7 @@ export class GatewayLifecycleManager {
         tempRoot: this.options.temp_root,
         assetCacheRoot: this.options.asset_cache_root,
         sourceRuntimeRoot: this.options.source_runtime_root,
-        sshPassword: '',
+        sshPassword,
         desktopOwnerID: await this.options.desktop_owner_id(),
         signal,
       });
@@ -164,7 +167,7 @@ export class GatewayLifecycleManager {
     const ready = await ensureRuntimePlacementReady({
       host_access: hostAccess,
       placement,
-      ssh_password: '',
+      ssh_password: sshPassword,
       runtime_release_tag: this.options.runtime_release_tag,
       release_base_url: this.options.release_base_url,
       source_runtime_root: this.options.source_runtime_root,
@@ -185,6 +188,14 @@ export class GatewayLifecycleManager {
       },
     });
     return ready.runtime_binary_path;
+  }
+
+  private async gatewaySSHPassword(record: GatewayRecord): Promise<string> {
+    const ref = gatewayRecordSSHPasswordRef(record);
+    if (!ref) {
+      return '';
+    }
+    return this.options.secret_store.readSecret(ref);
   }
 
   private emit(phase: GatewayRuntimeLifecycleProgress['phase'], title: string, detail: string): void {
@@ -250,6 +261,9 @@ function gatewayLifecycleTargetID(record: GatewayRecord): string {
 }
 
 function gatewayManagedSSHRuntimeBinaryPath(target: DesktopSSHEnvironmentDetails): string {
-  const runtimeRoot = target.runtime_root === 'remote_default' ? '~/.redeven' : target.runtime_root;
+  if (target.runtime_root === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT) {
+    return DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
+  }
+  const runtimeRoot = target.runtime_root;
   return `${runtimeRoot.replace(/\/+$/u, '')}/runtime/managed/bin/redeven`;
 }

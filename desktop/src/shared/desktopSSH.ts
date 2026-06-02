@@ -1,5 +1,5 @@
 export const DEFAULT_DESKTOP_SSH_RUNTIME_ROOT = 'remote_default';
-export const DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL = 'Remote user .redeven';
+export const DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL = '~/.redeven';
 export const DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY = 'auto';
 export const DEFAULT_DESKTOP_SSH_AUTH_MODE = 'key_agent';
 export const DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL = '';
@@ -59,7 +59,12 @@ export function normalizeDesktopSSHPort(value: unknown): number | null {
 
 export function normalizeDesktopSSHRuntimeRoot(value: unknown): string {
   const text = compact(value);
-  if (text === '') {
+  if (
+    text === ''
+    || text === '~/.redeven'
+    || text === '$HOME/.redeven'
+    || text === '${HOME}/.redeven'
+  ) {
     return DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
   }
   if (/[\r\n]/u.test(text)) {

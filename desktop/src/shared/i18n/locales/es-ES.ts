@@ -374,7 +374,7 @@ export const esES = {
     environmentUrl: "Environment URL",
     gatewayTransport: "Gateway Transport",
     gatewayName: "Gateway Name",
-    gatewayNamePlaceholder: "Remote lab Gateway",
+    gatewayNamePlaceholder: "Gateway-devbox",
     gatewayUrl: "Gateway URL",
     gatewayUrlPlaceholder: "https://gateway.example.com",
     gatewayUrlHelp: "Desktop talks directly to this Gateway and lists only the environments the Gateway manages. Provider and Region routes are not used for Gateway traffic.",
@@ -453,6 +453,7 @@ export const esES = {
     validationChooseContainer: "Elige un contenedor en ejecución.",
     validationChooseContainerFromList: "Elige un contenedor en ejecución de la lista actual.",
     validationRuntimeRootRequired: "La raíz Runtime es obligatoria.",
+    validationSshPasswordRequired: "La contraseña SSH es obligatoria para la autenticación con contraseña.",
   },
   confirm: {
     deleteConnectionTitle: "Eliminar conexión",

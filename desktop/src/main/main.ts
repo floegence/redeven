@@ -114,6 +114,8 @@ import {
   gatewayRecordToSource,
   gatewayRecordToSourceWithCatalog,
   gatewayRecordToSourceWithError,
+  gatewayRecordSSHPasswordRef,
+  gatewaySSHPasswordSecretRef,
   normalizeGatewayBaseURL,
   stableGatewayID,
   type GatewayRecord,
@@ -3623,51 +3625,124 @@ async function loadGatewaySourcesForWelcome() {
 async function upsertGatewayFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway' }>,
 ): Promise<GatewayRecord> {
-  const nextConnection = (() => {
-    switch (request.connection_kind) {
-      case 'url':
-        return {
-          kind: 'url' as const,
-          base_url: normalizeGatewayBaseURL(request.gateway_url),
-          allow_loopback_http: request.allow_loopback_http,
-        };
-      case 'ssh_host':
-        return {
-          kind: 'ssh_host' as const,
-          ssh_destination: request.ssh_destination,
-          ...(request.ssh_port == null ? {} : { ssh_port: request.ssh_port }),
-          auth_mode: 'key_agent' as const,
-          ...(request.connect_timeout_seconds == null ? {} : { connect_timeout_seconds: request.connect_timeout_seconds }),
-          runtime_root: request.runtime_root,
-          bootstrap_strategy: request.bootstrap_strategy,
-          ...(compact(request.release_base_url) ? { release_base_url: request.release_base_url } : {}),
-        };
-      case 'ssh_container':
-        return {
-          kind: 'ssh_container' as const,
-          ssh_destination: request.ssh_destination,
-          ...(request.ssh_port == null ? {} : { ssh_port: request.ssh_port }),
-          auth_mode: 'key_agent' as const,
-          ...(request.connect_timeout_seconds == null ? {} : { connect_timeout_seconds: request.connect_timeout_seconds }),
-          container_engine: request.container_engine,
-          container_id: request.container_id,
-          container_ref: request.container_ref,
-          container_label: request.container_label,
-          runtime_root: request.runtime_root,
-        };
-    }
-  })();
-  const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(nextConnection));
+  if (request.connection_kind === 'url') {
+    const nextConnection: GatewayRecord['connection'] = {
+      kind: 'url',
+      base_url: normalizeGatewayBaseURL(request.gateway_url),
+      allow_loopback_http: request.allow_loopback_http,
+    };
+    const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(nextConnection));
+    const existing = await gatewayStore().get(gatewayID);
+    return upsertGatewayConnectionRecord(gatewayID, request.display_name, nextConnection, existing);
+  }
+
+  const connectionDraft: Exclude<GatewayRecord['connection'], { kind: 'url' }> = request.connection_kind === 'ssh_host'
+    ? {
+        kind: 'ssh_host',
+        ssh_destination: request.ssh_destination,
+        ...(request.ssh_port == null ? {} : { ssh_port: request.ssh_port }),
+        auth_mode: request.auth_mode,
+        ...(request.connect_timeout_seconds == null ? {} : { connect_timeout_seconds: request.connect_timeout_seconds }),
+        runtime_root: request.runtime_root,
+        bootstrap_strategy: request.bootstrap_strategy,
+        ...(compact(request.release_base_url) ? { release_base_url: request.release_base_url } : {}),
+      }
+    : {
+        kind: 'ssh_container',
+        ssh_destination: request.ssh_destination,
+        ...(request.ssh_port == null ? {} : { ssh_port: request.ssh_port }),
+        auth_mode: request.auth_mode,
+        ...(request.connect_timeout_seconds == null ? {} : { connect_timeout_seconds: request.connect_timeout_seconds }),
+        container_engine: request.container_engine,
+        container_id: request.container_id,
+        container_ref: request.container_ref,
+        container_label: request.container_label,
+        runtime_root: request.runtime_root,
+      };
+  const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(connectionDraft));
   const existing = await gatewayStore().get(gatewayID);
+  const nextConnection = await prepareGatewaySSHPasswordConnection(gatewayID, connectionDraft, existing, {
+    ssh_password: request.ssh_password,
+    ssh_password_mode: request.ssh_password_mode,
+  });
+  return upsertGatewayConnectionRecord(gatewayID, request.display_name, nextConnection, existing);
+}
+
+async function upsertGatewayConnectionRecord(
+  gatewayID: string,
+  displayName: string,
+  nextConnection: GatewayRecord['connection'],
+  existing: GatewayRecord | null,
+): Promise<GatewayRecord> {
   if (existing?.trust_profile && gatewayBindingAudience(existing.connection) !== gatewayBindingAudience(nextConnection)) {
     await gatewaySecretStore().deleteSecret(existing.trust_profile.paired_client_private_key_ref);
     await gatewayLifecycleManager().clear(existing);
   }
+  const existingPasswordRef = existing ? gatewayRecordSSHPasswordRef(existing) : '';
+  const nextPasswordRef = nextConnection.kind === 'url' ? '' : nextConnection.ssh_password_ref ?? '';
+  if (existingPasswordRef && existingPasswordRef !== nextPasswordRef) {
+    await gatewaySecretStore().deleteSecret(existingPasswordRef);
+  }
   return gatewayStore().upsert({
     gateway_id: gatewayID,
-    display_name: request.display_name,
+    display_name: displayName,
     connection: nextConnection,
   });
+}
+
+async function prepareGatewaySSHPasswordConnection(
+  gatewayID: string,
+  connection: Exclude<GatewayRecord['connection'], { kind: 'url' }>,
+  existing: GatewayRecord | null,
+  passwordInput: Readonly<{
+    ssh_password: string;
+    ssh_password_mode: 'keep' | 'replace' | 'clear';
+  }>,
+): Promise<Exclude<GatewayRecord['connection'], { kind: 'url' }>> {
+  const existingRef = existing ? gatewayRecordSSHPasswordRef(existing) : '';
+  if (connection.auth_mode !== 'password') {
+    if (existingRef) {
+      await gatewaySecretStore().deleteSecret(existingRef);
+    }
+    return {
+      ...connection,
+      ssh_password_configured: false,
+    };
+  }
+  const ref = gatewaySSHPasswordSecretRef(gatewayID);
+  const secretStore = gatewaySecretStore();
+  if (passwordInput.ssh_password_mode === 'clear') {
+    if (existingRef) {
+      await secretStore.deleteSecret(existingRef);
+    }
+    return {
+      ...connection,
+      ssh_password_configured: false,
+    };
+  }
+  if (passwordInput.ssh_password_mode === 'replace') {
+    const password = compact(passwordInput.ssh_password);
+    if (!password) {
+      throw new Error('SSH password is required for password authentication.');
+    }
+    if (existingRef && existingRef !== ref) {
+      await secretStore.deleteSecret(existingRef);
+    }
+    await secretStore.writeSecret(ref, password);
+    return {
+      ...connection,
+      ssh_password_configured: true,
+      ssh_password_ref: ref,
+    };
+  }
+  if (!existingRef) {
+    throw new Error('SSH password is required for password authentication.');
+  }
+  return {
+    ...connection,
+    ssh_password_configured: true,
+    ssh_password_ref: existingRef === ref ? ref : existingRef,
+  };
 }
 
 async function pairGatewayFromLauncher(
@@ -3721,6 +3796,10 @@ async function deleteGatewayFromLauncher(gatewayID: string): Promise<GatewayReco
   const existing = await gatewayStore().get(gatewayID);
   if (existing?.trust_profile) {
     await gatewaySecretStore().deleteSecret(existing.trust_profile.paired_client_private_key_ref);
+  }
+  const passwordRef = existing ? gatewayRecordSSHPasswordRef(existing) : '';
+  if (passwordRef) {
+    await gatewaySecretStore().deleteSecret(passwordRef);
   }
   if (existing) {
     await gatewayLifecycleManager().clear(existing);

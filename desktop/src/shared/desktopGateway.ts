@@ -1,3 +1,6 @@
+import type { DesktopSSHEnvironmentDetails } from './desktopSSH';
+import type { DesktopContainerEngine } from './desktopRuntimePlacement';
+
 export type DesktopGatewayConnectionKind = 'url' | 'ssh_host' | 'ssh_container';
 
 export type DesktopGatewayStatus =
@@ -64,6 +67,12 @@ export type DesktopGatewaySource = Readonly<{
   endpoint_label?: string;
   gateway_url?: string;
   allow_loopback_http?: boolean;
+  ssh_details?: DesktopSSHEnvironmentDetails;
+  ssh_password_configured?: boolean;
+  container_engine?: DesktopContainerEngine;
+  container_id?: string;
+  container_ref?: string;
+  container_label?: string;
   created_at_ms: number;
   updated_at_ms: number;
   environments: readonly DesktopGatewayEnvironment[];

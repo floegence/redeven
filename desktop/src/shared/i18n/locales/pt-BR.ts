@@ -374,7 +374,7 @@ export const ptBR = {
     environmentUrl: "Environment URL",
     gatewayTransport: "Gateway Transport",
     gatewayName: "Gateway Name",
-    gatewayNamePlaceholder: "Remote lab Gateway",
+    gatewayNamePlaceholder: "Gateway-devbox",
     gatewayUrl: "Gateway URL",
     gatewayUrlPlaceholder: "https://gateway.example.com",
     gatewayUrlHelp: "Desktop talks directly to this Gateway and lists only the environments the Gateway manages. Provider and Region routes are not used for Gateway traffic.",
@@ -453,6 +453,7 @@ export const ptBR = {
     validationChooseContainer: "Escolha um contêiner em execução.",
     validationChooseContainerFromList: "Escolha um contêiner em execução da lista atual.",
     validationRuntimeRootRequired: "Raiz Runtime é obrigatória.",
+    validationSshPasswordRequired: "A senha SSH é obrigatória para autenticação por senha.",
   },
   confirm: {
     deleteConnectionTitle: "Excluir conexão",

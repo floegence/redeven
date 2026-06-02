@@ -10,7 +10,15 @@ import {
   type DesktopGatewaySource,
   type DesktopGatewayTrustState,
 } from '../shared/desktopGateway';
-import type { DesktopSSHAuthMode, DesktopSSHBootstrapStrategy } from '../shared/desktopSSH';
+import {
+  DEFAULT_DESKTOP_SSH_AUTH_MODE,
+  DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+  DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS,
+  DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
+  type DesktopSSHAuthMode,
+  type DesktopSSHBootstrapStrategy,
+  type DesktopSSHEnvironmentDetails,
+} from '../shared/desktopSSH';
 import type { DesktopContainerEngine } from '../shared/desktopRuntimePlacement';
 
 export const GATEWAY_STORE_SCHEMA_VERSION = 1;
@@ -25,7 +33,9 @@ export type GatewaySSHHostConnection = Readonly<{
   kind: 'ssh_host';
   ssh_destination: string;
   ssh_port?: number;
-  auth_mode?: Extract<DesktopSSHAuthMode, 'key_agent'>;
+  auth_mode?: DesktopSSHAuthMode;
+  ssh_password_configured?: boolean;
+  ssh_password_ref?: string;
   connect_timeout_seconds?: number;
   bootstrap_strategy?: DesktopSSHBootstrapStrategy;
   release_base_url?: string;
@@ -37,7 +47,9 @@ export type GatewaySSHContainerConnection = Readonly<{
   kind: 'ssh_container';
   ssh_destination: string;
   ssh_port?: number;
-  auth_mode?: Extract<DesktopSSHAuthMode, 'key_agent'>;
+  auth_mode?: DesktopSSHAuthMode;
+  ssh_password_configured?: boolean;
+  ssh_password_ref?: string;
   connect_timeout_seconds?: number;
   container_engine: DesktopContainerEngine;
   username?: string;
@@ -109,13 +121,86 @@ function positiveInteger(value: unknown): number | undefined {
   return Math.floor(numeric);
 }
 
-function normalizeGatewaySSHAuthMode(value: unknown): Extract<DesktopSSHAuthMode, 'key_agent'> | undefined {
+function normalizeGatewaySSHAuthMode(value: unknown): DesktopSSHAuthMode | undefined {
   switch (compact(value)) {
     case 'key_agent':
-      return 'key_agent';
+    case 'password':
+      return compact(value) as DesktopSSHAuthMode;
     default:
       return undefined;
   }
+}
+
+function normalizeGatewaySSHPasswordRef(value: unknown): string | undefined {
+  const ref = compact(value);
+  return ref.startsWith('gateway-ssh-password:') ? ref : undefined;
+}
+
+export function gatewaySSHPasswordSecretRef(gatewayID: string): string {
+  const cleanGatewayID = normalizeGatewayID(gatewayID);
+  return cleanGatewayID ? `gateway-ssh-password:${cleanGatewayID}` : '';
+}
+
+function normalizeGatewaySSHPasswordState(value: Record<string, unknown>): Readonly<{
+  auth_mode?: DesktopSSHAuthMode;
+  ssh_password_configured?: boolean;
+  ssh_password_ref?: string;
+}> {
+  const authMode = normalizeGatewaySSHAuthMode(value.auth_mode);
+  if (authMode !== 'password') {
+    return authMode
+      ? { auth_mode: authMode, ssh_password_configured: false }
+      : {};
+  }
+  const ref = normalizeGatewaySSHPasswordRef(value.ssh_password_ref);
+  const configured = value.ssh_password_configured === true || !!ref;
+  return {
+    auth_mode: 'password',
+    ssh_password_configured: configured,
+    ...(configured && ref ? { ssh_password_ref: ref } : {}),
+  };
+}
+
+function gatewayConnectionSSHDetails(connection: Exclude<GatewayConnection, GatewayURLConnection>): DesktopSSHEnvironmentDetails {
+  return {
+    ssh_destination: connection.ssh_destination,
+    ssh_port: connection.ssh_port ?? null,
+    auth_mode: connection.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE,
+    connect_timeout_seconds: connection.connect_timeout_seconds ?? DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS,
+    runtime_root: connection.runtime_root,
+    bootstrap_strategy: connection.kind === 'ssh_host'
+      ? connection.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY
+      : DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
+    release_base_url: connection.kind === 'ssh_host'
+      ? connection.release_base_url ?? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL
+      : DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
+  };
+}
+
+export function gatewayRecordSSHPasswordRef(record: GatewayRecord): string {
+  const connection = record.connection;
+  if (connection.kind === 'url' || connection.auth_mode !== 'password') {
+    return '';
+  }
+  return connection.ssh_password_ref ?? gatewaySSHPasswordSecretRef(record.gateway_id);
+}
+
+function normalizeGatewaySSHPasswordRefForRecord(connection: GatewayConnection, gatewayID: string): GatewayConnection {
+  if (connection.kind === 'url') {
+    return connection;
+  }
+  if (connection.auth_mode !== 'password') {
+    const { ssh_password_ref: _sshPasswordRef, ssh_password_configured: _sshPasswordConfigured, ...rest } = connection;
+    return rest;
+  }
+  if (!connection.ssh_password_configured) {
+    const { ssh_password_ref: _sshPasswordRef, ...rest } = connection;
+    return rest;
+  }
+  return {
+    ...connection,
+    ssh_password_ref: connection.ssh_password_ref ?? gatewaySSHPasswordSecretRef(gatewayID),
+  };
 }
 
 function normalizeGatewaySSHBootstrapStrategy(value: unknown): DesktopSSHBootstrapStrategy | undefined {
@@ -196,7 +281,7 @@ function normalizeSSHHostConnection(value: Record<string, unknown>): GatewaySSHH
     kind: 'ssh_host',
     ssh_destination: sshDestination,
     ...(positiveInteger(value.ssh_port) ? { ssh_port: positiveInteger(value.ssh_port) } : {}),
-    ...(normalizeGatewaySSHAuthMode(value.auth_mode) ? { auth_mode: normalizeGatewaySSHAuthMode(value.auth_mode) } : {}),
+    ...normalizeGatewaySSHPasswordState(value),
     ...(positiveInteger(value.connect_timeout_seconds) ? { connect_timeout_seconds: positiveInteger(value.connect_timeout_seconds) } : {}),
     ...(normalizeGatewaySSHBootstrapStrategy(value.bootstrap_strategy) ? { bootstrap_strategy: normalizeGatewaySSHBootstrapStrategy(value.bootstrap_strategy) } : {}),
     ...(compact(value.release_base_url) ? { release_base_url: compact(value.release_base_url) } : {}),
@@ -216,6 +301,8 @@ function normalizeSSHContainerConnection(value: Record<string, unknown>): Gatewa
     ssh_destination: base.ssh_destination,
     ...(base.ssh_port ? { ssh_port: base.ssh_port } : {}),
     ...(base.auth_mode ? { auth_mode: base.auth_mode } : {}),
+    ...(base.ssh_password_configured ? { ssh_password_configured: base.ssh_password_configured } : {}),
+    ...(base.ssh_password_ref ? { ssh_password_ref: base.ssh_password_ref } : {}),
     ...(base.connect_timeout_seconds ? { connect_timeout_seconds: base.connect_timeout_seconds } : {}),
     container_engine: normalizeGatewayContainerEngine(value.container_engine),
     ...(base.username ? { username: base.username } : {}),
@@ -300,10 +387,11 @@ export function normalizeGatewayRecord(value: unknown, now = Date.now()): Gatewa
   }
   const candidate = value as Record<string, unknown>;
   const gatewayID = normalizeGatewayID(candidate.gateway_id);
-  const connection = normalizeGatewayConnection(candidate.connection);
+  let connection = normalizeGatewayConnection(candidate.connection);
   if (!gatewayID || !connection) {
     return null;
   }
+  connection = normalizeGatewaySSHPasswordRefForRecord(connection, gatewayID);
   const rawTrustProfile = normalizeTrustProfile(candidate.trust_profile, gatewayID);
   const trustProfile = rawTrustProfile?.binding_audience === gatewayBindingAudience(connection)
     ? rawTrustProfile
@@ -345,7 +433,17 @@ export function gatewayRecordToSource(record: GatewayRecord): DesktopGatewaySour
     ...(record.connection.kind === 'url' ? {
       gateway_url: record.connection.base_url,
       allow_loopback_http: record.connection.allow_loopback_http === true,
-    } : {}),
+    } : {
+      ssh_details: gatewayConnectionSSHDetails(record.connection),
+      ssh_password_configured: record.connection.auth_mode === 'password'
+        && record.connection.ssh_password_configured === true,
+      ...(record.connection.kind === 'ssh_container' ? {
+        container_engine: record.connection.container_engine,
+        container_id: record.connection.container_id,
+        container_ref: record.connection.container_ref,
+        container_label: record.connection.container_label,
+      } : {}),
+    }),
     created_at_ms: record.created_at_ms,
     updated_at_ms: record.updated_at_ms,
     environments: [],

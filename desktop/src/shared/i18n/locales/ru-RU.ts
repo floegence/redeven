@@ -374,7 +374,7 @@ export const ruRU = {
     environmentUrl: "Environment URL",
     gatewayTransport: "Gateway Transport",
     gatewayName: "Gateway Name",
-    gatewayNamePlaceholder: "Remote lab Gateway",
+    gatewayNamePlaceholder: "Gateway-devbox",
     gatewayUrl: "Gateway URL",
     gatewayUrlPlaceholder: "https://gateway.example.com",
     gatewayUrlHelp: "Desktop talks directly to this Gateway and lists only the environments the Gateway manages. Provider and Region routes are not used for Gateway traffic.",
@@ -453,6 +453,7 @@ export const ruRU = {
     validationChooseContainer: "Выберите запущенный контейнер.",
     validationChooseContainerFromList: "Выберите запущенный контейнер из текущего списка.",
     validationRuntimeRootRequired: "Корень Runtime обязателен.",
+    validationSshPasswordRequired: "Для аутентификации по паролю требуется SSH-пароль.",
   },
   confirm: {
     deleteConnectionTitle: "Удалить подключение",

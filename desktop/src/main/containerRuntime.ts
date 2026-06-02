@@ -3,6 +3,7 @@ import {
   desktopRuntimeContainerReference,
   type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
+import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import {
   buildManagedSSHRuntimeProbeScript,
   buildManagedSSHUploadedInstallScript,
@@ -37,6 +38,18 @@ export type DesktopContainerInspectResult = Readonly<{
   container_label: string;
   status: DesktopContainerRuntimeStatus;
 }>;
+
+export function containerRuntimeRootShellPrelude(variableName = 'runtime_root'): string {
+  return [
+    `if [ "$${variableName}" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`,
+    '  if [ -z "${HOME:-}" ]; then',
+    '    echo "container HOME is unavailable; set Runtime Root to an absolute .redeven path" >&2',
+    '    exit 1',
+    '  fi',
+    `  ${variableName}="\${HOME%/}/.redeven"`,
+    'fi',
+  ].join('\n');
+}
 
 export type DesktopRuntimeContainerListItem = Readonly<{
   engine: DesktopContainerEngine;
@@ -494,6 +507,7 @@ export function containerRuntimeUploadedInstallCommand(input: Readonly<{
   const installDriver = [
     'set -eu',
     'runtime_root="$1"',
+    containerRuntimeRootShellPrelude(),
     'release_tag="$2"',
     'install_script="$3"',
     'upload_dir="$(mktemp -d "${TMPDIR:-/tmp}/redeven-container-upload.XXXXXX")"',
@@ -525,6 +539,13 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
   runtime_root: string;
   desktop_owner_id: string;
 }>): readonly string[] {
+  const startDriver = [
+    'set -eu',
+    'runtime_root="$1"',
+    containerRuntimeRootShellPrelude(),
+    'runtime_binary_path="$2"',
+    'exec "$runtime_binary_path" run --mode desktop --desktop-managed --presentation machine --state-root "$runtime_root" --local-ui-bind 127.0.0.1:0',
+  ].join('\n');
   return containerRuntimeExecCommandWithMode({
     engine: input.engine,
     container_id: input.container_id,
@@ -532,17 +553,12 @@ export function containerRuntimeDaemonStartCommand(input: Readonly<{
       REDEVEN_DESKTOP_OWNER_ID: input.desktop_owner_id,
     },
     argv: [
-      input.runtime_binary_path,
-      'run',
-      '--mode',
-      'desktop',
-      '--desktop-managed',
-      '--presentation',
-      'machine',
-      '--state-root',
+      'sh',
+      '-c',
+      startDriver,
+      'redeven-container-runtime-start',
       input.runtime_root,
-      '--local-ui-bind',
-      '127.0.0.1:0',
+      input.runtime_binary_path,
     ],
   }, { detached: true, interactive: false });
 }
@@ -553,14 +569,23 @@ export function containerRuntimeDaemonStatusCommand(input: Readonly<{
   runtime_binary_path: string;
   runtime_root: string;
 }>): readonly string[] {
+  const statusDriver = [
+    'set -eu',
+    'runtime_root="$1"',
+    containerRuntimeRootShellPrelude(),
+    'runtime_binary_path="$2"',
+    'exec "$runtime_binary_path" desktop-runtime-status --state-root "$runtime_root"',
+  ].join('\n');
   return containerRuntimeExecCommand({
     engine: input.engine,
     container_id: input.container_id,
     argv: [
-      input.runtime_binary_path,
-      'desktop-runtime-status',
-      '--state-root',
+      'sh',
+      '-c',
+      statusDriver,
+      'redeven-container-runtime-status',
       input.runtime_root,
+      input.runtime_binary_path,
     ],
   });
 }
@@ -571,14 +596,23 @@ export function containerRuntimeDaemonStopCommand(input: Readonly<{
   runtime_binary_path: string;
   runtime_root: string;
 }>): readonly string[] {
+  const stopDriver = [
+    'set -eu',
+    'runtime_root="$1"',
+    containerRuntimeRootShellPrelude(),
+    'runtime_binary_path="$2"',
+    'exec "$runtime_binary_path" desktop-runtime-stop --state-root "$runtime_root"',
+  ].join('\n');
   return containerRuntimeExecCommand({
     engine: input.engine,
     container_id: input.container_id,
     argv: [
-      input.runtime_binary_path,
-      'desktop-runtime-stop',
-      '--state-root',
+      'sh',
+      '-c',
+      stopDriver,
+      'redeven-container-runtime-stop',
       input.runtime_root,
+      input.runtime_binary_path,
     ],
   });
 }

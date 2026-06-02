@@ -2,6 +2,7 @@ import type { DesktopSettingsSurfaceSnapshot } from './desktopSettingsSurface';
 import type { DesktopControlPlaneSummary } from './controlPlaneProvider';
 import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import {
+  normalizeDesktopSSHAuthMode,
   normalizeDesktopSSHBootstrapStrategy,
   normalizeDesktopSSHConnectTimeoutSeconds,
   normalizeDesktopSSHDestination,
@@ -588,7 +589,9 @@ export type DesktopLauncherActionRequest = Readonly<
       connection_kind: 'ssh_host';
       ssh_destination: string;
       ssh_port: number | null;
-      auth_mode: Extract<DesktopSSHEnvironmentDetails['auth_mode'], 'key_agent'>;
+      auth_mode: DesktopSSHEnvironmentDetails['auth_mode'];
+      ssh_password: string;
+      ssh_password_mode: 'keep' | 'replace' | 'clear';
       connect_timeout_seconds: number | null;
       runtime_root: string;
       bootstrap_strategy: DesktopSSHEnvironmentDetails['bootstrap_strategy'];
@@ -601,7 +604,9 @@ export type DesktopLauncherActionRequest = Readonly<
       connection_kind: 'ssh_container';
       ssh_destination: string;
       ssh_port: number | null;
-      auth_mode: Extract<DesktopSSHEnvironmentDetails['auth_mode'], 'key_agent'>;
+      auth_mode: DesktopSSHEnvironmentDetails['auth_mode'];
+      ssh_password: string;
+      ssh_password_mode: 'keep' | 'replace' | 'clear';
       connect_timeout_seconds: number | null;
       container_engine: DesktopContainerEngine;
       container_id: string;
@@ -1139,6 +1144,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       }
       if (connectionKind === 'ssh_host') {
         try {
+          const runtimeRoot = normalizeDesktopSSHRuntimeRoot((candidate as { runtime_root?: unknown }).runtime_root);
           return {
             kind,
             gateway_id: gatewayID,
@@ -1146,9 +1152,11 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
             connection_kind: 'ssh_host',
             ssh_destination: normalizeDesktopSSHDestination((candidate as { ssh_destination?: unknown }).ssh_destination),
             ssh_port: normalizeDesktopSSHPort((candidate as { ssh_port?: unknown }).ssh_port),
-            auth_mode: 'key_agent',
+            auth_mode: normalizeDesktopSSHAuthMode((candidate as { auth_mode?: unknown }).auth_mode),
+            ssh_password: String((candidate as { ssh_password?: unknown }).ssh_password ?? ''),
+            ssh_password_mode: normalizeSSHPasswordMode((candidate as { ssh_password_mode?: unknown }).ssh_password_mode),
             connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
-            runtime_root: normalizeDesktopSSHRuntimeRoot((candidate as { runtime_root?: unknown }).runtime_root),
+            runtime_root: runtimeRoot,
             bootstrap_strategy: normalizeDesktopSSHBootstrapStrategy((candidate as { bootstrap_strategy?: unknown }).bootstrap_strategy),
             release_base_url: normalizeDesktopSSHReleaseBaseURL((candidate as { release_base_url?: unknown }).release_base_url),
           };
@@ -1162,6 +1170,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           return null;
         }
         try {
+          const runtimeRoot = normalizeDesktopSSHRuntimeRoot((candidate as { runtime_root?: unknown }).runtime_root);
           return {
             kind,
             gateway_id: gatewayID,
@@ -1169,13 +1178,15 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
             connection_kind: 'ssh_container',
             ssh_destination: normalizeDesktopSSHDestination((candidate as { ssh_destination?: unknown }).ssh_destination),
             ssh_port: normalizeDesktopSSHPort((candidate as { ssh_port?: unknown }).ssh_port),
-            auth_mode: 'key_agent',
+            auth_mode: normalizeDesktopSSHAuthMode((candidate as { auth_mode?: unknown }).auth_mode),
+            ssh_password: String((candidate as { ssh_password?: unknown }).ssh_password ?? ''),
+            ssh_password_mode: normalizeSSHPasswordMode((candidate as { ssh_password_mode?: unknown }).ssh_password_mode),
             connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds((candidate as { connect_timeout_seconds?: unknown }).connect_timeout_seconds),
             container_engine: normalizeDesktopContainerEngine((candidate as { container_engine?: unknown }).container_engine),
             container_id: containerID,
             container_ref: compact((candidate as { container_ref?: unknown }).container_ref) || compact((candidate as { container_label?: unknown }).container_label) || containerID,
             container_label: compact((candidate as { container_label?: unknown }).container_label) || containerID,
-            runtime_root: normalizeDesktopSSHRuntimeRoot((candidate as { runtime_root?: unknown }).runtime_root),
+            runtime_root: runtimeRoot,
           };
         } catch {
           return null;
