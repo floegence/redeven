@@ -262,4 +262,92 @@ describe('launcherActionFeedback', () => {
       delivery: 'inline',
     });
   });
+
+  it('explains Gateway start requirements and recovery paths', () => {
+    expect(launcherActionFailurePresentation(i18n, {
+      ok: false,
+      code: 'gateway_start_required',
+      scope: 'dialog',
+      message: '',
+      should_refresh_snapshot: true,
+    })).toEqual({
+      message: 'Start this Gateway first. Desktop will continue the pairing, refresh, or open action after the runtime is ready.',
+      tone: 'info',
+      refresh_snapshot: true,
+      delivery: 'inline',
+    });
+
+    expect(launcherActionFailurePresentation(i18n, {
+      ok: false,
+      code: 'gateway_not_manageable',
+      scope: 'dialog',
+      message: '',
+    })).toEqual({
+      message: 'This URL Gateway is access-only. Desktop can pair and refresh it, but start, stop, restart, and update must be managed on the Gateway host.',
+      tone: 'warning',
+      refresh_snapshot: false,
+      delivery: 'inline',
+    });
+
+    expect(launcherActionFailurePresentation(i18n, {
+      ok: false,
+      code: 'gateway_runtime_unreachable',
+      scope: 'environment',
+      message: '',
+    })).toEqual({
+      message: 'Desktop cannot reach the Gateway runtime. Start it on the target host or resolve the Gateway settings, then try again.',
+      tone: 'warning',
+      refresh_snapshot: false,
+      delivery: 'toast',
+    });
+
+    expect(launcherActionFailurePresentation(i18n, {
+      ok: false,
+      code: 'gateway_container_unavailable',
+      scope: 'environment',
+      message: '',
+    })).toEqual({
+      message: 'The Gateway container is unavailable. Start the container or update the Gateway settings, then try again.',
+      tone: 'warning',
+      refresh_snapshot: false,
+      delivery: 'toast',
+    });
+
+    expect(launcherActionFailurePresentation(i18n, {
+      ok: false,
+      code: 'gateway_bridge_unavailable',
+      scope: 'environment',
+      message: 'Bridge socket is missing.',
+    })).toEqual({
+      message: 'Bridge socket is missing.',
+      tone: 'warning',
+      refresh_snapshot: false,
+      delivery: 'toast',
+    });
+
+    expect(launcherActionFailurePresentation(i18n, {
+      ok: false,
+      code: 'gateway_runtime_start_failed',
+      scope: 'environment',
+      message: '',
+    })).toEqual({
+      message: 'Desktop could not start the Gateway runtime. Review the Gateway target settings and try Start Gateway again.',
+      tone: 'error',
+      refresh_snapshot: false,
+      delivery: 'toast',
+    });
+
+    expect(launcherActionFailurePresentation(i18n, {
+      ok: false,
+      code: 'gateway_catalog_failed',
+      scope: 'environment',
+      message: '',
+      should_refresh_snapshot: true,
+    })).toEqual({
+      message: 'Desktop could not refresh this Gateway catalog. Start or resolve the Gateway, then refresh again.',
+      tone: 'warning',
+      refresh_snapshot: true,
+      delivery: 'toast',
+    });
+  });
 });

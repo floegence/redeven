@@ -2302,6 +2302,12 @@ export type GatewaySourceActionModel = Readonly<{
   disabled_reason?: string;
 }>;
 
+export type GatewaySourceGuidanceModel = Readonly<{
+  title: string;
+  detail: string;
+  tone: 'neutral' | 'primary' | 'success' | 'warning';
+}>;
+
 export function buildGatewayRowModel(environment: DesktopEnvironmentEntry): GatewayRowModel {
   const status = buildEnvironmentDisplayStateModel(environment);
   const action = buildProviderBackedEnvironmentActionModel(environment).action_presentation.primary_action;
@@ -2328,7 +2334,9 @@ export type GatewaySourceRowModel = Readonly<{
   status_label: string;
   status_tone: EnvironmentCardTone;
   endpoint_label: string;
+  management_label: string;
   environment_count: number;
+  guidance: GatewaySourceGuidanceModel;
   primary_action: GatewaySourceActionModel;
   secondary_actions: readonly GatewaySourceActionModel[];
 }>;
@@ -2423,6 +2431,102 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource, primary: G
   return actions;
 }
 
+function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuidanceModel {
+  const runtime = gateway.runtime_state;
+  const runtimeStatus = runtime?.status ?? 'unknown';
+  const manageable = desktopGatewayCanManageRuntime(gateway);
+  const needsSetup = gateway.status === 'needs_setup';
+  const needsPairing = gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired';
+  const runtimeMessage = compact(runtime?.message) || compact(gateway.status_message);
+
+  if (needsSetup) {
+    return {
+      title: 'Finish Gateway setup',
+      detail: runtimeMessage || 'Complete the Gateway connection settings before Desktop can pair, start, or refresh this Gateway.',
+      tone: 'warning',
+    };
+  }
+
+  if (!manageable) {
+    return {
+      title: needsPairing ? 'Pair this access-only Gateway' : 'Access-only Gateway',
+      detail: needsPairing
+        ? 'Desktop can pair with this Gateway and read its catalog, but runtime start and restart stay on the Gateway host.'
+        : 'Desktop can refresh the catalog and open Gateway Environments, but it cannot start or stop this external Gateway runtime.',
+      tone: needsPairing ? 'primary' : 'neutral',
+    };
+  }
+
+  if (
+    runtimeStatus === 'ssh_unreachable'
+    || runtimeStatus === 'container_unavailable'
+    || runtimeStatus === 'bridge_unavailable'
+    || runtimeStatus === 'error'
+  ) {
+    return {
+      title: 'Resolve the Gateway target',
+      detail: runtimeMessage || 'Desktop cannot reach the SSH host, container, or bridge that runs this Gateway. Check the target settings before pairing or opening environments.',
+      tone: 'warning',
+    };
+  }
+
+  if (runtimeStatus === 'starting') {
+    return {
+      title: 'Gateway is starting',
+      detail: 'Desktop is preparing the Gateway runtime. Pairing and catalog refresh will be available when it reports ready.',
+      tone: 'primary',
+    };
+  }
+
+  if (runtimeStatus === 'runtime_needs_update') {
+    return {
+      title: 'Update before continuing',
+      detail: runtimeMessage || 'Install the Gateway runtime update, then Desktop can pair, refresh the catalog, and open environments through it.',
+      tone: 'warning',
+    };
+  }
+
+  if (runtimeStatus === 'not_started') {
+    return {
+      title: needsPairing ? 'Pair will start Gateway' : 'Start Gateway to use it',
+      detail: needsPairing
+        ? 'Desktop has the Gateway configuration, but the runtime is not running yet. Pairing will ask to start it and then continue discovering environments.'
+        : 'Start the Gateway runtime from Desktop before refreshing its catalog or opening environments through it.',
+      tone: 'warning',
+    };
+  }
+
+  if (needsPairing) {
+    return {
+      title: 'Pair this Gateway',
+      detail: 'Pairing trusts the Gateway catalog and lets Desktop show the environments it manages.',
+      tone: 'primary',
+    };
+  }
+
+  if (gateway.status === 'online' && runtimeStatus === 'ready') {
+    return {
+      title: 'Gateway is ready',
+      detail: 'Refresh its catalog when the remote environments change, or open an environment from the list below.',
+      tone: 'success',
+    };
+  }
+
+  if (desktopGatewayNeedsResolution(gateway.status)) {
+    return {
+      title: 'Gateway needs attention',
+      detail: runtimeMessage || 'Review the Gateway settings, then refresh or pair again when the target is reachable.',
+      tone: 'warning',
+    };
+  }
+
+  return {
+    title: 'Gateway catalog available',
+    detail: 'Refresh the catalog to pick up changes, or open an environment from this Gateway.',
+    tone: 'neutral',
+  };
+}
+
 export function buildGatewaySourceRowModel(
   gateway: DesktopGatewaySource,
 ): GatewaySourceRowModel {
@@ -2448,7 +2552,11 @@ export function buildGatewaySourceRowModel(
           ? 'warning'
           : 'neutral',
     endpoint_label: compact(gateway.endpoint_label),
+    management_label: desktopGatewayCanManageRuntime(gateway)
+      ? 'Managed by Desktop'
+      : 'Access-only Gateway',
     environment_count: gateway.environments.length,
+    guidance: gatewaySourceGuidance(gateway),
     primary_action: primaryAction,
     secondary_actions: gatewaySourceSecondaryActions(gateway, primaryAction),
   };

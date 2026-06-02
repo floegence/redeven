@@ -3050,6 +3050,158 @@ pre,
   transition-duration: 120ms;
 }
 
+/* ── Gateway source cards ── */
+
+.redeven-gateway-library {
+  width: 100%;
+}
+
+.redeven-gateway-card {
+  min-height: 23rem;
+}
+
+.redeven-gateway-card__management-chip {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted) 34%, transparent);
+  color: color-mix(in srgb, var(--foreground) 74%, var(--muted-foreground));
+  padding: 0.15rem 0.5rem;
+  font-size: 0.67rem;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.redeven-gateway-card__management-dot {
+  width: 0.38rem;
+  height: 0.38rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--primary) 72%, var(--muted-foreground));
+  box-shadow: 0 0 0 0.12rem color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.redeven-gateway-card__endpoint {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-gateway-card__guidance {
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground));
+  padding: 0.7rem 0.75rem;
+}
+
+.redeven-gateway-card__guidance[data-tone='primary'] {
+  border-color: color-mix(in srgb, var(--primary) 22%, var(--border));
+  background: color-mix(in srgb, var(--primary) 6%, var(--card));
+  color: color-mix(in srgb, var(--primary) 72%, var(--foreground));
+}
+
+.redeven-gateway-card__guidance[data-tone='success'] {
+  border-color: color-mix(in srgb, var(--success) 24%, var(--border));
+  background: color-mix(in srgb, var(--success) 6%, var(--card));
+  color: color-mix(in srgb, var(--success) 72%, var(--foreground));
+}
+
+.redeven-gateway-card__guidance[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border));
+  background: color-mix(in srgb, var(--warning) 8%, var(--card));
+  color: color-mix(in srgb, var(--warning) 76%, var(--foreground));
+}
+
+.redeven-gateway-card__env-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.redeven-gateway-card__empty-env {
+  border: 1px dashed color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  padding: 0.75rem;
+}
+
+.redeven-gateway-env-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--card) 92%, var(--muted) 8%);
+  padding: 0.55rem;
+}
+
+.redeven-gateway-env-row__endpoint {
+  margin-top: 0.15rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-gateway-env-row__aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+}
+
+.redeven-gateway-env-row__aside .redeven-status-indicator {
+  max-width: 8.5rem;
+}
+
+@media (max-width: 34rem) {
+  .redeven-gateway-env-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .redeven-gateway-env-row__aside {
+    align-items: stretch;
+  }
+}
+
+.redeven-gateway-card__more-envs {
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  color: var(--muted-foreground);
+  padding: 0.45rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.redeven-gateway-card__secondary-actions {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.redeven-gateway-card__secondary-action {
+  flex: 1 1 7rem;
+  min-width: 0;
+}
+
 /* ── Kind tag refinement ── */
 
 .redeven-environment-card .floe-tag {
