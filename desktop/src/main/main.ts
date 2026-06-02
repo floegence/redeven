@@ -4085,7 +4085,7 @@ async function pairGatewayFromLauncher(
   if (!confirmed) {
     if (lifecycleContext) {
       finishGatewayLifecycleOperationContext(lifecycleContext, {
-        status: 'failed',
+        status: 'canceled',
         title: 'Pair canceled',
         detail: 'Gateway pairing was canceled.',
       });

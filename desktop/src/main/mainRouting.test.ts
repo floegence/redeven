@@ -923,6 +923,8 @@ describe('main routing', () => {
     expect(pairSrc).toContain('const fingerprint = assertGatewayPairingChallenge({');
     expect(pairSrc).toContain('const confirmed = await confirmDesktopImpact({');
     expect(pairSrc).toContain("if (!confirmed) {");
+    expect(pairSrc).toContain("status: 'canceled'");
+    expect(pairSrc).not.toContain("status: 'failed',\n        title: 'Pair canceled'");
     expect(pairSrc).toContain("return launcherActionFailure(\n      'action_invalid',\n      'dialog',\n      'Gateway pairing was canceled.'");
     expect(pairSrc).toContain('const completion = await client.completePairing(record, buildPairingCompleteRequest(material, challenge));');
     expect(pairSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion);');

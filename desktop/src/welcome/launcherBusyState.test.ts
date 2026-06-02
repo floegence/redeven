@@ -23,11 +23,15 @@ import {
   busyStateWithActionProgress,
   environmentMatchesActionProgress,
   environmentMatchesRuntimeLifecycleProgress,
+  gatewayMatchesActionProgress,
+  gatewayMatchesRuntimeLifecycleProgress,
+  gatewaySourceMatchesRuntimeLifecycleProgress,
   IDLE_LAUNCHER_BUSY_STATE,
   launcherProgressBlocksPrimaryAction,
   reconcileBusyStateWithActionProgressSnapshot,
   selectedSnapshotOpenConnectionProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
+  selectedSnapshotRuntimeLifecycleProgressForGateway,
 } from './launcherBusyState';
 import type { RuntimeProgressEnvironmentMatch } from './launcherBusyState';
 import { environmentProgressPrimaryPresentation } from './environmentProgressPrimaryPresentation';
@@ -124,6 +128,36 @@ function localRuntimeLifecycleActionProgress(input: Readonly<{
       failedPhase: input.status === 'failed' || input.status === 'cleanup_failed' ? input.phase : undefined,
       targetID: 'local:local',
       targetLabel: 'Local Environment',
+    }),
+  };
+}
+
+function gatewayRuntimeLifecycleActionProgress(input: Readonly<{
+  gatewayID?: string;
+  action?: Extract<DesktopLauncherActionProgress['action'], 'pair_gateway' | 'start_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'stop_gateway_runtime' | 'refresh_gateway_catalog'>;
+  status?: LauncherProgressStatus;
+  operationKey?: string;
+  startedAt?: number;
+  updatedAt?: number;
+}> = {}): DesktopLauncherActionProgress {
+  const gatewayID = input.gatewayID ?? 'gw-demo';
+  return {
+    action: input.action ?? 'start_gateway_runtime',
+    operation_key: input.operationKey ?? `${gatewayID}:start`,
+    subject_kind: 'gateway',
+    subject_id: gatewayID,
+    started_at_unix_ms: input.startedAt ?? 100,
+    updated_at_unix_ms: input.updatedAt,
+    status: input.status ?? 'running',
+    phase: 'starting_runtime_process',
+    title: 'Starting Gateway',
+    detail: 'Desktop is starting the Gateway runtime.',
+    lifecycle_progress: runtimeLifecycleProgress({
+      location: 'ssh_host',
+      operation: 'start',
+      phase: 'starting_runtime_process',
+      targetID: gatewayID,
+      targetLabel: 'Gateway',
     }),
   };
 }
@@ -282,6 +316,28 @@ describe('launcherBusyState', () => {
       operation_key: 'other',
       subject_id: 'other',
     })).toBe(false);
+  });
+
+  it('matches Gateway action progress by Gateway subject identity', () => {
+    const state = busyStateForLauncherRequest({
+      kind: 'start_gateway_runtime',
+      gateway_id: 'gw-demo',
+    });
+    const progress = gatewayRuntimeLifecycleActionProgress({
+      gatewayID: 'gw-demo',
+      action: 'start_gateway_runtime',
+    });
+    const otherGatewayProgress = gatewayRuntimeLifecycleActionProgress({
+      gatewayID: 'gw-other',
+      action: 'start_gateway_runtime',
+    });
+
+    expect(gatewayMatchesActionProgress('gw-demo', progress)).toBe(true);
+    expect(gatewayMatchesRuntimeLifecycleProgress('gw-demo', progress)).toBe(true);
+    expect(busyStateMatchesActionProgress(state, progress)).toBe(true);
+    expect(busyStateWithActionProgress(state, progress).progress).toBe(progress);
+    expect(busyStateMatchesActionProgress(state, otherGatewayProgress)).toBe(false);
+    expect(busyStateWithActionProgress(state, otherGatewayProgress)).toBe(state);
   });
 
   it('blocks primary actions only while launcher progress is still active', () => {
@@ -1021,6 +1077,69 @@ describe('launcherBusyState', () => {
       environment as never,
       [failedSnapshotProgress],
     )).toBe(failedSnapshotProgress);
+  });
+
+  it('selects Gateway runtime lifecycle progress by gateway id', () => {
+    const runningGatewayProgress = gatewayRuntimeLifecycleActionProgress({
+      gatewayID: 'gw-demo',
+      action: 'pair_gateway',
+      operationKey: 'gw-demo:pair',
+      startedAt: 100,
+      updatedAt: 110,
+    });
+    const failedGatewayProgress = gatewayRuntimeLifecycleActionProgress({
+      gatewayID: 'gw-demo',
+      action: 'pair_gateway',
+      status: 'failed',
+      operationKey: 'gw-demo:pair',
+      startedAt: 100,
+      updatedAt: 120,
+    });
+    const otherGatewayProgress = gatewayRuntimeLifecycleActionProgress({
+      gatewayID: 'gw-other',
+      action: 'pair_gateway',
+      operationKey: 'gw-other:pair',
+      startedAt: 200,
+      updatedAt: 200,
+    });
+
+    expect(selectedSnapshotRuntimeLifecycleProgressForGateway(
+      'gw-demo',
+      [runningGatewayProgress, otherGatewayProgress, failedGatewayProgress],
+    )).toBe(failedGatewayProgress);
+    expect(environmentProgressPrimaryPresentation(failedGatewayProgress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Pair failed',
+    });
+  });
+
+  it('does not treat Gateway Environment open progress as Gateway source runtime lifecycle progress', () => {
+    const openProgress: DesktopLauncherActionProgress = {
+      action: 'open_gateway_environment',
+      operation_key: 'gateway:bastion:env:demo:open',
+      subject_kind: 'gateway',
+      subject_id: 'bastion',
+      environment_id: 'gateway:bastion:env:demo',
+      started_at_unix_ms: 100,
+      updated_at_unix_ms: 120,
+      status: 'running',
+      phase: 'checking_runtime_record',
+      title: 'Checking Gateway route',
+      detail: 'Desktop is asking the Gateway for a signed environment session.',
+      open_progress: buildOpenConnectionProgress({
+        location: 'runtime_gateway',
+        phase: 'checking_runtime_record',
+        environmentID: 'gateway:bastion:env:demo',
+        environmentLabel: 'Demo',
+        targetID: 'gateway:bastion:env:demo',
+        targetLabel: 'Demo',
+      }),
+    };
+
+    expect(gatewayMatchesActionProgress('bastion', openProgress)).toBe(true);
+    expect(gatewayMatchesRuntimeLifecycleProgress('bastion', openProgress)).toBe(false);
+    expect(gatewaySourceMatchesRuntimeLifecycleProgress('bastion', openProgress)).toBe(false);
+    expect(selectedSnapshotRuntimeLifecycleProgressForGateway('bastion', [openProgress])).toBeNull();
   });
 
   it('uses snapshot-only Stop failure for the Env card label while a fresh request still blocks duplicate clicks', () => {

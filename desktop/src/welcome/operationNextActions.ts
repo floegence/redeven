@@ -41,7 +41,9 @@ export function visibleOperationNextActions(
   };
   push('refresh_status');
   push('update_runtime');
-  push('manage_desktop_update');
+  if (progress.subject_kind !== 'gateway') {
+    push('manage_desktop_update');
+  }
   push('copy_diagnostics');
   push('dismiss');
   return actions;

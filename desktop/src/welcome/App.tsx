@@ -62,8 +62,11 @@ import type {
   DesktopAccessMode,
   DesktopSettingsSurfaceSnapshot,
 } from '../shared/desktopSettingsSurface';
-import type { DesktopGatewaySource } from '../shared/desktopGateway';
-import type { DesktopGatewayConnectionKind } from '../shared/desktopGateway';
+import {
+  desktopGatewayCanManageRuntime,
+  type DesktopGatewayConnectionKind,
+  type DesktopGatewaySource,
+} from '../shared/desktopGateway';
 import type {
   DesktopFlowerHostRouterDecision,
 } from '../shared/flowerHostSettingsIPC';
@@ -72,6 +75,7 @@ import type {
   DesktopEnvironmentOpenAction,
   DesktopLauncherActionProgress,
   DesktopLauncherActionKind,
+  DesktopGatewayStartPolicy,
   DesktopGatewayStartRequiredPayload,
   DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
@@ -191,6 +195,7 @@ import {
   type EnvironmentCenterTab,
   type EnvironmentPrimaryActionOverlayModel,
   shouldUseSpaciousEnvironmentGrid,
+  type GatewaySourceRowModel,
 } from './viewModel';
 import {
   launcherActionFailurePresentation,
@@ -294,6 +299,8 @@ import {
   IDLE_LAUNCHER_BUSY_STATE,
   selectedSnapshotOpenConnectionProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
+  selectedSnapshotRuntimeLifecycleProgressForGateway,
+  gatewaySourceMatchesRuntimeLifecycleProgress,
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
 import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnimation';
@@ -457,6 +464,11 @@ type ProviderRuntimeLinkConfirmationState = Readonly<{
 }>;
 
 type LauncherActionErrorTarget = 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' | 'gateway_dialog';
+type GatewayRuntimeActionKind = Extract<
+  DesktopLauncherActionKind,
+  'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'
+>;
+type GatewayRuntimeStartPolicy = Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
 const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
@@ -4509,7 +4521,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function pairGateway(gatewayID: string): Promise<void> {
+  async function pairGateway(gatewayID: string, startPolicy?: DesktopGatewayStartPolicy): Promise<void> {
     const cleanGatewayID = trimString(gatewayID);
     if (cleanGatewayID === '') {
       setErrorMessage('connect', i18n().t('environmentCenter.resolveGatewayError'));
@@ -4518,6 +4530,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const result = await performLauncherAction({
       kind: 'pair_gateway',
       gateway_id: cleanGatewayID,
+      ...(startPolicy ? { start_policy: startPolicy } : {}),
     });
     if (result?.outcome === 'paired_gateway') {
       await refreshSnapshot();
@@ -4527,14 +4540,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
 
   async function runGatewayRuntimeAction(
     gatewayID: string,
-    kind: Extract<DesktopLauncherActionKind, 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'>,
+    kind: GatewayRuntimeActionKind,
+    startPolicy?: GatewayRuntimeStartPolicy,
   ): Promise<void> {
     const cleanGatewayID = trimString(gatewayID);
     if (cleanGatewayID === '') {
       setErrorMessage('connect', i18n().t('environmentCenter.resolveGatewayError'));
       return;
     }
-    const result = await performLauncherAction({ kind, gateway_id: cleanGatewayID } as DesktopLauncherActionRequest);
+    const result = await performLauncherAction({
+      kind,
+      gateway_id: cleanGatewayID,
+      ...(kind === 'refresh_gateway_catalog' && startPolicy ? { start_policy: startPolicy } : {}),
+    } as DesktopLauncherActionRequest);
     if (!result) {
       return;
     }
@@ -5578,10 +5596,11 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
-  pairGateway: (gatewayID: string) => Promise<void>;
+  pairGateway: (gatewayID: string, startPolicy?: DesktopGatewayStartPolicy) => Promise<void>;
   runGatewayRuntimeAction: (
     gatewayID: string,
-    kind: Extract<DesktopLauncherActionKind, 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'>,
+    kind: GatewayRuntimeActionKind,
+    startPolicy?: GatewayRuntimeStartPolicy,
   ) => Promise<void>;
   openCreateControlPlaneDialog: (message?: string) => void;
   refreshAllEnvironmentRuntimes: () => Promise<void>;
@@ -5985,12 +6004,16 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 gatewaySources={props.gatewaySources}
                 gatewayEntries={props.gatewayEntries}
                 busyState={props.busyState}
+                actionProgress={props.actionProgress}
                 gatewaySourceFilter={props.gatewaySourceFilter}
                 gatewayQuery={props.gatewayQuery}
                 openCreateGatewaySetup={props.openCreateGatewaySetup}
                 pairGateway={props.pairGateway}
                 runGatewayRuntimeAction={props.runGatewayRuntimeAction}
                 runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+                cancelOperation={props.cancelOperation}
+                dismissOperation={props.dismissOperation}
+                copyOperationDiagnostics={props.copyOperationDiagnostics}
               />
             </Show>
           </div>
@@ -9266,24 +9289,45 @@ function GatewaySourcesPanel(props: Readonly<{
   gatewaySources: readonly DesktopGatewaySource[];
   gatewayEntries: readonly DesktopEnvironmentEntry[];
   busyState: DesktopLauncherBusyState;
+  actionProgress: readonly DesktopLauncherActionProgress[];
   gatewaySourceFilter: string;
   gatewayQuery: string;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
-  pairGateway: (gatewayID: string) => Promise<void>;
+  pairGateway: (gatewayID: string, startPolicy?: DesktopGatewayStartPolicy) => Promise<void>;
   runGatewayRuntimeAction: (
     gatewayID: string,
-    kind: Extract<DesktopLauncherActionKind, 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'>,
+    kind: GatewayRuntimeActionKind,
+    startPolicy?: GatewayRuntimeStartPolicy,
   ) => Promise<void>;
   runLocalEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
+  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
+  dismissOperation: (progress: DesktopLauncherActionProgress) => void;
+  copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
 }>) {
-  const [gatewayLibraryElement, setGatewayLibraryElement] = createSignal<HTMLDivElement>();
-  const [gatewayLibraryWidthPx, setGatewayLibraryWidthPx] = createSignal(0);
-  const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
+  const [activeGatewayPopoverID, setActiveGatewayPopoverID] = createSignal('');
   const entryGatewayIDs = createMemo(() => new Set(props.gatewayEntries.map((entry) => entry.gateway_id ?? '')));
+  const gatewaySourcesByID = createMemo(() => {
+    const record: Record<string, DesktopGatewaySource> = {};
+    for (const gateway of props.gatewaySources) {
+      record[gateway.gateway_id] = gateway;
+    }
+    return record;
+  });
+  const gatewayEntriesByGatewayID = createMemo(() => {
+    const record: Record<string, DesktopEnvironmentEntry[]> = {};
+    for (const entry of props.gatewayEntries) {
+      const gatewayID = trimString(entry.gateway_id);
+      if (gatewayID === '') {
+        continue;
+      }
+      record[gatewayID] = [...(record[gatewayID] ?? []), entry];
+    }
+    return record;
+  });
   const visibleGatewaySources = createMemo(() => {
     const gatewayIDs = entryGatewayIDs();
     const query = trimString(props.gatewayQuery);
@@ -9297,43 +9341,16 @@ function GatewaySourcesPanel(props: Readonly<{
         || gatewaySourceMatchesQuery(gateway, query);
     });
   });
-  const layoutModel = createMemo(() => buildEnvironmentLibraryLayoutModel({
-    visible_card_count: visibleGatewaySources().length,
-    layout_reference_count: Math.max(props.gatewaySources.length, visibleGatewaySources().length),
-    container_width_px: gatewayLibraryWidthPx(),
-    root_font_size_px: rootFontSizePx(),
-  }));
-  const gatewayGridStyle = createMemo<JSX.CSSProperties>(() => ({
-    '--redeven-environment-grid-columns': String(layoutModel().column_count),
-  }));
+  const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.gateway_id));
 
   createEffect(() => {
-    const element = gatewayLibraryElement();
-    if (!element) {
+    const activeGatewayID = activeGatewayPopoverID();
+    if (activeGatewayID === '') {
       return;
     }
-
-    const updateLayoutMetrics = () => {
-      setGatewayLibraryWidthPx(readMeasuredElementWidth(element));
-      setRootFontSizePx(readDocumentRootFontSizePx());
-    };
-
-    updateLayoutMetrics();
-
-    const resizeObserver = typeof ResizeObserver === 'undefined'
-      ? null
-      : new ResizeObserver(() => updateLayoutMetrics());
-    resizeObserver?.observe(element);
-    if (typeof window !== 'undefined') {
-      window.addEventListener('resize', updateLayoutMetrics);
+    if (!visibleGatewaySourceIDs().includes(activeGatewayID)) {
+      setActiveGatewayPopoverID('');
     }
-
-    onCleanup(() => {
-      resizeObserver?.disconnect();
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('resize', updateLayoutMetrics);
-      }
-    });
   });
 
   return (
@@ -9371,25 +9388,31 @@ function GatewaySourcesPanel(props: Readonly<{
         )}
       >
         <div
-          ref={setGatewayLibraryElement}
-          class="redeven-environment-library redeven-gateway-library"
-          data-density={layoutModel().density}
-          style={gatewayGridStyle()}
+          class="redeven-gateway-library"
         >
-          <div class="redeven-environment-grid">
-            <For each={visibleGatewaySources()}>
-              {(gateway) => (
+          <div class="redeven-gateway-grid">
+            <For each={visibleGatewaySourceIDs()}>
+              {(gatewayID) => {
+                const gateway = () => gatewaySourcesByID()[gatewayID]!;
+                return (
                 <GatewaySourceCard
                   i18n={props.i18n}
-                  gateway={gateway}
-                  gatewayEntries={props.gatewayEntries.filter((entry) => entry.gateway_id === gateway.gateway_id)}
+                  gateway={gateway()}
+                  gatewayEntries={gatewayEntriesByGatewayID()[gatewayID] ?? []}
                   busyState={props.busyState}
+                  actionProgress={props.actionProgress}
+                  actionPopoverOpen={activeGatewayPopoverID() === gatewayID}
+                  onActionPopoverOpenChange={(open) => setActiveGatewayPopoverID(open ? gatewayID : '')}
                   openCreateGatewaySetup={props.openCreateGatewaySetup}
                   pairGateway={props.pairGateway}
                   runGatewayRuntimeAction={props.runGatewayRuntimeAction}
                   runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+                  cancelOperation={props.cancelOperation}
+                  dismissOperation={props.dismissOperation}
+                  copyOperationDiagnostics={props.copyOperationDiagnostics}
                 />
-              )}
+                );
+              }}
             </For>
           </div>
         </div>
@@ -9419,21 +9442,55 @@ function GatewaySourceCard(props: Readonly<{
   gateway: DesktopGatewaySource;
   gatewayEntries: readonly DesktopEnvironmentEntry[];
   busyState: DesktopLauncherBusyState;
+  actionProgress: readonly DesktopLauncherActionProgress[];
+  actionPopoverOpen: boolean;
+  onActionPopoverOpenChange: (open: boolean) => void;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
-  pairGateway: (gatewayID: string) => Promise<void>;
+  pairGateway: (gatewayID: string, startPolicy?: DesktopGatewayStartPolicy) => Promise<void>;
   runGatewayRuntimeAction: (
     gatewayID: string,
-    kind: Extract<DesktopLauncherActionKind, 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'>,
+    kind: GatewayRuntimeActionKind,
+    startPolicy?: GatewayRuntimeStartPolicy,
   ) => Promise<void>;
   runLocalEnvironmentAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
+  cancelOperation: (progress: DesktopLauncherActionProgress) => void;
+  dismissOperation: (progress: DesktopLauncherActionProgress) => void;
+  copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
 }>) {
   const row = createMemo(() => buildGatewaySourceRowModel(props.gateway));
   const primaryActionLabel = createMemo(() => localizedEnvironmentActionLabel(props.i18n, row().primary_action.label));
-  const primaryBusy = createMemo(() => gatewaySourceActionBusy(props.busyState, props.gateway.gateway_id, row().primary_action));
+  const gatewayLifecycleProgress = createMemo(() => (
+    selectedSnapshotRuntimeLifecycleProgressForGateway(props.gateway.gateway_id, props.actionProgress)
+  ));
+  const visibleGatewayLifecycleProgress = createMemo(() => (
+    gatewayLifecycleProgress() ?? (
+      gatewaySourceMatchesRuntimeLifecycleProgress(props.gateway.gateway_id, props.busyState.progress)
+        ? props.busyState.progress
+        : null
+    )
+  ));
+  const primaryBusy = createMemo(() => gatewaySourceActionBusy(
+    props.busyState,
+    props.gateway.gateway_id,
+    row().primary_action,
+    visibleGatewayLifecycleProgress(),
+  ));
+  const progressPresentation = createMemo(() => localizedPrimaryProgressPresentation(
+    props.i18n,
+    environmentProgressPrimaryPresentation(visibleGatewayLifecycleProgress()),
+  ));
+  const hasProgressPanel = createMemo(() => visibleGatewayLifecycleProgress() !== null);
+  const guidePanelVisible = createMemo(() => (
+    props.actionPopoverOpen
+    && !hasProgressPanel()
+    && gatewaySourceActionGuidePanelVisible(props.gateway, row().primary_action)
+  ));
+  const progressPanelVisible = createMemo(() => props.actionPopoverOpen && hasProgressPanel());
+  const actionPopoverOpen = createMemo(() => progressPanelVisible() || guidePanelVisible());
   const visibleGatewayEntries = createMemo(() => props.gatewayEntries.slice(0, 3));
   const hiddenGatewayEntryCount = createMemo(() => Math.max(0, props.gatewayEntries.length - visibleGatewayEntries().length));
   const secondaryActions = createMemo(() => row().secondary_actions.filter((action) => action.intent !== 'manage_gateway'));
@@ -9441,6 +9498,22 @@ function GatewaySourceCard(props: Readonly<{
     row().primary_action.intent === 'start_gateway_runtime'
     || row().secondary_actions.some((action) => action.intent === 'start_gateway_runtime')
   ));
+  const renderProgressPresentationIcon = (presentation: EnvironmentProgressPrimaryPresentation) => {
+    if (presentation.kind === 'attention_trigger') {
+      return <AlertTriangle class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
+    }
+    return presentation.icon === 'stop'
+      ? <Stop class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
+      : <Play class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
+  };
+  const runAction = (action: GatewaySourceActionModel) => {
+    if (gatewaySourceActionStartsWorkflow(action)) {
+      props.onActionPopoverOpenChange(true);
+    } else if (action.intent === 'setup_gateway' || action.intent === 'manage_gateway' || action.intent === 'resolve_gateway') {
+      props.onActionPopoverOpenChange(false);
+    }
+    void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayRuntimeAction);
+  };
 
   return (
     <Card class="redeven-environment-card redeven-gateway-card h-full overflow-hidden">
@@ -9520,19 +9593,116 @@ function GatewaySourceCard(props: Readonly<{
       </CardContent>
       <CardFooter class="mt-auto flex flex-col gap-2 border-t border-border/60 px-4 pb-3 pt-3">
         <div class="flex w-full items-center gap-2">
-          <Button
-            size="sm"
-            variant="default"
-            class="min-w-0 flex-1"
-            loading={primaryBusy()}
-            disabled={!row().primary_action.enabled}
-            onClick={() => {
-              void runGatewaySourceAction(row().primary_action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayRuntimeAction);
+          <DesktopActionPopover
+            open={actionPopoverOpen()}
+            onOpenChange={(open) => {
+              if (open) {
+                props.onActionPopoverOpenChange(true);
+                return;
+              }
+              props.onActionPopoverOpenChange(false);
             }}
+            content={(
+              <Show
+                when={visibleGatewayLifecycleProgress()}
+                fallback={(
+                <GatewaySourceActionGuidePanel
+                  i18n={props.i18n}
+                  gateway={props.gateway}
+                  row={row()}
+                  busyState={props.busyState}
+                    runAction={runAction}
+                  />
+                )}
+              >
+                {(progress) => (
+                  <EnvironmentProgressPanel
+                    i18n={props.i18n}
+                    progress={progress()}
+                    cancelOperation={props.cancelOperation}
+                    dismissOperation={(currentProgress) => {
+                      props.dismissOperation(currentProgress);
+                      props.onActionPopoverOpenChange(false);
+                    }}
+                    copyOperationDiagnostics={props.copyOperationDiagnostics}
+                    runNextAction={(action, currentProgress) => {
+                      switch (action.kind) {
+                        case 'copy_diagnostics':
+                          props.copyOperationDiagnostics(currentProgress);
+                          break;
+                        case 'dismiss':
+                          props.dismissOperation(currentProgress);
+                          props.onActionPopoverOpenChange(false);
+                          break;
+                        case 'refresh_status':
+                          void props.runGatewayRuntimeAction(props.gateway.gateway_id, 'refresh_gateway_catalog');
+                          props.onActionPopoverOpenChange(true);
+                          break;
+                        case 'update_runtime':
+                          void props.runGatewayRuntimeAction(props.gateway.gateway_id, 'update_gateway_runtime');
+                          props.onActionPopoverOpenChange(true);
+                          break;
+                        case 'manage_desktop_update':
+                        case 'retry':
+                          break;
+                      }
+                    }}
+                  />
+                )}
+              </Show>
+            )}
+            anchorClass="flex min-w-0 flex-1"
+            popoverAriaLabel={
+              progressPanelVisible()
+                ? (visibleGatewayLifecycleProgress() ? localizedProgressTitle(props.i18n, visibleGatewayLifecycleProgress()!) : 'Gateway progress')
+                : row().guidance.title
+            }
           >
-            <GatewaySourceActionIcon intent={row().primary_action.intent} />
-            {primaryActionLabel()}
-          </Button>
+            <Show
+              when={progressPresentation()}
+              fallback={(
+                <Button
+                  size="sm"
+                  variant="default"
+                  class="min-w-0 flex-1 justify-center"
+                  loading={primaryBusy()}
+                  disabled={!row().primary_action.enabled}
+                  aria-haspopup={gatewaySourceActionGuidePanelVisible(props.gateway, row().primary_action) ? 'dialog' : undefined}
+                  aria-expanded={gatewaySourceActionGuidePanelVisible(props.gateway, row().primary_action) ? props.actionPopoverOpen : undefined}
+                  onClick={() => {
+                    if (gatewaySourceActionGuidePanelVisible(props.gateway, row().primary_action)) {
+                      props.onActionPopoverOpenChange(!props.actionPopoverOpen);
+                      return;
+                    }
+                    runAction(row().primary_action);
+                  }}
+                >
+                  <GatewaySourceActionIcon intent={row().primary_action.intent} />
+                  {primaryActionLabel()}
+                </Button>
+              )}
+            >
+              {(presentation) => (
+                <Button
+                  size="sm"
+                  variant="default"
+                  class={cn(
+                    'min-w-0 flex-1 justify-center',
+                    progressTriggerClassName(presentation()),
+                  )}
+                  aria-haspopup="dialog"
+                  aria-expanded={props.actionPopoverOpen}
+                  aria-label={presentation().ariaLabel}
+                  onClick={() => props.onActionPopoverOpenChange(!props.actionPopoverOpen)}
+                >
+                  <span class="redeven-split-action-trigger__content">
+                    {renderProgressPresentationIcon(presentation())}
+                    <span>{presentation().label}</span>
+                  </span>
+                </Button>
+              )}
+            </Show>
+          </DesktopActionPopover>
           <DesktopTooltip content={props.i18n.t('common.settings')} placement="top">
             <span>
               <ConsoleActionIconButton
@@ -9553,10 +9723,15 @@ function GatewaySourceCard(props: Readonly<{
                   size="sm"
                   variant={action.variant}
                   class="redeven-gateway-card__secondary-action"
-                  loading={gatewaySourceActionBusy(props.busyState, props.gateway.gateway_id, action)}
+                  loading={gatewaySourceActionBusy(
+                    props.busyState,
+                    props.gateway.gateway_id,
+                    action,
+                    visibleGatewayLifecycleProgress(),
+                  )}
                   disabled={!action.enabled}
                   onClick={() => {
-                    void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayRuntimeAction);
+                    runAction(action);
                   }}
                 >
                   <GatewaySourceActionIcon intent={action.intent} />
@@ -9635,14 +9810,195 @@ function GatewayEnvironmentActionIcon(props: Readonly<{ intent: EnvironmentActio
   }
 }
 
+function gatewaySourceActionStartsWorkflow(action: GatewaySourceActionModel): boolean {
+  switch (action.intent) {
+    case 'pair_gateway':
+    case 'start_gateway_runtime':
+    case 'stop_gateway_runtime':
+    case 'restart_gateway_runtime':
+    case 'update_gateway_runtime':
+    case 'refresh_gateway_catalog':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function gatewaySourceActionGuidePanelVisible(
+  gateway: DesktopGatewaySource,
+  action: GatewaySourceActionModel,
+): boolean {
+  if (!desktopGatewayCanManageRuntime(gateway)) {
+    return false;
+  }
+  const runtimeStatus = gateway.runtime_state?.status ?? 'unknown';
+  return (
+    (action.intent === 'pair_gateway' || action.intent === 'refresh_gateway_catalog')
+    && runtimeStatus !== 'ready'
+  );
+}
+
+function gatewaySourceActionShouldStartIfNeeded(
+  gateway: DesktopGatewaySource,
+  action: GatewaySourceActionModel,
+): boolean {
+  if (!desktopGatewayCanManageRuntime(gateway)) {
+    return false;
+  }
+  if (action.intent !== 'pair_gateway' && action.intent !== 'refresh_gateway_catalog') {
+    return false;
+  }
+  return (gateway.runtime_state?.status ?? 'unknown') !== 'ready';
+}
+
+function gatewaySourceActionGuideCopy(
+  gateway: DesktopGatewaySource,
+  row: GatewaySourceRowModel,
+): Readonly<{
+  title: string;
+  detail: string;
+  noticeTitle: string;
+  noticeDetail: string;
+}> {
+  const runtimeStatus = gateway.runtime_state?.status ?? 'unknown';
+  if (runtimeStatus === 'not_started') {
+    return {
+      title: row.primary_action.intent === 'pair_gateway' ? 'Start and pair Gateway' : 'Start before refreshing',
+      detail: `${row.label} is configured, but its Gateway runtime is not running yet.`,
+      noticeTitle: 'Desktop can manage this Gateway',
+      noticeDetail: 'Start Gateway will connect to the configured SSH host or container, launch the Gateway runtime, then continue the action.',
+    };
+  }
+  if (runtimeStatus === 'runtime_needs_update') {
+    return {
+      title: 'Update Gateway runtime first',
+      detail: `${row.label} needs a runtime update before Desktop can continue safely.`,
+      noticeTitle: 'Managed update available',
+      noticeDetail: 'Update Gateway will refresh the runtime on the configured target, then you can pair or refresh again.',
+    };
+  }
+  return {
+    title: 'Gateway needs attention',
+    detail: gateway.runtime_state?.message || row.guidance.detail,
+    noticeTitle: 'Review the target before retrying',
+    noticeDetail: 'Check the SSH host, container, or bridge settings. Start Gateway again after the target is reachable.',
+  };
+}
+
+function GatewaySourceActionGuidePanel(props: Readonly<{
+  i18n: DesktopI18n;
+  gateway: DesktopGatewaySource;
+  row: GatewaySourceRowModel;
+  busyState: DesktopLauncherBusyState;
+  runAction: (action: GatewaySourceActionModel) => void;
+}>) {
+  const copy = createMemo(() => gatewaySourceActionGuideCopy(props.gateway, props.row));
+  const startAction = createMemo(() => (
+    props.row.secondary_actions.find((action) => action.intent === 'start_gateway_runtime')
+    ?? (
+      props.gateway.runtime_state?.can_start !== false
+        ? {
+            intent: 'start_gateway_runtime',
+            label: 'Start Gateway',
+            variant: 'default',
+            enabled: true,
+          } satisfies GatewaySourceActionModel
+        : null
+    )
+  ));
+  const updateAction = createMemo(() => (
+    props.row.secondary_actions.find((action) => action.intent === 'update_gateway_runtime')
+    ?? (
+      props.gateway.runtime_state?.status === 'runtime_needs_update' && props.gateway.runtime_state.can_update !== false
+        ? {
+            intent: 'update_gateway_runtime',
+            label: 'Update Gateway',
+            variant: 'default',
+            enabled: true,
+          } satisfies GatewaySourceActionModel
+        : null
+    )
+  ));
+  const primaryAction = createMemo(() => (
+    props.gateway.runtime_state?.status === 'runtime_needs_update'
+      ? updateAction()
+      : startAction()
+  ));
+  const continueAction = createMemo(() => (
+    props.row.primary_action.intent === 'pair_gateway' || props.row.primary_action.intent === 'refresh_gateway_catalog'
+      ? props.row.primary_action
+      : null
+  ));
+  const continueActionLabel = createMemo(() => {
+    const action = continueAction();
+    if (!action || !gatewaySourceActionShouldStartIfNeeded(props.gateway, action)) {
+      return action?.label ?? '';
+    }
+    return action.intent === 'refresh_gateway_catalog'
+      ? 'Start Gateway & Refresh'
+      : 'Start Gateway & Pair';
+  });
+  return (
+    <div class="redeven-action-popover" tabIndex={-1}>
+      <div class="redeven-action-popover__status-header">
+        <span class="redeven-action-popover__status-icon" data-tone="warning">
+          <AlertTriangle />
+        </span>
+        <div class="redeven-action-popover__status-text">
+          <div class="redeven-action-popover__eyebrow">{props.row.management_label}</div>
+          <div class="redeven-action-popover__title">{copy().title}</div>
+        </div>
+      </div>
+      <div class="redeven-action-popover__detail">{copy().detail}</div>
+      <div class="redeven-action-popover__notice" data-tone="info">
+        <div class="redeven-action-popover__notice-title">{copy().noticeTitle}</div>
+        <div class="redeven-action-popover__notice-detail">{copy().noticeDetail}</div>
+      </div>
+      <div class="redeven-action-popover__actions">
+        <Show when={primaryAction()}>
+          {(action) => (
+            <Button
+              size="sm"
+              variant="default"
+              class="flex-1 justify-center gap-1.5"
+              loading={gatewaySourceActionBusy(props.busyState, props.gateway.gateway_id, action())}
+              disabled={!action().enabled}
+              onClick={() => props.runAction(action())}
+            >
+              <GatewaySourceActionIcon intent={action().intent} />
+              {localizedEnvironmentActionLabel(props.i18n, action().label)}
+            </Button>
+          )}
+        </Show>
+        <Show when={continueAction()}>
+          {(action) => (
+            <Button
+              size="sm"
+              variant="outline"
+              class="flex-1 justify-center gap-1.5"
+              loading={gatewaySourceActionBusy(props.busyState, props.gateway.gateway_id, action())}
+              disabled={!action().enabled}
+              onClick={() => props.runAction(action())}
+            >
+              <GatewaySourceActionIcon intent={action().intent} />
+              {localizedEnvironmentActionLabel(props.i18n, continueActionLabel())}
+            </Button>
+          )}
+        </Show>
+      </div>
+    </div>
+  );
+}
+
 function runGatewaySourceAction(
   action: GatewaySourceActionModel,
   gateway: DesktopGatewaySource,
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void,
-  pairGateway: (gatewayID: string) => Promise<void>,
+  pairGateway: (gatewayID: string, startPolicy?: DesktopGatewayStartPolicy) => Promise<void>,
   runGatewayRuntimeAction: (
     gatewayID: string,
-    kind: Extract<DesktopLauncherActionKind, 'start_gateway_runtime' | 'stop_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'refresh_gateway_catalog'>,
+    kind: GatewayRuntimeActionKind,
+    startPolicy?: GatewayRuntimeStartPolicy,
   ) => Promise<void>,
 ): Promise<void> | void {
   if (!action.enabled) {
@@ -9654,7 +10010,10 @@ function runGatewaySourceAction(
       openCreateGatewaySetup(gateway);
       return;
     case 'pair_gateway':
-      return pairGateway(gateway.gateway_id);
+      return pairGateway(
+        gateway.gateway_id,
+        gatewaySourceActionShouldStartIfNeeded(gateway, action) ? 'start_if_needed' : undefined,
+      );
     case 'resolve_gateway':
       openCreateGatewaySetup(gateway);
       return;
@@ -9667,7 +10026,11 @@ function runGatewaySourceAction(
     case 'update_gateway_runtime':
       return runGatewayRuntimeAction(gateway.gateway_id, 'update_gateway_runtime');
     case 'refresh_gateway_catalog':
-      return runGatewayRuntimeAction(gateway.gateway_id, 'refresh_gateway_catalog');
+      return runGatewayRuntimeAction(
+        gateway.gateway_id,
+        'refresh_gateway_catalog',
+        gatewaySourceActionShouldStartIfNeeded(gateway, action) ? 'start_if_needed' : undefined,
+      );
   }
 }
 
@@ -9696,9 +10059,22 @@ function gatewaySourceActionBusy(
   busyState: DesktopLauncherBusyState,
   gatewayID: string,
   action: GatewaySourceActionModel,
+  progress?: DesktopLauncherActionProgress | null,
 ): boolean {
   const actionKind = gatewaySourceLauncherActionKind(action);
-  return actionKind !== null && busyStateMatchesGateway(busyState, gatewayID, [actionKind]);
+  if (actionKind === null) {
+    return false;
+  }
+  if (
+    progress?.action === actionKind
+    && progress.status !== 'failed'
+    && progress.status !== 'cleanup_failed'
+    && progress.status !== 'succeeded'
+    && progress.status !== 'canceled'
+  ) {
+    return true;
+  }
+  return busyStateMatchesGateway(busyState, gatewayID, [actionKind]);
 }
 
 function gatewayStartRequiredTitle(payload: DesktopGatewayStartRequiredPayload | null): string {

@@ -165,6 +165,9 @@ export function busyStateWithActionProgress(
   if (state.action !== progress.action) {
     return state;
   }
+  if (state.gateway_id !== '' && !gatewayMatchesActionProgress(state.gateway_id, progress)) {
+    return state;
+  }
   const progressEnvironmentID = String(progress.environment_id ?? '').trim();
   if (state.environment_id !== '' && progressEnvironmentID !== '' && state.environment_id !== progressEnvironmentID) {
     return state;
@@ -259,12 +262,57 @@ export function environmentMatchesOpenConnectionProgress(
   return environmentRuntimeProgressIDs(environment).some((environmentID) => progressIDs.includes(environmentID));
 }
 
+export function gatewayMatchesActionProgress(
+  gatewayID: string,
+  progress: DesktopLauncherActionProgress | null | undefined,
+): boolean {
+  if (!progress) {
+    return false;
+  }
+  const cleanGatewayID = String(gatewayID ?? '').trim();
+  if (cleanGatewayID === '') {
+    return false;
+  }
+  const progressSubjectID = String(progress.subject_id ?? '').trim();
+  return progress.subject_kind === 'gateway' && progressSubjectID === cleanGatewayID;
+}
+
+export function gatewayMatchesRuntimeLifecycleProgress(
+  gatewayID: string,
+  progress: DesktopLauncherActionProgress | null | undefined,
+): boolean {
+  return Boolean(progress?.lifecycle_progress) && gatewayMatchesActionProgress(gatewayID, progress);
+}
+
+export function gatewaySourceMatchesRuntimeLifecycleProgress(
+  gatewayID: string,
+  progress: DesktopLauncherActionProgress | null | undefined,
+): boolean {
+  if (!gatewayMatchesRuntimeLifecycleProgress(gatewayID, progress)) {
+    return false;
+  }
+  switch (progress?.action) {
+    case 'pair_gateway':
+    case 'start_gateway_runtime':
+    case 'stop_gateway_runtime':
+    case 'restart_gateway_runtime':
+    case 'update_gateway_runtime':
+    case 'refresh_gateway_catalog':
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function busyStateMatchesActionProgress(
   state: DesktopLauncherBusyState,
   progress: DesktopLauncherActionProgress | null | undefined,
 ): boolean {
   if (!progress || state.action !== progress.action) {
     return false;
+  }
+  if (state.gateway_id !== '') {
+    return gatewayMatchesActionProgress(state.gateway_id, progress);
   }
   if (state.environment_id === '') {
     return false;
@@ -324,6 +372,16 @@ export function selectedSnapshotOpenConnectionProgressForEnvironment(
   return selectLauncherProgress(
     progressItems,
     (progress) => environmentMatchesOpenConnectionProgress(environment, progress),
+  );
+}
+
+export function selectedSnapshotRuntimeLifecycleProgressForGateway(
+  gatewayID: string,
+  progressItems: readonly DesktopLauncherActionProgress[],
+): DesktopLauncherActionProgress | null {
+  return selectLauncherProgress(
+    progressItems,
+    (progress) => gatewaySourceMatchesRuntimeLifecycleProgress(gatewayID, progress),
   );
 }
 
