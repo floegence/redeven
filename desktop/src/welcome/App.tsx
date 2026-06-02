@@ -62,7 +62,7 @@ import type {
   DesktopAccessMode,
   DesktopSettingsSurfaceSnapshot,
 } from '../shared/desktopSettingsSurface';
-import { desktopGatewayCanManageRuntime, type DesktopGatewaySource } from '../shared/desktopGateway';
+import type { DesktopGatewaySource } from '../shared/desktopGateway';
 import type { DesktopGatewayConnectionKind } from '../shared/desktopGateway';
 import type {
   DesktopFlowerHostRouterDecision,
@@ -645,8 +645,18 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Refresh Gateway status': 'environmentAction.refreshRuntimeStatus',
     Resolve: 'environmentAction.continue',
     Pair: 'environmentAction.pairGateway',
+    'Pair Gateway': 'environmentAction.pairGateway',
     'Set up': 'environmentStatus.setupRequired',
     Manage: 'environmentAction.manageInDesktop',
+    'Start Gateway': 'environmentAction.startRuntime',
+    'Starting...': 'progress.startingRuntime',
+    'Starting…': 'progress.startingRuntime',
+    'Stop': 'environmentAction.stopRuntime',
+    'Restart': 'environmentAction.restartRuntime',
+    'Update': 'environmentAction.updateRuntime',
+    'Update Gateway': 'environmentAction.updateRuntime',
+    'Resolve Gateway': 'environmentAction.continue',
+    Refresh: 'environmentAction.refreshStatus',
     Start: 'environmentAction.startRuntime',
     'Start runtime': 'environmentAction.startRuntime',
     'Start Runtime': 'environmentAction.startRuntime',
@@ -5318,6 +5328,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           <p class="text-sm">
             {gatewayStartRequiredMessage(gatewayStartRequiredDialog())}
           </p>
+          <div class="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+            {gatewayStartRequiredNextStep(gatewayStartRequiredDialog())}
+          </div>
           <Show when={gatewayStartRequiredDialog()?.runtime_state}>
             {(runtimeState) => (
               <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
@@ -9267,6 +9280,9 @@ function GatewaySourcesPanel(props: Readonly<{
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
 }>) {
+  const [gatewayLibraryElement, setGatewayLibraryElement] = createSignal<HTMLDivElement>();
+  const [gatewayLibraryWidthPx, setGatewayLibraryWidthPx] = createSignal(0);
+  const [rootFontSizePx, setRootFontSizePx] = createSignal(16);
   const entryGatewayIDs = createMemo(() => new Set(props.gatewayEntries.map((entry) => entry.gateway_id ?? '')));
   const visibleGatewaySources = createMemo(() => {
     const gatewayIDs = entryGatewayIDs();
@@ -9279,6 +9295,44 @@ function GatewaySourcesPanel(props: Readonly<{
       return !hasQuery
         || gatewayIDs.has(gateway.gateway_id)
         || gatewaySourceMatchesQuery(gateway, query);
+    });
+  });
+  const layoutModel = createMemo(() => buildEnvironmentLibraryLayoutModel({
+    visible_card_count: visibleGatewaySources().length,
+    layout_reference_count: Math.max(props.gatewaySources.length, visibleGatewaySources().length),
+    container_width_px: gatewayLibraryWidthPx(),
+    root_font_size_px: rootFontSizePx(),
+  }));
+  const gatewayGridStyle = createMemo<JSX.CSSProperties>(() => ({
+    '--redeven-environment-grid-columns': String(layoutModel().column_count),
+  }));
+
+  createEffect(() => {
+    const element = gatewayLibraryElement();
+    if (!element) {
+      return;
+    }
+
+    const updateLayoutMetrics = () => {
+      setGatewayLibraryWidthPx(readMeasuredElementWidth(element));
+      setRootFontSizePx(readDocumentRootFontSizePx());
+    };
+
+    updateLayoutMetrics();
+
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => updateLayoutMetrics());
+    resizeObserver?.observe(element);
+    if (typeof window !== 'undefined') {
+      window.addEventListener('resize', updateLayoutMetrics);
+    }
+
+    onCleanup(() => {
+      resizeObserver?.disconnect();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', updateLayoutMetrics);
+      }
     });
   });
 
@@ -9316,21 +9370,28 @@ function GatewaySourcesPanel(props: Readonly<{
           </div>
         )}
       >
-        <div class="space-y-3">
-          <For each={visibleGatewaySources()}>
-            {(gateway) => (
-              <GatewaySourceRow
-                i18n={props.i18n}
-                gateway={gateway}
-                gatewayEntries={props.gatewayEntries.filter((entry) => entry.gateway_id === gateway.gateway_id)}
-                busyState={props.busyState}
-                openCreateGatewaySetup={props.openCreateGatewaySetup}
-                pairGateway={props.pairGateway}
-                runGatewayRuntimeAction={props.runGatewayRuntimeAction}
-                runLocalEnvironmentAction={props.runLocalEnvironmentAction}
-              />
-            )}
-          </For>
+        <div
+          ref={setGatewayLibraryElement}
+          class="redeven-environment-library redeven-gateway-library"
+          data-density={layoutModel().density}
+          style={gatewayGridStyle()}
+        >
+          <div class="redeven-environment-grid">
+            <For each={visibleGatewaySources()}>
+              {(gateway) => (
+                <GatewaySourceCard
+                  i18n={props.i18n}
+                  gateway={gateway}
+                  gatewayEntries={props.gatewayEntries.filter((entry) => entry.gateway_id === gateway.gateway_id)}
+                  busyState={props.busyState}
+                  openCreateGatewaySetup={props.openCreateGatewaySetup}
+                  pairGateway={props.pairGateway}
+                  runGatewayRuntimeAction={props.runGatewayRuntimeAction}
+                  runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+                />
+              )}
+            </For>
+          </div>
         </div>
       </Show>
     </Show>
@@ -9353,7 +9414,7 @@ function gatewaySourceMatchesQuery(gateway: DesktopGatewaySource, query: string)
   return searchable.some((value) => trimString(value).toLowerCase().includes(normalizedQuery));
 }
 
-function GatewaySourceRow(props: Readonly<{
+function GatewaySourceCard(props: Readonly<{
   i18n: DesktopI18n;
   gateway: DesktopGatewaySource;
   gatewayEntries: readonly DesktopEnvironmentEntry[];
@@ -9373,35 +9434,96 @@ function GatewaySourceRow(props: Readonly<{
   const row = createMemo(() => buildGatewaySourceRowModel(props.gateway));
   const primaryActionLabel = createMemo(() => localizedEnvironmentActionLabel(props.i18n, row().primary_action.label));
   const primaryBusy = createMemo(() => gatewaySourceActionBusy(props.busyState, props.gateway.gateway_id, row().primary_action));
+  const visibleGatewayEntries = createMemo(() => props.gatewayEntries.slice(0, 3));
+  const hiddenGatewayEntryCount = createMemo(() => Math.max(0, props.gatewayEntries.length - visibleGatewayEntries().length));
+  const secondaryActions = createMemo(() => row().secondary_actions.filter((action) => action.intent !== 'manage_gateway'));
+  const hasManageableStartAction = createMemo(() => (
+    row().primary_action.intent === 'start_gateway_runtime'
+    || row().secondary_actions.some((action) => action.intent === 'start_gateway_runtime')
+  ));
 
   return (
-    <section class="redeven-gateway-row rounded-lg border border-border bg-card">
-      <div class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex min-w-0 items-center gap-3">
-          <ConsoleIconTile><ShieldCheck class="h-4 w-4" /></ConsoleIconTile>
-          <div class="min-w-0">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="truncate text-sm font-semibold tracking-tight text-foreground">{row().label}</div>
+    <Card class="redeven-environment-card redeven-gateway-card h-full overflow-hidden">
+      <CardHeader class="px-4 pb-2.5 pt-4">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0 flex-1">
+            <div class="mb-2 flex flex-wrap items-center gap-2">
+              <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                {row().transport_label}
+              </Tag>
               <EnvironmentStatusIndicator tone={row().status_tone}>
                 {localizedEnvironmentStatusLabel(props.i18n, row().status_label)}
               </EnvironmentStatusIndicator>
-              <ConsoleBadge>{row().transport_label}</ConsoleBadge>
               <ConsoleBadge>{props.i18n.t('environmentCenter.gatewayEnvsBadge', { count: row().environment_count })}</ConsoleBadge>
             </div>
-            <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <CardTitle class="truncate text-sm font-semibold leading-5 tracking-[0.01em]" title={row().label}>
+              {row().label}
+            </CardTitle>
+            <div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span class="redeven-gateway-card__management-chip">
+                <span class="redeven-gateway-card__management-dot" aria-hidden="true" />
+                {row().management_label}
+              </span>
               <Show when={row().endpoint_label}>
-                <span class="font-mono text-[11px]">{row().endpoint_label}</span>
+                {(endpoint) => <span class="redeven-gateway-card__endpoint">{endpoint()}</span>}
               </Show>
-              <span>{props.i18n.t(desktopGatewayCanManageRuntime(props.gateway)
-                ? 'environmentCenter.gatewayManagedByDesktop'
-                : 'environmentCenter.gatewayAccessOnlyByDesktop')}</span>
+            </div>
+          </div>
+          <ConsoleIconTile><ShieldCheck class="h-4 w-4" /></ConsoleIconTile>
+        </div>
+      </CardHeader>
+      <CardContent class="flex flex-1 flex-col gap-3 px-4 pb-3">
+        <div class="redeven-gateway-card__guidance" data-tone={row().guidance.tone}>
+          <div class="flex items-start gap-2">
+            <Show
+              when={row().guidance.tone === 'success'}
+              fallback={row().guidance.tone === 'warning'
+                ? <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                : <ShieldCheck class="mt-0.5 h-3.5 w-3.5 shrink-0" />}
+            >
+              <Check class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            </Show>
+            <div class="min-w-0">
+              <div class="text-xs font-semibold text-foreground">{row().guidance.title}</div>
+              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{row().guidance.detail}</div>
             </div>
           </div>
         </div>
-        <div class="flex flex-wrap items-center justify-end gap-2">
+        <Show
+          when={props.gatewayEntries.length > 0}
+          fallback={(
+            <div class="redeven-gateway-card__empty-env">
+              <div class="text-xs font-medium text-foreground">No environments discovered yet</div>
+              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
+                {hasManageableStartAction()
+                  ? 'Start this Gateway, then pair or refresh to discover the environments it manages.'
+                  : 'Pair or refresh this Gateway when its runtime is reachable to load the catalog.'}
+              </div>
+            </div>
+          )}
+        >
+          <div class="redeven-gateway-card__env-list">
+            <For each={visibleGatewayEntries()}>
+              {(environment) => (
+                <GatewayEnvironmentInlineRow
+                  i18n={props.i18n}
+                  environment={environment}
+                  runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+                />
+              )}
+            </For>
+            <Show when={hiddenGatewayEntryCount() > 0}>
+              <div class="redeven-gateway-card__more-envs">+{hiddenGatewayEntryCount()} more environments in this Gateway</div>
+            </Show>
+          </div>
+        </Show>
+      </CardContent>
+      <CardFooter class="mt-auto flex flex-col gap-2 border-t border-border/60 px-4 pb-3 pt-3">
+        <div class="flex w-full items-center gap-2">
           <Button
             size="sm"
             variant="default"
+            class="min-w-0 flex-1"
             loading={primaryBusy()}
             disabled={!row().primary_action.enabled}
             onClick={() => {
@@ -9411,40 +9533,41 @@ function GatewaySourceRow(props: Readonly<{
             <GatewaySourceActionIcon intent={row().primary_action.intent} />
             {primaryActionLabel()}
           </Button>
-          <For each={row().secondary_actions}>
-            {(action) => (
-              <Button
-                size="sm"
-                variant={action.variant}
-                loading={gatewaySourceActionBusy(props.busyState, props.gateway.gateway_id, action)}
-                disabled={!action.enabled}
-                onClick={() => {
-                  void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayRuntimeAction);
-                }}
+          <DesktopTooltip content={props.i18n.t('common.settings')} placement="top">
+            <span>
+              <ConsoleActionIconButton
+                title={props.i18n.t('common.settings')}
+                aria-label={`Manage ${row().label}`}
+                onClick={() => props.openCreateGatewaySetup(props.gateway)}
               >
-                <GatewaySourceActionIcon intent={action.intent} />
-                {localizedEnvironmentActionLabel(props.i18n, action.label)}
-              </Button>
-            )}
-          </For>
+                <Settings class="h-3.5 w-3.5" />
+              </ConsoleActionIconButton>
+            </span>
+          </DesktopTooltip>
         </div>
-      </div>
-      <Show when={props.gatewayEntries.length > 0}>
-        <div class="border-t border-border/70 px-4 py-2">
-          <div class="redeven-gateway-env-list">
-            <For each={props.gatewayEntries}>
-              {(environment) => (
-                <GatewayEnvironmentInlineRow
-                  i18n={props.i18n}
-                  environment={environment}
-                  runLocalEnvironmentAction={props.runLocalEnvironmentAction}
-                />
+        <Show when={secondaryActions().length > 0}>
+          <div class="redeven-gateway-card__secondary-actions">
+            <For each={secondaryActions()}>
+              {(action) => (
+                <Button
+                  size="sm"
+                  variant={action.variant}
+                  class="redeven-gateway-card__secondary-action"
+                  loading={gatewaySourceActionBusy(props.busyState, props.gateway.gateway_id, action)}
+                  disabled={!action.enabled}
+                  onClick={() => {
+                    void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayRuntimeAction);
+                  }}
+                >
+                  <GatewaySourceActionIcon intent={action.intent} />
+                  {localizedEnvironmentActionLabel(props.i18n, action.label)}
+                </Button>
               )}
             </For>
           </div>
-        </div>
-      </Show>
-    </section>
+        </Show>
+      </CardFooter>
+    </Card>
   );
 }
 
@@ -9463,25 +9586,53 @@ function GatewayEnvironmentInlineRow(props: Readonly<{
       <div class="min-w-0">
         <div class="truncate text-xs font-medium text-foreground">{model().environment_label}</div>
         <div class="truncate text-[11px] text-muted-foreground">{model().source_label}</div>
+        <Show when={model().endpoint_label}>
+          {(endpoint) => <div class="redeven-gateway-env-row__endpoint">{endpoint()}</div>}
+        </Show>
       </div>
-      <div class="hidden min-w-0 text-[11px] text-muted-foreground sm:block">
-        <span class="truncate">{model().endpoint_label}</span>
+      <div class="redeven-gateway-env-row__aside">
+        <EnvironmentStatusIndicator tone={model().status_tone}>
+          {localizedEnvironmentStatusLabel(props.i18n, model().status_label)}
+        </EnvironmentStatusIndicator>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={!model().primary_action.enabled}
+          onClick={() => {
+            void props.runLocalEnvironmentAction(props.environment, model().primary_action, 'connect');
+          }}
+        >
+          <GatewayEnvironmentActionIcon intent={model().primary_action.intent} />
+          {localizedEnvironmentActionLabel(props.i18n, model().primary_action.label)}
+        </Button>
       </div>
-      <EnvironmentStatusIndicator tone={model().status_tone}>
-        {localizedEnvironmentStatusLabel(props.i18n, model().status_label)}
-      </EnvironmentStatusIndicator>
-      <Button
-        size="sm"
-        variant="outline"
-        disabled={!model().primary_action.enabled}
-        onClick={() => {
-          void props.runLocalEnvironmentAction(props.environment, model().primary_action, 'connect');
-        }}
-      >
-        {localizedEnvironmentActionLabel(props.i18n, model().primary_action.label)}
-      </Button>
     </div>
   );
+}
+
+function GatewayEnvironmentActionIcon(props: Readonly<{ intent: EnvironmentActionIntent }>) {
+  switch (props.intent) {
+    case 'open':
+    case 'focus':
+    case 'opening':
+      return <ExternalLink class="mr-1 h-3.5 w-3.5" />;
+    case 'start_runtime':
+      return <Play class="mr-1 h-3.5 w-3.5" />;
+    case 'restart_runtime':
+    case 'refresh_runtime':
+    case 'reconnect_provider':
+      return <Refresh class="mr-1 h-3.5 w-3.5" />;
+    case 'update_runtime':
+      return <Save class="mr-1 h-3.5 w-3.5" />;
+    case 'stop_runtime':
+      return <Stop class="mr-1 h-3.5 w-3.5" />;
+    case 'resolve_gateway':
+      return <AlertTriangle class="mr-1 h-3.5 w-3.5" />;
+    case 'connect_provider_runtime':
+    case 'disconnect_provider_runtime':
+    case 'unavailable':
+      return <ShieldCheck class="mr-1 h-3.5 w-3.5" />;
+  }
 }
 
 function runGatewaySourceAction(
@@ -9576,11 +9727,26 @@ function gatewayStartRequiredMessage(payload: DesktopGatewayStartRequiredPayload
   const label = payload?.gateway_label || 'This Gateway';
   switch (payload?.reason) {
     case 'open_gateway_environment':
-      return `${label} must be running before Desktop can open this Gateway Environment.`;
+      return `Desktop found ${label}, but its Gateway Runtime is not running yet. Start it now and Desktop will continue opening this Gateway Environment.`;
     case 'refresh_gateway_catalog':
-      return `${label} must be running before Desktop can refresh its Environment catalog.`;
+      return `Desktop found ${label}, but its Gateway Runtime is not running yet. Start it now and Desktop will continue refreshing its Environment catalog.`;
     default:
-      return `${label} must be running before Desktop can pair with it.`;
+      return `Desktop found ${label}, but its Gateway Runtime is not running yet. Start it now and Desktop will continue pairing and discovering environments.`;
+  }
+}
+
+function gatewayStartRequiredNextStep(payload: DesktopGatewayStartRequiredPayload | null): string {
+  switch (payload?.runtime_state?.status) {
+    case 'ssh_unreachable':
+      return 'Next step: review the SSH host settings or network path, then try pairing again.';
+    case 'container_unavailable':
+      return 'Next step: make sure the target container exists and is running, then try pairing again.';
+    case 'bridge_unavailable':
+      return 'Next step: repair the Gateway bridge on the target host, then retry this action.';
+    case 'runtime_needs_update':
+      return 'Next step: update the Gateway runtime before continuing.';
+    default:
+      return 'Next step: Desktop will start the Gateway runtime on the configured SSH host or container, then retry this action automatically.';
   }
 }
 

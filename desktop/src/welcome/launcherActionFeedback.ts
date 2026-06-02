@@ -50,6 +50,38 @@ function reconnectControlPlaneAction(
   };
 }
 
+function gatewayFailureMessage(failure: DesktopLauncherActionFailure): string {
+  const detail = compact(failure.message);
+  switch (failure.code) {
+    case 'gateway_not_manageable':
+      return detail || 'This URL Gateway is access-only. Desktop can pair and refresh it, but start, stop, restart, and update must be managed on the Gateway host.';
+    case 'gateway_runtime_unreachable':
+      return detail || 'Desktop cannot reach the Gateway runtime. Start it on the target host or resolve the Gateway settings, then try again.';
+    case 'gateway_container_unavailable':
+      return detail || 'The Gateway container is unavailable. Start the container or update the Gateway settings, then try again.';
+    case 'gateway_bridge_unavailable':
+      return detail || 'Desktop cannot reach the Gateway bridge on the target host. Resolve the Gateway settings, then retry.';
+    case 'gateway_runtime_start_failed':
+      return detail || 'Desktop could not start the Gateway runtime. Review the Gateway target settings and try Start Gateway again.';
+    case 'gateway_runtime_stop_failed':
+      return detail || 'Desktop could not stop the Gateway runtime. Review the Gateway target and try again.';
+    case 'gateway_runtime_restart_failed':
+      return detail || 'Desktop could not restart the Gateway runtime. Review the Gateway target and try again.';
+    case 'gateway_runtime_update_failed':
+      return detail || 'Desktop could not update the Gateway runtime. Review the Gateway target and try again.';
+    case 'gateway_catalog_failed':
+      return detail || 'Desktop could not refresh this Gateway catalog. Start or resolve the Gateway, then refresh again.';
+    case 'gateway_start_required':
+      return detail || 'Start this Gateway first. Desktop will continue the pairing, refresh, or open action after the runtime is ready.';
+    default:
+      return detail || i18nFallbackGatewayMessage(failure);
+  }
+}
+
+function i18nFallbackGatewayMessage(_failure: DesktopLauncherActionFailure): string {
+  return 'Gateway action failed. Review the Gateway card for the next step, then try again.';
+}
+
 export function launcherActionFailurePresentation(
   i18n: DesktopI18n,
   failure: DesktopLauncherActionFailure,
@@ -167,8 +199,35 @@ export function launcherActionFailurePresentation(
       };
     case 'gateway_start_required':
       return {
-        message: '',
+        message: gatewayFailureMessage(failure),
         tone: 'info',
+        refresh_snapshot: refreshSnapshot,
+        delivery,
+      };
+    case 'gateway_not_manageable':
+      return {
+        message: gatewayFailureMessage(failure),
+        tone: 'warning',
+        refresh_snapshot: refreshSnapshot,
+        delivery,
+      };
+    case 'gateway_runtime_unreachable':
+    case 'gateway_container_unavailable':
+    case 'gateway_bridge_unavailable':
+    case 'gateway_catalog_failed':
+      return {
+        message: gatewayFailureMessage(failure),
+        tone: 'warning',
+        refresh_snapshot: refreshSnapshot,
+        delivery,
+      };
+    case 'gateway_runtime_start_failed':
+    case 'gateway_runtime_stop_failed':
+    case 'gateway_runtime_restart_failed':
+    case 'gateway_runtime_update_failed':
+      return {
+        message: gatewayFailureMessage(failure),
+        tone: 'error',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
