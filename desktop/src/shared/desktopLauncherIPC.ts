@@ -35,6 +35,7 @@ import type {
   DesktopGatewayEnvironment,
   DesktopGatewayEnvironmentCapability,
   DesktopGatewayEnvironmentState,
+  DesktopGatewayRuntimeState,
   DesktopGatewaySource,
   DesktopGatewayStatus,
   DesktopGatewayTrustState,
@@ -112,6 +113,11 @@ export type DesktopLauncherActionOutcome =
   | 'deleted_control_plane'
   | 'saved_gateway'
   | 'paired_gateway'
+  | 'started_gateway_runtime'
+  | 'stopped_gateway_runtime'
+  | 'restarted_gateway_runtime'
+  | 'updated_gateway_runtime'
+  | 'refreshed_gateway_catalog'
   | 'deleted_gateway'
   | 'saved_environment'
   | 'deleted_environment'
@@ -138,6 +144,17 @@ export type DesktopLauncherActionFailureCode =
   | 'provider_invalid_response'
   | 'provider_link_failed'
   | 'runtime_start_failed'
+  | 'gateway_start_required'
+  | 'gateway_not_manageable'
+  | 'gateway_runtime_unreachable'
+  | 'gateway_container_unavailable'
+  | 'gateway_bridge_unavailable'
+  | 'gateway_runtime_start_failed'
+  | 'gateway_runtime_stop_failed'
+  | 'gateway_runtime_restart_failed'
+  | 'gateway_runtime_update_failed'
+  | 'gateway_catalog_failed'
+  | 'confirmation_required'
   | 'operation_missing'
   | 'operation_not_cancelable'
   | 'action_invalid';
@@ -171,6 +188,11 @@ export type DesktopLauncherActionKind =
   | 'delete_control_plane'
   | 'upsert_gateway'
   | 'pair_gateway'
+  | 'start_gateway_runtime'
+  | 'stop_gateway_runtime'
+  | 'restart_gateway_runtime'
+  | 'update_gateway_runtime'
+  | 'refresh_gateway_catalog'
   | 'delete_gateway'
   | 'save_local_environment_settings'
   | 'upsert_saved_environment'
@@ -223,6 +245,37 @@ export type DesktopLauncherRuntimeTarget = Readonly<
   }>
   & Partial<DesktopSSHEnvironmentDetails>
 >;
+
+export type DesktopGatewayStartPolicy = 'require_ready' | 'start_if_needed';
+
+export type DesktopGatewayStartRequiredRetryAction = Readonly<
+  | {
+      kind: 'pair_gateway';
+      gateway_id: string;
+      start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
+    }
+  | {
+      kind: 'refresh_gateway_catalog';
+      gateway_id: string;
+      start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
+    }
+  | {
+      kind: 'open_gateway_environment';
+      environment_id: string;
+      gateway_id: string;
+      gateway_env_id: string;
+      label: string;
+      start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
+    }
+>;
+
+export type DesktopGatewayStartRequiredPayload = Readonly<{
+  gateway_id: string;
+  gateway_label: string;
+  reason: 'pair_gateway' | 'open_gateway_environment' | 'refresh_gateway_catalog';
+  runtime_state?: DesktopGatewayRuntimeState;
+  retry_action: DesktopGatewayStartRequiredRetryAction;
+}>;
 
 export type DesktopEnvironmentEntry = Readonly<{
   id: string;
@@ -467,6 +520,7 @@ export type DesktopLauncherActionRequest = Readonly<
       gateway_id: string;
       gateway_env_id: string;
       label: string;
+      start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
     }
   | {
       kind: 'open_remote_environment';
@@ -617,6 +671,28 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'pair_gateway';
       gateway_id: string;
+      start_policy?: DesktopGatewayStartPolicy;
+    }
+  | {
+      kind: 'start_gateway_runtime';
+      gateway_id: string;
+    }
+  | {
+      kind: 'stop_gateway_runtime';
+      gateway_id: string;
+    }
+  | {
+      kind: 'restart_gateway_runtime';
+      gateway_id: string;
+    }
+  | {
+      kind: 'update_gateway_runtime';
+      gateway_id: string;
+    }
+  | {
+      kind: 'refresh_gateway_catalog';
+      gateway_id: string;
+      start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
     }
   | {
       kind: 'delete_gateway';
@@ -694,6 +770,7 @@ export type DesktopLauncherActionFailure = Readonly<{
   env_public_id?: string;
   should_refresh_snapshot?: boolean;
   failure?: DesktopOperationFailurePresentation;
+  gateway_start_required_payload?: DesktopGatewayStartRequiredPayload;
 }>;
 
 export type DesktopLauncherActionResult = DesktopLauncherActionSuccess | DesktopLauncherActionFailure;
@@ -745,6 +822,14 @@ function compact(value: unknown): string {
 function normalizeSSHPasswordMode(value: unknown): 'keep' | 'replace' | 'clear' {
   const mode = compact(value);
   return mode === 'keep' || mode === 'clear' ? mode : 'replace';
+}
+
+function normalizeGatewayStartPolicy(
+  value: unknown,
+  allowed: readonly DesktopGatewayStartPolicy[],
+): DesktopGatewayStartPolicy | undefined {
+  const policy = compact(value) as DesktopGatewayStartPolicy;
+  return allowed.includes(policy) ? policy : undefined;
 }
 
 function normalizeDesktopLauncherRuntimeTarget(
@@ -902,12 +987,17 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       if (environmentID === '' || gatewayID === '' || gatewayEnvID === '' || label === '') {
         return null;
       }
+      const startPolicy = normalizeGatewayStartPolicy(
+        (candidate as { start_policy?: unknown }).start_policy,
+        ['start_if_needed'],
+      );
       return {
         kind,
         environment_id: environmentID,
         gateway_id: gatewayID,
         gateway_env_id: gatewayEnvID,
         label,
+        ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
       };
     }
     case 'connect_provider_runtime':
@@ -1195,15 +1285,33 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return null;
     }
     case 'pair_gateway':
+    case 'start_gateway_runtime':
+    case 'stop_gateway_runtime':
+    case 'restart_gateway_runtime':
+    case 'update_gateway_runtime':
+    case 'refresh_gateway_catalog':
     case 'delete_gateway': {
       const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
       if (gatewayID === '') {
         return null;
       }
       if (kind === 'pair_gateway') {
+        const startPolicy = normalizeGatewayStartPolicy(
+          (candidate as { start_policy?: unknown }).start_policy,
+          ['require_ready', 'start_if_needed'],
+        );
         return {
           kind,
           gateway_id: gatewayID,
+          ...(startPolicy ? { start_policy: startPolicy } : {}),
+        };
+      }
+      if (kind === 'refresh_gateway_catalog') {
+        const startPolicy = normalizeGatewayStartPolicy((candidate as { start_policy?: unknown }).start_policy, ['start_if_needed']);
+        return {
+          kind,
+          gateway_id: gatewayID,
+          ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
         };
       }
       return {

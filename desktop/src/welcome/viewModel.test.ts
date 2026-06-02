@@ -271,9 +271,18 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
     gateway_id: 'bastion',
     display_name: 'Bastion',
     connection_kind: 'url',
+    management_capability: 'access_only',
     status: 'online',
     trust_state: 'paired',
     endpoint_label: 'https://gateway.example.invalid',
+    runtime_state: {
+      status: 'not_applicable',
+      can_start: false,
+      can_stop: false,
+      can_restart: false,
+      can_update: false,
+      can_pair_after_start: false,
+    },
     created_at_ms: 10,
     updated_at_ms: 20,
     environments: [{
@@ -3401,13 +3410,17 @@ describe('Gateway view models', () => {
       status_label: 'Pairing required',
       primary_action: expect.objectContaining({
         intent: 'pair_gateway',
-        label: 'Pair',
+        label: 'Pair Gateway',
       }),
+      secondary_actions: expect.arrayContaining([
+        expect.objectContaining({ intent: 'manage_gateway' }),
+      ]),
     });
     expect(buildGatewaySourceRowModel(gatewaySource({
       gateway_id: 'lab',
       display_name: 'Lab Docker',
       connection_kind: 'ssh_container',
+      management_capability: 'managed_ssh_container',
       status: 'needs_setup',
       endpoint_label: 'lab-host / app-network-runner',
     }))).toMatchObject({
@@ -3423,5 +3436,114 @@ describe('Gateway view models', () => {
         label: 'Set up',
       }),
     });
+    const urlRow = buildGatewaySourceRowModel(gatewaySource());
+    expect(urlRow.primary_action).toEqual(expect.objectContaining({
+      intent: 'refresh_gateway_catalog',
+      label: 'Refresh',
+    }));
+    expect(urlRow.secondary_actions.map((action) => action.intent)).toEqual(['manage_gateway']);
+
+    const stoppedSSHRow = buildGatewaySourceRowModel(gatewaySource({
+      connection_kind: 'ssh_host',
+      management_capability: 'managed_ssh_host',
+      runtime_state: {
+        status: 'not_started',
+        can_start: true,
+        can_stop: false,
+        can_restart: false,
+        can_update: false,
+        can_pair_after_start: true,
+      },
+      status: 'offline',
+    }));
+    expect(stoppedSSHRow).toMatchObject({
+      status_label: 'Not started',
+      primary_action: expect.objectContaining({ intent: 'start_gateway_runtime' }),
+    });
+    expect(stoppedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
+      'manage_gateway',
+    ]);
+
+    const unreachableUnpairedRow = buildGatewaySourceRowModel(gatewaySource({
+      connection_kind: 'ssh_host',
+      management_capability: 'managed_ssh_host',
+      trust_state: 'unpaired',
+      status: 'pairing_required',
+      runtime_state: {
+        status: 'ssh_unreachable',
+        can_start: false,
+        can_stop: false,
+        can_restart: false,
+        can_update: false,
+        can_pair_after_start: false,
+        message: 'SSH host is unreachable.',
+      },
+    }));
+    expect(unreachableUnpairedRow.primary_action).toEqual(expect.objectContaining({
+      intent: 'resolve_gateway',
+      label: 'Resolve Gateway',
+    }));
+    expect(unreachableUnpairedRow.secondary_actions.map((action) => action.intent)).toEqual([
+      'manage_gateway',
+    ]);
+
+    const startingSSHRow = buildGatewaySourceRowModel(gatewaySource({
+      connection_kind: 'ssh_host',
+      management_capability: 'managed_ssh_host',
+      runtime_state: {
+        status: 'starting',
+        can_start: false,
+        can_stop: false,
+        can_restart: false,
+        can_update: false,
+        can_pair_after_start: false,
+      },
+    }));
+    expect(startingSSHRow.primary_action).toEqual(expect.objectContaining({
+      intent: 'start_gateway_runtime',
+      label: 'Starting...',
+      enabled: false,
+    }));
+
+    const updateRequiredSSHRow = buildGatewaySourceRowModel(gatewaySource({
+      connection_kind: 'ssh_host',
+      management_capability: 'managed_ssh_host',
+      runtime_state: {
+        status: 'runtime_needs_update',
+        can_start: false,
+        can_stop: false,
+        can_restart: true,
+        can_update: true,
+        can_pair_after_start: true,
+      },
+    }));
+    expect(updateRequiredSSHRow.primary_action).toEqual(expect.objectContaining({
+      intent: 'update_gateway_runtime',
+      label: 'Update Gateway',
+    }));
+    expect(updateRequiredSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
+      'restart_gateway_runtime',
+      'manage_gateway',
+    ]);
+
+    const readySSHRow = buildGatewaySourceRowModel(gatewaySource({
+      connection_kind: 'ssh_host',
+      management_capability: 'managed_ssh_host',
+      runtime_state: {
+        status: 'ready',
+        can_start: false,
+        can_stop: true,
+        can_restart: true,
+        can_update: true,
+        can_pair_after_start: false,
+      },
+    }));
+    expect(readySSHRow.primary_action.intent).toBe('refresh_gateway_catalog');
+    expect(readySSHRow.secondary_actions.map((action) => action.intent)).toEqual([
+      'stop_gateway_runtime',
+      'restart_gateway_runtime',
+      'update_gateway_runtime',
+      'manage_gateway',
+    ]);
   });
 });

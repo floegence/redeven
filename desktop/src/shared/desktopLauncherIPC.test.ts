@@ -656,6 +656,91 @@ describe('desktopLauncherIPC', () => {
       gateway_env_id: '',
       label: 'Demo',
     })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_gateway_environment',
+      environment_id: 'gateway:gw-demo:env:env-demo',
+      gateway_id: 'gw-demo',
+      gateway_env_id: 'env-demo',
+      label: 'Demo',
+      start_policy: 'require_ready',
+    })).toEqual({
+      kind: 'open_gateway_environment',
+      environment_id: 'gateway:gw-demo:env:env-demo',
+      gateway_id: 'gw-demo',
+      gateway_env_id: 'env-demo',
+      label: 'Demo',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_gateway_environment',
+      environment_id: 'gateway:gw-demo:env:env-demo',
+      gateway_id: 'gw-demo',
+      gateway_env_id: 'env-demo',
+      label: 'Demo',
+      start_policy: 'start_if_needed',
+      user_confirmed: true,
+      private_key: 'renderer must not pass this through',
+    })).toEqual({
+      kind: 'open_gateway_environment',
+      environment_id: 'gateway:gw-demo:env:env-demo',
+      gateway_id: 'gw-demo',
+      gateway_env_id: 'env-demo',
+      label: 'Demo',
+      start_policy: 'start_if_needed',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'pair_gateway',
+      gateway_id: ' gw-demo ',
+      start_policy: 'prompt_if_needed',
+      user_confirmed: true,
+    })).toEqual({
+      kind: 'pair_gateway',
+      gateway_id: 'gw-demo',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'pair_gateway',
+      gateway_id: ' gw-demo ',
+      start_policy: 'start_if_needed',
+      user_confirmed: true,
+    })).toEqual({
+      kind: 'pair_gateway',
+      gateway_id: 'gw-demo',
+      start_policy: 'start_if_needed',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'refresh_gateway_catalog',
+      gateway_id: ' gw-demo ',
+      start_policy: 'prompt_if_needed',
+    })).toEqual({
+      kind: 'refresh_gateway_catalog',
+      gateway_id: 'gw-demo',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'refresh_gateway_catalog',
+      gateway_id: ' gw-demo ',
+      start_policy: 'start_if_needed',
+      connect_artifact: { leak: true },
+    })).toEqual({
+      kind: 'refresh_gateway_catalog',
+      gateway_id: 'gw-demo',
+      start_policy: 'start_if_needed',
+    });
+    for (const kind of [
+      'start_gateway_runtime',
+      'stop_gateway_runtime',
+      'restart_gateway_runtime',
+      'update_gateway_runtime',
+    ] as const) {
+      expect(normalizeDesktopLauncherActionRequest({
+        kind,
+        gateway_id: ' gw-demo ',
+        start_policy: 'start_if_needed',
+      })).toEqual({
+        kind,
+        gateway_id: 'gw-demo',
+      });
+    }
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_gateway_runtime', gateway_id: 'gw-demo' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway_runtime', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_saved_environment', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest(null)).toBeNull();

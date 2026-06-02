@@ -256,6 +256,7 @@ export const frFR = {
     providerLocalLinksBadge: "{count} liens locaux",
     providerSynced: "Synchronisé {time}",
     gatewayManagedByDesktop: "Managed locally by Desktop",
+    gatewayAccessOnlyByDesktop: "Access-only Gateway",
     viewEnvironments: "Voir Environments",
     reconnect: "Reconnecter",
     removeProvider: "Supprimer Provider",

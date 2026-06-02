@@ -256,6 +256,7 @@ export const jaJP = {
     providerLocalLinksBadge: "{count} local links",
     providerSynced: "{time} に同期",
     gatewayManagedByDesktop: "Managed locally by Desktop",
+    gatewayAccessOnlyByDesktop: "Access-only Gateway",
     viewEnvironments: "Environments を表示",
     reconnect: "再接続",
     removeProvider: "Provider を削除",

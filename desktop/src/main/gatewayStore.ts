@@ -4,8 +4,10 @@ import { createHash } from 'node:crypto';
 
 import {
   desktopGatewayConnectionKindLabel,
+  desktopGatewayManagementCapability,
   type DesktopGatewayConnectionKind,
   type DesktopGatewayEnvironment,
+  type DesktopGatewayRuntimeState,
   type DesktopGatewayStatus,
   type DesktopGatewaySource,
   type DesktopGatewayTrustState,
@@ -420,10 +422,12 @@ export function gatewayTrustState(record: Pick<GatewayRecord, 'trust_profile'>):
 
 export function gatewayRecordToSource(record: GatewayRecord): DesktopGatewaySource {
   const trustState = gatewayTrustState(record);
+  const connectionKind = record.connection.kind as DesktopGatewayConnectionKind;
   return {
     gateway_id: record.gateway_id,
     display_name: record.display_name,
-    connection_kind: record.connection.kind as DesktopGatewayConnectionKind,
+    connection_kind: connectionKind,
+    management_capability: desktopGatewayManagementCapability(connectionKind),
     status: trustState === 'paired' ? 'unknown' : 'pairing_required',
     trust_state: trustState,
     status_message: trustState === 'paired'
@@ -444,9 +448,21 @@ export function gatewayRecordToSource(record: GatewayRecord): DesktopGatewaySour
         container_label: record.connection.container_label,
       } : {}),
     }),
+    ...(record.connection.kind === 'url' ? { runtime_state: notApplicableGatewayRuntimeState() } : {}),
     created_at_ms: record.created_at_ms,
     updated_at_ms: record.updated_at_ms,
     environments: [],
+  };
+}
+
+function notApplicableGatewayRuntimeState(): DesktopGatewayRuntimeState {
+  return {
+    status: 'not_applicable',
+    can_start: false,
+    can_stop: false,
+    can_restart: false,
+    can_update: false,
+    can_pair_after_start: false,
   };
 }
 

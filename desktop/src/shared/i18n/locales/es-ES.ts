@@ -256,6 +256,7 @@ export const esES = {
     providerLocalLinksBadge: "{count} enlaces locales",
     providerSynced: "Sincronizado {time}",
     gatewayManagedByDesktop: "Managed locally by Desktop",
+    gatewayAccessOnlyByDesktop: "Access-only Gateway",
     viewEnvironments: "Ver Environments",
     reconnect: "Reconectar",
     removeProvider: "Eliminar Provider",

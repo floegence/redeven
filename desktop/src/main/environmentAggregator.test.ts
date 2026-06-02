@@ -13,6 +13,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
     gateway_id: 'bastion',
     display_name: 'Bastion',
     connection_kind: 'url',
+    management_capability: 'access_only',
     status: 'online',
     trust_state: 'paired',
     endpoint_label: 'https://gateway.example.invalid',

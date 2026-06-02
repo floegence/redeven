@@ -98,8 +98,17 @@ describe('GatewayStore', () => {
     const source = gatewayRecordToSource(snapshot.gateways[0] as GatewayRecord);
     expect(source).toMatchObject({
       gateway_id: 'gw_demo',
+      management_capability: 'access_only',
       status: 'pairing_required',
       trust_state: 'unpaired',
+      runtime_state: {
+        status: 'not_applicable',
+        can_start: false,
+        can_stop: false,
+        can_restart: false,
+        can_update: false,
+        can_pair_after_start: false,
+      },
       environments: [],
     });
     expect(JSON.stringify(source)).not.toContain('paired_client_private_key_ref');
@@ -148,6 +157,7 @@ describe('GatewayStore', () => {
     const source = gatewayRecordToSource(record);
     expect(source).toMatchObject({
       connection_kind: 'ssh_host',
+      management_capability: 'managed_ssh_host',
       ssh_details: expect.objectContaining({
         ssh_destination: 'bastion',
         ssh_port: 2222,
@@ -156,7 +166,37 @@ describe('GatewayStore', () => {
       }),
       ssh_password_configured: true,
     });
+    expect(source.runtime_state).toBeUndefined();
     expect(JSON.stringify(source)).not.toContain('gateway-ssh-password');
+  });
+
+  it('projects SSH container Gateway management capability without persisting runtime state', () => {
+    const record = normalizeGatewayStoreSnapshot({
+      gateways: [{
+        gateway_id: 'gw_container',
+        display_name: 'Container Gateway',
+        connection: {
+          kind: 'ssh_container',
+          ssh_destination: 'bastion',
+          container_engine: 'docker',
+          container_id: 'container-stable-id',
+          container_ref: 'dev',
+          container_label: 'Dev',
+          runtime_root: 'remote_default',
+        },
+      }],
+    }, 1).gateways[0] as GatewayRecord;
+
+    const source = gatewayRecordToSource(record);
+    expect(source).toMatchObject({
+      connection_kind: 'ssh_container',
+      management_capability: 'managed_ssh_container',
+      container_engine: 'docker',
+      container_id: 'container-stable-id',
+      container_ref: 'dev',
+      container_label: 'Dev',
+    });
+    expect(source.runtime_state).toBeUndefined();
   });
 
   it('drops stale trust profiles when the Gateway connection identity changes', async () => {

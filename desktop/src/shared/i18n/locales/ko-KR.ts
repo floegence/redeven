@@ -256,6 +256,7 @@ export const koKR = {
     providerLocalLinksBadge: "{count} local links",
     providerSynced: "{time} 동기화됨",
     gatewayManagedByDesktop: "Managed locally by Desktop",
+    gatewayAccessOnlyByDesktop: "Access-only Gateway",
     viewEnvironments: "Environments 보기",
     reconnect: "다시 연결",
     removeProvider: "Provider 제거",
