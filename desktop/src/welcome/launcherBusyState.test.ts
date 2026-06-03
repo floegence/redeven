@@ -1175,6 +1175,7 @@ describe('launcherBusyState', () => {
     expect(gatewayMatchesRuntimeLifecycleProgress('bastion', openProgress)).toBe(false);
     expect(gatewaySourceMatchesRuntimeLifecycleProgress('bastion', openProgress)).toBe(false);
     expect(selectedSnapshotRuntimeLifecycleProgressForGateway('bastion', [openProgress])).toBeNull();
+    expect(selectedSnapshotGatewayProgress('bastion', [openProgress])).toBeNull();
   });
 
   it('uses snapshot-only Stop failure for the Env card label while a fresh request still blocks duplicate clicks', () => {

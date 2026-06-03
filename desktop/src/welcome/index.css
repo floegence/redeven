@@ -3185,70 +3185,30 @@ pre,
   color: color-mix(in srgb, var(--warning) 76%, var(--foreground));
 }
 
-.redeven-gateway-card__env-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-}
-
-.redeven-gateway-card__empty-env {
-  border: 1px dashed color-mix(in srgb, var(--border) 76%, transparent);
+.redeven-gateway-card__catalog-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
   padding: 0.65rem;
 }
 
-.redeven-gateway-env-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.6rem;
-  align-items: center;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--card) 92%, var(--muted) 8%);
-  padding: 0.55rem;
-}
-
-.redeven-gateway-env-row__endpoint {
-  margin-top: 0.15rem;
-  overflow: hidden;
-  color: var(--muted-foreground);
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.redeven-gateway-env-row__aside {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.35rem;
-}
-
-.redeven-gateway-env-row__aside .redeven-status-indicator {
-  max-width: 8.5rem;
+.redeven-gateway-card__view-envs-button {
+  min-width: 4.75rem;
+  justify-content: center;
 }
 
 @media (max-width: 34rem) {
-  .redeven-gateway-env-row {
+  .redeven-gateway-card__catalog-summary {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .redeven-gateway-env-row__aside {
-    align-items: stretch;
+  .redeven-gateway-card__view-envs-button {
+    width: 100%;
   }
-}
-
-.redeven-gateway-card__more-envs {
-  border-radius: 0.45rem;
-  background: color-mix(in srgb, var(--muted) 22%, transparent);
-  color: var(--muted-foreground);
-  padding: 0.45rem 0.6rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  text-align: center;
 }
 
 .redeven-gateway-action-panel__facts {
