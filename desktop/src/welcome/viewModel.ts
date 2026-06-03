@@ -2256,10 +2256,7 @@ export function gatewaySourceFilterOptions(
         ? {
             value,
             label: gateway.display_name || gateway.gateway_id,
-            count: snapshot.environments.filter((entry) => (
-              entry.kind === 'gateway_environment'
-              && entry.environment_source?.source_id === gatewaySourceFilterSourceID(value)
-            )).length,
+            count: 1,
           }
         : null;
     })
@@ -2338,6 +2335,8 @@ export type GatewaySourceRowModel = Readonly<{
   endpoint_label: string;
   management_label: string;
   environment_count: number;
+  environment_summary_label: string;
+  environment_summary_detail: string;
   guidance: GatewaySourceGuidanceModel;
   primary_action: GatewaySourceActionModel;
   secondary_actions: readonly GatewaySourceActionModel[];
@@ -2486,7 +2485,7 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
       title: needsPairing ? 'Preparing access-only Gateway' : 'Access-only Gateway',
       detail: needsPairing
         ? 'Desktop is pairing with this Gateway automatically. Runtime start and restart stay on the Gateway host.'
-        : 'Desktop can refresh the catalog and open Gateway Environments, but it cannot start or stop this external Gateway runtime.',
+        : 'Desktop can refresh the catalog and route Gateway Environments through this source, but it cannot start or stop this external Gateway runtime.',
       tone: needsPairing ? 'primary' : 'neutral',
     };
   }
@@ -2515,7 +2514,7 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   if (runtimeStatus === 'runtime_needs_update') {
     return {
       title: 'Update before continuing',
-      detail: runtimeMessage || 'Install the Gateway runtime update, then Desktop can pair, refresh the catalog, and open environments through it.',
+      detail: runtimeMessage || 'Install the Gateway runtime update, then Desktop can pair and refresh the environments this Gateway exposes.',
       tone: 'warning',
     };
   }
@@ -2541,7 +2540,7 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   if (gateway.status === 'online' && runtimeStatus === 'ready') {
     return {
       title: 'Gateway is ready',
-      detail: 'Refresh its catalog when the remote environments change, or open an environment from the list below.',
+      detail: 'Desktop keeps this Gateway catalog synced. Open its environments from the Environments tab.',
       tone: 'success',
     };
   }
@@ -2556,9 +2555,35 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
 
   return {
     title: 'Gateway catalog available',
-    detail: 'Refresh the catalog to pick up changes, or open an environment from this Gateway.',
+    detail: 'Refresh the catalog to pick up changes; its environments are listed separately in the Environments tab.',
     tone: 'neutral',
   };
+}
+
+function gatewayEnvironmentSummaryLabel(environmentCount: number): string {
+  if (environmentCount <= 0) {
+    return 'No environments synced';
+  }
+  if (environmentCount === 1) {
+    return '1 environment synced';
+  }
+  return `${environmentCount} environments synced`;
+}
+
+function gatewayEnvironmentSummaryDetail(
+  gateway: DesktopGatewaySource,
+  environmentCount: number,
+): string {
+  if (environmentCount > 0) {
+    return 'View and open these environments from the Environments tab filtered to this Gateway.';
+  }
+  if ((gateway.sync_state ?? 'idle') === 'syncing') {
+    return 'Desktop will add environments to the Environments tab when this Gateway catalog sync finishes.';
+  }
+  if (desktopGatewayNeedsResolution(gateway.status)) {
+    return 'Resolve this Gateway before its managed environments can appear in the Environments tab.';
+  }
+  return 'No environments are currently exposed by this Gateway catalog.';
 }
 
 export function buildGatewaySourceRowModel(
@@ -2567,6 +2592,7 @@ export function buildGatewaySourceRowModel(
   const needsResolution = desktopGatewayNeedsResolution(gateway.status);
   const runtimeStatus = gateway.runtime_state?.status;
   const primaryAction = gatewaySourcePrimaryAction(gateway);
+  const environmentCount = gateway.environments.length;
   return {
     gateway_id: gateway.gateway_id,
     label: gateway.display_name || gateway.gateway_id,
@@ -2591,7 +2617,9 @@ export function buildGatewaySourceRowModel(
     management_label: desktopGatewayCanManageRuntime(gateway)
       ? 'Managed by Desktop'
       : 'Access-only Gateway',
-    environment_count: gateway.environments.length,
+    environment_count: environmentCount,
+    environment_summary_label: gatewayEnvironmentSummaryLabel(environmentCount),
+    environment_summary_detail: gatewayEnvironmentSummaryDetail(gateway, environmentCount),
     guidance: gatewaySourceGuidance(gateway),
     primary_action: primaryAction,
     secondary_actions: gatewaySourceSecondaryActions(gateway, primaryAction),

@@ -159,6 +159,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const [gatewaySourceFilter, setGatewaySourceFilter] = createSignal');
     expect(appSrc).toContain('const [gatewayQuery, setGatewayQuery] = createSignal');
     expect(appSrc).toContain('filterGatewayEnvironmentEntries(');
+    expect(appSrc).toContain('function focusGatewayEnvironments(gateway: DesktopGatewaySource): void');
     expect(appSrc).toContain('<GatewaySourcesPanel');
     expect(appSrc).toContain("props.activeTab === 'gateways'");
     expect(appSrc).toContain('gatewaySourceFilterValue,');
@@ -204,7 +205,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('<EnvironmentProgressPanel');
     expect(appSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? \'start_if_needed\' : undefined');
     expect(appSrc).toContain('buildGatewayActionPresentation');
-    expect(appSrc).toContain('Desktop is syncing this Gateway and will list environments as soon as the catalog is ready.');
+    expect(appSrc).toContain('row().environment_summary_label');
+    expect(appSrc).toContain('row().environment_summary_detail');
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
     expect(appSrc).toContain("case 'refresh_status':");
     expect(appSrc).toContain("case 'refresh_gateway_catalog':");
@@ -251,15 +253,16 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
-    expect(appSrc).toContain('const entryGatewayIDs = createMemo(() => new Set(props.gatewayEntries.map((entry) => entry.gateway_id ?? \'\')));');
     expect(appSrc).toContain('const gatewaySourcesByID = createMemo(() => {');
     expect(appSrc).toContain('const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.gateway_id));');
     expect(appSrc).toContain('<For each={visibleGatewaySourceIDs()}>');
     expect(appSrc).toContain('gatewayEntriesByGatewayID()[gatewayID] ?? []');
     expect(appSrc).toContain("gatewaySourceFilterValue(gateway.gateway_id) !== props.gatewaySourceFilter");
-    expect(appSrc).toContain('|| gatewaySourceMatchesQuery(gateway, query);');
+    expect(appSrc).toContain('return !hasQuery || gatewaySourceMatchesQuery(gateway, query);');
     expect(appSrc).toContain('function gatewaySourceMatchesQuery(gateway: DesktopGatewaySource, query: string): boolean');
     expect(appSrc).toContain('gateway.endpoint_label,');
+    expect(appSrc).toContain('const visibleGatewaySourceCount = createMemo(() => (');
+    expect(appSrc).toContain('const totalGatewaySourceCount = createMemo(() => props.gatewaySources.length);');
     expect(appSrc).toContain('noMatchingGatewaysTitle');
     expect(styles).toContain('.redeven-gateway-grid');
     expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.5rem), 22rem));');
@@ -755,7 +758,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? \'start_if_needed\' : undefined');
     expect(appSrc).toContain('const quickSecondaryActions = createMemo(() => secondaryActions().slice(0, 1));');
     expect(appSrc).toContain('const overflowSecondaryActions = createMemo(() => secondaryActions().slice(quickSecondaryActions().length));');
-    expect(appSrc).toContain('Desktop can start this Gateway and refresh its catalog automatically.');
+    expect(appSrc).toContain('class="redeven-gateway-card__catalog-summary"');
+    expect(appSrc).toContain('onClick={() => props.viewGatewayEnvironments(props.gateway)}');
+    expect(appSrc).toContain('disabled={row().environment_count <= 0}');
     expect(appSrc).toContain('const gatewayActionRunning = createMemo(() => (');
     expect(appSrc).not.toContain('Start Gateway & Pair');
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
@@ -766,6 +771,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
     expect(appSrc).not.toContain('gatewayStartRequiredNextStep');
     expect(appSrc).not.toContain('function GatewaySourceRow');
+    expect(appSrc).not.toContain('function GatewayEnvironmentInlineRow');
+    expect(appSrc).not.toContain('GatewayEnvironmentActionIcon');
+    expect(appSrc).not.toContain('gateway_env_id: action.environment_id');
     expect(appSrc).not.toContain('redeven-gateway-row');
     expect(styles).toContain('.redeven-gateway-grid');
     expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.5rem), 22rem));');
@@ -773,7 +781,9 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-gateway-card__primary-anchor');
     expect(styles).toContain('flex: 1 1 auto;');
     expect(styles).toContain('.redeven-gateway-card__guidance');
-    expect(styles).toContain('.redeven-gateway-card__env-list');
+    expect(styles).toContain('.redeven-gateway-card__catalog-summary');
+    expect(styles).not.toContain('.redeven-gateway-card__env-list');
+    expect(styles).not.toContain('.redeven-gateway-env-row');
     expect(styles).not.toContain('.redeven-gateway-card__secondary-actions');
   });
 

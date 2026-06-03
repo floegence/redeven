@@ -162,7 +162,6 @@ import {
   buildEnvironmentLibraryLayoutModel,
   buildEnvironmentCardModel,
   buildEnvironmentCardFactsModel,
-  buildGatewayRowModel,
   buildGatewaySourceRowModel,
   ICON_ENDPOINTS,
   buildControlPlaneStatusModel,
@@ -172,7 +171,6 @@ import {
   environmentProviderFilterValue,
   filterGatewayEnvironmentEntries,
   filterEnvironmentLibrary,
-  gatewayEnvironmentCount,
   gatewaySourceFilterOptions,
   gatewaySourceFilterValue,
   LOCAL_ENVIRONMENT_LIBRARY_FILTER,
@@ -2359,6 +2357,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (runtimeTargetID) {
         next.add(runtimeTargetEnvironmentLibraryFilterValue(runtimeTargetID));
       }
+      if (environment.kind === 'gateway_environment') {
+        const gatewayFilterValue = gatewaySourceFilterValue(environment.gateway_id ?? '');
+        if (gatewayFilterValue !== '') {
+          next.add(gatewayFilterValue);
+        }
+      }
     }
     for (const controlPlane of controlPlanes()) {
       next.add(controlPlaneFilterValue(controlPlane));
@@ -2375,8 +2379,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const gatewayEntries = createMemo(() => (
     filterGatewayEnvironmentEntries(
       snapshot(),
-      gatewayQuery(),
-      gatewaySourceFilter(),
+      '',
+      '',
     )
   ));
   const librarySummary = createMemo(() => (
@@ -3191,6 +3195,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setActiveCenterTab('environments');
     setLibraryQuery('');
     setLibrarySourceFilter(controlPlaneFilterValue(controlPlane));
+  }
+
+  function focusGatewayEnvironments(gateway: DesktopGatewaySource): void {
+    setActiveCenterTab('environments');
+    setLibraryQuery('');
+    const filterValue = gatewaySourceFilterValue(gateway.gateway_id);
+    setLibrarySourceFilter(filterValue || GATEWAY_ENVIRONMENT_LIBRARY_FILTER);
   }
 
   function closeControlPlaneDialog(): void {
@@ -5162,6 +5173,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               controlPlanes={controlPlanes()}
               gatewaySources={snapshot().gateway_sources}
               viewControlPlaneEnvironments={focusProviderEnvironments}
+              viewGatewayEnvironments={focusGatewayEnvironments}
               reconnectControlPlane={reconnectControlPlane}
               refreshControlPlane={refreshControlPlane}
               deleteControlPlane={setDeleteControlPlaneTarget}
@@ -5631,6 +5643,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   controlPlanes: readonly DesktopControlPlaneSummary[];
   gatewaySources: readonly DesktopGatewaySource[];
   viewControlPlaneEnvironments: (controlPlane: DesktopControlPlaneSummary) => void;
+  viewGatewayEnvironments: (gateway: DesktopGatewaySource) => void;
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
@@ -5716,18 +5729,25 @@ function ConnectEnvironmentSurface(props: Readonly<{
     const matchedControlPlane = props.controlPlanes.find(
       (cp) => controlPlaneFilterValue(cp) === props.librarySourceFilter,
     );
-    return matchedControlPlane?.display_label ?? '';
+    if (matchedControlPlane) return matchedControlPlane.display_label;
+    const matchedGateway = gatewaySourceFilterOptions(props.snapshot).find(
+      (option) => option.value === props.librarySourceFilter,
+    );
+    return matchedGateway ? `Gateway: ${matchedGateway.label}` : '';
   });
   const controlPlaneEnvironmentCount = createMemo(() => (
     props.controlPlanes.reduce((total, controlPlane) => total + controlPlane.environments.length, 0)
   ));
-  const visibleGatewayEnvironmentCount = createMemo(() => (
-    gatewayEnvironmentCount(props.snapshot, props.gatewayQuery, props.gatewaySourceFilter)
-  ));
-  const totalGatewayEnvironmentCount = createMemo(() => (
-    gatewayEnvironmentCount(props.snapshot, '', '')
-  ));
   const gatewayFilterOptions = createMemo(() => gatewaySourceFilterOptions(props.snapshot));
+  const visibleGatewaySourceCount = createMemo(() => (
+    props.gatewaySources.filter((gateway) => {
+      if (props.gatewaySourceFilter !== '' && gatewaySourceFilterValue(gateway.gateway_id) !== props.gatewaySourceFilter) {
+        return false;
+      }
+      return gatewaySourceMatchesQuery(gateway, props.gatewayQuery);
+    }).length
+  ));
+  const totalGatewaySourceCount = createMemo(() => props.gatewaySources.length);
   const showQuickAddCards = createMemo(() => (
     trimString(props.libraryQuery) === ''
     && trimString(props.librarySourceFilter) === ''
@@ -5917,7 +5937,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                       aria-pressed={props.gatewaySourceFilter === ''}
                       onClick={() => props.setGatewaySourceFilter('')}
                     >
-                      {props.i18n.t('environmentCenter.allFilter')} ({totalGatewayEnvironmentCount()})
+                      {props.i18n.t('environmentCenter.allFilter')} ({totalGatewaySourceCount()})
                     </button>
                     <For each={gatewayFilterOptions()}>
                       {(option) => (
@@ -5935,7 +5955,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                     <div class="hidden items-center gap-2 text-xs text-muted-foreground sm:flex">
                       <span>{props.i18n.t('environmentCenter.gatewaysCount', { count: props.gatewaySources.length })}</span>
                       <span class="text-border">·</span>
-                      <span>{props.i18n.t('environmentCenter.shownCount', { count: visibleGatewayEnvironmentCount() })}</span>
+                      <span>{props.i18n.t('environmentCenter.shownCount', { count: visibleGatewaySourceCount() })}</span>
                     </div>
                   </>
                 </Show>
@@ -5998,7 +6018,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 pairGateway={props.pairGateway}
                 runGatewayLauncherAction={props.runGatewayLauncherAction}
                 runGatewayRuntimeAction={props.runGatewayRuntimeAction}
-                runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+                viewGatewayEnvironments={props.viewGatewayEnvironments}
                 cancelOperation={props.cancelOperation}
                 dismissOperation={props.dismissOperation}
                 copyOperationDiagnostics={props.copyOperationDiagnostics}
@@ -9326,17 +9346,12 @@ function GatewaySourcesPanel(props: Readonly<{
     kind: GatewayRuntimeActionKind,
     startPolicy?: GatewayRuntimeStartPolicy,
   ) => Promise<void>;
-  runLocalEnvironmentAction: (
-    environment: DesktopEnvironmentEntry,
-    action: EnvironmentActionModel,
-    errorTarget?: 'connect' | 'dialog' | 'settings',
-  ) => Promise<boolean>;
+  viewGatewayEnvironments: (gateway: DesktopGatewaySource) => void;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
 }>) {
   const [activeGatewayPopoverID, setActiveGatewayPopoverID] = createSignal('');
-  const entryGatewayIDs = createMemo(() => new Set(props.gatewayEntries.map((entry) => entry.gateway_id ?? '')));
   const gatewaySourcesByID = createMemo(() => {
     const record: Record<string, DesktopGatewaySource> = {};
     for (const gateway of props.gatewaySources) {
@@ -9356,16 +9371,13 @@ function GatewaySourcesPanel(props: Readonly<{
     return record;
   });
   const visibleGatewaySources = createMemo(() => {
-    const gatewayIDs = entryGatewayIDs();
     const query = trimString(props.gatewayQuery);
     const hasQuery = query !== '';
     return props.gatewaySources.filter((gateway) => {
       if (props.gatewaySourceFilter !== '' && gatewaySourceFilterValue(gateway.gateway_id) !== props.gatewaySourceFilter) {
         return false;
       }
-      return !hasQuery
-        || gatewayIDs.has(gateway.gateway_id)
-        || gatewaySourceMatchesQuery(gateway, query);
+      return !hasQuery || gatewaySourceMatchesQuery(gateway, query);
     });
   });
   const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.gateway_id));
@@ -9455,7 +9467,7 @@ function GatewaySourcesPanel(props: Readonly<{
                   pairGateway={props.pairGateway}
                   runGatewayLauncherAction={props.runGatewayLauncherAction}
                   runGatewayRuntimeAction={props.runGatewayRuntimeAction}
-                  runLocalEnvironmentAction={props.runLocalEnvironmentAction}
+                  viewGatewayEnvironments={props.viewGatewayEnvironments}
                   cancelOperation={props.cancelOperation}
                   dismissOperation={props.dismissOperation}
                   copyOperationDiagnostics={props.copyOperationDiagnostics}
@@ -9502,11 +9514,7 @@ function GatewaySourceCard(props: Readonly<{
     kind: GatewayRuntimeActionKind,
     startPolicy?: GatewayRuntimeStartPolicy,
   ) => Promise<void>;
-  runLocalEnvironmentAction: (
-    environment: DesktopEnvironmentEntry,
-    action: EnvironmentActionModel,
-    errorTarget?: 'connect' | 'dialog' | 'settings',
-  ) => Promise<boolean>;
+  viewGatewayEnvironments: (gateway: DesktopGatewaySource) => void;
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
@@ -9562,8 +9570,6 @@ function GatewaySourceCard(props: Readonly<{
   const guidePanelVisible = createMemo(() => props.actionPopoverOpen && !hasProgressPanel() && currentActionPresentation().execution_mode !== 'direct');
   const progressPanelVisible = createMemo(() => props.actionPopoverOpen && hasProgressPanel());
   const actionPopoverOpen = createMemo(() => progressPanelVisible() || guidePanelVisible());
-  const visibleGatewayEntries = createMemo(() => props.gatewayEntries.slice(0, 3));
-  const hiddenGatewayEntryCount = createMemo(() => Math.max(0, props.gatewayEntries.length - visibleGatewayEntries().length));
   const secondaryActions = createMemo(() => row().secondary_actions.filter((action) => action.intent !== 'manage_gateway'));
   const quickSecondaryActions = createMemo(() => secondaryActions().slice(0, 1));
   const overflowSecondaryActions = createMemo(() => secondaryActions().slice(quickSecondaryActions().length));
@@ -9575,10 +9581,6 @@ function GatewaySourceCard(props: Readonly<{
         session_key: entry.open_session_key,
         label: entry.label,
       }))
-  ));
-  const hasManageableStartAction = createMemo(() => (
-    row().primary_action.intent === 'start_gateway_runtime'
-    || row().secondary_actions.some((action) => action.intent === 'start_gateway_runtime')
   ));
   const gatewayActionRunning = createMemo(() => (
     visibleGatewayProgress()?.status === 'running'
@@ -9686,7 +9688,6 @@ function GatewaySourceCard(props: Readonly<{
               <EnvironmentStatusIndicator tone={row().status_tone}>
                 {localizedEnvironmentStatusLabel(props.i18n, row().status_label)}
               </EnvironmentStatusIndicator>
-              <ConsoleBadge>{props.i18n.t('environmentCenter.gatewayEnvsBadge', { count: row().environment_count })}</ConsoleBadge>
             </div>
             <CardTitle class="truncate text-sm font-semibold leading-5 tracking-[0.01em]" title={row().label}>
               {row().label}
@@ -9732,36 +9733,22 @@ function GatewaySourceCard(props: Readonly<{
             </div>
           </div>
         </div>
-        <Show
-          when={props.gatewayEntries.length > 0}
-          fallback={(
-            <div class="redeven-gateway-card__empty-env">
-              <div class="text-xs font-medium text-foreground">No environments discovered yet</div>
-              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                {props.gateway.sync_state === 'syncing'
-                  ? 'Desktop is syncing this Gateway and will list environments as soon as the catalog is ready.'
-                  : hasManageableStartAction()
-                    ? 'Desktop can start this Gateway and refresh its catalog automatically. Open the guidance panel if it needs attention.'
-                    : 'Desktop will refresh this Gateway automatically when the endpoint is reachable.'}
-              </div>
-            </div>
-          )}
-        >
-          <div class="redeven-gateway-card__env-list">
-            <For each={visibleGatewayEntries()}>
-              {(environment) => (
-                <GatewayEnvironmentInlineRow
-                  i18n={props.i18n}
-                  environment={environment}
-                  runLocalEnvironmentAction={props.runLocalEnvironmentAction}
-                />
-              )}
-            </For>
-            <Show when={hiddenGatewayEntryCount() > 0}>
-              <div class="redeven-gateway-card__more-envs">+{hiddenGatewayEntryCount()} more environments in this Gateway</div>
-            </Show>
+        <div class="redeven-gateway-card__catalog-summary">
+          <div class="min-w-0">
+            <div class="text-xs font-semibold text-foreground">{row().environment_summary_label}</div>
+            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{row().environment_summary_detail}</div>
           </div>
-        </Show>
+          <Button
+            size="sm"
+            variant="outline"
+            class="redeven-gateway-card__view-envs-button"
+            disabled={row().environment_count <= 0}
+            onClick={() => props.viewGatewayEnvironments(props.gateway)}
+          >
+            <ChevronRight class="mr-1 h-3.5 w-3.5" />
+            View
+          </Button>
+        </div>
       </CardContent>
       <CardFooter class="redeven-gateway-card__footer mt-auto flex flex-col gap-2 border-t border-border/60 px-4 pb-3 pt-3">
         <div class="redeven-gateway-card__footer-row">
@@ -9853,18 +9840,8 @@ function GatewaySourceCard(props: Readonly<{
                           props.openCreateGatewaySetup(props.gateway);
                           props.onActionPopoverOpenChange(false);
                           break;
-                        case 'open_gateway_environment':
-                          void props.runGatewayLauncherAction({
-                            kind: 'open_gateway_environment',
-                            gateway_id: action.gateway_id,
-                            environment_id: action.environment_id,
-                            gateway_env_id: action.environment_id,
-                            label: action.label,
-                            ...(action.start_policy ? { start_policy: action.start_policy } : {}),
-                          });
-                          props.onActionPopoverOpenChange(true);
-                          break;
                         case 'manage_desktop_update':
+                        case 'open_gateway_environment':
                           break;
                       }
                     }}
@@ -10024,70 +10001,6 @@ function GatewaySourceCard(props: Readonly<{
       </CardFooter>
     </Card>
   );
-}
-
-function GatewayEnvironmentInlineRow(props: Readonly<{
-  i18n: DesktopI18n;
-  environment: DesktopEnvironmentEntry;
-  runLocalEnvironmentAction: (
-    environment: DesktopEnvironmentEntry,
-    action: EnvironmentActionModel,
-    errorTarget?: 'connect' | 'dialog' | 'settings',
-  ) => Promise<boolean>;
-}>) {
-  const model = createMemo(() => buildGatewaySourceEnvironmentRow(props.i18n, props.environment));
-  return (
-    <div class="redeven-gateway-env-row">
-      <div class="min-w-0">
-        <div class="truncate text-xs font-medium text-foreground">{model().environment_label}</div>
-        <div class="truncate text-[11px] text-muted-foreground">{model().source_label}</div>
-        <Show when={model().endpoint_label}>
-          {(endpoint) => <div class="redeven-gateway-env-row__endpoint">{endpoint()}</div>}
-        </Show>
-      </div>
-      <div class="redeven-gateway-env-row__aside">
-        <EnvironmentStatusIndicator tone={model().status_tone}>
-          {localizedEnvironmentStatusLabel(props.i18n, model().status_label)}
-        </EnvironmentStatusIndicator>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={!model().primary_action.enabled}
-          onClick={() => {
-            void props.runLocalEnvironmentAction(props.environment, model().primary_action, 'connect');
-          }}
-        >
-          <GatewayEnvironmentActionIcon intent={model().primary_action.intent} />
-          {localizedEnvironmentActionLabel(props.i18n, model().primary_action.label)}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function GatewayEnvironmentActionIcon(props: Readonly<{ intent: EnvironmentActionIntent }>) {
-  switch (props.intent) {
-    case 'open':
-    case 'focus':
-    case 'opening':
-      return <ExternalLink class="mr-1 h-3.5 w-3.5" />;
-    case 'start_runtime':
-      return <Play class="mr-1 h-3.5 w-3.5" />;
-    case 'restart_runtime':
-    case 'refresh_runtime':
-    case 'reconnect_provider':
-      return <Refresh class="mr-1 h-3.5 w-3.5" />;
-    case 'update_runtime':
-      return <Save class="mr-1 h-3.5 w-3.5" />;
-    case 'stop_runtime':
-      return <Stop class="mr-1 h-3.5 w-3.5" />;
-    case 'resolve_gateway':
-      return <AlertTriangle class="mr-1 h-3.5 w-3.5" />;
-    case 'connect_provider_runtime':
-    case 'disconnect_provider_runtime':
-    case 'unavailable':
-      return <ShieldCheck class="mr-1 h-3.5 w-3.5" />;
-  }
 }
 
 function gatewayPanelIconTone(tone: GatewayActionPanelModel['tone']): 'neutral' | 'primary' | 'warning' | 'error' {
@@ -10335,17 +10248,6 @@ function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionMo
     case 'resolve_gateway':
       return <AlertTriangle class="mr-1 h-3.5 w-3.5" />;
   }
-}
-
-function buildGatewaySourceEnvironmentRow(
-  _i18n: DesktopI18n,
-  environment: DesktopEnvironmentEntry,
-) {
-  return buildGatewaySourceEnvironmentRowModel(environment);
-}
-
-function buildGatewaySourceEnvironmentRowModel(environment: DesktopEnvironmentEntry) {
-  return buildGatewayRowModel(environment);
 }
 
 const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(

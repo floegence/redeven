@@ -3336,6 +3336,16 @@ describe('Gateway view models', () => {
         gateway_label: 'Office',
       }),
     ]);
+    expect(filterEnvironmentLibrary(
+      snapshot,
+      '',
+      gatewaySourceFilterValue('office'),
+    )).toEqual([
+      expect.objectContaining({
+        gateway_env_id: 'office-demo',
+        gateway_label: 'Office',
+      }),
+    ]);
     expect(gatewayEnvironmentCount(snapshot, 'gateway.example', '')).toBe(1);
     expect(gatewaySourceFilterOptions(snapshot)).toEqual([
       {
@@ -3438,6 +3448,8 @@ describe('Gateway view models', () => {
       endpoint_label: 'lab-host / app-network-runner',
       management_label: 'Managed by Desktop',
       environment_count: 1,
+      environment_summary_label: '1 environment synced',
+      environment_summary_detail: 'View and open these environments from the Environments tab filtered to this Gateway.',
       guidance: expect.objectContaining({
         title: 'Finish Gateway setup',
         tone: 'warning',
@@ -3634,6 +3646,7 @@ describe('Gateway view models', () => {
     }));
     expect(readySSHRow.guidance).toMatchObject({
       title: 'Gateway is ready',
+      detail: 'Desktop keeps this Gateway catalog synced. Open its environments from the Environments tab.',
       tone: 'success',
     });
     expect(readySSHRow.secondary_actions.map((action) => action.intent)).toEqual([

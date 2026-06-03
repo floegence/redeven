@@ -307,19 +307,6 @@ export function gatewaySourceMatchesRuntimeLifecycleProgress(
   }
 }
 
-export function gatewaySourceMatchesCardProgress(
-  gatewayID: string,
-  progress: DesktopLauncherActionProgress | null | undefined,
-): boolean {
-  if (!gatewayMatchesActionProgress(gatewayID, progress)) {
-    return false;
-  }
-  if (progress?.step_progress || progress?.lifecycle_progress) {
-    return true;
-  }
-  return progress?.action === 'open_gateway_environment' && progress.open_progress !== undefined;
-}
-
 export function busyStateMatchesActionProgress(
   state: DesktopLauncherBusyState,
   progress: DesktopLauncherActionProgress | null | undefined,
@@ -407,7 +394,7 @@ export function selectedSnapshotGatewayProgress(
 ): DesktopLauncherActionProgress | null {
   return selectLauncherProgress(
     progressItems,
-    (progress) => gatewaySourceMatchesCardProgress(gatewayID, progress),
+    (progress) => gatewaySourceMatchesRuntimeLifecycleProgress(gatewayID, progress),
   );
 }
 
