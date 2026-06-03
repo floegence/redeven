@@ -110,7 +110,7 @@ function signedRuntimeStyleChallenge(
 }
 
 describe('gatewayTrust', () => {
-  it('requires explicit user confirmation before saving pairing material', async () => {
+  it('requires an accepted trust decision before saving pairing material', async () => {
     const store = memorySecretStore();
     const record = gatewayRecord();
     const material = createGatewayPairingMaterial(record);
@@ -120,10 +120,10 @@ describe('gatewayTrust', () => {
       record,
       material,
       challenge: signedChallenge(material, gatewayMaterial),
-      user_confirmed: false,
+      trust_accepted: false,
       secret_store: store,
       now_unix_ms: 1_000,
-    })).rejects.toMatchObject({ code: 'GATEWAY_PAIRING_CONFIRMATION_REQUIRED' });
+    })).rejects.toMatchObject({ code: 'GATEWAY_PAIRING_TRUST_REQUIRED' });
     expect(store.values.size).toBe(0);
   });
 
@@ -138,7 +138,7 @@ describe('gatewayTrust', () => {
       record,
       material,
       challenge,
-      user_confirmed: true,
+      trust_accepted: true,
       secret_store: store,
       now_unix_ms: 1_000,
     });
@@ -165,7 +165,7 @@ describe('gatewayTrust', () => {
       record,
       material,
       challenge: signedChallenge(material, gatewayMaterial, { protocol_version: '' }),
-      user_confirmed: true,
+      trust_accepted: true,
       secret_store: store,
       now_unix_ms: 1_000,
     })).rejects.toMatchObject({ code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' });
@@ -184,7 +184,7 @@ describe('gatewayTrust', () => {
         ...signedChallenge(material, gatewayMaterial),
         signature: 'invalid-signature',
       },
-      user_confirmed: true,
+      trust_accepted: true,
       secret_store: store,
       now_unix_ms: 1_000,
     })).rejects.toMatchObject({ code: 'GATEWAY_PAIRING_SIGNATURE_INVALID' });

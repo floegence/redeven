@@ -236,10 +236,53 @@ describe('GatewayStore', () => {
 
     expect(updated.connection).toMatchObject({ base_url: 'https://new.example/' });
     expect(updated.trust_profile).toBeUndefined();
+    expect(updated.last_catalog_sync_at_ms).toBeUndefined();
     expect(gatewayRecordToSource(updated)).toMatchObject({
       trust_state: 'unpaired',
       status: 'pairing_required',
     });
+  });
+
+  it('persists the latest catalog sync timestamp without changing trust or connection settings', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const store = new GatewayStore(defaultGatewayStorePath(root));
+
+    await store.upsert({
+      gateway_id: 'gw_demo',
+      display_name: 'Demo Gateway',
+      connection: {
+        kind: 'url',
+        base_url: 'https://gateway.example/',
+      },
+      trust_profile: {
+        trust_profile_id: 'gtp_demo',
+        paired_client_key_id: 'gck_demo',
+        paired_client_private_key_ref: 'gateway-client-key:gw_demo:gck_demo',
+        gateway_id: 'gw_demo',
+        gateway_public_key: 'PUBLIC KEY',
+        gateway_public_key_fingerprint: 'SHA256:fingerprint',
+        binding_audience: 'https://gateway.example/',
+        created_at_unix_ms: 1,
+      },
+      now_ms: 10,
+    });
+
+    const marked = await store.markCatalogSynced('gw_demo', 20);
+    expect(marked).toMatchObject({
+      gateway_id: 'gw_demo',
+      display_name: 'Demo Gateway',
+      connection: { kind: 'url', base_url: 'https://gateway.example/' },
+      last_catalog_sync_at_ms: 20,
+      updated_at_ms: 20,
+      trust_profile: expect.objectContaining({
+        trust_profile_id: 'gtp_demo',
+      }),
+    });
+
+    const loaded = await new GatewayStore(defaultGatewayStorePath(root)).get('gw_demo');
+    expect(loaded?.last_catalog_sync_at_ms).toBe(20);
+    expect(loaded?.trust_profile?.trust_profile_id).toBe('gtp_demo');
   });
 
   it('projects paired catalog rows without leaking trust material', () => {

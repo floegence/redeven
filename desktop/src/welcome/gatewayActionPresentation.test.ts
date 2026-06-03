@@ -38,19 +38,22 @@ function action(intent: GatewaySourceActionModel['intent']): GatewaySourceAction
 }
 
 describe('buildGatewayActionPresentation', () => {
-  it('opens a Pair guide even when the managed Gateway runtime is ready', () => {
+  it('opens a retry pairing guide when automatic Gateway pairing needs attention', () => {
     const model = buildGatewayActionPresentation({
-      gateway: gateway(),
-      clicked_action: action('pair_gateway'),
+      gateway: gateway({
+        status: 'error',
+        sync_state: 'pairing_failed',
+        last_sync_error_message: 'Gateway pairing challenge signature is invalid.',
+      }),
+      clicked_action: action('resolve_gateway'),
     });
 
     expect(model).toMatchObject({
-      kind: 'pair_ready',
+      kind: 'resolve_before_pair',
       execution_mode: 'guide',
-      continuation_action: {
-        kind: 'pair_gateway',
-        gateway_id: 'gw-demo',
-      },
+      title: 'Gateway pairing needs attention',
+      detail: 'Gateway pairing challenge signature is invalid.',
+      primary_action: { intent: 'refresh_gateway_status', label: 'Retry sync' },
     });
   });
 
@@ -79,7 +82,7 @@ describe('buildGatewayActionPresentation', () => {
     ]));
   });
 
-  it('offers Start Gateway and Start Gateway & Pair when the managed runtime is not started', () => {
+  it('explains that stopped managed Gateways are started by sync instead of requiring manual Pair confirmation', () => {
     const model = buildGatewayActionPresentation({
       gateway: gateway({
         runtime_state: {
@@ -94,19 +97,21 @@ describe('buildGatewayActionPresentation', () => {
       clicked_action: action('pair_gateway'),
     });
 
-    expect(model.kind).toBe('start_and_pair');
-    expect(model.primary_action).toMatchObject({ intent: 'start_gateway_runtime' });
+    expect(model.kind).toBe('start_and_refresh_catalog');
+    expect(model.primary_action).toMatchObject({ intent: 'refresh_gateway_status', label: 'Retry sync' });
     expect(model.secondary_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({ intent: 'pair_gateway', label: 'Start Gateway & Pair' }),
+      expect.objectContaining({ intent: 'start_gateway_runtime', label: 'Start Gateway' }),
     ]));
     expect(model.continuation_action).toMatchObject({
-      kind: 'pair_gateway',
-      start_policy: 'start_if_needed',
+      kind: 'refresh_gateway_status',
     });
+    expect(model.secondary_actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ intent: 'pair_gateway' }),
+    ]));
   });
 
   it('routes Pair through update or resolve guides when runtime state blocks trust', () => {
-    expect(buildGatewayActionPresentation({
+    const updateModel = buildGatewayActionPresentation({
       gateway: gateway({
         runtime_state: {
           status: 'runtime_needs_update',
@@ -118,7 +123,12 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('pair_gateway'),
-    })).toMatchObject({ kind: 'update_then_pair', primary_action: { intent: 'update_gateway_runtime' } });
+    });
+    expect(updateModel).toMatchObject({
+      kind: 'update_then_pair',
+      primary_action: { intent: 'update_gateway_runtime' },
+    });
+    expect(updateModel.continuation_action).toBeUndefined();
 
     expect(buildGatewayActionPresentation({
       gateway: gateway({
@@ -156,6 +166,9 @@ describe('buildGatewayActionPresentation', () => {
       affected_sessions: [
         { session_key: 's1', label: 'Prod shell' },
         { session_key: 's2', label: 'Build runner' },
+      ],
+      secondary_actions: [
+        expect.objectContaining({ intent: 'cancel_gateway_action', label: 'Cancel' }),
       ],
     });
   });

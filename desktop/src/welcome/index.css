@@ -3088,15 +3088,15 @@ pre,
 
 .redeven-gateway-card__primary-anchor {
   display: flex;
-  min-width: 9.5rem;
-  flex: 0 1 auto;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .redeven-gateway-card__primary-button {
-  width: auto;
-  min-width: 9.5rem;
-  max-width: 13rem;
-  padding-inline: 0.85rem;
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  padding-inline: 0.75rem;
 }
 
 .redeven-gateway-card__footer-actions {

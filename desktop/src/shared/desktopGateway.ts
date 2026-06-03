@@ -84,6 +84,14 @@ export type DesktopGatewayRuntimeState = Readonly<{
   lifecycle_operation_key?: string;
 }>;
 
+export type DesktopGatewaySyncState =
+  | 'idle'
+  | 'syncing'
+  | 'ready'
+  | 'gateway_unreachable'
+  | 'pairing_failed'
+  | 'catalog_failed';
+
 export type DesktopGatewaySource = Readonly<{
   gateway_id: string;
   display_name: string;
@@ -102,6 +110,11 @@ export type DesktopGatewaySource = Readonly<{
   container_ref?: string;
   container_label?: string;
   runtime_state?: DesktopGatewayRuntimeState;
+  sync_state?: DesktopGatewaySyncState;
+  last_sync_attempt_at_ms?: number;
+  last_synced_at_ms?: number;
+  last_sync_error_code?: string;
+  last_sync_error_message?: string;
   created_at_ms: number;
   updated_at_ms: number;
   environments: readonly DesktopGatewayEnvironment[];

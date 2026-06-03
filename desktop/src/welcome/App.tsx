@@ -77,7 +77,6 @@ import type {
   DesktopLauncherActionProgress,
   DesktopLauncherActionKind,
   DesktopGatewayStartPolicy,
-  DesktopGatewayStartRequiredPayload,
   DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
   DesktopLauncherCloseAction,
@@ -2287,7 +2286,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [gatewaySetupDialogState, setGatewaySetupDialogState] = createSignal<GatewaySetupDialogState | null>(null);
   const [gatewaySetupDialogError, setGatewaySetupDialogError] = createSignal('');
   const [gatewaySetupDialogFieldErrors, setGatewaySetupDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
-  const [gatewayStartRequiredDialog, setGatewayStartRequiredDialog] = createSignal<DesktopGatewayStartRequiredPayload | null>(null);
   const [sshConfigHosts, setSSHConfigHosts] = createSignal<readonly DesktopSSHConfigHost[]>([]);
   const [sshConfigHostsLoaded, setSSHConfigHostsLoaded] = createSignal(false);
   const [runtimeContainerOptions, setRuntimeContainerOptions] = createSignal<readonly DesktopRuntimeContainerOption[]>([]);
@@ -2879,17 +2877,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     errorTarget: LauncherActionErrorTarget,
     requestEnvID?: string,
   ): Promise<void> {
-    if (failure.code === 'gateway_start_required' && failure.gateway_start_required_payload) {
-      setGatewayStartRequiredDialog(failure.gateway_start_required_payload);
-      if (failure.should_refresh_snapshot === true) {
-        try {
-          await refreshSnapshot();
-        } catch (error) {
-          setErrorMessage(errorTarget, getErrorMessage(error));
-        }
-      }
-      return;
-    }
     const presentation = launcherActionFailurePresentation(i18n(), failure);
     if (presentation.refresh_snapshot) {
       try {
@@ -4632,27 +4619,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  function closeGatewayStartRequiredDialog(): void {
-    setGatewayStartRequiredDialog(null);
-  }
-
-  async function confirmGatewayStartRequiredDialog(): Promise<void> {
-    const payload = gatewayStartRequiredDialog();
-    if (!payload) {
-      return;
-    }
-    const result = await performLauncherAction(payload.retry_action);
-    if (result?.outcome === 'paired_gateway') {
-      showActionToast(i18n().t('toast.gatewayPaired'));
-    } else if (result?.outcome === 'refreshed_gateway_catalog') {
-      showActionToast('Gateway catalog refreshed.', 'info');
-    }
-    if (result) {
-      closeGatewayStartRequiredDialog();
-      await refreshSnapshot();
-    }
-  }
-
   async function openGatewayEnvironment(
     environment: DesktopEnvironmentEntry,
     errorTarget: 'connect' | 'dialog' = 'connect',
@@ -5382,41 +5348,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             {i18n().t('confirm.removeProviderQuestion', { label: deleteControlPlaneTarget() ? controlPlaneName(deleteControlPlaneTarget()!) : '' })}
           </p>
           <p class="text-xs text-muted-foreground">{i18n().t('confirm.removeProviderDescription')}</p>
-        </div>
-      </ConfirmDialog>
-
-      <ConfirmDialog
-        open={gatewayStartRequiredDialog() !== null}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeGatewayStartRequiredDialog();
-          }
-        }}
-        title={gatewayStartRequiredTitle(gatewayStartRequiredDialog())}
-        confirmText={gatewayStartRequiredConfirmText(gatewayStartRequiredDialog())}
-        loading={busyStateMatchesAction(busyState(), gatewayStartRequiredDialog()?.retry_action.kind ?? '')}
-        onConfirm={() => void confirmGatewayStartRequiredDialog()}
-      >
-        <div class="space-y-3">
-          <p class="text-sm">
-            {gatewayStartRequiredMessage(gatewayStartRequiredDialog())}
-          </p>
-          <div class="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
-            {gatewayStartRequiredNextStep(gatewayStartRequiredDialog())}
-          </div>
-          <Show when={gatewayStartRequiredDialog()?.runtime_state}>
-            {(runtimeState) => (
-              <div class="rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                <div class="font-medium text-foreground">{gatewayRuntimeStateLabel(runtimeState().status)}</div>
-                <Show when={runtimeState().message}>
-                  {(message) => <div class="mt-1">{message()}</div>}
-                </Show>
-                <Show when={runtimeState().runtime_state_root}>
-                  {(stateRoot) => <div class="mt-1 font-mono text-[11px]">{stateRoot()}</div>}
-                </Show>
-              </div>
-            )}
-          </Show>
         </div>
       </ConfirmDialog>
 
@@ -9634,7 +9565,7 @@ function GatewaySourceCard(props: Readonly<{
   const visibleGatewayEntries = createMemo(() => props.gatewayEntries.slice(0, 3));
   const hiddenGatewayEntryCount = createMemo(() => Math.max(0, props.gatewayEntries.length - visibleGatewayEntries().length));
   const secondaryActions = createMemo(() => row().secondary_actions.filter((action) => action.intent !== 'manage_gateway'));
-  const quickSecondaryActions = createMemo(() => secondaryActions().slice(0, 2));
+  const quickSecondaryActions = createMemo(() => secondaryActions().slice(0, 1));
   const overflowSecondaryActions = createMemo(() => secondaryActions().slice(quickSecondaryActions().length));
   const affectedSessions = createMemo<readonly GatewayActionAffectedSession[]>(() => (
     props.gatewayEntries
@@ -9648,6 +9579,20 @@ function GatewaySourceCard(props: Readonly<{
   const hasManageableStartAction = createMemo(() => (
     row().primary_action.intent === 'start_gateway_runtime'
     || row().secondary_actions.some((action) => action.intent === 'start_gateway_runtime')
+  ));
+  const gatewayActionRunning = createMemo(() => (
+    visibleGatewayProgress()?.status === 'running'
+    || visibleGatewayProgress()?.status === 'canceling'
+    || visibleGatewayProgress()?.status === 'cleanup_running'
+    || busyStateMatchesGateway(props.busyState, props.gateway.gateway_id, [
+      'pair_gateway',
+      'start_gateway_runtime',
+      'stop_gateway_runtime',
+      'restart_gateway_runtime',
+      'update_gateway_runtime',
+      'refresh_gateway_status',
+      'refresh_gateway_catalog',
+    ])
   ));
   const [moreActionsOpen, setMoreActionsOpen] = createSignal(false);
   let moreActionsAnchorRef: HTMLSpanElement | undefined;
@@ -9713,6 +9658,7 @@ function GatewaySourceCard(props: Readonly<{
   };
   const runRefreshStatus = () => {
     setSelectedAction(refreshStatusAction);
+    props.onActionPopoverOpenChange(false);
     const presentation = buildGatewayActionPresentation({
       gateway: props.gateway,
       clicked_action: refreshStatusAction,
@@ -9760,7 +9706,7 @@ function GatewaySourceCard(props: Readonly<{
               <ConsoleActionIconButton
                 title="Refresh status"
                 aria-label={`Refresh ${row().label} status`}
-                disabled={busyStateMatchesGateway(props.busyState, props.gateway.gateway_id, ['refresh_gateway_status'])}
+                disabled={gatewayActionRunning()}
                 onClick={runRefreshStatus}
               >
                 <Refresh class="h-4 w-4" />
@@ -9792,9 +9738,11 @@ function GatewaySourceCard(props: Readonly<{
             <div class="redeven-gateway-card__empty-env">
               <div class="text-xs font-medium text-foreground">No environments discovered yet</div>
               <div class="mt-1 text-[11px] leading-5 text-muted-foreground">
-                {hasManageableStartAction()
-                  ? 'Start this Gateway, then pair or refresh to discover the environments it manages.'
-                  : 'Pair or refresh this Gateway when its runtime is reachable to load the catalog.'}
+                {props.gateway.sync_state === 'syncing'
+                  ? 'Desktop is syncing this Gateway and will list environments as soon as the catalog is ready.'
+                  : hasManageableStartAction()
+                    ? 'Desktop can start this Gateway and refresh its catalog automatically. Open the guidance panel if it needs attention.'
+                    : 'Desktop will refresh this Gateway automatically when the endpoint is reachable.'}
               </div>
             </div>
           )}
@@ -10050,9 +9998,12 @@ function GatewaySourceCard(props: Readonly<{
                               type="button"
                               role="menuitem"
                               class="redeven-split-menu-item"
-                              disabled={!action.enabled}
+                              disabled={!action.enabled || gatewayActionRunning()}
                               title={!action.enabled ? action.disabled_reason : undefined}
                               onClick={() => {
+                                if (gatewayActionRunning()) {
+                                  return;
+                                }
                                 closeMoreActions();
                                 runAction(action);
                               }}
@@ -10155,17 +10106,20 @@ function GatewayActionPanel(props: Readonly<{
 }>) {
   const runPanelPrimary = () => {
     const action = props.model.primary_action;
-    if (!action) {
+    if (action) {
+      props.runAction(action);
       return;
     }
     if (props.model.continuation_action) {
       void props.runGatewayLauncherAction(props.model.continuation_action);
       props.close();
-      return;
     }
-    props.runAction(action);
   };
   const runSecondary = (action: GatewaySourceActionModel) => {
+    if (action.intent === 'cancel_gateway_action') {
+      props.close();
+      return;
+    }
     if (action.intent === 'manage_gateway') {
       props.openCreateGatewaySetup(props.gateway);
       props.close();
@@ -10276,6 +10230,8 @@ function runGatewaySourceAction(
     return;
   }
   switch (action.intent) {
+    case 'cancel_gateway_action':
+      return;
     case 'setup_gateway':
     case 'manage_gateway':
       openCreateGatewaySetup(gateway);
@@ -10355,74 +10311,6 @@ function gatewaySourceActionBusy(
   return busyStateMatchesGateway(busyState, gatewayID, [actionKind]);
 }
 
-function gatewayStartRequiredTitle(payload: DesktopGatewayStartRequiredPayload | null): string {
-  switch (payload?.reason) {
-    case 'open_gateway_environment':
-      return 'Start Gateway to Open';
-    case 'refresh_gateway_catalog':
-      return 'Start Gateway to Refresh';
-    default:
-      return 'Start Gateway to Pair';
-  }
-}
-
-function gatewayStartRequiredConfirmText(payload: DesktopGatewayStartRequiredPayload | null): string {
-  switch (payload?.reason) {
-    case 'open_gateway_environment':
-      return 'Start Gateway & Open';
-    case 'refresh_gateway_catalog':
-      return 'Start Gateway & Refresh';
-    default:
-      return 'Start Gateway & Pair';
-  }
-}
-
-function gatewayStartRequiredMessage(payload: DesktopGatewayStartRequiredPayload | null): string {
-  const label = payload?.gateway_label || 'This Gateway';
-  switch (payload?.reason) {
-    case 'open_gateway_environment':
-      return `Desktop found ${label}, but its Gateway Runtime is not running yet. Start it now and Desktop will continue opening this Gateway Environment.`;
-    case 'refresh_gateway_catalog':
-      return `Desktop found ${label}, but its Gateway Runtime is not running yet. Start it now and Desktop will continue refreshing its Environment catalog.`;
-    default:
-      return `Desktop found ${label}, but its Gateway Runtime is not running yet. Start it now and Desktop will continue pairing and discovering environments.`;
-  }
-}
-
-function gatewayStartRequiredNextStep(payload: DesktopGatewayStartRequiredPayload | null): string {
-  switch (payload?.runtime_state?.status) {
-    case 'ssh_unreachable':
-      return 'Next step: review the SSH host settings or network path, then try pairing again.';
-    case 'container_unavailable':
-      return 'Next step: make sure the target container exists and is running, then try pairing again.';
-    case 'bridge_unavailable':
-      return 'Next step: repair the Gateway bridge on the target host, then retry this action.';
-    case 'runtime_needs_update':
-      return 'Next step: update the Gateway runtime before continuing.';
-    default:
-      return 'Next step: Desktop will start the Gateway runtime on the configured SSH host or container, then retry this action automatically.';
-  }
-}
-
-function gatewayRuntimeStateLabel(status: string): string {
-  switch (status) {
-    case 'not_started':
-      return 'Gateway Runtime is not started';
-    case 'runtime_needs_update':
-      return 'Gateway Runtime needs an update';
-    case 'ssh_unreachable':
-      return 'SSH host is unreachable';
-    case 'container_unavailable':
-      return 'Container is unavailable';
-    case 'bridge_unavailable':
-      return 'Gateway bridge is unavailable';
-    case 'ready':
-      return 'Gateway Runtime is ready';
-    default:
-      return 'Gateway Runtime needs attention';
-  }
-}
-
 function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionModel['intent'] }>) {
   switch (props.intent) {
     case 'start_gateway_runtime':
@@ -10434,12 +10322,14 @@ function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionMo
     case 'update_gateway_runtime':
       return <Save class="mr-1 h-3.5 w-3.5" />;
     case 'refresh_gateway_status':
-      return <Refresh class="mr-1 h-3.5 w-3.5" />;
+      return <Check class="mr-1 h-3.5 w-3.5" />;
     case 'refresh_gateway_catalog':
       return <Refresh class="mr-1 h-3.5 w-3.5" />;
     case 'manage_gateway':
     case 'setup_gateway':
       return <Settings class="mr-1 h-3.5 w-3.5" />;
+    case 'cancel_gateway_action':
+      return <X class="mr-1 h-3.5 w-3.5" />;
     case 'pair_gateway':
       return <ShieldCheck class="mr-1 h-3.5 w-3.5" />;
     case 'resolve_gateway':
