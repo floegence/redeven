@@ -9,7 +9,7 @@ The runtime must always compute:
 
 ```
 cap_rwx = permission_policy.local_max
-if by_user[user_public_id] exists: cap_rwx = cap_rwx ∩ by_user[user_public_id]
+if user_public_id is non-empty and by_user[user_public_id] exists: cap_rwx = cap_rwx ∩ by_user[user_public_id]
 if by_app[floe_app] exists: cap_rwx = cap_rwx ∩ by_app[floe_app]
 
 effective_rwx = session_meta.rwx ∩ cap_rwx
@@ -33,6 +33,7 @@ The local cap is designed to protect users from:
 Notes:
 - The local cap only applies to `read/write/execute` (RWX).
 - `can_admin` is a separate namespace-level capability bit delivered in `session_meta`.
+- `by_user` is only evaluated when the authoritative session has a non-empty `user_public_id`. Anonymous, local-only, or malformed sessions must not match an empty-string user key.
 - Local UI uses the same per-app cap model as remote sessions. Env App UI itself resolves as `com.floegence.redeven.agent`, Code App routes resolve as `com.floegence.redeven.code`, and Port Forward routes/API actions resolve as `com.floegence.redeven.portforward`.
 - `filesystem_scope` is intentionally separate from the RWX cap so users can expose Home read/write, Computer read-only, and selected custom roots without changing the high-level permission category model.
 - Computer defaults to read-only. When the Files sidebar toggles Computer to `RW`, the runtime only allows writes that also pass `session_meta`, `permission_policy`, the filesystem root policy, symlink-safe scope resolution, and the OS user's own filesystem permissions. It is not a privilege escalation mechanism.
