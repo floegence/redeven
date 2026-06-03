@@ -245,8 +245,8 @@ describe('DesktopWelcomeShell', () => {
     expect(fullAddGatewayButtonSrc).not.toContain('openCreateConnectionDialog');
   });
 
-  it('does not let Gateway environment open fall back to remote URL actions', () => {
-    const appSrc = readWelcomeSource();
+	  it('does not let Gateway environment open fall back to remote URL actions', () => {
+	    const appSrc = readWelcomeSource();
 
     expect(appSrc).toContain("if (environment.kind === 'gateway_environment') {\n      return openGatewayEnvironment(environment, errorTarget);\n    }");
     expect(appSrc).toContain("kind: 'open_gateway_environment'");
@@ -256,10 +256,21 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('openCreateGatewaySetup(gateway);');
     expect(appSrc).not.toContain("case 'resolve_gateway':\n        await pairGateway(environment.gateway_id ?? '');");
     expect(appSrc).toContain("kind: 'pair_gateway'");
-    expect(appSrc).not.toContain("gateway_environment') {\n      return openRemoteEnvironment");
-  });
+	    expect(appSrc).not.toContain("gateway_environment') {\n      return openRemoteEnvironment");
+	  });
 
-  it('filters Gateway source rows with the Gateways tab source filter and query', () => {
+	  it('keeps Gateway-backed SSH profile UI honest about container loading and auth support', () => {
+	    const appSrc = readWelcomeSource();
+
+	    expect(appSrc).toContain("connectionState?.connection_kind === 'gateway_url_profile' && connectionState.profile_route_kind === 'ssh_container'");
+	    expect(appSrc).toContain("auth_mode: 'key_agent'");
+	    expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentSshAuthHelp')");
+	    expect(appSrc).toContain('const gatewaySSHProfileAuthOnly = createMemo');
+	    expect(appSrc).toContain('ssh_secret: undefined');
+	    expect(appSrc).not.toContain("mode: state.auth_mode === 'password' ? state.ssh_password_mode : 'clear'");
+	  });
+
+	  it('filters Gateway source rows with the Gateways tab source filter and query', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
@@ -1442,7 +1453,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: props.i18n.t('connectionDialog.passwordPrompt')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.localSshPassword')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.localSshPasswordHelp')");
-    expect(appSrc).toContain('value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE : DEFAULT_DESKTOP_SSH_AUTH_MODE}');
+    expect(appSrc).toContain('value={isSSHBackedKind() ? (props.state as SSHBackedConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE : DEFAULT_DESKTOP_SSH_AUTH_MODE}');
     expect(appSrc).toContain('variant="default"');
     expect(appSrc).not.toContain("const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === 'external_local_ui');");
     expect(appSrc).not.toContain('<Show when={showCreateConnectAction()}>');
@@ -1472,6 +1483,10 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | GatewayURLProfileConnectionDialogState | null;');
     expect(appSrc).toContain('props.switchKind(value as ConnectionDialogKind)');
+    expect(appSrc).toContain("profile_route_kind: DesktopGatewayConnectionKind;");
+    expect(appSrc).toContain("props.updateField('profile_route_kind', value);");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentRouteType')");
+    expect(appSrc).toContain("props.i18n.t('connectionDialog.gatewayEnvironmentManagedNotice')");
     expect(appSrc).not.toContain('const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === \'external_local_ui\');');
     expect(appSrc).not.toContain('onConnect={saveAndConnectURLFromDialog}');
     expect(appSrc).not.toContain('scope derived from Name.');
@@ -1537,15 +1552,21 @@ describe('DesktopWelcomeShell', () => {
     expect(dialogSrc).toContain('variant: "ghost-destructive"');
   });
 
-  it('uses the shared deletion copy for saved connections only', () => {
+  it('uses Gateway-specific deletion copy for Gateway-owned profiles', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("title={i18n().t('confirm.deleteConnectionTitle')}");
-    expect(appSrc).toContain("confirmText={i18n().t('confirm.deleteConnectionConfirm')}");
+    expect(appSrc).toContain("i18n().t('confirm.deleteConnectionTitle')");
+    expect(appSrc).toContain("i18n().t('confirm.deleteConnectionConfirm')");
     expect(appSrc).toContain("i18n().t('confirm.deleteConnectionQuestion'");
+    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentTitle')");
+    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentConfirm')");
+    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentQuestion'");
+    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentDescription')");
     expect(appSrc).toContain('const deleteTargetOperation = createMemo(() => {');
     expect(appSrc).toContain("i18n().t('confirm.deleteConnectionBusyDescription')");
+    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayEnvironmentBusyDescription')");
     expect(appSrc).toContain("i18n().t('environmentCenter.connectionRemovedCleanup')");
+    expect(appSrc).toContain("i18n().t('environmentCenter.gatewayEnvironmentRemoved')");
   });
 
   it('memoizes the Dialog open prop so overlay-mask focus trap does not thrash on every keystroke', () => {

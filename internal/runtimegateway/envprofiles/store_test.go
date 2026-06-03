@@ -37,6 +37,9 @@ func TestStoreUpsertURLProfileNormalizesAndPersistsAccessOnlyCatalogEntry(t *tes
 	if env.DisplayName != "Lab Env" || env.Origin.Label != "Lab Network" {
 		t.Fatalf("Environment = %#v", env)
 	}
+	if env.Profile == nil || !env.Profile.Managed || env.Profile.AccessRouteKind != protocol.EnvProfileAccessRouteKindURL {
+		t.Fatalf("Profile = %#v, want managed URL profile marker", env.Profile)
+	}
 	if got := env.AccessCapabilities; !reflect.DeepEqual(got, []protocol.EnvironmentCapability{protocol.EnvironmentCapabilityOpen}) {
 		t.Fatalf("AccessCapabilities = %#v", got)
 	}
@@ -162,6 +165,7 @@ func TestStoreUpsertSSHProfilesPersistsGatewayOwnedRouteWithoutAdvertisedLifecyc
 				Kind:           protocol.EnvProfileAccessRouteKindSSHHost,
 				SSHDestination: "devbox",
 				SSHPort:        2222,
+				SSHAuthMode:    "key_agent",
 				SSHRuntimeRoot: "",
 			},
 			ControlOwner: protocol.EnvProfileControlOwnerGateway,
@@ -172,6 +176,18 @@ func TestStoreUpsertSSHProfilesPersistsGatewayOwnedRouteWithoutAdvertisedLifecyc
 	}
 	if sshEnv.Origin.Kind != protocol.EnvironmentOriginKindSSHTarget || sshEnv.Origin.Label != "devbox" {
 		t.Fatalf("ssh environment origin = %#v", sshEnv.Origin)
+	}
+	if sshEnv.Profile == nil || !sshEnv.Profile.Managed || sshEnv.Profile.AccessRouteKind != protocol.EnvProfileAccessRouteKindSSHHost {
+		t.Fatalf("ssh profile marker = %#v", sshEnv.Profile)
+	}
+	if sshEnv.ProfileAccessRoute == nil ||
+		sshEnv.ProfileAccessRoute.Kind != protocol.EnvProfileAccessRouteKindSSHHost ||
+		sshEnv.ProfileAccessRoute.SSHDestination != "devbox" ||
+		sshEnv.ProfileAccessRoute.SSHPort != 2222 ||
+		sshEnv.ProfileAccessRoute.SSHAuthMode != "key_agent" ||
+		sshEnv.ProfileAccessRoute.SSHPasswordConfigured ||
+		sshEnv.ProfileAccessRoute.SSHRuntimeRoot != "~/.redeven" {
+		t.Fatalf("ssh profile access route = %#v", sshEnv.ProfileAccessRoute)
 	}
 	if len(sshEnv.AccessCapabilities) != 0 || len(sshEnv.ControlCapabilities) != 0 || len(sshEnv.Capabilities) != 0 {
 		t.Fatalf("ssh capabilities = access %#v control %#v legacy %#v, want empty until Gateway executor is available", sshEnv.AccessCapabilities, sshEnv.ControlCapabilities, sshEnv.Capabilities)
@@ -198,6 +214,17 @@ func TestStoreUpsertSSHProfilesPersistsGatewayOwnedRouteWithoutAdvertisedLifecyc
 	if containerEnv.Origin.Kind != protocol.EnvironmentOriginKindContainer || containerEnv.Origin.Label != "devbox / workspace-1" {
 		t.Fatalf("container environment origin = %#v", containerEnv.Origin)
 	}
+	if containerEnv.Profile == nil || !containerEnv.Profile.Managed || containerEnv.Profile.AccessRouteKind != protocol.EnvProfileAccessRouteKindSSHContainer {
+		t.Fatalf("container profile marker = %#v", containerEnv.Profile)
+	}
+	if containerEnv.ProfileAccessRoute == nil ||
+		containerEnv.ProfileAccessRoute.Kind != protocol.EnvProfileAccessRouteKindSSHContainer ||
+		containerEnv.ProfileAccessRoute.SSHDestination != "devbox" ||
+		containerEnv.ProfileAccessRoute.ContainerEngine != "podman" ||
+		containerEnv.ProfileAccessRoute.ContainerID != "workspace-1" ||
+		containerEnv.ProfileAccessRoute.ContainerRuntimeRoot != "~/.redeven" {
+		t.Fatalf("container profile access route = %#v", containerEnv.ProfileAccessRoute)
+	}
 	if len(containerEnv.AccessCapabilities) != 0 || len(containerEnv.ControlCapabilities) != 0 || len(containerEnv.Capabilities) != 0 {
 		t.Fatalf("container capabilities = access %#v control %#v legacy %#v, want empty until Gateway executor is available", containerEnv.AccessCapabilities, containerEnv.ControlCapabilities, containerEnv.Capabilities)
 	}
@@ -215,6 +242,48 @@ func TestStoreUpsertSSHProfilesPersistsGatewayOwnedRouteWithoutAdvertisedLifecyc
 	}
 	if got := byID["env_ssh"].AccessRoute; got.Kind != protocol.EnvProfileAccessRouteKindSSHHost || got.SSHDestination != "devbox" || got.SSHPort != 2222 || got.SSHRuntimeRoot != "~/.redeven" {
 		t.Fatalf("stored ssh route = %#v", got)
+	}
+	keptEnv, err := store.Upsert(context.Background(), protocol.EnvProfileUpsertRequest{
+		ProtocolVersion: protocol.Version,
+		Profile: protocol.EnvProfileInput{
+			GatewayEnvID: "env_ssh",
+			DisplayName:  "Renamed SSH Env",
+			AccessRoute: protocol.EnvProfileAccessRoute{
+				Kind:           protocol.EnvProfileAccessRouteKindSSHHost,
+				SSHDestination: "devbox",
+				SSHPort:        2222,
+				SSHAuthMode:    "key_agent",
+				SSHRuntimeRoot: "~/.redeven",
+			},
+			SSHSecret: &protocol.EnvProfileSSHSecret{Mode: "keep"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Upsert(ssh keep secret) error = %v", err)
+	}
+	if keptEnv.ProfileAccessRoute == nil || keptEnv.ProfileAccessRoute.SSHPasswordConfigured {
+		t.Fatalf("kept ssh profile access route = %#v, want no password marker", keptEnv.ProfileAccessRoute)
+	}
+	keyAgentEnv, err := store.Upsert(context.Background(), protocol.EnvProfileUpsertRequest{
+		ProtocolVersion: protocol.Version,
+		Profile: protocol.EnvProfileInput{
+			GatewayEnvID: "env_ssh",
+			DisplayName:  "Key Agent SSH Env",
+			AccessRoute: protocol.EnvProfileAccessRoute{
+				Kind:           protocol.EnvProfileAccessRouteKindSSHHost,
+				SSHDestination: "devbox",
+				SSHPort:        2222,
+				SSHAuthMode:    "key_agent",
+				SSHRuntimeRoot: "~/.redeven",
+			},
+			SSHSecret: &protocol.EnvProfileSSHSecret{Mode: "keep"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Upsert(ssh key_agent keep secret) error = %v", err)
+	}
+	if keyAgentEnv.ProfileAccessRoute == nil || keyAgentEnv.ProfileAccessRoute.SSHPasswordConfigured {
+		t.Fatalf("key-agent ssh profile access route = %#v, want no password marker", keyAgentEnv.ProfileAccessRoute)
 	}
 	if got := byID["env_container"].AccessRoute; got.Kind != protocol.EnvProfileAccessRouteKindSSHContainer || got.ContainerEngine != "podman" || got.ContainerID != "workspace-1" || got.ContainerRuntimeRoot != "~/.redeven" {
 		t.Fatalf("stored container route = %#v", got)
@@ -256,6 +325,38 @@ func TestStoreRejectsInvalidSSHProfiles(t *testing.T) {
 				},
 			},
 			want: ErrSSHPortInvalid,
+		},
+		{
+			name: "unsupported ssh password auth",
+			req: protocol.EnvProfileUpsertRequest{
+				ProtocolVersion: protocol.Version,
+				Profile: protocol.EnvProfileInput{
+					DisplayName: "SSH",
+					AccessRoute: protocol.EnvProfileAccessRoute{
+						Kind:           protocol.EnvProfileAccessRouteKindSSHHost,
+						SSHDestination: "devbox",
+						SSHAuthMode:    "password",
+					},
+					SSHSecret: &protocol.EnvProfileSSHSecret{Mode: "reuse", Password: "secret"},
+				},
+			},
+			want: ErrSSHPasswordAuthUnsupported,
+		},
+		{
+			name: "unsupported ssh password replacement",
+			req: protocol.EnvProfileUpsertRequest{
+				ProtocolVersion: protocol.Version,
+				Profile: protocol.EnvProfileInput{
+					DisplayName: "SSH",
+					AccessRoute: protocol.EnvProfileAccessRoute{
+						Kind:           protocol.EnvProfileAccessRouteKindSSHHost,
+						SSHDestination: "devbox",
+						SSHAuthMode:    "password",
+					},
+					SSHSecret: &protocol.EnvProfileSSHSecret{Mode: "replace"},
+				},
+			},
+			want: ErrSSHPasswordAuthUnsupported,
 		},
 		{
 			name: "invalid container engine",

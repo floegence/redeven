@@ -372,6 +372,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   gateway_environment_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
   gateway_environment_access_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
   gateway_environment_control_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
+  gateway_environment_profile?: DesktopGatewayEnvironment['profile'];
   gateway_environment_profile_access_route?: DesktopGatewayEnvironment['profile_access_route'];
   gateway_environment_origin?: DesktopGatewayEnvironment['origin'];
   environment_source?: DesktopEnvironmentSource;
@@ -434,6 +435,21 @@ export function desktopWelcomeSnapshotRevision(
 ): number {
   const revision = Number(snapshot.snapshot_revision);
   return Number.isFinite(revision) && revision > 0 ? revision : 0;
+}
+
+function normalizeGatewayProfileSSHSecret(value: unknown): Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway_environment_profile' }>['ssh_secret'] {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const mode = compact(candidate.mode);
+  if (mode !== 'keep' && mode !== 'replace' && mode !== 'clear') {
+    return undefined;
+  }
+  return {
+    mode,
+    ...(compact(candidate.password) ? { password: compact(candidate.password) } : {}),
+  };
 }
 
 export function selectLatestDesktopWelcomeSnapshot<T extends Pick<
@@ -780,10 +796,15 @@ export type DesktopLauncherActionRequest = Readonly<
         origin_label?: string;
         ssh_destination?: string;
         ssh_port?: number | null;
+        auth_mode?: 'key_agent' | 'password';
         ssh_runtime_root?: string;
         container_engine?: string;
         container_id?: string;
         container_runtime_root?: string;
+      }>;
+      ssh_secret?: Readonly<{
+        mode: 'keep' | 'replace' | 'clear';
+        password?: string;
       }>;
       control_owner?: 'none' | 'gateway';
     }
@@ -1475,6 +1496,9 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         origin_label: compact(accessRoute.origin_label) || undefined,
         ssh_destination: compact(accessRoute.ssh_destination) || undefined,
         ...(sshPort == null ? {} : { ssh_port: sshPort }),
+        ...(routeKind === 'ssh_host' || routeKind === 'ssh_container'
+          ? { auth_mode: compact(accessRoute.auth_mode) === 'password' ? 'password' : 'key_agent' }
+          : {}),
         ssh_runtime_root: compact(accessRoute.ssh_runtime_root) || undefined,
         container_engine: compact(accessRoute.container_engine) || undefined,
         container_id: compact(accessRoute.container_id) || undefined,
@@ -1495,6 +1519,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         gateway_env_id: compact((candidate as { gateway_env_id?: unknown }).gateway_env_id) || undefined,
         display_name: displayName,
         access_route: normalizedRoute,
+        ssh_secret: normalizeGatewayProfileSSHSecret((candidate as { ssh_secret?: unknown }).ssh_secret),
         control_owner: compact((candidate as { control_owner?: unknown }).control_owner) === 'gateway' ? 'gateway' : 'none',
       };
     }

@@ -803,6 +803,10 @@ describe('GatewayURLClient', () => {
             state: 'available',
             access_capabilities: ['open'],
             control_capabilities: [],
+            profile: {
+              managed: true,
+              access_route_kind: 'url',
+            },
             profile_access_route: {
               kind: 'url',
               url: 'https://target.example/',
@@ -824,13 +828,17 @@ describe('GatewayURLClient', () => {
         url: 'https://target.example/path?token=secret#frag',
         origin_label: 'target.example',
       },
-      control_owner: 'gateway',
+      control_owner: 'none',
     });
 
     expect(response.environment).toMatchObject({
       gateway_env_id: 'env_profile',
       access_capabilities: ['open'],
       control_capabilities: [],
+      profile: {
+        managed: true,
+        access_route_kind: 'url',
+      },
       profile_access_route: {
         kind: 'url',
         url: 'https://target.example/',
@@ -849,10 +857,91 @@ describe('GatewayURLClient', () => {
           url: 'https://target.example/',
           origin_label: 'target.example',
         },
-        control_owner: 'gateway',
+        control_owner: 'none',
       },
     });
     expect(server.requests[0]?.headers['x-redeven-request-signature']).toBeTruthy();
+  });
+
+  it('writes SSH environment profiles with request-only secret patches', async () => {
+    const server = await startServer((_request, _body, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        ok: true,
+        data: {
+          protocol_version: 'redeven-runtime-gateway-v1',
+          environment: {
+            gateway_env_id: 'env_ssh',
+            display_name: 'SSH Profile',
+            env_kind: 'reachable_env',
+            state: 'available',
+            access_capabilities: [],
+            control_capabilities: [],
+            profile: {
+              managed: true,
+              access_route_kind: 'ssh_host',
+            },
+            profile_access_route: {
+              kind: 'ssh_host',
+              ssh_destination: 'devbox',
+              ssh_port: 2222,
+              auth_mode: 'password',
+              ssh_runtime_root: '~/.redeven',
+            },
+            origin: { kind: 'ssh_target', label: 'devbox' },
+          },
+        },
+      }));
+    });
+    cleanupServers.add(server);
+    const paired = pairedURLRecord(server.baseURL);
+
+    await expect(new GatewayURLClient(paired.secretStore).upsertEnvironmentProfile(paired.record, {
+      display_name: 'SSH Profile',
+      access_route: {
+        kind: 'ssh_host',
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        auth_mode: 'password',
+        ssh_runtime_root: '~/.redeven',
+      },
+      ssh_secret: {
+        mode: 'replace',
+        password: 'secret-password',
+      },
+      control_owner: 'gateway',
+    })).resolves.toMatchObject({
+      environment: {
+        gateway_env_id: 'env_ssh',
+        profile: {
+          managed: true,
+          access_route_kind: 'ssh_host',
+        },
+        profile_access_route: {
+          kind: 'ssh_host',
+          ssh_destination: 'devbox',
+          auth_mode: 'password',
+        },
+      },
+    });
+    expect(JSON.parse(server.requests[0]?.body ?? '{}')).toEqual({
+      protocol_version: 'redeven-runtime-gateway-v1',
+      profile: {
+        display_name: 'SSH Profile',
+        access_route: {
+          kind: 'ssh_host',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          auth_mode: 'password',
+          ssh_runtime_root: '~/.redeven',
+        },
+        control_owner: 'gateway',
+        ssh_secret: {
+          mode: 'replace',
+          password: 'secret-password',
+        },
+      },
+    });
   });
 
   it('rejects URL environment profile targets with embedded credentials before signing', async () => {

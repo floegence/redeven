@@ -73,6 +73,7 @@ export type GatewayEnvProfileAccessRoute = Readonly<{
   origin_label?: string;
   ssh_destination?: string;
   ssh_port?: number;
+  auth_mode?: 'key_agent' | 'password';
   ssh_runtime_root?: string;
   container_engine?: string;
   container_id?: string;
@@ -83,6 +84,10 @@ export type GatewayEnvProfileUpsertRequest = Readonly<{
   gateway_env_id?: string;
   display_name: string;
   access_route: GatewayEnvProfileAccessRoute;
+  ssh_secret?: Readonly<{
+    mode: 'keep' | 'replace' | 'clear';
+    password?: string;
+  }>;
   control_owner?: 'none' | 'gateway';
 }>;
 
@@ -670,6 +675,8 @@ function normalizeGatewayEnvironmentProfileAccessRoute(value: unknown): DesktopG
     ...(Number.isFinite(Number(candidate.ssh_port)) && Number(candidate.ssh_port) > 0
       ? { ssh_port: Math.floor(Number(candidate.ssh_port)) }
       : {}),
+    ...(compact(candidate.auth_mode) === 'password' ? { auth_mode: 'password' } : {}),
+    ...((candidate as { ssh_password_configured?: unknown }).ssh_password_configured === true ? { ssh_password_configured: true } : {}),
     ...(compact(candidate.ssh_runtime_root) ? { ssh_runtime_root: compact(candidate.ssh_runtime_root) } : {}),
     ...(compact(candidate.container_engine) ? { container_engine: compact(candidate.container_engine) } : {}),
     ...(compact(candidate.container_id) ? { container_id: compact(candidate.container_id) } : {}),
@@ -685,6 +692,21 @@ function normalizeGatewayEnvironmentProfileAccessRoute(value: unknown): DesktopG
     return undefined;
   }
   return route;
+}
+
+function normalizeGatewayEnvironmentProfile(value: unknown): DesktopGatewayEnvironment['profile'] | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const kind = normalizeProfileAccessRouteKind(candidate.access_route_kind);
+  if (candidate.managed !== true || !kind) {
+    return undefined;
+  }
+  return {
+    managed: true,
+    access_route_kind: kind,
+  };
 }
 
 function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment | null {
@@ -726,6 +748,7 @@ function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment 
         || capability === 'update_runtime'
       )))];
   const profileAccessRoute = normalizeGatewayEnvironmentProfileAccessRoute(candidate.profile_access_route);
+  const profile = normalizeGatewayEnvironmentProfile(candidate.profile);
   return {
     gateway_env_id: gatewayEnvID,
     display_name: compact(candidate.display_name) || gatewayEnvID,
@@ -734,6 +757,7 @@ function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment 
     capabilities: [...new Set([...capabilities, ...normalizedAccessCapabilities, ...normalizedControlCapabilities])],
     access_capabilities: normalizedAccessCapabilities,
     control_capabilities: normalizedControlCapabilities,
+    ...(profile ? { profile } : {}),
     ...(profileAccessRoute ? { profile_access_route: profileAccessRoute } : {}),
     origin: {
       kind: normalizeOriginKind(origin.kind),
@@ -856,12 +880,19 @@ function gatewayEnvProfilePayload(request: GatewayEnvProfileUpsertRequest): unkn
         ...(Number.isFinite(Number(request.access_route.ssh_port)) && Number(request.access_route.ssh_port) > 0
           ? { ssh_port: Math.floor(Number(request.access_route.ssh_port)) }
           : {}),
+        ...(request.access_route.auth_mode === 'password' ? { auth_mode: 'password' } : {}),
         ...(compact(request.access_route.ssh_runtime_root) ? { ssh_runtime_root: compact(request.access_route.ssh_runtime_root) } : {}),
         ...(compact(request.access_route.container_engine) ? { container_engine: compact(request.access_route.container_engine) } : {}),
         ...(compact(request.access_route.container_id) ? { container_id: compact(request.access_route.container_id) } : {}),
         ...(compact(request.access_route.container_runtime_root) ? { container_runtime_root: compact(request.access_route.container_runtime_root) } : {}),
       },
       control_owner: request.control_owner === 'gateway' ? 'gateway' : 'none',
+      ...(request.ssh_secret ? {
+        ssh_secret: {
+          mode: request.ssh_secret.mode,
+          ...(compact(request.ssh_secret.password) ? { password: compact(request.ssh_secret.password) } : {}),
+        },
+      } : {}),
     },
   };
 }

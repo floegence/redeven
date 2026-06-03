@@ -127,8 +127,11 @@ function buildGatewayEnvironmentEntry(
   const needsResolve = desktopGatewayNeedsResolution(gateway.status);
   const canWriteGatewayProfile = gateway.status === 'online'
     && gateway.capabilities.includes('env_profile_write');
-  const hasEditableGatewayProfile = environment.profile_access_route?.kind === 'url'
-    && !!compact(environment.profile_access_route.url);
+  const hasManagedGatewayProfile = environment.profile?.managed === true
+    && !!environment.profile.access_route_kind;
+  const hasEditableGatewayProfile = hasManagedGatewayProfile
+    && !!environment.profile_access_route
+    && environment.profile_access_route.kind === environment.profile?.access_route_kind;
   const canEditGatewayProfile = canWriteGatewayProfile && hasEditableGatewayProfile;
   const hasGatewayLifecycleControl = gateway.status === 'online'
     && gateway.capabilities.includes('env_lifecycle');
@@ -176,6 +179,7 @@ function buildGatewayEnvironmentEntry(
     gateway_environment_capabilities: environment.capabilities,
     gateway_environment_access_capabilities: accessCapabilities,
     gateway_environment_control_capabilities: controlCapabilities,
+    gateway_environment_profile: environment.profile,
     gateway_environment_profile_access_route: environment.profile_access_route,
     gateway_environment_origin: environment.origin,
     environment_source: source,
@@ -198,7 +202,7 @@ function buildGatewayEnvironmentEntry(
     open_session_lifecycle: openSession?.open_session_lifecycle,
     open_action: windowState === 'open' ? 'focus' : windowState === 'opening' ? 'opening' : 'open',
     can_edit: canEditGatewayProfile,
-    can_delete: canWriteGatewayProfile && hasEditableGatewayProfile,
+    can_delete: canWriteGatewayProfile && hasManagedGatewayProfile,
     created_at_ms: createdAtMS,
     last_used_at_ms: environment.last_seen_at_unix_ms ?? gateway.updated_at_ms,
   };

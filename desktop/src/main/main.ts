@@ -75,6 +75,7 @@ import {
   buildGatewayDesktopTarget,
   buildManagedLocalRuntimeDesktopTarget,
   desktopSessionKeyFromRuntimeTargetID,
+  gatewayDesktopSessionKey,
   buildExternalLocalUIDesktopTarget,
   buildProviderEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
@@ -4292,12 +4293,6 @@ function validateGatewayProfileRouteForRecord(
   record: GatewayRecord,
   request: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway_environment_profile' }>,
 ): DesktopLauncherActionFailure | null {
-  if (request.access_route.kind !== 'url') {
-    return gatewayCapabilityFailure(
-      record,
-      'Desktop can only save URL access profiles through Gateways in this version.',
-    );
-  }
   if (request.access_route.kind === 'url' && request.control_owner === 'gateway') {
     return gatewayCapabilityFailure(
       record,
@@ -4305,6 +4300,14 @@ function validateGatewayProfileRouteForRecord(
     );
   }
   return null;
+}
+
+async function gatewayEnvironmentProfileForAction(
+  record: GatewayRecord,
+  gatewayEnvID: string,
+): Promise<DesktopGatewaySource['environments'][number] | null> {
+  const source = await syncGatewayRecord(record, { force: true }).catch(() => null);
+  return source?.environments.find((item) => item.gateway_env_id === gatewayEnvID) ?? null;
 }
 
 async function requireGatewayEnvironmentOpenCapability(
@@ -4431,11 +4434,13 @@ async function upsertGatewayEnvironmentProfileFromLauncher(
         ...(request.access_route.origin_label ? { origin_label: request.access_route.origin_label } : {}),
         ...(request.access_route.ssh_destination ? { ssh_destination: request.access_route.ssh_destination } : {}),
         ...(request.access_route.ssh_port == null ? {} : { ssh_port: request.access_route.ssh_port }),
+        ...(request.access_route.auth_mode ? { auth_mode: request.access_route.auth_mode } : {}),
         ...(request.access_route.ssh_runtime_root ? { ssh_runtime_root: request.access_route.ssh_runtime_root } : {}),
         ...(request.access_route.container_engine ? { container_engine: request.access_route.container_engine } : {}),
         ...(request.access_route.container_id ? { container_id: request.access_route.container_id } : {}),
         ...(request.access_route.container_runtime_root ? { container_runtime_root: request.access_route.container_runtime_root } : {}),
       },
+      ...(request.ssh_secret ? { ssh_secret: request.ssh_secret } : {}),
       control_owner: request.control_owner ?? 'none',
     }, {
       startPolicy: record.connection.kind === 'url' ? undefined : 'start_if_needed',
@@ -4482,11 +4487,52 @@ async function deleteGatewayEnvironmentProfileFromLauncher(
     if (capabilityFailure) {
       return capabilityFailure;
     }
-    await gatewayLifecycleManager().deleteEnvironmentProfile(record, {
+    const environment = await gatewayEnvironmentProfileForAction(record, request.gateway_env_id);
+    if (!environment) {
+      return launcherActionFailure(
+        'environment_missing',
+        'environment',
+        'This Gateway environment was already removed.',
+        {
+          gatewayID: record.gateway_id,
+          gatewayLabel: record.display_name,
+          gatewayEnvironmentID: request.gateway_env_id,
+          shouldRefreshSnapshot: true,
+        },
+      );
+    }
+    if (environment.profile?.managed !== true) {
+      return gatewayCapabilityFailure(
+        record,
+        'This Gateway environment is not a Gateway-managed profile.',
+        {
+          gatewayEnvironmentID: request.gateway_env_id,
+        },
+      );
+    }
+    const response = await gatewayLifecycleManager().deleteEnvironmentProfile(record, {
       gateway_env_id: request.gateway_env_id,
     }, {
       startPolicy: record.connection.kind === 'url' ? undefined : 'start_if_needed',
     });
+    if (!response.deleted) {
+      await syncGatewayRecord(record, { force: true }).catch(() => undefined);
+      return launcherActionFailure(
+        'environment_missing',
+        'environment',
+        'This Gateway environment was already removed.',
+        {
+          gatewayID: record.gateway_id,
+          gatewayLabel: record.display_name,
+          gatewayEnvironmentID: request.gateway_env_id,
+          shouldRefreshSnapshot: true,
+        },
+      );
+    }
+    const sessionRecord = liveSession(gatewayDesktopSessionKey(record.gateway_id, request.gateway_env_id));
+    if (sessionRecord) {
+      await finalizeSessionClosure(sessionRecord.session_key);
+    }
     await syncGatewayRecord(record, { force: true }).catch(() => undefined);
     return launcherActionSuccess('deleted_gateway_environment');
   } catch (error) {

@@ -62,10 +62,17 @@ export type DesktopGatewayEnvironmentProfileAccessRoute = Readonly<{
   origin_label?: string;
   ssh_destination?: string;
   ssh_port?: number;
+  auth_mode?: 'key_agent' | 'password';
+  ssh_password_configured?: boolean;
   ssh_runtime_root?: string;
   container_engine?: string;
   container_id?: string;
   container_runtime_root?: string;
+}>;
+
+export type DesktopGatewayEnvironmentProfile = Readonly<{
+  managed: boolean;
+  access_route_kind: DesktopGatewayConnectionKind;
 }>;
 
 export type DesktopGatewayEnvironment = Readonly<{
@@ -76,6 +83,7 @@ export type DesktopGatewayEnvironment = Readonly<{
   capabilities: readonly DesktopGatewayEnvironmentCapability[];
   access_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
   control_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
+  profile?: DesktopGatewayEnvironmentProfile;
   profile_access_route?: DesktopGatewayEnvironmentProfileAccessRoute;
   origin: Readonly<{
     kind: DesktopGatewayEnvironmentOriginKind;

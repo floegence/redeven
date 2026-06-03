@@ -81,12 +81,14 @@ func TestCatalogNormalization(t *testing.T) {
 			State:               "bad",
 			AccessCapabilities:  []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityFiles, "bad", EnvironmentCapabilityOpen},
 			ControlCapabilities: []EnvironmentCapability{EnvironmentCapabilityStart, EnvironmentCapabilityRestart, EnvironmentCapabilityUpdateRuntime, "bad"},
+			Profile:             &EnvironmentProfile{Managed: true, AccessRouteKind: EnvProfileAccessRouteKindSSHHost},
 			Origin:              EnvironmentOrigin{Kind: "bad", Label: " Target "},
 		},
 		{
 			GatewayEnvID: " env_legacy ",
 			DisplayName:  "Legacy",
 			Capabilities: []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityStop, EnvironmentCapabilityTerminal},
+			Profile:      &EnvironmentProfile{Managed: true},
 		},
 		{GatewayEnvID: " "},
 	})
@@ -125,7 +127,13 @@ func TestCatalogNormalization(t *testing.T) {
 	if got := env.Capabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityFiles, EnvironmentCapabilityStart, EnvironmentCapabilityRestart, EnvironmentCapabilityUpdateRuntime}) {
 		t.Fatalf("Environment capabilities = %#v", got)
 	}
+	if env.Profile == nil || !env.Profile.Managed || env.Profile.AccessRouteKind != EnvProfileAccessRouteKindSSHHost {
+		t.Fatalf("Profile = %#v, want managed ssh_host profile marker", env.Profile)
+	}
 	legacy := resp.Environments[1]
+	if legacy.Profile != nil {
+		t.Fatalf("legacy Profile = %#v, want nil without access_route_kind", legacy.Profile)
+	}
 	if got := legacy.AccessCapabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityTerminal}) {
 		t.Fatalf("legacy AccessCapabilities = %#v", got)
 	}
@@ -140,11 +148,13 @@ func TestRuntimeGatewayWireContractsDoNotExposeSecrets(t *testing.T) {
 		reflect.TypeOf(CatalogResponse{}),
 		reflect.TypeOf(GatewayMetadata{}),
 		reflect.TypeOf(Environment{}),
+		reflect.TypeOf(EnvironmentProfile{}),
 		reflect.TypeOf(EnvironmentOrigin{}),
 		reflect.TypeOf(OpenSessionRequest{}),
 		reflect.TypeOf(OpenSessionResponse{}),
 		reflect.TypeOf(EnvProfileUpsertRequest{}),
 		reflect.TypeOf(EnvProfileInput{}),
+		reflect.TypeOf(EnvProfileSSHSecret{}),
 		reflect.TypeOf(EnvProfileAccessRoute{}),
 		reflect.TypeOf(EnvProfileUpsertResponse{}),
 		reflect.TypeOf(EnvProfileDeleteRequest{}),
@@ -170,6 +180,12 @@ func assertNoSecretWireFields(t *testing.T, typ reflect.Type) {
 		field := typ.Field(i)
 		tag := field.Tag.Get("json")
 		wireName := strings.Split(tag, ",")[0]
+		if typ == reflect.TypeOf(EnvProfileSSHSecret{}) && (wireName == "password" || wireName == "mode") {
+			continue
+		}
+		if typ == reflect.TypeOf(EnvProfileInput{}) && wireName == "ssh_secret" {
+			continue
+		}
 		name := strings.ToLower(field.Name + " " + wireName)
 		if strings.Contains(name, "token") || strings.Contains(name, "secret") || strings.Contains(name, "bearer") {
 			t.Fatalf("%s.%s exposes forbidden credential-shaped wire field %q", typ.Name(), field.Name, wireName)
