@@ -307,6 +307,41 @@ describe('GatewayLifecycleManager', () => {
     }));
   });
 
+  it('coalesces concurrent managed Gateway starts for the same target', async () => {
+    let releaseRuntime: () => void = () => undefined;
+    lifecycleMocks.ensureManagedSSHRuntimeReady.mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        releaseRuntime = resolve;
+      });
+    });
+    const record: GatewayRecord = {
+      schema_version: 1,
+      gateway_id: 'gw_parallel',
+      display_name: 'Parallel Gateway',
+      connection: {
+        kind: 'ssh_host',
+        ssh_destination: 'bastion.internal',
+        auth_mode: 'key_agent',
+        runtime_root: '/opt/redeven',
+      },
+      created_at_ms: 1,
+      updated_at_ms: 1,
+    };
+    const lifecycle = manager();
+
+    const first = lifecycle.startGateway(record);
+    const second = lifecycle.ensureGatewayReady(record, { startPolicy: 'start_if_needed' });
+    await vi.waitFor(() => {
+      expect(lifecycleMocks.ensureManagedSSHRuntimeReady).toHaveBeenCalledTimes(1);
+    });
+    releaseRuntime();
+    const [firstSession, secondSession] = await Promise.all([first, second]);
+
+    expect(firstSession).toBe(secondSession);
+    expect(lifecycleMocks.ensureManagedSSHRuntimeReady).toHaveBeenCalledTimes(1);
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledTimes(1);
+  });
+
   it('requires explicit start policy only when an SSH Gateway is startable but not running', async () => {
     const record: GatewayRecord = {
       schema_version: 1,

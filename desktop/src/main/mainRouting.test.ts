@@ -914,36 +914,59 @@ describe('main routing', () => {
     expect(mainSrc).toContain("if (process.platform !== 'darwin' && quitPhase === 'idle') {");
   });
 
-  it('keeps Gateway pairing behind native confirmation and verified completion proof', () => {
+  it('pairs Gateways without native confirmation while verifying challenge and completion proof', () => {
     const mainSrc = readMainSource();
+    const helperStart = mainSrc.indexOf('async function pairGatewayWithClient(');
+    const syncStart = mainSrc.indexOf('async function syncGatewayRecord(', helperStart);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(syncStart).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, syncStart);
     const pairStart = mainSrc.indexOf('async function pairGatewayFromLauncher(');
     const deleteStart = mainSrc.indexOf('async function deleteGatewayFromLauncher(', pairStart);
     expect(pairStart).toBeGreaterThanOrEqual(0);
     expect(deleteStart).toBeGreaterThan(pairStart);
     const pairSrc = mainSrc.slice(pairStart, deleteStart);
 
-    expect(pairSrc).toContain('challenge = await client.pairingChallenge(record, pairingChallengeRequest(material));');
-    expect(pairSrc).toContain('const fingerprint = assertGatewayPairingChallenge({');
-    expect(pairSrc).toContain('const confirmed = await confirmDesktopImpact({');
-    expect(pairSrc).toContain("if (!confirmed) {");
-    expect(pairSrc).toContain("launcherOperations.finish(operationKey, 'canceled', {");
-    expect(pairSrc).not.toContain("status: 'failed',\n        title: 'Pair canceled'");
-    expect(pairSrc).toContain("return launcherActionSuccess('canceled_launcher_operation');");
-    expect(pairSrc).toContain('const completion = await client.completePairing(record, buildPairingCompleteRequest(material, challenge));');
-    expect(pairSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion);');
-    expect(pairSrc).toContain('completeGatewayPairing({');
-    expect(pairSrc).toContain('user_confirmed: true');
-    expect(pairSrc.indexOf('const fingerprint = assertGatewayPairingChallenge({')).toBeLessThan(
-      pairSrc.indexOf('const confirmed = await confirmDesktopImpact({'),
+    expect(helperSrc).toContain('const challenge = await client.pairingChallenge(record, pairingChallengeRequest(material), {');
+    expect(helperSrc).toContain('assertGatewayPairingChallenge({');
+    expect(pairSrc).not.toContain('confirmDesktopImpact({');
+    expect(pairSrc).not.toContain("phase: 'waiting_for_identity_confirmation'");
+    expect(helperSrc).toContain('const completion = await client.completePairing(record, buildPairingCompleteRequest(material, challenge), {');
+    expect(helperSrc).toContain('assertGatewayPairingCompleteResponse(material, challenge, completion);');
+    expect(helperSrc).toContain('completeGatewayPairing({');
+    expect(helperSrc).toContain('trust_accepted: true');
+    expect(helperSrc.indexOf('assertGatewayPairingChallenge({')).toBeLessThan(
+      helperSrc.indexOf('const completion = await client.completePairing(record, buildPairingCompleteRequest(material, challenge), {'),
     );
-    expect(pairSrc.indexOf('assertGatewayPairingCompleteResponse(material, challenge, completion);')).toBeLessThan(
-      pairSrc.indexOf('completeGatewayPairing({'),
+    expect(helperSrc.indexOf('assertGatewayPairingCompleteResponse(material, challenge, completion);')).toBeLessThan(
+      helperSrc.indexOf('completeGatewayPairing({'),
     );
-    expect(pairSrc.indexOf('completeGatewayPairing({')).toBeLessThan(
-      pairSrc.indexOf('gatewayStore().updateTrustProfile(record.gateway_id, trustProfile);'),
+    expect(helperSrc.indexOf('completeGatewayPairing({')).toBeLessThan(
+      helperSrc.indexOf('gatewayStore().updateTrustProfile(record.gateway_id, trustProfile);'),
     );
+    expect(pairSrc).toContain('await syncGatewayRecord(record, {');
+    expect(pairSrc).not.toContain('await client.pairingChallenge(');
+    expect(pairSrc).not.toContain('await gatewayLifecycleManager().refreshCatalog(');
     expect(mainSrc).toContain("case 'pair_gateway':");
     expect(mainSrc).not.toContain('request.user_confirmed');
+  });
+
+  it('keeps Gateway catalog sync in a main-process poller instead of snapshot-time probing', () => {
+    const mainSrc = readMainSource();
+    const loadStart = mainSrc.indexOf('async function loadGatewaySourcesForWelcome(');
+    const defaultSyncStart = mainSrc.indexOf('function defaultGatewaySyncRecord(', loadStart);
+    expect(defaultSyncStart).toBeGreaterThan(loadStart);
+    const loadSrc = mainSrc.slice(loadStart, defaultSyncStart);
+
+    expect(mainSrc).toContain('const gatewaySyncStateByID = new Map<string, GatewaySyncRecord>();');
+    expect(mainSrc).toContain('const gatewaySyncTaskByID = new Map<string, Promise<DesktopGatewaySource>>();');
+    expect(mainSrc).toContain('function updateGatewaySyncPoller(): void');
+    expect(mainSrc).toContain('async function syncVisibleGatewaysIfNeeded(');
+    expect(mainSrc).toContain("last_synced_at_ms: 0,");
+    expect(mainSrc).toContain('if (!syncRecord?.source) {');
+    expect(loadSrc).not.toContain('inspectRuntime(');
+    expect(loadSrc).not.toContain('refreshCatalog(');
+    expect(loadSrc).toContain('mergeGatewaySourceRecord(');
   });
 
   it('opens Gateway environments only through Gateway open-session without provider fallback', () => {

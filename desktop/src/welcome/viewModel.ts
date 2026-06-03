@@ -2293,7 +2293,8 @@ export type GatewaySourceActionIntent =
   | 'restart_gateway_runtime'
   | 'update_gateway_runtime'
   | 'refresh_gateway_status'
-  | 'refresh_gateway_catalog';
+  | 'refresh_gateway_catalog'
+  | 'cancel_gateway_action';
 
 export type GatewaySourceActionModel = Readonly<{
   intent: GatewaySourceActionIntent;
@@ -2362,6 +2363,7 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
   const runtime = gateway.runtime_state;
   const runtimeStatus = runtime?.status ?? 'unknown';
   const needsSetup = gateway.status === 'needs_setup';
+  const syncState = gateway.sync_state ?? 'idle';
   const needsPairing = gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired';
   const needsResolution = desktopGatewayNeedsResolution(gateway.status);
   const manageable = desktopGatewayCanManageRuntime(gateway);
@@ -2369,37 +2371,42 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
   if (needsSetup) {
     return gatewaySourceAction('setup_gateway', 'Set up', 'default');
   }
+  if (syncState === 'syncing') {
+    return gatewaySourceAction('refresh_gateway_status', 'Syncing...', 'default', false);
+  }
+  if (syncState === 'pairing_failed') {
+    return gatewaySourceAction('resolve_gateway', 'Needs Attention', 'default');
+  }
+  if (syncState === 'gateway_unreachable' || syncState === 'catalog_failed') {
+    return gatewaySourceAction('resolve_gateway', 'Needs Attention', 'default');
+  }
   if (manageable && (
     runtimeStatus === 'ssh_unreachable'
     || runtimeStatus === 'container_unavailable'
     || runtimeStatus === 'bridge_unavailable'
     || runtimeStatus === 'error'
   )) {
-    return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default');
+    return gatewaySourceAction('resolve_gateway', 'Needs Attention', 'default');
   }
   if (manageable && runtimeStatus === 'starting') {
     return gatewaySourceAction('start_gateway_runtime', 'Starting...', 'default', false);
   }
   if (manageable && runtimeStatus === 'runtime_needs_update') {
-    return gatewaySourceAction('update_gateway_runtime', 'Update Gateway', 'default', runtime?.can_update !== false);
-  }
-  if (manageable && runtimeStatus === 'not_started' && !needsPairing) {
-    return gatewaySourceAction('start_gateway_runtime', 'Start Gateway', 'default', runtime?.can_start !== false);
+    return gatewaySourceAction('resolve_gateway', 'Needs Attention', 'default');
   }
   if (needsPairing) {
-    return gatewaySourceAction('pair_gateway', 'Pair Gateway', 'default');
+    return gatewaySourceAction('refresh_gateway_status', 'Pairing...', 'default', false);
   }
   if (needsResolution) {
-    return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default');
+    return gatewaySourceAction('resolve_gateway', 'Needs Attention', 'default');
   }
-  return gatewaySourceAction('refresh_gateway_catalog', 'Refresh', 'default');
+  return gatewaySourceAction('refresh_gateway_status', 'Synced', 'default', false);
 }
 
 function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource, primary: GatewaySourceActionModel): readonly GatewaySourceActionModel[] {
   const runtime = gateway.runtime_state;
   const runtimeStatus = runtime?.status ?? 'unknown';
   const manageable = desktopGatewayCanManageRuntime(gateway);
-  const needsPairing = gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired';
   const actions: GatewaySourceActionModel[] = [];
 
   const add = (action: GatewaySourceActionModel) => {
@@ -2409,8 +2416,8 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource, primary: G
   };
 
   if (manageable) {
-    if (runtimeStatus === 'not_started' && (runtime?.can_start === true || needsPairing)) {
-      add(gatewaySourceAction('start_gateway_runtime', 'Start Gateway', 'outline', runtime?.can_start !== false));
+    if (runtimeStatus === 'not_started' && runtime?.can_start === true) {
+      add(gatewaySourceAction('start_gateway_runtime', 'Start Gateway', 'outline', true));
     }
     if (runtimeStatus === 'ready' && runtime?.can_stop === true) {
       add(gatewaySourceAction('stop_gateway_runtime', 'Stop', 'outline'));
@@ -2421,7 +2428,7 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource, primary: G
     if (runtimeStatus === 'ready' && runtime?.can_update === true) {
       add(gatewaySourceAction('update_gateway_runtime', 'Update', 'outline'));
     }
-    if (runtimeStatus === 'ready' && primary.intent !== 'refresh_gateway_catalog') {
+    if (runtimeStatus === 'ready' && gateway.trust_state === 'paired' && primary.intent !== 'refresh_gateway_catalog') {
       add(gatewaySourceAction('refresh_gateway_catalog', 'Refresh', 'outline'));
     }
   } else if (primary.intent !== 'refresh_gateway_catalog' && gateway.status === 'online') {
@@ -2438,7 +2445,9 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   const manageable = desktopGatewayCanManageRuntime(gateway);
   const needsSetup = gateway.status === 'needs_setup';
   const needsPairing = gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired';
-  const runtimeMessage = compact(runtime?.message) || compact(gateway.status_message);
+  const syncState = gateway.sync_state ?? 'idle';
+  const syncMessage = compact(gateway.last_sync_error_message);
+  const runtimeMessage = compact(runtime?.message) || syncMessage || compact(gateway.status_message);
 
   if (needsSetup) {
     return {
@@ -2448,11 +2457,35 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
     };
   }
 
+  if (syncState === 'syncing') {
+    return {
+      title: 'Syncing Gateway',
+      detail: 'Desktop is checking reachability, pairing if needed, and refreshing the environment catalog automatically.',
+      tone: 'primary',
+    };
+  }
+
+  if (syncState === 'pairing_failed') {
+    return {
+      title: gateway.status === 'trust_changed' ? 'Gateway trust changed' : 'Pairing needs attention',
+      detail: syncMessage || 'Desktop could not verify this Gateway identity. Review the Gateway target, then retry pairing from the guidance panel.',
+      tone: 'warning',
+    };
+  }
+
+  if (syncState === 'gateway_unreachable' || syncState === 'catalog_failed') {
+    return {
+      title: 'Gateway needs attention',
+      detail: runtimeMessage || 'Desktop could not keep this Gateway synced. Open the guidance panel to refresh, start, or resolve the target.',
+      tone: 'warning',
+    };
+  }
+
   if (!manageable) {
     return {
-      title: needsPairing ? 'Pair this access-only Gateway' : 'Access-only Gateway',
+      title: needsPairing ? 'Preparing access-only Gateway' : 'Access-only Gateway',
       detail: needsPairing
-        ? 'Desktop can pair with this Gateway and read its catalog, but runtime start and restart stay on the Gateway host.'
+        ? 'Desktop is pairing with this Gateway automatically. Runtime start and restart stay on the Gateway host.'
         : 'Desktop can refresh the catalog and open Gateway Environments, but it cannot start or stop this external Gateway runtime.',
       tone: needsPairing ? 'primary' : 'neutral',
     };
@@ -2489,18 +2522,18 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
 
   if (runtimeStatus === 'not_started') {
     return {
-      title: needsPairing ? 'Pair will start Gateway' : 'Start Gateway to use it',
+      title: needsPairing ? 'Preparing Gateway' : 'Gateway is stopped',
       detail: needsPairing
-        ? 'Desktop has the Gateway configuration, but the runtime is not running yet. Pairing will ask to start it and then continue discovering environments.'
-        : 'Start the Gateway runtime from Desktop before refreshing its catalog or opening environments through it.',
-      tone: 'warning',
+        ? 'Desktop will start this managed Gateway automatically and then discover its environments.'
+        : 'Desktop can start this Gateway automatically when syncing or opening environments. You can also start it manually from the actions menu.',
+      tone: needsPairing ? 'primary' : 'warning',
     };
   }
 
   if (needsPairing) {
     return {
-      title: 'Pair this Gateway',
-      detail: 'Pairing trusts the Gateway catalog and lets Desktop show the environments it manages.',
+      title: 'Preparing Gateway trust',
+      detail: 'Desktop is pairing this Gateway automatically so it can show the environments the Gateway manages.',
       tone: 'primary',
     };
   }
@@ -2542,6 +2575,8 @@ export function buildGatewaySourceRowModel(
       ? 'Not started'
       : runtimeStatus === 'runtime_needs_update'
         ? 'Update available'
+        : gateway.sync_state === 'syncing'
+          ? 'Syncing'
         : desktopGatewayStatusLabel(gateway.status),
     status_tone: gateway.status === 'online'
       ? 'success'

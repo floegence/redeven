@@ -384,12 +384,12 @@ export async function completeGatewayPairing(input: Readonly<{
   record: GatewayRecord;
   material: GatewayPairingMaterial;
   challenge: GatewayPairingChallengeResponse;
-  user_confirmed: boolean;
+  trust_accepted: boolean;
   secret_store: GatewaySecretStore;
   now_unix_ms?: number;
 }>): Promise<GatewayTrustProfile> {
-  if (!input.user_confirmed) {
-    throw new GatewayTrustError('GATEWAY_PAIRING_CONFIRMATION_REQUIRED', 'Confirm the Gateway fingerprint before pairing.');
+  if (!input.trust_accepted) {
+    throw new GatewayTrustError('GATEWAY_PAIRING_TRUST_REQUIRED', 'Accept the Gateway trust profile before pairing.');
   }
   const now = Math.floor(input.now_unix_ms ?? Date.now());
   const expectedFingerprint = assertGatewayPairingChallenge({

@@ -262,8 +262,10 @@ function actionLabel(action: string): string {
       return 'Refresh status';
     case 'refresh_gateway_catalog':
       return 'Refresh catalog';
+    case 'pair_gateway':
+      return 'Retry sync';
     default:
-      return 'Pair Gateway';
+      return 'Gateway action';
   }
 }
 
@@ -300,6 +302,8 @@ export function buildGatewayActionPresentation(
       title: input.retained_failure.title || `${actionLabel(action.intent)} failed`,
       detail: input.retained_failure.failure?.summary || input.retained_failure.detail || `Desktop could not complete this Gateway action.`,
       aria_label: 'Gateway action needs attention',
+      primary_action: gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', true),
+      secondary_actions: [gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true)],
     });
   }
 
@@ -318,18 +322,41 @@ export function buildGatewayActionPresentation(
   }
 
   if (action.intent === 'resolve_gateway') {
+    const syncState = gateway.sync_state ?? 'idle';
+    const pairingFailure = syncState === 'pairing_failed' || gateway.status === 'trust_changed';
+    const catalogFailure = syncState === 'catalog_failed';
+    const unreachable = syncState === 'gateway_unreachable';
     return buildPanel({
       gateway,
       kind: 'resolve_before_pair',
       execution_mode: 'guide',
       tone: 'warning',
       eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
-      title: 'Resolve Gateway',
-      detail: gateway.runtime_state?.message || gateway.status_message || 'Review this Gateway configuration before retrying.',
+      title: pairingFailure
+        ? 'Gateway pairing needs attention'
+        : catalogFailure
+          ? 'Gateway catalog sync failed'
+          : unreachable
+            ? 'Gateway is unreachable'
+            : 'Resolve Gateway',
+      detail: compact(gateway.last_sync_error_message)
+        || gateway.runtime_state?.message
+        || gateway.status_message
+        || 'Desktop keeps Gateways synced automatically. Review the target or retry sync when the Gateway is reachable.',
       aria_label: 'Resolve Gateway',
       resolve_focus: resolveFocusForGateway(gateway),
-      primary_action: action as GatewaySourceActionModel,
-      secondary_actions: [gatewayRuntimeAction('refresh_gateway_status', 'Refresh status', 'outline', true)],
+      primary_action: gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', true),
+      secondary_actions: [
+        ...(manageable && (runtimeStatus(gateway) === 'not_started' || runtimeStatus(gateway) === 'runtime_needs_update')
+          ? [gatewayRuntimeAction(
+              runtimeStatus(gateway) === 'runtime_needs_update' ? 'update_gateway_runtime' : 'start_gateway_runtime',
+              runtimeStatus(gateway) === 'runtime_needs_update' ? 'Update Gateway' : 'Start Gateway',
+              'outline',
+              true,
+            )]
+          : []),
+        gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true),
+      ],
     });
   }
 
@@ -371,7 +398,7 @@ export function buildGatewayActionPresentation(
         impact_acknowledged: true,
       } as DesktopLauncherActionRequest,
       primary_action: gatewaySourceAction(action.intent, label, 'default', action.enabled),
-      secondary_actions: [gatewaySourceAction('manage_gateway', 'Cancel', 'outline', true)],
+      secondary_actions: [gatewaySourceAction('cancel_gateway_action', 'Cancel', 'outline', true)],
     });
   }
 
@@ -382,31 +409,31 @@ export function buildGatewayActionPresentation(
       execution_mode: 'guide',
       tone: 'primary',
       eyebrow: 'Access-only Gateway',
-      title: gateway.trust_state === 'revoked' ? 'Review Gateway identity' : 'Pair access-only Gateway',
-      detail: 'Desktop can pair with this Gateway and refresh its catalog, but runtime management stays on the Gateway host.',
+      title: gateway.trust_state === 'revoked' ? 'Review Gateway identity' : 'Retry Gateway pairing',
+      detail: 'Desktop pairs URL Gateways automatically. Retry sync when the endpoint is reachable; runtime management stays on the Gateway host.',
       aria_label: 'Pair access-only Gateway',
-      continuation_action: continuationActionFor(gateway, action),
-      primary_action: gatewaySourceAction('pair_gateway', 'Pair Gateway', 'default', action.enabled),
+      continuation_action: continuationActionFor(gateway, gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled)),
+      primary_action: gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled),
       secondary_actions: [gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true)],
     });
   }
 
   if ((isPairAction || isCatalogRefresh) && manageable && status === 'not_started') {
-    const continueLabel = isCatalogRefresh ? 'Start Gateway & Refresh' : 'Start Gateway & Pair';
     return buildPanel({
       gateway,
-      kind: isCatalogRefresh ? 'start_and_refresh_catalog' : 'start_and_pair',
+      kind: 'start_and_refresh_catalog',
       execution_mode: 'guide',
       tone: 'warning',
       eyebrow: 'Managed Gateway',
-      title: isCatalogRefresh ? 'Start before refreshing' : 'Start and pair Gateway',
-      detail: isCatalogRefresh
-        ? 'Desktop can start this Gateway runtime, then refresh the environment catalog automatically.'
-        : 'Desktop can start this Gateway runtime, then continue pairing automatically.',
-      aria_label: isCatalogRefresh ? 'Start Gateway before refreshing catalog' : 'Start Gateway before pairing',
-      continuation_action: continuationActionFor(gateway, action, 'start_if_needed'),
-      primary_action: gatewaySourceAction('start_gateway_runtime', 'Start Gateway', 'default', gateway.runtime_state?.can_start !== false),
-      secondary_actions: [gatewayRuntimeAction(action.intent as GatewayManagedActionKind, continueLabel, 'outline', action.enabled)],
+      title: 'Start Gateway to sync',
+      detail: 'Desktop can start this Gateway runtime, then continue automatic pairing and catalog sync.',
+      aria_label: 'Start Gateway before syncing catalog',
+      continuation_action: continuationActionFor(gateway, gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled), 'start_if_needed'),
+      primary_action: gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled),
+      secondary_actions: [
+        gatewaySourceAction('start_gateway_runtime', 'Start Gateway', 'outline', gateway.runtime_state?.can_start !== false),
+        gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true),
+      ],
     });
   }
 
@@ -420,7 +447,6 @@ export function buildGatewayActionPresentation(
       title: 'Update Gateway before pairing',
       detail: 'Desktop needs to update this Gateway runtime before it can safely pair and trust the catalog.',
       aria_label: 'Update Gateway before pairing',
-      continuation_action: continuationActionFor(gateway, action, 'start_if_needed'),
       primary_action: gatewaySourceAction('update_gateway_runtime', 'Update Gateway', 'default', gateway.runtime_state?.can_update !== false),
       secondary_actions: [gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true)],
     });
@@ -449,12 +475,12 @@ export function buildGatewayActionPresentation(
       execution_mode: 'guide',
       tone: gateway.trust_state === 'revoked' || gateway.trust_state === 'trust_changed' ? 'warning' : 'primary',
       eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
-      title: gateway.trust_state === 'revoked' || gateway.trust_state === 'trust_changed' ? 'Review Gateway identity' : 'Pair this Gateway',
-      detail: 'Desktop will verify this Gateway identity, ask you to confirm the fingerprint, then trust the environment catalog it manages.',
+      title: gateway.trust_state === 'revoked' || gateway.trust_state === 'trust_changed' ? 'Review Gateway identity' : 'Retry Gateway pairing',
+      detail: 'Desktop normally pairs Gateways automatically. Retry sync to verify the Gateway identity and refresh its environment catalog.',
       aria_label: 'Pair this Gateway',
-      continuation_action: continuationActionFor(gateway, action),
-      primary_action: gatewaySourceAction('pair_gateway', 'Pair Gateway', 'default', action.enabled),
-      secondary_actions: [gatewayRuntimeAction('refresh_gateway_status', 'Refresh status', 'outline', true)],
+      continuation_action: continuationActionFor(gateway, gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled)),
+      primary_action: gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled),
+      secondary_actions: [gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true)],
     });
   }
 

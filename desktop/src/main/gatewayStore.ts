@@ -608,6 +608,7 @@ export class GatewayStore {
     }
     const existing = await this.get(gatewayID);
     const nextBindingAudience = gatewayBindingAudience(input.connection);
+    const connectionIdentityUnchanged = existing ? gatewayBindingAudience(existing.connection) === nextBindingAudience : false;
     const existingTrustProfile = existing?.trust_profile?.binding_audience === nextBindingAudience
       ? existing.trust_profile
       : undefined;
@@ -619,7 +620,7 @@ export class GatewayStore {
       trust_profile: input.trust_profile ?? existingTrustProfile,
       created_at_ms: existing?.created_at_ms ?? now,
       updated_at_ms: now,
-      last_catalog_sync_at_ms: existing?.last_catalog_sync_at_ms,
+      last_catalog_sync_at_ms: connectionIdentityUnchanged ? existing?.last_catalog_sync_at_ms : undefined,
     }, now);
     if (!record) {
       throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
@@ -649,6 +650,34 @@ export class GatewayStore {
       connection: existing.connection,
       trust_profile: trustProfile,
     });
+  }
+
+  async markCatalogSynced(gatewayID: string, syncedAtMS = Date.now()): Promise<GatewayRecord> {
+    const existing = await this.get(gatewayID);
+    if (!existing) {
+      throw new GatewayStoreError('GATEWAY_NOT_FOUND', 'Gateway was not found.');
+    }
+    const now = timestampMS(syncedAtMS, Date.now());
+    const record = normalizeGatewayRecord({
+      ...existing,
+      updated_at_ms: now,
+      last_catalog_sync_at_ms: now,
+    }, now);
+    if (!record) {
+      throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
+    }
+    const snapshot = await this.load();
+    this.snapshot = {
+      schema_version: 1,
+      gateways: normalizeGatewayStoreSnapshot({
+        gateways: [
+          ...snapshot.gateways.filter((item) => item.gateway_id !== record.gateway_id),
+          record,
+        ],
+      }, now).gateways,
+    };
+    await this.persist();
+    return record;
   }
 
   async delete(gatewayID: string): Promise<GatewayRecord | null> {

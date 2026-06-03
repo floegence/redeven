@@ -112,6 +112,7 @@ export type GatewayLifecycleManagerOptions = Readonly<{
 
 export class GatewayLifecycleManager {
   private readonly sessions: Map<string, GatewayLifecycleSession>;
+  private readonly pendingStartTasks = new Map<string, Promise<GatewayLifecycleSession>>();
 
   constructor(private readonly options: GatewayLifecycleManagerOptions) {
     this.sessions = options.session_cache ?? new Map();
@@ -310,6 +311,11 @@ export class GatewayLifecycleManager {
     if (record.connection.kind === 'url') {
       throw new GatewayNotManageableError();
     }
+    const targetID = gatewayLifecycleTargetID(record);
+    const pending = this.pendingStartTasks.get(targetID);
+    if (pending) {
+      return pending;
+    }
     return this.ensureBridgeSession(record, options);
   }
 
@@ -376,6 +382,7 @@ export class GatewayLifecycleManager {
 
   async clear(record: GatewayRecord): Promise<void> {
     const key = gatewayLifecycleTargetID(record);
+    await this.pendingStartTasks.get(key)?.catch(() => undefined);
     const existing = this.sessions.get(key);
     this.sessions.delete(key);
     await existing?.bridge_session.disconnect().catch(() => undefined);
@@ -387,13 +394,25 @@ export class GatewayLifecycleManager {
     if (existing) {
       return existing;
     }
-    const hostAccess = gatewayHostAccess(record);
-    const placement = gatewayPlacement(record);
-    const sshPassword = await this.gatewaySSHPassword(record);
-    const runtimeBinaryPath = await this.ensureRuntimeReady(record, hostAccess, placement, sshPassword, options.signal, {
-      onProgress: options.onProgress,
+    const pending = this.pendingStartTasks.get(targetID);
+    if (pending) {
+      return pending;
+    }
+    const task = (async () => {
+      const hostAccess = gatewayHostAccess(record);
+      const placement = gatewayPlacement(record);
+      const sshPassword = await this.gatewaySSHPassword(record);
+      const runtimeBinaryPath = await this.ensureRuntimeReady(record, hostAccess, placement, sshPassword, options.signal, {
+        onProgress: options.onProgress,
+      });
+      return this.openBridgeSession(record, runtimeBinaryPath, options);
+    })().finally(() => {
+      if (this.pendingStartTasks.get(targetID) === task) {
+        this.pendingStartTasks.delete(targetID);
+      }
     });
-    return this.openBridgeSession(record, runtimeBinaryPath, options);
+    this.pendingStartTasks.set(targetID, task);
+    return task;
   }
 
   private async openBridgeSession(
