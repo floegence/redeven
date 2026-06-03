@@ -492,6 +492,14 @@ export function environmentSourceLabel(environment: DesktopEnvironmentEntry): st
   }
 }
 
+function gatewayFactLabel(environment: DesktopEnvironmentEntry): string {
+  return (environment.environment_source?.kind === 'gateway'
+    ? compact(environment.environment_source.label)
+    : '')
+    || compact(environment.gateway_label)
+    || 'Gateway';
+}
+
 function normalizeIPAddressHost(value: string): string {
   return value.trim().toLowerCase().replace(/^\[(.*)\]$/, '$1');
 }
@@ -774,7 +782,7 @@ export function buildEnvironmentCardFactsModel(
   if (environment.kind === 'gateway_environment') {
     return orderEnvironmentCardFacts([
       buildEnvironmentCardFact('RUNS ON', environmentRunsOnLabel(environment), runsOnOpts),
-      buildEnvironmentCardFact('GATEWAY', environmentSourceLabel(environment)),
+      buildEnvironmentCardFact('GATEWAY', gatewayFactLabel(environment)),
       compact(environment.gateway_env_id) !== ''
         ? buildEnvironmentCardFact('ENV ID', environment.gateway_env_id ?? '', { copy_value: true })
         : buildPlaceholderEnvironmentCardFact('ENV ID', 'UNKNOWN'),
@@ -2445,13 +2453,11 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   const needsSetup = gateway.status === 'needs_setup';
   const needsPairing = gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired';
   const syncState = gateway.sync_state ?? 'idle';
-  const syncMessage = compact(gateway.last_sync_error_message);
-  const runtimeMessage = compact(runtime?.message) || syncMessage || compact(gateway.status_message);
 
   if (needsSetup) {
     return {
       title: 'Finish Gateway setup',
-      detail: runtimeMessage || 'Complete the Gateway connection settings before Desktop can pair, start, or refresh this Gateway.',
+      detail: 'Complete the Gateway connection settings before Desktop can pair, start, or refresh this Gateway.',
       tone: 'warning',
     };
   }
@@ -2467,7 +2473,7 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   if (syncState === 'pairing_failed') {
     return {
       title: gateway.status === 'trust_changed' ? 'Gateway trust changed' : 'Pairing needs attention',
-      detail: syncMessage || 'Desktop could not verify this Gateway identity. Review the Gateway target, then retry pairing from the guidance panel.',
+      detail: 'Desktop could not verify this Gateway identity. Review the Gateway target, then retry pairing from the guidance panel.',
       tone: 'warning',
     };
   }
@@ -2475,7 +2481,7 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   if (syncState === 'gateway_unreachable' || syncState === 'catalog_failed') {
     return {
       title: 'Gateway needs attention',
-      detail: runtimeMessage || 'Desktop could not keep this Gateway synced. Open the guidance panel to refresh, start, or resolve the target.',
+      detail: 'Desktop could not keep this Gateway synced. Open the guidance panel to refresh, start, or resolve the target.',
       tone: 'warning',
     };
   }
@@ -2498,7 +2504,7 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   ) {
     return {
       title: 'Resolve the Gateway target',
-      detail: runtimeMessage || 'Desktop cannot reach the SSH host, container, or bridge that runs this Gateway. Check the target settings before pairing or opening environments.',
+      detail: 'Desktop cannot reach the SSH host, container, or bridge that runs this Gateway. Check the target settings before pairing or opening environments.',
       tone: 'warning',
     };
   }
@@ -2514,7 +2520,7 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   if (runtimeStatus === 'runtime_needs_update') {
     return {
       title: 'Update before continuing',
-      detail: runtimeMessage || 'Install the Gateway runtime update, then Desktop can pair and refresh the environments this Gateway exposes.',
+      detail: 'Install the Gateway runtime update, then Desktop can pair and refresh the environments this Gateway exposes.',
       tone: 'warning',
     };
   }
@@ -2548,7 +2554,7 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   if (desktopGatewayNeedsResolution(gateway.status)) {
     return {
       title: 'Gateway needs attention',
-      detail: runtimeMessage || 'Review the Gateway settings, then refresh or pair again when the target is reachable.',
+      detail: 'Review the Gateway settings, then refresh or pair again when the target is reachable.',
       tone: 'warning',
     };
   }

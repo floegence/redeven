@@ -305,7 +305,6 @@ describe('GatewayStore', () => {
     }, 1).gateways[0] as GatewayRecord;
 
     const source = gatewayRecordToSourceWithCatalog(record, {
-      display_name: 'Live Gateway',
       status: 'online',
       environments: [{
         gateway_env_id: 'env_demo',
@@ -318,7 +317,7 @@ describe('GatewayStore', () => {
     });
 
     expect(source).toMatchObject({
-      display_name: 'Live Gateway',
+      display_name: 'Stored Gateway',
       status: 'online',
       environments: [expect.objectContaining({ gateway_env_id: 'env_demo' })],
     });

@@ -3733,7 +3733,7 @@ function mergeGatewaySourceRecord(
   return {
     ...base,
     ...source,
-    display_name: source.display_name || base.display_name,
+    display_name: base.display_name,
     connection_kind: base.connection_kind,
     management_capability: base.management_capability,
     endpoint_label: base.endpoint_label,
@@ -3985,7 +3985,6 @@ async function syncGatewayRecord(
       const syncedAtMS = Date.now();
       const syncedRecord = await gatewayStore().markCatalogSynced(currentRecord.gateway_id, syncedAtMS).catch(() => currentRecord);
       const source = mergeGatewaySourceRecord(gatewayRecordToSourceWithCatalog(syncedRecord, {
-        display_name: catalog.gateway.display_name,
         status: catalog.gateway.status,
         environments: catalog.environments,
       }), syncedRecord, {
