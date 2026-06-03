@@ -35,7 +35,7 @@ func TestServerRuntimeGatewayRequiresPairingForCatalog(t *testing.T) {
 	}
 }
 
-func TestServerRuntimeGatewayCatalogAndOpenSessionAfterPairing(t *testing.T) {
+func TestServerRuntimeGatewayCatalogDoesNotExposeDefaultHostEnv(t *testing.T) {
 	s := newRuntimeGatewayTestServer(t)
 	material := pairRuntimeGatewayTestClient(t, s, "http://127.0.0.1:24000/")
 
@@ -55,16 +55,17 @@ func TestServerRuntimeGatewayCatalogAndOpenSessionAfterPairing(t *testing.T) {
 	if err := json.Unmarshal(catalogRes.Body.Bytes(), &catalogEnvelope); err != nil {
 		t.Fatalf("catalog json.Unmarshal() error = %v", err)
 	}
-	if !catalogEnvelope.OK || len(catalogEnvelope.Data.Environments) != 1 {
+	if !catalogEnvelope.OK || len(catalogEnvelope.Data.Environments) != 0 {
 		t.Fatalf("catalog envelope = %#v", catalogEnvelope)
 	}
 	if catalogEnvelope.Data.Gateway.GatewayID != material.gatewayID || catalogEnvelope.Data.Gateway.GatewayPublicKeyFingerprint == "" {
 		t.Fatalf("catalog gateway metadata = %#v, material = %#v", catalogEnvelope.Data.Gateway, material)
 	}
-	env := catalogEnvelope.Data.Environments[0]
-	if env.GatewayEnvID != LocalEnvPublicID || env.State != protocol.EnvironmentStateAvailable {
-		t.Fatalf("catalog env = %#v", env)
-	}
+}
+
+func TestServerRuntimeGatewayRejectsDefaultHostEnvOpenSession(t *testing.T) {
+	s := newRuntimeGatewayTestServer(t)
+	material := pairRuntimeGatewayTestClient(t, s, "http://127.0.0.1:24000/")
 
 	openBody := []byte(`{"protocol_version":"redeven-runtime-gateway-v1","gateway_env_id":"env_local","requested_capability":"env_app","client_nonce":"client-nonce"}`)
 	openReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/open-session", bytes.NewReader(openBody))
@@ -72,27 +73,13 @@ func TestServerRuntimeGatewayCatalogAndOpenSessionAfterPairing(t *testing.T) {
 	openRes := httptest.NewRecorder()
 	s.handler().ServeHTTP(openRes, openReq)
 
-	if openRes.Result().StatusCode != http.StatusOK {
-		t.Fatalf("open-session status = %d, want %d; body=%s", openRes.Result().StatusCode, http.StatusOK, openRes.Body.String())
+	if openRes.Result().StatusCode != http.StatusNotFound {
+		t.Fatalf("open-session status = %d, want %d; body=%s", openRes.Result().StatusCode, http.StatusNotFound, openRes.Body.String())
 	}
-	var openEnvelope struct {
-		OK   bool                         `json:"ok"`
-		Data protocol.OpenSessionResponse `json:"data"`
-	}
-	if err := json.Unmarshal(openRes.Body.Bytes(), &openEnvelope); err != nil {
-		t.Fatalf("open json.Unmarshal() error = %v", err)
-	}
-	if !openEnvelope.OK || openEnvelope.Data.ConnectArtifact.Kind != protocol.ConnectArtifactKindLocalDirect {
-		t.Fatalf("open envelope = %#v", openEnvelope)
-	}
-	if !strings.Contains(openEnvelope.Data.ConnectArtifact.URL, "/_redeven_proxy/env/") {
-		t.Fatalf("artifact URL = %q, want Env App entry", openEnvelope.Data.ConnectArtifact.URL)
-	}
-	if parsed, err := url.Parse(openEnvelope.Data.ConnectArtifact.URL); err != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
-		t.Fatalf("artifact URL must not carry query or fragment secrets: url=%q err=%v", openEnvelope.Data.ConnectArtifact.URL, err)
-	}
-	if !verifyRuntimeGatewayArtifact(t, material, openEnvelope.Data, "client-nonce") {
-		t.Fatalf("artifact proof did not verify")
+	for _, cookie := range openRes.Result().Cookies() {
+		if cookie.Name == accessgate.LocalSessionCookieName {
+			t.Fatalf("open-session(env_local) set local access cookie: %#v", cookie)
+		}
 	}
 }
 
@@ -130,7 +117,15 @@ func TestServerRuntimeGatewayDirectArtifactDoesNotCarryLocalAccessResumeToken(t 
 	}
 	material := pairRuntimeGatewayTestClient(t, s, "http://127.0.0.1:24000/", unlock.ResumeToken)
 
-	openBody := []byte(`{"protocol_version":"redeven-runtime-gateway-v1","gateway_env_id":"env_local","requested_capability":"env_app","client_nonce":"client-nonce"}`)
+	upsertGatewayProfileViaHTTP(t, s, material, protocol.EnvProfileInput{
+		GatewayEnvID: "env_url",
+		DisplayName:  "URL Env",
+		AccessRoute: protocol.EnvProfileAccessRoute{
+			Kind: protocol.EnvProfileAccessRouteKindURL,
+			URL:  "https://target.example/",
+		},
+	})
+	openBody := []byte(`{"protocol_version":"redeven-runtime-gateway-v1","gateway_env_id":"env_url","requested_capability":"env_app","client_nonce":"client-nonce"}`)
 	openReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/open-session", bytes.NewReader(openBody))
 	signRuntimeGatewayTestRequest(t, openReq, material, openBody)
 	openRes := httptest.NewRecorder()
@@ -159,7 +154,15 @@ func TestServerRuntimeGatewayOpenSessionUsesDesktopBridgeArtifactForBridgeTransp
 	s := newRuntimeGatewayTestServer(t)
 	material := pairRuntimeGatewayTestClient(t, s, "ssh://bastion:22/opt/redeven")
 
-	openBody := []byte(`{"protocol_version":"redeven-runtime-gateway-v1","gateway_env_id":"env_local","requested_capability":"env_app","client_nonce":"client-nonce","bridge_session_id":"ssh:ssh%3A%2F%2Fbastion%3A22%2Fopt%2Fredeven","route_id":"env_app:gw_demo"}`)
+	upsertGatewayProfileViaHTTP(t, s, material, protocol.EnvProfileInput{
+		GatewayEnvID: "env_url",
+		DisplayName:  "URL Env",
+		AccessRoute: protocol.EnvProfileAccessRoute{
+			Kind: protocol.EnvProfileAccessRouteKindURL,
+			URL:  "https://target.example/",
+		},
+	})
+	openBody := []byte(`{"protocol_version":"redeven-runtime-gateway-v1","gateway_env_id":"env_url","requested_capability":"env_app","client_nonce":"client-nonce","bridge_session_id":"ssh:ssh%3A%2F%2Fbastion%3A22%2Fopt%2Fredeven","route_id":"env_app:gw_demo"}`)
 	openReq := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/open-session", bytes.NewReader(openBody))
 	openReq.Header.Set("X-Redeven-Gateway-Transport", "desktop_bridge")
 	signRuntimeGatewayTestRequest(t, openReq, material, openBody)
@@ -185,6 +188,86 @@ func TestServerRuntimeGatewayOpenSessionUsesDesktopBridgeArtifactForBridgeTransp
 	}
 	if !verifyRuntimeGatewayArtifact(t, material, openEnvelope.Data, "client-nonce") {
 		t.Fatalf("artifact proof did not verify")
+	}
+}
+
+func TestServerRuntimeGatewayProfileCatalogOpenAndDeleteRevokesProxySession(t *testing.T) {
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/local/runtime/health" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"proxied":true}`))
+	}))
+	defer target.Close()
+
+	s := newRuntimeGatewayTestServer(t)
+	material := pairRuntimeGatewayTestClient(t, s, "http://127.0.0.1:24000/")
+
+	upsertResp := upsertGatewayProfileViaHTTP(t, s, material, protocol.EnvProfileInput{
+		GatewayEnvID: "env_url",
+		DisplayName:  "URL Env",
+		AccessRoute: protocol.EnvProfileAccessRoute{
+			Kind:        protocol.EnvProfileAccessRouteKindURL,
+			URL:         target.URL,
+			OriginLabel: "Target",
+		},
+	})
+	if upsertResp.Environment.Profile == nil || !upsertResp.Environment.Profile.Managed {
+		t.Fatalf("upsert profile marker = %#v", upsertResp.Environment.Profile)
+	}
+
+	catalog := runtimeGatewayCatalogViaHTTP(t, s, material)
+	if len(catalog.Environments) != 1 || catalog.Environments[0].GatewayEnvID != "env_url" {
+		t.Fatalf("catalog environments = %#v", catalog.Environments)
+	}
+	env := catalog.Environments[0]
+	if env.Profile == nil || !env.Profile.Managed || env.Profile.AccessRouteKind != protocol.EnvProfileAccessRouteKindURL {
+		t.Fatalf("catalog env profile marker = %#v", env.Profile)
+	}
+
+	openResp, cookies := openGatewayEnvViaHTTP(t, s, material, "env_url", "client-nonce")
+	if openResp.ConnectArtifact.Kind != protocol.ConnectArtifactKindLocalDirect {
+		t.Fatalf("connect artifact = %#v", openResp.ConnectArtifact)
+	}
+	proxyReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:24000/api/local/runtime/health", nil)
+	for _, cookie := range cookies {
+		proxyReq.AddCookie(cookie)
+	}
+	proxyRes := httptest.NewRecorder()
+	s.handler().ServeHTTP(proxyRes, proxyReq)
+	if proxyRes.Result().StatusCode != http.StatusOK || !strings.Contains(proxyRes.Body.String(), `"proxied":true`) {
+		t.Fatalf("proxy status = %d body=%s", proxyRes.Result().StatusCode, proxyRes.Body.String())
+	}
+
+	deleteResp := deleteGatewayProfileViaHTTP(t, s, material, "env_url")
+	if !deleteResp.Deleted {
+		t.Fatalf("delete response = %#v", deleteResp)
+	}
+	staleProxyReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:24000/api/local/runtime/health", nil)
+	for _, cookie := range cookies {
+		staleProxyReq.AddCookie(cookie)
+	}
+	staleProxyRes := httptest.NewRecorder()
+	s.handler().ServeHTTP(staleProxyRes, staleProxyReq)
+	if staleProxyRes.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("stale proxy status = %d, want %d; body=%s", staleProxyRes.Result().StatusCode, http.StatusUnauthorized, staleProxyRes.Body.String())
+	}
+	for _, cookie := range staleProxyRes.Result().Cookies() {
+		if cookie.Name == runtimeGatewayEnvSessionCookieName && cookie.MaxAge >= 0 {
+			t.Fatalf("stale proxy did not clear profile session cookie: %#v", cookie)
+		}
+	}
+
+	staleLocalUIReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:24000/cs/session", nil)
+	for _, cookie := range cookies {
+		staleLocalUIReq.AddCookie(cookie)
+	}
+	staleLocalUIRes := httptest.NewRecorder()
+	s.handler().ServeHTTP(staleLocalUIRes, staleLocalUIReq)
+	if staleLocalUIRes.Result().StatusCode != http.StatusUnauthorized {
+		t.Fatalf("stale Local UI status = %d, want %d; body=%s", staleLocalUIRes.Result().StatusCode, http.StatusUnauthorized, staleLocalUIRes.Body.String())
 	}
 }
 
@@ -306,6 +389,118 @@ func runtimeGatewayPairingChallengeViaHTTP(t *testing.T, s *Server, req protocol
 		t.Fatalf("pairing challenge envelope = %#v", envelope)
 	}
 	return envelope.Data
+}
+
+func runtimeGatewayCatalogViaHTTP(t *testing.T, s *Server, material runtimeGatewayTestMaterial) protocol.CatalogResponse {
+	t.Helper()
+	body := []byte(`{"protocol_version":"redeven-runtime-gateway-v1"}`)
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/catalog", bytes.NewReader(body))
+	signRuntimeGatewayTestRequest(t, req, material, body)
+	res := httptest.NewRecorder()
+	s.handler().ServeHTTP(res, req)
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("catalog status = %d, want %d; body=%s", res.Result().StatusCode, http.StatusOK, res.Body.String())
+	}
+	var envelope struct {
+		OK   bool                     `json:"ok"`
+		Data protocol.CatalogResponse `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("catalog json.Unmarshal() error = %v", err)
+	}
+	if !envelope.OK {
+		t.Fatalf("catalog envelope = %#v", envelope)
+	}
+	return envelope.Data
+}
+
+func upsertGatewayProfileViaHTTP(t *testing.T, s *Server, material runtimeGatewayTestMaterial, profile protocol.EnvProfileInput) protocol.EnvProfileUpsertResponse {
+	t.Helper()
+	body, err := json.Marshal(protocol.EnvProfileUpsertRequest{
+		ProtocolVersion: protocol.Version,
+		Profile:         profile,
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/env-profiles/upsert", bytes.NewReader(body))
+	signRuntimeGatewayTestRequest(t, req, material, body)
+	res := httptest.NewRecorder()
+	s.handler().ServeHTTP(res, req)
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("upsert profile status = %d, want %d; body=%s", res.Result().StatusCode, http.StatusOK, res.Body.String())
+	}
+	var envelope struct {
+		OK   bool                              `json:"ok"`
+		Data protocol.EnvProfileUpsertResponse `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("upsert profile json.Unmarshal() error = %v", err)
+	}
+	if !envelope.OK {
+		t.Fatalf("upsert profile envelope = %#v", envelope)
+	}
+	return envelope.Data
+}
+
+func deleteGatewayProfileViaHTTP(t *testing.T, s *Server, material runtimeGatewayTestMaterial, gatewayEnvID string) protocol.EnvProfileDeleteResponse {
+	t.Helper()
+	body, err := json.Marshal(protocol.EnvProfileDeleteRequest{
+		ProtocolVersion: protocol.Version,
+		GatewayEnvID:    gatewayEnvID,
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/env-profiles/delete", bytes.NewReader(body))
+	signRuntimeGatewayTestRequest(t, req, material, body)
+	res := httptest.NewRecorder()
+	s.handler().ServeHTTP(res, req)
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("delete profile status = %d, want %d; body=%s", res.Result().StatusCode, http.StatusOK, res.Body.String())
+	}
+	var envelope struct {
+		OK   bool                              `json:"ok"`
+		Data protocol.EnvProfileDeleteResponse `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("delete profile json.Unmarshal() error = %v", err)
+	}
+	if !envelope.OK {
+		t.Fatalf("delete profile envelope = %#v", envelope)
+	}
+	return envelope.Data
+}
+
+func openGatewayEnvViaHTTP(t *testing.T, s *Server, material runtimeGatewayTestMaterial, gatewayEnvID string, clientNonce string) (protocol.OpenSessionResponse, []*http.Cookie) {
+	t.Helper()
+	body, err := json.Marshal(protocol.OpenSessionRequest{
+		ProtocolVersion:     protocol.Version,
+		GatewayEnvID:        gatewayEnvID,
+		RequestedCapability: protocol.RequestedCapabilityEnvApp,
+		ClientNonce:         clientNonce,
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/open-session", bytes.NewReader(body))
+	signRuntimeGatewayTestRequest(t, req, material, body)
+	res := httptest.NewRecorder()
+	s.handler().ServeHTTP(res, req)
+	if res.Result().StatusCode != http.StatusOK {
+		t.Fatalf("open session status = %d, want %d; body=%s", res.Result().StatusCode, http.StatusOK, res.Body.String())
+	}
+	var envelope struct {
+		OK   bool                         `json:"ok"`
+		Data protocol.OpenSessionResponse `json:"data"`
+	}
+	if err := json.Unmarshal(res.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("open session json.Unmarshal() error = %v", err)
+	}
+	if !envelope.OK {
+		t.Fatalf("open session envelope = %#v", envelope)
+	}
+	return envelope.Data, res.Result().Cookies()
 }
 
 func runtimeGatewayPairingCompleteViaHTTP(t *testing.T, s *Server, req protocol.PairingCompleteRequest, resumeTokens ...string) protocol.PairingCompleteResponse {

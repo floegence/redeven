@@ -35,6 +35,7 @@ var (
 	ErrContainerEngineInvalid       = errors.New("container_engine must be docker or podman")
 	ErrContainerIDRequired          = errors.New("container_id is required")
 	ErrContainerRuntimeRootRequired = errors.New("container_runtime_root is required")
+	ErrSSHPasswordAuthUnsupported   = errors.New("ssh password auth is not supported for gateway environment profiles yet")
 )
 
 type Store struct {
@@ -54,6 +55,7 @@ type EnvironmentProfile struct {
 	DisplayName     string                          `json:"display_name"`
 	AccessRoute     protocol.EnvProfileAccessRoute  `json:"access_route"`
 	ControlOwner    protocol.EnvProfileControlOwner `json:"control_owner"`
+	SSHPasswordSet  bool                            `json:"ssh_password_set,omitempty"`
 	CreatedAtUnixMS int64                           `json:"created_at_unix_ms"`
 	UpdatedAtUnixMS int64                           `json:"updated_at_unix_ms"`
 }
@@ -199,7 +201,11 @@ func EnvironmentFromProfile(profile EnvironmentProfile) protocol.Environment {
 		State:               protocol.EnvironmentStateAvailable,
 		AccessCapabilities:  accessCapabilities,
 		ControlCapabilities: controlCapabilities,
-		ProfileAccessRoute:  profileAccessRouteForCatalog(profile),
+		Profile: &protocol.EnvironmentProfile{
+			Managed:         true,
+			AccessRouteKind: profile.AccessRoute.Kind,
+		},
+		ProfileAccessRoute: profileAccessRouteForCatalog(profile),
 		Origin: protocol.EnvironmentOrigin{
 			Kind:  profileOriginKind(profile),
 			Label: profileOriginLabel(profile),
@@ -216,6 +222,29 @@ func profileAccessRouteForCatalog(profile EnvironmentProfile) *protocol.EnvProfi
 			Kind:        protocol.EnvProfileAccessRouteKindURL,
 			URL:         strings.TrimSpace(profile.AccessRoute.URL),
 			OriginLabel: strings.TrimSpace(profile.AccessRoute.OriginLabel),
+		}
+	case protocol.EnvProfileAccessRouteKindSSHHost:
+		return &protocol.EnvProfileAccessRoute{
+			Kind:                  protocol.EnvProfileAccessRouteKindSSHHost,
+			OriginLabel:           strings.TrimSpace(profile.AccessRoute.OriginLabel),
+			SSHDestination:        strings.TrimSpace(profile.AccessRoute.SSHDestination),
+			SSHPort:               profile.AccessRoute.SSHPort,
+			SSHAuthMode:           normalizeSSHAuthMode(profile.AccessRoute.SSHAuthMode),
+			SSHPasswordConfigured: profile.SSHPasswordSet,
+			SSHRuntimeRoot:        strings.TrimSpace(profile.AccessRoute.SSHRuntimeRoot),
+		}
+	case protocol.EnvProfileAccessRouteKindSSHContainer:
+		return &protocol.EnvProfileAccessRoute{
+			Kind:                  protocol.EnvProfileAccessRouteKindSSHContainer,
+			OriginLabel:           strings.TrimSpace(profile.AccessRoute.OriginLabel),
+			SSHDestination:        strings.TrimSpace(profile.AccessRoute.SSHDestination),
+			SSHPort:               profile.AccessRoute.SSHPort,
+			SSHAuthMode:           normalizeSSHAuthMode(profile.AccessRoute.SSHAuthMode),
+			SSHPasswordConfigured: profile.SSHPasswordSet,
+			SSHRuntimeRoot:        strings.TrimSpace(profile.AccessRoute.SSHRuntimeRoot),
+			ContainerEngine:       strings.TrimSpace(profile.AccessRoute.ContainerEngine),
+			ContainerID:           strings.TrimSpace(profile.AccessRoute.ContainerID),
+			ContainerRuntimeRoot:  strings.TrimSpace(profile.AccessRoute.ContainerRuntimeRoot),
 		}
 	default:
 		return nil
@@ -270,12 +299,24 @@ func profileFromRequest(req protocol.EnvProfileUpsertRequest) (EnvironmentProfil
 	if route.Kind == protocol.EnvProfileAccessRouteKindURL {
 		controlOwner = protocol.EnvProfileControlOwnerNone
 	}
+	sshPasswordSet, err := sshPasswordSetFromRequest(route)
+	if err != nil {
+		return EnvironmentProfile{}, err
+	}
 	return EnvironmentProfile{
-		GatewayEnvID: strings.TrimSpace(req.Profile.GatewayEnvID),
-		DisplayName:  strings.TrimSpace(req.Profile.DisplayName),
-		AccessRoute:  route,
-		ControlOwner: controlOwner,
+		GatewayEnvID:   strings.TrimSpace(req.Profile.GatewayEnvID),
+		DisplayName:    strings.TrimSpace(req.Profile.DisplayName),
+		AccessRoute:    route,
+		ControlOwner:   controlOwner,
+		SSHPasswordSet: sshPasswordSet,
 	}, nil
+}
+
+func sshPasswordSetFromRequest(route protocol.EnvProfileAccessRoute) (bool, error) {
+	if route.SSHAuthMode == "password" {
+		return false, ErrSSHPasswordAuthUnsupported
+	}
+	return false, nil
 }
 
 func normalizeSSHHostRoute(route protocol.EnvProfileAccessRoute) (protocol.EnvProfileAccessRoute, error) {
@@ -291,6 +332,7 @@ func normalizeSSHHostRoute(route protocol.EnvProfileAccessRoute) (protocol.EnvPr
 		OriginLabel:    strings.TrimSpace(route.OriginLabel),
 		SSHDestination: destination,
 		SSHPort:        route.SSHPort,
+		SSHAuthMode:    normalizeSSHAuthMode(route.SSHAuthMode),
 		SSHRuntimeRoot: normalizeRuntimeRoot(route.SSHRuntimeRoot),
 	}, nil
 }
@@ -326,6 +368,15 @@ func normalizeRuntimeRoot(raw string) string {
 		return "~/.redeven"
 	}
 	return clean
+}
+
+func normalizeSSHAuthMode(raw string) string {
+	switch strings.TrimSpace(raw) {
+	case "password":
+		return "password"
+	default:
+		return "key_agent"
+	}
 }
 
 func normalizeProfileURL(raw string) (string, error) {
@@ -467,6 +518,7 @@ func normalizeProfile(profile EnvironmentProfile) (EnvironmentProfile, error) {
 	}
 	normalized.CreatedAtUnixMS = profile.CreatedAtUnixMS
 	normalized.UpdatedAtUnixMS = profile.UpdatedAtUnixMS
+	normalized.SSHPasswordSet = normalized.AccessRoute.SSHAuthMode == "password" && (profile.SSHPasswordSet || normalized.SSHPasswordSet)
 	return normalized, nil
 }
 

@@ -159,9 +159,15 @@ type Environment struct {
 	Capabilities        []EnvironmentCapability `json:"capabilities"`
 	AccessCapabilities  []EnvironmentCapability `json:"access_capabilities"`
 	ControlCapabilities []EnvironmentCapability `json:"control_capabilities"`
+	Profile             *EnvironmentProfile     `json:"profile,omitempty"`
 	ProfileAccessRoute  *EnvProfileAccessRoute  `json:"profile_access_route,omitempty"`
 	Origin              EnvironmentOrigin       `json:"origin"`
 	LastSeenAtUnixMS    int64                   `json:"last_seen_at_unix_ms,omitempty"`
+}
+
+type EnvironmentProfile struct {
+	Managed         bool                      `json:"managed,omitempty"`
+	AccessRouteKind EnvProfileAccessRouteKind `json:"access_route_kind,omitempty"`
 }
 
 type EnvironmentOrigin struct {
@@ -196,18 +202,26 @@ type EnvProfileInput struct {
 	DisplayName  string                 `json:"display_name"`
 	AccessRoute  EnvProfileAccessRoute  `json:"access_route"`
 	ControlOwner EnvProfileControlOwner `json:"control_owner,omitempty"`
+	SSHSecret    *EnvProfileSSHSecret   `json:"ssh_secret,omitempty"`
+}
+
+type EnvProfileSSHSecret struct {
+	Mode     string `json:"mode"`
+	Password string `json:"password,omitempty"`
 }
 
 type EnvProfileAccessRoute struct {
-	Kind                 EnvProfileAccessRouteKind `json:"kind"`
-	URL                  string                    `json:"url,omitempty"`
-	OriginLabel          string                    `json:"origin_label,omitempty"`
-	SSHDestination       string                    `json:"ssh_destination,omitempty"`
-	SSHPort              int                       `json:"ssh_port,omitempty"`
-	SSHRuntimeRoot       string                    `json:"ssh_runtime_root,omitempty"`
-	ContainerEngine      string                    `json:"container_engine,omitempty"`
-	ContainerID          string                    `json:"container_id,omitempty"`
-	ContainerRuntimeRoot string                    `json:"container_runtime_root,omitempty"`
+	Kind                  EnvProfileAccessRouteKind `json:"kind"`
+	URL                   string                    `json:"url,omitempty"`
+	OriginLabel           string                    `json:"origin_label,omitempty"`
+	SSHDestination        string                    `json:"ssh_destination,omitempty"`
+	SSHPort               int                       `json:"ssh_port,omitempty"`
+	SSHAuthMode           string                    `json:"auth_mode,omitempty"`
+	SSHPasswordConfigured bool                      `json:"ssh_password_configured,omitempty"`
+	SSHRuntimeRoot        string                    `json:"ssh_runtime_root,omitempty"`
+	ContainerEngine       string                    `json:"container_engine,omitempty"`
+	ContainerID           string                    `json:"container_id,omitempty"`
+	ContainerRuntimeRoot  string                    `json:"container_runtime_root,omitempty"`
 }
 
 type EnvProfileUpsertResponse struct {
@@ -371,6 +385,14 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 		)
 		environment.Origin.Kind = normalizeEnvironmentOriginKind(environment.Origin.Kind)
 		environment.Origin.Label = strings.TrimSpace(environment.Origin.Label)
+		if environment.Profile != nil {
+			profile := normalizeEnvironmentProfile(*environment.Profile)
+			if !profile.Managed || profile.AccessRouteKind == "" {
+				environment.Profile = nil
+			} else {
+				environment.Profile = &profile
+			}
+		}
 		if environment.ProfileAccessRoute != nil {
 			route := normalizeEnvProfileAccessRouteForCatalog(*environment.ProfileAccessRoute)
 			if route.Kind == "" {
@@ -390,6 +412,14 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 	return out
 }
 
+func normalizeEnvironmentProfile(profile EnvironmentProfile) EnvironmentProfile {
+	profile.AccessRouteKind = normalizeEnvProfileAccessRouteKind(profile.AccessRouteKind)
+	if !profile.Managed || profile.AccessRouteKind == "" {
+		return EnvironmentProfile{}
+	}
+	return profile
+}
+
 func NormalizeEnvProfileUpsertRequest(req EnvProfileUpsertRequest) EnvProfileUpsertRequest {
 	req.Profile.GatewayEnvID = strings.TrimSpace(req.Profile.GatewayEnvID)
 	req.Profile.DisplayName = strings.TrimSpace(req.Profile.DisplayName)
@@ -397,6 +427,7 @@ func NormalizeEnvProfileUpsertRequest(req EnvProfileUpsertRequest) EnvProfileUps
 	req.Profile.AccessRoute.URL = strings.TrimSpace(req.Profile.AccessRoute.URL)
 	req.Profile.AccessRoute.OriginLabel = strings.TrimSpace(req.Profile.AccessRoute.OriginLabel)
 	req.Profile.AccessRoute.SSHDestination = strings.TrimSpace(req.Profile.AccessRoute.SSHDestination)
+	req.Profile.AccessRoute.SSHAuthMode = strings.TrimSpace(req.Profile.AccessRoute.SSHAuthMode)
 	req.Profile.AccessRoute.SSHRuntimeRoot = strings.TrimSpace(req.Profile.AccessRoute.SSHRuntimeRoot)
 	req.Profile.AccessRoute.ContainerEngine = strings.TrimSpace(req.Profile.AccessRoute.ContainerEngine)
 	req.Profile.AccessRoute.ContainerID = strings.TrimSpace(req.Profile.AccessRoute.ContainerID)
@@ -608,22 +639,26 @@ func normalizeEnvProfileAccessRouteForCatalog(route EnvProfileAccessRoute) EnvPr
 		}
 	case EnvProfileAccessRouteKindSSHHost:
 		return EnvProfileAccessRoute{
-			Kind:           EnvProfileAccessRouteKindSSHHost,
-			OriginLabel:    route.OriginLabel,
-			SSHDestination: route.SSHDestination,
-			SSHPort:        route.SSHPort,
-			SSHRuntimeRoot: route.SSHRuntimeRoot,
+			Kind:                  EnvProfileAccessRouteKindSSHHost,
+			OriginLabel:           route.OriginLabel,
+			SSHDestination:        route.SSHDestination,
+			SSHPort:               route.SSHPort,
+			SSHAuthMode:           route.SSHAuthMode,
+			SSHPasswordConfigured: route.SSHPasswordConfigured,
+			SSHRuntimeRoot:        route.SSHRuntimeRoot,
 		}
 	case EnvProfileAccessRouteKindSSHContainer:
 		return EnvProfileAccessRoute{
-			Kind:                 EnvProfileAccessRouteKindSSHContainer,
-			OriginLabel:          route.OriginLabel,
-			SSHDestination:       route.SSHDestination,
-			SSHPort:              route.SSHPort,
-			SSHRuntimeRoot:       route.SSHRuntimeRoot,
-			ContainerEngine:      route.ContainerEngine,
-			ContainerID:          route.ContainerID,
-			ContainerRuntimeRoot: route.ContainerRuntimeRoot,
+			Kind:                  EnvProfileAccessRouteKindSSHContainer,
+			OriginLabel:           route.OriginLabel,
+			SSHDestination:        route.SSHDestination,
+			SSHPort:               route.SSHPort,
+			SSHAuthMode:           route.SSHAuthMode,
+			SSHPasswordConfigured: route.SSHPasswordConfigured,
+			SSHRuntimeRoot:        route.SSHRuntimeRoot,
+			ContainerEngine:       route.ContainerEngine,
+			ContainerID:           route.ContainerID,
+			ContainerRuntimeRoot:  route.ContainerRuntimeRoot,
 		}
 	default:
 		return EnvProfileAccessRoute{}

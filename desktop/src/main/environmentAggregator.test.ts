@@ -206,28 +206,65 @@ describe('environmentAggregator', () => {
     });
   });
 
-  it('exposes edit and delete only for writable Gateway URL profiles', () => {
-    const editable = buildDesktopWelcomeSnapshot({
+  it('exposes edit and delete for writable Gateway-owned profiles by managed marker', () => {
+    const editableSnapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       gatewaySources: [gatewaySource({
         capabilities: ['env_profile_write'],
-        environments: [{
-          gateway_env_id: 'env_url',
-          display_name: 'URL Profile',
-          env_kind: 'reachable_env',
-          state: 'available',
-          capabilities: ['open'],
-          access_capabilities: ['open'],
-          control_capabilities: [],
-          profile_access_route: {
-            kind: 'url',
-            url: 'https://target.example/',
-            origin_label: 'Target',
+        environments: [
+          {
+            gateway_env_id: 'env_url',
+            display_name: 'URL Profile',
+            env_kind: 'reachable_env',
+            state: 'available',
+            capabilities: ['open'],
+            access_capabilities: ['open'],
+            control_capabilities: [],
+            profile: { managed: true, access_route_kind: 'url' },
+            profile_access_route: {
+              kind: 'url',
+              url: 'https://target.example/',
+              origin_label: 'Target',
+            },
+            origin: { kind: 'network_target', label: 'Target' },
           },
-          origin: { kind: 'network_target', label: 'Target' },
-        }],
+          {
+            gateway_env_id: 'env_ssh',
+            display_name: 'SSH Profile',
+            env_kind: 'reachable_env',
+            state: 'available',
+            capabilities: [],
+            access_capabilities: [],
+            control_capabilities: [],
+            profile: { managed: true, access_route_kind: 'ssh_host' },
+            profile_access_route: {
+              kind: 'ssh_host',
+              ssh_destination: 'devbox',
+              ssh_port: 2222,
+            },
+            origin: { kind: 'ssh_target', label: 'devbox' },
+          },
+          {
+            gateway_env_id: 'env_container',
+            display_name: 'Container Profile',
+            env_kind: 'reachable_env',
+            state: 'available',
+            capabilities: [],
+            access_capabilities: [],
+            control_capabilities: [],
+            profile: { managed: true, access_route_kind: 'ssh_container' },
+            profile_access_route: {
+              kind: 'ssh_container',
+              ssh_destination: 'devbox',
+              container_engine: 'docker',
+              container_id: 'workspace',
+            },
+            origin: { kind: 'container', label: 'devbox / workspace' },
+          },
+        ],
       })],
-    }).environments.find((entry) => entry.kind === 'gateway_environment');
+    });
+    const editable = editableSnapshot.environments.filter((entry) => entry.kind === 'gateway_environment');
     const readOnly = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       gatewaySources: [gatewaySource({
@@ -240,6 +277,10 @@ describe('environmentAggregator', () => {
           capabilities: ['open'],
           access_capabilities: ['open'],
           control_capabilities: [],
+          profile_access_route: {
+            kind: 'url',
+            url: 'https://target.example/',
+          },
           origin: { kind: 'network_target', label: 'Target' },
         }],
       })],
@@ -256,6 +297,7 @@ describe('environmentAggregator', () => {
           capabilities: ['open'],
           access_capabilities: ['open'],
           control_capabilities: [],
+          profile: { managed: true, access_route_kind: 'url' },
           profile_access_route: {
             kind: 'url',
             url: 'https://target.example/',
@@ -265,9 +307,20 @@ describe('environmentAggregator', () => {
       })],
     }).environments.find((entry) => entry.kind === 'gateway_environment');
 
-    expect(editable).toMatchObject({
+    expect(editable).toHaveLength(3);
+    expect(editable.map((entry) => [entry.gateway_env_id, entry.can_edit, entry.can_delete]).sort()).toEqual([
+      ['env_url', true, true],
+      ['env_ssh', true, true],
+      ['env_container', true, true],
+    ].sort());
+    const editableURL = editable.find((entry) => entry.gateway_env_id === 'env_url');
+    expect(editableURL).toMatchObject({
       can_edit: true,
       can_delete: true,
+      gateway_environment_profile: {
+        managed: true,
+        access_route_kind: 'url',
+      },
       gateway_environment_profile_access_route: {
         kind: 'url',
         url: 'https://target.example/',

@@ -67,6 +67,7 @@ import {
   desktopGatewayCanManageRuntime,
   desktopGatewayProfileURLHasEmbeddedCredentials,
   type DesktopGatewayConnectionKind,
+  type DesktopGatewayEnvironmentProfileAccessRoute,
   type DesktopGatewaySource,
 } from '../shared/desktopGateway';
 import type {
@@ -402,11 +403,26 @@ type RuntimeContainerConnectionDialogState = Readonly<{
 type GatewayURLProfileConnectionDialogState = Readonly<{
   mode: 'create' | 'edit';
   connection_kind: 'gateway_url_profile';
+  profile_route_kind: DesktopGatewayConnectionKind;
   environment_id: string;
   gateway_id: string;
   label: string;
   target_url: string;
   origin_label: string;
+  ssh_destination: string;
+  ssh_port: string;
+  auth_mode: DesktopSSHAuthMode;
+  ssh_password: string;
+  ssh_password_mode: 'keep' | 'replace' | 'clear';
+  ssh_password_configured: boolean;
+  baseline_ssh_destination: string;
+  baseline_ssh_port: string;
+  baseline_auth_mode: DesktopSSHAuthMode;
+  container_engine: DesktopContainerEngine;
+  container_id: string;
+  container_ref: string;
+  container_label: string;
+  runtime_root: string;
 }>;
 
 type GatewaySetupDialogState = Readonly<{
@@ -439,7 +455,9 @@ type GatewaySetupDialogState = Readonly<{
 
 type ConnectionDialogKind = 'external_local_ui' | 'ssh_environment' | 'local_container_runtime' | 'ssh_container_runtime' | 'gateway_url_profile';
 type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | GatewayURLProfileConnectionDialogState | null;
-type SSHPasswordConnectionDialogState = SSHConnectionDialogState | RuntimeContainerConnectionDialogState;
+type SSHBackedConnectionDialogState = SSHConnectionDialogState | RuntimeContainerConnectionDialogState | GatewayURLProfileConnectionDialogState;
+type ContainerBackedConnectionDialogState = RuntimeContainerConnectionDialogState | GatewayURLProfileConnectionDialogState;
+type SSHPasswordConnectionDialogState = SSHBackedConnectionDialogState;
 type SSHPasswordDraftState = SSHPasswordConnectionDialogState | GatewaySetupDialogState;
 
 type ControlPlaneDialogState = Readonly<{
@@ -1804,14 +1822,32 @@ function createGatewayURLProfileConnectionDialogState(
   mode: 'create' | 'edit',
   overrides: Partial<GatewayURLProfileConnectionDialogState> = {},
 ): GatewayURLProfileConnectionDialogState {
+  const sshDestination = trimString(overrides.ssh_destination);
+  const sshPort = trimString(overrides.ssh_port);
+  const authMode = (trimString(overrides.auth_mode) as DesktopSSHAuthMode) || DEFAULT_DESKTOP_SSH_AUTH_MODE;
   return {
     mode,
     connection_kind: 'gateway_url_profile',
+    profile_route_kind: overrides.profile_route_kind ?? 'url',
     environment_id: trimString(overrides.environment_id),
     gateway_id: trimString(overrides.gateway_id),
     label: trimString(overrides.label),
     target_url: trimString(overrides.target_url),
     origin_label: trimString(overrides.origin_label),
+    ssh_destination: sshDestination,
+    ssh_port: sshPort,
+    auth_mode: authMode,
+    ssh_password: '',
+    ssh_password_mode: overrides.ssh_password_configured ? 'keep' : 'replace',
+    ssh_password_configured: overrides.ssh_password_configured === true,
+    baseline_ssh_destination: sshDestination,
+    baseline_ssh_port: sshPort,
+    baseline_auth_mode: authMode,
+    container_engine: overrides.container_engine ?? 'docker',
+    container_id: trimString(overrides.container_id),
+    container_ref: trimString(overrides.container_ref) || trimString(overrides.container_label) || trimString(overrides.container_id),
+    container_label: trimString(overrides.container_label),
+    runtime_root: trimString(overrides.runtime_root),
   };
 }
 
@@ -1920,7 +1956,9 @@ function gatewayCanWriteEnvironmentProfiles(gateway: DesktopGatewaySource): bool
 function isSSHPasswordConnectionDialogState(
   state: ConnectionDialogState,
 ): state is SSHPasswordConnectionDialogState {
-  return state?.connection_kind === 'ssh_environment' || state?.connection_kind === 'ssh_container_runtime';
+  return state?.connection_kind === 'ssh_environment'
+    || state?.connection_kind === 'ssh_container_runtime'
+    || (state?.connection_kind === 'gateway_url_profile' && (state.profile_route_kind === 'ssh_host' || state.profile_route_kind === 'ssh_container'));
 }
 
 function isSSHPasswordDraftState(
@@ -1991,7 +2029,11 @@ function suggestConnectionLabel(state: ConnectionDialogState): string | null {
     case 'external_local_ui':
       return null;
     case 'gateway_url_profile': {
-      const seed = normalizeGatewayDisplayNameSeed(state.target_url);
+      const seed = state.profile_route_kind === 'url'
+        ? normalizeGatewayDisplayNameSeed(state.target_url)
+        : state.profile_route_kind === 'ssh_container'
+          ? trimString(state.container_label) || trimString(state.container_ref) || trimString(state.container_id)
+          : trimString(state.ssh_destination);
       return seed === '' ? null : seed;
     }
   }
@@ -2890,8 +2932,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const gatewayState = gatewaySetupDialogState();
     const state = connectionState?.connection_kind === 'local_container_runtime' || connectionState?.connection_kind === 'ssh_container_runtime'
       ? connectionState
-      : gatewayState?.connection_kind === 'ssh_container'
-        ? createRuntimeContainerConnectionDialogState(gatewayState.mode, 'ssh_container_runtime', {
+      : connectionState?.connection_kind === 'gateway_url_profile' && connectionState.profile_route_kind === 'ssh_container'
+        ? createRuntimeContainerConnectionDialogState(connectionState.mode, 'ssh_container_runtime', {
+          ssh_destination: connectionState.ssh_destination,
+          ssh_port: connectionState.ssh_port,
+          auth_mode: 'key_agent',
+          connect_timeout_seconds: '',
+          container_engine: connectionState.container_engine,
+          container_id: connectionState.container_id,
+          container_ref: connectionState.container_ref,
+          container_label: connectionState.container_label,
+          runtime_root: connectionState.runtime_root,
+        })
+        : gatewayState?.connection_kind === 'ssh_container'
+          ? createRuntimeContainerConnectionDialogState(gatewayState.mode, 'ssh_container_runtime', {
             ssh_destination: gatewayState.ssh_destination,
             ssh_port: gatewayState.ssh_port,
             auth_mode: gatewayState.auth_mode,
@@ -2902,7 +2956,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             container_label: gatewayState.container_label,
             runtime_root: gatewayState.runtime_root,
           })
-        : null;
+          : null;
     if (!state) {
       setRuntimeContainerOptions([]);
       setRuntimeContainerOptionsError('');
@@ -2954,16 +3008,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         const selectedID = trimString(
           currentDialogState?.connection_kind === 'local_container_runtime' || currentDialogState?.connection_kind === 'ssh_container_runtime'
             ? currentDialogState.container_id
-            : currentGatewayState?.connection_kind === 'ssh_container'
-              ? currentGatewayState.container_id
-              : '',
+            : currentDialogState?.connection_kind === 'gateway_url_profile' && currentDialogState.profile_route_kind === 'ssh_container'
+              ? currentDialogState.container_id
+              : currentGatewayState?.connection_kind === 'ssh_container'
+                ? currentGatewayState.container_id
+                : '',
         );
         const selectedRef = trimString(
           currentDialogState?.connection_kind === 'local_container_runtime' || currentDialogState?.connection_kind === 'ssh_container_runtime'
             ? currentDialogState.container_ref || currentDialogState.container_label
-            : currentGatewayState?.connection_kind === 'ssh_container'
-              ? currentGatewayState.container_ref || currentGatewayState.container_label
-              : '',
+            : currentDialogState?.connection_kind === 'gateway_url_profile' && currentDialogState.profile_route_kind === 'ssh_container'
+              ? currentDialogState.container_ref || currentDialogState.container_label
+              : currentGatewayState?.connection_kind === 'ssh_container'
+                ? currentGatewayState.container_ref || currentGatewayState.container_label
+                : '',
         );
         if (selectedID !== '' && !result.containers.some((container) => container.container_id === selectedID)) {
           const referenceMatches = selectedRef === ''
@@ -2976,7 +3034,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           if (referenceMatches.length === 1) {
             const [match] = referenceMatches;
             setConnectionDialogState((current) => {
-              if (current?.connection_kind !== 'local_container_runtime' && current?.connection_kind !== 'ssh_container_runtime') {
+              if (
+                current?.connection_kind !== 'local_container_runtime'
+                && current?.connection_kind !== 'ssh_container_runtime'
+                && !(current?.connection_kind === 'gateway_url_profile' && current.profile_route_kind === 'ssh_container')
+              ) {
                 return current;
               }
               if (current.container_engine !== state.container_engine) {
@@ -3027,6 +3089,19 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       const connectionState = connectionDialogState();
       if (connectionState?.connection_kind === 'local_container_runtime' || connectionState?.connection_kind === 'ssh_container_runtime') {
         return runtimeContainerOptionsRequestKey(connectionState);
+      }
+      if (connectionState?.connection_kind === 'gateway_url_profile' && connectionState.profile_route_kind === 'ssh_container') {
+        return runtimeContainerOptionsRequestKey(createRuntimeContainerConnectionDialogState(connectionState.mode, 'ssh_container_runtime', {
+          ssh_destination: connectionState.ssh_destination,
+          ssh_port: connectionState.ssh_port,
+          auth_mode: 'key_agent',
+          connect_timeout_seconds: '',
+          container_engine: connectionState.container_engine,
+          container_id: connectionState.container_id,
+          container_ref: connectionState.container_ref,
+          container_label: connectionState.container_label,
+          runtime_root: connectionState.runtime_root,
+        }));
       }
       const gatewayState = gatewaySetupDialogState();
       if (gatewayState?.connection_kind !== 'ssh_container') {
@@ -3411,7 +3486,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       openSettingsSurface(environment.id);
     } else if (environment.kind === 'gateway_environment') {
       const route = environment.gateway_environment_profile_access_route;
-      if (route?.kind !== 'url' || !trimString(route.url)) {
+      if (!route || route.kind !== environment.gateway_environment_profile?.access_route_kind) {
         setErrorMessage('connect', i18n().t('environmentCenter.gatewayEnvironmentProfileUnavailable'));
         return;
       }
@@ -3419,8 +3494,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         environment_id: environment.gateway_env_id ?? '',
         gateway_id: environment.gateway_id ?? '',
         label: environment.label,
-        target_url: route.url,
+        profile_route_kind: route.kind,
+        target_url: route.url ?? '',
         origin_label: route.origin_label ?? environment.gateway_environment_origin?.label ?? '',
+        ssh_destination: route.ssh_destination ?? '',
+        ssh_port: route.ssh_port == null ? '' : String(route.ssh_port),
+        auth_mode: route.auth_mode === 'password' ? 'password' : DEFAULT_DESKTOP_SSH_AUTH_MODE,
+        ssh_password_configured: route.ssh_password_configured === true,
+        container_engine: route.container_engine === 'podman' ? 'podman' : 'docker',
+        container_id: route.container_id ?? '',
+        container_ref: route.container_id ?? '',
+        container_label: route.container_id ?? '',
+        runtime_root: route.kind === 'ssh_container'
+          ? route.container_runtime_root ?? route.ssh_runtime_root ?? ''
+          : route.ssh_runtime_root ?? '',
       }));
     } else if (environment.kind === 'ssh_environment') {
       setConnectionDialogState(createSSHConnectionDialogState('edit', {
@@ -3564,7 +3651,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   function updateConnectionDialogField(
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'gateway_id' | 'target_url' | 'origin_label',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'gateway_id' | 'target_url' | 'origin_label' | 'profile_route_kind',
     value: string,
   ): void {
     setConnectionDialogState((current) => {
@@ -3576,7 +3663,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         [name]: value,
         ...(
           (name === 'ssh_destination' || name === 'ssh_port')
-          && current.connection_kind === 'ssh_container_runtime'
+          && (current.connection_kind === 'ssh_container_runtime' || (current.connection_kind === 'gateway_url_profile' && current.profile_route_kind === 'ssh_container'))
             ? { container_id: '', container_ref: '', container_label: '' }
             : {}
         ),
@@ -3584,7 +3671,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (isSSHPasswordDraftState(base)) {
         base = reconcileSSHPasswordDraft(base, name) as ConnectionDialogState;
       }
-      if (name === 'ssh_destination' || name === 'container_label' || name === 'target_url') {
+      if (name === 'ssh_destination' || name === 'container_label' || name === 'container_id' || name === 'target_url') {
         const oldSuggested = suggestConnectionLabel(current);
         const newSuggested = suggestConnectionLabel(base as ConnectionDialogState);
         const wasAutoFilled = oldSuggested !== null && trimString(current.label) === oldSuggested;
@@ -4830,24 +4917,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       gateway_id: string;
       gateway_env_id?: string;
       label: string;
-      target_url: string;
-      origin_label: string;
+      access_route: DesktopGatewayEnvironmentProfileAccessRoute;
+      ssh_secret?: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway_environment_profile' }>['ssh_secret'];
+      control_owner: 'none' | 'gateway';
       errorTarget: 'connect' | 'dialog';
       successMessage: string;
     }>,
   ): Promise<boolean> {
     const gatewayID = trimString(request.gateway_id);
-    const targetURL = trimString(request.target_url);
     if (!gatewayID) {
       setErrorMessage(request.errorTarget, i18n().t('connectionDialog.validationGatewayRequired'));
-      return false;
-    }
-    if (!targetURL) {
-      setErrorMessage(request.errorTarget, i18n().t('connectionDialog.validationGatewayTargetUrlRequired'));
-      return false;
-    }
-    if (desktopGatewayProfileURLHasEmbeddedCredentials(targetURL)) {
-      setErrorMessage(request.errorTarget, i18n().t('connectionDialog.validationGatewayTargetUrlCredentialsUnsupported'));
       return false;
     }
     setConnectionDialogError('');
@@ -4856,12 +4935,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       gateway_id: gatewayID,
       ...(trimString(request.gateway_env_id) ? { gateway_env_id: trimString(request.gateway_env_id) } : {}),
       display_name: trimString(request.label),
-      access_route: {
-        kind: 'url',
-        url: targetURL,
-        ...(trimString(request.origin_label) ? { origin_label: trimString(request.origin_label) } : {}),
-      },
-      control_owner: 'none',
+      access_route: request.access_route,
+      ...(request.ssh_secret ? { ssh_secret: request.ssh_secret } : {}),
+      control_owner: request.control_owner,
     }, request.errorTarget);
     if (result?.outcome !== 'saved_gateway_environment') {
       return false;
@@ -5095,10 +5171,24 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (!trimString(state.gateway_id)) {
         errors.gateway_id = i18n().t('connectionDialog.validationGatewayRequired');
       }
-      if (!trimString(state.target_url)) {
-        errors.target_url = i18n().t('connectionDialog.validationGatewayTargetUrlRequired');
-      } else if (desktopGatewayProfileURLHasEmbeddedCredentials(state.target_url)) {
-        errors.target_url = i18n().t('connectionDialog.validationGatewayTargetUrlCredentialsUnsupported');
+      if (state.profile_route_kind === 'url') {
+        if (!trimString(state.target_url)) {
+          errors.target_url = i18n().t('connectionDialog.validationGatewayTargetUrlRequired');
+        } else if (desktopGatewayProfileURLHasEmbeddedCredentials(state.target_url)) {
+          errors.target_url = i18n().t('connectionDialog.validationGatewayTargetUrlCredentialsUnsupported');
+        }
+      }
+      if ((state.profile_route_kind === 'ssh_host' || state.profile_route_kind === 'ssh_container') && !trimString(state.ssh_destination)) {
+        errors.ssh_destination = i18n().t('connectionDialog.validationSshDestinationRequired');
+      }
+      if ((state.profile_route_kind === 'ssh_host' || state.profile_route_kind === 'ssh_container') && trimString(state.ssh_port) !== '') {
+        const port = Number.parseInt(state.ssh_port, 10);
+        if (!Number.isFinite(port) || port < 1 || port > 65535) {
+          errors.ssh_port = i18n().t('connectionDialog.validationPortRange');
+        }
+      }
+      if (state.profile_route_kind === 'ssh_container' && !trimString(state.container_id)) {
+        errors.container_id = i18n().t('connectionDialog.validationChooseContainer');
       }
     }
     if (state?.connection_kind === 'ssh_environment' && !trimString(state.ssh_destination)) {
@@ -5136,6 +5226,34 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       errors.runtime_root = i18n().t('connectionDialog.validationRuntimeRootRequired');
     }
     return errors;
+  }
+
+  function gatewayEnvironmentProfileAccessRouteFromState(state: GatewayURLProfileConnectionDialogState): DesktopGatewayEnvironmentProfileAccessRoute {
+    if (state.profile_route_kind === 'url') {
+      return {
+        kind: 'url',
+        url: trimString(state.target_url),
+        ...(trimString(state.origin_label) ? { origin_label: trimString(state.origin_label) } : {}),
+      };
+    }
+	    const sshRoute = {
+	      kind: state.profile_route_kind,
+	      ...(trimString(state.origin_label) ? { origin_label: trimString(state.origin_label) } : {}),
+	      ssh_destination: trimString(state.ssh_destination),
+	      ...(trimString(state.ssh_port) === '' ? {} : { ssh_port: Number.parseInt(trimString(state.ssh_port), 10) }),
+	      auth_mode: 'key_agent',
+	      ssh_runtime_root: trimString(state.runtime_root) || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+	    } satisfies DesktopGatewayEnvironmentProfileAccessRoute;
+    if (state.profile_route_kind === 'ssh_host') {
+      return sshRoute;
+    }
+    return {
+      ...sshRoute,
+      kind: 'ssh_container',
+      container_engine: state.container_engine,
+      container_id: trimString(state.container_id),
+      container_runtime_root: trimString(state.runtime_root) || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
+    };
   }
 
   async function saveConnectionFromDialog(): Promise<void> {
@@ -5194,13 +5312,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       });
     } else if (state.connection_kind === 'gateway_url_profile') {
       saved = await upsertGatewayEnvironmentProfile({
-        gateway_id: state.gateway_id,
-        gateway_env_id: state.mode === 'edit' ? state.environment_id : '',
-        label: state.label,
-        target_url: state.target_url,
-        origin_label: state.origin_label,
-        errorTarget: 'dialog',
-        successMessage: i18n().t('toast.gatewayEnvironmentSaved'),
+	        gateway_id: state.gateway_id,
+	        gateway_env_id: state.mode === 'edit' ? state.environment_id : '',
+	        label: state.label,
+	        access_route: gatewayEnvironmentProfileAccessRouteFromState(state),
+	        ssh_secret: undefined,
+	        control_owner: state.profile_route_kind === 'url' ? 'none' : 'gateway',
+	        errorTarget: 'dialog',
+	        successMessage: i18n().t('toast.gatewayEnvironmentSaved'),
       });
     }
     if (saved) {
@@ -5357,9 +5476,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       await refreshSnapshot();
       setDeleteTarget(null);
       showActionToast(
-        hadBackgroundOperation
-          ? i18n().t('environmentCenter.connectionRemovedCleanup')
-          : i18n().t('environmentCenter.connectionRemoved'),
+        target.kind === 'gateway_environment'
+          ? i18n().t('environmentCenter.gatewayEnvironmentRemoved')
+          : hadBackgroundOperation
+            ? i18n().t('environmentCenter.connectionRemovedCleanup')
+            : i18n().t('environmentCenter.connectionRemoved'),
         'info',
       );
     } catch (error) {
@@ -5458,6 +5579,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ? i18n().t('shell.backToEnvironments')
       : i18n().t('shell.openRedevenDashboard')
   );
+  const deleteTargetIsGatewayEnvironment = createMemo(() => deleteTarget()?.kind === 'gateway_environment');
   const activateTopBarLogo = () => {
     if (snapshot().surface === 'flower_host') {
       void openEnvironmentCenterSurface();
@@ -5790,22 +5912,27 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             setDeleteTarget(null);
           }
         }}
-        title={i18n().t('confirm.deleteConnectionTitle')}
-        confirmText={i18n().t('confirm.deleteConnectionConfirm')}
+        title={deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentTitle') : i18n().t('confirm.deleteConnectionTitle')}
+        confirmText={deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentConfirm') : i18n().t('confirm.deleteConnectionConfirm')}
         variant="destructive"
         loading={busyStateMatchesAction(busyState(), 'delete_environment')}
         onConfirm={() => void deleteEnvironment()}
       >
         <div class="space-y-2">
           <p class="text-sm">
-            {i18n().t('confirm.deleteConnectionQuestion', { label: deleteTarget()?.label ?? '' })}
+            {deleteTargetIsGatewayEnvironment()
+              ? i18n().t('confirm.deleteGatewayEnvironmentQuestion', {
+                  label: deleteTarget()?.label ?? '',
+                  gateway: deleteTarget()?.gateway_label ?? i18n().t('environmentCenter.thisGateway'),
+                })
+              : i18n().t('confirm.deleteConnectionQuestion', { label: deleteTarget()?.label ?? '' })}
           </p>
           <p class="text-xs text-muted-foreground">
             <Show
               when={deleteTargetOperation()}
-              fallback={<>{i18n().t('confirm.deleteConnectionDescription')}</>}
+              fallback={<>{deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentDescription') : i18n().t('confirm.deleteConnectionDescription')}</>}
             >
-              <>{i18n().t('confirm.deleteConnectionBusyDescription')}</>
+              <>{deleteTargetIsGatewayEnvironment() ? i18n().t('confirm.deleteGatewayEnvironmentBusyDescription') : i18n().t('confirm.deleteConnectionBusyDescription')}</>
             </Show>
           </p>
         </div>
@@ -11779,7 +11906,7 @@ function ConnectionDialog(props: Readonly<{
   gatewayProfileSources: readonly DesktopGatewaySource[];
   onOpenChange: (open: boolean) => void;
   updateField: (
-    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'gateway_id' | 'target_url' | 'origin_label',
+    name: 'label' | 'external_local_ui_url' | 'ssh_destination' | 'ssh_port' | 'auth_mode' | 'ssh_password' | 'runtime_root' | 'release_base_url' | 'connect_timeout_seconds' | 'container_engine' | 'container_id' | 'container_ref' | 'container_label' | 'gateway_id' | 'target_url' | 'origin_label' | 'profile_route_kind',
     value: string,
   ) => void;
   toggleAutoRuntimeProbe: (enabled: boolean) => void;
@@ -11793,13 +11920,17 @@ function ConnectionDialog(props: Readonly<{
   const isOpen = createMemo(() => props.state !== null);
   const isCreate = createMemo(() => props.state?.mode === 'create');
   const connectionKind = createMemo(() => props.state?.connection_kind ?? 'external_local_ui');
+  const gatewayProfileRouteKind = createMemo(() => (
+    props.state?.connection_kind === 'gateway_url_profile' ? props.state.profile_route_kind : 'url'
+  ));
   const [advancedState, setAdvancedState] = createSignal<SSHConnectionDialogAdvancedState>({
     open: false,
     initialized_for_state_key: 'closed',
   });
-  const isSSHBackedKind = createMemo(() => connectionKind() === 'ssh_environment' || connectionKind() === 'ssh_container_runtime');
-  const isContainerKind = createMemo(() => connectionKind() === 'local_container_runtime' || connectionKind() === 'ssh_container_runtime');
-  const showSSHAdvanced = createMemo(() => connectionKind() === 'ssh_environment' && advancedState().open);
+	  const isSSHBackedKind = createMemo(() => connectionKind() === 'ssh_environment' || connectionKind() === 'ssh_container_runtime' || (connectionKind() === 'gateway_url_profile' && gatewayProfileRouteKind() !== 'url'));
+	  const isContainerKind = createMemo(() => connectionKind() === 'local_container_runtime' || connectionKind() === 'ssh_container_runtime' || (connectionKind() === 'gateway_url_profile' && gatewayProfileRouteKind() === 'ssh_container'));
+	  const showSSHAdvanced = createMemo(() => (connectionKind() === 'ssh_environment' || (connectionKind() === 'gateway_url_profile' && gatewayProfileRouteKind() !== 'url')) && advancedState().open);
+	  const gatewaySSHProfileAuthOnly = createMemo(() => connectionKind() === 'gateway_url_profile' && gatewayProfileRouteKind() !== 'url');
   const sshBootstrapStrategy = createMemo(() => (
     props.state?.connection_kind === 'ssh_environment'
       ? props.state.bootstrap_strategy
@@ -11841,7 +11972,9 @@ function ConnectionDialog(props: Readonly<{
       case 'ssh_container_runtime':
         return props.i18n.t('connectionDialog.sshContainerDescription');
       case 'gateway_url_profile':
-        return props.i18n.t('connectionDialog.gatewayEnvironmentDescription');
+        return props.i18n.t(gatewayProfileRouteKind() === 'url'
+          ? 'connectionDialog.gatewayEnvironmentDescription'
+          : 'connectionDialog.gatewayEnvironmentManagedDescription');
       default:
         return '';
     }
@@ -11850,9 +11983,17 @@ function ConnectionDialog(props: Readonly<{
   createEffect(() => {
     const state = props.state;
     setAdvancedState((current) => syncSSHConnectionDialogAdvancedState(current, (
-      state?.connection_kind === 'ssh_environment' || state?.connection_kind === 'external_local_ui'
-        ? state
-        : null
+      state?.connection_kind === 'gateway_url_profile' && state.profile_route_kind !== 'url'
+        ? {
+            mode: state.mode,
+            connection_kind: state.profile_route_kind === 'ssh_container' ? 'gateway_ssh_container' : 'gateway_ssh_environment',
+            environment_id: state.environment_id,
+            gateway_id: state.gateway_id,
+            runtime_root: state.runtime_root,
+          }
+        : state?.connection_kind === 'ssh_environment' || state?.connection_kind === 'external_local_ui'
+          ? state
+          : null
     )));
   });
 
@@ -11963,6 +12104,28 @@ function ConnectionDialog(props: Readonly<{
                     </Show>
                   </div>
                   <div class="space-y-1.5">
+                    <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.gatewayEnvironmentRouteType')}</label>
+                    <SegmentedControl
+                      value={gatewayProfileRouteKind()}
+                      onChange={(value) => {
+                        props.updateField('profile_route_kind', value);
+                        props.clearFieldErrors();
+                      }}
+                      options={[
+                        { value: 'url', label: props.i18n.t('connectionDialog.gatewayEnvironmentRouteUrl') },
+                        { value: 'ssh_host', label: props.i18n.t('connectionDialog.gatewayEnvironmentRouteSshHost') },
+                        { value: 'ssh_container', label: props.i18n.t('connectionDialog.gatewayEnvironmentRouteSshContainer') },
+                      ]}
+                      size="sm"
+                    />
+                    <div class="text-[11px] leading-5 text-muted-foreground">
+                      {gatewayProfileRouteKind() === 'url'
+                        ? props.i18n.t('connectionDialog.gatewayEnvironmentRouteUrlHelp')
+                        : props.i18n.t('connectionDialog.gatewayEnvironmentRouteManagedHelp')}
+                    </div>
+                  </div>
+                  <Show when={gatewayProfileRouteKind() === 'url'}>
+                  <div class="space-y-1.5">
                     <label for="gateway-environment-target-url" class="block text-xs font-medium text-foreground">
                       {props.i18n.t('connectionDialog.gatewayEnvironmentTargetUrl')} <span class="text-destructive">*</span>
                     </label>
@@ -11983,6 +12146,7 @@ function ConnectionDialog(props: Readonly<{
                       <div class="text-[11px] text-destructive">{props.fieldErrors.target_url}</div>
                     </Show>
                   </div>
+                  </Show>
                   <div class="space-y-1.5">
                     <label for="gateway-environment-origin-label" class="block text-xs font-medium text-foreground">
                       {props.i18n.t('connectionDialog.gatewayEnvironmentOriginLabel')}
@@ -11996,9 +12160,18 @@ function ConnectionDialog(props: Readonly<{
                       class="w-full"
                     />
                   </div>
-                  <div class="rounded-md border border-dashed border-border/40 bg-background/60 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
-                    {props.i18n.t('connectionDialog.gatewayEnvironmentAccessOnlyNotice')}
-                  </div>
+                  <Show
+                    when={gatewayProfileRouteKind() === 'url'}
+                    fallback={(
+                      <div class="rounded-md border border-dashed border-border/40 bg-background/60 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
+                        {props.i18n.t('connectionDialog.gatewayEnvironmentManagedNotice')}
+                      </div>
+                    )}
+                  >
+                    <div class="rounded-md border border-dashed border-border/40 bg-background/60 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
+                      {props.i18n.t('connectionDialog.gatewayEnvironmentAccessOnlyNotice')}
+                    </div>
+                  </Show>
                 </div>
               </Show>
             </div>
@@ -12055,7 +12228,7 @@ function ConnectionDialog(props: Readonly<{
                   </label>
                   <SSHDestinationCombobox
                     i18n={props.i18n}
-                    value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_destination ?? '' : ''}
+                    value={isSSHBackedKind() ? (props.state as SSHBackedConnectionDialogState | null)?.ssh_destination ?? '' : ''}
                     hosts={props.sshConfigHosts}
                     autofocus={props.state?.mode === 'create'}
                     class={props.fieldErrors.ssh_destination && 'border-destructive ring-1 ring-destructive/20'}
@@ -12076,7 +12249,7 @@ function ConnectionDialog(props: Readonly<{
                   <label for="environment-ssh-port" class="block text-xs font-medium text-foreground">{props.i18n.t('settings.portLabel')}</label>
                   <Input
                     id="environment-ssh-port"
-                    value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_port ?? '' : ''}
+                    value={isSSHBackedKind() ? (props.state as SSHBackedConnectionDialogState | null)?.ssh_port ?? '' : ''}
                     onInput={(event) => {
                       const raw = event.currentTarget.value.replace(/\D/g, '');
                       props.updateField('ssh_port', raw);
@@ -12092,48 +12265,59 @@ function ConnectionDialog(props: Readonly<{
                   </Show>
                 </div>
               </div>
-              <div class="space-y-1.5">
-                <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.authentication')}</label>
-                <SegmentedControl
-                  value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE : DEFAULT_DESKTOP_SSH_AUTH_MODE}
-                  onChange={(value) => props.updateField('auth_mode', value)}
-                  options={[
-                    { value: 'key_agent', label: props.i18n.t('connectionDialog.keyAgent') },
-                    { value: 'password', label: props.i18n.t('connectionDialog.passwordPrompt') },
-                  ]}
-                  size="sm"
-                />
-                <div class="text-[11px] leading-5 text-muted-foreground">
-                  {props.i18n.t('connectionDialog.authenticationHelp')}
-                </div>
-              </div>
-              <Show when={isSSHBackedKind() && ((props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE) === 'password'}>
+	              <div class="space-y-1.5">
+	                <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.authentication')}</label>
+	                <Show
+	                  when={!gatewaySSHProfileAuthOnly()}
+	                  fallback={(
+	                    <div class="flex h-8 items-center rounded-md border border-border/70 bg-background px-2.5 text-xs text-foreground">
+	                      {props.i18n.t('connectionDialog.keyAgent')}
+	                    </div>
+	                  )}
+	                >
+	                  <SegmentedControl
+	                    value={isSSHBackedKind() ? (props.state as SSHBackedConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE : DEFAULT_DESKTOP_SSH_AUTH_MODE}
+	                    onChange={(value) => props.updateField('auth_mode', value)}
+	                    options={[
+	                      { value: 'key_agent', label: props.i18n.t('connectionDialog.keyAgent') },
+	                      { value: 'password', label: props.i18n.t('connectionDialog.passwordPrompt') },
+	                    ]}
+	                    size="sm"
+	                  />
+	                </Show>
+	                <div class="text-[11px] leading-5 text-muted-foreground">
+	                  {gatewaySSHProfileAuthOnly()
+	                    ? props.i18n.t('connectionDialog.gatewayEnvironmentSshAuthHelp')
+	                    : props.i18n.t('connectionDialog.authenticationHelp')}
+	                </div>
+	              </div>
+	              <Show when={!gatewaySSHProfileAuthOnly() && isSSHBackedKind() && ((props.state as SSHBackedConnectionDialogState | null)?.auth_mode ?? DEFAULT_DESKTOP_SSH_AUTH_MODE) === 'password'}>
                 <div class="space-y-1.5">
                   <label for="environment-ssh-password" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.localSshPassword')}</label>
                   <Input
                     id="environment-ssh-password"
                     type="password"
                     autocomplete="new-password"
-                    value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password ?? '' : ''}
+                    value={isSSHBackedKind() ? (props.state as SSHBackedConnectionDialogState | null)?.ssh_password ?? '' : ''}
                     onInput={(event) => props.updateField('ssh_password', event.currentTarget.value)}
-                    placeholder={(props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_configured ? props.i18n.t('connectionDialog.replaceStoredPasswordPlaceholder') : props.i18n.t('connectionDialog.optionalSavedPasswordPlaceholder')}
+                    placeholder={(props.state as SSHBackedConnectionDialogState | null)?.ssh_password_configured ? props.i18n.t('connectionDialog.replaceStoredPasswordPlaceholder') : props.i18n.t('connectionDialog.optionalSavedPasswordPlaceholder')}
                     size="sm"
                     class="w-full"
                   />
                   <div class="text-[11px] leading-5 text-muted-foreground">
                     {props.i18n.t('connectionDialog.localSshPasswordHelp')}
                   </div>
-                  <Show when={(props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_configured && (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_mode !== 'clear'}>
+                  <Show when={(props.state as SSHBackedConnectionDialogState | null)?.ssh_password_configured && (props.state as SSHBackedConnectionDialogState | null)?.ssh_password_mode !== 'clear'}>
                     <Button size="sm" variant="outline" onClick={props.removeSSHPassword}>
                       {props.i18n.t('settings.removeStoredPassword')}
                     </Button>
                   </Show>
-                  <Show when={(props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.ssh_password_mode === 'clear'}>
+                  <Show when={(props.state as SSHBackedConnectionDialogState | null)?.ssh_password_mode === 'clear'}>
                     <div class="text-[11px] text-muted-foreground">{props.i18n.t('connectionDialog.storedSshPasswordWillBeRemoved')}</div>
                   </Show>
                 </div>
               </Show>
-              <Show when={connectionKind() === 'ssh_environment'}>
+              <Show when={connectionKind() === 'ssh_environment' || (connectionKind() === 'gateway_url_profile' && gatewayProfileRouteKind() !== 'url')}>
                 <div class="overflow-hidden rounded-md border border-border/70 bg-background/80">
                 <button
                   type="button"
@@ -12157,28 +12341,30 @@ function ConnectionDialog(props: Readonly<{
                   <div>
                     <div class="border-t border-border/70 px-3 py-3">
                     <div class="space-y-3">
-                      <div class="space-y-1.5">
-                        <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.bootstrapDelivery')}</label>
-                        <SegmentedControl
-                          value={sshBootstrapStrategy()}
-                          onChange={(value) => props.switchBootstrapStrategy(value as DesktopSSHBootstrapStrategy)}
-                          options={[
-                            { value: 'auto', label: props.i18n.t('connectionDialog.automatic') },
-                            { value: 'desktop_upload', label: props.i18n.t('connectionDialog.desktopUpload') },
-                            { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteFallback') },
-                          ]}
-                          size="sm"
-                        />
-                        <div class="text-[11px] text-muted-foreground">
-                          {props.i18n.t('connectionDialog.bootstrapHelp')}{' '}
-                          <span class="font-medium text-foreground">{props.i18n.t('connectionDialog.source', { source: sshBootstrapSummaryLabel() })}</span>
+                      <Show when={connectionKind() === 'ssh_environment'}>
+                        <div class="space-y-1.5">
+                          <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.bootstrapDelivery')}</label>
+                          <SegmentedControl
+                            value={sshBootstrapStrategy()}
+                            onChange={(value) => props.switchBootstrapStrategy(value as DesktopSSHBootstrapStrategy)}
+                            options={[
+                              { value: 'auto', label: props.i18n.t('connectionDialog.automatic') },
+                              { value: 'desktop_upload', label: props.i18n.t('connectionDialog.desktopUpload') },
+                              { value: 'remote_install', label: props.i18n.t('connectionDialog.remoteFallback') },
+                            ]}
+                            size="sm"
+                          />
+                          <div class="text-[11px] text-muted-foreground">
+                            {props.i18n.t('connectionDialog.bootstrapHelp')}{' '}
+                            <span class="font-medium text-foreground">{props.i18n.t('connectionDialog.source', { source: sshBootstrapSummaryLabel() })}</span>
+                          </div>
                         </div>
-                      </div>
+                      </Show>
                       <div class="space-y-1.5">
                         <label for="environment-ssh-runtime-root" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.runtimeRoot')}</label>
                         <Input
                           id="environment-ssh-runtime-root"
-                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.runtime_root : ''}
+                          value={props.state?.connection_kind === 'ssh_environment' || props.state?.connection_kind === 'gateway_url_profile' ? props.state.runtime_root : ''}
                           onInput={(event) => props.updateField('runtime_root', event.currentTarget.value)}
                           placeholder="$HOME/.redeven"
                           size="sm"
@@ -12189,36 +12375,38 @@ function ConnectionDialog(props: Readonly<{
                           {props.i18n.t('connectionDialog.runtimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })}
                         </div>
                       </div>
-                      <div class="space-y-1.5">
-                        <label for="environment-ssh-release-base-url" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.releaseBaseUrl')}</label>
-                        <Input
-                          id="environment-ssh-release-base-url"
-                          value={props.state?.connection_kind === 'ssh_environment' ? props.state.release_base_url : ''}
-                          onInput={(event) => props.updateField('release_base_url', event.currentTarget.value)}
-                          placeholder="https://github.com/floegence/redeven/releases"
-                          size="sm"
-                          class="w-full"
-                          spellcheck={false}
-                        />
-                        <div class="text-[11px] text-muted-foreground">
-                          {props.i18n.t('connectionDialog.releaseBaseUrlHelp', { url: DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL })}
+                      <Show when={connectionKind() === 'ssh_environment'}>
+                        <div class="space-y-1.5">
+                          <label for="environment-ssh-release-base-url" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.releaseBaseUrl')}</label>
+                          <Input
+                            id="environment-ssh-release-base-url"
+                            value={props.state?.connection_kind === 'ssh_environment' ? props.state.release_base_url : ''}
+                            onInput={(event) => props.updateField('release_base_url', event.currentTarget.value)}
+                            placeholder="https://github.com/floegence/redeven/releases"
+                            size="sm"
+                            class="w-full"
+                            spellcheck={false}
+                          />
+                          <div class="text-[11px] text-muted-foreground">
+                            {props.i18n.t('connectionDialog.releaseBaseUrlHelp', { url: DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL_LABEL })}
+                          </div>
                         </div>
-                      </div>
-                      <div class="space-y-1.5">
-                        <label for="environment-ssh-connect-timeout" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.connectTimeout')}</label>
-                        <Input
-                          id="environment-ssh-connect-timeout"
-                          value={isSSHBackedKind() ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.connect_timeout_seconds ?? '' : ''}
-                          onInput={(event) => props.updateField('connect_timeout_seconds', event.currentTarget.value)}
-                          placeholder={String(DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS)}
-                          size="sm"
-                          class="w-28"
-                          spellcheck={false}
-                        />
-                        <div class="text-[11px] text-muted-foreground">
-                          {props.i18n.t('connectionDialog.connectTimeoutHelp', { seconds: DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS })}
+                        <div class="space-y-1.5">
+                          <label for="environment-ssh-connect-timeout" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.connectTimeout')}</label>
+                          <Input
+                            id="environment-ssh-connect-timeout"
+                            value={isSSHBackedKind() && props.state?.connection_kind !== 'gateway_url_profile' ? (props.state as SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null)?.connect_timeout_seconds ?? '' : ''}
+                            onInput={(event) => props.updateField('connect_timeout_seconds', event.currentTarget.value)}
+                            placeholder={String(DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS)}
+                            size="sm"
+                            class="w-28"
+                            spellcheck={false}
+                          />
+                          <div class="text-[11px] text-muted-foreground">
+                            {props.i18n.t('connectionDialog.connectTimeoutHelp', { seconds: DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS })}
+                          </div>
                         </div>
-                      </div>
+                      </Show>
                     </div>
                   </div>
                   </div>
@@ -12243,31 +12431,31 @@ function ConnectionDialog(props: Readonly<{
                       <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.engine')}</label>
                     </div>
                     <SegmentedControl
-                    value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_engine : 'docker'}
-                    onChange={(value) => {
-                      props.updateField('container_engine', value);
-                      props.updateField('container_id', '');
-                      props.updateField('container_ref', '');
-                      props.updateField('container_label', '');
-                      props.clearFieldErrors();
-                    }}
-                    options={[
-                      { value: 'docker', label: 'Docker' },
-                      { value: 'podman', label: 'Podman' },
-                    ]}
-                    size="sm"
-                  />
+                      value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' || props.state?.connection_kind === 'gateway_url_profile' ? props.state.container_engine : 'docker'}
+                      onChange={(value) => {
+                        props.updateField('container_engine', value);
+                        props.updateField('container_id', '');
+                        props.updateField('container_ref', '');
+                        props.updateField('container_label', '');
+                        props.clearFieldErrors();
+                      }}
+                      options={[
+                        { value: 'docker', label: 'Docker' },
+                        { value: 'podman', label: 'Podman' },
+                      ]}
+                      size="sm"
+                    />
                 </div>
                 <ContainerPicker
                   i18n={props.i18n}
-                  selectedContainerID={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_id : ''}
-                  selectedContainerRef={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_ref : ''}
-                  selectedContainerLabel={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.container_label : ''}
+                  selectedContainerID={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' || props.state?.connection_kind === 'gateway_url_profile' ? props.state.container_id : ''}
+                  selectedContainerRef={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' || props.state?.connection_kind === 'gateway_url_profile' ? props.state.container_ref : ''}
+                  selectedContainerLabel={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' || props.state?.connection_kind === 'gateway_url_profile' ? props.state.container_label : ''}
                   containers={props.containerOptions}
                   loading={props.containerOptionsLoading}
-                  disabled={connectionKind() === 'ssh_container_runtime' && trimString((props.state as RuntimeContainerConnectionDialogState | null)?.ssh_destination) === ''}
+                  disabled={(connectionKind() === 'ssh_container_runtime' || (connectionKind() === 'gateway_url_profile' && gatewayProfileRouteKind() === 'ssh_container')) && trimString((props.state as ContainerBackedConnectionDialogState | null)?.ssh_destination) === ''}
                   error={props.containerOptionsError}
-                  emptyMessage={connectionKind() === 'ssh_container_runtime' && trimString((props.state as RuntimeContainerConnectionDialogState | null)?.ssh_destination) === ''
+                  emptyMessage={(connectionKind() === 'ssh_container_runtime' || (connectionKind() === 'gateway_url_profile' && gatewayProfileRouteKind() === 'ssh_container')) && trimString((props.state as ContainerBackedConnectionDialogState | null)?.ssh_destination) === ''
                     ? props.i18n.t('connectionDialog.chooseSshBeforeContainers')
                     : props.i18n.t('connectionDialog.noRunningContainers')}
                   fieldError={props.fieldErrors.container_id}
@@ -12289,18 +12477,18 @@ function ConnectionDialog(props: Readonly<{
                 </label>
                 <Input
                   id="environment-container-runtime-root"
-                  value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' ? props.state.runtime_root : ''}
+                  value={props.state?.connection_kind === 'local_container_runtime' || props.state?.connection_kind === 'ssh_container_runtime' || props.state?.connection_kind === 'gateway_url_profile' ? props.state.runtime_root : ''}
                   onInput={(event) => {
                     props.updateField('runtime_root', event.currentTarget.value);
                     props.clearFieldErrors();
                   }}
-                  placeholder={connectionKind() === 'ssh_container_runtime' ? DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL : '/root/.redeven'}
+                  placeholder={connectionKind() === 'ssh_container_runtime' || connectionKind() === 'gateway_url_profile' ? DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL : '/root/.redeven'}
                   size="sm"
                   class={cn('w-full', props.fieldErrors.runtime_root && 'border-destructive ring-1 ring-destructive/20')}
                   spellcheck={false}
                 />
                 <div class="text-[11px] text-muted-foreground">
-                  {connectionKind() === 'ssh_container_runtime'
+                  {connectionKind() === 'ssh_container_runtime' || connectionKind() === 'gateway_url_profile'
                     ? props.i18n.t('connectionDialog.runtimeRootHelp', { root: DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL })
                     : props.i18n.t('connectionDialog.containerRuntimeRootHelp')}
                 </div>

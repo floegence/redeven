@@ -751,6 +751,21 @@ func (s *Server) setRuntimeGatewayProfileSessionCookie(w http.ResponseWriter, to
 	})
 }
 
+func (s *Server) clearRuntimeGatewayProfileSessionCookie(w http.ResponseWriter) {
+	if w == nil {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     runtimeGatewayEnvSessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+		Expires:  time.Unix(0, 0),
+	})
+}
+
 func (s *Server) clearLocalAccessCookie(w http.ResponseWriter) {
 	if w == nil {
 		return
@@ -1131,6 +1146,31 @@ func (s *Server) runtimeGatewayProfileSessionFromRequest(r *http.Request) (runti
 	return session, true
 }
 
+func (s *Server) hasRuntimeGatewayProfileSessionCookie(r *http.Request) bool {
+	if s == nil || r == nil {
+		return false
+	}
+	cookie, err := r.Cookie(runtimeGatewayEnvSessionCookieName)
+	return err == nil && cookie != nil && strings.TrimSpace(cookie.Value) != ""
+}
+
+func (s *Server) revokeRuntimeGatewayProfileSessions(gatewayEnvID string) {
+	if s == nil {
+		return
+	}
+	cleanEnvID := strings.TrimSpace(gatewayEnvID)
+	if cleanEnvID == "" {
+		return
+	}
+	s.runtimeGatewayProfileSessionsMu.Lock()
+	for token, session := range s.runtimeGatewayProfileSessions {
+		if strings.TrimSpace(session.GatewayEnvID) == cleanEnvID {
+			delete(s.runtimeGatewayProfileSessions, token)
+		}
+	}
+	s.runtimeGatewayProfileSessionsMu.Unlock()
+}
+
 func shouldRuntimeGatewayProfileProxyRequest(r *http.Request) bool {
 	if r == nil || r.URL == nil {
 		return false
@@ -1142,6 +1182,14 @@ func shouldRuntimeGatewayProfileProxyRequest(r *http.Request) bool {
 		strings.HasPrefix(path, "/_redeven_proxy/") ||
 		strings.HasPrefix(path, "/_redeven_direct/") ||
 		strings.HasPrefix(path, "/api/local/")
+}
+
+func shouldRuntimeGatewayProfileBlockStaleSession(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	path := strings.TrimSpace(r.URL.Path)
+	return !strings.HasPrefix(path, "/gateway/v1/")
 }
 
 func runtimeGatewayTargetOrigin(target *url.URL) string {
@@ -1175,6 +1223,11 @@ func (s *Server) withRuntimeGatewayProfileProxy(next http.Handler) http.Handler 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		session, ok := s.runtimeGatewayProfileSessionFromRequest(r)
 		if !ok || !shouldRuntimeGatewayProfileProxyRequest(r) {
+			if !ok && s.hasRuntimeGatewayProfileSessionCookie(r) && shouldRuntimeGatewayProfileBlockStaleSession(r) {
+				s.clearRuntimeGatewayProfileSessionCookie(w)
+				http.Error(w, "Gateway profile session is no longer available", http.StatusUnauthorized)
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -1276,6 +1329,7 @@ func (s *Server) handleRuntimeGatewayEnvProfileUpsert(w http.ResponseWriter, r *
 		writeRuntimeGatewayProfileError(w, err)
 		return
 	}
+	s.revokeRuntimeGatewayProfileSessions(env.GatewayEnvID)
 	writeRuntimeGatewayData(w, http.StatusOK, gatewayprotocol.EnvProfileUpsertResponse{
 		ProtocolVersion: gatewayprotocol.Version,
 		Environment:     env,
@@ -1299,6 +1353,9 @@ func (s *Server) handleRuntimeGatewayEnvProfileDelete(w http.ResponseWriter, r *
 	if err != nil {
 		writeRuntimeGatewayProfileError(w, err)
 		return
+	}
+	if resp.Deleted {
+		s.revokeRuntimeGatewayProfileSessions(resp.GatewayEnvID)
 	}
 	writeRuntimeGatewayData(w, http.StatusOK, resp)
 }
@@ -1383,30 +1440,6 @@ func (s *Server) runtimeGatewayCatalogService(r *http.Request) *gatewaycatalog.S
 	metadata.Capabilities = append(metadata.Capabilities, gatewayprotocol.GatewayCapabilityEnvProfileWrite)
 	return gatewaycatalog.NewService(
 		gatewaycatalog.WithGatewayMetadata(metadata),
-		gatewaycatalog.WithEnvironmentSource(gatewaycatalog.EnvironmentSourceFunc(func(context.Context) ([]gatewayprotocol.Environment, error) {
-			host, _ := os.Hostname()
-			label := strings.TrimSpace(host)
-			if label == "" {
-				label = "Gateway host"
-			}
-			return []gatewayprotocol.Environment{{
-				GatewayEnvID: LocalEnvPublicID,
-				DisplayName:  "Local Environment",
-				EnvKind:      gatewayprotocol.EnvironmentKindManagedLocalEnv,
-				State:        gatewayprotocol.EnvironmentStateAvailable,
-				Capabilities: []gatewayprotocol.EnvironmentCapability{
-					gatewayprotocol.EnvironmentCapabilityOpen,
-				},
-				AccessCapabilities: []gatewayprotocol.EnvironmentCapability{
-					gatewayprotocol.EnvironmentCapabilityOpen,
-				},
-				Origin: gatewayprotocol.EnvironmentOrigin{
-					Kind:  gatewayprotocol.EnvironmentOriginKindGatewayHost,
-					Label: label,
-				},
-				LastSeenAtUnixMS: time.Now().UnixMilli(),
-			}}, nil
-		})),
 		gatewaycatalog.WithEnvironmentSource(gatewaycatalog.EnvironmentSourceFunc(func(ctx context.Context) ([]gatewayprotocol.Environment, error) {
 			profiles, err := s.runtimeGatewayProfileStore().List(ctx)
 			if err != nil {
@@ -1448,10 +1481,7 @@ func (i runtimeGatewayArtifactIssuer) IssueGatewayConnectArtifact(ctx context.Co
 			Message: "Gateway environment capability is not supported.",
 		}
 	}
-	if req.GatewayEnvID != LocalEnvPublicID {
-		return i.issueRuntimeGatewayProfileArtifact(ctx, req)
-	}
-	return i.issueRuntimeGatewayLocalArtifact(req)
+	return i.issueRuntimeGatewayProfileArtifact(ctx, req)
 }
 
 func (i runtimeGatewayArtifactIssuer) issueRuntimeGatewayProfileArtifact(ctx context.Context, req gatewayprotocol.OpenSessionRequest) (gatewaysession.GatewayConnectArtifactIssue, error) {
@@ -1477,17 +1507,6 @@ func (i runtimeGatewayArtifactIssuer) issueRuntimeGatewayProfileArtifact(ctx con
 	}
 	i.server.setRuntimeGatewayProfileSessionCookie(i.responseWriter, sessionToken, expiresAt)
 	return i.issueSignedRuntimeGatewayArtifact(req, "gateway_profile_url")
-}
-
-func (i runtimeGatewayArtifactIssuer) issueRuntimeGatewayLocalArtifact(req gatewayprotocol.OpenSessionRequest) (gatewaysession.GatewayConnectArtifactIssue, error) {
-	if i.server.accessEnabled() {
-		result, err := i.server.accessGate.MintTrustedLocalSession(localAccessResumeMeta())
-		if err != nil || result == nil || strings.TrimSpace(result.SessionToken) == "" || result.SessionExpiresAtUnix <= 0 {
-			return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("Gateway local access session is unavailable")
-		}
-		i.server.setLocalAccessCookie(i.responseWriter, result.SessionToken, result.SessionExpiresAtUnix)
-	}
-	return i.issueSignedRuntimeGatewayArtifact(req, "gateway_url")
 }
 
 func (i runtimeGatewayArtifactIssuer) issueSignedRuntimeGatewayArtifact(req gatewayprotocol.OpenSessionRequest, connectionKind string) (gatewaysession.GatewayConnectArtifactIssue, error) {

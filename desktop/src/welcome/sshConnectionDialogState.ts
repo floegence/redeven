@@ -1,6 +1,6 @@
 export type SSHConnectionDialogStateSnapshot = Readonly<{
   mode: 'create' | 'edit';
-  connection_kind: 'external_local_ui' | 'ssh_environment' | 'ssh_host' | 'ssh_container';
+  connection_kind: 'external_local_ui' | 'ssh_environment' | 'ssh_host' | 'ssh_container' | 'gateway_ssh_environment' | 'gateway_ssh_container';
   environment_id?: string;
   gateway_id?: string;
   runtime_root?: string;
@@ -35,6 +35,8 @@ function hasSSHAdvancedDisclosure(state: SSHConnectionDialogStateSnapshot): stat
       state.connection_kind === 'ssh_environment'
       || state.connection_kind === 'ssh_host'
       || state.connection_kind === 'ssh_container'
+      || state.connection_kind === 'gateway_ssh_environment'
+      || state.connection_kind === 'gateway_ssh_container'
     );
 }
 
