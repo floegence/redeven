@@ -387,6 +387,7 @@ import {
   DESKTOP_LAUNCHER_PERFORM_ACTION_CHANNEL,
   DESKTOP_LAUNCHER_SNAPSHOT_UPDATED_CHANNEL,
   type DesktopLauncherActionProgress,
+  type DesktopLauncherActionOutcome,
   type DesktopLauncherOperationSnapshot,
   type DesktopLauncherOperationStatus,
   type DesktopStepProgress,
@@ -424,7 +425,13 @@ import {
   type DesktopControlPlaneSummary,
   type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
-import type { DesktopGatewayRuntimeState, DesktopGatewaySource, DesktopGatewaySyncState } from '../shared/desktopGateway';
+import {
+  desktopGatewayCanOpenEnvironment,
+  desktopGatewayEnvironmentHasControlCapability,
+  type DesktopGatewayRuntimeState,
+  type DesktopGatewaySource,
+  type DesktopGatewaySyncState,
+} from '../shared/desktopGateway';
 import {
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
@@ -538,6 +545,7 @@ type DesktopSessionRecord = {
   allowed_base_url: string;
   root_window: DesktopTrackedWindow;
   child_windows: Map<string, DesktopTrackedWindow>;
+  session_partition: string;
   diagnostics: DesktopDiagnosticsRecorder;
   runtime_handle: DesktopSessionRuntimeHandle | null;
   steal_app_focus_on_ready: boolean;
@@ -719,6 +727,7 @@ type CreateBrowserWindowArgs = Readonly<{
   role: 'launcher' | 'session_root' | 'session_child';
   parent?: BrowserWindow;
   frameName?: string;
+  sessionPartition?: string;
   diagnostics?: DesktopDiagnosticsRecorder | null;
   stealAppFocus?: boolean;
   onWindowOpen?: (url: string, parent: BrowserWindow, frameName: string) => void;
@@ -2538,28 +2547,31 @@ function cookieHeaderFromSetCookie(headers: Readonly<Record<string, string>>): s
   return match ? `__Host-redeven_env_session=${match[1]}` : '';
 }
 
-async function installGatewayLocalAccessCookies(
+async function installGatewaySessionCookies(
   targetURL: string,
   setCookieHeaders: readonly string[] | undefined,
+  partition?: string,
 ): Promise<void> {
-  const rawCookie = (setCookieHeaders ?? []).find((value) => /^redeven_local_access=/iu.test(compact(value)));
-  if (!rawCookie) {
-    return;
-  }
-  const token = compact(rawCookie.match(/^redeven_local_access=([^;,]+)/iu)?.[1]);
-  if (!token) {
-    return;
-  }
   const parsed = new URL(targetURL);
-  await session.defaultSession.cookies.set({
-    url: `${parsed.protocol}//${parsed.host}/`,
-    name: 'redeven_local_access',
-    value: token,
-    path: '/',
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: parsed.protocol === 'https:',
-  });
+  const targetSession = compact(partition)
+    ? session.fromPartition(compact(partition))
+    : session.defaultSession;
+  for (const name of ['redeven_local_access', 'redeven_gateway_env_session']) {
+    const rawCookie = (setCookieHeaders ?? []).find((value) => new RegExp(`^${name}=`, 'iu').test(compact(value)));
+    const token = compact(rawCookie?.match(new RegExp(`^${name}=([^;,]+)`, 'iu'))?.[1]);
+    if (!token) {
+      continue;
+    }
+    await targetSession.cookies.set({
+      url: `${parsed.protocol}//${parsed.host}/`,
+      name,
+      value: token,
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: parsed.protocol === 'https:',
+    });
+  }
 }
 
 function normalizeProviderEnvelopeData<T>(body: unknown, label: string): T {
@@ -3590,6 +3602,8 @@ function launcherActionRefreshScope(
     case 'disconnect_provider_runtime':
     case 'stop_environment_runtime':
       return { force: true, mode: 'manual', targetEnvironmentIDs: targetScope };
+    case 'run_gateway_environment_lifecycle':
+      return { force: true, mode: 'manual', targetEnvironmentIDs: targetScope };
     case 'save_local_environment_settings':
     case 'upsert_saved_environment':
     case 'upsert_saved_ssh_environment':
@@ -3598,6 +3612,8 @@ function launcherActionRefreshScope(
     case 'delete_saved_ssh_environment':
     case 'delete_saved_runtime_target':
     case 'upsert_gateway':
+    case 'upsert_gateway_environment_profile':
+    case 'delete_gateway_environment_profile':
     case 'pair_gateway':
     case 'start_gateway_runtime':
     case 'stop_gateway_runtime':
@@ -3635,13 +3651,30 @@ function scheduleGatewaySyncAfterLauncherAction(
   result: DesktopLauncherActionResult,
 ): void {
   const actionKind: DesktopLauncherActionKind = request.kind;
-  if (!result.ok && actionKind !== 'pair_gateway' && actionKind !== 'refresh_gateway_catalog' && actionKind !== 'refresh_gateway_status') {
+  if (
+    !result.ok
+    && actionKind !== 'pair_gateway'
+    && actionKind !== 'refresh_gateway_catalog'
+    && actionKind !== 'refresh_gateway_status'
+    && actionKind !== 'upsert_gateway_environment_profile'
+    && actionKind !== 'delete_gateway_environment_profile'
+    && actionKind !== 'run_gateway_environment_lifecycle'
+  ) {
     return;
   }
   const gatewayID = launcherActionGatewayID(request);
   switch (actionKind) {
     case 'upsert_gateway':
       void syncVisibleGatewaysIfNeeded({ force: true });
+      return;
+    case 'upsert_gateway_environment_profile':
+    case 'delete_gateway_environment_profile':
+    case 'run_gateway_environment_lifecycle':
+      if (gatewayID) {
+        void gatewayStore().get(gatewayID).then((record) => (
+          record ? syncGatewayIfNeeded(record, { force: true }) : undefined
+        )).catch(() => undefined);
+      }
       return;
     case 'delete_gateway':
       if (gatewayID) {
@@ -3746,6 +3779,7 @@ function mergeGatewaySourceRecord(
     container_ref: base.container_ref,
     container_label: base.container_label,
     trust_state: source.trust_state ?? base.trust_state,
+    capabilities: source.capabilities ?? base.capabilities,
     runtime_state: runtimeState ?? source.runtime_state ?? base.runtime_state,
     created_at_ms: base.created_at_ms,
     updated_at_ms: base.updated_at_ms,
@@ -3986,6 +4020,7 @@ async function syncGatewayRecord(
       const syncedRecord = await gatewayStore().markCatalogSynced(currentRecord.gateway_id, syncedAtMS).catch(() => currentRecord);
       const source = mergeGatewaySourceRecord(gatewayRecordToSourceWithCatalog(syncedRecord, {
         status: catalog.gateway.status,
+        capabilities: catalog.gateway.capabilities,
         environments: catalog.environments,
       }), syncedRecord, {
         gateway_id: syncedRecord.gateway_id,
@@ -4168,6 +4203,396 @@ function gatewayOpenStartPolicyForRequest(
   policy: 'start_if_needed' | undefined,
 ): 'require_ready' | 'start_if_needed' {
   return policy === 'start_if_needed' ? 'start_if_needed' : 'require_ready';
+}
+
+function gatewayEnvLifecycleOutcome(
+  operation: Extract<DesktopLauncherActionRequest, { kind: 'run_gateway_environment_lifecycle' }>['operation'],
+): DesktopLauncherActionOutcome {
+  switch (operation) {
+    case 'start':
+      return 'started_gateway_environment_runtime';
+    case 'stop':
+      return 'stopped_gateway_environment_runtime';
+    case 'restart':
+      return 'restarted_gateway_environment_runtime';
+    case 'update_runtime':
+      return 'updated_gateway_environment_runtime';
+  }
+}
+
+function gatewayEnvLifecycleTitle(operation: Extract<DesktopLauncherActionRequest, { kind: 'run_gateway_environment_lifecycle' }>['operation']): string {
+  switch (operation) {
+    case 'start':
+      return 'Starting environment';
+    case 'stop':
+      return 'Stopping environment';
+    case 'restart':
+      return 'Restarting environment';
+    case 'update_runtime':
+      return 'Updating environment';
+  }
+}
+
+async function refreshGatewaySourceForAuthorizedAction(
+  record: GatewayRecord,
+  options: Readonly<{
+    signal?: AbortSignal;
+    onRuntimeProgress?: GatewayLifecycleProgressSink;
+  }> = {},
+): Promise<DesktopGatewaySource> {
+  return syncGatewayRecord(record, {
+    force: true,
+    progress: {
+      signal: options.signal,
+      onRuntimeProgress: options.onRuntimeProgress,
+    },
+  });
+}
+
+function gatewayCapabilityFailure(
+  record: GatewayRecord,
+  message: string,
+  options: Readonly<{
+    gatewayEnvironmentID?: string;
+    environmentID?: string;
+  }> = {},
+): DesktopLauncherActionFailure {
+  return launcherActionFailure(
+    'action_invalid',
+    'gateway',
+    message,
+    {
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      gatewayEnvironmentID: options.gatewayEnvironmentID,
+      environmentID: options.environmentID,
+      shouldRefreshSnapshot: true,
+      failure: desktopOperationFailurePresentation({
+        code: 'operation_failed',
+        title: 'Gateway Capability Unavailable',
+        summary: message,
+        targetLabel: record.display_name,
+      }),
+    },
+  );
+}
+
+async function requireGatewayProfileWriteCapability(record: GatewayRecord): Promise<DesktopLauncherActionFailure | null> {
+  const source = await refreshGatewaySourceForAuthorizedAction(record);
+  if (source.status === 'online' && source.capabilities.includes('env_profile_write')) {
+    return null;
+  }
+  return gatewayCapabilityFailure(
+    record,
+    'This Gateway does not currently allow Desktop to save environment profiles.',
+  );
+}
+
+function validateGatewayProfileRouteForRecord(
+  record: GatewayRecord,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway_environment_profile' }>,
+): DesktopLauncherActionFailure | null {
+  if (request.access_route.kind !== 'url') {
+    return gatewayCapabilityFailure(
+      record,
+      'Desktop can only save URL access profiles through Gateways in this version.',
+    );
+  }
+  if (request.access_route.kind === 'url' && request.control_owner === 'gateway') {
+    return gatewayCapabilityFailure(
+      record,
+      'URL access profiles cannot own runtime lifecycle control.',
+    );
+  }
+  return null;
+}
+
+async function requireGatewayEnvironmentOpenCapability(
+  record: GatewayRecord,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'open_gateway_environment' }>,
+  options: Readonly<{
+    signal?: AbortSignal;
+    onRuntimeProgress?: GatewayLifecycleProgressSink;
+  }> = {},
+): Promise<DesktopLauncherActionFailure | null> {
+  const source = await refreshGatewaySourceForAuthorizedAction(record, options);
+  if (source.status !== 'online' || !source.capabilities.includes('env_open_session')) {
+    return gatewayCapabilityFailure(
+      record,
+      'This Gateway does not currently support opening environment sessions.',
+      {
+        environmentID: request.environment_id,
+        gatewayEnvironmentID: request.gateway_env_id,
+      },
+    );
+  }
+  const environment = source.environments.find((item) => item.gateway_env_id === request.gateway_env_id) ?? null;
+  if (!environment) {
+    return launcherActionFailure(
+      'environment_missing',
+      'environment',
+      'This Gateway environment is no longer available.',
+      {
+        environmentID: request.environment_id,
+        gatewayID: record.gateway_id,
+        gatewayLabel: record.display_name,
+        gatewayEnvironmentID: request.gateway_env_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  if (!desktopGatewayCanOpenEnvironment(source, environment)) {
+    return gatewayCapabilityFailure(
+      record,
+      'This Gateway environment is not currently openable.',
+      {
+        environmentID: request.environment_id,
+        gatewayEnvironmentID: request.gateway_env_id,
+      },
+    );
+  }
+  return null;
+}
+
+async function requireGatewayEnvironmentLifecycleCapability(
+  record: GatewayRecord,
+  request: Extract<DesktopLauncherActionRequest, { kind: 'run_gateway_environment_lifecycle' }>,
+): Promise<DesktopLauncherActionFailure | null> {
+  const source = await refreshGatewaySourceForAuthorizedAction(record);
+  if (source.status !== 'online' || !source.capabilities.includes('env_lifecycle')) {
+    return gatewayCapabilityFailure(
+      record,
+      'This Gateway does not currently support environment lifecycle management.',
+      {
+        environmentID: request.environment_id,
+        gatewayEnvironmentID: request.gateway_env_id,
+      },
+    );
+  }
+  const environment = source.environments.find((item) => item.gateway_env_id === request.gateway_env_id) ?? null;
+  if (!environment) {
+    return launcherActionFailure(
+      'environment_missing',
+      'environment',
+      'This Gateway environment is no longer available.',
+      {
+        environmentID: request.environment_id,
+        gatewayID: record.gateway_id,
+        gatewayLabel: record.display_name,
+        gatewayEnvironmentID: request.gateway_env_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  const requiredCapability = request.operation === 'update_runtime' ? 'update_runtime' : request.operation;
+  if (!desktopGatewayEnvironmentHasControlCapability(environment, requiredCapability)) {
+    return gatewayCapabilityFailure(
+      record,
+      `This Gateway environment does not expose ${request.operation === 'update_runtime' ? 'update' : request.operation} control.`,
+      {
+        environmentID: request.environment_id,
+        gatewayEnvironmentID: request.gateway_env_id,
+      },
+    );
+  }
+  return null;
+}
+
+async function upsertGatewayEnvironmentProfileFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway_environment_profile' }>,
+): Promise<DesktopLauncherActionResult> {
+  const record = await gatewayStore().get(request.gateway_id);
+  if (!record) {
+    return launcherActionFailure(
+      'environment_missing',
+      'gateway',
+      'This Gateway is no longer available.',
+      {
+        gatewayID: request.gateway_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  try {
+    const routeFailure = validateGatewayProfileRouteForRecord(record, request);
+    if (routeFailure) {
+      return routeFailure;
+    }
+    const capabilityFailure = await requireGatewayProfileWriteCapability(record);
+    if (capabilityFailure) {
+      return capabilityFailure;
+    }
+    await gatewayLifecycleManager().upsertEnvironmentProfile(record, {
+      gateway_env_id: request.gateway_env_id,
+      display_name: request.display_name,
+      access_route: {
+        kind: request.access_route.kind,
+        ...(request.access_route.url ? { url: request.access_route.url } : {}),
+        ...(request.access_route.origin_label ? { origin_label: request.access_route.origin_label } : {}),
+        ...(request.access_route.ssh_destination ? { ssh_destination: request.access_route.ssh_destination } : {}),
+        ...(request.access_route.ssh_port == null ? {} : { ssh_port: request.access_route.ssh_port }),
+        ...(request.access_route.ssh_runtime_root ? { ssh_runtime_root: request.access_route.ssh_runtime_root } : {}),
+        ...(request.access_route.container_engine ? { container_engine: request.access_route.container_engine } : {}),
+        ...(request.access_route.container_id ? { container_id: request.access_route.container_id } : {}),
+        ...(request.access_route.container_runtime_root ? { container_runtime_root: request.access_route.container_runtime_root } : {}),
+      },
+      control_owner: request.control_owner ?? 'none',
+    }, {
+      startPolicy: record.connection.kind === 'url' ? undefined : 'start_if_needed',
+    });
+    await syncGatewayRecord(record, { force: true }).catch(() => undefined);
+    return launcherActionSuccess('saved_gateway_environment');
+  } catch (error) {
+    return launcherActionFailure(
+      gatewayRuntimeFailureCode(error),
+      'gateway',
+      error instanceof Error ? error.message : String(error),
+      {
+        gatewayID: record.gateway_id,
+        gatewayLabel: record.display_name,
+        shouldRefreshSnapshot: true,
+        failure: desktopFailureFromError(error, {
+          code: 'operation_failed',
+          title: 'Save Gateway Environment Failed',
+          summary: error instanceof Error ? error.message : String(error),
+          targetLabel: record.display_name,
+        }),
+      },
+    );
+  }
+}
+
+async function deleteGatewayEnvironmentProfileFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, { kind: 'delete_gateway_environment_profile' }>,
+): Promise<DesktopLauncherActionResult> {
+  const record = await gatewayStore().get(request.gateway_id);
+  if (!record) {
+    return launcherActionFailure(
+      'environment_missing',
+      'gateway',
+      'This Gateway is no longer available.',
+      {
+        gatewayID: request.gateway_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  try {
+    const capabilityFailure = await requireGatewayProfileWriteCapability(record);
+    if (capabilityFailure) {
+      return capabilityFailure;
+    }
+    await gatewayLifecycleManager().deleteEnvironmentProfile(record, {
+      gateway_env_id: request.gateway_env_id,
+    }, {
+      startPolicy: record.connection.kind === 'url' ? undefined : 'start_if_needed',
+    });
+    await syncGatewayRecord(record, { force: true }).catch(() => undefined);
+    return launcherActionSuccess('deleted_gateway_environment');
+  } catch (error) {
+    return launcherActionFailure(
+      gatewayRuntimeFailureCode(error),
+      'gateway',
+      error instanceof Error ? error.message : String(error),
+      {
+        gatewayID: record.gateway_id,
+        gatewayLabel: record.display_name,
+        gatewayEnvironmentID: request.gateway_env_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+}
+
+async function runGatewayEnvironmentLifecycleFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, { kind: 'run_gateway_environment_lifecycle' }>,
+): Promise<DesktopLauncherActionResult> {
+  const record = await gatewayStore().get(request.gateway_id);
+  if (!record) {
+    return launcherActionFailure(
+      'environment_missing',
+      'environment',
+      'This Gateway is no longer available.',
+      {
+        environmentID: request.environment_id,
+        gatewayID: request.gateway_id,
+        shouldRefreshSnapshot: true,
+      },
+    );
+  }
+  const capabilityFailure = await requireGatewayEnvironmentLifecycleCapability(record, request);
+  if (capabilityFailure) {
+    return capabilityFailure;
+  }
+  const label = compact(request.label) || request.gateway_env_id;
+  const operationKey = `${request.environment_id}:${request.operation}`;
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'run_gateway_environment_lifecycle',
+    subject_kind: 'gateway',
+    subject_id: record.gateway_id,
+    environment_id: request.environment_id,
+    environment_label: label,
+    gateway_environment_id: request.gateway_env_id,
+    phase: 'checking_runtime_record',
+    title: gatewayEnvLifecycleTitle(request.operation),
+    detail: `Desktop is asking ${record.display_name} to ${request.operation === 'update_runtime' ? 'update' : request.operation} ${label}.`,
+    cancelable: true,
+    interrupt_label: 'Stop operation',
+    interrupt_detail: 'Desktop is canceling this Gateway environment lifecycle request.',
+    interrupt_kind: 'generic',
+  });
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  try {
+    const response = await gatewayLifecycleManager().runEnvironmentLifecycle(record, {
+      gateway_env_id: request.gateway_env_id,
+      operation: request.operation,
+    }, {
+      signal,
+      startPolicy: record.connection.kind === 'url' ? undefined : 'start_if_needed',
+    });
+    if (response.state === 'failed' || response.state === 'unsupported') {
+      throw new GatewayClientError(
+        response.state === 'unsupported' ? 'GATEWAY_ENV_LIFECYCLE_UNSUPPORTED' : 'GATEWAY_ENV_LIFECYCLE_FAILED',
+        response.message || 'Gateway could not complete this environment lifecycle request.',
+      );
+    }
+    launcherOperations.finish(operationKey, 'succeeded', {
+      phase: 'gateway_environment_lifecycle_succeeded',
+      title: `${gatewayEnvLifecycleTitle(request.operation)} complete`,
+      detail: response.message || 'Gateway completed this environment lifecycle request.',
+    });
+    scheduleLauncherOperationRemoval(operationKey);
+    await syncGatewayRecord(record, { force: true }).catch(() => undefined);
+    return launcherActionSuccess(gatewayEnvLifecycleOutcome(request.operation));
+  } catch (error) {
+    const failure = desktopFailureFromError(error, {
+      code: 'operation_failed',
+      title: 'Gateway Environment Action Failed',
+      summary: error instanceof Error ? error.message : String(error),
+      targetLabel: label,
+    });
+    launcherOperations.finish(operationKey, signal?.aborted ? 'canceled' : 'failed', {
+      phase: signal?.aborted ? 'canceled' : 'failed',
+      title: signal?.aborted ? 'Operation canceled' : 'Gateway environment action failed',
+      detail: signal?.aborted ? 'Desktop canceled this Gateway environment lifecycle request.' : failure.summary,
+      failure,
+    });
+    scheduleLauncherOperationRemoval(operationKey);
+    return launcherActionFailure(
+      gatewayRuntimeFailureCode(error),
+      'environment',
+      failure.summary,
+      {
+        environmentID: request.environment_id,
+        gatewayID: record.gateway_id,
+        gatewayLabel: record.display_name,
+        gatewayEnvironmentID: request.gateway_env_id,
+        shouldRefreshSnapshot: true,
+        failure,
+      },
+    );
+  }
 }
 
 function gatewayStartRequiredFailure(
@@ -5334,6 +5759,7 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
       nodeIntegration: false,
       spellcheck: false,
       backgroundThrottling: false,
+      ...(compact(args.sessionPartition) ? { partition: compact(args.sessionPartition) } : {}),
     },
   });
   const trackedWindow = trackBrowserWindow(win);
@@ -5508,6 +5934,7 @@ function openSessionChildWindow(
     frameName,
     stateKey: sessionChildWindowStateKey(sessionKey, childKey),
     role: 'session_child',
+    sessionPartition: sessionRecord.session_partition,
     diagnostics: sessionRecord.diagnostics,
     onWindowOpen: (nextURL, nextParent, nextFrameName) => {
       if (isAllowedSessionNavigation(sessionKey, nextURL)) {
@@ -5632,6 +6059,7 @@ function createSessionRootWindow(
   diagnostics: DesktopDiagnosticsRecorder,
   options?: Readonly<{
     stealAppFocus?: boolean;
+    sessionPartition?: string;
     presentOnReadyToShow?: boolean;
     onDidFinishLoad?: (win: BrowserWindow) => void;
     onDidFailLoad?: (details: Readonly<{
@@ -5649,6 +6077,7 @@ function createSessionRootWindow(
     role: 'session_root',
     diagnostics,
     stealAppFocus: options?.stealAppFocus,
+    sessionPartition: options?.sessionPartition,
     presentOnReadyToShow: options?.presentOnReadyToShow,
     onDidFinishLoad: options?.onDidFinishLoad,
     onDidFailLoad: options?.onDidFailLoad,
@@ -5676,6 +6105,13 @@ function desktopDiagnosticsStateDirForTarget(target: DesktopSessionTarget, start
   return path.join(app.getPath('userData'), 'session-diagnostics', desktopSessionStateKeyFragment(target.session_key));
 }
 
+function desktopSessionPartitionForTarget(target: DesktopSessionTarget): string {
+  if (target.kind !== 'gateway_environment') {
+    return '';
+  }
+  return `persist:runtime-gateway:${desktopSessionStateKeyFragment(target.session_key)}`;
+}
+
 async function createSessionRecord(
   target: DesktopSessionTarget,
   startup: StartupReport,
@@ -5683,6 +6119,7 @@ async function createSessionRecord(
     runtimeHandle?: DesktopSessionRuntimeHandle | null;
     attached?: boolean;
     stealAppFocus?: boolean;
+    gatewaySetCookieHeaders?: readonly string[];
   }> = {},
 ): Promise<DesktopSessionRecord> {
   const diagnostics = new DesktopDiagnosticsRecorder();
@@ -5692,10 +6129,15 @@ async function createSessionRecord(
   const entryURL = desktopSessionEntryURL(target, startup);
   const safeEntryURL = stripSensitiveURLPayload(entryURL) || entryURL;
   const safeAllowedBaseURL = stripSensitiveURLPayload(startup.local_ui_url) || startup.local_ui_url;
+  const sessionPartition = desktopSessionPartitionForTarget(target);
+  if (target.kind === 'gateway_environment') {
+    await installGatewaySessionCookies(entryURL, options.gatewaySetCookieHeaders, sessionPartition);
+  }
   const initialLoad = createInitialLoadDeferred();
   let sessionRecord!: DesktopSessionRecord;
   const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics, {
     stealAppFocus: options.stealAppFocus,
+    sessionPartition,
     presentOnReadyToShow: false,
     onDidFinishLoad: () => {
       void sessionRecord.diagnostics.recordLifecycle(
@@ -5721,6 +6163,7 @@ async function createSessionRecord(
     allowed_base_url: safeAllowedBaseURL,
     root_window: rootWindow,
     child_windows: new Map(),
+    session_partition: sessionPartition,
     diagnostics,
     runtime_handle: options.runtimeHandle ?? null,
     steal_app_focus_on_ready: options.stealAppFocus === true,
@@ -8882,6 +9325,55 @@ function gatewayOpenFailureSummary(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+function finishGatewayOpenCapabilityFailure(
+  operationKey: string,
+  record: GatewayRecord,
+  request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_gateway_environment' }>>,
+  target: DesktopSessionTarget,
+  result: DesktopLauncherActionFailure,
+): DesktopLauncherActionFailure {
+  const failure = result.failure ?? desktopOperationFailurePresentation({
+    code: 'environment_open_failed',
+    title: 'Gateway Open Failed',
+    summary: result.message,
+    targetLabel: request.label,
+  });
+  launcherOperations.finish(operationKey, 'failed', {
+    phase: 'failed',
+    title: 'Open failed',
+    detail: failure.summary,
+    open_progress: buildOpenConnectionProgress({
+      hostAccess: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '' },
+      phase: 'failed',
+      environmentID: request.environment_id,
+      environmentLabel: request.label,
+      targetID: target.session_key,
+      targetLabel: request.label,
+      targetDetail: record.display_name,
+      location: 'runtime_gateway',
+    }),
+    failure,
+    next_actions: gatewayOperationFailureNextActions(operationKey, {
+      retryAction: {
+        kind: 'open_gateway_environment',
+        environment_id: request.environment_id,
+        gateway_id: request.gateway_id,
+        gateway_env_id: request.gateway_env_id,
+        label: request.label,
+        start_policy: record.connection.kind === 'url' ? undefined : 'start_if_needed',
+      },
+      gatewayID: record.gateway_id,
+      resolveFocus: 'identity_trust',
+    }),
+  });
+  return {
+    ...result,
+    failure,
+    operation_key: operationKey,
+  };
+}
+
 async function openGatewayEnvironmentFromLauncher(
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_gateway_environment' }>>,
 ): Promise<DesktopLauncherActionResult> {
@@ -8961,6 +9453,13 @@ async function openGatewayEnvironmentFromLauncher(
   }
 
   try {
+    const capabilityFailure = await requireGatewayEnvironmentOpenCapability(record, request, {
+      signal,
+      onRuntimeProgress: lifecycleContext?.onProgress,
+    });
+    if (capabilityFailure) {
+      return finishGatewayOpenCapabilityFailure(operationKey, record, request, target, capabilityFailure);
+    }
     const clientNonce = crypto.randomBytes(24).toString('base64url');
     const issued = await gatewayLifecycleManager().openSessionWithBridge(record, {
       gateway_env_id: request.gateway_env_id,
@@ -8975,7 +9474,6 @@ async function openGatewayEnvironmentFromLauncher(
     });
     const { response, bridge_session: bridgeSession } = issued;
     const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);
-    await installGatewayLocalAccessCookies(artifactURL, response.set_cookie_headers);
     const openTarget = buildGatewayDesktopTarget({
       gatewayID: record.gateway_id,
       gatewayLabel: record.display_name,
@@ -9016,7 +9514,10 @@ async function openGatewayEnvironmentFromLauncher(
         location: 'runtime_gateway',
       }),
     });
-    const sessionRecord = await createSessionRecord(openTarget, startup, { stealAppFocus: true });
+    const sessionRecord = await createSessionRecord(openTarget, startup, {
+      stealAppFocus: true,
+      gatewaySetCookieHeaders: response.set_cookie_headers,
+    });
     await waitForSessionInitialLoad(sessionRecord);
     resetLauncherIssueState();
     launcherOperations.finish(operationKey, 'succeeded', {
@@ -13636,6 +14137,12 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'delete_gateway':
       await deleteGatewayFromLauncher(request.gateway_id);
       return launcherActionSuccess('deleted_gateway');
+    case 'upsert_gateway_environment_profile':
+      return upsertGatewayEnvironmentProfileFromLauncher(request);
+    case 'delete_gateway_environment_profile':
+      return deleteGatewayEnvironmentProfileFromLauncher(request);
+    case 'run_gateway_environment_lifecycle':
+      return runGatewayEnvironmentLifecycleFromLauncher(request);
     case 'save_local_environment_settings':
       try {
         await saveLocalEnvironmentSettingsFromWelcome({

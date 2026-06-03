@@ -7,6 +7,7 @@ import {
   desktopGatewayManagementCapability,
   type DesktopGatewayConnectionKind,
   type DesktopGatewayEnvironment,
+  type DesktopGatewayCapability,
   type DesktopGatewayRuntimeState,
   type DesktopGatewayStatus,
   type DesktopGatewaySource,
@@ -428,6 +429,7 @@ export function gatewayRecordToSource(record: GatewayRecord): DesktopGatewaySour
     display_name: record.display_name,
     connection_kind: connectionKind,
     management_capability: desktopGatewayManagementCapability(connectionKind),
+    capabilities: [],
     status: trustState === 'paired' ? 'unknown' : 'pairing_required',
     trust_state: trustState,
     status_message: trustState === 'paired'
@@ -471,6 +473,7 @@ export function gatewayRecordToSourceWithCatalog(
   catalog: Readonly<{
     status?: DesktopGatewayStatus;
     status_message?: string;
+    capabilities?: readonly DesktopGatewayCapability[];
     environments?: readonly DesktopGatewayEnvironment[];
   }>,
 ): DesktopGatewaySource {
@@ -488,6 +491,7 @@ export function gatewayRecordToSourceWithCatalog(
       || (status === 'online'
         ? 'Gateway catalog is ready.'
         : 'Gateway catalog could not be refreshed.'),
+    capabilities: [...new Set(catalog.capabilities ?? [])],
     environments: [...(catalog.environments ?? [])],
   };
 }

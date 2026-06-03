@@ -1455,8 +1455,14 @@ function runtimeOperationMenuItem(plan: DesktopRuntimeOperationPlan | undefined)
 function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly EnvironmentActionMenuItemModel[] {
   const items: EnvironmentActionMenuItemModel[] = [];
   if (environment.kind === 'gateway_environment') {
+    for (const operation of runtimeOperationMenuOrder) {
+      const item = runtimeOperationMenuItem(environment.runtime_operations[operation]);
+      if (item) {
+        items.push(item);
+      }
+    }
     const refreshPlan = environment.runtime_operations.refresh;
-    return [{
+    items.push({
       id: 'refresh_runtime',
       label: 'Refresh Gateway status',
       action: {
@@ -1465,7 +1471,8 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
         enabled: refreshPlan?.availability !== 'blocked',
         variant: 'outline',
       },
-    }];
+    });
+    return items;
   }
   const remoteRouteAction = providerRemoteRouteMenuAction(environment);
   const runtimeProviderLinkAction = runtimeProviderLinkMenuAction(environment);

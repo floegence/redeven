@@ -134,6 +134,12 @@ export type DesktopLauncherActionOutcome =
   | 'refreshed_gateway_catalog'
   | 'refreshed_gateway_status'
   | 'deleted_gateway'
+  | 'saved_gateway_environment'
+  | 'deleted_gateway_environment'
+  | 'started_gateway_environment_runtime'
+  | 'stopped_gateway_environment_runtime'
+  | 'restarted_gateway_environment_runtime'
+  | 'updated_gateway_environment_runtime'
   | 'saved_environment'
   | 'deleted_environment'
   | 'closed_launcher'
@@ -210,6 +216,9 @@ export type DesktopLauncherActionKind =
   | 'refresh_gateway_catalog'
   | 'refresh_gateway_status'
   | 'delete_gateway'
+  | 'upsert_gateway_environment_profile'
+  | 'delete_gateway_environment_profile'
+  | 'run_gateway_environment_lifecycle'
   | 'save_local_environment_settings'
   | 'upsert_saved_environment'
   | 'upsert_saved_ssh_environment'
@@ -361,6 +370,9 @@ export type DesktopEnvironmentEntry = Readonly<{
   gateway_environment_state?: DesktopGatewayEnvironmentState;
   gateway_environment_kind?: DesktopGatewayEnvironment['env_kind'];
   gateway_environment_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
+  gateway_environment_access_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
+  gateway_environment_control_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
+  gateway_environment_profile_access_route?: DesktopGatewayEnvironment['profile_access_route'];
   gateway_environment_origin?: DesktopGatewayEnvironment['origin'];
   environment_source?: DesktopEnvironmentSource;
   pinned: boolean;
@@ -756,6 +768,37 @@ export type DesktopLauncherActionRequest = Readonly<
   | {
       kind: 'refresh_gateway_status';
       gateway_id: string;
+    }
+  | {
+      kind: 'upsert_gateway_environment_profile';
+      gateway_id: string;
+      gateway_env_id?: string;
+      display_name: string;
+      access_route: Readonly<{
+        kind: 'url' | 'ssh_host' | 'ssh_container';
+        url?: string;
+        origin_label?: string;
+        ssh_destination?: string;
+        ssh_port?: number | null;
+        ssh_runtime_root?: string;
+        container_engine?: string;
+        container_id?: string;
+        container_runtime_root?: string;
+      }>;
+      control_owner?: 'none' | 'gateway';
+    }
+  | {
+      kind: 'delete_gateway_environment_profile';
+      gateway_id: string;
+      gateway_env_id: string;
+    }
+  | {
+      kind: 'run_gateway_environment_lifecycle';
+      environment_id: string;
+      gateway_id: string;
+      gateway_env_id: string;
+      operation: 'start' | 'stop' | 'restart' | 'update_runtime';
+      label?: string;
     }
   | {
       kind: 'refresh_gateway_catalog';
@@ -1412,6 +1455,81 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return {
         kind,
         gateway_id: gatewayID,
+      };
+    }
+    case 'upsert_gateway_environment_profile': {
+      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      const displayName = compact((candidate as { display_name?: unknown }).display_name);
+      const accessRouteRaw = (candidate as { access_route?: unknown }).access_route;
+      const accessRoute = accessRouteRaw && typeof accessRouteRaw === 'object'
+        ? accessRouteRaw as Record<string, unknown>
+        : {};
+      const routeKind = compact(accessRoute.kind);
+      if (gatewayID === '' || displayName === '' || (routeKind !== 'url' && routeKind !== 'ssh_host' && routeKind !== 'ssh_container')) {
+        return null;
+      }
+      const sshPort = normalizeDesktopSSHPort(accessRoute.ssh_port);
+      const normalizedRoute = {
+        kind: routeKind,
+        url: compact(accessRoute.url) || undefined,
+        origin_label: compact(accessRoute.origin_label) || undefined,
+        ssh_destination: compact(accessRoute.ssh_destination) || undefined,
+        ...(sshPort == null ? {} : { ssh_port: sshPort }),
+        ssh_runtime_root: compact(accessRoute.ssh_runtime_root) || undefined,
+        container_engine: compact(accessRoute.container_engine) || undefined,
+        container_id: compact(accessRoute.container_id) || undefined,
+        container_runtime_root: compact(accessRoute.container_runtime_root) || undefined,
+      } as Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway_environment_profile' }>['access_route'];
+      if (routeKind === 'url' && !normalizedRoute.url) {
+        return null;
+      }
+      if ((routeKind === 'ssh_host' || routeKind === 'ssh_container') && !normalizedRoute.ssh_destination) {
+        return null;
+      }
+      if (routeKind === 'ssh_container' && !normalizedRoute.container_id) {
+        return null;
+      }
+      return {
+        kind,
+        gateway_id: gatewayID,
+        gateway_env_id: compact((candidate as { gateway_env_id?: unknown }).gateway_env_id) || undefined,
+        display_name: displayName,
+        access_route: normalizedRoute,
+        control_owner: compact((candidate as { control_owner?: unknown }).control_owner) === 'gateway' ? 'gateway' : 'none',
+      };
+    }
+    case 'delete_gateway_environment_profile': {
+      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      const gatewayEnvID = compact((candidate as { gateway_env_id?: unknown }).gateway_env_id);
+      if (gatewayID === '' || gatewayEnvID === '') {
+        return null;
+      }
+      return {
+        kind,
+        gateway_id: gatewayID,
+        gateway_env_id: gatewayEnvID,
+      };
+    }
+    case 'run_gateway_environment_lifecycle': {
+      const environmentID = compact((candidate as { environment_id?: unknown }).environment_id);
+      const gatewayID = compact((candidate as { gateway_id?: unknown }).gateway_id);
+      const gatewayEnvID = compact((candidate as { gateway_env_id?: unknown }).gateway_env_id);
+      const operation = compact((candidate as { operation?: unknown }).operation);
+      if (
+        environmentID === ''
+        || gatewayID === ''
+        || gatewayEnvID === ''
+        || (operation !== 'start' && operation !== 'stop' && operation !== 'restart' && operation !== 'update_runtime')
+      ) {
+        return null;
+      }
+      return {
+        kind,
+        environment_id: environmentID,
+        gateway_id: gatewayID,
+        gateway_env_id: gatewayEnvID,
+        operation,
+        label: compact((candidate as { label?: unknown }).label) || undefined,
       };
     }
     case 'upsert_saved_environment':

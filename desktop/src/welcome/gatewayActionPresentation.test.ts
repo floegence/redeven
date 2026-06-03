@@ -10,6 +10,7 @@ function gateway(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewayS
     display_name: 'Gateway-demo',
     connection_kind: 'ssh_host',
     management_capability: 'managed_ssh_host',
+    capabilities: [],
     status: 'pairing_required',
     trust_state: 'unpaired',
     endpoint_label: 'demo:22',

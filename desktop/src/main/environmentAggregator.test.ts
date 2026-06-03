@@ -14,6 +14,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
     display_name: 'Bastion',
     connection_kind: 'url',
     management_capability: 'access_only',
+    capabilities: [],
     status: 'online',
     trust_state: 'paired',
     endpoint_label: 'https://gateway.example.invalid',
@@ -167,6 +168,118 @@ describe('environmentAggregator', () => {
       is_open: true,
       open_action: 'focus',
       open_session_key: 'gateway:bastion:env:env_demo',
+    });
+  });
+
+  it('shows Gateway lifecycle actions only when both Gateway and environment grant control', () => {
+    const environment = {
+      gateway_env_id: 'env_managed',
+      display_name: 'Managed',
+      env_kind: 'managed_local_env' as const,
+      state: 'stopped' as const,
+      capabilities: ['open', 'start'] as const,
+      access_capabilities: ['open'] as const,
+      control_capabilities: ['start'] as const,
+      origin: { kind: 'gateway_host' as const, label: 'Gateway host' },
+    };
+    const withoutGatewayLifecycle = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [gatewaySource({
+        capabilities: ['env_profile_write'],
+        environments: [environment],
+      })],
+    }).environments.find((entry) => entry.kind === 'gateway_environment');
+    const withGatewayLifecycle = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [gatewaySource({
+        capabilities: ['env_profile_write', 'env_lifecycle'],
+        environments: [environment],
+      })],
+    }).environments.find((entry) => entry.kind === 'gateway_environment');
+
+    expect(withoutGatewayLifecycle?.runtime_operations.start).toMatchObject({
+      availability: 'hidden',
+    });
+    expect(withGatewayLifecycle?.runtime_operations.start).toMatchObject({
+      availability: 'available',
+      method: 'runtime_gateway',
+    });
+  });
+
+  it('exposes edit and delete only for writable Gateway URL profiles', () => {
+    const editable = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [gatewaySource({
+        capabilities: ['env_profile_write'],
+        environments: [{
+          gateway_env_id: 'env_url',
+          display_name: 'URL Profile',
+          env_kind: 'reachable_env',
+          state: 'available',
+          capabilities: ['open'],
+          access_capabilities: ['open'],
+          control_capabilities: [],
+          profile_access_route: {
+            kind: 'url',
+            url: 'https://target.example/',
+            origin_label: 'Target',
+          },
+          origin: { kind: 'network_target', label: 'Target' },
+        }],
+      })],
+    }).environments.find((entry) => entry.kind === 'gateway_environment');
+    const readOnly = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [gatewaySource({
+        capabilities: ['env_profile_write'],
+        environments: [{
+          gateway_env_id: 'env_catalog',
+          display_name: 'Catalog Env',
+          env_kind: 'reachable_env',
+          state: 'available',
+          capabilities: ['open'],
+          access_capabilities: ['open'],
+          control_capabilities: [],
+          origin: { kind: 'network_target', label: 'Target' },
+        }],
+      })],
+    }).environments.find((entry) => entry.kind === 'gateway_environment');
+    const notWritable = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      gatewaySources: [gatewaySource({
+        capabilities: [],
+        environments: [{
+          gateway_env_id: 'env_url',
+          display_name: 'URL Profile',
+          env_kind: 'reachable_env',
+          state: 'available',
+          capabilities: ['open'],
+          access_capabilities: ['open'],
+          control_capabilities: [],
+          profile_access_route: {
+            kind: 'url',
+            url: 'https://target.example/',
+          },
+          origin: { kind: 'network_target', label: 'Target' },
+        }],
+      })],
+    }).environments.find((entry) => entry.kind === 'gateway_environment');
+
+    expect(editable).toMatchObject({
+      can_edit: true,
+      can_delete: true,
+      gateway_environment_profile_access_route: {
+        kind: 'url',
+        url: 'https://target.example/',
+      },
+    });
+    expect(readOnly).toMatchObject({
+      can_edit: false,
+      can_delete: false,
+    });
+    expect(notWritable).toMatchObject({
+      can_edit: false,
+      can_delete: false,
     });
   });
 });

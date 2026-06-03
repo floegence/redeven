@@ -18,7 +18,7 @@ func (fn EnvironmentSourceFunc) ListGatewayEnvironments(ctx context.Context) ([]
 
 type Service struct {
 	gateway protocol.GatewayMetadata
-	source  EnvironmentSource
+	sources []EnvironmentSource
 }
 
 type ServiceOption func(*Service)
@@ -31,7 +31,9 @@ func WithGatewayMetadata(gateway protocol.GatewayMetadata) ServiceOption {
 
 func WithEnvironmentSource(source EnvironmentSource) ServiceOption {
 	return func(s *Service) {
-		s.source = source
+		if source != nil {
+			s.sources = append(s.sources, source)
+		}
 	}
 }
 
@@ -61,12 +63,12 @@ func (s *Service) ListEnvironments(ctx context.Context, req protocol.CatalogRequ
 		return protocol.CatalogResponse{}, err
 	}
 	var environments []protocol.Environment
-	if s.source != nil {
-		listed, err := s.source.ListGatewayEnvironments(ctx)
+	for _, source := range s.sources {
+		listed, err := source.ListGatewayEnvironments(ctx)
 		if err != nil {
 			return protocol.CatalogResponse{}, err
 		}
-		environments = listed
+		environments = append(environments, listed...)
 	}
 	return protocol.NewCatalogResponse(s.gateway, environments), nil
 }

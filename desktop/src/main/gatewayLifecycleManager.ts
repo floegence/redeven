@@ -27,6 +27,12 @@ import {
   GatewayBridgeClient,
   GatewayURLClient,
   type GatewayCatalogResponse,
+  type GatewayEnvLifecycleRequest,
+  type GatewayEnvLifecycleResponse,
+  type GatewayEnvProfileDeleteRequest,
+  type GatewayEnvProfileDeleteResponse,
+  type GatewayEnvProfileUpsertRequest,
+  type GatewayEnvProfileUpsertResponse,
   type GatewayOpenSessionRequest,
   type GatewayOpenSessionResponse,
 } from './gatewayClient';
@@ -168,6 +174,54 @@ export class GatewayLifecycleManager {
       response: await session.client.openSession(record, bridgeRequest, options),
       bridge_session: session.bridge_session,
     };
+  }
+
+  async upsertEnvironmentProfile(
+    record: GatewayRecord,
+    request: GatewayEnvProfileUpsertRequest,
+    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
+  ): Promise<GatewayEnvProfileUpsertResponse> {
+    if (record.connection.kind === 'url') {
+      return new GatewayURLClient(this.options.secret_store).upsertEnvironmentProfile(record, request, options);
+    }
+    const session = await this.ensureGatewayReady(record, {
+      startPolicy: options.startPolicy ?? 'start_if_needed',
+      signal: options.signal,
+      onProgress: options.onProgress,
+    });
+    return session.client.upsertEnvironmentProfile(record, request, options);
+  }
+
+  async deleteEnvironmentProfile(
+    record: GatewayRecord,
+    request: GatewayEnvProfileDeleteRequest,
+    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
+  ): Promise<GatewayEnvProfileDeleteResponse> {
+    if (record.connection.kind === 'url') {
+      return new GatewayURLClient(this.options.secret_store).deleteEnvironmentProfile(record, request, options);
+    }
+    const session = await this.ensureGatewayReady(record, {
+      startPolicy: options.startPolicy ?? 'start_if_needed',
+      signal: options.signal,
+      onProgress: options.onProgress,
+    });
+    return session.client.deleteEnvironmentProfile(record, request, options);
+  }
+
+  async runEnvironmentLifecycle(
+    record: GatewayRecord,
+    request: GatewayEnvLifecycleRequest,
+    options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {},
+  ): Promise<GatewayEnvLifecycleResponse> {
+    if (record.connection.kind === 'url') {
+      return new GatewayURLClient(this.options.secret_store).runEnvironmentLifecycle(record, request, options);
+    }
+    const session = await this.ensureGatewayReady(record, {
+      startPolicy: options.startPolicy ?? 'start_if_needed',
+      signal: options.signal,
+      onProgress: options.onProgress,
+    });
+    return session.client.runEnvironmentLifecycle(record, request, options);
   }
 
   async bridgeClient(record: GatewayRecord, options: Readonly<{

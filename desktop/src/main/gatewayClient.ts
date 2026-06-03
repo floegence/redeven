@@ -17,11 +17,14 @@ import {
   type GatewaySecretStore,
 } from './gatewayTrust';
 import type {
+  DesktopGatewayCapability,
   DesktopGatewayEnvironment,
   DesktopGatewayEnvironmentCapability,
+  DesktopGatewayEnvironmentProfileAccessRoute,
   DesktopGatewayEnvironmentOriginKind,
   DesktopGatewayEnvironmentState,
 } from '../shared/desktopGateway';
+import { desktopGatewayProfileURLHasEmbeddedCredentials } from '../shared/desktopGateway';
 import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBridgeSession';
 
 const GATEWAY_PROTOCOL_VERSION = 'redeven-runtime-gateway-v1';
@@ -38,7 +41,7 @@ export type GatewayCatalogResponse = Readonly<{
     gateway_id: string;
     display_name: string;
     status: 'online' | 'pairing_required' | 'trust_changed' | 'error' | 'unknown';
-    capabilities: readonly string[];
+    capabilities: readonly DesktopGatewayCapability[];
     gateway_public_key_fingerprint?: string;
   }>;
   environments: readonly DesktopGatewayEnvironment[];
@@ -62,6 +65,55 @@ export type GatewayOpenSessionResponse = Readonly<{
     gateway_env_id: string;
     connection_kind: string;
   }>;
+}>;
+
+export type GatewayEnvProfileAccessRoute = Readonly<{
+  kind: 'url' | 'ssh_host' | 'ssh_container';
+  url?: string;
+  origin_label?: string;
+  ssh_destination?: string;
+  ssh_port?: number;
+  ssh_runtime_root?: string;
+  container_engine?: string;
+  container_id?: string;
+  container_runtime_root?: string;
+}>;
+
+export type GatewayEnvProfileUpsertRequest = Readonly<{
+  gateway_env_id?: string;
+  display_name: string;
+  access_route: GatewayEnvProfileAccessRoute;
+  control_owner?: 'none' | 'gateway';
+}>;
+
+export type GatewayEnvProfileUpsertResponse = Readonly<{
+  protocol_version: string;
+  environment: DesktopGatewayEnvironment;
+}>;
+
+export type GatewayEnvProfileDeleteRequest = Readonly<{
+  gateway_env_id: string;
+}>;
+
+export type GatewayEnvProfileDeleteResponse = Readonly<{
+  protocol_version: string;
+  gateway_env_id: string;
+  deleted: boolean;
+}>;
+
+export type GatewayEnvLifecycleOperation = 'start' | 'stop' | 'restart' | 'update_runtime';
+
+export type GatewayEnvLifecycleRequest = Readonly<{
+  gateway_env_id: string;
+  operation: GatewayEnvLifecycleOperation;
+}>;
+
+export type GatewayEnvLifecycleResponse = Readonly<{
+  protocol_version: string;
+  gateway_env_id: string;
+  operation: GatewayEnvLifecycleOperation;
+  state: 'accepted' | 'running' | 'succeeded' | 'failed' | 'unsupported';
+  message?: string;
 }>;
 
 export type GatewayConnectArtifact = Readonly<{
@@ -89,7 +141,10 @@ type GatewayRoute =
   | 'gateway/v1/pairing/challenge'
   | 'gateway/v1/pairing/complete'
   | 'gateway/v1/catalog'
-  | 'gateway/v1/open-session';
+  | 'gateway/v1/open-session'
+  | 'gateway/v1/env-profiles/upsert'
+  | 'gateway/v1/env-profiles/delete'
+  | 'gateway/v1/env-lifecycle';
 
 type GatewayTransportCallOptions = GatewayRequestOptions & Readonly<{
   secretStore: GatewaySecretStore;
@@ -392,7 +447,7 @@ function requestGatewayBridgeJSON(
   route: GatewayRoute,
   body: unknown,
   options: GatewayTransportCallOptions,
-): Promise<unknown> {
+): Promise<GatewayHTTPDataResult> {
   return new Promise((resolve, reject) => {
     let settled = false;
     let raw = '';
@@ -441,7 +496,10 @@ function requestGatewayBridgeJSON(
     stream.onClose(() => {
       settle(() => {
         try {
-          resolve(parseGatewayHTTPResponse(responseBody(raw), responseStatusCode(raw)));
+          resolve({
+            data: parseGatewayHTTPResponse(responseBody(raw), responseStatusCode(raw)),
+            set_cookie_headers: rawGatewaySetCookieHeaders(raw),
+          });
         } catch (error) {
           reject(error);
         }
@@ -516,6 +574,7 @@ function normalizeEnvironmentCapability(value: unknown): DesktopGatewayEnvironme
     case 'open':
     case 'start':
     case 'stop':
+    case 'restart':
     case 'update_runtime':
     case 'terminal':
     case 'files':
@@ -525,6 +584,38 @@ function normalizeEnvironmentCapability(value: unknown): DesktopGatewayEnvironme
     default:
       return null;
   }
+}
+
+function normalizeGatewayCapability(value: unknown): DesktopGatewayCapability | null {
+  switch (compact(value)) {
+    case 'env_catalog':
+    case 'env_open_session':
+    case 'env_profile_write':
+    case 'env_lifecycle':
+    case 'terminal':
+    case 'files':
+    case 'web_service':
+    case 'port_forward':
+      return compact(value) as DesktopGatewayCapability;
+    default:
+      return null;
+  }
+}
+
+function rawGatewaySetCookieHeaders(raw: string): readonly string[] {
+  const splitAt = raw.indexOf('\r\n\r\n');
+  const head = splitAt >= 0 ? raw.slice(0, splitAt) : raw;
+  return head
+    .split('\r\n')
+    .slice(1)
+    .map((line) => {
+      const separator = line.indexOf(':');
+      if (separator < 0 || line.slice(0, separator).trim().toLowerCase() !== 'set-cookie') {
+        return '';
+      }
+      return compact(line.slice(separator + 1));
+    })
+    .filter(Boolean);
 }
 
 function normalizeGatewayStatus(value: unknown): GatewayCatalogResponse['gateway']['status'] {
@@ -551,6 +642,51 @@ function normalizeOriginKind(value: unknown): DesktopGatewayEnvironmentOriginKin
   }
 }
 
+function normalizeProfileAccessRouteKind(value: unknown): DesktopGatewayEnvironmentProfileAccessRoute['kind'] | null {
+  switch (compact(value)) {
+    case 'url':
+    case 'ssh_host':
+    case 'ssh_container':
+      return compact(value) as DesktopGatewayEnvironmentProfileAccessRoute['kind'];
+    default:
+      return null;
+  }
+}
+
+function normalizeGatewayEnvironmentProfileAccessRoute(value: unknown): DesktopGatewayEnvironmentProfileAccessRoute | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const candidate = value as Record<string, unknown>;
+  const kind = normalizeProfileAccessRouteKind(candidate.kind);
+  if (!kind) {
+    return undefined;
+  }
+  const route: DesktopGatewayEnvironmentProfileAccessRoute = {
+    kind,
+    ...(compact(candidate.url) ? { url: compact(candidate.url) } : {}),
+    ...(compact(candidate.origin_label) ? { origin_label: compact(candidate.origin_label) } : {}),
+    ...(compact(candidate.ssh_destination) ? { ssh_destination: compact(candidate.ssh_destination) } : {}),
+    ...(Number.isFinite(Number(candidate.ssh_port)) && Number(candidate.ssh_port) > 0
+      ? { ssh_port: Math.floor(Number(candidate.ssh_port)) }
+      : {}),
+    ...(compact(candidate.ssh_runtime_root) ? { ssh_runtime_root: compact(candidate.ssh_runtime_root) } : {}),
+    ...(compact(candidate.container_engine) ? { container_engine: compact(candidate.container_engine) } : {}),
+    ...(compact(candidate.container_id) ? { container_id: compact(candidate.container_id) } : {}),
+    ...(compact(candidate.container_runtime_root) ? { container_runtime_root: compact(candidate.container_runtime_root) } : {}),
+  };
+  if (route.kind === 'url' && (!route.url || desktopGatewayProfileURLHasEmbeddedCredentials(route.url))) {
+    return undefined;
+  }
+  if ((route.kind === 'ssh_host' || route.kind === 'ssh_container') && !route.ssh_destination) {
+    return undefined;
+  }
+  if (route.kind === 'ssh_container' && !route.container_id) {
+    return undefined;
+  }
+  return route;
+}
+
 function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -566,12 +702,39 @@ function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment 
   const capabilities = Array.isArray(candidate.capabilities)
     ? candidate.capabilities.map(normalizeEnvironmentCapability).filter((item): item is DesktopGatewayEnvironmentCapability => !!item)
     : [];
+  const accessCapabilities = Array.isArray(candidate.access_capabilities)
+    ? candidate.access_capabilities.map(normalizeEnvironmentCapability).filter((item): item is DesktopGatewayEnvironmentCapability => !!item)
+    : [];
+  const controlCapabilities = Array.isArray(candidate.control_capabilities)
+    ? candidate.control_capabilities.map(normalizeEnvironmentCapability).filter((item): item is DesktopGatewayEnvironmentCapability => !!item)
+    : [];
+  const normalizedAccessCapabilities = accessCapabilities.length > 0
+    ? [...new Set(accessCapabilities)]
+    : [...new Set(capabilities.filter((capability) => (
+        capability === 'open'
+        || capability === 'terminal'
+        || capability === 'files'
+        || capability === 'web_service'
+        || capability === 'port_forward'
+      )))];
+  const normalizedControlCapabilities = controlCapabilities.length > 0
+    ? [...new Set(controlCapabilities)]
+    : [...new Set(capabilities.filter((capability) => (
+        capability === 'start'
+        || capability === 'stop'
+        || capability === 'restart'
+        || capability === 'update_runtime'
+      )))];
+  const profileAccessRoute = normalizeGatewayEnvironmentProfileAccessRoute(candidate.profile_access_route);
   return {
     gateway_env_id: gatewayEnvID,
     display_name: compact(candidate.display_name) || gatewayEnvID,
     env_kind: compact(candidate.env_kind) === 'managed_local_env' ? 'managed_local_env' : 'reachable_env',
     state: normalizeEnvironmentState(candidate.state),
-    capabilities: [...new Set(capabilities)],
+    capabilities: [...new Set([...capabilities, ...normalizedAccessCapabilities, ...normalizedControlCapabilities])],
+    access_capabilities: normalizedAccessCapabilities,
+    control_capabilities: normalizedControlCapabilities,
+    ...(profileAccessRoute ? { profile_access_route: profileAccessRoute } : {}),
     origin: {
       kind: normalizeOriginKind(origin.kind),
       label: compact(origin.label),
@@ -579,6 +742,127 @@ function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment 
     ...(Number.isFinite(Number(candidate.last_seen_at_unix_ms)) && Number(candidate.last_seen_at_unix_ms) > 0
       ? { last_seen_at_unix_ms: Math.floor(Number(candidate.last_seen_at_unix_ms)) }
       : {}),
+  };
+}
+
+function normalizeGatewayEnvProfileUpsertResponse(value: unknown): GatewayEnvProfileUpsertResponse {
+  if (!value || typeof value !== 'object') {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway profile save response is invalid.');
+  }
+  const candidate = value as Record<string, unknown>;
+  const environment = normalizeGatewayEnvironment(candidate.environment);
+  if (!environment) {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway profile save response is missing environment.');
+  }
+  return {
+    protocol_version: normalizeProtocolVersion(candidate.protocol_version),
+    environment,
+  };
+}
+
+function normalizeGatewayEnvProfileDeleteResponse(value: unknown): GatewayEnvProfileDeleteResponse {
+  if (!value || typeof value !== 'object') {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway profile delete response is invalid.');
+  }
+  const candidate = value as Record<string, unknown>;
+  const gatewayEnvID = compact(candidate.gateway_env_id);
+  if (!gatewayEnvID) {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway profile delete response is missing gateway_env_id.');
+  }
+  return {
+    protocol_version: normalizeProtocolVersion(candidate.protocol_version),
+    gateway_env_id: gatewayEnvID,
+    deleted: candidate.deleted === true,
+  };
+}
+
+function normalizeGatewayEnvLifecycleOperation(value: unknown): GatewayEnvLifecycleOperation {
+  switch (compact(value)) {
+    case 'start':
+    case 'stop':
+    case 'restart':
+    case 'update_runtime':
+      return compact(value) as GatewayEnvLifecycleOperation;
+    default:
+      throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway lifecycle response has an unsupported operation.');
+  }
+}
+
+function normalizeGatewayEnvLifecycleState(value: unknown): GatewayEnvLifecycleResponse['state'] {
+  switch (compact(value)) {
+    case 'accepted':
+    case 'running':
+    case 'succeeded':
+    case 'failed':
+    case 'unsupported':
+      return compact(value) as GatewayEnvLifecycleResponse['state'];
+    default:
+      return 'failed';
+  }
+}
+
+function normalizeGatewayEnvLifecycleResponse(value: unknown): GatewayEnvLifecycleResponse {
+  if (!value || typeof value !== 'object') {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway lifecycle response is invalid.');
+  }
+  const candidate = value as Record<string, unknown>;
+  const gatewayEnvID = compact(candidate.gateway_env_id);
+  if (!gatewayEnvID) {
+    throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway lifecycle response is missing gateway_env_id.');
+  }
+  return {
+    protocol_version: normalizeProtocolVersion(candidate.protocol_version),
+    gateway_env_id: gatewayEnvID,
+    operation: normalizeGatewayEnvLifecycleOperation(candidate.operation),
+    state: normalizeGatewayEnvLifecycleState(candidate.state),
+    ...(compact(candidate.message) ? { message: compact(candidate.message) } : {}),
+  };
+}
+
+function normalizeGatewayProfileURL(value: string | undefined): string {
+  const raw = compact(value);
+  if (!raw) {
+    return '';
+  }
+  if (desktopGatewayProfileURLHasEmbeddedCredentials(raw)) {
+    throw new GatewayClientError('GATEWAY_PROFILE_URL_CREDENTIALS_UNSUPPORTED', 'Gateway target URL must not include embedded credentials.');
+  }
+  try {
+    const parsed = new URL(raw);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return raw;
+    }
+    parsed.pathname = '/';
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return raw;
+  }
+}
+
+function gatewayEnvProfilePayload(request: GatewayEnvProfileUpsertRequest): unknown {
+  const routeURL = normalizeGatewayProfileURL(request.access_route.url);
+  return {
+    protocol_version: GATEWAY_PROTOCOL_VERSION,
+    profile: {
+      ...(compact(request.gateway_env_id) ? { gateway_env_id: compact(request.gateway_env_id) } : {}),
+      display_name: compact(request.display_name),
+      access_route: {
+        kind: request.access_route.kind,
+        ...(routeURL ? { url: routeURL } : {}),
+        ...(compact(request.access_route.origin_label) ? { origin_label: compact(request.access_route.origin_label) } : {}),
+        ...(compact(request.access_route.ssh_destination) ? { ssh_destination: compact(request.access_route.ssh_destination) } : {}),
+        ...(Number.isFinite(Number(request.access_route.ssh_port)) && Number(request.access_route.ssh_port) > 0
+          ? { ssh_port: Math.floor(Number(request.access_route.ssh_port)) }
+          : {}),
+        ...(compact(request.access_route.ssh_runtime_root) ? { ssh_runtime_root: compact(request.access_route.ssh_runtime_root) } : {}),
+        ...(compact(request.access_route.container_engine) ? { container_engine: compact(request.access_route.container_engine) } : {}),
+        ...(compact(request.access_route.container_id) ? { container_id: compact(request.access_route.container_id) } : {}),
+        ...(compact(request.access_route.container_runtime_root) ? { container_runtime_root: compact(request.access_route.container_runtime_root) } : {}),
+      },
+      control_owner: request.control_owner === 'gateway' ? 'gateway' : 'none',
+    },
   };
 }
 
@@ -601,7 +885,7 @@ export function normalizeGatewayCatalogResponse(value: unknown): GatewayCatalogR
       display_name: compact(gateway.display_name) || gatewayID,
       status: normalizeGatewayStatus(gateway.status),
       capabilities: Array.isArray(gateway.capabilities)
-        ? [...new Set(gateway.capabilities.map(compact).filter(Boolean))]
+        ? [...new Set(gateway.capabilities.map(normalizeGatewayCapability).filter((item): item is DesktopGatewayCapability => !!item))]
         : [],
       ...(compact(gateway.gateway_public_key_fingerprint) ? { gateway_public_key_fingerprint: compact(gateway.gateway_public_key_fingerprint) } : {}),
     },
@@ -834,6 +1118,52 @@ export class GatewayURLClient {
     return response;
   }
 
+  async upsertEnvironmentProfile(
+    record: GatewayRecord,
+    request: GatewayEnvProfileUpsertRequest,
+    options: GatewayRequestOptions = {},
+  ): Promise<GatewayEnvProfileUpsertResponse> {
+    const data = await requestGatewayJSON(record, 'gateway/v1/env-profiles/upsert', gatewayEnvProfilePayload(request), {
+      secretStore: this.secretStore,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
+    return normalizeGatewayEnvProfileUpsertResponse(data.data);
+  }
+
+  async deleteEnvironmentProfile(
+    record: GatewayRecord,
+    request: GatewayEnvProfileDeleteRequest,
+    options: GatewayRequestOptions = {},
+  ): Promise<GatewayEnvProfileDeleteResponse> {
+    const data = await requestGatewayJSON(record, 'gateway/v1/env-profiles/delete', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      gateway_env_id: compact(request.gateway_env_id),
+    }, {
+      secretStore: this.secretStore,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
+    return normalizeGatewayEnvProfileDeleteResponse(data.data);
+  }
+
+  async runEnvironmentLifecycle(
+    record: GatewayRecord,
+    request: GatewayEnvLifecycleRequest,
+    options: GatewayRequestOptions = {},
+  ): Promise<GatewayEnvLifecycleResponse> {
+    const data = await requestGatewayJSON(record, 'gateway/v1/env-lifecycle', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      gateway_env_id: compact(request.gateway_env_id),
+      operation: request.operation,
+    }, {
+      secretStore: this.secretStore,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
+    return normalizeGatewayEnvLifecycleResponse(data.data);
+  }
+
   private assertGatewayIdentity(record: GatewayRecord, observedGatewayID: string, observedFingerprint: string | undefined): void {
     const profile: GatewayTrustProfile | undefined = record.trust_profile;
     if (record.gateway_id !== observedGatewayID) {
@@ -862,7 +1192,7 @@ export class GatewayBridgeClient {
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     });
-    const catalog = normalizeGatewayCatalogResponse(data);
+    const catalog = normalizeGatewayCatalogResponse(data.data);
     this.assertGatewayIdentity(record, catalog.gateway.gateway_id, catalog.gateway.gateway_public_key_fingerprint);
     return catalog;
   }
@@ -883,7 +1213,7 @@ export class GatewayBridgeClient {
       signal: options.signal,
       authenticated: false,
     });
-    return normalizePairingChallengeResponse(data);
+    return normalizePairingChallengeResponse(data.data);
   }
 
   async completePairing(
@@ -897,7 +1227,7 @@ export class GatewayBridgeClient {
       signal: options.signal,
       authenticated: false,
     });
-    return normalizePairingCompleteResponse(data);
+    return normalizePairingCompleteResponse(data.data);
   }
 
   async openSession(
@@ -917,7 +1247,10 @@ export class GatewayBridgeClient {
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     });
-    const response = normalizeGatewayOpenSessionResponse(data);
+    const response = {
+      ...normalizeGatewayOpenSessionResponse(data.data),
+      set_cookie_headers: data.set_cookie_headers,
+    };
     if (response.gateway_env_id !== request.gateway_env_id) {
       throw new GatewayClientError('GATEWAY_ENV_ID_MISMATCH', 'Gateway open-session response does not match the requested environment.');
     }
@@ -930,6 +1263,52 @@ export class GatewayBridgeClient {
       artifact: response.connect_artifact,
     });
     return response;
+  }
+
+  async upsertEnvironmentProfile(
+    record: GatewayRecord,
+    request: GatewayEnvProfileUpsertRequest,
+    options: GatewayRequestOptions = {},
+  ): Promise<GatewayEnvProfileUpsertResponse> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/env-profiles/upsert', gatewayEnvProfilePayload(request), {
+      secretStore: this.secretStore,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
+    return normalizeGatewayEnvProfileUpsertResponse(data.data);
+  }
+
+  async deleteEnvironmentProfile(
+    record: GatewayRecord,
+    request: GatewayEnvProfileDeleteRequest,
+    options: GatewayRequestOptions = {},
+  ): Promise<GatewayEnvProfileDeleteResponse> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/env-profiles/delete', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      gateway_env_id: compact(request.gateway_env_id),
+    }, {
+      secretStore: this.secretStore,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
+    return normalizeGatewayEnvProfileDeleteResponse(data.data);
+  }
+
+  async runEnvironmentLifecycle(
+    record: GatewayRecord,
+    request: GatewayEnvLifecycleRequest,
+    options: GatewayRequestOptions = {},
+  ): Promise<GatewayEnvLifecycleResponse> {
+    const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/env-lifecycle', {
+      protocol_version: GATEWAY_PROTOCOL_VERSION,
+      gateway_env_id: compact(request.gateway_env_id),
+      operation: request.operation,
+    }, {
+      secretStore: this.secretStore,
+      timeoutMs: options.timeoutMs,
+      signal: options.signal,
+    });
+    return normalizeGatewayEnvLifecycleResponse(data.data);
   }
 
   private assertGatewayIdentity(record: GatewayRecord, observedGatewayID: string, observedFingerprint: string | undefined): void {

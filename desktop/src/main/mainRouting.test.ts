@@ -996,26 +996,33 @@ describe('main routing', () => {
     expect(providerStart).toBeGreaterThan(openStart);
     const openSrc = mainSrc.slice(openStart, providerStart);
 
+    expect(openSrc).toContain('const capabilityFailure = await requireGatewayEnvironmentOpenCapability(record, request, {');
+    expect(openSrc).toContain('onRuntimeProgress: lifecycleContext?.onProgress,');
+    expect(openSrc).toContain('return finishGatewayOpenCapabilityFailure(operationKey, record, request, target, capabilityFailure);');
     expect(openSrc).toContain('const issued = await gatewayLifecycleManager().openSessionWithBridge(record, {');
     expect(openSrc).toContain("requested_capability: 'env_app'");
     expect(openSrc).toContain('if (error instanceof GatewayRuntimeStartRequiredError || error instanceof GatewayNotManageableError) {');
     expect(openSrc).toContain("next_actions: gatewayOperationFailureNextActions(operationKey, {");
     expect(openSrc).toContain("return gatewayLauncherFailureFromError(error, record, 'open_gateway_environment', {");
     expect(openSrc).toContain('const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);');
-    expect(openSrc).toContain('await installGatewayLocalAccessCookies(artifactURL, response.set_cookie_headers);');
+    expect(mainSrc).toContain('async function installGatewaySessionCookies(');
+    expect(mainSrc).toContain('await installGatewaySessionCookies(entryURL, options.gatewaySetCookieHeaders, sessionPartition);');
     expect(openSrc).toContain('buildGatewayDesktopTarget({');
     expect(openSrc).toContain('gatewaySessionID: response.gateway_session_id');
     expect(openSrc).toContain('gatewayManagedSessionStartup(artifactURL)');
+    expect(openSrc).toContain('const sessionRecord = await createSessionRecord(openTarget, startup, {');
+    expect(openSrc).toContain('gatewaySetCookieHeaders: response.set_cookie_headers,');
     expect(openSrc).toContain("location: 'runtime_gateway'");
+    expect(openSrc).not.toContain('installGatewayLocalAccessCookies');
     expect(openSrc).not.toContain('openRemoteEnvironmentFromLauncher');
     expect(openSrc).not.toContain('openProviderEnvironmentFromLauncher');
     expect(openSrc).not.toContain('openProviderEnvironmentWithOpenSession');
     expect(openSrc).not.toContain('openProviderRemoteEnvironmentRecord');
     expect(openSrc.indexOf('const artifactURL = gatewaySessionArtifactURL(record, response, bridgeSession);')).toBeLessThan(
-      openSrc.indexOf('await installGatewayLocalAccessCookies(artifactURL, response.set_cookie_headers);'),
-    );
-    expect(openSrc.indexOf('await installGatewayLocalAccessCookies(artifactURL, response.set_cookie_headers);')).toBeLessThan(
       openSrc.indexOf('const sessionRecord = await createSessionRecord(openTarget, startup'),
+    );
+    expect(openSrc.indexOf('gatewaySetCookieHeaders: response.set_cookie_headers,')).toBeLessThan(
+      openSrc.indexOf('await waitForSessionInitialLoad(sessionRecord);'),
     );
     expect(mainSrc).toContain("case 'open_gateway_environment':\n      return openGatewayEnvironmentFromLauncher(request);");
   });

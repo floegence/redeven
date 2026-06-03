@@ -74,17 +74,19 @@ func TestCatalogNormalization(t *testing.T) {
 		GatewayID:    " gateway_demo ",
 		DisplayName:  " Demo Gateway ",
 		Status:       "bad",
-		Capabilities: []GatewayCapability{GatewayCapabilityEnvCatalog, "bad", GatewayCapabilityEnvCatalog},
+		Capabilities: []GatewayCapability{GatewayCapabilityEnvCatalog, GatewayCapabilityEnvProfileWrite, "bad", GatewayCapabilityEnvCatalog},
 	}, []Environment{
 		{
-			GatewayEnvID: " env_demo ",
-			State:        "bad",
-			Capabilities: []EnvironmentCapability{
-				EnvironmentCapabilityOpen,
-				"bad",
-				EnvironmentCapabilityOpen,
-			},
-			Origin: EnvironmentOrigin{Kind: "bad", Label: " Target "},
+			GatewayEnvID:        " env_demo ",
+			State:               "bad",
+			AccessCapabilities:  []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityFiles, "bad", EnvironmentCapabilityOpen},
+			ControlCapabilities: []EnvironmentCapability{EnvironmentCapabilityStart, EnvironmentCapabilityRestart, EnvironmentCapabilityUpdateRuntime, "bad"},
+			Origin:              EnvironmentOrigin{Kind: "bad", Label: " Target "},
+		},
+		{
+			GatewayEnvID: " env_legacy ",
+			DisplayName:  "Legacy",
+			Capabilities: []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityStop, EnvironmentCapabilityTerminal},
 		},
 		{GatewayEnvID: " "},
 	})
@@ -95,11 +97,11 @@ func TestCatalogNormalization(t *testing.T) {
 	if resp.Gateway.Status != GatewayStatusUnknown {
 		t.Fatalf("Gateway status = %q", resp.Gateway.Status)
 	}
-	if got := resp.Gateway.Capabilities; !reflect.DeepEqual(got, []GatewayCapability{GatewayCapabilityEnvCatalog}) {
+	if got := resp.Gateway.Capabilities; !reflect.DeepEqual(got, []GatewayCapability{GatewayCapabilityEnvCatalog, GatewayCapabilityEnvProfileWrite}) {
 		t.Fatalf("Gateway capabilities = %#v", got)
 	}
-	if len(resp.Environments) != 1 {
-		t.Fatalf("Environments length = %d, want 1", len(resp.Environments))
+	if len(resp.Environments) != 2 {
+		t.Fatalf("Environments length = %d, want 2", len(resp.Environments))
 	}
 	env := resp.Environments[0]
 	if env.GatewayEnvID != "env_demo" || env.DisplayName != "env_demo" {
@@ -114,8 +116,21 @@ func TestCatalogNormalization(t *testing.T) {
 	if env.Origin.Kind != EnvironmentOriginKindNetworkTarget || env.Origin.Label != "Target" {
 		t.Fatalf("Origin = %#v", env.Origin)
 	}
-	if got := env.Capabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen}) {
+	if got := env.AccessCapabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityFiles}) {
+		t.Fatalf("AccessCapabilities = %#v", got)
+	}
+	if got := env.ControlCapabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityStart, EnvironmentCapabilityRestart, EnvironmentCapabilityUpdateRuntime}) {
+		t.Fatalf("ControlCapabilities = %#v", got)
+	}
+	if got := env.Capabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityFiles, EnvironmentCapabilityStart, EnvironmentCapabilityRestart, EnvironmentCapabilityUpdateRuntime}) {
 		t.Fatalf("Environment capabilities = %#v", got)
+	}
+	legacy := resp.Environments[1]
+	if got := legacy.AccessCapabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityTerminal}) {
+		t.Fatalf("legacy AccessCapabilities = %#v", got)
+	}
+	if got := legacy.ControlCapabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityStop}) {
+		t.Fatalf("legacy ControlCapabilities = %#v", got)
 	}
 }
 
@@ -128,6 +143,14 @@ func TestRuntimeGatewayWireContractsDoNotExposeSecrets(t *testing.T) {
 		reflect.TypeOf(EnvironmentOrigin{}),
 		reflect.TypeOf(OpenSessionRequest{}),
 		reflect.TypeOf(OpenSessionResponse{}),
+		reflect.TypeOf(EnvProfileUpsertRequest{}),
+		reflect.TypeOf(EnvProfileInput{}),
+		reflect.TypeOf(EnvProfileAccessRoute{}),
+		reflect.TypeOf(EnvProfileUpsertResponse{}),
+		reflect.TypeOf(EnvProfileDeleteRequest{}),
+		reflect.TypeOf(EnvProfileDeleteResponse{}),
+		reflect.TypeOf(EnvLifecycleRequest{}),
+		reflect.TypeOf(EnvLifecycleResponse{}),
 		reflect.TypeOf(GatewayConnectArtifact{}),
 		reflect.TypeOf(DiagnosticsHint{}),
 		reflect.TypeOf(PairingChallengeRequest{}),

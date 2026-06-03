@@ -6,6 +6,7 @@ import {
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 import {
   desktopGatewayCanOpenEnvironment,
+  desktopGatewayEnvironmentHasControlCapability,
   desktopGatewayEnvironmentEntryID,
   desktopGatewayNeedsResolution,
   desktopGatewaySourceID,
@@ -120,12 +121,29 @@ function buildGatewayEnvironmentEntry(
   }
   const displayName = compact(environment.display_name) || environment.gateway_env_id;
   const gatewayLabel = compact(gateway.display_name) || gateway.gateway_id;
+  const accessCapabilities = environment.access_capabilities ?? [];
+  const controlCapabilities = environment.control_capabilities ?? [];
   const isOpenable = desktopGatewayCanOpenEnvironment(gateway, environment);
   const needsResolve = desktopGatewayNeedsResolution(gateway.status);
-  const canStart = gateway.status === 'online'
-    && environment.env_kind === 'managed_local_env'
+  const canWriteGatewayProfile = gateway.status === 'online'
+    && gateway.capabilities.includes('env_profile_write');
+  const hasEditableGatewayProfile = environment.profile_access_route?.kind === 'url'
+    && !!compact(environment.profile_access_route.url);
+  const canEditGatewayProfile = canWriteGatewayProfile && hasEditableGatewayProfile;
+  const hasGatewayLifecycleControl = gateway.status === 'online'
+    && gateway.capabilities.includes('env_lifecycle');
+  const canStart = hasGatewayLifecycleControl
     && environment.state === 'stopped'
-    && environment.capabilities.includes('start');
+    && desktopGatewayEnvironmentHasControlCapability(environment, 'start');
+  const canStop = hasGatewayLifecycleControl
+    && environment.state === 'available'
+    && desktopGatewayEnvironmentHasControlCapability(environment, 'stop');
+  const canRestart = hasGatewayLifecycleControl
+    && (environment.state === 'available' || environment.state === 'stopped')
+    && desktopGatewayEnvironmentHasControlCapability(environment, 'restart');
+  const canUpdate = hasGatewayLifecycleControl
+    && (environment.state === 'available' || environment.state === 'stopped')
+    && desktopGatewayEnvironmentHasControlCapability(environment, 'update_runtime');
   const openSession = openSessionEntries.find((entry) => (
     entry.gateway_id === gateway.gateway_id
     && entry.gateway_env_id === environment.gateway_env_id
@@ -133,6 +151,9 @@ function buildGatewayEnvironmentEntry(
   const runtimeOperations = gatewayRuntimeOperations({
     openable: isOpenable,
     canStart,
+    canStop,
+    canRestart,
+    canUpdate,
     needsResolve,
   });
   const windowState = openSession?.window_state ?? 'closed';
@@ -153,6 +174,9 @@ function buildGatewayEnvironmentEntry(
     gateway_environment_state: environment.state,
     gateway_environment_kind: environment.env_kind,
     gateway_environment_capabilities: environment.capabilities,
+    gateway_environment_access_capabilities: accessCapabilities,
+    gateway_environment_control_capabilities: controlCapabilities,
+    gateway_environment_profile_access_route: environment.profile_access_route,
     gateway_environment_origin: environment.origin,
     environment_source: source,
     pinned: false,
@@ -173,8 +197,8 @@ function buildGatewayEnvironmentEntry(
     open_session_key: openSession?.open_session_key ?? '',
     open_session_lifecycle: openSession?.open_session_lifecycle,
     open_action: windowState === 'open' ? 'focus' : windowState === 'opening' ? 'opening' : 'open',
-    can_edit: false,
-    can_delete: false,
+    can_edit: canEditGatewayProfile,
+    can_delete: canWriteGatewayProfile && hasEditableGatewayProfile,
     created_at_ms: createdAtMS,
     last_used_at_ms: environment.last_seen_at_unix_ms ?? gateway.updated_at_ms,
   };
@@ -183,6 +207,9 @@ function buildGatewayEnvironmentEntry(
 function gatewayRuntimeOperations(input: Readonly<{
   openable: boolean;
   canStart: boolean;
+  canStop: boolean;
+  canRestart: boolean;
+  canUpdate: boolean;
   needsResolve: boolean;
 }>): DesktopRuntimeOperationPlans {
   const hidden = {
@@ -224,6 +251,33 @@ function gatewayRuntimeOperations(input: Readonly<{
       {
         label: 'Start through Gateway',
         menuVisibility: input.canStart ? 'contextual' : 'hidden',
+      },
+    ),
+    stop: desktopRuntimeOperationPlan(
+      'stop',
+      input.canStop ? 'available' : 'hidden',
+      'runtime_gateway',
+      {
+        label: 'Stop through Gateway',
+        menuVisibility: input.canStop ? 'stable' : 'hidden',
+      },
+    ),
+    restart: desktopRuntimeOperationPlan(
+      'restart',
+      input.canRestart ? 'available' : 'hidden',
+      'runtime_gateway',
+      {
+        label: 'Restart through Gateway',
+        menuVisibility: input.canRestart ? 'stable' : 'hidden',
+      },
+    ),
+    update: desktopRuntimeOperationPlan(
+      'update',
+      input.canUpdate ? 'available' : 'hidden',
+      'runtime_gateway',
+      {
+        label: 'Update through Gateway',
+        menuVisibility: input.canUpdate ? 'stable' : 'hidden',
       },
     ),
   };
