@@ -759,8 +759,8 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 		a.log.Warn("invalid grant_server notify json", "error", err)
 		return
 	}
-	if n.GrantServer == nil || n.SessionMeta == nil {
-		a.log.Warn("invalid grant_server notify: missing fields")
+	if err := session.ValidateGrantServerNotifyRemote(&n, a.cfg.EnvironmentID); err != nil {
+		a.log.Warn("invalid remote grant_server notify", "error", err)
 		return
 	}
 
@@ -769,23 +769,16 @@ func (a *Agent) handleGrantNotify(ctx context.Context, payload json.RawMessage) 
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	floeApp := strings.TrimSpace(meta.FloeApp)
 
-	if channelID == "" || endpointID == "" || floeApp == "" {
-		a.log.Warn("invalid session_meta", "channel_id", channelID, "endpoint_id", endpointID, "floe_app", floeApp)
-		return
-	}
-	if endpointID != a.cfg.EnvironmentID {
-		a.log.Warn("session_meta endpoint_id mismatch", "expected", a.cfg.EnvironmentID, "got", endpointID, "channel_id", channelID)
-		return
-	}
-	if n.GrantServer.ChannelId != channelID {
-		a.log.Warn("grant_server channel_id mismatch", "channel_id", channelID)
-		return
-	}
 	if !isSupportedFloeApp(floeApp) {
 		a.log.Warn("unsupported floe_app; ignoring session", "floe_app", floeApp, "channel_id", channelID)
 		return
 	}
+	meta.ChannelID = channelID
+	meta.EndpointID = endpointID
 	meta.FloeApp = floeApp
+	meta.UserPublicID = strings.TrimSpace(meta.UserPublicID)
+	meta.NamespacePublicID = strings.TrimSpace(meta.NamespacePublicID)
+	n.GrantServer.ChannelId = channelID
 
 	// Clamp control-plane granted permissions using the local endpoint cap.
 	declared := config.PermissionSet{

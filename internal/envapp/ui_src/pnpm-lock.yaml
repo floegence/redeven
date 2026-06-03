@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@floegence/flowersec-core': ^0.19.7
+  '@floegence/flowersec-core': ^0.19.9
   dompurify: ^3.4.0
   flatted: ^3.4.2
   lodash-es: ^4.18.1
@@ -26,20 +26,20 @@ importers:
         specifier: ^0.0.5
         version: 0.0.5
       '@floegence/floe-webapp-boot':
-        specifier: ^0.36.66
-        version: 0.36.66
+        specifier: ^0.36.67
+        version: 0.36.67
       '@floegence/floe-webapp-core':
-        specifier: ^0.36.66
-        version: 0.36.66(solid-js@1.9.13)
+        specifier: ^0.36.67
+        version: 0.36.67(solid-js@1.9.13)
       '@floegence/floe-webapp-protocol':
-        specifier: ^0.36.66
-        version: 0.36.66(solid-js@1.9.13)
+        specifier: ^0.36.67
+        version: 0.36.67(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
         specifier: ^0.5.2
         version: 0.5.2
       '@floegence/flowersec-core':
-        specifier: ^0.19.7
-        version: 0.19.7
+        specifier: ^0.19.9
+        version: 0.19.9
       '@fontsource/iosevka':
         specifier: ^5.2.5
         version: 5.2.5
@@ -489,24 +489,27 @@ packages:
   '@fast-csv/parse@4.3.6':
     resolution: {integrity: sha512-uRsLYksqpbDmWaSmzvJcuApSEe38+6NQZBUsuAyMZKqHxH0g1wcJgsKUvN3WC8tewaqFjBMMGrkHmC+T7k8LvA==}
 
-  '@floegence/floe-webapp-boot@0.36.66':
-    resolution: {integrity: sha512-4SrXf+qet8ksdBBntTmy1TjUrT6gMbHBmdxcQ5UDKsaf2DscfOS+JifGKfxMrBedITt2LfDUlGUK1dW7+517rQ==}
+  '@floegence/floe-webapp-boot@0.36.67':
+    resolution: {integrity: sha512-YlqHMBTtUM3BUDIP+9wk6g6sCVFri1oW58gePyL3dR7O+ThXuXdxF/JB35rB8vaUur3BHvR99nVkQxMNNGt0nA==}
+    engines: {node: '>=24.0.0'}
 
-  '@floegence/floe-webapp-core@0.36.66':
-    resolution: {integrity: sha512-XTZGQDb+wZMp2vU4cbeX2f347urs8SRKTdJIfPOsjpuVGTUVvurMoU70wyyK5Ydy9kimkLfPsVRSQc8rNr8NQg==}
+  '@floegence/floe-webapp-core@0.36.67':
+    resolution: {integrity: sha512-vDoGdDLXbQ+uOmYxaqFYFKRkmS5WPQMGth8Wb4FRiBcrH6oAOChfwUTcZNegcr4tbU/2qlzqUzwfAvE/NvIkfQ==}
+    engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floe-webapp-protocol@0.36.66':
-    resolution: {integrity: sha512-4Ft/tTaQFQO0/wRLHGgdkDlZNP31XMsT8vuGfDaQjIz/zVDp6v34WkJf03gXPtOv74gS50uzd5xeXjS3TbulHw==}
+  '@floegence/floe-webapp-protocol@0.36.67':
+    resolution: {integrity: sha512-Zftp5N9efAmyg8WpnhAPLcyznhzUv1akls53e1oe8c40zCSqt4h0dN6YdYsgxxX0uqnW1xFdB+Rsr/OYMk8ECw==}
+    engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
 
   '@floegence/floeterm-terminal-web@0.5.2':
     resolution: {integrity: sha512-ZbnYIc/jq8w3H/0/rh1wa9DVccG0A0e5HhVnI/QrTKuI2GSysM9GU63w2DNxhcO8AbZLqcCJDlntpfi7luv9sQ==}
 
-  '@floegence/flowersec-core@0.19.7':
-    resolution: {integrity: sha512-GWLpR1Sc+Q5mU5w4TLc2szqDN2s17dwUerpMmPm8k3may9RkE/4Ks1KTMcSz7YkIZDuIbN5g+ScOHO9Bjv7muw==}
+  '@floegence/flowersec-core@0.19.9':
+    resolution: {integrity: sha512-Bj8EFVt3MS6SZTLNztLhnA3aOmtSHYkTNfk1Xj7aylviN1q4ZEUmN++g5qLbbDrySeKTzRBH33wisxgC8Wk3dA==}
     engines: {node: '>=24.0.0'}
 
   '@fontsource/iosevka@5.2.5':
@@ -3022,14 +3025,14 @@ snapshots:
       lodash.isundefined: 3.0.1
       lodash.uniq: 4.5.0
 
-  '@floegence/floe-webapp-boot@0.36.66':
+  '@floegence/floe-webapp-boot@0.36.67':
     dependencies:
-      '@floegence/flowersec-core': 0.19.7
+      '@floegence/flowersec-core': 0.19.9
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floe-webapp-core@0.36.66(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.36.67(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
@@ -3041,9 +3044,9 @@ snapshots:
       solid-motionone: 1.0.4(solid-js@1.9.13)
       tailwind-merge: 3.6.0
 
-  '@floegence/floe-webapp-protocol@0.36.66(solid-js@1.9.13)':
+  '@floegence/floe-webapp-protocol@0.36.67(solid-js@1.9.13)':
     dependencies:
-      '@floegence/flowersec-core': 0.19.7
+      '@floegence/flowersec-core': 0.19.9
       solid-js: 1.9.13
     transitivePeerDependencies:
       - bufferutil
@@ -3054,7 +3057,7 @@ snapshots:
       '@beamterm/renderer': 1.0.0
       ghostty-web: 0.4.0-next.14.g6a1a50d
 
-  '@floegence/flowersec-core@0.19.7':
+  '@floegence/flowersec-core@0.19.9':
     dependencies:
       '@noble/ciphers': 0.6.0
       '@noble/curves': 1.9.7

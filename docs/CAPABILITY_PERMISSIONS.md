@@ -45,7 +45,7 @@ The runtime must always compute:
 
 ```
 cap_rwx = permission_policy.local_max
-if by_user[user_public_id] exists: cap_rwx = cap_rwx ∩ by_user[user_public_id]
+if user_public_id is non-empty and by_user[user_public_id] exists: cap_rwx = cap_rwx ∩ by_user[user_public_id]
 if by_app[floe_app] exists: cap_rwx = cap_rwx ∩ by_app[floe_app]
 
 effective_rwx = session_meta.rwx ∩ cap_rwx
@@ -53,6 +53,18 @@ effective_admin = session_meta.can_admin  // NOTE: not clamped by permission_pol
 ```
 
 The customer-side runtime is not a control-plane authorization boundary: users can inspect or modify their local Redeven binary, UI assets, and config. Local policy may only narrow the server-issued grant; it must never expand `session_meta` or infer access to another environment/client from local state.
+
+Remote `grant_server` sessions must deliver authoritative `session_meta` before any capability handler is exposed. The minimum contract is:
+
+- `user_public_id`: non-empty user identity for remote provider sessions; required for `by_user` local caps.
+- `namespace_public_id`: namespace/workspace authority for `can_admin` and namespace-scoped grants.
+- `endpoint_id`: endpoint/environment identity bound to the Flowersec session.
+- `floe_app`: target app such as `com.floegence.redeven.agent`, `com.floegence.redeven.code`, or `com.floegence.redeven.portforward`.
+- `read`, `write`, `execute`, and `can_admin`: server-issued capability bits.
+- `created_at_unix_ms`: grant/session creation time for diagnostics and audit correlation.
+- `channel_id`: transport/session channel metadata when provided by the control plane, used for audit and reconnect diagnostics.
+
+Local direct mode remains compatible with the same effective-permission calculation. It may source the equivalent session metadata from a local access gate or direct artifact instead of a remote `grant_server`, but it must still provide an app identity and capability bits before runtime handlers run. Local direct compatibility must not make `by_user[""]` a wildcard.
 
 See also: [`PERMISSION_POLICY.md`](PERMISSION_POLICY.md).
 

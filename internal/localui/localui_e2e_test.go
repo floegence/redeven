@@ -2,19 +2,25 @@ package localui
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
+	fsclient "github.com/floegence/flowersec/flowersec-go/client"
+	"github.com/floegence/flowersec/flowersec-go/protocolio"
 	"github.com/floegence/redeven/internal/accessgate"
 )
 
 func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
+	s.a = newRuntimeHealthTestAgent(t, s.configPath)
 
 	srv := httptest.NewServer(s.handler())
 	defer srv.Close()
@@ -141,6 +147,57 @@ func TestServer_E2E_LocalPasswordFlow(t *testing.T) {
 	if headerConnectResp.StatusCode != http.StatusOK {
 		t.Fatalf("header connect_artifact status = %d, want %d", headerConnectResp.StatusCode, http.StatusOK)
 	}
+
+	var connectBody connectArtifactEnvelope
+	if err := json.NewDecoder(headerConnectResp.Body).Decode(&connectBody); err != nil {
+		t.Fatalf("decode header connect_artifact body error = %v", err)
+	}
+	connectLocalDirectSession(t, s, srv.URL, unlockBody.Data.ResumeToken, connectBody.ConnectArtifact)
+}
+
+func connectLocalDirectSession(t *testing.T, s *Server, serverURL, resumeToken string, artifact *protocolio.ConnectArtifact) {
+	t.Helper()
+	if s == nil || s.a == nil {
+		t.Fatal("test server missing agent")
+	}
+	if artifact == nil || artifact.DirectInfo == nil {
+		t.Fatalf("missing direct connect artifact: %#v", artifact)
+	}
+	origin := strings.TrimPrefix(serverURL, "ws://")
+	origin = strings.TrimPrefix(origin, "wss://")
+	origin = strings.TrimPrefix(origin, "http://")
+	origin = strings.TrimPrefix(origin, "https://")
+	origin = "http://" + origin
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	client, err := fsclient.ConnectDirect(ctx, artifact.DirectInfo,
+		fsclient.WithOrigin(origin),
+		fsclient.WithHeader(http.Header{localAccessResumeHeader: []string{resumeToken}}),
+	)
+	if err != nil {
+		t.Fatalf("ConnectDirect() error = %v", err)
+	}
+	defer client.Close()
+
+	var sessions []any
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		sessions = nil
+		for _, sess := range s.a.RuntimePresentationSessions() {
+			if sess.ChannelID == artifact.DirectInfo.ChannelId &&
+				sess.SessionKind == "envapp_rpc" &&
+				sess.UserPublicID == "user_local" &&
+				sess.CanRead &&
+				sess.CanWrite &&
+				sess.CanExecute {
+				return
+			}
+			sessions = append(sessions, sess)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("local direct session %q did not become active; sessions=%#v", artifact.DirectInfo.ChannelId, sessions)
 }
 
 func TestServer_E2E_CodespaceBrowserBootstrapFromResumeToken(t *testing.T) {
