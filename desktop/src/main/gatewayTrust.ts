@@ -42,12 +42,13 @@ export type GatewayPairingChallengeResponse = Readonly<{
 }>;
 
 export type GatewayPairingCompleteRequest = Readonly<{
-  protocol_version: 'redeven-runtime-gateway-v1';
+  protocol_version: 'redeven-gateway-v1';
   client_nonce: string;
   gateway_nonce: string;
   gateway_id: string;
   binding_audience: string;
   client_key_id: string;
+  client_capability?: 'env_profile_write';
   proof: string;
 }>;
 
@@ -146,17 +147,27 @@ export function createGatewayPairingMaterial(record: GatewayRecord): GatewayPair
 }
 
 export function pairingChallengeRequest(material: GatewayPairingMaterial): Readonly<{
-  protocol_version: 'redeven-runtime-gateway-v1';
+  protocol_version: 'redeven-gateway-v1';
   client_nonce: string;
   client_public_key: string;
   binding_audience: string;
 }> {
   return {
-    protocol_version: 'redeven-runtime-gateway-v1',
+    protocol_version: 'redeven-gateway-v1',
     client_nonce: material.client_nonce,
     client_public_key: compact(material.client_public_key),
     binding_audience: material.binding_audience,
   };
+}
+
+export function pairingChallengeRequestWithCode(
+  material: GatewayPairingMaterial,
+  pairingCode: string,
+): ReturnType<typeof pairingChallengeRequest> & Readonly<{ pairing_code?: string }> {
+  const base = pairingChallengeRequest(material);
+  return compact(pairingCode)
+    ? { ...base, pairing_code: compact(pairingCode) }
+    : base;
 }
 
 export function pairingProofPayload(input: Readonly<{
@@ -166,6 +177,7 @@ export function pairingProofPayload(input: Readonly<{
   gateway_id: string;
   binding_audience: string;
   client_key_id: string;
+  client_capability?: string;
 }>): string {
   return canonicalJSON(input);
 }
@@ -200,13 +212,18 @@ export function pairingChallengePayload(input: Readonly<{
   client_public_key: string;
   gateway_public_key: string;
   expires_at_unix_ms: number;
+  pairing_code?: string;
 }>): string {
-  return canonicalJSON(input);
+  return canonicalJSON({
+    ...input,
+    ...(compact(input.pairing_code) ? { pairing_code: compact(input.pairing_code) } : {}),
+  });
 }
 
 export function buildPairingCompleteRequest(
   material: GatewayPairingMaterial,
   challenge: GatewayPairingChallengeResponse,
+  options: Readonly<{ profileWrite?: boolean }> = {},
 ): GatewayPairingCompleteRequest {
   const gatewayID = compact(challenge.gateway_id);
   const gatewayNonce = compact(challenge.gateway_nonce);
@@ -214,12 +231,13 @@ export function buildPairingCompleteRequest(
     throw new GatewayTrustError('GATEWAY_PAIRING_CHALLENGE_INVALID', 'Gateway pairing challenge is incomplete.');
   }
   const base = {
-    protocol_version: 'redeven-runtime-gateway-v1' as const,
+    protocol_version: 'redeven-gateway-v1' as const,
     client_nonce: material.client_nonce,
     gateway_nonce: gatewayNonce,
     gateway_id: gatewayID,
     binding_audience: material.binding_audience,
     client_key_id: material.client_key_id,
+    ...(options.profileWrite ? { client_capability: 'env_profile_write' as const } : {}),
   };
   return {
     ...base,
@@ -234,6 +252,7 @@ export function pairingCompleteResponsePayload(input: Readonly<{
   gateway_id: string;
   binding_audience: string;
   client_key_id: string;
+  client_capability?: string;
   paired_at_unix_ms: number;
 }>): string {
   return canonicalJSON(input);
@@ -254,7 +273,7 @@ export function gatewayConnectArtifactProofPayload(input: Readonly<{
   artifact_nonce: string;
 }>): string {
   return canonicalJSON({
-    protocol_version: 'redeven-runtime-gateway-v1',
+    protocol_version: 'redeven-gateway-v1',
     gateway_id: input.gateway_id,
     gateway_env_id: input.gateway_env_id,
     gateway_session_id: input.gateway_session_id,
@@ -283,6 +302,7 @@ export function assertGatewayPairingChallengeSignature(
     client_public_key: compact(material.client_public_key),
     gateway_public_key: challenge.gateway_public_key,
     expires_at_unix_ms: challenge.expires_at_unix_ms,
+    pairing_code: challenge.pairing_code,
   });
   if (!verifyGatewaySignature(challenge.gateway_public_key, payload, challenge.signature)) {
     throw new GatewayTrustError('GATEWAY_PAIRING_SIGNATURE_INVALID', 'Gateway pairing challenge signature is invalid.');
@@ -293,6 +313,7 @@ export function assertGatewayPairingChallenge(input: Readonly<{
   record: GatewayRecord;
   material: GatewayPairingMaterial;
   challenge: GatewayPairingChallengeResponse;
+  expected_pairing_code?: string;
   now_unix_ms?: number;
 }>): string {
   const now = Math.floor(input.now_unix_ms ?? Date.now());
@@ -304,8 +325,12 @@ export function assertGatewayPairingChallenge(input: Readonly<{
   if (!Number.isFinite(expiresAt) || Math.floor(expiresAt) <= now) {
     throw new GatewayTrustError('GATEWAY_PAIRING_CHALLENGE_EXPIRED', 'Gateway pairing challenge expired.');
   }
-  if (input.challenge.protocol_version !== 'redeven-runtime-gateway-v1') {
+  if (input.challenge.protocol_version !== 'redeven-gateway-v1') {
     throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
+  }
+  const expectedPairingCode = compact(input.expected_pairing_code);
+  if (expectedPairingCode !== '' && compact(input.challenge.pairing_code) !== expectedPairingCode) {
+    throw new GatewayTrustError('GATEWAY_PAIRING_CODE_MISMATCH', 'Gateway pairing challenge did not confirm the requested pairing code.');
   }
   const expectedFingerprint = gatewayPublicKeyFingerprint(input.challenge.gateway_public_key);
   const observedFingerprint = compact(input.challenge.gateway_public_key_fingerprint) || expectedFingerprint;
@@ -320,8 +345,9 @@ export function assertGatewayPairingCompleteResponse(
   material: GatewayPairingMaterial,
   challenge: GatewayPairingChallengeResponse,
   response: GatewayPairingCompleteResponse,
+  options: Readonly<{ client_capability?: string }> = {},
 ): void {
-  if (response.protocol_version !== 'redeven-runtime-gateway-v1') {
+  if (response.protocol_version !== 'redeven-gateway-v1') {
     throw new GatewayTrustError('GATEWAY_PROTOCOL_VERSION_UNSUPPORTED', 'Gateway protocol version is not supported.');
   }
   if (response.gateway_id !== challenge.gateway_id || response.client_key_id !== material.client_key_id) {
@@ -337,6 +363,7 @@ export function assertGatewayPairingCompleteResponse(
     gateway_id: response.gateway_id,
     binding_audience: material.binding_audience,
     client_key_id: response.client_key_id,
+    client_capability: compact(options.client_capability) || undefined,
     paired_at_unix_ms: response.paired_at_unix_ms,
   });
   if (!verifyGatewaySignature(challenge.gateway_public_key, payload, response.proof)) {
@@ -469,7 +496,7 @@ export async function createGatewayAuthHeaders(
   const route = compact(input.route);
   const method = compact(input.method).toUpperCase();
   const signaturePayload = canonicalJSON({
-    protocol_version: 'redeven-runtime-gateway-v1',
+    protocol_version: 'redeven-gateway-v1',
     method,
     route,
     body_digest: bodyDigest,

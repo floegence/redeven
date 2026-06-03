@@ -3,18 +3,18 @@
   "release_review": {
     "release_version": "unreleased",
     "previous_release": "v0.7.0",
-    "reviewed_at": "2026-06-01",
-    "review_id": "runtime-gateway-skeleton-v1",
-    "summary": "Runtime Service snapshots now include an optional Runtime Gateway capability while preserving the existing compatibility window.",
+    "reviewed_at": "2026-06-03",
+    "review_id": "gateway-service-decoupling-v1",
+    "summary": "Gateway is now a separate redeven-gateway service and protocol; Runtime Service protocol compatibility stays on the existing window.",
     "checked_surfaces": [
-      "Runtime Service snapshot schema adds only the optional capabilities.runtime_gateway field and keeps protocol_version redeven-runtime-v1",
-      "Go snapshot normalization treats missing runtime_gateway as unsupported so older startup reports and health snapshots remain readable",
-      "Desktop shared Runtime Service normalization treats missing runtime_gateway as unsupported while preserving existing provider link and desktop model source capability behavior",
-      "Runtime Gateway catalog and open-session skeletons define credential-free wire contracts and do not connect Portal or Metaserver authorization",
-      "Desktop Welcome registry and tab UI are intentionally not wired in this slice; no existing open flow consumes runtime_gateway yet",
-      "Compatibility epoch, minimum Desktop version, and minimum Runtime version remain unchanged because this is an additive optional capability"
+      "Runtime Service protocol_version remains redeven-runtime-v1 and runtime-control/open flows continue to use the existing desktop-bridge contract for env runtimes",
+      "Gateway catalog, profile management, pairing, and open-session now use the separate redeven-gateway-v1 protocol and redeven-gateway binary rather than Runtime Service snapshot fields",
+      "Desktop Gateway management actions use the independent Gateway service package slot and state root; env runtime start/stop/update actions remain separate",
+      "Older redeven-runtime-gateway-v1 catalog responses are rejected by Gateway protocol validation instead of being consumed as normal environments",
+      "Gateway catalog no longer exposes env_local by default; Gateway host environments must be explicit Gateway-owned profiles",
+      "Compatibility epoch, minimum Desktop version, and minimum Runtime version remain unchanged because Runtime Service's own wire contract is not widened in this change"
     ],
-    "same_window_rationale": "The new runtime_gateway field is an additive optional capability under the existing Runtime Service snapshot envelope. Older runtimes omit it and new Desktop code normalizes the omission to unsupported; older Desktop versions ignore the extra JSON field from newer runtimes. No required field, protocol version, compatibility epoch, minimum Desktop version, or minimum Runtime version changes are needed for this skeleton."
+    "same_window_rationale": "Gateway service management is outside the Runtime Service protocol window: it uses redeven-gateway-v1, a separate binary, and a separate managed package slot. Env runtime operations still use the existing Runtime Service protocol and desktop bridge, so no Runtime Service compatibility epoch or minimum version change is required for this release contract."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,

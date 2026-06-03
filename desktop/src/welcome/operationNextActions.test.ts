@@ -161,9 +161,9 @@ describe('operationNextActions', () => {
           label: 'Refresh status',
         },
         {
-          kind: 'update_gateway_runtime',
+          kind: 'update_gateway',
           gateway_id: 'bastion',
-          label: 'Update Gateway runtime',
+          label: 'Update Gateway service',
         },
         {
           kind: 'retry',
@@ -190,7 +190,7 @@ describe('operationNextActions', () => {
           label: 'Dismiss',
         },
       ]),
-      action: 'start_gateway_runtime',
+      action: 'start_gateway',
       operation_key: 'gateway:bastion:start',
       subject_kind: 'gateway',
       subject_id: 'bastion',
@@ -200,7 +200,7 @@ describe('operationNextActions', () => {
     expect(visibleOperationNextActions(progress)).toEqual([
       expect.objectContaining({ kind: 'retry', label: 'Retry' }),
       expect.objectContaining({ kind: 'refresh_gateway_status', label: 'Refresh status' }),
-      expect.objectContaining({ kind: 'update_gateway_runtime', label: 'Update Gateway runtime' }),
+      expect.objectContaining({ kind: 'update_gateway', label: 'Update Gateway service' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
       expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);

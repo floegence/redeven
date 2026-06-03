@@ -27,7 +27,7 @@ import type {
 import { desktopGatewayProfileURLHasEmbeddedCredentials } from '../shared/desktopGateway';
 import type { RuntimePlacementBridgeSessionHandle } from './runtimePlacementBridgeSession';
 
-const GATEWAY_PROTOCOL_VERSION = 'redeven-runtime-gateway-v1';
+const GATEWAY_PROTOCOL_VERSION = 'redeven-gateway-v1';
 const DEFAULT_GATEWAY_REQUEST_TIMEOUT_MS = 20_000;
 
 type GatewayRequestOptions = Readonly<{
@@ -715,38 +715,20 @@ function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment 
   }
   const candidate = value as Record<string, unknown>;
   const gatewayEnvID = compact(candidate.gateway_env_id);
-  if (!gatewayEnvID) {
+  if (!gatewayEnvID || gatewayEnvID === 'env_local') {
     return null;
   }
   const origin = candidate.origin && typeof candidate.origin === 'object'
     ? candidate.origin as Record<string, unknown>
     : {};
-  const capabilities = Array.isArray(candidate.capabilities)
-    ? candidate.capabilities.map(normalizeEnvironmentCapability).filter((item): item is DesktopGatewayEnvironmentCapability => !!item)
-    : [];
   const accessCapabilities = Array.isArray(candidate.access_capabilities)
     ? candidate.access_capabilities.map(normalizeEnvironmentCapability).filter((item): item is DesktopGatewayEnvironmentCapability => !!item)
     : [];
   const controlCapabilities = Array.isArray(candidate.control_capabilities)
     ? candidate.control_capabilities.map(normalizeEnvironmentCapability).filter((item): item is DesktopGatewayEnvironmentCapability => !!item)
     : [];
-  const normalizedAccessCapabilities = accessCapabilities.length > 0
-    ? [...new Set(accessCapabilities)]
-    : [...new Set(capabilities.filter((capability) => (
-        capability === 'open'
-        || capability === 'terminal'
-        || capability === 'files'
-        || capability === 'web_service'
-        || capability === 'port_forward'
-      )))];
-  const normalizedControlCapabilities = controlCapabilities.length > 0
-    ? [...new Set(controlCapabilities)]
-    : [...new Set(capabilities.filter((capability) => (
-        capability === 'start'
-        || capability === 'stop'
-        || capability === 'restart'
-        || capability === 'update_runtime'
-      )))];
+  const normalizedAccessCapabilities = [...new Set(accessCapabilities)];
+  const normalizedControlCapabilities = [...new Set(controlCapabilities)];
   const profileAccessRoute = normalizeGatewayEnvironmentProfileAccessRoute(candidate.profile_access_route);
   const profile = normalizeGatewayEnvironmentProfile(candidate.profile);
   return {
@@ -754,7 +736,7 @@ function normalizeGatewayEnvironment(value: unknown): DesktopGatewayEnvironment 
     display_name: compact(candidate.display_name) || gatewayEnvID,
     env_kind: compact(candidate.env_kind) === 'managed_local_env' ? 'managed_local_env' : 'reachable_env',
     state: normalizeEnvironmentState(candidate.state),
-    capabilities: [...new Set([...capabilities, ...normalizedAccessCapabilities, ...normalizedControlCapabilities])],
+    capabilities: [...new Set([...normalizedAccessCapabilities, ...normalizedControlCapabilities])],
     access_capabilities: normalizedAccessCapabilities,
     control_capabilities: normalizedControlCapabilities,
     ...(profile ? { profile } : {}),
@@ -1096,11 +1078,12 @@ export class GatewayURLClient {
   async pairingChallenge(
     record: GatewayRecord,
     request: Readonly<{
-      protocol_version: 'redeven-runtime-gateway-v1';
-      client_nonce: string;
-      client_public_key: string;
-      binding_audience: string;
-    }>,
+      protocol_version: 'redeven-gateway-v1';
+	      client_nonce: string;
+	      client_public_key: string;
+	      binding_audience: string;
+	      pairing_code?: string;
+	    }>,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayPairingChallengeResponse> {
     const data = await requestGatewayPairingJSON(record, 'gateway/v1/pairing/challenge', request, options);
@@ -1231,11 +1214,12 @@ export class GatewayBridgeClient {
   async pairingChallenge(
     record: GatewayRecord,
     request: Readonly<{
-      protocol_version: 'redeven-runtime-gateway-v1';
-      client_nonce: string;
-      client_public_key: string;
-      binding_audience: string;
-    }>,
+      protocol_version: 'redeven-gateway-v1';
+	      client_nonce: string;
+	      client_public_key: string;
+	      binding_audience: string;
+	      pairing_code?: string;
+	    }>,
     options: GatewayRequestOptions = {},
   ): Promise<GatewayPairingChallengeResponse> {
     const data = await requestGatewayBridgeJSON(this.bridge, record, 'gateway/v1/pairing/challenge', request, {

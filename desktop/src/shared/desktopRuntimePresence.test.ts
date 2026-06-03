@@ -479,7 +479,7 @@ describe('desktopRuntimePresence', () => {
     }
   });
 
-  it('keeps Gateway cards on the Runtime Gateway path instead of provider tunnel operations', () => {
+  it('keeps Gateway cards on the Gateway bridge path instead of provider tunnel operations', () => {
     const plans = buildDesktopRuntimeOperationPlans({
       surface: 'gateway_card',
       running: true,

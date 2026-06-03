@@ -35,7 +35,7 @@ import type {
   DesktopGatewayEnvironment,
   DesktopGatewayEnvironmentCapability,
   DesktopGatewayEnvironmentState,
-  DesktopGatewayRuntimeState,
+  DesktopGatewayServiceState,
   DesktopGatewaySource,
   DesktopGatewayStatus,
   DesktopGatewayTrustState,
@@ -127,10 +127,10 @@ export type DesktopLauncherActionOutcome =
   | 'deleted_control_plane'
   | 'saved_gateway'
   | 'paired_gateway'
-  | 'started_gateway_runtime'
-  | 'stopped_gateway_runtime'
-  | 'restarted_gateway_runtime'
-  | 'updated_gateway_runtime'
+  | 'started_gateway'
+  | 'stopped_gateway'
+  | 'restarted_gateway'
+  | 'updated_gateway'
   | 'refreshed_gateway_catalog'
   | 'refreshed_gateway_status'
   | 'deleted_gateway'
@@ -167,13 +167,13 @@ export type DesktopLauncherActionFailureCode =
   | 'runtime_start_failed'
   | 'gateway_start_required'
   | 'gateway_not_manageable'
-  | 'gateway_runtime_unreachable'
+  | 'gateway_service_unreachable'
   | 'gateway_container_unavailable'
   | 'gateway_bridge_unavailable'
-  | 'gateway_runtime_start_failed'
-  | 'gateway_runtime_stop_failed'
-  | 'gateway_runtime_restart_failed'
-  | 'gateway_runtime_update_failed'
+  | 'gateway_service_start_failed'
+  | 'gateway_service_stop_failed'
+  | 'gateway_service_restart_failed'
+  | 'gateway_service_update_failed'
   | 'gateway_catalog_failed'
   | 'confirmation_required'
   | 'operation_missing'
@@ -209,10 +209,10 @@ export type DesktopLauncherActionKind =
   | 'delete_control_plane'
   | 'upsert_gateway'
   | 'pair_gateway'
-  | 'start_gateway_runtime'
-  | 'stop_gateway_runtime'
-  | 'restart_gateway_runtime'
-  | 'update_gateway_runtime'
+  | 'start_gateway'
+  | 'stop_gateway'
+  | 'restart_gateway'
+  | 'update_gateway'
   | 'refresh_gateway_catalog'
   | 'refresh_gateway_status'
   | 'delete_gateway'
@@ -304,7 +304,7 @@ export type DesktopGatewayStartRequiredPayload = Readonly<{
   gateway_id: string;
   gateway_label: string;
   reason: 'pair_gateway' | 'open_gateway_environment' | 'refresh_gateway_catalog';
-  runtime_state?: DesktopGatewayRuntimeState;
+  service_state?: DesktopGatewayServiceState;
   retry_action: DesktopGatewayStartRequiredRetryAction;
 }>;
 
@@ -563,7 +563,7 @@ export type DesktopLauncherOperationNextAction = Readonly<
       label_key?: DesktopTranslationKey;
     }
   | {
-      kind: 'update_gateway_runtime';
+      kind: 'update_gateway';
       gateway_id: string;
       label: string;
       label_key?: DesktopTranslationKey;
@@ -721,10 +721,11 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'upsert_gateway';
       gateway_id?: string;
       display_name: string;
-      connection_kind: 'url';
-      gateway_url: string;
-      allow_loopback_http: boolean;
-    }
+	      connection_kind: 'url';
+	      gateway_url: string;
+	      pairing_code?: string;
+	      allow_loopback_http: boolean;
+	    }
   | {
       kind: 'upsert_gateway';
       gateway_id?: string;
@@ -763,21 +764,21 @@ export type DesktopLauncherActionRequest = Readonly<
       start_policy?: DesktopGatewayStartPolicy;
     }
   | {
-      kind: 'start_gateway_runtime';
+      kind: 'start_gateway';
       gateway_id: string;
     }
   | {
-      kind: 'stop_gateway_runtime';
-      gateway_id: string;
-      impact_acknowledged?: boolean;
-    }
-  | {
-      kind: 'restart_gateway_runtime';
+      kind: 'stop_gateway';
       gateway_id: string;
       impact_acknowledged?: boolean;
     }
   | {
-      kind: 'update_gateway_runtime';
+      kind: 'restart_gateway';
+      gateway_id: string;
+      impact_acknowledged?: boolean;
+    }
+  | {
+      kind: 'update_gateway';
       gateway_id: string;
       impact_acknowledged?: boolean;
     }
@@ -1369,11 +1370,14 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         return {
           kind,
           gateway_id: gatewayID,
-          display_name: displayName,
-          connection_kind: 'url',
-          gateway_url: gatewayURL,
-          allow_loopback_http: (candidate as { allow_loopback_http?: unknown }).allow_loopback_http === true,
-        };
+	          display_name: displayName,
+	          connection_kind: 'url',
+	          gateway_url: gatewayURL,
+	          ...(compact((candidate as { pairing_code?: unknown }).pairing_code)
+	            ? { pairing_code: compact((candidate as { pairing_code?: unknown }).pairing_code) }
+	            : {}),
+	          allow_loopback_http: (candidate as { allow_loopback_http?: unknown }).allow_loopback_http === true,
+	        };
       }
       if (connectionKind === 'ssh_host') {
         try {
@@ -1428,10 +1432,10 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return null;
     }
     case 'pair_gateway':
-    case 'start_gateway_runtime':
-    case 'stop_gateway_runtime':
-    case 'restart_gateway_runtime':
-    case 'update_gateway_runtime':
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
     case 'refresh_gateway_status':
     case 'refresh_gateway_catalog':
     case 'delete_gateway': {
@@ -1458,7 +1462,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
         };
       }
-      if (kind === 'stop_gateway_runtime' || kind === 'restart_gateway_runtime' || kind === 'update_gateway_runtime') {
+      if (kind === 'stop_gateway' || kind === 'restart_gateway' || kind === 'update_gateway') {
         return {
           kind,
           gateway_id: gatewayID,

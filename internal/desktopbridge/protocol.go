@@ -34,18 +34,23 @@ type FrameHeader struct {
 }
 
 type Hello struct {
-	ProtocolVersion string         `json:"protocol_version"`
-	RuntimeVersion  string         `json:"runtime_version"`
-	RuntimeCommit   string         `json:"runtime_commit,omitempty"`
-	StartedAtUnixMS int64          `json:"started_at_unix_ms,omitempty"`
-	LocalUI         HelloLocalUI   `json:"local_ui"`
-	RuntimeControl  RuntimeControl `json:"runtime_control"`
-	RuntimeService  any            `json:"runtime_service"`
+	ProtocolVersion string          `json:"protocol_version"`
+	RuntimeVersion  string          `json:"runtime_version"`
+	RuntimeCommit   string          `json:"runtime_commit,omitempty"`
+	StartedAtUnixMS int64           `json:"started_at_unix_ms,omitempty"`
+	LocalUI         HelloLocalUI    `json:"local_ui"`
+	RuntimeControl  RuntimeControl  `json:"runtime_control"`
+	RuntimeService  any             `json:"runtime_service"`
+	GatewayProtocol GatewayProtocol `json:"gateway_protocol,omitempty"`
 }
 
 type HelloLocalUI struct {
 	Available bool   `json:"available"`
 	BasePath  string `json:"base_path"`
+}
+
+type GatewayProtocol struct {
+	Available bool `json:"available"`
 }
 
 type RuntimeControl struct {

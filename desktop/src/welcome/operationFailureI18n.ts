@@ -28,6 +28,8 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
     case 'container_runtime_launch_failed':
     case 'ssh_runtime_launch_failed':
       return 'progress.runtimeStartFailedTitle';
+    case 'gateway_package_prepare_failed':
+      return 'progress.gatewayPackagePrepareFailedTitle';
     case 'local_runtime_stop_failed':
     case 'container_runtime_stop_failed':
     case 'ssh_runtime_stop_failed':
@@ -68,6 +70,8 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
     case 'container_runtime_launch_failed':
     case 'ssh_runtime_launch_failed':
       return 'progress.runtimeStartFailedSummary';
+    case 'gateway_package_prepare_failed':
+      return 'progress.gatewayPackagePrepareFailedSummary';
     case 'local_runtime_stop_failed':
     case 'container_runtime_stop_failed':
     case 'ssh_runtime_stop_failed':

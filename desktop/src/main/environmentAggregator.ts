@@ -192,7 +192,7 @@ function buildGatewayEnvironmentEntry(
     runtime_health: {
       status: isOpenable || canStart ? 'online' : 'offline',
       checked_at_unix_ms: Date.now(),
-      source: 'gateway_runtime_probe',
+      source: 'gateway_service_probe',
       freshness: needsResolve ? 'failed' : 'fresh',
       offline_reason_code: gatewayOfflineReasonCode(gateway.status, environment.state),
       offline_reason: gatewayOfflineReason(gateway, environment),

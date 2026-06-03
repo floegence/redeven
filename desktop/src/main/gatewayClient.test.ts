@@ -179,6 +179,7 @@ function bridgePairingChallengeResponse(args: Readonly<{
   gatewayPrivateKey: string;
   gatewayPublicKey: string;
   gatewayNonce: string;
+  pairingCode?: string;
 }>): unknown {
   const expiresAt = Date.now() + 60_000;
   const payload = JSON.stringify({
@@ -189,13 +190,15 @@ function bridgePairingChallengeResponse(args: Readonly<{
     gateway_id: args.gatewayID,
     gateway_nonce: args.gatewayNonce,
     gateway_public_key: args.gatewayPublicKey,
-    protocol_version: 'redeven-runtime-gateway-v1',
+    ...(args.pairingCode ? { pairing_code: args.pairingCode } : {}),
+    protocol_version: 'redeven-gateway-v1',
   });
   return {
-    protocol_version: 'redeven-runtime-gateway-v1',
+    protocol_version: 'redeven-gateway-v1',
     gateway_id: args.gatewayID,
     gateway_public_key: args.gatewayPublicKey,
     gateway_nonce: args.gatewayNonce,
+    ...(args.pairingCode ? { pairing_code: args.pairingCode } : {}),
     expires_at_unix_ms: expiresAt,
     signature: signGatewayPayload(args.gatewayPrivateKey, payload),
   };
@@ -258,7 +261,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: 'redeven-runtime-gateway-v1',
+          protocol_version: 'redeven-gateway-v1',
           gateway: {
             gateway_id: 'gw_demo',
             display_name: 'Demo Gateway',
@@ -272,7 +275,16 @@ describe('GatewayURLClient', () => {
             env_kind: 'reachable_env',
             state: 'available',
             capabilities: ['open', 'unexpected'],
+            access_capabilities: ['open'],
+            control_capabilities: [],
             origin: { kind: 'network_target', label: '10.0.0.10' },
+          }, {
+            gateway_env_id: 'env_local',
+            display_name: 'Default Host Env',
+            env_kind: 'managed_local_env',
+            state: 'available',
+            capabilities: ['open'],
+            origin: { kind: 'gateway_host', label: 'Gateway host' },
           }],
         },
       }));
@@ -286,12 +298,14 @@ describe('GatewayURLClient', () => {
     expect(catalog.environments).toEqual([expect.objectContaining({
       gateway_env_id: 'env_demo',
       capabilities: ['open'],
+      access_capabilities: ['open'],
+      control_capabilities: [],
     })]);
     expect(catalog.gateway.status).toBe('online');
     expect(server.requests[0]?.url).toBe('/gateway/v1/catalog');
     expect(server.requests[0]?.headers.authorization).toBeUndefined();
     expect(server.requests[0]?.headers['x-redeven-request-signature']).toBeTruthy();
-    expect(server.requests[0]?.body).toContain('redeven-runtime-gateway-v1');
+    expect(server.requests[0]?.body).toContain('redeven-gateway-v1');
   });
 
   it('rejects non-loopback HTTP Gateway URLs', async () => {
@@ -314,7 +328,7 @@ describe('GatewayURLClient', () => {
   });
 
   it('rejects catalog responses with non-exact protocol versions', async () => {
-    for (const protocolVersion of ['', ' redeven-runtime-gateway-v1 ', 'v0']) {
+    for (const protocolVersion of ['', ' redeven-gateway-v1 ', 'v0']) {
       let record!: GatewayRecord;
       const server = await startServer((_request, _body, response) => {
         response.setHeader('Content-Type', 'application/json');
@@ -349,7 +363,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: 'redeven-runtime-gateway-v1',
+          protocol_version: 'redeven-gateway-v1',
           gateway: { gateway_id: 'gw_other', display_name: 'Other Gateway', capabilities: [] },
           environments: [],
         },
@@ -368,7 +382,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: 'redeven-runtime-gateway-v1',
+          protocol_version: 'redeven-gateway-v1',
           gateway: {
             gateway_id: 'gw_demo',
             display_name: 'Demo Gateway',
@@ -400,7 +414,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: 'redeven-runtime-gateway-v1',
+          protocol_version: 'redeven-gateway-v1',
           gateway: {
             gateway_id: 'gw_demo',
             display_name: 'Demo Gateway',
@@ -469,16 +483,70 @@ describe('GatewayURLClient', () => {
     gatewayPublicKeyWire = `${gatewayMaterial.client_public_key.trim()}\n`;
 
     const challenge = await new GatewayURLClient(memorySecretStore()).pairingChallenge(record, {
-      protocol_version: 'redeven-runtime-gateway-v1',
+      protocol_version: 'redeven-gateway-v1',
       client_nonce: material.client_nonce,
       client_public_key: material.client_public_key,
       binding_audience: material.binding_audience,
     });
 
-    expect(challenge.gateway_public_key).toBe(gatewayPublicKeyWire);
-  });
+	  expect(challenge.gateway_public_key).toBe(gatewayPublicKeyWire);
+	});
 
-  it('does not reflect Gateway error bodies or messages into thrown errors', async () => {
+	it('sends URL Gateway pairing codes in the pairing challenge body', async () => {
+	  const base: GatewayRecord = {
+	    schema_version: 1,
+	    gateway_id: 'gw_demo',
+	    display_name: 'Demo Gateway',
+	    connection: {
+	      kind: 'url',
+	      base_url: 'http://127.0.0.1/',
+	      allow_loopback_http: true,
+	    },
+	    created_at_ms: 1,
+	    updated_at_ms: 1,
+	  };
+	  let record = base;
+	  let material!: ReturnType<typeof createGatewayPairingMaterial>;
+	  const gatewayMaterial = createGatewayPairingMaterial(base);
+	  const server = await startServer((_request, body, response) => {
+	    expect(JSON.parse(body)).toMatchObject({ pairing_code: 'pair-123456' });
+	    response.setHeader('Content-Type', 'application/json');
+	    response.end(JSON.stringify({
+	      ok: true,
+	      data: bridgePairingChallengeResponse({
+	        material,
+	        gatewayID: record.gateway_id,
+	        gatewayPrivateKey: gatewayMaterial.client_private_key,
+	        gatewayPublicKey: gatewayMaterial.client_public_key,
+	        gatewayNonce: 'gateway-nonce',
+	        pairingCode: 'pair-123456',
+	      }),
+	    }));
+	  });
+	  cleanupServers.add(server);
+	  record = {
+	    ...base,
+	    connection: {
+	      kind: 'url',
+	      base_url: server.baseURL,
+	      allow_loopback_http: true,
+	    },
+	  };
+	  material = createGatewayPairingMaterial(record);
+
+	  const challenge = await new GatewayURLClient(memorySecretStore()).pairingChallenge(record, {
+	    protocol_version: 'redeven-gateway-v1',
+	    client_nonce: material.client_nonce,
+	    client_public_key: material.client_public_key,
+	    binding_audience: material.binding_audience,
+	    pairing_code: 'pair-123456',
+	  });
+
+	  expect(challenge.pairing_code).toBe('pair-123456');
+	  expect(server.requests[0]?.body).toContain('pair-123456');
+	});
+
+	it('does not reflect Gateway error bodies or messages into thrown errors', async () => {
     for (const payload of [
       'plain proof-secret signature-secret private_key-secret',
       JSON.stringify({
@@ -550,7 +618,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: 'redeven-runtime-gateway-v1',
+          protocol_version: 'redeven-gateway-v1',
           gateway_session_id: gatewaySessionID,
           gateway_env_id: gatewayEnvID,
           connect_artifact: {
@@ -611,7 +679,7 @@ describe('GatewayURLClient', () => {
         response.end(JSON.stringify({
           ok: true,
           data: {
-            protocol_version: 'redeven-runtime-gateway-v1',
+            protocol_version: 'redeven-gateway-v1',
             gateway_session_id: gatewaySessionID,
             gateway_env_id: gatewayEnvID,
             connect_artifact: {
@@ -660,7 +728,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: 'redeven-runtime-gateway-v1',
+          protocol_version: 'redeven-gateway-v1',
           gateway_session_id: gatewaySessionID,
           gateway_env_id: gatewayEnvID,
           connect_artifact: {
@@ -713,7 +781,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: 'redeven-runtime-gateway-v1',
+          protocol_version: 'redeven-gateway-v1',
           gateway_session_id: 'gws_demo',
           gateway_env_id: 'env_other',
           connect_artifact: {
@@ -758,7 +826,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: ' redeven-runtime-gateway-v1 ',
+          protocol_version: ' redeven-gateway-v1 ',
           gateway_session_id: 'gws_demo',
           gateway_env_id: 'env_demo',
           connect_artifact: {
@@ -795,7 +863,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: 'redeven-runtime-gateway-v1',
+          protocol_version: 'redeven-gateway-v1',
           environment: {
             gateway_env_id: 'env_profile',
             display_name: 'Profile Env',
@@ -849,7 +917,7 @@ describe('GatewayURLClient', () => {
       url: '/gateway/v1/env-profiles/upsert',
     });
     expect(JSON.parse(server.requests[0]?.body ?? '{}')).toEqual({
-      protocol_version: 'redeven-runtime-gateway-v1',
+      protocol_version: 'redeven-gateway-v1',
       profile: {
         display_name: 'Profile Env',
         access_route: {
@@ -869,7 +937,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: 'redeven-runtime-gateway-v1',
+          protocol_version: 'redeven-gateway-v1',
           environment: {
             gateway_env_id: 'env_ssh',
             display_name: 'SSH Profile',
@@ -925,7 +993,7 @@ describe('GatewayURLClient', () => {
       },
     });
     expect(JSON.parse(server.requests[0]?.body ?? '{}')).toEqual({
-      protocol_version: 'redeven-runtime-gateway-v1',
+      protocol_version: 'redeven-gateway-v1',
       profile: {
         display_name: 'SSH Profile',
         access_route: {
@@ -974,7 +1042,7 @@ describe('GatewayURLClient', () => {
         response.end(JSON.stringify({
           ok: true,
           data: {
-            protocol_version: 'redeven-runtime-gateway-v1',
+            protocol_version: 'redeven-gateway-v1',
             gateway_env_id: 'env_profile',
             operation: 'restart',
             state: 'succeeded',
@@ -986,7 +1054,7 @@ describe('GatewayURLClient', () => {
       response.end(JSON.stringify({
         ok: true,
         data: {
-          protocol_version: 'redeven-runtime-gateway-v1',
+          protocol_version: 'redeven-gateway-v1',
           gateway_env_id: 'env_profile',
           deleted: true,
         },
@@ -1009,11 +1077,11 @@ describe('GatewayURLClient', () => {
     ]);
     expect(bodies).toEqual([
       {
-        protocol_version: 'redeven-runtime-gateway-v1',
+        protocol_version: 'redeven-gateway-v1',
         gateway_env_id: 'env_profile',
       },
       {
-        protocol_version: 'redeven-runtime-gateway-v1',
+        protocol_version: 'redeven-gateway-v1',
         gateway_env_id: 'env_profile',
         operation: 'restart',
       },
@@ -1045,7 +1113,7 @@ describe('GatewayBridgeClient', () => {
   it('fetches catalog through the gateway_protocol bridge with signed binding audience headers', async () => {
     const paired = pairedURLRecord('https://gateway.example/');
     const harness = createBridgeHandle(() => bridgeHTTPResponse({
-      protocol_version: 'redeven-runtime-gateway-v1',
+      protocol_version: 'redeven-gateway-v1',
       gateway: {
         gateway_id: 'gw_demo',
         display_name: 'Demo Gateway',
@@ -1100,7 +1168,7 @@ describe('GatewayBridgeClient', () => {
     })));
 
     const response = await new GatewayBridgeClient(memorySecretStore(), harness.bridge).pairingChallenge(base, {
-      protocol_version: 'redeven-runtime-gateway-v1',
+      protocol_version: 'redeven-gateway-v1',
       client_nonce: clientMaterial.client_nonce,
       client_public_key: clientMaterial.client_public_key,
       binding_audience: clientMaterial.binding_audience,
@@ -1126,7 +1194,7 @@ describe('GatewayBridgeClient', () => {
       artifact_nonce: randomBytes(8).toString('hex'),
     };
     const harness = createBridgeHandle(() => bridgeHTTPResponse({
-      protocol_version: 'redeven-runtime-gateway-v1',
+      protocol_version: 'redeven-gateway-v1',
       gateway_session_id: 'gws_demo',
       gateway_env_id: 'env_demo',
       connect_artifact: {
@@ -1169,7 +1237,7 @@ describe('GatewayBridgeClient', () => {
   it('writes SSH container profiles through the gateway_protocol bridge', async () => {
     const paired = pairedURLRecord('https://gateway.example/');
     const harness = createBridgeHandle(() => bridgeHTTPResponse({
-      protocol_version: 'redeven-runtime-gateway-v1',
+      protocol_version: 'redeven-gateway-v1',
       environment: {
         gateway_env_id: 'env_container',
         display_name: 'Container Env',
@@ -1203,7 +1271,7 @@ describe('GatewayBridgeClient', () => {
       requestLine: 'POST /gateway/v1/env-profiles/upsert HTTP/1.1',
     });
     expect(JSON.parse(harness.requests[0]?.body ?? '{}')).toEqual({
-      protocol_version: 'redeven-runtime-gateway-v1',
+      protocol_version: 'redeven-gateway-v1',
       profile: {
         gateway_env_id: 'env_container',
         display_name: 'Container Env',

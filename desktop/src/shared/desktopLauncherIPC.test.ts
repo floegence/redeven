@@ -732,10 +732,10 @@ describe('desktopLauncherIPC', () => {
       gateway_id: 'gw-demo',
     });
     for (const kind of [
-      'start_gateway_runtime',
-      'stop_gateway_runtime',
-      'restart_gateway_runtime',
-      'update_gateway_runtime',
+      'start_gateway',
+      'stop_gateway',
+      'restart_gateway',
+      'update_gateway',
     ] as const) {
       expect(normalizeDesktopLauncherActionRequest({
         kind,
@@ -747,7 +747,7 @@ describe('desktopLauncherIPC', () => {
       });
     }
     expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_gateway_runtime', gateway_id: 'gw-demo' })).toBeNull();
-    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway_runtime', gateway_id: '   ' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_saved_environment', environment_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest(null)).toBeNull();

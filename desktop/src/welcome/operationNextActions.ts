@@ -10,7 +10,7 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
     case 'manage_desktop_update':
       return `${action.kind}:environment:${action.environment_id ?? ''}`;
     case 'refresh_gateway_status':
-    case 'update_gateway_runtime':
+    case 'update_gateway':
     case 'resolve_gateway':
       return `${action.kind}:gateway:${action.gateway_id}`;
     case 'refresh_gateway_catalog':
@@ -55,7 +55,7 @@ export function visibleOperationNextActions(
     push('retry');
     push('refresh_gateway_status');
     push('refresh_gateway_catalog');
-    push('update_gateway_runtime');
+    push('update_gateway');
     push('resolve_gateway');
     push('open_gateway_environment');
   }
@@ -76,7 +76,7 @@ function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction
     || action.kind === 'retry'
     || action.kind === 'refresh_gateway_status'
     || action.kind === 'refresh_gateway_catalog'
-    || action.kind === 'update_gateway_runtime'
+    || action.kind === 'update_gateway'
     || action.kind === 'resolve_gateway'
     || action.kind === 'open_gateway_environment';
 }

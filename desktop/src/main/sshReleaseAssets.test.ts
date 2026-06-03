@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   buildDesktopSSHReleaseAssetURL,
   buildDesktopSSHReleaseSourceCacheKey,
+  desktopSSHReleasePackageName,
   ensureDesktopSSHReleaseArchive,
   ensureDesktopSSHVerifiedReleaseManifest,
   parseDesktopSSHReleaseSHA256,
@@ -119,6 +120,10 @@ describe('sshReleaseAssets', () => {
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  redeven_linux_amd64.tar.gz\n',
       'redeven_linux_amd64.tar.gz',
     )).toBe('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+
+    expect(desktopSSHReleasePackageName({ goos: 'linux', goarch: 'amd64' }, 'gateway')).toBe(
+      'redeven-gateway_linux_amd64.tar.gz',
+    );
   });
 
   it('verifies a published Redeven release manifest before trusting any checksums', () => {
@@ -127,9 +132,9 @@ describe('sshReleaseAssets', () => {
     expect(manifest.release_tag).toBe(RELEASE_FIXTURE_TAG);
     expect(manifest.release_base_url).toBe(RELEASE_FIXTURE_BASE_URL);
     expect(manifest.source_cache_key).toBe(buildDesktopSSHReleaseSourceCacheKey(RELEASE_FIXTURE_BASE_URL));
-    expect(manifest.sha256_by_asset_name.get('redeven_linux_amd64.tar.gz')).toBe(
-      '9cdece939c23b293176e846f7c687ccc9a8d7f15eab0e3fdbde4f25f4ba4dc50',
-    );
+      expect(manifest.sha256_by_asset_name.get('redeven_linux_amd64.tar.gz')).toBe(
+        '9cdece939c23b293176e846f7c687ccc9a8d7f15eab0e3fdbde4f25f4ba4dc50',
+      );
   });
 
   it('rejects tampered release manifests', () => {
@@ -282,6 +287,43 @@ describe('sshReleaseAssets', () => {
       await expect(fs.readFile(assetA.archive_path)).resolves.toEqual(archive);
       await expect(fs.readFile(assetB.archive_path)).resolves.toEqual(archive);
       expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('downloads Gateway release archives with the independent Gateway package name', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-gateway-release-assets-'));
+    try {
+      const archive = Buffer.from('gateway-tarball');
+      const checksum = sha256(archive);
+      const fetchMock = vi.fn(async (input: string | URL) => {
+        const url = String(input);
+        expect(url).toContain('/redeven-gateway_linux_amd64.tar.gz');
+        return new Response(archive, { status: 200 });
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+      const gatewayPackageName = desktopSSHReleasePackageName(platform, 'gateway');
+      const manifest: DesktopSSHVerifiedReleaseManifest = {
+        release_tag: 'v1.2.3',
+        release_base_url: 'https://mirror.example.invalid/releases',
+        source_cache_key: buildDesktopSSHReleaseSourceCacheKey('https://mirror.example.invalid/releases'),
+        sums_text: `${checksum}  ${gatewayPackageName}\n`,
+        sha256_by_asset_name: new Map([[gatewayPackageName, checksum]]),
+      };
+
+      const asset = await ensureDesktopSSHReleaseArchive({
+        manifest,
+        platform,
+        packageKind: 'gateway',
+        cacheRoot: root,
+      });
+
+      expect(path.basename(asset.archive_path)).toBe('redeven-gateway_linux_amd64.tar.gz');
+      expect(asset.archive_path).toContain('/linux_amd64/');
+      await expect(fs.readFile(asset.archive_path)).resolves.toEqual(archive);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

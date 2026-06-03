@@ -5,7 +5,10 @@ import (
 	"strings"
 )
 
-const Version = "redeven-runtime-gateway-v1"
+const (
+	Version                    = "redeven-gateway-v1"
+	ReservedLocalEnvironmentID = "env_local"
+)
 
 type GatewayCapability string
 
@@ -274,6 +277,7 @@ type PairingChallengeRequest struct {
 	ClientNonce     string `json:"client_nonce"`
 	ClientPublicKey string `json:"client_public_key"`
 	BindingAudience string `json:"binding_audience"`
+	PairingCode     string `json:"pairing_code,omitempty"`
 }
 
 type PairingChallengeResponse struct {
@@ -288,13 +292,14 @@ type PairingChallengeResponse struct {
 }
 
 type PairingCompleteRequest struct {
-	ProtocolVersion string `json:"protocol_version,omitempty"`
-	ClientNonce     string `json:"client_nonce"`
-	GatewayNonce    string `json:"gateway_nonce"`
-	GatewayID       string `json:"gateway_id"`
-	BindingAudience string `json:"binding_audience"`
-	ClientKeyID     string `json:"client_key_id"`
-	Proof           string `json:"proof"`
+	ProtocolVersion  string `json:"protocol_version,omitempty"`
+	ClientNonce      string `json:"client_nonce"`
+	GatewayNonce     string `json:"gateway_nonce"`
+	GatewayID        string `json:"gateway_id"`
+	BindingAudience  string `json:"binding_audience"`
+	ClientKeyID      string `json:"client_key_id"`
+	ClientCapability string `json:"client_capability,omitempty"`
+	Proof            string `json:"proof"`
 }
 
 type PairingCompleteResponse struct {
@@ -373,13 +378,7 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 		}
 		environment.AccessCapabilities = normalizeEnvironmentAccessCapabilities(environment.AccessCapabilities)
 		environment.ControlCapabilities = normalizeEnvironmentControlCapabilities(environment.ControlCapabilities)
-		legacyCapabilities := normalizeEnvironmentCapabilities(environment.Capabilities)
-		if len(environment.AccessCapabilities) == 0 && len(environment.ControlCapabilities) == 0 && len(legacyCapabilities) > 0 {
-			environment.AccessCapabilities = normalizeEnvironmentAccessCapabilities(legacyCapabilities)
-			environment.ControlCapabilities = normalizeEnvironmentControlCapabilities(legacyCapabilities)
-		}
 		environment.Capabilities = unionEnvironmentCapabilities(
-			legacyCapabilities,
 			environment.AccessCapabilities,
 			environment.ControlCapabilities,
 		)
@@ -402,6 +401,9 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 			}
 		}
 		if environment.GatewayEnvID == "" {
+			continue
+		}
+		if environment.GatewayEnvID == ReservedLocalEnvironmentID {
 			continue
 		}
 		if environment.DisplayName == "" {

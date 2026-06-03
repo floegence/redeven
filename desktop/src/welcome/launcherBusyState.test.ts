@@ -135,7 +135,7 @@ function localRuntimeLifecycleActionProgress(input: Readonly<{
 
 function gatewayRuntimeLifecycleActionProgress(input: Readonly<{
   gatewayID?: string;
-  action?: Extract<DesktopLauncherActionProgress['action'], 'pair_gateway' | 'start_gateway_runtime' | 'restart_gateway_runtime' | 'update_gateway_runtime' | 'stop_gateway_runtime' | 'refresh_gateway_catalog'>;
+  action?: Extract<DesktopLauncherActionProgress['action'], 'pair_gateway' | 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'stop_gateway' | 'refresh_gateway_catalog'>;
   status?: LauncherProgressStatus;
   operationKey?: string;
   startedAt?: number;
@@ -144,7 +144,7 @@ function gatewayRuntimeLifecycleActionProgress(input: Readonly<{
 }> = {}): DesktopLauncherActionProgress {
   const gatewayID = input.gatewayID ?? 'gw-demo';
   return {
-    action: input.action ?? 'start_gateway_runtime',
+    action: input.action ?? 'start_gateway',
     operation_key: input.operationKey ?? `${gatewayID}:start`,
     subject_kind: 'gateway',
     subject_id: gatewayID,
@@ -153,7 +153,7 @@ function gatewayRuntimeLifecycleActionProgress(input: Readonly<{
     status: input.status ?? 'running',
     phase: 'starting_runtime_process',
     title: 'Starting Gateway',
-    detail: 'Desktop is starting the Gateway runtime.',
+    detail: 'Desktop is starting the Gateway service.',
     ...(input.stepProgress ? { step_progress: input.stepProgress } : {}),
     lifecycle_progress: runtimeLifecycleProgress({
       location: 'ssh_host',
@@ -323,16 +323,16 @@ describe('launcherBusyState', () => {
 
   it('matches Gateway action progress by Gateway subject identity', () => {
     const state = busyStateForLauncherRequest({
-      kind: 'start_gateway_runtime',
+      kind: 'start_gateway',
       gateway_id: 'gw-demo',
     });
     const progress = gatewayRuntimeLifecycleActionProgress({
       gatewayID: 'gw-demo',
-      action: 'start_gateway_runtime',
+      action: 'start_gateway',
     });
     const otherGatewayProgress = gatewayRuntimeLifecycleActionProgress({
       gatewayID: 'gw-other',
-      action: 'start_gateway_runtime',
+      action: 'start_gateway',
     });
 
     expect(gatewayMatchesActionProgress('gw-demo', progress)).toBe(true);
@@ -1082,7 +1082,7 @@ describe('launcherBusyState', () => {
     )).toBe(failedSnapshotProgress);
   });
 
-  it('selects Gateway runtime lifecycle progress by gateway id', () => {
+  it('selects Gateway service lifecycle progress by gateway id', () => {
     const runningGatewayProgress = gatewayRuntimeLifecycleActionProgress({
       gatewayID: 'gw-demo',
       action: 'pair_gateway',
@@ -1124,7 +1124,7 @@ describe('launcherBusyState', () => {
       stepProgress: {
         active_step_id: 'fetching_pairing_challenge',
         steps: [
-          { id: 'checking_gateway_runtime', label: 'Checking Gateway runtime', status: 'succeeded' },
+          { id: 'checking_gateway_service', label: 'Checking Gateway service', status: 'succeeded' },
           { id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge', status: 'running' },
         ],
       },
@@ -1139,7 +1139,7 @@ describe('launcherBusyState', () => {
       step_progress: {
         active_step_id: 'fetching_pairing_challenge',
         steps: [
-          { id: 'checking_gateway_runtime', label: 'Checking Gateway runtime', status: 'succeeded' },
+          { id: 'checking_gateway_service', label: 'Checking Gateway service', status: 'succeeded' },
           { id: 'fetching_pairing_challenge', label: 'Fetching pairing challenge', status: 'failed' },
         ],
       },

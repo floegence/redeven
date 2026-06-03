@@ -271,7 +271,7 @@ describe('launcherActionFeedback', () => {
       message: '',
       should_refresh_snapshot: true,
     })).toEqual({
-      message: 'Start this Gateway first. Desktop will continue the pairing, refresh, or open action after the runtime is ready.',
+      message: 'Start this Gateway first. Desktop will continue the pairing, refresh, or open action after the Gateway service is ready.',
       tone: 'info',
       refresh_snapshot: true,
       delivery: 'inline',
@@ -291,11 +291,11 @@ describe('launcherActionFeedback', () => {
 
     expect(launcherActionFailurePresentation(i18n, {
       ok: false,
-      code: 'gateway_runtime_unreachable',
+      code: 'gateway_service_unreachable',
       scope: 'environment',
       message: '',
     })).toEqual({
-      message: 'Desktop cannot reach the Gateway runtime. Start it on the target host or resolve the Gateway settings, then try again.',
+      message: 'Desktop cannot reach the Gateway service. Start it on the target host or resolve the Gateway settings, then try again.',
       tone: 'warning',
       refresh_snapshot: false,
       delivery: 'toast',
@@ -327,11 +327,11 @@ describe('launcherActionFeedback', () => {
 
     expect(launcherActionFailurePresentation(i18n, {
       ok: false,
-      code: 'gateway_runtime_start_failed',
+      code: 'gateway_service_start_failed',
       scope: 'environment',
       message: '',
     })).toEqual({
-      message: 'Desktop could not start the Gateway runtime. Review the Gateway target settings and try Start Gateway again.',
+      message: 'Desktop could not start the Gateway service. Review the Gateway target settings and try Start Gateway again.',
       tone: 'error',
       refresh_snapshot: false,
       delivery: 'toast',
@@ -344,7 +344,7 @@ describe('launcherActionFeedback', () => {
       message: '',
       should_refresh_snapshot: true,
     })).toEqual({
-      message: 'Desktop could not refresh this Gateway catalog. Start or resolve the Gateway, then refresh again.',
+      message: 'Desktop could not refresh this Gateway. Start or resolve the Gateway, then refresh again.',
       tone: 'warning',
       refresh_snapshot: true,
       delivery: 'toast',

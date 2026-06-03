@@ -1609,7 +1609,7 @@ function buildEnvironmentEntries(
         is_open: sessionIsOpen(session),
         is_opening: sessionIsOpening(session),
         runtime_health: onlineRuntimeHealth(
-          'gateway_runtime_probe',
+          'gateway_service_probe',
           session.entry_url ?? session.startup?.local_ui_url ?? '',
           session.startup?.runtime_service,
         ),

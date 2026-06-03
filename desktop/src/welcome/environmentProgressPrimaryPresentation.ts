@@ -161,13 +161,13 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): s
   }
   switch (progress.action) {
     case 'stop_environment_runtime':
-    case 'stop_gateway_runtime':
+    case 'stop_gateway':
       return 'Stopping...';
     case 'restart_environment_runtime':
-    case 'restart_gateway_runtime':
+    case 'restart_gateway':
       return 'Restarting...';
     case 'update_environment_runtime':
-    case 'update_gateway_runtime':
+    case 'update_gateway':
       return 'Updating...';
     case 'pair_gateway':
       return 'Pairing...';
@@ -183,7 +183,7 @@ function runningProgressPrimaryIcon(progress: DesktopLauncherActionProgress): 'p
   if (progress.status === 'canceling' || progress.status === 'cleanup_running') {
     return 'stop';
   }
-  return progress.action === 'stop_environment_runtime' || progress.action === 'stop_gateway_runtime'
+  return progress.action === 'stop_environment_runtime' || progress.action === 'stop_gateway'
     ? 'stop'
     : 'play';
 }
@@ -240,16 +240,16 @@ function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): st
   }
   switch (progress.action) {
     case 'start_environment_runtime':
-    case 'start_gateway_runtime':
+    case 'start_gateway':
       return 'Start failed';
     case 'restart_environment_runtime':
-    case 'restart_gateway_runtime':
+    case 'restart_gateway':
       return 'Restart failed';
     case 'update_environment_runtime':
-    case 'update_gateway_runtime':
+    case 'update_gateway':
       return 'Update failed';
     case 'stop_environment_runtime':
-    case 'stop_gateway_runtime':
+    case 'stop_gateway':
       return 'Stop failed';
     case 'pair_gateway':
       return 'Pair failed';

@@ -77,9 +77,15 @@ jobs:
             -ldflags "-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildTime=${BUILD_TIME}" \
             -o dist/redeven \
             ./cmd/redeven
+          go build \
+            -trimpath \
+            -ldflags "-s -w -X main.Version=${VERSION} -X main.Commit=${COMMIT} -X main.BuildTime=${BUILD_TIME}" \
+            -o dist/redeven-gateway \
+            ./cmd/redeven-gateway
 
           tar -C dist -czf "dist/redeven_${GOOS}_${GOARCH}.tar.gz" redeven LICENSE THIRD_PARTY_NOTICES.md
-          rm -f dist/redeven
+          tar -C dist -czf "dist/redeven-gateway_${GOOS}_${GOARCH}.tar.gz" redeven-gateway LICENSE THIRD_PARTY_NOTICES.md
+          rm -f dist/redeven dist/redeven-gateway
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v6
@@ -87,6 +93,7 @@ jobs:
           name: package-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
             dist/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+            dist/redeven-gateway_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
             dist/knowledge_bundle.manifest.json
             dist/knowledge_bundle.sha256
             dist/LICENSE
@@ -194,6 +201,7 @@ jobs:
           REDEVEN_DESKTOP_BUNDLE_GOOS: ${{ matrix.goos }}
           REDEVEN_DESKTOP_BUNDLE_GOARCH: ${{ matrix.goarch }}
           REDEVEN_DESKTOP_RUNTIME_TARBALL: ${{ github.workspace }}/dist/agent/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
+          REDEVEN_DESKTOP_GATEWAY_TARBALL: ${{ github.workspace }}/dist/agent/redeven-gateway_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
           REDEVEN_DESKTOP_VERSION: ${{ github.ref_name }}
         run: |
           set -euo pipefail
@@ -265,6 +273,7 @@ jobs:
         run: |
           set -euo pipefail
           find dist/downloads -type f -name 'redeven_*.tar.gz' -exec cp {} dist/ \;
+          find dist/downloads -type f -name 'redeven-gateway_*.tar.gz' -exec cp {} dist/ \;
           find dist/downloads -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.dmg' \) -exec cp {} dist/ \;
 
           manifest_src="$(find dist/downloads -type f -name 'knowledge_bundle.manifest.json' -print -quit)"
@@ -282,7 +291,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          sha256sum redeven_*.tar.gz Redeven-Desktop-* LICENSE THIRD_PARTY_NOTICES.md knowledge_bundle.manifest.json knowledge_bundle.sha256 > SHA256SUMS
+          sha256sum redeven_*.tar.gz redeven-gateway_*.tar.gz Redeven-Desktop-* LICENSE THIRD_PARTY_NOTICES.md knowledge_bundle.manifest.json knowledge_bundle.sha256 > SHA256SUMS
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -359,6 +368,7 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --clobber \
             dist/redeven_*.tar.gz \
+            dist/redeven-gateway_*.tar.gz \
             dist/Redeven-Desktop-* \
             dist/SHA256SUMS \
             dist/SHA256SUMS.sig \

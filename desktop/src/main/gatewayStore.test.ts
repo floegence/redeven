@@ -101,7 +101,7 @@ describe('GatewayStore', () => {
       management_capability: 'access_only',
       status: 'pairing_required',
       trust_state: 'unpaired',
-      runtime_state: {
+      service_state: {
         status: 'not_applicable',
         can_start: false,
         can_stop: false,
@@ -166,7 +166,7 @@ describe('GatewayStore', () => {
       }),
       ssh_password_configured: true,
     });
-    expect(source.runtime_state).toBeUndefined();
+    expect(source.service_state).toBeUndefined();
     expect(JSON.stringify(source)).not.toContain('gateway-ssh-password');
   });
 
@@ -196,7 +196,7 @@ describe('GatewayStore', () => {
       container_ref: 'dev',
       container_label: 'Dev',
     });
-    expect(source.runtime_state).toBeUndefined();
+    expect(source.service_state).toBeUndefined();
   });
 
   it('drops stale trust profiles when the Gateway connection identity changes', async () => {

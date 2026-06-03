@@ -29,6 +29,14 @@ type pendingChallenge struct {
 	ClientNonce     string
 	ClientPublicKey string
 	BindingAudience string
+	PairingCode     string
+	ExpiresAtUnixMS int64
+}
+
+type PendingChallenge struct {
+	ClientNonce     string
+	BindingAudience string
+	PairingCode     string
 	ExpiresAtUnixMS int64
 }
 
@@ -49,6 +57,7 @@ type clientKey struct {
 	ClientKeyID        string `json:"client_key_id"`
 	ClientPublicKey    string `json:"client_public_key"`
 	BindingAudience    string `json:"binding_audience"`
+	ProfileWrite       bool   `json:"profile_write,omitempty"`
 	PairedAtUnixMS     int64  `json:"paired_at_unix_ms"`
 	LastVerifiedUnixMS int64  `json:"last_verified_at_unix_ms,omitempty"`
 }
@@ -58,8 +67,11 @@ func NewStore(filePath string) *Store {
 }
 
 func (s *Store) GatewayMetadata(bindingAudience string) (protocol.GatewayMetadata, string, error) {
-	state, err := s.ensureState(bindingAudience)
+	state, err := s.ensureStateForRead()
 	if err != nil {
+		return protocol.GatewayMetadata{}, "", err
+	}
+	if err := s.validateBindingAudience(state, bindingAudience); err != nil {
 		return protocol.GatewayMetadata{}, "", err
 	}
 	fingerprint, err := security.PublicKeyFingerprint(state.Gateway.PublicKey)
@@ -85,10 +97,11 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol
 	req.ClientNonce = strings.TrimSpace(req.ClientNonce)
 	req.ClientPublicKey = strings.TrimSpace(req.ClientPublicKey)
 	req.BindingAudience = strings.TrimSpace(req.BindingAudience)
+	req.PairingCode = strings.TrimSpace(req.PairingCode)
 	if req.ClientNonce == "" || req.ClientPublicKey == "" || req.BindingAudience == "" {
 		return protocol.PairingChallengeResponse{}, errors.New("pairing challenge request is incomplete")
 	}
-	state, err := s.ensureState(req.BindingAudience)
+	state, err := s.ensureStateForPairing(req.BindingAudience)
 	if err != nil {
 		return protocol.PairingChallengeResponse{}, err
 	}
@@ -101,7 +114,7 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol
 		return protocol.PairingChallengeResponse{}, err
 	}
 	expiresAt := time.Now().Add(challengeTTL).UnixMilli()
-	payload, err := security.CanonicalJSON(map[string]any{
+	challengeFields := map[string]any{
 		"binding_audience":   req.BindingAudience,
 		"client_nonce":       req.ClientNonce,
 		"client_public_key":  req.ClientPublicKey,
@@ -110,7 +123,11 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol
 		"gateway_nonce":      gatewayNonce,
 		"gateway_public_key": state.Gateway.PublicKey,
 		"protocol_version":   protocol.Version,
-	})
+	}
+	if req.PairingCode != "" {
+		challengeFields["pairing_code"] = req.PairingCode
+	}
+	payload, err := security.CanonicalJSON(challengeFields)
 	if err != nil {
 		return protocol.PairingChallengeResponse{}, err
 	}
@@ -126,6 +143,7 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol
 		ClientNonce:     req.ClientNonce,
 		ClientPublicKey: req.ClientPublicKey,
 		BindingAudience: req.BindingAudience,
+		PairingCode:     req.PairingCode,
 		ExpiresAtUnixMS: expiresAt,
 	}
 	s.mu.Unlock()
@@ -135,6 +153,7 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol
 		GatewayPublicKey:            state.Gateway.PublicKey,
 		GatewayPublicKeyFingerprint: fingerprint,
 		GatewayNonce:                gatewayNonce,
+		PairingCode:                 req.PairingCode,
 		ExpiresAtUnixMS:             expiresAt,
 		Signature:                   signature,
 	}, nil
@@ -144,18 +163,22 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 	if strings.TrimSpace(req.ProtocolVersion) != protocol.Version {
 		return protocol.PairingCompleteResponse{}, errors.New("protocol_version is not supported")
 	}
-	state, err := s.ensureState(req.BindingAudience)
-	if err != nil {
-		return protocol.PairingCompleteResponse{}, err
-	}
 	req.ClientNonce = strings.TrimSpace(req.ClientNonce)
 	req.GatewayNonce = strings.TrimSpace(req.GatewayNonce)
 	req.GatewayID = strings.TrimSpace(req.GatewayID)
 	req.BindingAudience = strings.TrimSpace(req.BindingAudience)
 	req.ClientKeyID = strings.TrimSpace(req.ClientKeyID)
+	req.ClientCapability = strings.TrimSpace(req.ClientCapability)
 	req.Proof = strings.TrimSpace(req.Proof)
 	if req.ClientNonce == "" || req.GatewayNonce == "" || req.GatewayID == "" || req.BindingAudience == "" || req.ClientKeyID == "" || req.Proof == "" {
 		return protocol.PairingCompleteResponse{}, errors.New("pairing completion request is incomplete")
+	}
+	state, err := s.ensureStateForRead()
+	if err != nil {
+		return protocol.PairingCompleteResponse{}, err
+	}
+	if err := s.validateBindingAudience(state, req.BindingAudience); err != nil {
+		return protocol.PairingCompleteResponse{}, err
 	}
 	if req.GatewayID != state.Gateway.GatewayID {
 		return protocol.PairingCompleteResponse{}, errors.New("gateway_id does not match this Gateway")
@@ -167,14 +190,18 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 	if expectedClientKeyID := security.ClientKeyID(challenge.ClientPublicKey); expectedClientKeyID != req.ClientKeyID {
 		return protocol.PairingCompleteResponse{}, errors.New("client_key_id does not match client_public_key")
 	}
-	requestPayload, err := security.CanonicalJSON(map[string]any{
+	requestFields := map[string]any{
 		"binding_audience": req.BindingAudience,
 		"client_key_id":    req.ClientKeyID,
 		"client_nonce":     req.ClientNonce,
 		"gateway_id":       req.GatewayID,
 		"gateway_nonce":    req.GatewayNonce,
 		"protocol_version": protocol.Version,
-	})
+	}
+	if req.ClientCapability != "" {
+		requestFields["client_capability"] = req.ClientCapability
+	}
+	requestPayload, err := security.CanonicalJSON(requestFields)
 	if err != nil {
 		return protocol.PairingCompleteResponse{}, err
 	}
@@ -189,12 +216,13 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 		ClientKeyID:     req.ClientKeyID,
 		ClientPublicKey: challenge.ClientPublicKey,
 		BindingAudience: req.BindingAudience,
+		ProfileWrite:    req.ClientCapability == string(protocol.GatewayCapabilityEnvProfileWrite),
 		PairedAtUnixMS:  pairedAt,
 	}
 	if err := s.saveState(state); err != nil {
 		return protocol.PairingCompleteResponse{}, err
 	}
-	payload, err := security.CanonicalJSON(map[string]any{
+	responseFields := map[string]any{
 		"binding_audience":  req.BindingAudience,
 		"client_key_id":     req.ClientKeyID,
 		"client_nonce":      req.ClientNonce,
@@ -202,7 +230,11 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 		"gateway_nonce":     req.GatewayNonce,
 		"paired_at_unix_ms": pairedAt,
 		"protocol_version":  protocol.Version,
-	})
+	}
+	if req.ClientCapability != "" {
+		responseFields["client_capability"] = req.ClientCapability
+	}
+	payload, err := security.CanonicalJSON(responseFields)
 	if err != nil {
 		return protocol.PairingCompleteResponse{}, err
 	}
@@ -217,6 +249,24 @@ func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.P
 		PairedAtUnixMS:  pairedAt,
 		Proof:           proof,
 	}, nil
+}
+
+func (s *Store) PendingChallenge(gatewayNonce string) (PendingChallenge, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.pending == nil {
+		return PendingChallenge{}, false
+	}
+	challenge, ok := s.pending[strings.TrimSpace(gatewayNonce)]
+	if !ok {
+		return PendingChallenge{}, false
+	}
+	return PendingChallenge{
+		ClientNonce:     challenge.ClientNonce,
+		BindingAudience: challenge.BindingAudience,
+		PairingCode:     challenge.PairingCode,
+		ExpiresAtUnixMS: challenge.ExpiresAtUnixMS,
+	}, true
 }
 
 func (s *Store) consumeChallenge(gatewayNonce string) (pendingChallenge, bool) {
@@ -255,8 +305,11 @@ func (s *Store) IsPaired(clientKeyID string, bindingAudience string) bool {
 }
 
 func (s *Store) ClientPublicKey(clientKeyID string, bindingAudience string) (string, bool) {
-	state, err := s.ensureState(bindingAudience)
+	state, err := s.ensureStateForRead()
 	if err != nil {
+		return "", false
+	}
+	if err := s.validateBindingAudience(state, bindingAudience); err != nil {
 		return "", false
 	}
 	client, ok := state.Clients[strings.TrimSpace(clientKeyID)]
@@ -269,7 +322,22 @@ func (s *Store) ClientPublicKey(clientKeyID string, bindingAudience string) (str
 	return client.ClientPublicKey, true
 }
 
-func (s *Store) ensureState(bindingAudience string) (fileState, error) {
+func (s *Store) ClientCanWriteProfiles(clientKeyID string, bindingAudience string) bool {
+	state, err := s.ensureStateForRead()
+	if err != nil {
+		return false
+	}
+	client, ok := state.Clients[strings.TrimSpace(clientKeyID)]
+	if !ok {
+		return false
+	}
+	if cleanAudience := strings.TrimSpace(bindingAudience); cleanAudience != "" && client.BindingAudience != cleanAudience {
+		return false
+	}
+	return client.ProfileWrite
+}
+
+func (s *Store) ensureStateForPairing(bindingAudience string) (fileState, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.state.Gateway.GatewayID != "" {
@@ -296,6 +364,18 @@ func (s *Store) ensureState(bindingAudience string) (fileState, error) {
 		return fileState{}, err
 	}
 	return s.state, nil
+}
+
+func (s *Store) validateBindingAudience(state fileState, bindingAudience string) error {
+	cleanAudience := strings.TrimSpace(bindingAudience)
+	if cleanAudience == "" {
+		return nil
+	}
+	expectedGatewayID := security.StableGatewayID(cleanAudience)
+	if state.Gateway.GatewayID != expectedGatewayID && !isBlankAudienceGatewayID(state.Gateway.GatewayID) {
+		return errors.New("Gateway identity does not match binding audience")
+	}
+	return nil
 }
 
 func (s *Store) migrateBlankAudienceGatewayIDLocked(bindingAudience string) error {
@@ -385,7 +465,7 @@ func newFileState(bindingAudience string) (fileState, error) {
 		SchemaVersion: 1,
 		Gateway: gatewayIdentity{
 			GatewayID:   gatewayID,
-			DisplayName: "Redeven Runtime Gateway",
+			DisplayName: "Redeven Gateway",
 			PublicKey:   keyPair.PublicKeyPEM,
 			PrivateKey:  keyPair.PrivateKeyPEM,
 		},

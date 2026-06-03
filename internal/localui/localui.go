@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -30,12 +29,6 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/portforward"
-	gatewayauth "github.com/floegence/redeven/internal/runtimegateway/auth"
-	gatewaycatalog "github.com/floegence/redeven/internal/runtimegateway/catalog"
-	gatewayenvprofiles "github.com/floegence/redeven/internal/runtimegateway/envprofiles"
-	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
-	gatewaysession "github.com/floegence/redeven/internal/runtimegateway/session"
-	gatewaytrust "github.com/floegence/redeven/internal/runtimegateway/trust"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 	"github.com/floegence/redeven/internal/session"
@@ -46,10 +39,8 @@ const (
 	// LocalEnvPublicID is the fixed env_public_id used for Local UI mode.
 	LocalEnvPublicID = "env_local"
 
-	localAccessResumeHeader            = "X-Redeven-Access-Resume"
-	localAccessResumeQuery             = "redeven_access_resume"
-	runtimeGatewayEnvSessionCookieName = "redeven_gateway_env_session"
-	runtimeGatewayEnvProxySessionTTL   = 12 * time.Hour
+	localAccessResumeHeader = "X-Redeven-Access-Resume"
+	localAccessResumeQuery  = "redeven_access_resume"
 
 	localNamespacePublicID = "ns_local"
 	localUserPublicID      = "user_local"
@@ -125,12 +116,6 @@ type Server struct {
 
 	runtimeControl *runtimeControlServer
 	runtimeStatus  *runtimemanagement.Server
-
-	runtimeGatewayTrust             *gatewaytrust.Store
-	runtimeGatewayAuth              *gatewayauth.Verifier
-	runtimeGatewayProfiles          *gatewayenvprofiles.Store
-	runtimeGatewayProfileSessionsMu sync.Mutex
-	runtimeGatewayProfileSessions   map[string]runtimeGatewayProfileSession
 }
 
 type pendingDirect struct {
@@ -139,12 +124,6 @@ type pendingDirect struct {
 	meta                      session.Meta
 	traceID                   string
 	connectArtifactIssuedAtMs int64
-}
-
-type runtimeGatewayProfileSession struct {
-	GatewayEnvID    string
-	TargetBaseURL   string
-	ExpiresAtUnixMS int64
 }
 
 func (s *Server) handler() http.Handler {
@@ -165,17 +144,9 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
 	mux.HandleFunc("/_redeven_direct/ws", s.handleDirectWS)
-	mux.HandleFunc("/gateway/v1/pairing/challenge", s.handleRuntimeGatewayPairingChallenge)
-	mux.HandleFunc("/gateway/v1/pairing/complete", s.handleRuntimeGatewayPairingComplete)
-	mux.HandleFunc("/gateway/v1/catalog", s.handleRuntimeGatewayCatalog)
-	mux.HandleFunc("/gateway/v1/open-session", s.handleRuntimeGatewayOpenSession)
-	mux.HandleFunc("/gateway/v1/env-profiles/upsert", s.handleRuntimeGatewayEnvProfileUpsert)
-	mux.HandleFunc("/gateway/v1/env-profiles/delete", s.handleRuntimeGatewayEnvProfileDelete)
-	mux.HandleFunc("/gateway/v1/env-lifecycle", s.handleRuntimeGatewayEnvLifecycle)
 	// Reuse the existing gateway for Env App UI + management APIs.
 	mux.HandleFunc("/_redeven_proxy/", s.handleGateway)
 	var handler http.Handler = mux
-	handler = s.withRuntimeGatewayProfileProxy(handler)
 	if s.diag == nil {
 		return handler
 	}
@@ -221,29 +192,26 @@ func New(opts Options) (*Server, error) {
 		config.PermissionSet{Read: true, Write: false, Execute: true},
 	)
 	return &Server{
-		log:                           logger,
-		bind:                          bind,
-		configPath:                    configPath,
-		stateRoot:                     strings.TrimSpace(opts.StateRoot),
-		stateDir:                      filepath.Dir(configPath),
-		runtimeControlSockPath:        strings.TrimSpace(opts.RuntimeControlSocketPath),
-		version:                       strings.TrimSpace(opts.Version),
-		desktopManaged:                opts.DesktopManaged,
-		desktopOwnerID:                strings.TrimSpace(opts.DesktopOwnerID),
-		effectiveRunMode:              strings.TrimSpace(opts.EffectiveRunMode),
-		remoteEnabled:                 opts.RemoteEnabled,
-		controlplaneBaseURL:           strings.TrimSpace(opts.ControlplaneBaseURL),
-		controlplaneProviderID:        strings.TrimSpace(opts.ControlplaneProviderID),
-		envPublicID:                   strings.TrimSpace(opts.EnvPublicID),
-		localPermissionCap:            &localPermissionCap,
-		gw:                            opts.Gateway,
-		a:                             opts.Agent,
-		diag:                          opts.Diagnostics,
-		accessGate:                    opts.AccessGate,
-		pending:                       make(map[string]pendingDirect),
-		runtimeGatewayTrust:           gatewaytrust.NewStore(runtimeGatewayTrustPath(strings.TrimSpace(opts.StateRoot), configPath)),
-		runtimeGatewayProfiles:        gatewayenvprofiles.NewStore(runtimeGatewayProfilesPath(strings.TrimSpace(opts.StateRoot), configPath)),
-		runtimeGatewayProfileSessions: make(map[string]runtimeGatewayProfileSession),
+		log:                    logger,
+		bind:                   bind,
+		configPath:             configPath,
+		stateRoot:              strings.TrimSpace(opts.StateRoot),
+		stateDir:               filepath.Dir(configPath),
+		runtimeControlSockPath: strings.TrimSpace(opts.RuntimeControlSocketPath),
+		version:                strings.TrimSpace(opts.Version),
+		desktopManaged:         opts.DesktopManaged,
+		desktopOwnerID:         strings.TrimSpace(opts.DesktopOwnerID),
+		effectiveRunMode:       strings.TrimSpace(opts.EffectiveRunMode),
+		remoteEnabled:          opts.RemoteEnabled,
+		controlplaneBaseURL:    strings.TrimSpace(opts.ControlplaneBaseURL),
+		controlplaneProviderID: strings.TrimSpace(opts.ControlplaneProviderID),
+		envPublicID:            strings.TrimSpace(opts.EnvPublicID),
+		localPermissionCap:     &localPermissionCap,
+		gw:                     opts.Gateway,
+		a:                      opts.Agent,
+		diag:                   opts.Diagnostics,
+		accessGate:             opts.AccessGate,
+		pending:                make(map[string]pendingDirect),
 	}, nil
 }
 
@@ -503,73 +471,6 @@ func (s *Server) ListenLabel() string {
 	return s.bind.ListenLabelForPort(s.Port())
 }
 
-func runtimeGatewayTrustPath(stateRoot string, configPath string) string {
-	base := strings.TrimSpace(stateRoot)
-	if base == "" {
-		base = filepath.Dir(strings.TrimSpace(configPath))
-	}
-	return filepath.Join(base, "gateway", "runtime-gateway-trust.json")
-}
-
-func runtimeGatewayProfilesPath(stateRoot string, configPath string) string {
-	base := strings.TrimSpace(stateRoot)
-	if base == "" {
-		base = filepath.Dir(strings.TrimSpace(configPath))
-	}
-	return filepath.Join(base, "gateway", "environments.json")
-}
-
-func (s *Server) runtimeGatewayTrustStore() *gatewaytrust.Store {
-	if s == nil {
-		return gatewaytrust.NewStore("")
-	}
-	if s.runtimeGatewayTrust == nil {
-		s.runtimeGatewayTrust = gatewaytrust.NewStore(runtimeGatewayTrustPath(s.stateRoot, s.configPath))
-	}
-	return s.runtimeGatewayTrust
-}
-
-func (s *Server) runtimeGatewayProfileStore() *gatewayenvprofiles.Store {
-	if s == nil {
-		return gatewayenvprofiles.NewStore("")
-	}
-	if s.runtimeGatewayProfiles == nil {
-		s.runtimeGatewayProfiles = gatewayenvprofiles.NewStore(runtimeGatewayProfilesPath(s.stateRoot, s.configPath))
-	}
-	return s.runtimeGatewayProfiles
-}
-
-func (s *Server) runtimeGatewayAuthVerifier() *gatewayauth.Verifier {
-	if s == nil {
-		return nil
-	}
-	if s.runtimeGatewayAuth == nil {
-		s.runtimeGatewayAuth = gatewayauth.NewVerifier(s.runtimeGatewayTrustStore())
-	}
-	return s.runtimeGatewayAuth
-}
-
-func (s *Server) runtimeGatewayBindingAudience(r *http.Request) string {
-	if r == nil {
-		return ""
-	}
-	if header := strings.TrimSpace(r.Header.Get("X-Redeven-Gateway-Binding-Audience")); header != "" {
-		return header
-	}
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	host := strings.TrimSpace(r.Host)
-	if host == "" {
-		host = strings.TrimSpace(r.Header.Get("Host"))
-	}
-	if host == "" {
-		return ""
-	}
-	return (&url.URL{Scheme: scheme, Host: host, Path: "/"}).String()
-}
-
 func (s *Server) DisplayURLs() []string {
 	if s == nil {
 		return nil
@@ -734,35 +635,6 @@ func (s *Server) setLocalAccessCookie(w http.ResponseWriter, token string, expir
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expiresAt,
-	})
-}
-
-func (s *Server) setRuntimeGatewayProfileSessionCookie(w http.ResponseWriter, token string, expiresAtUnixMs int64) {
-	if w == nil || strings.TrimSpace(token) == "" {
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     runtimeGatewayEnvSessionCookieName,
-		Value:    strings.TrimSpace(token),
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  time.UnixMilli(expiresAtUnixMs),
-	})
-}
-
-func (s *Server) clearRuntimeGatewayProfileSessionCookie(w http.ResponseWriter) {
-	if w == nil {
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     runtimeGatewayEnvSessionCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-		Expires:  time.Unix(0, 0),
 	})
 }
 
@@ -1042,636 +914,11 @@ func (s *Server) handleLogo(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/_redeven_proxy/env/logo.png", http.StatusFound)
 }
 
-func (s *Server) handleRuntimeGatewayPairingChallenge(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !s.requireRuntimeGatewayPairingAccess(w, r) {
-		return
-	}
-	var req gatewayprotocol.PairingChallengeRequest
-	if !decodeRuntimeGatewayJSON(w, r, &req) {
-		return
-	}
-	resp, err := s.runtimeGatewayTrustStore().PairingChallenge(req)
-	if err != nil {
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway pairing challenge request is invalid.", false)
-		return
-	}
-	writeRuntimeGatewayData(w, http.StatusOK, resp)
-}
-
-func (s *Server) handleRuntimeGatewayPairingComplete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if !s.requireRuntimeGatewayPairingAccess(w, r) {
-		return
-	}
-	var req gatewayprotocol.PairingCompleteRequest
-	if !decodeRuntimeGatewayJSON(w, r, &req) {
-		return
-	}
-	resp, err := s.runtimeGatewayTrustStore().CompletePairing(req)
-	if err != nil {
-		writeRuntimeGatewayError(w, http.StatusUnauthorized, gatewayprotocol.GatewayErrorCodeUnauthorized, "Gateway pairing completion was rejected.", false)
-		return
-	}
-	writeRuntimeGatewayData(w, http.StatusOK, resp)
-}
-
-func isRuntimeGatewayDesktopBridgeTransport(r *http.Request) bool {
-	return r != nil && strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Redeven-Gateway-Transport")), "desktop_bridge")
-}
-
-func (s *Server) requireRuntimeGatewayPairingAccess(w http.ResponseWriter, r *http.Request) bool {
-	if isRuntimeGatewayDesktopBridgeTransport(r) || s.ensureLocalAccessHTTPResponse(w, r) {
-		return true
-	}
-	writeRuntimeGatewayError(w, http.StatusLocked, gatewayprotocol.GatewayErrorCodeUnauthorized, "Gateway pairing requires local access.", false)
-	return false
-}
-
-func (s *Server) mintRuntimeGatewayProfileSession(profile gatewayenvprofiles.EnvironmentProfile) (string, int64, error) {
-	if s == nil {
-		return "", 0, errors.New("Gateway profile session store is unavailable")
-	}
-	token, err := randomB64u(24)
-	if err != nil {
-		return "", 0, err
-	}
-	expiresAt := time.Now().Add(runtimeGatewayEnvProxySessionTTL).UnixMilli()
-	session := runtimeGatewayProfileSession{
-		GatewayEnvID:    strings.TrimSpace(profile.GatewayEnvID),
-		TargetBaseURL:   strings.TrimSpace(profile.AccessRoute.URL),
-		ExpiresAtUnixMS: expiresAt,
-	}
-	if session.GatewayEnvID == "" || session.TargetBaseURL == "" {
-		return "", 0, errors.New("Gateway profile session is incomplete")
-	}
-	s.runtimeGatewayProfileSessionsMu.Lock()
-	if s.runtimeGatewayProfileSessions == nil {
-		s.runtimeGatewayProfileSessions = make(map[string]runtimeGatewayProfileSession)
-	}
-	s.runtimeGatewayProfileSessions[token] = session
-	s.runtimeGatewayProfileSessionsMu.Unlock()
-	return token, expiresAt, nil
-}
-
-func (s *Server) runtimeGatewayProfileSessionFromRequest(r *http.Request) (runtimeGatewayProfileSession, bool) {
-	if s == nil || r == nil {
-		return runtimeGatewayProfileSession{}, false
-	}
-	cookie, err := r.Cookie(runtimeGatewayEnvSessionCookieName)
-	if err != nil || cookie == nil {
-		return runtimeGatewayProfileSession{}, false
-	}
-	token := strings.TrimSpace(cookie.Value)
-	if token == "" {
-		return runtimeGatewayProfileSession{}, false
-	}
-	now := time.Now().UnixMilli()
-	s.runtimeGatewayProfileSessionsMu.Lock()
-	defer s.runtimeGatewayProfileSessionsMu.Unlock()
-	session, ok := s.runtimeGatewayProfileSessions[token]
-	if !ok {
-		return runtimeGatewayProfileSession{}, false
-	}
-	if session.ExpiresAtUnixMS <= now || strings.TrimSpace(session.TargetBaseURL) == "" {
-		delete(s.runtimeGatewayProfileSessions, token)
-		return runtimeGatewayProfileSession{}, false
-	}
-	return session, true
-}
-
-func (s *Server) hasRuntimeGatewayProfileSessionCookie(r *http.Request) bool {
-	if s == nil || r == nil {
-		return false
-	}
-	cookie, err := r.Cookie(runtimeGatewayEnvSessionCookieName)
-	return err == nil && cookie != nil && strings.TrimSpace(cookie.Value) != ""
-}
-
-func (s *Server) revokeRuntimeGatewayProfileSessions(gatewayEnvID string) {
-	if s == nil {
-		return
-	}
-	cleanEnvID := strings.TrimSpace(gatewayEnvID)
-	if cleanEnvID == "" {
-		return
-	}
-	s.runtimeGatewayProfileSessionsMu.Lock()
-	for token, session := range s.runtimeGatewayProfileSessions {
-		if strings.TrimSpace(session.GatewayEnvID) == cleanEnvID {
-			delete(s.runtimeGatewayProfileSessions, token)
-		}
-	}
-	s.runtimeGatewayProfileSessionsMu.Unlock()
-}
-
-func shouldRuntimeGatewayProfileProxyRequest(r *http.Request) bool {
-	if r == nil || r.URL == nil {
-		return false
-	}
-	path := strings.TrimSpace(r.URL.Path)
-	return path == "/" ||
-		path == "/favicon.ico" ||
-		path == "/logo.png" ||
-		strings.HasPrefix(path, "/_redeven_proxy/") ||
-		strings.HasPrefix(path, "/_redeven_direct/") ||
-		strings.HasPrefix(path, "/api/local/")
-}
-
-func shouldRuntimeGatewayProfileBlockStaleSession(r *http.Request) bool {
-	if r == nil || r.URL == nil {
-		return false
-	}
-	path := strings.TrimSpace(r.URL.Path)
-	return !strings.HasPrefix(path, "/gateway/v1/")
-}
-
-func runtimeGatewayTargetOrigin(target *url.URL) string {
-	if target == nil {
-		return ""
-	}
-	return (&url.URL{Scheme: target.Scheme, Host: target.Host}).String()
-}
-
-func stripRuntimeGatewayProfileCookie(header string) string {
-	parts := strings.Split(header, ";")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		clean := strings.TrimSpace(part)
-		if clean == "" {
-			continue
-		}
-		name, _, _ := strings.Cut(clean, "=")
-		if strings.EqualFold(strings.TrimSpace(name), runtimeGatewayEnvSessionCookieName) {
-			continue
-		}
-		out = append(out, clean)
-	}
-	return strings.Join(out, "; ")
-}
-
-func (s *Server) withRuntimeGatewayProfileProxy(next http.Handler) http.Handler {
-	if next == nil {
-		return http.NotFoundHandler()
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		session, ok := s.runtimeGatewayProfileSessionFromRequest(r)
-		if !ok || !shouldRuntimeGatewayProfileProxyRequest(r) {
-			if !ok && s.hasRuntimeGatewayProfileSessionCookie(r) && shouldRuntimeGatewayProfileBlockStaleSession(r) {
-				s.clearRuntimeGatewayProfileSessionCookie(w)
-				http.Error(w, "Gateway profile session is no longer available", http.StatusUnauthorized)
-				return
-			}
-			next.ServeHTTP(w, r)
-			return
-		}
-		target, err := url.Parse(strings.TrimSpace(session.TargetBaseURL))
-		if err != nil || target == nil || target.Scheme == "" || target.Host == "" {
-			http.Error(w, "Gateway profile target is unavailable", http.StatusBadGateway)
-			return
-		}
-		targetOrigin := runtimeGatewayTargetOrigin(target)
-		proxy := &httputil.ReverseProxy{
-			Rewrite: func(pr *httputil.ProxyRequest) {
-				pr.SetURL(target)
-				pr.Out.Host = target.Host
-				pr.Out.URL.Path = pr.In.URL.Path
-				pr.Out.URL.RawPath = pr.In.URL.RawPath
-				pr.Out.URL.RawQuery = pr.In.URL.RawQuery
-				if targetOrigin != "" {
-					pr.Out.Header.Set("Origin", targetOrigin)
-					if strings.TrimSpace(pr.Out.Header.Get("Referer")) != "" {
-						pr.Out.Header.Set("Referer", targetOrigin)
-					}
-				}
-				if cookie := stripRuntimeGatewayProfileCookie(pr.Out.Header.Get("Cookie")); cookie != "" {
-					pr.Out.Header.Set("Cookie", cookie)
-				} else {
-					pr.Out.Header.Del("Cookie")
-				}
-				pr.Out.Header.Del("Forwarded")
-				pr.Out.Header.Del("X-Forwarded-Host")
-				pr.Out.Header.Del("X-Forwarded-Proto")
-				pr.Out.Header.Del("X-Forwarded-For")
-				pr.Out.Header.Del("X-Forwarded-Port")
-			},
-			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
-				http.Error(w, "Gateway profile target is unavailable", http.StatusBadGateway)
-			},
-		}
-		proxy.ServeHTTP(w, r)
-	})
-}
-
-func (s *Server) handleRuntimeGatewayCatalog(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	body, ok := s.readAuthenticatedRuntimeGatewayBody(w, r)
-	if !ok {
-		return
-	}
-	var req gatewayprotocol.CatalogRequest
-	if !decodeRuntimeGatewayJSONBytes(w, body, &req) {
-		return
-	}
-	resp, err := s.runtimeGatewayCatalogService(r).ListEnvironments(r.Context(), req)
-	if err != nil {
-		writeRuntimeGatewayServiceError(w, err)
-		return
-	}
-	writeRuntimeGatewayData(w, http.StatusOK, resp)
-}
-
-func (s *Server) handleRuntimeGatewayOpenSession(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	body, ok := s.readAuthenticatedRuntimeGatewayBody(w, r)
-	if !ok {
-		return
-	}
-	var req gatewayprotocol.OpenSessionRequest
-	if !decodeRuntimeGatewayJSONBytes(w, body, &req) {
-		return
-	}
-	resp, err := s.runtimeGatewaySessionService(w, r).OpenSession(r.Context(), req)
-	if err != nil {
-		writeRuntimeGatewayServiceError(w, err)
-		return
-	}
-	writeRuntimeGatewayData(w, http.StatusOK, resp)
-}
-
-func (s *Server) handleRuntimeGatewayEnvProfileUpsert(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	body, ok := s.readAuthenticatedRuntimeGatewayBody(w, r)
-	if !ok {
-		return
-	}
-	var req gatewayprotocol.EnvProfileUpsertRequest
-	if !decodeRuntimeGatewayJSONBytes(w, body, &req) {
-		return
-	}
-	env, err := s.runtimeGatewayProfileStore().Upsert(r.Context(), req)
-	if err != nil {
-		writeRuntimeGatewayProfileError(w, err)
-		return
-	}
-	s.revokeRuntimeGatewayProfileSessions(env.GatewayEnvID)
-	writeRuntimeGatewayData(w, http.StatusOK, gatewayprotocol.EnvProfileUpsertResponse{
-		ProtocolVersion: gatewayprotocol.Version,
-		Environment:     env,
-	})
-}
-
-func (s *Server) handleRuntimeGatewayEnvProfileDelete(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	body, ok := s.readAuthenticatedRuntimeGatewayBody(w, r)
-	if !ok {
-		return
-	}
-	var req gatewayprotocol.EnvProfileDeleteRequest
-	if !decodeRuntimeGatewayJSONBytes(w, body, &req) {
-		return
-	}
-	resp, err := s.runtimeGatewayProfileStore().Delete(r.Context(), req)
-	if err != nil {
-		writeRuntimeGatewayProfileError(w, err)
-		return
-	}
-	if resp.Deleted {
-		s.revokeRuntimeGatewayProfileSessions(resp.GatewayEnvID)
-	}
-	writeRuntimeGatewayData(w, http.StatusOK, resp)
-}
-
-func (s *Server) handleRuntimeGatewayEnvLifecycle(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	body, ok := s.readAuthenticatedRuntimeGatewayBody(w, r)
-	if !ok {
-		return
-	}
-	var req gatewayprotocol.EnvLifecycleRequest
-	if !decodeRuntimeGatewayJSONBytes(w, body, &req) {
-		return
-	}
-	if err := gatewayprotocol.ValidateEnvLifecycleRequest(req); err != nil {
-		writeRuntimeGatewayProfileError(w, err)
-		return
-	}
-	req = gatewayprotocol.NormalizeEnvLifecycleRequest(req)
-	writeRuntimeGatewayData(w, http.StatusOK, gatewayprotocol.EnvLifecycleResponse{
-		ProtocolVersion: gatewayprotocol.Version,
-		GatewayEnvID:    req.GatewayEnvID,
-		Operation:       req.Operation,
-		State:           gatewayprotocol.EnvLifecycleStateUnsupported,
-		Message:         "Gateway environment lifecycle is not supported by this runtime.",
-	})
-}
-
-func decodeRuntimeGatewayJSON(w http.ResponseWriter, r *http.Request, out any) bool {
-	if r == nil {
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request is invalid.", false)
-		return false
-	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request body is invalid.", false)
-		return false
-	}
-	return decodeRuntimeGatewayJSONBytes(w, body, out)
-}
-
-func decodeRuntimeGatewayJSONBytes(w http.ResponseWriter, body []byte, out any) bool {
-	dec := json.NewDecoder(strings.NewReader(string(body)))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(out); err != nil {
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request JSON is invalid.", false)
-		return false
-	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request JSON is invalid.", false)
-		return false
-	}
-	return true
-}
-
-func (s *Server) readAuthenticatedRuntimeGatewayBody(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway request body is invalid.", false)
-		return nil, false
-	}
-	if _, err := s.runtimeGatewayAuthVerifier().Verify(r.Context(), r, body, s.runtimeGatewayBindingAudience(r)); err != nil {
-		writeRuntimeGatewayError(w, http.StatusUnauthorized, gatewayprotocol.GatewayErrorCodeUnauthorized, "Pair this Gateway before listing or opening environments.", false)
-		return nil, false
-	}
-	return body, true
-}
-
-func (s *Server) runtimeGatewayCatalogService(r *http.Request) *gatewaycatalog.Service {
-	metadata, _, err := s.runtimeGatewayTrustStore().GatewayMetadata(s.runtimeGatewayBindingAudience(r))
-	if err != nil {
-		metadata = gatewayprotocol.GatewayMetadata{
-			GatewayID:    "local-runtime-gateway",
-			DisplayName:  "Redeven Runtime Gateway",
-			Status:       gatewayprotocol.GatewayStatusError,
-			Capabilities: []gatewayprotocol.GatewayCapability{},
-		}
-	}
-	metadata.Capabilities = append(metadata.Capabilities, gatewayprotocol.GatewayCapabilityEnvProfileWrite)
-	return gatewaycatalog.NewService(
-		gatewaycatalog.WithGatewayMetadata(metadata),
-		gatewaycatalog.WithEnvironmentSource(gatewaycatalog.EnvironmentSourceFunc(func(ctx context.Context) ([]gatewayprotocol.Environment, error) {
-			profiles, err := s.runtimeGatewayProfileStore().List(ctx)
-			if err != nil {
-				return nil, err
-			}
-			environments := make([]gatewayprotocol.Environment, 0, len(profiles))
-			for _, profile := range profiles {
-				environments = append(environments, gatewayenvprofiles.EnvironmentFromProfile(profile))
-			}
-			return environments, nil
-		})),
-	)
-}
-
-func (s *Server) runtimeGatewaySessionService(w http.ResponseWriter, r *http.Request) *gatewaysession.Service {
-	issuer := runtimeGatewayArtifactIssuer{
-		server:          s,
-		request:         r,
-		responseWriter:  w,
-		bindingAudience: s.runtimeGatewayBindingAudience(r),
-	}
-	return gatewaysession.NewService(gatewaysession.WithConnectArtifactIssuer(issuer))
-}
-
-type runtimeGatewayArtifactIssuer struct {
-	server          *Server
-	request         *http.Request
-	responseWriter  http.ResponseWriter
-	bindingAudience string
-}
-
-func (i runtimeGatewayArtifactIssuer) IssueGatewayConnectArtifact(ctx context.Context, req gatewayprotocol.OpenSessionRequest) (gatewaysession.GatewayConnectArtifactIssue, error) {
-	if err := ctx.Err(); err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	if req.RequestedCapability != gatewayprotocol.RequestedCapabilityEnvApp {
-		return gatewaysession.GatewayConnectArtifactIssue{}, &gatewaysession.GatewayError{
-			Code:    gatewaysession.ErrorCodeCapabilityUnsupported,
-			Message: "Gateway environment capability is not supported.",
-		}
-	}
-	return i.issueRuntimeGatewayProfileArtifact(ctx, req)
-}
-
-func (i runtimeGatewayArtifactIssuer) issueRuntimeGatewayProfileArtifact(ctx context.Context, req gatewayprotocol.OpenSessionRequest) (gatewaysession.GatewayConnectArtifactIssue, error) {
-	profile, ok, err := i.server.runtimeGatewayProfileStore().Get(ctx, req.GatewayEnvID)
-	if err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	if !ok {
-		return gatewaysession.GatewayConnectArtifactIssue{}, &gatewaysession.GatewayError{
-			Code:    gatewaysession.ErrorCodeNotFound,
-			Message: "Gateway environment was not found.",
-		}
-	}
-	if profile.AccessRoute.Kind != gatewayprotocol.EnvProfileAccessRouteKindURL {
-		return gatewaysession.GatewayConnectArtifactIssue{}, &gatewaysession.GatewayError{
-			Code:    gatewaysession.ErrorCodeCapabilityUnsupported,
-			Message: "Gateway environment opening is not available for this profile yet.",
-		}
-	}
-	sessionToken, expiresAt, err := i.server.mintRuntimeGatewayProfileSession(profile)
-	if err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	i.server.setRuntimeGatewayProfileSessionCookie(i.responseWriter, sessionToken, expiresAt)
-	return i.issueSignedRuntimeGatewayArtifact(req, "gateway_profile_url")
-}
-
-func (i runtimeGatewayArtifactIssuer) issueSignedRuntimeGatewayArtifact(req gatewayprotocol.OpenSessionRequest, connectionKind string) (gatewaysession.GatewayConnectArtifactIssue, error) {
-	metadata, _, err := i.server.runtimeGatewayTrustStore().GatewayMetadata(i.bindingAudience)
-	if err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	privateKey, err := i.server.runtimeGatewayTrustStore().GatewayPrivateKey()
-	if err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	if isRuntimeGatewayDesktopBridgeTransport(i.request) {
-		return gatewaysession.NewSignedDesktopBridgeIssue(struct {
-			GatewayID           string
-			GatewayEnvID        string
-			BindingAudience     string
-			RequestedCapability gatewayprotocol.RequestedCapability
-			ClientNonce         string
-			BridgeSessionID     string
-			RouteID             string
-			GatewayPrivateKey   string
-			TTL                 time.Duration
-		}{
-			GatewayID:           metadata.GatewayID,
-			GatewayEnvID:        req.GatewayEnvID,
-			BindingAudience:     i.bindingAudience,
-			RequestedCapability: req.RequestedCapability,
-			ClientNonce:         req.ClientNonce,
-			BridgeSessionID:     req.BridgeSessionID,
-			RouteID:             req.RouteID,
-			GatewayPrivateKey:   privateKey,
-			TTL:                 10 * time.Minute,
-		})
-	}
-	entryURL := i.server.gatewayEnvAppEntryURL(i.request)
-	if strings.TrimSpace(entryURL) == "" {
-		return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("Gateway Env App entry URL is unavailable")
-	}
-	issue, err := gatewaysession.NewSignedLocalDirectIssue(struct {
-		GatewayID           string
-		GatewayEnvID        string
-		BindingAudience     string
-		RequestedCapability gatewayprotocol.RequestedCapability
-		ClientNonce         string
-		URL                 string
-		GatewayPrivateKey   string
-		TTL                 time.Duration
-	}{
-		GatewayID:           metadata.GatewayID,
-		GatewayEnvID:        req.GatewayEnvID,
-		BindingAudience:     i.bindingAudience,
-		RequestedCapability: req.RequestedCapability,
-		ClientNonce:         req.ClientNonce,
-		URL:                 entryURL,
-		GatewayPrivateKey:   privateKey,
-		TTL:                 10 * time.Minute,
-	})
-	if err != nil {
-		return gatewaysession.GatewayConnectArtifactIssue{}, err
-	}
-	if issue.DiagnosticsHint != nil {
-		issue.DiagnosticsHint.ConnectionKind = strings.TrimSpace(connectionKind)
-	}
-	return issue, nil
-}
-
-func (s *Server) gatewayEnvAppEntryURL(r *http.Request) string {
-	if r == nil {
-		return ""
-	}
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	host := strings.TrimSpace(r.Host)
-	if host == "" {
-		return ""
-	}
-	u := &url.URL{Scheme: scheme, Host: host, Path: "/_redeven_proxy/env/"}
-	return u.String()
-}
-
-func writeRuntimeGatewayServiceError(w http.ResponseWriter, err error) {
-	var sessionErr *gatewaysession.GatewayError
-	if errors.As(err, &sessionErr) {
-		switch sessionErr.Code {
-		case gatewaysession.ErrorCodeNotFound:
-			writeRuntimeGatewayError(w, http.StatusNotFound, gatewayprotocol.GatewayErrorCodeNotFound, sessionErr.Message, false)
-		case gatewaysession.ErrorCodeCapabilityUnsupported:
-			writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeCapabilityUnsupported, sessionErr.Message, false)
-		case gatewaysession.ErrorCodeNotImplemented:
-			writeRuntimeGatewayError(w, http.StatusNotImplemented, gatewayprotocol.GatewayErrorCodeNotImplemented, sessionErr.Message, false)
-		default:
-			writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, sessionErr.Message, false)
-		}
-		return
-	}
-	if errors.Is(err, gatewayprotocol.ErrUnsupportedProtocolVersion) {
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "protocol_version is not supported.", false)
-		return
-	}
-	writeRuntimeGatewayError(w, http.StatusInternalServerError, gatewayprotocol.GatewayErrorCodeUnavailable, "Gateway request could not be completed.", true)
-}
-
-func writeRuntimeGatewayProfileError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, gatewayprotocol.ErrUnsupportedProtocolVersion):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "protocol_version is not supported.", false)
-	case errors.Is(err, gatewayprotocol.ErrMissingDisplayName):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "display_name is required.", false)
-	case errors.Is(err, gatewayprotocol.ErrMissingAccessRoute):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "access_route is required.", false)
-	case errors.Is(err, gatewayprotocol.ErrMissingGatewayEnvID):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is required.", false)
-	case errors.Is(err, gatewayprotocol.ErrMissingLifecycleOperation):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "operation is required.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrGatewayEnvIDReserved):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is reserved.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrGatewayEnvIDInvalid):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is invalid.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrURLRequired):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url is required.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrURLMustBeAbsoluteHTTP):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url must be an absolute http or https URL.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrURLSchemeUnsupported):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url must use http or https.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrURLCredentialsUnsupported):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url must not include embedded credentials.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrSSHDestinationRequired):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_destination is required.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrSSHPortInvalid):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_port must be between 1 and 65535.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrContainerEngineInvalid):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "container_engine must be docker or podman.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrContainerIDRequired):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "container_id is required.", false)
-	case errors.Is(err, gatewayenvprofiles.ErrContainerRuntimeRootRequired):
-		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "container_runtime_root is required.", false)
-	default:
-		writeRuntimeGatewayError(w, http.StatusInternalServerError, gatewayprotocol.GatewayErrorCodeUnavailable, "Gateway environment profile request could not be completed.", true)
-	}
-}
-
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-func writeRuntimeGatewayData(w http.ResponseWriter, status int, data any) {
-	writeJSON(w, status, apiResp{OK: true, Data: data})
-}
-
-func writeRuntimeGatewayError(w http.ResponseWriter, status int, code gatewayprotocol.GatewayErrorCode, message string, retryable bool) {
-	writeJSON(w, status, apiResp{
-		OK: false,
-		Error: &apiError{
-			Code:           string(code),
-			Message:        strings.TrimSpace(message),
-			Retryable:      retryable,
-			RedactedDetail: strings.TrimSpace(message),
-		},
-		Data: nil,
-	})
 }
 
 func (s *Server) withDiagnostics(next http.Handler) http.Handler {
@@ -2304,12 +1551,4 @@ func (s *Server) sweepExpired() {
 	}
 	s.pendingMu.Unlock()
 
-	nowMS := time.Now().UnixMilli()
-	s.runtimeGatewayProfileSessionsMu.Lock()
-	for k, v := range s.runtimeGatewayProfileSessions {
-		if v.ExpiresAtUnixMS > 0 && nowMS > v.ExpiresAtUnixMS {
-			delete(s.runtimeGatewayProfileSessions, k)
-		}
-	}
-	s.runtimeGatewayProfileSessionsMu.Unlock()
 }

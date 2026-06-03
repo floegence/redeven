@@ -55,16 +55,19 @@ function signedChallenge(
     gateway_id: string;
     gateway_nonce: string;
     expires_at_unix_ms: number;
+    pairing_code: string;
   }> = {},
 ) {
   const challenge = {
-    protocol_version: overrides.protocol_version ?? 'redeven-runtime-gateway-v1',
+    protocol_version: overrides.protocol_version ?? 'redeven-gateway-v1',
     gateway_id: overrides.gateway_id ?? 'gw_demo',
     gateway_public_key: gatewayMaterial.client_public_key,
     gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(gatewayMaterial.client_public_key),
     gateway_nonce: overrides.gateway_nonce ?? 'gateway-nonce',
     expires_at_unix_ms: overrides.expires_at_unix_ms ?? 2_000,
+    pairing_code: overrides.pairing_code,
   };
+  const pairingCode = typeof challenge.pairing_code === 'string' ? challenge.pairing_code : '';
   return {
     ...challenge,
     signature: signGatewayPayload(gatewayMaterial.client_private_key, pairingChallengePayload({
@@ -76,6 +79,7 @@ function signedChallenge(
       client_public_key: material.client_public_key,
       gateway_public_key: challenge.gateway_public_key,
       expires_at_unix_ms: challenge.expires_at_unix_ms,
+      ...(pairingCode ? { pairing_code: pairingCode } : {}),
     })),
   };
 }
@@ -87,7 +91,7 @@ function signedRuntimeStyleChallenge(
   const gatewayPublicKey = gatewayMaterial.client_public_key.trim();
   const gatewayPublicKeyWire = `${gatewayPublicKey}\n`;
   const challenge = {
-    protocol_version: 'redeven-runtime-gateway-v1',
+    protocol_version: 'redeven-gateway-v1',
     gateway_id: 'gw_demo',
     gateway_public_key: gatewayPublicKeyWire,
     gateway_public_key_fingerprint: gatewayPublicKeyFingerprint(gatewayPublicKey),
@@ -223,6 +227,27 @@ describe('gatewayTrust', () => {
     })).toThrow('Gateway pairing challenge signature is invalid');
   });
 
+  it('requires URL pairing challenges to echo the requested pairing code', () => {
+    const record = gatewayRecord();
+    const material = createGatewayPairingMaterial(record);
+    const gatewayMaterial = createGatewayPairingMaterial(record);
+
+    expect(() => assertGatewayPairingChallenge({
+      record,
+      material,
+      challenge: signedChallenge(material, gatewayMaterial, { pairing_code: 'pair-123456' }),
+      expected_pairing_code: 'pair-123456',
+      now_unix_ms: 1_000,
+    })).not.toThrow();
+    expect(() => assertGatewayPairingChallenge({
+      record,
+      material,
+      challenge: signedChallenge(material, gatewayMaterial),
+      expected_pairing_code: 'pair-123456',
+      now_unix_ms: 1_000,
+    })).toThrow('Gateway pairing challenge did not confirm the requested pairing code');
+  });
+
   it('accepts runtime pairing challenges signed over trimmed PEM keys', () => {
     const record = gatewayRecord();
     const material = createGatewayPairingMaterial(record);
@@ -246,12 +271,12 @@ describe('gatewayTrust', () => {
     const gatewayMaterial = createGatewayPairingMaterial(record);
     const challenge = signedChallenge(material, gatewayMaterial);
     const response = {
-      protocol_version: 'redeven-runtime-gateway-v1',
+      protocol_version: 'redeven-gateway-v1',
       gateway_id: record.gateway_id,
       client_key_id: material.client_key_id,
       paired_at_unix_ms: 1_000,
       proof: signGatewayPayload(gatewayMaterial.client_private_key, pairingCompleteResponsePayload({
-        protocol_version: 'redeven-runtime-gateway-v1',
+        protocol_version: 'redeven-gateway-v1',
         client_nonce: material.client_nonce,
         gateway_nonce: challenge.gateway_nonce,
         gateway_id: record.gateway_id,
@@ -346,7 +371,7 @@ describe('gatewayTrust', () => {
       }),
       method: 'POST',
       route: '/gateway/v1/catalog',
-      body: { protocol_version: 'redeven-runtime-gateway-v1' },
+      body: { protocol_version: 'redeven-gateway-v1' },
       secret_store: store,
       timestamp_unix_ms: 1_770_000_000_000,
       nonce: 'nonce',
@@ -384,7 +409,7 @@ describe('gatewayTrust', () => {
   it('builds pairing challenge requests from generated key material', () => {
     const material = createGatewayPairingMaterial(gatewayRecord());
     expect(pairingChallengeRequest(material)).toMatchObject({
-      protocol_version: 'redeven-runtime-gateway-v1',
+      protocol_version: 'redeven-gateway-v1',
       client_nonce: material.client_nonce,
       client_public_key: material.client_public_key,
       binding_audience: 'https://gateway.example/',

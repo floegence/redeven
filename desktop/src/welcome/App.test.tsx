@@ -38,6 +38,10 @@ function readWelcomeSource(): string {
   return fs.readFileSync(path.join(__dirname, 'App.tsx'), 'utf8');
 }
 
+function readGatewaySourceActionRunnerSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'gatewaySourceActionRunner.ts'), 'utf8');
+}
+
 function readDesktopTooltipSource(): string {
   return fs.readFileSync(path.join(__dirname, 'DesktopTooltip.tsx'), 'utf8');
 }
@@ -198,12 +202,12 @@ describe('DesktopWelcomeShell', () => {
     expect(gatewayDialogSrc.indexOf('id="gateway-release-base-url"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
     expect(appSrc).toContain("performLauncherAction(action, 'gateway_dialog');");
     expect(appSrc).toContain('onClick={() => props.openCreateGatewaySetup()}');
-    expect(appSrc).toContain('function runGatewaySourceAction(');
+    expect(appSrc).toContain("import { runGatewaySourceAction } from './gatewaySourceActionRunner';");
+    const gatewaySourceActionRunnerSrc = readGatewaySourceActionRunnerSource();
     expect(appSrc).toContain("case 'manage_gateway':");
     expect(appSrc).toContain('selectedSnapshotGatewayProgress(props.gateway.gateway_id, props.actionProgress)');
     expect(appSrc).toContain('<GatewayActionPanel');
     expect(appSrc).toContain('<EnvironmentProgressPanel');
-    expect(appSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? \'start_if_needed\' : undefined');
     expect(appSrc).toContain('buildGatewayActionPresentation');
     expect(appSrc).toContain('row().environment_summary_label');
     expect(appSrc).toContain('row().environment_summary_detail');
@@ -213,8 +217,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("case 'retry':");
     expect(appSrc).toContain('row().management_label');
     expect(appSrc).toContain("case 'pair_gateway':");
-    expect(appSrc).toContain("case 'resolve_gateway':\n      openCreateGatewaySetup(gateway);");
-    expect(appSrc).toContain("case 'start_gateway_runtime':");
+    expect(gatewaySourceActionRunnerSrc).toContain("case 'resolve_gateway':\n      openCreateGatewaySetup(gateway);");
+    expect(appSrc).toContain("case 'start_gateway':");
     expect(appSrc).toContain("case 'refresh_gateway_catalog':");
     expect(appSrc).toContain('const ENVIRONMENT_CENTER_HEADER_COPY');
     expect(appSrc).toContain("titleKey: 'environmentCenter.environmentsTitle'");
@@ -766,6 +770,7 @@ describe('DesktopWelcomeShell', () => {
 
   it('renders Gateway sources as environment-style cards with guided actions', () => {
     const appSrc = readWelcomeSource();
+    const gatewaySourceActionRunnerSrc = readGatewaySourceActionRunnerSource();
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('function GatewaySourceCard');
@@ -774,14 +779,21 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('redeven-environment-card redeven-gateway-card');
     expect(appSrc).toContain('localizedGatewaySourceText(props.i18n, row().guidance.title)');
     expect(appSrc).toContain('localizedGatewaySourceText(props.i18n, row().guidance.detail)');
+    expect(appSrc).toContain('function localizedGatewaySourceActionLabel');
+    expect(appSrc).toContain('const primaryActionLabel = createMemo(() => localizedGatewaySourceActionLabel(props.i18n, row().primary_action));');
+    expect(appSrc).toContain('const localizedPanelActionLabel = (action: GatewaySourceActionModel) => localizedGatewaySourceActionLabel(props.i18n, action);');
     expect(appSrc).toContain('selectedSnapshotGatewayProgress(props.gateway.gateway_id, props.actionProgress)');
     expect(appSrc).toContain('<GatewayActionPanel');
-    expect(appSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? \'start_if_needed\' : undefined');
+    expect(appSrc).toContain('void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayServiceAction, props.runGatewayLauncherAction);');
+    expect(gatewaySourceActionRunnerSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? \'start_if_needed\' : undefined');
     expect(appSrc).toContain('const quickSecondaryActions = createMemo(() => secondaryActions().slice(0, 1));');
     expect(appSrc).toContain('const overflowSecondaryActions = createMemo(() => secondaryActions().slice(quickSecondaryActions().length));');
     expect(appSrc).toContain('class="redeven-gateway-card__catalog-summary"');
-    expect(appSrc).toContain('onClick={() => props.viewGatewayEnvironments(props.gateway)}');
-    expect(appSrc).toContain('disabled={row().environment_count <= 0}');
+    expect(appSrc).toContain('const catalogSummaryAction = createMemo(() => {');
+    expect(appSrc).toContain('onClick: () => props.viewGatewayEnvironments(props.gateway)');
+    expect(appSrc).toContain('onClick: () => props.openCreateGatewayEnvironment(props.gateway)');
+    expect(appSrc).toContain("props.gateway.capabilities.includes('env_profile_write')");
+    expect(appSrc).toContain('disabled={catalogSummaryAction().disabled}');
     expect(appSrc).toContain('const gatewayActionRunning = createMemo(() => (');
     expect(appSrc).not.toContain('Start Gateway & Pair');
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
@@ -1144,7 +1156,9 @@ describe('DesktopWelcomeShell', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
-    expect(appSrc).toContain('const activeActionProgress = createMemo(() => snapshot().action_progress);');
+    expect(appSrc).toContain('const activeActionProgress = createMemo(() => [');
+    expect(appSrc).toContain('...snapshot().action_progress,');
+    expect(appSrc).toContain('...retainedGatewayFailures().filter');
     expect(appSrc).toContain('reconcileBusyStateWithActionProgressSnapshot');
     expect(appSrc).toContain('setBusyState((busy) => reconcileBusyStateWithActionProgressSnapshot(busy, next.action_progress));');
     expect(appSrc).toContain('setBusyState((busy) => reconcileBusyStateWithActionProgressSnapshot(busy, acceptedSnapshot.action_progress));');
@@ -1361,7 +1375,8 @@ describe('DesktopWelcomeShell', () => {
   it('uses a settings affordance for every editable environment card', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain("content={props.i18n.t('common.settings')}");
+    expect(appSrc).toContain("props.i18n.t('common.settings')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.gatewayActionManage')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.runtimeTargetSettings')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.connectionSettingsForLabel'");
     expect(appSrc).toContain('<Settings class="h-3.5 w-3.5" />');

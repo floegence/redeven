@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -48,6 +49,10 @@ function archiveFetchCount(fetchMock: ReturnType<typeof vi.fn>, packageName: str
     .reduce((total, [, count]) => total + count, 0);
 }
 
+function singleFileTarGzipEntryName(archive: Buffer): string {
+  return gunzipSync(archive).subarray(0, 100).toString('utf8').replace(/\0.*$/u, '');
+}
+
 async function mkCacheRoot(): Promise<string> {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-package-cache-'));
   return runtimePackageCacheRoot(root);
@@ -81,12 +86,14 @@ async function preparePackage(args: Readonly<{
   cacheRoot: string;
   platform: DesktopSSHRemotePlatform;
   releaseBaseURL?: string;
+  packageKind?: 'runtime' | 'gateway';
   sourceRuntimeRoot?: string;
 }>): Promise<Awaited<ReturnType<typeof prepareDesktopRuntimeUploadAsset>>> {
   return prepareDesktopRuntimeUploadAsset({
     runtimeReleaseTag: 'v1.2.3',
     releaseBaseURL: args.releaseBaseURL ?? 'https://mirror.example.invalid/releases',
     assetCacheRoot: args.cacheRoot,
+    packageKind: args.packageKind,
     sourceRuntimeRoot: args.sourceRuntimeRoot,
     platform: args.platform,
     fetchPolicy: runtimeReleaseFetchPolicy(45_000),
@@ -120,6 +127,7 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
   await Promise.all([
     fs.mkdir(path.join(root, 'scripts'), { recursive: true }),
     fs.mkdir(path.join(root, 'cmd', 'redeven'), { recursive: true }),
+    fs.mkdir(path.join(root, 'cmd', 'redeven-gateway'), { recursive: true }),
     fs.mkdir(path.dirname(originalDistPath), { recursive: true }),
     fs.mkdir(path.dirname(originalBundlePath), { recursive: true }),
     fs.mkdir(path.dirname(originalDesktopReleasePath), { recursive: true }),
@@ -134,6 +142,12 @@ async function createSourceRuntimeFixture(): Promise<Readonly<{
     '',
   ].join('\n'));
   await fs.writeFile(path.join(root, 'cmd', 'redeven', 'main.go'), [
+    'package main',
+    '',
+    'func main() {}',
+    '',
+  ].join('\n'));
+  await fs.writeFile(path.join(root, 'cmd', 'redeven-gateway', 'main.go'), [
     'package main',
     '',
     'func main() {}',
@@ -212,6 +226,34 @@ describe('runtimePackageCache', () => {
       expect(archiveFetchCount(fetchMock, amd64.release_package_name)).toBe(1);
       expect(archiveFetchCount(fetchMock, arm64.release_package_name)).toBe(1);
       expect([...fetchURLCounts(fetchMock).keys()].filter((url) => url.endsWith('/SHA256SUMS'))).toHaveLength(1);
+    } finally {
+      await fs.rm(path.dirname(cacheRoot), { recursive: true, force: true });
+    }
+  });
+
+  it('keeps runtime and Gateway release archives separate for the same platform', async () => {
+    const cacheRoot = await mkCacheRoot();
+    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    const gatewayPackageName = 'redeven-gateway_linux_amd64.tar.gz';
+    const fetchMock = installFetchMock(new Map([
+      [platform.release_package_name, Buffer.from('linux-amd64-runtime')],
+      [gatewayPackageName, Buffer.from('linux-amd64-gateway')],
+    ]));
+    try {
+      const [runtimeAsset, gatewayAsset] = await Promise.all([
+        preparePackage({ cacheRoot, platform }),
+        preparePackage({ cacheRoot, platform, packageKind: 'gateway' }),
+      ]);
+
+      expect(runtimeAsset.archiveData.toString('utf8')).toBe('linux-amd64-runtime');
+      expect(gatewayAsset.archiveData.toString('utf8')).toBe('linux-amd64-gateway');
+      expect(runtimeAsset.cacheEntry?.key.package_kind).toBe('runtime');
+      expect(gatewayAsset.cacheEntry?.key.package_kind).toBe('gateway');
+      expect(runtimeAsset.cacheEntry?.key.package_name).toBe(platform.release_package_name);
+      expect(gatewayAsset.cacheEntry?.key.package_name).toBe(gatewayPackageName);
+      expect(runtimeAsset.cacheEntry?.archive_path).not.toBe(gatewayAsset.cacheEntry?.archive_path);
+      expect(archiveFetchCount(fetchMock, platform.release_package_name)).toBe(1);
+      expect(archiveFetchCount(fetchMock, gatewayPackageName)).toBe(1);
     } finally {
       await fs.rm(path.dirname(cacheRoot), { recursive: true, force: true });
     }
@@ -341,9 +383,44 @@ describe('runtimePackageCache', () => {
     }
   }, 15_000);
 
-  it('keeps source runtime build failures concise with raw output in diagnostics', async () => {
+  it('builds Gateway source packages from cmd/redeven-gateway and keeps them separate from runtime packages', async () => {
     const fixture = await createSourceRuntimeFixture();
     const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+    try {
+      const [runtimeAsset, gatewayAsset] = await Promise.all([
+        preparePackage({ cacheRoot: fixture.cacheRoot, platform, sourceRuntimeRoot: fixture.root }),
+        preparePackage({
+          cacheRoot: fixture.cacheRoot,
+          platform,
+          packageKind: 'gateway',
+          sourceRuntimeRoot: fixture.root,
+        }),
+      ]);
+
+      expect(runtimeAsset.source).toBe('source_build');
+      expect(gatewayAsset.source).toBe('source_build');
+      expect(runtimeAsset.archiveData).not.toEqual(gatewayAsset.archiveData);
+      expect(singleFileTarGzipEntryName(runtimeAsset.archiveData)).toBe('redeven');
+      expect(singleFileTarGzipEntryName(gatewayAsset.archiveData)).toBe('redeven-gateway');
+      const buildLog = await fs.readFile(fixture.buildLogPath, 'utf8');
+      expect(buildLog.trim().split('\n')).toHaveLength(2);
+
+      const cachedGateway = await preparePackage({
+        cacheRoot: fixture.cacheRoot,
+        platform,
+        packageKind: 'gateway',
+        sourceRuntimeRoot: fixture.root,
+      });
+      expect(cachedGateway.source).toBe('source_build_cache');
+      expect(cachedGateway.archiveData).toEqual(gatewayAsset.archiveData);
+    } finally {
+      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+    }
+  }, 15_000);
+
+	  it('keeps source runtime build failures concise with raw output in diagnostics', async () => {
+	    const fixture = await createSourceRuntimeFixture();
+	    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
     await fs.writeFile(path.join(fixture.root, 'cmd', 'redeven', 'main.go'), [
       'package main',
       '',
@@ -364,11 +441,40 @@ describe('runtimePackageCache', () => {
       expect((error as DesktopOperationFailureError).runtime_lifecycle_step_id).toBe('preparing_runtime_package');
       expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.text).toContain('go failed');
     } finally {
-      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
-    }
-  }, 15_000);
+	      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+	    }
+	  }, 15_000);
 
-  it('prunes old release tags, temporary files, and legacy cache roots', async () => {
+	  it('reports Gateway source package failures with Gateway-specific failure codes', async () => {
+	    const fixture = await createSourceRuntimeFixture();
+	    const platform = resolveDesktopSSHRemotePlatform('linux', 'x86_64');
+	    await fs.writeFile(path.join(fixture.root, 'cmd', 'redeven-gateway', 'main.go'), [
+	      'package main',
+	      '',
+	      'func main() {',
+	      '',
+	    ].join('\n'));
+	    try {
+	      const error = await preparePackage({
+	        cacheRoot: fixture.cacheRoot,
+	        platform,
+	        packageKind: 'gateway',
+	        sourceRuntimeRoot: fixture.root,
+	      }).catch((caught: unknown) => caught);
+
+	      expect(error).toBeInstanceOf(DesktopOperationFailureError);
+	      expect((error as DesktopOperationFailureError).presentation.code).toBe('gateway_package_prepare_failed');
+	      expect((error as DesktopOperationFailureError).presentation.summary).toBe(
+	        'Desktop could not prepare the linux/amd64 Redeven Gateway package.',
+	      );
+	      expect((error as DesktopOperationFailureError).runtime_lifecycle_step_id).toBe('preparing_gateway_package');
+	      expect((error as DesktopOperationFailureError).presentation.diagnostics?.[0]?.channel).toBe('gateway_package_build');
+	    } finally {
+	      await fs.rm(path.dirname(fixture.root), { recursive: true, force: true });
+	    }
+	  }, 15_000);
+
+	  it('prunes old release tags, temporary files, and legacy cache roots', async () => {
     const userDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-package-prune-'));
     const cacheRoot = runtimePackageCacheRoot(userDataRoot);
     const sourceRoot = path.join(cacheRoot, 'source-key');

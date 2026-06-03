@@ -51,6 +51,18 @@ func TestOpenSessionRejectsUnsupportedProtocolVersion(t *testing.T) {
 	}
 }
 
+func TestOpenSessionRejectsReservedLocalEnvironment(t *testing.T) {
+	_, err := NewService().OpenSession(context.Background(), protocol.OpenSessionRequest{
+		ProtocolVersion:     protocol.Version,
+		GatewayEnvID:        " env_local ",
+		RequestedCapability: protocol.RequestedCapabilityEnvApp,
+		ClientNonce:         " nonce_demo ",
+	})
+	if !IsGatewayErrorCode(err, ErrorCodeNotFound) {
+		t.Fatalf("OpenSession() error = %v, want %s", err, ErrorCodeNotFound)
+	}
+}
+
 func TestOpenSessionReturnsSignedLocalDirectArtifact(t *testing.T) {
 	keys, err := security.GenerateKeyPair()
 	if err != nil {
@@ -80,14 +92,14 @@ func TestOpenSessionReturnsSignedLocalDirectArtifact(t *testing.T) {
 
 	resp, err := service.OpenSession(context.Background(), protocol.OpenSessionRequest{
 		ProtocolVersion:     protocol.Version,
-		GatewayEnvID:        " env_local ",
+		GatewayEnvID:        " env_demo ",
 		RequestedCapability: protocol.RequestedCapabilityEnvApp,
 		ClientNonce:         " client-nonce ",
 	})
 	if err != nil {
 		t.Fatalf("OpenSession() error = %v", err)
 	}
-	if resp.GatewayEnvID != "env_local" || resp.ConnectArtifact.Kind != protocol.ConnectArtifactKindLocalDirect || resp.ConnectArtifact.URL == "" {
+	if resp.GatewayEnvID != "env_demo" || resp.ConnectArtifact.Kind != protocol.ConnectArtifactKindLocalDirect || resp.ConnectArtifact.URL == "" {
 		t.Fatalf("OpenSession() response = %#v", resp)
 	}
 	payload, err := security.CanonicalJSON(map[string]any{
@@ -98,7 +110,7 @@ func TestOpenSessionReturnsSignedLocalDirectArtifact(t *testing.T) {
 		"bridge_session_id":    "",
 		"client_nonce":         "client-nonce",
 		"expires_at_unix_ms":   resp.ConnectArtifact.ExpiresAtUnixMS,
-		"gateway_env_id":       "env_local",
+		"gateway_env_id":       "env_demo",
 		"gateway_id":           "gw_demo",
 		"gateway_session_id":   resp.GatewaySessionID,
 		"protocol_version":     protocol.Version,
@@ -144,7 +156,7 @@ func TestOpenSessionReturnsSignedDesktopBridgeArtifact(t *testing.T) {
 
 	resp, err := service.OpenSession(context.Background(), protocol.OpenSessionRequest{
 		ProtocolVersion:     protocol.Version,
-		GatewayEnvID:        " env_local ",
+		GatewayEnvID:        " env_demo ",
 		RequestedCapability: protocol.RequestedCapabilityEnvApp,
 		ClientNonce:         " client-nonce ",
 		BridgeSessionID:     " bridge-demo ",
@@ -153,7 +165,7 @@ func TestOpenSessionReturnsSignedDesktopBridgeArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenSession() error = %v", err)
 	}
-	if resp.GatewayEnvID != "env_local" || resp.ConnectArtifact.Kind != protocol.ConnectArtifactKindDesktopBridge {
+	if resp.GatewayEnvID != "env_demo" || resp.ConnectArtifact.Kind != protocol.ConnectArtifactKindDesktopBridge {
 		t.Fatalf("OpenSession() response = %#v", resp)
 	}
 	payload, err := security.CanonicalJSON(map[string]any{
@@ -164,7 +176,7 @@ func TestOpenSessionReturnsSignedDesktopBridgeArtifact(t *testing.T) {
 		"bridge_session_id":    "bridge-demo",
 		"client_nonce":         "client-nonce",
 		"expires_at_unix_ms":   resp.ConnectArtifact.ExpiresAtUnixMS,
-		"gateway_env_id":       "env_local",
+		"gateway_env_id":       "env_demo",
 		"gateway_id":           "gw_demo",
 		"gateway_session_id":   resp.GatewaySessionID,
 		"protocol_version":     protocol.Version,

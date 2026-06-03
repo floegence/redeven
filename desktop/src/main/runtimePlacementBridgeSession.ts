@@ -2,6 +2,7 @@ import type { Readable } from 'node:stream';
 
 import {
   buildRuntimePlacementBridgePlan,
+  type RuntimePlacementBridgeCommandKind,
 } from './runtimePlacementBridge';
 import {
   spawnLocalRuntimeHostCommand,
@@ -70,7 +71,9 @@ export type StartRuntimePlacementBridgeSessionArgs = Readonly<{
   host_access: DesktopRuntimeHostAccess;
   placement: DesktopRuntimePlacement;
   runtime_binary_path?: string;
+  bridge_command_kind?: RuntimePlacementBridgeCommandKind;
   desktop_owner_id: string;
+  require_local_ui?: boolean;
   ssh_password?: string;
   fallback_local_id?: string;
   signal?: AbortSignal;
@@ -98,6 +101,7 @@ function spawnBridgeCommand(args: StartRuntimePlacementBridgeSessionArgs): Runti
     host_access: args.host_access,
     placement: args.placement,
     runtime_binary_path: args.runtime_binary_path,
+    command_kind: args.bridge_command_kind,
   });
   const env = {
     REDEVEN_DESKTOP_OWNER_ID: compact(args.desktop_owner_id),
@@ -173,7 +177,8 @@ export async function startRuntimePlacementBridgeSession(
     await closeStreamingCommand(command);
     throw error;
   }
-  if (!hello.local_ui.available) {
+  const requireLocalUI = args.require_local_ui !== false;
+  if (requireLocalUI && !hello.local_ui.available) {
     await closeStreamingCommand(command);
     throw new Error('Runtime Placement Bridge reported Local UI unavailable.');
   }
@@ -265,23 +270,26 @@ export async function startRuntimePlacementBridgeSession(
     },
   };
 
-  let proxy: Awaited<ReturnType<typeof startRuntimePlacementLoopbackProxy>>;
+  let proxy: Awaited<ReturnType<typeof startRuntimePlacementLoopbackProxy>> | null = null;
   try {
     throwIfCanceled();
-    proxy = await startRuntimePlacementLoopbackProxy(bridgeHandle);
+    if (requireLocalUI) {
+      proxy = await startRuntimePlacementLoopbackProxy(bridgeHandle);
+    }
     throwIfCanceled();
   } catch (error) {
     await closeStreamingCommand(command);
     throw error;
   }
-  proxyClose = proxy.close;
+  proxyClose = proxy?.close ?? null;
   if (closed) {
-    await proxy.close().catch(() => undefined);
+    await proxy?.close().catch(() => undefined);
     await closeStreamingCommand(command);
     throw new Error('Runtime Placement Bridge session closed during startup.');
   }
   startFrameLoop();
-  const runtimeControl = runtimeControlEndpointFromBridgeHello(hello, proxy.url);
+  const localUIURL = proxy?.url ?? '';
+  const runtimeControl = proxy ? runtimeControlEndpointFromBridgeHello(hello, proxy.url) : undefined;
   const runtimeService = hello.runtime_service;
   const placementTargetID = desktopRuntimeTargetID(
     args.host_access,
@@ -297,8 +305,8 @@ export async function startRuntimePlacementBridgeSession(
   };
 
   const startup: StartupReport = {
-    local_ui_url: proxy.url,
-    local_ui_urls: [proxy.url],
+    local_ui_url: localUIURL,
+    local_ui_urls: localUIURL ? [localUIURL] : [],
     ...(runtimeControl ? { runtime_control: runtimeControl } : {}),
     effective_run_mode: runtimeService?.effective_run_mode,
     remote_enabled: runtimeService?.remote_enabled,
@@ -315,7 +323,7 @@ export async function startRuntimePlacementBridgeSession(
     placement: args.placement,
     hello,
     startup,
-    local_ui_url: proxy.url,
+    local_ui_url: localUIURL,
     ...(runtimeControl ? { runtime_control: runtimeControl } : {}),
     ...(runtimeService ? { runtime_service: runtimeService } : {}),
     runtime_handle: {

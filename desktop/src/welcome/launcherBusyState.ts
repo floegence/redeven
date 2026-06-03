@@ -31,10 +31,10 @@ export type BusyAction =
   | 'refresh_control_plane'
   | 'upsert_gateway'
   | 'pair_gateway'
-  | 'start_gateway_runtime'
-  | 'stop_gateway_runtime'
-  | 'restart_gateway_runtime'
-  | 'update_gateway_runtime'
+  | 'start_gateway'
+  | 'stop_gateway'
+  | 'restart_gateway'
+  | 'update_gateway'
   | 'refresh_gateway_status'
   | 'refresh_gateway_catalog'
   | 'delete_gateway'
@@ -298,10 +298,10 @@ export function gatewaySourceMatchesRuntimeLifecycleProgress(
   }
   switch (progress?.action) {
     case 'pair_gateway':
-    case 'start_gateway_runtime':
-    case 'stop_gateway_runtime':
-    case 'restart_gateway_runtime':
-    case 'update_gateway_runtime':
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
       return true;

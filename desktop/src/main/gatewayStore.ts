@@ -8,7 +8,7 @@ import {
   type DesktopGatewayConnectionKind,
   type DesktopGatewayEnvironment,
   type DesktopGatewayCapability,
-  type DesktopGatewayRuntimeState,
+  type DesktopGatewayServiceState,
   type DesktopGatewayStatus,
   type DesktopGatewaySource,
   type DesktopGatewayTrustState,
@@ -450,14 +450,14 @@ export function gatewayRecordToSource(record: GatewayRecord): DesktopGatewaySour
         container_label: record.connection.container_label,
       } : {}),
     }),
-    ...(record.connection.kind === 'url' ? { runtime_state: notApplicableGatewayRuntimeState() } : {}),
+    ...(record.connection.kind === 'url' ? { service_state: notApplicableGatewayServiceState() } : {}),
     created_at_ms: record.created_at_ms,
     updated_at_ms: record.updated_at_ms,
     environments: [],
   };
 }
 
-function notApplicableGatewayRuntimeState(): DesktopGatewayRuntimeState {
+function notApplicableGatewayServiceState(): DesktopGatewayServiceState {
   return {
     status: 'not_applicable',
     can_start: false,

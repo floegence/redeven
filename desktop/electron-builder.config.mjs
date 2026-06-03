@@ -31,17 +31,25 @@ function resolveTargetGoarch(arch = process.arch) {
   }
 }
 
-function resolveBundledRuntimeBinary() {
+function bundledBinaryCandidate(name) {
   const goos = resolveTargetGoos();
   const goarch = resolveTargetGoarch();
-  const executableName = goos === 'windows' ? 'redeven.exe' : 'redeven';
-  const candidate = path.join(desktopDir, '.bundle', `${goos}-${goarch}`, executableName);
+  const candidate = path.join(desktopDir, '.bundle', `${goos}-${goarch}`, name);
   if (!fs.existsSync(candidate)) {
     throw new Error(
-      `Bundled runtime binary not found at ${candidate}. Run npm run prepare:bundled-runtime or npm run package from the desktop workspace before invoking electron-builder directly.`,
+      `Bundled binary not found at ${candidate}. Run npm run prepare:bundled-runtime or npm run package from the desktop workspace before invoking electron-builder directly.`,
     );
   }
   return candidate;
+}
+
+function resolveBundledRuntimeBinary() {
+  const goos = resolveTargetGoos();
+  return bundledBinaryCandidate(goos === 'windows' ? 'redeven.exe' : 'redeven');
+}
+
+function resolveBundledGatewayBinary() {
+  return bundledBinaryCandidate('redeven-gateway');
 }
 
 function loadReleaseArtifactHelpers() {
@@ -57,6 +65,7 @@ function loadReleaseArtifactHelpers() {
 }
 
 const bundledRuntimeBinary = resolveBundledRuntimeBinary();
+const bundledGatewayBinary = resolveBundledGatewayBinary();
 const { normalizeLinuxDesktopArtifactPaths } = loadReleaseArtifactHelpers();
 
 export default {
@@ -88,6 +97,10 @@ export default {
     {
       from: bundledRuntimeBinary,
       to: 'bin/redeven',
+    },
+    {
+      from: bundledGatewayBinary,
+      to: 'bin/redeven-gateway',
     },
     {
       from: path.join(repoRoot, 'LICENSE'),
