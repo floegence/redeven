@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -31,6 +32,7 @@ import (
 	"github.com/floegence/redeven/internal/portforward"
 	gatewayauth "github.com/floegence/redeven/internal/runtimegateway/auth"
 	gatewaycatalog "github.com/floegence/redeven/internal/runtimegateway/catalog"
+	gatewayenvprofiles "github.com/floegence/redeven/internal/runtimegateway/envprofiles"
 	gatewayprotocol "github.com/floegence/redeven/internal/runtimegateway/protocol"
 	gatewaysession "github.com/floegence/redeven/internal/runtimegateway/session"
 	gatewaytrust "github.com/floegence/redeven/internal/runtimegateway/trust"
@@ -44,8 +46,10 @@ const (
 	// LocalEnvPublicID is the fixed env_public_id used for Local UI mode.
 	LocalEnvPublicID = "env_local"
 
-	localAccessResumeHeader = "X-Redeven-Access-Resume"
-	localAccessResumeQuery  = "redeven_access_resume"
+	localAccessResumeHeader            = "X-Redeven-Access-Resume"
+	localAccessResumeQuery             = "redeven_access_resume"
+	runtimeGatewayEnvSessionCookieName = "redeven_gateway_env_session"
+	runtimeGatewayEnvProxySessionTTL   = 12 * time.Hour
 
 	localNamespacePublicID = "ns_local"
 	localUserPublicID      = "user_local"
@@ -122,8 +126,11 @@ type Server struct {
 	runtimeControl *runtimeControlServer
 	runtimeStatus  *runtimemanagement.Server
 
-	runtimeGatewayTrust *gatewaytrust.Store
-	runtimeGatewayAuth  *gatewayauth.Verifier
+	runtimeGatewayTrust             *gatewaytrust.Store
+	runtimeGatewayAuth              *gatewayauth.Verifier
+	runtimeGatewayProfiles          *gatewayenvprofiles.Store
+	runtimeGatewayProfileSessionsMu sync.Mutex
+	runtimeGatewayProfileSessions   map[string]runtimeGatewayProfileSession
 }
 
 type pendingDirect struct {
@@ -132,6 +139,12 @@ type pendingDirect struct {
 	meta                      session.Meta
 	traceID                   string
 	connectArtifactIssuedAtMs int64
+}
+
+type runtimeGatewayProfileSession struct {
+	GatewayEnvID    string
+	TargetBaseURL   string
+	ExpiresAtUnixMS int64
 }
 
 func (s *Server) handler() http.Handler {
@@ -156,12 +169,17 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/gateway/v1/pairing/complete", s.handleRuntimeGatewayPairingComplete)
 	mux.HandleFunc("/gateway/v1/catalog", s.handleRuntimeGatewayCatalog)
 	mux.HandleFunc("/gateway/v1/open-session", s.handleRuntimeGatewayOpenSession)
+	mux.HandleFunc("/gateway/v1/env-profiles/upsert", s.handleRuntimeGatewayEnvProfileUpsert)
+	mux.HandleFunc("/gateway/v1/env-profiles/delete", s.handleRuntimeGatewayEnvProfileDelete)
+	mux.HandleFunc("/gateway/v1/env-lifecycle", s.handleRuntimeGatewayEnvLifecycle)
 	// Reuse the existing gateway for Env App UI + management APIs.
 	mux.HandleFunc("/_redeven_proxy/", s.handleGateway)
+	var handler http.Handler = mux
+	handler = s.withRuntimeGatewayProfileProxy(handler)
 	if s.diag == nil {
-		return mux
+		return handler
 	}
-	return s.withDiagnostics(mux)
+	return s.withDiagnostics(handler)
 }
 
 func (s *Server) HandlerForDesktopBridge() http.Handler {
@@ -203,27 +221,29 @@ func New(opts Options) (*Server, error) {
 		config.PermissionSet{Read: true, Write: false, Execute: true},
 	)
 	return &Server{
-		log:                    logger,
-		bind:                   bind,
-		configPath:             configPath,
-		stateRoot:              strings.TrimSpace(opts.StateRoot),
-		stateDir:               filepath.Dir(configPath),
-		runtimeControlSockPath: strings.TrimSpace(opts.RuntimeControlSocketPath),
-		version:                strings.TrimSpace(opts.Version),
-		desktopManaged:         opts.DesktopManaged,
-		desktopOwnerID:         strings.TrimSpace(opts.DesktopOwnerID),
-		effectiveRunMode:       strings.TrimSpace(opts.EffectiveRunMode),
-		remoteEnabled:          opts.RemoteEnabled,
-		controlplaneBaseURL:    strings.TrimSpace(opts.ControlplaneBaseURL),
-		controlplaneProviderID: strings.TrimSpace(opts.ControlplaneProviderID),
-		envPublicID:            strings.TrimSpace(opts.EnvPublicID),
-		localPermissionCap:     &localPermissionCap,
-		gw:                     opts.Gateway,
-		a:                      opts.Agent,
-		diag:                   opts.Diagnostics,
-		accessGate:             opts.AccessGate,
-		pending:                make(map[string]pendingDirect),
-		runtimeGatewayTrust:    gatewaytrust.NewStore(runtimeGatewayTrustPath(strings.TrimSpace(opts.StateRoot), configPath)),
+		log:                           logger,
+		bind:                          bind,
+		configPath:                    configPath,
+		stateRoot:                     strings.TrimSpace(opts.StateRoot),
+		stateDir:                      filepath.Dir(configPath),
+		runtimeControlSockPath:        strings.TrimSpace(opts.RuntimeControlSocketPath),
+		version:                       strings.TrimSpace(opts.Version),
+		desktopManaged:                opts.DesktopManaged,
+		desktopOwnerID:                strings.TrimSpace(opts.DesktopOwnerID),
+		effectiveRunMode:              strings.TrimSpace(opts.EffectiveRunMode),
+		remoteEnabled:                 opts.RemoteEnabled,
+		controlplaneBaseURL:           strings.TrimSpace(opts.ControlplaneBaseURL),
+		controlplaneProviderID:        strings.TrimSpace(opts.ControlplaneProviderID),
+		envPublicID:                   strings.TrimSpace(opts.EnvPublicID),
+		localPermissionCap:            &localPermissionCap,
+		gw:                            opts.Gateway,
+		a:                             opts.Agent,
+		diag:                          opts.Diagnostics,
+		accessGate:                    opts.AccessGate,
+		pending:                       make(map[string]pendingDirect),
+		runtimeGatewayTrust:           gatewaytrust.NewStore(runtimeGatewayTrustPath(strings.TrimSpace(opts.StateRoot), configPath)),
+		runtimeGatewayProfiles:        gatewayenvprofiles.NewStore(runtimeGatewayProfilesPath(strings.TrimSpace(opts.StateRoot), configPath)),
+		runtimeGatewayProfileSessions: make(map[string]runtimeGatewayProfileSession),
 	}, nil
 }
 
@@ -491,6 +511,14 @@ func runtimeGatewayTrustPath(stateRoot string, configPath string) string {
 	return filepath.Join(base, "gateway", "runtime-gateway-trust.json")
 }
 
+func runtimeGatewayProfilesPath(stateRoot string, configPath string) string {
+	base := strings.TrimSpace(stateRoot)
+	if base == "" {
+		base = filepath.Dir(strings.TrimSpace(configPath))
+	}
+	return filepath.Join(base, "gateway", "environments.json")
+}
+
 func (s *Server) runtimeGatewayTrustStore() *gatewaytrust.Store {
 	if s == nil {
 		return gatewaytrust.NewStore("")
@@ -499,6 +527,16 @@ func (s *Server) runtimeGatewayTrustStore() *gatewaytrust.Store {
 		s.runtimeGatewayTrust = gatewaytrust.NewStore(runtimeGatewayTrustPath(s.stateRoot, s.configPath))
 	}
 	return s.runtimeGatewayTrust
+}
+
+func (s *Server) runtimeGatewayProfileStore() *gatewayenvprofiles.Store {
+	if s == nil {
+		return gatewayenvprofiles.NewStore("")
+	}
+	if s.runtimeGatewayProfiles == nil {
+		s.runtimeGatewayProfiles = gatewayenvprofiles.NewStore(runtimeGatewayProfilesPath(s.stateRoot, s.configPath))
+	}
+	return s.runtimeGatewayProfiles
 }
 
 func (s *Server) runtimeGatewayAuthVerifier() *gatewayauth.Verifier {
@@ -696,6 +734,20 @@ func (s *Server) setLocalAccessCookie(w http.ResponseWriter, token string, expir
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  expiresAt,
+	})
+}
+
+func (s *Server) setRuntimeGatewayProfileSessionCookie(w http.ResponseWriter, token string, expiresAtUnixMs int64) {
+	if w == nil || strings.TrimSpace(token) == "" {
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     runtimeGatewayEnvSessionCookieName,
+		Value:    strings.TrimSpace(token),
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.UnixMilli(expiresAtUnixMs),
 	})
 }
 
@@ -1027,6 +1079,143 @@ func (s *Server) requireRuntimeGatewayPairingAccess(w http.ResponseWriter, r *ht
 	return false
 }
 
+func (s *Server) mintRuntimeGatewayProfileSession(profile gatewayenvprofiles.EnvironmentProfile) (string, int64, error) {
+	if s == nil {
+		return "", 0, errors.New("Gateway profile session store is unavailable")
+	}
+	token, err := randomB64u(24)
+	if err != nil {
+		return "", 0, err
+	}
+	expiresAt := time.Now().Add(runtimeGatewayEnvProxySessionTTL).UnixMilli()
+	session := runtimeGatewayProfileSession{
+		GatewayEnvID:    strings.TrimSpace(profile.GatewayEnvID),
+		TargetBaseURL:   strings.TrimSpace(profile.AccessRoute.URL),
+		ExpiresAtUnixMS: expiresAt,
+	}
+	if session.GatewayEnvID == "" || session.TargetBaseURL == "" {
+		return "", 0, errors.New("Gateway profile session is incomplete")
+	}
+	s.runtimeGatewayProfileSessionsMu.Lock()
+	if s.runtimeGatewayProfileSessions == nil {
+		s.runtimeGatewayProfileSessions = make(map[string]runtimeGatewayProfileSession)
+	}
+	s.runtimeGatewayProfileSessions[token] = session
+	s.runtimeGatewayProfileSessionsMu.Unlock()
+	return token, expiresAt, nil
+}
+
+func (s *Server) runtimeGatewayProfileSessionFromRequest(r *http.Request) (runtimeGatewayProfileSession, bool) {
+	if s == nil || r == nil {
+		return runtimeGatewayProfileSession{}, false
+	}
+	cookie, err := r.Cookie(runtimeGatewayEnvSessionCookieName)
+	if err != nil || cookie == nil {
+		return runtimeGatewayProfileSession{}, false
+	}
+	token := strings.TrimSpace(cookie.Value)
+	if token == "" {
+		return runtimeGatewayProfileSession{}, false
+	}
+	now := time.Now().UnixMilli()
+	s.runtimeGatewayProfileSessionsMu.Lock()
+	defer s.runtimeGatewayProfileSessionsMu.Unlock()
+	session, ok := s.runtimeGatewayProfileSessions[token]
+	if !ok {
+		return runtimeGatewayProfileSession{}, false
+	}
+	if session.ExpiresAtUnixMS <= now || strings.TrimSpace(session.TargetBaseURL) == "" {
+		delete(s.runtimeGatewayProfileSessions, token)
+		return runtimeGatewayProfileSession{}, false
+	}
+	return session, true
+}
+
+func shouldRuntimeGatewayProfileProxyRequest(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	path := strings.TrimSpace(r.URL.Path)
+	return path == "/" ||
+		path == "/favicon.ico" ||
+		path == "/logo.png" ||
+		strings.HasPrefix(path, "/_redeven_proxy/") ||
+		strings.HasPrefix(path, "/_redeven_direct/") ||
+		strings.HasPrefix(path, "/api/local/")
+}
+
+func runtimeGatewayTargetOrigin(target *url.URL) string {
+	if target == nil {
+		return ""
+	}
+	return (&url.URL{Scheme: target.Scheme, Host: target.Host}).String()
+}
+
+func stripRuntimeGatewayProfileCookie(header string) string {
+	parts := strings.Split(header, ";")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		clean := strings.TrimSpace(part)
+		if clean == "" {
+			continue
+		}
+		name, _, _ := strings.Cut(clean, "=")
+		if strings.EqualFold(strings.TrimSpace(name), runtimeGatewayEnvSessionCookieName) {
+			continue
+		}
+		out = append(out, clean)
+	}
+	return strings.Join(out, "; ")
+}
+
+func (s *Server) withRuntimeGatewayProfileProxy(next http.Handler) http.Handler {
+	if next == nil {
+		return http.NotFoundHandler()
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, ok := s.runtimeGatewayProfileSessionFromRequest(r)
+		if !ok || !shouldRuntimeGatewayProfileProxyRequest(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		target, err := url.Parse(strings.TrimSpace(session.TargetBaseURL))
+		if err != nil || target == nil || target.Scheme == "" || target.Host == "" {
+			http.Error(w, "Gateway profile target is unavailable", http.StatusBadGateway)
+			return
+		}
+		targetOrigin := runtimeGatewayTargetOrigin(target)
+		proxy := &httputil.ReverseProxy{
+			Rewrite: func(pr *httputil.ProxyRequest) {
+				pr.SetURL(target)
+				pr.Out.Host = target.Host
+				pr.Out.URL.Path = pr.In.URL.Path
+				pr.Out.URL.RawPath = pr.In.URL.RawPath
+				pr.Out.URL.RawQuery = pr.In.URL.RawQuery
+				if targetOrigin != "" {
+					pr.Out.Header.Set("Origin", targetOrigin)
+					if strings.TrimSpace(pr.Out.Header.Get("Referer")) != "" {
+						pr.Out.Header.Set("Referer", targetOrigin)
+					}
+				}
+				if cookie := stripRuntimeGatewayProfileCookie(pr.Out.Header.Get("Cookie")); cookie != "" {
+					pr.Out.Header.Set("Cookie", cookie)
+				} else {
+					pr.Out.Header.Del("Cookie")
+				}
+				pr.Out.Header.Del("Forwarded")
+				pr.Out.Header.Del("X-Forwarded-Host")
+				pr.Out.Header.Del("X-Forwarded-Proto")
+				pr.Out.Header.Del("X-Forwarded-For")
+				pr.Out.Header.Del("X-Forwarded-Port")
+			},
+			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+				http.Error(w, "Gateway profile target is unavailable", http.StatusBadGateway)
+			},
+		}
+		proxy.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) handleRuntimeGatewayCatalog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -1067,6 +1256,78 @@ func (s *Server) handleRuntimeGatewayOpenSession(w http.ResponseWriter, r *http.
 		return
 	}
 	writeRuntimeGatewayData(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleRuntimeGatewayEnvProfileUpsert(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	body, ok := s.readAuthenticatedRuntimeGatewayBody(w, r)
+	if !ok {
+		return
+	}
+	var req gatewayprotocol.EnvProfileUpsertRequest
+	if !decodeRuntimeGatewayJSONBytes(w, body, &req) {
+		return
+	}
+	env, err := s.runtimeGatewayProfileStore().Upsert(r.Context(), req)
+	if err != nil {
+		writeRuntimeGatewayProfileError(w, err)
+		return
+	}
+	writeRuntimeGatewayData(w, http.StatusOK, gatewayprotocol.EnvProfileUpsertResponse{
+		ProtocolVersion: gatewayprotocol.Version,
+		Environment:     env,
+	})
+}
+
+func (s *Server) handleRuntimeGatewayEnvProfileDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	body, ok := s.readAuthenticatedRuntimeGatewayBody(w, r)
+	if !ok {
+		return
+	}
+	var req gatewayprotocol.EnvProfileDeleteRequest
+	if !decodeRuntimeGatewayJSONBytes(w, body, &req) {
+		return
+	}
+	resp, err := s.runtimeGatewayProfileStore().Delete(r.Context(), req)
+	if err != nil {
+		writeRuntimeGatewayProfileError(w, err)
+		return
+	}
+	writeRuntimeGatewayData(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleRuntimeGatewayEnvLifecycle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	body, ok := s.readAuthenticatedRuntimeGatewayBody(w, r)
+	if !ok {
+		return
+	}
+	var req gatewayprotocol.EnvLifecycleRequest
+	if !decodeRuntimeGatewayJSONBytes(w, body, &req) {
+		return
+	}
+	if err := gatewayprotocol.ValidateEnvLifecycleRequest(req); err != nil {
+		writeRuntimeGatewayProfileError(w, err)
+		return
+	}
+	req = gatewayprotocol.NormalizeEnvLifecycleRequest(req)
+	writeRuntimeGatewayData(w, http.StatusOK, gatewayprotocol.EnvLifecycleResponse{
+		ProtocolVersion: gatewayprotocol.Version,
+		GatewayEnvID:    req.GatewayEnvID,
+		Operation:       req.Operation,
+		State:           gatewayprotocol.EnvLifecycleStateUnsupported,
+		Message:         "Gateway environment lifecycle is not supported by this runtime.",
+	})
 }
 
 func decodeRuntimeGatewayJSON(w http.ResponseWriter, r *http.Request, out any) bool {
@@ -1119,6 +1380,7 @@ func (s *Server) runtimeGatewayCatalogService(r *http.Request) *gatewaycatalog.S
 			Capabilities: []gatewayprotocol.GatewayCapability{},
 		}
 	}
+	metadata.Capabilities = append(metadata.Capabilities, gatewayprotocol.GatewayCapabilityEnvProfileWrite)
 	return gatewaycatalog.NewService(
 		gatewaycatalog.WithGatewayMetadata(metadata),
 		gatewaycatalog.WithEnvironmentSource(gatewaycatalog.EnvironmentSourceFunc(func(context.Context) ([]gatewayprotocol.Environment, error) {
@@ -1135,12 +1397,26 @@ func (s *Server) runtimeGatewayCatalogService(r *http.Request) *gatewaycatalog.S
 				Capabilities: []gatewayprotocol.EnvironmentCapability{
 					gatewayprotocol.EnvironmentCapabilityOpen,
 				},
+				AccessCapabilities: []gatewayprotocol.EnvironmentCapability{
+					gatewayprotocol.EnvironmentCapabilityOpen,
+				},
 				Origin: gatewayprotocol.EnvironmentOrigin{
 					Kind:  gatewayprotocol.EnvironmentOriginKindGatewayHost,
 					Label: label,
 				},
 				LastSeenAtUnixMS: time.Now().UnixMilli(),
 			}}, nil
+		})),
+		gatewaycatalog.WithEnvironmentSource(gatewaycatalog.EnvironmentSourceFunc(func(ctx context.Context) ([]gatewayprotocol.Environment, error) {
+			profiles, err := s.runtimeGatewayProfileStore().List(ctx)
+			if err != nil {
+				return nil, err
+			}
+			environments := make([]gatewayprotocol.Environment, 0, len(profiles))
+			for _, profile := range profiles {
+				environments = append(environments, gatewayenvprofiles.EnvironmentFromProfile(profile))
+			}
+			return environments, nil
 		})),
 	)
 }
@@ -1166,18 +1442,55 @@ func (i runtimeGatewayArtifactIssuer) IssueGatewayConnectArtifact(ctx context.Co
 	if err := ctx.Err(); err != nil {
 		return gatewaysession.GatewayConnectArtifactIssue{}, err
 	}
-	if req.GatewayEnvID != LocalEnvPublicID {
-		return gatewaysession.GatewayConnectArtifactIssue{}, &gatewaysession.GatewayError{
-			Code:    gatewaysession.ErrorCodeNotFound,
-			Message: "Gateway environment was not found.",
-		}
-	}
 	if req.RequestedCapability != gatewayprotocol.RequestedCapabilityEnvApp {
 		return gatewaysession.GatewayConnectArtifactIssue{}, &gatewaysession.GatewayError{
 			Code:    gatewaysession.ErrorCodeCapabilityUnsupported,
 			Message: "Gateway environment capability is not supported.",
 		}
 	}
+	if req.GatewayEnvID != LocalEnvPublicID {
+		return i.issueRuntimeGatewayProfileArtifact(ctx, req)
+	}
+	return i.issueRuntimeGatewayLocalArtifact(req)
+}
+
+func (i runtimeGatewayArtifactIssuer) issueRuntimeGatewayProfileArtifact(ctx context.Context, req gatewayprotocol.OpenSessionRequest) (gatewaysession.GatewayConnectArtifactIssue, error) {
+	profile, ok, err := i.server.runtimeGatewayProfileStore().Get(ctx, req.GatewayEnvID)
+	if err != nil {
+		return gatewaysession.GatewayConnectArtifactIssue{}, err
+	}
+	if !ok {
+		return gatewaysession.GatewayConnectArtifactIssue{}, &gatewaysession.GatewayError{
+			Code:    gatewaysession.ErrorCodeNotFound,
+			Message: "Gateway environment was not found.",
+		}
+	}
+	if profile.AccessRoute.Kind != gatewayprotocol.EnvProfileAccessRouteKindURL {
+		return gatewaysession.GatewayConnectArtifactIssue{}, &gatewaysession.GatewayError{
+			Code:    gatewaysession.ErrorCodeCapabilityUnsupported,
+			Message: "Gateway environment opening is not available for this profile yet.",
+		}
+	}
+	sessionToken, expiresAt, err := i.server.mintRuntimeGatewayProfileSession(profile)
+	if err != nil {
+		return gatewaysession.GatewayConnectArtifactIssue{}, err
+	}
+	i.server.setRuntimeGatewayProfileSessionCookie(i.responseWriter, sessionToken, expiresAt)
+	return i.issueSignedRuntimeGatewayArtifact(req, "gateway_profile_url")
+}
+
+func (i runtimeGatewayArtifactIssuer) issueRuntimeGatewayLocalArtifact(req gatewayprotocol.OpenSessionRequest) (gatewaysession.GatewayConnectArtifactIssue, error) {
+	if i.server.accessEnabled() {
+		result, err := i.server.accessGate.MintTrustedLocalSession(localAccessResumeMeta())
+		if err != nil || result == nil || strings.TrimSpace(result.SessionToken) == "" || result.SessionExpiresAtUnix <= 0 {
+			return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("Gateway local access session is unavailable")
+		}
+		i.server.setLocalAccessCookie(i.responseWriter, result.SessionToken, result.SessionExpiresAtUnix)
+	}
+	return i.issueSignedRuntimeGatewayArtifact(req, "gateway_url")
+}
+
+func (i runtimeGatewayArtifactIssuer) issueSignedRuntimeGatewayArtifact(req gatewayprotocol.OpenSessionRequest, connectionKind string) (gatewaysession.GatewayConnectArtifactIssue, error) {
 	metadata, _, err := i.server.runtimeGatewayTrustStore().GatewayMetadata(i.bindingAudience)
 	if err != nil {
 		return gatewaysession.GatewayConnectArtifactIssue{}, err
@@ -1213,14 +1526,7 @@ func (i runtimeGatewayArtifactIssuer) IssueGatewayConnectArtifact(ctx context.Co
 	if strings.TrimSpace(entryURL) == "" {
 		return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("Gateway Env App entry URL is unavailable")
 	}
-	if i.server.accessEnabled() {
-		result, err := i.server.accessGate.MintTrustedLocalSession(localAccessResumeMeta())
-		if err != nil || result == nil || strings.TrimSpace(result.SessionToken) == "" || result.SessionExpiresAtUnix <= 0 {
-			return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("Gateway local access session is unavailable")
-		}
-		i.server.setLocalAccessCookie(i.responseWriter, result.SessionToken, result.SessionExpiresAtUnix)
-	}
-	return gatewaysession.NewSignedLocalDirectIssue(struct {
+	issue, err := gatewaysession.NewSignedLocalDirectIssue(struct {
 		GatewayID           string
 		GatewayEnvID        string
 		BindingAudience     string
@@ -1239,6 +1545,13 @@ func (i runtimeGatewayArtifactIssuer) IssueGatewayConnectArtifact(ctx context.Co
 		GatewayPrivateKey:   privateKey,
 		TTL:                 10 * time.Minute,
 	})
+	if err != nil {
+		return gatewaysession.GatewayConnectArtifactIssue{}, err
+	}
+	if issue.DiagnosticsHint != nil {
+		issue.DiagnosticsHint.ConnectionKind = strings.TrimSpace(connectionKind)
+	}
+	return issue, nil
 }
 
 func (s *Server) gatewayEnvAppEntryURL(r *http.Request) string {
@@ -1277,6 +1590,45 @@ func writeRuntimeGatewayServiceError(w http.ResponseWriter, err error) {
 		return
 	}
 	writeRuntimeGatewayError(w, http.StatusInternalServerError, gatewayprotocol.GatewayErrorCodeUnavailable, "Gateway request could not be completed.", true)
+}
+
+func writeRuntimeGatewayProfileError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, gatewayprotocol.ErrUnsupportedProtocolVersion):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "protocol_version is not supported.", false)
+	case errors.Is(err, gatewayprotocol.ErrMissingDisplayName):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "display_name is required.", false)
+	case errors.Is(err, gatewayprotocol.ErrMissingAccessRoute):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "access_route is required.", false)
+	case errors.Is(err, gatewayprotocol.ErrMissingGatewayEnvID):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is required.", false)
+	case errors.Is(err, gatewayprotocol.ErrMissingLifecycleOperation):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "operation is required.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrGatewayEnvIDReserved):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is reserved.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrGatewayEnvIDInvalid):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is invalid.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrURLRequired):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url is required.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrURLMustBeAbsoluteHTTP):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url must be an absolute http or https URL.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrURLSchemeUnsupported):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url must use http or https.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrURLCredentialsUnsupported):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "url must not include embedded credentials.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrSSHDestinationRequired):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_destination is required.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrSSHPortInvalid):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_port must be between 1 and 65535.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrContainerEngineInvalid):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "container_engine must be docker or podman.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrContainerIDRequired):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "container_id is required.", false)
+	case errors.Is(err, gatewayenvprofiles.ErrContainerRuntimeRootRequired):
+		writeRuntimeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "container_runtime_root is required.", false)
+	default:
+		writeRuntimeGatewayError(w, http.StatusInternalServerError, gatewayprotocol.GatewayErrorCodeUnavailable, "Gateway environment profile request could not be completed.", true)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -1932,4 +2284,13 @@ func (s *Server) sweepExpired() {
 		}
 	}
 	s.pendingMu.Unlock()
+
+	nowMS := time.Now().UnixMilli()
+	s.runtimeGatewayProfileSessionsMu.Lock()
+	for k, v := range s.runtimeGatewayProfileSessions {
+		if v.ExpiresAtUnixMS > 0 && nowMS > v.ExpiresAtUnixMS {
+			delete(s.runtimeGatewayProfileSessions, k)
+		}
+	}
+	s.runtimeGatewayProfileSessionsMu.Unlock()
 }

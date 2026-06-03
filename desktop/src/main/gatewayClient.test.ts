@@ -788,6 +788,149 @@ describe('GatewayURLClient', () => {
     })).rejects.toMatchObject({ code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' });
   });
 
+  it('writes URL environment profiles over authenticated URL transport', async () => {
+    let record!: GatewayRecord;
+    const server = await startServer((_request, _body, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({
+        ok: true,
+        data: {
+          protocol_version: 'redeven-runtime-gateway-v1',
+          environment: {
+            gateway_env_id: 'env_profile',
+            display_name: 'Profile Env',
+            env_kind: 'reachable_env',
+            state: 'available',
+            access_capabilities: ['open'],
+            control_capabilities: [],
+            profile_access_route: {
+              kind: 'url',
+              url: 'https://target.example/',
+              origin_label: 'target.example',
+            },
+            origin: { kind: 'network_target', label: 'target.example' },
+          },
+        },
+      }));
+    });
+    cleanupServers.add(server);
+    const paired = pairedURLRecord(server.baseURL);
+    record = paired.record;
+
+    const response = await new GatewayURLClient(paired.secretStore).upsertEnvironmentProfile(record, {
+      display_name: 'Profile Env',
+      access_route: {
+        kind: 'url',
+        url: 'https://target.example/path?token=secret#frag',
+        origin_label: 'target.example',
+      },
+      control_owner: 'gateway',
+    });
+
+    expect(response.environment).toMatchObject({
+      gateway_env_id: 'env_profile',
+      access_capabilities: ['open'],
+      control_capabilities: [],
+      profile_access_route: {
+        kind: 'url',
+        url: 'https://target.example/',
+        origin_label: 'target.example',
+      },
+    });
+    expect(server.requests[0]).toMatchObject({
+      url: '/gateway/v1/env-profiles/upsert',
+    });
+    expect(JSON.parse(server.requests[0]?.body ?? '{}')).toEqual({
+      protocol_version: 'redeven-runtime-gateway-v1',
+      profile: {
+        display_name: 'Profile Env',
+        access_route: {
+          kind: 'url',
+          url: 'https://target.example/',
+          origin_label: 'target.example',
+        },
+        control_owner: 'gateway',
+      },
+    });
+    expect(server.requests[0]?.headers['x-redeven-request-signature']).toBeTruthy();
+  });
+
+  it('rejects URL environment profile targets with embedded credentials before signing', async () => {
+    const server = await startServer((_request, _body, response) => {
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ ok: true, data: {} }));
+    });
+    cleanupServers.add(server);
+    const paired = pairedURLRecord(server.baseURL);
+
+    await expect(new GatewayURLClient(paired.secretStore).upsertEnvironmentProfile(paired.record, {
+      display_name: 'Profile Env',
+      access_route: {
+        kind: 'url',
+        url: 'https://user:pass@target.example/path',
+      },
+      control_owner: 'none',
+    })).rejects.toMatchObject({ code: 'GATEWAY_PROFILE_URL_CREDENTIALS_UNSUPPORTED' });
+    expect(server.requests).toHaveLength(0);
+  });
+
+  it('deletes profiles and sends lifecycle requests over authenticated URL transport', async () => {
+    const routes: string[] = [];
+    const bodies: unknown[] = [];
+    const server = await startServer((request, body, response) => {
+      routes.push(request.url ?? '');
+      bodies.push(JSON.parse(body));
+      response.setHeader('Content-Type', 'application/json');
+      if ((request.url ?? '').includes('env-lifecycle')) {
+        response.end(JSON.stringify({
+          ok: true,
+          data: {
+            protocol_version: 'redeven-runtime-gateway-v1',
+            gateway_env_id: 'env_profile',
+            operation: 'restart',
+            state: 'succeeded',
+            message: 'Restarted.',
+          },
+        }));
+        return;
+      }
+      response.end(JSON.stringify({
+        ok: true,
+        data: {
+          protocol_version: 'redeven-runtime-gateway-v1',
+          gateway_env_id: 'env_profile',
+          deleted: true,
+        },
+      }));
+    });
+    cleanupServers.add(server);
+    const paired = pairedURLRecord(server.baseURL);
+
+    await expect(new GatewayURLClient(paired.secretStore).deleteEnvironmentProfile(paired.record, {
+      gateway_env_id: 'env_profile',
+    })).resolves.toMatchObject({ deleted: true });
+    await expect(new GatewayURLClient(paired.secretStore).runEnvironmentLifecycle(paired.record, {
+      gateway_env_id: 'env_profile',
+      operation: 'restart',
+    })).resolves.toMatchObject({ state: 'succeeded' });
+
+    expect(routes).toEqual([
+      '/gateway/v1/env-profiles/delete',
+      '/gateway/v1/env-lifecycle',
+    ]);
+    expect(bodies).toEqual([
+      {
+        protocol_version: 'redeven-runtime-gateway-v1',
+        gateway_env_id: 'env_profile',
+      },
+      {
+        protocol_version: 'redeven-runtime-gateway-v1',
+        gateway_env_id: 'env_profile',
+        operation: 'restart',
+      },
+    ]);
+  });
+
   it('redacts proof, signatures, private keys, and tokens from diagnostics', () => {
     expect(redactGatewayDiagnosticValue({
       proof: 'proof-secret',
@@ -932,5 +1075,61 @@ describe('GatewayBridgeClient', () => {
     });
     expect(harness.requests[0]?.raw).not.toContain('provider');
     expect(harness.requests[0]?.raw).not.toContain('__redeven_runtime_control');
+  });
+
+  it('writes SSH container profiles through the gateway_protocol bridge', async () => {
+    const paired = pairedURLRecord('https://gateway.example/');
+    const harness = createBridgeHandle(() => bridgeHTTPResponse({
+      protocol_version: 'redeven-runtime-gateway-v1',
+      environment: {
+        gateway_env_id: 'env_container',
+        display_name: 'Container Env',
+        env_kind: 'reachable_env',
+        state: 'unknown',
+        capabilities: [],
+        access_capabilities: [],
+        control_capabilities: [],
+        origin: { kind: 'container', label: 'devbox / workspace' },
+      },
+    }));
+
+    const response = await new GatewayBridgeClient(paired.secretStore, harness.bridge).upsertEnvironmentProfile(paired.record, {
+      gateway_env_id: 'env_container',
+      display_name: 'Container Env',
+      access_route: {
+        kind: 'ssh_container',
+        ssh_destination: 'devbox',
+        ssh_port: 2222,
+        ssh_runtime_root: '~/.redeven',
+        container_engine: 'docker',
+        container_id: 'workspace',
+        container_runtime_root: '~/.redeven',
+      },
+      control_owner: 'gateway',
+    });
+
+    expect(response.environment.gateway_env_id).toBe('env_container');
+    expect(harness.requests[0]).toMatchObject({
+      surface: 'gateway_protocol',
+      requestLine: 'POST /gateway/v1/env-profiles/upsert HTTP/1.1',
+    });
+    expect(JSON.parse(harness.requests[0]?.body ?? '{}')).toEqual({
+      protocol_version: 'redeven-runtime-gateway-v1',
+      profile: {
+        gateway_env_id: 'env_container',
+        display_name: 'Container Env',
+        access_route: {
+          kind: 'ssh_container',
+          ssh_destination: 'devbox',
+          ssh_port: 2222,
+          ssh_runtime_root: '~/.redeven',
+          container_engine: 'docker',
+          container_id: 'workspace',
+          container_runtime_root: '~/.redeven',
+        },
+        control_owner: 'gateway',
+      },
+    });
+    expect(harness.requests[0]?.headers['x-redeven-gateway-transport']).toBe('desktop_bridge');
   });
 });

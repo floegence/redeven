@@ -10,13 +10,14 @@ const Version = "redeven-runtime-gateway-v1"
 type GatewayCapability string
 
 const (
-	GatewayCapabilityEnvCatalog     GatewayCapability = "env_catalog"
-	GatewayCapabilityEnvOpenSession GatewayCapability = "env_open_session"
-	GatewayCapabilityEnvLifecycle   GatewayCapability = "env_lifecycle"
-	GatewayCapabilityTerminal       GatewayCapability = "terminal"
-	GatewayCapabilityFiles          GatewayCapability = "files"
-	GatewayCapabilityWebService     GatewayCapability = "web_service"
-	GatewayCapabilityPortForward    GatewayCapability = "port_forward"
+	GatewayCapabilityEnvCatalog      GatewayCapability = "env_catalog"
+	GatewayCapabilityEnvOpenSession  GatewayCapability = "env_open_session"
+	GatewayCapabilityEnvProfileWrite GatewayCapability = "env_profile_write"
+	GatewayCapabilityEnvLifecycle    GatewayCapability = "env_lifecycle"
+	GatewayCapabilityTerminal        GatewayCapability = "terminal"
+	GatewayCapabilityFiles           GatewayCapability = "files"
+	GatewayCapabilityWebService      GatewayCapability = "web_service"
+	GatewayCapabilityPortForward     GatewayCapability = "port_forward"
 )
 
 type EnvironmentKind string
@@ -42,6 +43,7 @@ const (
 	EnvironmentCapabilityOpen          EnvironmentCapability = "open"
 	EnvironmentCapabilityStart         EnvironmentCapability = "start"
 	EnvironmentCapabilityStop          EnvironmentCapability = "stop"
+	EnvironmentCapabilityRestart       EnvironmentCapability = "restart"
 	EnvironmentCapabilityUpdateRuntime EnvironmentCapability = "update_runtime"
 	EnvironmentCapabilityTerminal      EnvironmentCapability = "terminal"
 	EnvironmentCapabilityFiles         EnvironmentCapability = "files"
@@ -66,6 +68,40 @@ const (
 	RequestedCapabilityFiles       RequestedCapability = "files"
 	RequestedCapabilityWebService  RequestedCapability = "web_service"
 	RequestedCapabilityPortForward RequestedCapability = "port_forward"
+)
+
+type EnvProfileAccessRouteKind string
+
+const (
+	EnvProfileAccessRouteKindURL          EnvProfileAccessRouteKind = "url"
+	EnvProfileAccessRouteKindSSHHost      EnvProfileAccessRouteKind = "ssh_host"
+	EnvProfileAccessRouteKindSSHContainer EnvProfileAccessRouteKind = "ssh_container"
+)
+
+type EnvProfileControlOwner string
+
+const (
+	EnvProfileControlOwnerNone    EnvProfileControlOwner = "none"
+	EnvProfileControlOwnerGateway EnvProfileControlOwner = "gateway"
+)
+
+type EnvLifecycleOperation string
+
+const (
+	EnvLifecycleOperationStart         EnvLifecycleOperation = "start"
+	EnvLifecycleOperationStop          EnvLifecycleOperation = "stop"
+	EnvLifecycleOperationRestart       EnvLifecycleOperation = "restart"
+	EnvLifecycleOperationUpdateRuntime EnvLifecycleOperation = "update_runtime"
+)
+
+type EnvLifecycleState string
+
+const (
+	EnvLifecycleStateAccepted    EnvLifecycleState = "accepted"
+	EnvLifecycleStateRunning     EnvLifecycleState = "running"
+	EnvLifecycleStateSucceeded   EnvLifecycleState = "succeeded"
+	EnvLifecycleStateFailed      EnvLifecycleState = "failed"
+	EnvLifecycleStateUnsupported EnvLifecycleState = "unsupported"
 )
 
 type ConnectArtifactKind string
@@ -116,13 +152,16 @@ type GatewayMetadata struct {
 }
 
 type Environment struct {
-	GatewayEnvID     string                  `json:"gateway_env_id"`
-	DisplayName      string                  `json:"display_name"`
-	EnvKind          EnvironmentKind         `json:"env_kind"`
-	State            EnvironmentState        `json:"state"`
-	Capabilities     []EnvironmentCapability `json:"capabilities"`
-	Origin           EnvironmentOrigin       `json:"origin"`
-	LastSeenAtUnixMS int64                   `json:"last_seen_at_unix_ms,omitempty"`
+	GatewayEnvID        string                  `json:"gateway_env_id"`
+	DisplayName         string                  `json:"display_name"`
+	EnvKind             EnvironmentKind         `json:"env_kind"`
+	State               EnvironmentState        `json:"state"`
+	Capabilities        []EnvironmentCapability `json:"capabilities"`
+	AccessCapabilities  []EnvironmentCapability `json:"access_capabilities"`
+	ControlCapabilities []EnvironmentCapability `json:"control_capabilities"`
+	ProfileAccessRoute  *EnvProfileAccessRoute  `json:"profile_access_route,omitempty"`
+	Origin              EnvironmentOrigin       `json:"origin"`
+	LastSeenAtUnixMS    int64                   `json:"last_seen_at_unix_ms,omitempty"`
 }
 
 type EnvironmentOrigin struct {
@@ -145,6 +184,60 @@ type OpenSessionResponse struct {
 	GatewayEnvID     string                 `json:"gateway_env_id"`
 	ConnectArtifact  GatewayConnectArtifact `json:"connect_artifact"`
 	DiagnosticsHint  *DiagnosticsHint       `json:"diagnostics_hint,omitempty"`
+}
+
+type EnvProfileUpsertRequest struct {
+	ProtocolVersion string          `json:"protocol_version,omitempty"`
+	Profile         EnvProfileInput `json:"profile"`
+}
+
+type EnvProfileInput struct {
+	GatewayEnvID string                 `json:"gateway_env_id,omitempty"`
+	DisplayName  string                 `json:"display_name"`
+	AccessRoute  EnvProfileAccessRoute  `json:"access_route"`
+	ControlOwner EnvProfileControlOwner `json:"control_owner,omitempty"`
+}
+
+type EnvProfileAccessRoute struct {
+	Kind                 EnvProfileAccessRouteKind `json:"kind"`
+	URL                  string                    `json:"url,omitempty"`
+	OriginLabel          string                    `json:"origin_label,omitempty"`
+	SSHDestination       string                    `json:"ssh_destination,omitempty"`
+	SSHPort              int                       `json:"ssh_port,omitempty"`
+	SSHRuntimeRoot       string                    `json:"ssh_runtime_root,omitempty"`
+	ContainerEngine      string                    `json:"container_engine,omitempty"`
+	ContainerID          string                    `json:"container_id,omitempty"`
+	ContainerRuntimeRoot string                    `json:"container_runtime_root,omitempty"`
+}
+
+type EnvProfileUpsertResponse struct {
+	ProtocolVersion string      `json:"protocol_version"`
+	Environment     Environment `json:"environment"`
+}
+
+type EnvProfileDeleteRequest struct {
+	ProtocolVersion string `json:"protocol_version,omitempty"`
+	GatewayEnvID    string `json:"gateway_env_id"`
+}
+
+type EnvProfileDeleteResponse struct {
+	ProtocolVersion string `json:"protocol_version"`
+	GatewayEnvID    string `json:"gateway_env_id"`
+	Deleted         bool   `json:"deleted"`
+}
+
+type EnvLifecycleRequest struct {
+	ProtocolVersion string                `json:"protocol_version,omitempty"`
+	GatewayEnvID    string                `json:"gateway_env_id"`
+	Operation       EnvLifecycleOperation `json:"operation"`
+}
+
+type EnvLifecycleResponse struct {
+	ProtocolVersion string                `json:"protocol_version"`
+	GatewayEnvID    string                `json:"gateway_env_id"`
+	Operation       EnvLifecycleOperation `json:"operation"`
+	State           EnvLifecycleState     `json:"state"`
+	Message         string                `json:"message,omitempty"`
 }
 
 type GatewayConnectArtifact struct {
@@ -210,6 +303,9 @@ var (
 	ErrMissingGatewayEnvID        = errors.New("gateway_env_id is required")
 	ErrMissingRequestedCapability = errors.New("requested_capability is required")
 	ErrMissingClientNonce         = errors.New("client_nonce is required")
+	ErrMissingDisplayName         = errors.New("display_name is required")
+	ErrMissingAccessRoute         = errors.New("access_route is required")
+	ErrMissingLifecycleOperation  = errors.New("operation is required")
 )
 
 func ValidateProtocolVersion(version string) error {
@@ -261,9 +357,28 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 		default:
 			environment.EnvKind = EnvironmentKindReachableEnv
 		}
-		environment.Capabilities = normalizeEnvironmentCapabilities(environment.Capabilities)
+		environment.AccessCapabilities = normalizeEnvironmentAccessCapabilities(environment.AccessCapabilities)
+		environment.ControlCapabilities = normalizeEnvironmentControlCapabilities(environment.ControlCapabilities)
+		legacyCapabilities := normalizeEnvironmentCapabilities(environment.Capabilities)
+		if len(environment.AccessCapabilities) == 0 && len(environment.ControlCapabilities) == 0 && len(legacyCapabilities) > 0 {
+			environment.AccessCapabilities = normalizeEnvironmentAccessCapabilities(legacyCapabilities)
+			environment.ControlCapabilities = normalizeEnvironmentControlCapabilities(legacyCapabilities)
+		}
+		environment.Capabilities = unionEnvironmentCapabilities(
+			legacyCapabilities,
+			environment.AccessCapabilities,
+			environment.ControlCapabilities,
+		)
 		environment.Origin.Kind = normalizeEnvironmentOriginKind(environment.Origin.Kind)
 		environment.Origin.Label = strings.TrimSpace(environment.Origin.Label)
+		if environment.ProfileAccessRoute != nil {
+			route := normalizeEnvProfileAccessRouteForCatalog(*environment.ProfileAccessRoute)
+			if route.Kind == "" {
+				environment.ProfileAccessRoute = nil
+			} else {
+				environment.ProfileAccessRoute = &route
+			}
+		}
 		if environment.GatewayEnvID == "" {
 			continue
 		}
@@ -273,6 +388,71 @@ func NormalizeEnvironments(environments []Environment) []Environment {
 		out = append(out, environment)
 	}
 	return out
+}
+
+func NormalizeEnvProfileUpsertRequest(req EnvProfileUpsertRequest) EnvProfileUpsertRequest {
+	req.Profile.GatewayEnvID = strings.TrimSpace(req.Profile.GatewayEnvID)
+	req.Profile.DisplayName = strings.TrimSpace(req.Profile.DisplayName)
+	req.Profile.AccessRoute.Kind = normalizeEnvProfileAccessRouteKind(req.Profile.AccessRoute.Kind)
+	req.Profile.AccessRoute.URL = strings.TrimSpace(req.Profile.AccessRoute.URL)
+	req.Profile.AccessRoute.OriginLabel = strings.TrimSpace(req.Profile.AccessRoute.OriginLabel)
+	req.Profile.AccessRoute.SSHDestination = strings.TrimSpace(req.Profile.AccessRoute.SSHDestination)
+	req.Profile.AccessRoute.SSHRuntimeRoot = strings.TrimSpace(req.Profile.AccessRoute.SSHRuntimeRoot)
+	req.Profile.AccessRoute.ContainerEngine = strings.TrimSpace(req.Profile.AccessRoute.ContainerEngine)
+	req.Profile.AccessRoute.ContainerID = strings.TrimSpace(req.Profile.AccessRoute.ContainerID)
+	req.Profile.AccessRoute.ContainerRuntimeRoot = strings.TrimSpace(req.Profile.AccessRoute.ContainerRuntimeRoot)
+	req.Profile.ControlOwner = normalizeEnvProfileControlOwner(req.Profile.ControlOwner)
+	return req
+}
+
+func ValidateEnvProfileUpsertRequest(req EnvProfileUpsertRequest) error {
+	req = NormalizeEnvProfileUpsertRequest(req)
+	if err := ValidateProtocolVersion(req.ProtocolVersion); err != nil {
+		return err
+	}
+	if req.Profile.DisplayName == "" {
+		return ErrMissingDisplayName
+	}
+	if req.Profile.AccessRoute.Kind == "" {
+		return ErrMissingAccessRoute
+	}
+	return nil
+}
+
+func NormalizeEnvProfileDeleteRequest(req EnvProfileDeleteRequest) EnvProfileDeleteRequest {
+	req.GatewayEnvID = strings.TrimSpace(req.GatewayEnvID)
+	return req
+}
+
+func ValidateEnvProfileDeleteRequest(req EnvProfileDeleteRequest) error {
+	req = NormalizeEnvProfileDeleteRequest(req)
+	if err := ValidateProtocolVersion(req.ProtocolVersion); err != nil {
+		return err
+	}
+	if req.GatewayEnvID == "" {
+		return ErrMissingGatewayEnvID
+	}
+	return nil
+}
+
+func NormalizeEnvLifecycleRequest(req EnvLifecycleRequest) EnvLifecycleRequest {
+	req.GatewayEnvID = strings.TrimSpace(req.GatewayEnvID)
+	req.Operation = normalizeEnvLifecycleOperation(req.Operation)
+	return req
+}
+
+func ValidateEnvLifecycleRequest(req EnvLifecycleRequest) error {
+	req = NormalizeEnvLifecycleRequest(req)
+	if err := ValidateProtocolVersion(req.ProtocolVersion); err != nil {
+		return err
+	}
+	if req.GatewayEnvID == "" {
+		return ErrMissingGatewayEnvID
+	}
+	if req.Operation == "" {
+		return ErrMissingLifecycleOperation
+	}
+	return nil
 }
 
 func NormalizeOpenSessionRequest(req OpenSessionRequest) OpenSessionRequest {
@@ -303,7 +483,7 @@ func normalizeGatewayCapabilities(capabilities []GatewayCapability) []GatewayCap
 	seen := make(map[GatewayCapability]struct{}, len(capabilities))
 	for _, capability := range capabilities {
 		switch capability {
-		case GatewayCapabilityEnvCatalog, GatewayCapabilityEnvOpenSession, GatewayCapabilityEnvLifecycle,
+		case GatewayCapabilityEnvCatalog, GatewayCapabilityEnvOpenSession, GatewayCapabilityEnvProfileWrite, GatewayCapabilityEnvLifecycle,
 			GatewayCapabilityTerminal, GatewayCapabilityFiles, GatewayCapabilityWebService, GatewayCapabilityPortForward:
 		default:
 			continue
@@ -317,14 +497,66 @@ func normalizeGatewayCapabilities(capabilities []GatewayCapability) []GatewayCap
 	return out
 }
 
+func unionEnvironmentCapabilities(groups ...[]EnvironmentCapability) []EnvironmentCapability {
+	var merged []EnvironmentCapability
+	for _, group := range groups {
+		merged = append(merged, group...)
+	}
+	return normalizeEnvironmentCapabilities(merged)
+}
+
 func normalizeEnvironmentCapabilities(capabilities []EnvironmentCapability) []EnvironmentCapability {
 	out := make([]EnvironmentCapability, 0, len(capabilities))
 	seen := make(map[EnvironmentCapability]struct{}, len(capabilities))
 	for _, capability := range capabilities {
 		switch capability {
 		case EnvironmentCapabilityOpen, EnvironmentCapabilityStart, EnvironmentCapabilityStop,
-			EnvironmentCapabilityUpdateRuntime, EnvironmentCapabilityTerminal, EnvironmentCapabilityFiles,
+			EnvironmentCapabilityRestart, EnvironmentCapabilityUpdateRuntime, EnvironmentCapabilityTerminal, EnvironmentCapabilityFiles,
 			EnvironmentCapabilityWebService, EnvironmentCapabilityPortForward:
+		default:
+			continue
+		}
+		if _, ok := seen[capability]; ok {
+			continue
+		}
+		seen[capability] = struct{}{}
+		out = append(out, capability)
+	}
+	if out == nil {
+		return []EnvironmentCapability{}
+	}
+	return out
+}
+
+func normalizeEnvironmentAccessCapabilities(capabilities []EnvironmentCapability) []EnvironmentCapability {
+	out := make([]EnvironmentCapability, 0, len(capabilities))
+	seen := make(map[EnvironmentCapability]struct{}, len(capabilities))
+	for _, capability := range normalizeEnvironmentCapabilities(capabilities) {
+		switch capability {
+		case EnvironmentCapabilityOpen, EnvironmentCapabilityTerminal, EnvironmentCapabilityFiles,
+			EnvironmentCapabilityWebService, EnvironmentCapabilityPortForward:
+		default:
+			continue
+		}
+		if _, ok := seen[capability]; ok {
+			continue
+		}
+		seen[capability] = struct{}{}
+		out = append(out, capability)
+	}
+	if out == nil {
+		return []EnvironmentCapability{}
+	}
+	return out
+}
+
+func normalizeEnvironmentControlCapabilities(capabilities []EnvironmentCapability) []EnvironmentCapability {
+	out := make([]EnvironmentCapability, 0, len(capabilities))
+	seen := make(map[EnvironmentCapability]struct{}, len(capabilities))
+	for _, capability := range normalizeEnvironmentCapabilities(capabilities) {
+		switch capability {
+		case EnvironmentCapabilityStart, EnvironmentCapabilityStop, EnvironmentCapabilityRestart,
+			EnvironmentCapabilityUpdateRuntime:
 		default:
 			continue
 		}
@@ -346,6 +578,73 @@ func normalizeEnvironmentOriginKind(kind EnvironmentOriginKind) EnvironmentOrigi
 		return kind
 	default:
 		return EnvironmentOriginKindNetworkTarget
+	}
+}
+
+func normalizeEnvProfileAccessRouteKind(kind EnvProfileAccessRouteKind) EnvProfileAccessRouteKind {
+	switch kind {
+	case EnvProfileAccessRouteKindURL, EnvProfileAccessRouteKindSSHHost, EnvProfileAccessRouteKindSSHContainer:
+		return kind
+	default:
+		return ""
+	}
+}
+
+func normalizeEnvProfileAccessRouteForCatalog(route EnvProfileAccessRoute) EnvProfileAccessRoute {
+	route.Kind = normalizeEnvProfileAccessRouteKind(route.Kind)
+	route.URL = strings.TrimSpace(route.URL)
+	route.OriginLabel = strings.TrimSpace(route.OriginLabel)
+	route.SSHDestination = strings.TrimSpace(route.SSHDestination)
+	route.SSHRuntimeRoot = strings.TrimSpace(route.SSHRuntimeRoot)
+	route.ContainerEngine = strings.TrimSpace(route.ContainerEngine)
+	route.ContainerID = strings.TrimSpace(route.ContainerID)
+	route.ContainerRuntimeRoot = strings.TrimSpace(route.ContainerRuntimeRoot)
+	switch route.Kind {
+	case EnvProfileAccessRouteKindURL:
+		return EnvProfileAccessRoute{
+			Kind:        EnvProfileAccessRouteKindURL,
+			URL:         route.URL,
+			OriginLabel: route.OriginLabel,
+		}
+	case EnvProfileAccessRouteKindSSHHost:
+		return EnvProfileAccessRoute{
+			Kind:           EnvProfileAccessRouteKindSSHHost,
+			OriginLabel:    route.OriginLabel,
+			SSHDestination: route.SSHDestination,
+			SSHPort:        route.SSHPort,
+			SSHRuntimeRoot: route.SSHRuntimeRoot,
+		}
+	case EnvProfileAccessRouteKindSSHContainer:
+		return EnvProfileAccessRoute{
+			Kind:                 EnvProfileAccessRouteKindSSHContainer,
+			OriginLabel:          route.OriginLabel,
+			SSHDestination:       route.SSHDestination,
+			SSHPort:              route.SSHPort,
+			SSHRuntimeRoot:       route.SSHRuntimeRoot,
+			ContainerEngine:      route.ContainerEngine,
+			ContainerID:          route.ContainerID,
+			ContainerRuntimeRoot: route.ContainerRuntimeRoot,
+		}
+	default:
+		return EnvProfileAccessRoute{}
+	}
+}
+
+func normalizeEnvProfileControlOwner(owner EnvProfileControlOwner) EnvProfileControlOwner {
+	switch owner {
+	case EnvProfileControlOwnerGateway:
+		return owner
+	default:
+		return EnvProfileControlOwnerNone
+	}
+}
+
+func normalizeEnvLifecycleOperation(operation EnvLifecycleOperation) EnvLifecycleOperation {
+	switch operation {
+	case EnvLifecycleOperationStart, EnvLifecycleOperationStop, EnvLifecycleOperationRestart, EnvLifecycleOperationUpdateRuntime:
+		return operation
+	default:
+		return ""
 	}
 }
 

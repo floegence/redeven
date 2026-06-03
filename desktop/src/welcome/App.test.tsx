@@ -1201,7 +1201,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('props.progress.error_message');
     expect(appSrc).toContain('const panelProgress = createMemo(() => selectEnvironmentPanelProgress(primaryProgress(), runtimeMenuProgress()));');
     expect(appSrc).toContain('runtimeLifecycleProgress={runtimeMenuProgress()}');
-    expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\'], runtimeLifecycleProgress)');
+    expect(appSrc).toContain('busyStateBlocksEnvironmentAction(busyState, environmentID, [\'stop_environment_runtime\', \'run_gateway_environment_lifecycle\'], runtimeLifecycleProgress)');
     expect(appSrc).toContain('const progressPanelVisible = createMemo(() => props.progressOpen && hasPanelProgress());');
     expect(appSrc).toContain('const primaryProgressPresentation = createMemo(() => localizedPrimaryProgressPresentation(');
     expect(appSrc).toContain('primaryProgressPresentation() || progressPanelVisible()');
@@ -1470,7 +1470,7 @@ describe('DesktopWelcomeShell', () => {
   it('keeps the connection dialog source-scoped across URL, SSH, and managed container targets', () => {
     const appSrc = readWelcomeSource();
 
-    expect(appSrc).toContain('type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | null;');
+    expect(appSrc).toContain('type ConnectionDialogState = ExternalURLConnectionDialogState | SSHConnectionDialogState | RuntimeContainerConnectionDialogState | GatewayURLProfileConnectionDialogState | null;');
     expect(appSrc).toContain('props.switchKind(value as ConnectionDialogKind)');
     expect(appSrc).not.toContain('const showCreateConnectAction = createMemo(() => isCreate() && connectionKind() === \'external_local_ui\');');
     expect(appSrc).not.toContain('onConnect={saveAndConnectURLFromDialog}');

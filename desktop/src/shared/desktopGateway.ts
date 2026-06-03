@@ -4,6 +4,16 @@ import type { DesktopContainerEngine } from './desktopRuntimePlacement';
 export type DesktopGatewayConnectionKind = 'url' | 'ssh_host' | 'ssh_container';
 export type DesktopGatewayManagementCapability = 'access_only' | 'managed_ssh_host' | 'managed_ssh_container';
 
+export type DesktopGatewayCapability =
+  | 'env_catalog'
+  | 'env_open_session'
+  | 'env_profile_write'
+  | 'env_lifecycle'
+  | 'terminal'
+  | 'files'
+  | 'web_service'
+  | 'port_forward';
+
 export type DesktopGatewayStatus =
   | 'unknown'
   | 'online'
@@ -33,6 +43,7 @@ export type DesktopGatewayEnvironmentCapability =
   | 'open'
   | 'start'
   | 'stop'
+  | 'restart'
   | 'update_runtime'
   | 'terminal'
   | 'files'
@@ -45,12 +56,27 @@ export type DesktopGatewayEnvironmentOriginKind =
   | 'container'
   | 'network_target';
 
+export type DesktopGatewayEnvironmentProfileAccessRoute = Readonly<{
+  kind: DesktopGatewayConnectionKind;
+  url?: string;
+  origin_label?: string;
+  ssh_destination?: string;
+  ssh_port?: number;
+  ssh_runtime_root?: string;
+  container_engine?: string;
+  container_id?: string;
+  container_runtime_root?: string;
+}>;
+
 export type DesktopGatewayEnvironment = Readonly<{
   gateway_env_id: string;
   display_name: string;
   env_kind: 'managed_local_env' | 'reachable_env';
   state: DesktopGatewayEnvironmentState;
   capabilities: readonly DesktopGatewayEnvironmentCapability[];
+  access_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
+  control_capabilities?: readonly DesktopGatewayEnvironmentCapability[];
+  profile_access_route?: DesktopGatewayEnvironmentProfileAccessRoute;
   origin: Readonly<{
     kind: DesktopGatewayEnvironmentOriginKind;
     label: string;
@@ -97,6 +123,7 @@ export type DesktopGatewaySource = Readonly<{
   display_name: string;
   connection_kind: DesktopGatewayConnectionKind;
   management_capability: DesktopGatewayManagementCapability;
+  capabilities: readonly DesktopGatewayCapability[];
   status: DesktopGatewayStatus;
   trust_state?: DesktopGatewayTrustState;
   status_message?: string;
@@ -146,6 +173,19 @@ export function desktopGatewayEnvironmentEntryID(
   return cleanGatewayID && cleanGatewayEnvID
     ? `gateway:${cleanGatewayID}:env:${cleanGatewayEnvID}`
     : '';
+}
+
+export function desktopGatewayProfileURLHasEmbeddedCredentials(value: string | undefined): boolean {
+  const raw = compact(value);
+  if (!raw) {
+    return false;
+  }
+  try {
+    const parsed = new URL(raw);
+    return parsed.username !== '' || parsed.password !== '';
+  } catch {
+    return false;
+  }
 }
 
 export function desktopGatewayConnectionKindLabel(kind: DesktopGatewayConnectionKind): string {
@@ -223,9 +263,24 @@ export function desktopGatewayNeedsResolution(status: DesktopGatewayStatus): boo
 
 export function desktopGatewayCanOpenEnvironment(
   gateway: Pick<DesktopGatewaySource, 'status'>,
-  environment: Pick<DesktopGatewayEnvironment, 'state' | 'capabilities'>,
+  environment: Pick<DesktopGatewayEnvironment, 'state' | 'capabilities' | 'access_capabilities'>,
 ): boolean {
+  const explicitAccessCapabilities = environment.access_capabilities ?? [];
+  const accessCapabilities: readonly DesktopGatewayEnvironmentCapability[] = explicitAccessCapabilities.length > 0
+    ? explicitAccessCapabilities
+    : environment.capabilities;
   return gateway.status === 'online'
     && environment.state === 'available'
-    && environment.capabilities.includes('open');
+    && accessCapabilities.includes('open');
+}
+
+export function desktopGatewayEnvironmentHasControlCapability(
+  environment: Pick<DesktopGatewayEnvironment, 'capabilities' | 'control_capabilities'>,
+  capability: Extract<DesktopGatewayEnvironmentCapability, 'start' | 'stop' | 'restart' | 'update_runtime'>,
+): boolean {
+  const explicitControlCapabilities = environment.control_capabilities ?? [];
+  const controlCapabilities: readonly DesktopGatewayEnvironmentCapability[] = explicitControlCapabilities.length > 0
+    ? explicitControlCapabilities
+    : environment.capabilities;
+  return controlCapabilities.includes(capability);
 }
