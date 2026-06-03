@@ -59,7 +59,7 @@ export type DesktopRuntimeHealthSource =
   | 'provider_batch_probe'
   | 'external_local_ui_probe'
   | 'ssh_runtime_probe'
-  | 'gateway_runtime_probe';
+  | 'gateway_service_probe';
 
 export type DesktopEnvironmentWindowState = 'closed' | 'opening' | 'open';
 

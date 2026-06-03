@@ -1,6 +1,7 @@
 package desktopbridge
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -201,8 +202,13 @@ func isClosedNetworkError(err error) bool {
 }
 
 func NewURLSurfaceDialer(localUIURL string, runtimeControlURL string) SurfaceDialer {
+	return NewURLSurfaceDialerWithGateway(localUIURL, runtimeControlURL, "", "")
+}
+
+func NewURLSurfaceDialerWithGateway(localUIURL string, runtimeControlURL string, gatewayURL string, managedGatewayBridgeToken string) SurfaceDialer {
 	localUIAddr := dialAddrFromURL(localUIURL)
 	runtimeControlAddr := dialAddrFromURL(runtimeControlURL)
+	gatewayAddr := dialAddrFromURL(gatewayURL)
 	return func(ctx context.Context, surface StreamSurface) (net.Conn, error) {
 		addr := ""
 		switch surface {
@@ -211,7 +217,7 @@ func NewURLSurfaceDialer(localUIURL string, runtimeControlURL string) SurfaceDia
 		case StreamSurfaceRuntimeControl:
 			addr = runtimeControlAddr
 		case StreamSurfaceGatewayProtocol:
-			addr = localUIAddr
+			addr = gatewayAddr
 		default:
 			return nil, fmt.Errorf("unknown bridge surface %q", surface)
 		}
@@ -219,8 +225,70 @@ func NewURLSurfaceDialer(localUIURL string, runtimeControlURL string) SurfaceDia
 			return nil, fmt.Errorf("bridge surface %s is unavailable", surface)
 		}
 		dialer := net.Dialer{Timeout: 10 * time.Second}
-		return dialer.DialContext(ctx, "tcp", addr)
+		conn, err := dialer.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			return nil, err
+		}
+		if surface == StreamSurfaceGatewayProtocol && strings.TrimSpace(managedGatewayBridgeToken) != "" {
+			return &gatewayProtocolHeaderConn{
+				Conn:  conn,
+				token: strings.TrimSpace(managedGatewayBridgeToken),
+			}, nil
+		}
+		return conn, nil
 	}
+}
+
+type gatewayProtocolHeaderConn struct {
+	net.Conn
+
+	mu       sync.Mutex
+	token    string
+	injected bool
+	buffer   []byte
+}
+
+func (c *gatewayProtocolHeaderConn) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.injected || strings.TrimSpace(c.token) == "" {
+		return c.Conn.Write(p)
+	}
+	c.buffer = append(c.buffer, p...)
+	headerEnd := bytes.Index(c.buffer, []byte("\r\n\r\n"))
+	if headerEnd < 0 && len(c.buffer) < 64*1024 {
+		return len(p), nil
+	}
+	out := c.buffer
+	if headerEnd >= 0 {
+		header := []byte("X-Redeven-Gateway-Managed-Bridge-Token: " + c.token)
+		next := make([]byte, 0, len(c.buffer)+len(header)+2)
+		next = append(next, c.buffer[:headerEnd]...)
+		next = append(next, "\r\n"...)
+		next = append(next, header...)
+		next = append(next, c.buffer[headerEnd:]...)
+		out = next
+	}
+	c.injected = true
+	c.buffer = nil
+	if err := writeAll(c.Conn, out); err != nil {
+		return 0, err
+	}
+	return len(p), nil
+}
+
+func writeAll(w io.Writer, p []byte) error {
+	for len(p) > 0 {
+		n, err := w.Write(p)
+		if err != nil {
+			return err
+		}
+		if n <= 0 {
+			return io.ErrShortWrite
+		}
+		p = p[n:]
+	}
+	return nil
 }
 
 func dialAddrFromURL(raw string) string {

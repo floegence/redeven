@@ -28,6 +28,7 @@ type VerifiedRequest struct {
 	BindingAudience string
 	Nonce           string
 	TimestampUnixMS int64
+	ProfileWrite    bool
 }
 
 func NewVerifier(store *trust.Store) *Verifier {
@@ -97,6 +98,7 @@ func (v *Verifier) Verify(ctx context.Context, r *http.Request, body []byte, bin
 		BindingAudience: cleanAudience,
 		Nonce:           nonce,
 		TimestampUnixMS: ts,
+		ProfileWrite:    v.store.ClientCanWriteProfiles(clientKeyID, cleanAudience),
 	}, nil
 }
 

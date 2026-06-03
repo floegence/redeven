@@ -226,6 +226,75 @@ function stopTailForOperation(
   return [];
 }
 
+function gatewayServiceTailFrom(step: DesktopRuntimeLifecycleStepID): readonly DesktopRuntimeLifecycleStepID[] {
+  switch (step) {
+    case 'preparing_gateway_package':
+      return [
+        'preparing_gateway_package',
+        'installing_gateway_package',
+        'starting_gateway_service',
+        'opening_gateway_bridge',
+        'checking_gateway_service',
+        'gateway_service_ready',
+      ];
+    case 'installing_gateway_package':
+      return [
+        'installing_gateway_package',
+        'starting_gateway_service',
+        'opening_gateway_bridge',
+        'checking_gateway_service',
+        'gateway_service_ready',
+      ];
+    case 'starting_gateway_service':
+      return [
+        'starting_gateway_service',
+        'opening_gateway_bridge',
+        'checking_gateway_service',
+        'gateway_service_ready',
+      ];
+    case 'opening_gateway_bridge':
+      return [
+        'opening_gateway_bridge',
+        'checking_gateway_service',
+        'gateway_service_ready',
+      ];
+    case 'checking_gateway_service':
+      return [
+        'checking_gateway_service',
+        'gateway_service_ready',
+      ];
+    case 'gateway_service_ready':
+      return [
+        'checking_gateway_service',
+        'gateway_service_ready',
+      ];
+    case 'gateway_service_up_to_date':
+      return [
+        'checking_gateway_service',
+        'gateway_service_up_to_date',
+      ];
+    case 'stopping_gateway_service':
+      return [
+        'stopping_gateway_service',
+        'verifying_gateway_stopped',
+        'gateway_service_stopped',
+      ];
+    case 'verifying_gateway_stopped':
+      return [
+        'verifying_gateway_stopped',
+        'gateway_service_stopped',
+      ];
+    case 'gateway_service_stopped':
+      return [
+        'stopping_gateway_service',
+        'verifying_gateway_stopped',
+        'gateway_service_stopped',
+      ];
+    default:
+      return [];
+  }
+}
+
 export function initialRuntimeLifecyclePlan(input: RuntimeLifecyclePlanInput): RuntimeLifecyclePlanResult {
   return {
     state: 'planning',
@@ -235,6 +304,13 @@ export function initialRuntimeLifecyclePlan(input: RuntimeLifecyclePlanInput): R
 
 export function runtimeLifecyclePlanIncludingStep(input: RuntimeLifecyclePlanStepInput): RuntimeLifecyclePlanResult {
   const currentSteps = trimCurrentStepsForExpansion(input.currentSteps, input.step);
+  const explicitGatewayTail = gatewayServiceTailFrom(input.step);
+  if (explicitGatewayTail.length > 0) {
+    return {
+      state: 'executing',
+      steps: stepStates(appendMissing(currentSteps, explicitGatewayTail)),
+    };
+  }
   const explicitStopTail = stopTailForOperation(input.operation, input.step);
   if (explicitStopTail.length > 0) {
     return {

@@ -11,39 +11,44 @@ import (
 	"github.com/floegence/redeven/internal/runtimegateway/security"
 )
 
-func TestGatewayMetadataUsesBindingAudienceForGatewayID(t *testing.T) {
+func TestGatewayMetadataDoesNotInitializeGatewayIdentity(t *testing.T) {
 	audience := "https://gateway.example.internal"
-	store := NewStore(filepath.Join(t.TempDir(), "gateway-trust.json"))
+	path := filepath.Join(t.TempDir(), "gateway-trust.json")
+	store := NewStore(path)
 
-	metadata, _, err := store.GatewayMetadata(audience)
-	if err != nil {
-		t.Fatalf("GatewayMetadata() error = %v", err)
+	if _, _, err := store.GatewayMetadata(audience); err == nil {
+		t.Fatalf("GatewayMetadata() error = nil, want uninitialized identity error")
 	}
-
-	if want := security.StableGatewayID(audience); metadata.GatewayID != want {
-		t.Fatalf("GatewayID = %q, want %q", metadata.GatewayID, want)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("GatewayMetadata() should not create trust state, stat err = %v", err)
 	}
 }
 
-func TestGatewayMetadataMigratesEmptyAudienceIdentityBeforePairing(t *testing.T) {
+func TestPairingChallengeUsesBindingAudienceForGatewayID(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gateway-trust.json")
 	store := NewStore(path)
-	if _, _, err := store.GatewayMetadata(""); err != nil {
-		t.Fatalf("initial GatewayMetadata() error = %v", err)
-	}
 	audience := "https://gateway.example.internal"
-
-	metadata, _, err := store.GatewayMetadata(audience)
+	keys, err := security.GenerateKeyPair()
 	if err != nil {
-		t.Fatalf("GatewayMetadata() after audience bind error = %v", err)
+		t.Fatalf("GenerateKeyPair() error = %v", err)
 	}
 
-	if want := security.StableGatewayID(audience); metadata.GatewayID != want {
-		t.Fatalf("GatewayID = %q, want migrated %q", metadata.GatewayID, want)
+	challenge, err := store.PairingChallenge(protocol.PairingChallengeRequest{
+		ProtocolVersion: protocol.Version,
+		ClientNonce:     "client-nonce",
+		ClientPublicKey: keys.PublicKeyPEM,
+		BindingAudience: audience,
+	})
+	if err != nil {
+		t.Fatalf("PairingChallenge() error = %v", err)
+	}
+
+	if want := security.StableGatewayID(audience); challenge.GatewayID != want {
+		t.Fatalf("GatewayID = %q, want %q", challenge.GatewayID, want)
 	}
 	persisted := readTestState(t, path)
-	if persisted.Gateway.GatewayID != metadata.GatewayID {
-		t.Fatalf("persisted GatewayID = %q, want %q", persisted.Gateway.GatewayID, metadata.GatewayID)
+	if persisted.Gateway.GatewayID != challenge.GatewayID {
+		t.Fatalf("persisted GatewayID = %q, want %q", persisted.Gateway.GatewayID, challenge.GatewayID)
 	}
 }
 
@@ -64,6 +69,47 @@ func TestPairingIsAudienceScoped(t *testing.T) {
 	}
 	if got, ok := store.ClientPublicKey(clientKeyID, otherAudience); ok || got != "" {
 		t.Fatalf("ClientPublicKey(%q, %q) = (%q, %v), want not paired", clientKeyID, otherAudience, got, ok)
+	}
+}
+
+func TestPairingChallengeEchoesPairingCodeInSignedPayload(t *testing.T) {
+	store := NewStore(filepath.Join(t.TempDir(), "gateway-trust.json"))
+	audience := "https://gateway.example.internal"
+	keys, err := security.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() error = %v", err)
+	}
+
+	challenge, err := store.PairingChallenge(protocol.PairingChallengeRequest{
+		ProtocolVersion: protocol.Version,
+		ClientNonce:     "client-nonce",
+		ClientPublicKey: keys.PublicKeyPEM,
+		BindingAudience: audience,
+		PairingCode:     "pair-123456",
+	})
+	if err != nil {
+		t.Fatalf("PairingChallenge() error = %v", err)
+	}
+
+	if challenge.PairingCode != "pair-123456" {
+		t.Fatalf("PairingCode = %q, want echoed pairing code", challenge.PairingCode)
+	}
+	payload, err := security.CanonicalJSON(map[string]any{
+		"binding_audience":   audience,
+		"client_nonce":       "client-nonce",
+		"client_public_key":  strings.TrimSpace(keys.PublicKeyPEM),
+		"expires_at_unix_ms": challenge.ExpiresAtUnixMS,
+		"gateway_id":         challenge.GatewayID,
+		"gateway_nonce":      challenge.GatewayNonce,
+		"gateway_public_key": challenge.GatewayPublicKey,
+		"pairing_code":       "pair-123456",
+		"protocol_version":   protocol.Version,
+	})
+	if err != nil {
+		t.Fatalf("CanonicalJSON() error = %v", err)
+	}
+	if !security.VerifySignature(challenge.GatewayPublicKey, payload, challenge.Signature) {
+		t.Fatalf("PairingChallenge() signature did not cover pairing_code")
 	}
 }
 

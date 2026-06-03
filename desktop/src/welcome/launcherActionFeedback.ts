@@ -50,36 +50,35 @@ function reconnectControlPlaneAction(
   };
 }
 
-function gatewayFailureMessage(failure: DesktopLauncherActionFailure): string {
+function gatewayFailureMessage(i18n: DesktopI18n, failure: DesktopLauncherActionFailure): string {
   const detail = compact(failure.message);
+  const detailOr = (key: Parameters<DesktopI18n['t']>[0]) => (
+    i18n.locale === 'en-US' && detail ? detail : i18n.t(key)
+  );
   switch (failure.code) {
     case 'gateway_not_manageable':
-      return detail || 'This URL Gateway is access-only. Desktop can pair and refresh it, but start, stop, restart, and update must be managed on the Gateway host.';
-    case 'gateway_runtime_unreachable':
-      return detail || 'Desktop cannot reach the Gateway runtime. Start it on the target host or resolve the Gateway settings, then try again.';
+      return detailOr('toast.gatewayNotManageable');
+    case 'gateway_service_unreachable':
+      return detailOr('toast.gatewayServiceUnreachable');
     case 'gateway_container_unavailable':
-      return detail || 'The Gateway container is unavailable. Start the container or update the Gateway settings, then try again.';
+      return detailOr('toast.gatewayContainerUnavailable');
     case 'gateway_bridge_unavailable':
-      return detail || 'Desktop cannot reach the Gateway bridge on the target host. Resolve the Gateway settings, then retry.';
-    case 'gateway_runtime_start_failed':
-      return detail || 'Desktop could not start the Gateway runtime. Review the Gateway target settings and try Start Gateway again.';
-    case 'gateway_runtime_stop_failed':
-      return detail || 'Desktop could not stop the Gateway runtime. Review the Gateway target and try again.';
-    case 'gateway_runtime_restart_failed':
-      return detail || 'Desktop could not restart the Gateway runtime. Review the Gateway target and try again.';
-    case 'gateway_runtime_update_failed':
-      return detail || 'Desktop could not update the Gateway runtime. Review the Gateway target and try again.';
+      return detailOr('toast.gatewayBridgeUnavailable');
+    case 'gateway_service_start_failed':
+      return detailOr('toast.gatewayServiceStartFailed');
+    case 'gateway_service_stop_failed':
+      return detailOr('toast.gatewayServiceStopFailed');
+    case 'gateway_service_restart_failed':
+      return detailOr('toast.gatewayServiceRestartFailed');
+    case 'gateway_service_update_failed':
+      return detailOr('toast.gatewayServiceUpdateFailed');
     case 'gateway_catalog_failed':
-      return detail || 'Desktop could not refresh this Gateway catalog. Start or resolve the Gateway, then refresh again.';
+      return detailOr('toast.gatewayCatalogFailed');
     case 'gateway_start_required':
-      return detail || 'Start this Gateway first. Desktop will continue the pairing, refresh, or open action after the runtime is ready.';
+      return detailOr('toast.gatewayStartRequired');
     default:
-      return detail || i18nFallbackGatewayMessage(failure);
+      return detail || i18n.t('toast.gatewayActionFailed');
   }
-}
-
-function i18nFallbackGatewayMessage(_failure: DesktopLauncherActionFailure): string {
-  return 'Gateway action failed. Review the Gateway card for the next step, then try again.';
 }
 
 export function launcherActionFailurePresentation(
@@ -199,34 +198,34 @@ export function launcherActionFailurePresentation(
       };
     case 'gateway_start_required':
       return {
-        message: gatewayFailureMessage(failure),
+        message: gatewayFailureMessage(i18n, failure),
         tone: 'info',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
     case 'gateway_not_manageable':
       return {
-        message: gatewayFailureMessage(failure),
+        message: gatewayFailureMessage(i18n, failure),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
-    case 'gateway_runtime_unreachable':
+    case 'gateway_service_unreachable':
     case 'gateway_container_unavailable':
     case 'gateway_bridge_unavailable':
     case 'gateway_catalog_failed':
       return {
-        message: gatewayFailureMessage(failure),
+        message: gatewayFailureMessage(i18n, failure),
         tone: 'warning',
         refresh_snapshot: refreshSnapshot,
         delivery,
       };
-    case 'gateway_runtime_start_failed':
-    case 'gateway_runtime_stop_failed':
-    case 'gateway_runtime_restart_failed':
-    case 'gateway_runtime_update_failed':
+    case 'gateway_service_start_failed':
+    case 'gateway_service_stop_failed':
+    case 'gateway_service_restart_failed':
+    case 'gateway_service_update_failed':
       return {
-        message: gatewayFailureMessage(failure),
+        message: gatewayFailureMessage(i18n, failure),
         tone: 'error',
         refresh_snapshot: refreshSnapshot,
         delivery,

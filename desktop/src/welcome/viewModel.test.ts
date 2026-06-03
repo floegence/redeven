@@ -276,7 +276,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
     status: 'online',
     trust_state: 'paired',
     endpoint_label: 'https://gateway.example.invalid',
-    runtime_state: {
+    service_state: {
       status: 'not_applicable',
       can_start: false,
       can_stop: false,
@@ -292,6 +292,8 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
       env_kind: 'reachable_env',
       state: 'available',
       capabilities: ['open'],
+      access_capabilities: ['open'],
+      control_capabilities: [],
       origin: { kind: 'network_target', label: 'Finance subnet' },
     }],
     ...overrides,
@@ -3425,7 +3427,7 @@ describe('Gateway view models', () => {
         tone: 'primary',
       }),
       primary_action: expect.objectContaining({
-        intent: 'refresh_gateway_status',
+        intent: 'pair_gateway',
         label: 'Pairing...',
         enabled: false,
       }),
@@ -3477,7 +3479,7 @@ describe('Gateway view models', () => {
       management_capability: 'managed_ssh_host',
       status: 'pairing_required',
       trust_state: 'unpaired',
-      runtime_state: {
+      service_state: {
         status: 'not_started',
         can_start: true,
         can_stop: false,
@@ -3486,23 +3488,23 @@ describe('Gateway view models', () => {
         can_pair_after_start: true,
       },
     }));
-    expect(stoppedUnpairedSSHRow).toMatchObject({
-      status_label: 'Not started',
-      primary_action: expect.objectContaining({ intent: 'refresh_gateway_status', enabled: false }),
+	    expect(stoppedUnpairedSSHRow).toMatchObject({
+	      status_label: 'Not started',
+	      primary_action: expect.objectContaining({ intent: 'pair_gateway', enabled: false }),
       guidance: expect.objectContaining({
         title: 'Preparing Gateway',
         tone: 'primary',
       }),
     });
     expect(stoppedUnpairedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'start_gateway_runtime',
+      'start_gateway',
       'manage_gateway',
     ]);
 
     const stoppedSSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
       management_capability: 'managed_ssh_host',
-      runtime_state: {
+      service_state: {
         status: 'not_started',
         can_start: true,
         can_stop: false,
@@ -3521,7 +3523,7 @@ describe('Gateway view models', () => {
       }),
     });
     expect(stoppedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'start_gateway_runtime',
+      'start_gateway',
       'manage_gateway',
     ]);
 
@@ -3531,7 +3533,7 @@ describe('Gateway view models', () => {
       status: 'pairing_required',
       trust_state: 'unpaired',
       sync_state: 'syncing',
-      runtime_state: {
+      service_state: {
         status: 'starting',
         can_start: false,
         can_stop: false,
@@ -3558,7 +3560,7 @@ describe('Gateway view models', () => {
       management_capability: 'managed_ssh_host',
       trust_state: 'unpaired',
       status: 'pairing_required',
-      runtime_state: {
+      service_state: {
         status: 'ssh_unreachable',
         can_start: false,
         can_stop: false,
@@ -3584,7 +3586,7 @@ describe('Gateway view models', () => {
     const startingSSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
       management_capability: 'managed_ssh_host',
-      runtime_state: {
+      service_state: {
         status: 'starting',
         can_start: false,
         can_stop: false,
@@ -3594,7 +3596,7 @@ describe('Gateway view models', () => {
       },
     }));
     expect(startingSSHRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'start_gateway_runtime',
+      intent: 'start_gateway',
       label: 'Starting...',
       enabled: false,
     }));
@@ -3606,8 +3608,8 @@ describe('Gateway view models', () => {
     const updateRequiredSSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
       management_capability: 'managed_ssh_host',
-      runtime_state: {
-        status: 'runtime_needs_update',
+      service_state: {
+        status: 'service_needs_update',
         can_start: false,
         can_stop: false,
         can_restart: true,
@@ -3624,14 +3626,14 @@ describe('Gateway view models', () => {
       tone: 'warning',
     });
     expect(updateRequiredSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'restart_gateway_runtime',
+      'restart_gateway',
       'manage_gateway',
     ]);
 
     const readySSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
       management_capability: 'managed_ssh_host',
-      runtime_state: {
+      service_state: {
         status: 'ready',
         can_start: false,
         can_stop: true,
@@ -3651,11 +3653,40 @@ describe('Gateway view models', () => {
       tone: 'success',
     });
     expect(readySSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'stop_gateway_runtime',
-      'restart_gateway_runtime',
-      'update_gateway_runtime',
+      'stop_gateway',
+      'restart_gateway',
+      'update_gateway',
       'refresh_gateway_catalog',
       'manage_gateway',
     ]);
+    expect(readySSHRow.secondary_actions.map((action) => action.label)).toEqual([
+      'Stop Gateway',
+      'Restart Gateway',
+      'Update Gateway',
+      'Refresh',
+      'Manage',
+    ]);
+  });
+
+  it('guides writable empty Gateway catalogs toward adding Gateway-backed environments', () => {
+    const writableEmptyRow = buildGatewaySourceRowModel(gatewaySource({
+      capabilities: ['env_profile_write'],
+      environments: [],
+    }));
+    const readOnlyEmptyRow = buildGatewaySourceRowModel(gatewaySource({
+      capabilities: [],
+      environments: [],
+    }));
+
+    expect(writableEmptyRow).toMatchObject({
+      environment_count: 0,
+      environment_summary_label: 'No environments synced',
+      environment_summary_detail: 'Add a Gateway-backed Environment to make it available from every Desktop paired with this Gateway.',
+    });
+    expect(readOnlyEmptyRow).toMatchObject({
+      environment_count: 0,
+      environment_summary_label: 'No environments synced',
+      environment_summary_detail: 'No environments are currently exposed by this Gateway catalog.',
+    });
   });
 });

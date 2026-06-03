@@ -92,7 +92,7 @@ export type DesktopGatewayEnvironment = Readonly<{
   last_seen_at_unix_ms?: number;
 }>;
 
-export type DesktopGatewayRuntimeStatus =
+export type DesktopGatewayServiceStatus =
   | 'not_applicable'
   | 'unknown'
   | 'not_started'
@@ -100,19 +100,19 @@ export type DesktopGatewayRuntimeStatus =
   | 'ready'
   | 'ssh_unreachable'
   | 'container_unavailable'
-  | 'runtime_needs_update'
+  | 'service_needs_update'
   | 'bridge_unavailable'
   | 'error';
 
-export type DesktopGatewayRuntimeState = Readonly<{
-  status: DesktopGatewayRuntimeStatus;
+export type DesktopGatewayServiceState = Readonly<{
+  status: DesktopGatewayServiceStatus;
   can_start: boolean;
   can_stop: boolean;
   can_restart: boolean;
   can_update: boolean;
   can_pair_after_start: boolean;
-  runtime_target_id?: string;
-  runtime_state_root?: string;
+  service_target_id?: string;
+  service_state_root?: string;
   message?: string;
   checked_at_unix_ms?: number;
   lifecycle_operation_key?: string;
@@ -144,7 +144,7 @@ export type DesktopGatewaySource = Readonly<{
   container_id?: string;
   container_ref?: string;
   container_label?: string;
-  runtime_state?: DesktopGatewayRuntimeState;
+  service_state?: DesktopGatewayServiceState;
   sync_state?: DesktopGatewaySyncState;
   last_sync_attempt_at_ms?: number;
   last_synced_at_ms?: number;
@@ -220,7 +220,7 @@ export function desktopGatewayManagementCapability(
   }
 }
 
-export function desktopGatewayCanManageRuntime(
+export function desktopGatewayCanManageService(
   gateway: Pick<DesktopGatewaySource, 'management_capability'>,
 ): boolean {
   return gateway.management_capability === 'managed_ssh_host'
@@ -273,10 +273,7 @@ export function desktopGatewayCanOpenEnvironment(
   gateway: Pick<DesktopGatewaySource, 'status'>,
   environment: Pick<DesktopGatewayEnvironment, 'state' | 'capabilities' | 'access_capabilities'>,
 ): boolean {
-  const explicitAccessCapabilities = environment.access_capabilities ?? [];
-  const accessCapabilities: readonly DesktopGatewayEnvironmentCapability[] = explicitAccessCapabilities.length > 0
-    ? explicitAccessCapabilities
-    : environment.capabilities;
+  const accessCapabilities = environment.access_capabilities ?? [];
   return gateway.status === 'online'
     && environment.state === 'available'
     && accessCapabilities.includes('open');
@@ -286,9 +283,6 @@ export function desktopGatewayEnvironmentHasControlCapability(
   environment: Pick<DesktopGatewayEnvironment, 'capabilities' | 'control_capabilities'>,
   capability: Extract<DesktopGatewayEnvironmentCapability, 'start' | 'stop' | 'restart' | 'update_runtime'>,
 ): boolean {
-  const explicitControlCapabilities = environment.control_capabilities ?? [];
-  const controlCapabilities: readonly DesktopGatewayEnvironmentCapability[] = explicitControlCapabilities.length > 0
-    ? explicitControlCapabilities
-    : environment.capabilities;
+  const controlCapabilities = environment.control_capabilities ?? [];
   return controlCapabilities.includes(capability);
 }

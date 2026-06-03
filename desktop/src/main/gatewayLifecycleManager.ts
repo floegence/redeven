@@ -4,7 +4,6 @@ import {
   DEFAULT_DESKTOP_SSH_CONNECT_TIMEOUT_SECONDS,
   DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
-  DEFAULT_DESKTOP_SSH_RUNTIME_ROOT,
   desktopSSHRuntimeRootSubpath,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
@@ -13,16 +12,7 @@ import {
   type DesktopRuntimeHostAccess,
   type DesktopRuntimePlacement,
 } from '../shared/desktopRuntimePlacement';
-import { ensureRuntimePlacementReady } from './runtimePlacementManager';
 import { type RuntimePlacementBridgeSession, startRuntimePlacementBridgeSession } from './runtimePlacementBridgeSession';
-import {
-  ensureManagedSSHRuntimeReady,
-  probeManagedSSHRuntimeStatus,
-  stopManagedSSHRuntimeProcess,
-} from './sshRuntime';
-import { createSSHRuntimeHostExecutor } from './runtimeHostAccess';
-import { containerRuntimeDaemonStatusCommand, containerRuntimeDaemonStopCommand } from './containerRuntime';
-import { parseLaunchReport } from './launchReport';
 import {
   GatewayBridgeClient,
   GatewayURLClient,
@@ -39,7 +29,14 @@ import {
 import { gatewayEnvAppBridgeRouteID } from './gatewaySessionArtifact';
 import { gatewayRecordSSHPasswordRef, type GatewayRecord } from './gatewayStore';
 import type { GatewaySecretStore } from './gatewayTrust';
-import type { DesktopGatewayRuntimeState } from '../shared/desktopGateway';
+import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
+import {
+  ensureManagedGatewayServiceReady,
+  gatewayServiceBinaryPath,
+  probeManagedGatewayServiceStatus,
+  stopManagedGatewayService,
+  type GatewayServiceProgress,
+} from './gatewayServiceHost';
 
 export type GatewayLifecycleSession = Readonly<{
   target_id: string;
@@ -48,13 +45,13 @@ export type GatewayLifecycleSession = Readonly<{
   client: GatewayBridgeClient;
 }>;
 
-export class GatewayRuntimeStartRequiredError extends Error {
-  readonly runtime_state: DesktopGatewayRuntimeState;
+export class GatewayServiceStartRequiredError extends Error {
+  readonly service_state: DesktopGatewayServiceState;
 
-  constructor(runtimeState: DesktopGatewayRuntimeState, message = 'Gateway Runtime must be started before this action can continue.') {
+  constructor(serviceState: DesktopGatewayServiceState, message = 'Gateway service must be started before this action can continue.') {
     super(message);
-    this.name = 'GatewayRuntimeStartRequiredError';
-    this.runtime_state = runtimeState;
+    this.name = 'GatewayServiceStartRequiredError';
+    this.service_state = serviceState;
   }
 }
 
@@ -65,42 +62,42 @@ export class GatewayNotManageableError extends Error {
   }
 }
 
-export class GatewayRuntimeUnavailableError extends Error {
+export class GatewayServiceUnavailableError extends Error {
   constructor(
     readonly code:
-      | 'gateway_runtime_unreachable'
+      | 'gateway_service_unreachable'
       | 'gateway_container_unavailable'
       | 'gateway_bridge_unavailable'
-      | 'gateway_runtime_start_failed',
+      | 'gateway_service_start_failed',
     message: string,
   ) {
     super(message);
-    this.name = 'GatewayRuntimeUnavailableError';
+    this.name = 'GatewayServiceUnavailableError';
   }
 }
 
-export type GatewayRuntimeLifecycleProgress = Readonly<{
+export type GatewayServiceLifecycleProgress = Readonly<{
   phase:
     | 'checking_host'
     | 'checking_container'
-    | 'preparing_runtime_package'
-    | 'installing_runtime'
-    | 'starting_runtime'
+    | 'preparing_gateway_package'
+    | 'installing_gateway'
+    | 'starting_gateway'
     | 'opening_bridge'
-    | 'stopping_runtime'
-    | 'verifying_runtime_stopped'
+    | 'stopping_gateway'
+    | 'verifying_gateway_stopped'
     | 'gateway_ready';
   title: string;
   detail: string;
 }>;
 
 export type GatewayStartPolicy = 'require_ready' | 'start_if_needed';
-export type GatewayLifecycleProgressSink = (progress: GatewayRuntimeLifecycleProgress) => void;
-export type GatewayRuntimeTargetDescriptor = Readonly<{
+export type GatewayLifecycleProgressSink = (progress: GatewayServiceLifecycleProgress) => void;
+export type GatewayServiceTargetDescriptor = Readonly<{
   target_id: string;
   host_access: DesktopRuntimeHostAccess;
   placement: DesktopRuntimePlacement;
-  runtime_state_root: string;
+  service_state_root: string;
 }>;
 
 export type GatewayLifecycleManagerOptions = Readonly<{
@@ -235,83 +232,62 @@ export class GatewayLifecycleManager {
     return session.client;
   }
 
-  async inspectRuntime(record: GatewayRecord, signal?: AbortSignal): Promise<DesktopGatewayRuntimeState> {
+  async inspectService(record: GatewayRecord, signal?: AbortSignal): Promise<DesktopGatewayServiceState> {
     if (record.connection.kind === 'url') {
-      return notApplicableRuntimeState();
+      return notApplicableServiceState();
     }
     const targetID = gatewayLifecycleTargetID(record);
     if (this.sessions.has(targetID)) {
-      return manageableRuntimeState(record, 'ready', {
-        runtimeTargetID: targetID,
-        runtimeStateRoot: gatewayRuntimeStateRoot(record),
+      return manageableServiceState(record, 'ready', {
+        serviceTargetID: targetID,
+        serviceStateRoot: gatewayServiceStateRoot(record),
         message: 'Gateway bridge is ready.',
       });
     }
     const sshPassword = await this.gatewaySSHPassword(record);
-    if (record.connection.kind === 'ssh_host') {
-      const probe = await probeManagedSSHRuntimeStatus({
+    try {
+      const probe = await probeManagedGatewayServiceStatus({
         target: gatewaySSHDetails(record),
-        runtimeReleaseTag: this.options.runtime_release_tag,
-        runtimeStateRoot: gatewayRuntimeStateRoot(record),
+        placement: gatewayPlacement(record),
+        stateRoot: gatewayServiceStateRoot(record),
+        releaseTag: this.options.runtime_release_tag,
+        releaseBaseURL: this.options.release_base_url,
+        assetCacheRoot: this.options.asset_cache_root,
+        sourceRuntimeRoot: this.options.source_runtime_root,
         sshPassword,
         tempRoot: this.options.temp_root,
-        connectTimeoutSeconds: record.connection.connect_timeout_seconds,
         signal,
       });
-      if (probe.status === 'ready') {
-        return manageableRuntimeState(record, 'ready', {
-          runtimeTargetID: targetID,
-          runtimeStateRoot: gatewayRuntimeStateRoot(record),
-          message: 'Gateway Runtime is running.',
+      if (probe.status === 'running') {
+        return manageableServiceState(record, 'ready', {
+          serviceTargetID: targetID,
+          serviceStateRoot: probe.state_root,
+          message: 'Gateway service is running.',
         });
       }
       if (probe.status === 'not_running') {
-        return manageableRuntimeState(record, 'not_started', {
-          runtimeTargetID: targetID,
-          runtimeStateRoot: gatewayRuntimeStateRoot(record),
+        return manageableServiceState(record, 'not_started', {
+          serviceTargetID: targetID,
+          serviceStateRoot: probe.state_root,
           message: probe.message,
         });
       }
-      if (probe.status === 'failed') {
-        return manageableRuntimeState(record, 'ssh_unreachable', {
-          runtimeTargetID: targetID,
-          runtimeStateRoot: gatewayRuntimeStateRoot(record),
+      if (probe.status === 'needs_update') {
+        return manageableServiceState(record, 'service_needs_update', {
+          serviceTargetID: targetID,
+          serviceStateRoot: probe.state_root,
           message: probe.message,
         });
       }
-      return manageableRuntimeState(record, 'runtime_needs_update', {
-        runtimeTargetID: targetID,
-        runtimeStateRoot: gatewayRuntimeStateRoot(record),
-        message: probe.report.message,
+      return manageableServiceState(record, 'error', {
+        serviceTargetID: targetID,
+        serviceStateRoot: probe.state_root,
+        message: probe.message,
       });
-    }
-    try {
-      const hostAccess = gatewayHostAccess(record) as Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'ssh_host' }>>;
-      const placement = gatewayPlacement(record) as Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
-      const executor = createSSHRuntimeHostExecutor(hostAccess.ssh, { sshPassword });
-      const statusResult = await executor.run(containerRuntimeDaemonStatusCommand({
-        engine: placement.container_engine,
-        container_id: placement.container_id,
-        runtime_root: placement.runtime_root,
-        runtime_state_root: gatewayRuntimeStateRoot(record),
-        runtime_binary_path: gatewayContainerRuntimeBinaryPath(placement.runtime_root),
-      }), { signal });
-      const report = parseLaunchReport(statusResult.stdout);
-      return report.status === 'blocked'
-        ? manageableRuntimeState(record, 'not_started', {
-            runtimeTargetID: targetID,
-            runtimeStateRoot: gatewayRuntimeStateRoot(record),
-            message: report.message,
-          })
-        : manageableRuntimeState(record, 'ready', {
-            runtimeTargetID: targetID,
-            runtimeStateRoot: gatewayRuntimeStateRoot(record),
-            message: 'Gateway Runtime is running.',
-          });
     } catch (error) {
-      return manageableRuntimeState(record, 'container_unavailable', {
-        runtimeTargetID: targetID,
-        runtimeStateRoot: gatewayRuntimeStateRoot(record),
+      return manageableServiceState(record, record.connection.kind === 'ssh_container' ? 'container_unavailable' : 'ssh_unreachable', {
+        serviceTargetID: targetID,
+        serviceStateRoot: gatewayServiceStateRoot(record),
         message: error instanceof Error ? error.message : String(error),
       });
     }
@@ -333,32 +309,32 @@ export class GatewayLifecycleManager {
     if (options.startPolicy === 'start_if_needed') {
       return this.startGateway(record, options);
     }
-    const runtimeState = await this.inspectRuntime(record, options.signal);
-    if (runtimeState.status === 'ready') {
-      return this.openBridgeSession(record, gatewayRuntimeBinaryPath(record), {
+    const serviceState = await this.inspectService(record, options.signal);
+    if (serviceState.status === 'ready') {
+      return this.openBridgeSession(record, gatewayServiceBinaryPath(gatewayPlacement(record)), {
         signal: options.signal,
         onProgress: options.onProgress,
       });
     }
-    if (runtimeState.status === 'ssh_unreachable') {
-      throw new GatewayRuntimeUnavailableError(
-        'gateway_runtime_unreachable',
-        runtimeState.message ?? 'Gateway SSH host is unreachable.',
+    if (serviceState.status === 'ssh_unreachable') {
+      throw new GatewayServiceUnavailableError(
+        'gateway_service_unreachable',
+        serviceState.message ?? 'Gateway SSH host is unreachable.',
       );
     }
-    if (runtimeState.status === 'container_unavailable') {
-      throw new GatewayRuntimeUnavailableError(
+    if (serviceState.status === 'container_unavailable') {
+      throw new GatewayServiceUnavailableError(
         'gateway_container_unavailable',
-        runtimeState.message ?? 'Gateway container is unavailable.',
+        serviceState.message ?? 'Gateway container is unavailable.',
       );
     }
-    if (runtimeState.status === 'bridge_unavailable' || runtimeState.status === 'error') {
-      throw new GatewayRuntimeUnavailableError(
+    if (serviceState.status === 'bridge_unavailable' || serviceState.status === 'error') {
+      throw new GatewayServiceUnavailableError(
         'gateway_bridge_unavailable',
-        runtimeState.message ?? 'Gateway bridge is unavailable.',
+        serviceState.message ?? 'Gateway bridge is unavailable.',
       );
     }
-    throw new GatewayRuntimeStartRequiredError(runtimeState);
+    throw new GatewayServiceStartRequiredError(serviceState);
   }
 
   async startGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayLifecycleSession> {
@@ -379,36 +355,19 @@ export class GatewayLifecycleManager {
     }
     await this.clear(record);
     const sshPassword = await this.gatewaySSHPassword(record);
-    if (record.connection.kind === 'ssh_host') {
-      this.emit(options.onProgress, 'checking_host', 'Checking SSH Gateway host', 'Desktop is checking the SSH host before stopping the Gateway runtime.');
-      const target = gatewaySSHDetails(record);
-      const probe = await probeManagedSSHRuntimeStatus({
-        target,
-        runtimeReleaseTag: this.options.runtime_release_tag,
-        runtimeStateRoot: gatewayRuntimeStateRoot(record),
-        sshPassword,
-        tempRoot: this.options.temp_root,
-        connectTimeoutSeconds: record.connection.connect_timeout_seconds,
-        signal: options.signal,
-      });
-      if (probe.status !== 'ready') {
-        this.emit(options.onProgress, 'gateway_ready', 'Gateway already stopped', 'Desktop did not find a running Gateway runtime.');
-        return;
-      }
-      const pid = Number(probe.startup.pid ?? Number.NaN);
-      this.emit(options.onProgress, 'stopping_runtime', 'Stopping Gateway runtime', 'Desktop is stopping the Gateway runtime process.');
-      await stopManagedSSHRuntimeProcess({
-        target,
-        pid,
-        sshPassword,
-        tempRoot: this.options.temp_root,
-        connectTimeoutSeconds: record.connection.connect_timeout_seconds,
-        signal: options.signal,
-      });
-      await this.assertSSHGatewayStopped(record, sshPassword, options);
-      return;
-    }
-    await this.stopContainerGateway(record, sshPassword, options);
+    await stopManagedGatewayService({
+      target: gatewaySSHDetails(record),
+      placement: gatewayPlacement(record),
+      stateRoot: gatewayServiceStateRoot(record),
+      releaseTag: this.options.runtime_release_tag,
+      releaseBaseURL: this.options.release_base_url,
+      assetCacheRoot: this.options.asset_cache_root,
+      sourceRuntimeRoot: this.options.source_runtime_root,
+      sshPassword,
+      tempRoot: this.options.temp_root,
+      signal: options.signal,
+      onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
+    });
   }
 
   async restartGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayLifecycleSession> {
@@ -421,14 +380,13 @@ export class GatewayLifecycleManager {
       throw new GatewayNotManageableError();
     }
     await this.clear(record);
-    const hostAccess = gatewayHostAccess(record);
     const placement = gatewayPlacement(record);
     const sshPassword = await this.gatewaySSHPassword(record);
-    const runtimeBinaryPath = await this.ensureRuntimeReady(record, hostAccess, placement, sshPassword, options.signal, {
-      forceRuntimeUpdate: true,
+    const gatewayBinaryPath = await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
+      forceUpdate: true,
       onProgress: options.onProgress,
     });
-    return this.openBridgeSession(record, runtimeBinaryPath, {
+    return this.openBridgeSession(record, gatewayBinaryPath, {
       signal: options.signal,
       onProgress: options.onProgress,
     });
@@ -453,13 +411,12 @@ export class GatewayLifecycleManager {
       return pending;
     }
     const task = (async () => {
-      const hostAccess = gatewayHostAccess(record);
       const placement = gatewayPlacement(record);
       const sshPassword = await this.gatewaySSHPassword(record);
-      const runtimeBinaryPath = await this.ensureRuntimeReady(record, hostAccess, placement, sshPassword, options.signal, {
+      const gatewayBinaryPath = await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
         onProgress: options.onProgress,
       });
-      return this.openBridgeSession(record, runtimeBinaryPath, options);
+      return this.openBridgeSession(record, gatewayBinaryPath, options);
     })().finally(() => {
       if (this.pendingStartTasks.get(targetID) === task) {
         this.pendingStartTasks.delete(targetID);
@@ -471,7 +428,7 @@ export class GatewayLifecycleManager {
 
   private async openBridgeSession(
     record: GatewayRecord,
-    runtimeBinaryPath: string,
+    gatewayBinaryPath: string,
     options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {},
   ): Promise<GatewayLifecycleSession> {
     const targetID = gatewayLifecycleTargetID(record);
@@ -482,20 +439,22 @@ export class GatewayLifecycleManager {
     const hostAccess = gatewayHostAccess(record);
     const placement = gatewayPlacement(record);
     const sshPassword = await this.gatewaySSHPassword(record);
-    this.emit(options.onProgress, 'opening_bridge', 'Opening Gateway bridge', 'Desktop is opening the Gateway protocol stream through the existing runtime placement bridge.');
+    this.emit(options.onProgress, 'opening_bridge', 'Opening Gateway bridge', 'Desktop is opening the Gateway protocol stream through the managed Gateway service.');
     let bridgeSession: RuntimePlacementBridgeSession;
     try {
       bridgeSession = await startRuntimePlacementBridgeSession({
         host_access: hostAccess,
         placement,
-        runtime_binary_path: runtimeBinaryPath,
+        runtime_binary_path: gatewayBinaryPath,
+        bridge_command_kind: 'gateway',
+        require_local_ui: false,
         desktop_owner_id: await this.options.desktop_owner_id(),
         ssh_password: sshPassword,
         fallback_local_id: record.gateway_id,
         signal: options.signal,
       });
     } catch (error) {
-      throw new GatewayRuntimeUnavailableError(
+      throw new GatewayServiceUnavailableError(
         'gateway_bridge_unavailable',
         error instanceof Error ? error.message : String(error),
       );
@@ -511,73 +470,34 @@ export class GatewayLifecycleManager {
     return session;
   }
 
-  private async ensureRuntimeReady(
+  private async ensureServiceReady(
     record: GatewayRecord,
-    hostAccess: DesktopRuntimeHostAccess,
     placement: DesktopRuntimePlacement,
     sshPassword: string,
     signal?: AbortSignal,
-    options: Readonly<{ forceRuntimeUpdate?: boolean; onProgress?: GatewayLifecycleProgressSink }> = {},
+    options: Readonly<{ forceUpdate?: boolean; onProgress?: GatewayLifecycleProgressSink }> = {},
   ): Promise<string> {
-    if (record.connection.kind === 'ssh_host') {
-      this.emit(options.onProgress, 'checking_host', 'Checking SSH Gateway host', 'Desktop is checking the SSH host and installing the Gateway runtime when needed.');
-      const target = gatewaySSHDetails(record);
-      try {
-        await ensureManagedSSHRuntimeReady({
-          target,
-          runtimeStateRoot: gatewayRuntimeStateRoot(record),
-          runtimeReleaseTag: this.options.runtime_release_tag,
-          tempRoot: this.options.temp_root,
-          assetCacheRoot: this.options.asset_cache_root,
-          sourceRuntimeRoot: this.options.source_runtime_root,
-          sshPassword,
-          forceRuntimeUpdate: options.forceRuntimeUpdate === true,
-          desktopOwnerID: await this.options.desktop_owner_id(),
-          signal,
-        });
-      } catch (error) {
-        throw new GatewayRuntimeUnavailableError(
-          'gateway_runtime_start_failed',
-          error instanceof Error ? error.message : String(error),
-        );
-      }
-      return gatewayManagedSSHRuntimeBinaryPath(target);
-    }
-    this.emit(options.onProgress, 'checking_container', 'Checking Gateway container', 'Desktop is checking the selected running container through the SSH host.');
-    let ready;
     try {
-      ready = await ensureRuntimePlacementReady({
-        host_access: hostAccess,
+      return await ensureManagedGatewayServiceReady({
+        target: gatewaySSHDetails(record),
         placement,
-        ssh_password: sshPassword,
-        runtime_release_tag: this.options.runtime_release_tag,
-        release_base_url: this.options.release_base_url,
-        source_runtime_root: this.options.source_runtime_root,
-        asset_cache_root: this.options.asset_cache_root,
-        force_runtime_update: options.forceRuntimeUpdate === true,
-        timeout_ms: 45_000,
-        desktop_owner_id: await this.options.desktop_owner_id(),
+        stateRoot: gatewayServiceStateRoot(record),
+        releaseTag: this.options.runtime_release_tag,
+        releaseBaseURL: this.options.release_base_url,
+        assetCacheRoot: this.options.asset_cache_root,
+        sourceRuntimeRoot: this.options.source_runtime_root,
+        sshPassword,
+        tempRoot: this.options.temp_root,
+        forceUpdate: options.forceUpdate === true,
         signal,
-        on_progress: (progress) => {
-          const phase = progress.phase === 'checking_container'
-            ? 'checking_container'
-            : progress.phase === 'preparing_runtime_package'
-              ? 'preparing_runtime_package'
-              : progress.phase === 'installing_runtime'
-                ? 'installing_runtime'
-                : progress.phase === 'starting_runtime_daemon' || progress.phase === 'waiting_runtime_daemon'
-                  ? 'starting_runtime'
-                  : 'checking_container';
-          this.emit(options.onProgress, phase, progress.title, progress.detail);
-        },
+        onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
       });
     } catch (error) {
-      throw new GatewayRuntimeUnavailableError(
-        'gateway_container_unavailable',
+      throw new GatewayServiceUnavailableError(
+        record.connection.kind === 'ssh_container' ? 'gateway_container_unavailable' : 'gateway_service_start_failed',
         error instanceof Error ? error.message : String(error),
       );
     }
-    return ready.runtime_binary_path;
   }
 
   private async gatewaySSHPassword(record: GatewayRecord): Promise<string> {
@@ -590,77 +510,27 @@ export class GatewayLifecycleManager {
 
   private emit(
     sink: GatewayLifecycleProgressSink | undefined,
-    phase: GatewayRuntimeLifecycleProgress['phase'],
+    phase: GatewayServiceLifecycleProgress['phase'],
     title: string,
     detail: string,
   ): void {
     (sink ?? this.options.on_progress)?.({ phase, title, detail });
   }
 
-  private async assertSSHGatewayStopped(
-    record: GatewayRecord,
-    sshPassword: string,
-    options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {},
-  ): Promise<void> {
-    this.emit(options.onProgress, 'verifying_runtime_stopped', 'Verifying Gateway stopped', 'Desktop is confirming that the Gateway runtime has stopped.');
-    const probe = await probeManagedSSHRuntimeStatus({
-      target: gatewaySSHDetails(record),
-      runtimeReleaseTag: this.options.runtime_release_tag,
-      runtimeStateRoot: gatewayRuntimeStateRoot(record),
-      sshPassword,
-      tempRoot: this.options.temp_root,
-      connectTimeoutSeconds: record.connection.kind === 'ssh_host'
-        ? record.connection.connect_timeout_seconds
-        : undefined,
-      signal: options.signal,
-    });
-    if (probe.status === 'ready') {
-      throw new Error('Desktop could not stop the Gateway Runtime because it still reports a ready daemon.');
-    }
-  }
-
-  private async stopContainerGateway(
-    record: GatewayRecord,
-    sshPassword: string,
-    options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {},
-  ): Promise<void> {
-    if (record.connection.kind !== 'ssh_container') {
-      return;
-    }
-    this.emit(options.onProgress, 'checking_container', 'Checking Gateway container', 'Desktop is checking the selected container before stopping the Gateway runtime.');
-    const hostAccess = gatewayHostAccess(record) as Extract<DesktopRuntimeHostAccess, Readonly<{ kind: 'ssh_host' }>>;
-    const placement = gatewayPlacement(record) as Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>;
-    const executor = createSSHRuntimeHostExecutor(hostAccess.ssh, { sshPassword });
-    const runtimeBinaryPath = gatewayContainerRuntimeBinaryPath(placement.runtime_root);
-    this.emit(options.onProgress, 'stopping_runtime', 'Stopping Gateway runtime', 'Desktop is stopping the Gateway runtime process in the selected container.');
-    await executor.run(containerRuntimeDaemonStopCommand({
-      engine: placement.container_engine,
-      container_id: placement.container_id,
-      runtime_root: placement.runtime_root,
-      runtime_state_root: gatewayRuntimeStateRoot(record),
-      runtime_binary_path: runtimeBinaryPath,
-    }), { signal: options.signal });
-    this.emit(options.onProgress, 'verifying_runtime_stopped', 'Verifying Gateway stopped', 'Desktop is confirming that the Gateway runtime has stopped.');
-    const statusResult = await executor.run(containerRuntimeDaemonStatusCommand({
-      engine: placement.container_engine,
-      container_id: placement.container_id,
-      runtime_root: placement.runtime_root,
-      runtime_state_root: gatewayRuntimeStateRoot(record),
-      runtime_binary_path: runtimeBinaryPath,
-    }), { signal: options.signal });
-    const report = parseLaunchReport(statusResult.stdout);
-    if (report.status !== 'blocked') {
-      throw new Error('Desktop could not stop the Gateway Runtime because it still reports a ready daemon.');
-    }
+  private emitFromServiceProgress(
+    sink: GatewayLifecycleProgressSink | undefined,
+    progress: GatewayServiceProgress,
+  ): void {
+    this.emit(sink, progress.phase, progress.title, progress.detail);
   }
 }
 
-export function gatewayRuntimeTargetDescriptor(record: GatewayRecord): GatewayRuntimeTargetDescriptor {
+export function gatewayServiceTargetDescriptor(record: GatewayRecord): GatewayServiceTargetDescriptor {
   return {
     target_id: gatewayLifecycleTargetID(record),
     host_access: gatewayHostAccess(record),
     placement: gatewayPlacement(record),
-    runtime_state_root: gatewayRuntimeStateRoot(record),
+    service_state_root: gatewayServiceStateRoot(record),
   };
 }
 
@@ -696,7 +566,7 @@ function gatewayPlacement(record: GatewayRecord): DesktopRuntimePlacement {
     return {
       kind: 'host_process',
       runtime_root: record.connection.runtime_root,
-      runtime_state_root: gatewayRuntimeStateRoot(record),
+      runtime_state_root: gatewayServiceStateRoot(record),
       bootstrap_strategy: record.connection.bootstrap_strategy ?? DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
       release_base_url: record.connection.release_base_url ?? DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
     };
@@ -709,21 +579,22 @@ function gatewayPlacement(record: GatewayRecord): DesktopRuntimePlacement {
       container_ref: record.connection.container_ref ?? record.connection.container_label ?? record.connection.container_id,
       container_label: record.connection.container_label ?? record.connection.container_id,
       runtime_root: record.connection.runtime_root,
-      runtime_state_root: gatewayRuntimeStateRoot(record),
+      runtime_state_root: gatewayServiceStateRoot(record),
       bridge_strategy: 'exec_stream',
     };
   }
   throw new Error('URL Gateways do not use runtime placement.');
 }
 
-function gatewayRuntimeStateRoot(record: GatewayRecord): string {
+function gatewayServiceStateRoot(record: GatewayRecord): string {
   if (record.connection.kind === 'url') {
-    throw new Error('URL Gateways do not use runtime state roots.');
+    throw new Error('URL Gateways do not use service state roots.');
   }
   return desktopSSHRuntimeRootSubpath(
     record.connection.runtime_root,
     DEFAULT_DESKTOP_SSH_GATEWAY_PROFILE_DIR,
     record.gateway_id,
+    'state',
   );
 }
 
@@ -734,33 +605,7 @@ function gatewayLifecycleTargetID(record: GatewayRecord): string {
   return desktopRuntimeTargetID(gatewayHostAccess(record), gatewayPlacement(record), record.gateway_id);
 }
 
-function gatewayRuntimeBinaryPath(record: GatewayRecord): string {
-  if (record.connection.kind === 'ssh_host') {
-    return gatewayManagedSSHRuntimeBinaryPath(gatewaySSHDetails(record));
-  }
-  if (record.connection.kind === 'ssh_container') {
-    return gatewayContainerRuntimeBinaryPath(record.connection.runtime_root);
-  }
-  throw new Error('URL Gateways do not have runtime binaries.');
-}
-
-function gatewayManagedSSHRuntimeBinaryPath(target: DesktopSSHEnvironmentDetails): string {
-  if (target.runtime_root === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT) {
-    return DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
-  }
-  const runtimeRoot = target.runtime_root;
-  return `${runtimeRoot.replace(/\/+$/u, '')}/runtime/managed/bin/redeven`;
-}
-
-function gatewayContainerRuntimeBinaryPath(runtimeRoot: string): string {
-  const cleanRuntimeRoot = String(runtimeRoot ?? '').replace(/\/+$/u, '') || DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
-  if (cleanRuntimeRoot === DEFAULT_DESKTOP_SSH_RUNTIME_ROOT) {
-    return DEFAULT_DESKTOP_SSH_RUNTIME_ROOT;
-  }
-  return `${cleanRuntimeRoot}/runtime/managed/bin/redeven`;
-}
-
-function notApplicableRuntimeState(): DesktopGatewayRuntimeState {
+function notApplicableServiceState(): DesktopGatewayServiceState {
   return {
     status: 'not_applicable',
     can_start: false,
@@ -771,26 +616,26 @@ function notApplicableRuntimeState(): DesktopGatewayRuntimeState {
   };
 }
 
-function manageableRuntimeState(
+function manageableServiceState(
   record: GatewayRecord,
-  status: DesktopGatewayRuntimeState['status'],
+  status: DesktopGatewayServiceState['status'],
   options: Readonly<{
-    runtimeTargetID: string;
-    runtimeStateRoot: string;
+    serviceTargetID: string;
+    serviceStateRoot: string;
     message?: string;
   }>,
-): DesktopGatewayRuntimeState {
+): DesktopGatewayServiceState {
   const canStart = status === 'not_started';
   const isReady = status === 'ready';
   return {
     status,
     can_start: canStart,
     can_stop: isReady,
-    can_restart: isReady || status === 'runtime_needs_update',
-    can_update: record.connection.kind !== 'url' && (isReady || status === 'runtime_needs_update'),
+    can_restart: isReady || status === 'service_needs_update',
+    can_update: record.connection.kind !== 'url' && (isReady || status === 'service_needs_update'),
     can_pair_after_start: record.connection.kind !== 'url' && status !== 'ssh_unreachable' && status !== 'container_unavailable',
-    runtime_target_id: options.runtimeTargetID,
-    runtime_state_root: options.runtimeStateRoot,
+    service_target_id: options.serviceTargetID,
+    service_state_root: options.serviceStateRoot,
     ...(options.message ? { message: options.message } : {}),
     checked_at_unix_ms: Date.now(),
   };

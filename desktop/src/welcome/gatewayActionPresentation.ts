@@ -1,5 +1,5 @@
 import {
-  desktopGatewayCanManageRuntime,
+  desktopGatewayCanManageService,
   desktopGatewayConnectionKindLabel,
   type DesktopGatewaySource,
 } from '../shared/desktopGateway';
@@ -12,10 +12,10 @@ import type {
 import type { GatewaySourceActionModel } from './viewModel';
 
 type GatewayManagedActionKind =
-  | 'start_gateway_runtime'
-  | 'stop_gateway_runtime'
-  | 'restart_gateway_runtime'
-  | 'update_gateway_runtime'
+  | 'start_gateway'
+  | 'stop_gateway'
+  | 'restart_gateway'
+  | 'update_gateway'
   | 'refresh_gateway_status'
   | 'refresh_gateway_catalog'
   | 'pair_gateway';
@@ -82,7 +82,7 @@ function gatewaySourceAction(
   return { intent, label, variant, enabled };
 }
 
-function gatewayRuntimeAction(
+function gatewayServiceAction(
   intent: GatewayManagedActionKind,
   label: string,
   variant: GatewaySourceActionModel['variant'] = 'outline',
@@ -103,11 +103,11 @@ function needsPairing(gateway: DesktopGatewaySource): boolean {
     || gateway.trust_state === 'trust_changed';
 }
 
-function runtimeStatus(gateway: DesktopGatewaySource): string {
-  return gateway.runtime_state?.status ?? (gateway.connection_kind === 'url' ? 'not_applicable' : 'unknown');
+function serviceStatus(gateway: DesktopGatewaySource): string {
+  return gateway.service_state?.status ?? (gateway.connection_kind === 'url' ? 'not_applicable' : 'unknown');
 }
 
-function runtimeStatusLabel(status: string): string {
+function serviceStatusLabel(status: string): string {
   switch (status) {
     case 'not_applicable':
       return 'Access-only';
@@ -121,7 +121,7 @@ function runtimeStatusLabel(status: string): string {
       return 'SSH unreachable';
     case 'container_unavailable':
       return 'Container unavailable';
-    case 'runtime_needs_update':
+    case 'service_needs_update':
       return 'Update required';
     case 'bridge_unavailable':
       return 'Bridge unavailable';
@@ -147,9 +147,9 @@ function trustStateLabel(gateway: DesktopGatewaySource): string {
 }
 
 function defaultFacts(gateway: DesktopGatewaySource): readonly GatewayActionPanelFact[] {
-  const status = runtimeStatus(gateway);
+  const status = serviceStatus(gateway);
   return [
-    { label: 'Runtime', value: runtimeStatusLabel(status), tone: status === 'ready' || status === 'not_applicable' ? 'neutral' : 'warning' },
+    { label: 'Gateway service', value: serviceStatusLabel(status), tone: status === 'ready' || status === 'not_applicable' ? 'neutral' : 'warning' },
     { label: 'Trust', value: trustStateLabel(gateway), tone: gateway.trust_state === 'paired' ? 'neutral' : 'warning' },
     { label: 'Transport', value: desktopGatewayConnectionKindLabel(gateway.connection_kind) },
     { label: 'Endpoint', value: compact(gateway.endpoint_label) || compact(gateway.gateway_url) || gateway.gateway_id },
@@ -183,10 +183,10 @@ function continuationActionFor(
         kind: 'refresh_gateway_status',
         gateway_id: gateway.gateway_id,
       };
-    case 'start_gateway_runtime':
-    case 'stop_gateway_runtime':
-    case 'restart_gateway_runtime':
-    case 'update_gateway_runtime':
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
       return {
         kind: action.intent,
         gateway_id: gateway.gateway_id,
@@ -200,7 +200,7 @@ function resolveFocusForGateway(gateway: DesktopGatewaySource): DesktopGatewayRe
   if (gateway.connection_kind === 'url') {
     return 'url_endpoint';
   }
-  switch (runtimeStatus(gateway)) {
+  switch (serviceStatus(gateway)) {
     case 'ssh_unreachable':
       return 'ssh_host';
     case 'container_unavailable':
@@ -241,9 +241,9 @@ function buildPanel(
 
 function confirmationPanelKind(action: string): GatewayActionPanelKind {
   switch (action) {
-    case 'stop_gateway_runtime':
+    case 'stop_gateway':
       return 'stop_gateway_confirm';
-    case 'restart_gateway_runtime':
+    case 'restart_gateway':
       return 'restart_gateway_confirm';
     default:
       return 'update_gateway_confirm';
@@ -252,16 +252,16 @@ function confirmationPanelKind(action: string): GatewayActionPanelKind {
 
 function actionLabel(action: string): string {
   switch (action) {
-    case 'stop_gateway_runtime':
+    case 'stop_gateway':
       return 'Stop Gateway';
-    case 'restart_gateway_runtime':
+    case 'restart_gateway':
       return 'Restart Gateway';
-    case 'update_gateway_runtime':
+    case 'update_gateway':
       return 'Update Gateway';
     case 'refresh_gateway_status':
       return 'Refresh status';
     case 'refresh_gateway_catalog':
-      return 'Refresh catalog';
+      return 'Refresh';
     case 'pair_gateway':
       return 'Retry sync';
     default:
@@ -273,8 +273,8 @@ export function buildGatewayActionPresentation(
   input: BuildGatewayActionPresentationInput,
 ): GatewayActionPanelModel {
   const { gateway, clicked_action: action } = input;
-  const manageable = desktopGatewayCanManageRuntime(gateway);
-  const status = runtimeStatus(gateway);
+  const manageable = desktopGatewayCanManageService(gateway);
+  const status = serviceStatus(gateway);
   const isPairAction = action.intent === 'pair_gateway';
   const isCatalogRefresh = action.intent === 'refresh_gateway_catalog';
   const pairingNeeded = needsPairing(gateway);
@@ -302,8 +302,16 @@ export function buildGatewayActionPresentation(
       title: input.retained_failure.title || `${actionLabel(action.intent)} failed`,
       detail: input.retained_failure.failure?.summary || input.retained_failure.detail || `Desktop could not complete this Gateway action.`,
       aria_label: 'Gateway action needs attention',
-      primary_action: gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', true),
-      secondary_actions: [gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true)],
+      continuation_action: continuationActionFor(
+        gateway,
+        gatewaySourceAction(needsPairing(gateway) ? 'pair_gateway' : 'refresh_gateway_catalog', 'Retry sync', 'default', true),
+        serviceStatus(gateway) === 'not_started' ? 'start_if_needed' : undefined,
+      ),
+      primary_action: gatewaySourceAction(needsPairing(gateway) ? 'pair_gateway' : 'refresh_gateway_catalog', 'Retry sync', 'default', true),
+      secondary_actions: [
+        gatewayServiceAction('refresh_gateway_status', 'Refresh status', 'outline', true),
+        gatewaySourceAction('manage_gateway', 'Manage', 'outline', true),
+      ],
     });
   }
 
@@ -313,7 +321,7 @@ export function buildGatewayActionPresentation(
       kind: 'none',
       execution_mode: 'direct',
       tone: 'neutral',
-      eyebrow: 'Settings',
+      eyebrow: 'Manage',
       title: 'Manage Gateway',
       detail: 'Review this Gateway configuration.',
       aria_label: 'Manage Gateway',
@@ -340,22 +348,28 @@ export function buildGatewayActionPresentation(
             ? 'Gateway is unreachable'
             : 'Resolve Gateway',
       detail: compact(gateway.last_sync_error_message)
-        || gateway.runtime_state?.message
+        || gateway.service_state?.message
         || gateway.status_message
         || 'Desktop keeps Gateways synced automatically. Review the target or retry sync when the Gateway is reachable.',
       aria_label: 'Resolve Gateway',
       resolve_focus: resolveFocusForGateway(gateway),
-      primary_action: gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', true),
+      continuation_action: continuationActionFor(
+        gateway,
+        gatewaySourceAction(pairingFailure ? 'pair_gateway' : 'refresh_gateway_catalog', 'Retry sync', 'default', true),
+        serviceStatus(gateway) === 'not_started' ? 'start_if_needed' : undefined,
+      ),
+      primary_action: gatewaySourceAction(pairingFailure ? 'pair_gateway' : 'refresh_gateway_catalog', 'Retry sync', 'default', true),
       secondary_actions: [
-        ...(manageable && (runtimeStatus(gateway) === 'not_started' || runtimeStatus(gateway) === 'runtime_needs_update')
-          ? [gatewayRuntimeAction(
-              runtimeStatus(gateway) === 'runtime_needs_update' ? 'update_gateway_runtime' : 'start_gateway_runtime',
-              runtimeStatus(gateway) === 'runtime_needs_update' ? 'Update Gateway' : 'Start Gateway',
+        ...(manageable && (serviceStatus(gateway) === 'not_started' || serviceStatus(gateway) === 'service_needs_update')
+          ? [gatewayServiceAction(
+              serviceStatus(gateway) === 'service_needs_update' ? 'update_gateway' : 'start_gateway',
+              serviceStatus(gateway) === 'service_needs_update' ? 'Update Gateway' : 'Start Gateway',
               'outline',
               true,
             )]
           : []),
-        gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true),
+        gatewayServiceAction('refresh_gateway_status', 'Refresh status', 'outline', true),
+        gatewaySourceAction('manage_gateway', 'Manage', 'outline', true),
       ],
     });
   }
@@ -369,15 +383,15 @@ export function buildGatewayActionPresentation(
       eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
       title: 'Refresh Gateway status',
       detail: manageable
-        ? 'Desktop will check runtime reachability, version, and management state without refreshing the catalog.'
+        ? 'Desktop will check Gateway service reachability, version, and management state without refreshing the catalog.'
         : 'Desktop will check whether this external Gateway endpoint is reachable without changing trust or catalog data.',
       aria_label: 'Refresh Gateway status',
       continuation_action: continuationActionFor(gateway, action),
-      primary_action: gatewayRuntimeAction('refresh_gateway_status', 'Refresh status', 'default', action.enabled),
+      primary_action: gatewayServiceAction('refresh_gateway_status', 'Refresh status', 'default', action.enabled),
     });
   }
 
-  if ((action.intent === 'stop_gateway_runtime' || action.intent === 'restart_gateway_runtime' || action.intent === 'update_gateway_runtime') && manageable) {
+  if ((action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway') && manageable) {
     const label = actionLabel(action.intent);
     const sessions = input.affected_sessions ?? [];
     return buildPanel({
@@ -410,11 +424,11 @@ export function buildGatewayActionPresentation(
       tone: 'primary',
       eyebrow: 'Access-only Gateway',
       title: gateway.trust_state === 'revoked' ? 'Review Gateway identity' : 'Retry Gateway pairing',
-      detail: 'Desktop pairs URL Gateways automatically. Retry sync when the endpoint is reachable; runtime management stays on the Gateway host.',
+      detail: 'Desktop pairs URL Gateways automatically. Retry sync when the endpoint is reachable; Gateway service is managed on the Gateway host.',
       aria_label: 'Pair access-only Gateway',
-      continuation_action: continuationActionFor(gateway, gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled)),
-      primary_action: gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled),
-      secondary_actions: [gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true)],
+      continuation_action: continuationActionFor(gateway, gatewaySourceAction('pair_gateway', 'Retry sync', 'default', action.enabled)),
+      primary_action: gatewaySourceAction('pair_gateway', 'Retry sync', 'default', action.enabled),
+      secondary_actions: [gatewaySourceAction('manage_gateway', 'Manage', 'outline', true)],
     });
   }
 
@@ -426,18 +440,22 @@ export function buildGatewayActionPresentation(
       tone: 'warning',
       eyebrow: 'Managed Gateway',
       title: 'Start Gateway to sync',
-      detail: 'Desktop can start this Gateway runtime, then continue automatic pairing and catalog sync.',
+      detail: 'Desktop can start this Gateway service, then continue automatic pairing and catalog sync.',
       aria_label: 'Start Gateway before syncing catalog',
-      continuation_action: continuationActionFor(gateway, gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled), 'start_if_needed'),
-      primary_action: gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled),
+      continuation_action: continuationActionFor(
+        gateway,
+        gatewaySourceAction(isPairAction ? 'pair_gateway' : 'refresh_gateway_catalog', 'Retry sync', 'default', action.enabled),
+        'start_if_needed',
+      ),
+      primary_action: gatewaySourceAction(isPairAction ? 'pair_gateway' : 'refresh_gateway_catalog', 'Retry sync', 'default', action.enabled),
       secondary_actions: [
-        gatewaySourceAction('start_gateway_runtime', 'Start Gateway', 'outline', gateway.runtime_state?.can_start !== false),
-        gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true),
+        gatewaySourceAction('start_gateway', 'Start Gateway', 'outline', gateway.service_state?.can_start !== false),
+        gatewaySourceAction('manage_gateway', 'Manage', 'outline', true),
       ],
     });
   }
 
-  if (isPairAction && manageable && status === 'runtime_needs_update') {
+  if (isPairAction && manageable && status === 'service_needs_update') {
     return buildPanel({
       gateway,
       kind: 'update_then_pair',
@@ -445,10 +463,10 @@ export function buildGatewayActionPresentation(
       tone: 'warning',
       eyebrow: 'Managed Gateway',
       title: 'Update Gateway before pairing',
-      detail: 'Desktop needs to update this Gateway runtime before it can safely pair and trust the catalog.',
+      detail: 'Desktop needs to update this Gateway service before it can safely pair and trust the catalog.',
       aria_label: 'Update Gateway before pairing',
-      primary_action: gatewaySourceAction('update_gateway_runtime', 'Update Gateway', 'default', gateway.runtime_state?.can_update !== false),
-      secondary_actions: [gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true)],
+      primary_action: gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false),
+      secondary_actions: [gatewaySourceAction('manage_gateway', 'Manage', 'outline', true)],
     });
   }
 
@@ -460,11 +478,11 @@ export function buildGatewayActionPresentation(
       tone: 'warning',
       eyebrow: 'Managed Gateway',
       title: 'Resolve Gateway before pairing',
-      detail: gateway.runtime_state?.message || 'Desktop needs a reachable Gateway runtime before it can pair.',
+      detail: gateway.service_state?.message || 'Desktop needs a reachable Gateway service before it can pair.',
       aria_label: 'Resolve Gateway before pairing',
       resolve_focus: resolveFocusForGateway(gateway),
       primary_action: gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default', true),
-      secondary_actions: [gatewayRuntimeAction('refresh_gateway_status', 'Refresh status', 'outline', true)],
+      secondary_actions: [gatewayServiceAction('refresh_gateway_status', 'Refresh status', 'outline', true)],
     });
   }
 
@@ -478,9 +496,9 @@ export function buildGatewayActionPresentation(
       title: gateway.trust_state === 'revoked' || gateway.trust_state === 'trust_changed' ? 'Review Gateway identity' : 'Retry Gateway pairing',
       detail: 'Desktop normally pairs Gateways automatically. Retry sync to verify the Gateway identity and refresh its environment catalog.',
       aria_label: 'Pair this Gateway',
-      continuation_action: continuationActionFor(gateway, gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled)),
-      primary_action: gatewaySourceAction('refresh_gateway_status', 'Retry sync', 'default', action.enabled),
-      secondary_actions: [gatewaySourceAction('manage_gateway', 'Open settings', 'outline', true)],
+      continuation_action: continuationActionFor(gateway, gatewaySourceAction('pair_gateway', 'Retry sync', 'default', action.enabled)),
+      primary_action: gatewaySourceAction('pair_gateway', 'Retry sync', 'default', action.enabled),
+      secondary_actions: [gatewaySourceAction('manage_gateway', 'Manage', 'outline', true)],
     });
   }
 
@@ -492,11 +510,11 @@ export function buildGatewayActionPresentation(
       tone: 'warning',
       eyebrow: 'Managed Gateway',
       title: 'Gateway needs attention',
-      detail: gateway.runtime_state?.message || 'Desktop needs this Gateway runtime ready before refreshing the catalog.',
+      detail: gateway.service_state?.message || 'Desktop needs this Gateway service ready before refreshing the catalog.',
       aria_label: 'Resolve Gateway before refreshing catalog',
       resolve_focus: resolveFocusForGateway(gateway),
       primary_action: gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default', true),
-      secondary_actions: [gatewayRuntimeAction('refresh_gateway_status', 'Refresh status', 'outline', true)],
+      secondary_actions: [gatewayServiceAction('refresh_gateway_status', 'Refresh status', 'outline', true)],
     });
   }
 

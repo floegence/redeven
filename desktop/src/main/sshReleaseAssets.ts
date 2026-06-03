@@ -7,6 +7,8 @@ import { verifyDesktopSSHReleaseManifestSignature } from './sshReleaseTrust';
 export const PUBLIC_REDEVEN_RELEASE_BASE_URL = 'https://github.com/floegence/redeven/releases';
 export const DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS = 30_000;
 
+export type DesktopSSHReleasePackageKind = 'runtime' | 'gateway';
+
 export type DesktopSSHRemotePlatform = Readonly<{
   goos: 'linux' | 'darwin';
   goarch: 'amd64' | 'arm64' | 'arm' | '386';
@@ -55,6 +57,8 @@ type EnsureDesktopSSHVerifiedReleaseManifestArgs = Readonly<{
 type EnsureDesktopSSHReleaseArchiveArgs = Readonly<{
   manifest: DesktopSSHVerifiedReleaseManifest;
   platform: DesktopSSHRemotePlatform;
+  packageKind?: DesktopSSHReleasePackageKind;
+  packageName?: string;
   cacheRoot: string;
   fetchPolicy?: DesktopSSHReleaseFetchPolicy;
 }>;
@@ -116,6 +120,14 @@ export function resolveDesktopSSHRemotePlatform(rawOS: string, rawArch: string):
     release_package_name: `redeven_${goos}_${goarch}.tar.gz`,
     platform_label: `${goos}/${goarch}`,
   };
+}
+
+export function desktopSSHReleasePackageName(
+  platform: Pick<DesktopSSHRemotePlatform, 'goos' | 'goarch'>,
+  packageKind: DesktopSSHReleasePackageKind = 'runtime',
+): string {
+  const prefix = packageKind === 'gateway' ? 'redeven-gateway' : 'redeven';
+  return `${prefix}_${platform.goos}_${platform.goarch}.tar.gz`;
 }
 
 export function buildDesktopSSHReleaseAssetURL(
@@ -366,26 +378,28 @@ export async function ensureDesktopSSHVerifiedReleaseManifest(
 export async function ensureDesktopSSHReleaseArchive(
   args: EnsureDesktopSSHReleaseArchiveArgs,
 ): Promise<DesktopSSHResolvedReleaseAsset> {
+  const packageName = compact(args.packageName)
+    || desktopSSHReleasePackageName(args.platform, args.packageKind ?? 'runtime');
   const cacheDir = path.join(
     args.cacheRoot,
     args.manifest.source_cache_key,
     args.manifest.release_tag,
     args.platform.platform_id,
   );
-  const archivePath = path.join(cacheDir, args.platform.release_package_name);
+  const archivePath = path.join(cacheDir, packageName);
 
   await fs.mkdir(cacheDir, { recursive: true });
 
-  const sha256 = args.manifest.sha256_by_asset_name.get(args.platform.release_package_name);
+  const sha256 = args.manifest.sha256_by_asset_name.get(packageName);
   if (!sha256) {
-    throw new Error(`SHA256SUMS did not include ${args.platform.release_package_name}.`);
+    throw new Error(`SHA256SUMS did not include ${packageName}.`);
   }
 
   try {
     await verifyDesktopSSHReleaseAsset(archivePath, sha256);
   } catch {
     await downloadURLToPath(
-      buildDesktopSSHReleaseAssetURL(args.manifest.release_base_url, args.manifest.release_tag, args.platform.release_package_name),
+      buildDesktopSSHReleaseAssetURL(args.manifest.release_base_url, args.manifest.release_tag, packageName),
       archivePath,
       args.fetchPolicy,
     );

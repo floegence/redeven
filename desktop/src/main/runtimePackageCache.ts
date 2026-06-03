@@ -8,10 +8,12 @@ import { gzipSync } from 'node:zlib';
 import {
   DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS,
   buildDesktopSSHReleaseSourceCacheKey,
+  desktopSSHReleasePackageName,
   ensureDesktopSSHReleaseArchive,
   ensureDesktopSSHVerifiedReleaseManifest,
   verifyDesktopSSHReleaseAsset,
   type DesktopSSHReleaseFetchPolicy,
+  type DesktopSSHReleasePackageKind,
   type DesktopSSHRemotePlatform,
   type DesktopSSHVerifiedReleaseManifest,
 } from './sshReleaseAssets';
@@ -21,6 +23,7 @@ import {
 } from './desktopOperationFailure';
 
 export type DesktopRuntimePackageCacheKey = Readonly<{
+  package_kind: DesktopSSHReleasePackageKind;
   release_tag: string;
   release_base_url: string;
   source_cache_key: string;
@@ -56,6 +59,7 @@ type LocalCommandResult = Readonly<{
 
 type DesktopSourceRuntimePackageCacheEntry = Readonly<{
   source_root: string;
+  package_kind: DesktopSSHReleasePackageKind;
   runtime_release_tag: string;
   platform_id: string;
   archive_data: Buffer;
@@ -93,16 +97,21 @@ function releaseManifestInFlightKey(sourceCacheKey: string, releaseTag: string):
   return `manifest:${sourceCacheKey}:${releaseTag}`;
 }
 
-function releaseAssetInFlightKey(sourceCacheKey: string, releaseTag: string, platformID: string): string {
-  return `asset:${sourceCacheKey}:${releaseTag}:${platformID}`;
+function releaseAssetInFlightKey(sourceCacheKey: string, releaseTag: string, platformID: string, packageKind: DesktopSSHReleasePackageKind): string {
+  return `asset:${sourceCacheKey}:${releaseTag}:${platformID}:${packageKind}`;
 }
 
 function normalizeSourceRuntimeRoot(sourceRoot: string): string {
   return path.resolve(compact(sourceRoot));
 }
 
-function sourceRuntimeAssetCacheKey(sourceRoot: string, releaseTag: string, platformID: string): string {
-  return `source:${sourceRoot}:${releaseTag}:${platformID}`;
+function sourceRuntimeAssetCacheKey(
+  sourceRoot: string,
+  releaseTag: string,
+  platformID: string,
+  packageKind: DesktopSSHReleasePackageKind,
+): string {
+  return `source:${sourceRoot}:${releaseTag}:${platformID}:${packageKind}`;
 }
 
 const sourceRuntimeCopyExcludedSubtrees = [
@@ -305,46 +314,50 @@ async function copySourceRuntimeRoot(
 function runtimePackagePreparationFailure(
   error: unknown,
   platform: DesktopSSHRemotePlatform,
+  packageKind: DesktopSSHReleasePackageKind,
 ): Error {
   if (error instanceof DesktopOperationFailureError) {
     return error;
   }
   const message = error instanceof Error ? error.message : String(error);
+  const isGateway = packageKind === 'gateway';
   return new DesktopOperationFailureError(desktopOperationFailurePresentation({
-    code: 'container_runtime_launch_failed',
-    title: 'Runtime package preparation failed',
-    summary: `Desktop could not prepare the ${platform.platform_label} Redeven runtime package.`,
-    detail: 'The local source runtime build failed before Desktop could upload the runtime package.',
-    recoveryHint: 'Run the Redeven asset build and runtime build locally, then retry the runtime lifecycle action.',
+    code: isGateway ? 'gateway_package_prepare_failed' : 'container_runtime_launch_failed',
+    title: isGateway ? 'Gateway package preparation failed' : 'Runtime package preparation failed',
+    summary: `Desktop could not prepare the ${platform.platform_label} ${isGateway ? 'Redeven Gateway' : 'Redeven runtime'} package.`,
+    detail: `The local source ${isGateway ? 'Gateway' : 'runtime'} build failed before Desktop could upload the ${isGateway ? 'Gateway' : 'runtime'} package.`,
+    recoveryHint: `Run the Redeven asset build and ${isGateway ? 'Gateway' : 'runtime'} build locally, then retry the ${isGateway ? 'Gateway service' : 'runtime lifecycle'} action.`,
     diagnostics: [{
-      channel: 'runtime_package_build',
+      channel: isGateway ? 'gateway_package_build' : 'runtime_package_build',
       label: 'Build output',
       text: message,
     }],
   }), {
     cause: error,
-    runtimeLifecycleStepID: 'preparing_runtime_package',
+    runtimeLifecycleStepID: isGateway ? 'preparing_gateway_package' : 'preparing_runtime_package',
   });
 }
 
 async function prepareSourceRuntimeUploadAsset(args: Readonly<{
   sourceRuntimeRoot: string;
   runtimeReleaseTag: string;
+  packageKind: DesktopSSHReleasePackageKind;
   platform: DesktopSSHRemotePlatform;
   signal?: AbortSignal;
 }>): Promise<DesktopRuntimeUploadAsset> {
   throwIfCanceled(args.signal);
   const sourceRoot = args.sourceRuntimeRoot;
-  const commandRoot = path.join(sourceRoot, 'cmd', 'redeven');
+  const commandName = args.packageKind === 'gateway' ? 'redeven-gateway' : 'redeven';
+  const commandRoot = path.join(sourceRoot, 'cmd', commandName);
   const commandRootStat = await fs.stat(commandRoot).catch(() => null);
   if (!commandRootStat?.isDirectory()) {
-    throw new Error(`Desktop runtime source root is not a Redeven checkout: ${sourceRoot}`);
+    throw new Error(`Desktop ${args.packageKind} source root is not a Redeven checkout: ${sourceRoot}`);
   }
 
-  const buildRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-source-runtime-'));
+  const buildRoot = await fs.mkdtemp(path.join(os.tmpdir(), `redeven-source-${args.packageKind}-`));
   try {
     const buildSourceRoot = await copySourceRuntimeRoot(sourceRoot, buildRoot, args.signal);
-    const binaryPath = path.join(buildRoot, 'redeven');
+    const binaryPath = path.join(buildRoot, commandName);
     const buildTime = compact(process.env.REDEVEN_DESKTOP_BUNDLE_BUILD_TIME)
       || new Date().toISOString().replace(/\.\d{3}Z$/u, 'Z');
     const commit = await readSourceRuntimeCommit(sourceRoot, args.signal);
@@ -356,7 +369,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
       `-s -w -X main.Version=${args.runtimeReleaseTag} -X main.Commit=${commit} -X main.BuildTime=${buildTime}`,
       '-o',
       binaryPath,
-      './cmd/redeven',
+      `./cmd/${commandName}`,
     ], {
       cwd: buildSourceRoot,
       env: {
@@ -368,7 +381,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
     });
     throwIfCanceled(args.signal);
     return {
-      archiveData: createSingleFileTarGzip('redeven', await fs.readFile(binaryPath), 0o755),
+      archiveData: createSingleFileTarGzip(commandName, await fs.readFile(binaryPath), 0o755),
       cacheEntry: null,
       source: 'source_build',
     };
@@ -380,6 +393,7 @@ async function prepareSourceRuntimeUploadAsset(args: Readonly<{
 async function ensureSourceRuntimeUploadAsset(args: Readonly<{
   sourceRuntimeRoot: string;
   runtimeReleaseTag: string;
+  packageKind: DesktopSSHReleasePackageKind;
   platform: DesktopSSHRemotePlatform;
   signal?: AbortSignal;
 }>): Promise<DesktopRuntimeUploadAsset | null> {
@@ -389,7 +403,7 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
     return null;
   }
   const sourceRoot = normalizeSourceRuntimeRoot(requestedSourceRoot);
-  const key = sourceRuntimeAssetCacheKey(sourceRoot, args.runtimeReleaseTag, args.platform.platform_id);
+  const key = sourceRuntimeAssetCacheKey(sourceRoot, args.runtimeReleaseTag, args.platform.platform_id, args.packageKind);
   const cached = sourceRuntimePackageCache.get(key);
   if (cached) {
     return {
@@ -403,11 +417,13 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
     const built = await prepareSourceRuntimeUploadAsset({
       sourceRuntimeRoot: sourceRoot,
       runtimeReleaseTag: args.runtimeReleaseTag,
+      packageKind: args.packageKind,
       platform: args.platform,
       signal: args.signal,
     });
     sourceRuntimePackageCache.set(key, {
       source_root: sourceRoot,
+      package_kind: args.packageKind,
       runtime_release_tag: args.runtimeReleaseTag,
       platform_id: args.platform.platform_id,
       archive_data: Buffer.from(built.archiveData),
@@ -418,7 +434,7 @@ async function ensureSourceRuntimeUploadAsset(args: Readonly<{
 
 function isRuntimePackageCacheTemporaryName(name: string): boolean {
   return name.startsWith('source-runtime-')
-    || /^\.redeven_.*\.tar\.gz\.\d+\.[a-f0-9]+\.tmp$/u.test(name)
+    || /^\.redeven(?:-gateway)?_.*\.tar\.gz\.\d+\.[a-f0-9]+\.tmp$/u.test(name)
     || name.endsWith('.download.tmp');
 }
 
@@ -515,36 +531,40 @@ async function ensureReleaseManifest(args: Readonly<{
 async function ensureReleaseAssetEntry(args: Readonly<{
   manifest: DesktopSSHVerifiedReleaseManifest;
   platform: DesktopSSHRemotePlatform;
+  packageKind: DesktopSSHReleasePackageKind;
   cacheRoot: string;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
 }>): Promise<DesktopRuntimePackageCacheEntry> {
+  const packageName = desktopSSHReleasePackageName(args.platform, args.packageKind);
   const key = releaseAssetInFlightKey(
     args.manifest.source_cache_key,
     args.manifest.release_tag,
     args.platform.platform_id,
+    args.packageKind,
   );
   return onceInFlight(inFlightReleaseAssets, key, async () => {
-    const sha256 = args.manifest.sha256_by_asset_name.get(args.platform.release_package_name);
+    const sha256 = args.manifest.sha256_by_asset_name.get(packageName);
     if (!sha256) {
-      throw new Error(`SHA256SUMS did not include ${args.platform.release_package_name}.`);
+      throw new Error(`SHA256SUMS did not include ${packageName}.`);
     }
     const archivePath = path.join(
       args.cacheRoot,
       args.manifest.source_cache_key,
       args.manifest.release_tag,
       args.platform.platform_id,
-      args.platform.release_package_name,
+      packageName,
     );
 
     try {
       await verifyDesktopSSHReleaseAsset(archivePath, sha256);
       return {
         key: {
+          package_kind: args.packageKind,
           release_tag: args.manifest.release_tag,
           release_base_url: args.manifest.release_base_url,
           source_cache_key: args.manifest.source_cache_key,
           platform_id: args.platform.platform_id,
-          package_name: args.platform.release_package_name,
+          package_name: packageName,
         },
         archive_path: archivePath,
         sha256,
@@ -555,16 +575,19 @@ async function ensureReleaseAssetEntry(args: Readonly<{
       const asset = await ensureDesktopSSHReleaseArchive({
         manifest: args.manifest,
         platform: args.platform,
+        packageKind: args.packageKind,
+        packageName,
         cacheRoot: args.cacheRoot,
         fetchPolicy: args.fetchPolicy,
       });
       return {
         key: {
+          package_kind: args.packageKind,
           release_tag: asset.release_tag,
           release_base_url: asset.release_base_url,
           source_cache_key: asset.source_cache_key,
           platform_id: asset.platform.platform_id,
-          package_name: asset.platform.release_package_name,
+          package_name: packageName,
         },
         archive_path: asset.archive_path,
         sha256: asset.sha256,
@@ -579,11 +602,13 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
   runtimeReleaseTag: string;
   releaseBaseURL: string;
   assetCacheRoot: string;
+  packageKind?: DesktopSSHReleasePackageKind;
   sourceRuntimeRoot?: string;
   platform: DesktopSSHRemotePlatform;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
   signal?: AbortSignal;
 }>): Promise<DesktopRuntimeUploadAsset> {
+  const packageKind = args.packageKind ?? 'runtime';
   try {
     throwIfCanceled(args.signal);
     const runtimeReleaseTag = normalizeRuntimeReleaseTag(args.runtimeReleaseTag);
@@ -596,6 +621,7 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
     const sourceAsset = await ensureSourceRuntimeUploadAsset({
       sourceRuntimeRoot: args.sourceRuntimeRoot ?? '',
       runtimeReleaseTag,
+      packageKind,
       platform: args.platform,
       signal: args.signal,
     });
@@ -616,6 +642,7 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
     const cacheEntry = await ensureReleaseAssetEntry({
       manifest,
       platform: args.platform,
+      packageKind,
       cacheRoot: args.assetCacheRoot,
       fetchPolicy,
     });
@@ -626,22 +653,23 @@ export async function prepareDesktopRuntimeUploadAsset(args: Readonly<{
     };
   } catch (error) {
     if (compact(args.sourceRuntimeRoot) !== '') {
-      throw runtimePackagePreparationFailure(error, args.platform);
+      throw runtimePackagePreparationFailure(error, args.platform, packageKind);
     }
+    const isGateway = packageKind === 'gateway';
     throw new DesktopOperationFailureError(desktopOperationFailurePresentation({
-      code: 'container_runtime_launch_failed',
-      title: 'Runtime package preparation failed',
-      summary: `Desktop could not prepare the ${args.platform.platform_label} Redeven runtime package.`,
-      detail: 'Desktop could not resolve a verified runtime release archive for the target platform.',
-      recoveryHint: 'Check network access to the Redeven release source and retry the runtime lifecycle action.',
+      code: isGateway ? 'gateway_package_prepare_failed' : 'container_runtime_launch_failed',
+      title: isGateway ? 'Gateway package preparation failed' : 'Runtime package preparation failed',
+      summary: `Desktop could not prepare the ${args.platform.platform_label} ${isGateway ? 'Redeven Gateway' : 'Redeven runtime'} package.`,
+      detail: `Desktop could not resolve a verified ${isGateway ? 'Gateway' : 'runtime'} release archive for the target platform.`,
+      recoveryHint: `Check network access to the Redeven release source and retry the ${isGateway ? 'Gateway service' : 'runtime lifecycle'} action.`,
       diagnostics: [{
-        channel: 'runtime_package_cache',
+        channel: isGateway ? 'gateway_package_cache' : 'runtime_package_cache',
         label: 'Package preparation output',
         text: error instanceof Error ? error.message : String(error),
       }],
     }), {
       cause: error,
-      runtimeLifecycleStepID: 'preparing_runtime_package',
+      runtimeLifecycleStepID: isGateway ? 'preparing_gateway_package' : 'preparing_runtime_package',
     });
   }
 }

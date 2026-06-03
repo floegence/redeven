@@ -90,6 +90,11 @@ func TestCatalogNormalization(t *testing.T) {
 			Capabilities: []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityStop, EnvironmentCapabilityTerminal},
 			Profile:      &EnvironmentProfile{Managed: true},
 		},
+		{
+			GatewayEnvID: ReservedLocalEnvironmentID,
+			DisplayName:  "Default Host Env",
+			Capabilities: []EnvironmentCapability{EnvironmentCapabilityOpen},
+		},
 		{GatewayEnvID: " "},
 	})
 
@@ -103,7 +108,7 @@ func TestCatalogNormalization(t *testing.T) {
 		t.Fatalf("Gateway capabilities = %#v", got)
 	}
 	if len(resp.Environments) != 2 {
-		t.Fatalf("Environments length = %d, want 2", len(resp.Environments))
+		t.Fatalf("Environments length = %d, want 2 after reserved env filter", len(resp.Environments))
 	}
 	env := resp.Environments[0]
 	if env.GatewayEnvID != "env_demo" || env.DisplayName != "env_demo" {
@@ -134,11 +139,14 @@ func TestCatalogNormalization(t *testing.T) {
 	if legacy.Profile != nil {
 		t.Fatalf("legacy Profile = %#v, want nil without access_route_kind", legacy.Profile)
 	}
-	if got := legacy.AccessCapabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityOpen, EnvironmentCapabilityTerminal}) {
-		t.Fatalf("legacy AccessCapabilities = %#v", got)
+	if got := legacy.AccessCapabilities; len(got) != 0 {
+		t.Fatalf("legacy AccessCapabilities = %#v, want no inferred access capability", got)
 	}
-	if got := legacy.ControlCapabilities; !reflect.DeepEqual(got, []EnvironmentCapability{EnvironmentCapabilityStop}) {
-		t.Fatalf("legacy ControlCapabilities = %#v", got)
+	if got := legacy.ControlCapabilities; len(got) != 0 {
+		t.Fatalf("legacy ControlCapabilities = %#v, want no inferred control capability", got)
+	}
+	if got := legacy.Capabilities; len(got) != 0 {
+		t.Fatalf("legacy Capabilities = %#v, want no inferred aggregate capability", got)
 	}
 }
 

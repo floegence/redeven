@@ -24,7 +24,17 @@ export type DesktopRuntimeLifecyclePhase =
   | 'runtime_ready'
   | 'runtime_up_to_date'
   | 'runtime_already_stopped'
-  | 'runtime_stopped';
+  | 'runtime_stopped'
+  | 'preparing_gateway_package'
+  | 'installing_gateway_package'
+  | 'starting_gateway_service'
+  | 'opening_gateway_bridge'
+  | 'checking_gateway_service'
+  | 'gateway_service_ready'
+  | 'gateway_service_up_to_date'
+  | 'stopping_gateway_service'
+  | 'verifying_gateway_stopped'
+  | 'gateway_service_stopped';
 
 export type DesktopRuntimeLifecycleStepID = DesktopRuntimeLifecyclePhase;
 
@@ -107,6 +117,16 @@ export const RUNTIME_LIFECYCLE_PHASE_LABELS: Record<DesktopRuntimeLifecyclePhase
   runtime_up_to_date: 'Runtime up to date',
   runtime_already_stopped: 'Runtime already stopped',
   runtime_stopped: 'Runtime stopped',
+  preparing_gateway_package: 'Preparing Gateway package',
+  installing_gateway_package: 'Installing Gateway package',
+  starting_gateway_service: 'Starting Gateway service',
+  opening_gateway_bridge: 'Opening Gateway bridge',
+  checking_gateway_service: 'Checking Gateway service',
+  gateway_service_ready: 'Gateway service ready',
+  gateway_service_up_to_date: 'Gateway service up to date',
+  stopping_gateway_service: 'Stopping Gateway service',
+  verifying_gateway_stopped: 'Verifying Gateway stopped',
+  gateway_service_stopped: 'Gateway service stopped',
 };
 
 function compact(value: unknown): string {

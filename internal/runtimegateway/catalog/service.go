@@ -40,8 +40,8 @@ func WithEnvironmentSource(source EnvironmentSource) ServiceOption {
 func NewService(options ...ServiceOption) *Service {
 	service := &Service{
 		gateway: protocol.GatewayMetadata{
-			GatewayID:   "local-runtime-gateway",
-			DisplayName: "Redeven Runtime Gateway",
+			GatewayID:   "local-gateway",
+			DisplayName: "Redeven Gateway",
 			Status:      protocol.GatewayStatusPairingRequired,
 			Capabilities: []protocol.GatewayCapability{
 				protocol.GatewayCapabilityEnvCatalog,
@@ -68,7 +68,12 @@ func (s *Service) ListEnvironments(ctx context.Context, req protocol.CatalogRequ
 		if err != nil {
 			return protocol.CatalogResponse{}, err
 		}
-		environments = append(environments, listed...)
+		for _, environment := range listed {
+			if environment.GatewayEnvID == protocol.ReservedLocalEnvironmentID {
+				continue
+			}
+			environments = append(environments, environment)
+		}
 	}
 	return protocol.NewCatalogResponse(s.gateway, environments), nil
 }

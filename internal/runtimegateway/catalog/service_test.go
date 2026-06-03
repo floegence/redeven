@@ -35,9 +35,12 @@ func TestServiceListEnvironmentsNormalizesSourceCatalog(t *testing.T) {
 					GatewayEnvID: " env_demo ",
 					DisplayName:  " Demo ",
 					State:        protocol.EnvironmentStateAvailable,
-					Capabilities: []protocol.EnvironmentCapability{
+					AccessCapabilities: []protocol.EnvironmentCapability{
 						protocol.EnvironmentCapabilityOpen,
 						"bad",
+					},
+					ControlCapabilities: []protocol.EnvironmentCapability{
+						protocol.EnvironmentCapabilityRestart,
 					},
 				},
 			}, nil
@@ -52,12 +55,12 @@ func TestServiceListEnvironmentsNormalizesSourceCatalog(t *testing.T) {
 	if len(resp.Environments) != 1 {
 		t.Fatalf("Environments length = %d, want 1", len(resp.Environments))
 	}
-	if got := resp.Environments[0].Capabilities; len(got) != 1 || got[0] != protocol.EnvironmentCapabilityOpen {
+	if got := resp.Environments[0].Capabilities; len(got) != 2 || got[0] != protocol.EnvironmentCapabilityOpen || got[1] != protocol.EnvironmentCapabilityRestart {
 		t.Fatalf("Capabilities = %#v", got)
 	}
 }
 
-func TestServiceListEnvironmentsMergesAllSources(t *testing.T) {
+func TestServiceListEnvironmentsFiltersReservedLocalEnv(t *testing.T) {
 	resp, err := NewService(
 		WithEnvironmentSource(EnvironmentSourceFunc(func(context.Context) ([]protocol.Environment, error) {
 			return []protocol.Environment{{
@@ -77,10 +80,10 @@ func TestServiceListEnvironmentsMergesAllSources(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListEnvironments() error = %v", err)
 	}
-	if len(resp.Environments) != 2 {
-		t.Fatalf("Environments length = %d, want 2: %#v", len(resp.Environments), resp.Environments)
+	if len(resp.Environments) != 1 {
+		t.Fatalf("Environments length = %d, want 1: %#v", len(resp.Environments), resp.Environments)
 	}
-	if resp.Environments[0].GatewayEnvID != "env_local" || resp.Environments[1].GatewayEnvID != "env_profile" {
+	if resp.Environments[0].GatewayEnvID != "env_profile" {
 		t.Fatalf("Environments = %#v", resp.Environments)
 	}
 }

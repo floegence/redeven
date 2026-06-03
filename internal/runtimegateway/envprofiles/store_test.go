@@ -85,6 +85,48 @@ func TestStoreRejectsUnsupportedOrUnsafeProfiles(t *testing.T) {
 		want error
 	}{
 		{
+			name: "loopback URL target",
+			req: protocol.EnvProfileUpsertRequest{
+				ProtocolVersion: protocol.Version,
+				Profile: protocol.EnvProfileInput{
+					DisplayName: "Loopback",
+					AccessRoute: protocol.EnvProfileAccessRoute{
+						Kind: protocol.EnvProfileAccessRouteKindURL,
+						URL:  "http://127.0.0.1:24000/",
+					},
+				},
+			},
+			want: ErrURLTargetUnsafe,
+		},
+		{
+			name: "link local metadata target",
+			req: protocol.EnvProfileUpsertRequest{
+				ProtocolVersion: protocol.Version,
+				Profile: protocol.EnvProfileInput{
+					DisplayName: "Metadata",
+					AccessRoute: protocol.EnvProfileAccessRoute{
+						Kind: protocol.EnvProfileAccessRouteKindURL,
+						URL:  "http://169.254.169.254/latest/meta-data/",
+					},
+				},
+			},
+			want: ErrURLTargetUnsafe,
+		},
+		{
+			name: "localhost host target",
+			req: protocol.EnvProfileUpsertRequest{
+				ProtocolVersion: protocol.Version,
+				Profile: protocol.EnvProfileInput{
+					DisplayName: "Localhost",
+					AccessRoute: protocol.EnvProfileAccessRoute{
+						Kind: protocol.EnvProfileAccessRouteKindURL,
+						URL:  "http://localhost:24000/",
+					},
+				},
+			},
+			want: ErrURLTargetUnsafe,
+		},
+		{
 			name: "embedded credentials",
 			req: protocol.EnvProfileUpsertRequest{
 				ProtocolVersion: protocol.Version,

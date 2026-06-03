@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -30,6 +32,7 @@ var (
 	ErrURLMustBeAbsoluteHTTP        = errors.New("url must be an absolute http or https URL")
 	ErrURLSchemeUnsupported         = errors.New("url must use http or https")
 	ErrURLCredentialsUnsupported    = errors.New("url must not include embedded credentials")
+	ErrURLTargetUnsafe              = errors.New("url target is not allowed by the Gateway target policy")
 	ErrSSHDestinationRequired       = errors.New("ssh_destination is required")
 	ErrSSHPortInvalid               = errors.New("ssh_port must be between 1 and 65535")
 	ErrContainerEngineInvalid       = errors.New("container_engine must be docker or podman")
@@ -43,6 +46,16 @@ type Store struct {
 	filePath string
 	state    fileState
 	loaded   bool
+	policy   URLTargetPolicy
+}
+
+type StoreOptions struct {
+	URLTargetPolicy URLTargetPolicy
+}
+
+type URLTargetPolicy struct {
+	AllowPrivateNetworkTargets bool
+	AllowLoopbackTargets       bool
 }
 
 type fileState struct {
@@ -61,7 +74,14 @@ type EnvironmentProfile struct {
 }
 
 func NewStore(filePath string) *Store {
-	return &Store{filePath: strings.TrimSpace(filePath)}
+	return NewStoreWithOptions(filePath, StoreOptions{})
+}
+
+func NewStoreWithOptions(filePath string, options StoreOptions) *Store {
+	return &Store{
+		filePath: strings.TrimSpace(filePath),
+		policy:   options.URLTargetPolicy,
+	}
 }
 
 func (s *Store) List(ctx context.Context) ([]EnvironmentProfile, error) {
@@ -109,7 +129,7 @@ func (s *Store) Upsert(ctx context.Context, req protocol.EnvProfileUpsertRequest
 		return protocol.Environment{}, err
 	}
 	req = protocol.NormalizeEnvProfileUpsertRequest(req)
-	profile, err := profileFromRequest(req)
+	profile, err := profileFromRequest(req, s.policy)
 	if err != nil {
 		return protocol.Environment{}, err
 	}
@@ -127,7 +147,7 @@ func (s *Store) Upsert(ctx context.Context, req protocol.EnvProfileUpsertRequest
 			return protocol.Environment{}, err
 		}
 	}
-	if profile.GatewayEnvID == "env_local" {
+	if profile.GatewayEnvID == protocol.ReservedLocalEnvironmentID {
 		return protocol.Environment{}, ErrGatewayEnvIDReserved
 	}
 	if !gatewayEnvIDPattern.MatchString(profile.GatewayEnvID) {
@@ -151,7 +171,7 @@ func (s *Store) Upsert(ctx context.Context, req protocol.EnvProfileUpsertRequest
 	if err := s.saveStateLocked(state); err != nil {
 		return protocol.Environment{}, err
 	}
-	return EnvironmentFromProfile(profile), nil
+	return EnvironmentFromProfileWithEditableRoute(profile), nil
 }
 
 func (s *Store) Delete(ctx context.Context, req protocol.EnvProfileDeleteRequest) (protocol.EnvProfileDeleteResponse, error) {
@@ -205,13 +225,18 @@ func EnvironmentFromProfile(profile EnvironmentProfile) protocol.Environment {
 			Managed:         true,
 			AccessRouteKind: profile.AccessRoute.Kind,
 		},
-		ProfileAccessRoute: profileAccessRouteForCatalog(profile),
 		Origin: protocol.EnvironmentOrigin{
 			Kind:  profileOriginKind(profile),
 			Label: profileOriginLabel(profile),
 		},
 		LastSeenAtUnixMS: profile.UpdatedAtUnixMS,
 	}
+	return protocol.NormalizeEnvironments([]protocol.Environment{env})[0]
+}
+
+func EnvironmentFromProfileWithEditableRoute(profile EnvironmentProfile) protocol.Environment {
+	env := EnvironmentFromProfile(profile)
+	env.ProfileAccessRoute = profileAccessRouteForCatalog(profile)
 	return protocol.NormalizeEnvironments([]protocol.Environment{env})[0]
 }
 
@@ -267,11 +292,11 @@ func profileControlCapabilities(profile EnvironmentProfile) []protocol.Environme
 	return nil
 }
 
-func profileFromRequest(req protocol.EnvProfileUpsertRequest) (EnvironmentProfile, error) {
+func profileFromRequest(req protocol.EnvProfileUpsertRequest, policy URLTargetPolicy) (EnvironmentProfile, error) {
 	route := req.Profile.AccessRoute
 	switch route.Kind {
 	case protocol.EnvProfileAccessRouteKindURL:
-		normalizedURL, err := normalizeProfileURL(route.URL)
+		normalizedURL, err := normalizeProfileURL(route.URL, policy)
 		if err != nil {
 			return EnvironmentProfile{}, err
 		}
@@ -379,7 +404,7 @@ func normalizeSSHAuthMode(raw string) string {
 	}
 }
 
-func normalizeProfileURL(raw string) (string, error) {
+func normalizeProfileURL(raw string, policy URLTargetPolicy) (string, error) {
 	clean := strings.TrimSpace(raw)
 	if clean == "" {
 		return "", ErrURLRequired
@@ -396,11 +421,79 @@ func normalizeProfileURL(raw string) (string, error) {
 		return "", ErrURLCredentialsUnsupported
 	}
 	parsed.Host = strings.ToLower(strings.TrimSpace(parsed.Host))
+	host := parsed.Hostname()
+	if !URLTargetAllowed(host, policy) {
+		return "", ErrURLTargetUnsafe
+	}
 	parsed.Path = "/"
 	parsed.RawPath = ""
 	parsed.RawQuery = ""
 	parsed.Fragment = ""
 	return parsed.String(), nil
+}
+
+func URLTargetAllowed(host string, policy URLTargetPolicy) bool {
+	cleanHost := strings.Trim(strings.ToLower(strings.TrimSpace(host)), "[]")
+	if cleanHost == "" || cleanHost == "localhost" || strings.HasSuffix(cleanHost, ".localhost") {
+		return false
+	}
+	ip := net.ParseIP(cleanHost)
+	if ip == nil {
+		return true
+	}
+	return URLTargetIPAllowed(ip, policy)
+}
+
+func URLTargetIPAllowed(ip net.IP, policy URLTargetPolicy) bool {
+	if ip == nil {
+		return false
+	}
+	addr, ok := netip.AddrFromSlice(ip)
+	if !ok {
+		return false
+	}
+	if addr.Is4In6() {
+		addr = netip.AddrFrom4(addr.As4())
+	}
+	if addr.IsLoopback() {
+		return policy.AllowLoopbackTargets
+	}
+	if addr.IsPrivate() {
+		return policy.AllowPrivateNetworkTargets
+	}
+	return addr.IsGlobalUnicast() && !specialUsePrivateAddr(addr)
+}
+
+func specialUsePrivateAddr(addr netip.Addr) bool {
+	for _, prefix := range []netip.Prefix{
+		netip.MustParsePrefix("0.0.0.0/8"),
+		netip.MustParsePrefix("100.64.0.0/10"),
+		netip.MustParsePrefix("127.0.0.0/8"),
+		netip.MustParsePrefix("169.254.0.0/16"),
+		netip.MustParsePrefix("192.0.0.0/24"),
+		netip.MustParsePrefix("192.0.2.0/24"),
+		netip.MustParsePrefix("198.18.0.0/15"),
+		netip.MustParsePrefix("198.51.100.0/24"),
+		netip.MustParsePrefix("203.0.113.0/24"),
+		netip.MustParsePrefix("224.0.0.0/4"),
+		netip.MustParsePrefix("240.0.0.0/4"),
+		netip.MustParsePrefix("::/128"),
+		netip.MustParsePrefix("::1/128"),
+		netip.MustParsePrefix("64:ff9b::/96"),
+		netip.MustParsePrefix("64:ff9b:1::/48"),
+		netip.MustParsePrefix("100::/64"),
+		netip.MustParsePrefix("2001::/23"),
+		netip.MustParsePrefix("2001:2::/48"),
+		netip.MustParsePrefix("2001:db8::/32"),
+		netip.MustParsePrefix("fc00::/7"),
+		netip.MustParsePrefix("fe80::/10"),
+		netip.MustParsePrefix("ff00::/8"),
+	} {
+		if prefix.Contains(addr) {
+			return true
+		}
+	}
+	return false
 }
 
 func profileOriginLabel(profile EnvironmentProfile) string {
@@ -475,15 +568,15 @@ func (s *Store) loadState() (fileState, error) {
 		return fileState{}, err
 	}
 	state.SchemaVersion = schemaVersion
-	state.Profiles = normalizeProfiles(state.Profiles)
+	state.Profiles = normalizeProfiles(state.Profiles, s.policy)
 	return state, nil
 }
 
-func normalizeProfiles(profiles []EnvironmentProfile) []EnvironmentProfile {
+func normalizeProfiles(profiles []EnvironmentProfile, policy URLTargetPolicy) []EnvironmentProfile {
 	out := make([]EnvironmentProfile, 0, len(profiles))
 	seen := map[string]struct{}{}
 	for _, profile := range profiles {
-		normalized, err := normalizeProfile(profile)
+		normalized, err := normalizeProfile(profile, policy)
 		if err != nil {
 			continue
 		}
@@ -496,7 +589,7 @@ func normalizeProfiles(profiles []EnvironmentProfile) []EnvironmentProfile {
 	return out
 }
 
-func normalizeProfile(profile EnvironmentProfile) (EnvironmentProfile, error) {
+func normalizeProfile(profile EnvironmentProfile, policy URLTargetPolicy) (EnvironmentProfile, error) {
 	input := protocol.NormalizeEnvProfileUpsertRequest(protocol.EnvProfileUpsertRequest{
 		ProtocolVersion: protocol.Version,
 		Profile: protocol.EnvProfileInput{
@@ -506,14 +599,14 @@ func normalizeProfile(profile EnvironmentProfile) (EnvironmentProfile, error) {
 			ControlOwner: profile.ControlOwner,
 		},
 	})
-	normalized, err := profileFromRequest(input)
+	normalized, err := profileFromRequest(input, policy)
 	if err != nil {
 		return EnvironmentProfile{}, err
 	}
 	if normalized.GatewayEnvID == "" || normalized.DisplayName == "" {
 		return EnvironmentProfile{}, protocol.ErrMissingDisplayName
 	}
-	if normalized.GatewayEnvID == "env_local" || !gatewayEnvIDPattern.MatchString(normalized.GatewayEnvID) {
+	if normalized.GatewayEnvID == protocol.ReservedLocalEnvironmentID || !gatewayEnvIDPattern.MatchString(normalized.GatewayEnvID) {
 		return EnvironmentProfile{}, ErrGatewayEnvIDInvalid
 	}
 	normalized.CreatedAtUnixMS = profile.CreatedAtUnixMS
@@ -524,7 +617,7 @@ func normalizeProfile(profile EnvironmentProfile) (EnvironmentProfile, error) {
 
 func (s *Store) saveStateLocked(state fileState) error {
 	state.SchemaVersion = schemaVersion
-	state.Profiles = normalizeProfiles(state.Profiles)
+	state.Profiles = normalizeProfiles(state.Profiles, s.policy)
 	s.state = state
 	s.loaded = true
 	if strings.TrimSpace(s.filePath) == "" {

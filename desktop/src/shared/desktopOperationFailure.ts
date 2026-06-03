@@ -13,6 +13,7 @@ export type DesktopFailureCode =
   | 'local_runtime_stop_failed'
   | 'container_runtime_launch_failed'
   | 'container_runtime_stop_failed'
+  | 'gateway_package_prepare_failed'
   | 'runtime_host_command_failed'
   | 'runtime_update_required'
   | 'desktop_update_required'
@@ -61,6 +62,7 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'local_runtime_stop_failed':
     case 'container_runtime_launch_failed':
     case 'container_runtime_stop_failed':
+    case 'gateway_package_prepare_failed':
     case 'runtime_host_command_failed':
     case 'runtime_update_required':
     case 'desktop_update_required':

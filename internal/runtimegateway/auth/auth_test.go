@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -94,6 +96,29 @@ func TestVerifierRejectsWrongAudience(t *testing.T) {
 
 	if _, err := verifier.Verify(context.Background(), req, body, "https://other-gateway.example.internal"); err == nil {
 		t.Fatal("Verify() error = nil, want wrong audience error")
+	}
+}
+
+func TestVerifierDoesNotInitializeUnpairedGatewayIdentity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gateway-trust.json")
+	store := trust.NewStore(path)
+	verifier := NewVerifier(store)
+	body := []byte(`{"ok":true}`)
+	req, err := http.NewRequest(http.MethodPost, "http://runtime.local/gateway/v1/catalog", nil)
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+	req.Header.Set("X-Redeven-Gateway-ID", security.StableGatewayID("https://attacker.example/"))
+	req.Header.Set("X-Redeven-Client-Key-ID", "gck_attacker")
+	req.Header.Set("X-Redeven-Client-Nonce", "nonce")
+	req.Header.Set("X-Redeven-Request-TS", strconv.FormatInt(time.Now().UnixMilli(), 10))
+	req.Header.Set("X-Redeven-Request-Signature", "invalid")
+
+	if _, err := verifier.Verify(context.Background(), req, body, "https://attacker.example/"); err == nil {
+		t.Fatal("Verify() error = nil, want unpaired identity error")
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("Verify() should not create trust state, stat err = %v", err)
 	}
 }
 

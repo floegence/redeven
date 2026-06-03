@@ -12,14 +12,14 @@ infer_target_from_tarball() {
   local tarball_name
 
   tarball_name="$(basename -- "$tarball_path")"
-  if [[ "$tarball_name" =~ ^redeven_([^_]+)_([^_]+)\.tar\.gz$ ]]; then
+  if [[ "$tarball_name" =~ ^redeven(-gateway)?_([^_]+)_([^_]+)\.tar\.gz$ ]]; then
     case "$field" in
       goos)
-        printf '%s\n' "${BASH_REMATCH[1]}"
+        printf '%s\n' "${BASH_REMATCH[2]}"
         return 0
         ;;
       goarch)
-        printf '%s\n' "${BASH_REMATCH[2]}"
+        printf '%s\n' "${BASH_REMATCH[3]}"
         return 0
         ;;
     esac
@@ -91,10 +91,52 @@ bundle_from_tarball() {
   tar -xzf "$tarball_path" -C "$bundle_dir"
 }
 
+bundle_gateway_from_tarball() {
+  local tarball_path="$1"
+  local bundle_dir="$2"
+
+  if [ -z "$tarball_path" ]; then
+    return 0
+  fi
+  if [ ! -f "$tarball_path" ]; then
+    ui_pkg_die "desktop bundle Gateway tarball not found: $tarball_path"
+  fi
+  if ! command -v tar >/dev/null 2>&1; then
+    ui_pkg_die "tar not found (required to unpack REDEVEN_DESKTOP_GATEWAY_TARBALL)"
+  fi
+
+  ui_pkg_log "Preparing desktop bundled Gateway from release tarball..."
+  ui_pkg_log "GATEWAY_TARBALL: $tarball_path"
+  tar -xzf "$tarball_path" -C "$bundle_dir"
+}
+
+build_go_command() {
+  local goos="$1"
+  local goarch="$2"
+  local output_path="$3"
+  local command_path="$4"
+  local version="$5"
+  local commit="$6"
+  local build_time="$7"
+
+  (
+    cd "$ROOT_DIR"
+    GOOS="$goos" \
+    GOARCH="$goarch" \
+    CGO_ENABLED="${CGO_ENABLED:-0}" \
+    go build \
+      -trimpath \
+      -ldflags "-s -w -X main.Version=${version} -X main.Commit=${commit} -X main.BuildTime=${build_time}" \
+      -o "$output_path" \
+      "$command_path"
+  )
+}
+
 bundle_from_source() {
   local goos="$1"
   local goarch="$2"
   local output_path="$3"
+  local gateway_output_path="$4"
 
   if ! command -v go >/dev/null 2>&1; then
     ui_pkg_die "go not found (required to build the desktop bundled runtime)"
@@ -107,47 +149,47 @@ bundle_from_source() {
   ui_pkg_log "Building desktop bundled runtime from the current repository..."
   ui_pkg_log "TARGET: ${goos}-${goarch}"
   ui_pkg_log "OUTPUT: $output_path"
+  ui_pkg_log "GATEWAY_OUTPUT: $gateway_output_path"
 
   "$SCRIPT_DIR/build_assets.sh"
 
-  (
-    cd "$ROOT_DIR"
-    GOOS="$goos" \
-    GOARCH="$goarch" \
-    CGO_ENABLED="${CGO_ENABLED:-0}" \
-    go build \
-      -trimpath \
-      -ldflags "-s -w -X main.Version=${version} -X main.Commit=${commit} -X main.BuildTime=${build_time}" \
-      -o "$output_path" \
-      ./cmd/redeven
-  )
+  build_go_command "$goos" "$goarch" "$output_path" ./cmd/redeven "$version" "$commit" "$build_time"
+  build_go_command "$goos" "$goarch" "$gateway_output_path" ./cmd/redeven-gateway "$version" "$commit" "$build_time"
 }
 
 main() {
-  local goos goarch binary_name bundle_dir bundle_path tarball_path
+  local goos goarch binary_name bundle_dir bundle_path gateway_bundle_path tarball_path gateway_tarball_path
   tarball_path="${REDEVEN_DESKTOP_RUNTIME_TARBALL:-${REDEVEN_DESKTOP_AGENT_TARBALL:-}}"
+  gateway_tarball_path="${REDEVEN_DESKTOP_GATEWAY_TARBALL:-}"
   goos="$(resolve_target_goos "$tarball_path")"
   goarch="$(resolve_target_goarch "$tarball_path")"
   binary_name="$(resolve_binary_name "$goos")"
   bundle_dir="$ROOT_DIR/desktop/.bundle/${goos}-${goarch}"
   bundle_path="$bundle_dir/$binary_name"
+  gateway_bundle_path="$bundle_dir/redeven-gateway"
 
   ui_pkg_log "Preparing desktop bundled runtime..."
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
 
   if [ -n "$tarball_path" ]; then
     bundle_from_tarball "$tarball_path" "$bundle_dir"
+    bundle_gateway_from_tarball "$gateway_tarball_path" "$bundle_dir"
   else
     prepare_bundle_dir "$bundle_dir"
-    bundle_from_source "$goos" "$goarch" "$bundle_path"
+    bundle_from_source "$goos" "$goarch" "$bundle_path" "$gateway_bundle_path"
   fi
 
   if [ ! -f "$bundle_path" ]; then
     ui_pkg_die "desktop bundled runtime not found after preparation: $bundle_path"
   fi
+  if [ ! -f "$gateway_bundle_path" ]; then
+    ui_pkg_die "desktop bundled Gateway not found after preparation: $gateway_bundle_path"
+  fi
 
   chmod +x "$bundle_path"
+  chmod +x "$gateway_bundle_path"
   ui_pkg_log "Desktop bundled runtime ready: $bundle_path"
+  ui_pkg_log "Desktop bundled Gateway ready: $gateway_bundle_path"
   printf '%s\n' "$bundle_path"
 }
 

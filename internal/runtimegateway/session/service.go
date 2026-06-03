@@ -82,10 +82,16 @@ func (s *Service) OpenSession(ctx context.Context, req protocol.OpenSessionReque
 			Message: openSessionValidationMessage(err),
 		}
 	}
+	if req.GatewayEnvID == protocol.ReservedLocalEnvironmentID {
+		return nil, &GatewayError{
+			Code:    ErrorCodeNotFound,
+			Message: "Gateway environment was not found.",
+		}
+	}
 	if s == nil || s.issuer == nil {
 		return nil, &GatewayError{
 			Code:    ErrorCodeNotImplemented,
-			Message: "Runtime Gateway session opening is not configured in this runtime.",
+			Message: "Gateway session opening is not configured in this service.",
 		}
 	}
 	issue, err := s.issuer.IssueGatewayConnectArtifact(ctx, req)

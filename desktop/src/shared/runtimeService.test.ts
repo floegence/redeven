@@ -226,7 +226,7 @@ describe('runtimeService', () => {
     })).toBe(false);
   });
 
-  it('normalizes Runtime Gateway capability while keeping old snapshots unsupported', () => {
+  it('normalizes runtime-advertised Gateway capability while keeping old snapshots unsupported', () => {
     const supported = normalizeRuntimeServiceSnapshot({
       runtime_version: 'v1.2.3',
       compatibility: 'compatible',
