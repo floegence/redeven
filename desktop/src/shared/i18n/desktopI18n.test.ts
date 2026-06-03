@@ -215,6 +215,15 @@ describe('Desktop shared i18n dictionaries', () => {
     expect(zhCN.environmentCenter.askFlowerCardEyebrow).toBe('Flower 已就绪');
     expect(zhCN.environmentCenter.askFlowerCardDescription).toBe('想让我先看这个 Environment 的哪一部分？');
     expect(zhCN.environmentCenter.askFlowerCardContextLabel).toBe('已关联上下文');
+    expect(zhCN.environmentCenter.gatewaysTitle).toBe('Gateways');
+    expect(zhCN.environmentCenter.gatewaySearchPlaceholder).toBe('搜索 Gateways...');
+    expect(zhCN.environmentCenter.addGateway).toBe('添加 Gateway');
+    expect(zhCN.environmentCenter.addGatewayShort).toBe('添加');
+    expect(zhCN.environmentCenter.gatewayViewShort).toBe('查看');
+    expect(zhCN.environmentCenter.moreActions).toBe('更多操作');
+    expect(zhCN.environmentCenter.gatewayGuidanceReadyTitle).toBe('Gateway 已就绪');
+    expect(zhCN.environmentCenter.gatewaySummaryMany).toBe('已同步 {count} 个 environments');
+    expect(zhCN.environmentStatus.pairingRequired).toBe('需要配对');
     expect('askFlowerCardReadyHint' in zhCN.environmentCenter).toBe(false);
     expect(zhCN.toast.flowerPromptQueued).toBe('已发送给 Flower。');
     expect(zhCN.connectionDialog.sshHost).toBe('SSH主机');

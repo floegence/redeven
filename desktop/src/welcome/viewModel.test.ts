@@ -3397,7 +3397,7 @@ describe('Gateway view models', () => {
       }),
     });
     expect(buildEnvironmentCardFactsModel(readyEntry!)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'GATEWAY', value: 'Gateway: Bastion' }),
+      expect.objectContaining({ label: 'GATEWAY', value: 'Bastion' }),
       expect.objectContaining({ label: 'ENV ID', value: 'finance' }),
     ]));
     expect(buildEnvironmentCardFactsModel(readyEntry!).map((fact) => fact.label)).not.toContain('PROVIDER');
@@ -3573,7 +3573,7 @@ describe('Gateway view models', () => {
     }));
     expect(unreachableUnpairedRow.guidance).toMatchObject({
       title: 'Resolve the Gateway target',
-      detail: 'SSH host is unreachable.',
+      detail: 'Desktop cannot reach the SSH host, container, or bridge that runs this Gateway. Check the target settings before pairing or opening environments.',
       tone: 'warning',
     });
     expect(unreachableUnpairedRow.secondary_actions.map((action) => action.intent)).toEqual([

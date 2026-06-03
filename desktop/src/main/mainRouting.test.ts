@@ -951,6 +951,25 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain('request.user_confirmed');
   });
 
+  it('keeps the saved Gateway name as the source of truth during sync', () => {
+    const mainSrc = readMainSource();
+    const mergeStart = mainSrc.indexOf('function mergeGatewaySourceRecord(');
+    const mergeEnd = mainSrc.indexOf('function setGatewaySyncRecord(', mergeStart);
+    const syncStart = mainSrc.indexOf('async function syncGatewayRecord(');
+    const syncEnd = mainSrc.indexOf('async function pairGatewayFromLauncher(', syncStart);
+    expect(mergeStart).toBeGreaterThanOrEqual(0);
+    expect(mergeEnd).toBeGreaterThan(mergeStart);
+    expect(syncStart).toBeGreaterThanOrEqual(0);
+    expect(syncEnd).toBeGreaterThan(syncStart);
+    const mergeSrc = mainSrc.slice(mergeStart, mergeEnd);
+    const syncSrc = mainSrc.slice(syncStart, syncEnd);
+
+    expect(mergeSrc).toContain('display_name: base.display_name,');
+    expect(mergeSrc).not.toContain('display_name: source.display_name || base.display_name');
+    expect(syncSrc).toContain('gatewayRecordToSourceWithCatalog(syncedRecord, {');
+    expect(syncSrc).not.toContain('display_name: catalog.gateway.display_name');
+  });
+
   it('keeps Gateway catalog sync in a main-process poller instead of snapshot-time probing', () => {
     const mainSrc = readMainSource();
     const loadStart = mainSrc.indexOf('async function loadGatewaySourcesForWelcome(');

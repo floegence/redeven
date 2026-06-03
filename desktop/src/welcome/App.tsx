@@ -559,6 +559,24 @@ const ENVIRONMENT_CENTER_TABS: readonly Readonly<{ value: EnvironmentCenterTab; 
   { value: 'gateways', labelKey: 'environmentCenter.gatewaysSection' },
 ];
 
+const ENVIRONMENT_CENTER_HEADER_COPY: Readonly<Record<EnvironmentCenterTab, Readonly<{
+  titleKey: DesktopTranslationKey;
+  descriptionKey: DesktopTranslationKey;
+}>>> = {
+  environments: {
+    titleKey: 'environmentCenter.environmentsTitle',
+    descriptionKey: 'environmentCenter.environmentsDescription',
+  },
+  control_planes: {
+    titleKey: 'environmentCenter.providersTitle',
+    descriptionKey: 'environmentCenter.providersDescription',
+  },
+  gateways: {
+    titleKey: 'environmentCenter.gatewaysTitle',
+    descriptionKey: 'environmentCenter.gatewaysDescription',
+  },
+};
+
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -641,6 +659,19 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     'Invalid response': 'environmentStatus.invalidResponse',
     'Status stale': 'environmentStatus.statusStale',
     Authorized: 'environmentStatus.authorized',
+    Online: 'providerRuntimeState.online',
+    Offline: 'providerRuntimeState.offline',
+    'Needs setup': 'environmentStatus.setupRequired',
+    Installing: 'progress.installingRuntimePackage',
+    Starting: 'progress.startingRuntime',
+    Updating: 'progress.updatingEllipsis',
+    'Trust changed': 'environmentStatus.trustChanged',
+    'Pairing required': 'environmentStatus.pairingRequired',
+    'Needs attention': 'progress.needsAttention',
+    Unknown: 'common.unknown',
+    'Not started': 'environmentStatus.stopped',
+    'Update available': 'environmentStatus.runtimeNeedsUpdate',
+    Syncing: 'environmentCenter.gatewayActionSyncing',
   });
 }
 
@@ -658,19 +689,30 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Refresh Runtime status': 'environmentAction.refreshRuntimeStatus',
     'Refresh provider status': 'environmentAction.refreshProviderStatus',
     'Refresh Gateway status': 'environmentAction.refreshRuntimeStatus',
+    'Refresh catalog': 'environmentCenter.gatewayActionRefreshCatalog',
+    'Retry sync': 'environmentCenter.gatewayActionRetrySync',
+    'Open settings': 'environmentCenter.gatewayActionOpenSettings',
     Resolve: 'environmentAction.continue',
     Pair: 'environmentAction.pairGateway',
     'Pair Gateway': 'environmentAction.pairGateway',
     'Set up': 'environmentStatus.setupRequired',
+    Synced: 'environmentCenter.gatewayActionSynced',
+    'Needs Attention': 'progress.needsAttention',
+    'Syncing...': 'environmentCenter.gatewayActionSyncing',
+    'Pairing...': 'environmentCenter.gatewayActionPairing',
     Manage: 'environmentAction.manageInDesktop',
-    'Start Gateway': 'environmentAction.startRuntime',
+    'Start Gateway': 'environmentCenter.gatewayActionStart',
     'Starting...': 'progress.startingRuntime',
     'Starting…': 'progress.startingRuntime',
     'Stop': 'environmentAction.stopRuntime',
+    'Stop Gateway': 'environmentCenter.gatewayActionStop',
     'Restart': 'environmentAction.restartRuntime',
+    'Restart Gateway': 'environmentCenter.gatewayActionRestart',
     'Update': 'environmentAction.updateRuntime',
-    'Update Gateway': 'environmentAction.updateRuntime',
-    'Resolve Gateway': 'environmentAction.continue',
+    'Update Gateway': 'environmentCenter.gatewayActionUpdate',
+    'Resolve Gateway': 'environmentCenter.gatewayPanelResolveTitle',
+    'Gateway action': 'environmentCenter.gatewayPanelGenericAction',
+    Cancel: 'common.cancel',
     Refresh: 'environmentAction.refreshStatus',
     Start: 'environmentAction.startRuntime',
     'Start runtime': 'environmentAction.startRuntime',
@@ -722,6 +764,182 @@ function localizedEnvironmentMenuItem(
     label: localizedEnvironmentActionLabel(i18n, item.label),
     action,
   };
+}
+
+function localizedGatewaySourceText(i18n: DesktopI18n, value: string): string {
+  return localizedStringByValue(i18n, value, {
+    'Managed by Desktop': 'environmentCenter.gatewayManagedByDesktop',
+    'Access-only Gateway': 'environmentCenter.gatewayAccessOnlyByDesktop',
+    'Finish Gateway setup': 'environmentCenter.gatewayGuidanceFinishSetupTitle',
+    'Complete the Gateway connection settings before Desktop can pair, start, or refresh this Gateway.': 'environmentCenter.gatewayGuidanceFinishSetupDetail',
+    'Syncing Gateway': 'environmentCenter.gatewayGuidanceSyncingTitle',
+    'Desktop is checking reachability, pairing if needed, and refreshing the environment catalog automatically.': 'environmentCenter.gatewayGuidanceSyncingDetail',
+    'Gateway trust changed': 'environmentCenter.gatewayGuidanceTrustChangedTitle',
+    'Pairing needs attention': 'environmentCenter.gatewayGuidancePairingFailedTitle',
+    'Desktop could not verify this Gateway identity. Review the Gateway target, then retry pairing from the guidance panel.': 'environmentCenter.gatewayGuidancePairingFailedDetail',
+    'Gateway needs attention': 'environmentCenter.gatewayGuidanceNeedsAttentionTitle',
+    'Desktop could not keep this Gateway synced. Open the guidance panel to refresh, start, or resolve the target.': 'environmentCenter.gatewayGuidanceSyncFailedDetail',
+    'Preparing access-only Gateway': 'environmentCenter.gatewayGuidancePreparingAccessTitle',
+    'Desktop is pairing with this Gateway automatically. Runtime start and restart stay on the Gateway host.': 'environmentCenter.gatewayGuidancePreparingAccessDetail',
+    'Desktop can refresh the catalog and route Gateway Environments through this source, but it cannot start or stop this external Gateway runtime.': 'environmentCenter.gatewayGuidanceAccessOnlyDetail',
+    'Resolve the Gateway target': 'environmentCenter.gatewayGuidanceResolveTargetTitle',
+    'Desktop cannot reach the SSH host, container, or bridge that runs this Gateway. Check the target settings before pairing or opening environments.': 'environmentCenter.gatewayGuidanceResolveTargetDetail',
+    'Gateway is starting': 'environmentCenter.gatewayGuidanceStartingTitle',
+    'Desktop is preparing the Gateway runtime. Pairing and catalog refresh will be available when it reports ready.': 'environmentCenter.gatewayGuidanceStartingDetail',
+    'Update before continuing': 'environmentCenter.gatewayGuidanceUpdateTitle',
+    'Install the Gateway runtime update, then Desktop can pair and refresh the environments this Gateway exposes.': 'environmentCenter.gatewayGuidanceUpdateDetail',
+    'Preparing Gateway': 'environmentCenter.gatewayGuidancePreparingTitle',
+    'Gateway is stopped': 'environmentCenter.gatewayGuidanceStoppedTitle',
+    'Desktop will start this managed Gateway automatically and then discover its environments.': 'environmentCenter.gatewayGuidancePreparingDetail',
+    'Desktop can start this Gateway automatically when syncing or opening environments. You can also start it manually from the actions menu.': 'environmentCenter.gatewayGuidanceStoppedDetail',
+    'Preparing Gateway trust': 'environmentCenter.gatewayGuidancePreparingTrustTitle',
+    'Desktop is pairing this Gateway automatically so it can show the environments the Gateway manages.': 'environmentCenter.gatewayGuidancePreparingTrustDetail',
+    'Gateway is ready': 'environmentCenter.gatewayGuidanceReadyTitle',
+    'Desktop keeps this Gateway catalog synced. Open its environments from the Environments tab.': 'environmentCenter.gatewayGuidanceReadyDetail',
+    'Review the Gateway settings, then refresh or pair again when the target is reachable.': 'environmentCenter.gatewayGuidanceReviewSettingsDetail',
+    'Gateway catalog available': 'environmentCenter.gatewayGuidanceCatalogAvailableTitle',
+    'Refresh the catalog to pick up changes; its environments are listed separately in the Environments tab.': 'environmentCenter.gatewayGuidanceCatalogAvailableDetail',
+    'No environments synced': 'environmentCenter.gatewaySummaryNone',
+    '1 environment synced': 'environmentCenter.gatewaySummaryOne',
+    'View and open these environments from the Environments tab filtered to this Gateway.': 'environmentCenter.gatewaySummaryDetailAvailable',
+    'Desktop will add environments to the Environments tab when this Gateway catalog sync finishes.': 'environmentCenter.gatewaySummaryDetailSyncing',
+    'Resolve this Gateway before its managed environments can appear in the Environments tab.': 'environmentCenter.gatewaySummaryDetailResolve',
+    'No environments are currently exposed by this Gateway catalog.': 'environmentCenter.gatewaySummaryDetailNone',
+  });
+}
+
+function localizedGatewaySourceCountText(i18n: DesktopI18n, value: string): string {
+  const match = value.match(/^(\d+) environments synced$/u);
+  if (!match) {
+    return localizedGatewaySourceText(i18n, value);
+  }
+  return i18n.t('environmentCenter.gatewaySummaryMany', { count: match[1] ?? '0' });
+}
+
+function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): string {
+  const clean = trimString(value);
+  const failedAction = clean.match(/^(.+) failed$/u);
+  if (failedAction) {
+    return i18n.t('environmentCenter.gatewayPanelActionFailedTitle', {
+      action: localizedEnvironmentActionLabel(i18n, failedAction[1] ?? ''),
+    });
+  }
+  const workingOn = clean.match(/^Desktop is working on (.+)\.$/u);
+  if (workingOn) {
+    return i18n.t('environmentCenter.gatewayPanelWorkingOnLabel', { label: workingOn[1] ?? '' });
+  }
+  const runAction = clean.match(/^Desktop will run (.+) for (.+)\.$/u);
+  if (runAction) {
+    return i18n.t('environmentCenter.gatewayPanelRunActionForLabel', {
+      action: localizedEnvironmentActionLabel(i18n, runAction[1] ?? ''),
+      label: runAction[2] ?? '',
+    });
+  }
+  return localizedStringByValue(i18n, clean, {
+    Running: 'progress.running',
+    Settings: 'common.settings',
+    'Needs attention': 'progress.needsAttention',
+    'Managed Gateway': 'environmentCenter.gatewayPanelManagedGateway',
+    'Access-only Gateway': 'environmentCenter.gatewayAccessOnlyByDesktop',
+    'Gateway operation progress': 'environmentCenter.gatewayProgress',
+    'Gateway action needs attention': 'environmentCenter.gatewayPanelActionNeedsAttention',
+    'Gateway action': 'environmentCenter.gatewayPanelGenericAction',
+    'Desktop could not complete this Gateway action.': 'environmentCenter.gatewayPanelActionFailedDetail',
+    'Manage Gateway': 'environmentCenter.gatewayPanelManageTitle',
+    'Review this Gateway configuration.': 'environmentCenter.gatewayPanelManageDetail',
+    'Gateway pairing needs attention': 'environmentCenter.gatewayGuidancePairingFailedTitle',
+    'Gateway catalog sync failed': 'environmentCenter.gatewayPanelCatalogSyncFailedTitle',
+    'Gateway is unreachable': 'environmentCenter.gatewayPanelUnreachableTitle',
+    'Resolve Gateway': 'environmentCenter.gatewayPanelResolveTitle',
+    'Desktop keeps Gateways synced automatically. Review the target or retry sync when the Gateway is reachable.': 'environmentCenter.gatewayPanelResolveDetail',
+    'Refresh Gateway status': 'environmentCenter.gatewayPanelRefreshStatusTitle',
+    'Desktop will check runtime reachability, version, and management state without refreshing the catalog.': 'environmentCenter.gatewayPanelRefreshManagedDetail',
+    'Desktop will check whether this external Gateway endpoint is reachable without changing trust or catalog data.': 'environmentCenter.gatewayPanelRefreshAccessOnlyDetail',
+    'Stop Gateway': 'environmentCenter.gatewayActionStop',
+    'Restart Gateway': 'environmentCenter.gatewayActionRestart',
+    'Update Gateway': 'environmentCenter.gatewayActionUpdate',
+    'Review Gateway identity': 'environmentCenter.gatewayPanelReviewIdentityTitle',
+    'Retry Gateway pairing': 'environmentCenter.gatewayPanelRetryPairingTitle',
+    'Desktop pairs URL Gateways automatically. Retry sync when the endpoint is reachable; runtime management stays on the Gateway host.': 'environmentCenter.gatewayPanelAccessOnlyPairDetail',
+    'Start Gateway to sync': 'environmentCenter.gatewayPanelStartToSyncTitle',
+    'Desktop can start this Gateway runtime, then continue automatic pairing and catalog sync.': 'environmentCenter.gatewayPanelStartToSyncDetail',
+    'Start Gateway before syncing catalog': 'environmentCenter.gatewayPanelStartBeforeSyncAria',
+    'Update Gateway before pairing': 'environmentCenter.gatewayPanelUpdateBeforePairTitle',
+    'Desktop needs to update this Gateway runtime before it can safely pair and trust the catalog.': 'environmentCenter.gatewayPanelUpdateBeforePairDetail',
+    'Resolve Gateway before pairing': 'environmentCenter.gatewayPanelResolveBeforePairTitle',
+    'Desktop needs a reachable Gateway runtime before it can pair.': 'environmentCenter.gatewayPanelResolveBeforePairDetail',
+    'Pair this Gateway': 'environmentCenter.gatewayPanelPairThisGatewayAria',
+    'Desktop normally pairs Gateways automatically. Retry sync to verify the Gateway identity and refresh its environment catalog.': 'environmentCenter.gatewayPanelRetryPairingDetail',
+    'Gateway needs attention': 'environmentCenter.gatewayGuidanceNeedsAttentionTitle',
+    'Desktop needs this Gateway runtime ready before refreshing the catalog.': 'environmentCenter.gatewayPanelRuntimeReadyBeforeCatalogDetail',
+    'Resolve Gateway before refreshing catalog': 'environmentCenter.gatewayPanelResolveBeforeCatalogAria',
+    'Gateway pairing challenge signature is invalid.': 'environmentCenter.gatewayPanelErrorPairSignatureInvalid',
+    'SSH host is unreachable.': 'environmentCenter.gatewayPanelErrorSshHostUnreachable',
+    'Gateway SSH host is unreachable.': 'environmentCenter.gatewayPanelErrorSshHostUnreachable',
+    'Gateway bridge is unavailable.': 'environmentCenter.gatewayPanelErrorBridgeUnavailable',
+    'Gateway bridge session is unavailable.': 'environmentCenter.gatewayPanelErrorBridgeUnavailable',
+    'Gateway Runtime is not running.': 'environmentCenter.gatewayPanelErrorRuntimeNotRunning',
+    'Gateway request was rejected.': 'environmentCenter.gatewayPanelErrorRequestRejected',
+  });
+}
+
+function localizedGatewayActionPanelDetail(
+  i18n: DesktopI18n,
+  model: GatewayActionPanelModel,
+): string {
+  if (model.affected_sessions.length > 0 && (
+    model.kind === 'stop_gateway_confirm'
+    || model.kind === 'restart_gateway_confirm'
+    || model.kind === 'update_gateway_confirm'
+  )) {
+    const count = model.affected_sessions.length;
+    return i18n.t(count === 1
+      ? 'environmentCenter.gatewayPanelConfirmSessionsOne'
+      : 'environmentCenter.gatewayPanelConfirmSessionsMany', { count });
+  }
+  switch (model.kind) {
+    case 'stop_gateway_confirm':
+      return i18n.t('environmentCenter.gatewayPanelStopDetail');
+    case 'restart_gateway_confirm':
+      return i18n.t('environmentCenter.gatewayPanelRestartDetail');
+    case 'update_gateway_confirm':
+      return i18n.t('environmentCenter.gatewayPanelUpdateDetail');
+    default:
+      return localizedGatewayActionPanelText(i18n, model.detail);
+  }
+}
+
+function localizedGatewayPanelFactLabel(i18n: DesktopI18n, label: string): string {
+  return localizedStringByValue(i18n, label, {
+    Runtime: 'settings.runtimeLabel',
+    Trust: 'environmentCenter.gatewayPanelFactTrust',
+    Transport: 'environmentCenter.gatewayPanelFactTransport',
+    Endpoint: 'environmentFacts.endpoint',
+    Host: 'environmentCenter.gatewayPanelFactHost',
+    Container: 'environmentFacts.container',
+  });
+}
+
+function localizedGatewayPanelFactValue(i18n: DesktopI18n, value: string): string {
+  return localizedStringByValue(i18n, value, {
+    'Access-only': 'environmentCenter.gatewayAccessOnlyByDesktop',
+    'Not started': 'environmentStatus.stopped',
+    Starting: 'progress.startingRuntime',
+    Ready: 'status.ready',
+    'SSH unreachable': 'environmentCenter.gatewayPanelRuntimeSshUnreachable',
+    'Container unavailable': 'environmentCenter.gatewayPanelRuntimeContainerUnavailable',
+    'Update required': 'environmentStatus.runtimeNeedsUpdate',
+    'Bridge unavailable': 'environmentCenter.gatewayPanelRuntimeBridgeUnavailable',
+    'Needs attention': 'progress.needsAttention',
+    Unknown: 'common.unknown',
+    Paired: 'environmentCenter.gatewayPanelTrustPaired',
+    'Review required': 'environmentCenter.gatewayPanelTrustReviewRequired',
+    Revoked: 'environmentCenter.gatewayPanelTrustRevoked',
+    'Not paired': 'environmentCenter.gatewayPanelTrustNotPaired',
+    'URL transport': 'connectionDialog.gatewayTransportUrl',
+    'SSH host': 'connectionDialog.gatewayTransportSshHost',
+    'SSH container': 'connectionDialog.gatewayTransportSshContainer',
+  });
 }
 
 function localizedGuidanceAction(
@@ -5778,6 +5996,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   const useSpaciousWelcomeShell = createMemo(() => (
     useSpaciousEnvironmentLibraryLayout() || useSpaciousControlPlaneLayout() || useSpaciousGatewayLayout()
   ));
+  const headerCopy = createMemo(() => ENVIRONMENT_CENTER_HEADER_COPY[props.activeTab]);
 
   return (
     <div class="redeven-welcome-surface h-full min-h-0 w-full min-w-0 overflow-auto bg-background">
@@ -5790,9 +6009,9 @@ function ConnectEnvironmentSurface(props: Readonly<{
           <header class="redeven-header-separator mb-5 space-y-4">
             <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div class="space-y-1">
-                <h1 class="text-lg font-semibold tracking-tight text-foreground">{props.i18n.t('environmentCenter.title')}</h1>
+                <h1 class="text-lg font-semibold tracking-tight text-foreground">{props.i18n.t(headerCopy().titleKey)}</h1>
                 <p class="text-xs text-muted-foreground">
-                  {props.i18n.t('environmentCenter.description')}
+                  {props.i18n.t(headerCopy().descriptionKey)}
                 </p>
               </div>
               <div class="flex items-center gap-2">
@@ -5851,9 +6070,15 @@ function ConnectEnvironmentSurface(props: Readonly<{
                   </Button>
                 </Show>
                 <Show when={props.activeTab === 'gateways'}>
-                  <Button size="sm" variant="default" onClick={() => props.openCreateGatewaySetup()}>
+                  <Button
+                    size="sm"
+                    variant="default"
+                    title={props.i18n.t('environmentCenter.addGateway')}
+                    aria-label={props.i18n.t('environmentCenter.addGateway')}
+                    onClick={() => props.openCreateGatewaySetup()}
+                  >
                     <Plus class="mr-1 h-3.5 w-3.5" />
-                    {props.i18n.t('environmentCenter.addGateway')}
+                    {props.i18n.t('environmentCenter.addGatewayShort')}
                   </Button>
                 </Show>
               </div>
@@ -9652,6 +9877,10 @@ function GatewaySourceCard(props: Readonly<{
     props.onActionPopoverOpenChange(false);
     void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayRuntimeAction, props.runGatewayLauncherAction);
   };
+  const refreshStatusLabel = createMemo(() => props.i18n.t('environmentAction.refreshStatus'));
+  const moreActionsLabel = createMemo(() => props.i18n.t('environmentCenter.moreActions'));
+  const moreActionsForLabel = createMemo(() => props.i18n.t('environmentCenter.moreActionsForLabel', { label: row().label }));
+  const manageGatewayLabel = createMemo(() => props.i18n.t('environmentCenter.manageGatewayForLabel', { label: row().label }));
   const refreshStatusAction = {
     intent: 'refresh_gateway_status' as const,
     label: 'Refresh status',
@@ -9695,18 +9924,18 @@ function GatewaySourceCard(props: Readonly<{
             <div class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <span class="redeven-gateway-card__management-chip">
                 <span class="redeven-gateway-card__management-dot" aria-hidden="true" />
-                {row().management_label}
+                {localizedGatewaySourceText(props.i18n, row().management_label)}
               </span>
               <Show when={row().endpoint_label}>
                 {(endpoint) => <span class="redeven-gateway-card__endpoint">{endpoint()}</span>}
               </Show>
             </div>
           </div>
-          <DesktopTooltip content="Refresh status" placement="top">
+          <DesktopTooltip content={refreshStatusLabel()} placement="top">
             <span>
               <ConsoleActionIconButton
-                title="Refresh status"
-                aria-label={`Refresh ${row().label} status`}
+                title={refreshStatusLabel()}
+                aria-label={props.i18n.t('environmentCenter.refreshGatewayStatusForLabel', { label: row().label })}
                 disabled={gatewayActionRunning()}
                 onClick={runRefreshStatus}
               >
@@ -9728,15 +9957,15 @@ function GatewaySourceCard(props: Readonly<{
               <Check class="mt-0.5 h-3.5 w-3.5 shrink-0" />
             </Show>
             <div class="min-w-0">
-              <div class="text-xs font-semibold text-foreground">{row().guidance.title}</div>
-              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{row().guidance.detail}</div>
+              <div class="text-xs font-semibold text-foreground">{localizedGatewaySourceText(props.i18n, row().guidance.title)}</div>
+              <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{localizedGatewaySourceText(props.i18n, row().guidance.detail)}</div>
             </div>
           </div>
         </div>
         <div class="redeven-gateway-card__catalog-summary">
           <div class="min-w-0">
-            <div class="text-xs font-semibold text-foreground">{row().environment_summary_label}</div>
-            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{row().environment_summary_detail}</div>
+            <div class="text-xs font-semibold text-foreground">{localizedGatewaySourceCountText(props.i18n, row().environment_summary_label)}</div>
+            <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{localizedGatewaySourceText(props.i18n, row().environment_summary_detail)}</div>
           </div>
           <Button
             size="sm"
@@ -9746,7 +9975,7 @@ function GatewaySourceCard(props: Readonly<{
             onClick={() => props.viewGatewayEnvironments(props.gateway)}
           >
             <ChevronRight class="mr-1 h-3.5 w-3.5" />
-            View
+            {props.i18n.t('environmentCenter.gatewayViewShort')}
           </Button>
         </div>
       </CardContent>
@@ -9852,8 +10081,8 @@ function GatewaySourceCard(props: Readonly<{
             anchorClass="redeven-gateway-card__primary-anchor"
             popoverAriaLabel={
               progressPanelVisible()
-                ? (visibleGatewayProgress() ? localizedProgressTitle(props.i18n, visibleGatewayProgress()!) : 'Gateway progress')
-                : row().guidance.title
+                ? (visibleGatewayProgress() ? localizedProgressTitle(props.i18n, visibleGatewayProgress()!) : props.i18n.t('environmentCenter.gatewayProgress'))
+                : localizedGatewaySourceText(props.i18n, row().guidance.title)
             }
           >
             <Show
@@ -9905,7 +10134,7 @@ function GatewaySourceCard(props: Readonly<{
               <span>
                 <ConsoleActionIconButton
                   title={props.i18n.t('common.settings')}
-                  aria-label={`Manage ${row().label}`}
+                  aria-label={manageGatewayLabel()}
                   onClick={() => props.openCreateGatewaySetup(props.gateway)}
                 >
                   <Settings class="h-3.5 w-3.5" />
@@ -9941,11 +10170,11 @@ function GatewaySourceCard(props: Readonly<{
               </Show>
               <Show when={overflowSecondaryActions().length > 0}>
                 <span ref={moreActionsAnchorRef} class="relative">
-                  <DesktopTooltip content="More actions" placement="top">
+                  <DesktopTooltip content={moreActionsLabel()} placement="top">
                     <span>
                       <ConsoleActionIconButton
-                        title="More actions"
-                        aria-label={`More actions for ${row().label}`}
+                        title={moreActionsLabel()}
+                        aria-label={moreActionsForLabel()}
                         aria-haspopup="menu"
                         aria-expanded={moreActionsOpen()}
                         onClick={() => setMoreActionsOpen((open) => !open)}
@@ -9960,7 +10189,7 @@ function GatewaySourceCard(props: Readonly<{
                       anchorRef={moreActionsAnchorRef}
                       placement="top"
                       role="menu"
-                      ariaLabel={`More actions for ${row().label}`}
+                      ariaLabel={moreActionsForLabel()}
                       interactive
                       hideArrow
                       class="redeven-split-menu z-[230] max-w-[min(16rem,calc(100vw-1rem))]"
@@ -10041,8 +10270,12 @@ function GatewayActionPanel(props: Readonly<{
     props.runAction(action);
   };
   const tone = createMemo(() => gatewayPanelIconTone(props.model.tone));
+  const panelAriaLabel = createMemo(() => localizedGatewayActionPanelText(props.i18n, props.model.aria_label));
+  const panelEyebrow = createMemo(() => localizedGatewayActionPanelText(props.i18n, props.model.eyebrow));
+  const panelTitle = createMemo(() => localizedGatewayActionPanelText(props.i18n, props.model.title));
+  const panelDetail = createMemo(() => localizedGatewayActionPanelDetail(props.i18n, props.model));
   return (
-    <div class="redeven-action-popover redeven-gateway-action-panel" tabIndex={-1} aria-label={props.model.aria_label}>
+    <div class="redeven-action-popover redeven-gateway-action-panel" tabIndex={-1} aria-label={panelAriaLabel()}>
       <div class="redeven-action-popover__status-header">
         <span class="redeven-action-popover__status-icon" data-tone={tone()}>
           <Show when={props.model.tone === 'error'} fallback={props.model.tone === 'warning' ? <AlertTriangle /> : <ShieldCheck />}>
@@ -10050,30 +10283,32 @@ function GatewayActionPanel(props: Readonly<{
           </Show>
         </span>
         <div class="redeven-action-popover__status-text">
-          <div class="redeven-action-popover__eyebrow">{props.model.eyebrow}</div>
-          <div class="redeven-action-popover__title">{props.model.title}</div>
+          <div class="redeven-action-popover__eyebrow">{panelEyebrow()}</div>
+          <div class="redeven-action-popover__title">{panelTitle()}</div>
         </div>
       </div>
-      <div class="redeven-action-popover__detail">{props.model.detail}</div>
+      <div class="redeven-action-popover__detail">{panelDetail()}</div>
       <div class="redeven-gateway-action-panel__facts">
         <For each={props.model.facts}>
           {(fact) => (
             <div class="redeven-gateway-action-panel__fact">
-              <span class="redeven-gateway-action-panel__fact-label">{fact.label}</span>
-              <span class="redeven-gateway-action-panel__fact-value" data-tone={fact.tone ?? 'neutral'}>{fact.value}</span>
+              <span class="redeven-gateway-action-panel__fact-label">{localizedGatewayPanelFactLabel(props.i18n, fact.label)}</span>
+              <span class="redeven-gateway-action-panel__fact-value" data-tone={fact.tone ?? 'neutral'}>{localizedGatewayPanelFactValue(props.i18n, fact.value)}</span>
             </div>
           )}
         </For>
       </div>
       <Show when={props.model.affected_sessions.length > 0}>
         <div class="redeven-action-popover__notice" data-tone="warning">
-          <div class="redeven-action-popover__notice-title">Affected sessions</div>
+          <div class="redeven-action-popover__notice-title">{props.i18n.t('environmentCenter.gatewayPanelAffectedSessions')}</div>
           <div class="redeven-gateway-action-panel__sessions">
             <For each={props.model.affected_sessions}>
               {(session) => <div class="redeven-gateway-action-panel__session">{session.label}</div>}
             </For>
             <Show when={props.model.overflow_session_count > 0}>
-              <div class="redeven-gateway-action-panel__session">+{props.model.overflow_session_count} more</div>
+              <div class="redeven-gateway-action-panel__session">
+                {props.i18n.t('environmentCenter.gatewayPanelOverflowSessions', { count: props.model.overflow_session_count })}
+              </div>
             </Show>
           </div>
         </div>

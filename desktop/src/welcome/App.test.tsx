@@ -216,23 +216,33 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("case 'resolve_gateway':\n      openCreateGatewaySetup(gateway);");
     expect(appSrc).toContain("case 'start_gateway_runtime':");
     expect(appSrc).toContain("case 'refresh_gateway_catalog':");
-    const addGatewayLabel = "props.i18n.t('environmentCenter.addGateway')";
-    const addGatewayLabelOffsets: number[] = [];
-    let searchOffset = 0;
-    for (;;) {
-      const nextOffset = appSrc.indexOf(addGatewayLabel, searchOffset);
-      if (nextOffset < 0) {
-        break;
-      }
-      addGatewayLabelOffsets.push(nextOffset);
-      searchOffset = nextOffset + addGatewayLabel.length;
-    }
-    expect(addGatewayLabelOffsets).toHaveLength(2);
-    for (const offset of addGatewayLabelOffsets) {
-      const buttonPrefix = appSrc.slice(Math.max(0, offset - 240), offset);
-      expect(buttonPrefix).toContain('props.openCreateGatewaySetup()');
-      expect(buttonPrefix).not.toContain('openCreateConnectionDialog');
-    }
+    expect(appSrc).toContain('const ENVIRONMENT_CENTER_HEADER_COPY');
+    expect(appSrc).toContain("titleKey: 'environmentCenter.environmentsTitle'");
+    expect(appSrc).toContain("titleKey: 'environmentCenter.providersTitle'");
+    expect(appSrc).toContain("titleKey: 'environmentCenter.gatewaysTitle'");
+    expect(appSrc).toContain("props.i18n.t(headerCopy().titleKey)");
+    expect(appSrc).toContain("props.i18n.t(headerCopy().descriptionKey)");
+    expect(appSrc).not.toContain("props.i18n.t('environmentCenter.description')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.addGatewayShort')");
+    expect(appSrc).toContain("title={props.i18n.t('environmentCenter.addGateway')}");
+    expect(appSrc).toContain("aria-label={props.i18n.t('environmentCenter.addGateway')}");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.gatewayViewShort')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.refreshGatewayStatusForLabel'");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.moreActions')");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.moreActionsForLabel'");
+    expect(appSrc).toContain('localizedGatewaySourceText(props.i18n, row().guidance.title)');
+    expect(appSrc).toContain('localizedGatewaySourceCountText(props.i18n, row().environment_summary_label)');
+    expect(appSrc).not.toContain('>\\n            View\\n');
+    expect(appSrc).not.toContain('content="More actions"');
+    const gatewayHeaderButtonOffset = appSrc.indexOf("props.i18n.t('environmentCenter.addGatewayShort')");
+    const gatewayHeaderButtonSrc = appSrc.slice(Math.max(0, gatewayHeaderButtonOffset - 420), gatewayHeaderButtonOffset + 120);
+    expect(gatewayHeaderButtonSrc).toContain('props.openCreateGatewaySetup()');
+    expect(gatewayHeaderButtonSrc).toContain("props.i18n.t('environmentCenter.addGateway')");
+    expect(gatewayHeaderButtonSrc).not.toContain('openCreateConnectionDialog');
+    const fullAddGatewayButtonOffset = appSrc.lastIndexOf("props.i18n.t('environmentCenter.addGateway')");
+    const fullAddGatewayButtonSrc = appSrc.slice(Math.max(0, fullAddGatewayButtonOffset - 260), fullAddGatewayButtonOffset + 80);
+    expect(fullAddGatewayButtonSrc).toContain('props.openCreateGatewaySetup()');
+    expect(fullAddGatewayButtonSrc).not.toContain('openCreateConnectionDialog');
   });
 
   it('does not let Gateway environment open fall back to remote URL actions', () => {
@@ -751,8 +761,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('class="redeven-gateway-library"');
     expect(appSrc).toContain('<div class="redeven-gateway-grid">');
     expect(appSrc).toContain('redeven-environment-card redeven-gateway-card');
-    expect(appSrc).toContain('row().guidance.title');
-    expect(appSrc).toContain('row().guidance.detail');
+    expect(appSrc).toContain('localizedGatewaySourceText(props.i18n, row().guidance.title)');
+    expect(appSrc).toContain('localizedGatewaySourceText(props.i18n, row().guidance.detail)');
     expect(appSrc).toContain('selectedSnapshotGatewayProgress(props.gateway.gateway_id, props.actionProgress)');
     expect(appSrc).toContain('<GatewayActionPanel');
     expect(appSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? \'start_if_needed\' : undefined');
@@ -766,7 +776,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
     expect(appSrc).toContain("case 'refresh_status':");
     expect(appSrc).toContain('<MoreHorizontal class="h-3.5 w-3.5" />');
-    expect(appSrc).toContain('ariaLabel={`More actions for ${row().label}`}');
+    expect(appSrc).toContain('ariaLabel={moreActionsForLabel()}');
     expect(appSrc).not.toContain('redeven-gateway-card__secondary-actions');
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
     expect(appSrc).not.toContain('gatewayStartRequiredNextStep');
@@ -932,7 +942,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('connectEnvironmentTitle');
     expect(appSrc).toContain('openRedevenDashboard');
     expect(appSrc).toContain('function openRedevenDashboard');
-    expect(appSrc).toContain("props.i18n.t('environmentCenter.title')");
+    expect(appSrc).toContain("props.i18n.t(headerCopy().titleKey)");
     expect(appSrc).toContain("labelKey: 'desktop.provider'");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.searchPlaceholder')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.localFilter')");

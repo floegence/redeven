@@ -469,7 +469,6 @@ function notApplicableGatewayRuntimeState(): DesktopGatewayRuntimeState {
 export function gatewayRecordToSourceWithCatalog(
   record: GatewayRecord,
   catalog: Readonly<{
-    display_name?: string;
     status?: DesktopGatewayStatus;
     status_message?: string;
     environments?: readonly DesktopGatewayEnvironment[];
@@ -483,7 +482,6 @@ export function gatewayRecordToSourceWithCatalog(
   const status = catalog.status ?? 'online';
   return {
     ...base,
-    display_name: compact(catalog.display_name) || base.display_name,
     status,
     trust_state: status === 'trust_changed' ? 'trust_changed' : base.trust_state,
     status_message: compact(catalog.status_message)
