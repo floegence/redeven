@@ -330,6 +330,11 @@ export const koKR = {
     gatewayGuidanceCatalogAvailableDetail: "변경사항을 반영하려면 catalog를 새로고침하세요. environments는 Environments 탭에 별도로 표시됩니다.",
     gatewayPanelManagedGateway: "관리 Gateway",
     gatewayPanelActionNeedsAttention: "Gateway 작업에 확인이 필요합니다",
+    gatewayPanelRecommendedNextStep: "권장 다음 단계",
+    gatewayPanelStatusSection: "상태",
+    gatewayPanelDiagnostics: "진단",
+    gatewayPanelTrustSection: "Gateway 신뢰",
+    gatewayPanelFactCatalogSync: "카탈로그 동기화",
     gatewayPanelActionFailedTitle: "{action} 실패",
     gatewayPanelActionFailedDetail: "Desktop이 이 Gateway 작업을 완료하지 못했습니다.",
     gatewayPanelManageTitle: "Gateway 관리",
@@ -673,6 +678,7 @@ export const koKR = {
     checking: "확인 중",
     failed: "실패",
     ready: "준비됨",
+    idle: "대기 중",
   },
   plural: {
     environmentCount: plural({

@@ -57,6 +57,8 @@ export type GatewayActionPanelModel = Readonly<{
   detail: string;
   aria_label: string;
   facts: readonly GatewayActionPanelFact[];
+  status_facts: readonly GatewayActionPanelFact[];
+  diagnostic_facts: readonly GatewayActionPanelFact[];
   affected_sessions: readonly GatewayActionAffectedSession[];
   overflow_session_count: number;
   continuation_action?: DesktopLauncherActionRequest;
@@ -146,10 +148,39 @@ function trustStateLabel(gateway: DesktopGatewaySource): string {
   }
 }
 
-function defaultFacts(gateway: DesktopGatewaySource): readonly GatewayActionPanelFact[] {
+function catalogSyncLabel(gateway: DesktopGatewaySource): GatewayActionPanelFact {
+  switch (gateway.sync_state ?? 'idle') {
+    case 'syncing':
+      return { label: 'Catalog sync', value: 'Syncing', tone: 'warning' };
+    case 'catalog_failed':
+    case 'gateway_unreachable':
+    case 'pairing_failed':
+      return { label: 'Catalog sync', value: 'Failed', tone: 'error' };
+    case 'ready':
+      return { label: 'Catalog sync', value: 'Ready' };
+    default:
+      return { label: 'Catalog sync', value: 'Idle' };
+  }
+}
+
+function gatewayServiceFact(gateway: DesktopGatewaySource): GatewayActionPanelFact {
   const status = serviceStatus(gateway);
+  return {
+    label: 'Gateway service',
+    value: serviceStatusLabel(status),
+    tone: status === 'ready' || status === 'not_applicable' ? 'neutral' : 'warning',
+  };
+}
+
+function defaultStatusFacts(gateway: DesktopGatewaySource): readonly GatewayActionPanelFact[] {
   return [
-    { label: 'Gateway service', value: serviceStatusLabel(status), tone: status === 'ready' || status === 'not_applicable' ? 'neutral' : 'warning' },
+    gatewayServiceFact(gateway),
+    catalogSyncLabel(gateway),
+  ];
+}
+
+function defaultDiagnosticFacts(gateway: DesktopGatewaySource): readonly GatewayActionPanelFact[] {
+  return [
     { label: 'Trust', value: trustStateLabel(gateway), tone: gateway.trust_state === 'paired' ? 'neutral' : 'warning' },
     { label: 'Transport', value: desktopGatewayConnectionKindLabel(gateway.connection_kind) },
     { label: 'Endpoint', value: compact(gateway.endpoint_label) || compact(gateway.gateway_url) || gateway.gateway_id },
@@ -211,16 +242,20 @@ function resolveFocusForGateway(gateway: DesktopGatewaySource): DesktopGatewayRe
 }
 
 function buildPanel(
-  input: Omit<GatewayActionPanelModel, 'facts' | 'affected_sessions' | 'overflow_session_count' | 'secondary_actions'>
+  input: Omit<GatewayActionPanelModel, 'facts' | 'status_facts' | 'diagnostic_facts' | 'affected_sessions' | 'overflow_session_count' | 'secondary_actions'>
   & Readonly<{
     gateway: DesktopGatewaySource;
     facts?: readonly GatewayActionPanelFact[];
+    status_facts?: readonly GatewayActionPanelFact[];
+    diagnostic_facts?: readonly GatewayActionPanelFact[];
     affected_sessions?: readonly GatewayActionAffectedSession[];
     secondary_actions?: readonly GatewaySourceActionModel[];
   }>,
 ): GatewayActionPanelModel {
   const sessions = input.affected_sessions ?? [];
   const visibleSessions = sessions.slice(0, 5);
+  const statusFacts = input.status_facts ?? defaultStatusFacts(input.gateway);
+  const diagnosticFacts = input.diagnostic_facts ?? defaultDiagnosticFacts(input.gateway);
   return {
     kind: input.kind,
     execution_mode: input.execution_mode,
@@ -229,7 +264,9 @@ function buildPanel(
     title: input.title,
     detail: input.detail,
     aria_label: input.aria_label,
-    facts: input.facts ?? defaultFacts(input.gateway),
+    facts: input.facts ?? [...statusFacts, ...diagnosticFacts],
+    status_facts: statusFacts,
+    diagnostic_facts: diagnosticFacts,
     affected_sessions: visibleSessions,
     overflow_session_count: Math.max(0, sessions.length - visibleSessions.length),
     ...(input.continuation_action ? { continuation_action: input.continuation_action } : {}),
@@ -339,7 +376,7 @@ export function buildGatewayActionPresentation(
       kind: 'resolve_before_pair',
       execution_mode: 'guide',
       tone: 'warning',
-      eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
+      eyebrow: 'Gateway',
       title: pairingFailure
         ? 'Gateway pairing needs attention'
         : catalogFailure
@@ -380,7 +417,7 @@ export function buildGatewayActionPresentation(
       kind: 'refresh_status',
       execution_mode: 'direct',
       tone: 'neutral',
-      eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
+      eyebrow: 'Gateway status',
       title: 'Refresh Gateway status',
       detail: manageable
         ? 'Desktop will check Gateway service reachability, version, and management state without refreshing the catalog.'
@@ -399,7 +436,7 @@ export function buildGatewayActionPresentation(
       kind: confirmationPanelKind(action.intent),
       execution_mode: 'confirm',
       tone: sessions.length > 0 ? 'warning' : 'neutral',
-      eyebrow: 'Managed Gateway',
+      eyebrow: 'Gateway service',
       title: label,
       detail: sessions.length > 0
         ? `${sessions.length} environment session${sessions.length === 1 ? '' : 's'} opened through this Gateway will be disconnected.`
@@ -422,7 +459,7 @@ export function buildGatewayActionPresentation(
       kind: 'access_only_pair',
       execution_mode: 'guide',
       tone: 'primary',
-      eyebrow: 'Access-only Gateway',
+      eyebrow: 'Gateway trust',
       title: gateway.trust_state === 'revoked' ? 'Review Gateway identity' : 'Retry Gateway pairing',
       detail: 'Desktop pairs URL Gateways automatically. Retry sync when the endpoint is reachable; Gateway service is managed on the Gateway host.',
       aria_label: 'Pair access-only Gateway',
@@ -438,7 +475,7 @@ export function buildGatewayActionPresentation(
       kind: 'start_and_refresh_catalog',
       execution_mode: 'guide',
       tone: 'warning',
-      eyebrow: 'Managed Gateway',
+      eyebrow: 'Gateway service',
       title: 'Start Gateway to sync',
       detail: 'Desktop can start this Gateway service, then continue automatic pairing and catalog sync.',
       aria_label: 'Start Gateway before syncing catalog',
@@ -461,7 +498,7 @@ export function buildGatewayActionPresentation(
       kind: 'update_then_pair',
       execution_mode: 'guide',
       tone: 'warning',
-      eyebrow: 'Managed Gateway',
+      eyebrow: 'Gateway service',
       title: 'Update Gateway before pairing',
       detail: 'Desktop needs to update this Gateway service before it can safely pair and trust the catalog.',
       aria_label: 'Update Gateway before pairing',
@@ -476,7 +513,7 @@ export function buildGatewayActionPresentation(
       kind: 'resolve_before_pair',
       execution_mode: 'guide',
       tone: 'warning',
-      eyebrow: 'Managed Gateway',
+      eyebrow: 'Gateway service',
       title: 'Resolve Gateway before pairing',
       detail: gateway.service_state?.message || 'Desktop needs a reachable Gateway service before it can pair.',
       aria_label: 'Resolve Gateway before pairing',
@@ -492,7 +529,7 @@ export function buildGatewayActionPresentation(
       kind: 'pair_ready',
       execution_mode: 'guide',
       tone: gateway.trust_state === 'revoked' || gateway.trust_state === 'trust_changed' ? 'warning' : 'primary',
-      eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
+      eyebrow: 'Gateway trust',
       title: gateway.trust_state === 'revoked' || gateway.trust_state === 'trust_changed' ? 'Review Gateway identity' : 'Retry Gateway pairing',
       detail: 'Desktop normally pairs Gateways automatically. Retry sync to verify the Gateway identity and refresh its environment catalog.',
       aria_label: 'Pair this Gateway',
@@ -508,7 +545,7 @@ export function buildGatewayActionPresentation(
       kind: 'resolve_before_pair',
       execution_mode: 'guide',
       tone: 'warning',
-      eyebrow: 'Managed Gateway',
+      eyebrow: 'Gateway service',
       title: 'Gateway needs attention',
       detail: gateway.service_state?.message || 'Desktop needs this Gateway service ready before refreshing the catalog.',
       aria_label: 'Resolve Gateway before refreshing catalog',
@@ -523,7 +560,7 @@ export function buildGatewayActionPresentation(
     kind: 'none',
     execution_mode: 'direct',
     tone: 'neutral',
-    eyebrow: manageable ? 'Managed Gateway' : 'Access-only Gateway',
+    eyebrow: 'Gateway',
     title: actionLabel(action.intent),
     detail: `Desktop will run ${actionLabel(action.intent).toLowerCase()} for ${gateway.display_name}.`,
     aria_label: actionLabel(action.intent),

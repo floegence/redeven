@@ -330,6 +330,11 @@ export const jaJP = {
     gatewayGuidanceCatalogAvailableDetail: "変更を取り込むにはカタログを更新してください。environments は Environments タブに別途表示されます。",
     gatewayPanelManagedGateway: "管理対象 Gateway",
     gatewayPanelActionNeedsAttention: "Gateway 操作に対応が必要です",
+    gatewayPanelRecommendedNextStep: "推奨される次の手順",
+    gatewayPanelStatusSection: "状態",
+    gatewayPanelDiagnostics: "診断",
+    gatewayPanelTrustSection: "Gateway 信頼",
+    gatewayPanelFactCatalogSync: "カタログ同期",
     gatewayPanelActionFailedTitle: "{action} に失敗しました",
     gatewayPanelActionFailedDetail: "Desktop はこの Gateway 操作を完了できませんでした。",
     gatewayPanelManageTitle: "Gateway を管理",
@@ -673,6 +678,7 @@ export const jaJP = {
     checking: "確認中",
     failed: "失敗",
     ready: "準備完了",
+    idle: "アイドル",
   },
   plural: {
     environmentCount: plural({

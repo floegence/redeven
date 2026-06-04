@@ -330,6 +330,11 @@ export const zhTW = {
     gatewayGuidanceCatalogAvailableDetail: "重新整理目錄以取得變化；它的 environments 會單獨列在 Environments tab 中。",
     gatewayPanelManagedGateway: "託管 Gateway",
     gatewayPanelActionNeedsAttention: "Gateway 操作需要處理",
+    gatewayPanelRecommendedNextStep: "建議下一步",
+    gatewayPanelStatusSection: "狀態",
+    gatewayPanelDiagnostics: "診斷資訊",
+    gatewayPanelTrustSection: "Gateway 信任",
+    gatewayPanelFactCatalogSync: "目錄同步",
     gatewayPanelActionFailedTitle: "{action} 失敗",
     gatewayPanelActionFailedDetail: "Desktop 未能完成此 Gateway 操作。",
     gatewayPanelManageTitle: "管理 Gateway",
@@ -673,6 +678,7 @@ export const zhTW = {
     checking: "檢查中",
     failed: "失敗",
     ready: "就緒",
+    idle: "閒置",
   },
   plural: {
     environmentCount: plural({

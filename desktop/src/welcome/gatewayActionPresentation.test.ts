@@ -53,11 +53,22 @@ describe('buildGatewayActionPresentation', () => {
     expect(model).toMatchObject({
       kind: 'resolve_before_pair',
       execution_mode: 'guide',
+      eyebrow: 'Gateway',
       title: 'Gateway pairing needs attention',
       detail: 'Gateway pairing challenge signature is invalid.',
       primary_action: { intent: 'pair_gateway', label: 'Retry sync' },
       continuation_action: { kind: 'pair_gateway', gateway_id: 'gw-demo' },
     });
+    expect(model.status_facts).toEqual([
+      expect.objectContaining({ label: 'Gateway service', value: 'Ready' }),
+      expect.objectContaining({ label: 'Catalog sync', value: 'Failed', tone: 'error' }),
+    ]);
+    expect(model.diagnostic_facts.map((fact) => fact.label)).toEqual(expect.arrayContaining([
+      'Trust',
+      'Transport',
+      'Endpoint',
+    ]));
+    expect(JSON.stringify(model)).not.toContain('Managed Gateway');
   });
 
   it('keeps URL Gateways access-only and does not offer Gateway service management while pairing', () => {
@@ -101,7 +112,12 @@ describe('buildGatewayActionPresentation', () => {
     });
 
     expect(model.kind).toBe('start_and_refresh_catalog');
+    expect(model.eyebrow).toBe('Gateway service');
     expect(model.primary_action).toMatchObject({ intent: 'pair_gateway', label: 'Retry sync' });
+    expect(model.status_facts).toEqual([
+      expect.objectContaining({ label: 'Gateway service', value: 'Not started', tone: 'warning' }),
+      expect.objectContaining({ label: 'Catalog sync', value: 'Idle' }),
+    ]);
     expect(model.secondary_actions).toEqual(expect.arrayContaining([
       expect.objectContaining({ intent: 'start_gateway', label: 'Start Gateway' }),
     ]));

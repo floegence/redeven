@@ -330,6 +330,11 @@ export const frFR = {
     gatewayGuidanceCatalogAvailableDetail: "Actualisez le catalogue pour récupérer les changements ; ses environments sont listés séparément dans l’onglet Environments.",
     gatewayPanelManagedGateway: "Gateway géré",
     gatewayPanelActionNeedsAttention: "L’action Gateway demande une action",
+    gatewayPanelRecommendedNextStep: "Prochaine étape recommandée",
+    gatewayPanelStatusSection: "État",
+    gatewayPanelDiagnostics: "Diagnostic",
+    gatewayPanelTrustSection: "Confiance Gateway",
+    gatewayPanelFactCatalogSync: "Synchronisation du catalogue",
     gatewayPanelActionFailedTitle: "{action} a échoué",
     gatewayPanelActionFailedDetail: "Desktop n’a pas pu terminer cette action Gateway.",
     gatewayPanelManageTitle: "Gérer Gateway",
@@ -673,6 +678,7 @@ export const frFR = {
     checking: "Vérification",
     failed: "Échec",
     ready: "Prêt",
+    idle: "Inactif",
   },
   plural: {
     environmentCount: plural({
