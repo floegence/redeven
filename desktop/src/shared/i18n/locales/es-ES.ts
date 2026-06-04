@@ -330,6 +330,11 @@ export const esES = {
     gatewayGuidanceCatalogAvailableDetail: "Actualiza el catálogo para recoger cambios; sus environments aparecen por separado en la pestaña Environments.",
     gatewayPanelManagedGateway: "Gateway gestionado",
     gatewayPanelActionNeedsAttention: "La acción de Gateway requiere atención",
+    gatewayPanelRecommendedNextStep: "Siguiente paso recomendado",
+    gatewayPanelStatusSection: "Estado",
+    gatewayPanelDiagnostics: "Diagnóstico",
+    gatewayPanelTrustSection: "Confianza del Gateway",
+    gatewayPanelFactCatalogSync: "Sincronización del catálogo",
     gatewayPanelActionFailedTitle: "{action} falló",
     gatewayPanelActionFailedDetail: "Desktop no pudo completar esta acción de Gateway.",
     gatewayPanelManageTitle: "Gestionar Gateway",
@@ -673,6 +678,7 @@ export const esES = {
     checking: "Comprobando",
     failed: "Error",
     ready: "Listo",
+    idle: "Inactivo",
   },
   plural: {
     environmentCount: plural({

@@ -330,6 +330,11 @@ export const zhCN = {
     gatewayGuidanceCatalogAvailableDetail: "刷新目录以获取变化；它的 environments 会单独列在 Environments tab 中。",
     gatewayPanelManagedGateway: "托管 Gateway",
     gatewayPanelActionNeedsAttention: "Gateway 操作需要处理",
+    gatewayPanelRecommendedNextStep: "推荐下一步",
+    gatewayPanelStatusSection: "状态",
+    gatewayPanelDiagnostics: "诊断信息",
+    gatewayPanelTrustSection: "Gateway 信任",
+    gatewayPanelFactCatalogSync: "目录同步",
     gatewayPanelActionFailedTitle: "{action} 失败",
     gatewayPanelActionFailedDetail: "Desktop 未能完成此 Gateway 操作。",
     gatewayPanelManageTitle: "管理 Gateway",
@@ -673,6 +678,7 @@ export const zhCN = {
     checking: "检查中",
     failed: "失败",
     ready: "就绪",
+    idle: "空闲",
   },
   plural: {
     environmentCount: plural({

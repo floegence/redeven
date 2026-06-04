@@ -330,6 +330,11 @@ export const ptBR = {
     gatewayGuidanceCatalogAvailableDetail: "Atualize o catálogo para buscar mudanças; seus environments aparecem separadamente na aba Environments.",
     gatewayPanelManagedGateway: "Gateway gerenciado",
     gatewayPanelActionNeedsAttention: "A ação Gateway precisa de atenção",
+    gatewayPanelRecommendedNextStep: "Próxima etapa recomendada",
+    gatewayPanelStatusSection: "Status",
+    gatewayPanelDiagnostics: "Diagnóstico",
+    gatewayPanelTrustSection: "Confiança do Gateway",
+    gatewayPanelFactCatalogSync: "Sincronização do catálogo",
     gatewayPanelActionFailedTitle: "{action} falhou",
     gatewayPanelActionFailedDetail: "Desktop não conseguiu concluir esta ação Gateway.",
     gatewayPanelManageTitle: "Gerenciar Gateway",
@@ -673,6 +678,7 @@ export const ptBR = {
     checking: "Verificando",
     failed: "Falhou",
     ready: "Pronto",
+    idle: "Ocioso",
   },
   plural: {
     environmentCount: plural({

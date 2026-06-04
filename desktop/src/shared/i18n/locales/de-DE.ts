@@ -330,6 +330,11 @@ export const deDE = {
     gatewayGuidanceCatalogAvailableDetail: "Aktualisieren Sie den Katalog, um Änderungen zu übernehmen; seine Environments sind separat im Environments-Tab gelistet.",
     gatewayPanelManagedGateway: "Verwaltetes Gateway",
     gatewayPanelActionNeedsAttention: "Gateway-Aktion braucht Aufmerksamkeit",
+    gatewayPanelRecommendedNextStep: "Empfohlener nächster Schritt",
+    gatewayPanelStatusSection: "Status",
+    gatewayPanelDiagnostics: "Diagnose",
+    gatewayPanelTrustSection: "Gateway-Vertrauen",
+    gatewayPanelFactCatalogSync: "Katalog-Synchronisierung",
     gatewayPanelActionFailedTitle: "{action} fehlgeschlagen",
     gatewayPanelActionFailedDetail: "Desktop konnte diese Gateway-Aktion nicht abschließen.",
     gatewayPanelManageTitle: "Gateway verwalten",
@@ -673,6 +678,7 @@ export const deDE = {
     checking: "Wird geprüft",
     failed: "Fehlgeschlagen",
     ready: "Bereit",
+    idle: "Inaktiv",
   },
   plural: {
     environmentCount: plural({

@@ -330,6 +330,11 @@ export const ruRU = {
     gatewayGuidanceCatalogAvailableDetail: "Обновите каталог, чтобы получить изменения; его environments отображаются отдельно во вкладке Environments.",
     gatewayPanelManagedGateway: "Управляемый Gateway",
     gatewayPanelActionNeedsAttention: "Действие Gateway требует внимания",
+    gatewayPanelRecommendedNextStep: "Рекомендуемый следующий шаг",
+    gatewayPanelStatusSection: "Состояние",
+    gatewayPanelDiagnostics: "Диагностика",
+    gatewayPanelTrustSection: "Доверие Gateway",
+    gatewayPanelFactCatalogSync: "Синхронизация каталога",
     gatewayPanelActionFailedTitle: "{action} не удалось",
     gatewayPanelActionFailedDetail: "Desktop не смог завершить это действие Gateway.",
     gatewayPanelManageTitle: "Управлять Gateway",
@@ -681,6 +686,7 @@ export const ruRU = {
     checking: "Проверка",
     failed: "Ошибка",
     ready: "Готово",
+    idle: "Ожидание",
   },
   plural: {
     environmentCount: plural({

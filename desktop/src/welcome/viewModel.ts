@@ -2312,6 +2312,7 @@ export type GatewayRowModel = Readonly<{
 
 export type GatewaySourceActionIntent =
   | 'add_gateway_environment'
+  | 'open_gateway_environment'
   | 'manage_gateway'
   | 'pair_gateway'
   | 'resolve_gateway'
@@ -2405,7 +2406,6 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
     if (gateway.environments.length > 0) {
       return gatewaySourceAction('view_gateway_environments', 'View Environments', 'default');
     }
-    return gatewaySourceAction('refresh_gateway_catalog', 'Retry sync', 'default', false, 'Gateway catalog sync is already running.');
   }
   if (syncState === 'pairing_failed') {
     return gatewaySourceAction('resolve_gateway', 'Retry sync', 'default');
@@ -2425,9 +2425,6 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
     return serviceState?.can_start === true
       ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default')
       : gatewaySourceAction('resolve_gateway', 'Start Gateway', 'default', false, 'Gateway service cannot be started from this Desktop.');
-  }
-  if (manageable && serviceStatus === 'starting') {
-    return gatewaySourceAction('start_gateway', 'Starting...', 'default', false);
   }
   if (manageable && serviceStatus === 'service_needs_update') {
     return gatewaySourceAction('update_gateway', 'Update Gateway', 'default', serviceState?.can_update !== false);

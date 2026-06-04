@@ -3556,9 +3556,9 @@ describe('Gateway view models', () => {
     expect(syncingGatewayRow).toMatchObject({
       status_label: 'Syncing',
       primary_action: expect.objectContaining({
-        intent: 'refresh_gateway_catalog',
+        intent: 'pair_gateway',
         label: 'Retry sync',
-        enabled: false,
+        enabled: true,
       }),
       guidance: expect.objectContaining({
         title: 'Syncing Gateway',
@@ -3623,9 +3623,9 @@ describe('Gateway view models', () => {
       },
     }));
     expect(startingSSHRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'start_gateway',
-      label: 'Starting...',
-      enabled: false,
+      intent: 'view_gateway_environments',
+      label: 'View Environments',
+      enabled: true,
     }));
     expect(startingSSHRow.guidance).toMatchObject({
       title: 'Gateway is starting',
