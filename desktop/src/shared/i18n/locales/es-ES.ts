@@ -364,6 +364,8 @@ export const esES = {
     gatewayPanelStartBeforeSyncAria: "Iniciar Gateway antes de sincronizar el catálogo",
     gatewayPanelUpdateBeforePairTitle: "Actualizar Gateway antes de emparejar",
     gatewayPanelUpdateBeforePairDetail: "Desktop debe actualizar este servicio Gateway antes de emparejar de forma segura y confiar en el catálogo.",
+    gatewayPanelResolveBeforeSyncTitle: "Resolver Gateway antes de sincronizar",
+    gatewayPanelResolveBeforeSyncDetail: "Desktop necesita un servicio Gateway accesible antes de sincronizar environments.",
     gatewayPanelResolveBeforePairTitle: "Resolver Gateway antes de emparejar",
     gatewayPanelResolveBeforePairDetail: "Desktop necesita un servicio Gateway accesible antes de emparejar.",
     gatewayPanelPairThisGatewayAria: "Emparejar este Gateway",

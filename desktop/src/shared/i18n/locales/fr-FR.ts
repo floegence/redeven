@@ -364,6 +364,8 @@ export const frFR = {
     gatewayPanelStartBeforeSyncAria: "Démarrer Gateway avant la synchronisation du catalogue",
     gatewayPanelUpdateBeforePairTitle: "Mettre à jour Gateway avant l’appairage",
     gatewayPanelUpdateBeforePairDetail: "Desktop doit mettre à jour ce service Gateway avant de pouvoir appairer en sécurité et faire confiance au catalogue.",
+    gatewayPanelResolveBeforeSyncTitle: "Résoudre Gateway avant la synchronisation",
+    gatewayPanelResolveBeforeSyncDetail: "Desktop a besoin d’un service Gateway accessible avant de synchroniser les environments.",
     gatewayPanelResolveBeforePairTitle: "Résoudre Gateway avant l’appairage",
     gatewayPanelResolveBeforePairDetail: "Desktop a besoin d’un service Gateway accessible avant de pouvoir appairer.",
     gatewayPanelPairThisGatewayAria: "Appairer ce Gateway",

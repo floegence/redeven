@@ -364,6 +364,8 @@ export const zhTW = {
     gatewayPanelStartBeforeSyncAria: "先啟動 Gateway 再同步目錄",
     gatewayPanelUpdateBeforePairTitle: "配對前更新 Gateway",
     gatewayPanelUpdateBeforePairDetail: "Desktop 需要先更新此 Gateway 服務，才能安全配對並信任目錄。",
+    gatewayPanelResolveBeforeSyncTitle: "同步前處理 Gateway",
+    gatewayPanelResolveBeforeSyncDetail: "Desktop 需要可連線的 Gateway 服務後才能同步 environments。",
     gatewayPanelResolveBeforePairTitle: "配對前處理 Gateway",
     gatewayPanelResolveBeforePairDetail: "Desktop 需要可連線的 Gateway 服務後才能配對。",
     gatewayPanelPairThisGatewayAria: "配對此 Gateway",

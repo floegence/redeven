@@ -364,6 +364,8 @@ export const ruRU = {
     gatewayPanelStartBeforeSyncAria: "Запустить Gateway перед синхронизацией каталога",
     gatewayPanelUpdateBeforePairTitle: "Обновить Gateway перед связыванием",
     gatewayPanelUpdateBeforePairDetail: "Desktop должен обновить эту службу Gateway, прежде чем безопасно связаться и доверять каталогу.",
+    gatewayPanelResolveBeforeSyncTitle: "Исправить Gateway перед синхронизацией",
+    gatewayPanelResolveBeforeSyncDetail: "Desktop нужна доступная служба Gateway перед синхронизацией environments.",
     gatewayPanelResolveBeforePairTitle: "Исправить Gateway перед связыванием",
     gatewayPanelResolveBeforePairDetail: "Desktop нужна доступная служба Gateway перед связыванием.",
     gatewayPanelPairThisGatewayAria: "Связать этот Gateway",

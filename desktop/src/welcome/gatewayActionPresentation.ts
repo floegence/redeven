@@ -217,6 +217,9 @@ function continuationActionFor(
       return {
         kind: action.intent,
         gateway_id: gateway.gateway_id,
+        ...((action.intent === 'update_gateway' || action.intent === 'restart_gateway' || action.intent === 'stop_gateway')
+          ? { impact_acknowledged: true }
+          : {}),
       } as DesktopLauncherActionRequest;
     default:
       return undefined;
@@ -235,6 +238,106 @@ function resolveFocusForGateway(gateway: DesktopGatewaySource): DesktopGatewayRe
     default:
       return undefined;
   }
+}
+
+function gatewayResolveAction(): GatewaySourceActionModel {
+  return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default', true);
+}
+
+type GatewayRecoveryPlan = Readonly<{
+  title: string;
+  detail: string;
+  aria_label: string;
+  primary_action: GatewaySourceActionModel;
+  continuation_action?: DesktopLauncherActionRequest;
+  resolve_focus?: DesktopGatewayResolveFocus;
+}>;
+
+function gatewaySyncRecoveryPlan(gateway: DesktopGatewaySource, fallbackActionEnabled = true): GatewayRecoveryPlan {
+  const manageable = desktopGatewayCanManageService(gateway);
+  const status = serviceStatus(gateway);
+  const syncAction = gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default', fallbackActionEnabled);
+
+  if (gateway.local_enabled === false) {
+    const enableAction = gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default', true);
+    return {
+      title: 'Gateway disabled on this Desktop',
+      detail: 'This Desktop is not syncing this Gateway or showing its environments. Enable it to sync again.',
+      aria_label: 'Enable Gateway',
+      primary_action: enableAction,
+      continuation_action: continuationActionFor(gateway, enableAction),
+    };
+  }
+
+  if (manageable && status === 'not_started') {
+    const startAction = gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true);
+    return {
+      title: 'Start Gateway to sync',
+      detail: 'Desktop can start this Gateway service, then continue automatic pairing and catalog sync.',
+      aria_label: 'Start Gateway before syncing catalog',
+      primary_action: startAction,
+      continuation_action: continuationActionFor(gateway, startAction, 'start_if_needed'),
+    };
+  }
+
+  if (manageable && status === 'service_needs_update') {
+    const updateAction = gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false);
+    return {
+      title: 'Update Gateway before pairing',
+      detail: 'Desktop needs to update this Gateway service before it can safely pair and trust the catalog.',
+      aria_label: 'Update Gateway before pairing',
+      primary_action: updateAction,
+      continuation_action: continuationActionFor(gateway, updateAction),
+    };
+  }
+
+  if (manageable && (status === 'ssh_unreachable' || status === 'container_unavailable' || status === 'bridge_unavailable' || status === 'error')) {
+    const resolveAction = gatewayResolveAction();
+    return {
+      title: 'Resolve Gateway before syncing',
+      detail: gateway.service_state?.message || 'Desktop needs a reachable Gateway service before it can sync environments.',
+      aria_label: 'Resolve Gateway before syncing',
+      primary_action: resolveAction,
+      resolve_focus: resolveFocusForGateway(gateway),
+    };
+  }
+
+  if (gateway.sync_state === 'pairing_failed' || gateway.status === 'trust_changed' || gateway.trust_state === 'trust_changed') {
+    const reviewAction = gatewayResolveAction();
+    return {
+      title: 'Gateway pairing issue',
+      detail: compact(gateway.last_sync_error_message)
+        || 'Desktop could not verify this Gateway identity. Review the Gateway target, then sync this Gateway again.',
+      aria_label: 'Review Gateway identity',
+      primary_action: reviewAction,
+      resolve_focus: 'identity_trust',
+    };
+  }
+
+  if (!manageable && gateway.sync_state === 'gateway_unreachable') {
+    return {
+      title: 'Gateway is unreachable',
+      detail: 'Desktop will check this external Gateway endpoint and refresh its environment catalog. Start the Gateway on its host if it is offline.',
+      aria_label: 'Sync Gateway',
+      primary_action: syncAction,
+      continuation_action: continuationActionFor(gateway, syncAction),
+      resolve_focus: 'url_endpoint',
+    };
+  }
+
+  return {
+    title: gateway.sync_state === 'catalog_failed'
+      ? 'Gateway catalog sync failed'
+      : gateway.sync_state === 'gateway_unreachable'
+        ? 'Gateway is unreachable'
+        : 'Sync Gateway',
+    detail: manageable
+      ? 'Desktop will check Gateway service reachability, pair when needed, and refresh the environment catalog.'
+      : 'Desktop will check this external Gateway endpoint and refresh its environment catalog. Start the Gateway on its host if it is offline.',
+    aria_label: 'Sync Gateway',
+    primary_action: syncAction,
+    continuation_action: continuationActionFor(gateway, syncAction),
+  };
 }
 
 function buildPanel(
@@ -307,7 +410,6 @@ export function buildGatewayActionPresentation(
   const { gateway, clicked_action: action } = input;
   const manageable = desktopGatewayCanManageService(gateway);
   const status = serviceStatus(gateway);
-  const syncAction = gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default', action.enabled);
   const isSyncLikeAction = action.intent === 'sync_gateway'
     || action.intent === 'pair_gateway'
     || action.intent === 'refresh_gateway_catalog'
@@ -327,18 +429,19 @@ export function buildGatewayActionPresentation(
   }
 
   if (input.retained_failure) {
-    const shouldStart = manageable && serviceStatus(gateway) === 'not_started';
+    const recovery = gatewaySyncRecoveryPlan(gateway);
     return buildPanel({
       gateway,
       kind: 'failure_recovery',
       execution_mode: 'attention',
       tone: 'error',
       eyebrow: 'Gateway issue',
-      title: input.retained_failure.title || `${actionLabel(action.intent)} failed`,
-      detail: input.retained_failure.failure?.summary || input.retained_failure.detail || `Desktop could not complete this Gateway action.`,
-      aria_label: 'Gateway action issue',
-      continuation_action: continuationActionFor(gateway, shouldStart ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true) : syncAction, shouldStart ? 'start_if_needed' : undefined),
-      primary_action: shouldStart ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true) : syncAction,
+      title: input.retained_failure.title || recovery.title || `${actionLabel(action.intent)} failed`,
+      detail: input.retained_failure.failure?.summary || input.retained_failure.detail || recovery.detail || `Desktop could not complete this Gateway action.`,
+      aria_label: recovery.aria_label || 'Gateway action issue',
+      ...(recovery.resolve_focus ? { resolve_focus: recovery.resolve_focus } : {}),
+      ...(recovery.continuation_action ? { continuation_action: recovery.continuation_action } : {}),
+      primary_action: recovery.primary_action,
     });
   }
 
@@ -376,6 +479,7 @@ export function buildGatewayActionPresentation(
   }
 
   if (isSyncLikeAction && manageable && (status === 'ssh_unreachable' || status === 'container_unavailable' || status === 'bridge_unavailable' || status === 'error')) {
+    const resolveAction = gatewayResolveAction();
     return buildPanel({
       gateway,
       kind: 'resolve_before_pair',
@@ -386,71 +490,45 @@ export function buildGatewayActionPresentation(
       detail: gateway.service_state?.message || 'Desktop needs a reachable Gateway service before it can sync environments.',
       aria_label: 'Resolve Gateway before syncing',
       resolve_focus: resolveFocusForGateway(gateway),
-      continuation_action: continuationActionFor(gateway, syncAction),
-      primary_action: syncAction,
+      primary_action: resolveAction,
     });
   }
 
   if (isSyncLikeAction) {
-    const shouldStart = manageable && status === 'not_started';
+    const recovery = gatewaySyncRecoveryPlan(gateway, action.enabled);
     return buildPanel({
       gateway,
-      kind: shouldStart ? 'start_and_refresh_catalog' : 'resolve_before_pair',
+      kind: recovery.primary_action.intent === 'start_gateway' ? 'start_and_refresh_catalog' : 'resolve_before_pair',
       execution_mode: 'guide',
-      tone: shouldStart ? 'warning' : gateway.sync_state === 'catalog_failed' || gateway.sync_state === 'gateway_unreachable' ? 'warning' : 'primary',
-      eyebrow: shouldStart ? 'Gateway service' : 'Gateway',
-      title: shouldStart
-        ? 'Start Gateway to sync'
-        : gateway.sync_state === 'catalog_failed'
-          ? 'Gateway catalog sync failed'
-          : gateway.sync_state === 'gateway_unreachable'
-            ? 'Gateway is unreachable'
-            : 'Sync Gateway',
-      detail: shouldStart
-        ? 'Desktop can start this Gateway service, then continue automatic pairing and catalog sync.'
-        : manageable
-          ? 'Desktop will check Gateway service reachability, pair when needed, and refresh the environment catalog.'
-          : 'Desktop will check this external Gateway endpoint and refresh its environment catalog. Start the Gateway on its host if it is offline.',
-      aria_label: shouldStart ? 'Start Gateway before syncing catalog' : 'Sync Gateway',
-      continuation_action: continuationActionFor(gateway, shouldStart ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true) : syncAction, shouldStart ? 'start_if_needed' : undefined),
-      primary_action: shouldStart ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true) : syncAction,
+      tone: recovery.primary_action.intent === 'start_gateway' || gateway.sync_state === 'catalog_failed' || gateway.sync_state === 'gateway_unreachable' ? 'warning' : 'primary',
+      eyebrow: recovery.primary_action.intent === 'start_gateway' || recovery.primary_action.intent === 'update_gateway' ? 'Gateway service' : 'Gateway',
+      title: recovery.title,
+      detail: recovery.detail,
+      aria_label: recovery.aria_label,
+      ...(recovery.resolve_focus ? { resolve_focus: recovery.resolve_focus } : {}),
+      ...(recovery.continuation_action ? { continuation_action: recovery.continuation_action } : {}),
+      primary_action: recovery.primary_action,
     });
   }
 
   if (action.intent === 'resolve_gateway') {
-    const syncState = gateway.sync_state ?? 'idle';
-    const pairingFailure = syncState === 'pairing_failed' || gateway.status === 'trust_changed';
-    const catalogFailure = syncState === 'catalog_failed';
-    const unreachable = syncState === 'gateway_unreachable';
+    const recovery = gatewaySyncRecoveryPlan(gateway);
     return buildPanel({
       gateway,
       kind: 'resolve_before_pair',
       execution_mode: 'guide',
       tone: 'warning',
       eyebrow: 'Gateway',
-      title: pairingFailure
-        ? 'Gateway pairing issue'
-        : catalogFailure
-          ? 'Gateway catalog sync failed'
-          : unreachable
-            ? 'Gateway is unreachable'
-            : 'Resolve Gateway',
+      title: recovery.title === 'Sync Gateway' ? 'Resolve Gateway' : recovery.title,
       detail: compact(gateway.last_sync_error_message)
         || gateway.service_state?.message
         || gateway.status_message
+        || recovery.detail
         || 'Desktop keeps Gateways synced automatically. Review the target, then sync again when the Gateway is reachable.',
-      aria_label: 'Resolve Gateway',
-      resolve_focus: resolveFocusForGateway(gateway),
-      continuation_action: continuationActionFor(
-        gateway,
-        manageable && serviceStatus(gateway) === 'not_started'
-          ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true)
-          : syncAction,
-        manageable && serviceStatus(gateway) === 'not_started' ? 'start_if_needed' : undefined,
-      ),
-      primary_action: manageable && serviceStatus(gateway) === 'not_started'
-        ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true)
-        : syncAction,
+      aria_label: recovery.aria_label || 'Resolve Gateway',
+      ...(recovery.resolve_focus ? { resolve_focus: recovery.resolve_focus } : {}),
+      ...(recovery.continuation_action ? { continuation_action: recovery.continuation_action } : {}),
+      primary_action: recovery.primary_action,
     });
   }
 

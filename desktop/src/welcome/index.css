@@ -3178,17 +3178,17 @@ pre,
 }
 
 .redeven-gateway-card .redeven-action-popover-surface {
-  --redeven-action-popover-width: min(28rem, calc(100vw - 1rem));
+  --redeven-action-popover-width: min(20rem, calc(100vw - 1rem));
 }
 
 .redeven-action-popover-surface.redeven-gateway-action-popover-surface {
-  --redeven-action-popover-width: min(28rem, calc(100vw - 1rem));
+  --redeven-action-popover-width: min(20rem, calc(100vw - 1rem));
 }
 
 .redeven-gateway-action-panel {
   display: grid;
-  max-height: min(31rem, calc(100vh - 2rem));
-  min-height: 15rem;
+  max-height: min(27rem, calc(100vh - 2rem));
+  min-height: 12rem;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 0;
   padding: 0;
@@ -3198,21 +3198,21 @@ pre,
   display: grid;
   min-height: 0;
   min-width: 0;
-  gap: 0.75rem;
+  gap: 0.6rem;
   overflow: auto;
-  padding: 1.1rem 1.1rem 0.85rem;
+  padding: 1rem 1rem 0.75rem;
 }
 
 .redeven-gateway-action-panel__hero {
   display: flex;
   min-width: 0;
   align-items: flex-start;
-  gap: 0.8rem;
+  gap: 0.65rem;
 }
 
 .redeven-gateway-action-panel__hero .redeven-action-popover__status-icon {
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 2rem;
+  height: 2rem;
 }
 
 .redeven-gateway-action-panel__hero .redeven-action-popover__status-text {
@@ -3221,32 +3221,30 @@ pre,
 }
 
 .redeven-gateway-action-panel__hero .redeven-action-popover__eyebrow {
-  margin-bottom: 0.25rem;
-  letter-spacing: 0.09em;
+  margin-bottom: 0.16rem;
+  letter-spacing: 0.08em;
 }
 
 .redeven-gateway-action-panel__hero .redeven-action-popover__title {
-  max-width: 20.5rem;
-  margin-bottom: 0.35rem;
-  font-size: 1.03rem;
-  line-height: 1.2;
+  margin-bottom: 0.22rem;
+  font-size: 0.93rem;
+  line-height: 1.28;
   overflow-wrap: anywhere;
 }
 
 .redeven-gateway-action-panel__hero .redeven-action-popover__detail {
-  max-width: 21rem;
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
 
 .redeven-gateway-action-panel__context {
-  margin-top: 0.65rem;
+  margin-top: 0.5rem;
   display: inline-flex;
   max-width: 100%;
   border: 1px solid color-mix(in srgb, var(--border) 44%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--muted) 12%, transparent);
-  padding: 0.22rem 0.5rem;
+  padding: 0.18rem 0.48rem;
   overflow: hidden;
   color: var(--muted-foreground);
   font-size: 0.7rem;
@@ -3283,11 +3281,11 @@ pre,
       color-mix(in srgb, var(--popover) 94%, transparent),
       var(--popover)
     );
-  padding: 0.8rem 1rem;
+  padding: 0.68rem 0.85rem;
 }
 
 .redeven-gateway-action-panel__footer button {
-  min-width: 5.75rem;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3301,12 +3299,13 @@ pre,
 
 .redeven-gateway-action-panel__primary-action {
   flex: 0 1 auto;
-  min-width: 8.5rem;
-  max-width: 13rem;
+  min-width: 7.75rem;
+  max-width: 10.5rem;
 }
 
 .redeven-gateway-action-panel__secondary-action {
   flex: 0 1 auto;
+  max-width: 7.25rem;
 }
 
 .redeven-gateway-action-panel__facts {
@@ -3373,7 +3372,7 @@ pre,
   border: 1px solid color-mix(in srgb, var(--border) 44%, transparent);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--muted) 9%, transparent);
-  padding: 0.5rem 0.65rem;
+  padding: 0.42rem 0.55rem;
   color: var(--muted-foreground);
   font-size: 0.68rem;
   font-weight: 700;
@@ -3419,7 +3418,7 @@ pre,
 @media (max-width: 25rem) {
   .redeven-action-popover-surface.redeven-gateway-action-popover-surface,
   .redeven-gateway-card .redeven-action-popover-surface {
-    --redeven-action-popover-width: min(22rem, calc(100vw - 1rem));
+    --redeven-action-popover-width: min(20rem, calc(100vw - 1rem));
   }
 
   .redeven-gateway-action-panel__hero {
@@ -3432,7 +3431,7 @@ pre,
   }
 
   .redeven-gateway-action-panel {
-    max-height: min(27rem, calc(100vh - 3rem));
+    max-height: min(26rem, calc(100vh - 3rem));
   }
 
   .redeven-gateway-action-panel__hero .redeven-action-popover__title,

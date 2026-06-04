@@ -57,9 +57,10 @@ describe('buildGatewayActionPresentation', () => {
       eyebrow: 'Gateway',
       title: 'Gateway pairing issue',
       detail: 'Gateway pairing challenge signature is invalid.',
-      primary_action: { intent: 'sync_gateway', label: 'Sync Gateway' },
-      continuation_action: { kind: 'sync_gateway', gateway_id: 'gw-demo' },
+      primary_action: { intent: 'resolve_gateway', label: 'Resolve Gateway' },
+      resolve_focus: 'identity_trust',
     });
+    expect(model.continuation_action).toBeUndefined();
     expect(model.status_facts).toEqual([
       expect.objectContaining({ label: 'Gateway service', value: 'Ready' }),
       expect.objectContaining({ label: 'Catalog sync', value: 'Failed', tone: 'error' }),
@@ -164,7 +165,105 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('pair_gateway'),
-    })).toMatchObject({ kind: 'resolve_before_pair', resolve_focus: 'container' });
+    })).toMatchObject({
+      kind: 'resolve_before_pair',
+      resolve_focus: 'container',
+      primary_action: { intent: 'resolve_gateway', label: 'Resolve Gateway' },
+    });
+  });
+
+  it('recovers retained Gateway failures with the scenario-specific next step', () => {
+    const stoppedFailure = buildGatewayActionPresentation({
+      gateway: gateway({
+        service_state: {
+          status: 'not_started',
+          can_start: true,
+          can_stop: false,
+          can_restart: false,
+          can_update: false,
+          can_pair_after_start: true,
+        },
+      }),
+      clicked_action: action('sync_gateway'),
+      retained_failure: {
+        action: 'sync_gateway',
+        operation_key: 'gateway:gw-demo:sync',
+        subject_kind: 'gateway',
+        subject_id: 'gw-demo',
+        gateway_id: 'gw-demo',
+        started_at_unix_ms: 100,
+        status: 'failed',
+        phase: 'failed',
+        title: 'Sync failed',
+        detail: 'Gateway service is not running.',
+      },
+    });
+    expect(stoppedFailure).toMatchObject({
+      kind: 'failure_recovery',
+      primary_action: { intent: 'start_gateway', label: 'Start Gateway' },
+      continuation_action: { kind: 'sync_gateway', gateway_id: 'gw-demo', start_policy: 'start_if_needed' },
+    });
+
+    const updateFailure = buildGatewayActionPresentation({
+      gateway: gateway({
+        service_state: {
+          status: 'service_needs_update',
+          can_start: false,
+          can_stop: false,
+          can_restart: true,
+          can_update: true,
+          can_pair_after_start: false,
+        },
+      }),
+      clicked_action: action('sync_gateway'),
+      retained_failure: {
+        action: 'sync_gateway',
+        operation_key: 'gateway:gw-demo:sync',
+        subject_kind: 'gateway',
+        subject_id: 'gw-demo',
+        gateway_id: 'gw-demo',
+        started_at_unix_ms: 100,
+        status: 'failed',
+        phase: 'failed',
+        title: 'Sync failed',
+        detail: 'Gateway needs update.',
+      },
+    });
+    expect(updateFailure).toMatchObject({
+      primary_action: { intent: 'update_gateway', label: 'Update Gateway' },
+      continuation_action: { kind: 'update_gateway', gateway_id: 'gw-demo' },
+    });
+
+    const unreachableFailure = buildGatewayActionPresentation({
+      gateway: gateway({
+        service_state: {
+          status: 'ssh_unreachable',
+          can_start: false,
+          can_stop: false,
+          can_restart: false,
+          can_update: false,
+          can_pair_after_start: false,
+        },
+      }),
+      clicked_action: action('sync_gateway'),
+      retained_failure: {
+        action: 'sync_gateway',
+        operation_key: 'gateway:gw-demo:sync',
+        subject_kind: 'gateway',
+        subject_id: 'gw-demo',
+        gateway_id: 'gw-demo',
+        started_at_unix_ms: 100,
+        status: 'failed',
+        phase: 'failed',
+        title: 'Sync failed',
+        detail: 'SSH host is unreachable.',
+      },
+    });
+    expect(unreachableFailure).toMatchObject({
+      primary_action: { intent: 'resolve_gateway', label: 'Resolve Gateway' },
+      resolve_focus: 'ssh_host',
+    });
+    expect(unreachableFailure.continuation_action).toBeUndefined();
   });
 
   it('uses renderer-owned confirmation for Gateway service impact actions', () => {

@@ -364,6 +364,8 @@ export const jaJP = {
     gatewayPanelStartBeforeSyncAria: "カタログ同期前に Gateway を起動",
     gatewayPanelUpdateBeforePairTitle: "ペアリング前に Gateway を更新",
     gatewayPanelUpdateBeforePairDetail: "Desktop が安全にペアリングしてカタログを信頼するには、まずこの Gateway サービスを更新する必要があります。",
+    gatewayPanelResolveBeforeSyncTitle: "同期前に Gateway を解決",
+    gatewayPanelResolveBeforeSyncDetail: "Desktop が environments を同期するには、到達可能な Gateway サービスが必要です。",
     gatewayPanelResolveBeforePairTitle: "ペアリング前に Gateway を解決",
     gatewayPanelResolveBeforePairDetail: "Desktop がペアリングするには、到達可能な Gateway サービスが必要です。",
     gatewayPanelPairThisGatewayAria: "この Gateway をペアリング",
