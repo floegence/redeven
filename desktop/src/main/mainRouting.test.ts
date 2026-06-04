@@ -1066,6 +1066,20 @@ describe('main routing', () => {
     expect(mainSrc).toContain("return 'require_ready';");
   });
 
+  it('keeps Gateway service state stable while sync activity is running', () => {
+    const mainSrc = readMainSource();
+    const helperStart = mainSrc.indexOf('function gatewaySyncingServiceState(');
+    const helperEnd = mainSrc.indexOf('async function inspectGatewayServiceForSync(', helperStart);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+
+    expect(helperSrc).toContain('if (previous) {');
+    expect(helperSrc).toContain('return previous;');
+    expect(helperSrc).toContain("status: 'unknown'");
+    expect(helperSrc).not.toContain("status: previous?.status === 'ready' ? 'ready' : 'starting'");
+  });
+
 	  it('opens Gateway environments only through Gateway open-session without provider fallback', () => {
     const mainSrc = readMainSource();
     const openStart = mainSrc.indexOf('async function openGatewayEnvironmentFromLauncher(');

@@ -16,7 +16,8 @@ describe('DesktopActionPopover', () => {
     expect(source).toContain('requestAnimationFrame(() => {');
     expect(source).toContain('firstFocusableElement(popoverRef)?.focus();');
     expect(source).toContain('placement="top"');
-    expect(source).toContain('allowMainAxisOverflow');
+    expect(source).toContain('allowMainAxisOverflow?: boolean;');
+    expect(source).toContain('allowMainAxisOverflow={props.allowMainAxisOverflow ?? true}');
     expect(source).not.toContain('placement?:');
     expect(source).not.toContain('DesktopOverlayPlacement');
     expect(source).not.toContain('props.placement');

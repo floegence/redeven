@@ -2456,7 +2456,7 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource): readonly 
   };
 
   if (gateway.local_enabled === false) {
-    add(gatewaySourceAction('manage_gateway', 'Manage', 'outline'));
+    add(gatewaySourceAction('manage_gateway', 'Gateway settings', 'outline'));
     add(gatewaySourceAction('delete_gateway', 'Delete Gateway', 'outline'));
     return actions;
   }
@@ -2487,7 +2487,7 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource): readonly 
     }
   }
 
-  add(gatewaySourceAction('manage_gateway', 'Manage', 'outline'));
+  add(gatewaySourceAction('manage_gateway', 'Gateway settings', 'outline'));
   add(gatewaySourceAction('delete_gateway', 'Delete Gateway', 'outline'));
   return actions;
 }

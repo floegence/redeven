@@ -4018,16 +4018,16 @@ function gatewaySyncingServiceState(
       checked_at_unix_ms: Date.now(),
     };
   }
+  if (previous) {
+    return previous;
+  }
   return {
-    ...(previous ?? {
-      status: 'unknown' as const,
-      can_start: false,
-      can_stop: false,
-      can_restart: false,
-      can_update: false,
-      can_pair_after_start: true,
-    }),
-    status: previous?.status === 'ready' ? 'ready' : 'starting',
+    status: 'unknown',
+    can_start: false,
+    can_stop: false,
+    can_restart: false,
+    can_update: false,
+    can_pair_after_start: true,
     message: 'Desktop is syncing this Gateway catalog.',
     checked_at_unix_ms: Date.now(),
   };

@@ -3709,7 +3709,7 @@ describe('Gateway view models', () => {
       'Stop Gateway',
       'Restart Gateway',
       'Update Gateway',
-      'Manage',
+      'Gateway settings',
       'Delete Gateway',
     ]);
   });
