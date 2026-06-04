@@ -135,8 +135,29 @@ export type DesktopGatewayDiagnosisClassification =
   | 'bridge_unavailable'
   | 'trust_failed'
   | 'catalog_failed'
+  | 'service_ready_catalog_failed'
+  | 'legacy_runtime_residue'
   | 'unmanageable'
   | 'unknown';
+
+export type DesktopGatewayManagedProbeFact = Readonly<{
+  label: string;
+  value: string;
+  tone?: 'neutral' | 'success' | 'warning' | 'error';
+}>;
+
+export type DesktopGatewayManagedProbe = Readonly<{
+  binary_path?: string;
+  version?: string;
+  commit?: string;
+  service_pid?: number;
+  service_listen?: string;
+  state_root?: string;
+  legacy_local_catalog_present?: boolean;
+  legacy_runtime_residue?: boolean;
+  legacy_runtime_pids?: readonly number[];
+  facts: readonly DesktopGatewayManagedProbeFact[];
+}>;
 
 export type DesktopGatewayDiagnosis = Readonly<{
   checked_at_unix_ms: number;
@@ -147,6 +168,7 @@ export type DesktopGatewayDiagnosis = Readonly<{
   service_state?: DesktopGatewayServiceState;
   catalog_state?: DesktopGatewaySyncState;
   trust_state?: DesktopGatewayTrustState;
+  managed_probe?: DesktopGatewayManagedProbe;
   error_code?: string;
   error_message?: string;
 }>;

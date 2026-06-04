@@ -33,8 +33,10 @@ import type { DesktopGatewayServiceState } from '../shared/desktopGateway';
 import {
   ensureManagedGatewayServiceReady,
   gatewayServiceBinaryPath,
+  probeManagedGatewayServiceDeep,
   probeManagedGatewayServiceStatus,
   stopManagedGatewayService,
+  type GatewayServiceDeepProbe,
   type GatewayServiceProgress,
 } from './gatewayServiceHost';
 
@@ -250,6 +252,7 @@ export class GatewayLifecycleManager {
         target: gatewaySSHDetails(record),
         placement: gatewayPlacement(record),
         stateRoot: gatewayServiceStateRoot(record),
+        gatewayID: record.gateway_id,
         releaseTag: this.options.runtime_release_tag,
         releaseBaseURL: this.options.release_base_url,
         assetCacheRoot: this.options.asset_cache_root,
@@ -291,6 +294,26 @@ export class GatewayLifecycleManager {
         message: error instanceof Error ? error.message : String(error),
       });
     }
+  }
+
+  async inspectManagedProbe(record: GatewayRecord, signal?: AbortSignal): Promise<GatewayServiceDeepProbe | undefined> {
+    if (record.connection.kind === 'url') {
+      return undefined;
+    }
+    const sshPassword = await this.gatewaySSHPassword(record);
+    return probeManagedGatewayServiceDeep({
+      target: gatewaySSHDetails(record),
+      placement: gatewayPlacement(record),
+      stateRoot: gatewayServiceStateRoot(record),
+      gatewayID: record.gateway_id,
+      releaseTag: this.options.runtime_release_tag,
+      releaseBaseURL: this.options.release_base_url,
+      assetCacheRoot: this.options.asset_cache_root,
+      sourceRuntimeRoot: this.options.source_runtime_root,
+      sshPassword,
+      tempRoot: this.options.temp_root,
+      signal,
+    });
   }
 
   async ensureGatewayReady(record: GatewayRecord, options: Readonly<{
@@ -482,6 +505,7 @@ export class GatewayLifecycleManager {
         target: gatewaySSHDetails(record),
         placement,
         stateRoot: gatewayServiceStateRoot(record),
+        gatewayID: record.gateway_id,
         releaseTag: this.options.runtime_release_tag,
         releaseBaseURL: this.options.release_base_url,
         assetCacheRoot: this.options.asset_cache_root,

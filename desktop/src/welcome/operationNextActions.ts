@@ -11,6 +11,9 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
       return `${action.kind}:environment:${action.environment_id ?? ''}`;
     case 'refresh_gateway_status':
     case 'check_gateway':
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
     case 'update_gateway':
     case 'resolve_gateway':
       return `${action.kind}:gateway:${action.gateway_id}`;
@@ -55,6 +58,9 @@ export function visibleOperationNextActions(
   } else {
     push('check_gateway');
     if (!byKind.has('check_gateway')) {
+      push('start_gateway');
+      push('stop_gateway');
+      push('restart_gateway');
       push('update_gateway');
       push('resolve_gateway');
       push('retry');
@@ -64,7 +70,9 @@ export function visibleOperationNextActions(
     }
   }
   push('copy_diagnostics');
-  push('dismiss');
+  if (progress.subject_kind !== 'gateway') {
+    push('dismiss');
+  }
   return actions;
 }
 
@@ -79,6 +87,9 @@ function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction
     || action.kind === 'manage_desktop_update'
     || action.kind === 'retry'
     || action.kind === 'check_gateway'
+    || action.kind === 'start_gateway'
+    || action.kind === 'stop_gateway'
+    || action.kind === 'restart_gateway'
     || action.kind === 'update_gateway'
     || action.kind === 'resolve_gateway'
     || action.kind === 'refresh_gateway_status'

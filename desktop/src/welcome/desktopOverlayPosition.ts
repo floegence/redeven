@@ -1,12 +1,14 @@
 import type { JSX } from 'solid-js';
 
 export type DesktopOverlayPlacement = 'top' | 'bottom' | 'left' | 'right';
+export type DesktopOverlayPlacementLock = 'top-inline-shift';
 
 export type DesktopAnchoredOverlayPosition = Readonly<{
   placement: DesktopOverlayPlacement;
   left: number;
   top: number;
   arrowOffset: number;
+  maxHeight?: number;
 }>;
 
 function clamp(value: number, min: number, max: number): number {
@@ -37,6 +39,7 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
   viewportWidth: number;
   viewportHeight: number;
   preferredPlacement?: DesktopOverlayPlacement;
+  placementLock?: DesktopOverlayPlacementLock;
   constrainToViewport?: boolean;
   allowMainAxisOverflow?: boolean;
 }>): DesktopAnchoredOverlayPosition {
@@ -63,7 +66,9 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
     preferredPlacement === 'top' || preferredPlacement === 'bottom' ? 'left' : 'top',
   ] as const;
 
-  const placement = constrainToViewport && !allowMainAxisOverflow
+  const placement = options.placementLock === 'top-inline-shift'
+    ? 'top'
+    : constrainToViewport && !allowMainAxisOverflow
     ? orderedPlacements.find((candidate) => {
       const requiredSpace = candidate === 'top' || candidate === 'bottom'
         ? options.overlayHeight
@@ -74,6 +79,7 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
 
   let left = 0;
   let top = 0;
+  let maxHeight: number | undefined;
 
   switch (placement) {
     case 'top':
@@ -95,7 +101,10 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
   }
 
   if (constrainToViewport) {
-    if (allowMainAxisOverflow) {
+    if (options.placementLock === 'top-inline-shift') {
+      top = options.anchorRect.top - gap;
+      left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
+    } else if (allowMainAxisOverflow) {
       if (placement === 'top' || placement === 'bottom') {
         left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
       } else {
@@ -114,6 +123,7 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
     arrowOffset: placement === 'top' || placement === 'bottom'
       ? clamp(anchorCenterX - left, arrowInset, options.overlayWidth - arrowInset)
       : clamp(anchorCenterY - top, arrowInset, options.overlayHeight - arrowInset),
+    ...(maxHeight !== undefined ? { maxHeight } : {}),
   };
 }
 

@@ -1080,6 +1080,65 @@ describe('main routing', () => {
     expect(helperSrc).not.toContain("status: previous?.status === 'ready' ? 'ready' : 'starting'");
   });
 
+  it('keeps Gateway service actions in one foreground workflow with retryable failure actions', () => {
+    const mainSrc = readMainSource();
+    const serviceStart = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(');
+    const serviceEnd = mainSrc.indexOf('function gatewayServiceOperationName(', serviceStart);
+    expect(serviceStart).toBeGreaterThanOrEqual(0);
+    expect(serviceEnd).toBeGreaterThan(serviceStart);
+    const serviceSrc = mainSrc.slice(serviceStart, serviceEnd);
+    const nextActionsStart = mainSrc.indexOf('function gatewayOperationFailureNextActions(');
+    const nextActionsEnd = mainSrc.indexOf('function gatewayDiagnosisForServiceState(', nextActionsStart);
+    expect(nextActionsStart).toBeGreaterThanOrEqual(0);
+    expect(nextActionsEnd).toBeGreaterThan(nextActionsStart);
+    const nextActionsSrc = mainSrc.slice(nextActionsStart, nextActionsEnd);
+    const checkStart = mainSrc.indexOf('async function checkGatewayFromLauncher(');
+    const checkEnd = mainSrc.indexOf('async function pairGatewayFromLauncher(', checkStart);
+    expect(checkStart).toBeGreaterThanOrEqual(0);
+    expect(checkEnd).toBeGreaterThan(checkStart);
+    const checkSrc = mainSrc.slice(checkStart, checkEnd);
+
+    expect(serviceSrc).toContain('const operationKey = `${descriptor.target_id}:${gatewayServiceOperationName(request.kind)}`;');
+    expect(serviceSrc).toContain('const activeServiceOperation = launcherOperations.get(operationKey);');
+    expect(serviceSrc).toContain('if (launcherOperationIsActive(activeServiceOperation)) {');
+    expect(serviceSrc).toContain('gateway_id: record.gateway_id,');
+    expect(serviceSrc).toContain("priority: 'foreground',");
+    expect(serviceSrc).toContain("phase: 'refreshing_gateway_catalog'");
+    expect(serviceSrc).toContain('const completedServiceLifecycleProgress = completeRuntimeLifecycleWorkflowProgress(operationKey, lifecycleAttemptOwner, {');
+    expect(serviceSrc).toContain('lifecycle_progress: completedServiceLifecycleProgress');
+    expect(serviceSrc).toContain('step_progress: gatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, \'refreshing_gateway_catalog\')');
+    expect(serviceSrc).not.toContain('lifecycle_progress: undefined');
+    expect(serviceSrc).toContain("title: 'Gateway synced'");
+    expect(serviceSrc).toContain("step_progress: completeGatewayStepProgress(GATEWAY_PAIR_WORKFLOW_STEPS, 'gateway_paired')");
+    expect(serviceSrc).toContain('next_actions: gatewayOperationFailureNextActions(operationKey, {');
+    expect(serviceSrc).toContain('retryAction: {');
+    expect(serviceSrc).toContain("kind: 'sync_gateway'");
+    expect(mainSrc).not.toContain('function activeGatewayServiceOperation(gatewayID: string): DesktopLauncherOperationSnapshot | null');
+    expect(mainSrc).not.toContain('function activeGatewayForegroundOperation(gatewayID: string): DesktopLauncherOperationSnapshot | null');
+    expect(mainSrc).not.toContain('function launcherOperationIsActiveGatewayServiceAction(');
+    expect(nextActionsSrc).toContain("kind: 'retry' as const");
+    expect(nextActionsSrc).toContain("kind: 'check_gateway' as const");
+    expect(nextActionsSrc).toContain("kind: 'copy_diagnostics' as const");
+    expect(nextActionsSrc).toContain("kind: 'dismiss' as const");
+    expect(checkSrc).toContain('const activeCheckOperation = launcherOperations.get(operationKey);');
+    expect(checkSrc).toContain('if (launcherOperationIsActive(activeCheckOperation)) {\n    rebroadcastLauncherOperationProgress(activeCheckOperation);');
+    expect(checkSrc).toContain('cancelable: false');
+    expect(checkSrc).not.toContain('supersedeGatewaySyncTask(record.gateway_id);');
+    expect(checkSrc).toContain("action: 'check_gateway'");
+    expect(checkSrc).toContain('gateway_id: record.gateway_id,');
+    expect(checkSrc).toContain('next_actions: gatewayOperationFailureNextActions(operationKey, {');
+    expect(checkSrc).toContain("kind: 'check_gateway',");
+    const syncStart = mainSrc.indexOf('async function pairGatewayFromLauncher(');
+    const syncEnd = mainSrc.indexOf('function gatewayOpenSessionSummaries(', syncStart);
+    expect(syncStart).toBeGreaterThanOrEqual(0);
+    expect(syncEnd).toBeGreaterThan(syncStart);
+    const foregroundSyncSrc = mainSrc.slice(syncStart, syncEnd);
+    expect(foregroundSyncSrc).toContain('next_actions: gatewayOperationFailureNextActions(operationKey, {');
+    expect(foregroundSyncSrc).toContain('retryAction: {');
+    expect(foregroundSyncSrc).toContain("kind: 'sync_gateway'");
+    expect(foregroundSyncSrc).toContain('...(request.start_policy ? { start_policy: request.start_policy } : {})');
+  });
+
 	  it('opens Gateway environments only through Gateway open-session without provider fallback', () => {
     const mainSrc = readMainSource();
     const openStart = mainSrc.indexOf('async function openGatewayEnvironmentFromLauncher(');

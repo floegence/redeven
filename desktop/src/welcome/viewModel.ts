@@ -2323,7 +2323,6 @@ export type GatewaySourceActionIntent =
   | 'resolve_gateway'
   | 'setup_gateway'
   | 'start_gateway'
-  | 'service_start_gateway'
   | 'stop_gateway'
   | 'restart_gateway'
   | 'update_gateway'
@@ -2411,7 +2410,7 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
     return gatewaySourceAction('setup_gateway', 'Set up', 'default');
   }
   if (gateway.sync_state === 'gateway_unreachable' || gateway.sync_state === 'catalog_failed' || gateway.sync_state === 'pairing_failed') {
-    return gatewaySourceAction('check_gateway', 'Sync failed', 'default');
+    return gatewaySourceAction('check_gateway', 'Check Gateway', 'default');
   }
   if (manageable && (
     serviceStatus === 'ssh_unreachable'
@@ -2481,7 +2480,7 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource): readonly 
 
   if (manageable) {
     if (serviceStatus === 'not_started' && serviceState?.can_start === true) {
-      add(gatewaySourceAction('service_start_gateway', 'Start Gateway service', 'outline', true));
+      add(gatewaySourceAction('start_gateway', 'Start Gateway', 'outline', true));
     }
     if (serviceStatus === 'ready' && serviceState?.can_stop === true) {
       add(gatewaySourceAction('stop_gateway', 'Stop Gateway', 'outline'));

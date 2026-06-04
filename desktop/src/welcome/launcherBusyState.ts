@@ -310,6 +310,7 @@ export function gatewaySourceMatchesRuntimeLifecycleProgress(
     return false;
   }
   switch (progress?.action) {
+    case 'check_gateway':
     case 'sync_gateway':
     case 'pair_gateway':
     case 'start_gateway':

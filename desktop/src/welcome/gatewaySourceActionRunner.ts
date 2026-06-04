@@ -81,18 +81,27 @@ export function runGatewaySourceAction(
       return;
     case 'start_gateway':
       return runGatewayLauncherAction({
-        kind: 'sync_gateway',
+        kind: 'start_gateway',
         gateway_id: gateway.gateway_id,
-        start_policy: 'start_if_needed',
       });
-    case 'service_start_gateway':
-      return runGatewayServiceAction(gateway.gateway_id, 'start_gateway');
     case 'stop_gateway':
-      return runGatewayServiceAction(gateway.gateway_id, 'stop_gateway');
+      return runGatewayLauncherAction({
+        kind: 'stop_gateway',
+        gateway_id: gateway.gateway_id,
+        impact_acknowledged: true,
+      });
     case 'restart_gateway':
-      return runGatewayServiceAction(gateway.gateway_id, 'restart_gateway');
+      return runGatewayLauncherAction({
+        kind: 'restart_gateway',
+        gateway_id: gateway.gateway_id,
+        impact_acknowledged: true,
+      });
     case 'update_gateway':
-      return runGatewayServiceAction(gateway.gateway_id, 'update_gateway');
+      return runGatewayLauncherAction({
+        kind: 'update_gateway',
+        gateway_id: gateway.gateway_id,
+        impact_acknowledged: true,
+      });
     case 'refresh_gateway_catalog':
       return runGatewayLauncherAction({
         kind: 'sync_gateway',

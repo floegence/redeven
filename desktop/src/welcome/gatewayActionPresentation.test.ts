@@ -261,6 +261,28 @@ describe('buildGatewayActionPresentation', () => {
     });
   });
 
+  it('keeps Check Gateway as a diagnostic workflow before showing retained diagnosis results', () => {
+    const model = buildGatewayActionPresentation({
+      gateway: gateway({
+        sync_state: 'catalog_failed',
+        diagnosis: {
+          checked_at_unix_ms: 10,
+          classification: 'ready',
+          manageable: true,
+          summary: 'Gateway service is ready',
+          detail: 'A retained diagnosis should not replace the next manual check.',
+        },
+      }),
+      clicked_action: action('check_gateway'),
+    });
+
+    expect(model).toMatchObject({
+      kind: 'check_required',
+      primary_action: { intent: 'check_gateway', label: 'Check Gateway' },
+      continuation_action: { kind: 'check_gateway', gateway_id: 'gw-demo' },
+    });
+  });
+
   it('uses a completed Gateway diagnosis to recommend manageable recovery actions', () => {
     const stopped = buildGatewayActionPresentation({
       gateway: gateway({
@@ -273,11 +295,12 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
     });
     expect(stopped).toMatchObject({
       kind: 'start_and_refresh_catalog',
       primary_action: { intent: 'start_gateway', label: 'Start Gateway' },
-      continuation_action: { kind: 'sync_gateway', gateway_id: 'gw-demo', start_policy: 'start_if_needed' },
+      continuation_action: { kind: 'start_gateway', gateway_id: 'gw-demo' },
     });
 
     const unmanaged = buildGatewayActionPresentation({
@@ -293,6 +316,7 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
     });
     expect(unmanaged.kind).toBe('diagnosis_result');
     expect(unmanaged.primary_action).toBeUndefined();
@@ -311,6 +335,7 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
     });
     expect(needsUpdate).toMatchObject({
       kind: 'diagnosis_result',
@@ -338,6 +363,7 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
     });
     expect(sshUnreachable).toMatchObject({
       title: 'Gateway target needs review',
@@ -364,6 +390,7 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
     });
     expect(containerUnavailable).toMatchObject({
       title: 'Gateway target needs review',
@@ -382,6 +409,7 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
     });
     expect(trustFailed).toMatchObject({
       title: 'Gateway trust check failed',
@@ -400,12 +428,65 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
     });
     expect(catalogFailed).toMatchObject({
       title: 'Gateway catalog check failed',
       primary_action: { intent: 'sync_gateway', label: 'Sync Gateway' },
       continuation_action: { kind: 'sync_gateway', gateway_id: 'gw-demo' },
     });
+
+    const readyCatalogFailed = buildGatewayActionPresentation({
+      gateway: gateway({
+        diagnosis: {
+          checked_at_unix_ms: 10,
+          classification: 'service_ready_catalog_failed',
+          manageable: true,
+          summary: 'Gateway service is ready but catalog failed.',
+          detail: 'Raw catalog detail should stay out of the panel title.',
+        },
+      }),
+      clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
+    });
+    expect(readyCatalogFailed).toMatchObject({
+      title: 'Gateway catalog check failed',
+      primary_action: { intent: 'sync_gateway', label: 'Sync Gateway' },
+      continuation_action: { kind: 'sync_gateway', gateway_id: 'gw-demo' },
+    });
+
+    const legacyResidue = buildGatewayActionPresentation({
+      gateway: gateway({
+        diagnosis: {
+          checked_at_unix_ms: 10,
+          classification: 'legacy_runtime_residue',
+          manageable: true,
+          summary: 'Legacy Gateway service residue found',
+          detail: 'Raw residue detail should stay out of the panel title.',
+          managed_probe: {
+            binary_path: '/root/.redeven/gateway/managed/bin/redeven-gateway',
+            state_root: '/root/.redeven/gateways/gw-demo/state',
+            legacy_runtime_residue: true,
+            legacy_runtime_pids: [3342497],
+            facts: [
+              { label: 'Legacy runtime residue', value: 'Found', tone: 'warning' },
+              { label: 'Legacy runtime pids', value: '3342497', tone: 'warning' },
+            ],
+          },
+        },
+      }),
+      clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
+    });
+    expect(legacyResidue).toMatchObject({
+      title: 'Gateway update required',
+      primary_action: { intent: 'update_gateway', label: 'Update Gateway' },
+      continuation_action: { kind: 'update_gateway', gateway_id: 'gw-demo', impact_acknowledged: true },
+    });
+    expect(legacyResidue.diagnostic_facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Legacy runtime residue', value: 'Found', tone: 'warning' }),
+      expect.objectContaining({ label: 'Legacy runtime pids', value: '3342497', tone: 'warning' }),
+    ]));
 
     const ready = buildGatewayActionPresentation({
       gateway: gateway({
@@ -418,6 +499,7 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
     });
     expect(ready).toMatchObject({
       title: 'Gateway is ready',
@@ -435,6 +517,7 @@ describe('buildGatewayActionPresentation', () => {
         },
       }),
       clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
     });
     expect(disabled).toMatchObject({
       title: 'Gateway sync is paused',
@@ -499,9 +582,7 @@ describe('buildGatewayActionPresentation', () => {
         { session_key: 's1', label: 'Prod shell' },
         { session_key: 's2', label: 'Build runner' },
       ],
-      secondary_actions: [
-        expect.objectContaining({ intent: 'cancel_gateway_action', label: 'Cancel' }),
-      ],
+      secondary_actions: [],
     });
   });
 
@@ -573,7 +654,7 @@ describe('buildGatewayActionPresentation', () => {
     expect(runGatewayLauncherAction).not.toHaveBeenCalled();
   });
 
-  it('uses unified sync for catalog and status refresh, starting managed Gateways when needed', async () => {
+  it('uses unified sync for catalog refresh and direct service workflow for Start Gateway', async () => {
     const openCreateGatewaySetup = vi.fn();
     const pairGateway = vi.fn(async () => undefined);
     const runGatewayServiceAction = vi.fn(async () => undefined);
@@ -623,13 +704,17 @@ describe('buildGatewayActionPresentation', () => {
       gateway_id: 'gw-demo',
       start_policy: 'start_if_needed',
     });
+    expect(runGatewayLauncherAction).toHaveBeenCalledWith({
+      kind: 'start_gateway',
+      gateway_id: 'gw-demo',
+    });
     expect(runGatewayLauncherAction).toHaveBeenCalledTimes(2);
     expect(runGatewayServiceAction).not.toHaveBeenCalled();
     expect(pairGateway).not.toHaveBeenCalled();
     expect(openCreateGatewaySetup).not.toHaveBeenCalled();
   });
 
-  it('keeps direct service start separate from sync-and-start primary actions', async () => {
+  it('routes direct Gateway service actions through launcher workflows', async () => {
     const openCreateGatewaySetup = vi.fn();
     const pairGateway = vi.fn(async () => undefined);
     const runGatewayServiceAction = vi.fn(async () => undefined);
@@ -637,7 +722,7 @@ describe('buildGatewayActionPresentation', () => {
 
     await runGatewaySourceAction(
       {
-        intent: 'service_start_gateway',
+        intent: 'start_gateway',
         label: 'Start Gateway',
         enabled: true,
         variant: 'outline',
@@ -648,9 +733,30 @@ describe('buildGatewayActionPresentation', () => {
       runGatewayServiceAction,
       runGatewayLauncherAction,
     );
+    await runGatewaySourceAction(
+      {
+        intent: 'update_gateway',
+        label: 'Update Gateway',
+        enabled: true,
+        variant: 'outline',
+      },
+      gateway(),
+      openCreateGatewaySetup,
+      pairGateway,
+      runGatewayServiceAction,
+      runGatewayLauncherAction,
+    );
 
-    expect(runGatewayServiceAction).toHaveBeenCalledWith('gw-demo', 'start_gateway');
-    expect(runGatewayLauncherAction).not.toHaveBeenCalled();
+    expect(runGatewayLauncherAction).toHaveBeenCalledWith({
+      kind: 'start_gateway',
+      gateway_id: 'gw-demo',
+    });
+    expect(runGatewayLauncherAction).toHaveBeenCalledWith({
+      kind: 'update_gateway',
+      gateway_id: 'gw-demo',
+      impact_acknowledged: true,
+    });
+    expect(runGatewayServiceAction).not.toHaveBeenCalled();
   });
 
   it('guides disabled Gateways without surfacing Manage inside the popup', () => {
