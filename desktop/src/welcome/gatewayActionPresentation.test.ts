@@ -146,6 +146,10 @@ describe('buildGatewayActionPresentation', () => {
       kind: 'update_then_pair',
       primary_action: { intent: 'update_gateway' },
     });
+    expect(updateModel.status_facts).toEqual([
+      expect.objectContaining({ label: 'Gateway service', value: 'Update required', tone: 'warning' }),
+      expect.objectContaining({ label: 'Catalog sync', value: 'Idle' }),
+    ]);
     expect(updateModel.continuation_action).toBeUndefined();
 
     expect(buildGatewayActionPresentation({

@@ -8,6 +8,7 @@ export type DesktopActionPopoverProps = Readonly<{
   onOpenChange: (open: boolean) => void;
   class?: string;
   anchorClass?: string;
+  allowMainAxisOverflow?: boolean;
   popoverAriaLabel?: string;
 }>;
 
@@ -134,7 +135,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
           open={rendered()}
           anchorRef={anchorRef}
           placement="top"
-          allowMainAxisOverflow
+          allowMainAxisOverflow={props.allowMainAxisOverflow ?? true}
           role="dialog"
           ariaModal={false}
           ariaLabel={props.popoverAriaLabel}

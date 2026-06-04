@@ -702,9 +702,21 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     Unknown: 'common.unknown',
     Disabled: 'environmentCenter.gatewayDisabledStatus',
     'Not started': 'environmentStatus.stopped',
-    'Update available': 'environmentStatus.runtimeNeedsUpdate',
+    'Update available': 'environmentCenter.gatewayNeedsUpdate',
     Syncing: 'environmentCenter.gatewayActionSyncing',
   });
+}
+
+function localizedGatewaySourceStatusLabel(i18n: DesktopI18n, label: string): string {
+  return localizedStringByValue(i18n, label, {
+    Installing: 'environmentCenter.gatewayStatusInstalling',
+    Starting: 'environmentCenter.gatewayStatusStarting',
+    Updating: 'environmentCenter.gatewayStatusUpdating',
+    'Update available': 'environmentCenter.gatewayNeedsUpdate',
+    Disabled: 'environmentCenter.gatewayDisabledStatus',
+    Syncing: 'environmentCenter.gatewayActionSyncing',
+    'Not started': 'environmentStatus.stopped',
+  }) || localizedEnvironmentStatusLabel(i18n, label);
 }
 
 function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): string {
@@ -738,6 +750,7 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Syncing...': 'environmentCenter.gatewayActionSyncing',
     'Pairing...': 'environmentCenter.gatewayActionSyncing',
     Manage: 'environmentCenter.gatewayActionManage',
+    'Gateway settings': 'environmentCenter.gatewayActionManage',
     'Start Gateway': 'environmentCenter.gatewayActionStart',
     'Starting...': 'progress.startingRuntime',
     'Starting…': 'progress.startingRuntime',
@@ -1027,14 +1040,14 @@ function localizedGatewayPanelFactValue(i18n: DesktopI18n, value: string): strin
   return localizedStringByValue(i18n, value, {
     'Access-only': 'environmentCenter.gatewayAccessOnlyByDesktop',
     'Not started': 'environmentStatus.stopped',
-    Starting: 'progress.startingRuntime',
+    Starting: 'environmentCenter.gatewayStatusStarting',
     Ready: 'status.ready',
     Syncing: 'environmentCenter.gatewayActionSyncing',
     Failed: 'progress.failed',
     Idle: 'status.idle',
     'SSH unreachable': 'environmentCenter.gatewayPanelServiceSshUnreachable',
     'Container unavailable': 'environmentCenter.gatewayPanelServiceContainerUnavailable',
-    'Update required': 'environmentStatus.runtimeNeedsUpdate',
+    'Update required': 'environmentCenter.gatewayNeedsUpdate',
     'Bridge unavailable': 'environmentCenter.gatewayPanelServiceBridgeUnavailable',
     'Needs attention': 'progress.needsAttention',
     Unknown: 'common.unknown',
@@ -10618,8 +10631,13 @@ function GatewaySourceCard(props: Readonly<{
   deleteGateway: (gateway: DesktopGatewaySource) => void;
 }>) {
   const row = createMemo(() => buildGatewaySourceRowModel(props.gateway));
-  const primaryActionLabel = createMemo(() => localizedGatewaySourceActionLabel(props.i18n, row().primary_action));
   const [foregroundAction, setForegroundAction] = createSignal<GatewayForegroundActionSnapshot | null>(null);
+  const displayedPrimaryAction = createMemo(() => (
+    props.actionPopoverOpen && foregroundAction()
+      ? foregroundAction()!.action
+      : row().primary_action
+  ));
+  const primaryActionLabel = createMemo(() => localizedGatewaySourceActionLabel(props.i18n, displayedPrimaryAction()));
   const selectedGatewayWorkflowProgress = createMemo(() => {
     const foreground = foregroundAction();
     if (!foreground) {
@@ -10689,14 +10707,14 @@ function GatewaySourceCard(props: Readonly<{
     return foregroundAction()?.panel_model ?? currentActionPresentation();
   });
   const primaryActionPresentation = createMemo(() => buildGatewayActionPresentation({
-    gateway: props.gateway,
-    clicked_action: row().primary_action,
+    gateway: foregroundAction()?.gateway ?? props.gateway,
+    clicked_action: displayedPrimaryAction(),
     affected_sessions: affectedSessions(),
   }));
   const primaryBusy = createMemo(() => gatewaySourceActionBusy(
     props.busyState,
     props.gateway.gateway_id,
-    row().primary_action,
+    displayedPrimaryAction(),
     visibleGatewayProgress(),
     foregroundAction(),
   ));
@@ -10984,7 +11002,7 @@ function GatewaySourceCard(props: Readonly<{
                 {row().transport_label}
               </Tag>
               <EnvironmentStatusIndicator tone={row().status_tone}>
-                {localizedEnvironmentStatusLabel(props.i18n, row().status_label)}
+                {localizedGatewaySourceStatusLabel(props.i18n, row().status_label)}
               </EnvironmentStatusIndicator>
             </div>
             <CardTitle class="truncate text-sm font-semibold leading-5 tracking-[0.01em]" title={row().label}>
@@ -11042,7 +11060,6 @@ function GatewaySourceCard(props: Readonly<{
                     gateway={props.gateway}
                     model={visiblePanelModel()}
                     runAction={runPanelAction}
-                    openCreateGatewaySetup={props.openCreateGatewaySetup}
                     runGatewayLauncherAction={runForegroundRequest}
                     foregroundActionBusy={foregroundActionBusy}
                     close={closeActionPopover}
@@ -11137,11 +11154,13 @@ function GatewaySourceCard(props: Readonly<{
               </Show>
             )}
             anchorClass="redeven-gateway-card__primary-anchor"
+            allowMainAxisOverflow={false}
             popoverAriaLabel={
               progressPanelVisible()
                 ? (visibleGatewayProgress() ? localizedProgressTitle(props.i18n, visibleGatewayProgress()!) : props.i18n.t('environmentCenter.gatewayProgress'))
                 : localizedGatewaySourceText(props.i18n, row().guidance.title)
             }
+            class="redeven-gateway-action-popover-surface"
           >
             <Show
               when={progressPresentation()}
@@ -11154,16 +11173,16 @@ function GatewaySourceCard(props: Readonly<{
                     primaryBlocked() && 'redeven-split-action-trigger--blocked',
                   )}
                   loading={primaryBusy()}
-                  disabled={!row().primary_action.enabled && !primaryBlocked()}
+                  disabled={!displayedPrimaryAction().enabled && !primaryBlocked()}
                   aria-disabled={primaryBlocked() ? true : undefined}
                   aria-haspopup={primaryHasGuide() ? 'dialog' : undefined}
                   aria-expanded={primaryHasGuide() ? props.actionPopoverOpen : undefined}
                   onClick={() => {
-                    runAction(row().primary_action);
+                    runAction(displayedPrimaryAction());
                   }}
                 >
                   <span class="redeven-split-action-trigger__content">
-                    <GatewaySourceActionIcon intent={row().primary_action.intent} />
+                    <GatewaySourceActionIcon intent={displayedPrimaryAction().intent} />
                     <span>{primaryActionLabel()}</span>
                   </span>
                 </Button>
@@ -11271,7 +11290,6 @@ function GatewayActionPanel(props: Readonly<{
   gateway: DesktopGatewaySource;
   model: GatewayActionPanelModel;
   runAction: (action: GatewaySourceActionModel) => void;
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest, action?: GatewaySourceActionModel) => void;
   foregroundActionBusy: (action: GatewaySourceActionModel) => boolean;
   close: () => void;
@@ -11291,16 +11309,10 @@ function GatewayActionPanel(props: Readonly<{
       props.close();
       return;
     }
-    if (action.intent === 'manage_gateway') {
-      props.openCreateGatewaySetup(props.gateway);
-      props.close();
-      return;
-    }
     props.runAction(action);
   };
   const tone = createMemo(() => gatewayPanelIconTone(props.model.tone));
   const panelAriaLabel = createMemo(() => localizedGatewayActionPanelText(props.i18n, props.model.aria_label));
-  const panelEyebrow = createMemo(() => localizedGatewayActionPanelText(props.i18n, props.model.eyebrow));
   const panelTitle = createMemo(() => localizedGatewayActionPanelText(props.i18n, props.model.title));
   const panelDetail = createMemo(() => localizedGatewayActionPanelDetail(props.i18n, props.model));
   const localizedPanelActionLabel = (action: GatewaySourceActionModel) => localizedGatewaySourceActionLabel(props.i18n, action);
@@ -11316,58 +11328,60 @@ function GatewayActionPanel(props: Readonly<{
   const [diagnosticsOpen, setDiagnosticsOpen] = createSignal(false);
   return (
     <div class="redeven-action-popover redeven-gateway-action-panel" tabIndex={-1} aria-label={panelAriaLabel()}>
-      <div class="redeven-gateway-action-panel__hero">
-        <span class="redeven-action-popover__status-icon" data-tone={tone()}>
-          <Show when={props.model.tone === 'error'} fallback={props.model.tone === 'warning' ? <AlertTriangle /> : <ShieldCheck />}>
-            <X />
-          </Show>
-        </span>
-        <div class="redeven-action-popover__status-text">
-          <div class="redeven-action-popover__eyebrow">{panelEyebrow()}</div>
-          <div class="redeven-action-popover__title">{panelTitle()}</div>
-          <div class="redeven-action-popover__detail">{panelDetail()}</div>
-          <Show when={panelContext()}>
-            {(context) => <div class="redeven-gateway-action-panel__context">{context()}</div>}
-          </Show>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        class="redeven-gateway-action-panel__diagnostics-toggle"
-        aria-expanded={diagnosticsOpen()}
-        onClick={() => setDiagnosticsOpen((open) => !open)}
-      >
-        <span class="redeven-gateway-action-panel__diagnostics-label">{props.i18n.t('environmentCenter.gatewayPanelDiagnostics')}</span>
-        <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', diagnosticsOpen() && 'rotate-180')} />
-      </button>
-      <Show when={diagnosticsOpen()}>
-        <div class="redeven-gateway-action-panel__facts redeven-gateway-action-panel__facts--diagnostics">
-          <For each={props.model.diagnostic_facts}>
-          {(fact) => (
-            <div class="redeven-gateway-action-panel__fact">
-              <span class="redeven-gateway-action-panel__fact-label">{localizedGatewayPanelFactLabel(props.i18n, fact.label)}</span>
-              <span class="redeven-gateway-action-panel__fact-value" data-tone={fact.tone ?? 'neutral'}>{localizedGatewayPanelFactValue(props.i18n, fact.value)}</span>
-            </div>
-          )}
-          </For>
-        </div>
-      </Show>
-      <Show when={props.model.affected_sessions.length > 0}>
-        <div class="redeven-action-popover__notice" data-tone="warning">
-          <div class="redeven-action-popover__notice-title">{props.i18n.t('environmentCenter.gatewayPanelAffectedSessions')}</div>
-          <div class="redeven-gateway-action-panel__sessions">
-            <For each={props.model.affected_sessions}>
-              {(session) => <div class="redeven-gateway-action-panel__session">{session.label}</div>}
-            </For>
-            <Show when={props.model.overflow_session_count > 0}>
-              <div class="redeven-gateway-action-panel__session">
-                {props.i18n.t('environmentCenter.gatewayPanelOverflowSessions', { count: props.model.overflow_session_count })}
-              </div>
+      <div class="redeven-gateway-action-panel__body">
+        <div class="redeven-gateway-action-panel__hero">
+          <span class="redeven-action-popover__status-icon" data-tone={tone()}>
+            <Show when={props.model.tone === 'error'} fallback={props.model.tone === 'warning' ? <AlertTriangle /> : <ShieldCheck />}>
+              <X />
+            </Show>
+          </span>
+          <div class="redeven-action-popover__status-text">
+            <div class="redeven-action-popover__title">{panelTitle()}</div>
+            <div class="redeven-action-popover__detail">{panelDetail()}</div>
+            <Show when={panelContext()}>
+              {(context) => <div class="redeven-gateway-action-panel__context">{context()}</div>}
             </Show>
           </div>
         </div>
-      </Show>
+
+        <button
+          type="button"
+          class="redeven-gateway-action-panel__diagnostics-toggle"
+          aria-expanded={diagnosticsOpen()}
+          onClick={() => setDiagnosticsOpen((open) => !open)}
+        >
+          <span class="redeven-gateway-action-panel__diagnostics-label">{props.i18n.t('environmentCenter.gatewayPanelDiagnostics')}</span>
+          <ChevronDown class={cn('h-3.5 w-3.5 transition-transform duration-150', diagnosticsOpen() && 'rotate-180')} />
+        </button>
+        <Show when={diagnosticsOpen()}>
+          <div class="redeven-gateway-action-panel__facts redeven-gateway-action-panel__facts--diagnostics">
+            <For each={props.model.diagnostic_facts}>
+            {(fact) => (
+              <div class="redeven-gateway-action-panel__fact">
+                <span class="redeven-gateway-action-panel__fact-label">{localizedGatewayPanelFactLabel(props.i18n, fact.label)}</span>
+                <span class="redeven-gateway-action-panel__fact-value" data-tone={fact.tone ?? 'neutral'}>{localizedGatewayPanelFactValue(props.i18n, fact.value)}</span>
+              </div>
+            )}
+            </For>
+          </div>
+        </Show>
+        <Show when={props.model.affected_sessions.length > 0}>
+          <div class="redeven-action-popover__notice" data-tone="warning">
+            <div class="redeven-action-popover__notice-title">{props.i18n.t('environmentCenter.gatewayPanelAffectedSessions')}</div>
+            <div class="redeven-gateway-action-panel__sessions">
+              <For each={props.model.affected_sessions}>
+                {(session) => <div class="redeven-gateway-action-panel__session">{session.label}</div>}
+              </For>
+              <Show when={props.model.overflow_session_count > 0}>
+                <div class="redeven-gateway-action-panel__session">
+                  {props.i18n.t('environmentCenter.gatewayPanelOverflowSessions', { count: props.model.overflow_session_count })}
+                </div>
+              </Show>
+            </div>
+          </div>
+        </Show>
+      </div>
+
       <div class="redeven-gateway-action-panel__footer">
         <For each={props.model.secondary_actions}>
           {(action) => (

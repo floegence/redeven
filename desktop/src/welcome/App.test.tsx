@@ -787,8 +787,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const syncGatewayRunning = createMemo(() => (');
     expect(appSrc).toContain('props.gateway.background_sync_running === true');
     expect(appSrc).toContain('function localizedGatewaySourceActionLabel');
-    expect(appSrc).toContain('const primaryActionLabel = createMemo(() => localizedGatewaySourceActionLabel(props.i18n, row().primary_action));');
+    expect(appSrc).toContain('const primaryActionLabel = createMemo(() => localizedGatewaySourceActionLabel(props.i18n, displayedPrimaryAction()));');
     expect(appSrc).toContain('const localizedPanelActionLabel = (action: GatewaySourceActionModel) => localizedGatewaySourceActionLabel(props.i18n, action);');
+    expect(appSrc).toContain('function localizedGatewaySourceStatusLabel');
+    expect(appSrc).toContain('localizedGatewaySourceStatusLabel(props.i18n, row().status_label)');
     expect(appSrc).toContain('type GatewayForegroundActionSnapshot');
     expect(appSrc).toContain('const [foregroundAction, setForegroundAction] = createSignal<GatewayForegroundActionSnapshot | null>(null);');
     expect(appSrc).toContain('owns_progress: boolean;');
@@ -829,9 +831,22 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('disabled={menuItemDisabled(action)}');
     expect(appSrc).toContain('loading={syncGatewayRunning()}');
     expect(appSrc).toContain('onClick={syncGatewayFromIcon}');
+    expect(appSrc).toContain('const displayedPrimaryAction = createMemo(() => (');
+    expect(appSrc).toContain('props.actionPopoverOpen && foregroundAction()');
+    expect(appSrc).toContain('clicked_action: displayedPrimaryAction()');
+    expect(appSrc).toContain('allowMainAxisOverflow={false}');
+    expect(appSrc).toContain("'Update available': 'environmentCenter.gatewayNeedsUpdate'");
+    expect(appSrc).toContain("'Update required': 'environmentCenter.gatewayNeedsUpdate'");
+    expect(appSrc).toContain("Starting: 'environmentCenter.gatewayStatusStarting'");
     const gatewayPanelStart = appSrc.indexOf('function GatewayActionPanel');
     const gatewayPanelEnd = appSrc.indexOf('function gatewaySourceLauncherActionKind');
     const gatewayPanelSrc = appSrc.slice(gatewayPanelStart, gatewayPanelEnd);
+    expect(gatewayPanelSrc).toContain('<div class="redeven-gateway-action-panel__body">');
+    expect(gatewayPanelSrc).toContain('<div class="redeven-gateway-action-panel__footer">');
+    expect(gatewayPanelSrc.indexOf('<div class="redeven-gateway-action-panel__body">')).toBeLessThan(
+      gatewayPanelSrc.indexOf('<div class="redeven-gateway-action-panel__footer">'),
+    );
+    expect(gatewayPanelSrc).not.toContain("if (action.intent === 'manage_gateway')");
     expect(gatewayPanelSrc).toContain('loading={props.foregroundActionBusy(action())}');
     expect(gatewayPanelSrc).toContain('loading={props.foregroundActionBusy(action)}');
     expect(gatewayPanelSrc).not.toContain('gatewaySourceActionBusy(props.busyState');
@@ -864,6 +879,9 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-gateway-action-panel__section-label');
     expect(styles).toContain('.redeven-gateway-action-panel__diagnostics-toggle');
     expect(styles).toContain('.redeven-gateway-action-panel__facts--status');
+    expect(styles).toContain('grid-template-rows: minmax(0, 1fr) auto;');
+    expect(styles).toContain('.redeven-gateway-action-panel__body');
+    expect(styles).toContain('overflow: auto;');
     expect(styles).not.toContain('.redeven-gateway-card__management-chip');
     expect(styles).not.toContain('.redeven-gateway-card__env-list');
     expect(styles).not.toContain('.redeven-gateway-env-row');
