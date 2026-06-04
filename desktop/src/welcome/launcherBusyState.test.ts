@@ -135,7 +135,7 @@ function localRuntimeLifecycleActionProgress(input: Readonly<{
 
 function gatewayRuntimeLifecycleActionProgress(input: Readonly<{
   gatewayID?: string;
-  action?: Extract<DesktopLauncherActionProgress['action'], 'pair_gateway' | 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'stop_gateway' | 'refresh_gateway_catalog'>;
+  action?: Extract<DesktopLauncherActionProgress['action'], 'sync_gateway' | 'pair_gateway' | 'start_gateway' | 'restart_gateway' | 'update_gateway' | 'stop_gateway' | 'refresh_gateway_catalog'>;
   status?: LauncherProgressStatus;
   operationKey?: string;
   startedAt?: number;
@@ -1112,7 +1112,7 @@ describe('launcherBusyState', () => {
     )).toBe(failedGatewayProgress);
     expect(environmentProgressPrimaryPresentation(failedGatewayProgress)).toMatchObject({
       kind: 'attention_trigger',
-      label: 'Pair failed',
+      label: 'Sync failed',
     });
   });
 

@@ -84,6 +84,7 @@ export type GatewayRecord = Readonly<{
   schema_version: 1;
   gateway_id: string;
   display_name: string;
+  local_enabled: boolean;
   connection: GatewayConnection;
   trust_profile?: GatewayTrustProfile;
   created_at_ms: number;
@@ -403,6 +404,7 @@ export function normalizeGatewayRecord(value: unknown, now = Date.now()): Gatewa
     schema_version: 1,
     gateway_id: gatewayID,
     display_name: compact(candidate.display_name) || gatewayID,
+    local_enabled: candidate.local_enabled !== false,
     connection,
     ...(trustProfile ? { trust_profile: trustProfile } : {}),
     created_at_ms: timestampMS(candidate.created_at_ms, now),
@@ -427,6 +429,7 @@ export function gatewayRecordToSource(record: GatewayRecord): DesktopGatewaySour
   return {
     gateway_id: record.gateway_id,
     display_name: record.display_name,
+    local_enabled: record.local_enabled,
     connection_kind: connectionKind,
     management_capability: desktopGatewayManagementCapability(connectionKind),
     capabilities: [],
@@ -559,8 +562,21 @@ export function defaultGatewayStorePath(stateRoot: string): string {
   return path.join(stateRoot, 'local-environment', 'gateway', 'gateways.json');
 }
 
+function replaceGatewayRecord(snapshot: GatewayStoreSnapshot, record: GatewayRecord, now: number): GatewayStoreSnapshot {
+  return {
+    schema_version: 1,
+    gateways: normalizeGatewayStoreSnapshot({
+      gateways: [
+        ...snapshot.gateways.filter((item) => item.gateway_id !== record.gateway_id),
+        record,
+      ],
+    }, now).gateways,
+  };
+}
+
 export class GatewayStore {
   private snapshot: GatewayStoreSnapshot | null = null;
+  private mutationQueue: Promise<void> = Promise.resolve();
 
   constructor(private readonly filePath: string) {}
 
@@ -603,103 +619,137 @@ export class GatewayStore {
     trust_profile?: GatewayTrustProfile;
     now_ms?: number;
   }>): Promise<GatewayRecord> {
-    const now = timestampMS(input.now_ms, Date.now());
-    const gatewayID = normalizeGatewayID(input.gateway_id);
-    if (!gatewayID) {
-      throw new GatewayStoreError('GATEWAY_ID_REQUIRED', 'Gateway id is required.');
-    }
-    const existing = await this.get(gatewayID);
-    const nextBindingAudience = gatewayBindingAudience(input.connection);
-    const connectionIdentityUnchanged = existing ? gatewayBindingAudience(existing.connection) === nextBindingAudience : false;
-    const existingTrustProfile = existing?.trust_profile?.binding_audience === nextBindingAudience
-      ? existing.trust_profile
-      : undefined;
-    const record = normalizeGatewayRecord({
-      schema_version: 1,
-      gateway_id: gatewayID,
-      display_name: compact(input.display_name) || existing?.display_name || defaultGatewayDisplayName(input.connection),
-      connection: input.connection,
-      trust_profile: input.trust_profile ?? existingTrustProfile,
-      created_at_ms: existing?.created_at_ms ?? now,
-      updated_at_ms: now,
-      last_catalog_sync_at_ms: connectionIdentityUnchanged ? existing?.last_catalog_sync_at_ms : undefined,
-    }, now);
-    if (!record) {
-      throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
-    }
-    const snapshot = await this.load();
-    this.snapshot = {
-      schema_version: 1,
-      gateways: normalizeGatewayStoreSnapshot({
-        gateways: [
-          ...snapshot.gateways.filter((item) => item.gateway_id !== record.gateway_id),
-          record,
-        ],
-      }, now).gateways,
-    };
-    await this.persist();
-    return record;
+    return this.mutate(async () => {
+      const now = timestampMS(input.now_ms, Date.now());
+      const gatewayID = normalizeGatewayID(input.gateway_id);
+      if (!gatewayID) {
+        throw new GatewayStoreError('GATEWAY_ID_REQUIRED', 'Gateway id is required.');
+      }
+      const snapshot = await this.load();
+      const existing = snapshot.gateways.find((record) => record.gateway_id === gatewayID);
+      const nextBindingAudience = gatewayBindingAudience(input.connection);
+      const connectionIdentityUnchanged = existing ? gatewayBindingAudience(existing.connection) === nextBindingAudience : false;
+      const existingTrustProfile = existing?.trust_profile?.binding_audience === nextBindingAudience
+        ? existing.trust_profile
+        : undefined;
+      const record = normalizeGatewayRecord({
+        schema_version: 1,
+        gateway_id: gatewayID,
+        display_name: compact(input.display_name) || existing?.display_name || defaultGatewayDisplayName(input.connection),
+        local_enabled: existing?.local_enabled ?? true,
+        connection: input.connection,
+        trust_profile: input.trust_profile ?? existingTrustProfile,
+        created_at_ms: existing?.created_at_ms ?? now,
+        updated_at_ms: now,
+        last_catalog_sync_at_ms: connectionIdentityUnchanged ? existing?.last_catalog_sync_at_ms : undefined,
+      }, now);
+      if (!record) {
+        throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
+      }
+      this.snapshot = replaceGatewayRecord(snapshot, record, now);
+      await this.persist();
+      return record;
+    });
   }
 
   async updateTrustProfile(gatewayID: string, trustProfile: GatewayTrustProfile | undefined): Promise<GatewayRecord> {
-    const existing = await this.get(gatewayID);
-    if (!existing) {
-      throw new GatewayStoreError('GATEWAY_NOT_FOUND', 'Gateway was not found.');
-    }
-    return this.upsert({
-      gateway_id: existing.gateway_id,
-      display_name: existing.display_name,
-      connection: existing.connection,
-      trust_profile: trustProfile,
+    return this.mutate(async () => {
+      const cleanGatewayID = normalizeGatewayID(gatewayID);
+      const snapshot = await this.load();
+      const existing = snapshot.gateways.find((record) => record.gateway_id === cleanGatewayID);
+      if (!existing) {
+        throw new GatewayStoreError('GATEWAY_NOT_FOUND', 'Gateway was not found.');
+      }
+      const now = Date.now();
+      const record = normalizeGatewayRecord({
+        ...existing,
+        trust_profile: trustProfile,
+        updated_at_ms: now,
+      }, now);
+      if (!record) {
+        throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
+      }
+      this.snapshot = replaceGatewayRecord(snapshot, record, now);
+      await this.persist();
+      return record;
     });
   }
 
   async markCatalogSynced(gatewayID: string, syncedAtMS = Date.now()): Promise<GatewayRecord> {
-    const existing = await this.get(gatewayID);
-    if (!existing) {
-      throw new GatewayStoreError('GATEWAY_NOT_FOUND', 'Gateway was not found.');
-    }
-    const now = timestampMS(syncedAtMS, Date.now());
-    const record = normalizeGatewayRecord({
-      ...existing,
-      updated_at_ms: now,
-      last_catalog_sync_at_ms: now,
-    }, now);
-    if (!record) {
-      throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
-    }
-    const snapshot = await this.load();
-    this.snapshot = {
-      schema_version: 1,
-      gateways: normalizeGatewayStoreSnapshot({
-        gateways: [
-          ...snapshot.gateways.filter((item) => item.gateway_id !== record.gateway_id),
-          record,
-        ],
-      }, now).gateways,
-    };
-    await this.persist();
-    return record;
+    return this.mutate(async () => {
+      const cleanGatewayID = normalizeGatewayID(gatewayID);
+      const snapshot = await this.load();
+      const existing = snapshot.gateways.find((record) => record.gateway_id === cleanGatewayID);
+      if (!existing) {
+        throw new GatewayStoreError('GATEWAY_NOT_FOUND', 'Gateway was not found.');
+      }
+      const now = timestampMS(syncedAtMS, Date.now());
+      const record = normalizeGatewayRecord({
+        ...existing,
+        updated_at_ms: now,
+        last_catalog_sync_at_ms: now,
+      }, now);
+      if (!record) {
+        throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
+      }
+      this.snapshot = replaceGatewayRecord(snapshot, record, now);
+      await this.persist();
+      return record;
+    });
+  }
+
+  async setLocalEnabled(gatewayID: string, enabled: boolean, nowMS = Date.now()): Promise<GatewayRecord> {
+    return this.mutate(async () => {
+      const cleanGatewayID = normalizeGatewayID(gatewayID);
+      const snapshot = await this.load();
+      const existing = snapshot.gateways.find((record) => record.gateway_id === cleanGatewayID);
+      if (!existing) {
+        throw new GatewayStoreError('GATEWAY_NOT_FOUND', 'Gateway was not found.');
+      }
+      const now = timestampMS(nowMS, Date.now());
+      const record = normalizeGatewayRecord({
+        ...existing,
+        local_enabled: enabled,
+        updated_at_ms: now,
+      }, now);
+      if (!record) {
+        throw new GatewayStoreError('GATEWAY_RECORD_INVALID', 'Gateway record is invalid.');
+      }
+      this.snapshot = replaceGatewayRecord(snapshot, record, now);
+      await this.persist();
+      return record;
+    });
   }
 
   async delete(gatewayID: string): Promise<GatewayRecord | null> {
-    const cleanGatewayID = normalizeGatewayID(gatewayID);
-    const snapshot = await this.load();
-    const existing = snapshot.gateways.find((record) => record.gateway_id === cleanGatewayID) ?? null;
-    if (!existing) {
-      return null;
-    }
-    this.snapshot = {
-      schema_version: 1,
-      gateways: snapshot.gateways.filter((record) => record.gateway_id !== cleanGatewayID),
-    };
-    await this.persist();
-    return existing;
+    return this.mutate(async () => {
+      const cleanGatewayID = normalizeGatewayID(gatewayID);
+      const snapshot = await this.load();
+      const existing = snapshot.gateways.find((record) => record.gateway_id === cleanGatewayID) ?? null;
+      if (!existing) {
+        return null;
+      }
+      this.snapshot = {
+        schema_version: 1,
+        gateways: snapshot.gateways.filter((record) => record.gateway_id !== cleanGatewayID),
+      };
+      await this.persist();
+      return existing;
+    });
   }
 
   private async persist(): Promise<void> {
     const snapshot = await this.load();
     await fs.mkdir(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
     await fs.writeFile(this.filePath, `${JSON.stringify(snapshot, null, 2)}\n`, { mode: 0o600 });
+  }
+
+  private mutate<T>(callback: () => Promise<T>): Promise<T> {
+    const previous = this.mutationQueue;
+    let release: () => void = () => {};
+    this.mutationQueue = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return previous.then(callback, callback).finally(release);
   }
 }

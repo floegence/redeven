@@ -47,14 +47,12 @@ export function visibleOperationNextActions(
       actions.push(action);
     }
   };
-  push('refresh_status');
-  push('update_runtime');
   if (progress.subject_kind !== 'gateway') {
+    push('refresh_status');
+    push('update_runtime');
     push('manage_desktop_update');
   } else {
     push('retry');
-    push('refresh_gateway_status');
-    push('refresh_gateway_catalog');
     push('update_gateway');
     push('resolve_gateway');
     push('open_gateway_environment');
@@ -74,8 +72,6 @@ function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction
     || action.kind === 'update_runtime'
     || action.kind === 'manage_desktop_update'
     || action.kind === 'retry'
-    || action.kind === 'refresh_gateway_status'
-    || action.kind === 'refresh_gateway_catalog'
     || action.kind === 'update_gateway'
     || action.kind === 'resolve_gateway'
     || action.kind === 'open_gateway_environment';

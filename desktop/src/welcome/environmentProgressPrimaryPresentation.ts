@@ -169,11 +169,11 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): s
     case 'update_environment_runtime':
     case 'update_gateway':
       return 'Updating...';
+    case 'sync_gateway':
     case 'pair_gateway':
-      return 'Pairing...';
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
-      return 'Refreshing...';
+      return 'Syncing...';
     default:
       return 'Starting...';
   }
@@ -251,11 +251,11 @@ function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): st
     case 'stop_environment_runtime':
     case 'stop_gateway':
       return 'Stop failed';
+    case 'sync_gateway':
     case 'pair_gateway':
-      return 'Pair failed';
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
-      return 'Refresh failed';
+      return 'Sync failed';
     default:
       return 'Needs attention';
   }

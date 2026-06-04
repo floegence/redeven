@@ -197,7 +197,7 @@ describe('DesktopWelcomeShell', () => {
     expect(gatewayDialogSrc).toContain("props.i18n.t('connectionDialog.gatewayRuntimeRootHelp'");
     expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.runtimeRootHelp'");
     expect(gatewayDialogSrc).not.toContain("props.i18n.t('connectionDialog.connectTimeoutShort')");
-    expect(gatewayDialogSrc.indexOf('id="gateway-runtime-root"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
+    expect(gatewayDialogSrc.indexOf('id="gateway-data-root"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
     expect(gatewayDialogSrc.indexOf('id="gateway-ssh-connect-timeout"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
     expect(gatewayDialogSrc.indexOf('id="gateway-release-base-url"')).toBeGreaterThan(gatewayAdvancedCollapseOffset);
     expect(appSrc).toContain("performLauncherAction(action, 'gateway_dialog');");
@@ -206,7 +206,8 @@ describe('DesktopWelcomeShell', () => {
     const gatewaySourceActionRunnerSrc = readGatewaySourceActionRunnerSource();
     expect(appSrc).toContain("case 'manage_gateway':");
     expect(appSrc).toContain('const selectedGatewayWorkflowProgress = createMemo(() => {');
-    expect(appSrc).toContain("progress.action !== 'refresh_gateway_status'");
+    expect(appSrc).toContain('const syncGatewayRunning = createMemo(() => (');
+    expect(appSrc).toContain('props.gateway.background_sync_running === true');
     expect(appSrc).toContain('gatewayProgressBelongsToForegroundAction(progress, foreground)');
     expect(appSrc).toContain('<GatewayActionPanel');
     expect(appSrc).toContain('<EnvironmentProgressPanel');
@@ -237,7 +238,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("aria-label={props.i18n.t('environmentCenter.addGateway')}");
     expect(appSrc).toContain("case 'view_gateway_environments':");
     expect(appSrc).toContain("case 'add_gateway_environment':");
-    expect(appSrc).toContain("props.i18n.t('environmentCenter.refreshGatewayStatusForLabel'");
+    expect(appSrc).toContain("props.i18n.t('environmentCenter.syncGatewayForLabel'");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.moreActions')");
     expect(appSrc).toContain("props.i18n.t('environmentCenter.moreActionsForLabel'");
     expect(appSrc).toContain('popoverAriaLabel={');
@@ -265,7 +266,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("case 'resolve_gateway':\n        if (environment.kind === 'gateway_environment') {");
     expect(appSrc).toContain('openCreateGatewaySetup(gateway);');
     expect(appSrc).not.toContain("case 'resolve_gateway':\n        await pairGateway(environment.gateway_id ?? '');");
-    expect(appSrc).toContain("kind: 'pair_gateway'");
+    expect(appSrc).toContain("kind: 'sync_gateway'");
 	    expect(appSrc).not.toContain("gateway_environment') {\n      return openRemoteEnvironment");
 	  });
 
@@ -783,7 +784,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('class="redeven-gateway-library"');
     expect(appSrc).toContain('<div class="redeven-gateway-grid">');
     expect(appSrc).toContain('redeven-environment-card redeven-gateway-card');
-    expect(appSrc).toContain('progress.action !== \'refresh_gateway_status\'');
+    expect(appSrc).toContain('const syncGatewayRunning = createMemo(() => (');
+    expect(appSrc).toContain('props.gateway.background_sync_running === true');
     expect(appSrc).toContain('function localizedGatewaySourceActionLabel');
     expect(appSrc).toContain('const primaryActionLabel = createMemo(() => localizedGatewaySourceActionLabel(props.i18n, row().primary_action));');
     expect(appSrc).toContain('const localizedPanelActionLabel = (action: GatewaySourceActionModel) => localizedGatewaySourceActionLabel(props.i18n, action);');
@@ -796,9 +798,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('return progressStartedAt > 0 && progressStartedAt >= foreground.started_at_unix_ms;');
     expect(appSrc).not.toContain('progressStartedAt + 750');
     expect(appSrc).toContain('const selectedGatewayWorkflowProgress = createMemo(() => {');
-    expect(appSrc).toContain('const selectedRefreshStatusProgress = createMemo(() => (');
     expect(appSrc).toContain('<GatewayActionPanel');
-    expect(appSrc).toContain('statusFacts={liveStatusFacts()}');
+    expect(appSrc).not.toContain('statusFacts={liveStatusFacts()}');
     expect(appSrc).toContain('foregroundActionBusy={foregroundActionBusy}');
     expect(appSrc).toContain('runGatewayLauncherAction={runForegroundRequest}');
     expect(appSrc).toContain('const closeActionPopover = () => {');
@@ -807,7 +808,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('onClick={() => props.onActionPopoverOpenChange(!props.actionPopoverOpen)}');
     expect(appSrc).toContain('const visiblePanelModel = createMemo(() => {');
     expect(appSrc).toContain('void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayServiceAction, props.runGatewayLauncherAction);');
-    expect(gatewaySourceActionRunnerSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? \'start_if_needed\' : undefined');
+    expect(gatewaySourceActionRunnerSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? { start_policy: \'start_if_needed\' as const } : {}');
     expect(appSrc).toContain('const menuActions = createMemo(() => row().secondary_actions);');
     expect(appSrc).not.toContain('const quickSecondaryActions = createMemo(() => secondaryActions().slice(0, 1));');
     expect(appSrc).not.toContain('const overflowSecondaryActions = createMemo(() => secondaryActions().slice(quickSecondaryActions().length));');
@@ -818,7 +819,6 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("if (action.intent === 'add_gateway_environment')");
     expect(appSrc).toContain('const primaryActionRunning = createMemo(() => (');
     expect(appSrc).toContain('foregroundActionRunning()');
-    expect(appSrc).toContain('const refreshStatusRunning = createMemo(() => (');
     expect(appSrc).not.toContain('const gatewayActionRunning = createMemo(() => (');
     expect(appSrc).not.toContain('Start Gateway & Pair');
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
@@ -827,8 +827,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('ariaLabel={moreActionsForLabel()}');
     expect(appSrc).toContain('<For each={menuActions()}>');
     expect(appSrc).toContain('disabled={menuItemDisabled(action)}');
-    expect(appSrc).toContain('loading={refreshStatusRunning()}');
-    expect(appSrc).toContain('onClick={runRefreshStatus}');
+    expect(appSrc).toContain('loading={syncGatewayRunning()}');
+    expect(appSrc).toContain('onClick={syncGatewayFromIcon}');
     const gatewayPanelStart = appSrc.indexOf('function GatewayActionPanel');
     const gatewayPanelEnd = appSrc.indexOf('function gatewaySourceLauncherActionKind');
     const gatewayPanelSrc = appSrc.slice(gatewayPanelStart, gatewayPanelEnd);
@@ -839,6 +839,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('setSelectedAction(action)');
     expect(appSrc).not.toContain('redeven-gateway-card__management-chip');
     expect(appSrc).not.toContain('redeven-gateway-card__secondary-actions');
+    expect(appSrc).toContain("case 'delete_gateway':");
+    expect(appSrc).toContain("i18n().t('confirm.deleteGatewayTitle')");
     expect(appSrc).not.toContain('gatewayStartRequiredDialog');
     expect(appSrc).not.toContain('gatewayStartRequiredNextStep');
     expect(appSrc).not.toContain('function GatewaySourceRow');
@@ -849,7 +851,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-gateway-grid');
     expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.5rem), 22rem));');
     expect(styles).toContain('.redeven-gateway-card {');
-    expect(styles).toContain('.redeven-gateway-action-panel__actions button > span');
+    expect(styles).toContain('.redeven-gateway-action-panel__footer button > span');
     expect(styles).toContain('.redeven-gateway-action-panel__diagnostics-label');
     expect(styles).toContain('overflow-wrap: anywhere;');
     expect(styles).toContain('.redeven-gateway-card__primary-anchor');

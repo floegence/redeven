@@ -18,6 +18,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
   return {
     gateway_id: 'bastion',
     display_name: 'Bastion',
+    local_enabled: true,
     connection_kind: 'url',
     management_capability: 'access_only',
     capabilities: [],

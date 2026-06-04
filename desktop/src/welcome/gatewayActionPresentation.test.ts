@@ -9,6 +9,7 @@ function gateway(overrides: Partial<DesktopGatewaySource> = {}): DesktopGatewayS
   return {
     gateway_id: 'gw-demo',
     display_name: 'Gateway-demo',
+    local_enabled: true,
     connection_kind: 'ssh_host',
     management_capability: 'managed_ssh_host',
     capabilities: [],
@@ -40,7 +41,7 @@ function action(intent: GatewaySourceActionModel['intent']): GatewaySourceAction
 }
 
 describe('buildGatewayActionPresentation', () => {
-  it('opens a retry pairing guide when automatic Gateway pairing needs attention', () => {
+  it('opens a sync guide when automatic Gateway pairing has an issue', () => {
     const model = buildGatewayActionPresentation({
       gateway: gateway({
         status: 'error',
@@ -54,10 +55,10 @@ describe('buildGatewayActionPresentation', () => {
       kind: 'resolve_before_pair',
       execution_mode: 'guide',
       eyebrow: 'Gateway',
-      title: 'Gateway pairing needs attention',
+      title: 'Gateway pairing issue',
       detail: 'Gateway pairing challenge signature is invalid.',
-      primary_action: { intent: 'pair_gateway', label: 'Retry sync' },
-      continuation_action: { kind: 'pair_gateway', gateway_id: 'gw-demo' },
+      primary_action: { intent: 'sync_gateway', label: 'Sync Gateway' },
+      continuation_action: { kind: 'sync_gateway', gateway_id: 'gw-demo' },
     });
     expect(model.status_facts).toEqual([
       expect.objectContaining({ label: 'Gateway service', value: 'Ready' }),
@@ -89,10 +90,12 @@ describe('buildGatewayActionPresentation', () => {
       clicked_action: action('pair_gateway'),
     });
 
-    expect(model.kind).toBe('access_only_pair');
+    expect(model.kind).toBe('resolve_before_pair');
+    expect(model.primary_action).toMatchObject({ intent: 'sync_gateway', label: 'Sync Gateway' });
     expect(model.secondary_actions).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ intent: 'start_gateway' }),
       expect.objectContaining({ intent: 'update_gateway' }),
+      expect.objectContaining({ intent: 'manage_gateway' }),
     ]));
   });
 
@@ -113,21 +116,16 @@ describe('buildGatewayActionPresentation', () => {
 
     expect(model.kind).toBe('start_and_refresh_catalog');
     expect(model.eyebrow).toBe('Gateway service');
-    expect(model.primary_action).toMatchObject({ intent: 'pair_gateway', label: 'Retry sync' });
+    expect(model.primary_action).toMatchObject({ intent: 'start_gateway', label: 'Start Gateway' });
     expect(model.status_facts).toEqual([
       expect.objectContaining({ label: 'Gateway service', value: 'Not started', tone: 'warning' }),
       expect.objectContaining({ label: 'Catalog sync', value: 'Idle' }),
     ]);
-    expect(model.secondary_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({ intent: 'start_gateway', label: 'Start Gateway' }),
-    ]));
     expect(model.continuation_action).toMatchObject({
-      kind: 'pair_gateway',
+      kind: 'sync_gateway',
       start_policy: 'start_if_needed',
     });
-    expect(model.secondary_actions).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ intent: 'pair_gateway' }),
-    ]));
+    expect(model.secondary_actions).toEqual([]);
   });
 
   it('routes Pair through update or resolve guides when Gateway service state blocks trust', () => {
@@ -193,7 +191,7 @@ describe('buildGatewayActionPresentation', () => {
     });
   });
 
-  it('dispatches refresh status without starting, pairing, or refreshing catalog', async () => {
+  it('dispatches legacy refresh status as unified Gateway sync', async () => {
     const openCreateGatewaySetup = vi.fn();
     const pairGateway = vi.fn(async () => undefined);
     const runGatewayServiceAction = vi.fn(async () => undefined);
@@ -214,7 +212,7 @@ describe('buildGatewayActionPresentation', () => {
     );
 
     expect(runGatewayLauncherAction).toHaveBeenCalledWith({
-      kind: 'refresh_gateway_status',
+      kind: 'sync_gateway',
       gateway_id: 'gw-demo',
     });
     expect(pairGateway).not.toHaveBeenCalled();
@@ -261,7 +259,7 @@ describe('buildGatewayActionPresentation', () => {
     expect(runGatewayLauncherAction).not.toHaveBeenCalled();
   });
 
-  it('starts managed Gateways only for catalog sync, never for refresh status', async () => {
+  it('uses unified sync for catalog and status refresh, starting managed Gateways when needed', async () => {
     const openCreateGatewaySetup = vi.fn();
     const pairGateway = vi.fn(async () => undefined);
     const runGatewayServiceAction = vi.fn(async () => undefined);
@@ -281,8 +279,8 @@ describe('buildGatewayActionPresentation', () => {
 
     await runGatewaySourceAction(
       {
-        intent: 'refresh_gateway_catalog',
-        label: 'Retry sync',
+        intent: 'sync_gateway',
+        label: 'Sync Gateway',
         enabled: true,
         variant: 'default',
       },
@@ -294,10 +292,10 @@ describe('buildGatewayActionPresentation', () => {
     );
     await runGatewaySourceAction(
       {
-        intent: 'refresh_gateway_status',
-        label: 'Refresh status',
+        intent: 'start_gateway',
+        label: 'Start Gateway',
         enabled: true,
-        variant: 'outline',
+        variant: 'default',
       },
       stoppedGateway,
       openCreateGatewaySetup,
@@ -306,12 +304,54 @@ describe('buildGatewayActionPresentation', () => {
       runGatewayLauncherAction,
     );
 
-    expect(runGatewayServiceAction).toHaveBeenCalledWith('gw-demo', 'refresh_gateway_catalog', 'start_if_needed');
     expect(runGatewayLauncherAction).toHaveBeenCalledWith({
-      kind: 'refresh_gateway_status',
+      kind: 'sync_gateway',
       gateway_id: 'gw-demo',
+      start_policy: 'start_if_needed',
     });
+    expect(runGatewayLauncherAction).toHaveBeenCalledTimes(2);
+    expect(runGatewayServiceAction).not.toHaveBeenCalled();
     expect(pairGateway).not.toHaveBeenCalled();
     expect(openCreateGatewaySetup).not.toHaveBeenCalled();
+  });
+
+  it('keeps direct service start separate from sync-and-start primary actions', async () => {
+    const openCreateGatewaySetup = vi.fn();
+    const pairGateway = vi.fn(async () => undefined);
+    const runGatewayServiceAction = vi.fn(async () => undefined);
+    const runGatewayLauncherAction = vi.fn(async () => undefined);
+
+    await runGatewaySourceAction(
+      {
+        intent: 'service_start_gateway',
+        label: 'Start Gateway',
+        enabled: true,
+        variant: 'outline',
+      },
+      gateway(),
+      openCreateGatewaySetup,
+      pairGateway,
+      runGatewayServiceAction,
+      runGatewayLauncherAction,
+    );
+
+    expect(runGatewayServiceAction).toHaveBeenCalledWith('gw-demo', 'start_gateway');
+    expect(runGatewayLauncherAction).not.toHaveBeenCalled();
+  });
+
+  it('guides disabled Gateways without surfacing Manage inside the popup', () => {
+    const model = buildGatewayActionPresentation({
+      gateway: gateway({ local_enabled: false }),
+      clicked_action: action('sync_gateway'),
+    });
+
+    expect(model).toMatchObject({
+      kind: 'disabled_gateway',
+      title: 'Gateway disabled on this Desktop',
+      primary_action: { intent: 'enable_gateway', label: 'Enable Gateway' },
+      continuation_action: { kind: 'set_gateway_enabled', gateway_id: 'gw-demo', enabled: true },
+    });
+    expect(JSON.stringify(model)).not.toContain('manage_gateway');
+    expect(JSON.stringify(model)).not.toContain('Managed Gateway');
   });
 });

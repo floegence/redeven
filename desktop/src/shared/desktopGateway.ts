@@ -120,7 +120,6 @@ export type DesktopGatewayServiceState = Readonly<{
 
 export type DesktopGatewaySyncState =
   | 'idle'
-  | 'syncing'
   | 'ready'
   | 'gateway_unreachable'
   | 'pairing_failed'
@@ -129,6 +128,7 @@ export type DesktopGatewaySyncState =
 export type DesktopGatewaySource = Readonly<{
   gateway_id: string;
   display_name: string;
+  local_enabled: boolean;
   connection_kind: DesktopGatewayConnectionKind;
   management_capability: DesktopGatewayManagementCapability;
   capabilities: readonly DesktopGatewayCapability[];
@@ -146,6 +146,7 @@ export type DesktopGatewaySource = Readonly<{
   container_label?: string;
   service_state?: DesktopGatewayServiceState;
   sync_state?: DesktopGatewaySyncState;
+  background_sync_running?: boolean;
   last_sync_attempt_at_ms?: number;
   last_synced_at_ms?: number;
   last_sync_error_code?: string;
@@ -246,7 +247,7 @@ export function desktopGatewayStatusLabel(status: DesktopGatewayStatus): string 
     case 'pairing_required':
       return 'Pairing required';
     case 'error':
-      return 'Needs attention';
+      return 'Gateway issue';
     case 'unknown':
       return 'Unknown';
   }

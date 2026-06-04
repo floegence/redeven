@@ -10,6 +10,7 @@ function gatewayRecord(connection: GatewayRecord['connection']): GatewayRecord {
     schema_version: 1,
     gateway_id: 'gw_demo',
     display_name: 'Demo Gateway',
+    local_enabled: true,
     connection,
     created_at_ms: 1,
     updated_at_ms: 1,

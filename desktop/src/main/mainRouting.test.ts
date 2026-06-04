@@ -946,7 +946,10 @@ describe('main routing', () => {
       helperSrc.indexOf('completeGatewayPairing({'),
     );
     expect(helperSrc.indexOf('completeGatewayPairing({')).toBeLessThan(
-      helperSrc.indexOf('gatewayStore().updateTrustProfile(record.gateway_id, trustProfile);'),
+      helperSrc.indexOf('gatewayStore().updateTrustProfile(currentRecord.gateway_id, trustProfile);'),
+    );
+    expect(helperSrc.indexOf('await options.beforeStoreWrite?.()')).toBeLessThan(
+      helperSrc.indexOf('completeGatewayPairing({'),
     );
     expect(pairSrc).toContain('await syncGatewayRecord(record, {');
     expect(pairSrc).not.toContain('await client.pairingChallenge(');
@@ -974,45 +977,94 @@ describe('main routing', () => {
     expect(syncSrc).not.toContain('display_name: catalog.gateway.display_name');
   });
 
-	  it('keeps Gateway catalog sync in a main-process poller instead of snapshot-time probing', () => {
-	    const mainSrc = readMainSource();
-	    const loadStart = mainSrc.indexOf('async function loadGatewaySourcesForWelcome(');
-	    const defaultSyncStart = mainSrc.indexOf('function defaultGatewaySyncRecord(', loadStart);
+  it('keeps Gateway catalog sync in a main-process poller instead of snapshot-time probing', () => {
+    const mainSrc = readMainSource();
+    const loadStart = mainSrc.indexOf('async function loadGatewaySourcesForWelcome(');
+    const defaultSyncStart = mainSrc.indexOf('function defaultGatewaySyncRecord(', loadStart);
     expect(defaultSyncStart).toBeGreaterThan(loadStart);
     const loadSrc = mainSrc.slice(loadStart, defaultSyncStart);
 
     expect(mainSrc).toContain('const gatewaySyncStateByID = new Map<string, GatewaySyncRecord>();');
-    expect(mainSrc).toContain('const gatewaySyncTaskByID = new Map<string, Promise<DesktopGatewaySource>>();');
+    expect(mainSrc).toContain('type GatewaySyncTaskRecord = Readonly<{');
+    expect(mainSrc).toContain('priority: GatewaySyncOperationPriority;');
+    expect(mainSrc).toContain('token: symbol;');
+    expect(mainSrc).toContain('controller: AbortController;');
+    expect(mainSrc).toContain('task: Promise<DesktopGatewaySource>;');
+    expect(mainSrc).toContain('const gatewaySyncTaskByID = new Map<string, GatewaySyncTaskRecord>();');
+    expect(mainSrc).toContain('const supersededGatewaySyncTaskTokens = new Set<symbol>();');
+    expect(mainSrc).toContain('function supersedeGatewaySyncTask(gatewayID: string): void');
     expect(mainSrc).toContain('function updateGatewaySyncPoller(): void');
     expect(mainSrc).toContain('async function syncVisibleGatewaysIfNeeded(');
     expect(mainSrc).toContain("last_synced_at_ms: 0,");
+    expect(mainSrc).toContain('background_sync_running: false,');
     expect(mainSrc).toContain('if (!syncRecord?.source) {');
+    expect(mainSrc).toContain('if (!record.local_enabled) {');
+    expect(mainSrc).toContain("gatewaySyncTaskByID.set(record.gateway_id, { priority, token: taskToken, controller, task });");
     expect(loadSrc).not.toContain('inspectRuntime(');
-	    expect(loadSrc).not.toContain('refreshCatalog(');
-	    expect(loadSrc).toContain('mergeGatewaySourceRecord(');
-	  });
+    expect(loadSrc).not.toContain('refreshCatalog(');
+    expect(loadSrc).toContain('mergeGatewaySourceRecord(');
+  });
 
-	  it('separates Gateway status refresh from pairing, starting, and catalog sync', () => {
-	    const mainSrc = readMainSource();
-	    const syncStart = mainSrc.indexOf('async function syncGatewayRecord(');
-	    const syncEnd = mainSrc.indexOf('async function syncGatewayIfNeeded(', syncStart);
-	    expect(syncStart).toBeGreaterThanOrEqual(0);
-	    expect(syncEnd).toBeGreaterThan(syncStart);
-	    const syncSrc = mainSrc.slice(syncStart, syncEnd);
-	    const refreshBranchStart = syncSrc.indexOf("if (mode === 'refresh_status') {");
-	    const readyClientStart = syncSrc.indexOf('const client = await gatewayClientForSync(', refreshBranchStart);
-	    expect(refreshBranchStart).toBeGreaterThanOrEqual(0);
-	    expect(readyClientStart).toBeGreaterThan(refreshBranchStart);
-	    const refreshStatusSrc = syncSrc.slice(refreshBranchStart, readyClientStart);
+  it('keeps Gateway enable/disable and foreground sync as explicit local state transitions', () => {
+    const mainSrc = readMainSource();
+    const scheduleStart = mainSrc.indexOf('function scheduleGatewaySyncAfterLauncherAction(');
+    const scheduleEnd = mainSrc.indexOf('async function buildCurrentDesktopWelcomeSnapshot(', scheduleStart);
+    const syncStart = mainSrc.indexOf('async function syncGatewayRecord(');
+    const syncEnd = mainSrc.indexOf('async function syncGatewayIfNeeded(', syncStart);
+    const toggleStart = mainSrc.indexOf('async function setGatewayEnabledFromLauncher(');
+    const toggleEnd = mainSrc.indexOf('async function pairGatewayFromLauncher(', toggleStart);
+    expect(scheduleStart).toBeGreaterThanOrEqual(0);
+    expect(scheduleEnd).toBeGreaterThan(scheduleStart);
+    expect(syncStart).toBeGreaterThanOrEqual(0);
+    expect(syncEnd).toBeGreaterThan(syncStart);
+    expect(toggleStart).toBeGreaterThanOrEqual(0);
+    expect(toggleEnd).toBeGreaterThan(toggleStart);
+    const scheduleSrc = mainSrc.slice(scheduleStart, scheduleEnd);
+    const syncSrc = mainSrc.slice(syncStart, syncEnd);
+    const toggleSrc = mainSrc.slice(toggleStart, toggleEnd);
 
-	    expect(refreshStatusSrc).toContain('inspectGatewayServiceForSync(currentRecord, {');
-	    expect(refreshStatusSrc).toContain('gatewayInspectedSourceUpdate(currentRecord, previous, attemptAtMS, serviceState)');
-	    expect(refreshStatusSrc).not.toContain('pairGatewayWithClient(');
-	    expect(refreshStatusSrc).not.toContain('refreshCatalog(');
-	    expect(refreshStatusSrc).not.toContain('ensureGatewayReady(');
-	    expect(mainSrc).toContain("if (requested === 'start_if_needed') {");
-	    expect(mainSrc).toContain("return 'require_ready';");
-	  });
+    expect(scheduleSrc).toContain("case 'set_gateway_enabled':");
+    expect(scheduleSrc).toContain('const requestEnabled = request.kind === \'set_gateway_enabled\' ? request.enabled : true;');
+    expect(scheduleSrc).toContain('if (!requestEnabled) {');
+    expect(scheduleSrc).toContain('gatewaySyncStateByID.delete(gatewayID);');
+    expect(scheduleSrc).toContain('supersedeGatewaySyncTask(gatewayID);');
+    expect(scheduleSrc).toContain('record ? syncGatewayIfNeeded(record, { force: true }) : undefined');
+    expect(toggleSrc).toContain('gatewayStore().setLocalEnabled(request.gateway_id, request.enabled)');
+    expect(toggleSrc).toContain('if (!request.enabled) {');
+    expect(toggleSrc).toContain('gatewaySyncStateByID.delete(record.gateway_id);');
+    expect(toggleSrc).toContain('supersedeGatewaySyncTask(record.gateway_id);');
+    expect(toggleSrc).toContain("return launcherActionSuccess('disabled_gateway');");
+    expect(toggleSrc).toContain("return launcherActionSuccess('enabled_gateway');");
+    expect(syncSrc).toContain("if (priority === 'background' || existingTaskRecord.priority === 'foreground') {");
+    expect(syncSrc).toContain("supersedeGatewaySyncTask(record.gateway_id);");
+    expect(syncSrc).toContain('if (!latestRecord.local_enabled) {');
+    expect(syncSrc).toContain('throw new GatewaySyncCanceledError(\'Gateway sync was canceled because this Gateway is disabled on this Desktop.\');');
+  });
+
+  it('routes Gateway status refresh through the unified sync workflow', () => {
+    const mainSrc = readMainSource();
+    const syncStart = mainSrc.indexOf('async function syncGatewayRecord(');
+    const syncEnd = mainSrc.indexOf('async function syncGatewayIfNeeded(', syncStart);
+    expect(syncStart).toBeGreaterThanOrEqual(0);
+    expect(syncEnd).toBeGreaterThan(syncStart);
+    const syncSrc = mainSrc.slice(syncStart, syncEnd);
+    const refreshStart = mainSrc.indexOf('async function refreshGatewayStatusFromLauncher(');
+    const refreshEnd = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(', refreshStart);
+    expect(refreshStart).toBeGreaterThanOrEqual(0);
+    expect(refreshEnd).toBeGreaterThan(refreshStart);
+    const refreshSrc = mainSrc.slice(refreshStart, refreshEnd);
+
+    expect(syncSrc).not.toContain("mode === 'refresh_status'");
+    expect(syncSrc).toContain('inspectGatewayServiceForSync(currentRecord, {');
+    expect(syncSrc).toContain('const client = await gatewayClientForSync(currentRecord, {');
+    expect(syncSrc).toContain('startPolicy,');
+    expect(syncSrc).toContain('pairGatewayWithClient(currentRecord, client, secretStore, {');
+    expect(syncSrc).toContain('gatewayLifecycleManager().refreshCatalog(currentRecord, {');
+    expect(refreshSrc).toContain("kind: 'sync_gateway'");
+    expect(refreshSrc).not.toContain('refresh_status');
+    expect(mainSrc).toContain("if (requested === 'start_if_needed') {");
+    expect(mainSrc).toContain("return 'require_ready';");
+  });
 
 	  it('opens Gateway environments only through Gateway open-session without provider fallback', () => {
     const mainSrc = readMainSource();

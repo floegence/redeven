@@ -85,7 +85,15 @@ export function buildGatewayEnvironmentEntries(
   const createdAtMS = input.createdAtMS ?? Date.now();
   const entries: DesktopEnvironmentEntry[] = [];
   const matchedOpenSessionKeys = new Set<string>();
+  const disabledGatewayIDs = new Set(
+    input.gatewaySources
+      .filter((gateway) => gateway.local_enabled === false)
+      .map((gateway) => gateway.gateway_id),
+  );
   for (const gateway of input.gatewaySources) {
+    if (gateway.local_enabled === false) {
+      continue;
+    }
     const source = gatewayEnvironmentSource(gateway);
     if (!source) {
       continue;
@@ -103,7 +111,9 @@ export function buildGatewayEnvironmentEntries(
   return [
     ...entries,
     ...(input.openSessions ?? []).filter((entry) => (
-      entry.open_session_key && !matchedOpenSessionKeys.has(entry.open_session_key)
+      entry.open_session_key
+      && !matchedOpenSessionKeys.has(entry.open_session_key)
+      && !(entry.kind === 'gateway_environment' && entry.gateway_id && disabledGatewayIDs.has(entry.gateway_id))
     )),
   ];
 }
@@ -246,7 +256,7 @@ function gatewayRuntimeOperations(input: Readonly<{
       },
     ),
     refresh: desktopRuntimeOperationPlan('refresh', 'available', 'runtime_gateway', {
-      label: 'Refresh Gateway status',
+      label: 'Sync Gateway',
     }),
     start: desktopRuntimeOperationPlan(
       'start',
@@ -331,7 +341,7 @@ function gatewayOfflineReason(
     case 'needs_setup':
       return 'Set up this Gateway before opening environments through it.';
     case 'error':
-      return 'This Gateway needs attention.';
+      return 'This Gateway has an issue.';
     case 'installing':
     case 'starting':
     case 'updating':
