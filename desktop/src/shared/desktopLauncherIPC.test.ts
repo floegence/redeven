@@ -724,6 +724,15 @@ describe('desktopLauncherIPC', () => {
       start_policy: 'start_if_needed',
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'check_gateway',
+      gateway_id: ' gw-demo ',
+      start_policy: 'start_if_needed',
+      retry_action: { kind: 'sync_gateway', gateway_id: 'unsafe' },
+    })).toEqual({
+      kind: 'check_gateway',
+      gateway_id: 'gw-demo',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_gateway_enabled',
       gateway_id: ' gw-demo ',
       enabled: false,
@@ -781,6 +790,7 @@ describe('desktopLauncherIPC', () => {
       });
     }
     expect(normalizeDesktopLauncherActionRequest({ kind: 'refresh_gateway_runtime', gateway_id: 'gw-demo' })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({ kind: 'check_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'start_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_gateway', gateway_id: '   ' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'delete_saved_environment', environment_id: '   ' })).toBeNull();

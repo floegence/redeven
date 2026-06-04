@@ -125,6 +125,32 @@ export type DesktopGatewaySyncState =
   | 'pairing_failed'
   | 'catalog_failed';
 
+export type DesktopGatewayDiagnosisClassification =
+  | 'disabled'
+  | 'ready'
+  | 'not_started'
+  | 'needs_update'
+  | 'ssh_unreachable'
+  | 'container_unavailable'
+  | 'bridge_unavailable'
+  | 'trust_failed'
+  | 'catalog_failed'
+  | 'unmanageable'
+  | 'unknown';
+
+export type DesktopGatewayDiagnosis = Readonly<{
+  checked_at_unix_ms: number;
+  classification: DesktopGatewayDiagnosisClassification;
+  manageable: boolean;
+  summary: string;
+  detail: string;
+  service_state?: DesktopGatewayServiceState;
+  catalog_state?: DesktopGatewaySyncState;
+  trust_state?: DesktopGatewayTrustState;
+  error_code?: string;
+  error_message?: string;
+}>;
+
 export type DesktopGatewaySource = Readonly<{
   gateway_id: string;
   display_name: string;
@@ -151,6 +177,7 @@ export type DesktopGatewaySource = Readonly<{
   last_synced_at_ms?: number;
   last_sync_error_code?: string;
   last_sync_error_message?: string;
+  diagnosis?: DesktopGatewayDiagnosis;
   created_at_ms: number;
   updated_at_ms: number;
   environments: readonly DesktopGatewayEnvironment[];

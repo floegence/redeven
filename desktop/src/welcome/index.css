@@ -3177,12 +3177,8 @@ pre,
   line-height: 1.45;
 }
 
-.redeven-gateway-card .redeven-action-popover-surface {
-  --redeven-action-popover-width: min(20rem, calc(100vw - 1rem));
-}
-
 .redeven-action-popover-surface.redeven-gateway-action-popover-surface {
-  --redeven-action-popover-width: min(20rem, calc(100vw - 1rem));
+  --redeven-action-popover-width: min(19rem, calc(100vw - 1rem));
 }
 
 .redeven-gateway-action-panel {
@@ -3239,18 +3235,20 @@ pre,
 
 .redeven-gateway-action-panel__context {
   margin-top: 0.5rem;
-  display: inline-flex;
+  display: block;
+  width: fit-content;
   max-width: 100%;
   border: 1px solid color-mix(in srgb, var(--border) 44%, transparent);
-  border-radius: 999px;
+  border-radius: 0.45rem;
   background: color-mix(in srgb, var(--muted) 12%, transparent);
   padding: 0.18rem 0.48rem;
   overflow: hidden;
+  overflow-wrap: anywhere;
   color: var(--muted-foreground);
   font-size: 0.7rem;
   line-height: 1.45;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-overflow: clip;
+  white-space: normal;
 }
 
 .redeven-gateway-action-panel__section {
@@ -3269,10 +3267,9 @@ pre,
 }
 
 .redeven-gateway-action-panel__footer {
-  display: flex;
+  display: grid;
   min-width: 0;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: stretch;
   gap: 0.5rem;
   border-top: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
   background:
@@ -3284,7 +3281,16 @@ pre,
   padding: 0.68rem 0.85rem;
 }
 
+.redeven-gateway-action-panel__footer[data-mode='primary'] {
+  grid-template-columns: minmax(4.75rem, 0.58fr) minmax(0, 1.42fr);
+}
+
+.redeven-gateway-action-panel__footer[data-mode='close-only'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .redeven-gateway-action-panel__footer button {
+  width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3298,14 +3304,13 @@ pre,
 }
 
 .redeven-gateway-action-panel__primary-action {
-  flex: 0 1 auto;
-  min-width: 7.75rem;
-  max-width: 10.5rem;
+  min-width: 0;
+  max-width: none;
 }
 
 .redeven-gateway-action-panel__secondary-action {
-  flex: 0 1 auto;
-  max-width: 7.25rem;
+  min-width: 0;
+  max-width: none;
 }
 
 .redeven-gateway-action-panel__facts {
@@ -3445,8 +3450,7 @@ pre,
   }
 
   .redeven-gateway-action-panel__footer {
-    align-items: stretch;
-    flex-direction: column-reverse;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .redeven-gateway-action-panel__primary-action {

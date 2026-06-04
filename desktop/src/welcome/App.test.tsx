@@ -849,9 +849,11 @@ describe('DesktopWelcomeShell', () => {
     const gatewayPanelEnd = appSrc.indexOf('function gatewaySourceLauncherActionKind');
     const gatewayPanelSrc = appSrc.slice(gatewayPanelStart, gatewayPanelEnd);
     expect(gatewayPanelSrc).toContain('<div class="redeven-gateway-action-panel__body">');
-    expect(gatewayPanelSrc).toContain('<div class="redeven-gateway-action-panel__footer">');
+    expect(gatewayPanelSrc).toContain('<div class="redeven-gateway-action-panel__footer" data-mode={footerMode()}>');
+    expect(gatewayPanelSrc).toContain("props.model.primary_action ? 'primary' : 'close-only'");
+    expect(gatewayPanelSrc).toContain("label: props.i18n.t('common.close')");
     expect(gatewayPanelSrc.indexOf('<div class="redeven-gateway-action-panel__body">')).toBeLessThan(
-      gatewayPanelSrc.indexOf('<div class="redeven-gateway-action-panel__footer">'),
+      gatewayPanelSrc.indexOf('<div class="redeven-gateway-action-panel__footer" data-mode={footerMode()}>'),
     );
     expect(gatewayPanelSrc).not.toContain("if (action.intent === 'manage_gateway')");
     expect(gatewayPanelSrc).toContain('loading={props.foregroundActionBusy(action())}');
@@ -908,20 +910,17 @@ describe('DesktopWelcomeShell', () => {
     expect(pickerSrc).toContain('if (next === previous) {');
   });
 
-  it('builds retained Gateway failure progress with scenario-specific recovery actions', () => {
+  it('builds retained Gateway failure progress with a check-first recovery action', () => {
     const appSrc = readWelcomeSource();
     const retainedStart = appSrc.indexOf('function retainedGatewayFailureProgress');
     const retainedEnd = appSrc.indexOf('function localizedFailureForDisplay');
     const retainedSrc = appSrc.slice(retainedStart, retainedEnd);
 
-    expect(retainedSrc).toContain("case 'gateway_start_required':");
-    expect(retainedSrc).toContain("label: i18n.t('environmentCenter.gatewayActionStart')");
-    expect(retainedSrc).toContain("start_policy: 'start_if_needed'");
-    expect(retainedSrc).toContain("case 'gateway_service_update_failed':");
-    expect(retainedSrc).toContain("kind: 'update_gateway'");
-    expect(retainedSrc).toContain("case 'gateway_service_unreachable':");
-    expect(retainedSrc).toContain("case 'gateway_container_unavailable':");
-    expect(retainedSrc).toContain("kind: 'resolve_gateway'");
+    expect(retainedSrc).toContain("kind: 'check_gateway'");
+    expect(retainedSrc).toContain("label: i18n.t('environmentCenter.gatewayActionCheck')");
+    expect(retainedSrc).not.toContain("case 'gateway_start_required':");
+    expect(retainedSrc).not.toContain("kind: 'update_gateway'");
+    expect(retainedSrc).not.toContain("kind: 'resolve_gateway'");
     expect(retainedSrc).not.toContain("failure.code === 'gateway_start_required' ? { start_policy");
   });
 

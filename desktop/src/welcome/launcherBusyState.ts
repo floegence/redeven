@@ -30,6 +30,7 @@ export type BusyAction =
   | 'open_environment_settings'
   | 'refresh_control_plane'
   | 'upsert_gateway'
+  | 'check_gateway'
   | 'pair_gateway'
   | 'sync_gateway'
   | 'set_gateway_enabled'
