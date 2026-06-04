@@ -43,6 +43,8 @@ export function runGatewaySourceAction(
     return;
   }
   switch (action.intent) {
+    case 'add_gateway_environment':
+    case 'view_gateway_environments':
     case 'cancel_gateway_action':
       return;
     case 'setup_gateway':
