@@ -133,10 +133,10 @@ export function buildDesktopRuntimeOperationPlans(
       ...hidden,
       open: desktopRuntimeOperationPlan('open', input.openable ? 'available' : 'blocked', 'runtime_gateway', {
         reasonCode: input.openable ? undefined : 'gateway_route_unavailable',
-        message: input.openable ? undefined : 'Refresh Gateway status before opening this environment.',
+        message: input.openable ? undefined : 'Sync this Gateway before opening this environment.',
       }),
       refresh: desktopRuntimeOperationPlan('refresh', 'available', 'runtime_gateway', {
-        label: 'Refresh Gateway status',
+        label: 'Sync Gateway',
       }),
     };
   }

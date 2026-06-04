@@ -114,6 +114,36 @@ describe('GatewayStore', () => {
     expect(JSON.stringify(source)).not.toContain('paired_client_private_key_ref');
   });
 
+  it('defaults Gateway records to locally enabled and preserves the local toggle across edits', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const store = new GatewayStore(defaultGatewayStorePath(root));
+
+    const created = await store.upsert({
+      gateway_id: 'gw_demo',
+      display_name: 'Demo Gateway',
+      connection: { kind: 'url', base_url: 'https://gateway.example/' },
+      now_ms: 10,
+    });
+    expect(created.local_enabled).toBe(true);
+    expect(gatewayRecordToSource(created).local_enabled).toBe(true);
+
+    const disabled = await store.setLocalEnabled('gw_demo', false);
+    expect(disabled.local_enabled).toBe(false);
+    expect(gatewayRecordToSource(disabled).local_enabled).toBe(false);
+
+    const edited = await store.upsert({
+      gateway_id: 'gw_demo',
+      display_name: 'Renamed Gateway',
+      connection: { kind: 'url', base_url: 'https://gateway.example/' },
+      now_ms: 20,
+    });
+    expect(edited.local_enabled).toBe(false);
+
+    const reloaded = await new GatewayStore(defaultGatewayStorePath(root)).get('gw_demo');
+    expect(reloaded?.local_enabled).toBe(false);
+  });
+
   it('rejects embedded credentials and strips URL query strings from Gateway base URLs', () => {
     expect(normalizeGatewayBaseURL('https://gateway.example/path?token=leak#frag')).toBe('https://gateway.example/path/');
     expect(() => normalizeGatewayBaseURL('https://user:pass@gateway.example/')).toThrow('embedded credentials');
@@ -283,6 +313,44 @@ describe('GatewayStore', () => {
     const loaded = await new GatewayStore(defaultGatewayStorePath(root)).get('gw_demo');
     expect(loaded?.last_catalog_sync_at_ms).toBe(20);
     expect(loaded?.trust_profile?.trust_profile_id).toBe('gtp_demo');
+  });
+
+  it('serializes local enable toggles with trust and catalog mutations', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const store = new GatewayStore(defaultGatewayStorePath(root));
+
+    await store.upsert({
+      gateway_id: 'gw_demo',
+      display_name: 'Demo Gateway',
+      connection: { kind: 'url', base_url: 'https://gateway.example/' },
+      now_ms: 10,
+    });
+
+    await Promise.all([
+      store.setLocalEnabled('gw_demo', false, 20),
+      store.updateTrustProfile('gw_demo', {
+        trust_profile_id: 'gtp_demo',
+        paired_client_key_id: 'gck_demo',
+        paired_client_private_key_ref: 'gateway-client-key:gw_demo:gck_demo',
+        gateway_id: 'gw_demo',
+        gateway_public_key: 'PUBLIC KEY',
+        gateway_public_key_fingerprint: 'SHA256:fingerprint',
+        binding_audience: 'https://gateway.example/',
+        created_at_unix_ms: 30,
+      }),
+      store.markCatalogSynced('gw_demo', 40),
+    ]);
+
+    const loaded = await new GatewayStore(defaultGatewayStorePath(root)).get('gw_demo');
+    expect(loaded).toMatchObject({
+      gateway_id: 'gw_demo',
+      local_enabled: false,
+      last_catalog_sync_at_ms: 40,
+      trust_profile: expect.objectContaining({
+        trust_profile_id: 'gtp_demo',
+      }),
+    });
   });
 
   it('projects paired catalog rows without leaking trust material', () => {

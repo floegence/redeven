@@ -3182,7 +3182,9 @@ pre,
 }
 
 .redeven-gateway-action-panel {
-  gap: 0.75rem;
+  display: flex;
+  min-height: 14rem;
+  gap: 0.8rem;
   padding: 1rem;
 }
 
@@ -3196,6 +3198,16 @@ pre,
 .redeven-gateway-action-panel__hero .redeven-action-popover__status-icon {
   width: 2.15rem;
   height: 2.15rem;
+}
+
+.redeven-gateway-action-panel__context {
+  margin-top: 0.5rem;
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.7rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .redeven-gateway-action-panel__section {
@@ -3213,33 +3225,36 @@ pre,
   text-transform: uppercase;
 }
 
-.redeven-gateway-action-panel__actions {
-  display: grid;
+.redeven-gateway-action-panel__footer {
+  display: flex;
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr);
+  margin-top: auto;
+  justify-content: flex-end;
   gap: 0.45rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
+  padding-top: 0.75rem;
 }
 
-.redeven-gateway-action-panel__actions button {
+.redeven-gateway-action-panel__footer button {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.redeven-gateway-action-panel__actions button > span {
+.redeven-gateway-action-panel__footer button > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .redeven-gateway-action-panel__primary-action {
-  width: 100%;
+  flex: 1 1 auto;
+  max-width: 11rem;
 }
 
-.redeven-gateway-action-panel__secondary-action,
-.redeven-gateway-action-panel__tertiary-action {
-  width: 100%;
+.redeven-gateway-action-panel__secondary-action {
+  flex: 0 1 auto;
 }
 
 .redeven-gateway-action-panel__facts {
@@ -3303,9 +3318,8 @@ pre,
   justify-content: space-between;
   gap: 0.5rem;
   border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
   background: transparent;
-  padding: 0.6rem 0 0;
+  padding: 0.15rem 0 0;
   color: var(--muted-foreground);
   font-size: 0.68rem;
   font-weight: 700;
@@ -3350,6 +3364,15 @@ pre,
 @media (max-width: 25rem) {
   .redeven-gateway-action-panel__facts--status {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .redeven-gateway-action-panel__footer {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .redeven-gateway-action-panel__primary-action {
+    max-width: none;
   }
 }
 

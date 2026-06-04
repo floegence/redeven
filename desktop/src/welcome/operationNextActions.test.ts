@@ -152,9 +152,19 @@ describe('operationNextActions', () => {
     ]);
   });
 
-  it('hides Desktop update next actions from Gateway progress panels', () => {
+  it('hides Runtime and Desktop next actions from Gateway progress panels', () => {
     const progress: DesktopLauncherActionProgress = {
       ...failedProgress([
+        {
+          kind: 'refresh_status',
+          environment_id: 'gateway:bastion',
+          label: 'Refresh status',
+        },
+        {
+          kind: 'update_runtime',
+          environment_id: 'gateway:bastion',
+          label: 'Update Runtime',
+        },
         {
           kind: 'refresh_gateway_status',
           gateway_id: 'bastion',
@@ -199,13 +209,16 @@ describe('operationNextActions', () => {
 
     expect(visibleOperationNextActions(progress)).toEqual([
       expect.objectContaining({ kind: 'retry', label: 'Retry' }),
-      expect.objectContaining({ kind: 'refresh_gateway_status', label: 'Refresh status' }),
       expect.objectContaining({ kind: 'update_gateway', label: 'Update Gateway service' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
       expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);
     expect(visibleOperationNextActions(progress)).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'manage_desktop_update' }),
+      expect.objectContaining({ kind: 'refresh_gateway_status' }),
+      expect.objectContaining({ kind: 'refresh_gateway_catalog' }),
+      expect.objectContaining({ kind: 'refresh_status' }),
+      expect.objectContaining({ kind: 'update_runtime' }),
     ]));
   });
 });

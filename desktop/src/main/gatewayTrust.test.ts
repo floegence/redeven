@@ -37,6 +37,7 @@ function gatewayRecord(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
     schema_version: 1,
     gateway_id: 'gw_demo',
     display_name: 'Demo Gateway',
+    local_enabled: true,
     connection: {
       kind: 'url',
       base_url: 'https://gateway.example/',

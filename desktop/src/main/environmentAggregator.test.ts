@@ -12,6 +12,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
   return {
     gateway_id: 'bastion',
     display_name: 'Bastion',
+    local_enabled: true,
     connection_kind: 'url',
     management_capability: 'access_only',
     capabilities: [],
@@ -168,6 +169,68 @@ describe('environmentAggregator', () => {
       is_open: true,
       open_action: 'focus',
       open_session_key: 'gateway:bastion:env:env_demo',
+    });
+  });
+
+  it('hides disabled Gateway catalog rows and does not backfill their open sessions', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      openSessions: [{
+        session_key: 'gateway:bastion:env:env_demo',
+        target: {
+          kind: 'gateway_environment',
+          session_key: 'gateway:bastion:env:env_demo',
+          environment_id: 'gateway:bastion:env:env_demo',
+          label: 'Demo',
+          gateway_id: 'bastion',
+          gateway_label: 'Bastion',
+          gateway_env_id: 'env_demo',
+          gateway_session_id: 'gws_demo',
+        },
+        lifecycle: 'open',
+        entry_url: 'https://gateway.example/session',
+        startup: {
+          local_ui_url: 'https://gateway.example/session',
+          local_ui_urls: ['https://gateway.example/session'],
+        },
+      }],
+      gatewaySources: [gatewaySource({ local_enabled: false })],
+    });
+
+    expect(snapshot.environments.filter((entry) => entry.kind === 'gateway_environment')).toHaveLength(0);
+  });
+
+  it('keeps enabled Gateway open session fallback when its catalog row is temporarily absent', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      openSessions: [{
+        session_key: 'gateway:bastion:env:env_demo',
+        target: {
+          kind: 'gateway_environment',
+          session_key: 'gateway:bastion:env:env_demo',
+          environment_id: 'gateway:bastion:env:env_demo',
+          label: 'Demo',
+          gateway_id: 'bastion',
+          gateway_label: 'Bastion',
+          gateway_env_id: 'env_demo',
+          gateway_session_id: 'gws_demo',
+        },
+        lifecycle: 'open',
+        entry_url: 'https://gateway.example/session',
+        startup: {
+          local_ui_url: 'https://gateway.example/session',
+          local_ui_urls: ['https://gateway.example/session'],
+        },
+      }],
+      gatewaySources: [gatewaySource({ environments: [] })],
+    });
+
+    expect(snapshot.environments.filter((entry) => entry.kind === 'gateway_environment')).toHaveLength(1);
+    expect(snapshot.environments.find((entry) => entry.kind === 'gateway_environment')).toMatchObject({
+      open_session_key: 'gateway:bastion:env:env_demo',
+      gateway_id: 'bastion',
+      gateway_env_id: 'env_demo',
+      is_open: true,
     });
   });
 

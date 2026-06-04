@@ -299,14 +299,12 @@ import {
   IDLE_LAUNCHER_BUSY_STATE,
   selectedSnapshotOpenConnectionProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
-  selectedSnapshotGatewayProgress,
   gatewaySourceMatchesRuntimeLifecycleProgress,
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
 import {
   buildGatewayActionPresentation,
   type GatewayActionAffectedSession,
-  type GatewayActionPanelFact,
   type GatewayActionPanelModel,
 } from './gatewayActionPresentation';
 import { runGatewaySourceAction } from './gatewaySourceActionRunner';
@@ -502,7 +500,7 @@ type ProviderRuntimeLinkConfirmationState = Readonly<{
 type LauncherActionErrorTarget = 'connect' | 'settings' | 'dialog' | 'control_plane_dialog' | 'gateway_dialog';
 type GatewayServiceActionKind = Extract<
   DesktopLauncherActionKind,
-  'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'refresh_gateway_status' | 'refresh_gateway_catalog'
+  'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'sync_gateway'
 >;
 type GatewayServiceStartPolicy = Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
 
@@ -702,6 +700,7 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     'Pairing required': 'environmentStatus.pairingRequired',
     'Needs attention': 'progress.needsAttention',
     Unknown: 'common.unknown',
+    Disabled: 'environmentCenter.gatewayDisabledStatus',
     'Not started': 'environmentStatus.stopped',
     'Update available': 'environmentStatus.runtimeNeedsUpdate',
     Syncing: 'environmentCenter.gatewayActionSyncing',
@@ -721,9 +720,12 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Refresh runtime status': 'environmentAction.refreshRuntimeStatus',
     'Refresh Runtime status': 'environmentAction.refreshRuntimeStatus',
     'Refresh provider status': 'environmentAction.refreshProviderStatus',
-    'Refresh Gateway status': 'environmentCenter.gatewayActionRefreshStatus',
+    'Refresh Gateway status': 'environmentCenter.gatewayActionSync',
     'Refresh catalog': 'common.refresh',
-    'Retry sync': 'environmentCenter.gatewayActionRetrySync',
+    'Retry sync': 'environmentCenter.gatewayActionSync',
+    'Sync Gateway': 'environmentCenter.gatewayActionSync',
+    'Enable Gateway': 'environmentCenter.gatewayActionEnable',
+    'Disable Gateway': 'environmentCenter.gatewayActionDisable',
     'View Environments': 'environmentCenter.viewEnvironments',
     'Add Env': 'environmentCenter.gatewayAddEnvironmentShort',
     'Open settings': 'environmentCenter.gatewayActionManage',
@@ -734,7 +736,7 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     Synced: 'environmentCenter.gatewayActionSynced',
     'Needs Attention': 'progress.needsAttention',
     'Syncing...': 'environmentCenter.gatewayActionSyncing',
-    'Pairing...': 'environmentCenter.gatewayActionPairing',
+    'Pairing...': 'environmentCenter.gatewayActionSyncing',
     Manage: 'environmentCenter.gatewayActionManage',
     'Start Gateway': 'environmentCenter.gatewayActionStart',
     'Starting...': 'progress.startingRuntime',
@@ -807,17 +809,20 @@ function localizedEnvironmentMenuItem(
 
 function localizedGatewaySourceText(i18n: DesktopI18n, value: string): string {
   return localizedStringByValue(i18n, value, {
-    'Managed by Desktop': 'environmentCenter.gatewayManagedByDesktop',
+    'Managed by Desktop': 'environmentCenter.gatewayAccessOnlyByDesktop',
     'Access-only Gateway': 'environmentCenter.gatewayAccessOnlyByDesktop',
+    'Gateway disabled on this Desktop': 'environmentCenter.gatewayGuidanceDisabledTitle',
+    'This Desktop is not syncing this Gateway or showing its environments.': 'environmentCenter.gatewayGuidanceDisabledDetail',
     'Finish Gateway setup': 'environmentCenter.gatewayGuidanceFinishSetupTitle',
     'Complete the Gateway connection settings before Desktop can pair, start, or refresh this Gateway.': 'environmentCenter.gatewayGuidanceFinishSetupDetail',
     'Syncing Gateway': 'environmentCenter.gatewayGuidanceSyncingTitle',
     'Desktop is checking reachability, pairing if needed, and refreshing the environment catalog automatically.': 'environmentCenter.gatewayGuidanceSyncingDetail',
     'Gateway trust changed': 'environmentCenter.gatewayGuidanceTrustChangedTitle',
-    'Pairing needs attention': 'environmentCenter.gatewayGuidancePairingFailedTitle',
-    'Desktop could not verify this Gateway identity. Review the Gateway target, then retry pairing from the guidance panel.': 'environmentCenter.gatewayGuidancePairingFailedDetail',
-    'Gateway needs attention': 'environmentCenter.gatewayGuidanceNeedsAttentionTitle',
-    'Desktop could not keep this Gateway synced. Open the guidance panel to refresh, start, or resolve the target.': 'environmentCenter.gatewayGuidanceSyncFailedDetail',
+    'Pairing issue': 'environmentCenter.gatewayGuidancePairingFailedTitle',
+    'Desktop could not verify this Gateway identity. Review the Gateway target, then sync this Gateway again.': 'environmentCenter.gatewayGuidancePairingFailedDetail',
+    'Gateway sync failed': 'environmentCenter.gatewayGuidanceSyncFailedTitle',
+    'Gateway issue': 'environmentCenter.gatewayIssueTitle',
+    'Desktop could not keep this Gateway synced. Open the guidance panel to start, sync, or resolve the target.': 'environmentCenter.gatewayGuidanceSyncFailedDetail',
     'Preparing access-only Gateway': 'environmentCenter.gatewayGuidancePreparingAccessTitle',
     'Desktop is pairing with this Gateway automatically. This access-only Gateway is managed on its own host.': 'environmentCenter.gatewayGuidancePreparingAccessDetail',
     'Desktop can refresh the catalog and route Gateway Environments through this source, but it cannot start or stop this external Gateway service.': 'environmentCenter.gatewayGuidanceAccessOnlyDetail',
@@ -835,11 +840,12 @@ function localizedGatewaySourceText(i18n: DesktopI18n, value: string): string {
     'Desktop is pairing this Gateway automatically so it can show the environments the Gateway manages.': 'environmentCenter.gatewayGuidancePreparingTrustDetail',
     'Gateway is ready': 'environmentCenter.gatewayGuidanceReadyTitle',
     'Desktop keeps this Gateway catalog synced. Open its environments from the Environments tab.': 'environmentCenter.gatewayGuidanceReadyDetail',
-    'Review the Gateway settings, then refresh or pair again when the target is reachable.': 'environmentCenter.gatewayGuidanceReviewSettingsDetail',
+    'Review the Gateway settings, then sync again when the target is reachable.': 'environmentCenter.gatewayGuidanceReviewSettingsDetail',
     'Gateway catalog available': 'environmentCenter.gatewayGuidanceCatalogAvailableTitle',
-    'Refresh the catalog to pick up changes; its environments are listed separately in the Environments tab.': 'environmentCenter.gatewayGuidanceCatalogAvailableDetail',
+    'Sync this Gateway to pick up catalog changes; its environments are listed separately in the Environments tab.': 'environmentCenter.gatewayGuidanceCatalogAvailableDetail',
     'No environments synced': 'environmentCenter.gatewaySummaryNone',
     '1 environment synced': 'environmentCenter.gatewaySummaryOne',
+    'Sync paused on this Desktop. Gateway environments are hidden until you enable it again.': 'environmentCenter.gatewaySummaryDetailDisabled',
     'View and open these environments from the Environments tab filtered to this Gateway.': 'environmentCenter.gatewaySummaryDetailAvailable',
     'Desktop will add environments to the Environments tab when this Gateway catalog sync finishes.': 'environmentCenter.gatewaySummaryDetailSyncing',
     'Resolve this Gateway before its managed environments can appear in the Environments tab.': 'environmentCenter.gatewaySummaryDetailResolve',
@@ -864,9 +870,20 @@ function localizedGatewaySourceActionLabel(i18n: DesktopI18n, action: GatewaySou
       return i18n.t('environmentAction.open');
     case 'view_gateway_environments':
       return i18n.t('environmentCenter.viewEnvironments');
+    case 'enable_gateway':
+      return i18n.t('environmentCenter.gatewayActionEnable');
+    case 'disable_gateway':
+      return i18n.t('environmentCenter.gatewayActionPauseSync');
+    case 'delete_gateway':
+      return i18n.t('environmentCenter.gatewayActionDelete');
+    case 'sync_gateway':
+      return i18n.t('environmentCenter.gatewayActionSync');
     case 'start_gateway':
+    case 'service_start_gateway':
       return action.label === 'Starting...'
         ? i18n.t('progress.startingEllipsis')
+        : action.intent === 'service_start_gateway'
+          ? i18n.t('environmentCenter.gatewayActionStartService')
         : i18n.t('environmentCenter.gatewayActionStart');
     case 'stop_gateway':
       return i18n.t('environmentCenter.gatewayActionStop');
@@ -875,37 +892,22 @@ function localizedGatewaySourceActionLabel(i18n: DesktopI18n, action: GatewaySou
     case 'update_gateway':
       return i18n.t('environmentCenter.gatewayActionUpdate');
     case 'refresh_gateway_catalog':
-      if (action.label === 'Retry sync') {
-        return i18n.t('environmentCenter.gatewayActionRetrySync');
-      }
-      if (action.label === 'Syncing...') {
-        return i18n.t('environmentCenter.gatewayActionSyncing');
-      }
-      return i18n.t('common.refresh');
     case 'refresh_gateway_status':
       if (action.label === 'Syncing...') {
         return i18n.t('environmentCenter.gatewayActionSyncing');
       }
-      if (action.label === 'Pairing...') {
-        return i18n.t('environmentCenter.gatewayActionPairing');
-      }
       if (action.label === 'Synced') {
         return i18n.t('environmentCenter.gatewayActionSynced');
       }
-      return i18n.t('environmentAction.refreshStatus');
+      return i18n.t('environmentCenter.gatewayActionSync');
     case 'manage_gateway':
       return i18n.t('environmentCenter.gatewayActionManage');
     case 'pair_gateway':
-      if (action.label === 'Retry sync') {
-        return i18n.t('environmentCenter.gatewayActionRetrySync');
-      }
-      return i18n.t('environmentAction.pairGateway');
+      return i18n.t('environmentCenter.gatewayActionSync');
     case 'setup_gateway':
       return i18n.t('environmentStatus.setupRequired');
     case 'resolve_gateway':
-      return action.label === 'Retry sync'
-        ? i18n.t('environmentCenter.gatewayActionRetrySync')
-        : i18n.t('environmentCenter.gatewayPanelResolveTitle');
+      return i18n.t('environmentCenter.gatewayPanelResolveTitle');
     case 'cancel_gateway_action':
       return i18n.t('common.cancel');
     default:
@@ -940,28 +942,28 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
     'Gateway trust': 'environmentCenter.gatewayPanelTrustSection',
     Manage: 'environmentCenter.gatewayActionManage',
     'Needs attention': 'progress.needsAttention',
-    'Managed Gateway': 'environmentCenter.gatewayPanelManagedGateway',
+    'Gateway issue': 'environmentCenter.gatewayIssueTitle',
     'Access-only Gateway': 'environmentCenter.gatewayAccessOnlyByDesktop',
     'Gateway operation progress': 'environmentCenter.gatewayProgress',
-    'Gateway action needs attention': 'environmentCenter.gatewayPanelActionNeedsAttention',
+    'Gateway action issue': 'environmentCenter.gatewayPanelActionIssue',
     'Gateway action': 'environmentCenter.gatewayPanelGenericAction',
     'Desktop could not complete this Gateway action.': 'environmentCenter.gatewayPanelActionFailedDetail',
     'Manage Gateway': 'environmentCenter.gatewayPanelManageTitle',
     'Review this Gateway configuration.': 'environmentCenter.gatewayPanelManageDetail',
-    'Gateway pairing needs attention': 'environmentCenter.gatewayGuidancePairingFailedTitle',
+    'Gateway pairing issue': 'environmentCenter.gatewayGuidancePairingFailedTitle',
     'Gateway catalog sync failed': 'environmentCenter.gatewayPanelCatalogSyncFailedTitle',
     'Gateway is unreachable': 'environmentCenter.gatewayPanelUnreachableTitle',
     'Resolve Gateway': 'environmentCenter.gatewayPanelResolveTitle',
-    'Desktop keeps Gateways synced automatically. Review the target or retry sync when the Gateway is reachable.': 'environmentCenter.gatewayPanelResolveDetail',
-    'Refresh Gateway status': 'environmentCenter.gatewayPanelRefreshStatusTitle',
-    'Desktop will check Gateway service reachability, version, and management state without refreshing the catalog.': 'environmentCenter.gatewayPanelRefreshManagedDetail',
-    'Desktop will check whether this external Gateway endpoint is reachable without changing trust or catalog data.': 'environmentCenter.gatewayPanelRefreshAccessOnlyDetail',
+    'Desktop keeps Gateways synced automatically. Review the target, then sync again when the Gateway is reachable.': 'environmentCenter.gatewayPanelResolveDetail',
+    'Sync Gateway': 'environmentCenter.gatewayActionSync',
+    'Desktop will check Gateway service reachability, pair when needed, and refresh the environment catalog.': 'environmentCenter.gatewayPanelSyncManagedDetail',
+    'Desktop will check this external Gateway endpoint and refresh its environment catalog. Start the Gateway on its host if it is offline.': 'environmentCenter.gatewayPanelSyncAccessOnlyDetail',
     'Stop Gateway': 'environmentCenter.gatewayActionStop',
     'Restart Gateway': 'environmentCenter.gatewayActionRestart',
     'Update Gateway': 'environmentCenter.gatewayActionUpdate',
     'Review Gateway identity': 'environmentCenter.gatewayPanelReviewIdentityTitle',
     'Retry Gateway pairing': 'environmentCenter.gatewayPanelRetryPairingTitle',
-    'Desktop pairs URL Gateways automatically. Retry sync when the endpoint is reachable; Gateway service is managed on the Gateway host.': 'environmentCenter.gatewayPanelAccessOnlyPairDetail',
+    'Desktop pairs URL Gateways automatically. Sync when the endpoint is reachable; Gateway service is managed on the Gateway host.': 'environmentCenter.gatewayPanelAccessOnlyPairDetail',
     'Start Gateway to sync': 'environmentCenter.gatewayPanelStartToSyncTitle',
     'Desktop can start this Gateway service, then continue automatic pairing and catalog sync.': 'environmentCenter.gatewayPanelStartToSyncDetail',
     'Start Gateway before syncing catalog': 'environmentCenter.gatewayPanelStartBeforeSyncAria',
@@ -970,8 +972,7 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
     'Resolve Gateway before pairing': 'environmentCenter.gatewayPanelResolveBeforePairTitle',
     'Desktop needs a reachable Gateway service before it can pair.': 'environmentCenter.gatewayPanelResolveBeforePairDetail',
     'Pair this Gateway': 'environmentCenter.gatewayPanelPairThisGatewayAria',
-    'Desktop normally pairs Gateways automatically. Retry sync to verify the Gateway identity and refresh its environment catalog.': 'environmentCenter.gatewayPanelRetryPairingDetail',
-    'Gateway needs attention': 'environmentCenter.gatewayGuidanceNeedsAttentionTitle',
+    'Desktop will verify the Gateway identity and refresh its environment catalog.': 'environmentCenter.gatewayPanelRetryPairingDetail',
     'Desktop needs this Gateway service ready before refreshing the catalog.': 'environmentCenter.gatewayPanelServiceReadyBeforeCatalogDetail',
     'Resolve Gateway before refreshing catalog': 'environmentCenter.gatewayPanelResolveBeforeCatalogAria',
     'Gateway pairing challenge signature is invalid.': 'environmentCenter.gatewayPanelErrorPairSignatureInvalid',
@@ -1695,18 +1696,20 @@ function inlineFailurePresentation(
 
 function gatewayActionKindForRequest(
   request: DesktopLauncherActionRequest | undefined,
-): Extract<DesktopLauncherActionKind, 'pair_gateway' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'refresh_gateway_status' | 'refresh_gateway_catalog'> {
+): Extract<DesktopLauncherActionKind, 'sync_gateway' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway'> {
   switch (request?.kind) {
+    case 'sync_gateway':
     case 'pair_gateway':
+    case 'refresh_gateway_status':
+    case 'refresh_gateway_catalog':
+      return 'sync_gateway';
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
-    case 'refresh_gateway_status':
-    case 'refresh_gateway_catalog':
       return request.kind;
     default:
-      return 'refresh_gateway_catalog';
+      return 'sync_gateway';
   }
 }
 
@@ -1725,17 +1728,12 @@ function retainedGatewayFailureProgress(
     {
       kind: 'retry',
       operation_key: operationKey,
-      label: i18n.t('environmentCenter.gatewayActionRetrySync'),
+      label: i18n.t('environmentCenter.gatewayActionSync'),
       retry_action: {
-        kind: action === 'pair_gateway' ? 'pair_gateway' : 'refresh_gateway_catalog',
+        kind: 'sync_gateway',
         gateway_id: gatewayID,
         ...(failure.code === 'gateway_start_required' ? { start_policy: 'start_if_needed' as const } : {}),
       },
-    },
-    {
-      kind: 'refresh_gateway_status',
-      gateway_id: gatewayID,
-      label: i18n.t('environmentCenter.gatewayActionRefreshStatus'),
     },
     {
       kind: 'resolve_gateway',
@@ -2769,6 +2767,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [runtimeContainerOptionsKey, setRuntimeContainerOptionsKey] = createSignal('');
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
+  const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
   const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
@@ -4458,10 +4457,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return false;
       }
       const result = await performLauncherAction({
-        kind: 'refresh_gateway_catalog',
+        kind: 'sync_gateway',
         gateway_id: gatewayID,
+        start_policy: 'start_if_needed',
       }, errorTarget);
-      const refreshed = result?.outcome === 'refreshed_gateway_catalog';
+      const refreshed = result?.outcome === 'synced_gateway' || result?.outcome === 'paired_gateway';
       if (refreshed && options.announceSuccess !== false) {
         showActionToast(i18n().t('environmentCenter.runtimeStatusRefreshedToast', { label: environment.label }), 'info');
       }
@@ -5244,18 +5244,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function pairGateway(gatewayID: string, startPolicy?: DesktopGatewayStartPolicy): Promise<void> {
+  async function pairGateway(gatewayID: string, startPolicy?: GatewayServiceStartPolicy): Promise<void> {
     const cleanGatewayID = trimString(gatewayID);
     if (cleanGatewayID === '') {
       setErrorMessage('connect', i18n().t('environmentCenter.resolveGatewayError'));
       return;
     }
     const result = await performLauncherAction({
-      kind: 'pair_gateway',
+      kind: 'sync_gateway',
       gateway_id: cleanGatewayID,
       ...(startPolicy ? { start_policy: startPolicy } : {}),
     });
-    if (result?.outcome === 'paired_gateway') {
+    if (result?.outcome === 'paired_gateway' || result?.outcome === 'synced_gateway') {
       await refreshSnapshot();
       showActionToast(i18n().t('toast.gatewayPaired'));
     }
@@ -5274,7 +5274,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const result = await performLauncherAction({
       kind,
       gateway_id: cleanGatewayID,
-      ...(kind === 'refresh_gateway_catalog' && startPolicy ? { start_policy: startPolicy } : {}),
+      ...(kind === 'sync_gateway' && startPolicy ? { start_policy: startPolicy } : {}),
     } as DesktopLauncherActionRequest);
     if (!result) {
       return;
@@ -5292,6 +5292,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         break;
       case 'updated_gateway':
         showActionToast(i18n().t('toast.gatewayUpdated'));
+        break;
+      case 'synced_gateway':
+        showActionToast(i18n().t('toast.gatewaySynced'));
         break;
       case 'refreshed_gateway_catalog':
         showActionToast(i18n().t('toast.gatewayCatalogRefreshed'), 'info');
@@ -5313,6 +5316,15 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     switch (result.outcome) {
       case 'paired_gateway':
         showActionToast(i18n().t('toast.gatewayPaired'));
+        break;
+      case 'synced_gateway':
+        showActionToast(i18n().t('toast.gatewaySynced'));
+        break;
+      case 'enabled_gateway':
+        showActionToast(i18n().t('toast.gatewayEnabled'));
+        break;
+      case 'disabled_gateway':
+        showActionToast(i18n().t('toast.gatewayDisabled'), 'info');
         break;
       case 'started_gateway':
         showActionToast(i18n().t('toast.gatewayStarted'));
@@ -5707,6 +5719,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
+  async function deleteGateway(): Promise<void> {
+    const target = deleteGatewayTarget();
+    if (!target) {
+      return;
+    }
+    const result = await performLauncherAction({
+      kind: 'delete_gateway',
+      gateway_id: target.gateway_id,
+    });
+    if (result?.outcome === 'deleted_gateway') {
+      setDeleteGatewayTarget(null);
+      showActionToast(i18n().t('environmentCenter.gatewayRemoved'), 'info');
+    }
+  }
+
   async function openFlowerHostSurface(): Promise<void> {
     await performLauncherAction({
       kind: 'open_flower_host',
@@ -5981,6 +6008,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               reconnectControlPlane={reconnectControlPlane}
               refreshControlPlane={refreshControlPlane}
               deleteControlPlane={setDeleteControlPlaneTarget}
+              deleteGateway={setDeleteGatewayTarget}
               environmentFailures={environmentFailures()}
               dismissEnvironmentFailure={(environmentID: string) => {
                 setEnvironmentFailures((current) => {
@@ -6170,6 +6198,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             {i18n().t('confirm.removeProviderQuestion', { label: deleteControlPlaneTarget() ? controlPlaneName(deleteControlPlaneTarget()!) : '' })}
           </p>
           <p class="text-xs text-muted-foreground">{i18n().t('confirm.removeProviderDescription')}</p>
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={deleteGatewayTarget() !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteGatewayTarget(null);
+          }
+        }}
+        title={i18n().t('confirm.deleteGatewayTitle')}
+        confirmText={i18n().t('confirm.deleteGatewayConfirm')}
+        variant="destructive"
+        loading={busyStateMatchesAction(busyState(), 'delete_gateway')}
+        onConfirm={() => void deleteGateway()}
+      >
+        <div class="space-y-2">
+          <p class="text-sm">
+            {i18n().t('confirm.deleteGatewayQuestion', { label: deleteGatewayTarget()?.display_name ?? '' })}
+          </p>
+          <p class="text-xs text-muted-foreground">
+            {i18n().t('confirm.deleteGatewayDescription')}
+          </p>
         </div>
       </ConfirmDialog>
 
@@ -6404,7 +6455,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
-  pairGateway: (gatewayID: string, startPolicy?: DesktopGatewayStartPolicy) => Promise<void>;
+  pairGateway: (gatewayID: string, startPolicy?: GatewayServiceStartPolicy) => Promise<void>;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>;
   runGatewayServiceAction: (
     gatewayID: string,
@@ -6458,6 +6509,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   reconnectControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
+  deleteGateway: (gateway: DesktopGatewaySource) => void;
   environmentFailures: ReadonlyMap<string, EnvironmentFailureState>;
   dismissEnvironmentFailure: (environmentID: string) => void;
 }>) {
@@ -6841,6 +6893,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 cancelOperation={props.cancelOperation}
                 dismissOperation={props.dismissOperation}
                 copyOperationDiagnostics={props.copyOperationDiagnostics}
+                deleteGateway={props.deleteGateway}
               />
             </Show>
           </div>
@@ -8207,8 +8260,10 @@ function localizedProgressInterruptDetail(i18n: DesktopI18n, progress: DesktopLa
 function localizedProgressPlanningLabel(i18n: DesktopI18n, action: DesktopLauncherActionKind): string {
   switch (action) {
     case 'start_gateway':
+    case 'sync_gateway':
     case 'pair_gateway':
     case 'refresh_gateway_catalog':
+    case 'refresh_gateway_status':
       return i18n.t('progress.planningGatewayStartPath');
     case 'restart_gateway':
       return i18n.t('progress.planningGatewayRestartPath');
@@ -8263,9 +8318,8 @@ function localizedNextActionLabel(i18n: DesktopI18n, action: DesktopLauncherOper
     case 'manage_desktop_update':
       return i18n.t('environmentAction.updateRedevenDesktop');
     case 'refresh_gateway_status':
-      return i18n.t('environmentCenter.gatewayActionRefreshStatus');
     case 'refresh_gateway_catalog':
-      return i18n.t('common.refresh');
+      return i18n.t('environmentCenter.gatewayActionSync');
     case 'update_gateway':
       return i18n.t('environmentCenter.gatewayActionUpdate');
     case 'resolve_gateway':
@@ -8756,6 +8810,22 @@ function splitMenuItemToneData(intent: EnvironmentActionIntent): string {
       return 'primary';
     case 'disconnect_provider_runtime':
       return 'accent';
+    default:
+      return '';
+  }
+}
+
+function gatewaySplitMenuItemToneData(intent: GatewaySourceActionModel['intent']): string {
+  switch (intent) {
+    case 'delete_gateway':
+      return 'danger';
+    case 'disable_gateway':
+    case 'stop_gateway':
+      return 'accent';
+    case 'sync_gateway':
+    case 'start_gateway':
+    case 'service_start_gateway':
+      return 'primary';
     default:
       return '';
   }
@@ -10220,7 +10290,7 @@ function GatewaySourcesPanel(props: Readonly<{
   gatewaySourceFilter: string;
   gatewayQuery: string;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
-  pairGateway: (gatewayID: string, startPolicy?: DesktopGatewayStartPolicy) => Promise<void>;
+  pairGateway: (gatewayID: string, startPolicy?: GatewayServiceStartPolicy) => Promise<void>;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>;
   runGatewayServiceAction: (
     gatewayID: string,
@@ -10232,6 +10302,7 @@ function GatewaySourcesPanel(props: Readonly<{
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
+  deleteGateway: (gateway: DesktopGatewaySource) => void;
 }>) {
   const [activeGatewayPopoverID, setActiveGatewayPopoverID] = createSignal('');
   const gatewaySourcesByID = createMemo(() => {
@@ -10332,6 +10403,7 @@ function GatewaySourcesPanel(props: Readonly<{
                   cancelOperation={props.cancelOperation}
                   dismissOperation={props.dismissOperation}
                   copyOperationDiagnostics={props.copyOperationDiagnostics}
+                  deleteGateway={props.deleteGateway}
                 />
                 );
               }}
@@ -10438,8 +10510,10 @@ function gatewayBusyStateBelongsToForegroundAction(
 function gatewayActionShowsWorkflowProgress(action: GatewaySourceActionModel): boolean {
   switch (action.intent) {
     case 'open_gateway_environment':
+    case 'sync_gateway':
     case 'pair_gateway':
     case 'start_gateway':
+    case 'service_start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
@@ -10452,10 +10526,17 @@ function gatewayActionShowsWorkflowProgress(action: GatewaySourceActionModel): b
 
 function gatewaySourceActionForLauncherRequest(request: DesktopLauncherActionRequest): GatewaySourceActionModel | null {
   switch (request.kind) {
+    case 'sync_gateway':
+      return {
+        intent: request.start_policy === 'start_if_needed' ? 'start_gateway' : 'sync_gateway',
+        label: request.start_policy === 'start_if_needed' ? 'Start Gateway' : 'Sync Gateway',
+        enabled: true,
+        variant: 'default',
+      };
     case 'pair_gateway':
       return {
-        intent: 'pair_gateway',
-        label: 'Retry sync',
+        intent: 'sync_gateway',
+        label: 'Sync Gateway',
         enabled: true,
         variant: 'default',
       };
@@ -10489,15 +10570,15 @@ function gatewaySourceActionForLauncherRequest(request: DesktopLauncherActionReq
       };
     case 'refresh_gateway_catalog':
       return {
-        intent: 'refresh_gateway_catalog',
-        label: 'Retry sync',
+        intent: 'sync_gateway',
+        label: 'Sync Gateway',
         enabled: true,
         variant: 'default',
       };
     case 'refresh_gateway_status':
       return {
-        intent: 'refresh_gateway_status',
-        label: 'Refresh status',
+        intent: 'sync_gateway',
+        label: 'Sync Gateway',
         enabled: true,
         variant: 'default',
       };
@@ -10522,7 +10603,7 @@ function GatewaySourceCard(props: Readonly<{
   actionPopoverOpen: boolean;
   onActionPopoverOpenChange: (open: boolean) => void;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
-  pairGateway: (gatewayID: string, startPolicy?: DesktopGatewayStartPolicy) => Promise<void>;
+  pairGateway: (gatewayID: string, startPolicy?: GatewayServiceStartPolicy) => Promise<void>;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>;
   runGatewayServiceAction: (
     gatewayID: string,
@@ -10534,6 +10615,7 @@ function GatewaySourceCard(props: Readonly<{
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
+  deleteGateway: (gateway: DesktopGatewaySource) => void;
 }>) {
   const row = createMemo(() => buildGatewaySourceRowModel(props.gateway));
   const primaryActionLabel = createMemo(() => localizedGatewaySourceActionLabel(props.i18n, row().primary_action));
@@ -10545,17 +10627,10 @@ function GatewaySourceCard(props: Readonly<{
     }
     return selectForegroundGatewayProgress(
       props.actionProgress.filter((progress) => (
-        progress.action !== 'refresh_gateway_status'
-        && gatewayProgressBelongsToForegroundAction(progress, foreground)
+        gatewayProgressBelongsToForegroundAction(progress, foreground)
       )),
     );
   });
-  const selectedRefreshStatusProgress = createMemo(() => (
-    selectedSnapshotGatewayProgress(
-      props.gateway.gateway_id,
-      props.actionProgress.filter((progress) => progress.action === 'refresh_gateway_status'),
-    )
-  ));
   const busyGatewayProgress = createMemo(() => {
     const progress = props.busyState.progress;
     if (
@@ -10576,7 +10651,7 @@ function GatewaySourceCard(props: Readonly<{
   const busyGatewayWorkflowProgress = createMemo(() => {
     const progress = busyGatewayProgress();
     const foreground = foregroundAction();
-    if (!foreground || !progress || progress.action === 'refresh_gateway_status') {
+    if (!foreground || !progress) {
       return null;
     }
     return gatewayProgressBelongsToForegroundAction(progress, foreground)
@@ -10584,15 +10659,8 @@ function GatewaySourceCard(props: Readonly<{
       ? progress
       : null;
   });
-  const busyRefreshStatusProgress = createMemo(() => {
-    const progress = busyGatewayProgress();
-    return progress?.action === 'refresh_gateway_status' ? progress : null;
-  });
   const visibleGatewayProgress = createMemo(() => (
     selectedGatewayWorkflowProgress() ?? busyGatewayWorkflowProgress()
-  ));
-  const refreshStatusProgress = createMemo(() => (
-    selectedRefreshStatusProgress() ?? busyRefreshStatusProgress()
   ));
   const affectedSessions = createMemo<readonly GatewayActionAffectedSession[]>(() => (
     props.gatewayEntries
@@ -10603,15 +10671,6 @@ function GatewaySourceCard(props: Readonly<{
         label: entry.label,
       }))
   ));
-  const liveStatusFacts = createMemo(() => {
-    const foreground = foregroundAction();
-    const action = foreground?.action ?? row().primary_action;
-    return buildGatewayActionPresentation({
-      gateway: props.gateway,
-      clicked_action: action,
-      affected_sessions: affectedSessions(),
-    }).status_facts;
-  });
   const currentActionPresentation = createMemo(() => buildGatewayActionPresentation({
     gateway: foregroundAction()?.gateway ?? props.gateway,
     clicked_action: foregroundAction()?.action ?? row().primary_action,
@@ -10684,9 +10743,9 @@ function GatewaySourceCard(props: Readonly<{
   const primaryActionRunning = createMemo(() => (
     foregroundActionRunning()
   ));
-  const refreshStatusRunning = createMemo(() => (
-    progressIsRunning(refreshStatusProgress())
-    || busyStateMatchesGateway(props.busyState, props.gateway.gateway_id, ['refresh_gateway_status'])
+  const syncGatewayRunning = createMemo(() => (
+    props.gateway.background_sync_running === true
+    || busyStateMatchesGateway(props.busyState, props.gateway.gateway_id, ['sync_gateway'])
   ));
   const menuActionRunning = (action: GatewaySourceActionModel) => foregroundActionBusy(action);
   const [moreActionsOpen, setMoreActionsOpen] = createSignal(false);
@@ -10804,7 +10863,23 @@ function GatewaySourceCard(props: Readonly<{
       props.openCreateGatewayEnvironment(props.gateway);
       return;
     }
+    if (action.intent === 'delete_gateway') {
+      props.onActionPopoverOpenChange(false);
+      setForegroundAction(null);
+      props.deleteGateway(props.gateway);
+      return;
+    }
+    if (action.intent === 'setup_gateway' || action.intent === 'manage_gateway') {
+      props.onActionPopoverOpenChange(false);
+      setForegroundAction(null);
+      props.openCreateGatewaySetup(props.gateway);
+      return;
+    }
     const presentation = rememberForegroundAction(action, false);
+    if (props.gateway.background_sync_running === true && action.intent === 'sync_gateway') {
+      props.onActionPopoverOpenChange(true);
+      return;
+    }
     if (!action.enabled && presentation.execution_mode === 'direct') {
       setForegroundAction(null);
       return;
@@ -10836,6 +10911,12 @@ function GatewaySourceCard(props: Readonly<{
       props.openCreateGatewayEnvironment(props.gateway);
       return;
     }
+    if (action.intent === 'delete_gateway') {
+      props.onActionPopoverOpenChange(false);
+      setForegroundAction(null);
+      props.deleteGateway(props.gateway);
+      return;
+    }
     if (action.intent === 'setup_gateway' || action.intent === 'manage_gateway') {
       props.onActionPopoverOpenChange(false);
       setForegroundAction(null);
@@ -10847,6 +10928,11 @@ function GatewaySourceCard(props: Readonly<{
       clicked_action: action,
       affected_sessions: affectedSessions(),
     });
+    if (props.gateway.background_sync_running === true && action.intent === 'sync_gateway') {
+      rememberForegroundAction(action, false);
+      props.onActionPopoverOpenChange(true);
+      return;
+    }
     const ownsProgress = presentationCanStartProgress(action);
     if (!ownsProgress && presentation.execution_mode === 'direct') {
       void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayServiceAction, props.runGatewayLauncherAction);
@@ -10868,7 +10954,7 @@ function GatewaySourceCard(props: Readonly<{
     props.onActionPopoverOpenChange(false);
     setForegroundAction(null);
   };
-  const refreshStatusLabel = createMemo(() => props.i18n.t('environmentAction.refreshStatus'));
+  const syncGatewayLabel = createMemo(() => props.i18n.t('environmentCenter.gatewayActionSync'));
   const moreActionsLabel = createMemo(() => props.i18n.t('environmentCenter.moreActions'));
   const moreActionsForLabel = createMemo(() => props.i18n.t('environmentCenter.moreActionsForLabel', { label: row().label }));
   const localizedGatewayActionLabel = (action: GatewaySourceActionModel) => localizedGatewaySourceActionLabel(props.i18n, action);
@@ -10877,13 +10963,14 @@ function GatewaySourceCard(props: Readonly<{
   const menuItemDisabled = (action: GatewaySourceActionModel) => (
     !action.enabled || primaryActionRunning() || menuActionRunning(action)
   );
-  const runRefreshStatus = () => {
-    if (refreshStatusRunning()) {
+  const syncGatewayFromIcon = () => {
+    if (syncGatewayRunning() || props.gateway.local_enabled === false) {
       return;
     }
     void props.runGatewayLauncherAction({
-      kind: 'refresh_gateway_status',
+      kind: 'sync_gateway',
       gateway_id: props.gateway.gateway_id,
+      ...(props.gateway.management_capability === 'access_only' ? {} : { start_policy: 'start_if_needed' as const }),
     });
   };
 
@@ -10909,13 +10996,14 @@ function GatewaySourceCard(props: Readonly<{
               </Show>
             </div>
           </div>
-          <DesktopTooltip content={refreshStatusLabel()} placement="top">
+          <DesktopTooltip content={syncGatewayLabel()} placement="top">
             <span>
               <ConsoleActionIconButton
-                title={refreshStatusLabel()}
-                aria-label={props.i18n.t('environmentCenter.refreshGatewayStatusForLabel', { label: row().label })}
-                loading={refreshStatusRunning()}
-                onClick={runRefreshStatus}
+                title={syncGatewayLabel()}
+                aria-label={props.i18n.t('environmentCenter.syncGatewayForLabel', { label: row().label })}
+                loading={syncGatewayRunning()}
+                disabled={props.gateway.local_enabled === false}
+                onClick={syncGatewayFromIcon}
               >
                 <Refresh class="h-4 w-4" />
               </ConsoleActionIconButton>
@@ -10953,7 +11041,6 @@ function GatewaySourceCard(props: Readonly<{
                     i18n={props.i18n}
                     gateway={props.gateway}
                     model={visiblePanelModel()}
-                    statusFacts={liveStatusFacts()}
                     runAction={runPanelAction}
                     openCreateGatewaySetup={props.openCreateGatewaySetup}
                     runGatewayLauncherAction={runForegroundRequest}
@@ -10985,8 +11072,9 @@ function GatewaySourceCard(props: Readonly<{
                           break;
                         case 'refresh_status':
                           runForegroundRequest({
-                            kind: 'refresh_gateway_status',
+                            kind: 'sync_gateway',
                             gateway_id: props.gateway.gateway_id,
+                            ...(props.gateway.management_capability === 'access_only' ? {} : { start_policy: 'start_if_needed' as const }),
                           });
                           break;
                         case 'update_runtime':
@@ -11006,13 +11094,14 @@ function GatewaySourceCard(props: Readonly<{
                           break;
                         case 'refresh_gateway_status':
                           runForegroundRequest({
-                            kind: 'refresh_gateway_status',
+                            kind: 'sync_gateway',
                             gateway_id: action.gateway_id,
+                            ...(props.gateway.management_capability === 'access_only' ? {} : { start_policy: 'start_if_needed' as const }),
                           });
                           break;
                         case 'refresh_gateway_catalog':
                           runForegroundRequest({
-                            kind: 'refresh_gateway_catalog',
+                            kind: 'sync_gateway',
                             gateway_id: action.gateway_id,
                             ...(action.start_policy ? { start_policy: action.start_policy } : {}),
                           });
@@ -11145,6 +11234,7 @@ function GatewaySourceCard(props: Readonly<{
                               type="button"
                               role="menuitem"
                               class="redeven-split-menu-item"
+                              data-tone={gatewaySplitMenuItemToneData(action.intent) || undefined}
                               disabled={menuItemDisabled(action)}
                               title={!action.enabled ? action.disabled_reason : undefined}
                               onClick={() => {
@@ -11180,7 +11270,6 @@ function GatewayActionPanel(props: Readonly<{
   i18n: DesktopI18n;
   gateway: DesktopGatewaySource;
   model: GatewayActionPanelModel;
-  statusFacts: readonly GatewayActionPanelFact[];
   runAction: (action: GatewaySourceActionModel) => void;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest, action?: GatewaySourceActionModel) => void;
@@ -11215,6 +11304,15 @@ function GatewayActionPanel(props: Readonly<{
   const panelTitle = createMemo(() => localizedGatewayActionPanelText(props.i18n, props.model.title));
   const panelDetail = createMemo(() => localizedGatewayActionPanelDetail(props.i18n, props.model));
   const localizedPanelActionLabel = (action: GatewaySourceActionModel) => localizedGatewaySourceActionLabel(props.i18n, action);
+  const panelContext = createMemo(() => {
+    const facts = props.model.status_facts.slice(0, 2);
+    if (facts.length === 0) {
+      return '';
+    }
+    return facts
+      .map((fact) => `${localizedGatewayPanelFactLabel(props.i18n, fact.label)} ${localizedGatewayPanelFactValue(props.i18n, fact.value)}`)
+      .join(' · ');
+  });
   const [diagnosticsOpen, setDiagnosticsOpen] = createSignal(false);
   return (
     <div class="redeven-action-popover redeven-gateway-action-panel" tabIndex={-1} aria-label={panelAriaLabel()}>
@@ -11228,59 +11326,9 @@ function GatewayActionPanel(props: Readonly<{
           <div class="redeven-action-popover__eyebrow">{panelEyebrow()}</div>
           <div class="redeven-action-popover__title">{panelTitle()}</div>
           <div class="redeven-action-popover__detail">{panelDetail()}</div>
-        </div>
-      </div>
-
-      <div class="redeven-gateway-action-panel__section">
-        <div class="redeven-gateway-action-panel__section-label">{props.i18n.t('environmentCenter.gatewayPanelRecommendedNextStep')}</div>
-        <div class="redeven-gateway-action-panel__actions">
-          <Show when={props.model.primary_action}>
-            {(action) => (
-              <Button
-                size="sm"
-                variant="default"
-                class="redeven-gateway-action-panel__primary-action justify-center gap-1.5"
-                loading={props.foregroundActionBusy(action())}
-                disabled={!action().enabled}
-                onClick={runPanelPrimary}
-              >
-                <GatewaySourceActionIcon intent={action().intent} />
-                <span>{localizedPanelActionLabel(action())}</span>
-              </Button>
-            )}
+          <Show when={panelContext()}>
+            {(context) => <div class="redeven-gateway-action-panel__context">{context()}</div>}
           </Show>
-          <For each={props.model.secondary_actions}>
-            {(action, index) => (
-              <Button
-                size="sm"
-                variant={index() === 0 ? action.variant : 'outline'}
-                class={cn(
-                  index() === 0 ? 'redeven-gateway-action-panel__secondary-action' : 'redeven-gateway-action-panel__tertiary-action',
-                  'justify-center gap-1.5',
-                )}
-                loading={props.foregroundActionBusy(action)}
-                disabled={!action.enabled}
-                onClick={() => runSecondary(action)}
-              >
-                <GatewaySourceActionIcon intent={action.intent} />
-                <span>{localizedPanelActionLabel(action)}</span>
-              </Button>
-            )}
-          </For>
-        </div>
-      </div>
-
-      <div class="redeven-gateway-action-panel__section">
-        <div class="redeven-gateway-action-panel__section-label">{props.i18n.t('environmentCenter.gatewayPanelStatusSection')}</div>
-        <div class="redeven-gateway-action-panel__facts redeven-gateway-action-panel__facts--status">
-          <For each={props.statusFacts}>
-            {(fact) => (
-              <div class="redeven-gateway-action-panel__fact">
-                <span class="redeven-gateway-action-panel__fact-label">{localizedGatewayPanelFactLabel(props.i18n, fact.label)}</span>
-                <span class="redeven-gateway-action-panel__fact-value" data-tone={fact.tone ?? 'neutral'}>{localizedGatewayPanelFactValue(props.i18n, fact.value)}</span>
-              </div>
-            )}
-          </For>
         </div>
       </div>
 
@@ -11320,19 +11368,60 @@ function GatewayActionPanel(props: Readonly<{
           </div>
         </div>
       </Show>
+      <div class="redeven-gateway-action-panel__footer">
+        <For each={props.model.secondary_actions}>
+          {(action) => (
+            <Button
+              size="sm"
+              variant="outline"
+              class="redeven-gateway-action-panel__secondary-action justify-center gap-1.5"
+              loading={props.foregroundActionBusy(action)}
+              disabled={!action.enabled}
+              onClick={() => runSecondary(action)}
+            >
+              <GatewaySourceActionIcon intent={action.intent} />
+              <span>{localizedPanelActionLabel(action)}</span>
+            </Button>
+          )}
+        </For>
+        <Show when={props.model.primary_action}>
+          {(action) => (
+            <Button
+              size="sm"
+              variant="default"
+              class="redeven-gateway-action-panel__primary-action justify-center gap-1.5"
+              loading={props.foregroundActionBusy(action())}
+              disabled={!action().enabled}
+              onClick={runPanelPrimary}
+            >
+              <GatewaySourceActionIcon intent={action().intent} />
+              <span>{localizedPanelActionLabel(action())}</span>
+            </Button>
+          )}
+        </Show>
+      </div>
     </div>
   );
 }
 
 function gatewaySourceLauncherActionKind(
   action: GatewaySourceActionModel,
-): Extract<DesktopLauncherActionKind, 'open_gateway_environment' | 'pair_gateway' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'refresh_gateway_status' | 'refresh_gateway_catalog'> | null {
+): Extract<DesktopLauncherActionKind, 'open_gateway_environment' | 'sync_gateway' | 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway' | 'set_gateway_enabled' | 'delete_gateway'> | null {
   switch (action.intent) {
     case 'open_gateway_environment':
       return 'open_gateway_environment';
-    case 'pair_gateway':
-      return 'pair_gateway';
+    case 'sync_gateway':
     case 'start_gateway':
+    case 'pair_gateway':
+    case 'refresh_gateway_status':
+    case 'refresh_gateway_catalog':
+      return 'sync_gateway';
+    case 'enable_gateway':
+    case 'disable_gateway':
+      return 'set_gateway_enabled';
+    case 'delete_gateway':
+      return 'delete_gateway';
+    case 'service_start_gateway':
       return 'start_gateway';
     case 'stop_gateway':
       return 'stop_gateway';
@@ -11340,10 +11429,6 @@ function gatewaySourceLauncherActionKind(
       return 'restart_gateway';
     case 'update_gateway':
       return 'update_gateway';
-    case 'refresh_gateway_status':
-      return 'refresh_gateway_status';
-    case 'refresh_gateway_catalog':
-      return 'refresh_gateway_catalog';
     default:
       return null;
   }
@@ -11381,7 +11466,16 @@ function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionMo
       return <Plus class="mr-1 h-3.5 w-3.5" />;
     case 'view_gateway_environments':
       return <ChevronRight class="mr-1 h-3.5 w-3.5" />;
+    case 'enable_gateway':
+      return <Check class="mr-1 h-3.5 w-3.5" />;
+    case 'disable_gateway':
+      return <Stop class="mr-1 h-3.5 w-3.5" />;
+    case 'delete_gateway':
+      return <Trash class="mr-1 h-3.5 w-3.5" />;
+    case 'sync_gateway':
+      return <Refresh class="mr-1 h-3.5 w-3.5" />;
     case 'start_gateway':
+    case 'service_start_gateway':
       return <Play class="mr-1 h-3.5 w-3.5" />;
     case 'stop_gateway':
       return <Stop class="mr-1 h-3.5 w-3.5" />;
@@ -13174,7 +13268,7 @@ function GatewaySetupDialog(props: Readonly<{
           document.getElementById('gateway-ssh-password')?.scrollIntoView({ block: 'center' });
           break;
         case 'container':
-          document.getElementById('gateway-runtime-root')?.scrollIntoView({ block: 'center' });
+          document.getElementById('gateway-data-root')?.scrollIntoView({ block: 'center' });
           break;
         case 'identity_trust':
           document.getElementById('gateway-name')?.scrollIntoView({ block: 'center' });
@@ -13421,11 +13515,11 @@ function GatewaySetupDialog(props: Readonly<{
                           </div>
                         </Show>
                         <div class="space-y-1.5">
-                          <label for="gateway-runtime-root" class="block text-xs font-medium text-foreground">
-                            {props.i18n.t('connectionDialog.runtimeRoot')}
+                          <label for="gateway-data-root" class="block text-xs font-medium text-foreground">
+                            {props.i18n.t('connectionDialog.gatewayDataRoot')}
                           </label>
                           <Input
-                            id="gateway-runtime-root"
+                            id="gateway-data-root"
                             value={props.state?.runtime_root ?? ''}
                             onInput={(event) => {
                               props.updateField('runtime_root', event.currentTarget.value);

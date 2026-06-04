@@ -126,6 +126,10 @@ export type DesktopLauncherActionOutcome =
   | 'refreshed_control_plane'
   | 'deleted_control_plane'
   | 'saved_gateway'
+  | 'enabled_gateway'
+  | 'disabled_gateway'
+  | 'gateway_sync_in_progress'
+  | 'synced_gateway'
   | 'paired_gateway'
   | 'started_gateway'
   | 'stopped_gateway'
@@ -208,6 +212,8 @@ export type DesktopLauncherActionKind =
   | 'refresh_control_plane'
   | 'delete_control_plane'
   | 'upsert_gateway'
+  | 'set_gateway_enabled'
+  | 'sync_gateway'
   | 'pair_gateway'
   | 'start_gateway'
   | 'stop_gateway'
@@ -275,12 +281,12 @@ export type DesktopGatewayStartPolicy = 'require_ready' | 'start_if_needed';
 
 export type DesktopGatewayStartRequiredRetryAction = Readonly<
   | {
-      kind: 'pair_gateway';
+      kind: 'sync_gateway';
       gateway_id: string;
       start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
     }
   | {
-      kind: 'refresh_gateway_catalog';
+      kind: 'pair_gateway';
       gateway_id: string;
       start_policy: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
     }
@@ -303,7 +309,7 @@ export type DesktopGatewayResolveFocus =
 export type DesktopGatewayStartRequiredPayload = Readonly<{
   gateway_id: string;
   gateway_label: string;
-  reason: 'pair_gateway' | 'open_gateway_environment' | 'refresh_gateway_catalog';
+  reason: 'sync_gateway' | 'pair_gateway' | 'open_gateway_environment';
   service_state?: DesktopGatewayServiceState;
   retry_action: DesktopGatewayStartRequiredRetryAction;
 }>;
@@ -762,6 +768,16 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'pair_gateway';
       gateway_id: string;
       start_policy?: DesktopGatewayStartPolicy;
+    }
+  | {
+      kind: 'sync_gateway';
+      gateway_id: string;
+      start_policy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>;
+    }
+  | {
+      kind: 'set_gateway_enabled';
+      gateway_id: string;
+      enabled: boolean;
     }
   | {
       kind: 'start_gateway';
@@ -1432,6 +1448,8 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       return null;
     }
     case 'pair_gateway':
+    case 'sync_gateway':
+    case 'set_gateway_enabled':
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
@@ -1452,6 +1470,21 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           kind,
           gateway_id: gatewayID,
           ...(startPolicy ? { start_policy: startPolicy } : {}),
+        };
+      }
+      if (kind === 'sync_gateway') {
+        const startPolicy = normalizeGatewayStartPolicy((candidate as { start_policy?: unknown }).start_policy, ['start_if_needed']);
+        return {
+          kind,
+          gateway_id: gatewayID,
+          ...(startPolicy ? { start_policy: startPolicy as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> } : {}),
+        };
+      }
+      if (kind === 'set_gateway_enabled') {
+        return {
+          kind,
+          gateway_id: gatewayID,
+          enabled: (candidate as { enabled?: unknown }).enabled !== false,
         };
       }
       if (kind === 'refresh_gateway_catalog') {

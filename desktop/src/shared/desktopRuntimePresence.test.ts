@@ -493,7 +493,7 @@ describe('desktopRuntimePresence', () => {
     expect(plans.refresh).toMatchObject({
       availability: 'available',
       method: 'runtime_gateway',
-      label: 'Refresh Gateway status',
+      label: 'Sync Gateway',
     });
     expect(JSON.stringify(plans)).not.toContain('provider_tunnel');
   });

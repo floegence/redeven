@@ -31,6 +31,8 @@ export type BusyAction =
   | 'refresh_control_plane'
   | 'upsert_gateway'
   | 'pair_gateway'
+  | 'sync_gateway'
+  | 'set_gateway_enabled'
   | 'start_gateway'
   | 'stop_gateway'
   | 'restart_gateway'
@@ -289,14 +291,25 @@ export function gatewayMatchesRuntimeLifecycleProgress(
   return Boolean(progress?.lifecycle_progress) && gatewayMatchesActionProgress(gatewayID, progress);
 }
 
+export function gatewayMatchesWorkflowProgress(
+  gatewayID: string,
+  progress: DesktopLauncherActionProgress | null | undefined,
+): boolean {
+  return (
+    Boolean(progress?.lifecycle_progress)
+    || Boolean(progress?.step_progress)
+  ) && gatewayMatchesActionProgress(gatewayID, progress);
+}
+
 export function gatewaySourceMatchesRuntimeLifecycleProgress(
   gatewayID: string,
   progress: DesktopLauncherActionProgress | null | undefined,
 ): boolean {
-  if (!gatewayMatchesRuntimeLifecycleProgress(gatewayID, progress)) {
+  if (!gatewayMatchesWorkflowProgress(gatewayID, progress)) {
     return false;
   }
   switch (progress?.action) {
+    case 'sync_gateway':
     case 'pair_gateway':
     case 'start_gateway':
     case 'stop_gateway':

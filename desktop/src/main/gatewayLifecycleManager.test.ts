@@ -103,6 +103,7 @@ function sshGateway(overrides: Partial<GatewayRecord> = {}): GatewayRecord {
     schema_version: 1,
     gateway_id: 'gw_bastion',
     display_name: 'Bastion',
+    local_enabled: true,
     connection: {
       kind: 'ssh_host',
       ssh_destination: 'bastion.internal',
@@ -124,6 +125,7 @@ function containerGateway(): GatewayRecord {
     schema_version: 1,
     gateway_id: 'gw_container',
     display_name: 'Container Gateway',
+    local_enabled: true,
     connection: {
       kind: 'ssh_container',
       ssh_destination: 'bastion.internal',
@@ -505,6 +507,7 @@ describe('GatewayLifecycleManager', () => {
       schema_version: 1,
       gateway_id: 'gw_url',
       display_name: 'URL Gateway',
+    local_enabled: true,
       connection: {
         kind: 'url',
         base_url: 'https://gateway.example/',

@@ -79,6 +79,7 @@ function pairedURLRecord(baseURL: string, allowLoopbackHTTP = true): Readonly<{
     schema_version: 1,
     gateway_id: 'gw_demo',
     display_name: 'Demo Gateway',
+    local_enabled: true,
     connection: {
       kind: 'url',
       base_url: baseURL,
@@ -446,6 +447,7 @@ describe('GatewayURLClient', () => {
       schema_version: 1,
       gateway_id: 'gw_demo',
       display_name: 'Demo Gateway',
+    local_enabled: true,
       connection: {
         kind: 'url',
         base_url: '',
@@ -497,6 +499,7 @@ describe('GatewayURLClient', () => {
 	    schema_version: 1,
 	    gateway_id: 'gw_demo',
 	    display_name: 'Demo Gateway',
+    local_enabled: true,
 	    connection: {
 	      kind: 'url',
 	      base_url: 'http://127.0.0.1/',
@@ -1149,6 +1152,7 @@ describe('GatewayBridgeClient', () => {
       schema_version: 1,
       gateway_id: 'gw_demo',
       display_name: 'Demo Gateway',
+    local_enabled: true,
       connection: {
         kind: 'ssh_host',
         ssh_destination: 'bastion',

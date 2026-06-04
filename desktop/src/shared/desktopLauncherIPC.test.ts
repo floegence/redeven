@@ -707,6 +707,40 @@ describe('desktopLauncherIPC', () => {
       start_policy: 'start_if_needed',
     });
     expect(normalizeDesktopLauncherActionRequest({
+      kind: 'sync_gateway',
+      gateway_id: ' gw-demo ',
+      start_policy: 'require_ready',
+    })).toEqual({
+      kind: 'sync_gateway',
+      gateway_id: 'gw-demo',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'sync_gateway',
+      gateway_id: ' gw-demo ',
+      start_policy: 'start_if_needed',
+    })).toEqual({
+      kind: 'sync_gateway',
+      gateway_id: 'gw-demo',
+      start_policy: 'start_if_needed',
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'set_gateway_enabled',
+      gateway_id: ' gw-demo ',
+      enabled: false,
+    })).toEqual({
+      kind: 'set_gateway_enabled',
+      gateway_id: 'gw-demo',
+      enabled: false,
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'set_gateway_enabled',
+      gateway_id: ' gw-demo ',
+    })).toEqual({
+      kind: 'set_gateway_enabled',
+      gateway_id: 'gw-demo',
+      enabled: true,
+    });
+    expect(normalizeDesktopLauncherActionRequest({
       kind: 'refresh_gateway_catalog',
       gateway_id: ' gw-demo ',
       start_policy: 'prompt_if_needed',

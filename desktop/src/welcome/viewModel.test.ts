@@ -270,6 +270,7 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
   return {
     gateway_id: 'bastion',
     display_name: 'Bastion',
+    local_enabled: true,
     connection_kind: 'url',
     management_capability: 'access_only',
     capabilities: [],
@@ -3426,15 +3427,19 @@ describe('Gateway view models', () => {
         tone: 'primary',
       }),
       primary_action: expect.objectContaining({
-        intent: 'pair_gateway',
-        label: 'Retry sync',
+        intent: 'sync_gateway',
+        label: 'Sync Gateway',
         enabled: true,
       }),
-      secondary_actions: expect.arrayContaining([
-        expect.objectContaining({ intent: 'refresh_gateway_catalog' }),
-        expect.objectContaining({ intent: 'manage_gateway' }),
-      ]),
     });
+    expect(buildGatewaySourceRowModel(gatewaySource({
+      status: 'pairing_required',
+      trust_state: 'unpaired',
+    })).secondary_actions.map((action) => action.intent)).toEqual([
+      'disable_gateway',
+      'manage_gateway',
+      'delete_gateway',
+    ]);
 
     const secretSafeRow = buildGatewaySourceRowModel(gatewaySource({
       gateway_url: 'https://user:pass@gateway.example.invalid/path?token=secret',
@@ -3482,7 +3487,7 @@ describe('Gateway view models', () => {
       title: 'Access-only Gateway',
       tone: 'neutral',
     });
-    expect(urlRow.secondary_actions.map((action) => action.intent)).toEqual(['refresh_gateway_catalog', 'manage_gateway']);
+    expect(urlRow.secondary_actions.map((action) => action.intent)).toEqual(['sync_gateway', 'disable_gateway', 'manage_gateway', 'delete_gateway']);
 
     const stoppedUnpairedSSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
@@ -3507,8 +3512,11 @@ describe('Gateway view models', () => {
       }),
     });
     expect(stoppedUnpairedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'refresh_gateway_catalog',
+      'sync_gateway',
+      'disable_gateway',
+      'service_start_gateway',
       'manage_gateway',
+      'delete_gateway',
     ]);
 
     const stoppedSSHRow = buildGatewaySourceRowModel(gatewaySource({
@@ -3533,8 +3541,11 @@ describe('Gateway view models', () => {
       }),
     });
     expect(stoppedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'refresh_gateway_catalog',
+      'sync_gateway',
+      'disable_gateway',
+      'service_start_gateway',
       'manage_gateway',
+      'delete_gateway',
     ]);
 
     const syncingGatewayRow = buildGatewaySourceRowModel(gatewaySource({
@@ -3542,7 +3553,7 @@ describe('Gateway view models', () => {
       management_capability: 'managed_ssh_host',
       status: 'pairing_required',
       trust_state: 'unpaired',
-      sync_state: 'syncing',
+      background_sync_running: true,
       service_state: {
         status: 'starting',
         can_start: false,
@@ -3556,8 +3567,8 @@ describe('Gateway view models', () => {
     expect(syncingGatewayRow).toMatchObject({
       status_label: 'Syncing',
       primary_action: expect.objectContaining({
-        intent: 'pair_gateway',
-        label: 'Retry sync',
+        intent: 'sync_gateway',
+        label: 'Sync Gateway',
         enabled: true,
       }),
       guidance: expect.objectContaining({
@@ -3566,7 +3577,7 @@ describe('Gateway view models', () => {
       }),
     });
     const syncingGatewayWithCatalogRow = buildGatewaySourceRowModel(gatewaySource({
-      sync_state: 'syncing',
+      background_sync_running: true,
     }));
     expect(syncingGatewayWithCatalogRow.primary_action).toMatchObject({
       intent: 'view_gateway_environments',
@@ -3575,9 +3586,9 @@ describe('Gateway view models', () => {
     });
     expect(syncingGatewayWithCatalogRow.secondary_actions).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        intent: 'refresh_gateway_catalog',
+        intent: 'sync_gateway',
         enabled: false,
-        disabled_reason: 'Gateway catalog sync is already running.',
+        disabled_reason: 'Gateway sync is already running.',
       }),
     ]));
 
@@ -3597,8 +3608,8 @@ describe('Gateway view models', () => {
       },
     }));
     expect(unreachableUnpairedRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'resolve_gateway',
-      label: 'Retry sync',
+      intent: 'sync_gateway',
+      label: 'Sync Gateway',
     }));
     expect(unreachableUnpairedRow.guidance).toMatchObject({
       title: 'Resolve the Gateway target',
@@ -3606,8 +3617,9 @@ describe('Gateway view models', () => {
       tone: 'warning',
     });
     expect(unreachableUnpairedRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'refresh_gateway_catalog',
+      'disable_gateway',
       'manage_gateway',
+      'delete_gateway',
     ]);
 
     const startingSSHRow = buildGatewaySourceRowModel(gatewaySource({
@@ -3653,9 +3665,11 @@ describe('Gateway view models', () => {
       tone: 'warning',
     });
     expect(updateRequiredSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'refresh_gateway_catalog',
+      'sync_gateway',
+      'disable_gateway',
       'restart_gateway',
       'manage_gateway',
+      'delete_gateway',
     ]);
 
     const readySSHRow = buildGatewaySourceRowModel(gatewaySource({
@@ -3681,19 +3695,45 @@ describe('Gateway view models', () => {
       tone: 'success',
     });
     expect(readySSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'refresh_gateway_catalog',
+      'sync_gateway',
+      'disable_gateway',
       'stop_gateway',
       'restart_gateway',
       'update_gateway',
       'manage_gateway',
+      'delete_gateway',
     ]);
     expect(readySSHRow.secondary_actions.map((action) => action.label)).toEqual([
-      'Refresh',
+      'Sync Gateway',
+      'Pause Sync',
       'Stop Gateway',
       'Restart Gateway',
       'Update Gateway',
       'Manage',
+      'Delete Gateway',
     ]);
+  });
+
+  it('projects disabled Gateway source rows as locally paused without contributing environments', () => {
+    const row = buildGatewaySourceRowModel(gatewaySource({
+      local_enabled: false,
+    }));
+
+    expect(row).toMatchObject({
+      status_label: 'Disabled',
+      status_tone: 'neutral',
+      environment_summary_detail: 'Sync paused on this Desktop. Gateway environments are hidden until you enable it again.',
+      guidance: {
+        title: 'Gateway disabled on this Desktop',
+        detail: 'This Desktop is not syncing this Gateway or showing its environments.',
+        tone: 'neutral',
+      },
+      primary_action: expect.objectContaining({
+        intent: 'enable_gateway',
+        label: 'Enable Gateway',
+      }),
+    });
+    expect(row.secondary_actions.map((action) => action.intent)).toEqual(['manage_gateway', 'delete_gateway']);
   });
 
   it('guides writable empty Gateway catalogs toward adding Gateway-backed environments', () => {
@@ -3720,8 +3760,8 @@ describe('Gateway view models', () => {
       environment_summary_label: 'No environments synced',
       environment_summary_detail: 'No environments are currently exposed by this Gateway catalog.',
       primary_action: expect.objectContaining({
-        intent: 'refresh_gateway_catalog',
-        label: 'Refresh',
+        intent: 'sync_gateway',
+        label: 'Sync Gateway',
       }),
     });
   });
