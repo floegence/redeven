@@ -180,7 +180,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("placeholder={DEFAULT_DESKTOP_SSH_RUNTIME_ROOT_LABEL}");
     expect(appSrc).not.toContain("placeholder={isContainer() ? '/root/.redeven' : DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}");
     expect(appSrc).not.toContain("runtime_root: trimString(overrides.runtime_root) || (overrides.connection_kind === 'ssh_container' ? '/root/.redeven' : DEFAULT_DESKTOP_SSH_RUNTIME_ROOT)");
-    expect(appSrc).toContain('function openCreateGatewaySetup(gateway?: DesktopGatewaySource): void');
+    expect(appSrc).toContain('function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus): void');
+    expect(appSrc).toContain('function gatewaySetupFocusForGateway(');
+    expect(appSrc).toContain('requestedFocus?: DesktopGatewayResolveFocus');
+    expect(appSrc).toContain('if (requestedFocus) {');
+    expect(appSrc).toContain('focus_section: gatewaySetupFocusForGateway(gateway, focusSection)');
     expect(appSrc).toContain("setActiveCenterTab('gateways')");
     expect(appSrc).toContain('<GatewaySetupDialog');
     expect(appSrc).toContain("kind: 'upsert_gateway'");
@@ -210,6 +214,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('props.gateway.background_sync_running === true');
     expect(appSrc).toContain('gatewayProgressBelongsToForegroundAction(progress, foreground)');
     expect(appSrc).toContain('<GatewayActionPanel');
+    expect(appSrc).toContain('openResolveGateway={openGatewaySetupForPanelResolve}');
+    expect(appSrc).toContain('props.openCreateGatewaySetup(props.gateway, visiblePanelModel().resolve_focus)');
+    expect(appSrc).toContain('props.openCreateGatewaySetup(props.gateway, action.resolve_focus)');
     expect(appSrc).toContain('<EnvironmentProgressPanel');
     expect(appSrc).toContain('buildGatewayActionPresentation');
     expect(appSrc).toContain('row().environment_summary_label');
@@ -866,6 +873,8 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-gateway-grid');
     expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.5rem), 22rem));');
     expect(styles).toContain('.redeven-gateway-card {');
+    expect(styles).toContain('--redeven-action-popover-width: min(20rem, calc(100vw - 1rem));');
+    expect(styles).not.toContain('--redeven-action-popover-width: min(28rem');
     expect(styles).toContain('.redeven-gateway-action-panel__footer button > span');
     expect(styles).toContain('.redeven-gateway-action-panel__diagnostics-label');
     expect(styles).toContain('overflow-wrap: anywhere;');
@@ -886,6 +895,34 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).not.toContain('.redeven-gateway-card__env-list');
     expect(styles).not.toContain('.redeven-gateway-env-row');
     expect(styles).not.toContain('.redeven-gateway-card__secondary-actions');
+  });
+
+  it('keeps the language picker closed until an explicit open request arrives', () => {
+    const appSrc = readWelcomeSource();
+    const pickerStart = appSrc.indexOf('function DesktopLanguagePicker');
+    const pickerEnd = appSrc.indexOf('function PrimaryNavigation');
+    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
+
+    expect(pickerSrc).toContain('const [open, setOpen] = createSignal(false);');
+    expect(pickerSrc).toContain('{ defer: true }');
+    expect(pickerSrc).toContain('if (next === previous) {');
+  });
+
+  it('builds retained Gateway failure progress with scenario-specific recovery actions', () => {
+    const appSrc = readWelcomeSource();
+    const retainedStart = appSrc.indexOf('function retainedGatewayFailureProgress');
+    const retainedEnd = appSrc.indexOf('function localizedFailureForDisplay');
+    const retainedSrc = appSrc.slice(retainedStart, retainedEnd);
+
+    expect(retainedSrc).toContain("case 'gateway_start_required':");
+    expect(retainedSrc).toContain("label: i18n.t('environmentCenter.gatewayActionStart')");
+    expect(retainedSrc).toContain("start_policy: 'start_if_needed'");
+    expect(retainedSrc).toContain("case 'gateway_service_update_failed':");
+    expect(retainedSrc).toContain("kind: 'update_gateway'");
+    expect(retainedSrc).toContain("case 'gateway_service_unreachable':");
+    expect(retainedSrc).toContain("case 'gateway_container_unavailable':");
+    expect(retainedSrc).toContain("kind: 'resolve_gateway'");
+    expect(retainedSrc).not.toContain("failure.code === 'gateway_start_required' ? { start_policy");
   });
 
   it('routes welcome action controls through shared pointer-ready button classes', () => {

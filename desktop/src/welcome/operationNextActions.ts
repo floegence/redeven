@@ -52,9 +52,11 @@ export function visibleOperationNextActions(
     push('update_runtime');
     push('manage_desktop_update');
   } else {
-    push('retry');
     push('update_gateway');
     push('resolve_gateway');
+    push('retry');
+    push('refresh_gateway_status');
+    push('refresh_gateway_catalog');
     push('open_gateway_environment');
   }
   push('copy_diagnostics');
@@ -74,6 +76,8 @@ function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction
     || action.kind === 'retry'
     || action.kind === 'update_gateway'
     || action.kind === 'resolve_gateway'
+    || action.kind === 'refresh_gateway_status'
+    || action.kind === 'refresh_gateway_catalog'
     || action.kind === 'open_gateway_environment';
 }
 

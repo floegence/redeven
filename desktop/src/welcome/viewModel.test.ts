@@ -3608,8 +3608,8 @@ describe('Gateway view models', () => {
       },
     }));
     expect(unreachableUnpairedRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'sync_gateway',
-      label: 'Sync Gateway',
+      intent: 'resolve_gateway',
+      label: 'Resolve Gateway',
     }));
     expect(unreachableUnpairedRow.guidance).toMatchObject({
       title: 'Resolve the Gateway target',
@@ -3617,6 +3617,7 @@ describe('Gateway view models', () => {
       tone: 'warning',
     });
     expect(unreachableUnpairedRow.secondary_actions.map((action) => action.intent)).toEqual([
+      'sync_gateway',
       'disable_gateway',
       'manage_gateway',
       'delete_gateway',

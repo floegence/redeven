@@ -363,6 +363,8 @@ export const enUS = {
     gatewayPanelStartBeforeSyncAria: 'Start Gateway before syncing catalog',
     gatewayPanelUpdateBeforePairTitle: 'Update Gateway before pairing',
     gatewayPanelUpdateBeforePairDetail: 'Desktop needs to update this Gateway service before it can safely pair and trust the catalog.',
+    gatewayPanelResolveBeforeSyncTitle: 'Resolve Gateway before syncing',
+    gatewayPanelResolveBeforeSyncDetail: 'Desktop needs a reachable Gateway service before it can sync environments.',
     gatewayPanelResolveBeforePairTitle: 'Resolve Gateway before pairing',
     gatewayPanelResolveBeforePairDetail: 'Desktop needs a reachable Gateway service before it can pair.',
     gatewayPanelPairThisGatewayAria: 'Pair this Gateway',

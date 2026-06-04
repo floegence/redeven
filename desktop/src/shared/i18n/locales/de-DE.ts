@@ -364,6 +364,8 @@ export const deDE = {
     gatewayPanelStartBeforeSyncAria: "Gateway vor der Katalogsynchronisierung starten",
     gatewayPanelUpdateBeforePairTitle: "Gateway vor der Kopplung aktualisieren",
     gatewayPanelUpdateBeforePairDetail: "Desktop muss diesen Gateway-Dienst aktualisieren, bevor er sicher koppeln und dem Katalog vertrauen kann.",
+    gatewayPanelResolveBeforeSyncTitle: "Gateway vor der Synchronisierung beheben",
+    gatewayPanelResolveBeforeSyncDetail: "Desktop benötigt einen erreichbaren Gateway-Dienst, bevor es environments synchronisieren kann.",
     gatewayPanelResolveBeforePairTitle: "Gateway vor der Kopplung beheben",
     gatewayPanelResolveBeforePairDetail: "Desktop benötigt einen erreichbaren Gateway-Dienst, bevor es koppeln kann.",
     gatewayPanelPairThisGatewayAria: "Dieses Gateway koppeln",

@@ -5137,24 +5137,29 @@ function gatewayOperationFailureNextActions(
     includeUpdate?: boolean;
   }>,
 ): readonly DesktopLauncherOperationNextAction[] {
+  const retryAction = input.retryAction
+    ? [{
+        kind: 'retry' as const,
+        operation_key: operationKey,
+        retry_action: input.retryAction,
+        label: 'Sync Gateway',
+      }]
+    : [];
+  const resolveAction = {
+    kind: 'resolve_gateway' as const,
+    gateway_id: input.gatewayID,
+    ...(input.resolveFocus ? { resolve_focus: input.resolveFocus } : {}),
+    label: 'Resolve Gateway',
+  };
   return [
-    ...(input.retryAction ? [{
-      kind: 'retry' as const,
-      operation_key: operationKey,
-      retry_action: input.retryAction,
-      label: 'Sync Gateway',
-    }] : []),
     ...(input.includeUpdate ? [{
       kind: 'update_gateway' as const,
       gateway_id: input.gatewayID,
       label: 'Update Gateway',
     }] : []),
-    {
-      kind: 'resolve_gateway' as const,
-      gateway_id: input.gatewayID,
-      ...(input.resolveFocus ? { resolve_focus: input.resolveFocus } : {}),
-      label: 'Resolve Gateway',
-    },
+    ...(input.resolveFocus ? [resolveAction] : []),
+    ...retryAction,
+    ...(input.resolveFocus ? [] : [resolveAction]),
     {
       kind: 'copy_diagnostics' as const,
       operation_key: operationKey,

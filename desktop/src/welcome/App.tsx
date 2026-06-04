@@ -78,6 +78,7 @@ import type {
   DesktopEnvironmentOpenAction,
   DesktopLauncherActionProgress,
   DesktopLauncherActionKind,
+  DesktopGatewayResolveFocus,
   DesktopGatewayStartPolicy,
   DesktopLauncherActionResult,
   DesktopLauncherActionRequest,
@@ -982,6 +983,8 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
     'Start Gateway before syncing catalog': 'environmentCenter.gatewayPanelStartBeforeSyncAria',
     'Update Gateway before pairing': 'environmentCenter.gatewayPanelUpdateBeforePairTitle',
     'Desktop needs to update this Gateway service before it can safely pair and trust the catalog.': 'environmentCenter.gatewayPanelUpdateBeforePairDetail',
+    'Resolve Gateway before syncing': 'environmentCenter.gatewayPanelResolveBeforeSyncTitle',
+    'Desktop needs a reachable Gateway service before it can sync environments.': 'environmentCenter.gatewayPanelResolveBeforeSyncDetail',
     'Resolve Gateway before pairing': 'environmentCenter.gatewayPanelResolveBeforePairTitle',
     'Desktop needs a reachable Gateway service before it can pair.': 'environmentCenter.gatewayPanelResolveBeforePairDetail',
     'Pair this Gateway': 'environmentCenter.gatewayPanelPairThisGatewayAria',
@@ -1737,22 +1740,60 @@ function retainedGatewayFailureProgress(
   const operationKey = `ui:gateway:${gatewayID}:${now}`;
   const action = gatewayActionKindForRequest(request);
   const severity = presentation.tone === 'warning' ? 'warning' : 'error';
+  const recoveryAction = (): NonNullable<DesktopLauncherActionProgress['next_actions']>[number] => {
+    switch (failure.code) {
+      case 'gateway_start_required':
+      case 'gateway_service_start_failed':
+        return {
+          kind: 'retry',
+          operation_key: operationKey,
+          label: i18n.t('environmentCenter.gatewayActionStart'),
+          retry_action: {
+            kind: 'sync_gateway',
+            gateway_id: gatewayID,
+            start_policy: 'start_if_needed',
+          },
+        };
+      case 'gateway_service_update_failed':
+        return {
+          kind: 'update_gateway',
+          gateway_id: gatewayID,
+          label: i18n.t('environmentCenter.gatewayActionUpdate'),
+        };
+      case 'gateway_not_manageable':
+      case 'gateway_service_unreachable':
+      case 'gateway_container_unavailable':
+      case 'gateway_bridge_unavailable':
+        return {
+          kind: 'resolve_gateway',
+          gateway_id: gatewayID,
+          ...(failure.code === 'gateway_not_manageable' ? { resolve_focus: 'url_endpoint' as const } : {}),
+          ...(failure.code === 'gateway_service_unreachable' ? { resolve_focus: 'ssh_host' as const } : {}),
+          ...(failure.code === 'gateway_container_unavailable' ? { resolve_focus: 'container' as const } : {}),
+          label: i18n.t('environmentCenter.gatewayPanelResolveTitle'),
+        };
+      default:
+        return {
+          kind: 'retry',
+          operation_key: operationKey,
+          label: i18n.t('environmentCenter.gatewayActionSync'),
+          retry_action: {
+            kind: 'sync_gateway',
+            gateway_id: gatewayID,
+          },
+        };
+    }
+  };
+  const primaryRecoveryAction = recoveryAction();
   const nextActions: DesktopLauncherActionProgress['next_actions'] = [
-    {
-      kind: 'retry',
-      operation_key: operationKey,
-      label: i18n.t('environmentCenter.gatewayActionSync'),
-      retry_action: {
-        kind: 'sync_gateway',
-        gateway_id: gatewayID,
-        ...(failure.code === 'gateway_start_required' ? { start_policy: 'start_if_needed' as const } : {}),
-      },
-    },
-    {
-      kind: 'resolve_gateway',
-      gateway_id: gatewayID,
-      label: i18n.t('environmentCenter.gatewayPanelResolveTitle'),
-    },
+    primaryRecoveryAction,
+    ...(primaryRecoveryAction.kind !== 'resolve_gateway'
+      ? [{
+          kind: 'resolve_gateway' as const,
+          gateway_id: gatewayID,
+          label: i18n.t('environmentCenter.gatewayPanelResolveTitle'),
+        }]
+      : []),
     {
       kind: 'copy_diagnostics',
       operation_key: operationKey,
@@ -2484,6 +2525,7 @@ function DesktopLanguagePicker(props: Readonly<{
       setOpen(true);
       buttonRef?.focus();
     },
+    { defer: true },
   ));
 
   createEffect(() => {
@@ -3621,7 +3663,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }));
   }
 
-  function openCreateGatewaySetup(gateway?: DesktopGatewaySource): void {
+  function gatewaySetupFocusForGateway(
+    gateway: DesktopGatewaySource,
+    requestedFocus?: DesktopGatewayResolveFocus,
+  ): GatewaySetupDialogState['focus_section'] {
+    if (requestedFocus) {
+      return requestedFocus;
+    }
+    if (gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired') {
+      return 'identity_trust';
+    }
+    switch (gateway.service_state?.status) {
+      case 'ssh_unreachable':
+        return 'ssh_host';
+      case 'container_unavailable':
+        return 'container';
+      case 'service_needs_update':
+        return 'identity_trust';
+      default:
+        return undefined;
+    }
+  }
+
+  function openCreateGatewaySetup(gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus): void {
     if (snapshot().surface !== 'connect_environment') {
       showConnectEnvironment(i18n().t('environmentCenter.addGatewayLauncherPrompt'));
       return;
@@ -3653,15 +3717,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           container_id: gateway.container_id ?? '',
           container_ref: gateway.container_ref ?? '',
           container_label: gateway.container_label ?? '',
-          focus_section: gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired'
-            ? 'identity_trust'
-            : gateway.service_state?.status === 'ssh_unreachable'
-              ? 'ssh_host'
-              : gateway.service_state?.status === 'container_unavailable'
-                ? 'container'
-                : gateway.service_state?.status === 'service_needs_update'
-                  ? 'identity_trust'
-                  : undefined,
+          focus_section: gatewaySetupFocusForGateway(gateway, focusSection),
         }
       : {}));
     setLanguageSettingsOpen(false);
@@ -6467,7 +6523,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
   openLocalEnvironment: () => Promise<void>;
   openSettingsSurface: (environmentID?: string) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
   pairGateway: (gatewayID: string, startPolicy?: GatewayServiceStartPolicy) => Promise<void>;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>;
   runGatewayServiceAction: (
@@ -10302,7 +10358,7 @@ function GatewaySourcesPanel(props: Readonly<{
   actionProgress: readonly DesktopLauncherActionProgress[];
   gatewaySourceFilter: string;
   gatewayQuery: string;
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
   pairGateway: (gatewayID: string, startPolicy?: GatewayServiceStartPolicy) => Promise<void>;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>;
   runGatewayServiceAction: (
@@ -10615,7 +10671,7 @@ function GatewaySourceCard(props: Readonly<{
   actionProgress: readonly DesktopLauncherActionProgress[];
   actionPopoverOpen: boolean;
   onActionPopoverOpenChange: (open: boolean) => void;
-  openCreateGatewaySetup: (gateway?: DesktopGatewaySource) => void;
+  openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
   pairGateway: (gatewayID: string, startPolicy?: GatewayServiceStartPolicy) => Promise<void>;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>;
   runGatewayServiceAction: (
@@ -10960,6 +11016,11 @@ function GatewaySourceCard(props: Readonly<{
     props.onActionPopoverOpenChange(true);
     void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayServiceAction, props.runGatewayLauncherAction);
   };
+  const openGatewaySetupForPanelResolve = () => {
+    setForegroundAction(null);
+    props.openCreateGatewaySetup(props.gateway, visiblePanelModel().resolve_focus);
+    props.onActionPopoverOpenChange(false);
+  };
   const runForegroundRequest = (request: DesktopLauncherActionRequest, action?: GatewaySourceActionModel) => {
     const foregroundActionModel = action ?? gatewaySourceActionForLauncherRequest(request);
     if (foregroundActionModel) {
@@ -11061,6 +11122,7 @@ function GatewaySourceCard(props: Readonly<{
                     model={visiblePanelModel()}
                     runAction={runPanelAction}
                     runGatewayLauncherAction={runForegroundRequest}
+                    openResolveGateway={openGatewaySetupForPanelResolve}
                     foregroundActionBusy={foregroundActionBusy}
                     close={closeActionPopover}
                   />
@@ -11132,7 +11194,7 @@ function GatewaySourceCard(props: Readonly<{
                           break;
                         case 'resolve_gateway':
                           setForegroundAction(null);
-                          props.openCreateGatewaySetup(props.gateway);
+                          props.openCreateGatewaySetup(props.gateway, action.resolve_focus);
                           props.onActionPopoverOpenChange(false);
                           break;
                         case 'manage_desktop_update':
@@ -11291,11 +11353,16 @@ function GatewayActionPanel(props: Readonly<{
   model: GatewayActionPanelModel;
   runAction: (action: GatewaySourceActionModel) => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest, action?: GatewaySourceActionModel) => void;
+  openResolveGateway: () => void;
   foregroundActionBusy: (action: GatewaySourceActionModel) => boolean;
   close: () => void;
 }>) {
   const runPanelPrimary = () => {
     const action = props.model.primary_action;
+    if (action?.intent === 'resolve_gateway') {
+      props.openResolveGateway();
+      return;
+    }
     if (props.model.continuation_action) {
       props.runGatewayLauncherAction(props.model.continuation_action, action);
       return;
@@ -11307,6 +11374,10 @@ function GatewayActionPanel(props: Readonly<{
   const runSecondary = (action: GatewaySourceActionModel) => {
     if (action.intent === 'cancel_gateway_action') {
       props.close();
+      return;
+    }
+    if (action.intent === 'resolve_gateway') {
+      props.openResolveGateway();
       return;
     }
     props.runAction(action);

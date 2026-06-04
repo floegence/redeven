@@ -2415,7 +2415,7 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
     || serviceStatus === 'bridge_unavailable'
     || serviceStatus === 'error'
   )) {
-    return gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default');
+    return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default');
   }
   if (manageable && serviceStatus === 'not_started') {
     return serviceState?.can_start === true
@@ -2424,6 +2424,9 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
   }
   if (manageable && serviceStatus === 'service_needs_update') {
     return gatewaySourceAction('update_gateway', 'Update Gateway', 'default', serviceState?.can_update !== false);
+  }
+  if (gateway.sync_state === 'pairing_failed' || gateway.status === 'trust_changed' || gateway.trust_state === 'trust_changed') {
+    return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default');
   }
   if (needsPairing) {
     return gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default');

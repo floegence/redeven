@@ -364,6 +364,8 @@ export const ptBR = {
     gatewayPanelStartBeforeSyncAria: "Iniciar Gateway antes de sincronizar catálogo",
     gatewayPanelUpdateBeforePairTitle: "Atualizar Gateway antes de parear",
     gatewayPanelUpdateBeforePairDetail: "Desktop precisa atualizar este serviço Gateway antes de parear com segurança e confiar no catálogo.",
+    gatewayPanelResolveBeforeSyncTitle: "Resolver Gateway antes de sincronizar",
+    gatewayPanelResolveBeforeSyncDetail: "Desktop precisa de um serviço Gateway acessível antes de sincronizar environments.",
     gatewayPanelResolveBeforePairTitle: "Resolver Gateway antes de parear",
     gatewayPanelResolveBeforePairDetail: "Desktop precisa de um serviço Gateway acessível antes de parear.",
     gatewayPanelPairThisGatewayAria: "Parear este Gateway",

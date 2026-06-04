@@ -364,6 +364,8 @@ export const zhCN = {
     gatewayPanelStartBeforeSyncAria: "先启动 Gateway 再同步目录",
     gatewayPanelUpdateBeforePairTitle: "配对前更新 Gateway",
     gatewayPanelUpdateBeforePairDetail: "Desktop 需要先更新此 Gateway 服务，才能安全配对并信任目录。",
+    gatewayPanelResolveBeforeSyncTitle: "同步前处理 Gateway",
+    gatewayPanelResolveBeforeSyncDetail: "Desktop 需要可达的 Gateway 服务后才能同步 environments。",
     gatewayPanelResolveBeforePairTitle: "配对前处理 Gateway",
     gatewayPanelResolveBeforePairDetail: "Desktop 需要可达的 Gateway 服务后才能配对。",
     gatewayPanelPairThisGatewayAria: "配对此 Gateway",

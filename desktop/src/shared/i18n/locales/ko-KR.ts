@@ -364,6 +364,8 @@ export const koKR = {
     gatewayPanelStartBeforeSyncAria: "catalog 동기화 전에 Gateway 시작",
     gatewayPanelUpdateBeforePairTitle: "페어링 전에 Gateway 업데이트",
     gatewayPanelUpdateBeforePairDetail: "Desktop이 안전하게 페어링하고 catalog를 신뢰하려면 먼저 이 Gateway 서비스를 업데이트해야 합니다.",
+    gatewayPanelResolveBeforeSyncTitle: "동기화 전에 Gateway 해결",
+    gatewayPanelResolveBeforeSyncDetail: "Desktop이 environments를 동기화하려면 도달 가능한 Gateway 서비스가 필요합니다.",
     gatewayPanelResolveBeforePairTitle: "페어링 전에 Gateway 해결",
     gatewayPanelResolveBeforePairDetail: "Desktop이 페어링하려면 도달 가능한 Gateway 서비스가 필요합니다.",
     gatewayPanelPairThisGatewayAria: "이 Gateway 페어링",
