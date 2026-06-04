@@ -429,8 +429,10 @@ import {
   type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
 import {
+  desktopGatewayCanManageService,
   desktopGatewayCanOpenEnvironment,
   desktopGatewayEnvironmentHasControlCapability,
+  type DesktopGatewayDiagnosis,
   type DesktopGatewayServiceState,
   type DesktopGatewaySource,
   type DesktopGatewaySyncState,
@@ -3871,6 +3873,7 @@ function mergeGatewaySourceRecord(
     last_synced_at_ms: sync.last_synced_at_ms,
     last_sync_error_code: sync.last_sync_error_code,
     last_sync_error_message: sync.last_sync_error_message,
+    diagnosis: source.diagnosis,
   };
 }
 
@@ -4098,19 +4101,19 @@ async function pairGatewayWithClient(
   record: GatewayRecord,
   client: GatewayURLClient | Awaited<ReturnType<GatewayLifecycleManager['bridgeClient']>>,
   secretStore: GatewaySecretStore,
-	  options: Readonly<{
-	    signal?: AbortSignal;
-	    onStage?: (stage: Extract<GatewayWorkflowStepID, 'fetching_pairing_challenge' | 'saving_trust_profile'>) => void;
-	    pairingCode?: string;
-	    beforeStoreWrite?: () => Promise<GatewayRecord> | GatewayRecord;
-	  }> = {},
-	): Promise<GatewayRecord> {
+  options: Readonly<{
+    signal?: AbortSignal;
+    onStage?: (stage: Extract<GatewayWorkflowStepID, 'fetching_pairing_challenge' | 'saving_trust_profile'>) => void;
+    pairingCode?: string;
+    beforeStoreWrite?: () => Promise<GatewayRecord> | GatewayRecord;
+  }> = {},
+): Promise<GatewayRecord> {
   const material = createGatewayPairingMaterial(record);
   options.onStage?.('fetching_pairing_challenge');
-	  const challengeRequest = record.connection.kind === 'url'
-	    ? pairingChallengeRequestWithCode(material, options.pairingCode ?? '')
-	    : pairingChallengeRequest(material);
-	  const challenge = await client.pairingChallenge(record, challengeRequest, {
+  const challengeRequest = record.connection.kind === 'url'
+    ? pairingChallengeRequestWithCode(material, options.pairingCode ?? '')
+    : pairingChallengeRequest(material);
+  const challenge = await client.pairingChallenge(record, challengeRequest, {
     signal: options.signal,
   });
   assertGatewayPairingChallenge({
@@ -4324,25 +4327,25 @@ async function syncVisibleGatewaysIfNeeded(options: Readonly<{ force?: boolean }
 async function upsertGatewayFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'upsert_gateway' }>,
 ): Promise<GatewayRecord> {
-	if (request.connection_kind === 'url') {
-	  const nextConnection: GatewayRecord['connection'] = {
-	    kind: 'url',
-	    base_url: normalizeGatewayBaseURL(request.gateway_url),
-	    allow_loopback_http: request.allow_loopback_http,
-	  };
-	  const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(nextConnection));
-	  const existing = await gatewayStore().get(gatewayID);
-	  const record = await upsertGatewayConnectionRecord(gatewayID, request.display_name, nextConnection, existing);
-	  if (compact(request.pairing_code) !== '') {
-	    return pairGatewayWithClient(
-	      record,
-	      new GatewayURLClient(gatewaySecretStore()),
-	      gatewaySecretStore(),
-	      { pairingCode: request.pairing_code },
-	    );
-	  }
-	  return record;
-	}
+  if (request.connection_kind === 'url') {
+    const nextConnection: GatewayRecord['connection'] = {
+      kind: 'url',
+      base_url: normalizeGatewayBaseURL(request.gateway_url),
+      allow_loopback_http: request.allow_loopback_http,
+    };
+    const gatewayID = compact(request.gateway_id) || stableGatewayID(gatewayBindingAudience(nextConnection));
+    const existing = await gatewayStore().get(gatewayID);
+    const record = await upsertGatewayConnectionRecord(gatewayID, request.display_name, nextConnection, existing);
+    if (compact(request.pairing_code) !== '') {
+      return pairGatewayWithClient(
+        record,
+        new GatewayURLClient(gatewaySecretStore()),
+        gatewaySecretStore(),
+        { pairingCode: request.pairing_code },
+      );
+    }
+    return record;
+  }
 
   const connectionDraft: Exclude<GatewayRecord['connection'], { kind: 'url' }> = request.connection_kind === 'ssh_host'
     ? {
@@ -5059,6 +5062,14 @@ type GatewayWorkflowStepID =
   | 'refreshing_gateway_catalog'
   | 'gateway_paired';
 
+type GatewayCheckWorkflowStepID =
+  | 'checking_transport'
+  | 'checking_gateway_service'
+  | 'checking_gateway_version'
+  | 'checking_gateway_trust'
+  | 'checking_gateway_catalog'
+  | 'gateway_checked';
+
 type GatewayWorkflowStepDefinition = Readonly<{
   id: GatewayWorkflowStepID;
   label: string;
@@ -5073,9 +5084,24 @@ const GATEWAY_PAIR_WORKFLOW_STEPS: readonly GatewayWorkflowStepDefinition[] = [
   { id: 'gateway_paired', label: 'Gateway paired', backendEvent: 'gateway.pair.done' },
 ];
 
+type GatewayCheckWorkflowStepDefinition = Readonly<{
+  id: GatewayCheckWorkflowStepID;
+  label: string;
+  backendEvent: string;
+}>;
+
+const GATEWAY_CHECK_WORKFLOW_STEPS: readonly GatewayCheckWorkflowStepDefinition[] = [
+  { id: 'checking_transport', label: 'Checking Gateway transport', backendEvent: 'gateway.check.transport' },
+  { id: 'checking_gateway_service', label: 'Checking Gateway service', backendEvent: 'gateway.check.service' },
+  { id: 'checking_gateway_version', label: 'Checking Gateway version', backendEvent: 'gateway.check.version' },
+  { id: 'checking_gateway_trust', label: 'Checking Gateway trust', backendEvent: 'gateway.check.trust' },
+  { id: 'checking_gateway_catalog', label: 'Checking Gateway catalog', backendEvent: 'gateway.check.catalog' },
+  { id: 'gateway_checked', label: 'Gateway checked', backendEvent: 'gateway.check.done' },
+];
+
 function gatewayStepProgress(
-  steps: readonly GatewayWorkflowStepDefinition[],
-  activeStepID: GatewayWorkflowStepID,
+  steps: readonly (GatewayWorkflowStepDefinition | GatewayCheckWorkflowStepDefinition)[],
+  activeStepID: GatewayWorkflowStepID | GatewayCheckWorkflowStepID,
   status: DesktopStepProgressStepStatus = 'running',
 ): DesktopStepProgress {
   const activeIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepID));
@@ -5095,8 +5121,8 @@ function gatewayStepProgress(
 }
 
 function completeGatewayStepProgress(
-  steps: readonly GatewayWorkflowStepDefinition[],
-  activeStepID: GatewayWorkflowStepID,
+  steps: readonly (GatewayWorkflowStepDefinition | GatewayCheckWorkflowStepDefinition)[],
+  activeStepID: GatewayWorkflowStepID | GatewayCheckWorkflowStepID,
 ): DesktopStepProgress {
   const activeIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepID));
   return {
@@ -5111,8 +5137,8 @@ function completeGatewayStepProgress(
 }
 
 function failGatewayStepProgress(
-  steps: readonly GatewayWorkflowStepDefinition[],
-  activeStepID: GatewayWorkflowStepID,
+  steps: readonly (GatewayWorkflowStepDefinition | GatewayCheckWorkflowStepDefinition)[],
+  activeStepID: GatewayWorkflowStepID | GatewayCheckWorkflowStepID,
   detail: string,
 ): DesktopStepProgress {
   const activeIndex = Math.max(0, steps.findIndex((step) => step.id === activeStepID));
@@ -5131,35 +5157,15 @@ function failGatewayStepProgress(
 function gatewayOperationFailureNextActions(
   operationKey: string,
   input: Readonly<{
-    retryAction?: DesktopLauncherActionRequest;
     gatewayID: string;
-    resolveFocus?: DesktopLauncherActionFailure['resolve_focus'];
-    includeUpdate?: boolean;
   }>,
 ): readonly DesktopLauncherOperationNextAction[] {
-  const retryAction = input.retryAction
-    ? [{
-        kind: 'retry' as const,
-        operation_key: operationKey,
-        retry_action: input.retryAction,
-        label: 'Sync Gateway',
-      }]
-    : [];
-  const resolveAction = {
-    kind: 'resolve_gateway' as const,
-    gateway_id: input.gatewayID,
-    ...(input.resolveFocus ? { resolve_focus: input.resolveFocus } : {}),
-    label: 'Resolve Gateway',
-  };
   return [
-    ...(input.includeUpdate ? [{
-      kind: 'update_gateway' as const,
+    {
+      kind: 'check_gateway' as const,
       gateway_id: input.gatewayID,
-      label: 'Update Gateway',
-    }] : []),
-    ...(input.resolveFocus ? [resolveAction] : []),
-    ...retryAction,
-    ...(input.resolveFocus ? [] : [resolveAction]),
+      label: 'Check Gateway',
+    },
     {
       kind: 'copy_diagnostics' as const,
       operation_key: operationKey,
@@ -5171,6 +5177,277 @@ function gatewayOperationFailureNextActions(
       label: 'Dismiss',
     },
   ];
+}
+
+function gatewayDiagnosisForServiceState(
+  record: GatewayRecord,
+  serviceState: DesktopGatewayServiceState | undefined,
+): DesktopGatewayDiagnosis {
+  const manageable = desktopGatewayCanManageService(gatewayRecordToSource(record));
+  const status = serviceState?.status ?? (record.connection.kind === 'url' ? 'not_applicable' : 'unknown');
+  const base = {
+    checked_at_unix_ms: Date.now(),
+    manageable,
+    service_state: serviceState,
+    trust_state: gatewayRecordToSource(record).trust_state,
+  };
+  switch (status) {
+    case 'not_started':
+      return {
+        ...base,
+        classification: 'not_started',
+        summary: 'Gateway is stopped',
+        detail: 'Desktop can start this Gateway service, then run sync again.',
+      };
+    case 'service_needs_update':
+      return {
+        ...base,
+        classification: 'needs_update',
+        summary: 'Gateway update required',
+        detail: 'Desktop must update this Gateway service before pairing or syncing catalog data.',
+      };
+    case 'ssh_unreachable':
+      return {
+        ...base,
+        classification: 'ssh_unreachable',
+        summary: 'SSH host unreachable',
+        detail: serviceState?.message || 'Desktop cannot reach the SSH host that runs this Gateway.',
+      };
+    case 'container_unavailable':
+      return {
+        ...base,
+        classification: 'container_unavailable',
+        summary: 'Gateway container unavailable',
+        detail: serviceState?.message || 'Desktop cannot reach the container that runs this Gateway.',
+      };
+    case 'bridge_unavailable':
+    case 'error':
+      return {
+        ...base,
+        classification: 'bridge_unavailable',
+        summary: 'Gateway bridge unavailable',
+        detail: serviceState?.message || 'Desktop cannot open the Gateway bridge on the configured target.',
+      };
+    case 'not_applicable':
+      return {
+        ...base,
+        classification: 'unmanageable',
+        summary: 'External Gateway endpoint',
+        detail: 'Desktop can diagnose this Gateway endpoint, but service start and update must happen on its host.',
+      };
+    case 'ready':
+      return {
+        ...base,
+        classification: 'ready',
+        summary: 'Gateway service is ready',
+        detail: 'Desktop can reach the Gateway service. Continue checking trust and catalog access.',
+      };
+    default:
+      return {
+        ...base,
+        classification: 'unknown',
+        summary: 'Gateway status is unknown',
+        detail: serviceState?.message || 'Desktop could not determine this Gateway service state.',
+      };
+  }
+}
+
+function gatewayDiagnosisForError(
+  record: GatewayRecord,
+  error: unknown,
+  serviceState?: DesktopGatewayServiceState,
+): DesktopGatewayDiagnosis {
+  const source = gatewayRecordToSource(record);
+  const manageable = desktopGatewayCanManageService(source);
+  const code = gatewaySyncErrorCode(error);
+  const message = error instanceof Error ? error.message : String(error);
+  const base = {
+    checked_at_unix_ms: Date.now(),
+    manageable,
+    service_state: serviceState,
+    trust_state: source.trust_state,
+    error_code: code,
+    error_message: message,
+  };
+  if (error instanceof GatewayTrustError || code === 'GATEWAY_TRUST_CHANGED') {
+    return {
+      ...base,
+      classification: 'trust_failed',
+      catalog_state: 'pairing_failed',
+      summary: 'Gateway trust check failed',
+      detail: message || 'Desktop could not verify this Gateway identity.',
+    };
+  }
+  if (error instanceof GatewayServiceStartRequiredError) {
+    return gatewayDiagnosisForServiceState(record, error.service_state);
+  }
+  if (error instanceof GatewayNotManageableError) {
+    return {
+      ...base,
+      classification: 'unmanageable',
+      summary: 'Gateway is not manageable from Desktop',
+      detail: message || 'Start or update this Gateway on its host, then check again.',
+    };
+  }
+  if (error instanceof GatewayServiceUnavailableError) {
+    if (error.code === 'gateway_container_unavailable') {
+      return {
+        ...base,
+        classification: 'container_unavailable',
+        summary: 'Gateway container unavailable',
+        detail: message,
+      };
+    }
+    if (error.code === 'gateway_bridge_unavailable') {
+      return {
+        ...base,
+        classification: 'bridge_unavailable',
+        summary: 'Gateway bridge unavailable',
+        detail: message,
+      };
+    }
+    return {
+      ...base,
+      classification: 'ssh_unreachable',
+      summary: 'Gateway SSH host unreachable',
+      detail: message,
+    };
+  }
+  if (error instanceof GatewayClientError) {
+    const trustCodes = new Set([
+      'GATEWAY_ID_MISMATCH',
+      'GATEWAY_FINGERPRINT_REQUIRED',
+      'GATEWAY_PUBLIC_KEY_MISMATCH',
+      'GATEWAY_TRUST_CHANGED',
+    ]);
+    if (trustCodes.has(error.code) || error.code.startsWith('GATEWAY_PAIRING_')) {
+      return {
+        ...base,
+        classification: 'trust_failed',
+        catalog_state: 'pairing_failed',
+        summary: 'Gateway trust check failed',
+        detail: message,
+      };
+    }
+    if (error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED') {
+      return {
+        ...base,
+        classification: manageable ? 'needs_update' : 'catalog_failed',
+        catalog_state: 'catalog_failed',
+        summary: manageable ? 'Gateway update required' : 'Gateway protocol unsupported',
+        detail: message,
+      };
+    }
+    return {
+      ...base,
+      classification: 'catalog_failed',
+      catalog_state: 'catalog_failed',
+      summary: 'Gateway catalog check failed',
+      detail: message,
+    };
+  }
+  return {
+    ...base,
+    classification: 'unknown',
+    catalog_state: gatewaySyncStateForError(error),
+    summary: 'Gateway check failed',
+    detail: message || 'Desktop could not diagnose this Gateway.',
+  };
+}
+
+function gatewayDiagnosisSource(record: GatewayRecord, diagnosis: DesktopGatewayDiagnosis): DesktopGatewaySource {
+  const previous = gatewaySyncStateByID.get(record.gateway_id) ?? defaultGatewaySyncRecord(record);
+  const source = mergeGatewaySourceRecord(previous.source ?? gatewayRecordToSource(record), record, previous, diagnosis.service_state);
+  return {
+    ...source,
+    diagnosis,
+    service_state: diagnosis.service_state ?? source.service_state,
+  };
+}
+
+function setGatewayDiagnosis(record: GatewayRecord, diagnosis: DesktopGatewayDiagnosis): DesktopGatewaySource {
+  const previous = gatewaySyncStateByID.get(record.gateway_id) ?? defaultGatewaySyncRecord(record);
+  const source = gatewayDiagnosisSource(record, diagnosis);
+  setGatewaySyncRecord(record, {
+    ...previous,
+    gateway_id: record.gateway_id,
+    background_sync_running: previous.background_sync_running === true,
+    source,
+  });
+  return source;
+}
+
+async function checkGatewayRecord(
+  record: GatewayRecord,
+  options: Readonly<{
+    signal?: AbortSignal;
+    onStage?: (stage: GatewayCheckWorkflowStepID) => void;
+    onGatewayServiceProgress?: GatewayLifecycleProgressSink;
+  }> = {},
+): Promise<DesktopGatewayDiagnosis> {
+  if (!record.local_enabled) {
+    return {
+      checked_at_unix_ms: Date.now(),
+      classification: 'disabled',
+      manageable: desktopGatewayCanManageService(gatewayRecordToSource(record)),
+      summary: 'Gateway sync is paused',
+      detail: 'This Desktop is not syncing this Gateway while it is disabled locally.',
+      trust_state: gatewayRecordToSource(record).trust_state,
+      catalog_state: 'idle',
+    };
+  }
+
+  let serviceState: DesktopGatewayServiceState | undefined;
+  try {
+    options.onStage?.('checking_transport');
+    if (record.connection.kind !== 'url') {
+      options.onStage?.('checking_gateway_service');
+      serviceState = await inspectGatewayServiceForSync(record, {
+        signal: options.signal,
+        onProgress: options.onGatewayServiceProgress,
+      });
+      const serviceDiagnosis = gatewayDiagnosisForServiceState(record, serviceState);
+      if (serviceDiagnosis.classification !== 'ready') {
+        return serviceDiagnosis;
+      }
+    } else {
+      serviceState = await inspectGatewayServiceForSync(record, { signal: options.signal });
+    }
+
+    options.onStage?.('checking_gateway_version');
+    if (!record.trust_profile) {
+      return {
+        checked_at_unix_ms: Date.now(),
+        classification: 'trust_failed',
+        manageable: desktopGatewayCanManageService(gatewayRecordToSource(record)),
+        service_state: serviceState,
+        trust_state: 'unpaired',
+        catalog_state: 'pairing_failed',
+        summary: 'Gateway is not paired',
+        detail: 'Desktop needs to sync this Gateway before it can trust and read its catalog.',
+      };
+    }
+
+    options.onStage?.('checking_gateway_trust');
+    options.onStage?.('checking_gateway_catalog');
+    await gatewayLifecycleManager().refreshCatalog(record, {
+      timeoutMs: 10_000,
+      startPolicy: record.connection.kind === 'url' ? undefined : 'require_ready',
+      signal: options.signal,
+    });
+    return {
+      checked_at_unix_ms: Date.now(),
+      classification: 'ready',
+      manageable: desktopGatewayCanManageService(gatewayRecordToSource(record)),
+      service_state: serviceState,
+      trust_state: gatewayRecordToSource(record).trust_state,
+      catalog_state: 'ready',
+      summary: 'Gateway is ready',
+      detail: 'Desktop can reach this Gateway, verify trust, and read the catalog.',
+    };
+  } catch (error) {
+    return gatewayDiagnosisForError(record, error, serviceState);
+  }
 }
 
 type GatewayLifecycleOperationContext = Readonly<{
@@ -5336,6 +5613,139 @@ async function setGatewayEnabledFromLauncher(
   return launcherActionSuccess('enabled_gateway');
 }
 
+async function checkGatewayFromLauncher(
+  request: Extract<DesktopLauncherActionRequest, { kind: 'check_gateway' }>,
+): Promise<DesktopLauncherActionResult> {
+  const record = await gatewayStore().get(request.gateway_id);
+  if (!record) {
+    return launcherActionFailure('environment_missing', 'dialog', 'Gateway was not found.', {
+      gatewayID: request.gateway_id,
+      shouldRefreshSnapshot: true,
+    });
+  }
+  const operationKey = `${record.gateway_id}:check`;
+  if (launcherOperationIsActive(launcherOperations.get(operationKey))) {
+    return launcherActionSuccess('gateway_sync_in_progress');
+  }
+  const operation = launcherOperations.create({
+    operation_key: operationKey,
+    action: 'check_gateway',
+    subject_kind: 'gateway',
+    subject_id: record.gateway_id,
+    gateway_id: record.gateway_id,
+    phase: 'checking_transport',
+    title: 'Check Gateway',
+    detail: `Desktop is checking ${record.display_name} without starting, updating, or syncing it.`,
+    step_progress: gatewayStepProgress(GATEWAY_CHECK_WORKFLOW_STEPS, 'checking_transport'),
+    cancelable: true,
+    interrupt_label: 'Cancel',
+    interrupt_detail: 'Desktop is canceling this Gateway check.',
+    interrupt_kind: 'generic',
+  });
+  const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
+  const updateStage = (stage: GatewayCheckWorkflowStepID, detail: string): void => {
+    launcherOperations.update(operationKey, {
+      phase: stage,
+      title: 'Check Gateway',
+      detail,
+      step_progress: gatewayStepProgress(GATEWAY_CHECK_WORKFLOW_STEPS, stage),
+    });
+  };
+
+  const finishCanceled = () => {
+    launcherOperations.finish(operationKey, 'canceled', {
+      phase: 'checking_transport',
+      title: 'Check canceled',
+      detail: 'Desktop canceled this Gateway check.',
+      step_progress: gatewayStepProgress(GATEWAY_CHECK_WORKFLOW_STEPS, 'checking_transport', 'canceled'),
+    });
+    scheduleLauncherOperationRemoval(operationKey);
+    return launcherActionFailure('action_invalid', 'gateway', 'Gateway check was canceled.', {
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      operationKey,
+      shouldRefreshSnapshot: true,
+    });
+  };
+
+  try {
+    const diagnosis = await checkGatewayRecord(record, {
+      signal,
+      onGatewayServiceProgress: (progress) => {
+        launcherOperations.update(operationKey, {
+          phase: 'checking_gateway_service',
+          title: 'Check Gateway',
+          detail: progress.detail,
+          step_progress: gatewayStepProgress(GATEWAY_CHECK_WORKFLOW_STEPS, 'checking_gateway_service'),
+        });
+      },
+      onStage: (stage) => {
+        const detailByStage: Record<GatewayCheckWorkflowStepID, string> = {
+          checking_transport: `Desktop is checking how ${record.display_name} is reached.`,
+          checking_gateway_service: `Desktop is checking the Gateway service for ${record.display_name}.`,
+          checking_gateway_version: `Desktop is checking ${record.display_name}'s protocol and version.`,
+          checking_gateway_trust: `Desktop is verifying ${record.display_name}'s trust state.`,
+          checking_gateway_catalog: `Desktop is checking whether ${record.display_name} can return its catalog.`,
+          gateway_checked: `Desktop checked ${record.display_name}.`,
+        };
+        updateStage(stage, detailByStage[stage]);
+      },
+    });
+    if (signal?.aborted) {
+      return finishCanceled();
+    }
+    setGatewayDiagnosis(record, diagnosis);
+    launcherOperations.finish(operationKey, 'succeeded', {
+      phase: 'gateway_checked',
+      title: diagnosis.summary,
+      detail: diagnosis.detail,
+      step_progress: completeGatewayStepProgress(GATEWAY_CHECK_WORKFLOW_STEPS, 'gateway_checked'),
+    });
+    scheduleLauncherOperationRemoval(operationKey);
+    return launcherActionSuccess('checked_gateway');
+  } catch (error) {
+    if (isAbortLikeError(error) || signal?.aborted) {
+      return finishCanceled();
+    }
+    const diagnosis = gatewayDiagnosisForError(record, error);
+    setGatewayDiagnosis(record, diagnosis);
+    const failure = desktopFailureFromError(error, {
+      code: 'operation_failed',
+      title: 'Check Gateway Failed',
+      summary: diagnosis.detail,
+      targetLabel: record.display_name,
+    });
+    const current = launcherOperations.get(operationKey);
+    const phase = (current?.phase as GatewayCheckWorkflowStepID | undefined) ?? 'checking_transport';
+    launcherOperations.finish(operationKey, 'failed', {
+      phase,
+      title: diagnosis.summary,
+      detail: diagnosis.detail,
+      step_progress: failGatewayStepProgress(GATEWAY_CHECK_WORKFLOW_STEPS, phase, diagnosis.detail),
+      failure,
+      next_actions: [
+        {
+          kind: 'copy_diagnostics',
+          operation_key: operationKey,
+          label: 'Copy log',
+        },
+        {
+          kind: 'dismiss',
+          operation_key: operationKey,
+          label: 'Dismiss',
+        },
+      ],
+    });
+    return launcherActionFailure(gatewayLauncherActionFailureCode(error), 'gateway', diagnosis.detail, {
+      gatewayID: record.gateway_id,
+      gatewayLabel: record.display_name,
+      operationKey,
+      failure,
+      shouldRefreshSnapshot: true,
+    });
+  }
+}
+
 async function pairGatewayFromLauncher(
   request: Extract<DesktopLauncherActionRequest, { kind: 'pair_gateway' | 'sync_gateway' }>,
 ): Promise<DesktopLauncherActionResult> {
@@ -5380,16 +5790,6 @@ async function pairGatewayFromLauncher(
     interrupt_kind: 'generic',
   });
   const signal = launcherOperations.operationSignal(operation.operation_key) ?? undefined;
-  const syncRetryStartPolicy: Extract<GatewayStartPolicy, 'start_if_needed'> | undefined = request.start_policy === 'start_if_needed'
-    ? 'start_if_needed'
-    : record.connection.kind === 'url'
-      ? undefined
-      : 'start_if_needed';
-  const retryAction: Extract<DesktopLauncherActionRequest, { kind: 'sync_gateway' }> = {
-    kind: 'sync_gateway',
-    gateway_id: record.gateway_id,
-    ...(syncRetryStartPolicy ? { start_policy: syncRetryStartPolicy } : {}),
-  };
   const finishPairFailure = (
     error: unknown,
     activeStepID: GatewayWorkflowStepID,
@@ -5412,10 +5812,7 @@ async function pairGatewayFromLauncher(
       ...(signal?.aborted ? {} : {
         failure,
         next_actions: gatewayOperationFailureNextActions(operationKey, {
-          retryAction,
           gatewayID: record.gateway_id,
-          resolveFocus: gatewayResolveFocusForServiceFailure(error),
-          includeUpdate: code === 'gateway_service_update_failed',
         }),
       }),
     });
@@ -5433,7 +5830,6 @@ async function pairGatewayFromLauncher(
       gatewayLabel: record.display_name,
       operationKey,
       failure,
-      retryAction,
       resolveFocus: gatewayResolveFocusForServiceFailure(error),
       shouldRefreshSnapshot: true,
     });
@@ -9728,16 +10124,7 @@ function finishGatewayOpenCapabilityFailure(
     }),
     failure,
     next_actions: gatewayOperationFailureNextActions(operationKey, {
-      retryAction: {
-        kind: 'open_gateway_environment',
-        environment_id: request.environment_id,
-        gateway_id: request.gateway_id,
-        gateway_env_id: request.gateway_env_id,
-        label: request.label,
-        start_policy: record.connection.kind === 'url' ? undefined : 'start_if_needed',
-      },
       gatewayID: record.gateway_id,
-      resolveFocus: 'identity_trust',
     }),
   });
   return {
@@ -9938,16 +10325,7 @@ async function openGatewayEnvironmentFromLauncher(
         }),
         failure,
         next_actions: gatewayOperationFailureNextActions(operationKey, {
-          retryAction: {
-            kind: 'open_gateway_environment',
-            environment_id: request.environment_id,
-            gateway_id: request.gateway_id,
-            gateway_env_id: request.gateway_env_id,
-            label: request.label,
-            start_policy: 'start_if_needed',
-          },
           gatewayID: record.gateway_id,
-          resolveFocus: gatewayResolveFocusForServiceFailure(error),
         }),
       });
       return gatewayLauncherFailureFromError(error, record, 'open_gateway_environment', {
@@ -10019,16 +10397,7 @@ async function openGatewayEnvironmentFromLauncher(
       ...(signal?.aborted ? {} : {
         failure,
         next_actions: gatewayOperationFailureNextActions(operationKey, {
-          retryAction: {
-            kind: 'open_gateway_environment',
-            environment_id: request.environment_id,
-            gateway_id: request.gateway_id,
-            gateway_env_id: request.gateway_env_id,
-            label: request.label,
-            start_policy: record.connection.kind === 'url' ? undefined : 'start_if_needed',
-          },
           gatewayID: record.gateway_id,
-          resolveFocus: gatewayResolveFocusForServiceFailure(error),
         }),
       }),
     });
@@ -14499,6 +14868,8 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
     case 'pair_gateway':
     case 'sync_gateway':
       return pairGatewayFromLauncher(request);
+    case 'check_gateway':
+      return checkGatewayFromLauncher(request);
     case 'set_gateway_enabled':
       return setGatewayEnabledFromLauncher(request);
     case 'start_gateway':

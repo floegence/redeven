@@ -64,6 +64,11 @@ export function runGatewaySourceAction(
     case 'manage_gateway':
       openCreateGatewaySetup(gateway);
       return;
+    case 'check_gateway':
+      return runGatewayLauncherAction({
+        kind: 'check_gateway',
+        gateway_id: gateway.gateway_id,
+      });
     case 'pair_gateway':
     case 'sync_gateway':
       return runGatewayLauncherAction({

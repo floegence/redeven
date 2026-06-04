@@ -2312,6 +2312,7 @@ export type GatewayRowModel = Readonly<{
 
 export type GatewaySourceActionIntent =
   | 'add_gateway_environment'
+  | 'check_gateway'
   | 'enable_gateway'
   | 'disable_gateway'
   | 'delete_gateway'
@@ -2409,6 +2410,9 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
   if (needsSetup) {
     return gatewaySourceAction('setup_gateway', 'Set up', 'default');
   }
+  if (gateway.sync_state === 'gateway_unreachable' || gateway.sync_state === 'catalog_failed' || gateway.sync_state === 'pairing_failed') {
+    return gatewaySourceAction('check_gateway', 'Sync failed', 'default');
+  }
   if (manageable && (
     serviceStatus === 'ssh_unreachable'
     || serviceStatus === 'container_unavailable'
@@ -2425,7 +2429,7 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
   if (manageable && serviceStatus === 'service_needs_update') {
     return gatewaySourceAction('update_gateway', 'Update Gateway', 'default', serviceState?.can_update !== false);
   }
-  if (gateway.sync_state === 'pairing_failed' || gateway.status === 'trust_changed' || gateway.trust_state === 'trust_changed') {
+  if (gateway.status === 'trust_changed' || gateway.trust_state === 'trust_changed') {
     return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default');
   }
   if (needsPairing) {

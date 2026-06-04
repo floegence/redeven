@@ -128,6 +128,7 @@ export type DesktopLauncherActionOutcome =
   | 'saved_gateway'
   | 'enabled_gateway'
   | 'disabled_gateway'
+  | 'checked_gateway'
   | 'gateway_sync_in_progress'
   | 'synced_gateway'
   | 'paired_gateway'
@@ -213,6 +214,7 @@ export type DesktopLauncherActionKind =
   | 'delete_control_plane'
   | 'upsert_gateway'
   | 'set_gateway_enabled'
+  | 'check_gateway'
   | 'sync_gateway'
   | 'pair_gateway'
   | 'start_gateway'
@@ -538,6 +540,12 @@ export type DesktopLauncherOperationNextAction = Readonly<
       label_key?: DesktopTranslationKey;
     }
   | {
+      kind: 'check_gateway';
+      gateway_id: string;
+      label: string;
+      label_key?: DesktopTranslationKey;
+    }
+  | {
       kind: 'refresh_gateway_status';
       gateway_id: string;
       label: string;
@@ -727,11 +735,11 @@ export type DesktopLauncherActionRequest = Readonly<
       kind: 'upsert_gateway';
       gateway_id?: string;
       display_name: string;
-	      connection_kind: 'url';
-	      gateway_url: string;
-	      pairing_code?: string;
-	      allow_loopback_http: boolean;
-	    }
+      connection_kind: 'url';
+      gateway_url: string;
+      pairing_code?: string;
+      allow_loopback_http: boolean;
+    }
   | {
       kind: 'upsert_gateway';
       gateway_id?: string;
@@ -763,6 +771,10 @@ export type DesktopLauncherActionRequest = Readonly<
       container_ref: string;
       container_label: string;
       runtime_root: string;
+    }
+  | {
+      kind: 'check_gateway';
+      gateway_id: string;
     }
   | {
       kind: 'pair_gateway';
@@ -1386,14 +1398,14 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
         return {
           kind,
           gateway_id: gatewayID,
-	          display_name: displayName,
-	          connection_kind: 'url',
-	          gateway_url: gatewayURL,
-	          ...(compact((candidate as { pairing_code?: unknown }).pairing_code)
-	            ? { pairing_code: compact((candidate as { pairing_code?: unknown }).pairing_code) }
-	            : {}),
-	          allow_loopback_http: (candidate as { allow_loopback_http?: unknown }).allow_loopback_http === true,
-	        };
+          display_name: displayName,
+          connection_kind: 'url',
+          gateway_url: gatewayURL,
+          ...(compact((candidate as { pairing_code?: unknown }).pairing_code)
+            ? { pairing_code: compact((candidate as { pairing_code?: unknown }).pairing_code) }
+            : {}),
+          allow_loopback_http: (candidate as { allow_loopback_http?: unknown }).allow_loopback_http === true,
+        };
       }
       if (connectionKind === 'ssh_host') {
         try {
@@ -1447,6 +1459,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       }
       return null;
     }
+    case 'check_gateway':
     case 'pair_gateway':
     case 'sync_gateway':
     case 'set_gateway_enabled':
@@ -1470,6 +1483,12 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           kind,
           gateway_id: gatewayID,
           ...(startPolicy ? { start_policy: startPolicy } : {}),
+        };
+      }
+      if (kind === 'check_gateway') {
+        return {
+          kind,
+          gateway_id: gatewayID,
         };
       }
       if (kind === 'sync_gateway') {
