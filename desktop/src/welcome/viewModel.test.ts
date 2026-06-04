@@ -3514,7 +3514,6 @@ describe('Gateway view models', () => {
     expect(stoppedUnpairedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
       'sync_gateway',
       'disable_gateway',
-      'service_start_gateway',
       'manage_gateway',
       'delete_gateway',
     ]);
@@ -3543,7 +3542,6 @@ describe('Gateway view models', () => {
     expect(stoppedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
       'sync_gateway',
       'disable_gateway',
-      'service_start_gateway',
       'manage_gateway',
       'delete_gateway',
     ]);
@@ -3591,6 +3589,20 @@ describe('Gateway view models', () => {
         disabled_reason: 'Gateway sync is already running.',
       }),
     ]));
+
+    const failedCatalogRow = buildGatewaySourceRowModel(gatewaySource({
+      sync_state: 'catalog_failed',
+      last_sync_error_message: 'Gateway catalog sync failed.',
+    }));
+    expect(failedCatalogRow.primary_action).toEqual(expect.objectContaining({
+      intent: 'check_gateway',
+      label: 'Check Gateway',
+      enabled: true,
+    }));
+    expect(failedCatalogRow.guidance).toMatchObject({
+      title: 'Gateway sync failed',
+      tone: 'warning',
+    });
 
     const unreachableUnpairedRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',

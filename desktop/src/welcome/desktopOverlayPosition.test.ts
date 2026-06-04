@@ -157,4 +157,23 @@ describe('desktopOverlayPosition', () => {
     expect(position.left).toBe(12);
     expect(position.arrowOffset).toBe(186);
   });
+
+  it('locks Gateway action popovers above the trigger while only shifting inline', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(186, 18, 24, 24),
+      overlayWidth: 200,
+      overlayHeight: 70,
+      viewportWidth: 220,
+      viewportHeight: 400,
+      preferredPlacement: 'top',
+      placementLock: 'top-inline-shift',
+      allowMainAxisOverflow: false,
+    });
+
+    expect(position.placement).toBe('top');
+    expect(position.top).toBe(10);
+    expect(position.left).toBe(12);
+    expect(position.arrowOffset).toBe(186);
+    expect(position.maxHeight).toBeUndefined();
+  });
 });

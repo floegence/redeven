@@ -159,7 +159,18 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): s
   if (progress.open_progress) {
     return 'Opening...';
   }
+  if (
+    progress.subject_kind === 'gateway'
+    && (
+      progress.step_progress?.active_step_id === 'refreshing_gateway_catalog'
+      || progress.title === 'Sync Gateway'
+    )
+  ) {
+    return 'Syncing...';
+  }
   switch (progress.action) {
+    case 'check_gateway':
+      return 'Checking...';
     case 'stop_environment_runtime':
     case 'stop_gateway':
       return 'Stopping...';
@@ -239,6 +250,8 @@ function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): st
     return 'Open failed';
   }
   switch (progress.action) {
+    case 'check_gateway':
+      return 'Check failed';
     case 'start_environment_runtime':
     case 'start_gateway':
       return 'Start failed';

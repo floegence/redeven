@@ -221,7 +221,6 @@ describe('operationNextActions', () => {
     expect(visibleOperationNextActions(progress)).toEqual([
       expect.objectContaining({ kind: 'check_gateway', label: 'Check Gateway' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
-      expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);
     expect(visibleOperationNextActions(progress)).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'manage_desktop_update' }),
@@ -231,7 +230,47 @@ describe('operationNextActions', () => {
       expect.objectContaining({ kind: 'retry' }),
       expect.objectContaining({ kind: 'refresh_gateway_status' }),
       expect.objectContaining({ kind: 'refresh_gateway_catalog' }),
+      expect.objectContaining({ kind: 'dismiss' }),
     ]));
+  });
+
+  it('shows Gateway service recommendations after a diagnostic check completes', () => {
+    const progress: DesktopLauncherActionProgress = {
+      ...failedProgress([
+        {
+          kind: 'start_gateway',
+          gateway_id: 'bastion',
+          label: 'Start Gateway',
+        },
+        {
+          kind: 'update_gateway',
+          gateway_id: 'bastion',
+          label: 'Update Gateway',
+        },
+        {
+          kind: 'copy_diagnostics',
+          operation_key: 'gateway:bastion:check',
+          label: 'Copy log',
+        },
+        {
+          kind: 'dismiss',
+          operation_key: 'gateway:bastion:check',
+          label: 'Dismiss',
+        },
+      ]),
+      action: 'check_gateway',
+      operation_key: 'gateway:bastion:check',
+      subject_kind: 'gateway',
+      subject_id: 'bastion',
+      environment_id: undefined,
+      status: 'succeeded',
+    };
+
+    expect(visibleOperationNextActions(progress)).toEqual([
+      expect.objectContaining({ kind: 'start_gateway', label: 'Start Gateway' }),
+      expect.objectContaining({ kind: 'update_gateway', label: 'Update Gateway' }),
+      expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
+    ]);
   });
 
   it('keeps legacy Gateway recovery ordering when Check Gateway is absent', () => {

@@ -6,12 +6,14 @@ import {
   resolveDesktopAnchoredOverlayPosition,
   type DesktopAnchoredOverlayPosition,
   type DesktopOverlayPlacement,
+  type DesktopOverlayPlacementLock,
 } from './desktopOverlayPosition';
 
 type DesktopAnchoredOverlaySurfaceProps = Readonly<{
   open: boolean;
   anchorRef: HTMLElement | undefined;
   placement?: DesktopOverlayPlacement;
+  placementLock?: DesktopOverlayPlacementLock;
   constrainToViewport?: boolean;
   allowMainAxisOverflow?: boolean;
   hideArrow?: boolean;
@@ -34,9 +36,11 @@ function cn(...values: Array<string | undefined | null | false>): string {
 
 export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfaceProps) {
   const [position, setPosition] = createSignal<DesktopAnchoredOverlayPosition | null>(null);
+  const [overlayElement, setOverlayElement] = createSignal<HTMLDivElement | undefined>();
   const resolvedPlacement = createMemo(() => position()?.placement ?? (props.placement ?? 'top'));
 
   let frame = 0;
+  let followUpFrames = 0;
   let overlayRef: HTMLDivElement | undefined;
 
   const clearFrame = () => {
@@ -48,12 +52,13 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
   };
 
   const updatePosition = () => {
-    if (!props.anchorRef || !overlayRef || typeof window === 'undefined') {
+    const currentOverlay = overlayElement() ?? overlayRef;
+    if (!props.anchorRef || !currentOverlay || typeof window === 'undefined') {
       return;
     }
 
     const anchorRect = props.anchorRef.getBoundingClientRect();
-    const overlayRect = overlayRef.getBoundingClientRect();
+    const overlayRect = currentOverlay.getBoundingClientRect();
     const viewport = window.visualViewport;
     const viewportWidth = viewport?.width ?? window.innerWidth;
     const viewportHeight = viewport?.height ?? window.innerHeight;
@@ -67,6 +72,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
       viewportWidth,
       viewportHeight,
       preferredPlacement: props.placement,
+      placementLock: props.placementLock,
       constrainToViewport: props.constrainToViewport,
       allowMainAxisOverflow: props.allowMainAxisOverflow,
     });
@@ -83,7 +89,16 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     frame = requestAnimationFrame(() => {
       frame = 0;
       updatePosition();
+      if (followUpFrames > 0) {
+        followUpFrames -= 1;
+        schedulePositionUpdate();
+      }
     });
+  };
+
+  const schedulePositionSettlingUpdates = () => {
+    followUpFrames = 4;
+    schedulePositionUpdate();
   };
 
   createEffect(() => {
@@ -93,7 +108,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
       return;
     }
 
-    schedulePositionUpdate();
+    schedulePositionSettlingUpdates();
 
     const handleViewportChange = () => schedulePositionUpdate();
     window.addEventListener('scroll', handleViewportChange, true);
@@ -102,7 +117,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     window.visualViewport?.addEventListener('scroll', handleViewportChange);
 
     const anchorEl = props.anchorRef;
-    const nextOverlayRef = overlayRef;
+    const nextOverlayRef = overlayElement() ?? overlayRef;
     const observer = typeof ResizeObserver === 'undefined' || !anchorEl || !nextOverlayRef
       ? null
       : new ResizeObserver(() => {
@@ -130,14 +145,20 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
       <div
         ref={(element) => {
           overlayRef = element;
+          setOverlayElement(element);
           props.onOverlayRef?.(element);
+          if (element && props.open) {
+            updatePosition();
+            schedulePositionSettlingUpdates();
+          }
         }}
         role={props.role}
         aria-modal={props.ariaModal}
         aria-label={props.ariaLabel}
         data-placement={resolvedPlacement()}
+        data-placement-lock={props.placementLock}
         class={cn(
-          'fixed animate-in fade-in zoom-in-95',
+          'fixed',
           props.interactive === true ? 'pointer-events-auto' : 'pointer-events-none',
           props.class,
         )}
@@ -145,6 +166,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
           left: position() ? `${position()!.left}px` : '0px',
           top: position() ? `${position()!.top}px` : '0px',
           visibility: position() ? 'visible' : 'hidden',
+          ...(position()?.maxHeight !== undefined ? { '--redeven-anchored-overlay-max-height': `${position()!.maxHeight}px` } : {}),
         }}
         onMouseEnter={props.onMouseEnter}
         onMouseLeave={props.onMouseLeave}

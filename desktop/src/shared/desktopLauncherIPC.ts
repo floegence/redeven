@@ -577,6 +577,24 @@ export type DesktopLauncherOperationNextAction = Readonly<
       label_key?: DesktopTranslationKey;
     }
   | {
+      kind: 'start_gateway';
+      gateway_id: string;
+      label: string;
+      label_key?: DesktopTranslationKey;
+    }
+  | {
+      kind: 'stop_gateway';
+      gateway_id: string;
+      label: string;
+      label_key?: DesktopTranslationKey;
+    }
+  | {
+      kind: 'restart_gateway';
+      gateway_id: string;
+      label: string;
+      label_key?: DesktopTranslationKey;
+    }
+  | {
       kind: 'update_gateway';
       gateway_id: string;
       label: string;

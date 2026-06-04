@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const lifecycleMocks = vi.hoisted(() => ({
   ensureManagedGatewayServiceReady: vi.fn(),
+  probeManagedGatewayServiceDeep: vi.fn(),
   probeManagedGatewayServiceStatus: vi.fn(),
   stopManagedGatewayService: vi.fn(),
   startRuntimePlacementBridgeSession: vi.fn(),
@@ -12,6 +13,7 @@ vi.mock('./gatewayServiceHost', async () => {
   return {
     ...actual,
     ensureManagedGatewayServiceReady: lifecycleMocks.ensureManagedGatewayServiceReady,
+    probeManagedGatewayServiceDeep: lifecycleMocks.probeManagedGatewayServiceDeep,
     probeManagedGatewayServiceStatus: lifecycleMocks.probeManagedGatewayServiceStatus,
     stopManagedGatewayService: lifecycleMocks.stopManagedGatewayService,
   };
@@ -145,10 +147,22 @@ function containerGateway(): GatewayRecord {
 describe('GatewayLifecycleManager', () => {
   beforeEach(() => {
     lifecycleMocks.ensureManagedGatewayServiceReady.mockReset();
+    lifecycleMocks.probeManagedGatewayServiceDeep.mockReset();
     lifecycleMocks.probeManagedGatewayServiceStatus.mockReset();
     lifecycleMocks.stopManagedGatewayService.mockReset();
     lifecycleMocks.startRuntimePlacementBridgeSession.mockReset();
     lifecycleMocks.ensureManagedGatewayServiceReady.mockResolvedValue('/opt/redeven/gateway/managed/bin/redeven-gateway');
+    lifecycleMocks.probeManagedGatewayServiceDeep.mockResolvedValue({
+      binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      state_root: '/opt/redeven/gateways/gw_bastion/state',
+      package_status: 'ready',
+      version: 'v1.2.3',
+      service_status: 'running',
+      service_pid: 1234,
+      service_listen: '127.0.0.1:24000',
+      legacy_local_catalog_present: false,
+      legacy_runtime_pids: [],
+    });
     lifecycleMocks.probeManagedGatewayServiceStatus.mockResolvedValue({
       status: 'not_running',
       message: 'Gateway service is not running.',
@@ -499,6 +513,44 @@ describe('GatewayLifecycleManager', () => {
       }),
       stateRoot: '/opt/redeven/gateways/gw_bastion/state',
       releaseTag: 'v1.2.3',
+    }));
+  });
+
+  it('runs managed Gateway deep probe without opening or starting a bridge', async () => {
+    const record = sshGateway();
+
+    await expect(manager().inspectManagedProbe(record)).resolves.toMatchObject({
+      binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      service_status: 'running',
+    });
+
+    expect(lifecycleMocks.probeManagedGatewayServiceDeep).toHaveBeenCalledWith(expect.objectContaining({
+      target: expect.objectContaining({ ssh_destination: 'bastion.internal' }),
+      placement: expect.objectContaining({
+        kind: 'host_process',
+        runtime_root: '/opt/redeven',
+        runtime_state_root: '/opt/redeven/gateways/gw_bastion/state',
+      }),
+      stateRoot: '/opt/redeven/gateways/gw_bastion/state',
+      releaseTag: 'v1.2.3',
+      sshPassword: '',
+    }));
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).not.toHaveBeenCalled();
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
+  });
+
+  it('updates managed Gateways through the Gateway service slot with forced cleanup', async () => {
+    const record = sshGateway();
+
+    await manager().updateGateway(record);
+
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
+      stateRoot: '/opt/redeven/gateways/gw_bastion/state',
+      forceUpdate: true,
+    }));
+    expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledWith(expect.objectContaining({
+      runtime_binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
+      bridge_command_kind: 'gateway',
     }));
   });
 

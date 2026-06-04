@@ -144,6 +144,24 @@ describe('GatewayStore', () => {
     expect(reloaded?.local_enabled).toBe(false);
   });
 
+  it('rejects unsafe Gateway ids before they can be used as managed service roots', async () => {
+    const root = await createTempRoot();
+    cleanupRoots.add(root);
+    const store = new GatewayStore(defaultGatewayStorePath(root));
+
+    await expect(store.upsert({
+      gateway_id: '../gw demo',
+      display_name: 'Unsafe Gateway',
+      connection: { kind: 'url', base_url: 'https://gateway.example/' },
+    })).rejects.toMatchObject({
+      code: 'GATEWAY_ID_REQUIRED',
+    });
+
+    expect(normalizeGatewayStoreSnapshot({
+      gateways: [{ gateway_id: '../gw demo', connection: { kind: 'url', base_url: 'https://gateway.example/' } }],
+    }).gateways).toHaveLength(0);
+  });
+
   it('rejects embedded credentials and strips URL query strings from Gateway base URLs', () => {
     expect(normalizeGatewayBaseURL('https://gateway.example/path?token=leak#frag')).toBe('https://gateway.example/path/');
     expect(() => normalizeGatewayBaseURL('https://user:pass@gateway.example/')).toThrow('embedded credentials');

@@ -48,7 +48,7 @@ const noGatewayActionPanel: GatewayActionPanelModel = {
 export type GatewayActionPanelFact = Readonly<{
   label: string;
   value: string;
-  tone?: 'neutral' | 'warning' | 'error';
+  tone?: 'neutral' | 'success' | 'warning' | 'error';
 }>;
 
 export type GatewayActionAffectedSession = Readonly<{
@@ -81,6 +81,7 @@ export type BuildGatewayActionPresentationInput = Readonly<{
   active_progress?: DesktopLauncherActionProgress | null;
   retained_failure?: DesktopLauncherActionProgress | null;
   affected_sessions?: readonly GatewayActionAffectedSession[];
+  show_diagnosis_result?: boolean;
 }>;
 
 function gatewaySourceAction(
@@ -181,6 +182,7 @@ function defaultDiagnosticFacts(gateway: DesktopGatewaySource): readonly Gateway
     ...(diagnosis?.detail ? [{ label: 'Detail', value: diagnosis.detail }] : []),
     ...(diagnosis?.error_code ? [{ label: 'Error code', value: diagnosis.error_code }] : []),
     ...(diagnosis?.error_message ? [{ label: 'Error message', value: diagnosis.error_message, tone: 'error' as const }] : []),
+    ...(diagnosis?.managed_probe?.facts ?? []),
     ...(gateway.ssh_details?.ssh_destination ? [{ label: 'Host', value: gateway.ssh_details.ssh_destination }] : []),
     ...(gateway.container_label || gateway.container_ref || gateway.container_id
       ? [{ label: 'Container', value: compact(gateway.container_label) || compact(gateway.container_ref) || compact(gateway.container_id) }]
@@ -200,16 +202,20 @@ function continuationActionFor(
         gateway_id: gateway.gateway_id,
       };
     case 'sync_gateway':
-    case 'start_gateway':
     case 'pair_gateway':
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
       return {
         kind: 'sync_gateway',
         gateway_id: gateway.gateway_id,
-        ...(startPolicy ?? (action.intent === 'start_gateway' ? 'start_if_needed' : undefined)
-          ? { start_policy: (startPolicy ?? 'start_if_needed') as Extract<DesktopGatewayStartPolicy, 'start_if_needed'> }
+        ...(startPolicy
+          ? { start_policy: startPolicy }
           : {}),
+      };
+    case 'start_gateway':
+      return {
+        kind: 'start_gateway',
+        gateway_id: gateway.gateway_id,
       };
     case 'enable_gateway':
       return {
@@ -284,6 +290,10 @@ function gatewayDiagnosisTitle(gateway: DesktopGatewaySource): string {
       return 'Gateway trust check failed';
     case 'catalog_failed':
       return 'Gateway catalog check failed';
+    case 'service_ready_catalog_failed':
+      return 'Gateway catalog check failed';
+    case 'legacy_runtime_residue':
+      return 'Gateway update required';
     case 'unmanageable':
       return 'External Gateway endpoint';
     default:
@@ -342,10 +352,10 @@ function gatewaySyncRecoveryPlan(
       const startAction = gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true);
       return {
         title: 'Gateway is stopped',
-        detail: 'Desktop can start this Gateway service, then continue automatic pairing and catalog sync.',
-        aria_label: 'Start Gateway before syncing catalog',
+        detail: 'Desktop can start this Gateway service. Sync the Gateway after it is ready to refresh environments.',
+        aria_label: 'Start Gateway service',
         primary_action: startAction,
-        continuation_action: continuationActionFor(gateway, startAction, 'start_if_needed'),
+        continuation_action: continuationActionFor(gateway, startAction),
       };
     }
     case 'needs_update': {
@@ -396,6 +406,26 @@ function gatewaySyncRecoveryPlan(
         aria_label: 'Sync Gateway',
         primary_action: syncAction,
         continuation_action: continuationActionFor(gateway, syncAction),
+      };
+    }
+    case 'service_ready_catalog_failed': {
+      const syncAction = gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default', fallbackActionEnabled);
+      return {
+        title: gatewayDiagnosisTitle(gateway),
+        detail: 'Desktop can reach the Gateway service, but the signed catalog check failed. Run sync again after reviewing diagnostics.',
+        aria_label: 'Sync Gateway',
+        primary_action: syncAction,
+        continuation_action: continuationActionFor(gateway, syncAction),
+      };
+    }
+    case 'legacy_runtime_residue': {
+      const updateAction = gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false);
+      return {
+        title: 'Gateway update required',
+        detail: 'Desktop found old Gateway service residue on the target. Update Gateway to reinstall the service and clean the stale Desktop-managed service before syncing.',
+        aria_label: 'Update Gateway and clean legacy residue',
+        primary_action: updateAction,
+        continuation_action: continuationActionFor(gateway, updateAction),
       };
     }
     case 'unmanageable':
@@ -588,7 +618,7 @@ export function buildGatewayActionPresentation(
 
   if (isSyncLikeAction) {
     const recovery = gatewaySyncRecoveryPlan(gateway, action.enabled, {
-      useDiagnosis: action.intent === 'check_gateway',
+      useDiagnosis: action.intent === 'check_gateway' && input.show_diagnosis_result === true,
     });
     return buildPanel({
       gateway,
@@ -635,7 +665,7 @@ export function buildGatewayActionPresentation(
     });
   }
 
-  if ((action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway') && manageable) {
+  if ((action.intent === 'stop_gateway' || action.intent === 'restart_gateway' || action.intent === 'update_gateway') && manageable && (input.affected_sessions?.length ?? 0) > 0) {
     const label = actionLabel(action.intent);
     const sessions = input.affected_sessions ?? [];
     return buildPanel({
@@ -656,7 +686,6 @@ export function buildGatewayActionPresentation(
         impact_acknowledged: true,
       } as DesktopLauncherActionRequest,
       primary_action: gatewaySourceAction(action.intent, label, 'default', action.enabled),
-      secondary_actions: [gatewaySourceAction('cancel_gateway_action', 'Cancel', 'outline', true)],
     });
   }
 

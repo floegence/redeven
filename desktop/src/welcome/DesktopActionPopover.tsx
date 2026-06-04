@@ -1,5 +1,6 @@
 import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
+import type { DesktopOverlayPlacementLock } from './desktopOverlayPosition';
 
 export type DesktopActionPopoverProps = Readonly<{
   content: JSX.Element;
@@ -8,8 +9,10 @@ export type DesktopActionPopoverProps = Readonly<{
   onOpenChange: (open: boolean) => void;
   class?: string;
   anchorClass?: string;
+  placementLock?: DesktopOverlayPlacementLock;
   allowMainAxisOverflow?: boolean;
   popoverAriaLabel?: string;
+  onAnchorPointerDown?: JSX.EventHandlerUnion<HTMLSpanElement, PointerEvent>;
 }>;
 
 function cn(...values: Array<string | undefined | null | false>): string {
@@ -127,6 +130,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
       ref={anchorRef}
       data-redeven-action-popover-anchor=""
       class={cn('relative inline-block max-w-full', props.anchorClass)}
+      onPointerDown={props.onAnchorPointerDown}
     >
       {props.children}
 
@@ -135,6 +139,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
           open={rendered()}
           anchorRef={anchorRef}
           placement="top"
+          placementLock={props.placementLock}
           allowMainAxisOverflow={props.allowMainAxisOverflow ?? true}
           role="dialog"
           ariaModal={false}

@@ -273,6 +273,47 @@ describe('environmentProgressPrimaryPresentation', () => {
       label: 'Syncing...',
       icon: 'play',
     });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'start_gateway', operation: 'start', status: 'running', phase: 'starting_gateway_service' }),
+    )).toMatchObject({
+      kind: 'progress_trigger',
+      label: 'Starting...',
+      icon: 'play',
+    });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'restart_gateway', operation: 'restart', status: 'running', phase: 'starting_gateway_service' }),
+    )).toMatchObject({
+      kind: 'progress_trigger',
+      label: 'Restarting...',
+      icon: 'play',
+    });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'update_gateway', operation: 'update', status: 'running', phase: 'installing_gateway_package' }),
+    )).toMatchObject({
+      kind: 'progress_trigger',
+      label: 'Updating...',
+      icon: 'play',
+    });
+    expect(environmentProgressPrimaryPresentation({
+      action: 'check_gateway',
+      operation_key: 'gw-demo:check',
+      subject_kind: 'gateway',
+      subject_id: 'gw-demo',
+      gateway_id: 'gw-demo',
+      started_at_unix_ms: 400,
+      status: 'running',
+      phase: 'checking_transport',
+      title: 'Check Gateway',
+      detail: 'Desktop is checking the Gateway.',
+      step_progress: {
+        active_step_id: 'checking_transport',
+        steps: [{ id: 'checking_transport', label: 'Checking Gateway transport', status: 'running' }],
+      },
+    })).toMatchObject({
+      kind: 'progress_trigger',
+      label: 'Checking...',
+      icon: 'play',
+    });
   });
 
   it('releases the primary trigger for successful or canceled lifecycle progress', () => {
@@ -343,6 +384,35 @@ describe('environmentProgressPrimaryPresentation', () => {
     expect(environmentProgressPrimaryPresentation(
       lifecycleActionProgress({ action: 'refresh_gateway_catalog', operation: 'start', status: 'failed', phase: 'starting_runtime_process' }),
     )).toMatchObject({ label: 'Sync failed' });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'start_gateway', operation: 'start', status: 'failed', phase: 'starting_gateway_service' }),
+    )).toMatchObject({ label: 'Start failed' });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'restart_gateway', operation: 'restart', status: 'failed', phase: 'starting_gateway_service' }),
+    )).toMatchObject({ label: 'Restart failed' });
+    expect(environmentProgressPrimaryPresentation(
+      lifecycleActionProgress({ action: 'update_gateway', operation: 'update', status: 'failed', phase: 'installing_gateway_package' }),
+    )).toMatchObject({ label: 'Update failed' });
+    expect(environmentProgressPrimaryPresentation({
+      action: 'check_gateway',
+      operation_key: 'gw-demo:check',
+      subject_kind: 'gateway',
+      subject_id: 'gw-demo',
+      gateway_id: 'gw-demo',
+      started_at_unix_ms: 500,
+      status: 'failed',
+      phase: 'checking_gateway_service',
+      title: 'Check failed',
+      detail: 'Desktop could not check the Gateway.',
+      step_progress: {
+        active_step_id: 'checking_gateway_service',
+        steps: [{ id: 'checking_gateway_service', label: 'Checking Gateway service', status: 'failed' }],
+      },
+    })).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Check failed',
+      ariaLabel: 'Check failed. Show details.',
+    });
   });
 
   it('applies the same primary ownership rules to open connection progress', () => {

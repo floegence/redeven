@@ -227,7 +227,8 @@ function timestampMS(value: unknown, fallback: number): number {
 }
 
 function normalizeGatewayID(value: unknown): string {
-  return compact(value).replace(/\s+/gu, '-');
+  const clean = compact(value).replace(/\s+/gu, '-');
+  return /^[A-Za-z0-9._-]+$/u.test(clean) ? clean : '';
 }
 
 function sha256Base64URL(value: string): string {
