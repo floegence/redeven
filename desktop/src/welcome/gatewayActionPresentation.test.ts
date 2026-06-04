@@ -205,4 +205,97 @@ describe('buildGatewayActionPresentation', () => {
     expect(runGatewayServiceAction).not.toHaveBeenCalled();
     expect(openCreateGatewaySetup).not.toHaveBeenCalled();
   });
+
+  it('keeps renderer-owned Gateway source CTAs out of the launcher runner', async () => {
+    const openCreateGatewaySetup = vi.fn();
+    const pairGateway = vi.fn(async () => undefined);
+    const runGatewayServiceAction = vi.fn(async () => undefined);
+    const runGatewayLauncherAction = vi.fn(async () => undefined);
+
+    await runGatewaySourceAction(
+      {
+        intent: 'view_gateway_environments',
+        label: 'View Environments',
+        enabled: true,
+        variant: 'default',
+      },
+      gateway({ status: 'online', trust_state: 'paired' }),
+      openCreateGatewaySetup,
+      pairGateway,
+      runGatewayServiceAction,
+      runGatewayLauncherAction,
+    );
+    await runGatewaySourceAction(
+      {
+        intent: 'add_gateway_environment',
+        label: 'Add Env',
+        enabled: true,
+        variant: 'default',
+      },
+      gateway({ status: 'online', trust_state: 'paired' }),
+      openCreateGatewaySetup,
+      pairGateway,
+      runGatewayServiceAction,
+      runGatewayLauncherAction,
+    );
+
+    expect(openCreateGatewaySetup).not.toHaveBeenCalled();
+    expect(pairGateway).not.toHaveBeenCalled();
+    expect(runGatewayServiceAction).not.toHaveBeenCalled();
+    expect(runGatewayLauncherAction).not.toHaveBeenCalled();
+  });
+
+  it('starts managed Gateways only for catalog sync, never for refresh status', async () => {
+    const openCreateGatewaySetup = vi.fn();
+    const pairGateway = vi.fn(async () => undefined);
+    const runGatewayServiceAction = vi.fn(async () => undefined);
+    const runGatewayLauncherAction = vi.fn(async () => undefined);
+    const stoppedGateway = gateway({
+      status: 'pairing_required',
+      trust_state: 'unpaired',
+      service_state: {
+        status: 'not_started',
+        can_start: true,
+        can_stop: false,
+        can_restart: false,
+        can_update: false,
+        can_pair_after_start: true,
+      },
+    });
+
+    await runGatewaySourceAction(
+      {
+        intent: 'refresh_gateway_catalog',
+        label: 'Retry sync',
+        enabled: true,
+        variant: 'default',
+      },
+      stoppedGateway,
+      openCreateGatewaySetup,
+      pairGateway,
+      runGatewayServiceAction,
+      runGatewayLauncherAction,
+    );
+    await runGatewaySourceAction(
+      {
+        intent: 'refresh_gateway_status',
+        label: 'Refresh status',
+        enabled: true,
+        variant: 'outline',
+      },
+      stoppedGateway,
+      openCreateGatewaySetup,
+      pairGateway,
+      runGatewayServiceAction,
+      runGatewayLauncherAction,
+    );
+
+    expect(runGatewayServiceAction).toHaveBeenCalledWith('gw-demo', 'refresh_gateway_catalog', 'start_if_needed');
+    expect(runGatewayLauncherAction).toHaveBeenCalledWith({
+      kind: 'refresh_gateway_status',
+      gateway_id: 'gw-demo',
+    });
+    expect(pairGateway).not.toHaveBeenCalled();
+    expect(openCreateGatewaySetup).not.toHaveBeenCalled();
+  });
 });

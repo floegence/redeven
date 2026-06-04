@@ -2311,6 +2311,7 @@ export type GatewayRowModel = Readonly<{
 }>;
 
 export type GatewaySourceActionIntent =
+  | 'add_gateway_environment'
   | 'manage_gateway'
   | 'pair_gateway'
   | 'resolve_gateway'
@@ -2319,6 +2320,7 @@ export type GatewaySourceActionIntent =
   | 'stop_gateway'
   | 'restart_gateway'
   | 'update_gateway'
+  | 'view_gateway_environments'
   | 'refresh_gateway_status'
   | 'refresh_gateway_catalog'
   | 'cancel_gateway_action';
@@ -2363,7 +2365,6 @@ export type GatewaySourceRowModel = Readonly<{
   status_label: string;
   status_tone: EnvironmentCardTone;
   endpoint_label: string;
-  management_label: string;
   environment_count: number;
   environment_summary_label: string;
   environment_summary_detail: string;
@@ -2401,13 +2402,16 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
     return gatewaySourceAction('setup_gateway', 'Set up', 'default');
   }
   if (syncState === 'syncing') {
-    return gatewaySourceAction('refresh_gateway_status', 'Syncing...', 'default', false);
+    if (gateway.environments.length > 0) {
+      return gatewaySourceAction('view_gateway_environments', 'View Environments', 'default');
+    }
+    return gatewaySourceAction('refresh_gateway_catalog', 'Retry sync', 'default', false, 'Gateway catalog sync is already running.');
   }
   if (syncState === 'pairing_failed') {
-    return gatewaySourceAction('resolve_gateway', 'Needs Attention', 'default');
+    return gatewaySourceAction('resolve_gateway', 'Retry sync', 'default');
   }
   if (syncState === 'gateway_unreachable' || syncState === 'catalog_failed') {
-    return gatewaySourceAction('resolve_gateway', 'Needs Attention', 'default');
+    return gatewaySourceAction('resolve_gateway', 'Retry sync', 'default');
   }
   if (manageable && (
     serviceStatus === 'ssh_unreachable'
@@ -2415,27 +2419,39 @@ function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourc
     || serviceStatus === 'bridge_unavailable'
     || serviceStatus === 'error'
   )) {
-    return gatewaySourceAction('resolve_gateway', 'Needs Attention', 'default');
+    return gatewaySourceAction('resolve_gateway', 'Retry sync', 'default');
+  }
+  if (manageable && serviceStatus === 'not_started') {
+    return serviceState?.can_start === true
+      ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default')
+      : gatewaySourceAction('resolve_gateway', 'Start Gateway', 'default', false, 'Gateway service cannot be started from this Desktop.');
   }
   if (manageable && serviceStatus === 'starting') {
     return gatewaySourceAction('start_gateway', 'Starting...', 'default', false);
   }
   if (manageable && serviceStatus === 'service_needs_update') {
-    return gatewaySourceAction('resolve_gateway', 'Needs Attention', 'default');
+    return gatewaySourceAction('update_gateway', 'Update Gateway', 'default', serviceState?.can_update !== false);
   }
   if (needsPairing) {
-    return gatewaySourceAction('pair_gateway', 'Pairing...', 'default', false);
+    return gatewaySourceAction('pair_gateway', 'Retry sync', 'default');
   }
   if (needsResolution) {
-    return gatewaySourceAction('resolve_gateway', 'Needs Attention', 'default');
+    return gatewaySourceAction('resolve_gateway', 'Retry sync', 'default');
   }
-  return gatewaySourceAction('refresh_gateway_status', 'Synced', 'default', false);
+  if (gateway.environments.length > 0) {
+    return gatewaySourceAction('view_gateway_environments', 'View Environments', 'default');
+  }
+  if (gateway.status === 'online' && gateway.capabilities.includes('env_profile_write')) {
+    return gatewaySourceAction('add_gateway_environment', 'Add Env', 'default');
+  }
+  return gatewaySourceAction('refresh_gateway_catalog', 'Refresh', 'default');
 }
 
 function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource, primary: GatewaySourceActionModel): readonly GatewaySourceActionModel[] {
   const serviceState = gateway.service_state;
   const serviceStatus = serviceState?.status ?? 'unknown';
   const manageable = desktopGatewayCanManageService(gateway);
+  const syncRunning = (gateway.sync_state ?? 'idle') === 'syncing';
   const actions: GatewaySourceActionModel[] = [];
 
   const add = (action: GatewaySourceActionModel) => {
@@ -2443,6 +2459,16 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource, primary: G
       actions.push(action);
     }
   };
+
+  if (gateway.status !== 'needs_setup') {
+    add(gatewaySourceAction(
+      'refresh_gateway_catalog',
+      'Refresh',
+      'outline',
+      !syncRunning,
+      syncRunning ? 'Gateway catalog sync is already running.' : undefined,
+    ));
+  }
 
   if (manageable) {
     if (serviceStatus === 'not_started' && serviceState?.can_start === true) {
@@ -2457,11 +2483,6 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource, primary: G
     if (serviceStatus === 'ready' && serviceState?.can_update === true) {
       add(gatewaySourceAction('update_gateway', 'Update Gateway', 'outline'));
     }
-    if (serviceStatus === 'ready' && gateway.trust_state === 'paired' && primary.intent !== 'refresh_gateway_catalog') {
-      add(gatewaySourceAction('refresh_gateway_catalog', 'Refresh', 'outline'));
-    }
-  } else if (primary.intent !== 'refresh_gateway_catalog' && gateway.status === 'online') {
-    add(gatewaySourceAction('refresh_gateway_catalog', 'Refresh', 'outline'));
   }
 
   add(gatewaySourceAction('manage_gateway', 'Manage', 'outline'));
@@ -2645,9 +2666,6 @@ export function buildGatewaySourceRowModel(
           ? 'warning'
           : 'neutral',
     endpoint_label: compact(gateway.endpoint_label),
-    management_label: desktopGatewayCanManageService(gateway)
-      ? 'Managed by Desktop'
-      : 'Access-only Gateway',
     environment_count: environmentCount,
     environment_summary_label: gatewayEnvironmentSummaryLabel(environmentCount),
     environment_summary_detail: gatewayEnvironmentSummaryDetail(gateway, environmentCount),

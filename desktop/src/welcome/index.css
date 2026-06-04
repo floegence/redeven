@@ -3121,32 +3121,6 @@ pre,
   }
 }
 
-.redeven-gateway-card__management-chip {
-  display: inline-flex;
-  min-width: 0;
-  max-width: 100%;
-  align-items: center;
-  gap: 0.35rem;
-  border: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--muted) 34%, transparent);
-  color: color-mix(in srgb, var(--foreground) 74%, var(--muted-foreground));
-  padding: 0.15rem 0.5rem;
-  font-size: 0.67rem;
-  font-weight: 600;
-  line-height: 1.25;
-  white-space: nowrap;
-}
-
-.redeven-gateway-card__management-dot {
-  width: 0.38rem;
-  height: 0.38rem;
-  flex-shrink: 0;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--primary) 72%, var(--muted-foreground));
-  box-shadow: 0 0 0 0.12rem color-mix(in srgb, var(--primary) 12%, transparent);
-}
-
 .redeven-gateway-card__endpoint {
   min-width: 0;
   max-width: 100%;
@@ -3159,56 +3133,48 @@ pre,
   white-space: nowrap;
 }
 
-.redeven-gateway-card__guidance {
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--muted) 22%, transparent);
-  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground));
-  padding: 0.6rem 0.65rem;
-}
-
-.redeven-gateway-card__guidance[data-tone='primary'] {
-  border-color: color-mix(in srgb, var(--primary) 22%, var(--border));
-  background: color-mix(in srgb, var(--primary) 6%, var(--card));
-  color: color-mix(in srgb, var(--primary) 72%, var(--foreground));
-}
-
-.redeven-gateway-card__guidance[data-tone='success'] {
-  border-color: color-mix(in srgb, var(--success) 24%, var(--border));
-  background: color-mix(in srgb, var(--success) 6%, var(--card));
-  color: color-mix(in srgb, var(--success) 72%, var(--foreground));
-}
-
-.redeven-gateway-card__guidance[data-tone='warning'] {
-  border-color: color-mix(in srgb, var(--warning) 30%, var(--border));
-  background: color-mix(in srgb, var(--warning) 8%, var(--card));
-  color: color-mix(in srgb, var(--warning) 76%, var(--foreground));
-}
-
 .redeven-gateway-card__catalog-summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.75rem;
-  align-items: center;
+  min-height: 4rem;
   border: 1px solid color-mix(in srgb, var(--border) 74%, transparent);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--muted) 16%, transparent);
   padding: 0.65rem;
 }
 
-.redeven-gateway-card__view-envs-button {
-  min-width: 4.75rem;
-  justify-content: center;
+.redeven-gateway-card__catalog-summary[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--warning) 24%, var(--border));
+  background: color-mix(in srgb, var(--warning) 5%, var(--card));
 }
 
-@media (max-width: 34rem) {
-  .redeven-gateway-card__catalog-summary {
-    grid-template-columns: minmax(0, 1fr);
-  }
+.redeven-gateway-card__catalog-summary[data-tone='primary'] {
+  border-color: color-mix(in srgb, var(--primary) 18%, var(--border));
+  background: color-mix(in srgb, var(--primary) 4%, var(--card));
+}
 
-  .redeven-gateway-card__view-envs-button {
-    width: 100%;
-  }
+.redeven-gateway-card__catalog-summary[data-tone='success'] {
+  border-color: color-mix(in srgb, var(--success) 18%, var(--border));
+  background: color-mix(in srgb, var(--success) 4%, var(--card));
+}
+
+.redeven-gateway-card__summary-title {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-gateway-card__summary-detail {
+  display: -webkit-box;
+  margin-top: 0.25rem;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--muted-foreground);
+  font-size: 0.69rem;
+  line-height: 1.45;
 }
 
 .redeven-gateway-action-panel__facts {
