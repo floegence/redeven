@@ -972,6 +972,7 @@ function localizedGatewayActionPanelText(i18n: DesktopI18n, value: string): stri
     Manage: 'environmentCenter.gatewayActionManage',
     'Needs attention': 'progress.needsAttention',
     'Gateway issue': 'environmentCenter.gatewayIssueTitle',
+    'Gateway check complete': 'progress.gatewayCheckComplete',
     'Access-only Gateway': 'environmentCenter.gatewayAccessOnlyByDesktop',
     'Gateway operation progress': 'environmentCenter.gatewayProgress',
     'Gateway action issue': 'environmentCenter.gatewayPanelActionIssue',
@@ -1062,6 +1063,9 @@ function localizedGatewayActionPanelDetail(
 function localizedGatewayPanelFactLabel(i18n: DesktopI18n, label: string): string {
   return localizedStringByValue(i18n, label, {
     'Gateway service': 'environmentCenter.gatewayPanelFactGatewayService',
+    'Gateway version': 'environmentCenter.gatewayPanelFactGatewayVersion',
+    'Gateway trust': 'environmentCenter.gatewayPanelFactGatewayTrust',
+    'Gateway catalog': 'environmentCenter.gatewayPanelFactGatewayCatalog',
     'Catalog sync': 'environmentCenter.gatewayPanelFactCatalogSync',
     Trust: 'environmentCenter.gatewayPanelFactTrust',
     Transport: 'environmentCenter.gatewayPanelFactTransport',
@@ -1087,6 +1091,11 @@ function localizedGatewayPanelFactValue(i18n: DesktopI18n, value: string): strin
     Syncing: 'environmentCenter.gatewayActionSyncing',
     Failed: 'progress.failed',
     Idle: 'status.idle',
+    Verified: 'environmentCenter.gatewayPanelFactVerified',
+    Reachable: 'environmentCenter.gatewayPanelFactReachable',
+    Supported: 'environmentCenter.gatewayPanelFactSupported',
+    'Not ready': 'environmentCenter.gatewayPanelFactNotReady',
+    Skipped: 'environmentCenter.gatewayPanelProbeSkipped',
     'SSH unreachable': 'environmentCenter.gatewayPanelServiceSshUnreachable',
     'Container unavailable': 'environmentCenter.gatewayPanelServiceContainerUnavailable',
     'Update required': 'environmentCenter.gatewayNeedsUpdate',
@@ -1132,6 +1141,11 @@ function localizedGatewayPanelFactValue(i18n: DesktopI18n, value: string): strin
     'Desktop needs to sync this Gateway before it can trust and read its catalog.': 'environmentCenter.gatewayPanelRetryPairingDetail',
     'Desktop can reach this Gateway, verify trust, and read the catalog.': 'progress.gatewayCheckReadyDetail',
     'This Desktop is not syncing this Gateway while it is disabled locally.': 'environmentCenter.gatewayGuidanceDisabledDetail',
+    passed: 'environmentCenter.gatewayPanelProbePassed',
+    warning: 'environmentCenter.gatewayPanelProbeWarning',
+    failed: 'environmentCenter.gatewayPanelProbeFailed',
+    skipped: 'environmentCenter.gatewayPanelProbeSkipped',
+    unknown: 'common.unknown',
   });
 }
 
@@ -8253,6 +8267,7 @@ function localizedRuntimeLifecycleStepLabel(
 
 function localizedGatewayCheckStepLabel(i18n: DesktopI18n, stepID: string, fallback: string): string {
   return localizedStringByValue(i18n, stepID, {
+    checking_gateway: 'progress.checkingGateway',
     checking_transport: 'progress.checkingGatewayTransport',
     checking_gateway_service: 'progress.checkingGatewayService',
     checking_gateway_version: 'progress.checkingGatewayVersion',
@@ -8260,6 +8275,7 @@ function localizedGatewayCheckStepLabel(i18n: DesktopI18n, stepID: string, fallb
     checking_gateway_catalog: 'progress.checkingGatewayCatalog',
     gateway_checked: 'progress.gatewayChecked',
   }) || localizedStringByValue(i18n, fallback, {
+    'Checking Gateway': 'progress.checkingGateway',
     'Checking Gateway transport': 'progress.checkingGatewayTransport',
     'Checking Gateway service': 'progress.checkingGatewayService',
     'Checking Gateway version': 'progress.checkingGatewayVersion',
@@ -8320,6 +8336,7 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
     'Check Gateway': 'environmentCenter.gatewayActionCheck',
     'Check canceled': 'progress.gatewayCheckCanceled',
     'Gateway checked': 'progress.gatewayChecked',
+    'Gateway check complete': 'progress.gatewayCheckComplete',
     'Gateway is stopped': 'environmentCenter.gatewayGuidanceStoppedTitle',
     'Gateway update required': 'environmentCenter.gatewayPanelUpdateRequiredTitle',
     'Gateway service is ready': 'progress.gatewayServiceReady',
@@ -10655,12 +10672,7 @@ const GATEWAY_CHECK_STEP_DEFINITIONS: readonly Readonly<{
   id: string;
   label: string;
 }>[] = [
-  { id: 'checking_transport', label: 'Checking Gateway transport' },
-  { id: 'checking_gateway_service', label: 'Checking Gateway service' },
-  { id: 'checking_gateway_version', label: 'Checking Gateway version' },
-  { id: 'checking_gateway_trust', label: 'Checking Gateway trust' },
-  { id: 'checking_gateway_catalog', label: 'Checking Gateway catalog' },
-  { id: 'gateway_checked', label: 'Gateway checked' },
+  { id: 'checking_gateway', label: 'Checking Gateway' },
 ];
 
 function gatewayServiceFallbackTargetID(gateway: DesktopGatewaySource): string {
@@ -10731,15 +10743,15 @@ function pendingGatewayCheckProgress(
     started_at_unix_ms: startedAtUnixMS,
     updated_at_unix_ms: startedAtUnixMS,
     status: 'running',
-    phase: 'checking_transport',
+    phase: 'checking_gateway',
     title: 'Check Gateway',
     detail: `Desktop is checking ${gateway.display_name} without starting, updating, or syncing it.`,
     step_progress: {
-      active_step_id: 'checking_transport',
-      steps: GATEWAY_CHECK_STEP_DEFINITIONS.map((step, index) => ({
+      active_step_id: 'checking_gateway',
+      steps: GATEWAY_CHECK_STEP_DEFINITIONS.map((step) => ({
         id: step.id,
         label: step.label,
-        status: index === 0 ? 'running' : 'pending',
+        status: 'running',
       })),
     },
     cancelable: false,
@@ -11101,6 +11113,12 @@ function gatewayDiagnosisFromCheckProgress(
   gateway: DesktopGatewaySource,
   progress: DesktopLauncherActionProgress,
 ): DesktopGatewayDiagnosis {
+  if (progress.gateway_diagnosis) {
+    return progress.gateway_diagnosis;
+  }
+  if (gateway.diagnosis && gateway.diagnosis.checked_at_unix_ms >= gatewayProgressTimestamp(progress) - 1_000) {
+    return gateway.diagnosis;
+  }
   const nextAction = progress.next_actions?.find((candidate) => (
     candidate.kind === 'start_gateway'
     || candidate.kind === 'update_gateway'
@@ -11113,8 +11131,21 @@ function gatewayDiagnosisFromCheckProgress(
     : nextAction?.kind === 'update_gateway'
       ? 'needs_update'
       : nextAction?.kind === 'resolve_gateway'
-        ? 'unknown'
+        ? nextAction.resolve_focus === 'identity_trust'
+          ? 'trust_failed'
+          : 'unknown'
         : 'ready';
+  const recommendedAction: DesktopGatewayDiagnosis['recommended_recovery'] = nextAction?.kind === 'start_gateway'
+    ? 'start_gateway'
+    : nextAction?.kind === 'update_gateway'
+      ? 'update_gateway'
+      : nextAction?.kind === 'resolve_gateway'
+        ? nextAction.resolve_focus === 'identity_trust'
+          ? 'review_trust'
+          : 'edit_gateway_settings'
+        : nextAction?.kind === 'refresh_gateway_catalog' || nextAction?.kind === 'refresh_gateway_status'
+          ? 'sync_gateway'
+          : undefined;
   return {
     checked_at_unix_ms: gatewayProgressTimestamp(progress),
     classification,
@@ -11124,6 +11155,8 @@ function gatewayDiagnosisFromCheckProgress(
     service_state: gateway.service_state,
     trust_state: gateway.trust_state,
     catalog_state: gateway.sync_state,
+    ...(recommendedAction ? { recommended_recovery: recommendedAction } : {}),
+    ...(gateway.diagnosis?.probe_results ? { probe_results: gateway.diagnosis.probe_results } : {}),
     ...(progress.failure ? {
       error_code: progress.failure.code,
       error_message: progress.failure.summary,
@@ -11353,15 +11386,30 @@ function GatewaySourceCard(props: Readonly<{
       ? progress
       : null;
   });
-  const visibleGatewayProgress = createMemo(() => {
+  const foregroundDiagnosisBelongsToCheck = createMemo(() => gatewayForegroundDiagnosisBelongsToCheck(props.gateway, foregroundAction()));
+  const selectedVisibleGatewayProgress = createMemo(() => {
     const pending = foregroundAction()?.pending_progress ?? foregroundPendingProgress();
     const selected = selectedGatewayWorkflowProgress()
       ?? busyGatewayWorkflowProgress()
       ?? (props.actionPopoverOpen ? selectedGatewayForegroundRecoveryProgress() : null);
+    if (selected?.action === 'check_gateway' && selected.status === 'succeeded') {
+      return selected;
+    }
     if (pending && (!selected || launcherActionProgressIsTerminal(selected))) {
       return pending;
     }
     return selected;
+  });
+  const visibleGatewayProgress = createMemo(() => {
+    const progress = selectedVisibleGatewayProgress();
+    if (
+      progress?.action === 'check_gateway'
+      && progress.status === 'succeeded'
+      && (foregroundCheckResultPanel() || foregroundDiagnosisBelongsToCheck())
+    ) {
+      return null;
+    }
+    return progress;
   });
   const displayedPrimaryAction = createMemo(() => {
     const foreground = foregroundAction();
@@ -11387,7 +11435,6 @@ function GatewaySourceCard(props: Readonly<{
         label: entry.label,
       }))
   ));
-  const foregroundDiagnosisBelongsToCheck = createMemo(() => gatewayForegroundDiagnosisBelongsToCheck(props.gateway, foregroundAction()));
   const currentActionPresentation = createMemo(() => {
     const foreground = foregroundAction();
     const showDiagnosisResult = foregroundDiagnosisBelongsToCheck() || foreground?.diagnosis_gateway !== undefined;
@@ -11446,7 +11493,12 @@ function GatewaySourceCard(props: Readonly<{
   ));
   const hasProgressPanel = createMemo(() => visibleGatewayProgress() !== null);
   const foregroundWantsPopover = createMemo(() => (
-    foregroundAction()?.owns_progress === true && (foregroundPendingProgress() !== null || visibleGatewayProgress() !== null)
+    foregroundAction()?.owns_progress === true
+      && (
+        foregroundPendingProgress() !== null
+        || visibleGatewayProgress() !== null
+        || foregroundCheckResultPanel() !== null
+      )
   ));
   const guidePanelVisible = createMemo(() => (props.actionPopoverOpen || foregroundWantsPopover()) && !hasProgressPanel() && visiblePanelModel().execution_mode !== 'direct');
   const progressPanelVisible = createMemo(() => (props.actionPopoverOpen || foregroundWantsPopover()) && hasProgressPanel());
@@ -11590,7 +11642,7 @@ function GatewaySourceCard(props: Readonly<{
   });
   createEffect(() => {
     const foreground = foregroundAction();
-    const progress = visibleGatewayProgress();
+    const progress = selectedVisibleGatewayProgress();
     if (
       progress?.action !== 'check_gateway'
       || progress.status !== 'succeeded'
@@ -12381,6 +12433,18 @@ function GatewayActionPanel(props: Readonly<{
             <div class="redeven-action-popover__detail">{panelDetail()}</div>
             <Show when={panelContext()}>
               {(context) => <div class="redeven-gateway-action-panel__context">{context()}</div>}
+            </Show>
+            <Show when={props.model.result_facts.length > 0}>
+              <div class="redeven-gateway-action-panel__result-facts" aria-label={props.i18n.t('environmentCenter.gatewayPanelCheckResult')}>
+                <For each={props.model.result_facts}>
+                  {(fact) => (
+                    <span class="redeven-gateway-action-panel__result-fact" data-tone={fact.tone ?? 'neutral'}>
+                      <span class="redeven-gateway-action-panel__result-fact-label">{localizedGatewayPanelFactLabel(props.i18n, fact.label)}</span>
+                      <span class="redeven-gateway-action-panel__result-fact-value">{localizedGatewayPanelFactValue(props.i18n, fact.value)}</span>
+                    </span>
+                  )}
+                </For>
+              </div>
             </Show>
           </div>
         </div>

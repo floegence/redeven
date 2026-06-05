@@ -302,12 +302,12 @@ describe('environmentProgressPrimaryPresentation', () => {
       gateway_id: 'gw-demo',
       started_at_unix_ms: 400,
       status: 'running',
-      phase: 'checking_transport',
+      phase: 'checking_gateway',
       title: 'Check Gateway',
       detail: 'Desktop is checking the Gateway.',
       step_progress: {
-        active_step_id: 'checking_transport',
-        steps: [{ id: 'checking_transport', label: 'Checking Gateway transport', status: 'running' }],
+        active_step_id: 'checking_gateway',
+        steps: [{ id: 'checking_gateway', label: 'Checking Gateway', status: 'running' }],
       },
     })).toMatchObject({
       kind: 'progress_trigger',
@@ -401,12 +401,12 @@ describe('environmentProgressPrimaryPresentation', () => {
       gateway_id: 'gw-demo',
       started_at_unix_ms: 500,
       status: 'failed',
-      phase: 'checking_gateway_service',
+      phase: 'checking_gateway',
       title: 'Check failed',
       detail: 'Desktop could not check the Gateway.',
       step_progress: {
-        active_step_id: 'checking_gateway_service',
-        steps: [{ id: 'checking_gateway_service', label: 'Checking Gateway service', status: 'failed' }],
+        active_step_id: 'checking_gateway',
+        steps: [{ id: 'checking_gateway', label: 'Checking Gateway', status: 'failed' }],
       },
     })).toMatchObject({
       kind: 'attention_trigger',

@@ -826,6 +826,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('pending_progress?: DesktopLauncherActionProgress;');
     expect(appSrc).toContain('const pendingProgress = pendingGatewayForegroundProgress');
     expect(appSrc).toContain('...(pendingProgress ? { pending_progress: pendingProgress } : {}),');
+    expect(appSrc).toContain("if (selected?.action === 'check_gateway' && selected.status === 'succeeded') {");
     expect(appSrc).toContain('if (pending && (!selected || launcherActionProgressIsTerminal(selected))) {');
     expect(appSrc).not.toContain('if (selected && launcherActionProgressIsTerminal(selected)) {');
     expect(appSrc).toContain('const activeProgressForAction = (action: GatewaySourceActionModel): DesktopLauncherActionProgress | null => selectForegroundGatewayProgress(');
@@ -838,6 +839,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('statusFacts={liveStatusFacts()}');
     expect(appSrc).toContain('foregroundActionBusy={foregroundActionBusy}');
     expect(appSrc).toContain('runGatewayLauncherAction={runForegroundRequest}');
+    expect(appSrc).toContain('if (progress.gateway_diagnosis) {');
+    expect(appSrc).toContain('return progress.gateway_diagnosis;');
+    expect(appSrc).toContain("nextAction.resolve_focus === 'identity_trust'");
+    expect(appSrc).toContain("? 'review_trust'");
     expect(appSrc).toContain('const closeActionPopover = () => {');
     expect(appSrc).toContain('setForegroundAction(null);');
     expect(appSrc).toContain('if (!foregroundAction()?.owns_progress) {');
@@ -902,6 +907,8 @@ describe('DesktopWelcomeShell', () => {
     const gatewayPanelEnd = appSrc.indexOf('function gatewaySourceLauncherActionKind');
     const gatewayPanelSrc = appSrc.slice(gatewayPanelStart, gatewayPanelEnd);
     expect(gatewayPanelSrc).toContain('<div class="redeven-gateway-action-panel__body">');
+    expect(gatewayPanelSrc).toContain('redeven-gateway-action-panel__result-facts');
+    expect(gatewayPanelSrc).toContain('environmentCenter.gatewayPanelCheckResult');
     expect(gatewayPanelSrc).toContain('<div class="redeven-gateway-action-panel__footer" data-mode="primary">');
     expect(gatewayPanelSrc).not.toContain('close-only');
     expect(gatewayPanelSrc).not.toContain("props.i18n.t('common.close')");
@@ -927,7 +934,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-gateway-grid');
     expect(styles).toContain('grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.5rem), 22rem));');
     expect(styles).toContain('.redeven-gateway-card {');
-    expect(styles).toContain('--redeven-action-popover-width: min(20rem, calc(100vw - 1rem));');
+    expect(styles).toContain('--redeven-action-popover-width: min(19rem, calc(100vw - 1rem));');
     expect(styles).not.toContain('--redeven-action-popover-width: min(28rem');
     expect(styles).toContain('.redeven-gateway-action-panel__footer button > span');
     expect(styles).toContain('.redeven-gateway-action-panel__diagnostics-label');
@@ -941,6 +948,10 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-gateway-action-panel__hero');
     expect(styles).toContain(".redeven-action-popover__action-stack[data-subject-kind='gateway'] .redeven-action-popover__actions[data-layout='secondary']");
     expect(styles).toContain('.redeven-gateway-action-panel__section-label');
+    expect(styles).toContain('.redeven-gateway-action-panel__result-facts');
+    expect(styles).toContain(".redeven-gateway-action-panel__result-fact[data-tone='success']");
+    expect(styles).toContain('.redeven-gateway-action-panel__result-fact-value');
+    expect(styles).toContain('text-overflow: ellipsis;');
     expect(styles).toContain('.redeven-gateway-action-panel__diagnostics-toggle');
     expect(styles).toContain('.redeven-gateway-action-panel__facts--status');
     expect(styles).toContain('grid-template-rows: minmax(0, 1fr) auto;');
@@ -1422,6 +1433,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('function SSHRuntimeActivityOverlay');
     expect(appSrc).not.toContain('Starting SSH Runtime');
     expect(styles).toContain('.redeven-environment-progress');
+    expect(styles).toContain('grid-template-columns: 1rem minmax(0, 1fr);');
     expect(styles).toContain(".redeven-environment-progress__step[data-entering='true']");
     expect(styles).toContain(".redeven-environment-progress__meter[data-plan-state='planning'] span");
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');

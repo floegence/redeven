@@ -159,6 +159,13 @@ export type DesktopGatewayManagedProbe = Readonly<{
   facts: readonly DesktopGatewayManagedProbeFact[];
 }>;
 
+export type DesktopGatewayDiagnosisProbeResult = Readonly<{
+  id: 'gateway_service' | 'gateway_version' | 'gateway_trust' | 'gateway_catalog';
+  label: string;
+  status: 'passed' | 'warning' | 'failed' | 'skipped' | 'unknown';
+  detail?: string;
+}>;
+
 export type DesktopGatewayDiagnosis = Readonly<{
   checked_at_unix_ms: number;
   classification: DesktopGatewayDiagnosisClassification;
@@ -168,6 +175,8 @@ export type DesktopGatewayDiagnosis = Readonly<{
   service_state?: DesktopGatewayServiceState;
   catalog_state?: DesktopGatewaySyncState;
   trust_state?: DesktopGatewayTrustState;
+  recommended_recovery?: 'sync_gateway' | 'start_gateway' | 'update_gateway' | 'edit_gateway_settings' | 'review_trust';
+  probe_results?: readonly DesktopGatewayDiagnosisProbeResult[];
   managed_probe?: DesktopGatewayManagedProbe;
   error_code?: string;
   error_message?: string;
