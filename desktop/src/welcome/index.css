@@ -3191,10 +3191,6 @@ pre,
   --redeven-action-popover-width: min(19rem, calc(100vw - 1rem));
 }
 
-.redeven-action-popover-surface[data-placement-lock='top-inline-shift'] {
-  transform: translateY(-100%);
-}
-
 .redeven-gateway-action-panel {
   display: grid;
   max-height: min(25rem, var(--redeven-anchored-overlay-max-height, calc(100vh - 2rem)));

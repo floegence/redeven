@@ -1112,7 +1112,7 @@ describe('launcherBusyState', () => {
     )).toBe(failedGatewayProgress);
     expect(environmentProgressPrimaryPresentation(failedGatewayProgress)).toMatchObject({
       kind: 'attention_trigger',
-      label: 'Sync failed',
+      label: 'Refresh failed',
     });
   });
 

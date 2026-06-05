@@ -5,8 +5,6 @@ import {
   type DesktopGatewaySource,
 } from '../shared/desktopGateway';
 import type {
-  DesktopGatewayResolveFocus,
-  DesktopGatewayStartPolicy,
   DesktopLauncherActionProgress,
   DesktopLauncherActionRequest,
 } from '../shared/desktopLauncherIPC';
@@ -16,12 +14,7 @@ export type GatewayActionExecutionMode = 'direct' | 'guide' | 'confirm' | 'progr
 
 export type GatewayActionPanelKind =
   | 'none'
-  | 'check_required'
   | 'diagnosis_result'
-  | 'pair_ready'
-  | 'start_and_pair'
-  | 'update_then_pair'
-  | 'resolve_before_pair'
   | 'disabled_gateway'
   | 'start_gateway'
   | 'stop_gateway_confirm'
@@ -73,7 +66,6 @@ export type GatewayActionPanelModel = Readonly<{
   affected_sessions: readonly GatewayActionAffectedSession[];
   overflow_session_count: number;
   continuation_action?: DesktopLauncherActionRequest;
-  resolve_focus?: DesktopGatewayResolveFocus;
   primary_action?: GatewaySourceActionModel;
   secondary_actions: readonly GatewaySourceActionModel[];
 }>;
@@ -145,17 +137,17 @@ function trustStateLabel(gateway: DesktopGatewaySource): string {
 
 function catalogSyncLabel(gateway: DesktopGatewaySource): GatewayActionPanelFact {
   if (gateway.background_sync_running === true) {
-    return { label: 'Catalog sync', value: 'Syncing', tone: 'warning' };
+    return { label: 'Catalog refresh', value: 'Refreshing', tone: 'warning' };
   }
   switch (gateway.sync_state ?? 'idle') {
     case 'catalog_failed':
     case 'gateway_unreachable':
     case 'pairing_failed':
-      return { label: 'Catalog sync', value: 'Failed', tone: 'error' };
+      return { label: 'Catalog refresh', value: 'Failed', tone: 'error' };
     case 'ready':
-      return { label: 'Catalog sync', value: 'Ready' };
+      return { label: 'Catalog refresh', value: 'Ready' };
     default:
-      return { label: 'Catalog sync', value: 'Idle' };
+      return { label: 'Catalog refresh', value: 'Idle' };
   }
 }
 
@@ -212,24 +204,12 @@ function defaultDiagnosticFacts(gateway: DesktopGatewaySource): readonly Gateway
 function continuationActionFor(
   gateway: DesktopGatewaySource,
   action: BuildGatewayActionPresentationInput['clicked_action'],
-  startPolicy?: Extract<DesktopGatewayStartPolicy, 'start_if_needed'>,
 ): DesktopLauncherActionRequest | undefined {
   switch (action.intent) {
-    case 'check_gateway':
+    case 'refresh_gateway':
       return {
-        kind: 'check_gateway',
+        kind: 'refresh_gateway',
         gateway_id: gateway.gateway_id,
-      };
-    case 'sync_gateway':
-    case 'pair_gateway':
-    case 'refresh_gateway_catalog':
-    case 'refresh_gateway_status':
-      return {
-        kind: 'sync_gateway',
-        gateway_id: gateway.gateway_id,
-        ...(startPolicy
-          ? { start_policy: startPolicy }
-          : {}),
       };
     case 'start_gateway':
       return {
@@ -263,32 +243,6 @@ function continuationActionFor(
   }
 }
 
-function resolveFocusForGateway(gateway: DesktopGatewaySource): DesktopGatewayResolveFocus | undefined {
-  if (gateway.connection_kind === 'url') {
-    return 'url_endpoint';
-  }
-  switch (serviceStatus(gateway)) {
-    case 'ssh_unreachable':
-      return 'ssh_host';
-    case 'container_unavailable':
-      return 'container';
-    default:
-      return undefined;
-  }
-}
-
-function gatewayResolveAction(): GatewaySourceActionModel {
-  return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default', true);
-}
-
-function gatewayEditSettingsAction(): GatewaySourceActionModel {
-  return gatewaySourceAction('resolve_gateway', 'Edit Gateway Settings', 'default', true);
-}
-
-function gatewayReviewTrustAction(): GatewaySourceActionModel {
-  return gatewaySourceAction('resolve_gateway', 'Review Trust', 'default', true);
-}
-
 function gatewayDiagnosisTitle(gateway: DesktopGatewaySource): string {
   const diagnosis = gateway.diagnosis;
   switch (diagnosis?.classification) {
@@ -307,6 +261,10 @@ function gatewayDiagnosisTitle(gateway: DesktopGatewaySource): string {
       return diagnosis.manageable ? 'Gateway target needs review' : 'External Gateway endpoint';
     case 'trust_failed':
       return 'Gateway trust check failed';
+    case 'pairing_required':
+      return 'Gateway pairing required';
+    case 'identity_changed':
+      return 'Gateway identity changed';
     case 'catalog_failed':
       return 'Gateway catalog check failed';
     case 'service_ready_catalog_failed':
@@ -415,12 +373,10 @@ type GatewayRecoveryPlan = Readonly<{
   aria_label: string;
   primary_action?: GatewaySourceActionModel;
   continuation_action?: DesktopLauncherActionRequest;
-  resolve_focus?: DesktopGatewayResolveFocus;
 }>;
 
 function gatewayRecoveryPlanFromRecommendedRecovery(
   gateway: DesktopGatewaySource,
-  fallbackActionEnabled: boolean,
 ): GatewayRecoveryPlan | undefined {
   const diagnosis = gateway.diagnosis;
   switch (diagnosis?.recommended_recovery) {
@@ -428,52 +384,30 @@ function gatewayRecoveryPlanFromRecommendedRecovery(
       const startAction = gatewaySourceAction('start_gateway', 'Start Gateway', 'default', gateway.service_state?.can_start !== false);
       return {
         title: 'Gateway is stopped',
-        detail: 'Desktop can start this Gateway service. Sync the Gateway after it is ready to refresh environments.',
+        detail: 'Desktop can start this Gateway service. Use Refresh again after it is ready to refresh environments.',
         aria_label: 'Start Gateway service',
         primary_action: startAction,
         continuation_action: continuationActionFor(gateway, startAction),
+      };
+    }
+    case 'restart_gateway': {
+      const restartAction = gatewaySourceAction('restart_gateway', 'Restart Gateway', 'default', gateway.service_state?.can_restart !== false);
+      return {
+        title: 'Gateway service needs restart',
+        detail: 'Desktop can restart this Gateway service, then Refresh can retry pairing and catalog refresh.',
+        aria_label: 'Restart Gateway service',
+        primary_action: restartAction,
+        continuation_action: continuationActionFor(gateway, restartAction),
       };
     }
     case 'update_gateway': {
       const updateAction = gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false);
       return {
         title: 'Gateway update required',
-        detail: 'Desktop needs to update this Gateway service before it can safely pair and trust the catalog.',
-        aria_label: 'Update Gateway before syncing',
+        detail: 'Desktop needs to update this Gateway service before Refresh can safely pair and refresh the catalog.',
+        aria_label: 'Update Gateway before refreshing',
         primary_action: updateAction,
         continuation_action: continuationActionFor(gateway, updateAction),
-      };
-    }
-    case 'edit_gateway_settings': {
-      const resolveAction = gatewayEditSettingsAction();
-      return {
-        title: gatewayDiagnosisTitle(gateway),
-        detail: 'Desktop needs a reachable Gateway service before it can sync environments.',
-        aria_label: 'Resolve Gateway before syncing',
-        primary_action: resolveAction,
-        resolve_focus: resolveFocusForGateway(gateway),
-      };
-    }
-    case 'review_trust': {
-      const reviewAction = gatewayReviewTrustAction();
-      return {
-        title: gatewayDiagnosisTitle(gateway),
-        detail: 'Desktop could not verify this Gateway identity. Review the Gateway target, then sync this Gateway again.',
-        aria_label: 'Review Gateway identity',
-        primary_action: reviewAction,
-        resolve_focus: 'identity_trust',
-      };
-    }
-    case 'sync_gateway': {
-      const syncAction = gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default', fallbackActionEnabled);
-      return {
-        title: gatewayDiagnosisTitle(gateway),
-        detail: diagnosis.classification === 'ready'
-          ? 'Desktop can reach this Gateway. Run sync to refresh environments.'
-          : 'Desktop can reach the Gateway service, but catalog sync still failed.',
-        aria_label: 'Sync Gateway',
-        primary_action: syncAction,
-        continuation_action: continuationActionFor(gateway, syncAction),
       };
     }
     default:
@@ -481,16 +415,15 @@ function gatewayRecoveryPlanFromRecommendedRecovery(
   }
 }
 
-function gatewaySyncRecoveryPlan(
+function gatewayRefreshRecoveryPlan(
   gateway: DesktopGatewaySource,
-  fallbackActionEnabled = true,
   options: Readonly<{ useDiagnosis?: boolean }> = {},
 ): GatewayRecoveryPlan {
   if (gateway.local_enabled === false) {
     const enableAction = gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default', true);
     return {
       title: 'Gateway disabled on this Desktop',
-      detail: 'This Desktop is not syncing this Gateway or showing its environments. Enable it to sync again.',
+      detail: 'This Desktop is not refreshing this Gateway or showing its environments. Enable it to refresh again.',
       aria_label: 'Enable Gateway',
       primary_action: enableAction,
       continuation_action: continuationActionFor(gateway, enableAction),
@@ -498,14 +431,11 @@ function gatewaySyncRecoveryPlan(
   }
 
   const diagnosis = options.useDiagnosis ? gateway.diagnosis : undefined;
-  const checkAction = gatewaySourceAction('check_gateway', 'Check Gateway', 'default', fallbackActionEnabled);
   if (!diagnosis) {
     return {
-      title: 'Gateway sync failed',
-      detail: 'Run a check to identify whether this Gateway needs to start, update, or change configuration.',
-      aria_label: 'Check Gateway',
-      primary_action: checkAction,
-      continuation_action: continuationActionFor(gateway, checkAction),
+      title: 'Refresh Gateway',
+      detail: 'Refresh checks the target, Gateway service, package, pairing, and catalog in one operation.',
+      aria_label: 'Refresh Gateway',
     };
   }
 
@@ -514,91 +444,68 @@ function gatewaySyncRecoveryPlan(
       title: gatewayDiagnosisTitle(gateway),
       detail: 'Desktop cannot manage this Gateway. Review the diagnostics and fix it on the Gateway host.',
       aria_label: 'Gateway diagnostics',
-      resolve_focus: resolveFocusForGateway(gateway),
     };
   }
 
-  const recommendedRecovery = gatewayRecoveryPlanFromRecommendedRecovery(gateway, fallbackActionEnabled);
+  const recommendedRecovery = gatewayRecoveryPlanFromRecommendedRecovery(gateway);
   if (recommendedRecovery) {
     return recommendedRecovery;
   }
 
   switch (diagnosis.classification) {
-    case 'trust_failed': {
-      const reviewAction = gatewayReviewTrustAction();
-      return {
-        title: gatewayDiagnosisTitle(gateway),
-        detail: 'Desktop could not verify this Gateway identity. Review the Gateway target, then sync this Gateway again.',
-        aria_label: 'Review Gateway identity',
-        primary_action: reviewAction,
-        resolve_focus: 'identity_trust',
-      };
-    }
     case 'not_started': {
       const startAction = gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true);
       return {
         title: 'Gateway is stopped',
-        detail: 'Desktop can start this Gateway service. Sync the Gateway after it is ready to refresh environments.',
+        detail: 'Desktop can start this Gateway service. Use Refresh again after it is ready to refresh environments.',
         aria_label: 'Start Gateway service',
         primary_action: startAction,
         continuation_action: continuationActionFor(gateway, startAction),
+      };
+    }
+    case 'bridge_unavailable': {
+      const restartAction = gatewaySourceAction('restart_gateway', 'Restart Gateway', 'default', gateway.service_state?.can_restart !== false);
+      return {
+        title: 'Gateway service needs restart',
+        detail: 'Desktop can restart this Gateway service, then Refresh can retry pairing and catalog refresh.',
+        aria_label: 'Restart Gateway service',
+        primary_action: restartAction,
+        continuation_action: continuationActionFor(gateway, restartAction),
       };
     }
     case 'needs_update': {
       const updateAction = gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false);
       return {
         title: 'Gateway update required',
-        detail: 'Desktop needs to update this Gateway service before it can safely pair and trust the catalog.',
-        aria_label: 'Update Gateway before syncing',
+        detail: 'Desktop needs to update this Gateway service before Refresh can safely pair and refresh the catalog.',
+        aria_label: 'Update Gateway before refreshing',
         primary_action: updateAction,
         continuation_action: continuationActionFor(gateway, updateAction),
       };
     }
     case 'ssh_unreachable':
     case 'container_unavailable':
-    case 'bridge_unavailable':
-    case 'unknown': {
-      const resolveAction = gatewayEditSettingsAction();
+    case 'unknown':
       return {
         title: gatewayDiagnosisTitle(gateway),
-        detail: 'Desktop needs a reachable Gateway service before it can sync environments.',
-        aria_label: 'Resolve Gateway before syncing',
-        primary_action: resolveAction,
-        resolve_focus: resolveFocusForGateway(gateway),
+        detail: diagnosis.detail || 'Desktop needs a reachable Gateway target before Refresh can continue.',
+        aria_label: 'Gateway diagnostics',
       };
-    }
-    case 'catalog_failed': {
-      if (!diagnosis.manageable) {
-        return {
-          title: gatewayDiagnosisTitle(gateway),
-          detail: 'Desktop cannot manage this Gateway. Review the diagnostics and fix it on the Gateway host.',
-          aria_label: 'Gateway diagnostics',
-        };
-      }
-      const syncAction = gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default', fallbackActionEnabled);
+    case 'catalog_failed':
+    case 'service_ready_catalog_failed':
+    case 'trust_failed':
+    case 'pairing_required':
+    case 'identity_changed':
       return {
         title: gatewayDiagnosisTitle(gateway),
-        detail: 'Desktop can reach the Gateway service, but catalog sync still failed.',
-        aria_label: 'Sync Gateway',
-        primary_action: syncAction,
-        continuation_action: continuationActionFor(gateway, syncAction),
+        detail: diagnosis.detail || 'Refresh could not complete pairing or catalog refresh. Review the diagnostics, then run Refresh again after the target is corrected.',
+        aria_label: 'Gateway diagnostics',
       };
-    }
-    case 'service_ready_catalog_failed': {
-      const reviewAction = gatewayReviewTrustAction();
-      return {
-        title: gatewayDiagnosisTitle(gateway),
-        detail: 'Desktop can reach the Gateway service, but the signed catalog check failed. Review the diagnostics before syncing again.',
-        aria_label: 'Review Gateway identity',
-        primary_action: reviewAction,
-        resolve_focus: 'identity_trust',
-      };
-    }
     case 'legacy_runtime_residue': {
       const updateAction = gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false);
       return {
         title: 'Gateway update required',
-        detail: 'Desktop found old Gateway service residue on the target. Update Gateway to reinstall the service and clean the stale Desktop-managed service before syncing.',
+        detail: 'Desktop found old Gateway service residue on the target. Update Gateway to reinstall the service and clean the stale Desktop-managed service before refreshing.',
         aria_label: 'Update Gateway and clean legacy residue',
         primary_action: updateAction,
         continuation_action: continuationActionFor(gateway, updateAction),
@@ -611,19 +518,16 @@ function gatewaySyncRecoveryPlan(
         aria_label: 'Gateway diagnostics',
       };
     case 'ready': {
-      const syncAction = gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default', fallbackActionEnabled);
       return {
         title: gatewayDiagnosisTitle(gateway),
-        detail: 'Desktop can reach this Gateway. Run sync to refresh environments.',
-        aria_label: 'Sync Gateway',
-        primary_action: syncAction,
-        continuation_action: continuationActionFor(gateway, syncAction),
+        detail: 'Desktop refreshed this Gateway and can reach its catalog.',
+        aria_label: 'Gateway refreshed',
       };
     }
     case 'disabled':
       return {
         title: gatewayDiagnosisTitle(gateway),
-        detail: 'Enable this Gateway before syncing it.',
+        detail: 'Enable this Gateway before refreshing it.',
         aria_label: 'Gateway diagnostics',
       };
   }
@@ -660,7 +564,6 @@ function buildPanel(
     affected_sessions: visibleSessions,
     overflow_session_count: Math.max(0, sessions.length - visibleSessions.length),
     ...(input.continuation_action ? { continuation_action: input.continuation_action } : {}),
-    ...(input.resolve_focus ? { resolve_focus: input.resolve_focus } : {}),
     ...(input.primary_action ? { primary_action: input.primary_action } : {}),
     secondary_actions: input.secondary_actions ?? [],
   };
@@ -679,19 +582,14 @@ function confirmationPanelKind(action: string): GatewayActionPanelKind {
 
 function actionLabel(action: string): string {
   switch (action) {
+    case 'refresh_gateway':
+      return 'Refresh Gateway';
     case 'stop_gateway':
       return 'Stop Gateway';
     case 'restart_gateway':
       return 'Restart Gateway';
     case 'update_gateway':
       return 'Update Gateway';
-    case 'refresh_gateway_status':
-    case 'sync_gateway':
-    case 'refresh_gateway_catalog':
-    case 'pair_gateway':
-      return 'Sync Gateway';
-    case 'check_gateway':
-      return 'Check Gateway';
     default:
       return 'Gateway action';
   }
@@ -702,16 +600,6 @@ export function buildGatewayActionPresentation(
 ): GatewayActionPanelModel {
   const { gateway, clicked_action: action } = input;
   const manageable = desktopGatewayCanManageService(gateway);
-  const status = serviceStatus(gateway);
-  const hasSyncFailure = gateway.sync_state === 'catalog_failed'
-    || gateway.sync_state === 'gateway_unreachable'
-    || gateway.sync_state === 'pairing_failed';
-  const isSyncLikeAction = action.intent === 'sync_gateway'
-    || action.intent === 'pair_gateway'
-    || action.intent === 'refresh_gateway_catalog'
-    || action.intent === 'refresh_gateway_status'
-    || action.intent === 'check_gateway'
-    || (action.intent === 'resolve_gateway' && hasSyncFailure);
 
   if (input.active_progress) {
     return buildPanel({
@@ -727,8 +615,8 @@ export function buildGatewayActionPresentation(
   }
 
   if (input.retained_failure) {
-    const recovery = gatewaySyncRecoveryPlan(gateway, true, {
-      useDiagnosis: action.intent === 'check_gateway' || input.retained_failure.action === 'check_gateway',
+    const recovery = gatewayRefreshRecoveryPlan(gateway, {
+      useDiagnosis: action.intent === 'refresh_gateway' || input.retained_failure.action === 'refresh_gateway',
     });
     return buildPanel({
       gateway,
@@ -739,13 +627,12 @@ export function buildGatewayActionPresentation(
       title: recovery.title || input.retained_failure.title || `${actionLabel(action.intent)} failed`,
       detail: recovery.detail || input.retained_failure.failure?.summary || input.retained_failure.detail || `Desktop could not complete this Gateway action.`,
       aria_label: recovery.aria_label || 'Gateway action issue',
-      ...(recovery.resolve_focus ? { resolve_focus: recovery.resolve_focus } : {}),
       ...(recovery.continuation_action ? { continuation_action: recovery.continuation_action } : {}),
       ...(recovery.primary_action ? { primary_action: recovery.primary_action } : {}),
     });
   }
 
-  if (action.intent === 'setup_gateway' || action.intent === 'manage_gateway') {
+  if (action.intent === 'setup_gateway') {
     return noGatewayActionPanel;
   }
 
@@ -757,88 +644,33 @@ export function buildGatewayActionPresentation(
       tone: 'neutral',
       eyebrow: 'Gateway',
       title: 'Gateway disabled on this Desktop',
-      detail: 'This Desktop is not syncing this Gateway or showing its environments. Enable it to sync again.',
+      detail: 'This Desktop is not refreshing this Gateway or showing its environments. Enable it to refresh again.',
       aria_label: 'Enable Gateway',
       continuation_action: continuationActionFor(gateway, gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default', true)),
       primary_action: gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default', true),
     });
   }
 
-  if ((action.intent === 'pair_gateway' || action.intent === 'resolve_gateway') && manageable && status === 'service_needs_update') {
-    return buildPanel({
-      gateway,
-      kind: 'update_then_pair',
-      execution_mode: 'guide',
-      tone: 'warning',
-      eyebrow: 'Gateway service',
-      title: 'Update Gateway before pairing',
-      detail: 'Desktop needs to update this Gateway service before it can safely pair and trust the catalog.',
-      aria_label: 'Update Gateway before pairing',
-      primary_action: gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false),
-    });
-  }
-
-  if ((action.intent === 'pair_gateway' || action.intent === 'resolve_gateway') && manageable && (status === 'ssh_unreachable' || status === 'container_unavailable' || status === 'bridge_unavailable' || status === 'error')) {
-    const resolveAction = gatewayResolveAction();
-    return buildPanel({
-      gateway,
-      kind: 'resolve_before_pair',
-      execution_mode: 'guide',
-      tone: 'warning',
-      eyebrow: 'Gateway service',
-      title: 'Resolve Gateway before syncing',
-      detail: gateway.service_state?.message || 'Desktop needs a reachable Gateway service before it can sync environments.',
-      aria_label: 'Resolve Gateway before syncing',
-      resolve_focus: resolveFocusForGateway(gateway),
-      primary_action: resolveAction,
-    });
-  }
-
-  if (isSyncLikeAction) {
-    const recovery = gatewaySyncRecoveryPlan(gateway, action.enabled, {
-      useDiagnosis: action.intent === 'check_gateway' && input.show_diagnosis_result === true,
+  if (action.intent === 'refresh_gateway') {
+    const recovery = gatewayRefreshRecoveryPlan(gateway, {
+      useDiagnosis: input.show_diagnosis_result === true,
     });
     return buildPanel({
       gateway,
-      kind: recovery.primary_action?.intent === 'check_gateway'
-        ? 'check_required'
-        : recovery.primary_action?.intent === 'start_gateway'
-          ? 'start_and_refresh_catalog'
-          : 'diagnosis_result',
+      kind: 'diagnosis_result',
       execution_mode: 'guide',
-      tone: recovery.primary_action?.intent === 'check_gateway'
-        || recovery.primary_action?.intent === 'start_gateway'
+      tone: recovery.primary_action?.intent === 'start_gateway'
+        || recovery.primary_action?.intent === 'restart_gateway'
+        || recovery.primary_action?.intent === 'update_gateway'
         || gateway.sync_state === 'catalog_failed'
         || gateway.sync_state === 'gateway_unreachable'
         ? 'warning'
         : 'primary',
-      eyebrow: recovery.primary_action?.intent === 'start_gateway' || recovery.primary_action?.intent === 'update_gateway' ? 'Gateway service' : 'Gateway',
+      eyebrow: recovery.primary_action ? 'Gateway service' : 'Gateway',
       title: recovery.title,
       detail: recovery.detail,
       aria_label: recovery.aria_label,
       result_facts: input.show_diagnosis_result === true ? gatewayDiagnosisResultFacts(gateway) : [],
-      ...(recovery.resolve_focus ? { resolve_focus: recovery.resolve_focus } : {}),
-      ...(recovery.continuation_action ? { continuation_action: recovery.continuation_action } : {}),
-      ...(recovery.primary_action ? { primary_action: recovery.primary_action } : {}),
-    });
-  }
-
-  if (action.intent === 'resolve_gateway') {
-    const recovery = gatewaySyncRecoveryPlan(gateway);
-    return buildPanel({
-      gateway,
-      kind: 'resolve_before_pair',
-      execution_mode: 'guide',
-      tone: 'warning',
-      eyebrow: 'Gateway',
-      title: recovery.title === 'Sync Gateway' ? 'Resolve Gateway' : recovery.title,
-      detail: compact(gateway.last_sync_error_message)
-        || gateway.service_state?.message
-        || gateway.status_message
-        || recovery.detail
-        || 'Desktop keeps Gateways synced automatically. Review the target, then sync again when the Gateway is reachable.',
-      aria_label: recovery.aria_label || 'Resolve Gateway',
-      ...(recovery.resolve_focus ? { resolve_focus: recovery.resolve_focus } : {}),
       ...(recovery.continuation_action ? { continuation_action: recovery.continuation_action } : {}),
       ...(recovery.primary_action ? { primary_action: recovery.primary_action } : {}),
     });

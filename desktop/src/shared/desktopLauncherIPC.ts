@@ -133,6 +133,7 @@ export type DesktopLauncherActionOutcome =
   | 'gateway_sync_in_progress'
   | 'synced_gateway'
   | 'paired_gateway'
+  | 'refreshed_gateway'
   | 'started_gateway'
   | 'stopped_gateway'
   | 'restarted_gateway'
@@ -215,6 +216,7 @@ export type DesktopLauncherActionKind =
   | 'delete_control_plane'
   | 'upsert_gateway'
   | 'set_gateway_enabled'
+  | 'refresh_gateway'
   | 'check_gateway'
   | 'sync_gateway'
   | 'pair_gateway'
@@ -542,6 +544,10 @@ export type DesktopLauncherOperationNextAction = Readonly<
       label_key?: DesktopTranslationKey;
     }
   | {
+      kind: 'refresh_gateway';
+      gateway_id: string;
+    }
+  | {
       kind: 'check_gateway';
       gateway_id: string;
       label: string;
@@ -791,6 +797,10 @@ export type DesktopLauncherActionRequest = Readonly<
       container_ref: string;
       container_label: string;
       runtime_root: string;
+    }
+  | {
+      kind: 'refresh_gateway';
+      gateway_id: string;
     }
   | {
       kind: 'check_gateway';
@@ -1480,6 +1490,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       }
       return null;
     }
+    case 'refresh_gateway':
     case 'check_gateway':
     case 'pair_gateway':
     case 'sync_gateway':
@@ -1506,7 +1517,7 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
           ...(startPolicy ? { start_policy: startPolicy } : {}),
         };
       }
-      if (kind === 'check_gateway') {
+      if (kind === 'refresh_gateway' || kind === 'check_gateway') {
         return {
           kind,
           gateway_id: gatewayID,

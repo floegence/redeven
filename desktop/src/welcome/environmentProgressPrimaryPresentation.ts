@@ -163,14 +163,16 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): s
     progress.subject_kind === 'gateway'
     && (
       progress.step_progress?.active_step_id === 'refreshing_gateway_catalog'
-      || progress.title === 'Sync Gateway'
+      || progress.title === 'Refresh Gateway'
+      || progress.action === 'refresh_gateway'
     )
   ) {
-    return 'Syncing...';
+    return 'Refreshing...';
   }
   switch (progress.action) {
+    case 'refresh_gateway':
     case 'check_gateway':
-      return 'Checking...';
+      return 'Refreshing...';
     case 'stop_environment_runtime':
     case 'stop_gateway':
       return 'Stopping...';
@@ -184,7 +186,7 @@ function runningProgressPrimaryLabel(progress: DesktopLauncherActionProgress): s
     case 'pair_gateway':
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
-      return 'Syncing...';
+      return 'Refreshing...';
     default:
       return 'Starting...';
   }
@@ -250,8 +252,9 @@ function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): st
     return 'Open failed';
   }
   switch (progress.action) {
+    case 'refresh_gateway':
     case 'check_gateway':
-      return 'Check failed';
+      return 'Refresh failed';
     case 'start_environment_runtime':
     case 'start_gateway':
       return 'Start failed';
@@ -268,7 +271,7 @@ function failedProgressPrimaryLabel(progress: DesktopLauncherActionProgress): st
     case 'pair_gateway':
     case 'refresh_gateway_catalog':
     case 'refresh_gateway_status':
-      return 'Sync failed';
+      return 'Refresh failed';
     default:
       return 'Needs attention';
   }

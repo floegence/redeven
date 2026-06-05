@@ -9,16 +9,17 @@ function operationNextActionKey(action: DesktopLauncherOperationNextAction): str
     case 'update_runtime':
     case 'manage_desktop_update':
       return `${action.kind}:environment:${action.environment_id ?? ''}`;
-    case 'refresh_gateway_status':
+    case 'refresh_gateway':
     case 'check_gateway':
+    case 'refresh_gateway_status':
+    case 'refresh_gateway_catalog':
     case 'start_gateway':
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway':
-    case 'resolve_gateway':
       return `${action.kind}:gateway:${action.gateway_id}`;
-    case 'refresh_gateway_catalog':
-      return `${action.kind}:gateway:${action.gateway_id}:${action.start_policy ?? ''}`;
+    case 'resolve_gateway':
+      return `${action.kind}:gateway:${action.gateway_id}:${action.resolve_focus ?? ''}`;
     case 'open_gateway_environment':
       return `${action.kind}:gateway:${action.gateway_id}:environment:${action.environment_id}:${action.start_policy ?? ''}`;
     case 'copy_diagnostics':
@@ -56,23 +57,12 @@ export function visibleOperationNextActions(
     push('update_runtime');
     push('manage_desktop_update');
   } else {
-    push('check_gateway');
-    if (!byKind.has('check_gateway')) {
-      push('start_gateway');
-      push('stop_gateway');
-      push('restart_gateway');
-      push('update_gateway');
-      push('resolve_gateway');
-      push('retry');
-      push('refresh_gateway_status');
-      push('refresh_gateway_catalog');
-      push('open_gateway_environment');
-    }
+    push('start_gateway');
+    push('restart_gateway');
+    push('update_gateway');
   }
   push('copy_diagnostics');
-  if (progress.subject_kind !== 'gateway') {
-    push('dismiss');
-  }
+  push('dismiss');
   return actions;
 }
 
@@ -85,16 +75,10 @@ function operationNextActionIsPrimary(action: DesktopLauncherOperationNextAction
   return action.kind === 'refresh_status'
     || action.kind === 'update_runtime'
     || action.kind === 'manage_desktop_update'
-    || action.kind === 'retry'
-    || action.kind === 'check_gateway'
+    || action.kind === 'refresh_gateway'
     || action.kind === 'start_gateway'
-    || action.kind === 'stop_gateway'
     || action.kind === 'restart_gateway'
-    || action.kind === 'update_gateway'
-    || action.kind === 'resolve_gateway'
-    || action.kind === 'refresh_gateway_status'
-    || action.kind === 'refresh_gateway_catalog'
-    || action.kind === 'open_gateway_environment';
+    || action.kind === 'update_gateway';
 }
 
 export function groupedVisibleOperationNextActions(

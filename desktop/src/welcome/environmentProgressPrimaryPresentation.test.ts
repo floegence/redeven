@@ -263,14 +263,14 @@ describe('environmentProgressPrimaryPresentation', () => {
       lifecycleActionProgress({ action: 'pair_gateway', operation: 'start', status: 'running', phase: 'starting_runtime_process' }),
     )).toMatchObject({
       kind: 'progress_trigger',
-      label: 'Syncing...',
+      label: 'Refreshing...',
       icon: 'play',
     });
     expect(environmentProgressPrimaryPresentation(
       lifecycleActionProgress({ action: 'refresh_gateway_catalog', operation: 'start', status: 'running', phase: 'starting_runtime_process' }),
     )).toMatchObject({
       kind: 'progress_trigger',
-      label: 'Syncing...',
+      label: 'Refreshing...',
       icon: 'play',
     });
     expect(environmentProgressPrimaryPresentation(
@@ -311,7 +311,7 @@ describe('environmentProgressPrimaryPresentation', () => {
       },
     })).toMatchObject({
       kind: 'progress_trigger',
-      label: 'Checking...',
+      label: 'Refreshing...',
       icon: 'play',
     });
   });
@@ -380,10 +380,10 @@ describe('environmentProgressPrimaryPresentation', () => {
     )).toMatchObject({ label: 'Update failed' });
     expect(environmentProgressPrimaryPresentation(
       lifecycleActionProgress({ action: 'pair_gateway', operation: 'start', status: 'failed', phase: 'starting_runtime_process' }),
-    )).toMatchObject({ label: 'Sync failed' });
+    )).toMatchObject({ label: 'Refresh failed' });
     expect(environmentProgressPrimaryPresentation(
       lifecycleActionProgress({ action: 'refresh_gateway_catalog', operation: 'start', status: 'failed', phase: 'starting_runtime_process' }),
-    )).toMatchObject({ label: 'Sync failed' });
+    )).toMatchObject({ label: 'Refresh failed' });
     expect(environmentProgressPrimaryPresentation(
       lifecycleActionProgress({ action: 'start_gateway', operation: 'start', status: 'failed', phase: 'starting_gateway_service' }),
     )).toMatchObject({ label: 'Start failed' });
@@ -410,8 +410,8 @@ describe('environmentProgressPrimaryPresentation', () => {
       },
     })).toMatchObject({
       kind: 'attention_trigger',
-      label: 'Check failed',
-      ariaLabel: 'Check failed. Show details.',
+      label: 'Refresh failed',
+      ariaLabel: 'Refresh failed. Show details.',
     });
   });
 

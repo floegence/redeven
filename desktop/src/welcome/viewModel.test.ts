@@ -3416,7 +3416,7 @@ describe('Gateway view models', () => {
     });
   });
 
-  it('projects Gateway source rows with action-oriented primary buttons and safe labels', () => {
+  it('projects Gateway source rows with Refresh as the default primary action and safe labels', () => {
     expect(buildGatewaySourceRowModel(gatewaySource({
       status: 'pairing_required',
       trust_state: 'unpaired',
@@ -3427,8 +3427,8 @@ describe('Gateway view models', () => {
         tone: 'primary',
       }),
       primary_action: expect.objectContaining({
-        intent: 'sync_gateway',
-        label: 'Sync Gateway',
+        intent: 'refresh_gateway',
+        label: 'Refresh',
         enabled: true,
       }),
     });
@@ -3437,8 +3437,6 @@ describe('Gateway view models', () => {
       trust_state: 'unpaired',
     })).secondary_actions.map((action) => action.intent)).toEqual([
       'disable_gateway',
-      'manage_gateway',
-      'delete_gateway',
     ]);
 
     const secretSafeRow = buildGatewaySourceRowModel(gatewaySource({
@@ -3472,22 +3470,22 @@ describe('Gateway view models', () => {
         tone: 'warning',
       }),
       primary_action: expect.objectContaining({
-        intent: 'setup_gateway',
-        label: 'Set up',
+        intent: 'refresh_gateway',
+        label: 'Refresh',
       }),
     });
 
     const urlRow = buildGatewaySourceRowModel(gatewaySource());
     expect(urlRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'view_gateway_environments',
-      label: 'View Environments',
+      intent: 'refresh_gateway',
+      label: 'Refresh',
       enabled: true,
     }));
     expect(urlRow.guidance).toMatchObject({
       title: 'Access-only Gateway',
       tone: 'neutral',
     });
-    expect(urlRow.secondary_actions.map((action) => action.intent)).toEqual(['sync_gateway', 'disable_gateway', 'manage_gateway', 'delete_gateway']);
+    expect(urlRow.secondary_actions.map((action) => action.intent)).toEqual(['disable_gateway']);
 
     const stoppedUnpairedSSHRow = buildGatewaySourceRowModel(gatewaySource({
       connection_kind: 'ssh_host',
@@ -3505,17 +3503,15 @@ describe('Gateway view models', () => {
     }));
     expect(stoppedUnpairedSSHRow).toMatchObject({
       status_label: 'Not started',
-      primary_action: expect.objectContaining({ intent: 'start_gateway', label: 'Start Gateway', enabled: true }),
+      primary_action: expect.objectContaining({ intent: 'refresh_gateway', label: 'Refresh', enabled: true }),
       guidance: expect.objectContaining({
         title: 'Preparing Gateway',
         tone: 'primary',
       }),
     });
     expect(stoppedUnpairedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'sync_gateway',
       'disable_gateway',
-      'manage_gateway',
-      'delete_gateway',
+      'start_gateway',
     ]);
 
     const stoppedSSHRow = buildGatewaySourceRowModel(gatewaySource({
@@ -3533,17 +3529,15 @@ describe('Gateway view models', () => {
     }));
     expect(stoppedSSHRow).toMatchObject({
       status_label: 'Not started',
-      primary_action: expect.objectContaining({ intent: 'start_gateway', label: 'Start Gateway' }),
+      primary_action: expect.objectContaining({ intent: 'refresh_gateway', label: 'Refresh' }),
       guidance: expect.objectContaining({
         title: 'Gateway is stopped',
         tone: 'warning',
       }),
     });
     expect(stoppedSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'sync_gateway',
       'disable_gateway',
-      'manage_gateway',
-      'delete_gateway',
+      'start_gateway',
     ]);
 
     const syncingGatewayRow = buildGatewaySourceRowModel(gatewaySource({
@@ -3563,14 +3557,14 @@ describe('Gateway view models', () => {
       environments: [],
     }));
     expect(syncingGatewayRow).toMatchObject({
-      status_label: 'Syncing',
+      status_label: 'Refreshing',
       primary_action: expect.objectContaining({
-        intent: 'sync_gateway',
-        label: 'Sync Gateway',
+        intent: 'refresh_gateway',
+        label: 'Refresh',
         enabled: true,
       }),
       guidance: expect.objectContaining({
-        title: 'Syncing Gateway',
+        title: 'Refreshing Gateway',
         tone: 'primary',
       }),
     });
@@ -3578,29 +3572,23 @@ describe('Gateway view models', () => {
       background_sync_running: true,
     }));
     expect(syncingGatewayWithCatalogRow.primary_action).toMatchObject({
-      intent: 'view_gateway_environments',
-      label: 'View Environments',
+      intent: 'refresh_gateway',
+      label: 'Refresh',
       enabled: true,
     });
-    expect(syncingGatewayWithCatalogRow.secondary_actions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        intent: 'sync_gateway',
-        enabled: false,
-        disabled_reason: 'Gateway sync is already running.',
-      }),
-    ]));
+    expect(syncingGatewayWithCatalogRow.secondary_actions.map((action) => action.intent)).toEqual(['disable_gateway']);
 
     const failedCatalogRow = buildGatewaySourceRowModel(gatewaySource({
       sync_state: 'catalog_failed',
       last_sync_error_message: 'Gateway catalog sync failed.',
     }));
     expect(failedCatalogRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'check_gateway',
-      label: 'Check Gateway',
+      intent: 'refresh_gateway',
+      label: 'Refresh',
       enabled: true,
     }));
     expect(failedCatalogRow.guidance).toMatchObject({
-      title: 'Gateway sync failed',
+      title: 'Gateway refresh failed',
       tone: 'warning',
     });
 
@@ -3620,8 +3608,8 @@ describe('Gateway view models', () => {
       },
     }));
     expect(unreachableUnpairedRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'resolve_gateway',
-      label: 'Resolve Gateway',
+      intent: 'refresh_gateway',
+      label: 'Refresh',
     }));
     expect(unreachableUnpairedRow.guidance).toMatchObject({
       title: 'Resolve the Gateway target',
@@ -3629,10 +3617,7 @@ describe('Gateway view models', () => {
       tone: 'warning',
     });
     expect(unreachableUnpairedRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'sync_gateway',
       'disable_gateway',
-      'manage_gateway',
-      'delete_gateway',
     ]);
 
     const startingSSHRow = buildGatewaySourceRowModel(gatewaySource({
@@ -3648,8 +3633,8 @@ describe('Gateway view models', () => {
       },
     }));
     expect(startingSSHRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'view_gateway_environments',
-      label: 'View Environments',
+      intent: 'refresh_gateway',
+      label: 'Refresh',
       enabled: true,
     }));
     expect(startingSSHRow.guidance).toMatchObject({
@@ -3670,19 +3655,17 @@ describe('Gateway view models', () => {
       },
     }));
     expect(updateRequiredSSHRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'update_gateway',
-      label: 'Update Gateway',
+      intent: 'refresh_gateway',
+      label: 'Refresh',
     }));
     expect(updateRequiredSSHRow.guidance).toMatchObject({
       title: 'Update before continuing',
       tone: 'warning',
     });
     expect(updateRequiredSSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'sync_gateway',
       'disable_gateway',
       'restart_gateway',
-      'manage_gateway',
-      'delete_gateway',
+      'update_gateway',
     ]);
 
     const readySSHRow = buildGatewaySourceRowModel(gatewaySource({
@@ -3698,8 +3681,8 @@ describe('Gateway view models', () => {
       },
     }));
     expect(readySSHRow.primary_action).toEqual(expect.objectContaining({
-      intent: 'view_gateway_environments',
-      label: 'View Environments',
+      intent: 'refresh_gateway',
+      label: 'Refresh',
       enabled: true,
     }));
     expect(readySSHRow.guidance).toMatchObject({
@@ -3708,23 +3691,47 @@ describe('Gateway view models', () => {
       tone: 'success',
     });
     expect(readySSHRow.secondary_actions.map((action) => action.intent)).toEqual([
-      'sync_gateway',
       'disable_gateway',
       'stop_gateway',
       'restart_gateway',
       'update_gateway',
-      'manage_gateway',
-      'delete_gateway',
     ]);
     expect(readySSHRow.secondary_actions.map((action) => action.label)).toEqual([
-      'Sync Gateway',
-      'Pause Sync',
+      'Disable',
       'Stop Gateway',
       'Restart Gateway',
       'Update Gateway',
-      'Gateway settings',
-      'Delete Gateway',
     ]);
+    const allRows = [
+      buildGatewaySourceRowModel(gatewaySource({
+        status: 'pairing_required',
+        trust_state: 'unpaired',
+      })),
+      urlRow,
+      stoppedUnpairedSSHRow,
+      stoppedSSHRow,
+      syncingGatewayRow,
+      failedCatalogRow,
+      unreachableUnpairedRow,
+      startingSSHRow,
+      updateRequiredSSHRow,
+      readySSHRow,
+    ];
+    const allowedActions = new Set([
+      'refresh_gateway',
+      'start_gateway',
+      'stop_gateway',
+      'restart_gateway',
+      'update_gateway',
+      'enable_gateway',
+      'disable_gateway',
+    ]);
+    for (const row of allRows) {
+      expect(allowedActions.has(row.primary_action.intent)).toBe(true);
+      for (const secondary of row.secondary_actions) {
+        expect(allowedActions.has(secondary.intent)).toBe(true);
+      }
+    }
   });
 
   it('projects disabled Gateway source rows as locally paused without contributing environments', () => {
@@ -3746,7 +3753,7 @@ describe('Gateway view models', () => {
         label: 'Enable Gateway',
       }),
     });
-    expect(row.secondary_actions.map((action) => action.intent)).toEqual(['manage_gateway', 'delete_gateway']);
+    expect(row.secondary_actions.map((action) => action.intent)).toEqual([]);
   });
 
   it('guides writable empty Gateway catalogs toward adding Gateway-backed environments', () => {
@@ -3764,8 +3771,8 @@ describe('Gateway view models', () => {
       environment_summary_label: 'No environments synced',
       environment_summary_detail: 'Add a Gateway-backed Environment to make it available from every Desktop paired with this Gateway.',
       primary_action: expect.objectContaining({
-        intent: 'add_gateway_environment',
-        label: 'Add Env',
+        intent: 'refresh_gateway',
+        label: 'Refresh',
       }),
     });
     expect(readOnlyEmptyRow).toMatchObject({
@@ -3773,8 +3780,8 @@ describe('Gateway view models', () => {
       environment_summary_label: 'No environments synced',
       environment_summary_detail: 'No environments are currently exposed by this Gateway catalog.',
       primary_action: expect.objectContaining({
-        intent: 'sync_gateway',
-        label: 'Sync Gateway',
+        intent: 'refresh_gateway',
+        label: 'Refresh',
       }),
     });
   });

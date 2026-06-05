@@ -102,7 +102,6 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
 
   if (constrainToViewport) {
     if (options.placementLock === 'top-inline-shift') {
-      top = options.anchorRect.top - gap;
       left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
     } else if (allowMainAxisOverflow) {
       if (placement === 'top' || placement === 'bottom') {

@@ -13,6 +13,7 @@ export type DesktopActionPopoverProps = Readonly<{
   allowMainAxisOverflow?: boolean;
   popoverAriaLabel?: string;
   onAnchorPointerDown?: JSX.EventHandlerUnion<HTMLSpanElement, PointerEvent>;
+  onExitComplete?: () => void;
 }>;
 
 function cn(...values: Array<string | undefined | null | false>): string {
@@ -33,9 +34,12 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
   let popoverRef: HTMLDivElement | undefined;
   let focusFrame = 0;
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
+  let latestFrameHTML: string | null = null;
+  let frameObserver: MutationObserver | null = null;
 
   const [rendered, setRendered] = createSignal(props.open);
   const [closing, setClosing] = createSignal(false);
+  const [closingFrameHTML, setClosingFrameHTML] = createSignal<string | null>(null);
 
   const clearCloseTimer = () => {
     if (!closeTimer) {
@@ -43,6 +47,23 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
     }
     clearTimeout(closeTimer);
     closeTimer = null;
+  };
+
+  const currentFrameHTML = (): string | null => (
+    popoverRef?.querySelector<HTMLElement>('.redeven-action-popover-frame')?.innerHTML ?? null
+  );
+
+  const captureCurrentFrameHTML = (): string | null => {
+    const html = currentFrameHTML();
+    if (html !== null) {
+      latestFrameHTML = html;
+    }
+    return html;
+  };
+
+  const clearFrameObserver = () => {
+    frameObserver?.disconnect();
+    frameObserver = null;
   };
 
   const containsTarget = (target: EventTarget | null): boolean => {
@@ -60,23 +81,57 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
     event.stopPropagation();
   };
 
+  const requestOpenChange = (open: boolean) => {
+    if (!open) {
+      setClosingFrameHTML(captureCurrentFrameHTML() ?? latestFrameHTML);
+    }
+    props.onOpenChange(open);
+  };
+
   createEffect(() => {
     if (props.open) {
       clearCloseTimer();
       setRendered(true);
       setClosing(false);
+      setClosingFrameHTML(null);
       return;
     }
     if (!rendered()) {
       return;
     }
     setClosing(true);
+    setClosingFrameHTML(closingFrameHTML() ?? latestFrameHTML ?? captureCurrentFrameHTML());
     clearCloseTimer();
     closeTimer = setTimeout(() => {
       closeTimer = null;
       setRendered(false);
       setClosing(false);
+      setClosingFrameHTML(null);
+      props.onExitComplete?.();
     }, ACTION_POPOVER_EXIT_MS);
+  });
+
+  createEffect(() => {
+    clearFrameObserver();
+    if (!props.open || closing()) {
+      return;
+    }
+    const frameElement = popoverRef?.querySelector<HTMLElement>('.redeven-action-popover-frame');
+    if (!frameElement || typeof MutationObserver === 'undefined') {
+      captureCurrentFrameHTML();
+      return;
+    }
+    captureCurrentFrameHTML();
+    frameObserver = new MutationObserver(() => {
+      captureCurrentFrameHTML();
+    });
+    frameObserver.observe(frameElement, {
+      attributes: true,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    });
+    onCleanup(clearFrameObserver);
   });
 
   createEffect(() => {
@@ -89,24 +144,24 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
       firstFocusableElement(popoverRef)?.focus();
     });
 
-    const handlePointerDown = (event: MouseEvent) => {
+    const handlePointerDown = (event: PointerEvent) => {
       if (!containsTarget(event.target)) {
-        props.onOpenChange(false);
+        requestOpenChange(false);
       }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        props.onOpenChange(false);
+        requestOpenChange(false);
         focusAnchor();
       }
     };
     const handleFocusIn = (event: FocusEvent) => {
       if (!containsTarget(event.target)) {
-        props.onOpenChange(false);
+        requestOpenChange(false);
       }
     };
 
-    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('pointerdown', handlePointerDown, true);
     document.addEventListener('keydown', handleKeyDown);
     document.addEventListener('focusin', handleFocusIn);
     onCleanup(() => {
@@ -114,13 +169,14 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
         cancelAnimationFrame(focusFrame);
         focusFrame = 0;
       }
-      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('pointerdown', handlePointerDown, true);
       document.removeEventListener('keydown', handleKeyDown);
       document.removeEventListener('focusin', handleFocusIn);
     });
   });
 
   onCleanup(() => {
+    clearFrameObserver();
     clearCloseTimer();
     if (focusFrame) {
       cancelAnimationFrame(focusFrame);
@@ -149,6 +205,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
           ariaModal={false}
           ariaLabel={props.popoverAriaLabel}
           interactive
+          positionFrozen={closing()}
           class={cn(
             'redeven-action-popover-surface z-[225] text-popover-foreground',
             closing() && 'redeven-action-popover-surface--closing',
@@ -156,12 +213,18 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
           )}
           onOverlayRef={(element) => {
             popoverRef = element;
+            if (element && props.open && !closing()) {
+              captureCurrentFrameHTML();
+            }
           }}
           onPointerDownCapture={stopSurfacePointerDownPropagation}
         >
-          <div class="redeven-action-popover-frame">
-            {props.content}
-          </div>
+          <Show
+            when={closingFrameHTML()}
+            fallback={<div class="redeven-action-popover-frame">{props.content}</div>}
+          >
+            {(html) => <div class="redeven-action-popover-frame" innerHTML={html()} />}
+          </Show>
         </DesktopAnchoredOverlaySurface>
       </Show>
     </span>
