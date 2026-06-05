@@ -785,6 +785,7 @@ describe('DesktopWelcomeShell', () => {
   it('renders Gateway sources as environment-style cards with guided actions', () => {
     const appSrc = readWelcomeSource();
     const gatewaySourceActionRunnerSrc = readGatewaySourceActionRunnerSource();
+    const actionPopoverSrc = readDesktopActionPopoverSource();
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('function GatewaySourceCard');
@@ -931,6 +932,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('runMoreMenuAction(action);');
     expect(appSrc).toContain('clicked_action: displayedPrimaryAction()');
     expect(appSrc).toContain('allowMainAxisOverflow={false}');
+    expect(appSrc).toContain('onAnchorPointerDown={runPrimaryPointerDown}');
+    expect(actionPopoverSrc).toContain('onPointerDownCapture={stopSurfacePointerDownPropagation}');
+    expect(actionPopoverSrc).toContain('event.stopPropagation();');
     expect(appSrc).toContain("'Update available': 'environmentCenter.gatewayNeedsUpdate'");
     expect(appSrc).toContain("'Update required': 'environmentCenter.gatewayNeedsUpdate'");
     expect(appSrc).toContain("Starting: 'environmentCenter.gatewayStatusStarting'");
@@ -947,6 +951,7 @@ describe('DesktopWelcomeShell', () => {
     const diagnosticsToggleSrc = gatewayPanelSrc.slice(diagnosticsToggleStart, diagnosticsToggleEnd);
     expect(diagnosticsToggleSrc).not.toContain('runGatewayLauncherAction');
     expect(diagnosticsToggleSrc).not.toContain('runAction');
+    expect(gatewayPanelSrc).not.toContain('stopPropagation');
     expect(gatewayPanelSrc).toContain('<div class="redeven-gateway-action-panel__footer" data-mode="primary">');
     expect(gatewayPanelSrc).not.toContain('close-only');
     expect(gatewayPanelSrc).not.toContain("props.i18n.t('common.close')");

@@ -56,6 +56,10 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
     firstFocusableElement(anchorRef)?.focus();
   };
 
+  const stopSurfacePointerDownPropagation = (event: PointerEvent) => {
+    event.stopPropagation();
+  };
+
   createEffect(() => {
     if (props.open) {
       clearCloseTimer();
@@ -153,6 +157,7 @@ export function DesktopActionPopover(props: DesktopActionPopoverProps) {
           onOverlayRef={(element) => {
             popoverRef = element;
           }}
+          onPointerDownCapture={stopSurfacePointerDownPropagation}
         >
           <div class="redeven-action-popover-frame">
             {props.content}
