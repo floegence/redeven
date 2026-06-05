@@ -118,10 +118,47 @@ describe('main routing', () => {
     expect(mainSrc).toContain('recommended_recovery: recommendedRecovery');
     expect(mainSrc).toContain('switch (diagnosis.recommended_recovery ?? gatewayRecommendedRecoveryForDiagnosis(diagnosis))');
     expect(mainSrc).toContain("recommended_recovery: 'review_trust'");
+    expect(mainSrc).toContain("case 'service_ready_catalog_failed':\n      return 'review_trust';");
     expect(mainSrc).toContain("case 'trust_failed':\n      return 'review_trust';");
     expect(mainSrc).toContain("resolve_focus: 'identity_trust'");
     expect(mainSrc).toContain("label: 'Review Trust'");
     expect(mainSrc).not.toContain('recommended_action');
+  });
+
+  it('treats Gateway authorization rejection as pairing recovery instead of blind catalog sync', () => {
+    const mainSrc = readMainSource();
+    const gatewayTypeSrc = readSharedGatewaySource();
+    const syncStateStart = mainSrc.indexOf('function gatewayClientErrorIsPairingRejected(');
+    const syncStateEnd = mainSrc.indexOf('function gatewaySyncRecordFromError(', syncStateStart);
+    expect(syncStateStart).toBeGreaterThanOrEqual(0);
+    expect(syncStateEnd).toBeGreaterThan(syncStateStart);
+    const pairingHelperSrc = mainSrc.slice(syncStateStart, syncStateEnd);
+
+    expect(pairingHelperSrc).toContain("code === 'UNAUTHORIZED'");
+    expect(pairingHelperSrc).toContain("message.includes('pair this gateway before')");
+    expect(pairingHelperSrc).not.toContain("code === 'GATEWAY_TRUST_CHANGED'");
+
+    const diagnosisStart = mainSrc.indexOf('function gatewayDiagnosisForError(');
+    const diagnosisEnd = mainSrc.indexOf('async function checkGatewayRecord(', diagnosisStart);
+    expect(diagnosisStart).toBeGreaterThanOrEqual(0);
+    expect(diagnosisEnd).toBeGreaterThan(diagnosisStart);
+    const diagnosisSrc = mainSrc.slice(diagnosisStart, diagnosisEnd);
+
+    expect(gatewayTypeSrc).toContain('package_status?:');
+    expect(gatewayTypeSrc).toContain('target_version?: string;');
+    expect(gatewayTypeSrc).toContain('target_commit?: string;');
+    expect(mainSrc).toContain('target_commit: process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT');
+    expect(mainSrc).toContain('function gatewayManagedProbeNeedsUpdate(');
+    expect(diagnosisSrc).toContain('if (gatewayClientErrorIsPairingRejected(error)) {');
+    expect(diagnosisSrc).toContain('if (gatewayManagedProbeNeedsUpdate(managedProbe)) {');
+    expect(diagnosisSrc).toContain("classification: 'needs_update'");
+    expect(diagnosisSrc).toContain("catalog_state: 'pairing_failed'");
+    expect(diagnosisSrc).toContain("recommended_recovery: 'update_gateway'");
+    expect(diagnosisSrc).toContain("classification: 'trust_failed'");
+    expect(diagnosisSrc).toContain("recommended_recovery: 'review_trust'");
+    expect(diagnosisSrc.indexOf('if (gatewayClientErrorIsPairingRejected(error)) {')).toBeLessThan(
+      diagnosisSrc.indexOf("classification: manageable && serviceState?.status === 'ready' ? 'service_ready_catalog_failed' : 'catalog_failed'"),
+    );
   });
 
   it('keeps launcher snapshot construction on the fast in-memory path', () => {

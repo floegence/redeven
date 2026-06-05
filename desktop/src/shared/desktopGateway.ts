@@ -148,8 +148,19 @@ export type DesktopGatewayManagedProbeFact = Readonly<{
 
 export type DesktopGatewayManagedProbe = Readonly<{
   binary_path?: string;
+  package_status?:
+    | 'ready'
+    | 'missing_binary'
+    | 'binary_not_executable'
+    | 'version_command_failed'
+    | 'version_output_invalid'
+    | 'slot_version_mismatch'
+    | 'stamp_missing'
+    | 'stamp_invalid';
   version?: string;
+  target_version?: string;
   commit?: string;
+  target_commit?: string;
   service_pid?: number;
   service_listen?: string;
   state_root?: string;

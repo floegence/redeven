@@ -418,6 +418,69 @@ type GatewayRecoveryPlan = Readonly<{
   resolve_focus?: DesktopGatewayResolveFocus;
 }>;
 
+function gatewayRecoveryPlanFromRecommendedRecovery(
+  gateway: DesktopGatewaySource,
+  fallbackActionEnabled: boolean,
+): GatewayRecoveryPlan | undefined {
+  const diagnosis = gateway.diagnosis;
+  switch (diagnosis?.recommended_recovery) {
+    case 'start_gateway': {
+      const startAction = gatewaySourceAction('start_gateway', 'Start Gateway', 'default', gateway.service_state?.can_start !== false);
+      return {
+        title: 'Gateway is stopped',
+        detail: 'Desktop can start this Gateway service. Sync the Gateway after it is ready to refresh environments.',
+        aria_label: 'Start Gateway service',
+        primary_action: startAction,
+        continuation_action: continuationActionFor(gateway, startAction),
+      };
+    }
+    case 'update_gateway': {
+      const updateAction = gatewaySourceAction('update_gateway', 'Update Gateway', 'default', gateway.service_state?.can_update !== false);
+      return {
+        title: 'Gateway update required',
+        detail: 'Desktop needs to update this Gateway service before it can safely pair and trust the catalog.',
+        aria_label: 'Update Gateway before syncing',
+        primary_action: updateAction,
+        continuation_action: continuationActionFor(gateway, updateAction),
+      };
+    }
+    case 'edit_gateway_settings': {
+      const resolveAction = gatewayEditSettingsAction();
+      return {
+        title: gatewayDiagnosisTitle(gateway),
+        detail: 'Desktop needs a reachable Gateway service before it can sync environments.',
+        aria_label: 'Resolve Gateway before syncing',
+        primary_action: resolveAction,
+        resolve_focus: resolveFocusForGateway(gateway),
+      };
+    }
+    case 'review_trust': {
+      const reviewAction = gatewayReviewTrustAction();
+      return {
+        title: gatewayDiagnosisTitle(gateway),
+        detail: 'Desktop could not verify this Gateway identity. Review the Gateway target, then sync this Gateway again.',
+        aria_label: 'Review Gateway identity',
+        primary_action: reviewAction,
+        resolve_focus: 'identity_trust',
+      };
+    }
+    case 'sync_gateway': {
+      const syncAction = gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default', fallbackActionEnabled);
+      return {
+        title: gatewayDiagnosisTitle(gateway),
+        detail: diagnosis.classification === 'ready'
+          ? 'Desktop can reach this Gateway. Run sync to refresh environments.'
+          : 'Desktop can reach the Gateway service, but catalog sync still failed.',
+        aria_label: 'Sync Gateway',
+        primary_action: syncAction,
+        continuation_action: continuationActionFor(gateway, syncAction),
+      };
+    }
+    default:
+      return undefined;
+  }
+}
+
 function gatewaySyncRecoveryPlan(
   gateway: DesktopGatewaySource,
   fallbackActionEnabled = true,
@@ -453,6 +516,11 @@ function gatewaySyncRecoveryPlan(
       aria_label: 'Gateway diagnostics',
       resolve_focus: resolveFocusForGateway(gateway),
     };
+  }
+
+  const recommendedRecovery = gatewayRecoveryPlanFromRecommendedRecovery(gateway, fallbackActionEnabled);
+  if (recommendedRecovery) {
+    return recommendedRecovery;
   }
 
   switch (diagnosis.classification) {
@@ -517,13 +585,13 @@ function gatewaySyncRecoveryPlan(
       };
     }
     case 'service_ready_catalog_failed': {
-      const syncAction = gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default', fallbackActionEnabled);
+      const reviewAction = gatewayReviewTrustAction();
       return {
         title: gatewayDiagnosisTitle(gateway),
-        detail: 'Desktop can reach the Gateway service, but the signed catalog check failed. Run sync again after reviewing diagnostics.',
-        aria_label: 'Sync Gateway',
-        primary_action: syncAction,
-        continuation_action: continuationActionFor(gateway, syncAction),
+        detail: 'Desktop can reach the Gateway service, but the signed catalog check failed. Review the diagnostics before syncing again.',
+        aria_label: 'Review Gateway identity',
+        primary_action: reviewAction,
+        resolve_focus: 'identity_trust',
       };
     }
     case 'legacy_runtime_residue': {

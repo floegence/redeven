@@ -510,9 +510,58 @@ describe('buildGatewayActionPresentation', () => {
     });
     expect(readyCatalogFailed).toMatchObject({
       title: 'Gateway catalog check failed',
-      primary_action: { intent: 'sync_gateway', label: 'Sync Gateway' },
-      continuation_action: { kind: 'sync_gateway', gateway_id: 'gw-demo' },
+      primary_action: { intent: 'resolve_gateway', label: 'Review Trust' },
+      resolve_focus: 'identity_trust',
     });
+    expect(readyCatalogFailed.continuation_action).toBeUndefined();
+
+    const unauthorizedNeedsUpdate = buildGatewayActionPresentation({
+      gateway: gateway({
+        diagnosis: {
+          checked_at_unix_ms: 10,
+          classification: 'needs_update',
+          manageable: true,
+          summary: 'Gateway update required',
+          detail: 'Desktop can reach the Gateway service, but the service rejected the catalog request before pairing could be trusted.',
+          catalog_state: 'pairing_failed',
+          recommended_recovery: 'update_gateway',
+          error_code: 'UNAUTHORIZED',
+          error_message: 'Pair this Gateway before listing or opening environments.',
+          managed_probe: {
+            binary_path: '/root/.redeven/gateway/managed/bin/redeven-gateway',
+            package_status: 'ready',
+            version: 'v0.0.0-dev',
+            target_version: 'v0.0.0-dev',
+            commit: '46c3d67cc469',
+            target_commit: 'a7fd66530509',
+            state_root: '/root/.redeven/gateways/gw-demo/state',
+            legacy_local_catalog_present: false,
+            legacy_runtime_residue: false,
+            legacy_runtime_pids: [],
+            facts: [
+              { label: 'Package status', value: 'ready', tone: 'success' },
+              { label: 'Gateway version', value: 'v0.0.0-dev' },
+              { label: 'Gateway target version', value: 'v0.0.0-dev' },
+              { label: 'Gateway commit', value: '46c3d67cc469' },
+              { label: 'Gateway target commit', value: 'a7fd66530509' },
+            ],
+          },
+        },
+      }),
+      clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
+    });
+    expect(unauthorizedNeedsUpdate).toMatchObject({
+      title: 'Gateway update required',
+      primary_action: { intent: 'update_gateway', label: 'Update Gateway' },
+      continuation_action: { kind: 'update_gateway', gateway_id: 'gw-demo', impact_acknowledged: true },
+    });
+    expect(JSON.stringify(unauthorizedNeedsUpdate.primary_action)).not.toContain('Sync Gateway');
+    expect(unauthorizedNeedsUpdate.diagnostic_facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Error code', value: 'UNAUTHORIZED' }),
+      expect.objectContaining({ label: 'Error message', value: 'Pair this Gateway before listing or opening environments.', tone: 'error' }),
+      expect.objectContaining({ label: 'Gateway target commit', value: 'a7fd66530509' }),
+    ]));
 
     const legacyResidue = buildGatewayActionPresentation({
       gateway: gateway({
