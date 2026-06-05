@@ -24,6 +24,7 @@ type DesktopAnchoredOverlaySurfaceProps = Readonly<{
   interactive?: boolean;
   onMouseEnter?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>;
   onMouseLeave?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>;
+  onPointerDownCapture?: (event: PointerEvent) => void;
   onFocusIn?: JSX.EventHandlerUnion<HTMLDivElement, FocusEvent>;
   onFocusOut?: JSX.EventHandlerUnion<HTMLDivElement, FocusEvent>;
   onOverlayRef?: (element: HTMLDivElement | undefined) => void;
@@ -42,6 +43,19 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
   let frame = 0;
   let followUpFrames = 0;
   let overlayRef: HTMLDivElement | undefined;
+  let pointerCaptureElement: HTMLDivElement | undefined;
+
+  const handlePointerDownCapture = (event: PointerEvent) => {
+    props.onPointerDownCapture?.(event);
+  };
+
+  const clearPointerDownCapture = () => {
+    if (!pointerCaptureElement) {
+      return;
+    }
+    pointerCaptureElement.removeEventListener('pointerdown', handlePointerDownCapture, true);
+    pointerCaptureElement = undefined;
+  };
 
   const clearFrame = () => {
     if (!frame) {
@@ -138,13 +152,19 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     });
   });
 
-  onCleanup(() => clearFrame());
+  onCleanup(() => {
+    clearPointerDownCapture();
+    clearFrame();
+  });
 
   return (
     <Portal>
       <div
         ref={(element) => {
+          clearPointerDownCapture();
           overlayRef = element;
+          element.addEventListener('pointerdown', handlePointerDownCapture, true);
+          pointerCaptureElement = element;
           setOverlayElement(element);
           props.onOverlayRef?.(element);
           if (element && props.open) {
