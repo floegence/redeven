@@ -1,6 +1,7 @@
 import {
   desktopGatewayCanManageService,
   desktopGatewayConnectionKindLabel,
+  type DesktopGatewayDiagnosisProbeResult,
   type DesktopGatewaySource,
 } from '../shared/desktopGateway';
 import type {
@@ -39,6 +40,7 @@ const noGatewayActionPanel: GatewayActionPanelModel = {
   aria_label: '',
   facts: [],
   status_facts: [],
+  result_facts: [],
   diagnostic_facts: [],
   affected_sessions: [],
   overflow_session_count: 0,
@@ -66,6 +68,7 @@ export type GatewayActionPanelModel = Readonly<{
   aria_label: string;
   facts: readonly GatewayActionPanelFact[];
   status_facts: readonly GatewayActionPanelFact[];
+  result_facts: readonly GatewayActionPanelFact[];
   diagnostic_facts: readonly GatewayActionPanelFact[];
   affected_sessions: readonly GatewayActionAffectedSession[];
   overflow_session_count: number;
@@ -172,14 +175,30 @@ function defaultStatusFacts(gateway: DesktopGatewaySource): readonly GatewayActi
   ];
 }
 
+function probeFactValue(probe: DesktopGatewayDiagnosisProbeResult): string {
+  return compact(probe.detail) || probe.status;
+}
+
 function defaultDiagnosticFacts(gateway: DesktopGatewaySource): readonly GatewayActionPanelFact[] {
   const diagnosis = gateway.diagnosis;
+  const probeFacts = diagnosis?.probe_results?.map((probe) => ({
+    label: probe.label,
+    value: probeFactValue(probe),
+    tone: probe.status === 'passed'
+      ? 'success' as const
+      : probe.status === 'failed'
+        ? 'error' as const
+        : probe.status === 'warning'
+          ? 'warning' as const
+          : 'neutral' as const,
+  })) ?? [];
   return [
     { label: 'Trust', value: trustStateLabel(gateway), tone: gateway.trust_state === 'paired' ? 'neutral' : 'warning' },
     { label: 'Transport', value: desktopGatewayConnectionKindLabel(gateway.connection_kind) },
     { label: 'Endpoint', value: compact(gateway.endpoint_label) || compact(gateway.gateway_url) || gateway.gateway_id },
     ...(diagnosis ? [{ label: 'Diagnosis', value: diagnosis.summary }] : []),
     ...(diagnosis?.detail ? [{ label: 'Detail', value: diagnosis.detail }] : []),
+    ...probeFacts,
     ...(diagnosis?.error_code ? [{ label: 'Error code', value: diagnosis.error_code }] : []),
     ...(diagnosis?.error_message ? [{ label: 'Error message', value: diagnosis.error_message, tone: 'error' as const }] : []),
     ...(diagnosis?.managed_probe?.facts ?? []),
@@ -301,6 +320,95 @@ function gatewayDiagnosisTitle(gateway: DesktopGatewaySource): string {
   }
 }
 
+function probeResultFactValue(probe: DesktopGatewayDiagnosisProbeResult): string {
+  switch (probe.id) {
+    case 'gateway_service':
+      switch (probe.status) {
+        case 'passed':
+          return 'Ready';
+        case 'warning':
+          return 'Review required';
+        case 'failed':
+          return 'Not ready';
+        case 'skipped':
+          return 'Skipped';
+        default:
+          return 'Unknown';
+      }
+    case 'gateway_version':
+      switch (probe.status) {
+        case 'passed':
+          return 'Supported';
+        case 'warning':
+          return 'Update required';
+        case 'failed':
+          return 'Failed';
+        case 'skipped':
+          return 'Skipped';
+        default:
+          return 'Unknown';
+      }
+    case 'gateway_trust':
+      switch (probe.status) {
+        case 'passed':
+          return 'Verified';
+        case 'warning':
+          return 'Review required';
+        case 'failed':
+          return 'Failed';
+        case 'skipped':
+          return 'Skipped';
+        default:
+          return 'Unknown';
+      }
+    case 'gateway_catalog':
+      switch (probe.status) {
+        case 'passed':
+          return 'Reachable';
+        case 'warning':
+          return 'Review required';
+        case 'failed':
+          return 'Failed';
+        case 'skipped':
+          return 'Skipped';
+        default:
+          return 'Unknown';
+      }
+  }
+}
+
+function probeResultFactTone(status: string): GatewayActionPanelFact['tone'] {
+  switch (status) {
+    case 'passed':
+      return 'success';
+    case 'failed':
+      return 'error';
+    case 'warning':
+      return 'warning';
+    default:
+      return 'neutral';
+  }
+}
+
+function gatewayDiagnosisResultFacts(gateway: DesktopGatewaySource): readonly GatewayActionPanelFact[] {
+  const diagnosis = gateway.diagnosis;
+  const probeResults = diagnosis?.probe_results ?? [];
+  if (probeResults.length > 0) {
+    const preferred = diagnosis?.classification === 'ready'
+      ? probeResults.filter((probe) => probe.status === 'passed').slice(0, 3)
+      : probeResults.filter((probe) => probe.status === 'failed' || probe.status === 'warning').slice(0, 3);
+    const visible = preferred.length > 0
+      ? preferred
+      : probeResults.filter((probe) => probe.status === 'unknown' || probe.status === 'skipped').slice(0, 3);
+    return visible.map((probe) => ({
+      label: probe.label,
+      value: probeResultFactValue(probe),
+      tone: probeResultFactTone(probe.status),
+    }));
+  }
+  return defaultStatusFacts(gateway).slice(0, 2);
+}
+
 type GatewayRecoveryPlan = Readonly<{
   title: string;
   detail: string;
@@ -348,6 +456,26 @@ function gatewaySyncRecoveryPlan(
   }
 
   switch (diagnosis.classification) {
+    case 'trust_failed': {
+      if (diagnosis.recommended_recovery === 'sync_gateway') {
+        const syncAction = gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default', fallbackActionEnabled);
+        return {
+          title: 'Retry Gateway pairing',
+          detail: 'Desktop will verify the Gateway identity and refresh its environment catalog.',
+          aria_label: 'Pair this Gateway',
+          primary_action: syncAction,
+          continuation_action: continuationActionFor(gateway, syncAction),
+        };
+      }
+      const reviewAction = gatewayReviewTrustAction();
+      return {
+        title: gatewayDiagnosisTitle(gateway),
+        detail: 'Desktop could not verify this Gateway identity. Review the Gateway target, then sync this Gateway again.',
+        aria_label: 'Review Gateway identity',
+        primary_action: reviewAction,
+        resolve_focus: 'identity_trust',
+      };
+    }
     case 'not_started': {
       const startAction = gatewaySourceAction('start_gateway', 'Start Gateway', 'default', true);
       return {
@@ -379,16 +507,6 @@ function gatewaySyncRecoveryPlan(
         aria_label: 'Resolve Gateway before syncing',
         primary_action: resolveAction,
         resolve_focus: resolveFocusForGateway(gateway),
-      };
-    }
-    case 'trust_failed': {
-      const reviewAction = gatewayReviewTrustAction();
-      return {
-        title: gatewayDiagnosisTitle(gateway),
-        detail: 'Desktop could not verify this Gateway identity. Review the Gateway target, then sync this Gateway again.',
-        aria_label: 'Review Gateway identity',
-        primary_action: reviewAction,
-        resolve_focus: 'identity_trust',
       };
     }
     case 'catalog_failed': {
@@ -454,11 +572,12 @@ function gatewaySyncRecoveryPlan(
 }
 
 function buildPanel(
-  input: Omit<GatewayActionPanelModel, 'facts' | 'status_facts' | 'diagnostic_facts' | 'affected_sessions' | 'overflow_session_count' | 'secondary_actions'>
+  input: Omit<GatewayActionPanelModel, 'facts' | 'status_facts' | 'result_facts' | 'diagnostic_facts' | 'affected_sessions' | 'overflow_session_count' | 'secondary_actions'>
   & Readonly<{
     gateway: DesktopGatewaySource;
     facts?: readonly GatewayActionPanelFact[];
     status_facts?: readonly GatewayActionPanelFact[];
+    result_facts?: readonly GatewayActionPanelFact[];
     diagnostic_facts?: readonly GatewayActionPanelFact[];
     affected_sessions?: readonly GatewayActionAffectedSession[];
     secondary_actions?: readonly GatewaySourceActionModel[];
@@ -478,6 +597,7 @@ function buildPanel(
     aria_label: input.aria_label,
     facts: input.facts ?? [...statusFacts, ...diagnosticFacts],
     status_facts: statusFacts,
+    result_facts: input.result_facts ?? [],
     diagnostic_facts: diagnosticFacts,
     affected_sessions: visibleSessions,
     overflow_session_count: Math.max(0, sessions.length - visibleSessions.length),
@@ -638,6 +758,7 @@ export function buildGatewayActionPresentation(
       title: recovery.title,
       detail: recovery.detail,
       aria_label: recovery.aria_label,
+      result_facts: input.show_diagnosis_result === true ? gatewayDiagnosisResultFacts(gateway) : [],
       ...(recovery.resolve_focus ? { resolve_focus: recovery.resolve_focus } : {}),
       ...(recovery.continuation_action ? { continuation_action: recovery.continuation_action } : {}),
       ...(recovery.primary_action ? { primary_action: recovery.primary_action } : {}),

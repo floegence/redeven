@@ -2443,9 +2443,10 @@ body {
 }
 
 .redeven-environment-progress__step {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
   min-width: 0;
-  align-items: flex-start;
+  align-items: start;
   gap: 0.5rem;
   transform-origin: top left;
   transition:
@@ -2464,7 +2465,7 @@ body {
   align-items: center;
   flex-shrink: 0;
   width: 1rem;
-  padding-top: 0.15rem;
+  padding-top: 0.21rem;
 }
 
 .redeven-environment-progress__step-dot {
@@ -2515,8 +2516,8 @@ body {
 }
 
 .redeven-environment-progress__step-label {
+  display: block;
   min-width: 0;
-  padding-top: 0.06rem;
   padding-bottom: 0.4rem;
   font-size: 0.7rem;
   font-weight: 500;
@@ -3262,6 +3263,61 @@ pre,
   white-space: nowrap;
 }
 
+.redeven-gateway-action-panel__result-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.58rem;
+  min-width: 0;
+}
+
+.redeven-gateway-action-panel__result-fact {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.28rem;
+  border: 1px solid color-mix(in srgb, var(--border) 48%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted) 12%, transparent);
+  padding: 0.18rem 0.48rem;
+  font-size: 0.66rem;
+  line-height: 1.25;
+}
+
+.redeven-gateway-action-panel__result-fact[data-tone='success'] {
+  border-color: color-mix(in srgb, var(--success) 26%, transparent);
+  background: color-mix(in srgb, var(--success) 7%, transparent);
+}
+
+.redeven-gateway-action-panel__result-fact[data-tone='warning'] {
+  border-color: color-mix(in srgb, var(--warning) 30%, transparent);
+  background: color-mix(in srgb, var(--warning) 8%, transparent);
+}
+
+.redeven-gateway-action-panel__result-fact[data-tone='error'] {
+  border-color: color-mix(in srgb, var(--error) 28%, transparent);
+  background: color-mix(in srgb, var(--error) 7%, transparent);
+}
+
+.redeven-gateway-action-panel__result-fact-label {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-gateway-action-panel__result-fact-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  flex: 1 1 auto;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .redeven-gateway-action-panel__section {
   display: grid;
   min-width: 0;
@@ -3429,7 +3485,7 @@ pre,
 @media (max-width: 25rem) {
   .redeven-action-popover-surface.redeven-gateway-action-popover-surface,
   .redeven-gateway-card .redeven-action-popover-surface {
-    --redeven-action-popover-width: min(20rem, calc(100vw - 1rem));
+    --redeven-action-popover-width: min(19rem, calc(100vw - 1rem));
   }
 
   .redeven-gateway-action-panel__hero {

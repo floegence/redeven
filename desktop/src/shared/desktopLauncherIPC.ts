@@ -35,6 +35,7 @@ import type {
   DesktopGatewayEnvironment,
   DesktopGatewayEnvironmentCapability,
   DesktopGatewayEnvironmentState,
+  DesktopGatewayDiagnosis,
   DesktopGatewayServiceState,
   DesktopGatewaySource,
   DesktopGatewayStatus,
@@ -514,6 +515,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
   step_progress?: DesktopStepProgress;
+  gateway_diagnosis?: DesktopGatewayDiagnosis;
   cancelable: boolean;
   interrupt_label?: string;
   interrupt_label_key?: DesktopTranslationKey;
@@ -981,6 +983,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   lifecycle_progress?: DesktopRuntimeLifecycleProgress;
   open_progress?: DesktopOpenConnectionProgress;
   step_progress?: DesktopStepProgress;
+  gateway_diagnosis?: DesktopGatewayDiagnosis;
   cancelable?: boolean;
   interrupt_label?: string;
   interrupt_label_key?: DesktopTranslationKey;

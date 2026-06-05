@@ -292,6 +292,10 @@ describe('buildGatewayActionPresentation', () => {
           manageable: true,
           summary: 'Gateway is stopped',
           detail: 'Desktop can start this Gateway service.',
+          probe_results: [
+            { id: 'gateway_service', label: 'Gateway service', status: 'failed', detail: 'Service is not running.' },
+            { id: 'gateway_version', label: 'Gateway version', status: 'skipped' },
+          ],
         },
       }),
       clicked_action: action('check_gateway'),
@@ -302,6 +306,12 @@ describe('buildGatewayActionPresentation', () => {
       primary_action: { intent: 'start_gateway', label: 'Start Gateway' },
       continuation_action: { kind: 'start_gateway', gateway_id: 'gw-demo' },
     });
+    expect(stopped.result_facts).toEqual([
+      expect.objectContaining({ label: 'Gateway service', value: 'Not ready', tone: 'error' }),
+    ]);
+    expect(stopped.diagnostic_facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Gateway service', value: 'Service is not running.', tone: 'error' }),
+    ]));
 
     const unmanaged = buildGatewayActionPresentation({
       gateway: gateway({
@@ -343,6 +353,32 @@ describe('buildGatewayActionPresentation', () => {
       primary_action: { intent: 'update_gateway', label: 'Update Gateway' },
       continuation_action: { kind: 'update_gateway', gateway_id: 'gw-demo' },
     });
+
+    const needsUpdateWithProbes = buildGatewayActionPresentation({
+      gateway: gateway({
+        diagnosis: {
+          checked_at_unix_ms: 10,
+          classification: 'needs_update',
+          manageable: true,
+          summary: 'Gateway protocol unsupported',
+          detail: 'Raw protocol detail should stay out of the panel title.',
+          probe_results: [
+            { id: 'gateway_service', label: 'Gateway service', status: 'warning', detail: 'Gateway service is reachable but needs update.' },
+            { id: 'gateway_version', label: 'Gateway version', status: 'warning' },
+            { id: 'gateway_trust', label: 'Gateway trust', status: 'skipped' },
+          ],
+        },
+      }),
+      clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
+    });
+    expect(needsUpdateWithProbes.result_facts).toEqual([
+      expect.objectContaining({ label: 'Gateway service', value: 'Review required', tone: 'warning' }),
+      expect.objectContaining({ label: 'Gateway version', value: 'Update required', tone: 'warning' }),
+    ]);
+    expect(needsUpdateWithProbes.diagnostic_facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Gateway service', value: 'Gateway service is reachable but needs update.', tone: 'warning' }),
+    ]));
 
     const sshUnreachable = buildGatewayActionPresentation({
       gateway: gateway({
@@ -415,6 +451,28 @@ describe('buildGatewayActionPresentation', () => {
       title: 'Gateway trust check failed',
       primary_action: { intent: 'resolve_gateway', label: 'Review Trust' },
       resolve_focus: 'identity_trust',
+    });
+
+    const unpaired = buildGatewayActionPresentation({
+      gateway: gateway({
+        diagnosis: {
+          checked_at_unix_ms: 10,
+          classification: 'trust_failed',
+          manageable: true,
+          summary: 'Gateway is not paired',
+          detail: 'Desktop needs to sync this Gateway before it can trust and read its catalog.',
+          trust_state: 'unpaired',
+          catalog_state: 'pairing_failed',
+          recommended_recovery: 'sync_gateway',
+        },
+      }),
+      clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
+    });
+    expect(unpaired).toMatchObject({
+      title: 'Retry Gateway pairing',
+      primary_action: { intent: 'sync_gateway', label: 'Sync Gateway' },
+      continuation_action: { kind: 'sync_gateway', gateway_id: 'gw-demo' },
     });
 
     const catalogFailed = buildGatewayActionPresentation({
@@ -496,6 +554,11 @@ describe('buildGatewayActionPresentation', () => {
           manageable: true,
           summary: 'Gateway service is ready',
           detail: 'Raw ready detail should stay out of the panel title.',
+          probe_results: [
+            { id: 'gateway_service', label: 'Gateway service', status: 'passed' },
+            { id: 'gateway_trust', label: 'Gateway trust', status: 'passed' },
+            { id: 'gateway_catalog', label: 'Gateway catalog', status: 'passed' },
+          ],
         },
       }),
       clicked_action: action('check_gateway'),
@@ -505,6 +568,38 @@ describe('buildGatewayActionPresentation', () => {
       title: 'Gateway is ready',
       primary_action: { intent: 'sync_gateway', label: 'Sync Gateway' },
     });
+    expect(ready.result_facts).toEqual([
+      expect.objectContaining({ label: 'Gateway service', value: 'Ready', tone: 'success' }),
+      expect.objectContaining({ label: 'Gateway trust', value: 'Verified', tone: 'success' }),
+      expect.objectContaining({ label: 'Gateway catalog', value: 'Reachable', tone: 'success' }),
+    ]);
+    expect(ready.diagnostic_facts).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Gateway service', value: 'passed', tone: 'success' }),
+      expect.objectContaining({ label: 'Gateway trust', value: 'passed', tone: 'success' }),
+      expect.objectContaining({ label: 'Gateway catalog', value: 'passed', tone: 'success' }),
+    ]));
+
+    const inconclusive = buildGatewayActionPresentation({
+      gateway: gateway({
+        diagnosis: {
+          checked_at_unix_ms: 10,
+          classification: 'unknown',
+          manageable: true,
+          summary: 'Gateway status is unknown',
+          detail: 'Desktop could not determine this Gateway service state.',
+          probe_results: [
+            { id: 'gateway_service', label: 'Gateway service', status: 'unknown' },
+            { id: 'gateway_trust', label: 'Gateway trust', status: 'skipped' },
+          ],
+        },
+      }),
+      clicked_action: action('check_gateway'),
+      show_diagnosis_result: true,
+    });
+    expect(inconclusive.result_facts).toEqual([
+      expect.objectContaining({ label: 'Gateway service', value: 'Unknown', tone: 'neutral' }),
+      expect.objectContaining({ label: 'Gateway trust', value: 'Skipped', tone: 'neutral' }),
+    ]);
 
     const disabled = buildGatewayActionPresentation({
       gateway: gateway({
