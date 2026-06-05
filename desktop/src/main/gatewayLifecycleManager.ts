@@ -110,6 +110,7 @@ export type GatewayLifecycleManagerOptions = Readonly<{
   temp_root: string;
   desktop_owner_id: () => Promise<string>;
   source_runtime_root?: string;
+  target_commit?: string;
   session_cache?: Map<string, GatewayLifecycleSession>;
   signal?: AbortSignal;
   on_progress?: GatewayLifecycleProgressSink;
@@ -257,6 +258,7 @@ export class GatewayLifecycleManager {
         releaseBaseURL: this.options.release_base_url,
         assetCacheRoot: this.options.asset_cache_root,
         sourceRuntimeRoot: this.options.source_runtime_root,
+        targetCommit: this.options.target_commit,
         sshPassword,
         tempRoot: this.options.temp_root,
         signal,
@@ -310,6 +312,7 @@ export class GatewayLifecycleManager {
       releaseBaseURL: this.options.release_base_url,
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
+      targetCommit: this.options.target_commit,
       sshPassword,
       tempRoot: this.options.temp_root,
       signal,
@@ -386,6 +389,7 @@ export class GatewayLifecycleManager {
       releaseBaseURL: this.options.release_base_url,
       assetCacheRoot: this.options.asset_cache_root,
       sourceRuntimeRoot: this.options.source_runtime_root,
+      targetCommit: this.options.target_commit,
       sshPassword,
       tempRoot: this.options.temp_root,
       signal: options.signal,
@@ -510,6 +514,7 @@ export class GatewayLifecycleManager {
         releaseBaseURL: this.options.release_base_url,
         assetCacheRoot: this.options.asset_cache_root,
         sourceRuntimeRoot: this.options.source_runtime_root,
+        targetCommit: this.options.target_commit,
         sshPassword,
         tempRoot: this.options.temp_root,
         forceUpdate: options.forceUpdate === true,

@@ -55,7 +55,9 @@ export type GatewayServiceDeepProbe = Readonly<{
   state_root: string;
   package_status: GatewayServicePackageProbeStatus;
   version?: string;
+  target_version?: string;
   commit?: string;
+  target_commit?: string;
   build_time?: string;
   service_status: string;
   service_pid?: number;
@@ -90,6 +92,7 @@ export type GatewayServiceHostOptions = Readonly<{
   releaseBaseURL: string;
   assetCacheRoot: string;
   sourceRuntimeRoot?: string;
+  targetCommit?: string;
   sshPassword?: string;
   tempRoot: string;
   forceUpdate?: boolean;
@@ -445,6 +448,7 @@ function gatewayDeepProbeScript(rootShell: string): string {
     'set -eu',
     rootShell,
     managedGatewayPathShell(),
+    'target_commit="${4:-}"',
     gatewayProbeShell(),
     'gateway_package_is_ready || true',
     'version_value=""',
@@ -505,7 +509,9 @@ function gatewayDeepProbeScript(rootShell: string): string {
     'printf "state_root=%s\\n" "$state_root"',
     'printf "package_status=%s\\n" "$probe_status"',
     'printf "version=%s\\n" "$version_value"',
+    'printf "target_version=%s\\n" "$target_release_tag"',
     'printf "commit=%s\\n" "$commit_value"',
+    'printf "target_commit=%s\\n" "$target_commit"',
     'printf "build_time=%s\\n" "$build_time_value"',
     'printf "service_status=%s\\n" "$service_status"',
     'printf "service_pid=%s\\n" "$service_pid"',
@@ -838,7 +844,9 @@ function parseGatewayServiceDeepProbe(raw: string): GatewayServiceDeepProbe {
     state_root: compact(parsed.get('state_root')),
     package_status: normalizePackageProbeStatus(parsed.get('package_status') ?? ''),
     version: compact(parsed.get('version')) || undefined,
+    target_version: compact(parsed.get('target_version')) || undefined,
     commit: compact(parsed.get('commit')) || undefined,
+    target_commit: compact(parsed.get('target_commit')) || undefined,
     build_time: compact(parsed.get('build_time')) || undefined,
     service_status: compact(parsed.get('service_status')) || 'unknown',
     service_pid: Number.isInteger(servicePID) && servicePID > 0 ? servicePID : undefined,
@@ -852,10 +860,12 @@ function parseGatewayServiceDeepProbe(raw: string): GatewayServiceDeepProbe {
 export async function probeManagedGatewayServiceDeep(options: GatewayServiceHostOptions): Promise<GatewayServiceDeepProbe> {
   const executor = executorFor(options);
   const rootShell = rootShellForPlacement(options.placement);
+  const targetCommit = compact(options.targetCommit);
   const result = await executor.run(commandForPlacement(options.placement, gatewayDeepProbeScript(rootShell), [
     options.placement.runtime_root,
     options.stateRoot,
     normalizeReleaseTag(options.releaseTag),
+    targetCommit,
   ]), { signal: options.signal });
   return parseGatewayServiceDeepProbe(result.stdout);
 }

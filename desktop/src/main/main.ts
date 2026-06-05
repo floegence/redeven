@@ -2481,6 +2481,7 @@ function gatewayLifecycleManager(): GatewayLifecycleManager {
       asset_cache_root: desktopRuntimePackageCacheRoot(),
       temp_root: app.getPath('temp'),
       source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
+      target_commit: process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT,
       desktop_owner_id: desktopRuntimeOwnerID,
     });
   }
@@ -3942,7 +3943,7 @@ function gatewaySyncStateForError(error: unknown): DesktopGatewaySyncState {
     return 'pairing_failed';
   }
   if (error instanceof GatewayClientError) {
-    if (error.code.startsWith('GATEWAY_PAIRING_') || error.code === 'GATEWAY_TRUST_CHANGED') {
+    if (gatewayClientErrorIsPairingRejected(error)) {
       return 'pairing_failed';
     }
     return 'catalog_failed';
@@ -3951,6 +3952,28 @@ function gatewaySyncStateForError(error: unknown): DesktopGatewaySyncState {
     return 'gateway_unreachable';
   }
   return 'catalog_failed';
+}
+
+function gatewayClientErrorIsPairingRejected(error: GatewayClientError): boolean {
+  const code = compact(error.code).toUpperCase();
+  const message = compact(error.message).toLowerCase();
+  return code === 'UNAUTHORIZED'
+    || code === 'GATEWAY_UNAUTHORIZED'
+    || code.startsWith('GATEWAY_PAIRING_')
+    || message.includes('pair this gateway before')
+    || message.includes('pair this gateway');
+}
+
+function gatewayClientErrorIsTrustMismatch(error: GatewayClientError): boolean {
+  switch (compact(error.code)) {
+    case 'GATEWAY_ID_MISMATCH':
+    case 'GATEWAY_FINGERPRINT_REQUIRED':
+    case 'GATEWAY_PUBLIC_KEY_MISMATCH':
+    case 'GATEWAY_TRUST_CHANGED':
+      return true;
+    default:
+      return false;
+  }
 }
 
 function gatewaySyncRecordFromError(
@@ -5276,8 +5299,9 @@ function gatewayRecommendedRecoveryForDiagnosis(
   switch (diagnosis.classification) {
     case 'ready':
     case 'catalog_failed':
-    case 'service_ready_catalog_failed':
       return 'sync_gateway';
+    case 'service_ready_catalog_failed':
+      return 'review_trust';
     case 'not_started':
       return diagnosis.service_state?.can_start === false ? undefined : 'start_gateway';
     case 'needs_update':
@@ -5457,7 +5481,9 @@ function desktopManagedProbeFromServiceProbe(probe: GatewayServiceDeepProbe | un
     managedProbeFact('Gateway state root', probe.state_root),
     managedProbeFact('Package status', probe.package_status, probe.package_status === 'ready' ? 'success' : 'warning'),
     managedProbeFact('Gateway version', probe.version),
+    managedProbeFact('Gateway target version', probe.target_version),
     managedProbeFact('Gateway commit', probe.commit),
+    managedProbeFact('Gateway target commit', probe.target_commit),
     managedProbeFact('Gateway service', probe.service_status, probe.service_status === 'running' ? 'success' : 'warning'),
     managedProbeFact('Gateway service pid', probe.service_pid),
     managedProbeFact('Gateway listen', probe.service_listen),
@@ -5467,8 +5493,11 @@ function desktopManagedProbeFromServiceProbe(probe: GatewayServiceDeepProbe | un
   ].filter((fact): fact is DesktopGatewayManagedProbe['facts'][number] => fact !== null);
   return {
     binary_path: probe.binary_path,
+    package_status: probe.package_status,
     version: probe.version,
+    target_version: probe.target_version,
     commit: probe.commit,
+    target_commit: probe.target_commit,
     service_pid: probe.service_pid,
     service_listen: probe.service_listen,
     state_root: probe.state_root,
@@ -5477,6 +5506,43 @@ function desktopManagedProbeFromServiceProbe(probe: GatewayServiceDeepProbe | un
     legacy_runtime_pids: probe.legacy_runtime_pids,
     facts,
   };
+}
+
+function normalizeGatewayProbeVersion(value: string | undefined): string {
+  const clean = compact(value);
+  if (clean === '') {
+    return '';
+  }
+  return clean.startsWith('v') ? clean : `v${clean}`;
+}
+
+function gatewayProbeVersionIsDev(version: string): boolean {
+  return version === 'v0.0.0-dev';
+}
+
+function gatewayManagedProbeNeedsUpdate(probe: DesktopGatewayManagedProbe | undefined): boolean {
+  if (!probe) {
+    return false;
+  }
+  if (probe.legacy_runtime_residue === true || probe.legacy_local_catalog_present === true || (probe.legacy_runtime_pids?.length ?? 0) > 0) {
+    return true;
+  }
+  const packageStatus = compact(probe.package_status);
+  if (packageStatus !== '' && packageStatus !== 'ready') {
+    return true;
+  }
+  const version = normalizeGatewayProbeVersion(probe.version);
+  const targetVersion = normalizeGatewayProbeVersion(probe.target_version);
+  if (version !== '' && targetVersion !== '' && version !== targetVersion) {
+    return true;
+  }
+  const commit = compact(probe.commit);
+  const targetCommit = compact(probe.target_commit);
+  return gatewayProbeVersionIsDev(version)
+    && gatewayProbeVersionIsDev(targetVersion)
+    && commit !== ''
+    && targetCommit !== ''
+    && commit !== targetCommit;
 }
 
 function gatewayDiagnosisForError(
@@ -5544,13 +5610,27 @@ function gatewayDiagnosisForError(
     };
   }
   if (error instanceof GatewayClientError) {
-    const trustCodes = new Set([
-      'GATEWAY_ID_MISMATCH',
-      'GATEWAY_FINGERPRINT_REQUIRED',
-      'GATEWAY_PUBLIC_KEY_MISMATCH',
-      'GATEWAY_TRUST_CHANGED',
-    ]);
-    if (trustCodes.has(error.code) || error.code.startsWith('GATEWAY_PAIRING_')) {
+    if (gatewayClientErrorIsPairingRejected(error)) {
+      if (gatewayManagedProbeNeedsUpdate(managedProbe)) {
+        return {
+          ...base,
+          classification: 'needs_update',
+          catalog_state: 'pairing_failed',
+          recommended_recovery: 'update_gateway',
+          summary: 'Gateway update required',
+          detail: 'Desktop can reach the Gateway service, but the service rejected the catalog request before pairing could be trusted. Update Gateway to align the managed service with this Desktop before syncing again.',
+        };
+      }
+      return {
+        ...base,
+        classification: 'trust_failed',
+        catalog_state: 'pairing_failed',
+        recommended_recovery: 'review_trust',
+        summary: 'Gateway trust check failed',
+        detail: message,
+      };
+    }
+    if (gatewayClientErrorIsTrustMismatch(error)) {
       return {
         ...base,
         classification: 'trust_failed',
