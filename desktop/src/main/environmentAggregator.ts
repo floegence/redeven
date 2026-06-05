@@ -256,7 +256,7 @@ function gatewayRuntimeOperations(input: Readonly<{
       },
     ),
     refresh: desktopRuntimeOperationPlan('refresh', 'available', 'runtime_gateway', {
-      label: 'Sync Gateway',
+      label: 'Refresh Gateway',
     }),
     start: desktopRuntimeOperationPlan(
       'start',

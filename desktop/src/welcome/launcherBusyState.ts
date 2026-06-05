@@ -30,6 +30,7 @@ export type BusyAction =
   | 'open_environment_settings'
   | 'refresh_control_plane'
   | 'upsert_gateway'
+  | 'refresh_gateway'
   | 'check_gateway'
   | 'pair_gateway'
   | 'sync_gateway'
@@ -310,6 +311,7 @@ export function gatewaySourceMatchesRuntimeLifecycleProgress(
     return false;
   }
   switch (progress?.action) {
+    case 'refresh_gateway':
     case 'check_gateway':
     case 'sync_gateway':
     case 'pair_gateway':

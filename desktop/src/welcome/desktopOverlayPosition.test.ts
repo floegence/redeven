@@ -171,7 +171,7 @@ describe('desktopOverlayPosition', () => {
     });
 
     expect(position.placement).toBe('top');
-    expect(position.top).toBe(10);
+    expect(position.top).toBe(-60);
     expect(position.left).toBe(12);
     expect(position.arrowOffset).toBe(186);
     expect(position.maxHeight).toBeUndefined();

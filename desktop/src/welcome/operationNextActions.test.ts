@@ -219,22 +219,22 @@ describe('operationNextActions', () => {
     };
 
     expect(visibleOperationNextActions(progress)).toEqual([
-      expect.objectContaining({ kind: 'check_gateway', label: 'Check Gateway' }),
+      expect.objectContaining({ kind: 'update_gateway', label: 'Update Gateway service' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
+      expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);
     expect(visibleOperationNextActions(progress)).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'check_gateway' }),
       expect.objectContaining({ kind: 'manage_desktop_update' }),
       expect.objectContaining({ kind: 'refresh_status' }),
       expect.objectContaining({ kind: 'update_runtime' }),
-      expect.objectContaining({ kind: 'update_gateway' }),
       expect.objectContaining({ kind: 'retry' }),
       expect.objectContaining({ kind: 'refresh_gateway_status' }),
       expect.objectContaining({ kind: 'refresh_gateway_catalog' }),
-      expect.objectContaining({ kind: 'dismiss' }),
     ]));
   });
 
-  it('shows Gateway service recommendations after a diagnostic check completes', () => {
+  it('shows Gateway service recommendations after a Refresh diagnosis completes', () => {
     const progress: DesktopLauncherActionProgress = {
       ...failedProgress([
         {
@@ -258,8 +258,8 @@ describe('operationNextActions', () => {
           label: 'Dismiss',
         },
       ]),
-      action: 'check_gateway',
-      operation_key: 'gateway:bastion:check',
+      action: 'refresh_gateway',
+      operation_key: 'gateway:bastion:refresh',
       subject_kind: 'gateway',
       subject_id: 'bastion',
       environment_id: undefined,
@@ -270,10 +270,11 @@ describe('operationNextActions', () => {
       expect.objectContaining({ kind: 'start_gateway', label: 'Start Gateway' }),
       expect.objectContaining({ kind: 'update_gateway', label: 'Update Gateway' }),
       expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
+      expect.objectContaining({ kind: 'dismiss', label: 'Dismiss' }),
     ]);
   });
 
-  it('keeps legacy Gateway recovery ordering when Check Gateway is absent', () => {
+  it('hides legacy Gateway resolve and catalog actions from Gateway progress panels', () => {
     const progress: DesktopLauncherActionProgress = {
       ...failedProgress([
         {
@@ -301,47 +302,16 @@ describe('operationNextActions', () => {
       environment_id: undefined,
     };
 
-    expect(visibleOperationNextActions(progress).slice(0, 2)).toEqual([
-      expect.objectContaining({ kind: 'resolve_gateway', label: 'Resolve Gateway' }),
-      expect.objectContaining({ kind: 'refresh_gateway_catalog', label: 'Sync Gateway' }),
+    expect(visibleOperationNextActions(progress)).toEqual([
+      expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
     ]);
+    expect(visibleOperationNextActions(progress)).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'resolve_gateway' }),
+      expect.objectContaining({ kind: 'refresh_gateway_catalog' }),
+    ]));
   });
 
-  it('keeps specific Gateway recovery actions before generic catalog sync', () => {
-    const progress: DesktopLauncherActionProgress = {
-      ...failedProgress([
-        {
-          kind: 'resolve_gateway',
-          gateway_id: 'bastion',
-          resolve_focus: 'ssh_host',
-          label: 'Resolve Gateway',
-        },
-        {
-          kind: 'refresh_gateway_catalog',
-          gateway_id: 'bastion',
-          start_policy: 'start_if_needed',
-          label: 'Sync Gateway',
-        },
-        {
-          kind: 'copy_diagnostics',
-          operation_key: 'gateway:bastion:sync',
-          label: 'Copy log',
-        },
-      ]),
-      action: 'sync_gateway',
-      operation_key: 'gateway:bastion:sync',
-      subject_kind: 'gateway',
-      subject_id: 'bastion',
-      environment_id: undefined,
-    };
-
-    expect(visibleOperationNextActions(progress).slice(0, 2)).toEqual([
-      expect.objectContaining({ kind: 'resolve_gateway', label: 'Resolve Gateway' }),
-      expect.objectContaining({ kind: 'refresh_gateway_catalog', label: 'Sync Gateway' }),
-    ]);
-  });
-
-  it('keeps focused Gateway resolve actions ahead of generic retry', () => {
+  it('hides legacy Gateway retry actions from Gateway progress panels', () => {
     const progress: DesktopLauncherActionProgress = {
       ...failedProgress([
         {
@@ -372,9 +342,12 @@ describe('operationNextActions', () => {
       environment_id: undefined,
     };
 
-    expect(visibleOperationNextActions(progress).slice(0, 2)).toEqual([
-      expect.objectContaining({ kind: 'resolve_gateway', resolve_focus: 'container' }),
-      expect.objectContaining({ kind: 'retry', label: 'Sync Gateway' }),
+    expect(visibleOperationNextActions(progress)).toEqual([
+      expect.objectContaining({ kind: 'copy_diagnostics', label: 'Copy log' }),
     ]);
+    expect(visibleOperationNextActions(progress)).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'resolve_gateway' }),
+      expect.objectContaining({ kind: 'retry' }),
+    ]));
   });
 });

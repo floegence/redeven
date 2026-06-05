@@ -134,6 +134,8 @@ export type DesktopGatewayDiagnosisClassification =
   | 'container_unavailable'
   | 'bridge_unavailable'
   | 'trust_failed'
+  | 'pairing_required'
+  | 'identity_changed'
   | 'catalog_failed'
   | 'service_ready_catalog_failed'
   | 'legacy_runtime_residue'
@@ -186,7 +188,7 @@ export type DesktopGatewayDiagnosis = Readonly<{
   service_state?: DesktopGatewayServiceState;
   catalog_state?: DesktopGatewaySyncState;
   trust_state?: DesktopGatewayTrustState;
-  recommended_recovery?: 'sync_gateway' | 'start_gateway' | 'update_gateway' | 'edit_gateway_settings' | 'review_trust';
+  recommended_recovery?: 'start_gateway' | 'restart_gateway' | 'update_gateway';
   probe_results?: readonly DesktopGatewayDiagnosisProbeResult[];
   managed_probe?: DesktopGatewayManagedProbe;
   error_code?: string;

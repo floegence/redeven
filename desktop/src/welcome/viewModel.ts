@@ -1479,10 +1479,10 @@ function runtimeMenuActions(environment: DesktopEnvironmentEntry): readonly Envi
     const refreshPlan = environment.runtime_operations.refresh;
     items.push({
       id: 'refresh_runtime',
-      label: 'Sync Gateway',
+      label: 'Refresh',
       action: {
         intent: 'refresh_runtime',
-        label: 'Sync Gateway',
+        label: 'Refresh',
         enabled: refreshPlan?.availability !== 'blocked',
         variant: 'outline',
       },
@@ -2312,23 +2312,16 @@ export type GatewayRowModel = Readonly<{
 
 export type GatewaySourceActionIntent =
   | 'add_gateway_environment'
-  | 'check_gateway'
+  | 'refresh_gateway'
   | 'enable_gateway'
   | 'disable_gateway'
-  | 'delete_gateway'
-  | 'sync_gateway'
   | 'open_gateway_environment'
-  | 'manage_gateway'
-  | 'pair_gateway'
-  | 'resolve_gateway'
   | 'setup_gateway'
   | 'start_gateway'
   | 'stop_gateway'
   | 'restart_gateway'
   | 'update_gateway'
   | 'view_gateway_environments'
-  | 'refresh_gateway_status'
-  | 'refresh_gateway_catalog'
   | 'cancel_gateway_action';
 
 export type GatewaySourceActionModel = Readonly<{
@@ -2396,61 +2389,16 @@ function gatewaySourceAction(
 }
 
 function gatewaySourcePrimaryAction(gateway: DesktopGatewaySource): GatewaySourceActionModel {
-  const serviceState = gateway.service_state;
-  const serviceStatus = serviceState?.status ?? 'unknown';
-  const needsSetup = gateway.status === 'needs_setup';
-  const needsPairing = gateway.status === 'pairing_required' || gateway.trust_state === 'unpaired';
-  const needsResolution = desktopGatewayNeedsResolution(gateway.status);
-  const manageable = desktopGatewayCanManageService(gateway);
-
   if (gateway.local_enabled === false) {
     return gatewaySourceAction('enable_gateway', 'Enable Gateway', 'default');
   }
-  if (needsSetup) {
-    return gatewaySourceAction('setup_gateway', 'Set up', 'default');
-  }
-  if (gateway.sync_state === 'gateway_unreachable' || gateway.sync_state === 'catalog_failed' || gateway.sync_state === 'pairing_failed') {
-    return gatewaySourceAction('check_gateway', 'Check Gateway', 'default');
-  }
-  if (manageable && (
-    serviceStatus === 'ssh_unreachable'
-    || serviceStatus === 'container_unavailable'
-    || serviceStatus === 'bridge_unavailable'
-    || serviceStatus === 'error'
-  )) {
-    return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default');
-  }
-  if (manageable && serviceStatus === 'not_started') {
-    return serviceState?.can_start === true
-      ? gatewaySourceAction('start_gateway', 'Start Gateway', 'default')
-      : gatewaySourceAction('resolve_gateway', 'Start Gateway', 'default', false, 'Gateway service cannot be started from this Desktop.');
-  }
-  if (manageable && serviceStatus === 'service_needs_update') {
-    return gatewaySourceAction('update_gateway', 'Update Gateway', 'default', serviceState?.can_update !== false);
-  }
-  if (gateway.status === 'trust_changed' || gateway.trust_state === 'trust_changed') {
-    return gatewaySourceAction('resolve_gateway', 'Resolve Gateway', 'default');
-  }
-  if (needsPairing) {
-    return gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default');
-  }
-  if (needsResolution) {
-    return gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default');
-  }
-  if (gateway.environments.length > 0) {
-    return gatewaySourceAction('view_gateway_environments', 'View Environments', 'default');
-  }
-  if (gateway.status === 'online' && gateway.capabilities.includes('env_profile_write')) {
-    return gatewaySourceAction('add_gateway_environment', 'Add Env', 'default');
-  }
-  return gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default');
+  return gatewaySourceAction('refresh_gateway', 'Refresh', 'default');
 }
 
 function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource): readonly GatewaySourceActionModel[] {
   const serviceState = gateway.service_state;
   const serviceStatus = serviceState?.status ?? 'unknown';
   const manageable = desktopGatewayCanManageService(gateway);
-  const syncRunning = gateway.background_sync_running === true;
   const primaryAction = gatewaySourcePrimaryAction(gateway);
   const actions: GatewaySourceActionModel[] = [];
 
@@ -2462,20 +2410,11 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource): readonly 
   };
 
   if (gateway.local_enabled === false) {
-    add(gatewaySourceAction('manage_gateway', 'Gateway settings', 'outline'));
-    add(gatewaySourceAction('delete_gateway', 'Delete Gateway', 'outline'));
     return actions;
   }
 
   if (gateway.status !== 'needs_setup') {
-    add(gatewaySourceAction(
-      'sync_gateway',
-      'Sync Gateway',
-      'outline',
-      !syncRunning,
-      syncRunning ? 'Gateway sync is already running.' : undefined,
-    ));
-    add(gatewaySourceAction('disable_gateway', 'Pause Sync', 'outline'));
+    add(gatewaySourceAction('disable_gateway', 'Disable', 'outline'));
   }
 
   if (manageable) {
@@ -2488,13 +2427,11 @@ function gatewaySourceSecondaryActions(gateway: DesktopGatewaySource): readonly 
     if (serviceState?.can_restart === true) {
       add(gatewaySourceAction('restart_gateway', 'Restart Gateway', 'outline'));
     }
-    if (serviceStatus === 'ready' && serviceState?.can_update === true) {
+    if (serviceState?.can_update === true) {
       add(gatewaySourceAction('update_gateway', 'Update Gateway', 'outline'));
     }
   }
 
-  add(gatewaySourceAction('manage_gateway', 'Gateway settings', 'outline'));
-  add(gatewaySourceAction('delete_gateway', 'Delete Gateway', 'outline'));
   return actions;
 }
 
@@ -2524,8 +2461,8 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
 
   if (gateway.background_sync_running === true) {
     return {
-      title: 'Syncing Gateway',
-      detail: 'Desktop is checking reachability, pairing if needed, and refreshing the environment catalog automatically.',
+      title: 'Refreshing Gateway',
+      detail: 'Desktop is checking reachability, pairing if needed, and refreshing the environment catalog.',
       tone: 'primary',
     };
   }
@@ -2533,15 +2470,15 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   if (syncState === 'pairing_failed') {
     return {
       title: gateway.status === 'trust_changed' ? 'Gateway trust changed' : 'Pairing issue',
-      detail: 'Desktop could not verify this Gateway identity. Review the Gateway target, then sync this Gateway again.',
+      detail: 'Desktop could not verify this Gateway identity. Review the Gateway target, then refresh this Gateway again.',
       tone: 'warning',
     };
   }
 
   if (syncState === 'gateway_unreachable' || syncState === 'catalog_failed') {
     return {
-      title: 'Gateway sync failed',
-      detail: 'Desktop could not keep this Gateway synced. Open the guidance panel to start, sync, or resolve the target.',
+      title: 'Gateway refresh failed',
+      detail: 'Desktop could not refresh this Gateway. Use Refresh to diagnose the target and show the next available service action.',
       tone: 'warning',
     };
   }
@@ -2589,8 +2526,8 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
     return {
       title: needsPairing ? 'Preparing Gateway' : 'Gateway is stopped',
       detail: needsPairing
-        ? 'Desktop will start this managed Gateway automatically and then discover its environments.'
-        : 'Desktop can start this Gateway automatically when syncing or opening environments. You can also start it manually from the actions menu.',
+        ? 'Desktop will refresh this managed Gateway to diagnose whether it should be started before catalog refresh.'
+        : 'Desktop can start this Gateway from the actions menu, then Refresh can update its status and catalog.',
       tone: needsPairing ? 'primary' : 'warning',
     };
   }
@@ -2614,14 +2551,14 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
   if (desktopGatewayNeedsResolution(gateway.status)) {
     return {
       title: 'Gateway issue',
-      detail: 'Review the Gateway settings, then sync again when the target is reachable.',
+      detail: 'Review the Gateway target, then refresh again when it is reachable.',
       tone: 'warning',
     };
   }
 
   return {
     title: 'Gateway catalog available',
-    detail: 'Sync this Gateway to pick up catalog changes; its environments are listed separately in the Environments tab.',
+    detail: 'Refresh this Gateway to pick up catalog changes; its environments are listed separately in the Environments tab.',
     tone: 'neutral',
   };
 }
@@ -2647,7 +2584,7 @@ function gatewayEnvironmentSummaryDetail(
     return 'View and open these environments from the Environments tab filtered to this Gateway.';
   }
   if (gateway.background_sync_running === true) {
-    return 'Desktop will add environments to the Environments tab when this Gateway catalog sync finishes.';
+    return 'Desktop will add environments to the Environments tab when this Gateway refresh finishes.';
   }
   if (desktopGatewayNeedsResolution(gateway.status)) {
     return 'Resolve this Gateway before its managed environments can appear in the Environments tab.';
@@ -2676,7 +2613,7 @@ export function buildGatewaySourceRowModel(
       : runtimeStatus === 'service_needs_update'
         ? 'Update available'
         : gateway.background_sync_running === true
-          ? 'Syncing'
+          ? 'Refreshing'
         : desktopGatewayStatusLabel(gateway.status),
     status_tone: gateway.local_enabled === false
       ? 'neutral'

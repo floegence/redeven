@@ -22,6 +22,7 @@ type DesktopAnchoredOverlaySurfaceProps = Readonly<{
   ariaLabel?: string;
   class?: string;
   interactive?: boolean;
+  positionFrozen?: boolean;
   onMouseEnter?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>;
   onMouseLeave?: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent>;
   onPointerDownCapture?: (event: PointerEvent) => void;
@@ -66,6 +67,9 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
   };
 
   const updatePosition = () => {
+    if (props.positionFrozen === true) {
+      return;
+    }
     const currentOverlay = overlayElement() ?? overlayRef;
     if (!props.anchorRef || !currentOverlay || typeof window === 'undefined') {
       return;
@@ -121,6 +125,10 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
       setPosition(null);
       return;
     }
+    if (props.positionFrozen === true) {
+      clearFrame();
+      return;
+    }
 
     schedulePositionSettlingUpdates();
 
@@ -135,8 +143,8 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
     const observer = typeof ResizeObserver === 'undefined' || !anchorEl || !nextOverlayRef
       ? null
       : new ResizeObserver(() => {
-	        updatePosition();
-	      });
+        updatePosition();
+      });
     if (observer && anchorEl && nextOverlayRef) {
       observer.observe(anchorEl);
       observer.observe(nextOverlayRef);
@@ -167,7 +175,7 @@ export function DesktopAnchoredOverlaySurface(props: DesktopAnchoredOverlaySurfa
           pointerCaptureElement = element;
           setOverlayElement(element);
           props.onOverlayRef?.(element);
-          if (element && props.open) {
+          if (element && props.open && props.positionFrozen !== true) {
             updatePosition();
             schedulePositionSettlingUpdates();
           }
