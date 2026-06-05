@@ -117,7 +117,6 @@ describe('main routing', () => {
     expect(mainSrc).toContain('function gatewayRecommendedRecoveryForDiagnosis(');
     expect(mainSrc).toContain('recommended_recovery: recommendedRecovery');
     expect(mainSrc).toContain('switch (diagnosis.recommended_recovery ?? gatewayRecommendedRecoveryForDiagnosis(diagnosis))');
-    expect(mainSrc).toContain("recommended_recovery: 'sync_gateway'");
     expect(mainSrc).toContain("recommended_recovery: 'review_trust'");
     expect(mainSrc).toContain("case 'trust_failed':\n      return 'review_trust';");
     expect(mainSrc).toContain("resolve_focus: 'identity_trust'");
@@ -1202,6 +1201,9 @@ describe('main routing', () => {
     expect(checkRecordSrc).toContain('await gatewayLifecycleManager().refreshCatalog(record, {');
     expect(checkRecordSrc).toContain("startPolicy: record.connection.kind === 'url' ? undefined : 'require_ready'");
     expect(checkRecordSrc).toContain("catalog_state: 'ready'");
+    expect(checkRecordSrc).toContain("trust_state: 'unpaired'");
+    expect(checkRecordSrc).toContain("recommended_recovery: 'review_trust'");
+    expect(checkRecordSrc).not.toContain("recommended_recovery: 'sync_gateway'");
     expect(checkRecordSrc).not.toContain('markCatalogSynced(');
     expect(checkRecordSrc).not.toContain('setGatewaySyncRecord(');
     const syncStart = mainSrc.indexOf('async function pairGatewayFromLauncher(');

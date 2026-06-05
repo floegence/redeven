@@ -804,9 +804,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const foregroundAction = () => props.foregroundAction;');
     expect(appSrc).toContain('const setForegroundAction = props.setForegroundAction;');
     expect(appSrc).toContain('owns_progress: boolean;');
-    expect(appSrc).toContain('diagnosis_result?: GatewayDiagnosisResultSnapshot;');
+    expect(appSrc).toContain('const [retainedDiagnosisResult, setRetainedDiagnosisResult] = createSignal<GatewayDiagnosisResultSnapshot | null>(null);');
+    expect(appSrc).not.toContain('diagnosis_result?: GatewayDiagnosisResultSnapshot;');
     expect(appSrc).toContain('function buildGatewayDiagnosisResultSnapshot');
-    expect(appSrc).toContain('function gatewayDiagnosisResultMatchesProgress');
+    expect(appSrc).not.toContain('function gatewayDiagnosisResultMatchesProgress');
     expect(appSrc).not.toContain('foregroundCheckResultPanel');
     expect(appSrc).not.toContain('diagnosis_gateway');
     expect(appSrc).not.toContain('diagnosis_checked_at_unix_ms');
@@ -833,8 +834,14 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('pending_progress?: DesktopLauncherActionProgress;');
     expect(appSrc).toContain('const pendingProgress = pendingGatewayForegroundProgress');
     expect(appSrc).toContain('...(pendingProgress ? { pending_progress: pendingProgress } : {}),');
+    expect(appSrc).toContain('const selectedGatewayOperationProgress = createMemo(() => {');
+    expect(appSrc).toContain('const selectedGatewayCheckDiagnosisResult = createMemo<GatewayDiagnosisResultSnapshot | null>(() => {');
+    expect(appSrc).toContain('const visibleGatewayDiagnosisResult = createMemo<GatewayDiagnosisResultSnapshot | null>(() => {');
+    expect(appSrc).toContain('if (props.gateway.diagnosis) {\n      return buildGatewayDiagnosisResultSnapshot({');
     expect(appSrc).toContain("if (selected?.action === 'check_gateway' && selected.status === 'succeeded') {");
+    expect(appSrc).toContain("if (progress?.action === 'check_gateway' && progress.status === 'succeeded') {\n      return null;\n    }");
     expect(appSrc).toContain('if (pending && (!selected || launcherActionProgressIsTerminal(selected))) {');
+    expect(appSrc).not.toContain('selectedVisibleGatewayProgress');
     expect(appSrc).not.toContain('if (selected && launcherActionProgressIsTerminal(selected)) {');
     expect(appSrc).toContain('const activeProgressForAction = (action: GatewaySourceActionModel): DesktopLauncherActionProgress | null => selectForegroundGatewayProgress(');
     expect(appSrc).toContain('progress.lifecycle_progress.operation === operation');
@@ -857,13 +864,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('const gatewayAttentionID = createMemo(() => {');
     expect(appSrc).not.toContain('onClick={() => props.onActionPopoverOpenChange(!props.actionPopoverOpen)}');
     expect(appSrc).toContain('const visiblePanelModel = createMemo(() => {');
-    expect(appSrc).toContain('if (foreground?.diagnosis_result) {\n      return foreground.diagnosis_result.panel_model;\n    }');
+    expect(appSrc).toContain('const diagnosisResult = visibleGatewayDiagnosisResult();\n    if (diagnosisResult) {\n      return diagnosisResult.panel_model;\n    }');
     expect(appSrc).toContain('const runPrimaryPointerDown: JSX.EventHandlerUnion<HTMLSpanElement, PointerEvent>');
     expect(appSrc).toContain('if (currentProgress) {\n      return;\n    }');
     expect(appSrc).toContain('onAnchorPointerDown={runPrimaryPointerDown}');
     expect(appSrc).toContain('function gatewayForegroundDiagnosisBelongsToCheck(');
     expect(appSrc).toContain('return checkedAtUnixMS >= foreground.started_at_unix_ms;');
-    expect(appSrc).toContain("if (foreground?.action.intent === 'check_gateway' && foregroundDiagnosisBelongsToCheck()) {\n      return currentActionPresentation();");
     expect(appSrc).toContain('void runGatewaySourceAction(action, props.gateway, props.openCreateGatewaySetup, props.pairGateway, props.runGatewayServiceAction, props.runGatewayLauncherAction);');
     expect(gatewaySourceActionRunnerSrc).toContain('gatewaySourceActionShouldStartIfNeeded(gateway, action) ? { start_policy: \'start_if_needed\' as const } : {}');
     expect(appSrc).toContain('const menuActions = createMemo(() => row().secondary_actions);');
@@ -871,15 +877,24 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('foregroundAction={foregroundGatewayAction(gatewayID)}');
     expect(appSrc).toContain('setForegroundAction={(next) => setForegroundGatewayAction(gatewayID, next)}');
     expect(appSrc).toContain('const openActionPopover = () => {');
-    expect(appSrc).toContain('if (visibleGatewayProgress() || foregroundAction()?.diagnosis_result) {\n      props.onActionPopoverOpenChange(true);\n      return;\n    }');
+    expect(appSrc).toContain('if (visibleGatewayProgress() || retainedDiagnosisResult()) {\n      props.onActionPopoverOpenChange(true);\n      return;\n    }');
     const openPopoverStart = appSrc.indexOf('const openActionPopover = () => {');
     const openPopoverEnd = appSrc.indexOf('const syncGatewayLabel = createMemo', openPopoverStart);
     const openPopoverSrc = appSrc.slice(openPopoverStart, openPopoverEnd);
-    expect(openPopoverSrc.indexOf('foregroundAction()?.diagnosis_result')).toBeLessThan(
+    expect(openPopoverSrc.indexOf('retainedDiagnosisResult()')).toBeLessThan(
       openPopoverSrc.indexOf('actionStartsWorkflowImmediately(primaryAction)'),
     );
-    expect(appSrc).toContain("setForegroundAction({\n        ...foreground,\n        gateway: props.gateway,\n        panel_model: diagnosisResult.panel_model,\n        diagnosis_result: diagnosisResult,\n      });");
-    expect(appSrc).toContain('!actionPopoverOpen()');
+    expect(appSrc).toContain('setRetainedDiagnosisResult(diagnosisResult);');
+    expect(appSrc).toContain("setForegroundAction({\n        ...foreground,\n        gateway: diagnosisResult.gateway,\n        panel_model: diagnosisResult.panel_model,\n      });");
+    expect(appSrc).not.toContain('!actionPopoverOpen()');
+    const gatewayCardStart = appSrc.indexOf('function GatewaySourceCard');
+    const gatewayCardEnd = appSrc.indexOf('function gatewayPanelIconTone', gatewayCardStart);
+    expect(gatewayCardStart).toBeGreaterThanOrEqual(0);
+    expect(gatewayCardEnd).toBeGreaterThan(gatewayCardStart);
+    const gatewayCardSrc = appSrc.slice(gatewayCardStart, gatewayCardEnd);
+    expect(gatewayCardSrc).toContain('fallback={(\n                  <GatewayActionPanel');
+    expect(gatewayCardSrc).toContain('<EnvironmentProgressPanel');
+    expect(gatewayCardSrc).not.toContain('redeven-popover-panel-collapse');
     expect(appSrc).toContain("if (trimString(failure.operation_key) !== '') {\n        return;\n      }");
     expect(appSrc).not.toContain('const quickSecondaryActions = createMemo(() => secondaryActions().slice(0, 1));');
     expect(appSrc).not.toContain('const overflowSecondaryActions = createMemo(() => secondaryActions().slice(quickSecondaryActions().length));');

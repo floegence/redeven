@@ -460,20 +460,21 @@ describe('buildGatewayActionPresentation', () => {
           classification: 'trust_failed',
           manageable: true,
           summary: 'Gateway is not paired',
-          detail: 'Desktop needs to sync this Gateway before it can trust and read its catalog.',
+          detail: 'Desktop needs to review this Gateway identity before it can trust and read its catalog.',
           trust_state: 'unpaired',
           catalog_state: 'pairing_failed',
-          recommended_recovery: 'sync_gateway',
+          recommended_recovery: 'review_trust',
         },
       }),
       clicked_action: action('check_gateway'),
       show_diagnosis_result: true,
     });
     expect(unpaired).toMatchObject({
-      title: 'Retry Gateway pairing',
-      primary_action: { intent: 'sync_gateway', label: 'Sync Gateway' },
-      continuation_action: { kind: 'sync_gateway', gateway_id: 'gw-demo' },
+      title: 'Gateway trust check failed',
+      primary_action: { intent: 'resolve_gateway', label: 'Review Trust' },
+      resolve_focus: 'identity_trust',
     });
+    expect(unpaired.continuation_action).toBeUndefined();
 
     const catalogFailed = buildGatewayActionPresentation({
       gateway: gateway({

@@ -457,16 +457,6 @@ function gatewaySyncRecoveryPlan(
 
   switch (diagnosis.classification) {
     case 'trust_failed': {
-      if (diagnosis.recommended_recovery === 'sync_gateway') {
-        const syncAction = gatewaySourceAction('sync_gateway', 'Sync Gateway', 'default', fallbackActionEnabled);
-        return {
-          title: 'Retry Gateway pairing',
-          detail: 'Desktop will verify the Gateway identity and refresh its environment catalog.',
-          aria_label: 'Pair this Gateway',
-          primary_action: syncAction,
-          continuation_action: continuationActionFor(gateway, syncAction),
-        };
-      }
       const reviewAction = gatewayReviewTrustAction();
       return {
         title: gatewayDiagnosisTitle(gateway),

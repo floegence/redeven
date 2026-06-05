@@ -5674,9 +5674,9 @@ async function checkGatewayRecord(
         ...(managedProbe ? { managed_probe: managedProbe } : {}),
         trust_state: 'unpaired',
         catalog_state: 'pairing_failed',
-        recommended_recovery: 'sync_gateway',
+        recommended_recovery: 'review_trust',
         summary: 'Gateway is not paired',
-        detail: 'Desktop needs to sync this Gateway before it can trust and read its catalog.',
+        detail: 'Desktop needs to review this Gateway identity before it can trust and read its catalog.',
       };
     }
 
