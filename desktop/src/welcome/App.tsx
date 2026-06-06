@@ -286,6 +286,7 @@ import {
   type EnvironmentLifecycleDisclosureIntent,
   type EnvironmentLifecycleDisclosureState,
 } from './environmentLifecycleDisclosure';
+import { environmentProgressMeterPercent } from './environmentProgressMeter';
 import {
   type EnvironmentProgressPrimaryPresentation,
   environmentProgressPanelPrimaryAction,
@@ -8535,11 +8536,7 @@ function EnvironmentProgressPanel(props: Readonly<{
     () => startup()?.plan_revision ?? 0,
   );
   const stagePercent = createMemo(() => {
-    const current = startup() ?? openConnection();
-    if (!current || current.stage_count <= 0) {
-      return 0;
-    }
-    return Math.max(0, Math.min(100, Math.round((current.stage_index / current.stage_count) * 100)));
+    return environmentProgressMeterPercent(props.progress);
   });
   const canCancel = createMemo(() => (
     props.progress.subject_kind !== 'gateway'
@@ -12298,29 +12295,29 @@ function GatewaySourceCard(props: Readonly<{
                         moreActionsOverlayRef = element;
                       }}
                     >
-                      <div class="p-1">
-                        <For each={menuActions()}>
-                          {(action) => (
-                            <button
-                              type="button"
-                              role="menuitem"
-                              class="redeven-split-menu-item"
-                              data-tone={gatewaySplitMenuItemToneData(action.intent) || undefined}
-                              disabled={menuItemDisabled(action)}
-                              title={!action.enabled ? action.disabled_reason : undefined}
-                              onClick={() => {
-                                if (menuItemDisabled(action)) {
-                                  return;
-                                }
-                                runMoreMenuAction(action);
-                              }}
-                            >
-                              <GatewaySourceActionIcon intent={action.intent} />
-                              {localizedGatewayActionLabel(action)}
-                            </button>
-                          )}
-                        </For>
-                      </div>
+                      <For each={menuActions()}>
+                        {(action) => (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            class="redeven-split-menu-item"
+                            data-tone={gatewaySplitMenuItemToneData(action.intent) || undefined}
+                            disabled={menuItemDisabled(action)}
+                            title={!action.enabled ? action.disabled_reason : undefined}
+                            onClick={() => {
+                              if (menuItemDisabled(action)) {
+                                return;
+                              }
+                              runMoreMenuAction(action);
+                            }}
+                          >
+                            <span class="redeven-split-menu-item-icon">
+                              <GatewaySourceActionIcon intent={action.intent} class="h-3.5 w-3.5" />
+                            </span>
+                            {localizedGatewayActionLabel(action)}
+                          </button>
+                        )}
+                      </For>
                     </DesktopAnchoredOverlaySurface>
                   </Show>
                 </span>
@@ -12520,30 +12517,31 @@ function gatewaySourceActionBusy(
   return gatewayBusyStateBelongsToForegroundAction(busyState, gatewayID, foreground);
 }
 
-function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionModel['intent'] }>) {
+function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionModel['intent']; class?: string }>) {
+  const iconClass = () => props.class ?? 'mr-1 h-3.5 w-3.5';
   switch (props.intent) {
     case 'add_gateway_environment':
-      return <Plus class="mr-1 h-3.5 w-3.5" />;
+      return <Plus class={iconClass()} />;
     case 'view_gateway_environments':
-      return <ChevronRight class="mr-1 h-3.5 w-3.5" />;
+      return <ChevronRight class={iconClass()} />;
     case 'enable_gateway':
-      return <Check class="mr-1 h-3.5 w-3.5" />;
+      return <Check class={iconClass()} />;
     case 'disable_gateway':
-      return <Stop class="mr-1 h-3.5 w-3.5" />;
+      return <Stop class={iconClass()} />;
     case 'refresh_gateway':
-      return <Refresh class="mr-1 h-3.5 w-3.5" />;
+      return <Refresh class={iconClass()} />;
     case 'start_gateway':
-      return <Play class="mr-1 h-3.5 w-3.5" />;
+      return <Play class={iconClass()} />;
     case 'stop_gateway':
-      return <Stop class="mr-1 h-3.5 w-3.5" />;
+      return <Stop class={iconClass()} />;
     case 'restart_gateway':
-      return <Refresh class="mr-1 h-3.5 w-3.5" />;
+      return <Refresh class={iconClass()} />;
     case 'update_gateway':
-      return <Save class="mr-1 h-3.5 w-3.5" />;
+      return <Save class={iconClass()} />;
     case 'setup_gateway':
-      return <Settings class="mr-1 h-3.5 w-3.5" />;
+      return <Settings class={iconClass()} />;
     case 'cancel_gateway_action':
-      return <X class="mr-1 h-3.5 w-3.5" />;
+      return <X class={iconClass()} />;
   }
 }
 

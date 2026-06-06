@@ -956,6 +956,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('ariaLabel={moreActionsForLabel()}');
     expect(appSrc).toContain('<For each={menuActions()}>');
     expect(appSrc).toContain('disabled={menuItemDisabled(action)}');
+    expect(appSrc).toContain('<span class="redeven-split-menu-item-icon">');
+    expect(appSrc).toContain('<GatewaySourceActionIcon intent={action.intent} class="h-3.5 w-3.5" />');
+    expect(gatewayCardSrc).not.toContain('<div class="p-1">');
     expect(appSrc).toContain('loading={primaryBusy()}');
     expect(appSrc).toContain('onClick={runPrimaryAction}');
     expect(appSrc).toContain('foregroundActionRunning()');
@@ -1461,6 +1464,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('progressOpen={props.lifecycleProgressOpen}');
     expect(appSrc).toContain('onProgressOpenChange={props.onLifecycleProgressOpenChange}');
     expect(appSrc).toContain('function EnvironmentProgressPanel');
+    expect(appSrc).toContain('environmentProgressMeterPercent(props.progress)');
     expect(appSrc).toContain('primaryAction?: EnvironmentActionModel;');
     expect(appSrc).toContain('runPrimaryAction?: (action: EnvironmentActionModel) => void;');
     expect(appSrc).toContain('const panelPrimaryAction = createMemo(() => localizedProgressPanelPrimaryAction(');
