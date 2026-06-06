@@ -1115,12 +1115,15 @@ describe('main routing', () => {
     expect(mainSrc).toContain('function supersedeGatewaySyncTask(gatewayID: string): void');
     expect(mainSrc).toContain('function updateGatewaySyncPoller(): void');
     expect(mainSrc).toContain('async function syncVisibleGatewaysIfNeeded(');
+    expect(mainSrc).toContain('function launcherOperationIsActiveGatewayServiceAction(');
+    expect(mainSrc).toContain('function activeGatewayServiceOperation(gatewayID: string): DesktopLauncherOperationSnapshot | null');
     expect(mainSrc).toContain("last_synced_at_ms: 0,");
     expect(mainSrc).toContain('background_sync_running: false,');
     expect(mainSrc).toContain('const serviceStatus = syncRecord?.source?.service_state?.status;');
     expect(mainSrc).toContain("serviceStatus === 'not_started' || serviceStatus === 'service_needs_update'");
     expect(mainSrc).toContain('if (!syncRecord?.source) {');
     expect(mainSrc).toContain('if (!record.local_enabled) {');
+    expect(mainSrc).toContain('if (activeGatewayServiceOperation(record.gateway_id)) {');
     expect(mainSrc).toContain("gatewaySyncTaskByID.set(record.gateway_id, { priority, token: taskToken, controller, task });");
     expect(loadSrc).not.toContain('inspectRuntime(');
     expect(loadSrc).not.toContain('refreshCatalog(');
@@ -1182,13 +1185,47 @@ describe('main routing', () => {
     expect(syncSrc).toContain('const client = await gatewayClientForSync(currentRecord, {');
     expect(syncSrc).toContain('startPolicy,');
     expect(syncSrc).toContain('pairGatewayWithClient(currentRecord, client, secretStore, {');
-    expect(syncSrc).toContain('gatewayLifecycleManager().refreshCatalog(currentRecord, {');
+    expect(syncSrc).toContain('return gatewayLifecycleManager().refreshCatalog(targetRecord, {');
     expect(refreshSrc).toContain("return refreshGatewayFromLauncher({");
     expect(refreshSrc).toContain("kind: 'refresh_gateway'");
     expect(refreshSrc).not.toContain("kind: 'sync_gateway'");
     expect(refreshSrc).not.toContain('refresh_status');
     expect(mainSrc).toContain("if (requested === 'start_if_needed') {");
     expect(mainSrc).toContain("return 'require_ready';");
+  });
+
+  it('repairs managed Gateway trust internally when local or remote trust is stale', () => {
+    const mainSrc = readMainSource();
+    const helperStart = mainSrc.indexOf('function gatewayTrustErrorNeedsRepair(');
+    const helperEnd = mainSrc.indexOf('function gatewaySyncRecordFromError(', helperStart);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+    const syncStart = mainSrc.indexOf('async function syncGatewayRecord(');
+    const syncEnd = mainSrc.indexOf('async function syncGatewayIfNeeded(', syncStart);
+    expect(syncStart).toBeGreaterThanOrEqual(0);
+    expect(syncEnd).toBeGreaterThan(syncStart);
+    const syncSrc = mainSrc.slice(syncStart, syncEnd);
+
+    expect(mainSrc).toContain('revokeGatewayTrust,');
+    expect(helperSrc).toContain('function gatewayTrustErrorNeedsRepair(error: GatewayTrustError): boolean');
+    expect(helperSrc).toContain("case 'GATEWAY_PAIRING_REQUIRED':");
+    expect(helperSrc).toContain("case 'GATEWAY_CLIENT_PRIVATE_KEY_REQUIRED':");
+    expect(helperSrc).toContain("case 'GATEWAY_TRUST_REVOKED':");
+    expect(helperSrc).toContain('function gatewayErrorNeedsTrustRepair(error: unknown): boolean');
+    expect(helperSrc).toContain('return gatewayClientErrorIsPairingRejected(error);');
+    expect(helperSrc).toContain('return gatewayTrustErrorNeedsRepair(error);');
+    expect(helperSrc).toContain("record.connection.kind !== 'url' && !!record.trust_profile");
+    expect(helperSrc).toContain('await revokeGatewayTrust(profile, secretStore);');
+    expect(helperSrc).toContain('await gatewayLifecycleManager().clear(record);');
+    expect(helperSrc).toContain('return gatewayStore().updateTrustProfile(record.gateway_id, undefined);');
+    expect(syncSrc).toContain('catch (catalogError) {');
+    expect(syncSrc).toContain('gatewayErrorNeedsTrustRepair(catalogError)');
+    expect(syncSrc).toContain('gatewayCanRepairManagedTrust(currentRecord)');
+    expect(syncSrc).toContain('currentRecord = await resetManagedGatewayTrust(currentRecord, secretStore);');
+    expect(syncSrc).toContain('const repairClient = await gatewayClientForSync(currentRecord, {');
+    expect(syncSrc).toContain('currentRecord = await pairGatewayWithClient(currentRecord, repairClient, secretStore, {');
+    expect(syncSrc).toContain('catalog = await refreshCatalog(currentRecord);');
   });
 
   it('keeps Gateway service state stable while sync activity is running', () => {
@@ -1205,7 +1242,7 @@ describe('main routing', () => {
     expect(helperSrc).not.toContain("status: previous?.status === 'ready' ? 'ready' : 'starting'");
   });
 
-  it('keeps Gateway service actions in one foreground workflow without automatic catalog refresh or legacy retry actions', () => {
+  it('keeps Gateway service actions in one foreground workflow with internal post-success state refresh', () => {
     const mainSrc = readMainSource();
     const serviceStart = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(');
     const serviceEnd = mainSrc.indexOf('function gatewayServiceOperationName(', serviceStart);
@@ -1240,25 +1277,36 @@ describe('main routing', () => {
     expect(serviceSrc).toContain('supersedeGatewaySyncTask(record.gateway_id);');
     expect(serviceSrc).toContain('clearGatewayRefreshDiagnosisState(record.gateway_id);');
     expect(serviceSrc).toContain('rememberCompletedGatewayServiceAction(record, request, descriptor);');
+    expect(serviceSrc).toContain('await refreshGatewayAfterCompletedServiceAction(record, request);');
     expect(serviceSrc.indexOf('supersedeGatewaySyncTask(record.gateway_id);')).toBeLessThan(
       serviceSrc.indexOf('const descriptor = gatewayServiceTargetDescriptor(record);'),
     );
     expect(serviceSrc.indexOf('clearGatewayRefreshDiagnosisState(record.gateway_id);')).toBeLessThan(
       serviceSrc.indexOf('rememberCompletedGatewayServiceAction(record, request, descriptor);'),
     );
+    expect(serviceSrc.indexOf('rememberCompletedGatewayServiceAction(record, request, descriptor);')).toBeLessThan(
+      serviceSrc.indexOf('await refreshGatewayAfterCompletedServiceAction(record, request);'),
+    );
     expect(serviceSrc).toContain('const completedServiceLifecycleProgress = completeRuntimeLifecycleWorkflowProgress(operationKey, lifecycleAttemptOwner, {');
     expect(serviceSrc).toContain('lifecycle_progress: completedServiceLifecycleProgress');
     expect(serviceSrc).not.toContain('lifecycle_progress: undefined');
     expect(serviceSrc).toContain("title: `${actionLabel} complete`");
-    expect(serviceSrc).toContain('Use Refresh to refresh pairing and catalog.');
-    expect(serviceSrc).not.toContain('syncGatewayRecord(');
+    expect(serviceSrc).toContain('Desktop updated, restarted, and refreshed ${record.display_name}.');
+    expect(serviceSrc).not.toContain('Use Refresh to refresh pairing and catalog.');
     expect(serviceSrc).not.toContain('refreshing_gateway_catalog');
     expect(serviceSrc).not.toContain('Gateway synced');
     expect(serviceSrc).toContain('next_actions: gatewayOperationFailureNextActions(operationKey, {');
     expect(serviceSrc).not.toContain("kind: 'sync_gateway'");
-    expect(mainSrc).not.toContain('function activeGatewayServiceOperation(gatewayID: string): DesktopLauncherOperationSnapshot | null');
     expect(mainSrc).not.toContain('function activeGatewayForegroundOperation(gatewayID: string): DesktopLauncherOperationSnapshot | null');
-    expect(mainSrc).not.toContain('function launcherOperationIsActiveGatewayServiceAction(');
+    const postSuccessStart = mainSrc.indexOf('async function refreshGatewayAfterCompletedServiceAction(');
+    const postSuccessEnd = mainSrc.indexOf('async function runGatewayServiceActionFromLauncher(', postSuccessStart);
+    expect(postSuccessStart).toBeGreaterThanOrEqual(0);
+    expect(postSuccessEnd).toBeGreaterThan(postSuccessStart);
+    const postSuccessSrc = mainSrc.slice(postSuccessStart, postSuccessEnd);
+    expect(postSuccessSrc).toContain("if (request.kind === 'stop_gateway') {");
+    expect(postSuccessSrc).toContain('return;');
+    expect(postSuccessSrc).toContain('await syncGatewayRecord(latestRecord, {');
+    expect(postSuccessSrc).toContain("startPolicy: 'require_ready'");
     expect(nextActionsSrc).not.toContain("kind: 'retry' as const");
     expect(nextActionsSrc).not.toContain("kind: 'check_gateway' as const");
     expect(nextActionsSrc).toContain("kind: 'copy_diagnostics' as const");
@@ -1329,7 +1377,23 @@ describe('main routing', () => {
     expect(sideEffectSrc).not.toContain('gatewaySyncStateByID.delete(gatewayID);\n        gatewayDiagnosisByID.delete(gatewayID);\n        broadcastDesktopWelcomeSnapshots();');
   });
 
-	  it('opens Gateway environments only through Gateway open-session without provider fallback', () => {
+  it('plans Gateway service actions in the same order as the real host lifecycle', () => {
+    const mainSrc = readMainSource();
+    const helperStart = mainSrc.indexOf('function gatewayServiceInitialStepIDs(');
+    const helperEnd = mainSrc.indexOf('function buildGatewayServiceLifecycleProgress(', helperStart);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+
+    expect(helperSrc).toContain("if (operation === 'restart') {");
+    expect(helperSrc).toContain("'stopping_gateway_service',\n      'verifying_gateway_stopped',\n      'starting_gateway_service'");
+    expect(helperSrc).toContain("if (operation === 'update') {");
+    expect(helperSrc).toContain("'stopping_gateway_service',\n      'verifying_gateway_stopped',\n      'preparing_gateway_package',\n      'installing_gateway_package'");
+    expect(helperSrc).toContain("'gateway_service_up_to_date'");
+    expect(helperSrc).toContain("'starting_gateway_service',\n    'opening_gateway_bridge',\n    'checking_gateway_service',\n    'gateway_service_ready'");
+  });
+
+  it('opens Gateway environments only through Gateway open-session without provider fallback', () => {
     const mainSrc = readMainSource();
     const openStart = mainSrc.indexOf('async function openGatewayEnvironmentFromLauncher(');
     const providerStart = mainSrc.indexOf('async function openProviderRemoteEnvironmentRecord(', openStart);

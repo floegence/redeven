@@ -2080,7 +2080,7 @@ body {
   min-height: 2.75rem;
   max-height: var(--redeven-anchored-overlay-max-height, none);
   border-radius: 0.75rem;
-  overflow: hidden;
+  overflow: auto;
   border: 1px solid var(--redeven-action-popover-border);
   background: var(--popover);
   box-shadow:

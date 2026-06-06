@@ -315,4 +315,35 @@ describe('runtimeLifecycleExecutionPlan', () => {
       'runtime_ready',
     ]);
   });
+
+  it('does not trim an update plan when a stop phase that is already planned is observed', () => {
+    const plan = runtimeLifecyclePlanIncludingStep({
+      location: 'ssh_host',
+      operation: 'update',
+      currentSteps: [
+        'checking_host',
+        'stopping_gateway_service',
+        'verifying_gateway_stopped',
+        'preparing_gateway_package',
+        'installing_gateway_package',
+        'starting_gateway_service',
+        'opening_gateway_bridge',
+        'checking_gateway_service',
+        'gateway_service_up_to_date',
+      ],
+      step: 'stopping_gateway_service',
+    });
+
+    expect(plan.steps.map((step) => step.id)).toEqual([
+      'checking_host',
+      'stopping_gateway_service',
+      'verifying_gateway_stopped',
+      'preparing_gateway_package',
+      'installing_gateway_package',
+      'starting_gateway_service',
+      'opening_gateway_bridge',
+      'checking_gateway_service',
+      'gateway_service_up_to_date',
+    ]);
+  });
 });

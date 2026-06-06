@@ -508,6 +508,7 @@ type LauncherActionErrorTarget = 'connect' | 'settings' | 'dialog' | 'control_pl
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
 const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
 const ACTION_TOAST_TTL_MS = 4_000;
+const GATEWAY_TERMINAL_PROGRESS_VISIBLE_MS = ACTION_TOAST_TTL_MS;
 const GUIDANCE_SUCCESS_DISMISS_MS = 720;
 const GUIDANCE_SESSION_CLEAR_MS = 220;
 
@@ -611,6 +612,32 @@ const ENVIRONMENT_CENTER_HEADER_COPY: Readonly<Record<EnvironmentCenterTab, Read
 
 function trimString(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function launcherProgressIdentityKey(progress: DesktopLauncherActionProgress): string {
+  const operationKey = trimString(progress.operation_key);
+  if (operationKey !== '') {
+    return `operation:${operationKey}`;
+  }
+  const gatewayID = trimString(progress.gateway_id || (progress.subject_kind === 'gateway' ? progress.subject_id : ''));
+  if (gatewayID !== '') {
+    return `gateway:${gatewayID}:${progress.action}`;
+  }
+  const environmentID = trimString(progress.environment_id || progress.subject_id);
+  if (environmentID !== '') {
+    return `environment:${environmentID}:${progress.action}`;
+  }
+  return `${progress.action}:${gatewayProgressStartedAt(progress)}:${gatewayProgressTimestamp(progress)}`;
+}
+
+function activeLauncherProgressIsRetainable(progress: DesktopLauncherActionProgress): boolean {
+  return progress.status === 'running'
+    || progress.status === 'canceling'
+    || progress.status === 'cleanup_running'
+    || progress.status === 'failed'
+    || progress.status === 'cleanup_failed'
+    || progress.status === 'succeeded'
+    || progress.status === 'canceled';
 }
 
 function nextDesktopWelcomeSnapshot(
@@ -2804,6 +2831,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [languagePickerOpenRequest] = createSignal(0);
   const [languageSettingsOpen, setLanguageSettingsOpen] = createSignal(false);
   const [actionToasts, setActionToasts] = createSignal<readonly DesktopActionToast[]>([]);
+  const [liveActionProgress, setLiveActionProgress] = createSignal<readonly DesktopLauncherActionProgress[]>([]);
   const [retainedGatewayFailures, setRetainedGatewayFailures] = createSignal<readonly DesktopLauncherActionProgress[]>([]);
   const [settingsError, setSettingsError] = createSignal('');
   const [connectionDialogError, setConnectionDialogError] = createSignal('');
@@ -2846,6 +2874,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
   const [environmentFailures, setEnvironmentFailures] = createSignal<ReadonlyMap<string, EnvironmentFailureState>>(new Map());
   const actionToastTimers = new Map<number, number>();
+  const liveActionProgressTimers = new Map<string, number>();
   let nextActionToastID = 0;
   let settingsErrorRef: HTMLElement | undefined;
   let sshConfigHostsLoading = false;
@@ -2915,6 +2944,50 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       '',
     )
   ));
+  const clearLiveActionProgressTimer = (key: string) => {
+    const timer = liveActionProgressTimers.get(key);
+    if (timer === undefined) {
+      return;
+    }
+    window.clearTimeout(timer);
+    liveActionProgressTimers.delete(key);
+  };
+  const removeLiveActionProgress = (key: string) => {
+    clearLiveActionProgressTimer(key);
+    setLiveActionProgress((current) => current.filter((progress) => launcherProgressIdentityKey(progress) !== key));
+  };
+  const rememberLiveActionProgress = (progress: DesktopLauncherActionProgress) => {
+    if (!activeLauncherProgressIsRetainable(progress)) {
+      return;
+    }
+    const key = launcherProgressIdentityKey(progress);
+    if (key === '') {
+      return;
+    }
+    setLiveActionProgress((current) => [
+      ...current.filter((item) => launcherProgressIdentityKey(item) !== key),
+      progress,
+    ]);
+    if (!launcherActionProgressIsTerminal(progress)) {
+      clearLiveActionProgressTimer(key);
+      return;
+    }
+    clearLiveActionProgressTimer(key);
+    liveActionProgressTimers.set(key, window.setTimeout(() => {
+      removeLiveActionProgress(key);
+    }, 4_000));
+  };
+  const pruneLiveActionProgressWithSnapshot = (progressItems: readonly DesktopLauncherActionProgress[]) => {
+    const snapshotKeys = new Set(progressItems.map((progress) => launcherProgressIdentityKey(progress)));
+    setLiveActionProgress((current) => current.filter((progress) => {
+      const key = launcherProgressIdentityKey(progress);
+      if (snapshotKeys.has(key)) {
+        clearLiveActionProgressTimer(key);
+        return false;
+      }
+      return true;
+    }));
+  };
   const writableGatewayProfileSources = createMemo(() => (
     snapshot().gateway_sources.filter(gatewayCanWriteEnvironmentProfiles)
   ));
@@ -2973,10 +3046,14 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   ));
   const activeActionProgress = createMemo(() => [
     ...snapshot().action_progress,
-    ...retainedGatewayFailures().filter((retained) => (
+    ...liveActionProgress().filter((live) => (
       !snapshot().action_progress.some((progress) => (
-        trimString(progress.operation_key) !== ''
-        && trimString(progress.operation_key) === trimString(retained.operation_key)
+        launcherProgressIdentityKey(progress) === launcherProgressIdentityKey(live)
+      ))
+    )),
+    ...retainedGatewayFailures().filter((retained) => (
+      ![...snapshot().action_progress, ...liveActionProgress()].some((progress) => (
+        launcherProgressIdentityKey(progress) === launcherProgressIdentityKey(retained)
       ))
     )),
   ]);
@@ -3021,6 +3098,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       window.clearTimeout(handle);
     }
     actionToastTimers.clear();
+    for (const handle of liveActionProgressTimers.values()) {
+      window.clearTimeout(handle);
+    }
+    liveActionProgressTimers.clear();
   });
 
   if (shellTheme) {
@@ -3048,6 +3129,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       const next = nextDesktopWelcomeSnapshot(current, nextSnapshot);
       if (next !== current) {
         setBusyState((busy) => reconcileBusyStateWithActionProgressSnapshot(busy, next.action_progress));
+        pruneLiveActionProgressWithSnapshot(next.action_progress);
       }
       setEnvironmentFailures((failures) => {
         if (failures.size === 0) {
@@ -3082,6 +3164,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
   onCleanup(unsubscribeSnapshot);
   const unsubscribeActionProgress = props.runtime.launcher.subscribeActionProgress?.((progress) => {
+    rememberLiveActionProgress(progress);
     setBusyState((current) => busyStateWithActionProgress(current, progress));
   });
   if (unsubscribeActionProgress) {
@@ -8506,6 +8589,45 @@ function EnvironmentProgressPanel(props: Readonly<{
     const failure = props.progress.failure;
     return failure ? localizedFailureForDisplay(props.i18n, failure) : null;
   });
+  const renderNextActionGroups = () => (
+    <Show when={nextActionGroups().length > 0}>
+      <div class="redeven-action-popover__action-stack" data-subject-kind={props.progress.subject_kind}>
+        <For each={nextActionGroups()}>
+          {(group) => (
+            <div
+              class="redeven-action-popover__actions"
+              data-layout={group.kind}
+            >
+              <For each={group.actions}>
+                {(action) => (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    class="justify-center gap-1.5"
+                    onClick={() => props.runNextAction?.(action, props.progress)}
+                  >
+                    <Show
+                      when={action.kind === 'refresh_status'}
+                      fallback={action.kind === 'update_runtime'
+                        ? <Refresh class="h-3.5 w-3.5" />
+                        : action.kind === 'manage_desktop_update'
+                          ? <ExternalLink class="h-3.5 w-3.5" />
+                        : action.kind === 'copy_diagnostics'
+                          ? <Copy class="h-3.5 w-3.5" />
+                          : null}
+                    >
+                      <Refresh class="h-3.5 w-3.5" />
+                    </Show>
+                    {localizedNextActionLabel(props.i18n, action)}
+                  </Button>
+                )}
+              </For>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  );
   const stepState = (index: number, currentPhase: string | undefined, opStatus: string): 'done' | 'active' | 'pending' | 'error' => {
     const step = phaseSequence()[index];
     switch (step?.status) {
@@ -8556,6 +8678,18 @@ function EnvironmentProgressPanel(props: Readonly<{
         </div>
       </div>
       <div class="redeven-action-popover__detail">{localizedProgressDetail(props.i18n, props.progress)}</div>
+      <Show when={localizedFailure()}>
+        {(failure) => (
+          <div class="redeven-action-popover__notice" data-tone="error">
+            <div class="redeven-action-popover__notice-title">{failureNoticeTitle()}</div>
+            <div class="redeven-action-popover__notice-detail">{failure().summary}</div>
+            <Show when={failure().detail}>
+              {(detail) => <pre class="redeven-action-popover__notice-detail redeven-action-popover__notice-detail--pre">{detail()}</pre>}
+            </Show>
+          </div>
+        )}
+      </Show>
+      {renderNextActionGroups()}
       <Show when={stepProgress() || startup() || openConnection()}>
         <>
           <div class="redeven-environment-progress__steps" aria-hidden="true">
@@ -8622,17 +8756,6 @@ function EnvironmentProgressPanel(props: Readonly<{
             </div>
           </>
       </Show>
-      <Show when={localizedFailure()}>
-        {(failure) => (
-          <div class="redeven-action-popover__notice" data-tone="error">
-            <div class="redeven-action-popover__notice-title">{failureNoticeTitle()}</div>
-            <div class="redeven-action-popover__notice-detail">{failure().summary}</div>
-            <Show when={failure().detail}>
-              {(detail) => <pre class="redeven-action-popover__notice-detail redeven-action-popover__notice-detail--pre">{detail()}</pre>}
-            </Show>
-          </div>
-        )}
-      </Show>
       <Show when={canCancel()}>
         <div class="redeven-action-popover__actions">
           <Button
@@ -8663,43 +8786,6 @@ function EnvironmentProgressPanel(props: Readonly<{
             </Button>
           </div>
         )}
-      </Show>
-      <Show when={nextActionGroups().length > 0}>
-        <div class="redeven-action-popover__action-stack" data-subject-kind={props.progress.subject_kind}>
-          <For each={nextActionGroups()}>
-            {(group) => (
-              <div
-                class="redeven-action-popover__actions"
-                data-layout={group.kind}
-              >
-                <For each={group.actions}>
-                  {(action) => (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      class="justify-center gap-1.5"
-                      onClick={() => props.runNextAction?.(action, props.progress)}
-                    >
-                      <Show
-                        when={action.kind === 'refresh_status'}
-                        fallback={action.kind === 'update_runtime'
-                          ? <Refresh class="h-3.5 w-3.5" />
-                          : action.kind === 'manage_desktop_update'
-                            ? <ExternalLink class="h-3.5 w-3.5" />
-                          : action.kind === 'copy_diagnostics'
-                            ? <Copy class="h-3.5 w-3.5" />
-                            : null}
-                      >
-                        <Refresh class="h-3.5 w-3.5" />
-                      </Show>
-                      {localizedNextActionLabel(props.i18n, action)}
-                    </Button>
-                  )}
-                </For>
-              </div>
-            )}
-          </For>
-        </div>
       </Show>
       <Show when={showFallbackActions()}>
         <div class="redeven-action-popover__actions">
@@ -10532,8 +10618,6 @@ type GatewayDiagnosisResultSnapshot = Readonly<{
   panel_model: GatewayActionPanelModel;
 }>;
 
-const GATEWAY_FOREGROUND_PENDING_MIN_VISIBLE_MS = 700;
-
 function gatewayOperationNameForAction(action: GatewaySourceActionModel): 'start' | 'stop' | 'restart' | 'update' | null {
   switch (action.intent) {
     case 'start_gateway':
@@ -10855,6 +10939,15 @@ function gatewayProgressMatchesAction(
   return gatewayProgressMatchesOperationTarget(gateway, action, progress);
 }
 
+function gatewayProgressCanCompleteForegroundAction(
+  gateway: DesktopGatewaySource,
+  progress: DesktopLauncherActionProgress,
+  foreground: GatewayForegroundActionSnapshot,
+): boolean {
+  return gatewayProgressBelongsToForegroundAction(progress, foreground)
+    || gatewayProgressMatchesAction(gateway, foreground.action, progress);
+}
+
 function gatewayForegroundDiagnosisBelongsToRefresh(
   gateway: DesktopGatewaySource,
   foreground: GatewayForegroundActionSnapshot | null,
@@ -11106,18 +11199,10 @@ function GatewaySourceCard(props: Readonly<{
   const setForegroundAction = props.setForegroundAction;
   const [foregroundPendingProgress, setForegroundPendingProgress] = createSignal<DesktopLauncherActionProgress | null>(null);
   const [retainedDiagnosisResult, setRetainedDiagnosisResult] = createSignal<GatewayDiagnosisResultSnapshot | null>(null);
-  let foregroundPendingClearTimer: ReturnType<typeof setTimeout> | null = null;
   let foregroundTerminalClearTimer: ReturnType<typeof setTimeout> | null = null;
+  let foregroundTerminalClearKey: string | null = null;
   let actionPopoverExitTask: (() => void) | null = null;
-  const clearForegroundPendingClearTimer = () => {
-    if (!foregroundPendingClearTimer) {
-      return;
-    }
-    clearTimeout(foregroundPendingClearTimer);
-    foregroundPendingClearTimer = null;
-  };
   const clearForegroundPendingProgress = () => {
-    clearForegroundPendingClearTimer();
     setForegroundPendingProgress(null);
     setForegroundAction((current) => current?.pending_progress
       ? { ...current, pending_progress: undefined }
@@ -11125,37 +11210,15 @@ function GatewaySourceCard(props: Readonly<{
   };
   const clearForegroundTerminalClearTimer = () => {
     if (!foregroundTerminalClearTimer) {
+      foregroundTerminalClearKey = null;
       return;
     }
     clearTimeout(foregroundTerminalClearTimer);
     foregroundTerminalClearTimer = null;
+    foregroundTerminalClearKey = null;
   };
-  const setForegroundPendingProgressWithHold = (progress: DesktopLauncherActionProgress | null) => {
-    clearForegroundPendingClearTimer();
+  const setForegroundPendingProgressForRequest = (progress: DesktopLauncherActionProgress | null) => {
     setForegroundPendingProgress(progress);
-    if (!progress) {
-      return;
-    }
-    const pendingOperationKey = progress.operation_key;
-    const pendingStartedAt = gatewayProgressStartedAt(progress);
-    foregroundPendingClearTimer = setTimeout(() => {
-      foregroundPendingClearTimer = null;
-      const currentPending = foregroundPendingProgress();
-      if (
-        currentPending
-        && currentPending.operation_key === pendingOperationKey
-        && gatewayProgressStartedAt(currentPending) === pendingStartedAt
-      ) {
-        setForegroundPendingProgress(null);
-      }
-      setForegroundAction((current) => (
-        current?.pending_progress
-        && current.pending_progress.operation_key === pendingOperationKey
-        && gatewayProgressStartedAt(current.pending_progress) === pendingStartedAt
-          ? { ...current, pending_progress: undefined }
-          : current
-      ));
-    }, GATEWAY_FOREGROUND_PENDING_MIN_VISIBLE_MS);
   };
   const selectedGatewayWorkflowProgress = createMemo(() => {
     const foreground = foregroundAction();
@@ -11178,7 +11241,6 @@ function GatewaySourceCard(props: Readonly<{
     return selectForegroundGatewayProgress(
       props.actionProgress.filter((progress) => (
         gatewayProgressCanRecoverForegroundAction(progress)
-        && gatewayProgressMatchesAction(props.gateway, row().primary_action, progress)
         && gatewayProgressMatchesSubject(props.gateway.gateway_id, progress)
       )),
     );
@@ -11211,6 +11273,17 @@ function GatewaySourceCard(props: Readonly<{
       ? progress
       : null;
   });
+  createEffect(() => {
+    const foreground = foregroundAction();
+    const pending = foreground?.pending_progress ?? foregroundPendingProgress();
+    if (!foreground || !pending) {
+      return;
+    }
+    const progress = selectedGatewayWorkflowProgress() ?? busyGatewayWorkflowProgress();
+    if (progress) {
+      clearForegroundPendingProgress();
+    }
+  });
   const foregroundDiagnosisBelongsToRefresh = createMemo(() => gatewayForegroundDiagnosisBelongsToRefresh(props.gateway, foregroundAction()));
   const affectedSessions = createMemo<readonly GatewayActionAffectedSession[]>(() => (
     props.gatewayEntries
@@ -11229,7 +11302,7 @@ function GatewaySourceCard(props: Readonly<{
     if (selected?.action === 'refresh_gateway' && selected.status === 'succeeded') {
       return selected;
     }
-    if (pending && (!selected || launcherActionProgressIsTerminal(selected))) {
+    if (pending && !selected) {
       return pending;
     }
     return selected;
@@ -11389,7 +11462,27 @@ function GatewaySourceCard(props: Readonly<{
         || gatewayProgressIsActive(visibleGatewayProgress())
       )
   ));
-  const guidePanelVisible = createMemo(() => (props.actionPopoverOpen || foregroundWantsPopover()) && !hasProgressPanel() && visiblePanelModel().execution_mode !== 'direct');
+  const guidePanelHasState = createMemo(() => (
+    foregroundAction() !== null
+      || retainedDiagnosisResult() !== null
+      || visibleGatewayDiagnosisResult() !== null
+  ));
+  const foregroundCanShowGuidePanel = createMemo(() => {
+    const foreground = foregroundAction();
+    if (!foreground?.owns_progress) {
+      return true;
+    }
+    return foregroundPendingProgress() !== null
+      || visibleGatewayDiagnosisResult() !== null
+      || gatewayProgressNeedsAttention(visibleGatewayProgress());
+  });
+  const guidePanelVisible = createMemo(() => (
+    (props.actionPopoverOpen || foregroundWantsPopover())
+    && guidePanelHasState()
+    && foregroundCanShowGuidePanel()
+    && !hasProgressPanel()
+    && visiblePanelModel().execution_mode !== 'direct'
+  ));
   const progressPanelVisible = createMemo(() => (props.actionPopoverOpen || foregroundWantsPopover()) && hasProgressPanel());
   const actionPopoverOpen = createMemo(() => progressPanelVisible() || guidePanelVisible());
   const menuActions = createMemo(() => row().secondary_actions);
@@ -11494,11 +11587,29 @@ function GatewaySourceCard(props: Readonly<{
     { defer: true },
   ));
   onCleanup(() => {
-    clearForegroundPendingClearTimer();
     clearForegroundTerminalClearTimer();
   });
   createEffect(() => {
     const foreground = foregroundAction();
+    const progressResult = selectedGatewayRefreshDiagnosisResult();
+    if (progressResult) {
+      const current = retainedDiagnosisResult();
+      if (
+        current?.checked_at_unix_ms === progressResult.checked_at_unix_ms
+        && trimString(current.operation_key) === trimString(progressResult.operation_key)
+      ) {
+        return;
+      }
+      setRetainedDiagnosisResult(progressResult);
+      if (foreground?.action.intent === 'refresh_gateway') {
+        setForegroundAction({
+          ...foreground,
+          gateway: progressResult.gateway,
+          panel_model: progressResult.panel_model,
+        });
+      }
+      return;
+    }
     const diagnosisResult = visibleGatewayDiagnosisResult();
     if (
       !diagnosisResult
@@ -11528,34 +11639,64 @@ function GatewaySourceCard(props: Readonly<{
   createEffect(() => {
     const foreground = foregroundAction();
     const progress = selectedGatewayOperationProgress();
-    clearForegroundTerminalClearTimer();
     if (
       !foreground?.owns_progress
-      || !progress
       || gatewayProgressNeedsAttention(progress)
-      || !launcherActionProgressIsTerminal(progress)
-      || !gatewayProgressBelongsToForegroundAction(progress, foreground)
     ) {
+      clearForegroundTerminalClearTimer();
+      return;
+    }
+    if (!progress) {
+      return;
+    }
+    if (
+      !launcherActionProgressIsTerminal(progress)
+      || !gatewayProgressCanCompleteForegroundAction(props.gateway, progress, foreground)
+    ) {
+      clearForegroundTerminalClearTimer();
       return;
     }
     const operationKey = progress.operation_key;
     const startedAtUnixMS = gatewayProgressStartedAt(progress);
+    const foregroundStartedAtUnixMS = foreground.started_at_unix_ms;
+    const terminalClearKey = [
+      foreground.gateway_id,
+      foregroundStartedAtUnixMS,
+      foreground.action.intent,
+      operationKey,
+      startedAtUnixMS,
+      progress.status,
+    ].join(':');
+    if (foregroundTerminalClearKey === terminalClearKey) {
+      return;
+    }
+    clearForegroundTerminalClearTimer();
+    foregroundTerminalClearKey = terminalClearKey;
     foregroundTerminalClearTimer = setTimeout(() => {
       foregroundTerminalClearTimer = null;
+      foregroundTerminalClearKey = null;
       const currentForeground = foregroundAction();
       const currentProgress = selectedGatewayOperationProgress();
       if (
-        currentForeground?.operation_key === operationKey
-        && currentProgress?.operation_key === operationKey
-        && gatewayProgressStartedAt(currentProgress) === startedAtUnixMS
-        && launcherActionProgressIsTerminal(currentProgress)
-        && !gatewayProgressNeedsAttention(currentProgress)
+        currentForeground
+        && currentForeground.started_at_unix_ms === foregroundStartedAtUnixMS
+        && currentForeground.gateway_id === foreground.gateway_id
+        && currentForeground.action.intent === foreground.action.intent
+        && (
+          !currentProgress
+          || (
+            trimString(currentProgress.operation_key) === trimString(operationKey)
+            && gatewayProgressStartedAt(currentProgress) === startedAtUnixMS
+            && launcherActionProgressIsTerminal(currentProgress)
+            && !gatewayProgressNeedsAttention(currentProgress)
+          )
+        )
       ) {
         setForegroundAction(null);
         clearForegroundPendingProgress();
         props.onActionPopoverOpenChange(false);
       }
-    }, 1_200);
+    }, GATEWAY_TERMINAL_PROGRESS_VISIBLE_MS);
   });
 
   const presentationCanStartProgress = (action: GatewaySourceActionModel): boolean => (
@@ -11628,7 +11769,7 @@ function GatewaySourceCard(props: Readonly<{
       operation_key: operationKey,
       ...(pendingProgress ? { pending_progress: pendingProgress } : {}),
     });
-    setForegroundPendingProgressWithHold(pendingProgress);
+    setForegroundPendingProgressForRequest(pendingProgress);
     return panelModel;
   };
   const launcherRequestForGatewayAction = (action: GatewaySourceActionModel): DesktopLauncherActionRequest | null => {

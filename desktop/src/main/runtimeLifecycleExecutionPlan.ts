@@ -303,6 +303,12 @@ export function initialRuntimeLifecyclePlan(input: RuntimeLifecyclePlanInput): R
 }
 
 export function runtimeLifecyclePlanIncludingStep(input: RuntimeLifecyclePlanStepInput): RuntimeLifecyclePlanResult {
+  if (input.currentSteps.includes(input.step)) {
+    return {
+      state: 'executing',
+      steps: stepStates(input.currentSteps),
+    };
+  }
   const currentSteps = trimCurrentStepsForExpansion(input.currentSteps, input.step);
   const explicitGatewayTail = gatewayServiceTailFrom(input.step);
   if (explicitGatewayTail.length > 0) {
