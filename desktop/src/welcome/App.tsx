@@ -255,6 +255,14 @@ import {
   reconcileEnvironmentLibraryOverlayState,
 } from './environmentLibraryOverlayState';
 import {
+  closeGatewaySourceOverlayState,
+  closedGatewaySourceOverlayState,
+  gatewaySourceIDsWithActiveOverlay,
+  gatewaySourceOverlayOpenFor,
+  openGatewaySourceOverlayState,
+  reconcileGatewaySourceOverlayState,
+} from './gatewaySourceOverlayState';
+import {
   environmentLibraryEntryRecord,
   splitPinnedEnvironmentEntryIDs,
 } from './environmentLibraryProjection';
@@ -10474,7 +10482,7 @@ function GatewaySourcesPanel(props: Readonly<{
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
   deleteGateway: (gateway: DesktopGatewaySource) => void;
 }>) {
-  const [activeGatewayPopoverID, setActiveGatewayPopoverID] = createSignal('');
+  const [activeGatewayOverlayState, setActiveGatewayOverlayState] = createSignal(closedGatewaySourceOverlayState());
   const [foregroundGatewayActions, setForegroundGatewayActions] = createSignal<Record<string, GatewayForegroundActionSnapshot | null>>({});
   const foregroundGatewayAction = (gatewayID: string): GatewayForegroundActionSnapshot | null => (
     foregroundGatewayActions()[gatewayID] ?? null
@@ -10505,6 +10513,7 @@ function GatewaySourcesPanel(props: Readonly<{
     }
     return record;
   });
+  const gatewaySourceIDs = createMemo(() => props.gatewaySources.map((gateway) => gateway.gateway_id));
   const gatewayEntriesByGatewayID = createMemo(() => {
     const record: Record<string, DesktopEnvironmentEntry[]> = {};
     for (const entry of props.gatewayEntries) {
@@ -10527,15 +10536,28 @@ function GatewaySourcesPanel(props: Readonly<{
     });
   });
   const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.gateway_id));
+  const renderedGatewaySourceIDs = createMemo(() => gatewaySourceIDsWithActiveOverlay(
+    visibleGatewaySourceIDs(),
+    gatewaySourceIDs(),
+    activeGatewayOverlayState(),
+  ));
   createEffect(() => {
-    const activeGatewayID = activeGatewayPopoverID();
-    if (activeGatewayID === '') {
-      return;
-    }
-    if (!visibleGatewaySourceIDs().includes(activeGatewayID)) {
-      setActiveGatewayPopoverID('');
-    }
+    setActiveGatewayOverlayState((current) => reconcileGatewaySourceOverlayState(current, props.gatewaySources));
   });
+  const setGatewayActionPopoverOpen = (gatewayID: string, open: boolean) => {
+    setActiveGatewayOverlayState((current) => (
+      open
+        ? openGatewaySourceOverlayState('action_popover', gatewayID)
+        : closeGatewaySourceOverlayState(current, 'action_popover', gatewayID)
+    ));
+  };
+  const setGatewayMoreActionsMenuOpen = (gatewayID: string, open: boolean) => {
+    setActiveGatewayOverlayState((current) => (
+      open
+        ? openGatewaySourceOverlayState('more_actions_menu', gatewayID)
+        : closeGatewaySourceOverlayState(current, 'more_actions_menu', gatewayID)
+    ));
+  };
 
   return (
     <Show
@@ -10560,7 +10582,7 @@ function GatewaySourcesPanel(props: Readonly<{
       )}
     >
       <Show
-        when={visibleGatewaySources().length > 0}
+        when={renderedGatewaySourceIDs().length > 0}
         fallback={(
           <div class="redeven-empty-panel rounded-lg border border-dashed border-border/70 bg-card/70 px-5 py-8 text-center">
             <div class="mx-auto flex h-11 w-11 items-center justify-center rounded-md border border-border/70 bg-muted/20 text-muted-foreground">
@@ -10575,7 +10597,7 @@ function GatewaySourcesPanel(props: Readonly<{
           class="redeven-gateway-library"
         >
           <div class="redeven-gateway-grid">
-            <For each={visibleGatewaySourceIDs()}>
+            <For each={renderedGatewaySourceIDs()}>
               {(gatewayID) => {
                 const gateway = () => gatewaySourcesByID()[gatewayID]!;
                 return (
@@ -10587,8 +10609,10 @@ function GatewaySourcesPanel(props: Readonly<{
                   setForegroundAction={(next) => setForegroundGatewayAction(gatewayID, next)}
                   busyState={props.busyState}
                   actionProgress={props.actionProgress}
-                  actionPopoverOpen={activeGatewayPopoverID() === gatewayID}
-                  onActionPopoverOpenChange={(open) => setActiveGatewayPopoverID(open ? gatewayID : '')}
+                  actionPopoverOpen={gatewaySourceOverlayOpenFor(activeGatewayOverlayState(), 'action_popover', gatewayID)}
+                  onActionPopoverOpenChange={(open) => setGatewayActionPopoverOpen(gatewayID, open)}
+                  moreActionsMenuOpen={gatewaySourceOverlayOpenFor(activeGatewayOverlayState(), 'more_actions_menu', gatewayID)}
+                  onMoreActionsMenuOpenChange={(open) => setGatewayMoreActionsMenuOpen(gatewayID, open)}
                   openCreateGatewaySetup={props.openCreateGatewaySetup}
                   runGatewayLauncherAction={props.runGatewayLauncherAction}
                   openCreateGatewayEnvironment={props.openCreateGatewayEnvironment}
@@ -11210,6 +11234,8 @@ function GatewaySourceCard(props: Readonly<{
   actionProgress: readonly DesktopLauncherActionProgress[];
   actionPopoverOpen: boolean;
   onActionPopoverOpenChange: (open: boolean) => void;
+  moreActionsMenuOpen: boolean;
+  onMoreActionsMenuOpenChange: (open: boolean) => void;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
   runGatewayLauncherAction: (request: DesktopLauncherActionRequest) => Promise<void>;
   openCreateGatewayEnvironment: (gateway: DesktopGatewaySource) => void;
@@ -11227,6 +11253,7 @@ function GatewaySourceCard(props: Readonly<{
   let foregroundTerminalClearTimer: ReturnType<typeof setTimeout> | null = null;
   let foregroundTerminalClearKey: string | null = null;
   let actionPopoverExitTask: (() => void) | null = null;
+  let actionPopoverStaleCloseFrame = 0;
   const clearForegroundPendingProgress = () => {
     setForegroundPendingProgress(null);
     setForegroundAction((current) => current?.pending_progress
@@ -11241,6 +11268,13 @@ function GatewaySourceCard(props: Readonly<{
     clearTimeout(foregroundTerminalClearTimer);
     foregroundTerminalClearTimer = null;
     foregroundTerminalClearKey = null;
+  };
+  const clearActionPopoverStaleCloseFrame = () => {
+    if (!actionPopoverStaleCloseFrame) {
+      return;
+    }
+    cancelAnimationFrame(actionPopoverStaleCloseFrame);
+    actionPopoverStaleCloseFrame = 0;
   };
   const setForegroundPendingProgressForRequest = (progress: DesktopLauncherActionProgress | null) => {
     setForegroundPendingProgress(progress);
@@ -11507,6 +11541,18 @@ function GatewaySourceCard(props: Readonly<{
   ));
   const progressPanelVisible = createMemo(() => (props.actionPopoverOpen || foregroundWantsPopover()) && hasProgressPanel());
   const actionPopoverOpen = createMemo(() => progressPanelVisible() || guidePanelVisible());
+  createEffect(() => {
+    clearActionPopoverStaleCloseFrame();
+    if (!props.actionPopoverOpen || actionPopoverOpen()) {
+      return;
+    }
+    actionPopoverStaleCloseFrame = requestAnimationFrame(() => {
+      actionPopoverStaleCloseFrame = 0;
+      if (props.actionPopoverOpen && !actionPopoverOpen()) {
+        props.onActionPopoverOpenChange(false);
+      }
+    });
+  });
   const menuActions = createMemo(() => row().secondary_actions);
   const progressIsRunning = (progress: DesktopLauncherActionProgress | null | undefined) => (
     progress?.status === 'running'
@@ -11543,11 +11589,10 @@ function GatewaySourceCard(props: Readonly<{
       && gatewayProgressMatchesAction(props.gateway, action, progress)
     )),
   );
-  const [moreActionsOpen, setMoreActionsOpen] = createSignal(false);
   let moreActionsAnchorRef: HTMLSpanElement | undefined;
   let moreActionsOverlayRef: HTMLDivElement | undefined;
   let moreActionsFocusFrame = 0;
-  const closeMoreActions = () => setMoreActionsOpen(false);
+  const closeMoreActions = () => props.onMoreActionsMenuOpenChange(false);
   const clearMoreActionsFocusFrame = () => {
     if (!moreActionsFocusFrame) {
       return;
@@ -11560,7 +11605,7 @@ function GatewaySourceCard(props: Readonly<{
     && (moreActionsAnchorRef?.contains(target) === true || moreActionsOverlayRef?.contains(target) === true)
   );
   createEffect(() => {
-    if (!moreActionsOpen()) {
+    if (!props.moreActionsMenuOpen) {
       clearMoreActionsFocusFrame();
       return;
     }
@@ -11610,6 +11655,7 @@ function GatewaySourceCard(props: Readonly<{
   ));
   onCleanup(() => {
     clearForegroundTerminalClearTimer();
+    clearActionPopoverStaleCloseFrame();
   });
   createEffect(() => {
     const foreground = foregroundAction();
@@ -12273,17 +12319,17 @@ function GatewaySourceCard(props: Readonly<{
                         title={moreActionsLabel()}
                         aria-label={moreActionsForLabel()}
                         aria-haspopup="menu"
-                        aria-expanded={moreActionsOpen()}
+                        aria-expanded={props.moreActionsMenuOpen}
                         disabled={primaryActionRunning()}
-                        onClick={() => setMoreActionsOpen((open) => !open)}
+                        onClick={() => props.onMoreActionsMenuOpenChange(!props.moreActionsMenuOpen)}
                       >
                         <MoreHorizontal class="h-3.5 w-3.5" />
                       </ConsoleActionIconButton>
                     </span>
                   </DesktopTooltip>
-                  <Show when={moreActionsOpen()}>
+                  <Show when={props.moreActionsMenuOpen}>
                     <DesktopAnchoredOverlaySurface
-                      open={moreActionsOpen()}
+                      open={props.moreActionsMenuOpen}
                       anchorRef={moreActionsAnchorRef}
                       placement="top"
                       role="menu"

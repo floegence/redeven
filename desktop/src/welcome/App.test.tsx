@@ -293,7 +293,9 @@ describe('DesktopWelcomeShell', () => {
 
     expect(appSrc).toContain('const gatewaySourcesByID = createMemo(() => {');
     expect(appSrc).toContain('const visibleGatewaySourceIDs = createMemo(() => visibleGatewaySources().map((gateway) => gateway.gateway_id));');
-    expect(appSrc).toContain('<For each={visibleGatewaySourceIDs()}>');
+    expect(appSrc).toContain('const renderedGatewaySourceIDs = createMemo(() => gatewaySourceIDsWithActiveOverlay(');
+    expect(appSrc).toContain('<For each={renderedGatewaySourceIDs()}>');
+    expect(appSrc).not.toContain('<For each={visibleGatewaySourceIDs()}>');
     expect(appSrc).toContain('gatewayEntriesByGatewayID()[gatewayID] ?? []');
     expect(appSrc).toContain("gatewaySourceFilterValue(gateway.gateway_id) !== props.gatewaySourceFilter");
     expect(appSrc).toContain('return !hasQuery || gatewaySourceMatchesQuery(gateway, query);');
@@ -802,6 +804,12 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("'The Gateway service is ready. Use Refresh to pair if needed and refresh the environment catalog.': 'environmentCenter.gatewayGuidanceReadyDetail'");
     expect(appSrc).toContain('type GatewayForegroundActionSnapshot');
     expect(appSrc).toContain('type GatewayDiagnosisResultSnapshot');
+    expect(appSrc).toContain('closedGatewaySourceOverlayState');
+    expect(appSrc).toContain('reconcileGatewaySourceOverlayState(current, props.gatewaySources)');
+    expect(appSrc).toContain('const renderedGatewaySourceIDs = createMemo(() => gatewaySourceIDsWithActiveOverlay(');
+    expect(appSrc).toContain('<For each={renderedGatewaySourceIDs()}>');
+    expect(appSrc).not.toContain('activeGatewayPopoverID');
+    expect(appSrc).not.toContain('if (!visibleGatewaySourceIDs().includes(activeGatewayID))');
     expect(appSrc).toContain('const [foregroundGatewayActions, setForegroundGatewayActions] = createSignal<Record<string, GatewayForegroundActionSnapshot | null>>({});');
     expect(appSrc).toContain('const foregroundAction = () => props.foregroundAction;');
     expect(appSrc).toContain('const setForegroundAction = props.setForegroundAction;');
@@ -891,6 +899,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('gatewayProgressIsActive(visibleGatewayProgress())');
     expect(appSrc).toContain('const guidePanelHasState = createMemo(() => (');
     expect(appSrc).toContain('&& guidePanelHasState()');
+    expect(appSrc).toContain('let actionPopoverStaleCloseFrame = 0;');
+    expect(appSrc).toContain('const clearActionPopoverStaleCloseFrame = () => {');
+    expect(appSrc).toContain('actionPopoverStaleCloseFrame = requestAnimationFrame(() => {');
+    expect(appSrc).toContain('if (props.actionPopoverOpen && !actionPopoverOpen()) {\n        props.onActionPopoverOpenChange(false);\n      }');
     expect(appSrc).toContain('const foregroundCanShowGuidePanel = createMemo(() => {');
     expect(appSrc).toContain('foregroundPendingProgress() !== null\n      || visibleGatewayDiagnosisResult() !== null\n      || gatewayProgressNeedsAttention(visibleGatewayProgress())');
     expect(appSrc).toContain('function gatewayProgressNeedsAttention(progress: DesktopLauncherActionProgress | null | undefined): boolean');
@@ -927,7 +939,7 @@ describe('DesktopWelcomeShell', () => {
     );
     expect(appSrc).toContain('setRetainedDiagnosisResult(diagnosisResult);');
     expect(appSrc).toContain("setForegroundAction({\n        ...foreground,\n        gateway: diagnosisResult.gateway,\n        panel_model: diagnosisResult.panel_model,\n      });");
-    expect(appSrc).not.toContain('!actionPopoverOpen()');
+    expect(appSrc).not.toContain('if (props.actionPopoverOpen && !actionPopoverOpen()) {\n      props.onActionPopoverOpenChange(false);');
     const gatewayCardStart = appSrc.indexOf('function GatewaySourceCard');
     const gatewayCardEnd = appSrc.indexOf('function gatewayPanelIconTone', gatewayCardStart);
     expect(gatewayCardStart).toBeGreaterThanOrEqual(0);
@@ -954,6 +966,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain("case 'update_gateway':\n                          runForegroundRequest({");
     expect(appSrc).toContain('<MoreHorizontal class="h-3.5 w-3.5" />');
     expect(appSrc).toContain('ariaLabel={moreActionsForLabel()}');
+    expect(appSrc).toContain('moreActionsMenuOpen={gatewaySourceOverlayOpenFor(activeGatewayOverlayState(), \'more_actions_menu\', gatewayID)}');
+    expect(appSrc).toContain('onMoreActionsMenuOpenChange={(open) => setGatewayMoreActionsMenuOpen(gatewayID, open)}');
+    expect(gatewayCardSrc).not.toContain('const [moreActionsOpen, setMoreActionsOpen] = createSignal(false);');
     expect(appSrc).toContain('<For each={menuActions()}>');
     expect(appSrc).toContain('disabled={menuItemDisabled(action)}');
     expect(appSrc).toContain('<span class="redeven-split-menu-item-icon">');
