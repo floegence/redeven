@@ -5126,6 +5126,14 @@ function gatewayStartRequiredFailure(
   serviceState?: DesktopGatewayStartRequiredPayload['service_state'],
   message = 'Start this Gateway before continuing.',
 ): DesktopLauncherActionFailure {
+  const failure = desktopOperationFailurePresentation({
+    code: 'operation_failed',
+    title: 'Gateway is stopped',
+    titleKey: 'environmentCenter.gatewayGuidanceStoppedTitle',
+    summary: message,
+    detail: 'Desktop can start this Gateway service. Use Refresh again after it is ready to refresh environments.',
+    detailKey: 'environmentCenter.gatewayPanelStartToSyncDetail',
+  });
   return launcherActionFailure(
     'gateway_start_required',
     'gateway',
@@ -5134,6 +5142,7 @@ function gatewayStartRequiredFailure(
       shouldRefreshSnapshot: true,
       gatewayID: record.gateway_id,
       gatewayLabel: record.display_name,
+      failure,
       retryAction,
       resolveFocus: gatewayResolveFocusForServiceState(serviceState),
       gatewayStartRequiredPayload: {
@@ -5396,6 +5405,40 @@ function gatewayDiagnosisNextActions(
       label: 'Dismiss',
     },
   ];
+}
+
+function gatewayFailureTitleKeyForDiagnosis(
+  diagnosis: DesktopGatewayDiagnosis,
+): DesktopOperationFailurePresentation['title_key'] | undefined {
+  switch (diagnosis.classification) {
+    case 'not_started':
+      return 'environmentCenter.gatewayGuidanceStoppedTitle';
+    case 'needs_update':
+    case 'legacy_runtime_residue':
+      return 'environmentCenter.gatewayPanelUpdateRequiredTitle';
+    default:
+      return undefined;
+  }
+}
+
+function gatewayFailureDetailKeyForDiagnosis(
+  diagnosis: DesktopGatewayDiagnosis,
+): DesktopOperationFailurePresentation['detail_key'] | undefined {
+  if (diagnosis.classification === 'not_started') {
+    return 'environmentCenter.gatewayPanelStartToSyncDetail';
+  }
+  return undefined;
+}
+
+function gatewayFailureFromDiagnosis(diagnosis: DesktopGatewayDiagnosis): DesktopOperationFailurePresentation {
+  return desktopOperationFailurePresentation({
+    code: 'operation_failed',
+    title: compact(diagnosis.summary) || 'Gateway check failed',
+    titleKey: gatewayFailureTitleKeyForDiagnosis(diagnosis),
+    summary: compact(diagnosis.detail) || compact(diagnosis.summary) || 'Desktop could not diagnose this Gateway.',
+    detail: compact(diagnosis.detail),
+    detailKey: gatewayFailureDetailKeyForDiagnosis(diagnosis),
+  });
 }
 
 function gatewayRecommendedRecoveryForDiagnosis(
@@ -6193,12 +6236,7 @@ async function refreshGatewayFromLauncher(
       onDetail: updateRefreshDetail,
     }).catch(() => gatewayDiagnosisForError(latestRecord, error));
     setGatewayDiagnosis(record, diagnosis);
-    const failure = desktopFailureFromError(error, {
-      code: 'operation_failed',
-      title: 'Refresh Gateway Failed',
-      summary: diagnosis.detail,
-      targetLabel: record.display_name,
-    });
+    const failure = gatewayFailureFromDiagnosis(diagnosis);
     const phase = (launcherOperations.get(operationKey)?.phase as GatewayWorkflowStepID | undefined) ?? 'refreshing_gateway_catalog';
     launcherOperations.finish(operationKey, 'failed', {
       phase,

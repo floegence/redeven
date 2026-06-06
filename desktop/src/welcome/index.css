@@ -2331,6 +2331,12 @@ body {
   border-top: 1px solid color-mix(in srgb, var(--border) 46%, transparent);
 }
 
+.redeven-action-popover__action-stack[data-placement='after-steps'] {
+  margin-top: 0.45rem;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .redeven-action-popover__actions {
   display: flex;
   min-width: 0;
@@ -2440,6 +2446,10 @@ body {
   gap: 0;
   margin: 0.15rem 0;
   transition: min-height 180ms ease;
+}
+
+.redeven-environment-progress .redeven-action-popover__notice[data-placement='after-steps'] {
+  margin-top: 0.45rem;
 }
 
 .redeven-environment-progress__step {

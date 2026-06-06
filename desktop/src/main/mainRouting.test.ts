@@ -1311,6 +1311,16 @@ describe('main routing', () => {
     expect(nextActionsSrc).not.toContain("kind: 'check_gateway' as const");
     expect(nextActionsSrc).toContain("kind: 'copy_diagnostics' as const");
     expect(nextActionsSrc).toContain("kind: 'dismiss' as const");
+    const failureHelperStart = mainSrc.indexOf('function gatewayFailureTitleKeyForDiagnosis(');
+    const failureHelperEnd = mainSrc.indexOf('function gatewayRecommendedRecoveryForDiagnosis(', failureHelperStart);
+    expect(failureHelperStart).toBeGreaterThanOrEqual(0);
+    expect(failureHelperEnd).toBeGreaterThan(failureHelperStart);
+    const failureHelperSrc = mainSrc.slice(failureHelperStart, failureHelperEnd);
+    expect(failureHelperSrc).toContain("case 'not_started':");
+    expect(failureHelperSrc).toContain("return 'environmentCenter.gatewayGuidanceStoppedTitle';");
+    expect(failureHelperSrc).toContain("return 'environmentCenter.gatewayPanelStartToSyncDetail';");
+    expect(failureHelperSrc).toContain("case 'needs_update':");
+    expect(failureHelperSrc).toContain("return 'environmentCenter.gatewayPanelUpdateRequiredTitle';");
     expect(refreshSrc).toContain('const activeRefreshOperation = launcherOperations.get(operationKey);');
     expect(refreshSrc).toContain('if (launcherOperationIsActive(activeRefreshOperation)) {\n    rebroadcastLauncherOperationProgress(activeRefreshOperation);');
     expect(refreshSrc).toContain('cancelable: false');
@@ -1322,6 +1332,9 @@ describe('main routing', () => {
     expect(refreshSrc).toContain("step_progress: completeGatewayStepProgress(GATEWAY_REFRESH_WORKFLOW_STEPS, 'gateway_refreshed')");
     expect(refreshSrc).toContain('gateway_diagnosis: completeGatewayDiagnosis(diagnosis)');
     expect(refreshSrc).toContain('next_actions: gatewayDiagnosisNextActions(operationKey, latestRecord, diagnosis)');
+    expect(refreshSrc).toContain('const failure = gatewayFailureFromDiagnosis(diagnosis);');
+    expect(refreshSrc).not.toContain("title: 'Refresh Gateway Failed'");
+    expect(refreshSrc).not.toContain('targetLabel: record.display_name');
     expect(legacyWrapperSrc).toContain("return refreshGatewayFromLauncher({");
     expect(legacyWrapperSrc).toContain("kind: 'refresh_gateway'");
     expect(checkRecordSrc).toContain('await gatewayLifecycleManager().refreshCatalog(record, {');
@@ -1393,6 +1406,22 @@ describe('main routing', () => {
     expect(helperSrc).toContain("'stopping_gateway_service',\n      'verifying_gateway_stopped',\n      'preparing_gateway_package',\n      'installing_gateway_package'");
     expect(helperSrc).toContain("'gateway_service_up_to_date'");
     expect(helperSrc).toContain("'starting_gateway_service',\n    'opening_gateway_bridge',\n    'checking_gateway_service',\n    'gateway_service_ready'");
+  });
+
+  it('keeps Gateway start-required failures specific enough for recovery popovers', () => {
+    const mainSrc = readMainSource();
+    const failureStart = mainSrc.indexOf('function gatewayStartRequiredFailure(');
+    const failureEnd = mainSrc.indexOf('function gatewayLauncherFailureFromError(', failureStart);
+    expect(failureStart).toBeGreaterThanOrEqual(0);
+    expect(failureEnd).toBeGreaterThan(failureStart);
+    const failureSrc = mainSrc.slice(failureStart, failureEnd);
+
+    expect(failureSrc).toContain('const failure = desktopOperationFailurePresentation({');
+    expect(failureSrc).toContain("title: 'Gateway is stopped'");
+    expect(failureSrc).toContain("titleKey: 'environmentCenter.gatewayGuidanceStoppedTitle'");
+    expect(failureSrc).toContain("detailKey: 'environmentCenter.gatewayPanelStartToSyncDetail'");
+    expect(failureSrc).not.toContain('targetLabel');
+    expect(failureSrc).toContain('failure,');
   });
 
   it('opens Gateway environments only through Gateway open-session without provider fallback', () => {
