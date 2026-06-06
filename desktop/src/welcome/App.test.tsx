@@ -850,11 +850,14 @@ describe('DesktopWelcomeShell', () => {
     expect(recoverySrc).not.toContain("case 'sync_gateway':");
     expect(appSrc).not.toContain('GATEWAY_FOREGROUND_PENDING_MIN_VISIBLE_MS');
     expect(appSrc).toContain('pending_progress?: DesktopLauncherActionProgress;');
-    expect(appSrc).toContain('const pendingProgress = pendingGatewayForegroundProgress');
+    expect(appSrc).toContain('const ownsProgress = presentationCanStartProgress(action);');
+    expect(appSrc).toContain('const pendingProgress = ownsProgress\n      ? pendingGatewayForegroundProgress(props.gateway, action, operationKey, startedAtUnixMS)\n      : null;');
     expect(appSrc).toContain('...(pendingProgress ? { pending_progress: pendingProgress } : {}),');
     expect(appSrc).toContain('const progress = selectedGatewayWorkflowProgress() ?? busyGatewayWorkflowProgress();');
     expect(appSrc).toContain('if (progress) {\n      clearForegroundPendingProgress();\n    }');
     expect(appSrc).toContain('const selectedGatewayOperationProgress = createMemo(() => {');
+    expect(appSrc).toContain('if (foreground && !foreground.owns_progress) {\n      return null;\n    }');
+    expect(appSrc).toContain('const selected = foreground\n      ? selectedGatewayWorkflowProgress() ?? busyGatewayWorkflowProgress()\n      : (props.actionPopoverOpen ? selectedGatewayForegroundRecoveryProgress() : null);');
     expect(appSrc).toContain('const selectedGatewayRefreshDiagnosisResult = createMemo<GatewayDiagnosisResultSnapshot | null>(() => {');
     expect(appSrc).toContain('const visibleGatewayDiagnosisResult = createMemo<GatewayDiagnosisResultSnapshot | null>(() => {');
     expect(appSrc).toContain('if (props.gateway.diagnosis) {\n      return buildGatewayDiagnosisResultSnapshot({');
@@ -890,6 +893,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const closeActionPopoverAfterExit = (task: () => void) => {');
     expect(appSrc).toContain('onExitComplete={releaseClosedForegroundAction}');
     expect(appSrc).toContain('setForegroundAction(null);');
+    expect(appSrc).toContain('let previousGatewayID = props.gateway.gateway_id;');
+    expect(appSrc).toContain('if (gatewayID === previousGatewayID) {\n      return;\n    }');
+    expect(appSrc).not.toContain("createEffect(on(\n    () => props.gateway.gateway_id,\n    () => {");
     expect(appSrc).toContain('return !foregroundWantsPopover();');
     expect(appSrc).toContain('const runForegroundRequestFromProgress = (');
     expect(appSrc).toContain("if (currentProgress.subject_kind === 'gateway' && launcherActionProgressIsTerminal(currentProgress)) {");
