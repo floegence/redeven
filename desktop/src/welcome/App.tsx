@@ -11354,10 +11354,14 @@ function GatewaySourceCard(props: Readonly<{
       }))
   ));
   const selectedGatewayOperationProgress = createMemo(() => {
-    const pending = foregroundAction()?.pending_progress ?? foregroundPendingProgress();
-    const selected = selectedGatewayWorkflowProgress()
-      ?? busyGatewayWorkflowProgress()
-      ?? (props.actionPopoverOpen ? selectedGatewayForegroundRecoveryProgress() : null);
+    const foreground = foregroundAction();
+    if (foreground && !foreground.owns_progress) {
+      return null;
+    }
+    const pending = foreground?.pending_progress ?? foregroundPendingProgress();
+    const selected = foreground
+      ? selectedGatewayWorkflowProgress() ?? busyGatewayWorkflowProgress()
+      : (props.actionPopoverOpen ? selectedGatewayForegroundRecoveryProgress() : null);
     if (selected?.action === 'refresh_gateway' && selected.status === 'succeeded') {
       return selected;
     }
@@ -11643,16 +11647,18 @@ function GatewaySourceCard(props: Readonly<{
       ? <Stop class="redeven-split-action-trigger__icon h-3.5 w-3.5" />
       : <Play class="redeven-split-action-trigger__icon h-3.5 w-3.5" />;
   };
-  createEffect(on(
-    () => props.gateway.gateway_id,
-    () => {
+  let previousGatewayID = props.gateway.gateway_id;
+  createEffect(() => {
+    const gatewayID = props.gateway.gateway_id;
+    if (gatewayID === previousGatewayID) {
+      return;
+    }
+    previousGatewayID = gatewayID;
       actionPopoverExitTask = null;
       setForegroundAction(null);
       setRetainedDiagnosisResult(null);
       clearForegroundPendingProgress();
-    },
-    { defer: true },
-  ));
+  });
   onCleanup(() => {
     clearForegroundTerminalClearTimer();
     clearActionPopoverStaleCloseFrame();
@@ -11817,13 +11823,16 @@ function GatewaySourceCard(props: Readonly<{
   ): GatewayActionPanelModel => {
     setRetainedDiagnosisResult(null);
     const startedAtUnixMS = Date.now();
+    const ownsProgress = presentationCanStartProgress(action);
     const panelModel = buildGatewayActionPresentation({
       gateway: props.gateway,
       clicked_action: action,
       affected_sessions: affectedSessions(),
     });
     const operationKey = gatewayOperationKeyForAction(props.gateway, action);
-    const pendingProgress = pendingGatewayForegroundProgress(props.gateway, action, operationKey, startedAtUnixMS);
+    const pendingProgress = ownsProgress
+      ? pendingGatewayForegroundProgress(props.gateway, action, operationKey, startedAtUnixMS)
+      : null;
     setForegroundAction({
       gateway_id: props.gateway.gateway_id,
       started_at_unix_ms: startedAtUnixMS,
@@ -11833,8 +11842,8 @@ function GatewaySourceCard(props: Readonly<{
         ...panelModel,
         continuation_action: request,
       },
-      owns_progress: true,
-      operation_key: operationKey,
+      owns_progress: ownsProgress,
+      ...(operationKey ? { operation_key: operationKey } : {}),
       ...(pendingProgress ? { pending_progress: pendingProgress } : {}),
     });
     setForegroundPendingProgressForRequest(pendingProgress);
