@@ -406,9 +406,23 @@ export class GatewayLifecycleManager {
     if (record.connection.kind === 'url') {
       throw new GatewayNotManageableError();
     }
-    await this.clear(record);
     const placement = gatewayPlacement(record);
     const sshPassword = await this.gatewaySSHPassword(record);
+    await this.clear(record);
+    await stopManagedGatewayService({
+      target: gatewaySSHDetails(record),
+      placement,
+      stateRoot: gatewayServiceStateRoot(record),
+      releaseTag: this.options.runtime_release_tag,
+      releaseBaseURL: this.options.release_base_url,
+      assetCacheRoot: this.options.asset_cache_root,
+      sourceRuntimeRoot: this.options.source_runtime_root,
+      targetCommit: this.options.target_commit,
+      sshPassword,
+      tempRoot: this.options.temp_root,
+      signal: options.signal,
+      onProgress: (progress) => this.emitFromServiceProgress(options.onProgress, progress),
+    });
     const gatewayBinaryPath = await this.ensureServiceReady(record, placement, sshPassword, options.signal, {
       forceUpdate: true,
       onProgress: options.onProgress,

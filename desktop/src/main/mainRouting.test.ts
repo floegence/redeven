@@ -1117,6 +1117,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain('async function syncVisibleGatewaysIfNeeded(');
     expect(mainSrc).toContain("last_synced_at_ms: 0,");
     expect(mainSrc).toContain('background_sync_running: false,');
+    expect(mainSrc).toContain('const serviceStatus = syncRecord?.source?.service_state?.status;');
+    expect(mainSrc).toContain("serviceStatus === 'not_started' || serviceStatus === 'service_needs_update'");
     expect(mainSrc).toContain('if (!syncRecord?.source) {');
     expect(mainSrc).toContain('if (!record.local_enabled) {');
     expect(mainSrc).toContain("gatewaySyncTaskByID.set(record.gateway_id, { priority, token: taskToken, controller, task });");
@@ -1235,6 +1237,15 @@ describe('main routing', () => {
     expect(serviceSrc).toContain('const activeServiceOperation = launcherOperations.get(operationKey);');
     expect(serviceSrc).toContain('if (launcherOperationIsActive(activeServiceOperation)) {');
     expect(serviceSrc).toContain('gateway_id: record.gateway_id,');
+    expect(serviceSrc).toContain('supersedeGatewaySyncTask(record.gateway_id);');
+    expect(serviceSrc).toContain('clearGatewayRefreshDiagnosisState(record.gateway_id);');
+    expect(serviceSrc).toContain('rememberCompletedGatewayServiceAction(record, request, descriptor);');
+    expect(serviceSrc.indexOf('supersedeGatewaySyncTask(record.gateway_id);')).toBeLessThan(
+      serviceSrc.indexOf('const descriptor = gatewayServiceTargetDescriptor(record);'),
+    );
+    expect(serviceSrc.indexOf('clearGatewayRefreshDiagnosisState(record.gateway_id);')).toBeLessThan(
+      serviceSrc.indexOf('rememberCompletedGatewayServiceAction(record, request, descriptor);'),
+    );
     expect(serviceSrc).toContain('const completedServiceLifecycleProgress = completeRuntimeLifecycleWorkflowProgress(operationKey, lifecycleAttemptOwner, {');
     expect(serviceSrc).toContain('lifecycle_progress: completedServiceLifecycleProgress');
     expect(serviceSrc).not.toContain('lifecycle_progress: undefined');
@@ -1272,6 +1283,50 @@ describe('main routing', () => {
     expect(checkRecordSrc).not.toContain("recommended_recovery: 'review_trust'");
     expect(checkRecordSrc).not.toContain('markCatalogSynced(');
     expect(checkRecordSrc).not.toContain('setGatewaySyncRecord(');
+  });
+
+  it('publishes confirmed Gateway service state after service actions without claiming catalog success', () => {
+    const mainSrc = readMainSource();
+    const stateStart = mainSrc.indexOf('function serviceStateForCompletedGatewayAction(');
+    const rememberStart = mainSrc.indexOf('function rememberCompletedGatewayServiceAction(', stateStart);
+    const diagnosisStart = mainSrc.indexOf('function setGatewayDiagnosis(', rememberStart);
+    expect(stateStart).toBeGreaterThanOrEqual(0);
+    expect(rememberStart).toBeGreaterThan(stateStart);
+    expect(diagnosisStart).toBeGreaterThan(rememberStart);
+    const stateSrc = mainSrc.slice(stateStart, rememberStart);
+    const rememberSrc = mainSrc.slice(rememberStart, diagnosisStart);
+
+    expect(stateSrc).toContain("request.kind === 'stop_gateway'");
+    expect(stateSrc).toContain("status: 'not_started'");
+    expect(stateSrc).toContain('can_start: true');
+    expect(stateSrc).toContain('can_stop: false');
+    expect(stateSrc).toContain("status: 'ready'");
+    expect(stateSrc).toContain('can_stop: true');
+    expect(stateSrc).toContain('can_restart: true');
+    expect(stateSrc).toContain('can_update: true');
+    expect(stateSrc).toContain('service_target_id: descriptor.target_id');
+    expect(stateSrc).toContain('service_state_root: descriptor.service_state_root');
+    expect(rememberSrc).toContain('previous.source ?? gatewayRecordToSource(record)');
+    expect(rememberSrc).toContain("sync_state: 'idle'");
+    expect(rememberSrc).toContain('background_sync_running: false');
+    expect(rememberSrc).toContain("last_sync_error_code: ''");
+    expect(rememberSrc).toContain("last_sync_error_message: ''");
+    expect(rememberSrc).toContain('serviceStateForCompletedGatewayAction(request, descriptor)');
+    expect(rememberSrc).not.toContain("sync_state: 'ready'");
+    expect(rememberSrc).not.toContain('gatewayRecordToSourceWithCatalog(');
+    expect(rememberSrc).not.toContain('markCatalogSynced(');
+  });
+
+  it('does not erase the confirmed Gateway service state after stop actions finish', () => {
+    const mainSrc = readMainSource();
+    const sideEffectStart = mainSrc.indexOf('function scheduleGatewaySyncAfterLauncherAction(');
+    const snapshotStart = mainSrc.indexOf('async function buildCurrentDesktopWelcomeSnapshot(', sideEffectStart);
+    expect(sideEffectStart).toBeGreaterThanOrEqual(0);
+    expect(snapshotStart).toBeGreaterThan(sideEffectStart);
+    const sideEffectSrc = mainSrc.slice(sideEffectStart, snapshotStart);
+
+    expect(sideEffectSrc).not.toContain("case 'stop_gateway':");
+    expect(sideEffectSrc).not.toContain('gatewaySyncStateByID.delete(gatewayID);\n        gatewayDiagnosisByID.delete(gatewayID);\n        broadcastDesktopWelcomeSnapshots();');
   });
 
 	  it('opens Gateway environments only through Gateway open-session without provider fallback', () => {

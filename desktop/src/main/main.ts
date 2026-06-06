@@ -142,6 +142,7 @@ import {
   type GatewayLifecycleProgressSink,
   type GatewayStartPolicy,
   type GatewayServiceLifecycleProgress,
+  type GatewayServiceTargetDescriptor,
 } from './gatewayLifecycleManager';
 import type { GatewayServiceDeepProbe } from './gatewayServiceHost';
 import { gatewaySessionArtifactURL } from './gatewaySessionArtifact';
@@ -3771,13 +3772,6 @@ function scheduleGatewaySyncAfterLauncherAction(
       }
       broadcastDesktopWelcomeSnapshots();
       return;
-    case 'stop_gateway':
-      if (gatewayID) {
-        gatewaySyncStateByID.delete(gatewayID);
-        gatewayDiagnosisByID.delete(gatewayID);
-        broadcastDesktopWelcomeSnapshots();
-      }
-      return;
     default:
       return;
   }
@@ -3903,6 +3897,75 @@ function setGatewaySyncRecord(record: GatewayRecord, nextRecord: GatewaySyncReco
   }
   gatewaySyncStateByID.set(record.gateway_id, nextRecord);
   broadcastDesktopWelcomeSnapshots();
+}
+
+function serviceStateForCompletedGatewayAction(
+  request: Extract<DesktopLauncherActionRequest, {
+    kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway';
+  }>,
+  descriptor: GatewayServiceTargetDescriptor,
+): DesktopGatewayServiceState {
+  if (request.kind === 'stop_gateway') {
+    return {
+      status: 'not_started',
+      can_start: true,
+      can_stop: false,
+      can_restart: false,
+      can_update: false,
+      can_pair_after_start: true,
+      service_target_id: descriptor.target_id,
+      service_state_root: descriptor.service_state_root,
+      message: 'Gateway service is stopped.',
+      checked_at_unix_ms: Date.now(),
+    };
+  }
+  return {
+    status: 'ready',
+    can_start: false,
+    can_stop: true,
+    can_restart: true,
+    can_update: true,
+    can_pair_after_start: true,
+    service_target_id: descriptor.target_id,
+    service_state_root: descriptor.service_state_root,
+    message: request.kind === 'update_gateway'
+      ? 'Gateway service was updated and restarted.'
+      : `Gateway service is ${request.kind === 'start_gateway' ? 'running' : 'ready'}.`,
+    checked_at_unix_ms: Date.now(),
+  };
+}
+
+function rememberCompletedGatewayServiceAction(
+  record: GatewayRecord,
+  request: Extract<DesktopLauncherActionRequest, {
+    kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway';
+  }>,
+  descriptor: GatewayServiceTargetDescriptor,
+): void {
+  const previous = gatewaySyncStateByID.get(record.gateway_id) ?? defaultGatewaySyncRecord(record);
+  const source = mergeGatewaySourceRecord(
+    previous.source ?? gatewayRecordToSource(record),
+    record,
+    {
+      ...previous,
+      gateway_id: record.gateway_id,
+      sync_state: 'idle',
+      background_sync_running: false,
+      last_sync_error_code: '',
+      last_sync_error_message: '',
+    },
+    serviceStateForCompletedGatewayAction(request, descriptor),
+  );
+  setGatewaySyncRecord(record, {
+    gateway_id: record.gateway_id,
+    sync_state: 'idle',
+    background_sync_running: false,
+    last_sync_attempt_at_ms: previous.last_sync_attempt_at_ms,
+    last_synced_at_ms: previous.last_synced_at_ms,
+    last_sync_error_code: '',
+    last_sync_error_message: '',
+    source,
+  });
 }
 
 function setGatewayDiagnosis(record: GatewayRecord, diagnosis: DesktopGatewayDiagnosis): void {
@@ -4047,6 +4110,10 @@ function gatewayCatalogFresh(record: GatewayRecord, syncRecord?: GatewaySyncReco
 
 function gatewayNeedsAutoSync(record: GatewayRecord, syncRecord?: GatewaySyncRecord): boolean {
   if (!record.local_enabled || syncRecord?.background_sync_running === true) {
+    return false;
+  }
+  const serviceStatus = syncRecord?.source?.service_state?.status;
+  if (serviceStatus === 'not_started' || serviceStatus === 'service_needs_update') {
     return false;
   }
   return !gatewayCatalogFresh(record, syncRecord);
@@ -6170,6 +6237,8 @@ async function runGatewayServiceActionFromLauncher(
     });
   }
 
+  supersedeGatewaySyncTask(record.gateway_id);
+
   const descriptor = gatewayServiceTargetDescriptor(record);
   const lifecycleOperation = gatewayServiceLifecycleOperation(request.kind);
   const operationKey = `${descriptor.target_id}:${gatewayServiceOperationName(request.kind)}`;
@@ -6257,6 +6326,7 @@ async function runGatewayServiceActionFromLauncher(
       detail: `Desktop completed ${actionLabel.toLowerCase()} for ${record.display_name}.`,
     });
     clearGatewayRefreshDiagnosisState(record.gateway_id);
+    rememberCompletedGatewayServiceAction(record, request, descriptor);
     launcherOperations.finish(operationKey, 'succeeded', {
       phase: terminalPhase,
       title: `${actionLabel} complete`,

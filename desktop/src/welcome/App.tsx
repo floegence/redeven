@@ -704,6 +704,7 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     Disabled: 'environmentCenter.gatewayDisabledStatus',
     'Not started': 'environmentStatus.stopped',
     'Update available': 'environmentCenter.gatewayNeedsUpdate',
+    'Service ready': 'progress.gatewayServiceReady',
     Refreshing: 'environmentCenter.gatewayActionSyncing',
   });
 }
@@ -714,6 +715,7 @@ function localizedGatewaySourceStatusLabel(i18n: DesktopI18n, label: string): st
     Starting: 'environmentCenter.gatewayStatusStarting',
     Updating: 'environmentCenter.gatewayStatusUpdating',
     'Update available': 'environmentCenter.gatewayNeedsUpdate',
+    'Service ready': 'progress.gatewayServiceReady',
     Disabled: 'environmentCenter.gatewayDisabledStatus',
     Refreshing: 'environmentCenter.gatewayActionSyncing',
     'Not started': 'environmentStatus.stopped',
@@ -856,6 +858,7 @@ function localizedGatewaySourceText(i18n: DesktopI18n, value: string): string {
     'Desktop is pairing this Gateway automatically so it can show the environments the Gateway manages.': 'environmentCenter.gatewayGuidancePreparingTrustDetail',
     'Gateway is ready': 'environmentCenter.gatewayGuidanceReadyTitle',
     'Desktop keeps this Gateway catalog synced. Open its environments from the Environments tab.': 'environmentCenter.gatewayGuidanceReadyDetail',
+    'The Gateway service is ready. Use Refresh to pair if needed and refresh the environment catalog.': 'environmentCenter.gatewayGuidanceReadyDetail',
     'Review the Gateway settings, then refresh again when the target is reachable.': 'environmentCenter.gatewayGuidanceReviewSettingsDetail',
     'Gateway catalog available': 'environmentCenter.gatewayGuidanceCatalogAvailableTitle',
     'Refresh this Gateway to pick up catalog changes; its environments are listed separately in the Environments tab.': 'environmentCenter.gatewayGuidanceCatalogAvailableDetail',
@@ -11348,7 +11351,11 @@ function GatewaySourceCard(props: Readonly<{
     });
   });
   const visiblePanelModel = createMemo(() => {
-    if (visibleGatewayProgress()) {
+    const progress = visibleGatewayProgress();
+    if (progress && !launcherActionProgressIsTerminal(progress)) {
+      return currentActionPresentation();
+    }
+    if (progress && gatewayProgressNeedsAttention(progress)) {
       return currentActionPresentation();
     }
     const diagnosisResult = visibleGatewayDiagnosisResult();

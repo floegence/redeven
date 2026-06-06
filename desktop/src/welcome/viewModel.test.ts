@@ -3702,6 +3702,40 @@ describe('Gateway view models', () => {
       'Restart Gateway',
       'Update Gateway',
     ]);
+    const serviceReadyBeforeCatalogRow = buildGatewaySourceRowModel(gatewaySource({
+      connection_kind: 'ssh_host',
+      management_capability: 'managed_ssh_host',
+      status: 'unknown',
+      status_message: 'Gateway status has not been checked yet.',
+      service_state: {
+        status: 'ready',
+        can_start: false,
+        can_stop: true,
+        can_restart: true,
+        can_update: true,
+        can_pair_after_start: true,
+      },
+      environments: [],
+    }));
+    expect(serviceReadyBeforeCatalogRow).toMatchObject({
+      status_label: 'Service ready',
+      primary_action: expect.objectContaining({
+        intent: 'refresh_gateway',
+        label: 'Refresh',
+        enabled: true,
+      }),
+      guidance: expect.objectContaining({
+        title: 'Gateway is ready',
+        detail: 'The Gateway service is ready. Use Refresh to pair if needed and refresh the environment catalog.',
+        tone: 'success',
+      }),
+    });
+    expect(serviceReadyBeforeCatalogRow.secondary_actions.map((action) => action.intent)).toEqual([
+      'disable_gateway',
+      'stop_gateway',
+      'restart_gateway',
+      'update_gateway',
+    ]);
     const allRows = [
       buildGatewaySourceRowModel(gatewaySource({
         status: 'pairing_required',
@@ -3716,6 +3750,7 @@ describe('Gateway view models', () => {
       startingSSHRow,
       updateRequiredSSHRow,
       readySSHRow,
+      serviceReadyBeforeCatalogRow,
     ];
     const allowedActions = new Set([
       'refresh_gateway',
