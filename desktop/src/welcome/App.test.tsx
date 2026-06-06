@@ -851,7 +851,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const visibleGatewayDiagnosisResult = createMemo<GatewayDiagnosisResultSnapshot | null>(() => {');
     expect(appSrc).toContain('if (props.gateway.diagnosis) {\n      return buildGatewayDiagnosisResultSnapshot({');
     expect(appSrc).toContain("if (selected?.action === 'refresh_gateway' && selected.status === 'succeeded') {");
-    expect(appSrc).toContain("if (progress?.action === 'refresh_gateway' && progress.status === 'succeeded') {\n      return null;\n    }");
+    expect(appSrc).not.toContain("if (progress?.action === 'refresh_gateway' && progress.status === 'succeeded') {\n      return null;\n    }");
+    expect(appSrc).toContain('const visibleGatewayProgress = createMemo(() => {\n    const progress = selectedGatewayOperationProgress();\n    return progress;\n  });');
+    expect(appSrc).toContain('const labelsByStepID: Readonly<Record<string, DesktopTranslationKey>> = {');
+    expect(appSrc).toContain('const stepIDKey = labelsByStepID[cleanStepID];');
+    expect(appSrc).toContain('return fallbackKey ? i18n.t(fallbackKey) : cleanFallback || cleanStepID;');
     expect(appSrc).toContain('if (pending && !selected) {');
     expect(appSrc).not.toContain('if (pending && (!selected || launcherActionProgressIsTerminal(selected))) {');
     expect(appSrc).toContain('if (progress && !launcherActionProgressIsTerminal(progress)) {');
