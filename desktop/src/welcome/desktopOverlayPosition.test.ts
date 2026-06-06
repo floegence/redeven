@@ -171,9 +171,28 @@ describe('desktopOverlayPosition', () => {
     });
 
     expect(position.placement).toBe('top');
-    expect(position.top).toBe(-60);
+    expect(position.top).toBe(8);
     expect(position.left).toBe(12);
     expect(position.arrowOffset).toBe(186);
-    expect(position.maxHeight).toBeUndefined();
+    expect(position.maxHeight).toBe(2);
+  });
+
+  it('keeps a tall locked Gateway action popover inside the viewport', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(49, 388, 282, 28),
+      overlayWidth: 304,
+      overlayHeight: 522,
+      viewportWidth: 1311,
+      viewportHeight: 835,
+      preferredPlacement: 'top',
+      placementLock: 'top-inline-shift',
+      allowMainAxisOverflow: false,
+    });
+
+    expect(position.placement).toBe('top');
+    expect(position.top).toBe(8);
+    expect(position.left).toBe(38);
+    expect(position.maxHeight).toBe(372);
+    expect(position.arrowOffset).toBeCloseTo(152, 0);
   });
 });

@@ -129,6 +129,7 @@ import {
   createGatewayPairingMaterial,
   pairingChallengeRequest,
   pairingChallengeRequestWithCode,
+  revokeGatewayTrust,
   GatewayTrustError,
   type GatewaySecretStore,
 } from './gatewayTrust';
@@ -4026,6 +4027,27 @@ function gatewayClientErrorIsPairingRejected(error: GatewayClientError): boolean
     || message.includes('pair this gateway');
 }
 
+function gatewayTrustErrorNeedsRepair(error: GatewayTrustError): boolean {
+  switch (compact(error.code).toUpperCase()) {
+    case 'GATEWAY_PAIRING_REQUIRED':
+    case 'GATEWAY_CLIENT_PRIVATE_KEY_REQUIRED':
+    case 'GATEWAY_TRUST_REVOKED':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function gatewayErrorNeedsTrustRepair(error: unknown): boolean {
+  if (error instanceof GatewayClientError) {
+    return gatewayClientErrorIsPairingRejected(error);
+  }
+  if (error instanceof GatewayTrustError) {
+    return gatewayTrustErrorNeedsRepair(error);
+  }
+  return false;
+}
+
 function gatewayClientErrorIsTrustMismatch(error: GatewayClientError): boolean {
   switch (compact(error.code)) {
     case 'GATEWAY_ID_MISMATCH':
@@ -4036,6 +4058,19 @@ function gatewayClientErrorIsTrustMismatch(error: GatewayClientError): boolean {
     default:
       return false;
   }
+}
+
+function gatewayCanRepairManagedTrust(record: GatewayRecord): boolean {
+  return record.connection.kind !== 'url' && !!record.trust_profile;
+}
+
+async function resetManagedGatewayTrust(record: GatewayRecord, secretStore: GatewaySecretStore): Promise<GatewayRecord> {
+  const profile = record.trust_profile;
+  if (profile) {
+    await revokeGatewayTrust(profile, secretStore);
+  }
+  await gatewayLifecycleManager().clear(record);
+  return gatewayStore().updateTrustProfile(record.gateway_id, undefined);
 }
 
 function gatewaySyncRecordFromError(
@@ -4354,12 +4389,36 @@ async function syncGatewayRecord(
         });
         currentRecord = await assertSyncActive();
       }
-      options.progress?.onStage?.('refreshing_gateway_catalog');
-      const catalog = await gatewayLifecycleManager().refreshCatalog(currentRecord, {
-        timeoutMs: 10_000,
-        startPolicy: currentRecord.connection.kind === 'url' ? undefined : 'require_ready',
-        signal,
-      });
+      const refreshCatalog = async (targetRecord: GatewayRecord) => {
+        options.progress?.onStage?.('refreshing_gateway_catalog');
+        return gatewayLifecycleManager().refreshCatalog(targetRecord, {
+          timeoutMs: 10_000,
+          startPolicy: targetRecord.connection.kind === 'url' ? undefined : 'require_ready',
+          signal,
+        });
+      };
+      let catalog: Awaited<ReturnType<typeof refreshCatalog>>;
+      try {
+        catalog = await refreshCatalog(currentRecord);
+      } catch (catalogError) {
+        if (!gatewayErrorNeedsTrustRepair(catalogError) || !gatewayCanRepairManagedTrust(currentRecord)) {
+          throw catalogError;
+        }
+        currentRecord = await resetManagedGatewayTrust(currentRecord, secretStore);
+        currentRecord = await assertSyncActive();
+        const repairClient = await gatewayClientForSync(currentRecord, {
+          startPolicy: 'require_ready',
+          signal,
+          onProgress: options.progress?.onGatewayServiceProgress,
+        });
+        currentRecord = await pairGatewayWithClient(currentRecord, repairClient, secretStore, {
+          signal,
+          onStage: options.progress?.onStage,
+          beforeStoreWrite: assertSyncActive,
+        });
+        currentRecord = await assertSyncActive();
+        catalog = await refreshCatalog(currentRecord);
+      }
       currentRecord = await assertSyncActive();
       const syncedAtMS = Date.now();
       const syncedRecord = await gatewayStore().markCatalogSynced(currentRecord.gateway_id, syncedAtMS).catch(() => currentRecord);
@@ -4431,6 +4490,9 @@ async function syncVisibleGatewaysIfNeeded(options: Readonly<{ force?: boolean }
   const records = await gatewayStore().list();
   await Promise.all(records.map(async (record) => {
     if (!record.local_enabled) {
+      return;
+    }
+    if (activeGatewayServiceOperation(record.gateway_id)) {
       return;
     }
     await syncGatewayIfNeeded(record, options).catch((error) => {
@@ -6202,6 +6264,27 @@ async function refreshGatewayStatusFromLauncher(
   });
 }
 
+async function refreshGatewayAfterCompletedServiceAction(
+  record: GatewayRecord,
+  request: Extract<DesktopLauncherActionRequest, {
+    kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway';
+  }>,
+): Promise<void> {
+  if (request.kind === 'stop_gateway') {
+    return;
+  }
+  const latestRecord = await gatewayStore().get(record.gateway_id);
+  if (!latestRecord?.local_enabled) {
+    return;
+  }
+  await syncGatewayRecord(latestRecord, {
+    force: true,
+    mode: 'sync',
+    priority: 'foreground',
+    startPolicy: 'require_ready',
+  });
+}
+
 async function runGatewayServiceActionFromLauncher(
   request: Extract<DesktopLauncherActionRequest, {
     kind: 'start_gateway' | 'stop_gateway' | 'restart_gateway' | 'update_gateway';
@@ -6327,11 +6410,20 @@ async function runGatewayServiceActionFromLauncher(
     });
     clearGatewayRefreshDiagnosisState(record.gateway_id);
     rememberCompletedGatewayServiceAction(record, request, descriptor);
+    if (request.kind !== 'stop_gateway') {
+      launcherOperations.update(operationKey, {
+        phase: terminalPhase,
+        title: `${actionLabel} Gateway`,
+        detail: `Desktop completed ${actionLabel.toLowerCase()} and is refreshing ${record.display_name}.`,
+        lifecycle_progress: completedServiceLifecycleProgress,
+      });
+      await refreshGatewayAfterCompletedServiceAction(record, request);
+    }
     launcherOperations.finish(operationKey, 'succeeded', {
       phase: terminalPhase,
       title: `${actionLabel} complete`,
       detail: request.kind === 'update_gateway'
-        ? `Desktop updated and restarted ${record.display_name}. Use Refresh to refresh pairing and catalog.`
+        ? `Desktop updated, restarted, and refreshed ${record.display_name}.`
         : `Desktop completed ${actionLabel.toLowerCase()} for ${record.display_name}.`,
       lifecycle_progress: completedServiceLifecycleProgress,
     });
@@ -6591,6 +6683,33 @@ function launcherOperationIsActive(snapshot: DesktopLauncherOperationSnapshot | 
   return snapshot?.status === 'running'
     || snapshot?.status === 'canceling'
     || snapshot?.status === 'cleanup_running';
+}
+
+function launcherOperationIsActiveGatewayServiceAction(snapshot: DesktopLauncherOperationSnapshot | null): boolean {
+  const current = snapshot;
+  if (!current || !launcherOperationIsActive(current) || current.subject_kind !== 'gateway') {
+    return false;
+  }
+  switch (current.action) {
+    case 'start_gateway':
+    case 'stop_gateway':
+    case 'restart_gateway':
+    case 'update_gateway':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function activeGatewayServiceOperation(gatewayID: string): DesktopLauncherOperationSnapshot | null {
+  const cleanGatewayID = compact(gatewayID);
+  if (cleanGatewayID === '') {
+    return null;
+  }
+  return launcherOperations.operations().find((snapshot) => (
+    launcherOperationIsActiveGatewayServiceAction(snapshot)
+    && (snapshot.subject_id === cleanGatewayID || snapshot.gateway_id === cleanGatewayID)
+  )) ?? null;
 }
 
 function scheduleLauncherOperationRemoval(operationKey: string, delayMs = 4_000): void {
@@ -7632,6 +7751,7 @@ function gatewayServiceInitialStepIDs(
   placement: DesktopRuntimePlacement,
   operation: DesktopRuntimeLifecycleOperation,
 ): readonly DesktopRuntimeLifecycleStepID[] {
+  const firstCheck = placement.kind === 'container_process' ? 'checking_container' : 'checking_host';
   if (operation === 'stop') {
     return [
       'stopping_gateway_service',
@@ -7639,14 +7759,36 @@ function gatewayServiceInitialStepIDs(
       'gateway_service_stopped',
     ];
   }
+  if (operation === 'restart') {
+    return [
+      firstCheck,
+      'stopping_gateway_service',
+      'verifying_gateway_stopped',
+      'starting_gateway_service',
+      'opening_gateway_bridge',
+      'checking_gateway_service',
+      'gateway_service_ready',
+    ];
+  }
+  if (operation === 'update') {
+    return [
+      firstCheck,
+      'stopping_gateway_service',
+      'verifying_gateway_stopped',
+      'preparing_gateway_package',
+      'installing_gateway_package',
+      'starting_gateway_service',
+      'opening_gateway_bridge',
+      'checking_gateway_service',
+      'gateway_service_up_to_date',
+    ];
+  }
   return [
-    placement.kind === 'container_process' ? 'checking_container' : 'checking_host',
-    'preparing_gateway_package',
-    'installing_gateway_package',
+    firstCheck,
     'starting_gateway_service',
     'opening_gateway_bridge',
     'checking_gateway_service',
-    operation === 'update' ? 'gateway_service_up_to_date' : 'gateway_service_ready',
+    'gateway_service_ready',
   ];
 }
 

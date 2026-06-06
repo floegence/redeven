@@ -103,6 +103,11 @@ export function resolveDesktopAnchoredOverlayPosition(options: Readonly<{
   if (constrainToViewport) {
     if (options.placementLock === 'top-inline-shift') {
       left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
+      const availableHeight = Math.max(0, options.anchorRect.top - margin - gap);
+      if (placement === 'top' && options.overlayHeight > availableHeight) {
+        maxHeight = availableHeight;
+        top = margin;
+      }
     } else if (allowMainAxisOverflow) {
       if (placement === 'top' || placement === 'bottom') {
         left = clamp(left, margin, options.viewportWidth - options.overlayWidth - margin);
