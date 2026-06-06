@@ -1538,6 +1538,21 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-environment-progress');
     expect(styles).toContain('grid-template-columns: 1rem minmax(0, 1fr);');
     expect(styles).toContain(".redeven-environment-progress__step[data-entering='true']");
+    expect(appSrc).toContain('const hasStepTimeline = createMemo(() => Boolean(stepProgress() || startup() || openConnection()));');
+    expect(appSrc).toContain('const failureNoticeHeading = createMemo(() => trimString(localizedFailure()?.title) || failureNoticeTitle());');
+    expect(appSrc).toContain('<div class="redeven-action-popover__notice-title">{failureNoticeHeading()}</div>');
+    const steppedProgressStart = appSrc.indexOf('<Show when={hasStepTimeline()}>');
+    const steppedProgressEnd = appSrc.indexOf('<Show when={canCancel()}>', steppedProgressStart);
+    const steppedProgressSrc = appSrc.slice(steppedProgressStart, steppedProgressEnd);
+    expect(steppedProgressSrc.indexOf('{renderFailureNotice()}')).toBeGreaterThan(
+      steppedProgressSrc.indexOf('<div class="redeven-environment-progress__steps" aria-hidden="true">'),
+    );
+    expect(steppedProgressSrc.indexOf('{renderNextActionGroups()}')).toBeGreaterThan(
+      steppedProgressSrc.indexOf('<div class="redeven-environment-progress__steps" aria-hidden="true">'),
+    );
+    expect(appSrc).toContain("data-placement={hasStepTimeline() ? 'after-steps' : 'inline'}");
+    expect(styles).toContain(".redeven-action-popover__action-stack[data-placement='after-steps']");
+    expect(styles).toContain(".redeven-environment-progress .redeven-action-popover__notice[data-placement='after-steps']");
     expect(styles).toContain(".redeven-environment-progress__meter[data-plan-state='planning'] span");
     expect(styles).toContain('@media (prefers-reduced-motion: reduce)');
     expect(styles).toContain('.redeven-environment-progress__meter');

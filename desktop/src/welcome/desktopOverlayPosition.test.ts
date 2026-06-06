@@ -177,11 +177,49 @@ describe('desktopOverlayPosition', () => {
     expect(position.maxHeight).toBe(2);
   });
 
+  it('keeps a short locked Gateway action popover attached above the trigger when it fits', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(186, 120, 24, 24),
+      overlayWidth: 200,
+      overlayHeight: 70,
+      viewportWidth: 220,
+      viewportHeight: 400,
+      preferredPlacement: 'top',
+      placementLock: 'top-inline-shift',
+      allowMainAxisOverflow: false,
+    });
+
+    expect(position.placement).toBe('top');
+    expect(position.top).toBe(42);
+    expect(position.left).toBe(12);
+    expect(position.arrowOffset).toBe(186);
+    expect(position.maxHeight).toBe(104);
+  });
+
   it('keeps a tall locked Gateway action popover inside the viewport', () => {
     const position = resolveDesktopAnchoredOverlayPosition({
       anchorRect: rect(49, 388, 282, 28),
       overlayWidth: 304,
       overlayHeight: 522,
+      viewportWidth: 1311,
+      viewportHeight: 835,
+      preferredPlacement: 'top',
+      placementLock: 'top-inline-shift',
+      allowMainAxisOverflow: false,
+    });
+
+    expect(position.placement).toBe('top');
+    expect(position.top).toBe(8);
+    expect(position.left).toBe(38);
+    expect(position.maxHeight).toBe(372);
+    expect(position.arrowOffset).toBeCloseTo(152, 0);
+  });
+
+  it('keeps the same viewport height lock after a tall Gateway popover has been clipped', () => {
+    const position = resolveDesktopAnchoredOverlayPosition({
+      anchorRect: rect(49, 388, 282, 28),
+      overlayWidth: 304,
+      overlayHeight: 372,
       viewportWidth: 1311,
       viewportHeight: 835,
       preferredPlacement: 'top',

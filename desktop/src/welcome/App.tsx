@@ -8600,9 +8600,32 @@ function EnvironmentProgressPanel(props: Readonly<{
     const failure = props.progress.failure;
     return failure ? localizedFailureForDisplay(props.i18n, failure) : null;
   });
+  const hasStepTimeline = createMemo(() => Boolean(stepProgress() || startup() || openConnection()));
+  const failureNoticeHeading = createMemo(() => trimString(localizedFailure()?.title) || failureNoticeTitle());
+  const renderFailureNotice = () => (
+    <Show when={localizedFailure()}>
+      {(failure) => (
+        <div
+          class="redeven-action-popover__notice"
+          data-tone="error"
+          data-placement={hasStepTimeline() ? 'after-steps' : 'inline'}
+        >
+          <div class="redeven-action-popover__notice-title">{failureNoticeHeading()}</div>
+          <div class="redeven-action-popover__notice-detail">{failure().summary}</div>
+          <Show when={failure().detail}>
+            {(detail) => <pre class="redeven-action-popover__notice-detail redeven-action-popover__notice-detail--pre">{detail()}</pre>}
+          </Show>
+        </div>
+      )}
+    </Show>
+  );
   const renderNextActionGroups = () => (
     <Show when={nextActionGroups().length > 0}>
-      <div class="redeven-action-popover__action-stack" data-subject-kind={props.progress.subject_kind}>
+      <div
+        class="redeven-action-popover__action-stack"
+        data-subject-kind={props.progress.subject_kind}
+        data-placement={hasStepTimeline() ? 'after-steps' : 'inline'}
+      >
         <For each={nextActionGroups()}>
           {(group) => (
             <div
@@ -8689,19 +8712,11 @@ function EnvironmentProgressPanel(props: Readonly<{
         </div>
       </div>
       <div class="redeven-action-popover__detail">{localizedProgressDetail(props.i18n, props.progress)}</div>
-      <Show when={localizedFailure()}>
-        {(failure) => (
-          <div class="redeven-action-popover__notice" data-tone="error">
-            <div class="redeven-action-popover__notice-title">{failureNoticeTitle()}</div>
-            <div class="redeven-action-popover__notice-detail">{failure().summary}</div>
-            <Show when={failure().detail}>
-              {(detail) => <pre class="redeven-action-popover__notice-detail redeven-action-popover__notice-detail--pre">{detail()}</pre>}
-            </Show>
-          </div>
-        )}
+      <Show when={!hasStepTimeline()}>
+        {renderFailureNotice()}
+        {renderNextActionGroups()}
       </Show>
-      {renderNextActionGroups()}
-      <Show when={stepProgress() || startup() || openConnection()}>
+      <Show when={hasStepTimeline()}>
         <>
           <div class="redeven-environment-progress__steps" aria-hidden="true">
               <Index each={phaseSequence()}>
@@ -8765,6 +8780,8 @@ function EnvironmentProgressPanel(props: Readonly<{
                 {(detail) => <span>{detail()}</span>}
               </Show>
             </div>
+            {renderFailureNotice()}
+            {renderNextActionGroups()}
           </>
       </Show>
       <Show when={canCancel()}>
