@@ -539,11 +539,21 @@ describe('GatewayLifecycleManager', () => {
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).not.toHaveBeenCalled();
   });
 
-  it('updates managed Gateways through the Gateway service slot with forced cleanup', async () => {
+  it('updates managed Gateways by stopping the old service before forcing the package install and restart', async () => {
     const record = sshGateway();
 
     await manager().updateGateway(record);
 
+    expect(lifecycleMocks.stopManagedGatewayService).toHaveBeenCalledWith(expect.objectContaining({
+      target: expect.objectContaining({ ssh_destination: 'bastion.internal' }),
+      placement: expect.objectContaining({
+        kind: 'host_process',
+        runtime_root: '/opt/redeven',
+        runtime_state_root: '/opt/redeven/gateways/gw_bastion/state',
+      }),
+      stateRoot: '/opt/redeven/gateways/gw_bastion/state',
+      releaseTag: 'v1.2.3',
+    }));
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledWith(expect.objectContaining({
       stateRoot: '/opt/redeven/gateways/gw_bastion/state',
       forceUpdate: true,
@@ -552,6 +562,12 @@ describe('GatewayLifecycleManager', () => {
       runtime_binary_path: '/opt/redeven/gateway/managed/bin/redeven-gateway',
       bridge_command_kind: 'gateway',
     }));
+    expect(lifecycleMocks.stopManagedGatewayService.mock.invocationCallOrder[0]).toBeLessThan(
+      lifecycleMocks.ensureManagedGatewayServiceReady.mock.invocationCallOrder[0] ?? 0,
+    );
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady.mock.invocationCallOrder[0]).toBeLessThan(
+      lifecycleMocks.startRuntimePlacementBridgeSession.mock.invocationCallOrder[0] ?? 0,
+    );
   });
 
   it('does not allow Desktop to manage URL Gateways as local services', async () => {

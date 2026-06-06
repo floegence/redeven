@@ -798,6 +798,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('const localizedPanelActionLabel = (action: GatewaySourceActionModel) => localizedGatewaySourceActionLabel(props.i18n, action);');
     expect(appSrc).toContain('function localizedGatewaySourceStatusLabel');
     expect(appSrc).toContain('localizedGatewaySourceStatusLabel(props.i18n, row().status_label)');
+    expect(appSrc).toContain("'Service ready': 'progress.gatewayServiceReady'");
+    expect(appSrc).toContain("'The Gateway service is ready. Use Refresh to pair if needed and refresh the environment catalog.': 'environmentCenter.gatewayGuidanceReadyDetail'");
     expect(appSrc).toContain('type GatewayForegroundActionSnapshot');
     expect(appSrc).toContain('type GatewayDiagnosisResultSnapshot');
     expect(appSrc).toContain('const [foregroundGatewayActions, setForegroundGatewayActions] = createSignal<Record<string, GatewayForegroundActionSnapshot | null>>({});');
@@ -842,6 +844,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("if (selected?.action === 'refresh_gateway' && selected.status === 'succeeded') {");
     expect(appSrc).toContain("if (progress?.action === 'refresh_gateway' && progress.status === 'succeeded') {\n      return null;\n    }");
     expect(appSrc).toContain('if (pending && (!selected || launcherActionProgressIsTerminal(selected))) {');
+    expect(appSrc).toContain('if (progress && !launcherActionProgressIsTerminal(progress)) {');
+    expect(appSrc).toContain('if (progress && gatewayProgressNeedsAttention(progress)) {');
     expect(appSrc).not.toContain('selectedVisibleGatewayProgress');
     expect(appSrc).not.toContain('if (selected && launcherActionProgressIsTerminal(selected)) {');
     expect(appSrc).toContain('const activeProgressForAction = (action: GatewaySourceActionModel): DesktopLauncherActionProgress | null => selectForegroundGatewayProgress(');

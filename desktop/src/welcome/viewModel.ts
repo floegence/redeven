@@ -2540,10 +2540,12 @@ function gatewaySourceGuidance(gateway: DesktopGatewaySource): GatewaySourceGuid
     };
   }
 
-  if (gateway.status === 'online' && runtimeStatus === 'ready') {
+  if (runtimeStatus === 'ready') {
     return {
       title: 'Gateway is ready',
-      detail: 'Desktop keeps this Gateway catalog synced. Open its environments from the Environments tab.',
+      detail: gateway.status === 'online'
+        ? 'Desktop keeps this Gateway catalog synced. Open its environments from the Environments tab.'
+        : 'The Gateway service is ready. Use Refresh to pair if needed and refresh the environment catalog.',
       tone: 'success',
     };
   }
@@ -2612,6 +2614,8 @@ export function buildGatewaySourceRowModel(
       ? 'Not started'
       : runtimeStatus === 'service_needs_update'
         ? 'Update available'
+        : runtimeStatus === 'ready' && gateway.status !== 'online'
+          ? 'Service ready'
         : gateway.background_sync_running === true
           ? 'Refreshing'
         : desktopGatewayStatusLabel(gateway.status),
