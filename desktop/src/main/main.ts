@@ -6168,8 +6168,8 @@ async function refreshGatewayFromLauncher(
     });
     launcherOperations.finish(operationKey, 'succeeded', {
       phase: 'gateway_refreshed',
-      title: 'Gateway refreshed',
-      detail: `Desktop refreshed ${record.display_name}.`,
+      title: 'Gateway is ready',
+      detail: 'Desktop refreshed this Gateway and can reach its catalog.',
       step_progress: completeGatewayStepProgress(GATEWAY_REFRESH_WORKFLOW_STEPS, 'gateway_refreshed'),
     });
     scheduleLauncherOperationRemoval(operationKey);

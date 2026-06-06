@@ -1317,6 +1317,8 @@ describe('main routing', () => {
     expect(refreshSrc).toContain("action: 'refresh_gateway'");
     expect(refreshSrc).toContain("phase: 'checking_gateway_service'");
     expect(refreshSrc).toContain("step_progress: gatewayStepProgress(GATEWAY_REFRESH_WORKFLOW_STEPS, 'checking_gateway_service')");
+    expect(refreshSrc).toContain("title: 'Gateway is ready'");
+    expect(refreshSrc).toContain("detail: 'Desktop refreshed this Gateway and can reach its catalog.'");
     expect(refreshSrc).toContain("step_progress: completeGatewayStepProgress(GATEWAY_REFRESH_WORKFLOW_STEPS, 'gateway_refreshed')");
     expect(refreshSrc).toContain('gateway_diagnosis: completeGatewayDiagnosis(diagnosis)');
     expect(refreshSrc).toContain('next_actions: gatewayDiagnosisNextActions(operationKey, latestRecord, diagnosis)');

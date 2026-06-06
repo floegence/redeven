@@ -8240,7 +8240,7 @@ function localizedRuntimeLifecycleStepLabel(
 }
 
 function localizedGatewayCheckStepLabel(i18n: DesktopI18n, stepID: string, fallback: string): string {
-  return localizedStringByValue(i18n, stepID, {
+  const labelsByStepID: Readonly<Record<string, DesktopTranslationKey>> = {
     checking_gateway: 'progress.checkingGateway',
     checking_transport: 'progress.checkingGatewayTransport',
     checking_gateway_service: 'progress.checkingGatewayService',
@@ -8248,7 +8248,14 @@ function localizedGatewayCheckStepLabel(i18n: DesktopI18n, stepID: string, fallb
     checking_gateway_trust: 'progress.checkingGatewayTrust',
     checking_gateway_catalog: 'progress.checkingGatewayCatalog',
     gateway_checked: 'progress.gatewayChecked',
-  }) || localizedStringByValue(i18n, fallback, {
+    gateway_refreshed: 'progress.gatewayChecked',
+  };
+  const cleanStepID = trimString(stepID);
+  const stepIDKey = labelsByStepID[cleanStepID];
+  if (stepIDKey) {
+    return i18n.t(stepIDKey);
+  }
+  const labelsByFallback: Readonly<Record<string, DesktopTranslationKey>> = {
     'Checking Gateway': 'progress.checkingGateway',
     'Checking Gateway transport': 'progress.checkingGatewayTransport',
     'Checking Gateway service': 'progress.checkingGatewayService',
@@ -8256,7 +8263,11 @@ function localizedGatewayCheckStepLabel(i18n: DesktopI18n, stepID: string, fallb
     'Checking Gateway trust': 'progress.checkingGatewayTrust',
     'Checking Gateway catalog': 'progress.checkingGatewayCatalog',
     'Gateway checked': 'progress.gatewayChecked',
-  });
+    'Gateway refreshed': 'progress.gatewayChecked',
+  };
+  const cleanFallback = trimString(fallback);
+  const fallbackKey = labelsByFallback[cleanFallback];
+  return fallbackKey ? i18n.t(fallbackKey) : cleanFallback || cleanStepID;
 }
 
 function localizedGatewayCheckStepDetail(i18n: DesktopI18n, detail: string | undefined): string | undefined {
@@ -11385,9 +11396,6 @@ function GatewaySourceCard(props: Readonly<{
   });
   const visibleGatewayProgress = createMemo(() => {
     const progress = selectedGatewayOperationProgress();
-    if (progress?.action === 'refresh_gateway' && progress.status === 'succeeded') {
-      return null;
-    }
     return progress;
   });
   const displayedPrimaryAction = createMemo(() => {
