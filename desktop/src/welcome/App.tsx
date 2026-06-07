@@ -14,6 +14,7 @@ import {
   Globe,
   Lock,
   Moon,
+  Package,
   Pin,
   Play,
   Plus,
@@ -12582,7 +12583,7 @@ function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionMo
     case 'enable_gateway':
       return <Check class={iconClass()} />;
     case 'disable_gateway':
-      return <Stop class={iconClass()} />;
+      return <GatewayDisabledIcon class={iconClass()} />;
     case 'refresh_gateway':
       return <Refresh class={iconClass()} />;
     case 'start_gateway':
@@ -12592,12 +12593,31 @@ function GatewaySourceActionIcon(props: Readonly<{ intent: GatewaySourceActionMo
     case 'restart_gateway':
       return <Refresh class={iconClass()} />;
     case 'update_gateway':
-      return <Save class={iconClass()} />;
+      return <Package class={iconClass()} />;
     case 'setup_gateway':
       return <Settings class={iconClass()} />;
     case 'cancel_gateway_action':
       return <X class={iconClass()} />;
   }
+}
+
+function GatewayDisabledIcon(props: Readonly<{ class?: string }>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class={props.class}
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="8" />
+      <path d="m7.8 7.8 8.4 8.4" />
+    </svg>
+  );
 }
 
 const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
