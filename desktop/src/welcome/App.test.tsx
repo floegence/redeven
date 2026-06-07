@@ -979,6 +979,17 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('disabled={menuItemDisabled(action)}');
     expect(appSrc).toContain('<span class="redeven-split-menu-item-icon">');
     expect(appSrc).toContain('<GatewaySourceActionIcon intent={action.intent} class="h-3.5 w-3.5" />');
+    const gatewaySourceActionIconStart = appSrc.indexOf('function GatewaySourceActionIcon');
+    const gatewaySourceActionIconEnd = appSrc.indexOf('const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS', gatewaySourceActionIconStart);
+    expect(gatewaySourceActionIconStart).toBeGreaterThanOrEqual(0);
+    expect(gatewaySourceActionIconEnd).toBeGreaterThan(gatewaySourceActionIconStart);
+    const gatewaySourceActionIconSrc = appSrc.slice(gatewaySourceActionIconStart, gatewaySourceActionIconEnd);
+    expect(gatewaySourceActionIconSrc).toContain("case 'disable_gateway':\n      return <GatewayDisabledIcon class={iconClass()} />;");
+    expect(gatewaySourceActionIconSrc).toContain("case 'stop_gateway':\n      return <Stop class={iconClass()} />;");
+    expect(gatewaySourceActionIconSrc).toContain("case 'restart_gateway':\n      return <Refresh class={iconClass()} />;");
+    expect(gatewaySourceActionIconSrc).toContain("case 'update_gateway':\n      return <Package class={iconClass()} />;");
+    expect(gatewaySourceActionIconSrc).not.toContain("case 'disable_gateway':\n      return <Stop");
+    expect(gatewaySourceActionIconSrc).not.toContain("case 'update_gateway':\n      return <Save");
     expect(gatewayCardSrc).not.toContain('<div class="p-1">');
     expect(appSrc).toContain('loading={primaryBusy()}');
     expect(appSrc).toContain('onClick={runPrimaryAction}');
