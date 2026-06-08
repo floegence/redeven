@@ -112,6 +112,11 @@ Additional rules:
 
 - Remote `main` should always move directly to the latest local `main` tip whenever `main` is pushed.
 - Do not discard, collapse, or silently rewrite meaningful feature commits during integration.
+- Integration and conflict resolution must preserve the semantic intent of all involved branches, not just produce text that compiles.
+- Before resolving merge or rebase conflicts, review the substantive commits on each side for new features, bug fixes, behavior changes, tests, and user-facing workflows.
+- Do not drop, overwrite, or silently weaken current or historical functionality unless the user explicitly approves that product decision.
+- If two branches introduce incompatible behavior, surface the product or architecture tradeoff instead of choosing one side silently.
+- After resolving conflicts, run focused checks for the affected behavior in addition to the repository quality gate.
 - If a feature branch has already been pushed and someone depends on it, switch to a conservative coordination flow instead of freely rewriting history.
 
 Recommended Git configuration:
@@ -136,6 +141,7 @@ git config --global merge.conflictstyle zdiff3
   - prefer regeneration over manual conflict stitching.
 - For shared contracts, schemas, and cross-repo payload fields:
   - align semantics manually instead of blindly taking one side.
+- For behavior conflicts that are not obvious from conflict markers, inspect the relevant commit history and tests so that fixes and existing product behavior are not regressed.
 - If you are not confident about the resolution, abort the rebase and reassess.
 
 ## Repository Language Policy
