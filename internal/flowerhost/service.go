@@ -361,7 +361,7 @@ func (s *Service) CreateThread(ctx context.Context, req ThreadCreateRequest) (Th
 		_ = s.ai.DeleteThread(ctx, s.Meta(), thread.ThreadID, true)
 		return ThreadSnapshot{}, nil, err
 	}
-	snapshot, err := s.threadSnapshot(ctx, thread.ThreadID, thread)
+	snapshot, err := s.threadSnapshot(ctx, thread.ThreadID, nil)
 	if err != nil {
 		return ThreadSnapshot{}, nil, err
 	}

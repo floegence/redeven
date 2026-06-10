@@ -185,6 +185,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
+  const refreshSelectedThread = async (threadID: string) => {
+    const tid = trimString(threadID);
+    if (!tid || !props.adapter.loadThread) return;
+    try {
+      const thread = await props.adapter.loadThread(tid);
+      if (selectedThreadID() !== thread.thread_id) return;
+      upsertThread(thread);
+      setThreadLoadError('');
+    } catch (error) {
+      setThreadLoadError(getErrorMessage(error));
+    }
+  };
+
   const refreshThreads = async () => {
     setThreadsRefreshing(true);
     try {
@@ -247,8 +260,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     const timer = window.setInterval(() => {
-      void refreshThreads();
+      void refreshSelectedThread(threadID);
     }, 1200);
+    void refreshSelectedThread(threadID);
     onCleanup(() => window.clearInterval(timer));
   });
 
@@ -312,9 +326,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         composerRef.value = '';
       }
       returnToChat();
-      if (!thread.messages.length && props.adapter.loadThread) {
-        await loadAndSelectThread(thread.thread_id);
-      }
+      await refreshSelectedThread(thread.thread_id);
     } catch (error) {
       const failure = error as FlowerSendMessageFailure;
       if (failure.fresh_decision) {
