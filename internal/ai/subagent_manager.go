@@ -44,10 +44,11 @@ const (
 	subagentDefaultTimeoutSec = 900
 	subagentSteerMinInterval  = 2 * time.Second
 
-	subagentFailureReasonRuntimeError            = "runtime_error"
-	subagentFailureReasonResultContractViolation = "result_contract_violation"
-	subagentFailureReasonTimedOut                = "timed_out"
-	subagentFailureReasonCanceled                = "canceled"
+	subagentFailureReasonRuntimeError             = "runtime_error"
+	subagentFailureReasonResultContractViolation  = "result_contract_violation"
+	subagentFailureReasonTimedOut                 = "timed_out"
+	subagentFailureReasonCanceled                 = "canceled"
+	subagentFailureReasonBlockedNoUserInteraction = "blocked_no_user_interaction"
 )
 
 type subagentStats struct {

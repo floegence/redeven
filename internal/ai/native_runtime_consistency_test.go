@@ -249,7 +249,6 @@ func (m *openAIDoomLoopGuardMock) handle(w http.ResponseWriter, r *http.Request)
 	m.step++
 	step := m.step
 	path := m.fsPath
-	finalToken := m.finalToken
 	m.mu.Unlock()
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -261,19 +260,18 @@ func (m *openAIDoomLoopGuardMock) handle(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	switch step {
-	case 1:
+	if step <= 4 {
 		writeOpenAISSEJSON(w, f, map[string]any{
 			"type": "response.completed",
 			"response": map[string]any{
-				"id":     "resp_doom_1",
+				"id":     fmt.Sprintf("resp_doom_%d", step),
 				"model":  "gpt-5-mini",
 				"status": "completed",
 				"output": []any{
 					map[string]any{
 						"type":      "function_call",
-						"id":        "fc_doom_1",
-						"call_id":   "call_doom_1",
+						"id":        fmt.Sprintf("fc_doom_%d", step),
+						"call_id":   fmt.Sprintf("call_doom_%d", step),
 						"name":      "terminal_exec",
 						"arguments": fmt.Sprintf(`{"command":"pwd","cwd":%q}`, path),
 					},
@@ -287,35 +285,10 @@ func (m *openAIDoomLoopGuardMock) handle(w http.ResponseWriter, r *http.Request)
 				},
 			},
 		})
-	case 2:
-		writeOpenAISSEJSON(w, f, map[string]any{
-			"type": "response.completed",
-			"response": map[string]any{
-				"id":     "resp_doom_2",
-				"model":  "gpt-5-mini",
-				"status": "completed",
-				"output": []any{
-					map[string]any{
-						"type":      "function_call",
-						"id":        "fc_doom_2",
-						"call_id":   "call_doom_2",
-						"name":      "terminal_exec",
-						"arguments": fmt.Sprintf(`{"command":"pwd","cwd":%q}`, path),
-					},
-				},
-				"usage": map[string]any{
-					"input_tokens":  1,
-					"output_tokens": 1,
-					"output_tokens_details": map[string]any{
-						"reasoning_tokens": 0,
-					},
-				},
-			},
-		})
-	default:
+	} else {
 		writeOpenAISSEJSON(w, f, map[string]any{
 			"type":  "response.output_text.delta",
-			"delta": finalToken,
+			"delta": m.finalToken,
 		})
 		writeOpenAISSEJSON(w, f, map[string]any{
 			"type": "response.completed",
@@ -485,7 +458,7 @@ func (m *openAIToolTimeoutRecoveryMock) snapshot() (int, bool) {
 	return m.step, m.sawTimeoutToolResp
 }
 
-func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
+func TestIntegration_NativeSDK_OpenAI_DuplicateToolGuard_BlocksRepeat(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -495,8 +468,7 @@ func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
 		t.Fatalf("write sample file: %v", err)
 	}
 
-	finalToken := "OPENAI_DOOM_LOOP_OK"
-	mock := &openAIDoomLoopGuardMock{finalToken: finalToken, fsPath: agentHomeDir}
+	mock := &openAIDoomLoopGuardMock{finalToken: "OPENAI_DUPLICATE_TOOL_UNREACHED", fsPath: agentHomeDir}
 	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
 	t.Cleanup(srv.Close)
 
@@ -556,29 +528,32 @@ func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
 
 	runID := "run_test_native_openai_doom_loop_guard_1"
 	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
+	err = svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "Trigger doom-loop guard by repeating tool calls"},
 		Options:  RunOptions{MaxSteps: 6, MaxNoToolRounds: 1},
-	}, rr); err != nil {
-		t.Fatalf("StartRun: %v", err)
+	}, rr)
+	if err == nil || !strings.Contains(err.Error(), "repeated identical tool calls") {
+		t.Fatalf("StartRun err=%v, want duplicate tool guard", err)
 	}
 
 	body := rr.Body.String()
-	if !strings.Contains(body, finalToken) {
-		t.Fatalf("NDJSON stream missing token %q, body=%q", finalToken, body)
+	if strings.Contains(body, "OPENAI_DUPLICATE_TOOL_UNREACHED") {
+		t.Fatalf("duplicate guard should stop before provider fallback token, body=%q", body)
 	}
 
 	toolCalls, err := svc.threadsDB.ListRecentThreadToolCalls(ctx, meta.EndpointID, th.ThreadID, 20)
 	if err != nil {
 		t.Fatalf("ListRecentThreadToolCalls: %v", err)
 	}
-	if len(toolCalls) != 1 {
-		t.Fatalf("tool call records=%d, want 1; records=%+v", len(toolCalls), toolCalls)
+	if len(toolCalls) != 3 {
+		t.Fatalf("tool call records=%d, want 3; records=%+v", len(toolCalls), toolCalls)
 	}
-	if toolCalls[0].ToolName != "terminal.exec" {
-		t.Fatalf("tool_name=%q, want %q", toolCalls[0].ToolName, "terminal.exec")
+	for _, rec := range toolCalls {
+		if rec.ToolName != "terminal.exec" {
+			t.Fatalf("tool_name=%q, want %q", rec.ToolName, "terminal.exec")
+		}
 	}
 
 	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, runID, 2000)
@@ -587,16 +562,16 @@ func TestIntegration_NativeSDK_OpenAI_DoomLoopGuard_BlocksRepeat(t *testing.T) {
 	}
 	sawGuard := false
 	for _, ev := range events {
-		if strings.TrimSpace(ev.EventType) == "guard.doom_loop" {
+		if strings.TrimSpace(ev.EventType) == "floret.run.end" && strings.Contains(ev.PayloadJSON, "repeated identical tool calls") {
 			sawGuard = true
 			break
 		}
 	}
 	if !sawGuard {
-		t.Fatalf("expected guard.doom_loop event, got %d events", len(events))
+		t.Fatalf("expected floret.run.end duplicate guard event, got %d events", len(events))
 	}
-	if mock.snapshotStep() < 3 {
-		t.Fatalf("expected at least 3 provider turns, got %d", mock.snapshotStep())
+	if mock.snapshotStep() != 4 {
+		t.Fatalf("provider turns=%d, want 4", mock.snapshotStep())
 	}
 }
 
@@ -1139,56 +1114,38 @@ func (m *openAITextThenAskUserMock) handle(w http.ResponseWriter, r *http.Reques
 		},
 	})
 
-	if step == 1 {
-		writeOpenAISSEJSON(w, f, map[string]any{
-			"type":  "response.output_text.delta",
-			"delta": provisionalText,
-		})
-		writeOpenAISSEJSON(w, f, map[string]any{
-			"type": "response.completed",
-			"response": map[string]any{
-				"id":            "resp_text_then_ask_1",
-				"model":         "gpt-5-mini",
-				"status":        "completed",
-				"finish_reason": "stop",
-				"output": []any{
-					map[string]any{
-						"type": "output_text",
-						"text": provisionalText,
-					},
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"type":  "response.output_text.delta",
+		"delta": provisionalText,
+	})
+	writeOpenAISSEJSON(w, f, map[string]any{
+		"type": "response.completed",
+		"response": map[string]any{
+			"id":     fmt.Sprintf("resp_text_then_ask_%d", step),
+			"model":  "gpt-5-mini",
+			"status": "completed",
+			"output": []any{
+				map[string]any{
+					"type": "output_text",
+					"text": provisionalText,
 				},
-				"usage": map[string]any{
-					"input_tokens":  1,
-					"output_tokens": 1,
-				},
-			},
-		})
-	} else {
-		writeOpenAISSEJSON(w, f, map[string]any{
-			"type": "response.completed",
-			"response": map[string]any{
-				"id":     "resp_text_then_ask_2",
-				"model":  "gpt-5-mini",
-				"status": "completed",
-				"output": []any{
-					map[string]any{
-						"type":    "function_call",
-						"id":      "fc_text_then_ask_2",
-						"call_id": "call_text_then_ask_2",
-						"name":    "ask_user",
-						"arguments": fmt.Sprintf(
-							`{"questions":[{"id":"question_1","header":"Need input","question":%q,"is_secret":false,"response_mode":"select","choices_exhaustive":true,"choices":[{"choice_id":"choice_1","label":"Option 1","kind":"select"},{"choice_id":"choice_2","label":"Option 2","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose one option."],"evidence_refs":["model asked for the next user choice"]}`,
-							questionText,
-						),
-					},
-				},
-				"usage": map[string]any{
-					"input_tokens":  1,
-					"output_tokens": 1,
+				map[string]any{
+					"type":    "function_call",
+					"id":      fmt.Sprintf("fc_text_then_ask_%d", step),
+					"call_id": fmt.Sprintf("call_text_then_ask_%d", step),
+					"name":    "ask_user",
+					"arguments": fmt.Sprintf(
+						`{"questions":[{"id":"question_1","header":"Need input","question":%q,"is_secret":false,"response_mode":"select","choices_exhaustive":true,"choices":[{"choice_id":"choice_1","label":"Option 1","kind":"select"},{"choice_id":"choice_2","label":"Option 2","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose one option."],"evidence_refs":["model asked for the next user choice"]}`,
+						questionText,
+					),
 				},
 			},
-		})
-	}
+			"usage": map[string]any{
+				"input_tokens":  1,
+				"output_tokens": 1,
+			},
+		},
+	})
 
 	_, _ = io.WriteString(w, "data: [DONE]\n\n")
 	f.Flush()

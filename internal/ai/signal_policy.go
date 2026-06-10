@@ -52,19 +52,3 @@ func splitSignalsByPolicy(calls []ToolCall, capability runCapabilityContract) si
 	}
 	return result
 }
-
-func firstAskUserSignal(calls []ToolCall) (askUserSignal, bool) {
-	for _, call := range calls {
-		if strings.TrimSpace(call.Name) != "ask_user" {
-			continue
-		}
-		signal := askUserSignal{
-			Questions:        extractSignalRequestUserInputQuestions(call, "questions"),
-			ReasonCode:       extractSignalText(call, "reason_code"),
-			RequiredFromUser: extractSignalStringList(call, "required_from_user"),
-			EvidenceRefs:     extractSignalStringList(call, "evidence_refs"),
-		}
-		return signal, true
-	}
-	return askUserSignal{}, false
-}

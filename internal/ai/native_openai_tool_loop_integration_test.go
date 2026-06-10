@@ -559,7 +559,7 @@ func (m *openAITextOnlyContinuationMock) snapshot() (step int, sawAssistantHisto
 	return m.step, m.sawAssistantHistory, m.secondInputJSON
 }
 
-func TestIntegration_NativeSDK_OpenAI_TextOnlyContinuationDoesNotCommitDraftAssistantHistory(t *testing.T) {
+func TestIntegration_NativeSDK_OpenAI_NaturalStopProjectsMissingCompletionWithoutPersistingDraft(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -567,8 +567,7 @@ func TestIntegration_NativeSDK_OpenAI_TextOnlyContinuationDoesNotCommitDraftAssi
 	agentHomeDir := t.TempDir()
 
 	textToken := "TEXT_ONLY_CONTEXT_COMMIT"
-	finalToken := "TEXT_ONLY_CONTEXT_COMMIT_DONE"
-	mock := &openAITextOnlyContinuationMock{textToken: textToken, finalToken: finalToken}
+	mock := &openAITextOnlyContinuationMock{textToken: textToken}
 	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
 	t.Cleanup(srv.Close)
 
@@ -641,13 +640,21 @@ func TestIntegration_NativeSDK_OpenAI_TextOnlyContinuationDoesNotCommitDraftAssi
 	if !strings.Contains(body, textToken) {
 		t.Fatalf("stream output missing text token %q, body=%q", textToken, body)
 	}
+	if !strings.Contains(body, `"type":"activity-timeline"`) || !strings.Contains(body, `"toolName":"ask_user"`) {
+		t.Fatalf("stream output missing ask_user activity timeline, body=%q", body)
+	}
 
 	stepCount, sawAssistantHistory, secondInputJSON := mock.snapshot()
-	if stepCount != 2 {
-		t.Fatalf("provider step count=%d, want 2", stepCount)
+	if stepCount != 1 {
+		t.Fatalf("provider step count=%d, want 1", stepCount)
 	}
 	if sawAssistantHistory {
-		t.Fatalf("second provider turn unexpectedly included provisional assistant text in input history, input=%s", secondInputJSON)
+		t.Fatalf("unexpected provider continuation included provisional assistant text in input history, input=%s", secondInputJSON)
+	}
+
+	view := waitForThreadStatus(t, ctx, svc, &meta, th.ThreadID, runID, RunStateWaitingUser)
+	if view == nil || view.WaitingPrompt == nil {
+		t.Fatalf("waiting prompt missing after missing-completion projection: %+v", view)
 	}
 
 	events, err := svc.ListRunEvents(ctx, &meta, runID, 200)
@@ -658,29 +665,20 @@ func TestIntegration_NativeSDK_OpenAI_TextOnlyContinuationDoesNotCommitDraftAssi
 		if strings.TrimSpace(ev.EventType) != "assistant.turn.history" {
 			continue
 		}
-		payload, ok := ev.Payload.(map[string]any)
-		if !ok {
-			t.Fatalf("assistant.turn.history payload type=%T, want map[string]any", ev.Payload)
-		}
-		if strings.TrimSpace(fmt.Sprint(payload["source"])) != "text_only_continuation" {
-			continue
-		}
-		t.Fatalf("text_only_continuation should not be committed into assistant history: %+v", payload)
+		t.Fatalf("natural-stop draft should not be committed into assistant history: %+v", ev.Payload)
 	}
 
 	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 50, 0)
 	if err != nil {
 		t.Fatalf("ListMessages: %v", err)
 	}
-	var assistantText string
 	for _, msg := range msgs {
 		if strings.TrimSpace(msg.Role) != "assistant" {
 			continue
 		}
-		assistantText = strings.TrimSpace(msg.TextContent)
-	}
-	if assistantText != finalToken {
-		t.Fatalf("assistant text=%q, want %q", assistantText, finalToken)
+		if strings.Contains(strings.TrimSpace(msg.TextContent), textToken) {
+			t.Fatalf("draft assistant text should be cleared after waiting-user projection, got %q", msg.TextContent)
+		}
 	}
 }
 
@@ -899,7 +897,7 @@ func (m *openAIStructuredSignalRecoveryMock) handle(w http.ResponseWriter, r *ht
 	f.Flush()
 }
 
-func TestIntegration_NativeSDK_OpenAI_StructuredContinuationTextOnlyRecoveryUsesSignalOnlyTurn(t *testing.T) {
+func TestIntegration_NativeSDK_OpenAI_StructuredContinuationTextOnlyStopProjectsWaitingUser(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -1010,27 +1008,23 @@ func TestIntegration_NativeSDK_OpenAI_StructuredContinuationTextOnlyRecoveryUses
 	}
 
 	stepCount, classifierCount, stepToolNames := mock.snapshot()
-	if stepCount != 2 {
-		t.Fatalf("provider step count=%d, want 2; tool_names=%v", stepCount, stepToolNames)
+	if stepCount != 1 {
+		t.Fatalf("provider step count=%d, want 1; tool_names=%v", stepCount, stepToolNames)
 	}
 	if classifierCount != 0 {
 		t.Fatalf("classifier_count=%d, want 0", classifierCount)
-	}
-	if len(stepToolNames) < 2 || !isStructuredSignalRecoveryToolset(stepToolNames[1]) {
-		t.Fatalf("second turn should use signal-only recovery tools, got=%v", stepToolNames)
 	}
 
 	events, err := svc.ListRunEvents(ctx, &meta, runID, 200)
 	if err != nil {
 		t.Fatalf("ListRunEvents: %v", err)
 	}
-	recovery := findRunEventPayload(t, events.Events, "signal.recovery.attempt")
-	if got := strings.TrimSpace(fmt.Sprint(recovery["strategy"])); got != "structured_signal_recovery" {
-		t.Fatalf("signal recovery strategy=%q, want structured_signal_recovery", got)
-	}
 	askAttempt := findRunEventPayload(t, events.Events, "ask_user.attempt")
 	if got := strings.TrimSpace(fmt.Sprint(askAttempt["validation_mode"])); got != "deterministic_contract_state" {
 		t.Fatalf("ask_user validation_mode=%q, want deterministic_contract_state", got)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(askAttempt["source"])); got != "missing_explicit_completion" {
+		t.Fatalf("ask_user source=%q, want missing_explicit_completion", got)
 	}
 }
 
@@ -1214,7 +1208,7 @@ func (m *openAIMixedSignalSameTurnMock) snapshot() (step int, sawSecondTurn bool
 	return m.step, m.sawSecondTurn
 }
 
-func TestIntegration_NativeSDK_OpenAI_MixedSignalsCompleteInSameTurn(t *testing.T) {
+func TestIntegration_NativeSDK_OpenAI_MixedSignalsAreRejected(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -1281,46 +1275,37 @@ func TestIntegration_NativeSDK_OpenAI_MixedSignalsCompleteInSameTurn(t *testing.
 
 	runID := "run_test_native_openai_mixed_signal_same_turn_1"
 	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
+	err = svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "Summarize quickly and complete"},
 		Options:  RunOptions{MaxSteps: 4},
-	}, rr); err != nil {
-		t.Fatalf("StartRun: %v", err)
+	}, rr)
+	if err == nil || !strings.Contains(err.Error(), "control signal with ordinary tool calls") {
+		t.Fatalf("StartRun err=%v, want mixed control/ordinary tool rejection", err)
 	}
 
 	body := rr.Body.String()
-	if !strings.Contains(body, "MIXED_SIGNAL_COMPLETED") {
-		t.Fatalf("expected mixed-turn completion result in stream, body=%q", body)
-	}
-	if strings.Contains(body, "SECOND_TURN_FALLBACK") {
-		t.Fatalf("unexpected fallback completion from second turn, body=%q", body)
+	if strings.Contains(body, "MIXED_SIGNAL_COMPLETED") || strings.Contains(body, "SECOND_TURN_FALLBACK") {
+		t.Fatalf("mixed signal turn should not complete or continue, body=%q", body)
 	}
 
 	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, runID, 2000)
 	if err != nil {
 		t.Fatalf("ListRunEvents: %v", err)
 	}
-	sawWriteTodos := false
-	sawCompletion := false
+	sawRunEnd := false
 	for _, ev := range events {
-		if strings.TrimSpace(ev.EventType) == "tool.call" && strings.Contains(ev.PayloadJSON, "\"tool_name\":\"write_todos\"") {
-			sawWriteTodos = true
-		}
-		if strings.TrimSpace(ev.EventType) == "completion.attempt" && strings.Contains(ev.PayloadJSON, "\"gate_passed\":true") {
-			sawCompletion = true
+		if strings.TrimSpace(ev.EventType) == "floret.run.end" && strings.Contains(ev.PayloadJSON, "control signal with ordinary tool calls") {
+			sawRunEnd = true
 		}
 	}
-	if !sawWriteTodos {
-		t.Fatalf("expected write_todos tool.call event in mixed-signal turn")
-	}
-	if !sawCompletion {
-		t.Fatalf("expected successful completion.attempt event in mixed-signal turn")
+	if !sawRunEnd {
+		t.Fatalf("expected floret.run.end mixed-signal error event")
 	}
 
 	stepCount, sawSecondTurn := mock.snapshot()
 	if sawSecondTurn || stepCount != 1 {
-		t.Fatalf("expected single provider task turn, got step_count=%d saw_second_turn=%v", stepCount, sawSecondTurn)
+		t.Fatalf("expected single rejected provider task turn, got step_count=%d saw_second_turn=%v", stepCount, sawSecondTurn)
 	}
 }
