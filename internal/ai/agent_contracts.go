@@ -165,11 +165,6 @@ type ToolHandler interface {
 	HandlePartial(ctx context.Context, partial PartialToolCall) error
 }
 
-type ToolInterceptor interface {
-	BeforeExec(ctx context.Context, call ToolCall) (ToolCall, error)
-	AfterExec(ctx context.Context, call ToolCall, result ToolResult) (ToolResult, error)
-}
-
 type ToolRegistry interface {
 	Register(tool ToolDef, handler ToolHandler) error
 	Unregister(name string) error
@@ -188,45 +183,6 @@ type ModelSelectInput struct {
 
 type ModelSelector interface {
 	Select(ctx context.Context, in ModelSelectInput) (provider string, model string, reason string)
-}
-
-type StepResult struct {
-	Round        int
-	TurnResult   TurnResult
-	ToolResults  []ToolResult
-	FinishReason string
-}
-
-type RunContext struct {
-	RunID     string
-	ThreadID  string
-	Endpoint  string
-	Objective string
-}
-
-type TurnHook interface {
-	BeforeTurn(ctx context.Context, run *RunContext) error
-	AfterTurn(ctx context.Context, run *RunContext, step StepResult) error
-}
-
-type LoopBudget struct {
-	MaxSteps       int
-	MaxWallTimeMS  int64
-	MaxInputTokens int64
-	MaxOutputToken int64
-	MaxCostMilli   int64
-}
-
-type BudgetHint struct {
-	MaxSteps int
-}
-
-type AgentLoop struct {
-	runID        string
-	parent       *AgentLoop
-	depth        int
-	budget       LoopBudget
-	deriveBudget func(parent LoopBudget, hint BudgetHint) LoopBudget
 }
 
 type TurnSnapshot struct {
