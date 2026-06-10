@@ -83,6 +83,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       disabled={props.disabled}
     />
   ),
+  ProcessingIndicator: (props: any) => <span class={props.class}>{props.children}</span>,
   Select: (props: any) => (
     <select
       class={props.class}
@@ -104,6 +105,16 @@ function flush(): Promise<void> {
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitFor(condition: () => boolean, timeoutMs = 1000): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    await wait(10);
+    await flush();
+    if (condition()) return;
+  }
+  throw new Error('Timed out waiting for FlowerSurface condition.');
 }
 
 function settingsSnapshot(configured = true): FlowerSettingsSnapshot {
@@ -494,5 +505,70 @@ describe('FlowerSurface navigation', () => {
       prompt: 'continue',
       decision: null,
     }));
+  });
+
+  it('loads the canonical thread after sending so completed assistant replies appear', async () => {
+    const sentThread = thread({
+      thread_id: 'thread-new',
+      title: 'Flower verification',
+      status: 'running',
+      messages: [
+        {
+          id: 'm-user',
+          role: 'user',
+          content: 'verify Flower',
+          created_at_ms: 10,
+        },
+      ],
+    });
+    const completeThread = thread({
+      thread_id: 'thread-new',
+      title: 'Flower verification',
+      status: 'success',
+      messages: [
+        {
+          id: 'm-user',
+          role: 'user',
+          content: 'verify Flower',
+          created_at_ms: 10,
+        },
+        {
+          id: 'm-assistant',
+          role: 'assistant',
+          content: 'Flower verification is complete.',
+          created_at_ms: 20,
+        },
+      ],
+    });
+    const sendMessage = vi.fn(async () => sentThread);
+    const loadThread = vi.fn(async () => completeThread);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <FlowerSurface adapter={{
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread,
+      sendMessage,
+    }} />, host);
+    await waitFor(() => Boolean(host.querySelector('textarea')));
+
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'verify Flower';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => (Array.from(host.querySelectorAll('.flower-host-composer button')) as HTMLButtonElement[])
+      .some((button) => button.textContent?.includes('Send') && !button.disabled));
+    const send = (Array.from(host.querySelectorAll('.flower-host-composer button')) as HTMLButtonElement[])
+      .find((button) => button.textContent?.includes('Send') && !button.disabled) as HTMLButtonElement;
+    send.click();
+    await waitFor(() => sendMessage.mock.calls.length > 0);
+    await waitFor(() => loadThread.mock.calls.length > 0);
+    await waitFor(() => host.textContent?.includes('Flower verification is complete.') ?? false);
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      thread_id: undefined,
+      prompt: 'verify Flower',
+    }));
+    expect(loadThread).toHaveBeenCalledWith('thread-new');
+    expect(host.textContent).toContain('Flower verification is complete.');
   });
 });
