@@ -35,10 +35,10 @@ type targetBrokerOpenSessionRequest struct {
 }
 
 type targetBrokerOpenSessionResponse struct {
-	OK         bool                `json:"ok"`
-	Data       *TargetSessionGrant `json:"data,omitempty"`
-	Configured bool                `json:"configured,omitempty"`
-	Error      string              `json:"error,omitempty"`
+	OK         bool                 `json:"ok"`
+	Data       *TargetSessionGrant  `json:"data,omitempty"`
+	Configured bool                 `json:"configured,omitempty"`
+	Error      loopbackErrorPayload `json:"error,omitempty"`
 }
 
 func NewTargetConnector(opts TargetConnectorOptions) *TargetConnector {
@@ -136,7 +136,7 @@ func (c *TargetConnector) OpenTargetGrant(ctx context.Context, target FlowerTarg
 }
 
 func brokerErrorMessage(payload targetBrokerOpenSessionResponse, fallback string) string {
-	if message := strings.TrimSpace(payload.Error); message != "" {
+	if message := payload.Error.String(); message != "" {
 		return message
 	}
 	return fallback

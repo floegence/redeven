@@ -121,6 +121,7 @@ func (r *Router) resolve(req ResolveRequest, forcedSelectionSource string) (Rout
 		State:               HandlerStateOnline,
 		SelectionSource:     selectionSource,
 		SupportsThreadKinds: []string{ThreadKindChat, ThreadKindTask},
+		AllowedTargetIDs:    []string{},
 	}
 	if !health.Configured {
 		global.State = HandlerStateUnreachable

@@ -34,6 +34,9 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 	if err != nil {
 		return nil, err
 	}
+	if err := validateActionableTodoItems(normalized); err != nil {
+		return nil, err
+	}
 	todosJSON, err := encodeTodoItemsJSON(normalized)
 	if err != nil {
 		return nil, err

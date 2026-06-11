@@ -56,13 +56,14 @@ func TestValidateRequestUserInputResponse_RequiresWriteChoiceText(t *testing.T) 
 	}
 }
 
-func TestValidateRequestUserInputResponse_LegacyOtherFallbackInfersWriteChoice(t *testing.T) {
+func TestParseRequestUserInputPromptJSON_RejectsLegacyOtherFallback(t *testing.T) {
 	t.Parallel()
 
 	prompt := parseRequestUserInputPromptJSON(`{
 		"prompt_id":"rui_msg_legacy_other_tool_legacy_other",
 		"message_id":"msg_legacy_other",
 		"tool_id":"tool_legacy_other",
+		"tool_name":"ask_user",
 		"questions":[{
 			"id":"direction",
 			"header":"Direction",
@@ -72,29 +73,8 @@ func TestValidateRequestUserInputResponse_LegacyOtherFallbackInfersWriteChoice(t
 			"options":[{"option_id":"default","label":"Default path"}]
 		}]
 	}`)
-	if prompt == nil {
-		t.Fatalf("prompt should not be nil")
-	}
-	if len(prompt.Questions) != 1 || len(prompt.Questions[0].Choices) != 1 {
-		t.Fatalf("prompt questions=%+v", prompt.Questions)
-	}
-	if got := prompt.Questions[0].ResponseMode; got != requestUserInputResponseModeSelectText {
-		t.Fatalf("response_mode=%q, want %q", got, requestUserInputResponseModeSelectText)
-	}
-
-	normalized, err := validateRequestUserInputResponse(prompt, &RequestUserInputResponse{
-		PromptID: prompt.PromptID,
-		Answers: map[string]RequestUserInputAnswer{
-			"direction": {
-				Text: "Need a custom direction",
-			},
-		},
-	})
-	if err != nil {
-		t.Fatalf("validateRequestUserInputResponse legacy other fallback: %v", err)
-	}
-	if got := normalized.Answers["direction"].ChoiceID; got != "" {
-		t.Fatalf("choice_id=%q, want empty custom-answer path", got)
+	if prompt != nil {
+		t.Fatalf("legacy runtime prompt should be rejected: %+v", prompt)
 	}
 }
 
@@ -128,7 +108,7 @@ func TestRequestUserInputQuestionFromModelRecord_RejectsLegacyShape(t *testing.T
 		"write_label":        "None of the above",
 		"write_placeholder":  "Type another answer",
 		"choices": []any{
-			map[string]any{"choice_id": "default", "label": "Default path"},
+			map[string]any{"choice_id": "default", "label": "Default path", "kind": "select"},
 		},
 	})
 	if !ok || reason != "" {
@@ -139,13 +119,14 @@ func TestRequestUserInputQuestionFromModelRecord_RejectsLegacyShape(t *testing.T
 	}
 }
 
-func TestParseRequestUserInputPromptJSON_NormalizesLegacyOptionDetailToWriteChoice(t *testing.T) {
+func TestParseRequestUserInputPromptJSON_RejectsLegacyOptionDetail(t *testing.T) {
 	t.Parallel()
 
 	prompt := parseRequestUserInputPromptJSON(`{
 		"prompt_id":"rui_msg_legacy_optional_tool_legacy_optional",
 		"message_id":"msg_legacy_optional",
 		"tool_id":"tool_legacy_optional",
+		"tool_name":"ask_user",
 		"questions":[{
 			"id":"direction",
 			"header":"Direction",
@@ -159,27 +140,19 @@ func TestParseRequestUserInputPromptJSON_NormalizesLegacyOptionDetailToWriteChoi
 			}]
 		}]
 	}`)
-	if prompt == nil {
-		t.Fatalf("prompt should not be nil")
-	}
-	if len(prompt.Questions) != 1 {
-		t.Fatalf("prompt questions=%+v", prompt.Questions)
-	}
-	if got := prompt.Questions[0].ResponseMode; got != requestUserInputResponseModeWrite {
-		t.Fatalf("response_mode=%q, want %q", got, requestUserInputResponseModeWrite)
-	}
-	if got := prompt.Questions[0].WritePlaceholder; got != "Describe the custom path" {
-		t.Fatalf("write placeholder=%q, want %q", got, "Describe the custom path")
+	if prompt != nil {
+		t.Fatalf("legacy option detail prompt should be rejected: %+v", prompt)
 	}
 }
 
-func TestParseRequestUserInputPromptJSON_DefaultsResponseModeFromChoiceKinds(t *testing.T) {
+func TestParseRequestUserInputPromptJSON_RejectsMissingResponseModeAndExhaustiveFlag(t *testing.T) {
 	t.Parallel()
 
 	pureSelect := parseRequestUserInputPromptJSON(`{
 		"prompt_id":"rui_msg_select_tool_select",
 		"message_id":"msg_select",
 		"tool_id":"tool_select",
+		"tool_name":"ask_user",
 		"questions":[{
 			"id":"direction",
 			"header":"Direction",
@@ -191,52 +164,40 @@ func TestParseRequestUserInputPromptJSON_DefaultsResponseModeFromChoiceKinds(t *
 			]
 		}]
 	}`)
-	if pureSelect == nil || len(pureSelect.Questions) != 1 {
-		t.Fatalf("pureSelect prompt=%+v", pureSelect)
-	}
-	if pureSelect.Questions[0].ResponseMode != requestUserInputResponseModeSelect {
-		t.Fatalf("pure select prompt should default to response_mode=select: %+v", pureSelect.Questions[0])
-	}
-	if pureSelect.Questions[0].ChoicesExhaustive == nil || !*pureSelect.Questions[0].ChoicesExhaustive {
-		t.Fatalf("pure select prompt should infer choices_exhaustive=true: %+v", pureSelect.Questions[0])
+	if pureSelect != nil {
+		t.Fatalf("missing response_mode should be rejected: %+v", pureSelect)
 	}
 
 	withWrite := parseRequestUserInputPromptJSON(`{
 		"prompt_id":"rui_msg_write_tool_write",
 		"message_id":"msg_write",
 		"tool_id":"tool_write",
+		"tool_name":"ask_user",
 		"questions":[{
 			"id":"direction",
 			"header":"Direction",
 			"question":"Choose the next direction.",
 			"is_secret":false,
+			"response_mode":"select_or_write",
 			"choices":[
 				{"choice_id":"default","label":"Default path","kind":"select"},
 				{"choice_id":"other","label":"Other","kind":"write","input_placeholder":"Describe the custom path"}
 			]
 		}]
 	}`)
-	if withWrite == nil || len(withWrite.Questions) != 1 {
-		t.Fatalf("withWrite prompt=%+v", withWrite)
-	}
-	if withWrite.Questions[0].ResponseMode != requestUserInputResponseModeSelectText {
-		t.Fatalf("write-choice prompt should default to response_mode=select_or_write: %+v", withWrite.Questions[0])
-	}
-	if withWrite.Questions[0].ChoicesExhaustive == nil || *withWrite.Questions[0].ChoicesExhaustive {
-		t.Fatalf("write-choice prompt should infer choices_exhaustive=false: %+v", withWrite.Questions[0])
-	}
-	if len(withWrite.Questions[0].Choices) != 1 {
-		t.Fatalf("canonical mixed prompt should keep only fixed choices: %+v", withWrite.Questions[0].Choices)
+	if withWrite != nil {
+		t.Fatalf("missing choices_exhaustive should be rejected: %+v", withWrite)
 	}
 }
 
-func TestParseRequestUserInputPromptJSON_ChoicesExhaustiveIsAuthoritative(t *testing.T) {
+func TestParseRequestUserInputPromptJSON_RejectsInconsistentChoicesExhaustive(t *testing.T) {
 	t.Parallel()
 
 	prompt := parseRequestUserInputPromptJSON(`{
 		"prompt_id":"rui_msg_non_exhaustive_tool_non_exhaustive",
 		"message_id":"msg_non_exhaustive",
 		"tool_id":"tool_non_exhaustive",
+		"tool_name":"ask_user",
 		"questions":[{
 			"id":"direction",
 			"header":"Direction",
@@ -250,18 +211,8 @@ func TestParseRequestUserInputPromptJSON_ChoicesExhaustiveIsAuthoritative(t *tes
 			]
 		}]
 	}`)
-	if prompt == nil || len(prompt.Questions) != 1 {
-		t.Fatalf("prompt=%+v", prompt)
-	}
-	question := prompt.Questions[0]
-	if got := question.ResponseMode; got != requestUserInputResponseModeSelectText {
-		t.Fatalf("response_mode=%q, want %q", got, requestUserInputResponseModeSelectText)
-	}
-	if question.ChoicesExhaustive == nil || *question.ChoicesExhaustive {
-		t.Fatalf("choices_exhaustive=%v, want false", question.ChoicesExhaustive)
-	}
-	if question.WriteLabel == "" {
-		t.Fatalf("expected write_label for non-exhaustive fixed choices: %+v", question)
+	if prompt != nil {
+		t.Fatalf("inconsistent choices_exhaustive should be rejected: %+v", prompt)
 	}
 }
 
@@ -272,6 +223,7 @@ func TestParseRequestUserInputPromptJSON_PreservesInteractionContract(t *testing
 		"prompt_id":"rui_msg_contract_tool_contract",
 		"message_id":"msg_contract",
 		"tool_id":"tool_contract",
+		"tool_name":"ask_user",
 		"reason_code":"user_decision_required",
 		"interaction_contract":{
 			"enabled":true,

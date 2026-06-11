@@ -55,6 +55,8 @@ func ClassifyError(inv Invocation, err error) *ToolError {
 			errorCode = ErrorCodeTargetRequired
 		case "target_executor_unavailable":
 			errorCode = ErrorCodeTargetUnavailable
+		case "target_not_allowed":
+			errorCode = ErrorCodePermissionDenied
 		}
 		out := &ToolError{
 			Code:      errorCode,

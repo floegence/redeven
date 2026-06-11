@@ -65,6 +65,7 @@ import {
   loadFlowerHostSettingsViaBridge,
   saveFlowerHostSettingsViaBridge,
   sendFlowerHostChatResultViaBridge,
+  submitFlowerHostInputViaBridge,
   resolveFlowerHostHandlerViaBridge,
   shutdownFlowerHostBridge,
   type DesktopFlowerHostTargetSessionGrant,
@@ -308,15 +309,19 @@ import {
   RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL,
   SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL,
   SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL,
+  type DesktopFlowerHostError,
   type DesktopFlowerHostResolveHandlerRequest,
   type DesktopFlowerHostSendChatRequest,
   type DesktopFlowerHostSettingsDraft,
+  type DesktopFlowerHostSubmitInputRequest,
   type ListDesktopFlowerHostThreadsResult,
   type LoadDesktopFlowerHostThreadResult,
   type LoadDesktopFlowerHostSettingsResult,
   type ResolveDesktopFlowerHostHandlerResult,
   type SendDesktopFlowerHostChatResult,
   type SaveDesktopFlowerHostSettingsResult,
+  type SubmitDesktopFlowerHostInputResult,
 } from '../shared/flowerHostSettingsIPC';
 import {
   DESKTOP_STATE_GET_CHANNEL,
@@ -888,6 +893,21 @@ installStdioBrokenPipeGuards();
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function desktopFlowerHostError(code: string, message: string): DesktopFlowerHostError {
+  return {
+    code: compact(code) || 'flower_host_error',
+    message: compact(message) || 'Flower Host request failed.',
+  };
+}
+
+function desktopFlowerHostErrorFromUnknown(error: unknown): DesktopFlowerHostError {
+  const record = error as { code?: unknown; message?: unknown };
+  return desktopFlowerHostError(
+    compact(record?.code) || 'flower_host_error',
+    error instanceof Error ? error.message : compact(record?.message) || String(error),
+  );
 }
 
 function bundledRuntimeExecutablePath(): string {
@@ -2531,11 +2551,12 @@ function normalizeFlowerHostRequiredCapabilities(value: unknown): string[] {
   return out;
 }
 
-function envAppTargetSessionCapabilities(): DesktopFlowerHostTargetSessionGrant['capabilities'] {
+function targetSessionCapabilitiesFor(requiredCapabilities: readonly string[]): DesktopFlowerHostTargetSessionGrant['capabilities'] {
+  const required = new Set(requiredCapabilities);
   return {
-    can_read: true,
-    can_write: false,
-    can_execute: false,
+    can_read: required.size === 0 || required.has('read'),
+    can_write: required.has('write'),
+    can_execute: required.has('execute'),
   };
 }
 
@@ -2694,13 +2715,26 @@ async function rememberFlowerHostProviderTarget(input: Readonly<{
 }
 
 function grantExpiresAtUnixMS(grant: unknown): number {
-  const raw = grant && typeof grant === 'object'
-    ? Number((grant as Record<string, unknown>).channel_init_expire_at_unix_s)
-    : 0;
-  if (!Number.isFinite(raw) || raw <= 0) {
-    return Date.now() + 60_000;
+  if (!grant || typeof grant !== 'object') {
+    throw new Error('Provider returned an incomplete target grant.');
   }
-  return Math.floor(raw * 1000);
+  const raw = Number((grant as Record<string, unknown>).channel_init_expire_at_unix_s);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    throw new Error('Provider returned a target grant without a valid expiration.');
+  }
+  const expiresAtUnixMS = Math.floor(raw * 1000);
+  if (expiresAtUnixMS <= Date.now()) {
+    throw new Error('Provider returned an expired target grant.');
+  }
+  return expiresAtUnixMS;
+}
+
+function entryTicketExpiresAtUnixMS(entry: ProviderEnvAppEntryTicketResponse): number {
+  const expiresAtUnixMS = Number(entry.expires_at_unix_ms);
+  if (!Number.isFinite(expiresAtUnixMS) || expiresAtUnixMS <= Date.now()) {
+    throw new Error('Provider returned an expired target entry ticket.');
+  }
+  return expiresAtUnixMS;
 }
 
 async function openFlowerHostTargetSession(
@@ -2713,7 +2747,7 @@ async function openFlowerHostTargetSession(
   if (!targetID || !providerOrigin || !providerID || !envPublicID) {
     throw new Error('Target session request is incomplete.');
   }
-  normalizeFlowerHostRequiredCapabilities(request.required_capabilities);
+  const requiredCapabilities = normalizeFlowerHostRequiredCapabilities(request.required_capabilities);
   const preferences = await loadDesktopPreferencesCached();
   const environment = findProviderEnvironmentByID(
     preferences,
@@ -2800,6 +2834,7 @@ async function openFlowerHostTargetSession(
   if (!entryTicket) {
     throw new Error('Provider returned an incomplete target entry ticket.');
   }
+  const entryExpiresAtUnixMS = entryTicketExpiresAtUnixMS(entry);
   const grantResponse = await fetchProviderJSON(providerNeutralSessionURL(
     sandboxOrigin,
     '/v1/channel/init/entry',
@@ -2827,8 +2862,8 @@ async function openFlowerHostTargetSession(
     provider_origin: providerOrigin,
     env_public_id: envPublicID,
     grant_client: grantClient,
-    capabilities: envAppTargetSessionCapabilities(),
-    expires_at_unix_ms: Math.min(grantExpiresAtUnixMS(grantClient), Number(entry.expires_at_unix_ms) || Number.MAX_SAFE_INTEGER),
+    capabilities: targetSessionCapabilitiesFor(requiredCapabilities),
+    expires_at_unix_ms: Math.min(grantExpiresAtUnixMS(grantClient), entryExpiresAtUnixMS),
   };
 }
 
@@ -16018,7 +16053,7 @@ if (!app.requestSingleInstanceLock()) {
     } catch (error) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: desktopFlowerHostErrorFromUnknown(error),
       };
     }
   });
@@ -16034,7 +16069,7 @@ if (!app.requestSingleInstanceLock()) {
     } catch (error) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: desktopFlowerHostErrorFromUnknown(error),
       };
     }
   });
@@ -16047,7 +16082,7 @@ if (!app.requestSingleInstanceLock()) {
     } catch (error) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: desktopFlowerHostErrorFromUnknown(error),
       };
     }
   });
@@ -16063,7 +16098,7 @@ if (!app.requestSingleInstanceLock()) {
     } catch (error) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: desktopFlowerHostErrorFromUnknown(error),
       };
     }
   });
@@ -16079,7 +16114,7 @@ if (!app.requestSingleInstanceLock()) {
     } catch (error) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: desktopFlowerHostErrorFromUnknown(error),
       };
     }
   });
@@ -16089,26 +16124,17 @@ if (!app.requestSingleInstanceLock()) {
         ...flowerHostBridgeArgs(),
         request,
       });
-      if (result.create_failure) {
-        const code = compact(result.create_failure.error?.code);
-        const message = compact(result.create_failure.error?.message);
-        const error = [code, message].filter(Boolean).join(': ') || 'Flower handler selection is no longer available.';
+      if ('create_failure' in result) {
         if (result.create_failure.fresh_decision) {
           return {
             ok: false,
-            error,
+            error: result.create_failure.error,
             fresh_decision: result.create_failure.fresh_decision,
           };
         }
         return {
           ok: false,
-          error,
-        };
-      }
-      if (!result.thread) {
-        return {
-          ok: false,
-          error: 'Flower Host did not return a conversation.',
+          error: result.create_failure.error,
         };
       }
       return {
@@ -16118,7 +16144,23 @@ if (!app.requestSingleInstanceLock()) {
     } catch (error) {
       return {
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: desktopFlowerHostErrorFromUnknown(error),
+      };
+    }
+  });
+  ipcMain.handle(SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL, async (_event, request: DesktopFlowerHostSubmitInputRequest): Promise<SubmitDesktopFlowerHostInputResult> => {
+    try {
+      return {
+        ok: true,
+        thread: await submitFlowerHostInputViaBridge({
+          ...flowerHostBridgeArgs(),
+          request,
+        }),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: desktopFlowerHostErrorFromUnknown(error),
       };
     }
   });

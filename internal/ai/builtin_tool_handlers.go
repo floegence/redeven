@@ -340,84 +340,57 @@ func subagentsToolInputSchema() map[string]any {
 }
 
 func askUserToolInputSchema() map[string]any {
-	questionBase := map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"id":                 map[string]any{"type": "string", "maxLength": 80},
-			"header":             map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
-			"question":           map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
-			"is_secret":          map[string]any{"type": "boolean"},
-			"response_mode":      map[string]any{"type": "string", "enum": []string{"select", "write", "select_or_write"}},
-			"choices_exhaustive": map[string]any{"type": "boolean", "description": "For choice-based questions, true means the fixed choices are genuinely exhaustive; false means the user may need a typed fallback beyond the listed choices."},
-			"write_label":        map[string]any{"type": "string", "maxLength": 200, "description": "For select_or_write, this is the standardized typed fallback label such as None of the above. For write, it can label the direct input."},
-			"write_placeholder":  map[string]any{"type": "string", "maxLength": 160},
-			"choices": map[string]any{
-				"type":     "array",
-				"maxItems": 4,
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"choice_id":   map[string]any{"type": "string", "maxLength": 64},
-						"label":       map[string]any{"type": "string", "maxLength": 200},
-						"description": map[string]any{"type": "string", "maxLength": 240},
-						"actions": map[string]any{
-							"type":     "array",
-							"maxItems": 4,
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"type": map[string]any{"type": "string", "enum": []string{"set_mode"}},
-									"mode": map[string]any{"type": "string", "enum": []string{"act", "plan"}},
-								},
-								"required":             []string{"type"},
-								"additionalProperties": false,
-							},
-						},
-					},
-					"required":             []string{"choice_id", "label"},
-					"additionalProperties": false,
-				},
-			},
-		},
-		"required":             []string{"id", "header", "question", "is_secret", "response_mode"},
-		"additionalProperties": false,
-	}
 	return map[string]any{
 		"type": "object",
 		"properties": map[string]any{
 			"questions": map[string]any{
-				"type":     "array",
-				"minItems": 1,
-				"maxItems": 5,
+				"type":        "array",
+				"minItems":    1,
+				"maxItems":    5,
+				"description": "Structured user-input questions. Each question must be fully specified; Host validation rejects missing ids, text, response_mode, invalid choice contracts, and legacy options/is_other shapes.",
 				"items": map[string]any{
-					"allOf": []any{
-						questionBase,
-						map[string]any{
-							"oneOf": []any{
-								map[string]any{
-									"properties": map[string]any{
-										"response_mode":      map[string]any{"const": "select"},
-										"choices_exhaustive": map[string]any{"const": true},
-										"choices":            map[string]any{"type": "array", "minItems": 1, "maxItems": 4},
+					"type": "object",
+					"properties": map[string]any{
+						"id":                 map[string]any{"type": "string", "minLength": 1, "maxLength": 80, "description": "Stable question id, for example question_1."},
+						"header":             map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
+						"question":           map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+						"is_secret":          map[string]any{"type": "boolean"},
+						"response_mode":      map[string]any{"type": "string", "enum": []string{"select", "write", "select_or_write"}, "description": "select requires fixed choices and choices_exhaustive=true; write must omit choices; select_or_write requires fixed choices and choices_exhaustive=false."},
+						"choices_exhaustive": map[string]any{"type": "boolean", "description": "Required when choices are present. true only for exhaustive select; false for select_or_write with a typed fallback."},
+						"write_label":        map[string]any{"type": "string", "maxLength": 200, "description": "For select_or_write, the typed fallback label such as None of the above. For write, the direct input label."},
+						"write_placeholder":  map[string]any{"type": "string", "maxLength": 160},
+						"choices": map[string]any{
+							"type":        "array",
+							"maxItems":    4,
+							"description": "Fixed select choices only. Do not include Other/None as a write choice; use response_mode=select_or_write with choices_exhaustive=false for typed fallback.",
+							"items": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"choice_id":   map[string]any{"type": "string", "minLength": 1, "maxLength": 64},
+									"label":       map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
+									"description": map[string]any{"type": "string", "maxLength": 240},
+									"kind":        map[string]any{"type": "string", "enum": []string{"select"}, "description": "Fixed options must use kind=select."},
+									"actions": map[string]any{
+										"type":     "array",
+										"maxItems": 4,
+										"items": map[string]any{
+											"type": "object",
+											"properties": map[string]any{
+												"type": map[string]any{"type": "string", "enum": []string{"set_mode"}},
+												"mode": map[string]any{"type": "string", "enum": []string{"act", "plan"}},
+											},
+											"required":             []string{"type"},
+											"additionalProperties": false,
+										},
 									},
-									"required": []string{"choices", "choices_exhaustive"},
 								},
-								map[string]any{
-									"properties": map[string]any{
-										"response_mode": map[string]any{"const": "write"},
-									},
-								},
-								map[string]any{
-									"properties": map[string]any{
-										"response_mode":      map[string]any{"const": "select_or_write"},
-										"choices_exhaustive": map[string]any{"const": false},
-										"choices":            map[string]any{"type": "array", "minItems": 1, "maxItems": 4},
-									},
-									"required": []string{"choices", "choices_exhaustive"},
-								},
+								"required":             []string{"choice_id", "label", "kind"},
+								"additionalProperties": false,
 							},
 						},
 					},
+					"required":             []string{"id", "header", "question", "is_secret", "response_mode"},
+					"additionalProperties": false,
 				},
 			},
 			"reason_code": map[string]any{
@@ -497,8 +470,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "apply_patch",
-			Description:      "Apply a patch to files on the local machine. This is a compatibility editing tool; prefer file.edit or file.write for normal changes. Use ONLY the canonical Begin/End Patch format with relative paths. The patch must be one document from `*** Begin Patch` to `*** End Patch` using `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "Entire patch text in canonical Begin/End Patch format. Start with `*** Begin Patch`, end with `*** End Patch`, use relative paths, and include file operations such as `*** Update File:` plus `@@` hunks."}}), "required": []string{"patch"}, "additionalProperties": false}),
+			Description:      "Apply a patch to files on the local machine. This is a compatibility editing tool; prefer file.edit or file.write for normal changes. Use ONLY the canonical Begin/End Patch format with relative paths. The patch must be one document from `*** Begin Patch` to `*** End Patch` using `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks. In `*** Add File:` bodies, every content line must start with `+`.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"patch": map[string]any{"type": "string", "description": "Entire patch text in canonical Begin/End Patch format. Start with `*** Begin Patch`, end with `*** End Patch`, use relative paths, and include file operations such as `*** Update File:` plus `@@` hunks. For `*** Add File: path`, every new content line must begin with `+`, for example `+hello`."}}), "required": []string{"patch"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         true,
 			RequiresApproval: true,
@@ -541,7 +514,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "write_todos",
-			Description:      "Replace the current thread todo list snapshot for actionable work. Keep at most one in_progress item, avoid empty lists unless explicitly clearing prior todos, and use at least 3 todos when the user asks for explicit planning/task breakdown.",
+			Description:      "Replace the current thread todo list snapshot for actionable work. Track work items only, not control signals such as task_complete, ask_user, or exit_plan_mode. Keep at most one in_progress item, avoid empty lists unless explicitly clearing prior todos, and use at least 3 todos when the user asks for explicit planning/task breakdown.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"todos": map[string]any{"type": "array", "items": map[string]any{"type": "object", "properties": map[string]any{"id": map[string]any{"type": "string"}, "content": map[string]any{"type": "string"}, "status": map[string]any{"type": "string", "enum": []string{"pending", "in_progress", "completed", "cancelled"}}, "note": map[string]any{"type": "string"}}, "required": []string{"content", "status"}, "additionalProperties": false}}, "expected_version": map[string]any{"type": "integer", "minimum": 0}, "explanation": map[string]any{"type": "string", "maxLength": 500}}, "required": []string{"todos"}, "additionalProperties": false}),
 			ParallelSafe:     true,
 			Mutating:         false,

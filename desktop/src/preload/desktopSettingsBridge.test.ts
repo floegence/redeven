@@ -36,6 +36,7 @@ describe('bootstrapDesktopSettingsBridge', () => {
     expect(typeof bridge.loadFlowerHostThread).toBe('function');
     expect(typeof bridge.resolveFlowerHostHandler).toBe('function');
     expect(typeof bridge.sendFlowerHostChat).toBe('function');
+    expect(typeof bridge.submitFlowerHostInput).toBe('function');
     expect(typeof bridge.cancel).toBe('function');
 
     await bridge.save({
@@ -65,6 +66,13 @@ describe('bootstrapDesktopSettingsBridge', () => {
     await bridge.loadFlowerHostThread('thread-1');
     await bridge.resolveFlowerHostHandler({ thread_kind: 'chat', client_surface: 'flower_surface' });
     await bridge.sendFlowerHostChat({ prompt: 'hello' });
+    await bridge.submitFlowerHostInput({
+      thread_id: 'thread-1',
+      prompt_id: 'prompt-1',
+      answers: {
+        target: { choice_id: 'staging' },
+      },
+    });
     bridge.cancel();
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:save-settings', {
@@ -84,6 +92,13 @@ describe('bootstrapDesktopSettingsBridge', () => {
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(5, 'redeven-desktop:flower-host-thread-load', 'thread-1');
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(6, 'redeven-desktop:flower-host-handler-resolve', { thread_kind: 'chat', client_surface: 'flower_surface' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(7, 'redeven-desktop:flower-host-chat-send', { prompt: 'hello' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(8, 'redeven-desktop:flower-host-input-submit', {
+      thread_id: 'thread-1',
+      prompt_id: 'prompt-1',
+      answers: {
+        target: { choice_id: 'staging' },
+      },
+    });
     expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:cancel-settings');
   });
 });

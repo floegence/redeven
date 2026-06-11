@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -69,14 +70,19 @@ func (s *floretToolRuntimeState) updateFromToolResult(call ToolCall, result Tool
 
 func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRuntimeState) (*fltools.Registry, error) {
 	registry := fltools.NewRegistry()
+	hostContext := floretHostLabelsForRun(r)
 	for _, def := range activeTools {
 		name := strings.TrimSpace(def.Name)
 		if name == "" || isFlowerControlTool(name) {
 			continue
 		}
 		def := def
+		toolDef, err := floretToolDefinition(def)
+		if err != nil {
+			return nil, err
+		}
 		tool := fltools.Define[map[string]any](
-			floretToolDefinition(def),
+			toolDef,
 			nil,
 			nil,
 			func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
@@ -88,6 +94,7 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				if call.Name == "" {
 					call.Name = strings.TrimSpace(def.Name)
 				}
+				call.Args = applyFloretHostContextToToolArgs(call.Name, call.Args, hostContext)
 				handler := &builtInToolHandler{r: r, toolName: call.Name}
 				result, err := handler.Execute(ctx, call)
 				if err != nil {
@@ -106,13 +113,54 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 	return registry, nil
 }
 
-func floretToolDefinition(def ToolDef) fltools.Definition {
+func floretHostLabelsForRun(r *run) map[string]string {
+	host := map[string]string{
+		"endpoint_id": strings.TrimSpace(r.endpointID),
+		"engine":      "redeven",
+	}
+	if policy := normalizeToolTargetPolicy(r.toolTargetPolicy); policy.requiresExplicitTarget() {
+		if targetID := strings.TrimSpace(policy.DefaultTargetID); targetID != "" {
+			host["target_id"] = targetID
+			host["current_target_id"] = targetID
+			host["primary_target_id"] = targetID
+		}
+	}
+	return host
+}
+
+func applyFloretHostContextToToolArgs(toolName string, args map[string]any, hostContext map[string]string) map[string]any {
+	if !toolRequiresTarget(toolName) {
+		return args
+	}
+	if strings.TrimSpace(targetIDFromToolArgs(args)) != "" {
+		return args
+	}
+	targetID := firstNonEmptyString(hostContext["target_id"], hostContext["current_target_id"], hostContext["primary_target_id"])
+	if targetID == "" {
+		return args
+	}
+	out := cloneAnyMap(args)
+	out["target_id"] = targetID
+	return out
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 	inputSchema := map[string]any{"type": "object", "additionalProperties": true}
 	if len(def.InputSchema) > 0 {
 		var parsed map[string]any
-		if err := json.Unmarshal(def.InputSchema, &parsed); err == nil && parsed != nil {
-			inputSchema = parsed
+		if err := json.Unmarshal(def.InputSchema, &parsed); err != nil || parsed == nil {
+			return fltools.Definition{}, fmt.Errorf("invalid input schema for Floret tool %s", strings.TrimSpace(def.Name))
 		}
+		inputSchema = parsed
 	}
 	effects := floretToolEffects(def)
 	readOnly := !def.Mutating && def.Name != "terminal.exec"
@@ -132,7 +180,7 @@ func floretToolDefinition(def ToolDef) fltools.Definition {
 			"namespace":           strings.TrimSpace(def.Namespace),
 			"flower_policy_owner": "internal/ai.run.handleToolCall",
 		},
-	}
+	}, nil
 }
 
 func floretToolParallelSafe(def ToolDef, effects []fltools.Effect) bool {
@@ -198,7 +246,7 @@ func isFlowerControlTool(name string) bool {
 	}
 }
 
-func floretControlDefinitionsFromTools(activeTools []ToolDef) []flprovider.ToolDefinition {
+func floretControlDefinitionsFromTools(activeTools []ToolDef) ([]flprovider.ToolDefinition, error) {
 	defs := make([]flprovider.ToolDefinition, 0, 3)
 	for _, def := range activeTools {
 		name := strings.TrimSpace(def.Name)
@@ -208,9 +256,10 @@ func floretControlDefinitionsFromTools(activeTools []ToolDef) []flprovider.ToolD
 		inputSchema := map[string]any{"type": "object", "additionalProperties": true}
 		if len(def.InputSchema) > 0 {
 			var parsed map[string]any
-			if err := json.Unmarshal(def.InputSchema, &parsed); err == nil && parsed != nil {
-				inputSchema = parsed
+			if err := json.Unmarshal(def.InputSchema, &parsed); err != nil || parsed == nil {
+				return nil, fmt.Errorf("invalid input schema for Floret control tool %s", name)
 			}
+			inputSchema = parsed
 		}
 		defs = append(defs, flprovider.ToolDefinition{
 			Name:        name,
@@ -225,7 +274,7 @@ func floretControlDefinitionsFromTools(activeTools []ToolDef) []flprovider.ToolD
 			},
 		})
 	}
-	return defs
+	return defs, nil
 }
 
 func floretControlToolsForContract(all []ToolDef, contract runCapabilityContract) []ToolDef {

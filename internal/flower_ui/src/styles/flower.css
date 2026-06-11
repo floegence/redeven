@@ -152,7 +152,7 @@ html.dark .flower-component-shell {
   --flower-chat-surface-soft: var(--redeven-surface-panel-soft, var(--card));
   --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated, var(--card));
   --flower-chat-surface-border: var(--redeven-surface-panel-border, var(--border));
-  --flower-chat-dock-track-max-width: 56rem;
+  --flower-chat-dock-track-max-width: 112rem;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -302,26 +302,54 @@ html.dark .flower-component-shell {
   white-space: nowrap;
 }
 
-.flower-host-handler-error-row {
-  display: flex;
+.flower-host-handler-error-card {
+  display: grid;
   min-width: 0;
-  align-items: center;
-  gap: 0.375rem;
+  max-width: min(34rem, 100%);
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 24%, transparent);
+  border-radius: 0.625rem;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 7%, transparent);
+  padding: 0.5rem;
 }
 
-.flower-host-handler-error {
-  max-width: min(28rem, 100%);
+.flower-host-handler-error-icon {
+  display: flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.4375rem;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
+  color: var(--warning, #f59e0b);
+}
+
+.flower-host-handler-error-copy {
   min-width: 0;
-  overflow: hidden;
-  color: var(--warning);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.flower-host-handler-error-title {
+  color: color-mix(in srgb, var(--foreground) 86%, var(--warning, #f59e0b) 14%);
+  font-size: 0.75rem;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.flower-host-handler-error-message {
+  margin-top: 0.125rem;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
   font-size: 0.75rem;
   font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .flower-host-handler-retry {
   flex: 0 0 auto;
+  justify-self: end;
   cursor: pointer;
   border: 0;
   border-radius: 9999px;
@@ -343,6 +371,15 @@ html.dark .flower-component-shell {
   .flower-host-composer-footer > button {
     width: 100%;
     justify-content: center;
+  }
+
+  .flower-host-handler-error-card {
+    grid-template-columns: 1.5rem minmax(0, 1fr);
+  }
+
+  .flower-host-handler-retry {
+    grid-column: 2;
+    justify-self: start;
   }
 }
 
@@ -400,8 +437,17 @@ html.dark .flower-component-shell {
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: 1rem;
+  padding: clamp(0.75rem, 1.2vw, 1.125rem) clamp(0.75rem, 1.45vw, 1.25rem) 1rem;
   scrollbar-gutter: stable;
+}
+
+.flower-host-transcript-stack {
+  display: flex;
+  width: min(100%, var(--flower-chat-dock-track-max-width));
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0 auto;
 }
 
 .flower-host-chat-bottom-dock {
@@ -409,7 +455,7 @@ html.dark .flower-component-shell {
   z-index: 1;
   flex: 0 0 auto;
   background: transparent;
-  padding: 0 0.75rem calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  padding: 0 clamp(0.625rem, 1.2vw, 1rem) calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 .flower-host-chat-bottom-dock::before {
@@ -425,6 +471,707 @@ html.dark .flower-component-shell {
   position: relative;
   width: min(100%, var(--flower-chat-dock-track-max-width));
   margin: 0 auto;
+}
+
+.flower-host-message-row {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+}
+
+.flower-host-message-row-user {
+  justify-content: flex-end;
+}
+
+.flower-host-message-row-assistant {
+  justify-content: flex-start;
+}
+
+.flower-host-message-bubble {
+  max-width: min(100%, 78rem);
+  min-width: 0;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  letter-spacing: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.flower-host-message-bubble-user {
+  max-width: min(78%, 44rem);
+  background: color-mix(in srgb, var(--primary) 15%, var(--flower-chat-surface-elevated));
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+  color: color-mix(in srgb, var(--foreground) 95%, var(--primary) 5%);
+}
+
+.flower-host-message-bubble-assistant {
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 64%, transparent);
+  border-color: color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent);
+  color: var(--foreground);
+}
+
+.flower-host-message-bubble-streaming {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.flower-host-message-bubble-error {
+  border-color: color-mix(in srgb, var(--destructive) 30%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--destructive) 7%, var(--flower-chat-surface-elevated));
+}
+
+.flower-host-message-error-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  color: var(--destructive);
+  font-size: 0.6875rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.flower-host-message-placeholder {
+  display: inline-block;
+  width: 0.25rem;
+}
+
+.flower-host-streaming-cursor {
+  position: relative;
+  display: inline-block;
+  width: 0.42rem;
+  height: 1.15em;
+  margin-left: 0.16rem;
+  vertical-align: -0.18em;
+  border-radius: 9999px;
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--primary) 12%, transparent),
+      color-mix(in srgb, var(--primary) 90%, white 10%),
+      color-mix(in srgb, var(--primary) 12%, transparent)
+    );
+  background-size: 100% 220%;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent),
+    0 0 14px color-mix(in srgb, var(--primary) 46%, transparent);
+  animation: flower-host-cursor-flow 1.05s linear infinite;
+}
+
+@keyframes flower-host-cursor-flow {
+  0% {
+    background-position: 0 100%;
+    opacity: 0.5;
+    transform: translateY(0);
+  }
+  45% {
+    opacity: 1;
+  }
+  100% {
+    background-position: 0 -120%;
+    opacity: 0.68;
+    transform: translateY(-0.02em);
+  }
+}
+
+.flower-host-error-card {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.625rem;
+  border: 1px solid color-mix(in srgb, var(--destructive) 24%, var(--flower-chat-surface-border));
+  border-radius: 0.5rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--destructive) 8%, var(--flower-chat-surface-elevated)), color-mix(in srgb, var(--flower-chat-surface-elevated) 88%, transparent));
+  color: var(--foreground);
+  padding: 0.75rem;
+}
+
+.flower-host-error-icon {
+  display: flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--destructive) 13%, transparent);
+  color: var(--destructive);
+}
+
+.flower-host-error-copy {
+  min-width: 0;
+}
+
+.flower-host-error-title {
+  color: color-mix(in srgb, var(--foreground) 88%, var(--destructive) 12%);
+  font-size: 0.8125rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.flower-host-error-message {
+  margin-top: 0.2rem;
+  color: color-mix(in srgb, var(--muted-foreground) 80%, var(--foreground) 20%);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.flower-host-composer-error {
+  margin-top: 0.625rem;
+}
+
+.flower-host-thread-loading {
+  display: grid;
+  width: min(100%, 34rem);
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.875rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 54%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 54%, transparent);
+  padding: 0.875rem;
+}
+
+.flower-host-thread-loading-copy {
+  min-width: 0;
+}
+
+.flower-host-thread-loading-title {
+  color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground) 16%);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.flower-host-thread-loading-line {
+  width: 72%;
+  height: 0.45rem;
+  margin-top: 0.45rem;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--muted-foreground) 12%, transparent),
+    color-mix(in srgb, var(--primary) 18%, transparent),
+    color-mix(in srgb, var(--muted-foreground) 10%, transparent)
+  );
+  background-size: 180% 100%;
+  animation: flower-host-thread-loading-sheen 1.25s ease-in-out infinite;
+}
+
+.flower-host-thread-loading-line-short {
+  width: 46%;
+  animation-delay: 0.12s;
+}
+
+@keyframes flower-host-thread-loading-sheen {
+  0% {
+    background-position: 100% 0;
+    opacity: 0.58;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    background-position: -80% 0;
+    opacity: 0.68;
+  }
+}
+
+.flower-host-tool-activity {
+  container-type: inline-size;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 48%, transparent);
+  padding: 0.625rem;
+}
+
+.flower-host-tool-activity-heading {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4rem;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
+  font-size: 0.71875rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.flower-host-tool-activity-list {
+  display: grid;
+  min-width: 0;
+  gap: 0.375rem;
+}
+
+.flower-host-tool-activity-item {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 1.35rem minmax(0, 1fr) auto auto minmax(6rem, auto);
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 44%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--flower-chat-surface) 42%, transparent);
+  padding: 0.42rem 0.5rem;
+}
+
+.flower-host-tool-activity-icon {
+  display: flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+}
+
+.flower-host-tool-activity-item-running .flower-host-tool-activity-icon {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: color-mix(in srgb, var(--primary) 80%, var(--foreground) 20%);
+}
+
+.flower-host-tool-activity-item-pending .flower-host-tool-activity-icon,
+.flower-host-tool-activity-item-waiting .flower-host-tool-activity-icon {
+  background: color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent);
+  color: color-mix(in srgb, var(--warning, #f59e0b) 76%, var(--foreground) 24%);
+}
+
+.flower-host-tool-activity-item-success .flower-host-tool-activity-icon {
+  background: color-mix(in srgb, #10b981 13%, transparent);
+  color: color-mix(in srgb, #10b981 76%, var(--foreground) 24%);
+}
+
+.flower-host-tool-activity-item-error .flower-host-tool-activity-icon,
+.flower-host-tool-activity-item-canceled .flower-host-tool-activity-icon {
+  background: color-mix(in srgb, var(--destructive) 12%, transparent);
+  color: var(--destructive);
+}
+
+.flower-host-tool-activity-main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.flower-host-tool-activity-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.flower-host-tool-activity-error {
+  min-width: 0;
+  color: var(--destructive);
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: 0.71875rem;
+  font-weight: 600;
+}
+
+.flower-host-tool-activity-status,
+.flower-host-tool-activity-approval {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 11rem;
+  align-items: center;
+  justify-self: end;
+  overflow: hidden;
+  border-radius: 9999px;
+  padding: 0.12rem 0.45rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 750;
+  letter-spacing: 0;
+}
+
+.flower-host-tool-activity-status {
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 50%, transparent);
+  background: color-mix(in srgb, var(--muted) 26%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+}
+
+.flower-host-tool-activity-status-running {
+  border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  color: color-mix(in srgb, var(--primary) 78%, var(--foreground) 22%);
+}
+
+.flower-host-tool-activity-status-pending,
+.flower-host-tool-activity-status-waiting {
+  border-color: color-mix(in srgb, var(--warning, #f59e0b) 24%, transparent);
+  background: color-mix(in srgb, var(--warning, #f59e0b) 9%, transparent);
+  color: color-mix(in srgb, var(--warning, #f59e0b) 72%, var(--foreground) 28%);
+}
+
+.flower-host-tool-activity-status-success {
+  border-color: color-mix(in srgb, #10b981 24%, transparent);
+  background: color-mix(in srgb, #10b981 9%, transparent);
+  color: color-mix(in srgb, #10b981 72%, var(--foreground) 28%);
+}
+
+.flower-host-tool-activity-status-error,
+.flower-host-tool-activity-status-canceled {
+  border-color: color-mix(in srgb, var(--destructive) 24%, transparent);
+  background: color-mix(in srgb, var(--destructive) 8%, transparent);
+  color: var(--destructive);
+}
+
+.flower-host-tool-activity-approval {
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+  color: color-mix(in srgb, var(--primary) 72%, var(--foreground) 28%);
+}
+
+.flower-host-tool-activity-name {
+  min-width: 0;
+  justify-self: end;
+  overflow: hidden;
+  max-width: 14rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 54%, transparent);
+  border-radius: 9999px;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  padding: 0.12rem 0.45rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+}
+
+.flower-host-input-request-card {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 28%, var(--flower-chat-surface-border));
+  border-radius: 0.5rem;
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--warning, #f59e0b) 8%, var(--flower-chat-surface-elevated)), color-mix(in srgb, var(--flower-chat-surface-elevated) 72%, transparent));
+  box-shadow: 0 14px 30px -28px color-mix(in srgb, var(--warning, #f59e0b) 56%, transparent);
+  padding: 0.75rem;
+}
+
+.flower-host-input-request-heading {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.625rem;
+}
+
+.flower-host-input-request-icon {
+  display: flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
+  color: color-mix(in srgb, var(--warning, #f59e0b) 78%, var(--foreground) 22%);
+}
+
+.flower-host-input-request-copy {
+  min-width: 0;
+}
+
+.flower-host-input-request-title {
+  color: color-mix(in srgb, var(--foreground) 88%, var(--warning, #f59e0b) 12%);
+  font-size: 0.875rem;
+  font-weight: 780;
+  line-height: 1.35;
+}
+
+.flower-host-input-request-description {
+  margin-top: 0.15rem;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.flower-host-input-request-questions {
+  display: grid;
+  min-width: 0;
+  gap: 0.625rem;
+}
+
+.flower-host-input-request-question {
+  display: grid;
+  min-width: 0;
+  gap: 0.5rem;
+  border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 52%, transparent);
+  padding-top: 0.625rem;
+}
+
+.flower-host-input-request-question-copy {
+  min-width: 0;
+}
+
+.flower-host-input-request-question-header {
+  color: color-mix(in srgb, var(--foreground) 86%, var(--primary) 14%);
+  font-size: 0.75rem;
+  font-weight: 760;
+  letter-spacing: 0;
+  line-height: 1.35;
+}
+
+.flower-host-input-request-question-text {
+  margin-top: 0.12rem;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.flower-host-input-request-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
+  gap: 0.5rem;
+}
+
+.flower-host-input-request-choice {
+  display: flex;
+  min-width: 0;
+  min-height: 3.125rem;
+  cursor: pointer;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.18rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 64%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--flower-chat-surface) 58%, transparent);
+  color: var(--foreground);
+  padding: 0.55rem 0.625rem;
+  text-align: left;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.flower-host-input-request-choice:hover,
+.flower-host-input-request-choice:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--primary) 7%, var(--flower-chat-surface-elevated));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 8%, transparent);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.flower-host-input-request-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+  transform: none;
+}
+
+.flower-host-input-request-choice-selected,
+.flower-host-input-request-choice-selected:hover,
+.flower-host-input-request-choice-selected:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 46%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--primary) 13%, var(--flower-chat-surface-elevated));
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--primary) 9%, transparent);
+}
+
+.flower-host-input-request-choice-label {
+  min-width: 0;
+  color: color-mix(in srgb, var(--foreground) 92%, var(--primary) 8%);
+  font-size: 0.8125rem;
+  font-weight: 720;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.flower-host-input-request-choice-description {
+  min-width: 0;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.flower-host-input-request-write {
+  display: grid;
+  min-width: 0;
+  gap: 0.35rem;
+}
+
+.flower-host-input-request-write > span {
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.flower-host-input-request-text {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--flower-chat-surface) 64%, transparent);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.55;
+  outline: none;
+  padding: 0.625rem 0.7rem;
+  resize: vertical;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.flower-host-input-request-text::placeholder {
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+}
+
+.flower-host-input-request-text:focus {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 84%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.flower-host-input-request-text:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
+.flower-host-input-request-footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 50%, transparent);
+  padding-top: 0.625rem;
+}
+
+.flower-host-input-request-error {
+  display: inline-flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.4rem;
+  color: color-mix(in srgb, var(--destructive) 82%, var(--foreground) 18%);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.flower-host-input-request-error svg {
+  flex: 0 0 auto;
+}
+
+.flower-host-input-request-submit {
+  display: inline-flex;
+  min-height: 2.125rem;
+  flex: 0 0 auto;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--primary) 86%, var(--foreground) 14%);
+  color: var(--primary-foreground);
+  padding: 0.45rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 760;
+  line-height: 1;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    filter 150ms ease,
+    transform 150ms ease;
+}
+
+.flower-host-input-request-submit:hover,
+.flower-host-input-request-submit:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 48%, transparent);
+  filter: saturate(1.08);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.flower-host-input-request-submit:disabled {
+  cursor: not-allowed;
+  filter: none;
+  opacity: 0.62;
+  transform: none;
+}
+
+@container (max-width: 860px) {
+  .flower-host-tool-activity-item {
+    grid-template-columns: 1.35rem minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .flower-host-tool-activity-status,
+  .flower-host-tool-activity-approval,
+  .flower-host-tool-activity-name {
+    grid-column: 2;
+    justify-self: start;
+    max-width: 100%;
+  }
+
+  .flower-host-tool-activity-status {
+    grid-row: 2;
+  }
+
+  .flower-host-tool-activity-approval {
+    grid-row: 3;
+  }
+
+  .flower-host-tool-activity-name {
+    grid-row: 4;
+  }
+}
+
+@media (max-width: 780px) {
+  .flower-host-message-bubble,
+  .flower-host-message-bubble-user {
+    max-width: 100%;
+  }
+
+  .flower-host-tool-activity-item {
+    grid-template-columns: 1.35rem minmax(0, 1fr);
+  }
+
+  .flower-host-tool-activity-status,
+  .flower-host-tool-activity-approval,
+  .flower-host-tool-activity-name {
+    grid-column: 2;
+    justify-self: start;
+    max-width: 100%;
+  }
 }
 
 .flower-host-surface {
@@ -1486,6 +2233,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .flower-host-streaming-cursor,
   .redeven-flower-icon-spin,
   .redeven-flower-icon-breathe {
     animation: none !important;

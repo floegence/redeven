@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -78,6 +79,46 @@ func TestRunToolWriteTodos_PersistsSnapshotAndEvent(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("missing todos.updated run event")
+	}
+}
+
+func TestRunToolWriteTodos_RejectsControlSignalTodos(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	s, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if err := s.CreateThread(ctx, threadstore.Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	r := &run{
+		id:         "run_1",
+		endpointID: "env_1",
+		threadID:   "th_1",
+		threadsDB:  s,
+	}
+
+	_, err = r.toolWriteTodos(ctx, "tool_1", []TodoItem{
+		{ID: "work_1", Content: "Run focused tests", Status: TodoStatusCompleted},
+		{ID: "finish", Content: "调用 task_complete 总结结果", Status: TodoStatusInProgress},
+	}, nil, "")
+	if err == nil {
+		t.Fatalf("toolWriteTodos should reject control signal todos")
+	}
+	if !strings.Contains(err.Error(), "control signal") {
+		t.Fatalf("error=%q, want control signal guidance", err.Error())
+	}
+
+	snapshot, snapErr := s.GetThreadTodosSnapshot(ctx, "env_1", "th_1")
+	if snapErr != nil {
+		t.Fatalf("GetThreadTodosSnapshot: %v", snapErr)
+	}
+	if strings.TrimSpace(snapshot.TodosJSON) != "[]" {
+		t.Fatalf("snapshot todos_json=%q, want unchanged empty snapshot", snapshot.TodosJSON)
 	}
 }
 

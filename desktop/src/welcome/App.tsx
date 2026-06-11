@@ -74,6 +74,7 @@ import {
   type DesktopGatewaySource,
 } from '../shared/desktopGateway';
 import type {
+  DesktopFlowerHostError,
   DesktopFlowerHostRouterDecision,
 } from '../shared/flowerHostSettingsIPC';
 import type {
@@ -665,26 +666,42 @@ function passwordModeForInput(value: string, configured: boolean): DesktopLocalU
   return trimString(value) !== '' ? 'replace' : defaultLocalUIPasswordMode(configured);
 }
 
-function getErrorMessage(error: unknown): string {
+function errorLikeMessage(error: unknown): string {
   if (error instanceof Error) {
     return trimString(error.message);
   }
   if (error && typeof error === 'object') {
     const record = error as Record<string, unknown>;
     const directMessage = trimString(record.message)
-      || trimString(record.error)
       || trimString(record.detail)
-      || trimString(record.details);
+      || trimString(record.details)
+      || errorLikeMessage(record.error);
     if (directMessage !== '') {
       return directMessage;
     }
+  }
+  return trimString(error);
+}
+
+function getErrorMessage(error: unknown): string {
+  const message = errorLikeMessage(error);
+  if (message !== '') {
+    return message;
+  }
+  if (error && typeof error === 'object') {
     try {
-      return trimString(JSON.stringify(record));
+      return trimString(JSON.stringify(error));
     } catch {
       return '';
     }
   }
-  return trimString(error);
+  return '';
+}
+
+function flowerHostError(error: DesktopFlowerHostError): Error & { code?: string } {
+  const out = new Error(getErrorMessage(error) || 'Flower Host request failed.') as Error & { code?: string };
+  out.code = trimString(error.code);
+  return out;
 }
 
 function localizedStringByValue(
@@ -5854,7 +5871,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       primary_target_id: environmentFlowerPrimaryTargetID(environment),
     });
     if (!result.ok) {
-      throw new Error(result.error);
+      throw flowerHostError(result.error);
     }
     return result.decision;
   }
@@ -5884,9 +5901,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     if (!result.ok) {
       if ('fresh_decision' in result) {
         // Surface stale routing state through the existing composer validation path.
-        throw Object.assign(new Error(result.error), { fresh_decision: result.fresh_decision });
+        throw Object.assign(flowerHostError(result.error), { fresh_decision: result.fresh_decision });
       }
-      throw new Error(result.error);
+      throw flowerHostError(result.error);
     }
     setFocusedFlowerThreadID(result.thread.thread_id);
     showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
@@ -6127,7 +6144,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             adapter={createDesktopFlowerSurfaceAdapter(props.runtime.settings, {
               hostDisplayName: i18n().t('flowerSurface.host.thisHost'),
               hostSubtitle: i18n().t('flowerSurface.host.subtitle'),
-              threadSourceLabel: i18n().t('flowerSurface.host.thisHost'),
             })}
             copy={createDesktopFlowerSurfaceCopy(i18n())}
             focusThreadID={focusedFlowerThreadID()}

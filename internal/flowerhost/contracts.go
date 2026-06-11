@@ -94,6 +94,11 @@ type ProviderSecretState struct {
 	WebSearchAPIKeyConfigured bool   `json:"web_search_api_key_configured"`
 }
 
+type CarrierHealth struct {
+	State string `json:"state"`
+	Error string `json:"error,omitempty"`
+}
+
 type TargetCache struct {
 	Version int                `json:"version"`
 	Entries []TargetCacheEntry `json:"entries"`
@@ -369,24 +374,102 @@ type ChatSendRequest struct {
 }
 
 type ChatMessage struct {
-	ID          string `json:"id"`
-	Role        string `json:"role"`
-	Content     string `json:"content"`
-	CreatedAtMs int64  `json:"created_at_ms"`
+	ID          string             `json:"id"`
+	Role        string             `json:"role"`
+	Content     string             `json:"content"`
+	Status      string             `json:"status"`
+	CreatedAtMs int64              `json:"created_at_ms"`
+	Blocks      []ChatMessageBlock `json:"blocks,omitempty"`
+}
+
+type ChatMessageBlock struct {
+	Type    string `json:"type"`
+	Content string `json:"content,omitempty"`
+}
+
+type ChatRunError struct {
+	Message string `json:"message"`
+	Code    string `json:"code,omitempty"`
+}
+
+type ChatToolActivity struct {
+	RunID            string `json:"run_id,omitempty"`
+	ToolID           string `json:"tool_id"`
+	ToolName         string `json:"tool_name"`
+	Status           string `json:"status"`
+	Summary          string `json:"summary"`
+	RequiresApproval bool   `json:"requires_approval,omitempty"`
+	ApprovalState    string `json:"approval_state,omitempty"`
+	ErrorMessage     string `json:"error_message,omitempty"`
+	StartedAtMs      int64  `json:"started_at_ms,omitempty"`
+	EndedAtMs        int64  `json:"ended_at_ms,omitempty"`
+}
+
+type ChatInputRequest struct {
+	PromptID         string              `json:"prompt_id"`
+	MessageID        string              `json:"message_id"`
+	ToolID           string              `json:"tool_id"`
+	ToolName         string              `json:"tool_name"`
+	ReasonCode       string              `json:"reason_code,omitempty"`
+	RequiredFromUser []string            `json:"required_from_user,omitempty"`
+	EvidenceRefs     []string            `json:"evidence_refs,omitempty"`
+	Questions        []ChatInputQuestion `json:"questions"`
+	PublicSummary    string              `json:"public_summary,omitempty"`
+	ContainsSecret   bool                `json:"contains_secret,omitempty"`
+}
+
+type ChatInputQuestion struct {
+	ID                string            `json:"id"`
+	Header            string            `json:"header"`
+	Question          string            `json:"question"`
+	IsSecret          bool              `json:"is_secret,omitempty"`
+	ResponseMode      string            `json:"response_mode"`
+	ChoicesExhaustive *bool             `json:"choices_exhaustive,omitempty"`
+	WriteLabel        string            `json:"write_label,omitempty"`
+	WritePlaceholder  string            `json:"write_placeholder,omitempty"`
+	Choices           []ChatInputChoice `json:"choices,omitempty"`
+}
+
+type ChatInputChoice struct {
+	ChoiceID         string            `json:"choice_id"`
+	Label            string            `json:"label"`
+	Description      string            `json:"description,omitempty"`
+	Kind             string            `json:"kind"`
+	InputPlaceholder string            `json:"input_placeholder,omitempty"`
+	Actions          []ChatInputAction `json:"actions,omitempty"`
+}
+
+type ChatInputAction struct {
+	Type string `json:"type"`
+	Mode string `json:"mode,omitempty"`
+}
+
+type ChatInputAnswer struct {
+	ChoiceID string `json:"choice_id,omitempty"`
+	Text     string `json:"text,omitempty"`
+}
+
+type ChatSubmitInputRequest struct {
+	ThreadID string                     `json:"thread_id"`
+	PromptID string                     `json:"prompt_id"`
+	Answers  map[string]ChatInputAnswer `json:"answers"`
 }
 
 type ThreadSnapshot struct {
-	ThreadID     string        `json:"thread_id"`
-	Title        string        `json:"title"`
-	ModelID      string        `json:"model_id"`
-	CreatedAtMs  int64         `json:"created_at_ms"`
-	UpdatedAtMs  int64         `json:"updated_at_ms"`
-	Status       string        `json:"status,omitempty"`
-	Messages     []ChatMessage `json:"messages"`
-	HomeHostID   string        `json:"home_host_id,omitempty"`
-	HomeHostKind string        `json:"home_host_kind,omitempty"`
-	SourceLabel  string        `json:"source_label,omitempty"`
-	TargetLabels []string      `json:"target_labels,omitempty"`
+	ThreadID     string             `json:"thread_id"`
+	Title        string             `json:"title"`
+	ModelID      string             `json:"model_id"`
+	CreatedAtMs  int64              `json:"created_at_ms"`
+	UpdatedAtMs  int64              `json:"updated_at_ms"`
+	Status       string             `json:"status"`
+	Messages     []ChatMessage      `json:"messages"`
+	ToolActivity []ChatToolActivity `json:"tool_activity,omitempty"`
+	InputRequest *ChatInputRequest  `json:"input_request,omitempty"`
+	Error        *ChatRunError      `json:"error,omitempty"`
+	HomeHostID   string             `json:"home_host_id,omitempty"`
+	HomeHostKind string             `json:"home_host_kind,omitempty"`
+	SourceLabel  string             `json:"source_label"`
+	TargetLabels []string           `json:"target_labels"`
 }
 
 type ListThreadsResponse struct {
@@ -394,8 +477,12 @@ type ListThreadsResponse struct {
 }
 
 type SendChatResponse struct {
-	Thread        ThreadSnapshot       `json:"thread"`
+	Thread        *ThreadSnapshot      `json:"thread,omitempty"`
 	CreateFailure *ThreadCreateFailure `json:"create_failure,omitempty"`
+}
+
+type SubmitChatInputResponse struct {
+	Thread *ThreadSnapshot `json:"thread"`
 }
 
 type StartupReport struct {

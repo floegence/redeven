@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	flsessiontree "github.com/floegence/floret/sessiontree"
 	_ "modernc.org/sqlite"
 )
 
@@ -31,9 +32,8 @@ type Store struct {
 }
 
 const (
-	ThreadTitleSourceAuto         = "auto"
-	ThreadTitleSourceAutoFallback = "auto_fallback"
-	ThreadTitleSourceUser         = "user"
+	ThreadTitleSourceAuto = "auto"
+	ThreadTitleSourceUser = "user"
 )
 
 func Open(path string) (*Store, error) {
@@ -153,7 +153,7 @@ type QueuedTurn struct {
 }
 
 type ThreadsCursor struct {
-	UpdatedAtUnixMs int64
+	CreatedAtUnixMs int64
 	ThreadID        string
 }
 
@@ -216,10 +216,10 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 
 // EncodeCursor encodes a cursor as a URL-safe base64 string.
 func EncodeCursor(c ThreadsCursor) string {
-	if c.UpdatedAtUnixMs <= 0 || strings.TrimSpace(c.ThreadID) == "" {
+	if c.CreatedAtUnixMs <= 0 || strings.TrimSpace(c.ThreadID) == "" {
 		return ""
 	}
-	raw := fmt.Sprintf("%d:%s", c.UpdatedAtUnixMs, strings.TrimSpace(c.ThreadID))
+	raw := fmt.Sprintf("%d:%s", c.CreatedAtUnixMs, strings.TrimSpace(c.ThreadID))
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
@@ -244,7 +244,7 @@ func DecodeCursor(raw string) (ThreadsCursor, bool) {
 	if id == "" {
 		return ThreadsCursor{}, false
 	}
-	return ThreadsCursor{UpdatedAtUnixMs: ms, ThreadID: id}, true
+	return ThreadsCursor{CreatedAtUnixMs: ms, ThreadID: id}, true
 }
 
 func parseInt64(raw string) (int64, error) {
@@ -288,22 +288,13 @@ func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, c
 	}
 
 	args := []any{endpointID}
-	where := ""
-	if cursor.UpdatedAtUnixMs > 0 && strings.TrimSpace(cursor.ThreadID) != "" {
-		where = "AND (updated_at_unix_ms < ? OR (updated_at_unix_ms = ? AND thread_id < ?))"
-		args = append(args, cursor.UpdatedAtUnixMs, cursor.UpdatedAtUnixMs, strings.TrimSpace(cursor.ThreadID))
-	}
-	args = append(args, limit)
 
 	q := fmt.Sprintf(`
 SELECT
 %s
 FROM ai_threads
 WHERE endpoint_id = ?
-%s
-ORDER BY updated_at_unix_ms DESC, thread_id DESC
-LIMIT ?
-`, threadSelectColumnsSQL, where)
+`, threadSelectColumnsSQL)
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -325,9 +316,58 @@ LIMIT ?
 	if len(out) == 0 {
 		return out, "", nil
 	}
+	out = applyFloretThreadListOptions(out, flsessiontree.ListThreadsOptions{
+		Limit:          limit + 1,
+		AfterCreatedAt: unixMsTime(cursor.CreatedAtUnixMs),
+		AfterID:        cursor.ThreadID,
+	})
+	if len(out) == 0 {
+		return out, "", nil
+	}
+	hasMore := len(out) > limit
+	if hasMore {
+		out = out[:limit]
+	}
 	last := out[len(out)-1]
-	next := EncodeCursor(ThreadsCursor{UpdatedAtUnixMs: last.UpdatedAtUnixMs, ThreadID: last.ThreadID})
+	next := ""
+	if hasMore {
+		next = EncodeCursor(ThreadsCursor{CreatedAtUnixMs: last.CreatedAtUnixMs, ThreadID: last.ThreadID})
+	}
 	return out, next, nil
+}
+
+func applyFloretThreadListOptions(threads []Thread, opts flsessiontree.ListThreadsOptions) []Thread {
+	byID := make(map[string]Thread, len(threads))
+	metas := make([]flsessiontree.ThreadMeta, 0, len(threads))
+	for _, thread := range threads {
+		thread.ThreadID = strings.TrimSpace(thread.ThreadID)
+		if thread.ThreadID == "" {
+			continue
+		}
+		byID[thread.ThreadID] = thread
+		metas = append(metas, flsessiontree.ThreadMeta{
+			ID:        thread.ThreadID,
+			CreatedAt: unixMsTime(thread.CreatedAtUnixMs),
+			UpdatedAt: unixMsTime(thread.UpdatedAtUnixMs),
+		})
+	}
+	metas = flsessiontree.ApplyThreadListOptions(metas, opts)
+	out := make([]Thread, 0, len(metas))
+	for _, meta := range metas {
+		thread, ok := byID[meta.ID]
+		if !ok {
+			continue
+		}
+		out = append(out, thread)
+	}
+	return out
+}
+
+func unixMsTime(ms int64) time.Time {
+	if ms <= 0 {
+		return time.Time{}
+	}
+	return time.UnixMilli(ms).UTC()
 }
 
 func (s *Store) ListAutoThreadTitleCandidates(ctx context.Context, limit int) ([]AutoThreadTitleCandidate, error) {
@@ -433,7 +473,11 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
 	t.TitleModelID = strings.TrimSpace(t.TitleModelID)
 	t.TitlePromptVersion = strings.TrimSpace(t.TitlePromptVersion)
-	t.RunStatus = normalizeRunStatus(t.RunStatus)
+	runStatus, err := canonicalRunStatusForCreate(t.RunStatus)
+	if err != nil {
+		return err
+	}
+	t.RunStatus = runStatus
 	t.RunError = strings.TrimSpace(t.RunError)
 	t.WaitingUserInputJSON = strings.TrimSpace(t.WaitingUserInputJSON)
 	t.CreatedByUserPublicID = strings.TrimSpace(t.CreatedByUserPublicID)
@@ -456,7 +500,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.RunUpdatedAtUnixMs = 0
 	}
 
-	_, err := s.db.ExecContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 	INSERT INTO ai_threads(
 	  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
 	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
@@ -662,53 +706,9 @@ SET title = ?,
     updated_by_user_public_id = ?,
     updated_by_user_email = ?
 WHERE endpoint_id = ? AND thread_id = ?
-  AND (
-    TRIM(COALESCE(title, '')) = ''
-    OR LOWER(TRIM(COALESCE(title_source, ''))) = ?
-  )
+  AND TRIM(COALESCE(title, '')) = ''
   AND LOWER(TRIM(COALESCE(title_source, ''))) != ?
-`, title, ThreadTitleSourceAuto, generatedAtUnixMs, inputMessageID, modelID, promptVersion, generatedAtUnixMs, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID, ThreadTitleSourceAutoFallback, ThreadTitleSourceUser)
-	if err != nil {
-		return false, err
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
-}
-
-func (s *Store) SetFallbackThreadTitle(ctx context.Context, endpointID string, threadID string, title string, inputMessageID string, generatedAtUnixMs int64, updatedByID string, updatedByEmail string) (bool, error) {
-	if s == nil || s.db == nil {
-		return false, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	title = strings.TrimSpace(title)
-	inputMessageID = strings.TrimSpace(inputMessageID)
-	if endpointID == "" || threadID == "" || title == "" {
-		return false, errors.New("invalid request")
-	}
-	if len(title) > 200 {
-		return false, errors.New("title too long")
-	}
-	if generatedAtUnixMs <= 0 {
-		generatedAtUnixMs = time.Now().UnixMilli()
-	}
-	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
-SET title = ?,
-    title_source = ?,
-    title_generated_at_unix_ms = ?,
-    title_input_message_id = ?,
-    title_model_id = '',
-    title_prompt_version = '',
-    updated_at_unix_ms = ?,
-    updated_by_user_public_id = ?,
-    updated_by_user_email = ?
-WHERE endpoint_id = ? AND thread_id = ?
-  AND LOWER(TRIM(COALESCE(title_source, ''))) != ?
-`, title, ThreadTitleSourceAutoFallback, generatedAtUnixMs, inputMessageID, generatedAtUnixMs, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID, ThreadTitleSourceUser)
+`, title, ThreadTitleSourceAuto, generatedAtUnixMs, inputMessageID, modelID, promptVersion, generatedAtUnixMs, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID, ThreadTitleSourceUser)
 	if err != nil {
 		return false, err
 	}
@@ -720,8 +720,6 @@ func normalizeThreadTitleSource(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case ThreadTitleSourceAuto:
 		return ThreadTitleSourceAuto
-	case ThreadTitleSourceAutoFallback:
-		return ThreadTitleSourceAutoFallback
 	case ThreadTitleSourceUser:
 		return ThreadTitleSourceUser
 	default:
@@ -729,14 +727,28 @@ func normalizeThreadTitleSource(raw string) string {
 	}
 }
 
-func normalizeRunStatus(status string) string {
+func canonicalRunStatus(status string) (string, bool) {
 	status = strings.TrimSpace(strings.ToLower(status))
 	switch status {
 	case "idle", "accepted", "running", "waiting_approval", "recovering", "finalizing", "waiting_user", "success", "failed", "canceled", "timed_out":
-		return status
+		return status, true
 	default:
-		return "idle"
+		return "", false
 	}
+}
+
+func canonicalRunStatusForCreate(status string) (string, error) {
+	if strings.TrimSpace(status) == "" {
+		return "idle", nil
+	}
+	return canonicalRunStatusForWrite(status)
+}
+
+func canonicalRunStatusForWrite(status string) (string, error) {
+	if normalized, ok := canonicalRunStatus(status); ok {
+		return normalized, nil
+	}
+	return "", fmt.Errorf("unsupported run status %q", strings.TrimSpace(status))
 }
 
 func normalizeExecutionMode(mode string) string {
@@ -812,7 +824,10 @@ func (s *Store) UpdateThreadRunState(
 		return errors.New("invalid request")
 	}
 
-	runStatus = normalizeRunStatus(runStatus)
+	runStatus, err := canonicalRunStatusForWrite(runStatus)
+	if err != nil {
+		return err
+	}
 	runError = strings.TrimSpace(runError)
 	if runStatus != "failed" && runStatus != "timed_out" {
 		runError = ""
@@ -1962,7 +1977,11 @@ func (s *Store) UpsertRun(ctx context.Context, rec RunRecord) error {
 	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
 	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
 	rec.MessageID = strings.TrimSpace(rec.MessageID)
-	rec.State = normalizeRunStatus(rec.State)
+	state, err := canonicalRunStatusForWrite(rec.State)
+	if err != nil {
+		return err
+	}
+	rec.State = state
 	rec.ErrorCode = strings.TrimSpace(rec.ErrorCode)
 	rec.ErrorMessage = strings.TrimSpace(rec.ErrorMessage)
 	if rec.RunID == "" || rec.EndpointID == "" || rec.ThreadID == "" {
@@ -1975,7 +1994,7 @@ func (s *Store) UpsertRun(ctx context.Context, rec RunRecord) error {
 	if rec.StartedAtUnixMs <= 0 {
 		rec.StartedAtUnixMs = now
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 INSERT INTO ai_runs(
   run_id, endpoint_id, thread_id, message_id,
   state, error_code, error_message, attempt_count,

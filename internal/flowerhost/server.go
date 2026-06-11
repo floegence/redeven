@@ -57,6 +57,7 @@ func StartServer(opts ServerOptions) (*Server, error) {
 	mux.HandleFunc("/v1/threads", srv.handleThreads)
 	mux.HandleFunc("/v1/thread/", srv.handleThreadDetail)
 	mux.HandleFunc("/v1/chat/send", srv.handleSend)
+	mux.HandleFunc("/v1/chat/input", srv.handleSubmitInput)
 	srv.server = &http.Server{
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
@@ -95,7 +96,7 @@ func (s *Server) authorized(w http.ResponseWriter, r *http.Request) bool {
 	if strings.TrimSpace(r.Header.Get("authorization")) == "Bearer "+s.token {
 		return true
 	}
-	writeJSONResponse(w, http.StatusUnauthorized, map[string]any{"ok": false, "error": "unauthorized"})
+	writeErrorResponse(w, http.StatusUnauthorized, "unauthorized", "unauthorized")
 	return false
 }
 
@@ -104,17 +105,21 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodGet {
-		writeJSONResponse(w, http.StatusMethodNotAllowed, map[string]any{"ok": false, "error": "method not allowed"})
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	snapshot, _ := s.service.LoadSettings(r.Context())
+	carrier := s.service.CarrierHealth(r.Context())
+	status := map[string]any{
+		"presence":    s.service.router.Presence(),
+		"configured":  snapshot.Config.Enabled && len(snapshot.Config.Providers) > 0,
+		"model_count": countModels(snapshot.Config),
+		"carrier":     carrier,
+	}
 	writeJSONResponse(w, http.StatusOK, map[string]any{
-		"ok": true,
-		"status": map[string]any{
-			"presence":    s.service.router.Presence(),
-			"configured":  snapshot.Config.Enabled && len(snapshot.Config.Providers) > 0,
-			"model_count": countModels(snapshot.Config),
-		},
+		"ok":     true,
+		"data":   status,
+		"status": status,
 	})
 }
 
@@ -129,13 +134,13 @@ func (s *Server) handleSettings(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		var draft SettingsDraft
 		if err := json.NewDecoder(r.Body).Decode(&draft); err != nil {
-			writeJSONResponse(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+			writeErrorResponse(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
 		snapshot, err := s.service.SaveSettings(r.Context(), draft)
 		writeResult(w, snapshot, err)
 	default:
-		writeJSONResponse(w, http.StatusMethodNotAllowed, map[string]any{"ok": false, "error": "method not allowed"})
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	}
 }
 
@@ -144,12 +149,12 @@ func (s *Server) handleResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		writeJSONResponse(w, http.StatusMethodNotAllowed, map[string]any{"ok": false, "error": "method not allowed"})
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	var req ResolveRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONResponse(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		writeErrorResponse(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	decision, err := s.service.Resolve(r.Context(), req)
@@ -161,12 +166,12 @@ func (s *Server) handleSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		writeJSONResponse(w, http.StatusMethodNotAllowed, map[string]any{"ok": false, "error": "method not allowed"})
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	var req HandlerSwitchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONResponse(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		writeErrorResponse(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	decision, err := s.service.SwitchHandler(r.Context(), req)
@@ -178,7 +183,7 @@ func (s *Server) handleThreads(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodGet {
-		writeJSONResponse(w, http.StatusMethodNotAllowed, map[string]any{"ok": false, "error": "method not allowed"})
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	threads, err := s.service.ListThreads(r.Context())
@@ -190,12 +195,12 @@ func (s *Server) handleThreadDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodGet {
-		writeJSONResponse(w, http.StatusMethodNotAllowed, map[string]any{"ok": false, "error": "method not allowed"})
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	threadID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/v1/thread/"))
 	if threadID == "" || strings.Contains(threadID, "/") {
-		writeJSONResponse(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "missing thread id"})
+		writeErrorResponse(w, http.StatusBadRequest, "missing_thread_id", "missing thread id")
 		return
 	}
 	thread, err := s.service.GetThread(r.Context(), threadID)
@@ -207,24 +212,66 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.Method != http.MethodPost {
-		writeJSONResponse(w, http.StatusMethodNotAllowed, map[string]any{"ok": false, "error": "method not allowed"})
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 		return
 	}
 	var req ChatSendRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONResponse(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		writeErrorResponse(w, http.StatusBadRequest, "invalid_request", err.Error())
 		return
 	}
 	result, err := s.service.SendChat(r.Context(), req)
 	writeResult(w, result, err)
 }
 
+func (s *Server) handleSubmitInput(w http.ResponseWriter, r *http.Request) {
+	if !s.authorized(w, r) {
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	var req ChatSubmitInputRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErrorResponse(w, http.StatusBadRequest, "invalid_request", err.Error())
+		return
+	}
+	result, err := s.service.SubmitInput(r.Context(), req)
+	writeResult(w, result, err)
+}
+
 func writeResult(w http.ResponseWriter, value any, err error) {
 	if err != nil {
-		writeJSONResponse(w, http.StatusBadRequest, map[string]any{"ok": false, "error": err.Error()})
+		status := http.StatusBadRequest
+		code := "flower_host_error"
+		var coded codedServiceError
+		if errors.As(err, &coded) {
+			status = coded.HTTPStatus()
+			code = coded.ErrorCode()
+		}
+		writeErrorResponse(w, status, code, err.Error())
 		return
 	}
 	writeJSONResponse(w, http.StatusOK, map[string]any{"ok": true, "data": value})
+}
+
+func writeErrorResponse(w http.ResponseWriter, status int, code string, message string) {
+	code = strings.TrimSpace(code)
+	if code == "" {
+		code = "flower_host_error"
+	}
+	message = strings.TrimSpace(message)
+	if message == "" {
+		message = "Flower Host request failed."
+	}
+	writeJSONResponse(w, status, map[string]any{
+		"ok": false,
+		"error": map[string]any{
+			"code":    code,
+			"message": message,
+		},
+	})
 }
 
 func writeJSONResponse(w http.ResponseWriter, status int, value any) {

@@ -1,6 +1,9 @@
 package flowerhost
 
-import "testing"
+import (
+	"encoding/json"
+	"testing"
+)
 
 func testIdentity() HostIdentity {
 	return HostIdentity{
@@ -34,6 +37,40 @@ func TestRouterResolveSelectsVisibleGlobalHandler(t *testing.T) {
 	}
 	if decision.DecisionScope.ContextEnvelopeID != nil || decision.DecisionScope.PrimaryTargetID != nil {
 		t.Fatalf("plain new chat scope should not inherit context: %#v", decision.DecisionScope)
+	}
+	raw, err := json.Marshal(decision)
+	if err != nil {
+		t.Fatalf("Marshal decision: %v", err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		t.Fatalf("Unmarshal decision: %v", err)
+	}
+	selected, ok := payload["selected_handler"].(map[string]any)
+	if !ok {
+		t.Fatalf("selected_handler=%#v, want object", payload["selected_handler"])
+	}
+	assertJSONEmptyArray(t, selected, "selected_handler.allowed_target_ids", "allowed_target_ids")
+	available, ok := payload["available_handlers"].([]any)
+	if !ok || len(available) != 1 {
+		t.Fatalf("available_handlers=%#v, want one handler", payload["available_handlers"])
+	}
+	availableHandler, ok := available[0].(map[string]any)
+	if !ok {
+		t.Fatalf("available_handlers[0]=%#v, want object", available[0])
+	}
+	assertJSONEmptyArray(t, availableHandler, "available_handlers[0].allowed_target_ids", "allowed_target_ids")
+}
+
+func assertJSONEmptyArray(t *testing.T, record map[string]any, label string, field string) {
+	t.Helper()
+	value, ok := record[field]
+	if !ok {
+		t.Fatalf("%s missing, want explicit empty array", label)
+	}
+	values, ok := value.([]any)
+	if !ok || values == nil || len(values) != 0 {
+		t.Fatalf("%s=%#v, want explicit empty array", label, value)
 	}
 }
 

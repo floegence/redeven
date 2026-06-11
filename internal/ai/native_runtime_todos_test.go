@@ -49,6 +49,45 @@ func TestExtractWriteTodosState_EmptyTodosSnapshot(t *testing.T) {
 	}
 }
 
+func TestExtractWriteTodosState_IgnoresControlSignalTodosForCompletionGate(t *testing.T) {
+	t.Parallel()
+
+	total, open, inProgress, version, ok := extractWriteTodosState(map[string]any{
+		"version": 8,
+		"summary": map[string]any{
+			"total":       2,
+			"pending":     0,
+			"in_progress": 1,
+			"completed":   1,
+			"cancelled":   0,
+		},
+		"todos": []TodoItem{
+			{ID: "work", Content: "Verify generated files", Status: TodoStatusCompleted},
+			{ID: "finish", Content: "调用 task_complete 总结验收结果", Status: TodoStatusInProgress},
+		},
+	})
+	if !ok {
+		t.Fatalf("expected valid write_todos payload")
+	}
+	if total != 2 || open != 0 || inProgress != 0 || version != 8 {
+		t.Fatalf("unexpected actionable todo state total=%d open=%d in_progress=%d version=%d", total, open, inProgress, version)
+	}
+}
+
+func TestActionableTodoSummary_IgnoresControlSignalTodos(t *testing.T) {
+	t.Parallel()
+
+	summary := actionableTodoSummary([]TodoItem{
+		{ID: "work_1", Content: "Run focused tests", Status: TodoStatusCompleted},
+		{ID: "finish", Content: "finish with task_complete", Status: TodoStatusInProgress},
+		{ID: "question", Content: "ask_user for approval", Status: TodoStatusPending},
+	})
+
+	if summary.Total != 1 || summary.Pending != 0 || summary.InProgress != 0 || summary.Completed != 1 {
+		t.Fatalf("summary=%+v, want only actionable work counted", summary)
+	}
+}
+
 func TestUpdateTodoRuntimeState(t *testing.T) {
 	t.Parallel()
 

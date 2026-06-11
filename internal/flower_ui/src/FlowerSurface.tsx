@@ -1,19 +1,25 @@
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { ChevronDown, GripVertical, Send, Settings } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Check, ChevronDown, Clock, GripVertical, Send, Settings, Terminal, Zap } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
 import type { FlowerSurfaceCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
 import type {
+  FlowerInputAnswer,
+  FlowerInputRequest,
+  FlowerInputRequestChoice,
+  FlowerInputRequestQuestion,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
   FlowerSendMessageFailure,
   FlowerRouterDecision,
   FlowerThreadSnapshot,
+  FlowerChatMessage,
+  FlowerToolActivity,
 } from './contracts/flowerSurfaceContracts';
 import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import { FlowerIcon } from './icons/FlowerIcon';
@@ -22,6 +28,10 @@ import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
 import { FlowerThreadList } from './threads/FlowerThreadList';
 
 type FlowerSurfacePanel = 'chat' | 'settings';
+type FlowerInputDraft = Readonly<{
+  choice_id?: string;
+  text?: string;
+}>;
 
 const THREAD_RAIL_WIDTH_STORAGE_KEY = 'redeven.flower.threadRailWidth';
 const THREAD_RAIL_WIDTH_DEFAULT = 272;
@@ -63,6 +73,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [selectedThreadID, setSelectedThreadID] = createSignal('');
   const [chatDraft, setChatDraft] = createSignal('');
   const [chatSubmitError, setChatSubmitError] = createSignal('');
+  const [inputDrafts, setInputDrafts] = createSignal<Record<string, FlowerInputDraft>>({});
+  const [inputSubmitError, setInputSubmitError] = createSignal('');
+  const [inputSubmitting, setInputSubmitting] = createSignal(false);
   const [chatRunning, setChatRunning] = createSignal(false);
   const [settingsSaving, setSettingsSaving] = createSignal(false);
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
@@ -73,14 +86,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [handlerLoading, setHandlerLoading] = createSignal(false);
   const [handlerError, setHandlerError] = createSignal('');
   const [threadLoadError, setThreadLoadError] = createSignal('');
+  const [loadingThreadID, setLoadingThreadID] = createSignal('');
   const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
   const [threadRailResizing, setThreadRailResizing] = createSignal(false);
   let threadLoadSequence = 0;
   let lastFocusedThreadID = '';
+  let lastInputPromptSignature = '';
   let composerRef: HTMLTextAreaElement | undefined;
+  let transcriptRef: HTMLDivElement | undefined;
+  let transcriptNearBottom = true;
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
   const selectedThreadRunning = createMemo(() => selectedThread()?.status === 'running');
+  const selectedInputRequest = createMemo(() => selectedThread()?.input_request ?? null);
+  const selectedThreadHasContent = createMemo(() => {
+    const thread = selectedThread();
+    if (!thread) return false;
+    return thread.messages.length > 0
+      || (thread.tool_activity?.length ?? 0) > 0
+      || !!thread.input_request
+      || trimString(thread.error?.message) !== '';
+  });
+  const selectedThreadLoading = createMemo(() => trimString(loadingThreadID()) !== '' && loadingThreadID() === selectedThreadID());
+  const selectedThreadRunErrorMessage = createMemo(() => trimString(selectedThread()?.error?.message));
   const threadItems = createMemo(() => threads().map(projectFlowerThreadListItem));
   const currentModelID = createMemo(() => trimString(snapshot()?.config.current_model_id));
   const activeProvider = createMemo(() => {
@@ -147,8 +175,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const upsertThread = (thread: FlowerThreadSnapshot) => {
-    setThreads((current) => [thread, ...current.filter((item) => item.thread_id !== thread.thread_id)]);
+    setThreads((current) => {
+      const existingIndex = current.findIndex((item) => item.thread_id === thread.thread_id);
+      if (existingIndex < 0) {
+        return [thread, ...current];
+      }
+      const next = [...current];
+      next[existingIndex] = thread;
+      return next;
+    });
   };
+
+  const threadHasLoadedDetail = (thread: FlowerThreadSnapshot): boolean => (
+    thread.messages.length > 0 || thread.tool_activity !== undefined || thread.input_request !== undefined || thread.error !== undefined
+  );
+
+  const mergeThreadListSummary = (
+    summary: FlowerThreadSnapshot,
+    existing: FlowerThreadSnapshot,
+  ): FlowerThreadSnapshot => ({
+    ...summary,
+    messages: existing.messages,
+    ...(existing.tool_activity !== undefined ? { tool_activity: existing.tool_activity } : {}),
+    ...(existing.input_request !== undefined ? { input_request: existing.input_request } : {}),
+    ...(existing.error !== undefined ? { error: existing.error } : {}),
+  });
 
   const mergeThreadListRefresh = (
     current: readonly FlowerThreadSnapshot[],
@@ -158,10 +209,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return next.map((thread) => {
       const existing = byID.get(thread.thread_id);
       if (!existing) return thread;
-      return {
-        ...thread,
-        messages: thread.messages.length > 0 ? thread.messages : existing.messages,
-      };
+      const listSummaryOnly = thread.messages.length === 0
+        && thread.tool_activity === undefined
+        && thread.input_request === undefined
+        && thread.error === undefined;
+      if (listSummaryOnly && threadHasLoadedDetail(existing)) {
+        return mergeThreadListSummary(thread, existing);
+      }
+      return thread;
     });
   };
 
@@ -169,18 +224,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const tid = trimString(threadID);
     if (!tid) return;
     const sequence = ++threadLoadSequence;
+    transcriptNearBottom = true;
     setSelectedThreadID(tid);
     setChatSubmitError('');
+    setInputSubmitError('');
     setThreadLoadError('');
     returnToChat();
     if (!props.adapter.loadThread) return;
+    setLoadingThreadID(tid);
     try {
       const thread = await props.adapter.loadThread(tid);
       if (sequence !== threadLoadSequence) return;
       upsertThread(thread);
       setSelectedThreadID(thread.thread_id);
+      setLoadingThreadID('');
     } catch (error) {
       if (sequence !== threadLoadSequence) return;
+      setLoadingThreadID('');
       setThreadLoadError(getErrorMessage(error));
     }
   };
@@ -198,10 +258,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const refreshThreads = async () => {
+  const refreshThreads = async (): Promise<boolean> => {
     setThreadsRefreshing(true);
     try {
       const next = await props.adapter.listThreads();
+      setLoadError('');
+      const selectedID = selectedThreadID();
+      const previousSelected = threads().find((thread) => thread.thread_id === selectedID) ?? null;
+      const selectedSummary = next.find((thread) => thread.thread_id === selectedID) ?? null;
       setThreads((current) => mergeThreadListRefresh(current, next));
       const focusedThreadID = trimString(props.focusThreadID);
       setSelectedThreadID((current) => {
@@ -210,6 +274,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         return current && !next.some((thread) => thread.thread_id === current) ? '' : current;
       });
+      if (
+        selectedID
+        && props.adapter.loadThread
+        && previousSelected
+        && selectedSummary
+        && (previousSelected.updated_at_ms !== selectedSummary.updated_at_ms || previousSelected.status !== selectedSummary.status)
+      ) {
+        void refreshSelectedThread(selectedID);
+      }
+      return true;
+    } catch (error) {
+      setLoadError(getErrorMessage(error));
+      return false;
     } finally {
       setThreadsRefreshing(false);
     }
@@ -266,6 +343,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     onCleanup(() => window.clearInterval(timer));
   });
 
+  createEffect(() => {
+    const promptID = selectedInputRequest()?.prompt_id ?? '';
+    const signature = promptID ? `${selectedThreadID()}:${promptID}` : '';
+    if (signature === lastInputPromptSignature) {
+      return;
+    }
+    lastInputPromptSignature = signature;
+    setInputDrafts({});
+    setInputSubmitError('');
+  });
+
   const saveSettings = async (draft: FlowerSettingsDraft) => {
     setSaveError('');
     setSettingsSaving(true);
@@ -295,6 +383,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const submitChat = async () => {
     const prompt = trimString(composerRef?.value ?? chatDraft());
     setChatSubmitError('');
+    if (selectedInputRequest()) {
+      setChatSubmitError(chatCopyValue('inputRequestComposerPlaceholder', 'Answer the prompt above to continue this conversation.'));
+      return;
+    }
     if (!snapshot()) {
       setChatSubmitError(copy().chat.loadingSettings);
       return;
@@ -321,6 +413,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
       upsertThread(thread);
       setSelectedThreadID(thread.thread_id);
+      setLoadError('');
       setChatDraft('');
       if (composerRef) {
         composerRef.value = '';
@@ -341,9 +434,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const startCompose = () => {
     threadLoadSequence += 1;
+    transcriptNearBottom = true;
     setSelectedThreadID('');
     setChatDraft('');
     setChatSubmitError('');
+    setInputDrafts({});
+    setInputSubmitError('');
     setThreadLoadError('');
     void resolveHandlerDecision();
     returnToChat();
@@ -380,8 +476,69 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const selectThread = (threadID: string) => {
+    transcriptNearBottom = true;
     void loadAndSelectThread(threadID);
   };
+
+  const transcriptIsNearBottom = (): boolean => {
+    const node = transcriptRef;
+    if (!node) return true;
+    return node.scrollHeight - node.scrollTop - node.clientHeight <= 96;
+  };
+
+  const updateTranscriptNearBottom = () => {
+    transcriptNearBottom = transcriptIsNearBottom();
+  };
+
+  const scrollTranscriptToBottom = () => {
+    const node = transcriptRef;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+    transcriptNearBottom = true;
+  };
+
+  const transcriptRenderSignature = createMemo(() => {
+    const thread = selectedThread();
+    if (!thread) return `${selectedThreadID()}:empty`;
+    return [
+      thread.thread_id,
+      thread.status,
+      thread.updated_at_ms,
+      thread.messages.map((message) => [
+        message.id,
+        message.status,
+        message.content,
+        message.blocks?.map((block) => `${block.type}:${block.content ?? ''}`).join('|') ?? '',
+      ].join('\x1e')).join('\x1d'),
+      thread.tool_activity?.map((item) => [
+        item.tool_id,
+        item.status,
+        item.summary,
+        item.error_message ?? '',
+        item.approval_state ?? '',
+      ].join('\x1e')).join('\x1d') ?? '',
+      thread.input_request
+        ? [
+            thread.input_request.prompt_id,
+            thread.input_request.questions.map((question) => [
+              question.id,
+              question.header,
+              question.question,
+              question.response_mode,
+              question.choices?.map((choice) => `${choice.choice_id}:${choice.label}:${choice.kind}`).join('|') ?? '',
+            ].join('\x1e')).join('\x1d'),
+          ].join('\x1e')
+        : '',
+      thread.error?.message ?? '',
+    ].join('\x1f');
+  });
+
+  createEffect(() => {
+    transcriptRenderSignature();
+    if (transcriptNearBottom) {
+      queueMicrotask(scrollTranscriptToBottom);
+    }
+  });
 
   const shouldSubmitOnEnterKeydown = (event: KeyboardEvent): boolean => {
     if (event.isComposing || isComposing()) {
@@ -390,17 +547,366 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return event.key === 'Enter' && !event.shiftKey;
   };
 
-  const messageBubble = (message: FlowerThreadSnapshot['messages'][number]) => (
-    <div class={cn('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}>
-      <div class={cn(
-        'max-w-[78%] whitespace-pre-wrap rounded-xl px-3 py-2 text-sm leading-6 shadow-sm',
-        message.role === 'user'
-          ? 'bg-primary text-primary-foreground'
-          : 'border border-border/60 bg-card/70 text-foreground',
-      )}>
-        {message.content}
+  const errorNotice = (title: string, message: string) => (
+    <div role="alert" class="flower-host-error-card">
+      <div class="flower-host-error-icon"><AlertTriangle class="h-4 w-4" /></div>
+      <div class="flower-host-error-copy">
+        <div class="flower-host-error-title">{title}</div>
+        <div class="flower-host-error-message">{message}</div>
       </div>
     </div>
+  );
+
+  const chatCopyValue = (
+    key: 'inputRequestTitle'
+      | 'inputRequestDescription'
+      | 'inputRequestSubmit'
+      | 'inputRequestRetry'
+      | 'inputRequestAnswerRequired'
+      | 'inputRequestSubmitting'
+      | 'inputRequestComposerPlaceholder',
+    fallback: string,
+  ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
+
+  const streamingCursor = () => <span class="flower-host-streaming-cursor" aria-hidden="true" />;
+
+  const questionMode = (question: FlowerInputRequestQuestion): NonNullable<FlowerInputRequestQuestion['response_mode']> => {
+    return question.response_mode;
+  };
+
+  const questionDraft = (questionID: string): FlowerInputDraft => inputDrafts()[questionID] ?? {};
+
+  const setQuestionDraft = (questionID: string, next: FlowerInputDraft) => {
+    setInputDrafts((current) => ({
+      ...current,
+      [questionID]: {
+        ...(trimString(next.choice_id) ? { choice_id: trimString(next.choice_id) } : {}),
+        ...(next.text !== undefined ? { text: next.text } : {}),
+      },
+    }));
+    setInputSubmitError('');
+  };
+
+  const selectedChoiceForQuestion = (question: FlowerInputRequestQuestion): FlowerInputRequestChoice | null => {
+    const selectedChoiceID = trimString(questionDraft(question.id).choice_id);
+    if (!selectedChoiceID) return null;
+    return question.choices?.find((choice) => choice.choice_id === selectedChoiceID) ?? null;
+  };
+
+  const selectInputChoice = (question: FlowerInputRequestQuestion, choice: FlowerInputRequestChoice) => {
+    const current = questionDraft(question.id);
+    setQuestionDraft(question.id, {
+      choice_id: choice.choice_id,
+      ...(choice.kind === 'write' && trimString(current.text) ? { text: current.text } : {}),
+    });
+  };
+
+  const updateInputText = (question: FlowerInputRequestQuestion, text: string) => {
+    const current = questionDraft(question.id);
+    const selectedChoice = selectedChoiceForQuestion(question);
+    const shouldKeepChoice = selectedChoice?.kind === 'write' || questionMode(question) === 'select';
+    setQuestionDraft(question.id, {
+      ...(shouldKeepChoice && current.choice_id ? { choice_id: current.choice_id } : {}),
+      text,
+    });
+  };
+
+  const questionAnswer = (question: FlowerInputRequestQuestion): FlowerInputAnswer | null => {
+    const draft = questionDraft(question.id);
+    const choiceID = trimString(draft.choice_id);
+    const text = trimString(draft.text);
+    const mode = questionMode(question);
+    const selectedChoice = selectedChoiceForQuestion(question);
+    if (mode === 'write') {
+      return text ? { text } : null;
+    }
+    if (choiceID) {
+      if (selectedChoice?.kind === 'write' && !text) {
+        return null;
+      }
+      return {
+        choice_id: choiceID,
+        ...(text ? { text } : {}),
+      };
+    }
+    if (mode === 'select_or_write' && text) {
+      return { text };
+    }
+    return null;
+  };
+
+  const inputRequestAnswers = (): Record<string, FlowerInputAnswer> | null => {
+    const request = selectedInputRequest();
+    if (!request) return null;
+    const answers: Record<string, FlowerInputAnswer> = {};
+    for (const question of request.questions) {
+      const answer = questionAnswer(question);
+      if (!answer) {
+        return null;
+      }
+      answers[question.id] = answer;
+    }
+    return answers;
+  };
+
+  const submitInputRequest = async () => {
+    const thread = selectedThread();
+    const request = selectedInputRequest();
+    if (!thread || !request) return;
+    const answers = inputRequestAnswers();
+    if (!answers) {
+      setInputSubmitError(chatCopyValue('inputRequestAnswerRequired', 'Answer every question before continuing.'));
+      return;
+    }
+    setInputSubmitting(true);
+    setInputSubmitError('');
+    try {
+      const next = await props.adapter.submitInput({
+        thread_id: thread.thread_id,
+        prompt_id: request.prompt_id,
+        answers,
+      });
+      upsertThread(next);
+      setSelectedThreadID(next.thread_id);
+      setInputDrafts({});
+      setInputSubmitError('');
+      await refreshSelectedThread(next.thread_id);
+    } catch (error) {
+      setInputSubmitError(getErrorMessage(error));
+    } finally {
+      setInputSubmitting(false);
+    }
+  };
+
+  const inputTextControl = (question: FlowerInputRequestQuestion) => {
+    const selectedChoice = () => selectedChoiceForQuestion(question);
+    const placeholder = () => selectedChoice()?.input_placeholder
+      || question.write_placeholder
+      || chatCopyValue('inputRequestComposerPlaceholder', 'Answer the prompt above to continue this conversation.');
+    const value = () => questionDraft(question.id).text ?? '';
+    return (
+      <label class="flower-host-input-request-write">
+        <span>{question.write_label || selectedChoice()?.label || question.header}</span>
+        <Show
+          when={question.is_secret}
+          fallback={(
+            <textarea
+              class="flower-host-input-request-text"
+              value={value()}
+              placeholder={placeholder()}
+              disabled={inputSubmitting()}
+              rows={3}
+              onInput={(event) => updateInputText(question, event.currentTarget.value)}
+            />
+          )}
+        >
+          <input
+            class="flower-host-input-request-text"
+            type="password"
+            value={value()}
+            placeholder={placeholder()}
+            disabled={inputSubmitting()}
+            onInput={(event) => updateInputText(question, event.currentTarget.value)}
+          />
+        </Show>
+      </label>
+    );
+  };
+
+  const inputRequestCard = (request: FlowerInputRequest | null | undefined) => (
+    <Show when={request}>
+      {(inputRequest) => (
+        <section class="flower-host-input-request-card" data-flower-input-request-card aria-label={chatCopyValue('inputRequestTitle', 'Flower needs your input')}>
+          <div class="flower-host-input-request-heading">
+            <div class="flower-host-input-request-icon"><Clock class="h-4 w-4" /></div>
+            <div class="flower-host-input-request-copy">
+              <div class="flower-host-input-request-title">{chatCopyValue('inputRequestTitle', 'Flower needs your input')}</div>
+              <div class="flower-host-input-request-description">
+                {inputRequest().public_summary || chatCopyValue('inputRequestDescription', 'Answer this structured prompt so Flower can continue the same run.')}
+              </div>
+            </div>
+          </div>
+          <div class="flower-host-input-request-questions">
+            <For each={inputRequest().questions}>
+              {(question) => {
+                const mode = () => questionMode(question);
+                const selectedChoiceID = () => trimString(questionDraft(question.id).choice_id);
+                const showWriteInput = () => mode() === 'write' || mode() === 'select_or_write' || selectedChoiceForQuestion(question)?.kind === 'write';
+                return (
+                  <div class="flower-host-input-request-question">
+                    <div class="flower-host-input-request-question-copy">
+                      <div class="flower-host-input-request-question-header">{question.header}</div>
+                      <div class="flower-host-input-request-question-text">{question.question}</div>
+                    </div>
+                    <Show when={(question.choices?.length ?? 0) > 0}>
+                      <div class="flower-host-input-request-choice-grid">
+                        <For each={question.choices ?? []}>
+                          {(choice) => (
+                            <button
+                              type="button"
+                              class={cn(
+                                'flower-host-input-request-choice',
+                                selectedChoiceID() === choice.choice_id && 'flower-host-input-request-choice-selected',
+                              )}
+                              aria-pressed={selectedChoiceID() === choice.choice_id}
+                              disabled={inputSubmitting()}
+                              onClick={() => selectInputChoice(question, choice)}
+                            >
+                              <span class="flower-host-input-request-choice-label">{choice.label}</span>
+                              <Show when={choice.description}>
+                                {(description) => <span class="flower-host-input-request-choice-description">{description()}</span>}
+                              </Show>
+                            </button>
+                          )}
+                        </For>
+                      </div>
+                    </Show>
+                    <Show when={showWriteInput()}>
+                      {inputTextControl(question)}
+                    </Show>
+                  </div>
+                );
+              }}
+            </For>
+          </div>
+          <div class="flower-host-input-request-footer">
+            <Show when={inputSubmitError()}>
+              {(message) => (
+                <div role="alert" class="flower-host-input-request-error">
+                  <AlertTriangle class="h-3.5 w-3.5" />
+                  <span>{message()}</span>
+                </div>
+              )}
+            </Show>
+            <button
+              type="button"
+              class="flower-host-input-request-submit"
+              disabled={inputSubmitting()}
+              onClick={() => void submitInputRequest()}
+            >
+              {inputSubmitting()
+                ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
+                : inputSubmitError()
+                  ? chatCopyValue('inputRequestRetry', 'Retry')
+                  : chatCopyValue('inputRequestSubmit', 'Continue')}
+            </button>
+          </div>
+        </section>
+      )}
+    </Show>
+  );
+
+  const messageText = (message: FlowerChatMessage): string => {
+    const blocks = message.blocks?.filter((block) => block.type === 'markdown' || block.type === 'text') ?? [];
+    const text = blocks.map((block) => trimString(block.content)).filter(Boolean).join('\n\n');
+    return trimString(message.content) || trimString(text);
+  };
+
+  const messageBubble = (message: FlowerChatMessage) => {
+    const streaming = message.status === 'streaming';
+    const failed = message.status === 'error';
+    const text = messageText(message);
+    if (failed && !text && !streaming && selectedThreadRunErrorMessage()) {
+      return null;
+    }
+    const visibleText = text || (failed ? copy().chat.messageErrorFallback : '');
+    return (
+      <div
+        class={cn('flower-host-message-row', message.role === 'user' ? 'flower-host-message-row-user' : 'flower-host-message-row-assistant')}
+        data-flower-message-id={message.id}
+        data-flower-message-role={message.role}
+        data-flower-message-status={message.status}
+      >
+        <div class={cn(
+          'flower-host-message-bubble',
+          message.role === 'user'
+            ? 'flower-host-message-bubble-user'
+            : 'flower-host-message-bubble-assistant',
+          streaming && 'flower-host-message-bubble-streaming',
+          failed && 'flower-host-message-bubble-error',
+        )}>
+          <Show when={failed}>
+            <div class="flower-host-message-error-kicker">
+              <AlertTriangle class="h-3.5 w-3.5" />
+              <span>{copy().chat.messageErrorTitle}</span>
+            </div>
+          </Show>
+          <Show when={visibleText} fallback={<Show when={streaming}><span class="flower-host-message-placeholder"> </span>{streamingCursor()}</Show>}>
+            <span>{visibleText}</span>
+            <Show when={streaming}>{streamingCursor()}</Show>
+          </Show>
+        </div>
+      </div>
+    );
+  };
+
+  const toolStatusIcon = (item: FlowerToolActivity) => {
+    switch (item.status) {
+      case 'success':
+        return <Check class="h-3.5 w-3.5" />;
+      case 'error':
+      case 'canceled':
+        return <AlertTriangle class="h-3.5 w-3.5" />;
+      case 'waiting':
+      case 'pending':
+        return <Clock class="h-3.5 w-3.5" />;
+      case 'running':
+        return <Terminal class="h-3.5 w-3.5" />;
+    }
+  };
+
+  const toolApprovalText = (item: FlowerToolActivity): string => {
+    const state = trimString(item.approval_state);
+    if (state) return copy().chat.toolApprovalState(state);
+    return item.requires_approval ? copy().chat.toolApprovalRequired : '';
+  };
+
+  const toolActivityAriaLabel = (item: FlowerToolActivity): string => {
+    const parts = [
+      item.summary,
+      item.tool_name,
+      copy().chat.toolStatuses[item.status],
+      toolApprovalText(item),
+      trimString(item.error_message),
+    ].filter(Boolean);
+    return parts.join('. ');
+  };
+
+  const toolActivity = (items: readonly FlowerToolActivity[] | undefined) => (
+    <Show when={(items?.length ?? 0) > 0}>
+      <section class="flower-host-tool-activity" aria-label={copy().chat.toolActivityLabel}>
+        <div class="flower-host-tool-activity-heading">
+          <Zap class="h-3.5 w-3.5" />
+          <span>{copy().chat.toolActivityLabel}</span>
+        </div>
+        <div class="flower-host-tool-activity-list" role="list">
+          <For each={items ?? []}>
+            {(item) => (
+              <div
+                class={cn('flower-host-tool-activity-item', `flower-host-tool-activity-item-${item.status}`)}
+                role="listitem"
+                aria-label={toolActivityAriaLabel(item)}
+              >
+                <span class="flower-host-tool-activity-icon">{toolStatusIcon(item)}</span>
+                <span class="flower-host-tool-activity-main">
+                  <span class="flower-host-tool-activity-summary">{item.summary}</span>
+                  <Show when={item.error_message}>
+                    <span class="flower-host-tool-activity-error">{item.error_message}</span>
+                  </Show>
+                </span>
+                <span class={cn('flower-host-tool-activity-status', `flower-host-tool-activity-status-${item.status}`)}>
+                  {copy().chat.toolStatuses[item.status]}
+                </span>
+                <Show when={toolApprovalText(item)}>
+                  {(approval) => <span class="flower-host-tool-activity-approval">{approval()}</span>}
+                </Show>
+                <span class="flower-host-tool-activity-name">{item.tool_name}</span>
+              </div>
+            )}
+          </For>
+        </div>
+      </section>
+    </Show>
   );
 
   const setupGuide = () => (
@@ -414,6 +920,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <Settings class="h-4 w-4" />
         <span>{copy().chat.openSettings}</span>
       </button>
+    </div>
+  );
+
+  const threadLoadingState = () => (
+    <div class="flower-host-thread-loading" role="status" aria-live="polite">
+      <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-10 w-10 redeven-flower-icon-breathe" iconClass="redeven-flower-icon-spin" />
+      <div class="flower-host-thread-loading-copy">
+        <div class="flower-host-thread-loading-title">{copy().chat.threadLoading}</div>
+        <div class="flower-host-thread-loading-line" />
+        <div class="flower-host-thread-loading-line flower-host-thread-loading-line-short" />
+      </div>
     </div>
   );
 
@@ -439,27 +956,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       </div>
       <div class="flower-host-chat-main flower-chat-main">
-        <div class="flower-host-chat-transcript flower-chat-transcript">
-          <Show when={loadError()}>
-            <div role="alert" class="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-              {loadError()}
-            </div>
-          </Show>
-          <Show when={threadLoadError()}>
-            <div role="alert" class="mb-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-              {threadLoadError()}
-            </div>
-          </Show>
-          <Show
-            when={selectedThread()?.messages.length}
-            fallback={needsSetup()
-              ? setupGuide()
-              : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => setChatDraft(prompt)} />}
-          >
-            <div class="mx-auto flex max-w-3xl flex-col gap-3">
+        <div ref={transcriptRef} class="flower-host-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom}>
+          <div class="flower-host-transcript-stack">
+            <Show when={loadError()}>
+              {(message) => errorNotice(copy().chat.loadErrorTitle, message())}
+            </Show>
+            <Show when={threadLoadError()}>
+              {(message) => errorNotice(copy().chat.threadLoadErrorTitle, message())}
+            </Show>
+            <Show
+              when={selectedThreadHasContent()}
+              fallback={selectedThreadLoading()
+                ? threadLoadingState()
+                : needsSetup()
+                  ? setupGuide()
+                  : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => setChatDraft(prompt)} />}
+            >
               <For each={selectedThread()?.messages ?? []}>{messageBubble}</For>
-            </div>
-          </Show>
+              {toolActivity(selectedThread()?.tool_activity)}
+              {inputRequestCard(selectedThread()?.input_request)}
+              <Show when={selectedThread()?.error}>
+                {(error) => errorNotice(copy().chat.runErrorTitle, error().message)}
+              </Show>
+            </Show>
+          </div>
         </div>
         <div class="flower-host-chat-bottom-dock flower-chat-bottom-dock">
           <div class="flower-host-chat-bottom-dock-track flower-chat-bottom-dock-track">
@@ -467,8 +987,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <textarea
                 ref={composerRef}
                 class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
-                placeholder={copy().chat.placeholder}
+                placeholder={selectedInputRequest()
+                  ? chatCopyValue('inputRequestComposerPlaceholder', 'Answer the prompt above to continue this conversation.')
+                  : copy().chat.placeholder}
                 value={chatDraft()}
+                disabled={!!selectedInputRequest() || inputSubmitting()}
                 onInput={(event) => {
                   setChatDraft(event.currentTarget.value);
                   setChatSubmitError('');
@@ -530,8 +1053,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       </div>
                     </Show>
                     <Show when={handlerError()}>
-                      <div class="flower-host-handler-error-row">
-                        <span class="flower-host-handler-error">{handlerError()}</span>
+                      <div role="alert" class="flower-host-handler-error-card">
+                        <div class="flower-host-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
+                        <div class="flower-host-handler-error-copy">
+                          <div class="flower-host-handler-error-title">{copy().chat.handlerUnavailable}</div>
+                          <div class="flower-host-handler-error-message">{handlerError()}</div>
+                        </div>
                         <button
                           type="button"
                           class="flower-host-handler-retry"
@@ -545,7 +1072,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <Button
                     variant="primary"
                     icon={Send}
-                    disabled={chatRunning() || !readyForChat() || !readyHandlerDecision() || !trimString(chatDraft())}
+                    disabled={chatRunning() || !!selectedInputRequest() || !readyForChat() || !readyHandlerDecision() || !trimString(chatDraft())}
                     loading={chatRunning()}
                     onClick={() => void submitChat()}
                   >
@@ -555,7 +1082,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </div>
             </div>
             <Show when={chatSubmitError()}>
-              <div role="alert" class="mt-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{chatSubmitError()}</div>
+              {(message) => <div class="flower-host-composer-error">{errorNotice(copy().chat.composerErrorTitle, message())}</div>}
             </Show>
           </div>
         </div>
@@ -567,6 +1094,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     <main
       id="redeven-flower-surface"
       class={cn('flower-component-shell flower-host-surface', threadRailResizing() && 'flower-component-shell-resizing', props.class)}
+      data-flower-selected-thread-id={selectedThreadID()}
+      data-flower-selected-thread-status={selectedThread()?.status ?? 'idle'}
+      data-flower-selected-thread-loading={selectedThreadLoading() ? 'true' : 'false'}
+      data-flower-side-panel={sidePanel()}
       style={{ '--flower-thread-rail-width': `${threadRailWidth()}px` }}
     >
       <aside class="flower-component-thread-rail" aria-label={copy().chat.conversationsAria}>

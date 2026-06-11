@@ -27,8 +27,20 @@ const spawnCalls: Array<{
 }> = [];
 let startupMode: 'ready' | 'blocked' = 'ready';
 let startupAttached = false;
+let startupAttachedReports: boolean[] = [];
+let startupPID = 4242;
 let secretResolverClosed = false;
 let fetchStatusOK = true;
+let carrierState: 'ready' | 'unreachable' | 'missing' = 'ready';
+let threadResponse: unknown = null;
+let settingsResponse: unknown = null;
+let chatSendResponse: unknown = null;
+let chatInputResponse: unknown = null;
+const fetchRequests: Array<{
+  url: string;
+  method: string;
+  body?: unknown;
+}> = [];
 
 vi.mock('node:child_process', () => ({
   spawn: vi.fn((executable: string, args: readonly string[], options: { env?: NodeJS.ProcessEnv }) => {
@@ -49,9 +61,10 @@ vi.mock('node:child_process', () => ({
     if (reportFile) {
       setImmediate(async () => {
         await fs.mkdir(path.dirname(reportFile), { recursive: true });
+        const attached = startupAttachedReports.length > 0 ? Boolean(startupAttachedReports.shift()) : startupAttached;
         await fs.writeFile(reportFile, JSON.stringify(startupMode === 'blocked'
           ? { status: 'blocked', code: 'flower_host_locked', message: 'Flower Host is already running.' }
-          : { status: 'ready', host_id: 'host', base_url: 'http://127.0.0.1:12345', token: 'host-token', attached: startupAttached }));
+          : { status: 'ready', host_id: 'host', base_url: 'http://127.0.0.1:12345', token: 'host-token', pid: startupPID, attached }));
       });
     }
     return child;
@@ -71,18 +84,72 @@ vi.mock('./flowerHostSecretResolver', () => ({
 beforeEach(() => {
   startupMode = 'ready';
   startupAttached = false;
+  startupAttachedReports = [];
+  startupPID = 4242;
   secretResolverClosed = false;
   fetchStatusOK = true;
+  carrierState = 'ready';
+  threadResponse = null;
+  settingsResponse = null;
+  chatSendResponse = null;
+  chatInputResponse = null;
   spawnedChildren.splice(0);
   spawnCalls.splice(0);
-  vi.stubGlobal('fetch', vi.fn(async (input: string | URL) => {
+  fetchRequests.splice(0);
+  vi.stubGlobal('fetch', vi.fn(async (input: string | URL, init?: RequestInit) => {
+    fetchRequests.push({
+      url: String(input),
+      method: String(init?.method ?? 'GET').toUpperCase(),
+      ...(typeof init?.body === 'string' ? { body: JSON.parse(init.body) } : {}),
+    });
     if (String(input).endsWith('/v1/status') && fetchStatusOK) {
-      return new Response(JSON.stringify({ ok: true, data: { status: { configured: true } } }), {
+      return new Response(JSON.stringify({
+        ok: true,
+        data: {
+          configured: true,
+          ...(carrierState === 'missing' ? {} : {
+            carrier: {
+              state: carrierState,
+              ...(carrierState === 'unreachable' ? { error: 'secret resolver connection refused' } : {}),
+            },
+          }),
+        },
+      }), {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
     }
-    return new Response(JSON.stringify({ ok: false, error: 'host unavailable' }), {
+    if (String(input).includes('/v1/thread/') && threadResponse) {
+      return new Response(JSON.stringify({ ok: true, data: threadResponse }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (String(input).endsWith('/v1/settings') && settingsResponse) {
+      return new Response(JSON.stringify({ ok: true, data: settingsResponse }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (String(input).endsWith('/v1/chat/send') && chatSendResponse) {
+      return new Response(JSON.stringify({ ok: true, data: chatSendResponse }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (String(input).endsWith('/v1/chat/input') && chatInputResponse) {
+      return new Response(JSON.stringify({ ok: true, data: chatInputResponse }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({
+      ok: false,
+      error: {
+        code: 'flower_host_unavailable',
+        message: 'host unavailable',
+      },
+    }), {
       status: 503,
       headers: { 'content-type': 'application/json' },
     });
@@ -101,6 +168,157 @@ function bridgeArgs(root: string) {
     paths: defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored'),
     codec: createDesktopFlowerHostPlaintextSecretCodec(),
     tempRoot: root,
+  };
+}
+
+function validThreadResponse(): Record<string, unknown> {
+  return {
+    thread_id: 'thread-streaming',
+    title: 'Streaming',
+    model_id: 'deepseek/deepseek-chat',
+    created_at_ms: 10,
+    updated_at_ms: 90,
+    status: 'running',
+    source_label: 'this host',
+    target_labels: [],
+    messages: [
+      {
+        id: 'm-streaming',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        created_at_ms: 90,
+        blocks: [
+          { type: 'thinking', content: 'Checking context.' },
+          { type: 'markdown', content: 'Partial answer' },
+        ],
+      },
+    ],
+    tool_activity: [
+      {
+        run_id: 'run-1',
+        tool_id: 'tool-terminal',
+        tool_name: 'terminal.exec',
+        status: 'success',
+        summary: 'Run command',
+        started_at_ms: 80,
+        ended_at_ms: 89,
+      },
+    ],
+    error: {
+      code: 'failed',
+      message: 'provider rejected request',
+    },
+  };
+}
+
+function validInputRequestResponse(): Record<string, unknown> {
+  return {
+    prompt_id: 'prompt-ask-user',
+    message_id: 'message-ask-user',
+    tool_id: 'tool-ask-user',
+    tool_name: 'ask_user',
+    reason_code: 'needs_user_choice',
+    required_from_user: ['target'],
+    evidence_refs: ['m-streaming'],
+    public_summary: 'Choose a target before Flower continues.',
+    contains_secret: false,
+    questions: [
+      {
+        id: 'target',
+        header: 'Deployment target',
+        question: 'Where should Flower deploy this change?',
+        response_mode: 'select_or_write',
+        choices_exhaustive: false,
+        write_label: 'Other target',
+        write_placeholder: 'Type another target',
+        choices: [
+          {
+            choice_id: 'staging',
+            label: 'Staging',
+            description: 'Use the validation environment.',
+            kind: 'select',
+            actions: [
+              {
+                type: 'set_mode',
+                mode: 'act',
+              },
+            ],
+          },
+          {
+            choice_id: 'other',
+            label: 'Other',
+            kind: 'write',
+            input_placeholder: 'Type target name',
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function validSettingsResponse(): Record<string, unknown> {
+  return {
+    config: {
+      schema_version: 1,
+      enabled: false,
+      current_model_id: '',
+      execution_policy: {
+        require_user_approval: true,
+        block_dangerous_commands: true,
+      },
+      terminal_exec_policy: {
+        default_timeout_ms: 120_000,
+        max_timeout_ms: 600_000,
+      },
+      providers: [],
+    },
+    provider_secrets: [],
+    target_cache: {
+      version: 1,
+      entries: [],
+    },
+  };
+}
+
+function validRouterDecision(): Record<string, unknown> {
+  return {
+    decision_id: 'decision-1',
+    decision_revision: 1,
+    route: 'blocked',
+    reason_code: 'provider_not_configured',
+    selected_handler: null,
+    available_handlers: [],
+    unavailable_handlers: [],
+    handler_selection: {
+      can_switch: false,
+      requires_user_visible_confirmation: true,
+    },
+    decision_scope: {
+      thread_kind: 'chat',
+      client_surface: 'flower_surface',
+    },
+    host_presence: {
+      schema_version: 1,
+      host_id: 'flower-host:test',
+      host_kind: 'global',
+      carrier_kind: 'desktop',
+      display_name: 'Flower Host',
+      state: 'online',
+      endpoint: {
+        visibility: 'loopback',
+        base_url: 'http://127.0.0.1:12345',
+      },
+      capabilities: ['chat'],
+      last_seen_at_unix_ms: 1_700_000_000_000,
+    },
+    allowed_actions: [],
+    ui_chips: [],
+    blocker: {
+      code: 'provider_not_configured',
+      message: 'Configure a provider before chatting.',
+    },
+    created_at_unix_ms: 1_700_000_000_000,
   };
 }
 
@@ -205,9 +423,411 @@ describe('Flower Host bridge lifecycle', () => {
 
       await bridge.ensureFlowerHostBridge(bridgeArgs(root));
       fetchStatusOK = false;
-      await expect(bridge.ensureFlowerHostBridge(bridgeArgs(root))).rejects.toThrow('Flower Host request failed with HTTP 503.');
+      await expect(bridge.ensureFlowerHostBridge(bridgeArgs(root))).rejects.toThrow('host unavailable');
 
       expect(spawnCalls).toHaveLength(2);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves message blocks, tool activity, errors, and stable creation time from thread responses', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    threadResponse = validThreadResponse();
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      const thread = await bridge.loadFlowerHostThreadViaBridge({
+        ...bridgeArgs(root),
+        threadID: 'thread-streaming',
+      });
+
+      expect(thread.created_at_ms).toBe(10);
+      expect(thread.updated_at_ms).toBe(90);
+      expect(thread.messages[0]).toMatchObject({
+        status: 'streaming',
+        blocks: [
+          { type: 'thinking', content: 'Checking context.' },
+          { type: 'markdown', content: 'Partial answer' },
+        ],
+      });
+      expect(thread.tool_activity).toEqual([
+        {
+          run_id: 'run-1',
+          tool_id: 'tool-terminal',
+          tool_name: 'terminal.exec',
+          status: 'success',
+          summary: 'Run command',
+          started_at_ms: 80,
+          ended_at_ms: 89,
+        },
+      ]);
+      expect(thread.error).toEqual({
+        code: 'failed',
+        message: 'provider rejected request',
+      });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves structured input requests from thread responses', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    threadResponse = {
+      ...validThreadResponse(),
+      status: 'waiting_user',
+      input_request: validInputRequestResponse(),
+    };
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      const thread = await bridge.loadFlowerHostThreadViaBridge({
+        ...bridgeArgs(root),
+        threadID: 'thread-streaming',
+      });
+
+      expect(thread.status).toBe('waiting_user');
+      expect(thread.input_request).toEqual(validInputRequestResponse());
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('posts structured input answers and normalizes the returned thread', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    chatInputResponse = {
+      thread: {
+        ...validThreadResponse(),
+        status: 'running',
+      },
+    };
+    const request = {
+      thread_id: 'thread-streaming',
+      prompt_id: 'prompt-ask-user',
+      answers: {
+        target: { choice_id: 'staging' },
+        note: { text: 'Ship after validation.' },
+      },
+    };
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      const thread = await bridge.submitFlowerHostInputViaBridge({
+        ...bridgeArgs(root),
+        request,
+      });
+
+      expect(thread.thread_id).toBe('thread-streaming');
+      const outbound = fetchRequests.find((item) => item.url.endsWith('/v1/chat/input'));
+      expect(outbound).toEqual({
+        url: 'http://127.0.0.1:12345/v1/chat/input',
+        method: 'POST',
+        body: request,
+      });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects malformed thread responses instead of defaulting missing fields', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    try {
+      const bridge = await import('./flowerHostBridge');
+      for (const item of [
+        {
+          name: 'missing status',
+          thread: (() => {
+            const thread = validThreadResponse();
+            delete thread.status;
+            return thread;
+          })(),
+          message: 'thread.status',
+        },
+        {
+          name: 'missing source label',
+          thread: (() => {
+            const thread = validThreadResponse();
+            delete thread.source_label;
+            return thread;
+          })(),
+          message: 'thread.source_label',
+        },
+        {
+          name: 'missing target labels',
+          thread: (() => {
+            const thread = validThreadResponse();
+            delete thread.target_labels;
+            return thread;
+          })(),
+          message: 'thread.target_labels',
+        },
+        {
+          name: 'invalid home host kind',
+          thread: {
+            ...validThreadResponse(),
+            home_host_kind: 'desktop',
+          },
+          message: 'thread.home_host_kind',
+        },
+        {
+          name: 'malformed input request',
+          thread: {
+            ...validThreadResponse(),
+            input_request: {
+              ...validInputRequestResponse(),
+              questions: [],
+            },
+          },
+          message: 'thread.input_request.questions',
+        },
+        {
+          name: 'missing message status',
+          thread: (() => {
+            const thread = validThreadResponse();
+            delete (thread.messages as Array<Record<string, unknown>>)[0].status;
+            return thread;
+          })(),
+          message: 'thread.messages[0].status',
+        },
+        {
+          name: 'missing input request tool name',
+          thread: {
+            ...validThreadResponse(),
+            input_request: (() => {
+              const request = validInputRequestResponse();
+              delete request.tool_name;
+              return request;
+            })(),
+          },
+          message: 'thread.input_request.tool_name',
+        },
+        {
+          name: 'missing input request response mode',
+          thread: {
+            ...validThreadResponse(),
+            input_request: (() => {
+              const request = validInputRequestResponse();
+              delete (request.questions as Array<Record<string, unknown>>)[0].response_mode;
+              return request;
+            })(),
+          },
+          message: 'thread.input_request.questions[0].response_mode',
+        },
+      ]) {
+        threadResponse = item.thread;
+        await expect(bridge.loadFlowerHostThreadViaBridge({
+          ...bridgeArgs(root),
+          threadID: 'thread-streaming',
+        }), item.name).rejects.toThrow(item.message);
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects chat input responses without a returned thread', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    chatInputResponse = {};
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      await expect(bridge.submitFlowerHostInputViaBridge({
+        ...bridgeArgs(root),
+        request: {
+          thread_id: 'thread-streaming',
+          prompt_id: 'prompt-ask-user',
+          answers: {
+            target: { choice_id: 'staging' },
+          },
+        },
+      })).rejects.toThrow('chat_input.thread');
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects settings responses without an explicit target cache contract', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    const settings = validSettingsResponse();
+    delete settings.target_cache;
+    settingsResponse = settings;
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      await expect(bridge.loadFlowerHostSettingsViaBridge(bridgeArgs(root)))
+        .rejects
+        .toThrow('settings.target_cache');
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves structured chat creation failures without inventing default errors', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    chatSendResponse = {
+      create_failure: {
+        error: {
+          code: 'provider_not_configured',
+          message: 'Configure a provider before chatting.',
+        },
+        fresh_decision: validRouterDecision(),
+      },
+    };
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      const result = await bridge.sendFlowerHostChatResultViaBridge({
+        ...bridgeArgs(root),
+        request: {
+          thread_id: '',
+          prompt: 'hello',
+        },
+      });
+
+      expect('create_failure' in result).toBe(true);
+      if (!('create_failure' in result)) {
+        throw new Error('expected create_failure branch');
+      }
+      expect(result.create_failure).toEqual({
+        error: {
+          code: 'provider_not_configured',
+          message: 'Configure a provider before chatting.',
+        },
+        fresh_decision: validRouterDecision(),
+      });
+      expect('thread' in result).toBe(false);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves successful chat send threads through the response union', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    chatSendResponse = {
+      thread: validThreadResponse(),
+    };
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      const result = await bridge.sendFlowerHostChatResultViaBridge({
+        ...bridgeArgs(root),
+        request: {
+          thread_id: 'thread-streaming',
+          prompt: 'continue',
+        },
+      });
+
+      expect('thread' in result).toBe(true);
+      if (!('thread' in result)) {
+        throw new Error('expected thread branch');
+      }
+      expect(result.thread.thread_id).toBe('thread-streaming');
+      expect('create_failure' in result).toBe(false);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects malformed chat creation failures instead of defaulting error payloads', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    try {
+      const bridge = await import('./flowerHostBridge');
+      for (const item of [
+        {
+          name: 'missing error code',
+          createFailure: {
+            error: {
+              message: 'Configure a provider before chatting.',
+            },
+          },
+          message: 'create_failure.error.code',
+        },
+        {
+          name: 'missing error message',
+          createFailure: {
+            error: {
+              code: 'provider_not_configured',
+            },
+          },
+          message: 'create_failure.error.message',
+        },
+        {
+          name: 'malformed fresh decision',
+          createFailure: {
+            error: {
+              code: 'provider_not_configured',
+              message: 'Configure a provider before chatting.',
+            },
+            fresh_decision: {
+              ...validRouterDecision(),
+              route: 'fallback',
+            },
+          },
+          message: 'create_failure.fresh_decision.route',
+        },
+        {
+          name: 'missing fresh decision unavailable handlers',
+          createFailure: {
+            error: {
+              code: 'provider_not_configured',
+              message: 'Configure a provider before chatting.',
+            },
+            fresh_decision: (() => {
+              const decision = validRouterDecision();
+              delete decision.unavailable_handlers;
+              return decision;
+            })(),
+          },
+          message: 'create_failure.fresh_decision.unavailable_handlers',
+        },
+      ]) {
+        chatSendResponse = {
+          create_failure: item.createFailure,
+        };
+        await expect(bridge.sendFlowerHostChatResultViaBridge({
+          ...bridgeArgs(root),
+          request: {
+            thread_id: '',
+            prompt: 'hello',
+          },
+        }), item.name).rejects.toThrow(item.message);
+      }
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects chat send responses that do not satisfy the thread/create_failure union', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    try {
+      const bridge = await import('./flowerHostBridge');
+      for (const item of [
+        {
+          name: 'missing both branches',
+          response: {},
+        },
+        {
+          name: 'conflicting branches',
+          response: {
+            thread: validThreadResponse(),
+            create_failure: {
+              error: {
+                code: 'provider_not_configured',
+                message: 'Configure a provider before chatting.',
+              },
+            },
+          },
+        },
+      ]) {
+        chatSendResponse = item.response;
+        await expect(bridge.sendFlowerHostChatResultViaBridge({
+          ...bridgeArgs(root),
+          request: {
+            thread_id: '',
+            prompt: 'hello',
+          },
+        }), item.name).rejects.toThrow('chat_send');
+      }
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

@@ -200,6 +200,24 @@ export type FlowerSurfaceCopy = Readonly<{
     handlerUnavailable: string;
     handlerRetry: string;
     send: string;
+    runErrorTitle: string;
+    messageErrorTitle: string;
+    messageErrorFallback: string;
+    loadErrorTitle: string;
+    threadLoadErrorTitle: string;
+    threadLoading: string;
+    composerErrorTitle: string;
+    toolActivityLabel: string;
+    toolStatuses: Readonly<Record<'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled', string>>;
+    toolApprovalRequired: string;
+    toolApprovalState: (state: string) => string;
+    inputRequestTitle?: string;
+    inputRequestDescription?: string;
+    inputRequestSubmit?: string;
+    inputRequestRetry?: string;
+    inputRequestAnswerRequired?: string;
+    inputRequestSubmitting?: string;
+    inputRequestComposerPlaceholder?: string;
     conversationsAria: string;
     resizeConversationsLabel: string;
     entryLabel: string;
@@ -228,6 +246,31 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     handlerUnavailable: 'Flower handler unavailable',
     handlerRetry: 'Retry',
     send: 'Send',
+    runErrorTitle: 'Flower could not finish this reply.',
+    messageErrorTitle: 'Message failed',
+    messageErrorFallback: 'This message failed before Flower produced visible text.',
+    loadErrorTitle: 'Flower could not load.',
+    threadLoadErrorTitle: 'Conversation could not load.',
+    threadLoading: 'Loading conversation...',
+    composerErrorTitle: 'Flower could not send.',
+    toolActivityLabel: 'Tool activity',
+    toolStatuses: {
+      pending: 'Pending',
+      running: 'Running',
+      waiting: 'Waiting',
+      success: 'Done',
+      error: 'Failed',
+      canceled: 'Canceled',
+    },
+    toolApprovalRequired: 'Approval required',
+    toolApprovalState: (state) => `Approval: ${state}`,
+    inputRequestTitle: 'Flower needs your input',
+    inputRequestDescription: 'Answer this structured prompt so Flower can continue the same run.',
+    inputRequestSubmit: 'Continue',
+    inputRequestRetry: 'Retry',
+    inputRequestAnswerRequired: 'Answer every question before continuing.',
+    inputRequestSubmitting: 'Submitting...',
+    inputRequestComposerPlaceholder: 'Answer the prompt above to continue this conversation.',
     conversationsAria: 'Flower conversations',
     resizeConversationsLabel: 'Resize conversations',
     entryLabel: 'Flower',
@@ -235,7 +278,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   },
   threadList: {
     title: 'Conversations',
-    description: 'History follows Flower, not a single runtime.',
+    description: 'Created-time order stays stable while conversations update.',
     refreshLabel: 'Refresh conversations',
     searchPlaceholder: 'Search conversations...',
     empty: 'No conversations yet.',

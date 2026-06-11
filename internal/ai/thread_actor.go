@@ -533,6 +533,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 	effectiveCurrentInput := deriveEffectiveCurrentUserInput(req.Input)
+	effectiveCurrentInput.MessageID = persisted.MessageID
 	effectiveCurrentInput.MessageRowID = persisted.RowID
 	effectiveCurrentInput.MessageCreatedAtUnixMs = persisted.CreatedAtUnixMs
 	a.mgr.svc.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
@@ -684,6 +685,7 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 	effectiveCurrentInput := deriveEffectiveCurrentUserInput(req.Input)
+	effectiveCurrentInput.MessageID = persisted.MessageID
 	effectiveCurrentInput.MessageRowID = persisted.RowID
 	effectiveCurrentInput.MessageCreatedAtUnixMs = persisted.CreatedAtUnixMs
 	a.mgr.svc.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)

@@ -42,6 +42,9 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 	if !strings.Contains(applyPatch.Description, "Use ONLY the canonical Begin/End Patch format") {
 		t.Fatalf("description missing canonical patch contract: %q", applyPatch.Description)
 	}
+	if !strings.Contains(applyPatch.Description, "every content line must start with `+`") {
+		t.Fatalf("description missing add-file content-line prefix rule: %q", applyPatch.Description)
+	}
 	if strings.Contains(applyPatch.Description, "diff --git") {
 		t.Fatalf("description should not recommend unified diff: %q", applyPatch.Description)
 	}
@@ -64,6 +67,9 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 	}
 	if !strings.Contains(description, "*** Update File:") || !strings.Contains(description, "@@") {
 		t.Fatalf("patch property description missing file op guidance: %q", description)
+	}
+	if !strings.Contains(description, "every new content line must begin with `+`") {
+		t.Fatalf("patch property description missing add-file content-line prefix rule: %q", description)
 	}
 }
 

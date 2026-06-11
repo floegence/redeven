@@ -11,8 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -21,6 +21,7 @@ type autoTitleMock struct {
 	mu           sync.Mutex
 	requestCount int
 	maxTokens    []int
+	requests     []map[string]any
 	token        string
 	responses    []autoTitleMockResponse
 }
@@ -30,12 +31,6 @@ type autoTitleMockResponse struct {
 	Token      string
 	Delay      time.Duration
 	WaitCh     <-chan struct{}
-}
-
-type moonshotAutoTitleMock struct {
-	mu           sync.Mutex
-	requestCount int
-	maxTokens    []int
 }
 
 func (m *autoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
@@ -61,6 +56,7 @@ func (m *autoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	m.requestCount++
 	m.maxTokens = append(m.maxTokens, maxTokens)
+	m.requests = append(m.requests, req)
 	var response autoTitleMockResponse
 	if len(m.responses) > 0 {
 		response = m.responses[0]
@@ -151,162 +147,10 @@ func (m *autoTitleMock) maxTokensSnapshot() []int {
 	return append([]int(nil), m.maxTokens...)
 }
 
-func (m *moonshotAutoTitleMock) handle(w http.ResponseWriter, r *http.Request) {
-	if r == nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	if strings.TrimSpace(r.Header.Get("Authorization")) != "Bearer sk-test" {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
-		return
-	}
-	if !strings.HasSuffix(strings.TrimSpace(r.URL.Path), "/chat/completions") {
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-
-	var req map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return
-	}
-
-	maxTokens := jsonNumberToInt(req["max_tokens"])
-	m.mu.Lock()
-	m.requestCount++
-	m.maxTokens = append(m.maxTokens, maxTokens)
-	m.mu.Unlock()
-
-	f, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-
-	if maxTokens < autoThreadTitleMaxOutputHigh {
-		writeOpenAISSEJSON(w, f, map[string]any{
-			"id":      "chatcmpl_auto_title_low",
-			"object":  "chat.completion.chunk",
-			"created": 123,
-			"model":   "kimi-k2.6",
-			"choices": []any{
-				map[string]any{
-					"index":         0,
-					"finish_reason": nil,
-					"delta": map[string]any{
-						"role":              "assistant",
-						"reasoning_content": "Need to summarize the thread issue before returning JSON.",
-					},
-				},
-			},
-		})
-		writeOpenAISSEJSON(w, f, map[string]any{
-			"id":      "chatcmpl_auto_title_low",
-			"object":  "chat.completion.chunk",
-			"created": 123,
-			"model":   "kimi-k2.6",
-			"choices": []any{
-				map[string]any{
-					"index":         0,
-					"finish_reason": "length",
-					"delta":         map[string]any{},
-				},
-			},
-		})
-		writeOpenAISSEJSON(w, f, map[string]any{
-			"id":      "chatcmpl_auto_title_low",
-			"object":  "chat.completion.chunk",
-			"created": 123,
-			"model":   "kimi-k2.6",
-			"choices": []any{},
-			"usage": map[string]any{
-				"prompt_tokens":     12,
-				"completion_tokens": 4,
-				"total_tokens":      16,
-				"completion_tokens_details": map[string]any{
-					"reasoning_tokens": 4,
-				},
-			},
-		})
-		return
-	}
-
-	writeOpenAISSEJSON(w, f, map[string]any{
-		"id":      "chatcmpl_auto_title_high",
-		"object":  "chat.completion.chunk",
-		"created": 124,
-		"model":   "kimi-k2.6",
-		"choices": []any{
-			map[string]any{
-				"index":         0,
-				"finish_reason": nil,
-				"delta": map[string]any{
-					"role":              "assistant",
-					"reasoning_content": "Expanded budget allows the final JSON payload to be emitted.",
-				},
-			},
-		},
-	})
-	writeOpenAISSEJSON(w, f, map[string]any{
-		"id":      "chatcmpl_auto_title_high",
-		"object":  "chat.completion.chunk",
-		"created": 124,
-		"model":   "kimi-k2.6",
-		"choices": []any{
-			map[string]any{
-				"index":         0,
-				"finish_reason": nil,
-				"delta": map[string]any{
-					"content": `{"title":"Investigate thread title stuck on New Chat","reason":"debug_thread_title"}`,
-				},
-			},
-		},
-	})
-	writeOpenAISSEJSON(w, f, map[string]any{
-		"id":      "chatcmpl_auto_title_high",
-		"object":  "chat.completion.chunk",
-		"created": 124,
-		"model":   "kimi-k2.6",
-		"choices": []any{
-			map[string]any{
-				"index":         0,
-				"finish_reason": "stop",
-				"delta":         map[string]any{},
-			},
-		},
-	})
-	writeOpenAISSEJSON(w, f, map[string]any{
-		"id":      "chatcmpl_auto_title_high",
-		"object":  "chat.completion.chunk",
-		"created": 124,
-		"model":   "kimi-k2.6",
-		"choices": []any{},
-		"usage": map[string]any{
-			"prompt_tokens":     14,
-			"completion_tokens": 8,
-			"total_tokens":      22,
-			"completion_tokens_details": map[string]any{
-				"reasoning_tokens": 6,
-			},
-		},
-	})
-}
-
-func (m *moonshotAutoTitleMock) count() int {
+func (m *autoTitleMock) requestPayloads() []map[string]any {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.requestCount
-}
-
-func (m *moonshotAutoTitleMock) maxTokensSnapshot() []int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return append([]int(nil), m.maxTokens...)
+	return append([]map[string]any(nil), m.requests...)
 }
 
 func jsonNumberToInt(v any) int {
@@ -385,78 +229,10 @@ func newAutoTitleTestServiceWithStateDir(t *testing.T, mock *autoTitleMock, stat
 	return svc, meta
 }
 
-func newMoonshotAutoTitleTestService(t *testing.T, mock *moonshotAutoTitleMock) (*Service, session.Meta) {
-	t.Helper()
-
-	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
-	t.Cleanup(srv.Close)
-
-	cfg := &config.AIConfig{
-		Providers: []config.AIProvider{
-			{
-				ID:      "moonshot",
-				Name:    "Moonshot",
-				Type:    "moonshot",
-				BaseURL: strings.TrimSuffix(srv.URL, "/") + "/v1",
-				Models:  []config.AIProviderModel{{ModelName: "kimi-k2.6"}},
-			},
-		},
-	}
-
-	meta := session.Meta{
-		EndpointID:        "env_auto_title_test",
-		NamespacePublicID: "ns_auto_title_test",
-		ChannelID:         "ch_auto_title_test",
-		UserPublicID:      "u_auto_title_test",
-		UserEmail:         "u_auto_title_test@example.com",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-	}
-
-	svc, err := NewService(Options{
-		Logger:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		StateDir:         t.TempDir(),
-		AgentHomeDir:     t.TempDir(),
-		Shell:            "bash",
-		Config:           cfg,
-		PersistOpTimeout: 2 * time.Second,
-		RunMaxWallTime:   5 * time.Second,
-		RunIdleTimeout:   2 * time.Second,
-		ResolveProviderAPIKey: func(providerID string) (string, bool, error) {
-			if strings.TrimSpace(providerID) != "moonshot" {
-				return "", false, nil
-			}
-			return "sk-test", true, nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-	t.Cleanup(func() { _ = svc.Close() })
-
-	return svc, meta
-}
-
-func TestParseAutoThreadTitleDecision_NormalizesJSONPayload(t *testing.T) {
-	t.Parallel()
-
-	got, err := parseAutoThreadTitleDecision("```json\n{\"title\":\"  Fix\\n failing regression tests  \",\"reason\":\"intent_summary\"}\n```")
-	if err != nil {
-		t.Fatalf("parseAutoThreadTitleDecision: %v", err)
-	}
-	if got.Title != "Fix failing regression tests" {
-		t.Fatalf("Title=%q, want normalized title", got.Title)
-	}
-	if got.Reason != "intent_summary" {
-		t.Fatalf("Reason=%q, want intent_summary", got.Reason)
-	}
-}
-
 func TestScheduleAutoThreadTitle_PopulatesUntitledThread(t *testing.T) {
 	t.Parallel()
 
-	mock := &autoTitleMock{token: `{"title":"Fix failing regression tests","reason":"intent_summary"}`}
+	mock := &autoTitleMock{token: `Fix failing regression tests`}
 	svc, meta := newAutoTitleTestService(t, mock)
 
 	ctx := context.Background()
@@ -479,9 +255,7 @@ func TestScheduleAutoThreadTitle_PopulatesUntitledThread(t *testing.T) {
 			t.Fatalf("GetThread: %v", getErr)
 		}
 		if th != nil && strings.TrimSpace(th.Title) != "" {
-			if th.Title != "Fix failing regression tests" {
-				t.Fatalf("Title=%q, want generated title", th.Title)
-			}
+			assertShortAutoTitle(t, th.Title)
 			if th.TitleSource != "auto" {
 				t.Fatalf("TitleSource=%q, want auto", th.TitleSource)
 			}
@@ -497,6 +271,21 @@ func TestScheduleAutoThreadTitle_PopulatesUntitledThread(t *testing.T) {
 			if mock.count() == 0 {
 				t.Fatalf("requestCount=0, want >=1")
 			}
+			payloads := mock.requestPayloads()
+			if len(payloads) == 0 {
+				t.Fatalf("provider request payload missing")
+			}
+			rawPayload, err := json.Marshal(payloads[0])
+			if err != nil {
+				t.Fatalf("Marshal request payload: %v", err)
+			}
+			payloadText := string(rawPayload)
+			if !strings.Contains(payloadText, "You generate concise thread titles for an interactive AI agent.") {
+				t.Fatalf("provider request did not use Floret title prompt: %s", payloadText)
+			}
+			if strings.Contains(payloadText, "thread_title_v1") || strings.Contains(payloadText, "Return JSON only") {
+				t.Fatalf("provider request retained old Redeven title prompt: %s", payloadText)
+			}
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -508,7 +297,7 @@ func TestScheduleAutoThreadTitle_PopulatesUntitledThread(t *testing.T) {
 func TestApplyAutoThreadTitle_ManualBlankRenamePreventsOverwrite(t *testing.T) {
 	t.Parallel()
 
-	mock := &autoTitleMock{token: `{"title":"Should not apply","reason":"intent_summary"}`}
+	mock := &autoTitleMock{token: `Should not apply`}
 	svc, meta := newAutoTitleTestService(t, mock)
 
 	ctx := context.Background()
@@ -540,54 +329,13 @@ func TestApplyAutoThreadTitle_ManualBlankRenamePreventsOverwrite(t *testing.T) {
 	}
 }
 
-func TestApplyAutoThreadTitle_ExpandsOutputBudgetForReasoningHeavyProvider(t *testing.T) {
-	t.Parallel()
-
-	mock := &moonshotAutoTitleMock{}
-	svc, meta := newMoonshotAutoTitleTestService(t, mock)
-
-	ctx := context.Background()
-	thread, err := svc.CreateThread(ctx, &meta, "", "moonshot/kimi-k2.6", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-
-	svc.applyAutoThreadTitle(ctx, meta.EndpointID, thread.ThreadID, "msg_auto_title_budget", "please investigate why the thread title stays on New Chat", meta.UserPublicID, meta.UserEmail)
-
-	th, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, thread.ThreadID)
-	if err != nil {
-		t.Fatalf("GetThread: %v", err)
-	}
-	if th == nil {
-		t.Fatalf("thread missing")
-	}
-	if th.Title != "Investigate thread title stuck on New Chat" {
-		t.Fatalf("Title=%q, want adaptive retry title", th.Title)
-	}
-	if th.TitleSource != "auto" {
-		t.Fatalf("TitleSource=%q, want auto", th.TitleSource)
-	}
-	if th.TitleInputMessageID != "msg_auto_title_budget" {
-		t.Fatalf("TitleInputMessageID=%q, want msg_auto_title_budget", th.TitleInputMessageID)
-	}
-	if th.TitleModelID != "moonshot/kimi-k2.6" {
-		t.Fatalf("TitleModelID=%q, want moonshot/kimi-k2.6", th.TitleModelID)
-	}
-	if mock.count() != 2 {
-		t.Fatalf("requestCount=%d, want 2 attempts within one apply call", mock.count())
-	}
-	if got := mock.maxTokensSnapshot(); len(got) != 2 || got[0] != autoThreadTitleMaxOutputLow || got[1] != autoThreadTitleMaxOutputHigh {
-		t.Fatalf("maxTokens=%v, want [%d %d]", got, autoThreadTitleMaxOutputLow, autoThreadTitleMaxOutputHigh)
-	}
-}
-
 func TestScheduleAutoThreadTitle_RetriesUntilSuccess(t *testing.T) {
 	t.Parallel()
 
 	mock := &autoTitleMock{
 		responses: []autoTitleMockResponse{
-			{Token: `{"title":`},
-			{Token: `{"title":"Retry failing CI regression tests","reason":"intent_summary"}`},
+			{Token: ``},
+			{Token: `Retry failing CI regression tests`},
 		},
 	}
 	svc, meta := newAutoTitleTestService(t, mock)
@@ -612,9 +360,7 @@ func TestScheduleAutoThreadTitle_RetriesUntilSuccess(t *testing.T) {
 			t.Fatalf("GetThread: %v", getErr)
 		}
 		if th != nil && strings.TrimSpace(th.Title) != "" {
-			if th.Title != "Retry failing CI regression tests" {
-				t.Fatalf("Title=%q, want retry result", th.Title)
-			}
+			assertShortAutoTitle(t, th.Title)
 			if th.TitleInputMessageID != "msg_retry_1" {
 				t.Fatalf("TitleInputMessageID=%q, want msg_retry_1", th.TitleInputMessageID)
 			}
@@ -629,14 +375,14 @@ func TestScheduleAutoThreadTitle_RetriesUntilSuccess(t *testing.T) {
 	t.Fatalf("auto title was not applied after retry")
 }
 
-func TestScheduleAutoThreadTitle_FallsBackAfterThreeFailures(t *testing.T) {
+func TestScheduleAutoThreadTitle_LeavesThreadUntitledAfterGenerationFailures(t *testing.T) {
 	t.Parallel()
 
 	mock := &autoTitleMock{
 		responses: []autoTitleMockResponse{
-			{Token: `{"title":`},
-			{Token: `{"title":`},
-			{Token: `{"title":`},
+			{Token: ``},
+			{Token: ``},
+			{Token: ``},
 		},
 	}
 	svc, meta := newAutoTitleTestService(t, mock)
@@ -660,100 +406,33 @@ func TestScheduleAutoThreadTitle_FallsBackAfterThreeFailures(t *testing.T) {
 		PublicText:             firstText,
 	})
 
-	wantFallback := normalizeAutoThreadTitle(firstText)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		th, getErr := svc.threadsDB.GetThread(ctx, meta.EndpointID, thread.ThreadID)
-		if getErr != nil {
-			t.Fatalf("GetThread: %v", getErr)
-		}
-		if th != nil && strings.TrimSpace(th.Title) != "" {
-			if th.Title != wantFallback {
-				t.Fatalf("Title=%q, want fallback %q", th.Title, wantFallback)
+		key := runThreadKey(meta.EndpointID, thread.ThreadID)
+		svc.threadTitleCoordinator.mu.Lock()
+		_, pending := svc.threadTitleCoordinator.pending[key]
+		_, inFlight := svc.threadTitleCoordinator.inFlight[key]
+		svc.threadTitleCoordinator.mu.Unlock()
+		if mock.count() == 3 && !pending && !inFlight {
+			th, getErr := svc.threadsDB.GetThread(ctx, meta.EndpointID, thread.ThreadID)
+			if getErr != nil {
+				t.Fatalf("GetThread: %v", getErr)
 			}
-			if th.TitleSource != threadstore.ThreadTitleSourceAutoFallback {
-				t.Fatalf("TitleSource=%q, want %q", th.TitleSource, threadstore.ThreadTitleSourceAutoFallback)
+			if th == nil {
+				t.Fatalf("thread missing")
 			}
-			if th.TitleInputMessageID != persisted.MessageID {
-				t.Fatalf("TitleInputMessageID=%q, want %q", th.TitleInputMessageID, persisted.MessageID)
+			if strings.TrimSpace(th.Title) != "" || strings.TrimSpace(th.TitleSource) != "" {
+				t.Fatalf("thread title should remain empty after provider failures: %+v", th)
 			}
-			if th.TitleModelID != "" {
-				t.Fatalf("TitleModelID=%q, want empty for fallback", th.TitleModelID)
-			}
-			if th.TitlePromptVersion != "" {
-				t.Fatalf("TitlePromptVersion=%q, want empty for fallback", th.TitlePromptVersion)
-			}
-			if mock.count() != 3 {
-				t.Fatalf("requestCount=%d maxTokens=%v, want 3 generation attempts before fallback", mock.count(), mock.maxTokensSnapshot())
+			if th.TitleInputMessageID != "" || th.TitleModelID != "" || th.TitlePromptVersion != "" {
+				t.Fatalf("title metadata should remain empty after provider failures: %+v", th)
 			}
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	t.Fatalf("fallback title was not applied before timeout")
-}
-
-func TestScheduleAutoThreadTitle_RegeneratesAfterFallbackWhenNewUserMessageArrives(t *testing.T) {
-	t.Parallel()
-
-	mock := &autoTitleMock{token: `{"title":"Prepare focused sandbox smoke fix","reason":"intent_summary"}`}
-	svc, meta := newAutoTitleTestService(t, mock)
-
-	ctx := context.Background()
-	thread, err := svc.CreateThread(ctx, &meta, "", "openai/gpt-5-mini", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	firstPersisted, _, err := svc.persistUserMessage(ctx, &meta, meta.EndpointID, thread.ThreadID, RunInput{Text: "first request that becomes fallback title"})
-	if err != nil {
-		t.Fatalf("persistUserMessage first: %v", err)
-	}
-	updated, err := svc.threadsDB.SetFallbackThreadTitle(ctx, meta.EndpointID, thread.ThreadID, normalizeAutoThreadTitle("first request that becomes fallback title"), firstPersisted.MessageID, 321, meta.UserPublicID, meta.UserEmail)
-	if err != nil {
-		t.Fatalf("SetFallbackThreadTitle: %v", err)
-	}
-	if !updated {
-		t.Fatalf("SetFallbackThreadTitle updated=false, want true")
-	}
-	secondText := "please prepare a focused sandbox smoke fix"
-	secondPersisted, _, err := svc.persistUserMessage(ctx, &meta, meta.EndpointID, thread.ThreadID, RunInput{Text: secondText})
-	if err != nil {
-		t.Fatalf("persistUserMessage second: %v", err)
-	}
-
-	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
-		MessageID:              secondPersisted.MessageID,
-		MessageRowID:           secondPersisted.RowID,
-		MessageCreatedAtUnixMs: secondPersisted.CreatedAtUnixMs,
-		PublicText:             secondText,
-	})
-
-	deadline := time.Now().Add(15 * time.Second)
-	for time.Now().Before(deadline) {
-		th, getErr := svc.threadsDB.GetThread(ctx, meta.EndpointID, thread.ThreadID)
-		if getErr != nil {
-			t.Fatalf("GetThread: %v", getErr)
-		}
-		if th != nil && strings.TrimSpace(th.Title) == "Prepare focused sandbox smoke fix" {
-			if th.TitleSource != threadstore.ThreadTitleSourceAuto {
-				t.Fatalf("TitleSource=%q, want %q", th.TitleSource, threadstore.ThreadTitleSourceAuto)
-			}
-			if th.TitleInputMessageID != secondPersisted.MessageID {
-				t.Fatalf("TitleInputMessageID=%q, want %q", th.TitleInputMessageID, secondPersisted.MessageID)
-			}
-			if th.TitleModelID != "openai/gpt-5-mini" {
-				t.Fatalf("TitleModelID=%q, want openai/gpt-5-mini", th.TitleModelID)
-			}
-			if mock.count() != 1 {
-				t.Fatalf("requestCount=%d, want 1 regeneration attempt", mock.count())
-			}
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-
-	t.Fatalf("auto title was not regenerated after fallback")
+	t.Fatalf("auto title failures did not exhaust before timeout; count=%d maxTokens=%v", mock.count(), mock.maxTokensSnapshot())
 }
 
 func TestScheduleAutoThreadTitle_NewerPendingInputReplacesOlderFailedRequest(t *testing.T) {
@@ -761,8 +440,8 @@ func TestScheduleAutoThreadTitle_NewerPendingInputReplacesOlderFailedRequest(t *
 
 	mock := &autoTitleMock{
 		responses: []autoTitleMockResponse{
-			{Token: `{"title":`},
-			{Token: `{"title":"Prepare a focused sandbox smoke fix","reason":"intent_summary"}`},
+			{Token: ``},
+			{Token: `Prepare a focused sandbox smoke fix`},
 		},
 	}
 	svc, meta := newAutoTitleTestService(t, mock)
@@ -813,9 +492,7 @@ func TestScheduleAutoThreadTitle_NewerPendingInputReplacesOlderFailedRequest(t *
 			t.Fatalf("GetThread: %v", getErr)
 		}
 		if th != nil && strings.TrimSpace(th.Title) != "" {
-			if th.Title != "Prepare a focused sandbox smoke fix" {
-				t.Fatalf("Title=%q, want latest retry result", th.Title)
-			}
+			assertShortAutoTitle(t, th.Title)
 			if th.TitleInputMessageID != "msg_retry_new" {
 				t.Fatalf("TitleInputMessageID=%q, want msg_retry_new", th.TitleInputMessageID)
 			}
@@ -1065,7 +742,7 @@ func TestNewService_RecoversPendingAutoThreadTitles(t *testing.T) {
 
 	recoveryMock := &autoTitleMock{
 		responses: []autoTitleMockResponse{
-			{Token: `{"title":"Recover blank thread title after restart","reason":"intent_summary"}`},
+			{Token: `Recover blank thread title after restart`},
 		},
 	}
 	recoveredSvc, recoveredMeta := newAutoTitleTestServiceWithStateDir(t, recoveryMock, stateDir)
@@ -1078,9 +755,7 @@ func TestNewService_RecoversPendingAutoThreadTitles(t *testing.T) {
 			t.Fatalf("GetThread: %v", getErr)
 		}
 		if th != nil && strings.TrimSpace(th.Title) != "" {
-			if th.Title != "Recover blank thread title after restart" {
-				t.Fatalf("Title=%q, want recovery title", th.Title)
-			}
+			assertShortAutoTitle(t, th.Title)
 			if th.TitleInputMessageID != persisted.MessageID {
 				t.Fatalf("TitleInputMessageID=%q, want %q", th.TitleInputMessageID, persisted.MessageID)
 			}
@@ -1093,4 +768,15 @@ func TestNewService_RecoversPendingAutoThreadTitles(t *testing.T) {
 	}
 
 	t.Fatalf("recovery auto title was not applied")
+}
+
+func assertShortAutoTitle(t *testing.T, title string) {
+	t.Helper()
+	title = strings.TrimSpace(title)
+	if title == "" {
+		t.Fatalf("Title is empty, want generated auto title")
+	}
+	if got := utf8.RuneCountInString(title); got > 16 {
+		t.Fatalf("Title=%q length=%d, want at most 16 runes", title, got)
+	}
 }

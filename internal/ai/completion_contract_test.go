@@ -20,6 +20,37 @@ func TestCompletionContractForExecutionContract(t *testing.T) {
 	}
 }
 
+func TestExecutionContractForPolicyDecisionHonorsRequestedAgenticContract(t *testing.T) {
+	t.Parallel()
+
+	taskPolicy := runPolicyDecision{
+		Intent:            RunIntentTask,
+		ExecutionContract: RunExecutionContractHybridFirstTurn,
+	}
+	if got := executionContractForPolicyDecision(taskPolicy, RunExecutionContractAgenticLoop); got != RunExecutionContractAgenticLoop {
+		t.Fatalf("task requested agentic_loop => %q, want %q", got, RunExecutionContractAgenticLoop)
+	}
+
+	socialPolicy := runPolicyDecision{
+		Intent:            RunIntentSocial,
+		ExecutionContract: RunExecutionContractDirectReply,
+	}
+	if got := executionContractForPolicyDecision(socialPolicy, RunExecutionContractAgenticLoop); got != RunExecutionContractAgenticLoop {
+		t.Fatalf("social requested agentic_loop => %q, want requested agentic loop", got)
+	}
+}
+
+func TestNormalizeExecutionContractPreservesExplicitAgenticLoop(t *testing.T) {
+	t.Parallel()
+
+	if got := normalizeExecutionContract(RunExecutionContractAgenticLoop, RunIntentSocial, RunObjectiveModeReplace, TaskComplexitySimple, TodoPolicyNone, interactionContract{}); got != RunExecutionContractAgenticLoop {
+		t.Fatalf("explicit social agentic_loop => %q, want %q", got, RunExecutionContractAgenticLoop)
+	}
+	if got := normalizeExecutionContract("", RunIntentSocial, RunObjectiveModeReplace, TaskComplexitySimple, TodoPolicyNone, interactionContract{}); got != RunExecutionContractDirectReply {
+		t.Fatalf("default social contract => %q, want %q", got, RunExecutionContractDirectReply)
+	}
+}
+
 func TestClassifyFinalizationReason(t *testing.T) {
 	t.Parallel()
 
@@ -95,6 +126,17 @@ func TestEvaluateTaskCompletionGate(t *testing.T) {
 		TodoTotalCount:      2,
 	}, TaskComplexityStandard, config.AIModeAct); pass || reason != todoRequirementInsufficientPolicyRequired {
 		t.Fatalf("required todo policy with too few todos => pass=%v reason=%q", pass, reason)
+	}
+
+	if pass, reason := evaluateTaskCompletionGate("Everything is done.", runtimeState{
+		TodoPolicy:           TodoPolicyRequired,
+		MinimumTodoItems:     7,
+		TodoTrackingEnabled:  true,
+		TodoTotalCount:       6,
+		TodoOpenCount:        0,
+		CompletedActionFacts: []string{"terminal.exec: created directory", "file.write: wrote summary"},
+	}, TaskComplexityStandard, config.AIModeAct); !pass || reason != "ok" {
+		t.Fatalf("completed actionable todos with verified work => pass=%v reason=%q", pass, reason)
 	}
 
 	if pass, reason := evaluateTaskCompletionGate("I think you are in your late twenties. Did I guess right?", runtimeState{

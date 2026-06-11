@@ -540,7 +540,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req TurnRequest, on
 	}
 
 	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
-	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
+	decorateChatCompletionParams(&params, req.WebSearchMode, req.ProviderControls.DisableReasoning, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
@@ -753,7 +753,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req TurnRequest, onEv
 	}
 
 	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
-	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
+	decorateChatCompletionParams(&params, req.WebSearchMode, req.ProviderControls.DisableReasoning, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
@@ -994,7 +994,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req TurnRequest) (TurnResul
 		params.ResponseFormat = openai.ChatCompletionNewParamsResponseFormatUnion{OfJSONObject: &obj}
 	}
 	tools, aliasToReal := buildOpenAIChatTools(req.Tools, p.strictToolSchema)
-	decorateChatCompletionParams(&params, req.WebSearchMode, &tools)
+	decorateChatCompletionParams(&params, req.WebSearchMode, req.ProviderControls.DisableReasoning, &tools)
 	if len(tools) > 0 {
 		params.Tools = tools
 	}
@@ -1074,9 +1074,14 @@ func buildOpenAIChatTools(defs []ToolDef, strict bool) ([]openai.ChatCompletionT
 	return out, aliasToReal
 }
 
-func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSearchMode string, tools *[]openai.ChatCompletionToolParam) {
+func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSearchMode string, disableReasoning bool, tools *[]openai.ChatCompletionToolParam) {
 	if params == nil {
 		return
+	}
+	extraFields := map[string]any{}
+	if disableReasoning {
+		extraFields["thinking"] = map[string]any{"type": "disabled"}
+		extraFields["enable_thinking"] = false
 	}
 	switch strings.TrimSpace(webSearchMode) {
 	case providerWebSearchModeKimiBuiltin:
@@ -1088,9 +1093,7 @@ func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSea
 				},
 			}))
 		}
-		params.SetExtraFields(map[string]any{
-			"thinking": map[string]any{"type": "disabled"},
-		})
+		extraFields["thinking"] = map[string]any{"type": "disabled"}
 	case providerWebSearchModeGLMWebSearchTool:
 		if tools != nil {
 			*tools = append(*tools, openAIChatToolOverride(map[string]any{
@@ -1101,9 +1104,10 @@ func decorateChatCompletionParams(params *openai.ChatCompletionNewParams, webSea
 			}))
 		}
 	case providerWebSearchModeDeepSeekNative:
-		params.SetExtraFields(map[string]any{
-			"enable_search": true,
-		})
+		extraFields["enable_search"] = true
+	}
+	if len(extraFields) > 0 {
+		params.SetExtraFields(extraFields)
 	}
 }
 
@@ -3631,6 +3635,9 @@ func todoTrackingRequirement(complexity string, state runtimeState) (bool, strin
 			return true, todoRequirementMissingPolicyRequired
 		}
 		if state.TodoTotalCount < minItems {
+			if state.TodoOpenCount == 0 && runtimeCloseoutHasVerifiedToolWork(state) {
+				return false, ""
+			}
 			return true, todoRequirementInsufficientPolicyRequired
 		}
 		return false, ""
@@ -3666,10 +3673,11 @@ func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *runtimeState, 
 				todos, decodeErr := decodeTodoItemsJSON(snapshot.TodosJSON)
 				if decodeErr == nil {
 					summary := summarizeTodos(todos)
+					actionableSummary := actionableTodoSummary(todos)
 					state.TodoTrackingEnabled = true
 					state.TodoTotalCount = summary.Total
-					state.TodoOpenCount = summary.Pending + summary.InProgress
-					state.TodoInProgressCount = summary.InProgress
+					state.TodoOpenCount = actionableSummary.Pending + actionableSummary.InProgress
+					state.TodoInProgressCount = actionableSummary.InProgress
 					state.TodoSnapshotVersion = snapshot.Version
 					return "thread_snapshot", true
 				}
@@ -3760,6 +3768,11 @@ func extractWriteTodosState(raw any) (totalCount int, openCount int, inProgressC
 	total := readAnyInt(summary["total"])
 	if total < 0 || pending < 0 || inProgress < 0 || completed < 0 || cancelled < 0 {
 		return 0, 0, 0, 0, false
+	}
+	if todos, ok := root["todos"].([]TodoItem); ok {
+		actionableSummary := actionableTodoSummary(todos)
+		pending = actionableSummary.Pending
+		inProgress = actionableSummary.InProgress
 	}
 	open := pending + inProgress
 	ver := int64(readAnyInt(root["version"]))
@@ -4003,6 +4016,51 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 	}
 }
 
+func (r *run) emitTaskCompleteToolBlock(toolID string, resultText string, evidenceRefs []string) {
+	if r == nil {
+		return
+	}
+	toolID = strings.TrimSpace(toolID)
+	if toolID == "" {
+		if id, err := newToolID(); err == nil {
+			toolID = id
+		} else {
+			toolID = "tool_task_complete"
+		}
+	}
+	resultText = strings.TrimSpace(resultText)
+	cleanEvidenceRefs := make([]string, 0, len(evidenceRefs))
+	for _, ref := range evidenceRefs {
+		if ref = strings.TrimSpace(ref); ref != "" {
+			cleanEvidenceRefs = append(cleanEvidenceRefs, ref)
+		}
+	}
+	args := map[string]any{
+		"result": truncateRunes(resultText, 500),
+	}
+	result := map[string]any{
+		"result": resultText,
+	}
+	if len(cleanEvidenceRefs) > 0 {
+		args["evidence_refs"] = append([]string(nil), cleanEvidenceRefs...)
+		result["evidence_refs"] = append([]string(nil), cleanEvidenceRefs...)
+	}
+	toolID = r.persistSyntheticToolSuccess(toolID, "task_complete", args, result)
+	r.mu.Lock()
+	idx := r.reserveActivityTimelineBlockIndexLocked()
+	r.needNewTextBlock = true
+	r.mu.Unlock()
+	block := ToolCallBlock{
+		Type:     "tool-call",
+		ToolName: "task_complete",
+		ToolID:   toolID,
+		Args:     args,
+		Status:   ToolCallStatusSuccess,
+		Result:   result,
+	}
+	r.emitPersistedToolBlockSet(idx, block)
+}
+
 func (r *run) emitAskUserToolBlock(signal askUserSignal, source string, contract interactionContract) {
 	if r == nil {
 		return
@@ -4029,6 +4087,19 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string, contract
 	idx := r.reserveActivityTimelineBlockIndexLocked()
 	r.needNewTextBlock = true
 	r.mu.Unlock()
+	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
+		MessageID:           strings.TrimSpace(r.messageID),
+		ToolID:              toolID,
+		ToolName:            "ask_user",
+		ReasonCode:          signal.ReasonCode,
+		RequiredFromUser:    append([]string(nil), signal.RequiredFromUser...),
+		EvidenceRefs:        append([]string(nil), signal.EvidenceRefs...),
+		InteractionContract: contract,
+		Questions:           questions,
+	})
+	if prompt == nil {
+		return
+	}
 	args := map[string]any{
 		"questions":            questions,
 		"reason_code":          signal.ReasonCode,
@@ -4043,6 +4114,7 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string, contract
 		"required_from_user":   append([]string(nil), signal.RequiredFromUser...),
 		"evidence_refs":        append([]string(nil), signal.EvidenceRefs...),
 		"interaction_contract": contract,
+		"waiting_prompt":       prompt,
 		"waiting_user":         true,
 	}
 	toolID = r.persistSyntheticToolSuccess(toolID, "ask_user", args, result)

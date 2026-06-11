@@ -16,6 +16,7 @@ func testRequestUserInputPrompt(messageID string, toolID string, reasonCode stri
 	return normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
 		MessageID:        strings.TrimSpace(messageID),
 		ToolID:           strings.TrimSpace(toolID),
+		ToolName:         "ask_user",
 		ReasonCode:       strings.TrimSpace(reasonCode),
 		RequiredFromUser: []string{"Provide the missing input."},
 		EvidenceRefs:     []string{"tool_evidence_1"},
@@ -24,12 +25,20 @@ func testRequestUserInputPrompt(messageID string, toolID string, reasonCode stri
 }
 
 func testSingleQuestionPrompt(messageID string, toolID string, questionID string, question string, choices []RequestUserInputChoice) *RequestUserInputPrompt {
+	responseMode := requestUserInputResponseModeWrite
+	var choicesExhaustive *bool
+	if len(choices) > 0 {
+		responseMode = requestUserInputResponseModeSelect
+		choicesExhaustive = testBoolPtr(true)
+	}
 	return testRequestUserInputPrompt(messageID, toolID, AskUserReasonUserDecisionRequired, []RequestUserInputQuestion{
 		{
-			ID:       strings.TrimSpace(questionID),
-			Header:   strings.TrimSpace(question),
-			Question: strings.TrimSpace(question),
-			Choices:  choices,
+			ID:                strings.TrimSpace(questionID),
+			Header:            strings.TrimSpace(question),
+			Question:          strings.TrimSpace(question),
+			ResponseMode:      responseMode,
+			ChoicesExhaustive: choicesExhaustive,
+			Choices:           choices,
 		},
 	})
 }

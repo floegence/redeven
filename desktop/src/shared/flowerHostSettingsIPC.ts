@@ -3,6 +3,7 @@ export const SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL = 'redeven-desktop:flower
 export const LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL = 'redeven-desktop:flower-host-threads-list';
 export const LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL = 'redeven-desktop:flower-host-thread-load';
 export const SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL = 'redeven-desktop:flower-host-chat-send';
+export const SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL = 'redeven-desktop:flower-host-input-submit';
 export const RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL = 'redeven-desktop:flower-host-handler-resolve';
 
 export type DesktopFlowerHostProviderType =
@@ -140,19 +141,20 @@ export type DesktopFlowerHostRouterDecision = Readonly<{
   reason_code: string;
   selected_handler: DesktopFlowerHostHandlerRef | null;
   available_handlers: readonly DesktopFlowerHostHandlerRef[];
-  unavailable_handlers?: readonly DesktopFlowerHostUnavailableHandler[];
+  unavailable_handlers: readonly DesktopFlowerHostUnavailableHandler[];
   handler_selection: Readonly<{
     can_switch: boolean;
     lock_reason?: string | null;
     requires_user_visible_confirmation: boolean;
   }>;
   decision_scope: DesktopFlowerHostDecisionScope;
-  host_presence?: DesktopFlowerHostPresence;
+  host_presence: DesktopFlowerHostPresence;
   current_target_id?: string;
-  allowed_actions?: readonly string[];
+  allowed_actions: readonly string[];
   ui_chips: readonly DesktopFlowerHostUIChip[];
   primary_message?: string;
   blocker?: Readonly<{ code: string; message: string }> | null;
+  created_at_unix_ms: number;
 }>;
 
 export type DesktopFlowerHostContextEnvelopeHeader = Readonly<{
@@ -180,7 +182,8 @@ export type DesktopFlowerHostSettingsSnapshot = Readonly<{
   target_cache: DesktopFlowerHostTargetCache;
 }>;
 
-export type DesktopFlowerHostChatMessageRole = 'user' | 'assistant';
+export type DesktopFlowerHostChatMessageRole = 'user' | 'assistant' | 'system';
+export type DesktopFlowerHostChatMessageStatus = 'sending' | 'streaming' | 'error' | 'complete';
 export type DesktopFlowerHostThreadStatus =
   | 'idle'
   | 'running'
@@ -190,11 +193,94 @@ export type DesktopFlowerHostThreadStatus =
   | 'success'
   | 'read_only';
 
+export type DesktopFlowerHostChatMessageBlock = Readonly<{
+  type: 'markdown' | 'text' | 'thinking';
+  content?: string;
+}>;
+
 export type DesktopFlowerHostChatMessage = Readonly<{
   id: string;
   role: DesktopFlowerHostChatMessageRole;
   content: string;
+  status: DesktopFlowerHostChatMessageStatus;
   created_at_ms: number;
+  blocks?: readonly DesktopFlowerHostChatMessageBlock[];
+}>;
+
+export type DesktopFlowerHostThreadError = Readonly<{
+  message: string;
+  code?: string;
+}>;
+
+export type DesktopFlowerHostToolActivityStatus =
+  | 'pending'
+  | 'running'
+  | 'waiting'
+  | 'success'
+  | 'error'
+  | 'canceled';
+
+export type DesktopFlowerHostToolActivity = Readonly<{
+  run_id?: string;
+  tool_id: string;
+  tool_name: string;
+  status: DesktopFlowerHostToolActivityStatus;
+  summary: string;
+  requires_approval?: boolean;
+  approval_state?: string;
+  error_message?: string;
+  started_at_ms?: number;
+  ended_at_ms?: number;
+}>;
+
+export type DesktopFlowerHostInputAction = Readonly<{
+  type: string;
+  mode?: string;
+}>;
+
+export type DesktopFlowerHostInputChoice = Readonly<{
+  choice_id: string;
+  label: string;
+  description?: string;
+  kind: 'select' | 'write';
+  input_placeholder?: string;
+  actions?: readonly DesktopFlowerHostInputAction[];
+}>;
+
+export type DesktopFlowerHostInputQuestion = Readonly<{
+  id: string;
+  header: string;
+  question: string;
+  is_secret?: boolean;
+  response_mode: 'select' | 'write' | 'select_or_write';
+  choices_exhaustive?: boolean;
+  write_label?: string;
+  write_placeholder?: string;
+  choices?: readonly DesktopFlowerHostInputChoice[];
+}>;
+
+export type DesktopFlowerHostInputRequest = Readonly<{
+  prompt_id: string;
+  message_id: string;
+  tool_id: string;
+  tool_name: string;
+  reason_code?: string;
+  required_from_user?: readonly string[];
+  evidence_refs?: readonly string[];
+  questions: readonly DesktopFlowerHostInputQuestion[];
+  public_summary?: string;
+  contains_secret?: boolean;
+}>;
+
+export type DesktopFlowerHostInputAnswer = Readonly<{
+  choice_id?: string;
+  text?: string;
+}>;
+
+export type DesktopFlowerHostSubmitInputRequest = Readonly<{
+  thread_id: string;
+  prompt_id: string;
+  answers: Readonly<Record<string, DesktopFlowerHostInputAnswer>>;
 }>;
 
 export type DesktopFlowerHostThread = Readonly<{
@@ -203,12 +289,15 @@ export type DesktopFlowerHostThread = Readonly<{
   model_id: string;
   created_at_ms: number;
   updated_at_ms: number;
-  status?: DesktopFlowerHostThreadStatus;
+  status: DesktopFlowerHostThreadStatus;
   home_host_id?: string;
   home_host_kind?: 'global' | 'env_local';
-  source_label?: string;
-  target_labels?: readonly string[];
+  source_label: string;
+  target_labels: readonly string[];
   messages: readonly DesktopFlowerHostChatMessage[];
+  tool_activity?: readonly DesktopFlowerHostToolActivity[];
+  input_request?: DesktopFlowerHostInputRequest | null;
+  error?: DesktopFlowerHostThreadError | null;
 }>;
 
 export type DesktopFlowerHostSendChatRequest = Readonly<{
@@ -225,15 +314,22 @@ export type DesktopFlowerHostSendChatRequest = Readonly<{
   context_action?: unknown;
 }>;
 
+export type DesktopFlowerHostError = Readonly<{
+  code: string;
+  message: string;
+}>;
+
+export type DesktopFlowerHostFailure = Readonly<{
+  ok: false;
+  error: DesktopFlowerHostError;
+}>;
+
 export type ListDesktopFlowerHostThreadsResult = Readonly<
   | {
       ok: true;
       threads: readonly DesktopFlowerHostThread[];
     }
-  | {
-      ok: false;
-      error: string;
-    }
+  | DesktopFlowerHostFailure
 >;
 
 export type LoadDesktopFlowerHostThreadResult = Readonly<
@@ -241,10 +337,7 @@ export type LoadDesktopFlowerHostThreadResult = Readonly<
       ok: true;
       thread: DesktopFlowerHostThread;
     }
-  | {
-      ok: false;
-      error: string;
-    }
+  | DesktopFlowerHostFailure
 >;
 
 export type SendDesktopFlowerHostChatResult = Readonly<
@@ -254,13 +347,18 @@ export type SendDesktopFlowerHostChatResult = Readonly<
     }
   | {
       ok: false;
-      error: string;
+      error: DesktopFlowerHostError;
       fresh_decision: DesktopFlowerHostRouterDecision;
     }
+  | DesktopFlowerHostFailure
+>;
+
+export type SubmitDesktopFlowerHostInputResult = Readonly<
   | {
-      ok: false;
-      error: string;
+      ok: true;
+      thread: DesktopFlowerHostThread;
     }
+  | DesktopFlowerHostFailure
 >;
 
 export type LoadDesktopFlowerHostSettingsResult = Readonly<
@@ -268,10 +366,7 @@ export type LoadDesktopFlowerHostSettingsResult = Readonly<
       ok: true;
       snapshot: DesktopFlowerHostSettingsSnapshot;
     }
-  | {
-      ok: false;
-      error: string;
-    }
+  | DesktopFlowerHostFailure
 >;
 
 export type ResolveDesktopFlowerHostHandlerResult = Readonly<
@@ -279,10 +374,7 @@ export type ResolveDesktopFlowerHostHandlerResult = Readonly<
       ok: true;
       decision: DesktopFlowerHostRouterDecision;
     }
-  | {
-      ok: false;
-      error: string;
-    }
+  | DesktopFlowerHostFailure
 >;
 
 export type SaveDesktopFlowerHostSettingsResult = Readonly<
@@ -290,10 +382,7 @@ export type SaveDesktopFlowerHostSettingsResult = Readonly<
       ok: true;
       snapshot: DesktopFlowerHostSettingsSnapshot;
     }
-  | {
-      ok: false;
-      error: string;
-    }
+  | DesktopFlowerHostFailure
 >;
 
 export function normalizeDesktopFlowerHostSecretMode(

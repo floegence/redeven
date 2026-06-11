@@ -2355,8 +2355,10 @@ func normalizeSnapshotMessageStatus(status string) string {
 		return "streaming"
 	case "error":
 		return "error"
-	default:
+	case "complete":
 		return "complete"
+	default:
+		return ""
 	}
 }
 
@@ -2403,6 +2405,9 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 		Blocks:    blocks,
 		Status:    normalizeSnapshotMessageStatus(status),
 		Timestamp: assistantAt,
+	}
+	if msg.Status == "" {
+		return "", "", 0, fmt.Errorf("unsupported assistant snapshot status %q", strings.TrimSpace(status))
 	}
 	b, err := json.Marshal(msg)
 	if err != nil {
@@ -2505,21 +2510,18 @@ func assistantVisibleTextFromBlock(block any) string {
 func extractAskUserSummaryFromAny(value any) string {
 	switch v := value.(type) {
 	case map[string]any:
-		if prompt := requestUserInputPromptFromAnyValue(v["waiting_prompt"], "", ""); prompt != nil {
+		if prompt := requestUserInputPromptFromAnyValue(v["waiting_prompt"], "", "", ""); prompt != nil {
 			return formatRequestUserInputAssistantSummary(*prompt)
 		}
-		if questions := parseAskUserQuestionsAny(v["questions"]); len(questions) > 0 {
-			return formatRequestUserInputAssistantSummary(RequestUserInputPrompt{Questions: questions})
-		}
 	default:
-		if questions := parseAskUserQuestionsAny(value); len(questions) > 0 {
-			return formatRequestUserInputAssistantSummary(RequestUserInputPrompt{Questions: questions})
+		if prompt := requestUserInputPromptFromAnyValue(value, "", "", ""); prompt != nil {
+			return formatRequestUserInputAssistantSummary(*prompt)
 		}
 	}
 	return ""
 }
 
-func requestUserInputPromptFromAnyValue(value any, messageID string, toolID string) *RequestUserInputPrompt {
+func requestUserInputPromptFromAnyValue(value any, messageID string, toolID string, toolName string) *RequestUserInputPrompt {
 	if value == nil {
 		return nil
 	}
@@ -2531,13 +2533,20 @@ func requestUserInputPromptFromAnyValue(value any, messageID string, toolID stri
 	if err := json.Unmarshal(raw, &prompt); err != nil {
 		return nil
 	}
-	if strings.TrimSpace(prompt.MessageID) == "" {
-		prompt.MessageID = strings.TrimSpace(messageID)
+	normalized := strictRequestUserInputPrompt(&prompt)
+	if normalized == nil {
+		return nil
 	}
-	if strings.TrimSpace(prompt.ToolID) == "" {
-		prompt.ToolID = strings.TrimSpace(toolID)
+	if want := strings.TrimSpace(messageID); want != "" && strings.TrimSpace(normalized.MessageID) != want {
+		return nil
 	}
-	return normalizeRequestUserInputPrompt(&prompt)
+	if want := strings.TrimSpace(toolID); want != "" && strings.TrimSpace(normalized.ToolID) != want {
+		return nil
+	}
+	if want := strings.TrimSpace(toolName); want != "" && strings.TrimSpace(normalized.ToolName) != want {
+		return nil
+	}
+	return normalized
 }
 
 func toAnySlice(value any) []any {
@@ -2579,13 +2588,19 @@ func extractStringListFromAny(value any) []string {
 }
 
 func extractAskUserQuestions(args any, result any) []RequestUserInputQuestion {
-	if m, ok := result.(map[string]any); ok && m != nil {
-		if questions := parseAskUserQuestionsAny(m["questions"]); len(questions) > 0 {
+	if rec, ok := result.(map[string]any); ok {
+		if prompt := requestUserInputPromptFromAnyValue(rec["waiting_prompt"], "", "", ""); prompt != nil {
+			return prompt.Questions
+		}
+		if questions := parseAskUserQuestionsAny(rec["questions"]); len(questions) > 0 {
 			return questions
 		}
 	}
-	if m, ok := args.(map[string]any); ok && m != nil {
-		if questions := parseAskUserQuestionsAny(m["questions"]); len(questions) > 0 {
+	if questions := parseAskUserQuestionsAny(args); len(questions) > 0 {
+		return questions
+	}
+	if rec, ok := args.(map[string]any); ok {
+		if questions := parseAskUserQuestionsAny(rec["questions"]); len(questions) > 0 {
 			return questions
 		}
 	}
@@ -2624,9 +2639,13 @@ func extractAskUserToolIdentity(block any) (toolID string, askUser bool, waiting
 	case ToolCallBlock:
 		switch strings.TrimSpace(v.ToolName) {
 		case "ask_user":
-			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), extractAskUserQuestions(v.Args, v.Result)
+			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID), "ask_user")
+			if prompt == nil {
+				return "", false, false, nil
+			}
+			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), prompt.Questions
 		case "exit_plan_mode":
-			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID))
+			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID), "exit_plan_mode")
 			if prompt == nil {
 				return "", false, false, nil
 			}
@@ -2640,9 +2659,13 @@ func extractAskUserToolIdentity(block any) (toolID string, askUser bool, waiting
 		}
 		switch strings.TrimSpace(v.ToolName) {
 		case "ask_user":
-			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), extractAskUserQuestions(v.Args, v.Result)
+			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID), "ask_user")
+			if prompt == nil {
+				return "", false, false, nil
+			}
+			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), prompt.Questions
 		case "exit_plan_mode":
-			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID))
+			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID), "exit_plan_mode")
 			if prompt == nil {
 				return "", false, false, nil
 			}
@@ -2659,10 +2682,14 @@ func extractAskUserToolIdentity(block any) (toolID string, askUser bool, waiting
 		switch strings.TrimSpace(toolName) {
 		case "ask_user":
 			toolID, _ := v["toolId"].(string)
-			return strings.TrimSpace(toolID), true, extractAskUserWaitingFlag(v["result"]), extractAskUserQuestions(v["args"], v["result"])
+			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v["result"]), "", strings.TrimSpace(toolID), "ask_user")
+			if prompt == nil {
+				return "", false, false, nil
+			}
+			return strings.TrimSpace(toolID), true, extractAskUserWaitingFlag(v["result"]), prompt.Questions
 		case "exit_plan_mode":
 			toolID, _ := v["toolId"].(string)
-			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v["result"]), "", strings.TrimSpace(toolID))
+			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v["result"]), "", strings.TrimSpace(toolID), "exit_plan_mode")
 			if prompt == nil {
 				return "", false, false, nil
 			}
@@ -2706,52 +2733,41 @@ func extractAskUserPromptSnapshot(block any, messageID string) (*RequestUserInpu
 	if prompt, waitingUser := activityPromptSnapshotFromBlock(block, messageID); prompt != nil {
 		return prompt, waitingUser
 	}
-	toolID, askUser, waitingUser, questions := extractAskUserToolIdentity(block)
+	toolID, askUser, waitingUser, _ := extractAskUserToolIdentity(block)
 	if !askUser || strings.TrimSpace(toolID) == "" {
 		return nil, false
 	}
 
-	var args map[string]any
 	var result map[string]any
 	switch v := block.(type) {
 	case ToolCallBlock:
-		args = v.Args
 		result, _ = v.Result.(map[string]any)
 	case *ToolCallBlock:
 		if v == nil {
 			return nil, false
 		}
-		args = v.Args
 		result, _ = v.Result.(map[string]any)
 	case map[string]any:
-		args, _ = v["args"].(map[string]any)
 		result, _ = v["result"].(map[string]any)
 	default:
 		return nil, false
 	}
 
-	payload := args
-	if payload == nil {
-		payload = result
+	toolName := ""
+	switch v := block.(type) {
+	case ToolCallBlock:
+		toolName = strings.TrimSpace(v.ToolName)
+	case *ToolCallBlock:
+		if v != nil {
+			toolName = strings.TrimSpace(v.ToolName)
+		}
+	case map[string]any:
+		toolName = strings.TrimSpace(anyToString(v["toolName"]))
 	}
-	if payload == nil {
-		payload = map[string]any{}
-	}
-
-	if prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(result), strings.TrimSpace(messageID), strings.TrimSpace(toolID)); prompt != nil {
+	if prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(result), strings.TrimSpace(messageID), strings.TrimSpace(toolID), toolName); prompt != nil {
 		return prompt, waitingUser
 	}
-
-	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
-		MessageID:           strings.TrimSpace(messageID),
-		ToolID:              strings.TrimSpace(toolID),
-		ReasonCode:          strings.TrimSpace(anyToString(payload["reason_code"])),
-		RequiredFromUser:    extractStringListFromAny(payload["required_from_user"]),
-		EvidenceRefs:        extractStringListFromAny(payload["evidence_refs"]),
-		InteractionContract: interactionContractFromAny(payload["interaction_contract"]),
-		Questions:           questions,
-	})
-	return prompt, waitingUser
+	return nil, false
 }
 
 func (r *run) snapshotWaitingPrompt() *RequestUserInputPrompt {
@@ -3252,12 +3268,19 @@ func (r *run) shouldRouteTargetTool(toolName string) bool {
 
 func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string, args map[string]any) (any, error) {
 	policy := normalizeToolTargetPolicy(r.toolTargetPolicy)
-	targetID := targetIDFromToolArgs(args, policy.DefaultTargetID)
+	targetID := targetIDFromToolArgs(args)
 	if strings.TrimSpace(targetID) == "" {
 		return nil, &targetToolPolicyError{
 			code:   "missing_target_id",
 			tool:   toolName,
 			target: "",
+		}
+	}
+	if !targetAllowedByPolicy(policy, targetID) {
+		return nil, &targetToolPolicyError{
+			code:   "target_not_allowed",
+			tool:   toolName,
+			target: targetID,
 		}
 	}
 	if r.targetToolExecutor == nil {
@@ -3297,6 +3320,8 @@ func (e *targetToolPolicyError) Error() string {
 		return "target_id is required for target-scoped Flower tools"
 	case "target_executor_unavailable":
 		return "target tool executor is unavailable"
+	case "target_not_allowed":
+		return "target_id is not allowed for this Flower thread"
 	default:
 		return "target tool policy denied the tool call"
 	}

@@ -71,7 +71,7 @@ function groupThreadsByDate(threads: ThreadView[]): { group: TimeGroup; threads:
   };
 
   for (const t of threads) {
-    const ts = threadSortTime(t);
+    const ts = threadCreatedTime(t);
     if (ts >= todayStart) {
       groups.today.push(t);
     } else if (ts >= yesterdayStart) {
@@ -145,12 +145,18 @@ function timeGroupLabel(group: TimeGroup, i18n: I18nHelpers): string {
   }
 }
 
-function threadSortTime(thread: ThreadView): number {
-  const updated = Number(thread.updated_at_unix_ms || 0);
-  if (updated > 0) return updated;
+function threadCreatedTime(thread: ThreadView): number {
   const created = Number(thread.created_at_unix_ms || 0);
   if (created > 0) return created;
   return 0;
+}
+
+function orderThreadsByCreatedAt(threads: readonly ThreadView[]): ThreadView[] {
+  return [...threads].sort((left, right) => {
+    const byCreated = threadCreatedTime(right) - threadCreatedTime(left);
+    if (byCreated !== 0) return byCreated;
+    return String(left.thread_id ?? '').localeCompare(String(right.thread_id ?? ''));
+  });
 }
 
 function normalizeThreadStatus(raw: string | null | undefined): ThreadRunStatus {
@@ -380,7 +386,7 @@ export function AIChatSidebar(props: {
     ]));
   });
   const visibleThreads = createMemo(() => {
-    if (scope() === 'all') return threadList();
+    if (scope() === 'all') return orderThreadsByCreatedAt(threadList());
     const currentEnvPublicId = String(env.env_id() ?? '').trim();
     const projected = Array.from(flowerThreadById().values());
     const visibleIds = new Set(
@@ -388,7 +394,7 @@ export function AIChatSidebar(props: {
         .map((item) => String(item.thread_id ?? '').trim())
         .filter(Boolean),
     );
-    return threadList().filter((thread) => visibleIds.has(String(thread.thread_id ?? '').trim()));
+    return orderThreadsByCreatedAt(threadList().filter((thread) => visibleIds.has(String(thread.thread_id ?? '').trim())));
   });
   const groupedThreads = createMemo(() => groupThreadsByDate(visibleThreads()));
   const showGroupHeaders = createMemo(() => visibleThreads().length >= 5);
@@ -586,7 +592,7 @@ function ThreadCard(props: {
     if (!item) return '';
     return String(item.read_only_reason ?? item.source_label ?? item.summary ?? '').trim();
   };
-  const timeStr = () => fmtShortTime(props.thread.updated_at_unix_ms, props.i18n);
+  const timeStr = () => fmtShortTime(props.thread.created_at_unix_ms, props.i18n);
   const indicatorMode = (): 'running' | 'unread' | 'none' => {
     if (props.isRunning) return 'running';
     if (props.unread) return 'unread';

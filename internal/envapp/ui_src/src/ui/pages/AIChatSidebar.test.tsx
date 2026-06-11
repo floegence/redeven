@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Show } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -42,6 +42,17 @@ function makeThreadsResource(threads: ThreadView[]): any {
   resource.loading = false;
   resource.error = null;
   return resource;
+}
+
+function makeReactiveThreadsResource(initialThreads: ThreadView[]): {
+  resource: any;
+  setThreads: (threads: ThreadView[]) => void;
+} {
+  const [threads, setThreads] = createSignal(initialThreads);
+  const resource: any = () => ({ threads: threads() });
+  resource.loading = false;
+  resource.error = null;
+  return { resource, setThreads };
 }
 
 function makeThread(overrides: Partial<ThreadView> = {}): ThreadView {
@@ -397,6 +408,60 @@ describe('AIChatSidebar', () => {
     expect(scrollRegion?.className).toContain('overscroll-contain');
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
+  });
+
+  it('keeps created-time order and scroll offset stable when selecting a refreshed thread', async () => {
+    const originalThreads = [
+      makeThread({
+        thread_id: 'thread-newest',
+        title: 'Newest',
+        created_at_unix_ms: 3000,
+        updated_at_unix_ms: 3000,
+      }),
+      makeThread({
+        thread_id: 'thread-middle',
+        title: 'Middle',
+        created_at_unix_ms: 2000,
+        updated_at_unix_ms: 2000,
+      }),
+      makeThread({
+        thread_id: 'thread-oldest',
+        title: 'Oldest',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 1000,
+      }),
+    ];
+    const reactive = makeReactiveThreadsResource(originalThreads);
+    aiContextStub.threads = reactive.resource;
+    aiContextStub.activeThreadId = () => 'thread-newest';
+    aiContextStub.selectThreadId = vi.fn((threadID: string) => {
+      aiContextStub.activeThreadId = () => threadID;
+      reactive.setThreads(originalThreads.map((thread) =>
+        thread.thread_id === threadID
+          ? { ...thread, updated_at_unix_ms: 9000, last_message_at_unix_ms: 9000 }
+          : thread,
+      ));
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <AIChatSidebar />, host);
+
+    const scrollRegion = host.querySelector('[data-testid="flower-thread-scroll-region"]') as HTMLDivElement | null;
+    expect(scrollRegion).toBeTruthy();
+    scrollRegion!.scrollTop = 42;
+
+    const orderBefore = Array.from(host.querySelectorAll('[data-thread-id]')).map((node) => node.getAttribute('data-thread-id'));
+    expect(orderBefore).toEqual(['thread-newest', 'thread-middle', 'thread-oldest']);
+
+    const middleButton = host.querySelector('[data-thread-id="thread-middle"] button') as HTMLButtonElement | null;
+    expect(middleButton).toBeTruthy();
+    middleButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await Promise.resolve();
+
+    const orderAfter = Array.from(host.querySelectorAll('[data-thread-id]')).map((node) => node.getAttribute('data-thread-id'));
+    expect(orderAfter).toEqual(['thread-newest', 'thread-middle', 'thread-oldest']);
+    expect(scrollRegion!.scrollTop).toBe(42);
   });
 
   it('keeps current-env rail limited to the Flower conversation list', () => {

@@ -5,20 +5,31 @@ import type {
 import type {
   DesktopFlowerHostChatMessage,
   DesktopFlowerHostConfig,
+  DesktopFlowerHostInputRequest,
   DesktopFlowerHostProvider,
   DesktopFlowerHostProviderDraft,
   DesktopFlowerHostProviderModel,
   DesktopFlowerHostResolveHandlerRequest,
-  DesktopFlowerHostRouterDecision,
   DesktopFlowerHostSendChatRequest,
   DesktopFlowerHostSettingsDraft,
   DesktopFlowerHostSettingsSnapshot,
+  DesktopFlowerHostSubmitInputRequest,
   DesktopFlowerHostTargetCacheEntry,
   DesktopFlowerHostThread,
+  DesktopFlowerHostError,
+  ListDesktopFlowerHostThreadsResult,
+  LoadDesktopFlowerHostSettingsResult,
+  LoadDesktopFlowerHostThreadResult,
+  ResolveDesktopFlowerHostHandlerResult,
+  SaveDesktopFlowerHostSettingsResult,
+  SendDesktopFlowerHostChatResult,
+  SubmitDesktopFlowerHostInputResult,
 } from '../../shared/flowerHostSettingsIPC';
 import type {
   FlowerChatMessage,
+  FlowerChatMessageBlock,
   FlowerHostConfig,
+  FlowerInputRequest,
   FlowerProvider,
   FlowerProviderDraft,
   FlowerProviderModel,
@@ -32,37 +43,25 @@ import type {
 
 export type DesktopSettingsBridge = Readonly<{
   save: (draft: DesktopSettingsDraft) => Promise<SaveDesktopSettingsResult>;
-  loadFlowerHostSettings: () => Promise<
-    | { ok: true; snapshot: DesktopFlowerHostSettingsSnapshot }
-    | { ok: false; error: string }
-  >;
-  saveFlowerHostSettings: (draft: DesktopFlowerHostSettingsDraft) => Promise<
-    | { ok: true; snapshot: DesktopFlowerHostSettingsSnapshot }
-    | { ok: false; error: string }
-  >;
-  listFlowerHostThreads: () => Promise<
-    | { ok: true; threads: readonly DesktopFlowerHostThread[] }
-    | { ok: false; error: string }
-  >;
-  loadFlowerHostThread: (threadID: string) => Promise<
-    | { ok: true; thread: DesktopFlowerHostThread }
-    | { ok: false; error: string }
-  >;
-  resolveFlowerHostHandler: (request?: DesktopFlowerHostResolveHandlerRequest) => Promise<
-    | { ok: true; decision: DesktopFlowerHostRouterDecision }
-    | { ok: false; error: string }
-  >;
-  sendFlowerHostChat: (request: DesktopFlowerHostSendChatRequest) => Promise<
-    | { ok: true; thread: DesktopFlowerHostThread }
-    | { ok: false; error: string }
-  >;
+  loadFlowerHostSettings: () => Promise<LoadDesktopFlowerHostSettingsResult>;
+  saveFlowerHostSettings: (draft: DesktopFlowerHostSettingsDraft) => Promise<SaveDesktopFlowerHostSettingsResult>;
+  listFlowerHostThreads: () => Promise<ListDesktopFlowerHostThreadsResult>;
+  loadFlowerHostThread: (threadID: string) => Promise<LoadDesktopFlowerHostThreadResult>;
+  resolveFlowerHostHandler: (request?: DesktopFlowerHostResolveHandlerRequest) => Promise<ResolveDesktopFlowerHostHandlerResult>;
+  sendFlowerHostChat: (request: DesktopFlowerHostSendChatRequest) => Promise<SendDesktopFlowerHostChatResult>;
+  submitFlowerHostInput: (request: DesktopFlowerHostSubmitInputRequest) => Promise<SubmitDesktopFlowerHostInputResult>;
   cancel: () => void;
 }>;
+
+function flowerHostError(error: DesktopFlowerHostError): Error & { code?: string } {
+  const out = new Error(error.message) as Error & { code?: string };
+  out.code = error.code;
+  return out;
+}
 
 export type DesktopFlowerSurfaceAdapterOptions = Readonly<{
   hostDisplayName: string;
   hostSubtitle: string;
-  threadSourceLabel: string;
 }>;
 
 function mapModel(model: DesktopFlowerHostProviderModel): FlowerProviderModel {
@@ -161,25 +160,71 @@ export function mapFlowerSettingsDraftToDesktop(draft: FlowerSettingsDraft): Des
 }
 
 function mapMessage(message: DesktopFlowerHostChatMessage): FlowerChatMessage {
+  const blocks = message.blocks
+    ?.map((block): FlowerChatMessageBlock => ({
+      type: block.type,
+      ...(block.content !== undefined ? { content: block.content } : {}),
+    })) ?? [];
   return {
     id: message.id,
     role: message.role,
     content: message.content,
+    status: message.status,
     created_at_ms: message.created_at_ms,
+    ...(blocks.length > 0 ? { blocks } : {}),
   };
 }
 
-export function mapDesktopFlowerThread(thread: DesktopFlowerHostThread, sourceLabel = 'this host'): FlowerThreadSnapshot {
+function mapInputRequest(request: DesktopFlowerHostInputRequest): FlowerInputRequest {
+  return {
+    prompt_id: request.prompt_id,
+    message_id: request.message_id,
+    tool_id: request.tool_id,
+    tool_name: request.tool_name,
+    ...(request.reason_code ? { reason_code: request.reason_code } : {}),
+    ...(request.required_from_user ? { required_from_user: request.required_from_user } : {}),
+    ...(request.evidence_refs ? { evidence_refs: request.evidence_refs } : {}),
+    questions: request.questions.map((question) => ({
+      id: question.id,
+      header: question.header,
+      question: question.question,
+      ...(question.is_secret !== undefined ? { is_secret: question.is_secret } : {}),
+      response_mode: question.response_mode,
+      ...(question.choices_exhaustive !== undefined ? { choices_exhaustive: question.choices_exhaustive } : {}),
+      ...(question.write_label ? { write_label: question.write_label } : {}),
+      ...(question.write_placeholder ? { write_placeholder: question.write_placeholder } : {}),
+      ...(question.choices ? {
+        choices: question.choices.map((choice) => ({
+          choice_id: choice.choice_id,
+          label: choice.label,
+          ...(choice.description ? { description: choice.description } : {}),
+          kind: choice.kind,
+          ...(choice.input_placeholder ? { input_placeholder: choice.input_placeholder } : {}),
+          ...(choice.actions ? { actions: choice.actions } : {}),
+        })),
+      } : {}),
+    })),
+    ...(request.public_summary ? { public_summary: request.public_summary } : {}),
+    ...(request.contains_secret !== undefined ? { contains_secret: request.contains_secret } : {}),
+  };
+}
+
+export function mapDesktopFlowerThread(thread: DesktopFlowerHostThread): FlowerThreadSnapshot {
   return {
     thread_id: thread.thread_id,
     title: thread.title,
     model_id: thread.model_id,
     created_at_ms: thread.created_at_ms,
     updated_at_ms: thread.updated_at_ms,
-    status: thread.status ?? 'idle',
-    source_label: thread.source_label || sourceLabel,
-    target_labels: thread.target_labels ?? [],
+    status: thread.status,
+    ...(thread.home_host_id ? { home_host_id: thread.home_host_id } : {}),
+    ...(thread.home_host_kind ? { home_host_kind: thread.home_host_kind } : {}),
+    source_label: thread.source_label,
+    target_labels: thread.target_labels,
     messages: thread.messages.map(mapMessage),
+    ...(thread.tool_activity ? { tool_activity: thread.tool_activity } : {}),
+    ...(thread.input_request ? { input_request: mapInputRequest(thread.input_request) } : {}),
+    ...(thread.error !== undefined ? { error: thread.error } : {}),
   };
 }
 
@@ -188,7 +233,6 @@ export function createDesktopFlowerSurfaceAdapter(
   options: DesktopFlowerSurfaceAdapterOptions = {
     hostDisplayName: 'this host',
     hostSubtitle: 'Global assistant host',
-    threadSourceLabel: 'this host',
   },
 ): FlowerSurfaceAdapter {
   return {
@@ -201,27 +245,27 @@ export function createDesktopFlowerSurfaceAdapter(
     },
     loadSettings: async () => {
       const result = await bridge.loadFlowerHostSettings();
-      if (!result.ok) throw new Error(result.error);
+      if (!result.ok) throw flowerHostError(result.error);
       return mapDesktopFlowerSnapshot(result.snapshot);
     },
     saveSettings: async (draft) => {
       const result = await bridge.saveFlowerHostSettings(mapFlowerSettingsDraftToDesktop(draft));
-      if (!result.ok) throw new Error(result.error);
+      if (!result.ok) throw flowerHostError(result.error);
       return mapDesktopFlowerSnapshot(result.snapshot);
     },
     listThreads: async () => {
       const result = await bridge.listFlowerHostThreads();
-      if (!result.ok) throw new Error(result.error);
-      return result.threads.map((thread) => mapDesktopFlowerThread(thread, options.threadSourceLabel));
+      if (!result.ok) throw flowerHostError(result.error);
+      return result.threads.map((thread) => mapDesktopFlowerThread(thread));
     },
     loadThread: async (threadID) => {
       const result = await bridge.loadFlowerHostThread(threadID);
-      if (!result.ok) throw new Error(result.error);
-      return mapDesktopFlowerThread(result.thread, options.threadSourceLabel);
+      if (!result.ok) throw flowerHostError(result.error);
+      return mapDesktopFlowerThread(result.thread);
     },
     resolveHandler: async (request) => {
       const result = await bridge.resolveFlowerHostHandler(request);
-      if (!result.ok) throw new Error(result.error);
+      if (!result.ok) throw flowerHostError(result.error);
       return result.decision;
     },
     sendMessage: async (input) => {
@@ -236,14 +280,23 @@ export function createDesktopFlowerSurfaceAdapter(
         client_surface: input.decision?.decision_scope.client_surface,
       });
       if (!result.ok) {
-        const error = new Error(result.error) as Error & { fresh_decision?: FlowerRouterDecision };
+        const error = flowerHostError(result.error) as Error & { code?: string; fresh_decision?: FlowerRouterDecision };
         const freshDecision = (result as { fresh_decision?: FlowerRouterDecision }).fresh_decision;
         if (freshDecision) {
           error.fresh_decision = freshDecision;
         }
         throw error;
       }
-      return mapDesktopFlowerThread(result.thread, options.threadSourceLabel);
+      return mapDesktopFlowerThread(result.thread);
+    },
+    submitInput: async (input) => {
+      const result = await bridge.submitFlowerHostInput({
+        thread_id: input.thread_id,
+        prompt_id: input.prompt_id,
+        answers: input.answers,
+      });
+      if (!result.ok) throw flowerHostError(result.error);
+      return mapDesktopFlowerThread(result.thread);
     },
   };
 }

@@ -658,19 +658,11 @@ func activityPromptSnapshotFromBlock(block any, messageID string) (*RequestUserI
 			item := items[ii]
 			switch strings.TrimSpace(item.ToolName) {
 			case "ask_user":
-				if prompt := requestUserInputPromptFromAnyValue(item.Payload, messageID, strings.TrimSpace(item.ToolID)); prompt != nil {
+				if prompt := requestUserInputPromptFromAnyValue(item.Payload["waiting_prompt"], messageID, strings.TrimSpace(item.ToolID), "ask_user"); prompt != nil {
 					return prompt, item.Status == "waiting"
 				}
-				questions := parseAskUserQuestionsAny(item.Payload["questions"])
-				if len(questions) > 0 {
-					return normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
-						MessageID: strings.TrimSpace(messageID),
-						ToolID:    strings.TrimSpace(item.ToolID),
-						Questions: questions,
-					}), item.Status == "waiting"
-				}
 			case "exit_plan_mode":
-				if prompt := requestUserInputPromptFromAnyValue(item.Payload["waiting_prompt"], messageID, strings.TrimSpace(item.ToolID)); prompt != nil {
+				if prompt := requestUserInputPromptFromAnyValue(item.Payload["waiting_prompt"], messageID, strings.TrimSpace(item.ToolID), "exit_plan_mode"); prompt != nil {
 					return prompt, item.Status == "waiting"
 				}
 			}
@@ -830,6 +822,13 @@ func todosCountDescription(args map[string]any, result any) string {
 
 func askUserQuestionSummary(args map[string]any, result any) string {
 	questions := extractAskUserQuestions(args, result)
+	if len(questions) == 0 {
+		if rec, ok := result.(map[string]any); ok {
+			if prompt := requestUserInputPromptFromAnyValue(rec["waiting_prompt"], "", "", "ask_user"); prompt != nil {
+				questions = prompt.Questions
+			}
+		}
+	}
 	if len(questions) == 0 {
 		return ""
 	}

@@ -163,3 +163,36 @@ func TestTargetConnectorMapsOfflineTargetToUnreachable(t *testing.T) {
 		t.Fatalf("reason=%q err=%v, want target_unreachable", got, err)
 	}
 }
+
+func TestTargetConnectorPreservesStructuredBrokerErrorMessage(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("content-type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"ok": false,
+			"error": map[string]any{
+				"code":    "target_session_invalid",
+				"message": "Target session grant is malformed.",
+			},
+		})
+	}))
+	defer server.Close()
+
+	connector := NewTargetConnector(TargetConnectorOptions{
+		BrokerURL:   server.URL,
+		BrokerToken: "broker-token",
+	})
+	_, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
+		TargetID:       "cp:test:env:env_a",
+		ProviderOrigin: server.URL,
+		EnvPublicID:    "env_a",
+	}, []string{"read"})
+	if got := TargetConnectReason(err); got != "target_unreachable" {
+		t.Fatalf("reason=%q err=%v, want target_unreachable", got, err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "Target session grant is malformed.") {
+		t.Fatalf("err=%v, want structured broker message", err)
+	}
+}

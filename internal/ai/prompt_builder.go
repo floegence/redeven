@@ -357,9 +357,6 @@ func buildPromptProtocolSurfaceSection(snapshot promptRuntimeSnapshot) promptSec
 		if snapshot.ProtocolWaitingMode == RunWaitingModeExitPlanMode {
 			lines = append(lines, "- In plan mode, use `exit_plan_mode` when execution requires switching the thread into act mode.")
 		}
-		if snapshot.ProtocolCompletionMode == RunCompletionModeRuntimeCloseout {
-			lines = append(lines, "- Prefer `task_complete` when it is natural, but after verified tool work the runtime may also close out successfully from a strong final answer without another explicit completion signal.")
-		}
 	default:
 		lines = append(lines,
 			"- Primary editing tool: `apply_patch`.",
@@ -468,6 +465,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 			"- Use apply_patch only when the structured file tools are insufficient or you truly need patch semantics.",
 			"- If you call apply_patch, send exactly one canonical patch document from `*** Begin Patch` to `*** End Patch` with relative paths.",
 			"- Use `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks inside apply_patch; do NOT send `diff --git` or raw `---` / `+++` diffs for normal edits.",
+			"- In apply_patch `*** Add File:` bodies, prefix every new content line with `+`.",
 		)
 	} else {
 		lines = append(lines,
@@ -475,6 +473,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 			"- Prefer apply_patch for file edits instead of shell redirection or ad-hoc overwrite commands.",
 			"- When you call apply_patch, send exactly one canonical patch document from `*** Begin Patch` to `*** End Patch` with relative paths.",
 			"- Use `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks inside apply_patch; do NOT send `diff --git` or raw `---` / `+++` diffs for normal edits.",
+			"- In apply_patch `*** Add File:` bodies, prefix every new content line with `+`.",
 		)
 	}
 	lines = append(lines,
@@ -502,10 +501,11 @@ func buildPromptTodoDisciplineSection() promptSection {
 		"- If todo policy is none, skip todos unless they clearly improve execution quality.",
 		"- Skip write_todos for a single trivial step that can be completed immediately.",
 		"- Do NOT call write_todos with an empty list when there is no actionable work to track.",
+		"- Track only actionable work in write_todos. Do not create todos for control signals such as task_complete, ask_user, or exit_plan_mode.",
 		"- Keep exactly one todo as in_progress at a time.",
 		"- Update write_todos immediately when you start, complete, cancel, or discover work.",
 		"- Finish all feasible todos in this run before asking the user.",
-		"- Before any final answer or runtime closeout, update write_todos one last time so no actionable items remain open.",
+		"- Before finalization, update write_todos one last time so no actionable items remain open.",
 		"- Before task_complete, ensure all todos are completed or cancelled.",
 	)
 }
@@ -551,9 +551,9 @@ func buildPromptCommonWorkflowsSection(snapshot promptRuntimeSnapshot) promptSec
 	}
 	if snapshot.ProtocolSurface == RunProtocolSurfaceStructuredFileOps {
 		lines = append(lines,
-			"- **File questions**: file.read or terminal.exec → analyze → final summary or task_complete",
-			"- **Code changes**: file.read (inspect) → file.edit/file.write → terminal.exec (verify) → final summary or task_complete",
-			"- **Debugging**: terminal.exec (reproduce) → file.edit/file.write or apply_patch → terminal.exec (verify) → final summary or task_complete",
+			"- **File questions**: file.read or terminal.exec → analyze → finish according to the Completion Contract",
+			"- **Code changes**: file.read (inspect) → file.edit/file.write → terminal.exec (verify) → finish according to the Completion Contract",
+			"- **Debugging**: terminal.exec (reproduce) → file.edit/file.write or apply_patch → terminal.exec (verify) → finish according to the Completion Contract",
 		)
 	} else {
 		lines = append(lines,
@@ -667,19 +667,10 @@ func buildPromptCompletionContractSection(snapshot promptRuntimeSnapshot) prompt
 			"- If you continue beyond the first turn, switch to explicit signals: call task_complete when done or ask_user when structured user input is required.",
 		)
 	case completionContractExplicitOnly:
-		if snapshot.ProtocolCompletionMode == RunCompletionModeRuntimeCloseout {
-			lines = append(lines,
-				"- Prefer task_complete with a detailed result summary when it is natural to do so.",
-				"- After verified tool work, the runtime may also close out successfully from a strong final answer even if task_complete is missing.",
-				"- Once verified work is complete, stop narrating future steps and give the final answer or task_complete immediately.",
-				"- Do NOT rely on runtime closeout while you are still waiting on the user or when the work is not actually verified.",
-			)
-		} else {
-			lines = append(lines,
-				"- You MUST call task_complete with a detailed result summary when done. Never end without it.",
-				"- Task runs are explicit-completion only: no task_complete means the task is not complete.",
-			)
-		}
+		lines = append(lines,
+			"- You MUST call task_complete with a detailed result summary when done. Never end without it.",
+			"- Task runs are explicit-completion only: no task_complete means the task is not complete.",
+		)
 	default:
 		return promptSection{}
 	}

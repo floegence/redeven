@@ -165,7 +165,7 @@ func parseCodexPatch(patchText string) ([]unifiedDiffFile, error) {
 					continue
 				}
 				if !strings.HasPrefix(lines[i], "+") {
-					return nil, fmt.Errorf("invalid add file line: %q", lines[i])
+					return nil, fmt.Errorf("invalid add file line: %q; each new content line in an *** Add File body must start with +", lines[i])
 				}
 				hunkLines = append(hunkLines, lines[i])
 				i++
