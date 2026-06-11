@@ -478,10 +478,15 @@ type ContainerBackedConnectionDialogState = RuntimeContainerConnectionDialogStat
 type SSHPasswordConnectionDialogState = SSHBackedConnectionDialogState;
 type SSHPasswordDraftState = SSHPasswordConnectionDialogState | GatewaySetupDialogState;
 
+type ControlPlaneOriginMode = 'preset' | 'custom';
+
 type ControlPlaneDialogState = Readonly<{
+  origin_mode: ControlPlaneOriginMode;
   display_label: string;
   display_label_touched: boolean;
   provider_origin: string;
+  preset_provider_origin: string;
+  custom_provider_origin: string;
 }> | null;
 
 type EnvironmentGuidanceActionResolution = Readonly<{
@@ -494,13 +499,33 @@ const LOGO_DARK_URL = new URL('../../../internal/envapp/ui_src/public/logo-dark.
 const OFFICIAL_PROVIDER_DOMAIN_PARTS = ['redeven', 'com'] as const;
 const OFFICIAL_PROVIDER_DOMAIN = OFFICIAL_PROVIDER_DOMAIN_PARTS.join('.');
 const DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN = `https://${OFFICIAL_PROVIDER_DOMAIN}`;
-const OFFICIAL_PROVIDER_OPTIONS = [
+const DEVELOPMENT_PROVIDER_DOMAIN_PARTS = ['redeven', 'test'] as const;
+const DEVELOPMENT_PROVIDER_DOMAIN = DEVELOPMENT_PROVIDER_DOMAIN_PARTS.join('.');
+const DEVELOPMENT_CONTROL_PLANE_PROVIDER_ORIGIN = `https://${DEVELOPMENT_PROVIDER_DOMAIN}`;
+const DESKTOP_WELCOME_IMPORT_META = import.meta as ImportMeta & {
+  readonly env?: Readonly<{
+    DEV?: boolean;
+  }>;
+};
+type ControlPlaneProviderPresetOption = Readonly<{
+  display_label: string;
+  domain: string;
+  provider_origin: string;
+}>;
+const CONTROL_PLANE_PROVIDER_PRESET_OPTIONS: readonly ControlPlaneProviderPresetOption[] = [
   {
     display_label: 'Redeven',
     domain: OFFICIAL_PROVIDER_DOMAIN,
     provider_origin: DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN,
   },
-] as const;
+  ...(DESKTOP_WELCOME_IMPORT_META.env?.DEV === true
+    ? [{
+        display_label: 'Redeven Test',
+        domain: DEVELOPMENT_PROVIDER_DOMAIN,
+        provider_origin: DEVELOPMENT_CONTROL_PLANE_PROVIDER_ORIGIN,
+      }]
+    : []),
+];
 
 type EnvironmentFailureState = Readonly<{
   failure: DesktopOperationFailurePresentation;
@@ -2325,14 +2350,64 @@ function suggestConnectionLabel(state: ConnectionDialogState): string | null {
   }
 }
 
+function controlPlaneProviderPresetForOrigin(providerOrigin: string): ControlPlaneProviderPresetOption | null {
+  const clean = trimString(providerOrigin);
+  if (clean === '') {
+    return null;
+  }
+  return CONTROL_PLANE_PROVIDER_PRESET_OPTIONS.find((option) => option.provider_origin === clean) ?? null;
+}
+
+function defaultControlPlaneProviderPreset(): ControlPlaneProviderPresetOption {
+  return CONTROL_PLANE_PROVIDER_PRESET_OPTIONS[0] ?? {
+    display_label: 'Redeven',
+    domain: OFFICIAL_PROVIDER_DOMAIN,
+    provider_origin: DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN,
+  };
+}
+
+function suggestControlPlaneProviderName(providerOrigin: string): string {
+  return controlPlaneProviderPresetForOrigin(providerOrigin)?.display_label
+    ?? suggestControlPlaneDisplayLabel(providerOrigin);
+}
+
+function syncControlPlaneDisplayLabel(
+  state: Exclude<ControlPlaneDialogState, null>,
+  providerOrigin: string,
+): Pick<Exclude<ControlPlaneDialogState, null>, 'display_label'> {
+  return {
+    display_label: state.display_label_touched
+      ? state.display_label
+      : suggestControlPlaneProviderName(providerOrigin),
+  };
+}
+
+function resolvedControlPlaneProviderName(state: Exclude<ControlPlaneDialogState, null>): string {
+  const clean = trimString(state.display_label);
+  return clean === '' ? suggestControlPlaneProviderName(state.provider_origin) : clean;
+}
+
 function createControlPlaneDialogState(
   overrides: Partial<Exclude<ControlPlaneDialogState, null>> = {},
 ): Exclude<ControlPlaneDialogState, null> {
-  const providerOrigin = trimString(overrides.provider_origin) || DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN;
+  const requestedProviderOrigin = trimString(overrides.provider_origin);
+  const requestedPreset = controlPlaneProviderPresetForOrigin(requestedProviderOrigin);
+  const defaultPreset = defaultControlPlaneProviderPreset();
+  const originMode = overrides.origin_mode
+    ?? (requestedProviderOrigin !== '' && !requestedPreset ? 'custom' : 'preset');
+  const presetProviderOrigin = trimString(overrides.preset_provider_origin)
+    || requestedPreset?.provider_origin
+    || defaultPreset.provider_origin;
+  const customProviderOrigin = trimString(overrides.custom_provider_origin)
+    || (requestedProviderOrigin !== '' && !requestedPreset ? requestedProviderOrigin : '');
+  const providerOrigin = originMode === 'custom' ? customProviderOrigin : presetProviderOrigin;
   const displayLabel = trimString(overrides.display_label);
   return {
+    origin_mode: originMode,
     provider_origin: providerOrigin,
-    display_label: displayLabel || suggestControlPlaneDisplayLabel(providerOrigin),
+    preset_provider_origin: presetProviderOrigin,
+    custom_provider_origin: customProviderOrigin,
+    display_label: displayLabel || suggestControlPlaneProviderName(providerOrigin),
     display_label_touched: overrides.display_label_touched === true,
   };
 }
@@ -3971,10 +4046,20 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     setControlPlaneDialogError('');
   }
 
-  function updateControlPlaneDialogField(name: 'display_label' | 'provider_origin', value: string): void {
+  function updateControlPlaneDialogField(
+    name: 'display_label' | 'display_label_auto' | 'provider_origin' | 'origin_mode',
+    value: string,
+  ): void {
     setControlPlaneDialogState((current) => {
       if (!current) {
         return current;
+      }
+      if (name === 'display_label_auto') {
+        return {
+          ...current,
+          display_label: suggestControlPlaneProviderName(current.provider_origin),
+          display_label_touched: false,
+        };
       }
       if (name === 'display_label') {
         return {
@@ -3983,13 +4068,36 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           display_label_touched: true,
         };
       }
+      if (name === 'origin_mode') {
+        const nextOriginMode: ControlPlaneOriginMode = value === 'custom' ? 'custom' : 'preset';
+        const nextPresetProviderOrigin = current.preset_provider_origin || defaultControlPlaneProviderPreset().provider_origin;
+        const nextProviderOrigin = nextOriginMode === 'custom'
+          ? current.custom_provider_origin
+          : nextPresetProviderOrigin;
+        return {
+          ...current,
+          origin_mode: nextOriginMode,
+          provider_origin: nextProviderOrigin,
+          preset_provider_origin: nextPresetProviderOrigin,
+          ...syncControlPlaneDisplayLabel(current, nextProviderOrigin),
+        };
+      }
       const nextProviderOrigin = value;
+      const nextPresetProviderOrigin = current.origin_mode === 'preset'
+        ? (controlPlaneProviderPresetForOrigin(nextProviderOrigin)?.provider_origin ?? defaultControlPlaneProviderPreset().provider_origin)
+        : current.preset_provider_origin;
+      const nextCustomProviderOrigin = current.origin_mode === 'custom'
+        ? nextProviderOrigin
+        : current.custom_provider_origin;
       return {
         ...current,
-        provider_origin: nextProviderOrigin,
-        display_label: current.display_label_touched
-          ? current.display_label
-          : suggestControlPlaneDisplayLabel(nextProviderOrigin),
+        provider_origin: current.origin_mode === 'preset' ? nextPresetProviderOrigin : nextProviderOrigin,
+        preset_provider_origin: nextPresetProviderOrigin,
+        custom_provider_origin: nextCustomProviderOrigin,
+        ...syncControlPlaneDisplayLabel(
+          current,
+          current.origin_mode === 'preset' ? nextPresetProviderOrigin : nextProviderOrigin,
+        ),
       };
     });
   }
@@ -5020,7 +5128,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const result = await performLauncherAction({
       kind: 'start_control_plane_connect',
       provider_origin: trimString(state.provider_origin),
-      display_label: trimString(state.display_label),
+      display_label: resolvedControlPlaneProviderName(state),
     }, 'control_plane_dialog');
     if (result?.outcome === 'started_control_plane_connect') {
       closeControlPlaneDialog();
@@ -14824,17 +14932,15 @@ function GatewaySetupDialog(props: Readonly<{
   );
 }
 
-type OfficialProviderOption = (typeof OFFICIAL_PROVIDER_OPTIONS)[number];
-
-function officialProviderOptionForOrigin(providerOrigin: string): OfficialProviderOption {
-  return OFFICIAL_PROVIDER_OPTIONS.find((option) => option.provider_origin === trimString(providerOrigin))
-    ?? OFFICIAL_PROVIDER_OPTIONS[0];
+function officialProviderOptionForOrigin(providerOrigin: string): ControlPlaneProviderPresetOption {
+  return controlPlaneProviderPresetForOrigin(providerOrigin) ?? defaultControlPlaneProviderPreset();
 }
 
 function OfficialProviderPicker(props: Readonly<{
   i18n: DesktopI18n;
   providerOrigin: string;
   onSelect: (providerOrigin: string) => void;
+  autofocus?: boolean;
 }>) {
   const [open, setOpen] = createSignal(false);
   const [highlightedIndex, setHighlightedIndex] = createSignal(0);
@@ -14868,14 +14974,14 @@ function OfficialProviderPicker(props: Readonly<{
   }
 
   function moveHighlight(delta: number): void {
-    const count = OFFICIAL_PROVIDER_OPTIONS.length;
+    const count = CONTROL_PLANE_PROVIDER_PRESET_OPTIONS.length;
     if (count <= 0) {
       return;
     }
     setHighlightedIndex((current) => (current + delta + count) % count);
   }
 
-  function selectProvider(option: OfficialProviderOption): void {
+  function selectProvider(option: ControlPlaneProviderPresetOption): void {
     props.onSelect(option.provider_origin);
     setOpen(false);
     buttonRef?.focus();
@@ -14893,7 +14999,7 @@ function OfficialProviderPicker(props: Readonly<{
       }}
     >
       <label for="control-plane-provider-picker" class="block text-xs font-medium text-foreground">
-        {props.i18n.t('desktop.provider')}
+        {props.i18n.t('connectionDialog.providerPreset')}
       </label>
       <button
         ref={buttonRef}
@@ -14903,6 +15009,7 @@ function OfficialProviderPicker(props: Readonly<{
         aria-haspopup="listbox"
         aria-expanded={open() ? 'true' : 'false'}
         aria-controls="control-plane-provider-options"
+        autofocus={props.autofocus}
         onClick={() => {
           if (open()) {
             setOpen(false);
@@ -14927,7 +15034,7 @@ function OfficialProviderPicker(props: Readonly<{
             moveHighlight(-1);
           } else if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            const option = OFFICIAL_PROVIDER_OPTIONS[highlightedIndex()];
+            const option = CONTROL_PLANE_PROVIDER_PRESET_OPTIONS[highlightedIndex()];
             if (option) {
               selectProvider(option);
             }
@@ -14967,7 +15074,7 @@ function OfficialProviderPicker(props: Readonly<{
           }}
         >
           <div class="min-h-0 flex-1 overflow-auto">
-            <For each={OFFICIAL_PROVIDER_OPTIONS}>
+            <For each={CONTROL_PLANE_PROVIDER_PRESET_OPTIONS}>
               {(option, index) => {
                 const selected = createMemo(() => selectedProvider().provider_origin === option.provider_origin);
                 const highlighted = createMemo(() => highlightedIndex() === index());
@@ -15017,12 +15124,22 @@ function ControlPlaneDialog(props: Readonly<{
   error: string;
   busyState: DesktopLauncherBusyState;
   onOpenChange: (open: boolean) => void;
-  updateField: (name: 'display_label' | 'provider_origin', value: string) => void;
+  updateField: (name: 'display_label' | 'display_label_auto' | 'provider_origin' | 'origin_mode', value: string) => void;
   onConnect: () => Promise<void>;
 }>) {
   // See ConnectionDialog: memoize the open boolean so that identity churn in
   // `props.state` never re-triggers the overlay-mask focus trap mid-typing.
   const isOpen = createMemo(() => props.state !== null);
+  const originMode = createMemo(() => props.state?.origin_mode ?? 'preset');
+  const canContinue = createMemo(() => (
+    trimString(props.state?.provider_origin) !== ''
+    && (props.state ? resolvedControlPlaneProviderName(props.state) !== '' : false)
+  ));
+  const providerNameModeLabel = createMemo(() => (
+    props.state?.display_label_touched
+      ? props.i18n.t('connectionDialog.providerNameCustom')
+      : props.i18n.t('connectionDialog.providerNameAuto')
+  ));
   return (
     <Dialog
       open={isOpen()}
@@ -15036,6 +15153,7 @@ function ControlPlaneDialog(props: Readonly<{
           <Button
             size="sm"
             variant="default"
+            disabled={!canContinue()}
             loading={busyStateMatchesAction(props.busyState, 'start_control_plane_connect')}
             onClick={() => {
               void props.onConnect();
@@ -15047,23 +15165,74 @@ function ControlPlaneDialog(props: Readonly<{
       )}
     >
       <div class="space-y-4">
+        <div class="space-y-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-3">
+          <div class="space-y-1.5">
+            <label id="control-plane-origin-mode-label" class="block text-xs font-medium text-foreground">
+              {props.i18n.t('desktop.controlPlane')}
+            </label>
+            <SegmentedControl
+              value={originMode()}
+              onChange={(value) => props.updateField('origin_mode', value)}
+              options={[
+                { value: 'preset', label: props.i18n.t('connectionDialog.providerOriginPreset') },
+                { value: 'custom', label: props.i18n.t('connectionDialog.providerOriginCustom') },
+              ]}
+              size="sm"
+            />
+          </div>
+          <Show
+            when={originMode() === 'custom'}
+            fallback={(
+              <OfficialProviderPicker
+                i18n={props.i18n}
+                providerOrigin={props.state?.preset_provider_origin ?? DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN}
+                autofocus
+                onSelect={(providerOrigin) => props.updateField('provider_origin', providerOrigin)}
+              />
+            )}
+          >
+            <div class="space-y-1.5">
+              <label for="control-plane-custom-origin" class="block text-xs font-medium text-foreground">
+                {props.i18n.t('connectionDialog.providerCustomUrl')}
+              </label>
+              <Input
+                id="control-plane-custom-origin"
+                value={props.state?.custom_provider_origin ?? ''}
+                onInput={(event) => props.updateField('provider_origin', event.currentTarget.value)}
+                placeholder="https://control.example.com"
+                size="sm"
+                class="w-full"
+                spellcheck={false}
+                autofocus
+              />
+              <div class="text-[11px] leading-5 text-muted-foreground">
+                {props.i18n.t('connectionDialog.providerCustomUrlHelp')}
+              </div>
+            </div>
+          </Show>
+        </div>
         <div class="space-y-1.5">
-          <label for="control-plane-label" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.providerName')}</label>
+          <div class="flex items-center justify-between gap-2">
+            <label for="control-plane-label" class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.providerName')}</label>
+            <Tag variant={props.state?.display_label_touched ? 'primary' : 'neutral'} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+              {providerNameModeLabel()}
+            </Tag>
+          </div>
           <Input
             id="control-plane-label"
             value={props.state?.display_label ?? ''}
             onInput={(event) => props.updateField('display_label', event.currentTarget.value)}
-            placeholder={OFFICIAL_PROVIDER_DOMAIN}
+            onBlur={() => {
+              if (trimString(props.state?.display_label) === '') {
+                props.updateField('display_label_auto', '');
+              }
+            }}
+            placeholder={suggestControlPlaneProviderName(props.state?.provider_origin ?? '') || OFFICIAL_PROVIDER_DOMAIN}
             size="sm"
             class="w-full"
             spellcheck={false}
           />
         </div>
-        <OfficialProviderPicker
-          i18n={props.i18n}
-          providerOrigin={props.state?.provider_origin ?? DEFAULT_CONTROL_PLANE_PROVIDER_ORIGIN}
-          onSelect={(providerOrigin) => props.updateField('provider_origin', providerOrigin)}
-        />
         <div class="text-xs text-muted-foreground">
           {props.i18n.t('connectionDialog.providerAuthorizationHelp')}
         </div>
