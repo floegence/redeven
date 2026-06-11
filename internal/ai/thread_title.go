@@ -8,17 +8,18 @@ import (
 	"sync"
 	"time"
 
-	flagent "github.com/floegence/floret/agentharness"
-	flsession "github.com/floegence/floret/session"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
 const (
-	autoThreadTitlePromptVersion = flagent.ThreadTitleLogicalRequestID
+	autoThreadTitlePromptVersion = "thread_title.v1"
 	autoThreadTitleMaxAttempts   = 3
 	autoThreadTitleRecoveryLimit = 128
+	autoThreadTitleMaxTokens     = 24
+	autoThreadTitleSourceModel   = "model"
+	autoThreadTitleSystemPrompt  = "You generate concise thread titles for an interactive AI agent. Return only the title text, with no quotes, no punctuation wrapper, and no explanation. The title must be at most 16 visible characters."
 )
 
 type autoThreadTitleDecision struct {
@@ -164,34 +165,50 @@ func (s *Service) generateAutoThreadTitleByModel(ctx context.Context, resolved r
 	}
 	defer cancel()
 
-	generator := flagent.ProviderTitleGenerator{
-		Provider: newFloretProviderAdapter(
-			adapter.Adapter,
-			adapter.ProviderType,
-			adapter.ModelName,
-			config.AIModePlan,
-			ProviderControls{},
-			TurnBudgets{MaxSteps: 1},
-			"",
-			nil,
-			nil,
-			nil,
-		),
-		ProviderName: adapter.ProviderType,
-		Model:        adapter.ModelName,
-	}
-	result, err := generator.GenerateTitle(titleCtx, flagent.TitleRequest{
-		ThreadID: strings.TrimSpace(threadID),
-		TurnID:   strings.TrimSpace(messageID),
-		Messages: []flsession.Message{{
-			Role:    flsession.User,
-			Content: strings.TrimSpace(userInput),
-		}},
-	})
+	result, err := adapter.Adapter.StreamTurn(titleCtx, TurnRequest{
+		Model: strings.TrimSpace(adapter.ModelName),
+		Messages: []Message{
+			{Role: "system", Content: []ContentPart{{Type: "text", Text: autoThreadTitleSystemPrompt}}},
+			{Role: "user", Content: []ContentPart{{Type: "text", Text: buildAutoThreadTitleUserPrompt(threadID, messageID, userInput)}}},
+		},
+		Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: autoThreadTitleMaxTokens},
+		ModeFlags:        ModeFlags{Mode: config.AIModePlan},
+		ProviderControls: ProviderControls{DisableReasoning: true},
+	}, nil)
 	if err != nil {
 		return autoThreadTitleDecision{}, err
 	}
-	return autoThreadTitleDecision{Title: result.Title, Source: string(result.Source)}, nil
+	title := normalizeAutoThreadTitle(result.Text)
+	if title == "" {
+		return autoThreadTitleDecision{}, errors.New("empty generated thread title")
+	}
+	return autoThreadTitleDecision{Title: title, Source: autoThreadTitleSourceModel}, nil
+}
+
+func buildAutoThreadTitleUserPrompt(threadID string, messageID string, userInput string) string {
+	parts := []string{
+		"Thread ID: " + strings.TrimSpace(threadID),
+		"Message ID: " + strings.TrimSpace(messageID),
+		"User message:",
+		strings.TrimSpace(userInput),
+	}
+	return strings.Join(parts, "\n")
+}
+
+func normalizeAutoThreadTitle(raw string) string {
+	title := strings.TrimSpace(raw)
+	title = strings.Trim(title, "` \t\r\n\"'“”‘’")
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return ""
+	}
+	fields := strings.Fields(title)
+	title = strings.Join(fields, " ")
+	runes := []rune(title)
+	if len(runes) > 16 {
+		title = string(runes[:16])
+	}
+	return strings.TrimSpace(title)
 }
 
 func (s *Service) scheduleAutoThreadTitle(meta *session.Meta, threadID string, input effectiveCurrentUserInput) {

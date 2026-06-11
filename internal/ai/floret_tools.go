@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 
-	flprovider "github.com/floegence/floret/provider"
 	fltools "github.com/floegence/floret/tools"
 )
 
@@ -246,8 +245,8 @@ func isFlowerControlTool(name string) bool {
 	}
 }
 
-func floretControlDefinitionsFromTools(activeTools []ToolDef) ([]flprovider.ToolDefinition, error) {
-	defs := make([]flprovider.ToolDefinition, 0, 3)
+func floretControlDefinitionsFromTools(activeTools []ToolDef) ([]fltools.ToolDefinition, error) {
+	defs := make([]fltools.ToolDefinition, 0, 3)
 	for _, def := range activeTools {
 		name := strings.TrimSpace(def.Name)
 		if !isFlowerControlTool(name) {
@@ -261,7 +260,7 @@ func floretControlDefinitionsFromTools(activeTools []ToolDef) ([]flprovider.Tool
 			}
 			inputSchema = parsed
 		}
-		defs = append(defs, flprovider.ToolDefinition{
+		defs = append(defs, fltools.ToolDefinition{
 			Name:        name,
 			Title:       name,
 			Description: strings.TrimSpace(def.Description),

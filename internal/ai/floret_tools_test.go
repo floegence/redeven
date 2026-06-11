@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	flprovider "github.com/floegence/floret/provider"
+	fltools "github.com/floegence/floret/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -122,7 +122,7 @@ func TestFloretToolRegistryInjectsRunHostTargetContext(t *testing.T) {
 		t.Fatalf("buildFloretToolRegistry: %v", err)
 	}
 
-	result := registry.Run(context.Background(), flprovider.ToolCall{
+	result := registry.Run(context.Background(), fltools.ToolCall{
 		ID:   "call_1",
 		Name: "terminal.exec",
 		Args: `{"command":"pwd"}`,

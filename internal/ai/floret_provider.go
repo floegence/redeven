@@ -6,9 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
-	flprovider "github.com/floegence/floret/provider"
-	flsession "github.com/floegence/floret/session"
+	flruntime "github.com/floegence/floret/runtime"
+	fltools "github.com/floegence/floret/tools"
 )
 
 type floretProviderAdapter struct {
@@ -21,13 +22,22 @@ type floretProviderAdapter struct {
 
 	controls              ProviderControls
 	budgets               TurnBudgets
-	resumeHistory         []flsession.Message
-	initialProviderState  *flprovider.State
+	resumeHistory         []flruntime.TranscriptMessage
+	streamRun             *run
+	currentStateMu        sync.Mutex
+	currentState          *flruntime.ModelState
 	recordSources         func([]SourceRef)
 	continuationSupported bool
 }
 
-func newFloretProviderAdapter(base Provider, providerType string, modelName string, mode string, controls ProviderControls, budgets TurnBudgets, webSearch string, resumeHistory []flsession.Message, initialState *flprovider.State, recordSources func([]SourceRef)) *floretProviderAdapter {
+func (p *floretProviderAdapter) bindStreamRun(r *run) {
+	if p == nil {
+		return
+	}
+	p.streamRun = r
+}
+
+func newFloretProviderAdapter(base Provider, providerType string, modelName string, mode string, controls ProviderControls, budgets TurnBudgets, webSearch string, resumeHistory []flruntime.TranscriptMessage, recordSources func([]SourceRef)) *floretProviderAdapter {
 	return &floretProviderAdapter{
 		base:                  base,
 		providerType:          strings.ToLower(strings.TrimSpace(providerType)),
@@ -36,24 +46,23 @@ func newFloretProviderAdapter(base Provider, providerType string, modelName stri
 		webSearch:             strings.TrimSpace(webSearch),
 		controls:              controls,
 		budgets:               budgets,
-		resumeHistory:         flsession.CloneMessages(resumeHistory),
-		initialProviderState:  flprovider.CloneState(initialState),
+		resumeHistory:         cloneFloretTranscriptMessages(resumeHistory),
 		recordSources:         recordSources,
 		continuationSupported: isOpenAIResponsesProviderContinuationEnabled(providerType),
 	}
 }
 
-func (p *floretProviderAdapter) Stream(ctx context.Context, req flprovider.Request) (<-chan flprovider.StreamEvent, error) {
+func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
 	if p == nil || p.base == nil {
 		return nil, errors.New("nil floret provider adapter")
 	}
-	out := make(chan flprovider.StreamEvent, 32)
+	out := make(chan flruntime.ModelEvent, 32)
 	go func() {
 		defer close(out)
 
 		turnReq, err := p.turnRequest(req)
 		if err != nil {
-			sendFloretProviderEvent(ctx, out, flprovider.StreamEvent{Type: flprovider.Error, Err: err, Reason: err.Error()})
+			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
 			return
 		}
 		var streamedText strings.Builder
@@ -65,24 +74,28 @@ func (p *floretProviderAdapter) Stream(ctx context.Context, req flprovider.Reque
 					return
 				}
 				streamedText.WriteString(ev.Text)
-				sendFloretProviderEvent(ctx, out, flprovider.StreamEvent{Type: flprovider.Delta, Text: ev.Text})
+				p.emitTextDelta(ev.Text)
+				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventDelta, Text: ev.Text})
 			case StreamEventThinkingDelta:
 				if ev.Text == "" {
 					return
 				}
 				streamedReasoning.WriteString(ev.Text)
-				sendFloretProviderEvent(ctx, out, flprovider.StreamEvent{Type: flprovider.Reasoning, Text: ev.Text})
+				p.emitReasoningDelta(ev.Text)
+				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventReasoning, Text: ev.Text})
 			}
 		})
 		if err != nil {
-			sendFloretProviderEvent(ctx, out, flprovider.StreamEvent{Type: flprovider.Error, Err: err, Reason: err.Error()})
+			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
 			return
 		}
 		if strings.TrimSpace(streamedText.String()) == "" && strings.TrimSpace(result.Text) != "" {
-			sendFloretProviderEvent(ctx, out, flprovider.StreamEvent{Type: flprovider.Delta, Text: result.Text})
+			p.emitTextDelta(result.Text)
+			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventDelta, Text: result.Text})
 		}
 		if strings.TrimSpace(streamedReasoning.String()) == "" && strings.TrimSpace(result.Reasoning) != "" {
-			sendFloretProviderEvent(ctx, out, flprovider.StreamEvent{Type: flprovider.Reasoning, Text: result.Reasoning})
+			p.emitReasoningDelta(result.Reasoning)
+			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventReasoning, Text: result.Reasoning})
 		}
 		if len(result.Sources) > 0 && p.recordSources != nil {
 			p.recordSources(append([]SourceRef(nil), result.Sources...))
@@ -90,31 +103,71 @@ func (p *floretProviderAdapter) Stream(ctx context.Context, req flprovider.Reque
 		if len(result.ToolCalls) > 0 {
 			toolCalls, err := floretToolCallsFromFlower(result.ToolCalls)
 			if err != nil {
-				sendFloretProviderEvent(ctx, out, flprovider.StreamEvent{Type: flprovider.Error, Err: err, Reason: err.Error()})
+				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
 				return
 			}
-			sendFloretProviderEvent(ctx, out, flprovider.StreamEvent{Type: flprovider.ToolCalls, ToolCalls: toolCalls})
+			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventToolCalls, ToolCalls: toolCalls})
 		}
 		usage := floretUsageFromFlower(result.Usage)
 		if usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.ReasoningTokens > 0 {
-			sendFloretProviderEvent(ctx, out, flprovider.StreamEvent{Type: flprovider.UsageEvent, Usage: usage})
+			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventUsage, Usage: usage})
 		}
-		terminal := flprovider.StreamEvent{
-			Type:          flprovider.Done,
+		terminal := flruntime.ModelEvent{
+			Type:          flruntime.ModelEventDone,
 			Reason:        normalizeReplyFinishReason(result.FinishReason),
 			ResponseState: flowerProviderStateToFloret(result.ProviderState),
 		}
+		p.setCurrentProviderState(terminal.ResponseState)
 		if terminal.Reason == "length" {
-			terminal.Type = flprovider.Truncated
+			terminal.Type = flruntime.ModelEventTruncated
 		}
 		sendFloretProviderEvent(ctx, out, terminal)
 	}()
 	return out, nil
 }
 
-func (p *floretProviderAdapter) turnRequest(req flprovider.Request) (TurnRequest, error) {
+func (p *floretProviderAdapter) emitTextDelta(text string) {
+	if p == nil || p.streamRun == nil || text == "" {
+		return
+	}
+	_ = p.streamRun.appendTextDelta(text)
+}
+
+func (p *floretProviderAdapter) emitReasoningDelta(text string) {
+	if p == nil || p.streamRun == nil || text == "" {
+		return
+	}
+	p.streamRun.touchActivity()
+	_ = p.streamRun.appendThinkingDelta(text)
+	p.streamRun.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{
+		"delta": truncateRunes(text, 2000),
+	})
+}
+
+func (p *floretProviderAdapter) setCurrentProviderState(state *flruntime.ModelState) {
+	if p == nil {
+		return
+	}
+	if state == nil {
+		return
+	}
+	p.currentStateMu.Lock()
+	defer p.currentStateMu.Unlock()
+	p.currentState = cloneFloretModelState(state)
+}
+
+func (p *floretProviderAdapter) currentProviderState() *flruntime.ModelState {
+	if p == nil {
+		return nil
+	}
+	p.currentStateMu.Lock()
+	defer p.currentStateMu.Unlock()
+	return cloneFloretModelState(p.currentState)
+}
+
+func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (TurnRequest, error) {
 	controls := p.controls
-	previous := flprovider.CloneState(req.PreviousState)
+	previous := cloneFloretModelState(req.PreviousState)
 	if p.shouldUsePreviousState(previous, req.Step) {
 		controls.PreviousResponseID = strings.TrimSpace(previous.ID)
 	} else {
@@ -159,7 +212,7 @@ func (p *floretProviderAdapter) turnRequest(req flprovider.Request) (TurnRequest
 	}, nil
 }
 
-func (p *floretProviderAdapter) shouldUsePreviousState(state *flprovider.State, step int) bool {
+func (p *floretProviderAdapter) shouldUsePreviousState(state *flruntime.ModelState, step int) bool {
 	if p == nil || !p.continuationSupported || state == nil {
 		return false
 	}
@@ -169,45 +222,56 @@ func (p *floretProviderAdapter) shouldUsePreviousState(state *flprovider.State, 
 	// Redeven's existing OpenAI Responses continuation contract only resumes
 	// the first provider request of a user turn. Later Floret steps already have
 	// explicit tool history in the local transcript.
-	return step <= 1 && p.initialProviderState != nil && strings.TrimSpace(p.initialProviderState.ID) == strings.TrimSpace(state.ID)
+	return step <= 1
 }
 
-func sendFloretProviderEvent(ctx context.Context, out chan<- flprovider.StreamEvent, ev flprovider.StreamEvent) {
+func sendFloretProviderEvent(ctx context.Context, out chan<- flruntime.ModelEvent, ev flruntime.ModelEvent) {
 	select {
 	case <-ctx.Done():
 	case out <- ev:
 	}
 }
 
-func replaceFloretProviderHistoryWithResume(messages []flsession.Message, resume []flsession.Message) []flsession.Message {
-	out := make([]flsession.Message, 0, 1+len(resume))
+func replaceFloretProviderHistoryWithResume(messages []flruntime.ModelMessage, resume []flruntime.TranscriptMessage) []flruntime.ModelMessage {
+	out := make([]flruntime.ModelMessage, 0, 1+len(resume))
 	for _, msg := range messages {
-		if msg.Role == flsession.System && strings.TrimSpace(msg.Content) != "" {
+		if strings.EqualFold(strings.TrimSpace(msg.Role), "system") && strings.TrimSpace(msg.Content) != "" {
 			out = append(out, msg)
 			break
 		}
 	}
-	out = append(out, flsession.CloneMessages(resume)...)
+	for _, msg := range resume {
+		out = append(out, flruntime.ModelMessage{
+			Role:       strings.TrimSpace(msg.Role),
+			Content:    strings.TrimSpace(msg.Content),
+			Reasoning:  strings.TrimSpace(msg.Reasoning),
+			ToolCallID: strings.TrimSpace(msg.ToolCallID),
+			ToolName:   strings.TrimSpace(msg.ToolName),
+			ToolArgs:   strings.TrimSpace(msg.ToolArgs),
+		})
+	}
 	return out
 }
 
-func floretMessagesToFlower(messages []flsession.Message) ([]Message, error) {
+func floretMessagesToFlower(messages []flruntime.ModelMessage) ([]Message, error) {
 	messages = projectFloretControlMessagesForProvider(messages)
 	out := make([]Message, 0, len(messages))
 	for i := 0; i < len(messages); i++ {
 		msg := messages[i]
-		role := string(msg.Role)
-		switch msg.Role {
-		case flsession.System:
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
+		switch role {
+		case "system":
 			role = "system"
-		case flsession.User:
+		case "user":
 			role = "user"
-		case flsession.Assistant:
+		case "assistant":
 			role = "assistant"
-		case flsession.Tool:
+		case "tool":
 			role = "tool"
+		default:
+			return nil, fmt.Errorf("Floret model message %d has unsupported Floret model message role %q", i, msg.Role)
 		}
-		if msg.Role == flsession.Tool {
+		if role == "tool" {
 			out = append(out, Message{Role: "tool", Content: []ContentPart{{
 				Type:       "tool_result",
 				ToolCallID: strings.TrimSpace(msg.ToolCallID),
@@ -216,7 +280,7 @@ func floretMessagesToFlower(messages []flsession.Message) ([]Message, error) {
 			}}})
 			continue
 		}
-		if msg.Role == flsession.Assistant && strings.TrimSpace(msg.ToolCallID) != "" {
+		if role == "assistant" && strings.TrimSpace(msg.ToolCallID) != "" {
 			parts, next, err := floretAssistantToolCallParts(messages, i)
 			if err != nil {
 				return nil, err
@@ -229,7 +293,7 @@ func floretMessagesToFlower(messages []flsession.Message) ([]Message, error) {
 		if strings.TrimSpace(msg.Content) != "" {
 			parts = append(parts, ContentPart{Type: "text", Text: msg.Content})
 		}
-		if msg.Role == flsession.Assistant && strings.TrimSpace(msg.Reasoning) != "" {
+		if role == "assistant" && strings.TrimSpace(msg.Reasoning) != "" {
 			parts = append(parts, ContentPart{Type: "reasoning", Text: msg.Reasoning})
 		}
 		if len(parts) == 0 {
@@ -243,22 +307,22 @@ func floretMessagesToFlower(messages []flsession.Message) ([]Message, error) {
 	return out, nil
 }
 
-func projectFloretControlMessagesForProvider(messages []flsession.Message) []flsession.Message {
-	out := make([]flsession.Message, 0, len(messages))
+func projectFloretControlMessagesForProvider(messages []flruntime.ModelMessage) []flruntime.ModelMessage {
+	out := make([]flruntime.ModelMessage, 0, len(messages))
 	for _, msg := range messages {
 		if !isFlowerControlTool(msg.ToolName) {
 			out = append(out, msg)
 			continue
 		}
-		switch msg.Role {
-		case flsession.Assistant:
-			out = append(out, flsession.Message{
-				Role:    flsession.Assistant,
+		switch strings.ToLower(strings.TrimSpace(msg.Role)) {
+		case "assistant":
+			out = append(out, flruntime.ModelMessage{
+				Role:    "assistant",
 				Content: providerSafeFloretControlMessageText(msg),
 			})
-		case flsession.Tool:
-			out = append(out, flsession.Message{
-				Role:    flsession.Assistant,
+		case "tool":
+			out = append(out, flruntime.ModelMessage{
+				Role:    "assistant",
 				Content: providerSafeFloretControlResultText(msg),
 			})
 		default:
@@ -268,7 +332,7 @@ func projectFloretControlMessagesForProvider(messages []flsession.Message) []fls
 	return out
 }
 
-func providerSafeFloretControlMessageText(msg flsession.Message) string {
+func providerSafeFloretControlMessageText(msg flruntime.ModelMessage) string {
 	name := strings.TrimSpace(msg.ToolName)
 	if name == "" {
 		name = "control"
@@ -285,7 +349,7 @@ func providerSafeFloretControlMessageText(msg flsession.Message) string {
 	}
 }
 
-func providerSafeFloretControlResultText(msg flsession.Message) string {
+func providerSafeFloretControlResultText(msg flruntime.ModelMessage) string {
 	name := strings.TrimSpace(msg.ToolName)
 	if name == "" {
 		name = "control"
@@ -373,12 +437,12 @@ func removeStringOnce(values []string, target string) []string {
 	return values
 }
 
-func floretAssistantToolCallParts(messages []flsession.Message, start int) ([]ContentPart, int, error) {
+func floretAssistantToolCallParts(messages []flruntime.ModelMessage, start int) ([]ContentPart, int, error) {
 	parts := make([]ContentPart, 0, 3)
 	reasoningSet := make(map[string]struct{}, 1)
 	for i := start; i < len(messages); i++ {
 		msg := messages[i]
-		if msg.Role != flsession.Assistant || strings.TrimSpace(msg.ToolCallID) == "" {
+		if strings.ToLower(strings.TrimSpace(msg.Role)) != "assistant" || strings.TrimSpace(msg.ToolCallID) == "" {
 			return parts, i, nil
 		}
 		if reasoning := strings.TrimSpace(msg.Reasoning); reasoning != "" {
@@ -405,8 +469,8 @@ func floretAssistantToolCallParts(messages []flsession.Message, start int) ([]Co
 	return parts, len(messages), nil
 }
 
-func floretToolCallsFromFlower(calls []ToolCall) ([]flprovider.ToolCall, error) {
-	out := make([]flprovider.ToolCall, 0, len(calls))
+func floretToolCallsFromFlower(calls []ToolCall) ([]fltools.ToolCall, error) {
+	out := make([]fltools.ToolCall, 0, len(calls))
 	for _, call := range calls {
 		name := strings.TrimSpace(call.Name)
 		if name == "" {
@@ -420,12 +484,12 @@ func floretToolCallsFromFlower(calls []ToolCall) ([]flprovider.ToolCall, error) 
 			}
 			raw = string(b)
 		}
-		out = append(out, flprovider.ToolCall{ID: strings.TrimSpace(call.ID), Name: name, Args: raw})
+		out = append(out, fltools.ToolCall{ID: strings.TrimSpace(call.ID), Name: name, Args: raw})
 	}
 	return out, nil
 }
 
-func flowerToolsFromFloret(defs []flprovider.ToolDefinition) ([]ToolDef, error) {
+func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
 	out := make([]ToolDef, 0, len(defs))
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)
@@ -449,7 +513,7 @@ func flowerToolsFromFloret(defs []flprovider.ToolDefinition) ([]ToolDef, error) 
 	return out, nil
 }
 
-func flowerProviderStateToFloret(state *TurnProviderState) *flprovider.State {
+func flowerProviderStateToFloret(state *TurnProviderState) *flruntime.ModelState {
 	if state == nil {
 		return nil
 	}
@@ -458,10 +522,10 @@ func flowerProviderStateToFloret(state *TurnProviderState) *flprovider.State {
 	if kind == "" || id == "" {
 		return nil
 	}
-	return &flprovider.State{Kind: kind, ID: id}
+	return &flruntime.ModelState{Kind: kind, ID: id}
 }
 
-func floretProviderStateToFlower(state *flprovider.State) *TurnProviderState {
+func floretProviderStateToFlower(state *flruntime.ModelState) *TurnProviderState {
 	if state == nil {
 		return nil
 	}
@@ -473,20 +537,59 @@ func floretProviderStateToFlower(state *flprovider.State) *TurnProviderState {
 	return &TurnProviderState{ContinuationKind: kind, ContinuationID: id}
 }
 
-func floretUsageFromFlower(usage TurnUsage) flprovider.Usage {
-	out := flprovider.Usage{
+func floretUsageFromFlower(usage TurnUsage) flruntime.ProviderUsage {
+	out := flruntime.ProviderUsage{
 		InputTokens:     usage.InputTokens,
 		OutputTokens:    usage.OutputTokens,
 		ReasoningTokens: usage.ReasoningTokens,
 	}
-	return out.Normalized()
+	return normalizeFloretUsage(out)
 }
 
-func flowerUsageFromFloret(usage flprovider.Usage) TurnUsage {
-	usage = usage.Normalized()
+func flowerUsageFromFloret(usage flruntime.ProviderUsage) TurnUsage {
+	usage = normalizeFloretUsage(usage)
 	return TurnUsage{
 		InputTokens:     usage.InputTokens,
 		OutputTokens:    usage.OutputTokens,
 		ReasoningTokens: usage.ReasoningTokens,
 	}
+}
+
+func cloneFloretTranscriptMessages(messages []flruntime.TranscriptMessage) []flruntime.TranscriptMessage {
+	if len(messages) == 0 {
+		return nil
+	}
+	out := make([]flruntime.TranscriptMessage, len(messages))
+	copy(out, messages)
+	return out
+}
+
+func cloneFloretModelState(state *flruntime.ModelState) *flruntime.ModelState {
+	if state == nil {
+		return nil
+	}
+	out := &flruntime.ModelState{
+		Kind: strings.TrimSpace(state.Kind),
+		ID:   strings.TrimSpace(state.ID),
+	}
+	if len(state.Attributes) > 0 {
+		out.Attributes = make(map[string]string, len(state.Attributes))
+		for key, value := range state.Attributes {
+			out.Attributes[key] = value
+		}
+	}
+	return out
+}
+
+func normalizeFloretUsage(usage flruntime.ProviderUsage) flruntime.ProviderUsage {
+	if usage.TotalTokens <= 0 {
+		usage.TotalTokens = usage.InputTokens + usage.OutputTokens + usage.ReasoningTokens + usage.CacheReadTokens + usage.CacheWriteTokens
+	}
+	if usage.Source == "" && usage.TotalTokens > 0 {
+		usage.Source = "native"
+	}
+	if usage.TotalTokens > 0 || usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.ReasoningTokens > 0 {
+		usage.Available = true
+	}
+	return usage
 }

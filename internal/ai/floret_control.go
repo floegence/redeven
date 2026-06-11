@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	flengine "github.com/floegence/floret/engine"
-	flprovider "github.com/floegence/floret/provider"
+	flruntime "github.com/floegence/floret/runtime"
+	fltools "github.com/floegence/floret/tools"
 )
 
 type floretControlProjector struct {
@@ -16,7 +16,7 @@ type floretControlProjector struct {
 	mode       string
 }
 
-func newFloretControlSpec(r *run, state *floretToolRuntimeState, activeTools []ToolDef, complexity string, mode string) (flengine.ControlSpec, error) {
+func newFloretControlSpec(r *run, state *floretToolRuntimeState, activeTools []ToolDef, complexity string, mode string) (flruntime.TurnSignalSpec, error) {
 	projector := floretControlProjector{
 		run:        r,
 		state:      state,
@@ -25,18 +25,18 @@ func newFloretControlSpec(r *run, state *floretToolRuntimeState, activeTools []T
 	}
 	definitions, err := floretControlDefinitionsFromTools(activeTools)
 	if err != nil {
-		return flengine.ControlSpec{}, err
+		return flruntime.TurnSignalSpec{}, err
 	}
-	return flengine.ControlSpec{
+	return flruntime.TurnSignalSpec{
 		Definitions: definitions,
 		Project:     projector.Project,
 	}, nil
 }
 
-func (p floretControlProjector) Project(call flprovider.ToolCall) (flengine.ControlSignal, bool, error) {
+func (p floretControlProjector) Project(call fltools.ToolCall) (flruntime.TurnSignal, bool, error) {
 	flowerCall, err := flowerToolCallFromFloret(call)
 	if err != nil {
-		return flengine.ControlSignal{}, true, err
+		return flruntime.TurnSignal{}, true, err
 	}
 	switch strings.TrimSpace(flowerCall.Name) {
 	case "task_complete":
@@ -48,11 +48,11 @@ func (p floretControlProjector) Project(call flprovider.ToolCall) (flengine.Cont
 		signal, err := p.projectExitPlanMode(flowerCall)
 		return signal, true, err
 	default:
-		return flengine.ControlSignal{}, false, nil
+		return flruntime.TurnSignal{}, false, nil
 	}
 }
 
-func (p floretControlProjector) projectTaskComplete(call ToolCall) flengine.ControlSignal {
+func (p floretControlProjector) projectTaskComplete(call ToolCall) flruntime.TurnSignal {
 	resultText := extractSignalText(call, "result")
 	evidenceRefs := extractSignalStringList(call, "evidence_refs")
 	payload := cloneAnyMap(call.Args)
@@ -60,8 +60,8 @@ func (p floretControlProjector) projectTaskComplete(call ToolCall) flengine.Cont
 	if len(evidenceRefs) > 0 {
 		payload["evidence_refs"] = evidenceRefs
 	}
-	return flengine.ControlSignal{
-		Disposition: flengine.ControlTerminal,
+	return flruntime.TurnSignal{
+		Disposition: flruntime.SignalTerminal,
 		Name:        "task_complete",
 		CallID:      strings.TrimSpace(call.ID),
 		Payload:     payload,
@@ -69,7 +69,7 @@ func (p floretControlProjector) projectTaskComplete(call ToolCall) flengine.Cont
 	}
 }
 
-func (p floretControlProjector) projectAskUser(call ToolCall) (flengine.ControlSignal, error) {
+func (p floretControlProjector) projectAskUser(call ToolCall) (flruntime.TurnSignal, error) {
 	questions, questionContractError := extractModelSignalRequestUserInputQuestions(call, "questions")
 	signal := askUserSignal{
 		Questions:        questions,
@@ -114,8 +114,8 @@ func (p floretControlProjector) projectAskUser(call ToolCall) (flengine.ControlS
 		})
 	}
 	if !pass {
-		return flengine.ControlSignal{
-			Disposition: flengine.ControlContinue,
+		return flruntime.TurnSignal{
+			Disposition: flruntime.SignalContinue,
 			Name:        "ask_user",
 			CallID:      strings.TrimSpace(call.ID),
 			Payload: map[string]any{
@@ -136,8 +136,8 @@ func (p floretControlProjector) projectAskUser(call ToolCall) (flengine.ControlS
 		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
 		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
 	}
-	return flengine.ControlSignal{
-		Disposition: flengine.ControlWaiting,
+	return flruntime.TurnSignal{
+		Disposition: flruntime.SignalWaiting,
 		Name:        "ask_user",
 		CallID:      strings.TrimSpace(call.ID),
 		Payload:     payload,
@@ -145,9 +145,9 @@ func (p floretControlProjector) projectAskUser(call ToolCall) (flengine.ControlS
 	}, nil
 }
 
-func (p floretControlProjector) projectExitPlanMode(call ToolCall) (flengine.ControlSignal, error) {
+func (p floretControlProjector) projectExitPlanMode(call ToolCall) (flruntime.TurnSignal, error) {
 	if p.run == nil {
-		return flengine.ControlSignal{}, errors.New("exit_plan_mode requires run projection")
+		return flruntime.TurnSignal{}, errors.New("exit_plan_mode requires run projection")
 	}
 	args := ExitPlanModeArgs{
 		Summary:        extractSignalText(call, "summary"),
@@ -155,8 +155,8 @@ func (p floretControlProjector) projectExitPlanMode(call ToolCall) (flengine.Con
 	}
 	result, err := p.run.toolExitPlanMode(strings.TrimSpace(call.ID), args)
 	if err != nil {
-		return flengine.ControlSignal{
-			Disposition: flengine.ControlContinue,
+		return flruntime.TurnSignal{
+			Disposition: flruntime.SignalContinue,
 			Name:        "exit_plan_mode",
 			CallID:      strings.TrimSpace(call.ID),
 			Payload:     map[string]any{"error": err.Error()},
@@ -169,8 +169,8 @@ func (p floretControlProjector) projectExitPlanMode(call ToolCall) (flengine.Con
 		"args":           args,
 		"waiting_prompt": result.WaitingPrompt,
 	}
-	return flengine.ControlSignal{
-		Disposition: flengine.ControlWaiting,
+	return flruntime.TurnSignal{
+		Disposition: flruntime.SignalWaiting,
 		Name:        "exit_plan_mode",
 		CallID:      strings.TrimSpace(call.ID),
 		Payload:     payload,
@@ -178,7 +178,7 @@ func (p floretControlProjector) projectExitPlanMode(call ToolCall) (flengine.Con
 	}, nil
 }
 
-func flowerToolCallFromFloret(call flprovider.ToolCall) (ToolCall, error) {
+func flowerToolCallFromFloret(call fltools.ToolCall) (ToolCall, error) {
 	args := map[string]any{}
 	if raw := strings.TrimSpace(call.Args); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &args); err != nil {

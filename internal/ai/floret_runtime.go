@@ -7,12 +7,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	flengine "github.com/floegence/floret/engine"
-	flprovider "github.com/floegence/floret/provider"
-	flcache "github.com/floegence/floret/provider/cache"
-	flsession "github.com/floegence/floret/session"
-	flartifact "github.com/floegence/floret/session/artifact"
-	flcontextpolicy "github.com/floegence/floret/session/contextpolicy"
+	flconfig "github.com/floegence/floret/config"
+	flruntime "github.com/floegence/floret/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 )
@@ -164,8 +160,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	}
 	sharedState := newFloretToolRuntimeState(state)
 
-	history := flowerMessagesToFloret(buildMessagesForRun(req))
-	resumeHistory := flowerMessagesToFloret(buildResumeMessagesForRun(req))
+	history, err := flowerMessagesToFloret(buildMessagesForRun(req))
+	if err != nil {
+		return r.failRun("Failed to project Floret transcript", err)
+	}
+	resumeHistory, err := flowerMessagesToFloret(buildResumeMessagesForRun(req))
+	if err != nil {
+		return r.failRun("Failed to project Floret resume transcript", err)
+	}
 	resumeState, previousState := r.loadFloretPreviousProviderState(ctx, providerCfg, providerType, modelName)
 	_ = resumeState
 
@@ -199,78 +201,90 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		},
 		r.webSearchMode,
 		resumeHistory,
-		previousState,
 		func(sources []SourceRef) {
 			for _, src := range sources {
 				r.addWebSource(src.Title, src.URL)
 			}
 		},
 	)
-	completionPolicy := flengine.CompletionExplicitSignal
+	flProvider.bindStreamRun(r)
+	completionPolicy := flruntime.TurnCompletionExplicitSignal
 	if completionContractForExecutionContract(executionContract) == completionContractFirstTurn {
-		completionPolicy = flengine.CompletionNaturalStop
+		completionPolicy = flruntime.TurnCompletionNaturalStop
 	}
 	hostLabels := floretHostLabelsForRun(r)
 	controlSpec, err := newFloretControlSpec(r, sharedState, controlTools, taskComplexity, mode)
 	if err != nil {
 		return r.failRun("Failed to initialize Floret control tools", err)
 	}
-	engineOptions := flengine.Options{
-		RunID:                  strings.TrimSpace(r.id),
-		SessionID:              strings.TrimSpace(r.threadID),
-		TraceID:                strings.TrimSpace(r.id),
-		ProviderName:           providerType,
-		Model:                  modelName,
-		Labels:                 flengine.RunLabels{Correlation: map[string]string{"thread_id": strings.TrimSpace(r.threadID), "message_id": strings.TrimSpace(r.messageID)}, Host: hostLabels},
-		ContextPolicy:          floretContextPolicy(contextWindow, inputContextLimit, req.Options.MaxOutputTokens),
-		CompletionPolicy:       completionPolicy,
-		ControlSpec:            controlSpec,
-		PreviousProviderState:  previousState,
-		MaxToolCalls:           nativeHardMaxSteps,
-		MaxTotalTokens:         int64(req.Options.MaxInputTokens + req.Options.MaxOutputTokens),
-		MaxCostUSD:             req.Options.MaxCostUSD,
-		MaxLengthContinuations: 2,
-		NoProgressLimit:        2,
-		DuplicateToolLimit:     3,
+	labels := flruntime.RunLabels{Correlation: map[string]string{"thread_id": strings.TrimSpace(r.threadID), "message_id": strings.TrimSpace(r.messageID)}, Host: hostLabels}
+	maxTotalTokens := int64(req.Options.MaxInputTokens + req.Options.MaxOutputTokens)
+	if maxTotalTokens <= 0 {
+		maxTotalTokens = 0
 	}
-	if engineOptions.MaxTotalTokens <= 0 {
-		engineOptions.MaxTotalTokens = 0
-	}
-	flEngine, err := flengine.New(flengine.Config{
-		Provider:     flProvider,
-		Tools:        flTools,
-		Store:        flsession.NewMemoryStore(),
-		Prompt:       flcache.NewMemoryStore(),
-		Artifacts:    flartifact.NewMemoryStore(),
-		SystemPrompt: systemPrompt,
-		Sink:         floretEventSink{run: r},
-		Options:      engineOptions,
-	})
+	floretProvider, err := floretProviderName(providerType)
 	if err != nil {
-		return r.failRun("Failed to initialize Floret engine", err)
+		return r.failRun("Unsupported Floret provider type", err)
+	}
+	floretCfg := flconfig.Config{
+		Provider:      floretProvider,
+		Model:         modelName,
+		BaseURL:       strings.TrimSpace(providerCfg.BaseURL),
+		APIKey:        strings.TrimSpace(apiKey),
+		SystemPrompt:  systemPrompt,
+		ContextPolicy: floretContextPolicy(contextWindow, inputContextLimit, req.Options.MaxOutputTokens),
+	}
+	if floretCfg.Provider == flconfig.ProviderOpenAICompatible && floretCfg.BaseURL == "" {
+		floretCfg.BaseURL = "http://model-gateway.invalid"
+	}
+	if floretProviderRequiresAPIKey(floretCfg.Provider) && floretCfg.APIKey == "" {
+		floretCfg.APIKey = "model-gateway"
 	}
 
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret", "intent": intent})
 	if r.finalizeIfContextCanceledWithRuntimeCloseout(ctx, 0, sharedState.snapshot(), taskComplexity, mode, protocolProfile, req.Options.RequireUserConfirmOnTaskComplete) {
 		return nil
 	}
-	result := flEngine.RunTurn(ctx, flengine.RunInput{
-		RunID:                 strings.TrimSpace(r.id),
-		SessionID:             strings.TrimSpace(r.threadID),
-		TraceID:               strings.TrimSpace(r.id),
-		Labels:                engineOptions.Labels,
-		PreviousProviderState: previousState,
+	result, err := flruntime.RunProjectedTurn(ctx, flruntime.ProjectedTurnOptions{
+		Config:       floretCfg,
+		ModelGateway: flProvider,
+		Tools:        flTools,
+		Sink:         floretEventSink{run: r},
+		LoopLimits: flruntime.LoopLimits{
+			NoProgressLimit:    2,
+			DuplicateToolLimit: 3,
+		},
+	}, flruntime.ProjectedTurnRequest{
+		RunID:                 flruntime.RunID(strings.TrimSpace(r.id)),
+		ThreadID:              flruntime.ThreadID(strings.TrimSpace(r.threadID)),
+		TurnID:                flruntime.TurnID(strings.TrimSpace(r.messageID)),
+		TraceID:               flruntime.TraceID(strings.TrimSpace(r.id)),
+		PromptScopeID:         flruntime.PromptScopeID(strings.TrimSpace(r.threadID)),
 		History:               history,
+		Labels:                labels,
+		PreviousProviderState: previousState,
+		Completion:            completionPolicy,
+		Signals:               controlSpec,
+		Limits: flruntime.TurnLimits{
+			MaxToolCalls:           nativeHardMaxSteps,
+			MaxTotalTokens:         maxTotalTokens,
+			MaxCostUSD:             req.Options.MaxCostUSD,
+			MaxLengthContinuations: 2,
+		},
 	})
-	r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.Usage), estimateFloretHistoryTokens(systemPrompt, history, activeTools))
+	if err != nil && result.Status == "" {
+		return r.failRun("Failed to run Floret projected turn", err)
+	}
+	r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), estimateFloretHistoryTokens(systemPrompt, history, activeTools))
+	providerState := flProvider.currentProviderState()
 	r.setProviderContinuationCandidate(buildProviderContinuationCandidate(
 		strings.TrimSpace(providerCfg.ID),
 		providerType,
 		modelName,
 		providerCfg.BaseURL,
-		floretProviderStateToFlower(result.ProviderState),
+		floretProviderStateToFlower(providerState),
 	))
-	if ctx.Err() != nil && result.Status != flengine.Completed && result.Status != flengine.Waiting {
+	if ctx.Err() != nil && result.Status != flruntime.TurnStatusCompleted && result.Status != flruntime.TurnStatusWaiting {
 		if r.finalizeIfContextCanceledWithRuntimeCloseout(ctx, result.Metrics.Steps, sharedState.snapshot(), taskComplexity, mode, protocolProfile, req.Options.RequireUserConfirmOnTaskComplete) {
 			return nil
 		}
@@ -278,7 +292,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, mode, protocolProfile)
 }
 
-func (r *run) loadFloretPreviousProviderState(ctx context.Context, providerCfg config.AIProvider, providerType string, modelName string) (providerTurnResumeState, *flprovider.State) {
+func (r *run) loadFloretPreviousProviderState(ctx context.Context, providerCfg config.AIProvider, providerType string, modelName string) (providerTurnResumeState, *flruntime.ModelState) {
 	resumeState, err := r.loadProviderTurnResumeState(ctx, providerCfg, providerType, modelName)
 	if err != nil {
 		r.persistRunEvent("provider.continuation.load_failed", RealtimeStreamKindLifecycle, map[string]any{
@@ -296,7 +310,7 @@ func (r *run) loadFloretPreviousProviderState(ctx context.Context, providerCfg c
 			"previous_response_id": resumeState.PreviousResponseID,
 			"provider_base_url":    canonicalProviderContinuationBaseURL(providerType, providerCfg.BaseURL),
 		})
-		return resumeState, &flprovider.State{Kind: providerContinuationKindOpenAIResponses, ID: strings.TrimSpace(resumeState.PreviousResponseID)}
+		return resumeState, &flruntime.ModelState{Kind: providerContinuationKindOpenAIResponses, ID: strings.TrimSpace(resumeState.PreviousResponseID)}
 	}
 	if strings.TrimSpace(resumeState.SkipReason) != "" {
 		r.persistRunEvent("provider.continuation.skipped", RealtimeStreamKindLifecycle, map[string]any{
@@ -309,14 +323,14 @@ func (r *run) loadFloretPreviousProviderState(ctx context.Context, providerCfg c
 	return resumeState, nil
 }
 
-func (r *run) projectFloretResult(ctx context.Context, result flengine.Result, req RunRequest, state runtimeState, complexity string, mode string, profile RunProtocolProfile) error {
+func (r *run) projectFloretResult(ctx context.Context, result flruntime.ProjectedTurnResult, req RunRequest, state runtimeState, complexity string, mode string, profile RunProtocolProfile) error {
 	step := result.Metrics.Steps
 	if step <= 0 {
 		step = 1
 	}
 	switch result.Status {
-	case flengine.Completed:
-		if signal := result.ControlSignal; signal != nil && strings.TrimSpace(signal.Name) == "task_complete" {
+	case flruntime.TurnStatusCompleted:
+		if signal := result.Signal; signal != nil && strings.TrimSpace(signal.Name) == "task_complete" {
 			resultText := strings.TrimSpace(signal.OutputText)
 			if resultText == "" {
 				resultText = strings.TrimSpace(anyToString(signal.Payload["result"]))
@@ -380,8 +394,8 @@ func (r *run) projectFloretResult(ctx context.Context, result flengine.Result, r
 			return nil
 		}
 		return r.projectFloretMissingExplicitCompletion(ctx, step, state)
-	case flengine.Waiting:
-		if signal := result.ControlSignal; signal != nil {
+	case flruntime.TurnStatusWaiting:
+		if signal := result.Signal; signal != nil {
 			switch strings.TrimSpace(signal.Name) {
 			case "ask_user":
 				return r.projectFloretAskUserWaiting(ctx, step, signal, state)
@@ -390,7 +404,7 @@ func (r *run) projectFloretResult(ctx context.Context, result flengine.Result, r
 			}
 		}
 		return r.failRun("Run entered waiting state without a supported control signal", errors.New("unsupported waiting control signal"))
-	case flengine.Cancelled:
+	case flruntime.TurnStatusCancelled:
 		if r.finalizeIfContextCanceledWithRuntimeCloseout(ctx, step, state, complexity, mode, profile, req.Options.RequireUserConfirmOnTaskComplete) {
 			return nil
 		}
@@ -398,9 +412,10 @@ func (r *run) projectFloretResult(ctx context.Context, result flengine.Result, r
 			return nil
 		}
 		return r.failRun("Floret run was canceled", context.Canceled)
-	case flengine.Failed:
-		if result.Err == nil {
-			result.Err = errors.New("floret engine failed")
+	case flruntime.TurnStatusFailed:
+		resultErr := errors.New(strings.TrimSpace(result.Error))
+		if strings.TrimSpace(result.Error) == "" {
+			resultErr = errors.New("floret projected turn failed")
 		}
 		if finishReason := floretFailureFinishReason(result); finishReason != "" {
 			r.persistFloretNativeTurnResult(step, result, req.Options.Intent, finishReason)
@@ -412,7 +427,7 @@ func (r *run) projectFloretResult(ctx context.Context, result flengine.Result, r
 				floretFailureMessage(finishReason),
 			)
 		}
-		return r.failRun("Floret engine failed", result.Err)
+		return r.failRun("Floret projected turn failed", resultErr)
 	default:
 		return r.failRun("Floret engine returned unknown status", fmt.Errorf("unknown floret status %q", result.Status))
 	}
@@ -428,15 +443,37 @@ func enableFlowerWebSearchTool(providerCfg config.AIProvider, capability provide
 	return strings.EqualFold(strings.TrimSpace(providerCfg.Type), "openai_compatible")
 }
 
-func floretFailureFinishReason(result flengine.Result) string {
-	finishReason := normalizeReplyFinishReason(string(result.FinishReason))
+func floretProviderName(providerType string) (string, error) {
+	providerType = strings.ToLower(strings.TrimSpace(providerType))
+	providerType = strings.ReplaceAll(providerType, "_", "-")
+	switch providerType {
+	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen":
+		return providerType, nil
+	case "openai-compatible", "desktop-model-source":
+		return flconfig.ProviderOpenAICompatible, nil
+	default:
+		return "", fmt.Errorf("unsupported provider type %q", providerType)
+	}
+}
+
+func floretProviderRequiresAPIKey(providerName string) bool {
+	switch strings.TrimSpace(providerName) {
+	case flconfig.ProviderFake:
+		return false
+	default:
+		return true
+	}
+}
+
+func floretFailureFinishReason(result flruntime.ProjectedTurnResult) string {
+	finishReason := normalizeReplyFinishReason(result.FinishReason)
 	if finishReason == "unknown" {
 		finishReason = normalizeReplyFinishReason(result.RawFinishReason)
 	}
 	if classifyReplyFinish(finishReason) == replyFinishClassBlocked {
 		return finishReason
 	}
-	if errors.Is(result.Err, flengine.ErrContentFiltered) {
+	if strings.Contains(strings.ToLower(result.Error), "content filtered") {
 		return "content_filter"
 	}
 	return ""
@@ -460,11 +497,11 @@ func floretFailureMessage(finishReason string) string {
 	}
 }
 
-func (r *run) persistFloretNativeTurnResult(step int, result flengine.Result, intent string, finishReason string) {
+func (r *run) persistFloretNativeTurnResult(step int, result flruntime.ProjectedTurnResult, intent string, finishReason string) {
 	if r == nil {
 		return
 	}
-	usage := flowerUsageFromFloret(result.Metrics.Usage)
+	usage := flowerUsageFromFloret(result.Metrics.ProviderUsage)
 	r.persistRunEvent("native.turn.result", RealtimeStreamKindLifecycle, map[string]any{
 		"step_index":    step,
 		"finish_reason": normalizeReplyFinishReason(finishReason),
@@ -479,7 +516,7 @@ func (r *run) persistFloretNativeTurnResult(step int, result flengine.Result, in
 	})
 }
 
-func (r *run) projectFloretAskUserWaiting(ctx context.Context, step int, signal *flengine.ControlSignal, state runtimeState) error {
+func (r *run) projectFloretAskUserWaiting(ctx context.Context, step int, signal *flruntime.TurnSignal, state runtimeState) error {
 	if signal == nil {
 		return errors.New("nil ask_user control signal")
 	}
@@ -541,7 +578,7 @@ func (r *run) projectFloretAskUserWaiting(ctx context.Context, step int, signal 
 	return nil
 }
 
-func (r *run) projectFloretExitPlanModeWaiting(ctx context.Context, step int, signal *flengine.ControlSignal, state runtimeState) error {
+func (r *run) projectFloretExitPlanModeWaiting(ctx context.Context, step int, signal *flruntime.TurnSignal, state runtimeState) error {
 	if signal == nil {
 		return errors.New("nil exit_plan_mode control signal")
 	}
@@ -671,16 +708,18 @@ func (r *run) projectFloretMissingExplicitCompletion(ctx context.Context, step i
 	return nil
 }
 
-func flowerMessagesToFloret(messages []Message) []flsession.Message {
-	out := make([]flsession.Message, 0, len(messages))
-	for _, msg := range messages {
-		role := flsession.Role(strings.ToLower(strings.TrimSpace(msg.Role)))
+func flowerMessagesToFloret(messages []Message) ([]flruntime.TranscriptMessage, error) {
+	out := make([]flruntime.TranscriptMessage, 0, len(messages))
+	for i, msg := range messages {
+		role := strings.ToLower(strings.TrimSpace(msg.Role))
 		switch role {
-		case flsession.System, flsession.User, flsession.Assistant, flsession.Tool:
+		case "user", "assistant", "tool":
+		case "system":
+			continue
 		default:
-			role = flsession.User
+			return nil, fmt.Errorf("message %d has unsupported role %q", i, msg.Role)
 		}
-		if role == flsession.Tool {
+		if role == "tool" {
 			for _, part := range msg.Content {
 				if !strings.EqualFold(strings.TrimSpace(part.Type), "tool_result") {
 					continue
@@ -689,8 +728,8 @@ func flowerMessagesToFloret(messages []Message) []flsession.Message {
 				if text == "" && len(part.JSON) > 0 {
 					text = string(part.JSON)
 				}
-				out = append(out, flsession.Message{
-					Role:       flsession.Tool,
+				out = append(out, flruntime.TranscriptMessage{
+					Role:       "tool",
 					Content:    text,
 					ToolCallID: toolCallIDFromPart(part),
 					ToolName:   strings.TrimSpace(part.ToolName),
@@ -698,11 +737,11 @@ func flowerMessagesToFloret(messages []Message) []flsession.Message {
 			}
 			continue
 		}
-		if role == flsession.Assistant {
+		if role == "assistant" {
 			assistantText := messageTextForFloret(msg, false)
 			reasoning := messageReasoningForFloret(msg)
 			if strings.TrimSpace(assistantText) != "" || strings.TrimSpace(reasoning) != "" {
-				out = append(out, flsession.Message{Role: role, Content: assistantText, Reasoning: reasoning})
+				out = append(out, flruntime.TranscriptMessage{Role: role, Content: assistantText, Reasoning: reasoning})
 			}
 			for _, part := range msg.Content {
 				if !strings.EqualFold(strings.TrimSpace(part.Type), "tool_call") {
@@ -715,8 +754,8 @@ func flowerMessagesToFloret(messages []Message) []flsession.Message {
 				if args == "" {
 					args = "{}"
 				}
-				out = append(out, flsession.Message{
-					Role:       flsession.Assistant,
+				out = append(out, flruntime.TranscriptMessage{
+					Role:       "assistant",
 					Content:    "tool_call",
 					Reasoning:  reasoning,
 					ToolCallID: toolCallIDFromPart(part),
@@ -730,9 +769,9 @@ func flowerMessagesToFloret(messages []Message) []flsession.Message {
 		if strings.TrimSpace(text) == "" {
 			continue
 		}
-		out = append(out, flsession.Message{Role: role, Content: text})
+		out = append(out, flruntime.TranscriptMessage{Role: role, Content: text})
 	}
-	return out
+	return out, nil
 }
 
 func messageTextForFloret(msg Message, includeAttachments bool) string {
@@ -769,7 +808,7 @@ func messageReasoningForFloret(msg Message) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func floretContextPolicy(contextWindow int, inputLimit int, maxOutput int) flcontextpolicy.Policy {
+func floretContextPolicy(contextWindow int, inputLimit int, maxOutput int) flconfig.ContextPolicy {
 	if contextWindow <= 0 {
 		contextWindow = nativeDefaultContextLimit
 	}
@@ -780,17 +819,17 @@ func floretContextPolicy(contextWindow int, inputLimit int, maxOutput int) flcon
 	if threshold <= 0 {
 		threshold = int64(contextWindow)
 	}
-	return flcontextpolicy.Normalize(flcontextpolicy.Policy{
+	return flconfig.ContextPolicy{
 		ContextWindowTokens:   int64(contextWindow),
 		MaxOutputTokens:       int64(maxOutput),
 		ReservedOutputTokens:  int64(maxOutput),
 		RecentTailTokens:      threshold,
 		RecentUserTokens:      threshold / 2,
 		MaxCompactionFailures: 2,
-	})
+	}
 }
 
-func estimateFloretHistoryTokens(systemPrompt string, history []flsession.Message, tools []ToolDef) int {
+func estimateFloretHistoryTokens(systemPrompt string, history []flruntime.TranscriptMessage, tools []ToolDef) int {
 	total := utf8.RuneCountInString(systemPrompt) / 4
 	for _, msg := range history {
 		total += utf8.RuneCountInString(msg.Content) / 4
