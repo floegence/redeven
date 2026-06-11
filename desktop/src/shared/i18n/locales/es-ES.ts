@@ -666,7 +666,6 @@ export const esES = {
     addProviderTitle: "Añadir Provider",
     continueInBrowser: "Continuar en el navegador",
     providerName: "Nombre",
-    providerUrl: "Provider URL",
     providerAuthorizationHelp: "Desktop abrirá tu navegador, usará tu sesión actual de Control Plane para autorizar este Provider y guardará localmente solo una autorización de Desktop revocable.",
     sshDestinationPlaceholder: "user@host o alias-config-ssh",
     sshPortTag: "Port {port}",
