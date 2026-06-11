@@ -641,8 +641,16 @@ const PendingTerminalTabStatusIcon = (props: { status: pending_terminal_session_
   );
 };
 
-function TerminalCreatingPane() {
+function TerminalLoadingPane(props: {
+  message?: string;
+  progressLabel?: string;
+  dataStage?: string;
+}) {
   const i18n = useI18n();
+  const message = createMemo(() => String(props.message ?? '').trim() || i18n.t('terminal.creatingMessage'));
+  const progressLabel = createMemo(() => String(props.progressLabel ?? '').trim() || i18n.t('terminal.creatingAria'));
+  const dataStage = createMemo(() => String(props.dataStage ?? '').trim() || 'creating');
+
   return (
     <div
       class="redeven-loading-curtain redeven-terminal-loading-curtain"
@@ -650,21 +658,28 @@ function TerminalCreatingPane() {
       aria-live="polite"
       aria-busy="true"
       data-redeven-loading-curtain-surface="component"
-      data-redeven-loading-curtain-stage="creating"
+      data-redeven-loading-curtain-stage={dataStage()}
+      style={{
+        'background-color': 'var(--redeven-terminal-loading-background, var(--background))',
+      }}
     >
       <div class="redeven-loading-curtain__panel">
         <div class="redeven-loading-curtain__eyebrow">{i18n.t('terminal.creatingEyebrow')}</div>
         <div
           class="redeven-loading-curtain__indicator"
           role="progressbar"
-          aria-label={i18n.t('terminal.creatingAria')}
+          aria-label={progressLabel()}
         >
           <div class="redeven-loading-curtain__indicator-bar" />
         </div>
-        <div class="redeven-loading-curtain__message">{i18n.t('terminal.creatingMessage')}</div>
+        <div class="redeven-loading-curtain__message">{message()}</div>
       </div>
     </div>
   );
+}
+
+function TerminalCreatingPane() {
+  return <TerminalLoadingPane dataStage="creating" />;
 }
 
 const PlusIcon = (props: { class?: string }) => (
@@ -1598,6 +1613,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [optimisticTerminalSessions, setOptimisticTerminalSessions] = createSignal<TerminalSessionInfo[]>([]);
   const [optimisticClosingSessionIds, setOptimisticClosingSessionIds] = createSignal<Set<string>>(new Set());
   const [pendingTerminalSessions, setPendingTerminalSessions] = createSignal<pending_terminal_session[]>([]);
+  const [sessionsHydrated, setSessionsHydrated] = createSignal(false);
   const [sessionsLoading, setSessionsLoading] = createSignal(false);
   const [localActiveSessionId, setLocalActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
   const [localActivePendingSessionId, setLocalActivePendingSessionId] = createSignal<string | null>(null);
@@ -1733,6 +1749,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const resolvedPendingIds = new Set(resolvedPendingTerminalSessions().map((session) => session.pendingSessionId));
     return pendingTerminalSessions().filter((session) => !resolvedPendingIds.has(session.id));
   });
+
+  const emptySessionListLoading = createMemo(() => (
+    connected()
+    && sessions().length === 0
+    && visiblePendingTerminalSessions().length === 0
+    && (!sessionsHydrated() || sessionsLoading())
+  ));
 
   const visiblePendingTerminalSessionById = (sessionId: string): pending_terminal_session | null => {
     const normalizedSessionId = String(sessionId ?? '').trim();
@@ -2393,6 +2416,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       if (handleExecuteDenied(e)) return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
+      setSessionsHydrated(true);
       setSessionsLoading(false);
     }
   };
@@ -2708,11 +2732,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   createEffect(() => {
     const client = protocol.client();
-    if (!client) return;
+    if (!client) {
+      batch(() => {
+        setSessionsHydrated(false);
+        setSessionsLoading(false);
+      });
+      return;
+    }
 
     let cancelled = false;
-    void (async () => {
+    batch(() => {
+      setSessionsHydrated(false);
       setSessionsLoading(true);
+    });
+    void (async () => {
       try {
         await sessionsCoordinator.refresh();
       } catch (e) {
@@ -2720,7 +2753,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         if (handleExecuteDenied(e)) return;
         setError(e instanceof Error ? e.message : String(e));
       } finally {
-        if (!cancelled) setSessionsLoading(false);
+        if (!cancelled) {
+          batch(() => {
+            setSessionsHydrated(true);
+            setSessionsLoading(false);
+          });
+        }
       }
     })();
 
@@ -3708,16 +3746,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
             </div>
           </Show>
 
-          <Show when={sessionsLoading() && sessions().length === 0}>
-            <RedevenLoadingCurtain
-              visible
-              eyebrow={i18n.t('terminal.creatingEyebrow')}
+          <Show when={emptySessionListLoading()}>
+            <TerminalLoadingPane
               message={i18n.t('terminal.loadingSessions')}
-              class="redeven-terminal-loading-curtain"
+              progressLabel={i18n.t('terminal.loadingSessions')}
+              dataStage="sessions"
             />
           </Show>
 
-          <Show when={!sessionsLoading() && sessions().length === 0 && visiblePendingTerminalSessions().length === 0}>
+          <Show when={sessionsHydrated() && !sessionsLoading() && sessions().length === 0 && visiblePendingTerminalSessions().length === 0}>
             <div class="absolute inset-0 flex items-center justify-center p-8">
               <div class="max-w-sm text-center flex flex-col items-center gap-4">
                 <div class="w-10 h-10 rounded-full bg-muted flex items-center justify-center">

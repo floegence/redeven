@@ -1034,6 +1034,38 @@ describe('TerminalPanel', () => {
     vi.unstubAllGlobals();
   });
 
+  it('keeps an empty terminal panel on the terminal loading surface until sessions hydrate', async () => {
+    terminalSessionsState.sessions = [];
+    const refreshGate: { resolve?: () => void } = {};
+    sessionsCoordinatorMocks.refresh.mockImplementationOnce(async () => (
+      await new Promise<void>((resolve) => {
+        refreshGate.resolve = resolve;
+      })
+    ));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="deck" />, host);
+
+    const loadingCurtain = host.querySelector('.redeven-terminal-loading-curtain') as HTMLElement | null;
+    expect(loadingCurtain).toBeTruthy();
+    expect(loadingCurtain?.getAttribute('data-redeven-loading-curtain-stage')).toBe('sessions');
+    expect(loadingCurtain?.textContent).toContain('Loading sessions...');
+    expect(loadingCurtain?.querySelector('[role="progressbar"]')?.getAttribute('aria-label')).toBe('Loading sessions...');
+    expect(host.textContent).not.toContain('No terminal sessions yet');
+
+    await settleTerminalPanel();
+    expect(sessionsCoordinatorMocks.refresh).toHaveBeenCalledTimes(1);
+
+    expect(refreshGate.resolve).toBeTruthy();
+    refreshGate.resolve?.();
+    await settleTerminalPanel();
+
+    expect(host.querySelector('.redeven-terminal-loading-curtain')).toBeNull();
+    expect(host.textContent).toContain('No terminal sessions yet');
+  });
+
   it('shows a simplified More menu and opens terminal settings from it', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
