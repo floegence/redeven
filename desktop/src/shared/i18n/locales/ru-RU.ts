@@ -666,7 +666,6 @@ export const ruRU = {
     addProviderTitle: "Добавить Provider",
     continueInBrowser: "Продолжить в браузере",
     providerName: "Имя",
-    providerUrl: "Provider URL",
     providerAuthorizationHelp: "Desktop откроет браузер, использует текущий сеанс Control Plane для авторизации этого Provider и сохранит локально только отзывную авторизацию Desktop.",
     sshDestinationPlaceholder: "user@host или ssh-config-alias",
     sshPortTag: "Port {port}",

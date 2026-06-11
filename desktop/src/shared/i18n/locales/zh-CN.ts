@@ -666,7 +666,6 @@ export const zhCN = {
     addProviderTitle: "添加 Provider",
     continueInBrowser: "在浏览器中继续",
     providerName: "名称",
-    providerUrl: "Provider URL",
     providerAuthorizationHelp: "Desktop 会打开你的浏览器，使用当前 Control Plane session 授权此 Provider，并且只在本机保存可撤销的 Desktop authorization。",
     sshDestinationPlaceholder: "user@host or ssh-config-alias",
     sshPortTag: "端口 {port}",

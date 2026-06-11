@@ -666,7 +666,6 @@ export const frFR = {
     addProviderTitle: "Ajouter un Provider",
     continueInBrowser: "Continuer dans le navigateur",
     providerName: "Nom",
-    providerUrl: "Provider URL",
     providerAuthorizationHelp: "Desktop ouvrira votre navigateur, utilisera votre session Control Plane actuelle pour autoriser ce Provider et ne stockera localement qu’une autorisation Desktop révocable.",
     sshDestinationPlaceholder: "user@host ou alias-config-ssh",
     sshPortTag: "Port {port}",

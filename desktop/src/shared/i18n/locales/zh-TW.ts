@@ -666,7 +666,6 @@ export const zhTW = {
     addProviderTitle: "新增 Provider",
     continueInBrowser: "在瀏覽器中繼續",
     providerName: "名稱",
-    providerUrl: "Provider URL",
     providerAuthorizationHelp: "Desktop 會開啟你的瀏覽器，使用目前 Control Plane session 授權此 Provider，並且只在本機儲存可撤銷的 Desktop authorization。",
     sshDestinationPlaceholder: "user@host or ssh-config-alias",
     sshPortTag: "Port {port}",

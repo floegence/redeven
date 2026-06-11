@@ -666,7 +666,6 @@ export const deDE = {
     addProviderTitle: "Provider hinzufügen",
     continueInBrowser: "Im Browser fortfahren",
     providerName: "Name",
-    providerUrl: "Provider URL",
     providerAuthorizationHelp: "Desktop öffnet deinen Browser, nutzt deine aktuelle Control Plane Sitzung, um diesen Provider zu autorisieren, und speichert lokal nur eine widerrufbare Desktop-Autorisierung.",
     sshDestinationPlaceholder: "user@host oder ssh-config-alias",
     sshPortTag: "Port {port}",

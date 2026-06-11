@@ -1121,7 +1121,6 @@ export const enUS = {
     addProviderTitle: 'Add Provider',
     continueInBrowser: 'Continue in Browser',
     providerName: 'Name',
-    providerUrl: 'Provider URL',
     providerAuthorizationHelp: 'Desktop will open your browser, use your current Control Plane session to authorize this Provider, and store only a revocable Desktop authorization locally.',
     sshDestinationPlaceholder: 'user@host or ssh-config-alias',
     sshPortTag: 'Port {port}',
