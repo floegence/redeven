@@ -324,13 +324,13 @@ describe('desktopFlowerHostState', () => {
         version: 1,
         entries: [
           {
-            target_id: 'cp:test:env:env_a',
+            target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
             label: 'Env A',
-            target_url: 'https://region.example.test/_redeven_boot/#redeven=boot-payload',
+            target_url: 'https://dev.redeven.test/_redeven_boot/#redeven=boot-payload',
             last_seen_at_unix_ms: 123,
             metadata: {
               target_kind: 'provider_environment',
-              provider_origin: 'https://region.example.test',
+              provider_origin: 'https://redeven.test',
               provider_id: 'reference_provider',
               env_public_id: 'env_a',
               namespace_public_id: 'ns_a',
@@ -357,7 +357,7 @@ describe('desktopFlowerHostState', () => {
 
       expect(cache.entries[0]?.metadata).toEqual({
         target_kind: 'provider_environment',
-        provider_origin: 'https://region.example.test',
+        provider_origin: 'https://redeven.test',
         provider_id: 'reference_provider',
         env_public_id: 'env_a',
         namespace_public_id: 'ns_a',

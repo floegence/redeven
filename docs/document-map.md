@@ -20,6 +20,6 @@ This page is a compact entry point for the main product and runtime docs in Rede
 
 ## Protocol docs
 
-- [RCPP v1](protocol/rcpp-v1.md)
+- [RCPP v2](protocol/rcpp-v2.md)
 - [Desktop model source RPC v1](protocol/desktop-model-source-rpc-v1.md)
-- [RCPP v1 OpenAPI](openapi/rcpp-v1.yaml)
+- [RCPP v2 OpenAPI](openapi/rcpp-v2.yaml)

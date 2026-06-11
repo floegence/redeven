@@ -120,7 +120,8 @@ func (c *cli) helpCmd(args []string) int {
 func (c *cli) bootstrapCmd(args []string) int {
 	fs := newCLIFlagSet("bootstrap")
 
-	controlplane := fs.String("controlplane", "", "Controlplane base URL (e.g. https://region.example.invalid)")
+	providerOrigin := fs.String("provider-origin", "", "Provider origin (e.g. https://redeven.test)")
+	controlplane := fs.String("controlplane", "", "Access point controlplane base URL (e.g. https://dev.redeven.test)")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket (raw ticket; 'Bearer <ticket>' is also accepted)")
 	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
@@ -156,6 +157,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 		return 2
 	}
 	missing := findMissingFlags(
+		requiredFlag{name: "--provider-origin", value: *providerOrigin},
 		requiredFlag{name: "--controlplane", value: *controlplane},
 		requiredFlag{name: "--env-id", value: *envID},
 		requiredFlag{name: "one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)", value: resolvedBootstrapTicket},
@@ -166,7 +168,8 @@ func (c *cli) bootstrapCmd(args []string) int {
 			fmt.Sprintf("missing required flags for `redeven bootstrap`: %s", formatFlagList(missing)),
 			[]string{
 				fmt.Sprintf(
-					"Example: redeven bootstrap --controlplane %s --env-id %s --bootstrap-ticket %s",
+					"Example: redeven bootstrap --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket %s",
+					exampleProviderOrigin,
 					exampleControlplaneURL,
 					exampleEnvID,
 					exampleBootstrapTicket,
@@ -186,6 +189,7 @@ func (c *cli) bootstrapCmd(args []string) int {
 	defer cancel()
 
 	_, err = config.BootstrapConfig(ctx, config.BootstrapArgs{
+		ProviderOrigin:         *providerOrigin,
 		ControlplaneBaseURL:    *controlplane,
 		EnvironmentID:          *envID,
 		BootstrapTicket:        resolvedBootstrapTicket,
@@ -210,7 +214,8 @@ func (c *cli) bootstrapCmd(args []string) int {
 
 func (c *cli) runCmd(args []string) int {
 	fs := newCLIFlagSet("run")
-	controlplane := fs.String("controlplane", "", "Controlplane base URL for one-shot Local Environment rebind")
+	providerOrigin := fs.String("provider-origin", "", "Provider origin for one-shot Local Environment rebind")
+	controlplane := fs.String("controlplane", "", "Access point controlplane base URL for one-shot Local Environment rebind")
 	envID := fs.String("env-id", "", "Environment public ID (env_...)")
 	bootstrapTicket := fs.String("bootstrap-ticket", "", "One-time bootstrap ticket")
 	bootstrapTicketEnv := fs.String("bootstrap-ticket-env", "", "Environment variable name holding the bootstrap ticket")
@@ -389,11 +394,13 @@ func (c *cli) runCmd(args []string) int {
 		return failRuntimeLaunch(code, message, 1, "")
 	}
 
-	bootstrapViaFlags := strings.TrimSpace(*controlplane) != "" ||
+	bootstrapViaFlags := strings.TrimSpace(*providerOrigin) != "" ||
+		strings.TrimSpace(*controlplane) != "" ||
 		strings.TrimSpace(*envID) != "" ||
 		resolvedBootstrapTicket != ""
 	if bootstrapViaFlags {
 		missing := findMissingFlags(
+			requiredFlag{name: "--provider-origin", value: *providerOrigin},
 			requiredFlag{name: "--controlplane", value: *controlplane},
 			requiredFlag{name: "--env-id", value: *envID},
 			requiredFlag{name: "one bootstrap ticket (--bootstrap-ticket or --bootstrap-ticket-env)", value: resolvedBootstrapTicket},
@@ -408,17 +415,19 @@ func (c *cli) runCmd(args []string) int {
 				c.stderr,
 				message,
 				[]string{
-					"Hint: provide --controlplane, --env-id, and exactly one bootstrap ticket together, or run `redeven bootstrap` first.",
+					"Hint: provide --provider-origin, --controlplane, --env-id, and exactly one bootstrap ticket together, or run `redeven bootstrap` first.",
 					fmt.Sprintf(
-						"Example: redeven run --mode hybrid --controlplane %s --env-id %s --bootstrap-ticket %s",
+						"Example: redeven run --mode hybrid --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket %s",
+						exampleProviderOrigin,
 						exampleControlplaneURL,
 						exampleEnvID,
 						exampleBootstrapTicket,
 					),
 					fmt.Sprintf(
-						"Example: %s=%s redeven run --mode desktop --desktop-managed --presentation machine --controlplane %s --env-id %s --bootstrap-ticket-env %s",
+						"Example: %s=%s redeven run --mode desktop --desktop-managed --presentation machine --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket-env %s",
 						exampleBootstrapEnv,
 						exampleBootstrapTicket,
+						exampleProviderOrigin,
 						exampleControlplaneURL,
 						exampleEnvID,
 						exampleBootstrapEnv,
@@ -534,6 +543,7 @@ func (c *cli) runCmd(args []string) int {
 
 		_, err = config.BootstrapConfig(ctx, buildRunBootstrapArgs(
 			stateLayout.StateRoot,
+			*providerOrigin,
 			*controlplane,
 			*envID,
 			resolvedBootstrapTicket,
@@ -594,6 +604,7 @@ func (c *cli) runCmd(args []string) int {
 		snapshot.RemoteEnabled = processRemoteEnabled
 		snapshot.ControlChannelEnabled = controlChannelEnabled
 		snapshot.LocalUIEnabled = localUIEnabled
+		snapshot.ProviderOrigin = cfg.ProviderOrigin
 		snapshot.ControlplaneBaseURL = cfg.ControlplaneBaseURL
 		snapshot.ControlplaneProviderID = cfg.ControlplaneProviderID
 		snapshot.EnvPublicID = cfg.EnvironmentID
@@ -781,6 +792,7 @@ func (c *cli) runCmd(args []string) int {
 				RemoteEnabled:            processRemoteEnabled,
 				DesktopManaged:           *desktopManaged,
 				DesktopOwnerID:           desktopOwnerID,
+				ProviderOrigin:           cfg.ProviderOrigin,
 				ControlplaneBaseURL:      cfg.ControlplaneBaseURL,
 				ControlplaneProviderID:   cfg.ControlplaneProviderID,
 				EnvPublicID:              cfg.EnvironmentID,
@@ -844,6 +856,7 @@ func (c *cli) printRunStateLayoutGuidance(reason error) int {
 
 func buildRunBootstrapArgs(
 	stateRoot string,
+	providerOrigin string,
 	controlplane string,
 	envID string,
 	bootstrapTicket string,
@@ -853,6 +866,7 @@ func buildRunBootstrapArgs(
 	runtimeVersion string,
 ) config.BootstrapArgs {
 	args := config.BootstrapArgs{
+		ProviderOrigin:         providerOrigin,
 		ControlplaneBaseURL:    controlplane,
 		EnvironmentID:          envID,
 		BootstrapTicket:        bootstrapTicket,
@@ -917,11 +931,11 @@ func (c *cli) printNotBootstrappedGuidance(reason error) int {
 		c.stderr,
 		fmt.Sprintf("runtime is not bootstrapped for remote or hybrid mode: %v", reason),
 		[]string{
-			"Hint: run `redeven bootstrap` first, or pass --controlplane, --env-id, and a one-time bootstrap ticket directly to `redeven run`.",
+			"Hint: run `redeven bootstrap` first, or pass --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket directly to `redeven run`.",
 			"Examples:",
-			fmt.Sprintf("  redeven bootstrap --controlplane %s --env-id %s --bootstrap-ticket %s", exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket),
-			fmt.Sprintf("  redeven run --mode hybrid --controlplane %s --env-id %s --bootstrap-ticket %s", exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket),
-			fmt.Sprintf("  %s=%s redeven run --mode desktop --desktop-managed --presentation machine --controlplane %s --env-id %s --bootstrap-ticket-env %s", exampleBootstrapEnv, exampleBootstrapTicket, exampleControlplaneURL, exampleEnvID, exampleBootstrapEnv),
+			fmt.Sprintf("  redeven bootstrap --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket %s", exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket),
+			fmt.Sprintf("  redeven run --mode hybrid --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket %s", exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket),
+			fmt.Sprintf("  %s=%s redeven run --mode desktop --desktop-managed --presentation machine --provider-origin %s --controlplane %s --env-id %s --bootstrap-ticket-env %s", exampleBootstrapEnv, exampleBootstrapTicket, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapEnv),
 		},
 		"",
 	)

@@ -79,13 +79,26 @@ function placeholderFact(label: string, value = 'None') {
   };
 }
 
-function buildProvider(providerOrigin = 'https://cp.example.invalid') {
+function buildProvider(providerOrigin = 'https://redeven.test') {
   return {
-    protocol_version: 'rcpp-v1' as const,
+    protocol_version: 'rcpp-v2' as const,
     provider_id: 'example_control_plane',
     display_name: 'Example Control Plane',
     provider_origin: providerOrigin,
     documentation_url: `${providerOrigin}/docs/control-plane-providers`,
+    access_points: [{
+      access_point_id: 'dev',
+      region: 'dev',
+      display_name: 'Development',
+      description: 'Development access point',
+      access_point_origin: providerOrigin === 'https://other.example.invalid'
+        ? 'https://other-dev.example.invalid'
+        : 'https://dev.redeven.test',
+      country_code: 'SG',
+      city: 'Singapore',
+      status: 'active',
+      health_status: 'healthy',
+    }],
   };
 }
 
@@ -139,8 +152,11 @@ function buildControlPlaneSummary(options: Readonly<{
       provider_id: provider.provider_id,
       provider_origin: provider.provider_origin,
       env_public_id: envPublicID,
+      region: 'dev',
+      access_point_id: 'dev',
+      access_point_origin: provider.access_points[0]?.access_point_origin ?? 'https://dev.redeven.test',
       label: 'Demo Environment',
-      environment_url: options.environmentURL ?? `${provider.provider_origin}/env/${envPublicID}`,
+      environment_url: options.environmentURL ?? `${provider.access_points[0]?.access_point_origin ?? provider.provider_origin}/env/${envPublicID}`,
       description: 'team sandbox',
       namespace_public_id: 'ns_demo',
       namespace_name: 'Demo Team',
@@ -164,7 +180,7 @@ function buildControlPlaneSummary(options: Readonly<{
 
 function providerRuntimeState(envPublicID = 'env_demo') {
   return {
-    controlplane_base_url: 'https://cp.example.invalid',
+    controlplane_base_url: 'https://dev.redeven.test',
     controlplane_provider_id: 'example_control_plane',
     env_public_id: envPublicID,
   };
@@ -179,6 +195,11 @@ function providerRuntimeService(
     provider_origin: providerLink?.provider_origin,
     provider_id: providerLink?.provider_id,
     env_public_id: providerLink?.env_public_id,
+    access_point_origin: providerLink?.access_point_origin ?? (
+      providerLink?.state === 'linked'
+        ? 'https://dev.redeven.test'
+        : undefined
+    ),
     local_environment_public_id: providerLink?.local_environment_public_id,
     binding_generation: providerLink?.binding_generation,
     remote_enabled: providerLink?.remote_enabled ?? providerLink?.state === 'linked',
@@ -602,7 +623,7 @@ describe('buildEnvironmentCardModel', () => {
         },
       },
     });
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
+    const localServe = testProviderBoundLocalEnvironment('https://redeven.test', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const controlPlane = buildControlPlaneSummary({});
@@ -682,7 +703,7 @@ describe('buildEnvironmentCardModel', () => {
               desktop_model_source: { state: 'unsupported' },
               provider_link: {
                 state: 'linked',
-                provider_origin: 'https://cp.example.invalid',
+                provider_origin: 'https://redeven.test',
                 provider_id: 'example_control_plane',
                 env_public_id: 'env_demo',
                 remote_enabled: true,
@@ -777,7 +798,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardModel(providerEntry!)).toEqual(expect.objectContaining({
       kind_label: 'Provider',
       status_label: 'READY',
-      target_primary: 'https://cp.example.invalid/env/env_demo',
+      target_primary: 'https://dev.redeven.test/env/env_demo',
       target_secondary: '',
     }));
     expect(buildEnvironmentCardModel(urlEntry!)).toEqual(expect.objectContaining({
@@ -802,7 +823,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardFactsModel(providerEntry!)).toEqual([
       defaultFact('RUNS ON', 'Provider remote', {
         endpoints: [
-          { label: 'PROVIDER', value: 'https://cp.example.invalid/env/env_demo', monospace: true, copy_label: 'Copy environment URL' },
+          { label: 'PROVIDER', value: 'https://dev.redeven.test/env/env_demo', monospace: true, copy_label: 'Copy environment URL' },
         ],
       }),
       placeholderFact('VERSION', 'UNKNOWN'),
@@ -831,7 +852,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(buildEnvironmentCardEndpointsModel(providerEntry!)).toEqual([
       {
         label: 'PROVIDER',
-        value: 'https://cp.example.invalid/env/env_demo',
+        value: 'https://dev.redeven.test/env/env_demo',
         monospace: true,
         copy_label: 'Copy environment URL',
       },
@@ -892,7 +913,7 @@ describe('buildEnvironmentCardModel', () => {
     expect(filterEnvironmentLibrary(
       snapshot,
       '',
-      desktopControlPlaneKey('https://cp.example.invalid', 'example_control_plane'),
+      desktopControlPlaneKey('https://redeven.test', 'example_control_plane'),
     ).map((environment) => environment.kind)).toEqual([
       'provider_environment',
     ]);
@@ -2324,7 +2345,7 @@ describe('buildEnvironmentCardModel', () => {
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
         provider_environments: [
-          testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+          testProviderEnvironment('https://redeven.test', 'env_demo', {
             preferredOpenRoute: 'remote_desktop',
           }),
         ],
@@ -2364,7 +2385,7 @@ describe('buildEnvironmentCardModel', () => {
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
         provider_environments: [
-          testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+          testProviderEnvironment('https://redeven.test', 'env_demo', {
             preferredOpenRoute: 'remote_desktop',
           }),
         ],
@@ -2484,7 +2505,7 @@ describe('buildEnvironmentCardModel', () => {
             ...providerRuntimeState('env_demo'),
             runtime_service: providerRuntimeService({ state: 'openable' }, {
               state: 'linked',
-              provider_origin: 'https://cp.example.invalid',
+              provider_origin: 'https://redeven.test',
               provider_id: 'example_control_plane',
               env_public_id: 'env_demo',
             }),
@@ -2546,7 +2567,7 @@ describe('buildEnvironmentCardModel', () => {
 
     const localOnlyRuntimeService = providerRuntimeService({ state: 'openable' }, {
       state: 'linked',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://redeven.test',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
       remote_enabled: false,
@@ -2773,7 +2794,7 @@ describe('buildEnvironmentCardModel', () => {
       status: 'online',
       lifecycleStatus: 'active',
     });
-    const remotePreferred = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+    const remotePreferred = testProviderEnvironment('https://redeven.test', 'env_demo', {
       preferredOpenRoute: 'remote_desktop',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -2830,7 +2851,7 @@ describe('buildEnvironmentCardModel', () => {
           label: 'Reconnect Provider',
           enabled: true,
           variant: 'default',
-          provider_origin: 'https://cp.example.invalid',
+          provider_origin: 'https://redeven.test',
           provider_id: 'example_control_plane',
         },
         primary_action_overlay: {
@@ -2847,7 +2868,7 @@ describe('buildEnvironmentCardModel', () => {
             label: 'Reconnect Provider',
             enabled: true,
             variant: 'default',
-            provider_origin: 'https://cp.example.invalid',
+            provider_origin: 'https://redeven.test',
             provider_id: 'example_control_plane',
           },
         }],
@@ -2862,7 +2883,7 @@ describe('buildEnvironmentCardModel', () => {
       ...providerRuntimeState('env_demo'),
       runtime_service: providerRuntimeService({ state: 'openable' }, {
         state: 'linked',
-        provider_origin: 'https://cp.example.invalid',
+        provider_origin: 'https://redeven.test',
         provider_id: 'example_control_plane',
         env_public_id: 'env_demo',
       }),
@@ -2925,7 +2946,7 @@ describe('buildEnvironmentCardModel', () => {
       },
     });
 
-    const focusableLocalEnvironment = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
+    const focusableLocalEnvironment = testProviderBoundLocalEnvironment('https://redeven.test', 'env_demo', {
       currentRuntime: {
         local_ui_url: 'http://127.0.0.1:24001/',
         desktop_managed: true,
@@ -2933,7 +2954,7 @@ describe('buildEnvironmentCardModel', () => {
         ...providerRuntimeState('env_demo'),
         runtime_service: providerRuntimeService({ state: 'openable' }, {
           state: 'linked',
-          provider_origin: 'https://cp.example.invalid',
+          provider_origin: 'https://redeven.test',
           provider_id: 'example_control_plane',
           env_public_id: 'env_demo',
         }),
@@ -2984,7 +3005,7 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('treats opening managed sessions as a disabled Opening state instead of Focus', () => {
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_opening', {
+    const localServe = testProviderBoundLocalEnvironment('https://redeven.test', 'env_opening', {
       currentRuntime: {
         local_ui_url: 'http://localhost:23998/',
         desktop_managed: true,
@@ -3148,7 +3169,7 @@ describe('buildEnvironmentCardModel', () => {
         }),
       },
     });
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_preparing');
+    const localServe = testProviderBoundLocalEnvironment('https://redeven.test', 'env_preparing');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: local,
@@ -3172,7 +3193,7 @@ describe('buildEnvironmentCardModel', () => {
   });
 
   it('projects provider remote sessions onto the separate provider card', () => {
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
+    const localServe = testProviderBoundLocalEnvironment('https://redeven.test', 'env_demo');
     const remoteTarget = buildLocalEnvironmentDesktopTarget(localServe, { route: 'remote_desktop' });
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({

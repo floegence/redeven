@@ -1,11 +1,13 @@
 import {
   normalizeControlPlaneOrigin,
   normalizeDesktopControlPlaneAccount,
+  normalizeDesktopProviderAccessPointList,
   normalizeDesktopControlPlaneProvider,
   normalizeDesktopProviderEnvironmentList,
   normalizeDesktopProviderEnvironmentRuntimeHealthList,
   type DesktopControlPlaneAccount,
   type DesktopControlPlaneProvider,
+  type DesktopProviderAccessPoint,
   type DesktopProviderEnvironment,
   type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
@@ -17,19 +19,20 @@ import {
 } from './controlPlaneProviderTransport';
 
 const PROVIDER_DISCOVERY_PATH = '/.well-known/redeven-provider.json';
-const PROVIDER_ME_PATH = '/api/rcpp/v1/me';
-const PROVIDER_ENVIRONMENTS_PATH = '/api/rcpp/v1/environments';
-const PROVIDER_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH = '/api/rcpp/v1/environments/runtime-health/query';
-const PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH = '/api/rcpp/v1/desktop/connect/exchange';
-const PROVIDER_DESKTOP_TOKEN_REFRESH_PATH = '/api/rcpp/v1/desktop/token/refresh';
-const PROVIDER_DESKTOP_TOKEN_REVOKE_PATH = '/api/rcpp/v1/desktop/token/revoke';
+const PROVIDER_ME_PATH = '/api/rcpp/v2/me';
+const PROVIDER_ENVIRONMENTS_PATH = '/api/rcpp/v2/environments';
+const PROVIDER_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH = '/api/rcpp/v2/environments/runtime-health/query';
+const PROVIDER_DESKTOP_CONNECT_EXCHANGE_PATH = '/api/rcpp/v2/desktop/connect/exchange';
+const PROVIDER_DESKTOP_TOKEN_REFRESH_PATH = '/api/rcpp/v2/desktop/token/refresh';
+const PROVIDER_DESKTOP_TOKEN_REVOKE_PATH = '/api/rcpp/v2/desktop/token/revoke';
 const PROVIDER_DESKTOP_OPEN_SESSION_PATH_SUFFIX = '/desktop/open-session';
-const PROVIDER_BOOTSTRAP_EXCHANGE_PATH = '/api/rcpp/v1/runtime/bootstrap/exchange';
+const PROVIDER_BOOTSTRAP_EXCHANGE_PATH = '/api/rcpp/v2/runtime/bootstrap/exchange';
 const DEFAULT_PROVIDER_TIMEOUT_MS = 15_000;
 
 export type ProviderDesktopOpenSession = Readonly<{
   bootstrap_ticket?: string;
   remote_session_url?: string;
+  access_point_origin: string;
   expires_at_unix_ms: number;
 }>;
 
@@ -39,7 +42,7 @@ export type ProviderDesktopConnectExchangeResult = Readonly<{
   refresh_token: string;
   authorization_expires_at_unix_ms: number;
   account: DesktopControlPlaneAccount;
-  environments: readonly DesktopProviderEnvironment[];
+  access_points: readonly DesktopProviderAccessPoint[];
 }>;
 
 export type ProviderDesktopConnectAuthorization = Readonly<{
@@ -86,6 +89,10 @@ function providerRequestURL(providerOrigin: string, pathname: string): string {
   base.search = '';
   base.hash = '';
   return base.toString();
+}
+
+function accessPointRequestURL(accessPointOrigin: string, pathname: string): string {
+  return providerRequestURL(accessPointOrigin, pathname);
 }
 
 function headersRecord(headers: Headers): Readonly<Record<string, string>> {
@@ -207,24 +214,34 @@ export async function fetchProviderJSON(
 }
 
 function normalizeProviderOpenSessionResponse(
-  providerOrigin: string,
+  accessPointOrigin: string,
   body: unknown,
   message: string,
 ): ProviderDesktopOpenSession {
   if (!body || typeof body !== 'object') {
-    throw invalidProviderResponseError(providerOrigin, message);
+    throw invalidProviderResponseError(accessPointOrigin, message);
   }
 
   const candidate = body as Record<string, unknown>;
   const bootstrapTicket = compact(candidate.bootstrap_ticket);
   const remoteSessionURL = compact(candidate.remote_session_url);
+  let responseAccessPointOrigin = '';
+  try {
+    responseAccessPointOrigin = normalizeControlPlaneOrigin(compact(candidate.access_point_origin));
+  } catch {
+    throw invalidProviderResponseError(accessPointOrigin, message);
+  }
   if (bootstrapTicket === '' && remoteSessionURL === '') {
-    throw invalidProviderResponseError(providerOrigin, message);
+    throw invalidProviderResponseError(accessPointOrigin, message);
+  }
+  if (responseAccessPointOrigin !== normalizeControlPlaneOrigin(accessPointOrigin)) {
+    throw invalidProviderResponseError(accessPointOrigin, message);
   }
   return {
     bootstrap_ticket: bootstrapTicket || undefined,
     remote_session_url: remoteSessionURL || undefined,
-    expires_at_unix_ms: normalizeProviderUnixMS(providerOrigin, candidate.expires_at_unix_ms, message),
+    access_point_origin: responseAccessPointOrigin,
+    expires_at_unix_ms: normalizeProviderUnixMS(accessPointOrigin, candidate.expires_at_unix_ms, message),
   };
 }
 
@@ -276,12 +293,27 @@ function normalizeProviderDesktopConnectExchangeResponse(
   const candidate = body as Record<string, unknown>;
   const accessToken = compact(candidate.access_token);
   const refreshToken = compact(candidate.refresh_token);
+  const providerID = compact(candidate.provider_id);
+  let providerOrigin = '';
+  try {
+    providerOrigin = normalizeControlPlaneOrigin(compact(candidate.provider_origin));
+  } catch {
+    throw invalidProviderResponseError(
+      provider.provider_origin,
+      'The provider desktop connect response is invalid.',
+    );
+  }
   const authorizationExpiresAtUnixMS = normalizeProviderUnixMS(
     provider.provider_origin,
     candidate.authorization_expires_at_unix_ms,
     'The provider desktop connect response is invalid.',
   );
-  if (accessToken === '' || refreshToken === '') {
+  if (
+    accessToken === ''
+    || refreshToken === ''
+    || providerID !== provider.provider_id
+    || providerOrigin !== provider.provider_origin
+  ) {
     throw invalidProviderResponseError(
       provider.provider_origin,
       'The provider desktop connect response is invalid.',
@@ -300,6 +332,13 @@ function normalizeProviderDesktopConnectExchangeResponse(
       'The provider desktop connect response is invalid.',
     );
   }
+  const accessPoints = normalizeDesktopProviderAccessPointList(candidate.access_points);
+  if (accessPoints.length === 0) {
+    throw invalidProviderResponseError(
+      provider.provider_origin,
+      'The provider desktop connect response is invalid.',
+    );
+  }
 
   return {
     access_token: accessToken,
@@ -311,9 +350,7 @@ function normalizeProviderDesktopConnectExchangeResponse(
     refresh_token: refreshToken,
     authorization_expires_at_unix_ms: authorizationExpiresAtUnixMS,
     account,
-    environments: normalizeDesktopProviderEnvironmentList({
-      environments: Array.isArray(candidate.environments) ? candidate.environments : [],
-    }, { provider }),
+    access_points: accessPoints,
   };
 }
 
@@ -418,11 +455,13 @@ export async function fetchProviderAccount(
 
 export async function fetchProviderEnvironments(
   provider: DesktopControlPlaneProvider,
+  accessPoint: DesktopProviderAccessPoint,
   accessToken: string,
   requestOptions: ProviderClientRequestOptions = {},
 ): Promise<readonly DesktopProviderEnvironment[]> {
+  const accessPointOrigin = accessPoint.access_point_origin;
   const { body } = await fetchProviderJSON(
-    providerRequestURL(provider.provider_origin, PROVIDER_ENVIRONMENTS_PATH),
+    accessPointRequestURL(accessPointOrigin, PROVIDER_ENVIRONMENTS_PATH),
     {
       bearerToken: accessToken,
       operationLabel: 'the published environment list',
@@ -431,7 +470,7 @@ export async function fetchProviderEnvironments(
   );
   if (!body || typeof body !== 'object' || !Array.isArray((body as { environments?: unknown }).environments)) {
     throw invalidProviderResponseError(
-      provider.provider_origin,
+      accessPointOrigin,
       'The provider environment list is invalid.',
     );
   }
@@ -440,6 +479,7 @@ export async function fetchProviderEnvironments(
 
 export async function queryProviderEnvironmentRuntimeHealth(
   provider: DesktopControlPlaneProvider,
+  accessPoint: DesktopProviderAccessPoint,
   accessToken: string,
   query: ProviderEnvironmentRuntimeHealthQuery,
   requestOptions: ProviderClientRequestOptions = {},
@@ -450,8 +490,9 @@ export async function queryProviderEnvironmentRuntimeHealth(
   if (envPublicIDs.length === 0) {
     return [];
   }
+  const accessPointOrigin = accessPoint.access_point_origin;
   const { body } = await fetchProviderJSON(
-    providerRequestURL(provider.provider_origin, PROVIDER_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH),
+    accessPointRequestURL(accessPointOrigin, PROVIDER_ENVIRONMENTS_RUNTIME_HEALTH_QUERY_PATH),
     {
       method: 'POST',
       bearerToken: accessToken,
@@ -464,7 +505,7 @@ export async function queryProviderEnvironmentRuntimeHealth(
   );
   if (!body || typeof body !== 'object' || !Array.isArray((body as { environments?: unknown }).environments)) {
     throw invalidProviderResponseError(
-      provider.provider_origin,
+      accessPointOrigin,
       'The provider runtime health response is invalid.',
     );
   }
@@ -473,6 +514,7 @@ export async function queryProviderEnvironmentRuntimeHealth(
 
 export async function requestDesktopOpenSession(
   provider: DesktopControlPlaneProvider,
+  accessPoint: DesktopProviderAccessPoint,
   accessToken: string,
   envPublicID: string,
   requestOptions: ProviderClientRequestOptions = {},
@@ -481,9 +523,10 @@ export async function requestDesktopOpenSession(
   if (cleanEnvPublicID === '') {
     throw new Error('Environment ID is required.');
   }
+  const accessPointOrigin = accessPoint.access_point_origin;
   const { body } = await fetchProviderJSON(
-    providerRequestURL(
-      provider.provider_origin,
+    accessPointRequestURL(
+      accessPointOrigin,
       `${PROVIDER_ENVIRONMENTS_PATH}/${encodeURIComponent(cleanEnvPublicID)}${PROVIDER_DESKTOP_OPEN_SESSION_PATH_SUFFIX}`,
     ),
     {
@@ -494,20 +537,20 @@ export async function requestDesktopOpenSession(
     },
   );
   return normalizeProviderOpenSessionResponse(
-    provider.provider_origin,
+    accessPointOrigin,
     body,
     'The provider desktop open session response is invalid.',
   );
 }
 
-export function providerBootstrapExchangeURL(providerOrigin: string): string {
-  return providerRequestURL(providerOrigin, PROVIDER_BOOTSTRAP_EXCHANGE_PATH);
+export function providerBootstrapExchangeURL(accessPointOrigin: string): string {
+  return accessPointRequestURL(accessPointOrigin, PROVIDER_BOOTSTRAP_EXCHANGE_PATH);
 }
 
-export function providerFloeproxyBootExchangeURL(providerOrigin: string): string {
-  return providerRequestURL(providerOrigin, '/api/srv/v1/floeproxy/boot/exchange');
+export function providerFloeproxyBootExchangeURL(accessPointOrigin: string): string {
+  return accessPointRequestURL(accessPointOrigin, '/api/srv/v1/floeproxy/boot/exchange');
 }
 
-export function providerFloeproxyEntryURL(providerOrigin: string): string {
-  return providerRequestURL(providerOrigin, '/api/srv/v1/floeproxy/entry');
+export function providerFloeproxyEntryURL(accessPointOrigin: string): string {
+  return accessPointRequestURL(accessPointOrigin, '/api/srv/v1/floeproxy/entry');
 }

@@ -190,7 +190,7 @@ describe('runtimeService', () => {
       bindings: {
         provider_link: {
           state: 'linked',
-          provider_origin: ' https://cp.example.invalid ',
+          provider_origin: ' https://provider.example.invalid ',
           provider_id: ' example_control_plane ',
           env_public_id: ' env_demo ',
           local_environment_public_id: ' lenv_demo ',
@@ -206,7 +206,7 @@ describe('runtimeService', () => {
     expect(snapshot.capabilities?.provider_link.bind_method).toBe('runtime_control_v1');
     expect(runtimeServiceProviderLinkBinding(snapshot)).toMatchObject({
       state: 'linked',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
       local_environment_public_id: 'lenv_demo',
@@ -215,12 +215,12 @@ describe('runtimeService', () => {
       last_connected_at_unix_ms: 1778750000000,
     });
     expect(runtimeServiceProviderLinkMatches(snapshot, {
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
     })).toBe(true);
     expect(runtimeServiceProviderLinkMatches(snapshot, {
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       provider_id: 'example_control_plane',
       env_public_id: 'env_other',
     })).toBe(false);
@@ -259,7 +259,7 @@ describe('runtimeService', () => {
       bindings: {
         provider_link: {
           state: 'linked',
-          provider_origin: 'https://cp.example.invalid',
+          provider_origin: 'https://provider.example.invalid',
           provider_id: 'example_control_plane',
           env_public_id: 'env_demo',
           remote_enabled: true,
@@ -293,7 +293,7 @@ describe('runtimeService', () => {
       bindings: {
         provider_link: {
           state: 'linked',
-          provider_origin: 'https://cp.example.invalid',
+          provider_origin: 'https://provider.example.invalid',
           provider_id: 'example_control_plane',
           env_public_id: 'env_demo',
           remote_enabled: true,
@@ -310,7 +310,7 @@ describe('runtimeService', () => {
       bindings: {
         provider_link: {
           state: 'linked',
-          provider_origin: 'https://cp.example.invalid',
+          provider_origin: 'https://provider.example.invalid',
           provider_id: 'example_control_plane',
           env_public_id: 'env_demo',
           remote_enabled: false,

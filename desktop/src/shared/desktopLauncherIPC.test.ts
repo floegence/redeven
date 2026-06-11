@@ -93,7 +93,7 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'start_environment_runtime',
-      environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
+      environment_id: ' provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo ',
       runtime_target_id: ' local:container:docker:container-stable-id:abc12345 ',
       placement_target_id: ' local:container:docker:container-stable-id:abc12345 ',
       host_access: { kind: 'local_host' },
@@ -108,7 +108,7 @@ describe('desktopLauncherIPC', () => {
       force_runtime_update: true,
     })).toEqual({
       kind: 'start_environment_runtime',
-      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      environment_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       runtime_target_id: 'local:container:docker:container-stable-id:abc12345',
       placement_target_id: 'local:container:docker:container-stable-id:abc12345',
       host_access: { kind: 'local_host' },
@@ -125,7 +125,7 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'restart_environment_runtime',
-      environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
+      environment_id: ' provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo ',
       runtime_target_id: ' local:container:docker:container-stable-id:abc12345 ',
       placement_target_id: ' local:container:docker:container-stable-id:abc12345 ',
       host_access: { kind: 'local_host' },
@@ -139,7 +139,7 @@ describe('desktopLauncherIPC', () => {
       },
     })).toEqual(expect.objectContaining({
       kind: 'restart_environment_runtime',
-      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      environment_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       runtime_target_id: 'local:container:docker:container-stable-id:abc12345',
       placement: expect.objectContaining({
         kind: 'container_process',
@@ -184,20 +184,20 @@ describe('desktopLauncherIPC', () => {
     }));
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'connect_provider_runtime',
-      provider_environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
+      provider_environment_id: ' provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo ',
       runtime_target_id: ' ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default ',
     })).toEqual({
       kind: 'connect_provider_runtime',
-      provider_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      provider_environment_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       runtime_target_id: 'ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default',
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'disconnect_provider_runtime',
-      provider_environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
+      provider_environment_id: ' provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo ',
       runtime_target_id: ' local:local ',
     })).toEqual({
       kind: 'disconnect_provider_runtime',
-      provider_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      provider_environment_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       runtime_target_id: 'local:local',
     });
     expect(normalizeDesktopLauncherActionRequest({
@@ -378,11 +378,11 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'start_control_plane_connect',
-      provider_origin: ' https://cp.example.invalid/root ',
+      provider_origin: ' https://provider.example.invalid/root ',
       display_label: ' Example Control Plane ',
     })).toEqual({
       kind: 'start_control_plane_connect',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       display_label: 'Example Control Plane',
     });
     expect(normalizeDesktopLauncherActionRequest({
@@ -396,11 +396,11 @@ describe('desktopLauncherIPC', () => {
     });
     expect(normalizeDesktopLauncherActionRequest({
       kind: 'set_provider_environment_pinned',
-      environment_id: ' cp:https%3A%2F%2Fcp.example.invalid:env:env_demo ',
+      environment_id: ' provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo ',
       pinned: true,
     })).toEqual({
       kind: 'set_provider_environment_pinned',
-      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      environment_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       pinned: true,
     });
     expect(normalizeDesktopLauncherActionRequest({

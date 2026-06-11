@@ -47,7 +47,7 @@ describe('environmentLibraryProjection', () => {
     const local = testLocalEnvironment({
       label: 'Local',
     });
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -67,7 +67,7 @@ describe('environmentLibraryProjection', () => {
       label: 'Local',
       pinned: true,
     });
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
       pinned: false,
     });

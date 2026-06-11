@@ -119,6 +119,7 @@ describe('runtimeControlClient', () => {
       provider_origin: 'https://provider.example.invalid',
       provider_id: 'provider-1',
       env_public_id: 'env-1',
+      access_point_origin: 'https://dev.provider.example.invalid',
       bootstrap_ticket: 'ticket-1',
     });
 
@@ -129,6 +130,7 @@ describe('runtimeControlClient', () => {
     expect(JSON.parse(server.bodies[0] ?? '{}')).toMatchObject({
       provider_id: 'provider-1',
       env_public_id: 'env-1',
+      access_point_origin: 'https://dev.provider.example.invalid',
     });
   });
 

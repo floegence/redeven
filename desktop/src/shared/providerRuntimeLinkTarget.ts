@@ -30,6 +30,7 @@ export type DesktopProviderEnvironmentCandidate = Readonly<{
   provider_origin: string;
   provider_id: string;
   env_public_id: string;
+  access_point_origin: string;
   provider_label?: string;
   route_state: 'online' | 'offline' | 'unknown';
   occupancy: DesktopProviderEnvironmentOccupancy;
@@ -54,6 +55,7 @@ export type DesktopProviderRuntimeLinkTarget = Readonly<{
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
+  access_point_origin?: string;
   can_connect_provider: boolean;
   can_disconnect_provider: boolean;
   blocked_reason_code?: string;

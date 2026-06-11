@@ -54,6 +54,7 @@ export type DesktopLocalRuntimeProviderBinding = Readonly<{
   provider_origin: string;
   provider_id: string;
   env_public_id: string;
+  access_point_origin: string;
 }>;
 
 function compact(value: unknown): string {
@@ -68,7 +69,8 @@ export function desktopRuntimeProviderBindingMatches(
     binding?.state === 'linked'
     && compact(binding.provider_origin) === compact(expected?.provider_origin)
     && compact(binding.provider_id) === compact(expected?.provider_id)
-    && compact(binding.env_public_id) === compact(expected?.env_public_id),
+    && compact(binding.env_public_id) === compact(expected?.env_public_id)
+    && compact(binding.access_point_origin) === compact(expected?.access_point_origin),
   );
 }
 

@@ -51,6 +51,7 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		RemoteEnabled:            startup.RemoteEnabled,
 		DesktopManaged:           startup.DesktopManaged,
 		DesktopOwnerID:           startup.DesktopOwnerID,
+		ProviderOrigin:           startup.ProviderOrigin,
 		ControlplaneBaseURL:      startup.ControlplaneBaseURL,
 		ControlplaneProviderID:   startup.ControlplaneProviderID,
 		EnvPublicID:              startup.EnvPublicID,
@@ -72,6 +73,7 @@ type runtimeStartupReport struct {
 	RemoteEnabled            bool
 	DesktopManaged           bool
 	DesktopOwnerID           string
+	ProviderOrigin           string
 	ControlplaneBaseURL      string
 	ControlplaneProviderID   string
 	EnvPublicID              string
@@ -108,7 +110,8 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 		RemoteEnabled:            status.RuntimeService.RemoteEnabled,
 		DesktopManaged:           status.Identity.DesktopManaged,
 		DesktopOwnerID:           status.Identity.DesktopOwnerID,
-		ControlplaneBaseURL:      status.RuntimeService.Bindings.ProviderLink.ProviderOrigin,
+		ProviderOrigin:           status.RuntimeService.Bindings.ProviderLink.ProviderOrigin,
+		ControlplaneBaseURL:      status.RuntimeService.Bindings.ProviderLink.AccessPointOrigin,
 		ControlplaneProviderID:   status.RuntimeService.Bindings.ProviderLink.ProviderID,
 		EnvPublicID:              status.RuntimeService.Bindings.ProviderLink.EnvPublicID,
 		StateDir:                 status.Identity.StateDir,

@@ -1306,7 +1306,7 @@ describe('EnvAppShell local access gate', () => {
     installDesktopSessionContext({
       sessionSource: 'provider_environment',
       label: 'Acme Desktop',
-      localEnvironmentID: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_provider',
+      localEnvironmentID: 'provider:https%3A%2F%2Fredeven.test:env:env_provider',
       envPublicID: 'env_provider',
     });
     getEnvironmentMock.mockImplementation(async (request: { source?: string; envId?: string }) => {

@@ -35,9 +35,10 @@ func (c *runtimePresentationController) ConfigureControlPlane(ctx context.Contex
 		}, nil
 	}
 	status, err := c.agent.ConfigureControlPlane(ctx, agent.ControlPlaneSetup{
-		ControlplaneURL: setup.ControlplaneURL,
-		EnvironmentID:   setup.EnvironmentID,
-		BootstrapTicket: setup.BootstrapTicket,
+		ProviderOrigin:    setup.ProviderOrigin,
+		AccessPointOrigin: setup.AccessPointOrigin,
+		EnvironmentID:     setup.EnvironmentID,
+		BootstrapTicket:   setup.BootstrapTicket,
 	})
 	if err != nil {
 		return runtimepresentation.ControlPlaneStatus{}, err
@@ -109,6 +110,7 @@ func (c *runtimePresentationController) RuntimeOverview() runtimepresentation.Ru
 			ProviderOrigin:           snapshot.Bindings.ProviderLink.ProviderOrigin,
 			ProviderID:               snapshot.Bindings.ProviderLink.ProviderID,
 			EnvPublicID:              snapshot.Bindings.ProviderLink.EnvPublicID,
+			AccessPointOrigin:        snapshot.Bindings.ProviderLink.AccessPointOrigin,
 			LocalEnvironmentPublicID: snapshot.Bindings.ProviderLink.LocalEnvironmentPublicID,
 			RemoteEnabled:            snapshot.Bindings.ProviderLink.RemoteEnabled,
 			LastErrorCode:            snapshot.Bindings.ProviderLink.LastErrorCode,

@@ -12,6 +12,7 @@ export type PendingControlPlaneAuthorization = Readonly<{
   code_verifier: string;
   code_challenge: string;
   requested_env_public_id?: string;
+  requested_access_point_origin?: string;
   label?: string;
   display_label?: string;
   created_at_unix_ms: number;
@@ -22,6 +23,7 @@ type CreatePendingControlPlaneAuthorizationInput = Readonly<{
   providerOrigin: string;
   providerID?: string;
   requestedEnvPublicID?: string;
+  requestedAccessPointOrigin?: string;
   label?: string;
   displayLabel?: string;
   now?: number;
@@ -47,6 +49,9 @@ export function createPendingControlPlaneAuthorization(
   input: CreatePendingControlPlaneAuthorizationInput,
 ): PendingControlPlaneAuthorization {
   const providerOrigin = normalizeControlPlaneOrigin(input.providerOrigin);
+  const requestedAccessPointOrigin = compact(input.requestedAccessPointOrigin) === ''
+    ? ''
+    : normalizeControlPlaneOrigin(compact(input.requestedAccessPointOrigin));
   const now = Number.isFinite(input.now) ? Math.floor(Number(input.now)) : Date.now();
   const codeVerifier = randomBase64URL(32);
 
@@ -57,6 +62,7 @@ export function createPendingControlPlaneAuthorization(
     code_verifier: codeVerifier,
     code_challenge: buildControlPlaneCodeChallenge(codeVerifier),
     requested_env_public_id: compact(input.requestedEnvPublicID) || undefined,
+    requested_access_point_origin: requestedAccessPointOrigin || undefined,
     label: compact(input.label) || undefined,
     display_label: compact(input.displayLabel) || undefined,
     created_at_unix_ms: now,

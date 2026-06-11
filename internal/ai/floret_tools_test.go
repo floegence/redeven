@@ -13,26 +13,26 @@ import (
 func TestFloretHostLabelsIncludeExplicitTargetContext(t *testing.T) {
 	r := newRun(runOptions{
 		EndpointID:       "env_1",
-		ToolTargetPolicy: ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "cp:test:env:target_1"},
+		ToolTargetPolicy: ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 	})
 	labels := floretHostLabelsForRun(r)
 	if labels["endpoint_id"] != "env_1" || labels["engine"] != "redeven" {
 		t.Fatalf("base labels = %#v", labels)
 	}
-	if labels["target_id"] != "cp:test:env:target_1" ||
-		labels["current_target_id"] != "cp:test:env:target_1" ||
-		labels["primary_target_id"] != "cp:test:env:target_1" {
+	if labels["target_id"] != "provider:https%3A%2F%2Fredeven.test:env:target_1" ||
+		labels["current_target_id"] != "provider:https%3A%2F%2Fredeven.test:env:target_1" ||
+		labels["primary_target_id"] != "provider:https%3A%2F%2Fredeven.test:env:target_1" {
 		t.Fatalf("target labels = %#v", labels)
 	}
 }
 
 func TestApplyFloretHostContextToToolArgsInjectsOnlyTargetScopedTools(t *testing.T) {
-	host := map[string]string{"target_id": "cp:test:env:target_1"}
+	host := map[string]string{"target_id": "provider:https%3A%2F%2Fredeven.test:env:target_1"}
 	targetArgs := applyFloretHostContextToToolArgs("terminal.exec", map[string]any{"command": "pwd"}, host)
-	if targetArgs["target_id"] != "cp:test:env:target_1" {
+	if targetArgs["target_id"] != "provider:https%3A%2F%2Fredeven.test:env:target_1" {
 		t.Fatalf("target args = %#v", targetArgs)
 	}
-	if targetIDFromToolArgs(targetArgs) != "cp:test:env:target_1" {
+	if targetIDFromToolArgs(targetArgs) != "provider:https%3A%2F%2Fredeven.test:env:target_1" {
 		t.Fatalf("target id not readable from args: %#v", targetArgs)
 	}
 
@@ -106,7 +106,7 @@ func TestFloretToolRegistryInjectsRunHostTargetContext(t *testing.T) {
 		AgentHomeDir:       t.TempDir(),
 		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		EndpointID:         "env_test",
-		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "cp:test:env:target_1"},
+		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: executor,
 	})
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
@@ -130,7 +130,7 @@ func TestFloretToolRegistryInjectsRunHostTargetContext(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("registry result error text=%q structured=%#v", result.Text, result.Structured)
 	}
-	if executor.call.TargetID != "cp:test:env:target_1" {
+	if executor.call.TargetID != "provider:https%3A%2F%2Fredeven.test:env:target_1" {
 		t.Fatalf("target_id=%q", executor.call.TargetID)
 	}
 	var forwarded map[string]any

@@ -28,6 +28,7 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 	}
 
 	cfg := &Config{
+		ProviderOrigin:           "https://redeven.test",
 		ControlplaneBaseURL:      "https://dev.redeven.test",
 		ControlplaneProviderID:   "example_control_plane",
 		EnvironmentID:            "env_demo",
@@ -58,8 +59,11 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 	if record.CurrentProviderBinding == nil {
 		t.Fatalf("CurrentProviderBinding = nil")
 	}
-	if record.CurrentProviderBinding.ProviderOrigin != "https://dev.redeven.test" {
+	if record.CurrentProviderBinding.ProviderOrigin != "https://redeven.test" {
 		t.Fatalf("CurrentProviderBinding.ProviderOrigin = %q", record.CurrentProviderBinding.ProviderOrigin)
+	}
+	if record.CurrentProviderBinding.AccessPointOrigin != "https://dev.redeven.test" {
+		t.Fatalf("CurrentProviderBinding.AccessPointOrigin = %q", record.CurrentProviderBinding.AccessPointOrigin)
 	}
 	if record.CurrentProviderBinding.ProviderID != "example_control_plane" {
 		t.Fatalf("CurrentProviderBinding.ProviderID = %q", record.CurrentProviderBinding.ProviderID)
@@ -80,6 +84,7 @@ func TestWriteEnvironmentCatalogRecordKeepsLocalIdentityWithoutProviderID(t *tes
 	}
 
 	cfg := &Config{
+		ProviderOrigin:           "https://redeven.test",
 		ControlplaneBaseURL:      "https://dev.redeven.test",
 		EnvironmentID:            "env_demo",
 		LocalEnvironmentPublicID: "le_demo",
@@ -121,9 +126,10 @@ func TestWriteEnvironmentCatalogRecordReusesExistingLocalEnvironmentRecordProper
 		LastUsedAtMS:  789,
 		PreferredOpen: "remote_desktop",
 		CurrentProviderBinding: &environmentCatalogProviderBinding{
-			ProviderOrigin:         "https://dev.redeven.test",
-			ProviderID:             "https__dev.redeven.test",
+			ProviderOrigin:         "https://redeven.test",
+			ProviderID:             "redeven",
 			EnvPublicID:            "env_demo",
+			AccessPointOrigin:      "https://dev.redeven.test",
 			RemoteWebSupported:     true,
 			RemoteDesktopSupported: true,
 		},

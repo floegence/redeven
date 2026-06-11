@@ -215,30 +215,30 @@ describe('launcherBusyState', () => {
   it('scopes control-plane requests by provider identity', () => {
     const refreshState = busyStateForLauncherRequest({
       kind: 'refresh_control_plane',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       provider_id: 'example_control_plane',
     });
     const connectState = busyStateForLauncherRequest({
       kind: 'start_control_plane_connect',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       display_label: 'Demo Control Plane',
     });
 
     expect(busyStateMatchesControlPlane(
       refreshState,
-      'https://cp.example.invalid',
+      'https://provider.example.invalid',
       'example_control_plane',
       ['refresh_control_plane'],
     )).toBe(true);
     expect(busyStateMatchesControlPlane(
       refreshState,
-      'https://cp.example.invalid',
+      'https://provider.example.invalid',
       'other_provider',
       ['refresh_control_plane'],
     )).toBe(false);
     expect(busyStateMatchesControlPlane(
       connectState,
-      'https://cp.example.invalid',
+      'https://provider.example.invalid',
       'example_control_plane',
       ['start_control_plane_connect'],
     )).toBe(true);
@@ -897,7 +897,7 @@ describe('launcherBusyState', () => {
     };
 
     const localContainerEnvironment: RuntimeProgressEnvironmentMatch = {
-      id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       managed_runtime_target_id: runtimeID('local:container:docker:dev:abcd1234'),
       managed_runtime_placement_target_id: runtimeID('local:container:docker:dev:abcd1234'),
       provider_runtime_link_target: undefined,

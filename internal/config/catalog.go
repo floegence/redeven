@@ -12,6 +12,7 @@ type environmentCatalogProviderBinding struct {
 	ProviderOrigin         string `json:"provider_origin"`
 	ProviderID             string `json:"provider_id"`
 	EnvPublicID            string `json:"env_public_id"`
+	AccessPointOrigin      string `json:"access_point_origin"`
 	RemoteWebSupported     bool   `json:"remote_web_supported"`
 	RemoteDesktopSupported bool   `json:"remote_desktop_supported"`
 }
@@ -38,9 +39,10 @@ type environmentCatalogFile struct {
 }
 
 type catalogEnvironmentBinding struct {
-	ProviderOrigin string
-	ProviderID     string
-	EnvPublicID    string
+	ProviderOrigin    string
+	ProviderID        string
+	EnvPublicID       string
+	AccessPointOrigin string
 }
 
 func catalogRootForLayout(layout StateLayout) (string, error) {
@@ -86,12 +88,17 @@ func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	baseURL := strings.TrimSpace(cfg.ControlplaneBaseURL)
+	providerOrigin := strings.TrimSpace(cfg.ProviderOrigin)
+	accessPointOrigin := strings.TrimSpace(cfg.ControlplaneBaseURL)
 	envID := strings.TrimSpace(cfg.EnvironmentID)
-	if baseURL == "" || envID == "" {
+	if providerOrigin == "" || accessPointOrigin == "" || envID == "" {
 		return nil, nil
 	}
-	normalizedBaseURL, err := normalizeControlplaneBaseURL(baseURL)
+	normalizedProviderOrigin, err := normalizeControlplaneBaseURL(providerOrigin)
+	if err != nil {
+		return nil, err
+	}
+	normalizedAccessPointOrigin, err := normalizeControlplaneBaseURL(accessPointOrigin)
 	if err != nil {
 		return nil, err
 	}
@@ -100,9 +107,10 @@ func bindingForConfig(cfg *Config) (*catalogEnvironmentBinding, error) {
 		return nil, nil
 	}
 	return &catalogEnvironmentBinding{
-		ProviderOrigin: normalizedBaseURL,
-		ProviderID:     providerID,
-		EnvPublicID:    envID,
+		ProviderOrigin:    normalizedProviderOrigin,
+		ProviderID:        providerID,
+		EnvPublicID:       envID,
+		AccessPointOrigin: normalizedAccessPointOrigin,
 	}, nil
 }
 
@@ -154,6 +162,7 @@ func WriteEnvironmentCatalogRecord(layout StateLayout, cfg *Config, localUIBind 
 			ProviderOrigin:         binding.ProviderOrigin,
 			ProviderID:             binding.ProviderID,
 			EnvPublicID:            binding.EnvPublicID,
+			AccessPointOrigin:      binding.AccessPointOrigin,
 			RemoteWebSupported:     true,
 			RemoteDesktopSupported: true,
 		}

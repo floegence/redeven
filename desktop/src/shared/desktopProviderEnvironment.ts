@@ -6,6 +6,9 @@ import {
 } from './desktopLocalEnvironmentState';
 
 export type DesktopProviderEnvironmentRemoteCatalogEntry = Readonly<{
+  region: string;
+  access_point_id: string;
+  access_point_origin: string;
   environment_url: string;
   description: string;
   namespace_public_id: string;
@@ -20,6 +23,9 @@ export type DesktopProviderEnvironmentRecord = Readonly<{
   provider_origin: string;
   provider_id: string;
   env_public_id: string;
+  region: string;
+  access_point_id: string;
+  access_point_origin: string;
   label: string;
   pinned: boolean;
   created_at_ms: number;
@@ -38,7 +44,7 @@ function compact(value: unknown): string {
 export function desktopProviderEnvironmentID(providerOrigin: string, envPublicID: string): string {
   const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
   const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
-  return `cp:${encodeURIComponent(normalizedOrigin)}:env:${encodeURIComponent(normalizedEnvPublicID)}`;
+  return `provider:${encodeURIComponent(normalizedOrigin)}:env:${encodeURIComponent(normalizedEnvPublicID)}`;
 }
 
 export function defaultDesktopProviderEnvironmentLabel(envPublicID: string): string {
@@ -49,6 +55,9 @@ export function desktopProviderEnvironmentRemoteCatalogEntryFromPublished(
   published: DesktopProviderEnvironment,
 ): DesktopProviderEnvironmentRemoteCatalogEntry {
   return {
+    region: compact(published.region),
+    access_point_id: compact(published.access_point_id),
+    access_point_origin: normalizeControlPlaneOrigin(published.access_point_origin),
     environment_url: compact(published.environment_url),
     description: compact(published.description),
     namespace_public_id: compact(published.namespace_public_id),
@@ -60,11 +69,13 @@ export function desktopProviderEnvironmentRemoteCatalogEntryFromPublished(
 }
 
 type CreateDesktopProviderEnvironmentRecordOptions = Readonly<{
-  environmentID?: string;
   label?: string;
   pinned?: boolean;
   preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
   providerID: string;
+  region: string;
+  accessPointID: string;
+  accessPointOrigin: string;
   remoteWebSupported?: boolean;
   remoteDesktopSupported?: boolean;
   remoteCatalogEntry?: DesktopProviderEnvironmentRemoteCatalogEntry;
@@ -81,8 +92,14 @@ export function createDesktopProviderEnvironmentRecord(
   const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
   const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
   const providerID = compact(options.providerID);
+  const region = compact(options.region);
+  const accessPointID = compact(options.accessPointID);
+  const accessPointOrigin = normalizeControlPlaneOrigin(options.accessPointOrigin);
   if (providerID === '') {
     throw new Error('Provider ID is required.');
+  }
+  if (region === '' || accessPointID === '') {
+    throw new Error('Access point identity is required.');
   }
   const now = Math.max(
     Number(options.createdAtMS ?? Number.NaN) || 0,
@@ -91,10 +108,13 @@ export function createDesktopProviderEnvironmentRecord(
     Date.now(),
   );
   return {
-    id: compact(options.environmentID) || desktopProviderEnvironmentID(normalizedOrigin, normalizedEnvPublicID),
+    id: desktopProviderEnvironmentID(normalizedOrigin, normalizedEnvPublicID),
     provider_origin: normalizedOrigin,
     provider_id: providerID,
     env_public_id: normalizedEnvPublicID,
+    region,
+    access_point_id: accessPointID,
+    access_point_origin: accessPointOrigin,
     label: compact(options.label) || defaultDesktopProviderEnvironmentLabel(normalizedEnvPublicID),
     pinned: options.pinned === true,
     created_at_ms: Number(options.createdAtMS ?? now) || now,

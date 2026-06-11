@@ -25,7 +25,7 @@ describe('environmentLibraryOverlayState', () => {
   });
 
   it('keeps a runtime menu open across refresh while the same environment remains visible', () => {
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
+    const localServe = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const initialSnapshot = buildDesktopWelcomeSnapshot({
@@ -86,7 +86,7 @@ describe('environmentLibraryOverlayState', () => {
           },
         }),
         provider_environments: [
-          testProviderEnvironment('https://cp.example.invalid', 'env_demo'),
+          testProviderEnvironment('https://provider.example.invalid', 'env_demo'),
         ],
       }),
     });
@@ -99,7 +99,7 @@ describe('environmentLibraryOverlayState', () => {
   });
 
   it('closes a guidance overlay when the environment is no longer visible in the current card list', () => {
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
+    const localServe = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: localServe,
@@ -113,7 +113,7 @@ describe('environmentLibraryOverlayState', () => {
   });
 
   it('closes a guidance overlay once the same environment no longer exposes blocked-action guidance', () => {
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
+    const localServe = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const snapshot = buildDesktopWelcomeSnapshot({

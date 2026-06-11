@@ -44,7 +44,7 @@ const (
 )
 
 type controlPlaneSetupState struct {
-	Fields     [3]string
+	Fields     [4]string
 	Active     int
 	Submitting bool
 	Error      string
@@ -379,10 +379,13 @@ func (r *Renderer) runControlPlaneAction() {
 func (r *Renderer) openControlPlaneSetup() {
 	r.mu.Lock()
 	if r.setup.Fields[0] == "" {
-		r.setup.Fields[0] = strings.TrimSpace(r.snapshot.ControlplaneBaseURL)
+		r.setup.Fields[0] = strings.TrimSpace(r.snapshot.ProviderOrigin)
 	}
 	if r.setup.Fields[1] == "" {
-		r.setup.Fields[1] = strings.TrimSpace(r.snapshot.EnvPublicID)
+		r.setup.Fields[1] = strings.TrimSpace(r.snapshot.ControlplaneBaseURL)
+	}
+	if r.setup.Fields[2] == "" {
+		r.setup.Fields[2] = strings.TrimSpace(r.snapshot.EnvPublicID)
 	}
 	r.setup.Active = 0
 	r.setup.Error = ""
@@ -440,7 +443,7 @@ func (r *Renderer) handleControlPlaneSetupEnter() {
 	r.mu.Lock()
 	active := r.setup.Active
 	r.mu.Unlock()
-	if active < 2 {
+	if active < 3 {
 		r.moveControlPlaneSetupField(1)
 		return
 	}
@@ -474,9 +477,10 @@ func (r *Renderer) submitControlPlaneSetup() {
 	r.mu.Lock()
 	controller := r.controller
 	setup := ControlPlaneSetup{
-		ControlplaneURL: strings.TrimSpace(r.setup.Fields[0]),
-		EnvironmentID:   strings.TrimSpace(r.setup.Fields[1]),
-		BootstrapTicket: strings.TrimSpace(r.setup.Fields[2]),
+		ProviderOrigin:    strings.TrimSpace(r.setup.Fields[0]),
+		AccessPointOrigin: strings.TrimSpace(r.setup.Fields[1]),
+		EnvironmentID:     strings.TrimSpace(r.setup.Fields[2]),
+		BootstrapTicket:   strings.TrimSpace(r.setup.Fields[3]),
 	}
 	r.setup.Submitting = true
 	r.setup.Error = ""
@@ -502,11 +506,12 @@ func (r *Renderer) finishControlPlaneSetup(message string, success bool, setup C
 	if success {
 		r.expanded = RichPanelNone
 		r.notice = message
-		r.setup.Fields[2] = ""
-		r.snapshot.ControlplaneBaseURL = setup.ControlplaneURL
+		r.setup.Fields[3] = ""
+		r.snapshot.ProviderOrigin = setup.ProviderOrigin
+		r.snapshot.ControlplaneBaseURL = setup.AccessPointOrigin
 		r.snapshot.EnvPublicID = setup.EnvironmentID
 		r.snapshot.ControlChannelEnabled = true
-		r.snapshot.EnvironmentURL = BuildEnvironmentURL(setup.ControlplaneURL, setup.EnvironmentID)
+		r.snapshot.EnvironmentURL = BuildEnvironmentURL(setup.AccessPointOrigin, setup.EnvironmentID)
 	} else {
 		r.setup.Error = message
 	}

@@ -28,7 +28,8 @@ func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
 	}
 
 	if err := config.Save(layout.ConfigPath, &config.Config{
-		ControlplaneBaseURL:      "https://region.example.invalid",
+		ProviderOrigin:           "https://redeven.test",
+		ControlplaneBaseURL:      "https://dev.redeven.test",
 		ControlplaneProviderID:   "provider_1",
 		EnvironmentID:            "env_123",
 		LocalEnvironmentPublicID: "le_123",
@@ -66,9 +67,10 @@ func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
 				RemoteEnabled:    true,
 				Bindings: runtimeservice.Bindings{
 					ProviderLink: runtimeservice.ProviderLinkBinding{
-						ProviderOrigin: "https://region.example.invalid",
-						ProviderID:     "provider_1",
-						EnvPublicID:    "env_123",
+						ProviderOrigin:    "https://redeven.test",
+						ProviderID:        "provider_1",
+						EnvPublicID:       "env_123",
+						AccessPointOrigin: "https://dev.redeven.test",
 					},
 				},
 			}),

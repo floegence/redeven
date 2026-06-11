@@ -15,6 +15,7 @@ import (
 //
 // NOTE: This file contains secrets (PSK). Always keep it chmod 0600.
 type Config struct {
+	ProviderOrigin           string                      `json:"provider_origin"`
 	ControlplaneBaseURL      string                      `json:"controlplane_base_url"`
 	ControlplaneProviderID   string                      `json:"controlplane_provider_id,omitempty"`
 	EnvironmentID            string                      `json:"environment_id"`
@@ -95,6 +96,9 @@ func (c *Config) ValidateRemoteStrict() error {
 	}
 	if strings.TrimSpace(c.ControlplaneBaseURL) == "" {
 		return errors.New("missing controlplane_base_url")
+	}
+	if strings.TrimSpace(c.ProviderOrigin) == "" {
+		return errors.New("missing provider_origin")
 	}
 	if strings.TrimSpace(c.EnvironmentID) == "" {
 		return errors.New("missing environment_id")

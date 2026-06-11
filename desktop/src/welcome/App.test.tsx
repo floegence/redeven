@@ -84,6 +84,78 @@ function readInstalledDialogSource(): string {
   );
 }
 
+function testProviderAccessPoint(providerOrigin: string) {
+  return {
+    access_point_id: 'dev',
+    region: 'dev',
+    display_name: 'Development',
+    description: 'Development access point',
+    access_point_origin: providerOrigin === 'https://cp.other.invalid'
+      ? 'https://dev.cp.other.invalid'
+      : 'https://dev.provider.example.invalid',
+    country_code: 'SG',
+    city: 'Singapore',
+    status: 'active',
+    health_status: 'healthy',
+  };
+}
+
+function testControlPlaneSummary(input: Readonly<{
+  providerOrigin?: string;
+  envPublicID?: string;
+  label?: string;
+  namespacePublicID?: string;
+  namespaceName?: string;
+  userPublicID?: string;
+  userDisplayName?: string;
+  displayLabel?: string;
+}> = {}) {
+  const providerOrigin = input.providerOrigin ?? 'https://provider.example.invalid';
+  const envPublicID = input.envPublicID ?? 'env_demo';
+  const accessPoint = testProviderAccessPoint(providerOrigin);
+  return {
+    provider: {
+      protocol_version: 'rcpp-v2' as const,
+      provider_id: 'example_control_plane',
+      display_name: 'Example Control Plane',
+      provider_origin: providerOrigin,
+      documentation_url: `${providerOrigin}/docs/control-plane-providers`,
+      access_points: [accessPoint],
+    },
+    account: {
+      provider_id: 'example_control_plane',
+      provider_origin: providerOrigin,
+      display_name: 'Example Control Plane',
+      user_public_id: input.userPublicID ?? 'user_demo',
+      user_display_name: input.userDisplayName ?? 'Demo User',
+      authorization_expires_at_unix_ms: Date.now() + 60_000,
+    },
+    display_label: input.displayLabel ?? 'Demo Control Plane',
+    environments: [{
+      provider_id: 'example_control_plane',
+      provider_origin: providerOrigin,
+      env_public_id: envPublicID,
+      region: accessPoint.region,
+      access_point_id: accessPoint.access_point_id,
+      access_point_origin: accessPoint.access_point_origin,
+      label: input.label ?? 'Demo Environment',
+      environment_url: `${accessPoint.access_point_origin}/env/${envPublicID}`,
+      description: 'team sandbox',
+      namespace_public_id: input.namespacePublicID ?? 'ns_demo',
+      namespace_name: input.namespaceName ?? 'Demo Team',
+      status: 'online',
+      lifecycle_status: 'active',
+      last_seen_at_unix_ms: 456,
+    }],
+    last_synced_at_ms: Date.now(),
+    sync_state: 'ready' as const,
+    last_sync_attempt_at_ms: Date.now(),
+    last_sync_error_code: '',
+    last_sync_error_message: '',
+    catalog_freshness: 'fresh' as const,
+  };
+}
+
 describe('DesktopWelcomeShell', () => {
   it('describes Connect Environment inside the shared shell model', () => {
     const local = testLocalEnvironment({
@@ -505,43 +577,7 @@ describe('DesktopWelcomeShell', () => {
         ],
         saved_ssh_environments: [],
       }),
-      controlPlanes: [{
-        provider: {
-          protocol_version: 'rcpp-v1',
-          provider_id: 'example_control_plane',
-          display_name: 'Example Control Plane',
-          provider_origin: 'https://cp.example.invalid',
-          documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
-        },
-        account: {
-          provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.example.invalid',
-          display_name: 'Example Control Plane',
-          user_public_id: 'user_demo',
-          user_display_name: 'Demo User',
-          authorization_expires_at_unix_ms: Date.now() + 60_000,
-        },
-        display_label: 'Demo Control Plane',
-        environments: [{
-          provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.example.invalid',
-          env_public_id: 'env_demo',
-          label: 'Demo Environment',
-          environment_url: 'https://cp.example.invalid/env/env_demo',
-          description: 'team sandbox',
-          namespace_public_id: 'ns_demo',
-          namespace_name: 'Demo Team',
-          status: 'online',
-          lifecycle_status: 'active',
-          last_seen_at_unix_ms: 456,
-        }],
-        last_synced_at_ms: Date.now(),
-        sync_state: 'ready',
-        last_sync_attempt_at_ms: Date.now(),
-        last_sync_error_code: '',
-        last_sync_error_message: '',
-        catalog_freshness: 'fresh',
-      }],
+      controlPlanes: [testControlPlaneSummary()],
     });
 
     expect(environmentLibraryCount(snapshot)).toBe(4);
@@ -568,85 +604,25 @@ describe('DesktopWelcomeShell', () => {
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
       }),
-      controlPlanes: [{
-        provider: {
-          protocol_version: 'rcpp-v1',
-          provider_id: 'example_control_plane',
-          display_name: 'Example Control Plane',
-          provider_origin: 'https://cp.example.invalid',
-          documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
-        },
-        account: {
-          provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.example.invalid',
-          display_name: 'Example Control Plane',
-          user_public_id: 'user_demo',
-          user_display_name: 'Demo User',
-          authorization_expires_at_unix_ms: Date.now() + 60_000,
-        },
-        display_label: 'Demo Control Plane',
-        environments: [{
-          provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.example.invalid',
-          env_public_id: 'env_demo',
-          label: 'Demo Environment',
-          environment_url: 'https://cp.example.invalid/env/env_demo',
-          description: 'team sandbox',
-          namespace_public_id: 'ns_demo',
-          namespace_name: 'Demo Team',
-          status: 'online',
-          lifecycle_status: 'active',
-          last_seen_at_unix_ms: 456,
-        }],
-        last_synced_at_ms: Date.now(),
-        sync_state: 'ready',
-        last_sync_attempt_at_ms: Date.now(),
-        last_sync_error_code: '',
-        last_sync_error_message: '',
-        catalog_freshness: 'fresh',
-      }, {
-        provider: {
-          protocol_version: 'rcpp-v1',
-          provider_id: 'example_control_plane',
-          display_name: 'Example Control Plane',
-          provider_origin: 'https://cp.other.invalid',
-          documentation_url: 'https://cp.other.invalid/docs/control-plane-providers',
-        },
-        account: {
-          provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.other.invalid',
-          display_name: 'Example Control Plane',
-          user_public_id: 'user_other',
-          user_display_name: 'Other User',
-          authorization_expires_at_unix_ms: Date.now() + 60_000,
-        },
-        display_label: 'Other Control Plane',
-        environments: [{
-          provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.other.invalid',
-          env_public_id: 'env_other',
+      controlPlanes: [
+        testControlPlaneSummary(),
+        testControlPlaneSummary({
+          providerOrigin: 'https://cp.other.invalid',
+          envPublicID: 'env_other',
           label: 'Other Environment',
-          environment_url: 'https://cp.other.invalid/env/env_other',
-          description: 'team sandbox',
-          namespace_public_id: 'ns_other',
-          namespace_name: 'Other Team',
-          status: 'online',
-          lifecycle_status: 'active',
-          last_seen_at_unix_ms: 456,
-        }],
-        last_synced_at_ms: Date.now(),
-        sync_state: 'ready',
-        last_sync_attempt_at_ms: Date.now(),
-        last_sync_error_code: '',
-        last_sync_error_message: '',
-        catalog_freshness: 'fresh',
-      }],
+          namespacePublicID: 'ns_other',
+          namespaceName: 'Other Team',
+          userPublicID: 'user_other',
+          userDisplayName: 'Other User',
+          displayLabel: 'Other Control Plane',
+        }),
+      ],
     });
 
     expect(filterEnvironmentLibrary(
       snapshot,
       '',
-      desktopControlPlaneKey('https://cp.example.invalid', 'example_control_plane'),
+      desktopControlPlaneKey('https://provider.example.invalid', 'example_control_plane'),
     )).toEqual([
       expect.objectContaining({
         kind: 'provider_environment',

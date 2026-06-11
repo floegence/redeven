@@ -154,15 +154,15 @@ describe('uiStorage', () => {
     vi.stubGlobal('localStorage', createStorageMock());
     window.redevenDesktopSessionContext = {
       getSnapshot: () => ({
-        local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-        renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+        local_environment_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
+        renderer_storage_scope_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
       }),
     };
 
     writeRendererScopedUIStorageItem('files:lastPath', '/workspace/demo');
 
     expect(rendererScopedUIStorageKey('files:lastPath')).toBe(
-      'files:lastPath:cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      'files:lastPath:provider:https%3A%2F%2Fredeven.test:env:env_demo',
     );
     expect(readRendererScopedUIStorageItem('files:lastPath')).toBe('/workspace/demo');
   });

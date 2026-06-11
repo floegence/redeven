@@ -9,9 +9,10 @@ import (
 )
 
 type ControlPlaneSetup struct {
-	ControlplaneURL string
-	EnvironmentID   string
-	BootstrapTicket string
+	ProviderOrigin    string
+	AccessPointOrigin string
+	EnvironmentID     string
+	BootstrapTicket   string
 }
 
 type ControlPlaneRuntimeStatus struct {
@@ -105,7 +106,8 @@ func (a *Agent) ConfigureControlPlane(ctx context.Context, setup ControlPlaneSet
 	}
 	cfg, err := config.BootstrapProviderLink(ctx, config.ProviderLinkBootstrapArgs{
 		ConfigPath:               a.configPath,
-		ControlplaneBaseURL:      strings.TrimSpace(setup.ControlplaneURL),
+		ProviderOrigin:           strings.TrimSpace(setup.ProviderOrigin),
+		ControlplaneBaseURL:      strings.TrimSpace(setup.AccessPointOrigin),
 		EnvironmentID:            strings.TrimSpace(setup.EnvironmentID),
 		BootstrapTicket:          strings.TrimSpace(setup.BootstrapTicket),
 		RuntimeVersion:           a.version,

@@ -39,9 +39,10 @@ describe('desktopLaunch', () => {
 
   it('adds one-shot bootstrap ticket args and secret env vars to the spawn plan', () => {
     const environment = testProviderBoundLocalEnvironment(
-      'https://region.example.invalid',
+      'https://redeven.test',
       'env_123',
       {
+        accessPointOrigin: 'https://dev.redeven.test',
         access: testLocalAccess({
           local_ui_bind: '127.0.0.1:0',
           local_ui_password: 'secret',
@@ -58,7 +59,8 @@ describe('desktopLaunch', () => {
         desktopOwnerID: 'desktop-owner-1',
         bootstrap: {
           kind: 'bootstrap_ticket',
-          controlplane_url: 'https://region.example.invalid',
+          provider_origin: 'https://redeven.test',
+          controlplane_url: 'https://dev.redeven.test',
           env_id: 'env_123',
           bootstrap_ticket: 'ticket-123',
         },
@@ -76,8 +78,10 @@ describe('desktopLaunch', () => {
       '--state-root',
       '/Users/tester/.redeven',
       '--password-stdin',
+      '--provider-origin',
+      'https://redeven.test',
       '--controlplane',
-      'https://region.example.invalid',
+      'https://dev.redeven.test',
       '--env-id',
       'env_123',
       '--bootstrap-ticket-env',
@@ -96,7 +100,8 @@ describe('desktopLaunch', () => {
   });
 
   it('adds one-shot bootstrap ticket and Desktop owner env vars', () => {
-    const environment = testProviderBoundLocalEnvironment('https://region.example.invalid', 'env_123', {
+    const environment = testProviderBoundLocalEnvironment('https://redeven.test', 'env_123', {
+      accessPointOrigin: 'https://dev.redeven.test',
       access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
       }),
@@ -107,7 +112,8 @@ describe('desktopLaunch', () => {
     }, {
       bootstrap: {
         kind: 'bootstrap_ticket',
-        controlplane_url: 'https://region.example.invalid',
+        provider_origin: 'https://redeven.test',
+        controlplane_url: 'https://dev.redeven.test',
         env_id: 'env_123',
         bootstrap_ticket: 'ticket-123',
       },
@@ -119,7 +125,8 @@ describe('desktopLaunch', () => {
   });
 
   it('does not emit provider bootstrap flags without a one-shot ticket', () => {
-    const environment = testProviderBoundLocalEnvironment('https://region.example.invalid', 'env_123', {
+    const environment = testProviderBoundLocalEnvironment('https://redeven.test', 'env_123', {
+      accessPointOrigin: 'https://dev.redeven.test',
       access: testLocalAccess({
         local_ui_bind: '127.0.0.1:0',
       }),

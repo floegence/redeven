@@ -32,7 +32,7 @@ describe('controlPlaneProviderTransport', () => {
     }));
 
     const response = await electronDesktopProviderTransport({
-      url: 'https://cp.example.invalid/.well-known/redeven-provider.json',
+      url: 'https://provider.example.invalid/.well-known/redeven-provider.json',
       method: 'GET',
       headers: {
         Accept: 'application/json',

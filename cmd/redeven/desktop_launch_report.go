@@ -67,6 +67,7 @@ type desktopLaunchReport struct {
 	RemoteEnabled            bool                    `json:"remote_enabled"`
 	DesktopManaged           bool                    `json:"desktop_managed"`
 	DesktopOwnerID           string                  `json:"desktop_owner_id,omitempty"`
+	ProviderOrigin           string                  `json:"provider_origin,omitempty"`
 	ControlplaneBaseURL      string                  `json:"controlplane_base_url,omitempty"`
 	ControlplaneProviderID   string                  `json:"controlplane_provider_id,omitempty"`
 	EnvPublicID              string                  `json:"env_public_id,omitempty"`
@@ -111,6 +112,7 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 		}
 		report.EffectiveRunMode = strings.TrimSpace(report.EffectiveRunMode)
 		report.DesktopOwnerID = strings.TrimSpace(report.DesktopOwnerID)
+		report.ProviderOrigin = strings.TrimSpace(report.ProviderOrigin)
 		report.ControlplaneBaseURL = strings.TrimSpace(report.ControlplaneBaseURL)
 		report.ControlplaneProviderID = strings.TrimSpace(report.ControlplaneProviderID)
 		report.EnvPublicID = strings.TrimSpace(report.EnvPublicID)

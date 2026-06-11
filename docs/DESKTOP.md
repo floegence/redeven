@@ -17,7 +17,7 @@ This document describes the public Electron desktop shell that ships with each `
 - Desktop owns one Local Environment for the current OS user / Redeven profile state root. Desktop and standalone CLI/runtime mode share the same state directory and profile catalog under `~/.redeven/`.
 - The launcher is a singleton shell-owned window. Each opened Environment owns its own session window, and reopening the launcher never disconnects existing sessions.
 - Session identity is keyed by target type: managed Local Environment/provider route, saved Local UI URL, or SSH Host entry.
-- Provider integrations use the fixed public RCPP v1 contract. `provider_id` comes from discovery and is reused in protocol payloads, catalog records, and bindings.
+- Provider integrations use the fixed public RCPP v2 contract. `provider_id` and `provider_origin` come from discovery, while each environment carries its own access point routing metadata.
 - Saved Redeven URL and SSH Host entries are connection records. SSH Host entries persist host-access details but do not create a separate Desktop-private runtime state root.
 - Env App receives a Desktop-owned session context so it can scope renderer-local UI state and choose the correct Web Services route for local, remote, or SSH-hosted sessions.
 - Common startup failures return to the launcher with contextual recovery actions; Electron allows session-owned navigation only to the reported Local UI origin and opens unrelated URLs in the system browser.
@@ -426,22 +426,23 @@ Desktop shell preferences live under the Electron user data directory, not insid
 
 ## Control Plane Provider Protocol
 
-Desktop supports compatible first-party and third-party control planes through one fixed provider contract:
+Desktop supports compatible first-party and third-party control planes through one fixed provider contract. RCPP v2 separates the provider authority from access points: Desktop authorizes once at the provider origin, discovers every access point, and syncs environments from each access point.
 
 - discovery: `GET /.well-known/redeven-provider.json`
-- browser authorization code: `POST /api/rcpp/v1/desktop/authorize`
-- desktop connect exchange: `POST /api/rcpp/v1/desktop/connect/exchange`
-- desktop token refresh: `POST /api/rcpp/v1/desktop/token/refresh`
-- desktop token revoke: `POST /api/rcpp/v1/desktop/token/revoke`
-- desktop account lookup: `GET /api/rcpp/v1/me`
-- provider environment list: `GET /api/rcpp/v1/environments`
-- provider Environment open session: `POST /api/rcpp/v1/environments/:env_public_id/desktop/open-session`
-- runtime bootstrap exchange: `POST /api/rcpp/v1/runtime/bootstrap/exchange`
+- provider authority browser authorization code: `POST /api/rcpp/v2/desktop/authorize`
+- provider authority desktop connect exchange: `POST /api/rcpp/v2/desktop/connect/exchange`
+- provider authority token refresh: `POST /api/rcpp/v2/desktop/token/refresh`
+- provider authority token revoke: `POST /api/rcpp/v2/desktop/token/revoke`
+- provider authority account lookup: `GET /api/rcpp/v2/me`
+- access point environment list: `GET /api/rcpp/v2/environments`
+- access point runtime health query: `POST /api/rcpp/v2/environments/runtime-health/query`
+- access point Environment open session: `POST /api/rcpp/v2/environments/:env_public_id/desktop/open-session`
+- access point runtime bootstrap exchange: `POST /api/rcpp/v2/runtime/bootstrap/exchange`
 
 Public provider protocol references:
 
-- formal RCPP v1 specification: [`docs/protocol/rcpp-v1.md`](protocol/rcpp-v1.md)
-- machine-readable OpenAPI: [`docs/openapi/rcpp-v1.yaml`](openapi/rcpp-v1.yaml)
+- formal RCPP v2 specification: [`docs/protocol/rcpp-v2.md`](protocol/rcpp-v2.md)
+- machine-readable OpenAPI: [`docs/openapi/rcpp-v2.yaml`](openapi/rcpp-v2.yaml)
 
 Desktop assumptions:
 
@@ -458,8 +459,8 @@ The Control Plane flow is:
 3. Desktop generates a local PKCE `state + code_verifier + code_challenge`.
 4. The browser session requests a short-lived `authorization_code` and deep-links back to Desktop.
 5. Desktop exchanges `authorization_code + code_verifier` for a short-lived in-memory access token plus a long-lived revocable refresh token.
-6. Desktop loads `me` and `environments` with the access token.
-7. Desktop stores the provider catalog in `control_planes[*].environments` and reconciles it into first-class `provider_environments` records.
+6. Desktop loads `me`, iterates every discovered access point, and reads each access point's environment catalog with the access token.
+7. Desktop stores the provider account plus access point catalog, then reconciles successful access point results into first-class `provider_environments` records.
 8. Desktop refreshes access tokens on demand with the stored refresh token.
 9. Desktop requests a provider Environment open session only when it opens a specific provider environment through the provider tunnel or when the user explicitly connects that provider Environment to a selected Local/SSH runtime card.
 10. For a remote provider card, Desktop opens the returned `remote_session_url` directly without persisting a remote-only Local Environment state first.
@@ -480,7 +481,7 @@ For `connect`, the launch deep link carries only `provider_origin`. Desktop then
 
 For `authorized`, the browser returns `provider_origin`, `state`, and `authorization_code`. Desktop matches that state locally, validates the provider origin, and completes the connect exchange with its local `code_verifier`.
 
-For `open`, the provider origin and target environment ID are sufficient. If Desktop already has provider authorization, it directly requests a unified open-session response. Otherwise it first completes the same PKCE browser authorization flow and then requests open-session. `provider_id` remains optional because Desktop can resolve it through discovery.
+For `open`, the link carries `provider_origin`, `access_point_origin`, and the target environment ID. If Desktop already has provider authorization and a matching access point catalog entry, it requests open-session from that access point. Otherwise it first completes the same PKCE browser authorization flow, syncs the provider catalog, and then requests open-session. `provider_id` remains optional because Desktop can resolve it through discovery.
 
 ## Shell-Owned Theme State
 

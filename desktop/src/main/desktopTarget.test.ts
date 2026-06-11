@@ -62,11 +62,11 @@ describe('desktopTarget', () => {
   });
 
   it('builds provider-backed targets with provider-scoped session keys', () => {
-    expect(controlPlaneDesktopSessionKey('https://cp.example.invalid/path', ' env_demo ')).toBe(
-      'env:cp%3Ahttps%253A%252F%252Fcp.example.invalid%3Aenv%3Aenv_demo:remote_desktop',
+    expect(controlPlaneDesktopSessionKey('https://redeven.test/path', ' env_demo ')).toBe(
+      'env:provider%3Ahttps%253A%252F%252Fredeven.test%3Aenv%3Aenv_demo:remote_desktop',
     );
     expect(buildProviderEnvironmentDesktopTarget(testProviderEnvironment(
-      'https://cp.example.invalid/path',
+      'https://redeven.test/path',
       ' env_demo ',
       {
         providerID: ' example_control_plane ',
@@ -74,12 +74,12 @@ describe('desktopTarget', () => {
       },
     ), { route: 'remote_desktop' })).toEqual({
       kind: 'local_environment',
-      session_key: 'env:cp%3Ahttps%253A%252F%252Fcp.example.invalid%3Aenv%3Aenv_demo:remote_desktop',
-      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      session_key: 'env:provider%3Ahttps%253A%252F%252Fredeven.test%3Aenv%3Aenv_demo:remote_desktop',
+      environment_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
       route: 'remote_desktop',
       local_environment_kind: 'controlplane',
       provider_id: 'example_control_plane',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://redeven.test',
       env_public_id: 'env_demo',
       label: 'Demo Environment',
       has_local_hosting: false,

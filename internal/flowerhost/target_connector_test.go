@@ -27,7 +27,7 @@ func TestTargetConnectorRequestsCarrierBrokerOnly(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok": true,
 			"data": TargetSessionGrant{
-				TargetID:       "cp:test:env:env_a",
+				TargetID:       "provider:https%3A%2F%2Fredeven.test:env:env_a",
 				ProviderOrigin: "http://provider.example.test",
 				EnvPublicID:    "env_a",
 				GrantClient: &controlv1.ChannelInitGrant{
@@ -48,7 +48,7 @@ func TestTargetConnectorRequestsCarrierBrokerOnly(t *testing.T) {
 		BrokerToken: "broker-token",
 	})
 	grant, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
-		TargetID:       "cp:test:env:env_a",
+		TargetID:       "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ProviderOrigin: "http://provider.example.test",
 		ProviderID:     "reference_provider",
 		EnvPublicID:    "env_a",
@@ -62,7 +62,7 @@ func TestTargetConnectorRequestsCarrierBrokerOnly(t *testing.T) {
 	if seenAuth != "Bearer broker-token" {
 		t.Fatalf("authorization=%q", seenAuth)
 	}
-	if seenBody.TargetID != "cp:test:env:env_a" || seenBody.EnvPublicID != "env_a" || seenBody.ProviderOrigin != "http://provider.example.test" {
+	if seenBody.TargetID != "provider:https%3A%2F%2Fredeven.test:env:env_a" || seenBody.EnvPublicID != "env_a" || seenBody.ProviderOrigin != "http://provider.example.test" {
 		t.Fatalf("request body=%#v", seenBody)
 	}
 	if len(seenBody.RequiredCapabilities) != 2 || seenBody.RequiredCapabilities[0] != "read" || seenBody.RequiredCapabilities[1] != "write" {
@@ -81,8 +81,8 @@ func TestTargetConnectorRejectsInvalidRequiredCapability(t *testing.T) {
 		BrokerToken: "broker-token",
 	})
 	_, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
-		TargetID:       "cp:test:env:env_a",
-		ProviderOrigin: "https://region.example.test",
+		TargetID:       "provider:https%3A%2F%2Fredeven.test:env:env_a",
+		ProviderOrigin: "https://redeven.test",
 		EnvPublicID:    "env_a",
 	}, []string{"admin"})
 	if got := TargetConnectReason(err); got != "target_unsupported" {
@@ -98,7 +98,7 @@ func TestTargetConnectorRejectsGrantForDifferentTarget(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"ok": true,
 			"data": TargetSessionGrant{
-				TargetID:        "cp:test:env:env_b",
+				TargetID:        "provider:https%3A%2F%2Fredeven.test:env:env_b",
 				ProviderOrigin:  "http://provider.example.test",
 				EnvPublicID:     "env_a",
 				GrantClient:     &controlv1.ChannelInitGrant{ChannelId: "ch_target"},
@@ -114,7 +114,7 @@ func TestTargetConnectorRejectsGrantForDifferentTarget(t *testing.T) {
 		BrokerToken: "broker-token",
 	})
 	_, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
-		TargetID:       "cp:test:env:env_a",
+		TargetID:       "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ProviderOrigin: "http://provider.example.test",
 		EnvPublicID:    "env_a",
 	}, []string{"read"})
@@ -128,8 +128,8 @@ func TestTargetConnectorFailsClosedWithoutBroker(t *testing.T) {
 
 	connector := NewTargetConnector(TargetConnectorOptions{})
 	_, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
-		TargetID:       "cp:test:env:env_a",
-		ProviderOrigin: "https://region.example.test",
+		TargetID:       "provider:https%3A%2F%2Fredeven.test:env:env_a",
+		ProviderOrigin: "https://redeven.test",
 		EnvPublicID:    "env_a",
 	}, []string{"read"})
 	if got := TargetConnectReason(err); got != "target_unauthorized" {
@@ -155,7 +155,7 @@ func TestTargetConnectorMapsOfflineTargetToUnreachable(t *testing.T) {
 		BrokerToken: "broker-token",
 	})
 	_, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
-		TargetID:       "cp:test:env:env_a",
+		TargetID:       "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ProviderOrigin: server.URL,
 		EnvPublicID:    "env_a",
 	}, []string{"read"})
@@ -185,7 +185,7 @@ func TestTargetConnectorPreservesStructuredBrokerErrorMessage(t *testing.T) {
 		BrokerToken: "broker-token",
 	})
 	_, err := connector.OpenTargetGrant(context.Background(), FlowerTargetRef{
-		TargetID:       "cp:test:env:env_a",
+		TargetID:       "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ProviderOrigin: server.URL,
 		EnvPublicID:    "env_a",
 	}, []string{"read"})

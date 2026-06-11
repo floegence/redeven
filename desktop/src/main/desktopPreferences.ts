@@ -30,9 +30,9 @@ import {
   normalizeControlPlaneOrigin,
   normalizeDesktopControlPlaneAccount,
   normalizeDesktopControlPlaneProvider,
-  normalizeDesktopProviderEnvironmentList,
   type DesktopControlPlaneAccount,
   type DesktopControlPlaneProvider,
+  type DesktopProviderAccessPoint,
   type DesktopProviderEnvironment,
 } from '../shared/controlPlaneProvider';
 import {
@@ -68,7 +68,6 @@ import {
 import {
   createDesktopProviderEnvironmentRecord,
   defaultDesktopProviderEnvironmentLabel,
-  desktopProviderEnvironmentID,
   desktopProviderEnvironmentRemoteCatalogEntryFromPublished,
   providerEnvironmentStableSortKey,
   type DesktopProviderEnvironmentRecord,
@@ -113,7 +112,6 @@ export type DesktopSavedRuntimeTarget = Readonly<{
 export type DesktopSavedControlPlane = Readonly<{
   provider: DesktopControlPlaneProvider;
   account: DesktopControlPlaneAccount;
-  environments: readonly DesktopProviderEnvironment[];
   display_label: string;
   last_synced_at_ms: number;
 }>;
@@ -230,6 +228,7 @@ type DesktopLocalEnvironmentStateCatalogFile = Readonly<{
     provider_origin?: unknown;
     provider_id?: unknown;
     env_public_id?: unknown;
+    access_point_origin?: unknown;
     remote_web_supported?: unknown;
     remote_desktop_supported?: unknown;
   }>;
@@ -263,7 +262,6 @@ type DesktopProviderCatalogFile = Readonly<{
   record_kind?: unknown;
   provider?: unknown;
   account?: DesktopControlPlaneAccountFile;
-  environments?: readonly unknown[];
   display_label?: unknown;
   last_synced_at_ms?: unknown;
 }>;
@@ -275,6 +273,9 @@ type DesktopProviderEnvironmentCatalogFile = Readonly<{
   provider_origin?: unknown;
   provider_id?: unknown;
   env_public_id?: unknown;
+  region?: unknown;
+  access_point_id?: unknown;
+  access_point_origin?: unknown;
   label?: unknown;
   pinned?: unknown;
   created_at_ms?: unknown;
@@ -284,6 +285,9 @@ type DesktopProviderEnvironmentCatalogFile = Readonly<{
   remote_web_supported?: unknown;
   remote_desktop_supported?: unknown;
   remote_catalog_entry?: Readonly<{
+    region?: unknown;
+    access_point_id?: unknown;
+    access_point_origin?: unknown;
     environment_url?: unknown;
     description?: unknown;
     namespace_public_id?: unknown;
@@ -303,7 +307,6 @@ type DesktopControlPlaneAccountFile = Readonly<{
 type DesktopControlPlaneFile = Readonly<{
   provider?: unknown;
   account?: DesktopControlPlaneAccountFile;
-  environments?: readonly unknown[];
   display_label?: unknown;
   last_synced_at_ms?: unknown;
 }>;
@@ -391,6 +394,7 @@ export type UpsertDesktopSavedControlPlaneInput = Readonly<{
   provider: DesktopControlPlaneProvider;
   account: DesktopControlPlaneAccount;
   environments?: readonly DesktopProviderEnvironment[];
+  synced_access_points?: readonly Pick<DesktopProviderAccessPoint, 'access_point_id' | 'access_point_origin'>[];
   display_label?: string;
   last_synced_at_ms?: number;
   refresh_token?: string;
@@ -866,7 +870,6 @@ function normalizeSavedControlPlaneCandidate(
   return {
     provider,
     account,
-    environments: normalizeDesktopProviderEnvironmentList({ environments: candidate.environments }, { provider }),
     display_label: normalizeControlPlaneDisplayLabel(candidate.display_label, provider.provider_origin),
     last_synced_at_ms: normalizeLastUsedAtMS(candidate.last_synced_at_ms, fallbackLastSyncedAtMS),
   };
@@ -1109,7 +1112,21 @@ function normalizeProviderEnvironmentRemoteCatalogEntry(
     return undefined;
   }
   const candidate = value as NonNullable<DesktopProviderEnvironmentCatalogFile['remote_catalog_entry']>;
+  const accessPointOrigin = (() => {
+    const raw = compact(candidate.access_point_origin);
+    if (raw === '') {
+      return '';
+    }
+    try {
+      return normalizeControlPlaneOrigin(raw);
+    } catch {
+      return '';
+    }
+  })();
   const entry = {
+    region: compact(candidate.region),
+    access_point_id: compact(candidate.access_point_id),
+    access_point_origin: accessPointOrigin,
     environment_url: compact(candidate.environment_url),
     description: compact(candidate.description),
     namespace_public_id: compact(candidate.namespace_public_id),
@@ -1119,7 +1136,10 @@ function normalizeProviderEnvironmentRemoteCatalogEntry(
     last_seen_at_unix_ms: normalizeLastUsedAtMS(candidate.last_seen_at_unix_ms, 0),
   };
   return (
-    entry.environment_url !== ''
+    entry.region !== ''
+    || entry.access_point_id !== ''
+    || entry.access_point_origin !== ''
+    || entry.environment_url !== ''
     || entry.description !== ''
     || entry.namespace_public_id !== ''
     || entry.namespace_name !== ''
@@ -1154,24 +1174,34 @@ function normalizeProviderEnvironmentCatalogCandidate(
   }
   const providerOrigin = compact(candidate.provider_origin);
   const envPublicID = compact(candidate.env_public_id);
+  const region = compact(candidate.region);
+  const accessPointID = compact(candidate.access_point_id);
+  const accessPointOrigin = compact(candidate.access_point_origin);
   const normalizedProviderIdentity = normalizeProviderIdentityForOrigin(
     providerOrigin,
     candidate.provider_id,
     canonicalProviderIDsByOrigin,
   );
-  if (providerOrigin === '' || envPublicID === '' || normalizedProviderIdentity.providerID === '') {
+  if (
+    providerOrigin === ''
+    || envPublicID === ''
+    || normalizedProviderIdentity.providerID === ''
+    || region === ''
+    || accessPointID === ''
+    || accessPointOrigin === ''
+  ) {
     return {
       environment: null,
       didCanonicalizeProviderIdentity: normalizedProviderIdentity.didCanonicalize,
     };
   }
-  const environmentID = compact(candidate.id)
-    || desktopProviderEnvironmentID(providerOrigin, envPublicID);
   try {
     return {
       environment: createDesktopProviderEnvironmentRecord(providerOrigin, envPublicID, {
-        environmentID,
         providerID: normalizedProviderIdentity.providerID,
+        region,
+        accessPointID,
+        accessPointOrigin,
         label: compact(candidate.label),
         pinned: normalizePinned(candidate.pinned),
         preferredOpenRoute: normalizePreferredOpenRoute(candidate.preferred_open_route),
@@ -1236,6 +1266,9 @@ function mergeProviderEnvironmentRecord(
     provider_origin: string;
     provider_id: string;
     env_public_id: string;
+    region: string;
+    access_point_id: string;
+    access_point_origin: string;
     label?: string;
     pinned?: boolean;
     preferred_open_route?: DesktopLocalEnvironmentPreferredOpenRoute;
@@ -1254,8 +1287,10 @@ function mergeProviderEnvironmentRecord(
     ? existing?.remote_catalog_entry
     : input.remote_catalog_entry ?? undefined;
   return createDesktopProviderEnvironmentRecord(input.provider_origin, input.env_public_id, {
-    environmentID: existing?.id,
     providerID: input.provider_id || existing?.provider_id || '',
+    region: input.region || existing?.region || '',
+    accessPointID: input.access_point_id || existing?.access_point_id || '',
+    accessPointOrigin: input.access_point_origin || existing?.access_point_origin || '',
     label,
     pinned,
     preferredOpenRoute,
@@ -1281,48 +1316,16 @@ function reconcileProviderEnvironments(
   }>,
 ): readonly DesktopProviderEnvironmentRecord[] {
   const canonicalProviderIDsByOrigin = buildCanonicalProviderIDByOrigin(input.controlPlanes);
-  const recordsByKey = new Map<string, DesktopProviderEnvironmentRecord>();
-  const activeCatalogKeys = new Set<string>();
-
-  for (const environment of input.stored) {
-    const canonicalEnvironment = canonicalizeProviderEnvironmentIdentity(environment, canonicalProviderIDsByOrigin);
-    recordsByKey.set(
-      providerEnvironmentRecordKey(
-        canonicalEnvironment.provider_origin,
-        canonicalEnvironment.provider_id,
-        canonicalEnvironment.env_public_id,
-      ),
-      canonicalEnvironment,
-    );
-  }
-
-  for (const controlPlane of input.controlPlanes) {
-    for (const environment of controlPlane.environments) {
-      const key = providerEnvironmentRecordKey(
-        controlPlane.provider.provider_origin,
-        controlPlane.provider.provider_id,
-        environment.env_public_id,
-      );
-      activeCatalogKeys.add(key);
-      const existing = recordsByKey.get(key) ?? null;
-      recordsByKey.set(key, mergeProviderEnvironmentRecord(existing, {
-        provider_origin: controlPlane.provider.provider_origin,
-        provider_id: controlPlane.provider.provider_id,
-        env_public_id: environment.env_public_id,
-        label: environment.label,
-        remote_web_supported: true,
-        remote_desktop_supported: true,
-        remote_catalog_entry: desktopProviderEnvironmentRemoteCatalogEntryFromPublished(environment),
-        created_at_ms: controlPlane.last_synced_at_ms || Date.now(),
-        updated_at_ms: controlPlane.last_synced_at_ms || Date.now(),
-      }));
-    }
-  }
-
   return normalizeProviderEnvironmentCollection(
-    [...recordsByKey.entries()]
-      .filter(([key]) => activeCatalogKeys.has(key))
-      .map(([, environment]) => environment),
+    input.stored
+      .map((environment) => canonicalizeProviderEnvironmentIdentity(environment, canonicalProviderIDsByOrigin))
+      .filter((environment) => input.controlPlanes.some((controlPlane) => (
+        providerEnvironmentBelongsToControlPlane(
+          environment,
+          controlPlane.provider.provider_origin,
+          controlPlane.provider.provider_id,
+        )
+      ))),
   );
 }
 
@@ -1426,6 +1429,22 @@ function providerEnvironmentRecordKey(
   return `${desktopControlPlaneKey(providerOrigin, providerID)}|${normalizeDesktopProviderEnvironmentID(envPublicID)}`;
 }
 
+function providerAccessPointRouteKey(accessPointID: string, accessPointOrigin: string): string {
+  const cleanAccessPointID = compact(accessPointID);
+  if (cleanAccessPointID === '') {
+    return '';
+  }
+  try {
+    return `${cleanAccessPointID}\n${normalizeControlPlaneOrigin(accessPointOrigin)}`;
+  } catch {
+    return '';
+  }
+}
+
+function providerEnvironmentAccessPointRouteKey(environment: DesktopProviderEnvironmentRecord): string {
+  return providerAccessPointRouteKey(environment.access_point_id, environment.access_point_origin);
+}
+
 function canonicalizeProviderEnvironmentIdentity(
   environment: DesktopProviderEnvironmentRecord,
   canonicalProviderIDsByOrigin: ReadonlyMap<string, string>,
@@ -1442,6 +1461,9 @@ function canonicalizeProviderEnvironmentIdentity(
     provider_origin: environment.provider_origin,
     provider_id: normalizedProviderIdentity.providerID,
     env_public_id: environment.env_public_id,
+    region: environment.region,
+    access_point_id: environment.access_point_id,
+    access_point_origin: environment.access_point_origin,
     label: environment.label,
     pinned: environment.pinned,
     preferred_open_route: environment.preferred_open_route,
@@ -1554,6 +1576,9 @@ function updateProviderEnvironmentRecordByID(
     provider_origin: existing.provider_origin,
     provider_id: existing.provider_id,
     env_public_id: existing.env_public_id,
+    region: existing.region,
+    access_point_id: existing.access_point_id,
+    access_point_origin: existing.access_point_origin,
     label: existing.label,
     pinned: input.pinned ?? existing.pinned,
     preferred_open_route: existing.preferred_open_route,
@@ -1770,7 +1795,6 @@ export function upsertSavedControlPlane(
   const nextControlPlane: DesktopSavedControlPlane = {
     provider: input.provider,
     account: input.account,
-    environments: input.environments ?? [],
     display_label: normalizeControlPlaneDisplayLabel(
       input.display_label ?? existing?.display_label,
       input.provider.provider_origin,
@@ -1796,12 +1820,78 @@ export function upsertSavedControlPlane(
     control_plane_refresh_tokens: nextRefreshTokens,
     control_planes: controlPlanes,
   };
+  if (!input.environments) {
+    return {
+      ...nextPreferences,
+      provider_environments: reconcileProviderEnvironments({
+        stored: nextPreferences.provider_environments,
+        controlPlanes,
+      }),
+    };
+  }
+
+  const incomingKeys = new Set<string>();
+  const incomingRecords = input.environments.map((environment) => {
+    const recordKey = providerEnvironmentRecordKey(
+      input.provider.provider_origin,
+      input.provider.provider_id,
+      environment.env_public_id,
+    );
+    incomingKeys.add(recordKey);
+    const existingRecord = nextPreferences.provider_environments.find((stored) => (
+      providerEnvironmentRecordKey(stored.provider_origin, stored.provider_id, stored.env_public_id) === recordKey
+    )) ?? null;
+    return mergeProviderEnvironmentRecord(existingRecord, {
+      provider_origin: input.provider.provider_origin,
+      provider_id: input.provider.provider_id,
+      env_public_id: environment.env_public_id,
+      region: environment.region,
+      access_point_id: environment.access_point_id,
+      access_point_origin: environment.access_point_origin,
+      label: environment.label,
+      remote_web_supported: true,
+      remote_desktop_supported: true,
+      remote_catalog_entry: desktopProviderEnvironmentRemoteCatalogEntryFromPublished(environment),
+      created_at_ms: input.last_synced_at_ms || Date.now(),
+      updated_at_ms: input.last_synced_at_ms || Date.now(),
+    });
+  });
+
+  const syncedAccessPointKeys = input.synced_access_points
+    ? new Set(input.synced_access_points
+      .map((accessPoint) => providerAccessPointRouteKey(accessPoint.access_point_id, accessPoint.access_point_origin))
+      .filter((key) => key !== ''))
+    : null;
+  const activeAccessPointKeys = new Set(input.provider.access_points
+    .map((accessPoint) => providerAccessPointRouteKey(accessPoint.access_point_id, accessPoint.access_point_origin))
+    .filter((key) => key !== ''));
+  const retainedRecords = nextPreferences.provider_environments.filter((environment) => {
+    if (!providerEnvironmentBelongsToControlPlane(
+      environment,
+      input.provider.provider_origin,
+      input.provider.provider_id,
+    )) {
+      return true;
+    }
+    const routeKey = providerEnvironmentAccessPointRouteKey(environment);
+    if (!activeAccessPointKeys.has(routeKey)) {
+      return false;
+    }
+    if (syncedAccessPointKeys && !syncedAccessPointKeys.has(routeKey)) {
+      return true;
+    }
+    return incomingKeys.has(providerEnvironmentRecordKey(
+      environment.provider_origin,
+      environment.provider_id,
+      environment.env_public_id,
+    ));
+  });
   return {
     ...nextPreferences,
-    provider_environments: reconcileProviderEnvironments({
-      stored: nextPreferences.provider_environments,
-      controlPlanes,
-    }),
+    provider_environments: normalizeProviderEnvironmentCollection([
+      ...incomingRecords,
+      ...retainedRecords,
+    ]),
   };
 }
 
@@ -2229,6 +2319,7 @@ function normalizeLocalEnvironmentCatalogCandidate(
         compact(bindingSource.env_public_id),
         {
           providerID: normalizedProviderIdentity.providerID,
+          accessPointOrigin: compact(bindingSource.access_point_origin),
           remoteWebSupported: bindingSource.remote_web_supported !== false,
           remoteDesktopSupported: bindingSource.remote_desktop_supported !== false,
         },
@@ -2353,6 +2444,7 @@ function serializeLocalEnvironmentCatalog(environment: DesktopLocalEnvironmentSt
             provider_origin: environment.current_provider_binding.provider_origin,
             provider_id: environment.current_provider_binding.provider_id,
             env_public_id: environment.current_provider_binding.env_public_id,
+            access_point_origin: environment.current_provider_binding.access_point_origin,
             remote_web_supported: environment.current_provider_binding.remote_web_supported,
             remote_desktop_supported: environment.current_provider_binding.remote_desktop_supported,
           },
@@ -2424,6 +2516,7 @@ function serializeSavedControlPlaneCatalog(controlPlane: DesktopSavedControlPlan
       display_name: controlPlane.provider.display_name,
       provider_origin: controlPlane.provider.provider_origin,
       documentation_url: controlPlane.provider.documentation_url,
+      access_points: controlPlane.provider.access_points,
     },
     account: {
       user_public_id: controlPlane.account.user_public_id,
@@ -2431,17 +2524,6 @@ function serializeSavedControlPlaneCatalog(controlPlane: DesktopSavedControlPlan
       authorization_expires_at_unix_ms: controlPlane.account.authorization_expires_at_unix_ms,
     },
     display_label: controlPlane.display_label,
-    environments: controlPlane.environments.map((environment) => ({
-      env_public_id: environment.env_public_id,
-      name: environment.label,
-      environment_url: environment.environment_url,
-      description: environment.description,
-      namespace_public_id: environment.namespace_public_id,
-      namespace_name: environment.namespace_name,
-      status: environment.status,
-      lifecycle_status: environment.lifecycle_status,
-      last_seen_at_unix_ms: environment.last_seen_at_unix_ms,
-    })),
     last_synced_at_ms: controlPlane.last_synced_at_ms,
   };
 }
@@ -2456,6 +2538,9 @@ function serializeProviderEnvironmentCatalog(
     provider_origin: environment.provider_origin,
     provider_id: environment.provider_id,
     env_public_id: environment.env_public_id,
+    region: environment.region,
+    access_point_id: environment.access_point_id,
+    access_point_origin: environment.access_point_origin,
     label: environment.label,
     pinned: environment.pinned,
     created_at_ms: environment.created_at_ms,

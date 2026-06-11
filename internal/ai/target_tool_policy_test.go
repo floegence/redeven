@@ -66,7 +66,7 @@ func TestHandleToolCall_ExplicitTargetPolicyUsesTargetExecutor(t *testing.T) {
 	})
 
 	outcome, err := r.handleToolCall(context.Background(), "tool_term_1", "terminal.exec", map[string]any{
-		"target_id": "cp:local:env:env_a",
+		"target_id": "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		"command":   "pwd",
 	})
 	if err != nil {
@@ -75,7 +75,7 @@ func TestHandleToolCall_ExplicitTargetPolicyUsesTargetExecutor(t *testing.T) {
 	if outcome == nil || !outcome.Success {
 		t.Fatalf("outcome=%#v, want success", outcome)
 	}
-	if executor.call.TargetID != "cp:local:env:env_a" {
+	if executor.call.TargetID != "provider:https%3A%2F%2Fredeven.test:env:env_a" {
 		t.Fatalf("target_id=%q", executor.call.TargetID)
 	}
 	if executor.call.ToolName != "terminal.exec" {
@@ -106,14 +106,14 @@ func TestHandleToolCall_ExplicitTargetPolicyRejectsUnallowedTarget(t *testing.T)
 		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		ToolTargetPolicy: ToolTargetPolicy{
 			Mode:             ToolTargetModeExplicitTarget,
-			DefaultTargetID:  "cp:local:env:env_a",
-			AllowedTargetIDs: []string{"cp:local:env:env_a"},
+			DefaultTargetID:  "provider:https%3A%2F%2Fredeven.test:env:env_a",
+			AllowedTargetIDs: []string{"provider:https%3A%2F%2Fredeven.test:env:env_a"},
 		},
 		TargetToolExecutor: executor,
 	})
 
 	outcome, err := r.handleToolCall(context.Background(), "tool_term_1", "terminal.exec", map[string]any{
-		"target_id": "cp:local:env:env_b",
+		"target_id": "provider:https%3A%2F%2Fredeven.test:env:env_b",
 		"command":   "pwd",
 	})
 	if err != nil {
@@ -171,7 +171,7 @@ func TestPrepareRunUsesThreadScopedTargetPolicy(t *testing.T) {
 		ToolTargetPolicyForRun: func(_ *session.Meta, thread threadstore.Thread, _ *threadstore.FlowerThreadMetadata) ToolTargetPolicy {
 			return ToolTargetPolicy{
 				Mode:            ToolTargetModeExplicitTarget,
-				DefaultTargetID: "cp:test:env:" + thread.ThreadID,
+				DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:" + thread.ThreadID,
 			}
 		},
 	})
@@ -199,7 +199,7 @@ func TestPrepareRunUsesThreadScopedTargetPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)
 	}
-	if got := prepared.r.toolTargetPolicy.DefaultTargetID; got != "cp:test:env:"+thread.ThreadID {
+	if got := prepared.r.toolTargetPolicy.DefaultTargetID; got != "provider:https%3A%2F%2Fredeven.test:env:"+thread.ThreadID {
 		t.Fatalf("run default target id=%q", got)
 	}
 }

@@ -46,6 +46,7 @@ type Snapshot struct {
 	RemoteEnabled            bool
 	ControlChannelEnabled    bool
 	LocalUIEnabled           bool
+	ProviderOrigin           string
 	ControlplaneBaseURL      string
 	ControlplaneProviderID   string
 	EnvPublicID              string

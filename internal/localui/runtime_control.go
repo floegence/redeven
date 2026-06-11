@@ -232,12 +232,14 @@ type runtimeControlProviderLinkRequest struct {
 	ProviderOrigin         string `json:"provider_origin"`
 	ProviderID             string `json:"provider_id"`
 	EnvPublicID            string `json:"env_public_id"`
+	AccessPointOrigin      string `json:"access_point_origin"`
 	BootstrapTicket        string `json:"bootstrap_ticket"`
 	AllowRelinkWhenIdle    bool   `json:"allow_relink_when_idle"`
 	ExpectedCurrentBinding *struct {
 		ProviderOrigin    string `json:"provider_origin"`
 		ProviderID        string `json:"provider_id"`
 		EnvPublicID       string `json:"env_public_id"`
+		AccessPointOrigin string `json:"access_point_origin"`
 		BindingGeneration int64  `json:"binding_generation"`
 	} `json:"expected_current_binding,omitempty"`
 }
@@ -261,6 +263,7 @@ func (s *runtimeControlServer) handleProviderLinkConnect(w http.ResponseWriter, 
 		ProviderOrigin:      body.ProviderOrigin,
 		ProviderID:          body.ProviderID,
 		EnvPublicID:         body.EnvPublicID,
+		AccessPointOrigin:   body.AccessPointOrigin,
 		BootstrapTicket:     body.BootstrapTicket,
 		AllowRelinkWhenIdle: body.AllowRelinkWhenIdle,
 	}
@@ -268,6 +271,7 @@ func (s *runtimeControlServer) handleProviderLinkConnect(w http.ResponseWriter, 
 		req.ExpectedProviderOrigin = body.ExpectedCurrentBinding.ProviderOrigin
 		req.ExpectedProviderID = body.ExpectedCurrentBinding.ProviderID
 		req.ExpectedEnvPublicID = body.ExpectedCurrentBinding.EnvPublicID
+		req.ExpectedAccessPointOrigin = body.ExpectedCurrentBinding.AccessPointOrigin
 		req.ExpectedGeneration = body.ExpectedCurrentBinding.BindingGeneration
 	}
 	resp, err := s.agent.ConnectProvider(r.Context(), req)

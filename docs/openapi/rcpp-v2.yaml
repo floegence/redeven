@@ -1,0 +1,511 @@
+openapi: 3.1.0
+info:
+  title: Redeven Control Plane Provider Protocol
+  version: rcpp-v2
+  summary: Provider authority plus access point contract for Redeven Desktop and Runtime.
+servers:
+  - url: https://redeven.example
+    description: Provider authority
+  - url: https://sg.redeven.example
+    description: Access point
+tags:
+  - name: ProviderAuthority
+  - name: AccessPoint
+paths:
+  /.well-known/redeven-provider.json:
+    get:
+      tags: [ProviderAuthority]
+      operationId: getProviderDiscovery
+      responses:
+        '200':
+          description: Provider discovery.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiscoveryResponse'
+  /api/rcpp/v2/desktop/authorize:
+    post:
+      tags: [ProviderAuthority]
+      operationId: createDesktopAuthorizationCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopAuthorizationRequest'
+      responses:
+        '200':
+          description: Authorization code.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopAuthorizationResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v2/desktop/connect/exchange:
+    post:
+      tags: [ProviderAuthority]
+      operationId: exchangeDesktopAuthorizationCode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopConnectExchangeRequest'
+      responses:
+        '200':
+          description: Desktop authorization material.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopConnectExchangeResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v2/desktop/token/refresh:
+    post:
+      tags: [ProviderAuthority]
+      operationId: refreshDesktopAccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopTokenRefreshRequest'
+      responses:
+        '200':
+          description: Refreshed desktop access token.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopTokenRefreshResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v2/desktop/token/revoke:
+    post:
+      tags: [ProviderAuthority]
+      operationId: revokeDesktopAuthorization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DesktopTokenRevokeRequest'
+      responses:
+        '204':
+          description: Authorization revoked.
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v2/me:
+    get:
+      tags: [ProviderAuthority]
+      operationId: getProviderAccount
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Provider account.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderMeResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v2/environments:
+    get:
+      tags: [AccessPoint]
+      operationId: listProviderEnvironments
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Environments visible at this access point.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderEnvironmentListResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v2/environments/runtime-health/query:
+    post:
+      tags: [AccessPoint]
+      operationId: queryProviderEnvironmentRuntimeHealth
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderEnvironmentRuntimeHealthQueryRequest'
+      responses:
+        '200':
+          description: Runtime health snapshots.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderEnvironmentRuntimeHealthQueryResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v2/environments/{envId}/desktop/open-session:
+    post:
+      tags: [AccessPoint]
+      operationId: createDesktopOpenSession
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: envId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Desktop open-session materials.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DesktopOpenSessionResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+  /api/rcpp/v2/runtime/bootstrap/exchange:
+    post:
+      tags: [AccessPoint]
+      operationId: exchangeRuntimeBootstrapTicket
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuntimeBootstrapExchangeRequest'
+      responses:
+        '200':
+          description: Runtime direct connection info.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RuntimeBootstrapExchangeResponse'
+        default:
+          $ref: '#/components/responses/ErrorEnvelope'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    ErrorEnvelope:
+      description: Standard error envelope.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              success:
+                type: boolean
+                const: false
+              error:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+  schemas:
+    DiscoveryResponse:
+      type: object
+      required: [protocol_version, provider_id, display_name, provider_origin, documentation_url, access_points]
+      properties:
+        protocol_version:
+          type: string
+          const: rcpp-v2
+        provider_id:
+          type: string
+        display_name:
+          type: string
+        provider_origin:
+          type: string
+          format: uri
+        documentation_url:
+          type: string
+        access_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderAccessPoint'
+    ProviderAccessPoint:
+      type: object
+      required: [access_point_id, region, display_name, access_point_origin, status]
+      properties:
+        access_point_id:
+          type: string
+        region:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        country_code:
+          type: string
+        city:
+          type: string
+        status:
+          type: string
+        health_status:
+          type: string
+    DesktopAuthorizationRequest:
+      type: object
+      required: [code_challenge, code_challenge_method]
+      properties:
+        code_challenge:
+          type: string
+        code_challenge_method:
+          type: string
+          const: S256
+    DesktopAuthorizationResponse:
+      type: object
+      required: [authorization_code, expires_at_unix_ms]
+      properties:
+        authorization_code:
+          type: string
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+    DesktopConnectExchangeRequest:
+      type: object
+      required: [authorization_code, code_verifier]
+      properties:
+        authorization_code:
+          type: string
+        code_verifier:
+          type: string
+    DesktopConnectExchangeResponse:
+      type: object
+      required: [access_token, access_expires_at_unix_ms, refresh_token, authorization_expires_at_unix_ms, provider_id, provider_origin, account, access_points]
+      properties:
+        access_token:
+          type: string
+        access_expires_at_unix_ms:
+          type: integer
+          format: int64
+        refresh_token:
+          type: string
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+        provider_id:
+          type: string
+        provider_origin:
+          type: string
+          format: uri
+        account:
+          $ref: '#/components/schemas/ProviderMeResponse'
+        access_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderAccessPoint'
+    DesktopTokenRefreshRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+    DesktopTokenRefreshResponse:
+      type: object
+      required: [access_token, access_expires_at_unix_ms, authorization_expires_at_unix_ms]
+      properties:
+        access_token:
+          type: string
+        access_expires_at_unix_ms:
+          type: integer
+          format: int64
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+    DesktopTokenRevokeRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+    ProviderMeResponse:
+      type: object
+      required: [user_public_id, user_display_name, authorization_expires_at_unix_ms]
+      properties:
+        user_public_id:
+          type: string
+        user_display_name:
+          type: string
+        authorization_expires_at_unix_ms:
+          type: integer
+          format: int64
+    ProviderEnvironmentListResponse:
+      type: object
+      required: [environments]
+      properties:
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderEnvironmentSummary'
+    ProviderEnvironmentSummary:
+      type: object
+      required: [env_public_id, name, region, access_point_id, access_point_origin]
+      properties:
+        env_public_id:
+          type: string
+        name:
+          type: string
+        region:
+          type: string
+        access_point_id:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        environment_url:
+          type: string
+        description:
+          type: string
+        namespace_public_id:
+          type: string
+        namespace_name:
+          type: string
+        status:
+          type: string
+        lifecycle_status:
+          type: string
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+        runtime_health:
+          $ref: '#/components/schemas/ProviderEnvironmentRuntimeHealth'
+    ProviderEnvironmentRuntimeHealthQueryRequest:
+      type: object
+      required: [env_public_ids]
+      properties:
+        env_public_ids:
+          type: array
+          items:
+            type: string
+    ProviderEnvironmentRuntimeHealthQueryResponse:
+      type: object
+      required: [environments]
+      properties:
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderEnvironmentRuntimeHealth'
+    ProviderEnvironmentRuntimeHealth:
+      type: object
+      required: [env_public_id, runtime_status, observed_at_unix_ms]
+      properties:
+        env_public_id:
+          type: string
+        runtime_status:
+          type: string
+          enum: [online, offline]
+        observed_at_unix_ms:
+          type: integer
+          format: int64
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+        offline_reason_code:
+          type: string
+        offline_reason:
+          type: string
+    DesktopOpenSessionResponse:
+      type: object
+      required: [access_point_origin, expires_at_unix_ms]
+      properties:
+        bootstrap_ticket:
+          type: string
+        remote_session_url:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+    RuntimeBootstrapExchangeRequest:
+      type: object
+      required: [env_public_id, provider_origin, local_environment_public_id, agent_instance_id]
+      properties:
+        env_public_id:
+          type: string
+        provider_origin:
+          type: string
+          format: uri
+        local_environment_public_id:
+          type: string
+        agent_instance_id:
+          type: string
+        hostname:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        runtime_version:
+          type: string
+    RuntimeBootstrapExchangeResponse:
+      type: object
+      required: [provider_id, provider_origin, access_point_id, access_point_origin, env_public_id, direct]
+      properties:
+        provider_id:
+          type: string
+        provider_origin:
+          type: string
+          format: uri
+        access_point_id:
+          type: string
+        access_point_origin:
+          type: string
+          format: uri
+        env_public_id:
+          type: string
+        direct:
+          $ref: '#/components/schemas/RuntimeDirectConnectInfo'
+        local_environment_binding:
+          $ref: '#/components/schemas/ProviderLocalEnvironmentBinding'
+    RuntimeDirectConnectInfo:
+      type: object
+      required: [ws_url, channel_id, e2ee_psk_b64u, channel_init_expire_at_unix_s, default_suite]
+      properties:
+        ws_url:
+          type: string
+        channel_id:
+          type: string
+        e2ee_psk_b64u:
+          type: string
+        channel_init_expire_at_unix_s:
+          type: integer
+          format: int64
+        default_suite:
+          type: integer
+    ProviderLocalEnvironmentBinding:
+      type: object
+      properties:
+        local_environment_public_id:
+          type: string
+        user_public_id:
+          type: string
+        env_public_id:
+          type: string
+        generation:
+          type: integer
+          format: int64
+        hostname:
+          type: string
+        os:
+          type: string
+        arch:
+          type: string
+        runtime_version:
+          type: string
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64

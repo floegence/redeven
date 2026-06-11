@@ -235,7 +235,7 @@ Runtime side:
 
 ## Session bootstrap contract used by the Env App UI
 
-The Env App UI runs on sandbox origins and consumes a short-lived control-plane bootstrap contract. Public implementations should treat the control plane as the authority that issues browser bootstrap credentials and runtime connection artifacts. The wire-level runtime control-plane protocol is documented in [`protocol/rcpp-v1.md`](protocol/rcpp-v1.md) and [`openapi/rcpp-v1.yaml`](openapi/rcpp-v1.yaml).
+The Env App UI runs on sandbox origins and consumes a short-lived access point bootstrap contract. Public implementations should treat the provider authority as the identity and token issuer, while the selected access point issues browser bootstrap credentials and runtime connection artifacts for its own region. The wire-level provider/access point protocol is documented in [`protocol/rcpp-v2.md`](protocol/rcpp-v2.md) and [`openapi/rcpp-v2.yaml`](openapi/rcpp-v2.yaml).
 
 - Browser bootstrap credentials are short-lived and origin-scoped.
 - Runtime connection artifacts are minted on demand and used by Flowersec to establish the encrypted runtime session.

@@ -95,7 +95,7 @@ describe('environmentGuidanceSession', () => {
           },
         }),
         provider_environments: [
-          testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+          testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
             preferredOpenRoute: 'local_host',
           }),
         ],
@@ -118,7 +118,7 @@ describe('environmentGuidanceSession', () => {
   });
 
   it('settles the active session once the local runtime no longer exposes a guidance popover', () => {
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
+    const localServe = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -148,7 +148,7 @@ describe('environmentGuidanceSession', () => {
   });
 
   it('keeps settled success reconciliation referentially stable', () => {
-    const localServe = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
+    const localServe = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
       label: 'Demo Local Serve',
     });
     const snapshot = buildDesktopWelcomeSnapshot({

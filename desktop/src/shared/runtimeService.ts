@@ -76,6 +76,7 @@ export type RuntimeServiceProviderLinkBinding = Readonly<{
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
+  access_point_origin?: string;
   local_environment_public_id?: string;
   binding_generation?: number;
   remote_enabled: boolean;
@@ -279,6 +280,7 @@ function normalizeProviderLinkBinding(
     provider_origin: compact(record.provider_origin) || undefined,
     provider_id: compact(record.provider_id) || undefined,
     env_public_id: compact(record.env_public_id) || undefined,
+    access_point_origin: compact(record.access_point_origin) || undefined,
     local_environment_public_id: compact(record.local_environment_public_id) || undefined,
     binding_generation: normalizeCount(record.binding_generation) || undefined,
     remote_enabled: state === 'linked' && record.remote_enabled === true,
@@ -503,13 +505,15 @@ export function runtimeServiceProviderLinkMatches(
     provider_origin?: string;
     provider_id?: string;
     env_public_id?: string;
+    access_point_origin?: string;
   }> | null | undefined,
 ): boolean {
   const binding = runtimeServiceProviderLinkBinding(snapshot);
   return binding.state === 'linked'
     && compact(binding.provider_origin) === compact(expected?.provider_origin)
     && compact(binding.provider_id) === compact(expected?.provider_id)
-    && compact(binding.env_public_id) === compact(expected?.env_public_id);
+    && compact(binding.env_public_id) === compact(expected?.env_public_id)
+    && compact(binding.access_point_origin) === compact(expected?.access_point_origin);
 }
 
 export function runtimeServiceWorkloadCounts(snapshot: RuntimeServiceSnapshot | null | undefined): RuntimeServiceWorkload {

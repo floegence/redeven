@@ -47,7 +47,8 @@ func (f *providerDisconnectFakeRPC) Call(_ context.Context, typeID uint32, paylo
 func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 	t.Helper()
 	cfg := &config.Config{
-		ControlplaneBaseURL:      "https://provider.example.test",
+		ProviderOrigin:           "https://redeven.test",
+		ControlplaneBaseURL:      "https://dev.redeven.test",
 		ControlplaneProviderID:   "example_control_plane",
 		EnvironmentID:            "env_demo",
 		LocalEnvironmentPublicID: "le_existing",
@@ -119,7 +120,7 @@ func providerLinkTestServer(t *testing.T, handler func(http.ResponseWriter, *htt
 
 func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *http.Request, channelID string) {
 	t.Helper()
-	if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v1/runtime/bootstrap/exchange" {
+	if r.Method != http.MethodPost || r.URL.Path != "/api/rcpp/v2/runtime/bootstrap/exchange" {
 		t.Fatalf("unexpected request %s %s", r.Method, r.URL.Path)
 	}
 	if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
@@ -127,13 +128,21 @@ func writeProviderLinkBootstrapResponse(t *testing.T, w http.ResponseWriter, r *
 	}
 	var payload struct {
 		EnvPublicID              string `json:"env_public_id"`
+		ProviderOrigin           string `json:"provider_origin"`
 		LocalEnvironmentPublicID string `json:"local_environment_public_id"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		t.Fatalf("Decode(request) error = %v", err)
 	}
+	if payload.ProviderOrigin == "" {
+		t.Fatalf("ProviderOrigin is empty")
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write([]byte(`{
+  "provider_id": "example_control_plane",
+  "provider_origin": "` + payload.ProviderOrigin + `",
+  "access_point_id": "dev",
+  "access_point_origin": "http://` + r.Host + `",
   "direct": {
     "ws_url": "ws://127.0.0.1:1/control/ws",
     "channel_id": "` + channelID + `",
@@ -157,10 +166,11 @@ func TestConnectProviderPersistsConfigOnlyAfterBootstrapSucceeds(t *testing.T) {
 	defer server.Close()
 
 	_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin:  server.URL,
-		ProviderID:      "example_control_plane",
-		EnvPublicID:     "env_demo",
-		BootstrapTicket: "ticket-123",
+		ProviderOrigin:    "https://redeven.test",
+		ProviderID:        "example_control_plane",
+		EnvPublicID:       "env_demo",
+		AccessPointOrigin: server.URL,
+		BootstrapTicket:   "ticket-123",
 	})
 	if err == nil {
 		t.Fatalf("ConnectProvider() error = nil, want bootstrap failure")
@@ -180,6 +190,7 @@ func TestConnectProviderPersistsConfigOnlyAfterBootstrapSucceeds(t *testing.T) {
 func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 	cfgPath := filepath.Join(t.TempDir(), "config.json")
 	initial := &config.Config{
+		ProviderOrigin:           "https://redeven.test",
 		ControlplaneBaseURL:      "https://old.example.invalid",
 		ControlplaneProviderID:   "old_provider",
 		EnvironmentID:            "env_old",
@@ -210,15 +221,17 @@ func TestConnectProviderRechecksActiveWorkBeforePersistingConfig(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() {
 		_, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-			ProviderOrigin:         server.URL,
-			ProviderID:             "example_control_plane",
-			EnvPublicID:            "env_new",
-			BootstrapTicket:        "ticket-123",
-			AllowRelinkWhenIdle:    true,
-			ExpectedProviderOrigin: initial.ControlplaneBaseURL,
-			ExpectedProviderID:     initial.ControlplaneProviderID,
-			ExpectedEnvPublicID:    initial.EnvironmentID,
-			ExpectedGeneration:     initial.BindingGeneration,
+			ProviderOrigin:            "https://redeven.test",
+			ProviderID:                "example_control_plane",
+			EnvPublicID:               "env_new",
+			AccessPointOrigin:         server.URL,
+			BootstrapTicket:           "ticket-123",
+			AllowRelinkWhenIdle:       true,
+			ExpectedProviderOrigin:    initial.ProviderOrigin,
+			ExpectedProviderID:        initial.ControlplaneProviderID,
+			ExpectedEnvPublicID:       initial.EnvironmentID,
+			ExpectedAccessPointOrigin: initial.ControlplaneBaseURL,
+			ExpectedGeneration:        initial.BindingGeneration,
 		})
 		errCh <- err
 	}()
@@ -269,6 +282,7 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 	defer server.Close()
 
 	cfg := &config.Config{
+		ProviderOrigin:           "https://redeven.test",
 		ControlplaneBaseURL:      server.URL,
 		ControlplaneProviderID:   "example_control_plane",
 		EnvironmentID:            "env_demo",
@@ -301,10 +315,11 @@ func TestConnectProviderRefreshesExistingMatchingBindingWhenExplicitlyRequested(
 	}
 
 	resp, err := a.ConnectProvider(context.Background(), ProviderLinkRequest{
-		ProviderOrigin:  server.URL,
-		ProviderID:      "example_control_plane",
-		EnvPublicID:     "env_demo",
-		BootstrapTicket: "ticket-123",
+		ProviderOrigin:    "https://redeven.test",
+		ProviderID:        "example_control_plane",
+		EnvPublicID:       "env_demo",
+		AccessPointOrigin: server.URL,
+		BootstrapTicket:   "ticket-123",
 	})
 	if err != nil {
 		t.Fatalf("ConnectProvider() error = %v", err)
@@ -358,7 +373,9 @@ func TestDisconnectProviderSendsRuntimeDisconnectBeforeClearingConfig(t *testing
 		t.Fatalf("Unmarshal(runtime disconnect request) error = %v", err)
 	}
 	if req.EnvPublicID != "env_demo" ||
+		req.ProviderOrigin != "https://redeven.test" ||
 		req.ProviderID != "example_control_plane" ||
+		req.AccessPointOrigin != "https://dev.redeven.test" ||
 		req.LocalEnvironmentPublicID != "le_existing" ||
 		req.BindingGeneration != 7 ||
 		req.AgentInstanceID != "ai_existing" ||
@@ -370,7 +387,8 @@ func TestDisconnectProviderSendsRuntimeDisconnectBeforeClearingConfig(t *testing
 	if err != nil {
 		t.Fatalf("config.Load() error = %v", err)
 	}
-	if saved.ControlplaneBaseURL != "" ||
+	if saved.ProviderOrigin != "" ||
+		saved.ControlplaneBaseURL != "" ||
 		saved.ControlplaneProviderID != "" ||
 		saved.EnvironmentID != "" ||
 		saved.LocalEnvironmentPublicID != "" ||
@@ -408,7 +426,8 @@ func TestDisconnectProviderConflictDoesNotClearConfig(t *testing.T) {
 	if loadErr != nil {
 		t.Fatalf("config.Load() error = %v", loadErr)
 	}
-	if saved.ControlplaneBaseURL != cfg.ControlplaneBaseURL ||
+	if saved.ProviderOrigin != cfg.ProviderOrigin ||
+		saved.ControlplaneBaseURL != cfg.ControlplaneBaseURL ||
 		saved.ControlplaneProviderID != cfg.ControlplaneProviderID ||
 		saved.EnvironmentID != cfg.EnvironmentID ||
 		saved.LocalEnvironmentPublicID != cfg.LocalEnvironmentPublicID ||
@@ -439,7 +458,8 @@ func TestDisconnectProviderClearsConfigWithoutActiveControlChannel(t *testing.T)
 	if loadErr != nil {
 		t.Fatalf("config.Load() error = %v", loadErr)
 	}
-	if saved.ControlplaneBaseURL != "" ||
+	if saved.ProviderOrigin != "" ||
+		saved.ControlplaneBaseURL != "" ||
 		saved.ControlplaneProviderID != "" ||
 		saved.EnvironmentID != "" ||
 		saved.LocalEnvironmentPublicID != "" ||

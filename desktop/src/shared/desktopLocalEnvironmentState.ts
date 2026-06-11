@@ -21,6 +21,7 @@ export type DesktopLocalEnvironmentRuntimeState = Readonly<{
   desktop_owner_id?: string;
   desktop_ownership?: 'owned' | 'managed_elsewhere' | 'unowned' | 'external';
   controlplane_base_url?: string;
+  provider_origin?: string;
   controlplane_provider_id?: string;
   env_public_id?: string;
   password_required: boolean;
@@ -42,6 +43,7 @@ export type DesktopLocalEnvironmentProviderBinding = Readonly<{
   provider_origin: string;
   provider_id: string;
   env_public_id: string;
+  access_point_origin: string;
   remote_web_supported: boolean;
   remote_desktop_supported: boolean;
 }>;
@@ -91,7 +93,7 @@ export function normalizeDesktopProviderKey(value: unknown): string {
 export function desktopProviderEnvironmentStateID(providerOrigin: string, envPublicID: string): string {
   const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
   const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
-  return `cp:${encodeURIComponent(normalizedOrigin)}:env:${encodeURIComponent(normalizedEnvPublicID)}`;
+  return `provider:${encodeURIComponent(normalizedOrigin)}:env:${encodeURIComponent(normalizedEnvPublicID)}`;
 }
 
 export function defaultDesktopLocalEnvironmentAccess(): DesktopLocalEnvironmentAccess {
@@ -132,6 +134,7 @@ function normalizeRuntimeState(
       return undefined;
     })(),
     controlplane_base_url: compact(value.controlplane_base_url) || undefined,
+    provider_origin: compact(value.provider_origin) || undefined,
     controlplane_provider_id: compact(value.controlplane_provider_id) || undefined,
     env_public_id: compact(value.env_public_id) || undefined,
     password_required: value.password_required === true,
@@ -167,6 +170,7 @@ export function createDesktopLocalEnvironmentHosting(
 
 type CreateDesktopLocalProviderBindingOptions = Readonly<{
   providerID: string;
+  accessPointOrigin: string;
   remoteWebSupported?: boolean;
   remoteDesktopSupported?: boolean;
 }>;
@@ -177,6 +181,7 @@ export function createDesktopLocalProviderBinding(
   options: CreateDesktopLocalProviderBindingOptions,
 ): DesktopLocalEnvironmentProviderBinding {
   const normalizedOrigin = normalizeControlPlaneOrigin(providerOrigin);
+  const accessPointOrigin = normalizeControlPlaneOrigin(options.accessPointOrigin);
   const normalizedEnvPublicID = normalizeDesktopProviderEnvironmentID(envPublicID);
   const providerID = compact(options.providerID);
   if (providerID === '') {
@@ -186,6 +191,7 @@ export function createDesktopLocalProviderBinding(
     provider_origin: normalizedOrigin,
     provider_id: providerID,
     env_public_id: normalizedEnvPublicID,
+    access_point_origin: accessPointOrigin,
     remote_web_supported: options.remoteWebSupported !== false,
     remote_desktop_supported: options.remoteDesktopSupported !== false,
   };
@@ -243,6 +249,7 @@ export function projectProviderEnvironmentToLocalRuntimeTarget(
     providerEnvironment.env_public_id,
     {
       providerID: providerEnvironment.provider_id,
+      accessPointOrigin: providerEnvironment.access_point_origin,
       remoteWebSupported: providerEnvironment.remote_web_supported,
       remoteDesktopSupported: providerEnvironment.remote_desktop_supported,
     },

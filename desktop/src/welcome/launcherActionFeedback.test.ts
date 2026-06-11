@@ -105,7 +105,7 @@ describe('launcherActionFeedback', () => {
       code: 'control_plane_auth_required',
       scope: 'control_plane',
       message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
       should_refresh_snapshot: true,
@@ -118,7 +118,7 @@ describe('launcherActionFeedback', () => {
       action: {
         kind: 'reconnect_control_plane',
         label: 'Reconnect Provider',
-        provider_origin: 'https://cp.example.invalid',
+        provider_origin: 'https://provider.example.invalid',
         provider_id: 'example_control_plane',
       },
       auto_dismiss: false,
@@ -133,7 +133,7 @@ describe('launcherActionFeedback', () => {
       code: 'control_plane_auth_required',
       scope: 'control_plane',
       message: 'Desktop needs fresh provider authorization before it can open or connect this provider Environment.',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       env_public_id: 'env_demo',
     })).toMatchObject({
       title: 'Provider 授权已过期',

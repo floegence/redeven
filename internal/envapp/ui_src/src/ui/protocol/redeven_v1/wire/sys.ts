@@ -81,6 +81,7 @@ export type wire_sys_ping_resp = {
         provider_origin?: string;
         provider_id?: string;
         env_public_id?: string;
+        access_point_origin?: string;
         local_environment_public_id?: string;
         binding_generation?: number;
         remote_enabled?: boolean;

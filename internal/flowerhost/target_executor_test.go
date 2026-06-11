@@ -50,11 +50,11 @@ func TestResolveTargetRejectsTargetWithoutFileCapabilityForFileRead(t *testing.T
 	if err := configStore.SaveTargetCache(context.Background(), TargetCache{
 		Version: 1,
 		Entries: []TargetCacheEntry{{
-			TargetID:  "cp:test:env:env_a",
+			TargetID:  "provider:https%3A%2F%2Fredeven.test:env:env_a",
 			Label:     "env-a",
-			TargetURL: "https://region.example.test/?endpoint_id=env_a",
+			TargetURL: "https://dev.redeven.test/?endpoint_id=env_a",
 			Metadata: json.RawMessage(`{
-				"provider_origin": "https://region.example.test",
+				"provider_origin": "https://redeven.test",
 				"env_public_id": "env_a",
 				"capabilities": ["git"]
 			}`),
@@ -66,7 +66,7 @@ func TestResolveTargetRejectsTargetWithoutFileCapabilityForFileRead(t *testing.T
 		Catalog:   NewTargetCatalog(configStore),
 		Connector: &TargetConnector{},
 	})
-	_, err = executor.resolveTarget(context.Background(), "cp:test:env:env_a", []string{"read"})
+	_, err = executor.resolveTarget(context.Background(), "provider:https%3A%2F%2Fredeven.test:env:env_a", []string{"read"})
 	if got := TargetConnectReason(err); got != "target_unsupported" {
 		t.Fatalf("reason=%q err=%v, want target_unsupported", got, err)
 	}
@@ -77,13 +77,13 @@ func TestTargetExecutorRejectsMismatchedResponseEnvelope(t *testing.T) {
 
 	call := ai.TargetToolCall{
 		ToolCallID: "call_1",
-		TargetID:   "cp:test:env:env_a",
+		TargetID:   "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ToolName:   "file.read",
 		Arguments:  json.RawMessage(`{"file_path":"README.md"}`),
 	}
 	resp := flowerhostrpc.TargetToolResult{
 		ToolCallID: "call_1",
-		TargetID:   "cp:test:env:env_b",
+		TargetID:   "provider:https%3A%2F%2Fredeven.test:env:env_b",
 		ToolName:   "file.read",
 		Result:     map[string]any{"ok": true},
 	}

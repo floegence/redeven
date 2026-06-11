@@ -25,19 +25,84 @@ import {
   buildSSHDesktopTarget,
 } from './desktopTarget';
 
+const testAccessPoint = {
+  access_point_id: 'dev',
+  region: 'dev',
+  display_name: 'Development',
+  description: 'Development access point',
+  access_point_origin: 'https://dev.provider.example.invalid',
+  country_code: 'SG',
+  city: 'Singapore',
+  status: 'active',
+  health_status: 'healthy',
+} as const;
+
 const testProvider = normalizeDesktopControlPlaneProvider({
-  protocol_version: 'rcpp-v1',
+  protocol_version: 'rcpp-v2',
   provider_id: 'example_control_plane',
   display_name: 'Example Control Plane',
-  provider_origin: 'https://cp.example.invalid',
-  documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
+  provider_origin: 'https://provider.example.invalid',
+  documentation_url: 'https://provider.example.invalid/docs/control-plane-providers',
+  access_points: [testAccessPoint],
 });
 
 function providerRuntimeState(envPublicID = 'env_demo') {
   return {
-    controlplane_base_url: 'https://cp.example.invalid',
+    provider_origin: 'https://provider.example.invalid',
+    controlplane_base_url: testAccessPoint.access_point_origin,
     controlplane_provider_id: 'example_control_plane',
     env_public_id: envPublicID,
+  };
+}
+
+function testControlPlaneSummary(input: Readonly<{
+  runtimeHealth?: boolean;
+  lastSeenAtUnixMS?: number;
+}> = {}) {
+  const lastSeenAtUnixMS = input.lastSeenAtUnixMS ?? 456;
+  return {
+    provider: testProvider!,
+    account: {
+      provider_id: 'example_control_plane',
+      provider_origin: 'https://provider.example.invalid',
+      display_name: 'Example Control Plane',
+      user_public_id: 'user_demo',
+      user_display_name: 'Demo User',
+      authorization_expires_at_unix_ms: Date.now() + 60_000,
+    },
+    display_label: 'Demo Control Plane',
+    environments: [{
+      provider_id: 'example_control_plane',
+      provider_origin: 'https://provider.example.invalid',
+      env_public_id: 'env_demo',
+      region: testAccessPoint.region,
+      access_point_id: testAccessPoint.access_point_id,
+      access_point_origin: testAccessPoint.access_point_origin,
+      label: 'Demo Environment',
+      environment_url: `${testAccessPoint.access_point_origin}/env/env_demo`,
+      description: 'team sandbox',
+      namespace_public_id: 'ns_demo',
+      namespace_name: 'Demo Team',
+      status: 'online',
+      lifecycle_status: 'active',
+      last_seen_at_unix_ms: lastSeenAtUnixMS,
+      ...(input.runtimeHealth === true ? {
+        runtime_health: {
+          env_public_id: 'env_demo',
+          runtime_status: 'online' as const,
+          observed_at_unix_ms: lastSeenAtUnixMS,
+          last_seen_at_unix_ms: lastSeenAtUnixMS,
+          offline_reason_code: '',
+          offline_reason: '',
+        },
+      } : {}),
+    }],
+    last_synced_at_ms: Date.now(),
+    sync_state: 'ready' as const,
+    last_sync_attempt_at_ms: Date.now(),
+    last_sync_error_code: '',
+    last_sync_error_message: '',
+    catalog_freshness: 'fresh' as const,
   };
 }
 
@@ -182,7 +247,7 @@ describe('desktopWelcomeState', () => {
           createdAtMS: 10,
         }),
         provider_environments: [
-          testProviderEnvironment('https://cp.example.invalid', 'env_provider', {
+          testProviderEnvironment('https://provider.example.invalid', 'env_provider', {
             label: 'Provider',
             pinned: true,
             createdAtMS: 30,
@@ -272,8 +337,14 @@ describe('desktopWelcomeState', () => {
           },
         ],
         control_plane_refresh_tokens: {
-          'https://cp.example.invalid|example_control_plane': 'refresh-123',
+          'https://provider.example.invalid|example_control_plane': 'refresh-123',
         },
+        provider_environments: testProvider ? [
+          testProviderEnvironment(testProvider.provider_origin, 'env_demo', {
+            providerID: testProvider.provider_id,
+            label: 'Demo Environment',
+          }),
+        ] : [],
         control_planes: testProvider ? [{
           provider: testProvider,
           account: {
@@ -284,18 +355,6 @@ describe('desktopWelcomeState', () => {
             user_display_name: 'Demo User',
             authorization_expires_at_unix_ms: 1000,
           },
-          environments: [{
-            provider_id: testProvider.provider_id,
-            provider_origin: testProvider.provider_origin,
-            env_public_id: 'env_demo',
-            label: 'Demo Environment',
-            description: 'team sandbox',
-            namespace_public_id: 'ns_demo',
-            namespace_name: 'Demo Team',
-            status: 'online',
-            lifecycle_status: 'active',
-            last_seen_at_unix_ms: 123,
-          }],
           display_label: 'Demo Control Plane',
           last_synced_at_ms: 500,
         }] : [],
@@ -358,12 +417,12 @@ describe('desktopWelcomeState', () => {
         local_environment_close_behavior: 'detaches',
       }),
       expect.objectContaining({
-        id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+        id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
         kind: 'provider_environment',
         label: 'Demo Environment',
         category: 'provider',
         is_open: false,
-        provider_origin: 'https://cp.example.invalid',
+        provider_origin: 'https://provider.example.invalid',
         provider_id: 'example_control_plane',
         env_public_id: 'env_demo',
       }),
@@ -398,7 +457,7 @@ describe('desktopWelcomeState', () => {
       expect.objectContaining({
         provider: expect.objectContaining({
           provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.example.invalid',
+          provider_origin: 'https://provider.example.invalid',
         }),
         account: expect.objectContaining({
           user_public_id: 'user_demo',
@@ -491,7 +550,7 @@ describe('desktopWelcomeState', () => {
     if (!testProvider) {
       throw new Error('missing test provider');
     }
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
       lastUsedAtMS: 1778750000000,
     });
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -499,7 +558,7 @@ describe('desktopWelcomeState', () => {
         provider_environments: [providerEnvironment],
       }),
       openSessions: [{
-        session_key: controlPlaneDesktopSessionKey('https://cp.example.invalid', 'env_demo'),
+        session_key: controlPlaneDesktopSessionKey('https://provider.example.invalid', 'env_demo'),
         target: buildProviderEnvironmentDesktopTarget(providerEnvironment, { route: 'remote_desktop' }),
         lifecycle: 'open',
         entry_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
@@ -523,7 +582,11 @@ describe('desktopWelcomeState', () => {
           provider_id: testProvider.provider_id,
           provider_origin: testProvider.provider_origin,
           env_public_id: 'env_demo',
+          region: testAccessPoint.region,
+          access_point_id: testAccessPoint.access_point_id,
+          access_point_origin: testAccessPoint.access_point_origin,
           label: 'Demo Environment',
+          environment_url: `${testAccessPoint.access_point_origin}/env/env_demo`,
           description: 'team sandbox',
           namespace_public_id: 'ns_demo',
           namespace_name: 'Demo Team',
@@ -557,7 +620,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('projects provider startup time only when the open remote session reports it', () => {
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo', {
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo', {
       lastUsedAtMS: 1778750000000,
     });
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -565,7 +628,7 @@ describe('desktopWelcomeState', () => {
         provider_environments: [providerEnvironment],
       }),
       openSessions: [{
-        session_key: controlPlaneDesktopSessionKey('https://cp.example.invalid', 'env_demo'),
+        session_key: controlPlaneDesktopSessionKey('https://provider.example.invalid', 'env_demo'),
         target: buildProviderEnvironmentDesktopTarget(providerEnvironment, { route: 'remote_desktop' }),
         lifecycle: 'open',
         entry_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
@@ -964,7 +1027,7 @@ describe('desktopWelcomeState', () => {
 
   it('keeps a running SSH runtime connectable before a window is open', () => {
     const sshID = 'ssh:devbox:2222:key_agent:remote_default';
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         saved_ssh_environments: [{
@@ -1083,7 +1146,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('marks provider environment candidates as occupied per selected runtime target', () => {
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
     const localService = {
       protocol_version: 'redeven-runtime-v1',
       service_owner: 'desktop' as const,
@@ -1109,9 +1172,10 @@ describe('desktopWelcomeState', () => {
         desktop_model_source: { state: 'unsupported' as const },
         provider_link: {
           state: 'linked' as const,
-          provider_origin: 'https://cp.example.invalid',
+          provider_origin: 'https://provider.example.invalid',
           provider_id: 'example_control_plane',
           env_public_id: 'env_demo',
+          access_point_origin: testAccessPoint.access_point_origin,
           remote_enabled: true,
         },
       },
@@ -1164,7 +1228,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('marks provider-reported online environments as occupied when no local runtime identity matches', () => {
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
     const freshSyncAt = Date.now();
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
@@ -1173,33 +1237,12 @@ describe('desktopWelcomeState', () => {
           provider: testProvider!,
           account: {
             provider_id: 'example_control_plane',
-            provider_origin: 'https://cp.example.invalid',
+            provider_origin: 'https://provider.example.invalid',
             display_name: 'Demo Control Plane',
             user_public_id: 'user_demo',
             user_display_name: 'Demo User',
             authorization_expires_at_unix_ms: freshSyncAt + 60_000,
           },
-          environments: [{
-            provider_id: 'example_control_plane',
-            provider_origin: 'https://cp.example.invalid',
-            env_public_id: 'env_demo',
-            label: 'Demo Environment',
-            environment_url: 'https://cp.example.invalid/env/env_demo',
-            description: 'team sandbox',
-            namespace_public_id: 'ns_demo',
-            namespace_name: 'Demo Team',
-            status: 'online',
-            lifecycle_status: 'active',
-            last_seen_at_unix_ms: freshSyncAt,
-            runtime_health: {
-              env_public_id: 'env_demo',
-              runtime_status: 'online',
-              observed_at_unix_ms: freshSyncAt,
-              last_seen_at_unix_ms: freshSyncAt,
-              offline_reason_code: '',
-              offline_reason: '',
-            },
-          }],
           display_label: 'Demo Control Plane',
           last_synced_at_ms: freshSyncAt,
         }],
@@ -1208,7 +1251,7 @@ describe('desktopWelcomeState', () => {
         provider: testProvider!,
         account: {
           provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.example.invalid',
+          provider_origin: 'https://provider.example.invalid',
           display_name: 'Demo Control Plane',
           user_public_id: 'user_demo',
           user_display_name: 'Demo User',
@@ -1216,10 +1259,13 @@ describe('desktopWelcomeState', () => {
         },
         environments: [{
           provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.example.invalid',
+          provider_origin: 'https://provider.example.invalid',
           env_public_id: 'env_demo',
+          region: testAccessPoint.region,
+          access_point_id: testAccessPoint.access_point_id,
+          access_point_origin: testAccessPoint.access_point_origin,
           label: 'Demo Environment',
-          environment_url: 'https://cp.example.invalid/env/env_demo',
+          environment_url: `${testAccessPoint.access_point_origin}/env/env_demo`,
           description: 'team sandbox',
           namespace_public_id: 'ns_demo',
           namespace_name: 'Demo Team',
@@ -1255,7 +1301,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('keeps stale provider candidate routes unknown instead of offline', () => {
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment(),
@@ -1265,7 +1311,7 @@ describe('desktopWelcomeState', () => {
         provider: testProvider!,
         account: {
           provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.example.invalid',
+          provider_origin: 'https://provider.example.invalid',
           display_name: 'Demo Control Plane',
           user_public_id: 'user_demo',
           user_display_name: 'Demo User',
@@ -1292,7 +1338,7 @@ describe('desktopWelcomeState', () => {
   it('projects saved Local and SSH container runtime targets without leaking runtime-control material', () => {
     const localContainerID = 'local:container:docker:dev-container:63ce185e';
     const sshContainerID = 'ssh:container:devbox%3A2222:docker:dev-container:63ce185e';
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
     const sshHostAccess = {
       kind: 'ssh_host' as const,
       ssh: {
@@ -2077,8 +2123,8 @@ describe('desktopWelcomeState', () => {
   });
 
   it('keeps provider cards remote-only while summarizing linked managed runtimes', () => {
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
-    const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
+    const managedControlPlane = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo');
     const local = testLocalEnvironment({
       access: testLocalAccess({
         local_ui_bind: 'localhost:23998',
@@ -2113,9 +2159,10 @@ describe('desktopWelcomeState', () => {
             desktop_model_source: { state: 'unsupported' },
             provider_link: {
               state: 'linked',
-              provider_origin: 'https://cp.example.invalid',
+              provider_origin: 'https://provider.example.invalid',
               provider_id: 'example_control_plane',
               env_public_id: 'env_demo',
+          access_point_origin: testAccessPoint.access_point_origin,
               remote_enabled: true,
             },
           },
@@ -2130,7 +2177,7 @@ describe('desktopWelcomeState', () => {
       openSessions: [
         testLocalEnvironmentSession(managedControlPlane, 'http://localhost:23998/', 'open', providerRuntimeState('env_demo')),
         {
-          session_key: controlPlaneDesktopSessionKey('https://cp.example.invalid', 'env_demo'),
+          session_key: controlPlaneDesktopSessionKey('https://provider.example.invalid', 'env_demo'),
           target: remoteTarget,
           lifecycle: 'open',
           entry_url: 'https://env.example.invalid/_redeven_boot/#redeven=abc',
@@ -2141,51 +2188,7 @@ describe('desktopWelcomeState', () => {
           },
         },
       ],
-      controlPlanes: [{
-        provider: {
-          protocol_version: 'rcpp-v1',
-          provider_id: 'example_control_plane',
-          display_name: 'Example Control Plane',
-          provider_origin: 'https://cp.example.invalid',
-          documentation_url: 'https://cp.example.invalid/docs/control-plane-providers',
-        },
-        account: {
-          provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.example.invalid',
-          display_name: 'Example Control Plane',
-          user_public_id: 'user_demo',
-          user_display_name: 'Demo User',
-          authorization_expires_at_unix_ms: Date.now() + 60_000,
-        },
-        display_label: 'Demo Control Plane',
-        environments: [{
-          provider_id: 'example_control_plane',
-          provider_origin: 'https://cp.example.invalid',
-          env_public_id: 'env_demo',
-          label: 'Demo Environment',
-          environment_url: 'https://cp.example.invalid/env/env_demo',
-          description: 'team sandbox',
-          namespace_public_id: 'ns_demo',
-          namespace_name: 'Demo Team',
-          status: 'online',
-          lifecycle_status: 'active',
-          last_seen_at_unix_ms: 456,
-          runtime_health: {
-            env_public_id: 'env_demo',
-            runtime_status: 'online',
-            observed_at_unix_ms: 456,
-            last_seen_at_unix_ms: 456,
-            offline_reason_code: '',
-            offline_reason: '',
-          },
-        }],
-        last_synced_at_ms: Date.now(),
-        sync_state: 'ready',
-        last_sync_attempt_at_ms: Date.now(),
-        last_sync_error_code: '',
-        last_sync_error_message: '',
-        catalog_freshness: 'fresh',
-      }],
+      controlPlanes: [testControlPlaneSummary({ runtimeHealth: true })],
     });
 
     expect(snapshot.environments.find((entry) => (
@@ -2245,31 +2248,52 @@ describe('desktopWelcomeState', () => {
             user_display_name: 'Demo User',
             authorization_expires_at_unix_ms: now + 60_000,
           },
-          environments: [{
-            provider_id: provider.provider_id,
-            provider_origin: provider.provider_origin,
-            env_public_id: 'env_demo',
-            label: 'Demo Environment',
-            environment_url: 'https://cp.example.invalid/env/env_demo',
-            description: 'team sandbox',
-            namespace_public_id: 'ns_demo',
-            namespace_name: 'Demo Team',
-            status: 'offline',
-            lifecycle_status: 'active',
-            last_seen_at_unix_ms: 456,
-            runtime_health: {
-              env_public_id: 'env_demo',
-              runtime_status: 'offline',
-              observed_at_unix_ms: 789,
-              last_seen_at_unix_ms: 456,
-              offline_reason_code: 'runtime_disconnected',
-              offline_reason: 'The runtime disconnected from this provider.',
-            },
-          }],
           display_label: 'Demo Control Plane',
           last_synced_at_ms: now,
         }],
       }),
+      controlPlanes: [{
+        provider,
+        account: {
+          provider_id: provider.provider_id,
+          provider_origin: provider.provider_origin,
+          display_name: 'Example Control Plane',
+          user_public_id: 'user_demo',
+          user_display_name: 'Demo User',
+          authorization_expires_at_unix_ms: now + 60_000,
+        },
+        environments: [{
+          provider_id: provider.provider_id,
+          provider_origin: provider.provider_origin,
+          env_public_id: 'env_demo',
+          region: testAccessPoint.region,
+          access_point_id: testAccessPoint.access_point_id,
+          access_point_origin: testAccessPoint.access_point_origin,
+          label: 'Demo Environment',
+          environment_url: `${testAccessPoint.access_point_origin}/env/env_demo`,
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'offline',
+          lifecycle_status: 'active',
+          last_seen_at_unix_ms: 456,
+          runtime_health: {
+            env_public_id: 'env_demo',
+            runtime_status: 'offline',
+            observed_at_unix_ms: 789,
+            last_seen_at_unix_ms: 456,
+            offline_reason_code: 'runtime_disconnected',
+            offline_reason: 'The runtime disconnected from this provider.',
+          },
+        }],
+        display_label: 'Demo Control Plane',
+        last_synced_at_ms: now,
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: now,
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }],
     });
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
@@ -2286,8 +2310,8 @@ describe('desktopWelcomeState', () => {
   });
 
   it('threads Control Plane runtime state into provider environment library entries', () => {
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
-    const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo', {
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
+    const managedControlPlane = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo', {
       localHosting: false,
     });
     const snapshot = buildDesktopWelcomeSnapshot({
@@ -2303,28 +2327,50 @@ describe('desktopWelcomeState', () => {
             user_display_name: 'Demo User',
             authorization_expires_at_unix_ms: 1000,
           },
-          environments: [{
-            provider_id: testProvider.provider_id,
-            provider_origin: testProvider.provider_origin,
-            env_public_id: 'env_demo',
-            label: 'Demo Environment',
-            description: 'team sandbox',
-            namespace_public_id: 'ns_demo',
-            namespace_name: 'Demo Team',
-            status: 'offline',
-            lifecycle_status: 'suspended',
-            last_seen_at_unix_ms: 456,
-          }],
           display_label: 'Demo Control Plane',
           last_synced_at_ms: 500,
         }] : [],
       }),
+      controlPlanes: testProvider ? [{
+        provider: testProvider,
+        account: {
+          provider_id: testProvider.provider_id,
+          provider_origin: testProvider.provider_origin,
+          display_name: testProvider.display_name,
+          user_public_id: 'user_demo',
+          user_display_name: 'Demo User',
+          authorization_expires_at_unix_ms: 1000,
+        },
+        environments: [{
+          provider_id: testProvider.provider_id,
+          provider_origin: testProvider.provider_origin,
+          env_public_id: 'env_demo',
+          region: testAccessPoint.region,
+          access_point_id: testAccessPoint.access_point_id,
+          access_point_origin: testAccessPoint.access_point_origin,
+          label: 'Demo Environment',
+          environment_url: `${testAccessPoint.access_point_origin}/env/env_demo`,
+          description: 'team sandbox',
+          namespace_public_id: 'ns_demo',
+          namespace_name: 'Demo Team',
+          status: 'offline',
+          lifecycle_status: 'suspended',
+          last_seen_at_unix_ms: 456,
+        }],
+        display_label: 'Demo Control Plane',
+        last_synced_at_ms: 500,
+        sync_state: 'ready',
+        last_sync_attempt_at_ms: 500,
+        last_sync_error_code: '',
+        last_sync_error_message: '',
+        catalog_freshness: 'fresh',
+      }] : [],
     });
 
     expect(snapshot.environments).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: providerEnvironment.id,
-        provider_origin: 'https://cp.example.invalid',
+        provider_origin: 'https://provider.example.invalid',
         provider_id: 'example_control_plane',
         env_public_id: 'env_demo',
         control_plane_label: 'Demo Control Plane',
@@ -2341,8 +2387,8 @@ describe('desktopWelcomeState', () => {
     if (!testProvider) {
       throw new Error('Expected normalized test provider.');
     }
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
-    const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
+    const managedControlPlane = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo');
     const summaryAccount = {
       provider_id: testProvider.provider_id,
       provider_origin: testProvider.provider_origin,
@@ -2355,7 +2401,11 @@ describe('desktopWelcomeState', () => {
       provider_id: testProvider.provider_id,
       provider_origin: testProvider.provider_origin,
       env_public_id: 'env_demo',
+      region: testAccessPoint.region,
+      access_point_id: testAccessPoint.access_point_id,
+      access_point_origin: testAccessPoint.access_point_origin,
       label: 'Demo Environment',
+      environment_url: `${testAccessPoint.access_point_origin}/env/env_demo`,
       description: 'team sandbox',
       namespace_public_id: 'ns_demo',
       namespace_name: 'Demo Team',
@@ -2371,7 +2421,6 @@ describe('desktopWelcomeState', () => {
         control_planes: [{
           provider: testProvider,
           account: summaryAccount,
-          environments: [summaryEnvironment],
           display_label: 'Demo Control Plane',
           last_synced_at_ms: freshSyncAt,
         }],
@@ -2427,7 +2476,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('describes provider-link targets on Local cards without exposing unbound runtimes through provider cards', () => {
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment({
@@ -2487,7 +2536,7 @@ describe('desktopWelcomeState', () => {
         provider_environment_candidates: expect.arrayContaining([
           expect.objectContaining({
             provider_environment_id: providerEnvironment.id,
-            provider_origin: 'https://cp.example.invalid',
+            provider_origin: 'https://provider.example.invalid',
             provider_id: 'example_control_plane',
             env_public_id: 'env_demo',
           }),
@@ -2497,7 +2546,7 @@ describe('desktopWelcomeState', () => {
   });
 
   it('keeps local-only linked runtimes connectable from Local cards while Provider cards stay remote-only', () => {
-    const providerEnvironment = testProviderEnvironment('https://cp.example.invalid', 'env_demo');
+    const providerEnvironment = testProviderEnvironment('https://provider.example.invalid', 'env_demo');
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences({
         local_environment: testLocalEnvironment({
@@ -2537,9 +2586,10 @@ describe('desktopWelcomeState', () => {
                 desktop_model_source: { state: 'unsupported' },
                 provider_link: {
                   state: 'linked',
-                  provider_origin: 'https://cp.example.invalid',
+                  provider_origin: 'https://provider.example.invalid',
                   provider_id: 'example_control_plane',
                   env_public_id: 'env_demo',
+                  access_point_origin: testAccessPoint.access_point_origin,
                   remote_enabled: false,
                 },
               },
@@ -2575,9 +2625,10 @@ describe('desktopWelcomeState', () => {
               desktop_model_source: { state: 'unsupported' },
               provider_link: {
                 state: 'linked',
-                provider_origin: 'https://cp.example.invalid',
+                provider_origin: 'https://provider.example.invalid',
                 provider_id: 'example_control_plane',
                 env_public_id: 'env_demo',
+                access_point_origin: testAccessPoint.access_point_origin,
                 remote_enabled: false,
               },
             },
@@ -2610,7 +2661,7 @@ describe('desktopWelcomeState', () => {
     expect(localEntry?.provider_runtime_link_target).toMatchObject({
       id: 'local:local',
       provider_link_state: 'linked',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
       provider_connection_state: 'error',
@@ -2625,7 +2676,7 @@ describe('desktopWelcomeState', () => {
     if (!testProvider) {
       throw new Error('Expected normalized test provider.');
     }
-    const managedControlPlane = testProviderBoundLocalEnvironment('https://cp.example.invalid', 'env_demo');
+    const managedControlPlane = testProviderBoundLocalEnvironment('https://provider.example.invalid', 'env_demo');
     const summaryAccount = {
       provider_id: testProvider.provider_id,
       provider_origin: testProvider.provider_origin,
@@ -2642,7 +2693,6 @@ describe('desktopWelcomeState', () => {
         control_planes: [{
           provider: testProvider,
           account: summaryAccount,
-          environments: [],
           display_label: 'Demo Control Plane',
           last_synced_at_ms: freshSyncAt,
         }],
@@ -2674,9 +2724,10 @@ describe('desktopWelcomeState', () => {
               desktop_model_source: { state: 'unsupported' },
               provider_link: {
                 state: 'linked',
-                provider_origin: 'https://cp.example.invalid',
+                provider_origin: 'https://provider.example.invalid',
                 provider_id: 'example_control_plane',
                 env_public_id: 'env_demo',
+                access_point_origin: testAccessPoint.access_point_origin,
                 remote_enabled: true,
               },
             },
@@ -2705,7 +2756,7 @@ describe('desktopWelcomeState', () => {
       provider_runtime_link_target: expect.objectContaining({
         id: 'local:local',
         provider_link_state: 'linked',
-        provider_origin: 'https://cp.example.invalid',
+        provider_origin: 'https://provider.example.invalid',
         provider_id: 'example_control_plane',
         env_public_id: 'env_demo',
         can_disconnect_provider: true,
