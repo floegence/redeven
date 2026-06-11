@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	flsessiontree "github.com/floegence/floret/sessiontree"
 	_ "modernc.org/sqlite"
 )
 
@@ -316,11 +316,7 @@ WHERE endpoint_id = ?
 	if len(out) == 0 {
 		return out, "", nil
 	}
-	out = applyFloretThreadListOptions(out, flsessiontree.ListThreadsOptions{
-		Limit:          limit + 1,
-		AfterCreatedAt: unixMsTime(cursor.CreatedAtUnixMs),
-		AfterID:        cursor.ThreadID,
-	})
+	out = applyThreadListOptions(out, threadListOptions{Limit: limit + 1, Cursor: cursor})
 	if len(out) == 0 {
 		return out, "", nil
 	}
@@ -336,29 +332,38 @@ WHERE endpoint_id = ?
 	return out, next, nil
 }
 
-func applyFloretThreadListOptions(threads []Thread, opts flsessiontree.ListThreadsOptions) []Thread {
-	byID := make(map[string]Thread, len(threads))
-	metas := make([]flsessiontree.ThreadMeta, 0, len(threads))
+type threadListOptions struct {
+	Limit  int
+	Cursor ThreadsCursor
+}
+
+func applyThreadListOptions(threads []Thread, opts threadListOptions) []Thread {
+	out := make([]Thread, 0, len(threads))
 	for _, thread := range threads {
 		thread.ThreadID = strings.TrimSpace(thread.ThreadID)
 		if thread.ThreadID == "" {
 			continue
 		}
-		byID[thread.ThreadID] = thread
-		metas = append(metas, flsessiontree.ThreadMeta{
-			ID:        thread.ThreadID,
-			CreatedAt: unixMsTime(thread.CreatedAtUnixMs),
-			UpdatedAt: unixMsTime(thread.UpdatedAtUnixMs),
-		})
-	}
-	metas = flsessiontree.ApplyThreadListOptions(metas, opts)
-	out := make([]Thread, 0, len(metas))
-	for _, meta := range metas {
-		thread, ok := byID[meta.ID]
-		if !ok {
-			continue
-		}
 		out = append(out, thread)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].CreatedAtUnixMs != out[j].CreatedAtUnixMs {
+			return out[i].CreatedAtUnixMs > out[j].CreatedAtUnixMs
+		}
+		return out[i].ThreadID < out[j].ThreadID
+	})
+	if opts.Cursor.CreatedAtUnixMs > 0 && strings.TrimSpace(opts.Cursor.ThreadID) != "" {
+		cursorID := strings.TrimSpace(opts.Cursor.ThreadID)
+		filtered := out[:0]
+		for _, thread := range out {
+			if thread.CreatedAtUnixMs < opts.Cursor.CreatedAtUnixMs || (thread.CreatedAtUnixMs == opts.Cursor.CreatedAtUnixMs && strings.TrimSpace(thread.ThreadID) > cursorID) {
+				filtered = append(filtered, thread)
+			}
+		}
+		out = filtered
+	}
+	if opts.Limit > 0 && len(out) > opts.Limit {
+		out = out[:opts.Limit]
 	}
 	return out
 }

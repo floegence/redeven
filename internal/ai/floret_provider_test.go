@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	flprovider "github.com/floegence/floret/provider"
-	flsession "github.com/floegence/floret/session"
+	flruntime "github.com/floegence/floret/runtime"
+	fltools "github.com/floegence/floret/tools"
 )
 
 type recordingFlowerProvider struct {
@@ -32,18 +32,17 @@ func TestFloretProviderAdapter_DisableReasoningControlsProviderRequest(t *testin
 		"",
 		nil,
 		nil,
-		nil,
 	)
-	stream, err := adapter.Stream(context.Background(), flprovider.Request{
-		SessionID:        "thread",
-		LogicalRequestID: "thread_title",
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		ThreadID:         "thread",
+		PromptScopeID:    "thread",
 		Model:            "deepseek-v4-pro",
-		Messages:         []flsession.Message{{Role: flsession.User, Content: "请生成标题"}},
+		Messages:         []flruntime.ModelMessage{{Role: "user", Content: "请生成标题"}},
 		MaxOutputTokens:  64,
 		DisableReasoning: true,
 	})
 	if err != nil {
-		t.Fatalf("Stream: %v", err)
+		t.Fatalf("StreamModel: %v", err)
 	}
 	for range stream {
 	}
@@ -58,15 +57,81 @@ func TestFloretProviderAdapter_DisableReasoningControlsProviderRequest(t *testin
 	}
 }
 
+func TestFloretProviderAdapter_UsesProjectedPreviousState(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingFlowerProvider{}
+	adapter := newFloretProviderAdapter(
+		recorder,
+		"openai",
+		"gpt-5-mini",
+		"act",
+		ProviderControls{},
+		TurnBudgets{MaxSteps: 1},
+		"",
+		[]flruntime.TranscriptMessage{{Role: "user", Content: "resume turn"}},
+		nil,
+	)
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		Step:            1,
+		Model:           "gpt-5-mini",
+		Messages:        []flruntime.ModelMessage{{Role: "user", Content: "full history"}},
+		PreviousState:   &flruntime.ModelState{Kind: providerContinuationKindOpenAIResponses, ID: "resp_prev"},
+		MaxOutputTokens: 64,
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	for range stream {
+	}
+	if recorder.req.ProviderControls.PreviousResponseID != "resp_prev" {
+		t.Fatalf("PreviousResponseID=%q, want resp_prev", recorder.req.ProviderControls.PreviousResponseID)
+	}
+	if len(recorder.req.Messages) != 1 || messageTextForFloret(recorder.req.Messages[0], true) != "resume turn" {
+		t.Fatalf("messages=%#v, want projected resume history", recorder.req.Messages)
+	}
+}
+
+func TestFloretProviderAdapter_KeepsLastNonNilProviderState(t *testing.T) {
+	t.Parallel()
+
+	adapter := newFloretProviderAdapter(
+		&recordingFlowerProvider{},
+		"openai",
+		"gpt-5-mini",
+		"act",
+		ProviderControls{},
+		TurnBudgets{MaxSteps: 1},
+		"",
+		nil,
+		nil,
+	)
+	adapter.setCurrentProviderState(&flruntime.ModelState{Kind: providerContinuationKindOpenAIResponses, ID: "resp_keep"})
+	adapter.setCurrentProviderState(nil)
+	got := adapter.currentProviderState()
+	if got == nil || got.ID != "resp_keep" {
+		t.Fatalf("currentProviderState=%#v, want last non-nil state", got)
+	}
+}
+
+func TestFloretMessagesToFlowerRejectsUnsupportedRole(t *testing.T) {
+	t.Parallel()
+
+	_, err := floretMessagesToFlower([]flruntime.ModelMessage{{Role: "developer", Content: "unsupported"}})
+	if err == nil || !strings.Contains(err.Error(), "unsupported Floret model message role") {
+		t.Fatalf("error=%v, want unsupported role rejection", err)
+	}
+}
+
 func TestFloretMessagesToFlower_GroupsConsecutiveAssistantToolCalls(t *testing.T) {
 	t.Parallel()
 
-	got, err := floretMessagesToFlower([]flsession.Message{
-		{Role: flsession.User, Content: "inspect and edit"},
-		{Role: flsession.Assistant, Content: "tool_call", Reasoning: "use both tools", ToolCallID: "todo-1", ToolName: "write_todos", ToolArgs: `{"todos":[{"content":"inspect","status":"in_progress"}]}`},
-		{Role: flsession.Assistant, Content: "tool_call", Reasoning: "use both tools", ToolCallID: "shell-1", ToolName: "terminal.exec", ToolArgs: `{"command":"mkdir -p smoke"}`},
-		{Role: flsession.Tool, Content: `{"status":"success","summary":"updated todos"}`, ToolCallID: "todo-1", ToolName: "write_todos"},
-		{Role: flsession.Tool, Content: `{"status":"success","summary":"created directory"}`, ToolCallID: "shell-1", ToolName: "terminal.exec"},
+	got, err := floretMessagesToFlower([]flruntime.ModelMessage{
+		{Role: "user", Content: "inspect and edit"},
+		{Role: "assistant", Content: "tool_call", Reasoning: "use both tools", ToolCallID: "todo-1", ToolName: "write_todos", ToolArgs: `{"todos":[{"content":"inspect","status":"in_progress"}]}`},
+		{Role: "assistant", Content: "tool_call", Reasoning: "use both tools", ToolCallID: "shell-1", ToolName: "terminal.exec", ToolArgs: `{"command":"mkdir -p smoke"}`},
+		{Role: "tool", Content: `{"status":"success","summary":"updated todos"}`, ToolCallID: "todo-1", ToolName: "write_todos"},
+		{Role: "tool", Content: `{"status":"success","summary":"created directory"}`, ToolCallID: "shell-1", ToolName: "terminal.exec"},
 	})
 	if err != nil {
 		t.Fatalf("floretMessagesToFlower: %v", err)
@@ -103,11 +168,11 @@ func TestFloretMessagesToFlower_GroupsConsecutiveAssistantToolCalls(t *testing.T
 func TestFloretMessagesToFlower_ProjectsControlToolHistoryAsProviderSafeText(t *testing.T) {
 	t.Parallel()
 
-	got, err := floretMessagesToFlower([]flsession.Message{
-		{Role: flsession.User, Content: "ask a structured question"},
-		{Role: flsession.Assistant, Content: "tool_call", ToolCallID: "ask-1", ToolName: "ask_user", ToolArgs: `{"questions":[]}`},
-		{Role: flsession.Tool, Content: "ask_user was rejected because reason_code is missing or invalid.", ToolCallID: "ask-1", ToolName: "ask_user"},
-		{Role: flsession.Assistant, Content: "tool_call", ToolCallID: "ask-2", ToolName: "ask_user", ToolArgs: `{"questions":[{"id":"q1"}]}`},
+	got, err := floretMessagesToFlower([]flruntime.ModelMessage{
+		{Role: "user", Content: "ask a structured question"},
+		{Role: "assistant", Content: "tool_call", ToolCallID: "ask-1", ToolName: "ask_user", ToolArgs: `{"questions":[]}`},
+		{Role: "tool", Content: "ask_user was rejected because reason_code is missing or invalid.", ToolCallID: "ask-1", ToolName: "ask_user"},
+		{Role: "assistant", Content: "tool_call", ToolCallID: "ask-2", ToolName: "ask_user", ToolArgs: `{"questions":[{"id":"q1"}]}`},
 	})
 	if err != nil {
 		t.Fatalf("floretMessagesToFlower: %v", err)
@@ -138,9 +203,9 @@ func TestFloretMessagesToFlower_ProjectsControlToolHistoryAsProviderSafeText(t *
 func TestFloretMessagesToFlower_RejectsOrphanOrdinaryToolResult(t *testing.T) {
 	t.Parallel()
 
-	_, err := floretMessagesToFlower([]flsession.Message{
-		{Role: flsession.User, Content: "continue"},
-		{Role: flsession.Tool, Content: `{"status":"success"}`, ToolCallID: "read-1", ToolName: "file.read"},
+	_, err := floretMessagesToFlower([]flruntime.ModelMessage{
+		{Role: "user", Content: "continue"},
+		{Role: "tool", Content: `{"status":"success"}`, ToolCallID: "read-1", ToolName: "file.read"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "without a preceding assistant tool call") {
 		t.Fatalf("error=%v, want orphan ordinary tool result rejection", err)
@@ -150,8 +215,8 @@ func TestFloretMessagesToFlower_RejectsOrphanOrdinaryToolResult(t *testing.T) {
 func TestFloretMessagesToFlowerRejectsInvalidToolArgs(t *testing.T) {
 	t.Parallel()
 
-	_, err := floretMessagesToFlower([]flsession.Message{{
-		Role:       flsession.Assistant,
+	_, err := floretMessagesToFlower([]flruntime.ModelMessage{{
+		Role:       "assistant",
 		ToolCallID: "call-1",
 		ToolName:   "terminal.exec",
 		ToolArgs:   `{"command":`,
@@ -164,7 +229,7 @@ func TestFloretMessagesToFlowerRejectsInvalidToolArgs(t *testing.T) {
 func TestFlowerToolsFromFloretRejectsInvalidSchema(t *testing.T) {
 	t.Parallel()
 
-	_, err := flowerToolsFromFloret([]flprovider.ToolDefinition{{
+	_, err := flowerToolsFromFloret([]fltools.ToolDefinition{{
 		Name:        "terminal.exec",
 		InputSchema: map[string]any{"bad": func() {}},
 	}})

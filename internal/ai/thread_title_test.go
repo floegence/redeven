@@ -281,10 +281,10 @@ func TestScheduleAutoThreadTitle_PopulatesUntitledThread(t *testing.T) {
 			}
 			payloadText := string(rawPayload)
 			if !strings.Contains(payloadText, "You generate concise thread titles for an interactive AI agent.") {
-				t.Fatalf("provider request did not use Floret title prompt: %s", payloadText)
+				t.Fatalf("provider request did not use thread title prompt: %s", payloadText)
 			}
 			if strings.Contains(payloadText, "thread_title_v1") || strings.Contains(payloadText, "Return JSON only") {
-				t.Fatalf("provider request retained old Redeven title prompt: %s", payloadText)
+				t.Fatalf("provider request used unsupported JSON title prompt: %s", payloadText)
 			}
 			return
 		}

@@ -3,96 +3,95 @@ package ai
 import (
 	"strings"
 
-	flevent "github.com/floegence/floret/event"
+	flruntime "github.com/floegence/floret/runtime"
+)
+
+const (
+	floretEventStepStart             = "step_start"
+	floretEventProviderRequest       = "provider_request"
+	floretEventProviderFinish        = "provider_finish"
+	floretEventProviderRetry         = "provider_retry"
+	floretEventContextCompact        = "context_compact"
+	floretEventContextContinue       = "context_continue"
+	floretEventBudgetExceeded        = "budget_exceeded"
+	floretEventStepEnd               = "step_end"
+	floretEventRunEnd                = "run_end"
+	floretEventToolApprovalRequested = "tool_approval_requested"
+	floretEventToolApprovalApproved  = "tool_approval_approved"
+	floretEventToolApprovalRejected  = "tool_approval_rejected"
+	floretEventToolApprovalTimedOut  = "tool_approval_timed_out"
+	floretEventToolApprovalCanceled  = "tool_approval_canceled"
 )
 
 type floretEventSink struct {
 	run *run
 }
 
-func (s floretEventSink) Emit(ev flevent.Event) {
+func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r := s.run
 	if r == nil {
 		return
 	}
 	switch ev.Type {
-	case flevent.ProviderDelta:
-		if ev.Message != "" {
-			_ = r.appendTextDelta(ev.Message)
-		}
-	case flevent.ProviderReasoning:
-		if ev.Message != "" {
-			r.touchActivity()
-			_ = r.appendThinkingDelta(ev.Message)
-			r.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{
-				"delta": truncateRunes(ev.Message, 2000),
-			})
-		}
-	case flevent.ProviderRequest:
+	case floretEventProviderRequest:
 		r.persistRunEvent("floret.provider.request", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index": ev.Step,
 			"provider":   strings.TrimSpace(ev.Provider),
 			"model":      strings.TrimSpace(ev.Model),
 			"metadata":   ev.Metadata,
 		})
-	case flevent.ProviderFinish:
+	case floretEventProviderFinish:
 		r.persistRunEvent("floret.provider.finish", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":      ev.Step,
-			"finish_reason":   strings.TrimSpace(ev.FinishReason),
-			"raw_finish":      strings.TrimSpace(ev.RawFinishReason),
-			"finish_inferred": ev.FinishInferred,
+			"step_index":    ev.Step,
+			"finish_reason": strings.TrimSpace(ev.FinishReason),
+			"metadata":      ev.Metadata,
 		})
-	case flevent.ProviderRetry:
+	case floretEventProviderRetry:
 		r.persistRunEvent("floret.provider.retry", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index": ev.Step,
 			"message":    strings.TrimSpace(ev.Message),
 		})
-	case flevent.ContextCompact:
+	case floretEventContextCompact:
 		payload := map[string]any{
 			"step_index": ev.Step,
 			"message":    strings.TrimSpace(ev.Message),
 			"metadata":   ev.Metadata,
-			"metrics":    ev.Metrics,
 		}
-		if strings.TrimSpace(ev.Err) != "" {
-			payload["error"] = strings.TrimSpace(ev.Err)
+		if strings.TrimSpace(ev.Error) != "" {
+			payload["error"] = strings.TrimSpace(ev.Error)
 		}
 		if strings.TrimSpace(ev.Result) != "" {
 			payload["result"] = strings.TrimSpace(ev.Result)
 		}
 		r.emitContextCompactionEvent("context.compaction.floret", payload)
-	case flevent.ContextContinue:
+	case floretEventContextContinue:
 		r.persistRunEvent("floret.context.continue", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":          ev.Step,
-			"continuation_reason": strings.TrimSpace(ev.ContinuationReason),
-			"message":             strings.TrimSpace(ev.Message),
-			"detail":              strings.TrimSpace(ev.Result),
+			"step_index": ev.Step,
+			"message":    strings.TrimSpace(ev.Message),
+			"detail":     strings.TrimSpace(ev.Result),
+			"metadata":   ev.Metadata,
 		})
-	case flevent.BudgetExceeded:
+	case floretEventBudgetExceeded:
 		r.persistRunEvent("floret.budget.exceeded", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index": ev.Step,
-			"metrics":    ev.Metrics,
+			"metadata":   ev.Metadata,
 		})
-	case flevent.StepStart:
+	case floretEventStepStart:
 		r.touchActivity()
-	case flevent.StepEnd:
+	case floretEventStepEnd:
 		r.persistRunEvent("floret.step.end", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":          ev.Step,
-			"metrics":             ev.Metrics,
-			"completion_reason":   strings.TrimSpace(ev.CompletionReason),
-			"continuation_reason": strings.TrimSpace(ev.ContinuationReason),
-			"finish_reason":       strings.TrimSpace(ev.FinishReason),
+			"step_index":    ev.Step,
+			"finish_reason": strings.TrimSpace(ev.FinishReason),
+			"metadata":      ev.Metadata,
 		})
-	case flevent.RunEnd:
+	case floretEventRunEnd:
 		r.persistRunEvent("floret.run.end", RealtimeStreamKindLifecycle, map[string]any{
-			"metrics":             ev.Metrics,
-			"completion_reason":   strings.TrimSpace(ev.CompletionReason),
-			"continuation_reason": strings.TrimSpace(ev.ContinuationReason),
-			"finish_reason":       strings.TrimSpace(ev.FinishReason),
-			"error":               strings.TrimSpace(ev.Err),
+			"finish_reason": strings.TrimSpace(ev.FinishReason),
+			"error":         strings.TrimSpace(ev.Error),
+			"metadata":      ev.Metadata,
 		})
-	case flevent.ToolApprovalRequested, flevent.ToolApprovalApproved, flevent.ToolApprovalRejected, flevent.ToolApprovalTimedOut, flevent.ToolApprovalCanceled:
-		r.persistRunEvent("floret."+string(ev.Type), RealtimeStreamKindLifecycle, map[string]any{
+	case floretEventToolApprovalRequested, floretEventToolApprovalApproved, floretEventToolApprovalRejected, floretEventToolApprovalTimedOut, floretEventToolApprovalCanceled:
+		r.persistRunEvent("floret."+ev.Type, RealtimeStreamKindLifecycle, map[string]any{
 			"tool_id":   strings.TrimSpace(ev.ToolID),
 			"tool_name": strings.TrimSpace(ev.ToolName),
 			"metadata":  ev.Metadata,
