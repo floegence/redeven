@@ -645,23 +645,25 @@ function TerminalLoadingPane(props: {
   message?: string;
   progressLabel?: string;
   dataStage?: string;
+  tone?: 'system' | 'terminal';
 }) {
   const i18n = useI18n();
   const message = createMemo(() => String(props.message ?? '').trim() || i18n.t('terminal.creatingMessage'));
   const progressLabel = createMemo(() => String(props.progressLabel ?? '').trim() || i18n.t('terminal.creatingAria'));
   const dataStage = createMemo(() => String(props.dataStage ?? '').trim() || 'creating');
+  const tone = createMemo(() => props.tone ?? 'terminal');
 
   return (
     <div
-      class="redeven-loading-curtain redeven-terminal-loading-curtain"
+      class={`redeven-loading-curtain${tone() === 'terminal' ? ' redeven-terminal-loading-curtain' : ''}`}
       role="status"
       aria-live="polite"
       aria-busy="true"
       data-redeven-loading-curtain-surface="component"
       data-redeven-loading-curtain-stage={dataStage()}
-      style={{
+      style={tone() === 'terminal' ? {
         'background-color': 'var(--redeven-terminal-loading-background, var(--background))',
-      }}
+      } : undefined}
     >
       <div class="redeven-loading-curtain__panel">
         <div class="redeven-loading-curtain__eyebrow">{i18n.t('terminal.creatingEyebrow')}</div>
@@ -3751,6 +3753,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               message={i18n.t('terminal.loadingSessions')}
               progressLabel={i18n.t('terminal.loadingSessions')}
               dataStage="sessions"
+              tone="system"
             />
           </Show>
 
