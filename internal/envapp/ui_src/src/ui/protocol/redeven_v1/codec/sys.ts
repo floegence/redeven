@@ -130,6 +130,7 @@ function fromWireRuntimeServiceProviderLinkBinding(
     providerOrigin: String(record.provider_origin ?? '').trim() || undefined,
     providerId: String(record.provider_id ?? '').trim() || undefined,
     envPublicId: String(record.env_public_id ?? '').trim() || undefined,
+    accessPointOrigin: String(record.access_point_origin ?? '').trim() || undefined,
     localEnvironmentPublicId: String(record.local_environment_public_id ?? '').trim() || undefined,
     bindingGeneration: normalizeCount(record.binding_generation) || undefined,
     remoteEnabled: state === 'linked',

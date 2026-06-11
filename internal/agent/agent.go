@@ -729,7 +729,9 @@ func sendRuntimeDisconnectWithCaller(ctx context.Context, caller rpcutil.Caller,
 	}
 	resp, err := rpcutil.CallJSON[runtimeDisconnectReq, runtimeDisconnectResp](ctx, caller, controlRPCTypeRuntimeDisconnect, &runtimeDisconnectReq{
 		EnvPublicID:              snapshot.EnvPublicID,
+		ProviderOrigin:           snapshot.ProviderOrigin,
 		ProviderID:               snapshot.ProviderID,
+		AccessPointOrigin:        snapshot.AccessPointOrigin,
 		LocalEnvironmentPublicID: snapshot.LocalEnvironmentPublicID,
 		BindingGeneration:        snapshot.BindingGeneration,
 		AgentInstanceID:          snapshot.AgentInstanceID,
@@ -1417,7 +1419,9 @@ type credentialRenewResp struct {
 
 type runtimeDisconnectReq struct {
 	EnvPublicID              string `json:"env_public_id,omitempty"`
+	ProviderOrigin           string `json:"provider_origin"`
 	ProviderID               string `json:"provider_id"`
+	AccessPointOrigin        string `json:"access_point_origin"`
 	LocalEnvironmentPublicID string `json:"local_environment_public_id"`
 	BindingGeneration        int64  `json:"binding_generation"`
 	AgentInstanceID          string `json:"agent_instance_id,omitempty"`

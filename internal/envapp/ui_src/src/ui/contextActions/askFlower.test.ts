@@ -44,7 +44,7 @@ describe('Ask Flower context actions', () => {
       source: 'file_browser',
       suggestedWorkingDirAbs: '/workspace/repo',
       executionContext: {
-        current_target_id: 'cp:https%3A%2F%2Fexample.test:env:env_a',
+        current_target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
         source_env_public_id: 'env_a',
         host_hint: 'auto',
         session_source: 'provider_environment',
@@ -60,7 +60,7 @@ describe('Ask Flower context actions', () => {
     });
 
     expect(action.execution_context).toEqual({
-      current_target_id: 'cp:https%3A%2F%2Fexample.test:env:env_a',
+      current_target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
       source_env_public_id: 'env_a',
       host_hint: 'auto',
       session_source: 'provider_environment',

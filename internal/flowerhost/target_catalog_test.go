@@ -16,7 +16,7 @@ func TestTargetCatalogProjectsDesktopTargetCache(t *testing.T) {
 	}
 	store := NewConfigStore(paths)
 	metadata, err := json.Marshal(map[string]any{
-		"provider_origin":           "https://region.example.test",
+		"provider_origin":           "https://redeven.test",
 		"provider_id":               "redeven_reference",
 		"env_public_id":             "env_a",
 		"namespace_public_id":       "ns_1",
@@ -31,9 +31,9 @@ func TestTargetCatalogProjectsDesktopTargetCache(t *testing.T) {
 	if err := store.SaveTargetCache(context.Background(), TargetCache{
 		Version: 1,
 		Entries: []TargetCacheEntry{{
-			TargetID:         "cp:https%3A%2F%2Fregion.example.test:env:env_a",
+			TargetID:         "provider:https%3A%2F%2Fredeven.test:env:env_a",
 			Label:            "staging-api",
-			TargetURL:        "https://region.example.test/environments/env_a",
+			TargetURL:        "https://dev.redeven.test/environments/env_a",
 			LastSeenAtUnixMs: 456,
 			Metadata:         metadata,
 		}},
@@ -49,7 +49,7 @@ func TestTargetCatalogProjectsDesktopTargetCache(t *testing.T) {
 		t.Fatalf("targets=%#v, want one", targets)
 	}
 	target := targets[0]
-	if target.TargetID != "cp:https%3A%2F%2Fregion.example.test:env:env_a" || target.EnvPublicID != "env_a" {
+	if target.TargetID != "provider:https%3A%2F%2Fredeven.test:env:env_a" || target.EnvPublicID != "env_a" {
 		t.Fatalf("target identity=%#v", target)
 	}
 	if target.Label != "staging-api" || target.ConnectState != TargetConnectConnectable {
@@ -70,7 +70,7 @@ func TestTargetCacheSanitizesLegacySensitiveMetadata(t *testing.T) {
 	store := NewConfigStore(paths)
 	metadata, err := json.Marshal(map[string]any{
 		"target_kind":               TargetKindProviderEnvironment,
-		"provider_origin":           "https://region.example.test",
+		"provider_origin":           "https://redeven.test",
 		"provider_id":               "redeven_reference",
 		"env_public_id":             "env_a",
 		"namespace_public_id":       "ns_1",
@@ -95,7 +95,7 @@ func TestTargetCacheSanitizesLegacySensitiveMetadata(t *testing.T) {
 	if err := store.SaveTargetCache(context.Background(), TargetCache{
 		Version: 1,
 		Entries: []TargetCacheEntry{{
-			TargetID: "cp:test:env:env_a",
+			TargetID: "provider:https%3A%2F%2Fredeven.test:env:env_a",
 			Label:    "env-a",
 			Metadata: metadata,
 		}},
@@ -129,7 +129,7 @@ func TestTargetCacheSanitizesLegacySensitiveMetadata(t *testing.T) {
 	if err := json.Unmarshal(cache.Entries[0].Metadata, &sanitized); err != nil {
 		t.Fatalf("Unmarshal sanitized metadata: %v", err)
 	}
-	if sanitized["provider_origin"] != "https://region.example.test" || sanitized["env_public_id"] != "env_a" {
+	if sanitized["provider_origin"] != "https://redeven.test" || sanitized["env_public_id"] != "env_a" {
 		t.Fatalf("sanitized identity metadata=%#v", sanitized)
 	}
 	capabilities, ok := sanitized["capabilities"].([]any)
@@ -146,14 +146,14 @@ func TestTargetCatalogDoesNotInferCapabilities(t *testing.T) {
 	t.Parallel()
 
 	metadata, err := json.Marshal(map[string]any{
-		"provider_origin": "https://region.example.test",
+		"provider_origin": "https://redeven.test",
 		"env_public_id":   "env_a",
 	})
 	if err != nil {
 		t.Fatalf("Marshal metadata: %v", err)
 	}
 	target := targetRefFromCacheEntry(TargetCacheEntry{
-		TargetID: "cp:test:env:env_a",
+		TargetID: "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		Label:    "env-a",
 		Metadata: metadata,
 	})
@@ -166,9 +166,9 @@ func TestTargetCatalogDoesNotInferIdentityFromDisplayURL(t *testing.T) {
 	t.Parallel()
 
 	target := targetRefFromCacheEntry(TargetCacheEntry{
-		TargetID:  "cp:test:env:env_a",
+		TargetID:  "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		Label:     "env-a",
-		TargetURL: "https://region.example.test/environments/env_a",
+		TargetURL: "https://dev.redeven.test/environments/env_a",
 	})
 	if target.ProviderOrigin != "" || target.EnvPublicID != "" {
 		t.Fatalf("target identity should come from metadata only: %#v", target)

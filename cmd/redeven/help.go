@@ -9,7 +9,8 @@ import (
 )
 
 const (
-	exampleControlplaneURL = "https://region.example.invalid"
+	exampleProviderOrigin  = "https://redeven.test"
+	exampleControlplaneURL = "https://dev.redeven.test"
 	exampleEnvID           = "env_123"
 	exampleBootstrapTicket = "<bootstrap-ticket>"
 	examplePasswordEnv     = "REDEVEN_LOCAL_UI_PASSWORD"
@@ -45,21 +46,21 @@ Commands:
 
 Quick start:
   Bind the Local Environment once, then run:
-    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
+    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
     redeven run --mode hybrid
 
   Local-only mode on this device:
     redeven run --mode local
 
   Expose Local UI to another trusted device on your local network:
-    %[4]s=replace-with-a-long-password \
-    redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[4]s
+    %[5]s=replace-with-a-long-password \
+    redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[5]s
 
   One-shot Local Environment rebind without a separate bootstrap step:
-    redeven run --mode hybrid --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
+    redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
 
-Run %[5]s for detailed usage.
-`, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket, examplePasswordEnv, "`redeven help <command>`"), "\n")
+Run %[6]s for detailed usage.
+`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket, examplePasswordEnv, "`redeven help <command>`"), "\n")
 }
 
 func desktopBridgeHelpText() string {
@@ -154,10 +155,11 @@ redeven bootstrap
 Bind the Local Environment to a control-plane environment.
 
 Usage:
-  redeven bootstrap --controlplane <url> --env-id <env_public_id> [ticket flags] [flags]
+  redeven bootstrap --provider-origin <url> --controlplane <url> --env-id <env_public_id> [ticket flags] [flags]
 
 Required flags:
-  --controlplane <url>              Controlplane base URL.
+  --provider-origin <url>           Provider authority origin.
+  --controlplane <url>              Access point controlplane base URL.
   --env-id <env_public_id>          Environment public ID.
   One bootstrap ticket:
     --bootstrap-ticket <ticket>       One-time bootstrap ticket. "Bearer <ticket>" is also accepted.
@@ -183,18 +185,18 @@ Writes by default:
 
 Examples:
   Minimal bootstrap:
-    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
+    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
 
   Bootstrap from a one-time desktop handoff ticket:
-    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
+    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
 
   Bootstrap with a stricter permission preset:
-    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s --permission-policy read_only
+    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s --permission-policy read_only
 
   Bootstrap, then start the runtime:
-    redeven bootstrap --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
+    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
     redeven run --mode hybrid
-`, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket), "\n")
+`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket), "\n")
 }
 
 func runHelpText() string {
@@ -213,8 +215,8 @@ Modes:
   desktop   Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.
 
 Bootstrap rules:
-  - Recommended flow: run %[4]s once, then use %[5]s.
-  - One-shot flow: pass --controlplane, --env-id, and a one-time bootstrap ticket to %[5]s.
+  - Recommended flow: run %[5]s once, then use %[6]s.
+  - One-shot flow: pass --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket to %[6]s.
 
 Local Environment state rules:
   - Redeven uses one Local Environment state at ~/.redeven/local-environment.
@@ -236,13 +238,14 @@ Rich terminal controls:
   - Enter on Sessions opens the active-session view; type to filter by user, app, channel, or target.
   - Enter on Logs opens the full runtime log view; Esc returns to the overview.
   - Enter on Control plane connects or disconnects when remote config is valid.
-  - If remote config is missing, Enter opens Control URL, Environment, and bootstrap ticket setup fields.
+  - If remote config is missing, Enter opens Provider, Access Point, Environment, and bootstrap ticket setup fields.
 
 Flags:
   --mode <remote|hybrid|local|desktop>
                                     Run mode (default: remote).
   --local-ui-bind <host:port>       Local UI bind address (default: localhost:23998).
-  --controlplane <url>              Controlplane base URL for one-shot bootstrap.
+  --provider-origin <url>           Provider authority origin for one-shot bootstrap.
+  --controlplane <url>              Access point controlplane base URL for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
   --bootstrap-ticket <ticket>       One-time bootstrap ticket for one-shot bootstrap.
   --bootstrap-ticket-env <env_name> Read the bootstrap ticket from an environment variable.
@@ -271,15 +274,15 @@ Examples:
     redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0
 
   Hybrid mode exposed to another trusted device on your local network:
-    %[7]s=replace-with-a-long-password \
-    redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[7]s
+    %[8]s=replace-with-a-long-password \
+    redeven run --mode hybrid --local-ui-bind 0.0.0.0:24000 --password-env %[8]s
 
   One-shot hybrid run without a separate bootstrap step:
-    redeven run --mode hybrid --controlplane %[1]s --env-id %[2]s --bootstrap-ticket %[3]s
+    redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket %[4]s
 
   One-shot desktop handoff run with a bootstrap ticket:
-    %[6]s=%[3]s redeven run --mode desktop --desktop-managed --presentation machine --controlplane %[1]s --env-id %[2]s --bootstrap-ticket-env %[6]s
-`, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket, "`redeven bootstrap`", "`redeven run`", exampleBootstrapEnv, examplePasswordEnv), "\n")
+    %[7]s=%[4]s redeven run --mode desktop --desktop-managed --presentation machine --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-env %[7]s
+`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, exampleBootstrapTicket, "`redeven bootstrap`", "`redeven run`", exampleBootstrapEnv, examplePasswordEnv), "\n")
 }
 
 func searchHelpText() string {

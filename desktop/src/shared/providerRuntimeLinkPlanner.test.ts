@@ -10,11 +10,12 @@ import {
 
 function provider(): DesktopProviderEnvironmentCandidate {
   return {
-    provider_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+    provider_environment_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
     label: 'Demo Environment',
-    provider_origin: 'https://cp.example.invalid',
+    provider_origin: 'https://redeven.test',
     provider_id: 'example_control_plane',
     env_public_id: 'env_demo',
+    access_point_origin: 'https://dev.redeven.test',
     provider_label: 'Demo Provider',
     route_state: 'online',
     occupancy: { state: 'available' },
@@ -85,9 +86,10 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
   it('reports already linked for the same provider environment', () => {
     const binding = {
       state: 'linked' as const,
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://redeven.test',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
+      access_point_origin: 'https://dev.redeven.test',
       remote_enabled: true,
     };
     expect(buildDesktopProviderRuntimeLinkPlan(target({
@@ -105,9 +107,10 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
   it('treats a matching saved link without an active provider connection as a runtime inconsistency', () => {
     const binding = {
       state: 'linked' as const,
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://redeven.test',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
+      access_point_origin: 'https://dev.redeven.test',
       remote_enabled: false,
     };
     expect(buildDesktopProviderRuntimeLinkPlan(target({
@@ -127,9 +130,10 @@ describe('buildDesktopProviderRuntimeLinkPlan', () => {
   it('does not ask a local-only linked runtime to reconnect when the provider environment is occupied here', () => {
     const binding = {
       state: 'linked' as const,
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://redeven.test',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
+      access_point_origin: 'https://dev.redeven.test',
       remote_enabled: false,
     };
     expect(buildDesktopProviderRuntimeLinkPlan(target({

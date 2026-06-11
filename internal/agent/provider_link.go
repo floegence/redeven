@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"runtime"
 	"strings"
 	"time"
@@ -26,6 +27,49 @@ const (
 const providerDisconnectReasonUser = "user_disconnect"
 
 var errProviderControlChannelNotConnected = errors.New("provider control channel is not connected")
+
+func normalizeProviderOrigin(raw string) (string, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return "", errors.New("provider origin is required")
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return "", err
+	}
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "http" && scheme != "https" {
+		return "", fmt.Errorf("unsupported provider origin scheme: %q", parsed.Scheme)
+	}
+	if strings.TrimSpace(parsed.Host) == "" || strings.TrimSpace(parsed.Hostname()) == "" {
+		return "", errors.New("provider origin host is required")
+	}
+	if strings.TrimSpace(parsed.Path) != "" && parsed.Path != "/" {
+		return "", errors.New("provider origin must not include a path")
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+		return "", errors.New("provider origin must not include user info, query, or fragment")
+	}
+	parsed.Scheme = scheme
+	parsed.Host = strings.ToLower(strings.TrimSpace(parsed.Host))
+	parsed.Path = ""
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	parsed.User = nil
+	return strings.TrimSuffix(parsed.String(), "/"), nil
+}
+
+func normalizeAccessPointOrigin(raw string) (string, error) {
+	origin, err := normalizeProviderOrigin(raw)
+	if err != nil {
+		return "", err
+	}
+	if err := codeapp.ValidateControlplaneBaseURL(origin); err != nil {
+		return "", err
+	}
+	return origin, nil
+}
 
 type ProviderLinkError struct {
 	Code    string
@@ -54,15 +98,17 @@ func (e *ProviderLinkError) Unwrap() error {
 }
 
 type ProviderLinkRequest struct {
-	ProviderOrigin         string
-	ProviderID             string
-	EnvPublicID            string
-	BootstrapTicket        string
-	ExpectedProviderOrigin string
-	ExpectedProviderID     string
-	ExpectedEnvPublicID    string
-	ExpectedGeneration     int64
-	AllowRelinkWhenIdle    bool
+	ProviderOrigin            string
+	ProviderID                string
+	EnvPublicID               string
+	AccessPointOrigin         string
+	BootstrapTicket           string
+	ExpectedProviderOrigin    string
+	ExpectedProviderID        string
+	ExpectedEnvPublicID       string
+	ExpectedAccessPointOrigin string
+	ExpectedGeneration        int64
+	AllowRelinkWhenIdle       bool
 }
 
 type ProviderLinkResponse struct {
@@ -73,6 +119,7 @@ type providerDisconnectSnapshot struct {
 	ProviderOrigin           string
 	ProviderID               string
 	EnvPublicID              string
+	AccessPointOrigin        string
 	LocalEnvironmentPublicID string
 	BindingGeneration        int64
 	AgentInstanceID          string
@@ -111,9 +158,10 @@ func (a *Agent) providerLinkBindingLocked(errorCode string) runtimeservice.Provi
 	}
 	return runtimeservice.NormalizeProviderLinkBinding(runtimeservice.ProviderLinkBinding{
 		State:                    runtimeservice.ProviderLinkStateLinked,
-		ProviderOrigin:           a.cfg.ControlplaneBaseURL,
+		ProviderOrigin:           a.cfg.ProviderOrigin,
 		ProviderID:               a.cfg.ControlplaneProviderID,
 		EnvPublicID:              a.cfg.EnvironmentID,
+		AccessPointOrigin:        a.cfg.ControlplaneBaseURL,
 		LocalEnvironmentPublicID: a.cfg.LocalEnvironmentPublicID,
 		BindingGeneration:        a.cfg.BindingGeneration,
 		RemoteEnabled:            a.remoteEnabled,
@@ -143,20 +191,23 @@ func LocalEnvPublicIDForAgent() string {
 func providerLinkMatches(binding runtimeservice.ProviderLinkBinding, req ProviderLinkRequest) bool {
 	return strings.TrimSpace(binding.ProviderOrigin) == strings.TrimSpace(req.ProviderOrigin) &&
 		strings.TrimSpace(binding.ProviderID) == strings.TrimSpace(req.ProviderID) &&
-		strings.TrimSpace(binding.EnvPublicID) == strings.TrimSpace(req.EnvPublicID)
+		strings.TrimSpace(binding.EnvPublicID) == strings.TrimSpace(req.EnvPublicID) &&
+		strings.TrimSpace(binding.AccessPointOrigin) == strings.TrimSpace(req.AccessPointOrigin)
 }
 
 func requestedExpectedProviderLinkMatches(binding runtimeservice.ProviderLinkBinding, req ProviderLinkRequest) bool {
 	expectedOrigin := strings.TrimSpace(req.ExpectedProviderOrigin)
 	expectedProviderID := strings.TrimSpace(req.ExpectedProviderID)
 	expectedEnvID := strings.TrimSpace(req.ExpectedEnvPublicID)
+	expectedAccessPointOrigin := strings.TrimSpace(req.ExpectedAccessPointOrigin)
 	expectedGeneration := req.ExpectedGeneration
-	if expectedOrigin == "" && expectedProviderID == "" && expectedEnvID == "" && expectedGeneration <= 0 {
+	if expectedOrigin == "" && expectedProviderID == "" && expectedEnvID == "" && expectedAccessPointOrigin == "" && expectedGeneration <= 0 {
 		return true
 	}
 	return strings.TrimSpace(binding.ProviderOrigin) == expectedOrigin &&
 		strings.TrimSpace(binding.ProviderID) == expectedProviderID &&
 		strings.TrimSpace(binding.EnvPublicID) == expectedEnvID &&
+		strings.TrimSpace(binding.AccessPointOrigin) == expectedAccessPointOrigin &&
 		(expectedGeneration <= 0 || binding.BindingGeneration == expectedGeneration)
 }
 
@@ -168,9 +219,10 @@ func providerDisconnectSnapshotFromConfig(cfg *config.Config) (providerDisconnec
 		return providerDisconnectSnapshot{}, err
 	}
 	snapshot := providerDisconnectSnapshot{
-		ProviderOrigin:           strings.TrimSpace(cfg.ControlplaneBaseURL),
+		ProviderOrigin:           strings.TrimSpace(cfg.ProviderOrigin),
 		ProviderID:               strings.TrimSpace(cfg.ControlplaneProviderID),
 		EnvPublicID:              strings.TrimSpace(cfg.EnvironmentID),
+		AccessPointOrigin:        strings.TrimSpace(cfg.ControlplaneBaseURL),
 		LocalEnvironmentPublicID: strings.TrimSpace(cfg.LocalEnvironmentPublicID),
 		BindingGeneration:        cfg.BindingGeneration,
 		AgentInstanceID:          strings.TrimSpace(cfg.AgentInstanceID),
@@ -221,21 +273,37 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 		}
 	}
 	providerOrigin := strings.TrimSpace(req.ProviderOrigin)
+	accessPointOrigin := strings.TrimSpace(req.AccessPointOrigin)
 	envPublicID := strings.TrimSpace(req.EnvPublicID)
 	bootstrapTicket := strings.TrimSpace(req.BootstrapTicket)
-	if providerOrigin == "" || envPublicID == "" || bootstrapTicket == "" {
+	if providerOrigin == "" || accessPointOrigin == "" || envPublicID == "" || bootstrapTicket == "" {
 		return nil, &ProviderLinkError{
 			Code:    "PROVIDER_LINK_INVALID_REQUEST",
-			Message: "Provider origin, environment id, and bootstrap ticket are required.",
+			Message: "Provider origin, access point origin, environment id, and bootstrap ticket are required.",
 		}
 	}
-	if err := codeapp.ValidateControlplaneBaseURL(providerOrigin); err != nil {
+	normalizedProviderOrigin, err := normalizeProviderOrigin(providerOrigin)
+	if err != nil {
 		return nil, &ProviderLinkError{
 			Code:    "PROVIDER_LINK_INVALID_REQUEST",
 			Message: fmt.Sprintf("Provider origin is invalid: %v", err),
 			Err:     err,
 		}
 	}
+	normalizedAccessPointOrigin, err := normalizeAccessPointOrigin(accessPointOrigin)
+	if err != nil {
+		return nil, &ProviderLinkError{
+			Code:    "PROVIDER_LINK_INVALID_REQUEST",
+			Message: fmt.Sprintf("Access point origin is invalid: %v", err),
+			Err:     err,
+		}
+	}
+	req.ProviderOrigin = normalizedProviderOrigin
+	req.ProviderID = strings.TrimSpace(req.ProviderID)
+	req.EnvPublicID = envPublicID
+	req.AccessPointOrigin = normalizedAccessPointOrigin
+	providerOrigin = normalizedProviderOrigin
+	accessPointOrigin = normalizedAccessPointOrigin
 
 	a.mu.Lock()
 	current := a.providerLinkBindingLocked("")
@@ -260,7 +328,8 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	}
 	cfg, err := config.ResolveProviderLinkConfig(ctx, config.ProviderLinkBootstrapArgs{
 		ConfigPath:               a.configPath,
-		ControlplaneBaseURL:      providerOrigin,
+		ProviderOrigin:           providerOrigin,
+		ControlplaneBaseURL:      accessPointOrigin,
 		ControlplaneProviderID:   strings.TrimSpace(req.ProviderID),
 		EnvironmentID:            envPublicID,
 		BootstrapTicket:          bootstrapTicket,
@@ -295,7 +364,7 @@ func (a *Agent) ConnectProvider(ctx context.Context, req ProviderLinkRequest) (*
 	binding := a.enableProviderControlChannelLocked()
 	a.mu.Unlock()
 	if a.code != nil {
-		_ = a.code.SetControlplaneBaseURL(providerOrigin)
+		_ = a.code.SetControlplaneBaseURL(accessPointOrigin)
 	}
 	a.startOrRestartControlChannel()
 
@@ -327,7 +396,8 @@ func (a *Agent) providerDisconnectShouldNotifyLocked() bool {
 
 func (a *Agent) clearProviderLinkBindingLocked(snapshot providerDisconnectSnapshot) (runtimeservice.ProviderLinkBinding, error) {
 	if a.cfg == nil ||
-		strings.TrimSpace(a.cfg.ControlplaneBaseURL) != snapshot.ProviderOrigin ||
+		strings.TrimSpace(a.cfg.ProviderOrigin) != snapshot.ProviderOrigin ||
+		strings.TrimSpace(a.cfg.ControlplaneBaseURL) != snapshot.AccessPointOrigin ||
 		strings.TrimSpace(a.cfg.ControlplaneProviderID) != snapshot.ProviderID ||
 		strings.TrimSpace(a.cfg.EnvironmentID) != snapshot.EnvPublicID ||
 		strings.TrimSpace(a.cfg.LocalEnvironmentPublicID) != snapshot.LocalEnvironmentPublicID ||
@@ -338,6 +408,7 @@ func (a *Agent) clearProviderLinkBindingLocked(snapshot providerDisconnectSnapsh
 		}
 	}
 	next := *a.cfg
+	next.ProviderOrigin = ""
 	next.ControlplaneBaseURL = ""
 	next.ControlplaneProviderID = ""
 	next.EnvironmentID = ""

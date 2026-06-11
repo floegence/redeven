@@ -248,7 +248,6 @@ import {
   type DesktopLocalEnvironmentState,
 } from '../shared/desktopLocalEnvironmentState';
 import {
-  createDesktopProviderEnvironmentRecord,
   desktopProviderEnvironmentID,
   type DesktopProviderEnvironmentRecord,
 } from '../shared/desktopProviderEnvironment';
@@ -434,6 +433,8 @@ import {
   desktopControlPlaneKey,
   normalizeControlPlaneOrigin,
   type DesktopControlPlaneSummary,
+  type DesktopProviderAccessPoint,
+  type DesktopProviderEnvironment,
   type DesktopProviderEnvironmentRuntimeHealth,
 } from '../shared/controlPlaneProvider';
 import {
@@ -999,6 +1000,7 @@ function localRuntimeMatchesProvider(
       provider_origin: environment.provider_origin,
       provider_id: compact(environment.provider_id),
       env_public_id: compact(environment.env_public_id),
+      access_point_origin: environment.access_point_origin,
     },
   );
 }
@@ -1008,6 +1010,7 @@ function runtimeMatchesProvider(
   providerOrigin: string,
   providerID: string,
   envPublicID: string,
+  accessPointOrigin: string,
 ): boolean {
   return desktopRuntimeProviderBindingMatches(
     runtimeServiceProviderLinkBinding(startup?.runtime_service),
@@ -1015,6 +1018,7 @@ function runtimeMatchesProvider(
       provider_origin: providerOrigin,
       provider_id: providerID,
       env_public_id: envPublicID,
+      access_point_origin: accessPointOrigin,
     },
   );
 }
@@ -1237,8 +1241,9 @@ function runtimeTargetRecordMatchesProvider(
   providerOrigin: string,
   providerID: string,
   envPublicID: string,
+  accessPointOrigin: string,
 ): boolean {
-  return runtimeMatchesProvider(runtimeTarget.record.startup, providerOrigin, providerID, envPublicID);
+  return runtimeMatchesProvider(runtimeTarget.record.startup, providerOrigin, providerID, envPublicID, accessPointOrigin);
 }
 
 async function providerEnvironmentOccupyingRuntime(
@@ -1249,7 +1254,8 @@ async function providerEnvironmentOccupyingRuntime(
   const providerOrigin = compact(environment.provider_origin);
   const providerID = compact(environment.provider_id);
   const envPublicID = compact(environment.env_public_id);
-  if (providerOrigin === '' || providerID === '' || envPublicID === '') {
+  const accessPointOrigin = compact(environment.access_point_origin);
+  if (providerOrigin === '' || providerID === '' || envPublicID === '' || accessPointOrigin === '') {
     return null;
   }
   const records: ProviderRuntimeLinkTargetRecord[] = [];
@@ -1288,7 +1294,7 @@ async function providerEnvironmentOccupyingRuntime(
   }
   return records.find((record) => (
     record.id !== selectedRuntimeTargetID
-    && runtimeTargetRecordMatchesProvider(record, providerOrigin, providerID, envPublicID)
+    && runtimeTargetRecordMatchesProvider(record, providerOrigin, providerID, envPublicID, accessPointOrigin)
   )) ?? null;
 }
 
@@ -1405,8 +1411,10 @@ async function requestProviderDesktopSessionMaterial(
     }
   }
   const authorized = await ensureControlPlaneAccessToken(target.preferences, target.controlPlane);
+  const accessPoint = providerAccessPointForEnvironment(authorized.controlPlane, environment);
   const openSession = await requestDesktopOpenSession(
     authorized.controlPlane.provider,
+    accessPoint,
     authorized.accessToken,
     environment.env_public_id,
   );
@@ -1443,8 +1451,10 @@ async function prepareProviderRemoteOpenSession(
     throw routeFailure;
   }
   const authorized = await ensureControlPlaneAccessToken(target.preferences, target.controlPlane);
+  const accessPoint = providerAccessPointForEnvironment(authorized.controlPlane, environment);
   const openSession = await requestDesktopOpenSession(
     authorized.controlPlane.provider,
+    accessPoint,
     authorized.accessToken,
     environment.env_public_id,
   );
@@ -1587,6 +1597,7 @@ async function verifyCurrentLocalEnvironmentRuntimeRecord(
     const startup = await loadExternalLocalUIStartup(currentRecord.startup.local_ui_url, DESKTOP_RUNTIME_PROBE_TIMEOUT_MS);
     if (startup) {
       return updateLocalEnvironmentRuntimeRecordStartup(currentRecord, {
+        provider_origin: startup.provider_origin ?? currentRecord.startup.provider_origin,
         controlplane_base_url: startup.controlplane_base_url ?? currentRecord.startup.controlplane_base_url,
         controlplane_provider_id: startup.controlplane_provider_id ?? currentRecord.startup.controlplane_provider_id,
         env_public_id: startup.env_public_id ?? currentRecord.startup.env_public_id,
@@ -9401,6 +9412,94 @@ function controlPlaneRefreshToken(
   }
 }
 
+function providerAccessPointForEnvironment(
+  controlPlane: DesktopSavedControlPlane,
+  environment: DesktopProviderEnvironmentRecord,
+): DesktopSavedControlPlane['provider']['access_points'][number] {
+  const accessPoint = controlPlane.provider.access_points.find((candidate) => (
+    candidate.access_point_id === environment.access_point_id
+    && candidate.region === environment.region
+    && candidate.access_point_origin === environment.access_point_origin
+  )) ?? null;
+  if (!accessPoint) {
+    throw new Error('This provider no longer lists the environment access point. Sync the provider and try again.');
+  }
+  return accessPoint;
+}
+
+function findProviderEnvironmentForAccessPointRoute(
+  preferences: DesktopPreferences,
+  controlPlane: DesktopSavedControlPlane,
+  envPublicID: string,
+  accessPointOrigin: string,
+): DesktopProviderEnvironmentRecord | null {
+  const normalizedAccessPointOrigin = normalizeControlPlaneOrigin(accessPointOrigin);
+  const cleanEnvPublicID = compact(envPublicID);
+  return preferences.provider_environments.find((environment) => (
+    environment.provider_origin === controlPlane.provider.provider_origin
+    && environment.provider_id === controlPlane.provider.provider_id
+    && environment.env_public_id === cleanEnvPublicID
+    && environment.access_point_origin === normalizedAccessPointOrigin
+  )) ?? null;
+}
+
+type ProviderAccessPointEnvironmentSync = Readonly<{
+  environments: readonly DesktopProviderEnvironment[];
+  syncedAccessPoints: readonly DesktopProviderAccessPoint[];
+  failures: readonly Readonly<{
+    accessPoint: DesktopProviderAccessPoint;
+    error: unknown;
+  }>[];
+}>;
+
+async function fetchProviderEnvironmentsFromAccessPoints(
+  provider: DesktopSavedControlPlane['provider'],
+  accessToken: string,
+): Promise<ProviderAccessPointEnvironmentSync> {
+  const results = await Promise.all(provider.access_points.map(async (accessPoint) => {
+    try {
+      return {
+        status: 'fulfilled' as const,
+        accessPoint,
+        environments: await fetchProviderEnvironments(provider, accessPoint, accessToken),
+      };
+    } catch (error) {
+      return {
+        status: 'rejected' as const,
+        accessPoint,
+        error,
+      };
+    }
+  }));
+  const environments: DesktopProviderEnvironment[] = [];
+  const syncedAccessPoints: DesktopProviderAccessPoint[] = [];
+  const failures: ProviderAccessPointEnvironmentSync['failures'][number][] = [];
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      syncedAccessPoints.push(result.accessPoint);
+      environments.push(...result.environments);
+      continue;
+    }
+    failures.push({ accessPoint: result.accessPoint, error: result.error });
+  }
+  if (syncedAccessPoints.length === 0) {
+    const firstFailure = failures[0];
+    if (firstFailure?.error instanceof Error) {
+      throw firstFailure.error;
+    }
+    throw new Error('Desktop could not sync any provider access point.');
+  }
+  for (const failure of failures) {
+    const message = failure.error instanceof Error ? failure.error.message : String(failure.error);
+    console.warn(`[redeven:provider-sync] Access point ${failure.accessPoint.access_point_origin} did not sync: ${message}`);
+  }
+  return {
+    environments,
+    syncedAccessPoints,
+    failures,
+  };
+}
+
 function cachedControlPlaneAccessState(
   providerOrigin: string,
   providerID: string,
@@ -9566,16 +9665,44 @@ function clearControlPlaneTransientState(providerOrigin: string, providerID: str
   }
 }
 
-function controlPlaneSummary(controlPlane: DesktopSavedControlPlane): DesktopControlPlaneSummary {
-  const syncRecord = currentControlPlaneSyncRecord(controlPlane);
-  const environments = controlPlane.environments.map((environment) => ({
-    ...environment,
+function providerEnvironmentRecordAsSummary(
+  environment: DesktopProviderEnvironmentRecord,
+): DesktopProviderEnvironment {
+  const catalog = environment.remote_catalog_entry;
+  return {
+    provider_id: environment.provider_id,
+    provider_origin: environment.provider_origin,
+    env_public_id: environment.env_public_id,
+    region: environment.region,
+    access_point_id: environment.access_point_id,
+    access_point_origin: environment.access_point_origin,
+    label: environment.label,
+    environment_url: catalog?.environment_url || undefined,
+    description: catalog?.description ?? '',
+    namespace_public_id: catalog?.namespace_public_id ?? '',
+    namespace_name: catalog?.namespace_name ?? '',
+    status: catalog?.status ?? '',
+    lifecycle_status: catalog?.lifecycle_status ?? '',
+    last_seen_at_unix_ms: catalog?.last_seen_at_unix_ms ?? 0,
     runtime_health: providerEnvironmentRuntimeHealthForControlPlane(
-      controlPlane.provider.provider_origin,
-      controlPlane.provider.provider_id,
+      environment.provider_origin,
+      environment.provider_id,
       environment.env_public_id,
-    ) ?? environment.runtime_health,
-  }));
+    ) ?? undefined,
+  };
+}
+
+function controlPlaneSummary(
+  controlPlane: DesktopSavedControlPlane,
+  providerEnvironments: readonly DesktopProviderEnvironmentRecord[] = [],
+): DesktopControlPlaneSummary {
+  const syncRecord = currentControlPlaneSyncRecord(controlPlane);
+  const environments = providerEnvironments
+    .filter((environment) => (
+      environment.provider_origin === controlPlane.provider.provider_origin
+      && environment.provider_id === controlPlane.provider.provider_id
+    ))
+    .map((environment) => providerEnvironmentRecordAsSummary(environment));
   return {
     ...controlPlane,
     environments,
@@ -9588,11 +9715,14 @@ function controlPlaneSummary(controlPlane: DesktopSavedControlPlane): DesktopCon
 }
 
 function currentControlPlaneSummaries(preferences: DesktopPreferences): readonly DesktopControlPlaneSummary[] {
-  return preferences.control_planes.map((controlPlane) => controlPlaneSummary(controlPlane));
+  return preferences.control_planes.map((controlPlane) => controlPlaneSummary(controlPlane, preferences.provider_environments));
 }
 
-function controlPlaneNeedsAutoSync(controlPlane: DesktopSavedControlPlane): boolean {
-  const summary = controlPlaneSummary(controlPlane);
+function controlPlaneNeedsAutoSync(
+  controlPlane: DesktopSavedControlPlane,
+  providerEnvironments: readonly DesktopProviderEnvironmentRecord[] = [],
+): boolean {
+  const summary = controlPlaneSummary(controlPlane, providerEnvironments);
   if (summary.sync_state === 'syncing' || summary.sync_state === 'auth_required') {
     return false;
   }
@@ -9641,7 +9771,7 @@ async function syncVisibleControlPlanesIfNeeded(options: Readonly<{ force?: bool
   }
   const preferences = await loadDesktopPreferencesCached();
   const tasks = preferences.control_planes.flatMap((controlPlane) => {
-    if (!options.force && !controlPlaneNeedsAutoSync(controlPlane)) {
+    if (!options.force && !controlPlaneNeedsAutoSync(controlPlane, preferences.provider_environments)) {
       return [];
     }
     return [syncSavedControlPlaneAccountWithState(
@@ -9670,12 +9800,35 @@ async function refreshProviderEnvironmentRuntimeHealth(
     throw new Error('This provider is no longer saved in Desktop.');
   }
   const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
-  const runtimeHealth = await queryProviderEnvironmentRuntimeHealth(
-    authorized.controlPlane.provider,
-    authorized.accessToken,
-    { env_public_ids: cleanEnvPublicIDs },
-  );
-  upsertProviderRuntimeHealth(providerOrigin, providerID, runtimeHealth);
+  const environmentsByAccessPoint = new Map<string, DesktopProviderEnvironmentRecord[]>();
+  for (const environment of authorized.preferences.provider_environments) {
+    if (
+      environment.provider_origin !== authorized.controlPlane.provider.provider_origin
+      || environment.provider_id !== authorized.controlPlane.provider.provider_id
+      || !cleanEnvPublicIDs.includes(environment.env_public_id)
+    ) {
+      continue;
+    }
+    const key = `${environment.access_point_id}\n${environment.access_point_origin}`;
+    environmentsByAccessPoint.set(key, [
+      ...(environmentsByAccessPoint.get(key) ?? []),
+      environment,
+    ]);
+  }
+  const runtimeHealthByAccessPoint = await Promise.all([...environmentsByAccessPoint.values()].map(async (environments) => {
+    const firstEnvironment = environments[0];
+    if (!firstEnvironment) {
+      return [];
+    }
+    const accessPoint = providerAccessPointForEnvironment(authorized.controlPlane, firstEnvironment);
+    return queryProviderEnvironmentRuntimeHealth(
+      authorized.controlPlane.provider,
+      accessPoint,
+      authorized.accessToken,
+      { env_public_ids: environments.map((environment) => environment.env_public_id) },
+    );
+  }));
+  upsertProviderRuntimeHealth(providerOrigin, providerID, runtimeHealthByAccessPoint.flat());
 }
 
 async function syncLinkedProviderRuntimeHealthFromService(
@@ -9702,10 +9855,14 @@ async function syncLinkedProviderRuntimeHealthFromService(
 async function refreshAllProviderEnvironmentRuntimeHealth(): Promise<void> {
   const preferences = await loadDesktopPreferencesCached();
   await Promise.all(preferences.control_planes.map(async (controlPlane) => {
+    const environments = preferences.provider_environments.filter((environment) => (
+      environment.provider_origin === controlPlane.provider.provider_origin
+      && environment.provider_id === controlPlane.provider.provider_id
+    ));
     await refreshProviderEnvironmentRuntimeHealth(
       controlPlane.provider.provider_origin,
       controlPlane.provider.provider_id,
-      controlPlane.environments.map((environment) => environment.env_public_id),
+      environments.map((environment) => environment.env_public_id),
     );
   }));
 }
@@ -9770,6 +9927,7 @@ async function startControlPlaneAuthorization(args: Readonly<{
   providerOrigin: string;
   expectedProviderID?: string;
   requestedEnvPublicID?: string;
+  requestedAccessPointOrigin?: string;
   label?: string;
   displayLabel?: string;
 }>): Promise<PendingControlPlaneAuthorization> {
@@ -9782,6 +9940,7 @@ async function startControlPlaneAuthorization(args: Readonly<{
     providerOrigin: provider.provider_origin,
     providerID: provider.provider_id,
     requestedEnvPublicID: args.requestedEnvPublicID,
+    requestedAccessPointOrigin: args.requestedAccessPointOrigin,
     label: args.label,
     displayLabel: args.displayLabel,
   });
@@ -9810,32 +9969,38 @@ async function saveAuthorizedControlPlane(
     authorization_code: authorizationCode,
     code_verifier: codeVerifier,
   });
+  const authorizedProvider = {
+    ...provider,
+    access_points: exchange.access_points,
+  };
   rememberControlPlaneAccessState(
-    provider.provider_origin,
-    provider.provider_id,
+    authorizedProvider.provider_origin,
+    authorizedProvider.provider_id,
     exchange.access_token,
     exchange.access_expires_at_unix_ms,
     exchange.authorization_expires_at_unix_ms,
   );
+  const environmentSync = await fetchProviderEnvironmentsFromAccessPoints(authorizedProvider, exchange.access_token);
   const nextPreferences = upsertSavedControlPlane(preferences, {
-    provider,
+    provider: authorizedProvider,
     account: exchange.account,
-    environments: exchange.environments,
+    environments: environmentSync.environments,
+    synced_access_points: environmentSync.syncedAccessPoints,
     display_label: compact(displayLabel) || undefined,
     last_synced_at_ms: Date.now(),
     refresh_token: exchange.refresh_token,
   });
-  const controlPlane = savedControlPlaneByIdentity(nextPreferences, provider.provider_origin, provider.provider_id);
+  const controlPlane = savedControlPlaneByIdentity(nextPreferences, authorizedProvider.provider_origin, authorizedProvider.provider_id);
   if (!controlPlane) {
     throw new Error('Desktop failed to save the provider account.');
   }
   upsertProviderRuntimeHealth(
-    provider.provider_origin,
-    provider.provider_id,
-    exchange.environments.flatMap((environment) => environment.runtime_health ? [environment.runtime_health] : []),
+    authorizedProvider.provider_origin,
+    authorizedProvider.provider_id,
+    environmentSync.environments.flatMap((environment) => environment.runtime_health ? [environment.runtime_health] : []),
   );
   await persistDesktopPreferences(nextPreferences);
-  setControlPlaneSyncRecord(provider.provider_origin, provider.provider_id, {
+  setControlPlaneSyncRecord(authorizedProvider.provider_origin, authorizedProvider.provider_id, {
     sync_state: 'ready',
     last_sync_attempt_at_ms: controlPlane.last_synced_at_ms,
     last_sync_error_code: '',
@@ -9883,15 +10048,16 @@ async function syncSavedControlPlaneAccount(
     refreshed.authorization_expires_at_unix_ms,
   );
 
-  const [account, environments] = await Promise.all([
+  const [account, environmentSync] = await Promise.all([
     fetchProviderAccount(provider, refreshed.access_token),
-    fetchProviderEnvironments(provider, refreshed.access_token),
+    fetchProviderEnvironmentsFromAccessPoints(provider, refreshed.access_token),
   ]);
   assertCurrentSubject();
   const nextPreferences = upsertSavedControlPlane(preferences, {
     provider,
     account,
-    environments,
+    environments: environmentSync.environments,
+    synced_access_points: environmentSync.syncedAccessPoints,
     last_synced_at_ms: Date.now(),
     refresh_token: refreshToken,
   });
@@ -9902,7 +10068,7 @@ async function syncSavedControlPlaneAccount(
   upsertProviderRuntimeHealth(
     provider.provider_origin,
     provider.provider_id,
-    environments.flatMap((environment) => environment.runtime_health ? [environment.runtime_health] : []),
+    environmentSync.environments.flatMap((environment) => environment.runtime_health ? [environment.runtime_health] : []),
   );
   await persistDesktopPreferences(nextPreferences);
   return {
@@ -9933,7 +10099,7 @@ async function syncSavedControlPlaneAccountWithState(
       throw new Error('This provider is no longer saved in Desktop.');
     }
 
-    const summary = controlPlaneSummary(controlPlane);
+    const summary = controlPlaneSummary(controlPlane, preferences.provider_environments);
     if (!options.force && summary.catalog_freshness === 'fresh' && summary.sync_state === 'ready') {
       return {
         preferences,
@@ -10028,7 +10194,6 @@ async function ensureControlPlaneAccessToken(
       ...controlPlane.account,
       authorization_expires_at_unix_ms: refreshed.authorization_expires_at_unix_ms,
     },
-    environments: controlPlane.environments,
     last_synced_at_ms: controlPlane.last_synced_at_ms,
     refresh_token: refreshToken,
   });
@@ -10044,17 +10209,6 @@ async function ensureControlPlaneAccessToken(
   };
 }
 
-function controlPlaneEnvironmentLabel(
-  controlPlane: DesktopSavedControlPlane | null,
-  envPublicID: string,
-  fallbackLabel = '',
-): string {
-  const cleanEnvPublicID = String(envPublicID ?? '').trim();
-  const cleanFallback = String(fallbackLabel ?? '').trim();
-  const environment = controlPlane?.environments.find((entry) => entry.env_public_id === cleanEnvPublicID) ?? null;
-  return environment?.label || cleanFallback || cleanEnvPublicID;
-}
-
 function controlPlaneRouteSnapshot(
   preferences: DesktopPreferences,
   providerOrigin: string,
@@ -10063,7 +10217,7 @@ function controlPlaneRouteSnapshot(
 ): Readonly<{
   controlPlane: DesktopSavedControlPlane | null;
   summary: DesktopControlPlaneSummary | null;
-  environment: DesktopSavedControlPlane['environments'][number] | null;
+  environment: DesktopProviderEnvironment | null;
   remoteRouteState: DesktopProviderRemoteRouteState;
 }> {
   const controlPlane = savedControlPlaneByIdentity(preferences, providerOrigin, providerID);
@@ -10075,7 +10229,7 @@ function controlPlaneRouteSnapshot(
       remoteRouteState: 'auth_required',
     };
   }
-  const summary = controlPlaneSummary(controlPlane);
+  const summary = controlPlaneSummary(controlPlane, preferences.provider_environments);
   const environment = summary.environments.find((entry) => entry.env_public_id === envPublicID) ?? null;
   return {
     controlPlane,
@@ -11139,12 +11293,10 @@ async function openProviderEnvironmentWithOpenSession(args: Readonly<{
   const providerEnvironment = findProviderEnvironmentByID(
     preferences,
     desktopProviderEnvironmentID(providerOrigin, args.envPublicID),
-  ) ?? createDesktopProviderEnvironmentRecord(providerOrigin, args.envPublicID, {
-    providerID,
-    label: controlPlaneEnvironmentLabel(controlPlane, args.envPublicID, args.label),
-    remoteDesktopSupported: true,
-    remoteWebSupported: true,
-  });
+  );
+  if (!providerEnvironment || providerEnvironment.provider_id !== providerID) {
+    throw new Error('Desktop could not find this provider environment. Sync the provider and try again.');
+  }
   return openProviderRemoteEnvironmentRecord(preferences, providerEnvironment, {
     remoteSessionURL,
     stealAppFocus: true,
@@ -13135,18 +13287,21 @@ async function connectProviderRuntimeFromLauncher(
       provider_origin: providerSession.controlPlane.provider.provider_origin,
       provider_id: providerSession.controlPlane.provider.provider_id,
       env_public_id: environment.env_public_id,
+      access_point_origin: environment.access_point_origin,
       bootstrap_ticket: providerSession.bootstrapTicket,
       expected_current_binding: currentBinding.state === 'linked'
         ? {
             provider_origin: currentBinding.provider_origin,
             provider_id: currentBinding.provider_id,
             env_public_id: currentBinding.env_public_id,
+            access_point_origin: currentBinding.access_point_origin,
             binding_generation: currentBinding.binding_generation,
           }
         : undefined,
     });
     updateProviderRuntimeTargetStartup(runtimeTarget, {
-      controlplane_base_url: linked.binding.provider_origin,
+      provider_origin: linked.binding.provider_origin,
+      controlplane_base_url: linked.binding.access_point_origin,
       controlplane_provider_id: linked.binding.provider_id,
       env_public_id: linked.binding.env_public_id,
       effective_run_mode: linked.runtime_service.effective_run_mode,
@@ -13182,6 +13337,7 @@ async function disconnectProviderRuntimeFromLauncher(
         provider_origin: candidate.provider_origin,
         provider_id: candidate.provider_id,
         env_public_id: candidate.env_public_id,
+        access_point_origin: candidate.access_point_origin,
       })
         ? candidate
         : null;
@@ -13190,6 +13346,7 @@ async function disconnectProviderRuntimeFromLauncher(
       provider_origin: candidate.provider_origin,
       provider_id: candidate.provider_id,
       env_public_id: candidate.env_public_id,
+      access_point_origin: candidate.access_point_origin,
     })) ?? null;
   })();
   if (!runtimeTarget || !runtimeRecord?.startup.runtime_control) {
@@ -13215,6 +13372,7 @@ async function disconnectProviderRuntimeFromLauncher(
   try {
     const unlinked = await disconnectProviderLink(runtimeRecord.startup.runtime_control);
     updateProviderRuntimeTargetStartup(runtimeTarget, {
+      provider_origin: '',
       controlplane_base_url: '',
       controlplane_provider_id: '',
       env_public_id: '',
@@ -15634,6 +15792,7 @@ type DesktopDeepLinkRequest =
       provider_origin: string;
       provider_id?: string;
       env_public_id: string;
+      access_point_origin: string;
       label?: string;
     }>
   | Readonly<{
@@ -15668,9 +15827,10 @@ function parseDesktopDeepLink(rawURL: string): DesktopDeepLinkRequest | null {
 
     if (parsed.hostname === 'control-plane' && parsed.pathname === '/open') {
       const providerOrigin = String(parsed.searchParams.get('provider_origin') ?? '').trim();
+      const accessPointOrigin = String(parsed.searchParams.get('access_point_origin') ?? '').trim();
       const envPublicID = String(parsed.searchParams.get('env_public_id') ?? '').trim();
       const label = String(parsed.searchParams.get('label') ?? '').trim();
-      if (providerOrigin === '' || envPublicID === '') {
+      if (providerOrigin === '' || accessPointOrigin === '' || envPublicID === '') {
         return null;
       }
       return {
@@ -15678,6 +15838,7 @@ function parseDesktopDeepLink(rawURL: string): DesktopDeepLinkRequest | null {
         provider_origin: providerOrigin,
         provider_id: String(parsed.searchParams.get('provider_id') ?? '').trim() || undefined,
         env_public_id: envPublicID,
+        access_point_origin: accessPointOrigin,
         label: label || undefined,
       };
     }
@@ -15717,8 +15878,8 @@ async function connectControlPlaneFromDeepLink(
 async function openProviderEnvironmentFromDeepLink(
   request: Extract<DesktopDeepLinkRequest, Readonly<{ kind: 'open_provider_environment' }>>,
 ): Promise<void> {
-  const preferences = await loadDesktopPreferencesCached();
-  const controlPlane = request.provider_id
+  let preferences = await loadDesktopPreferencesCached();
+  let controlPlane = request.provider_id
     ? savedControlPlaneByIdentity(preferences, request.provider_origin, request.provider_id)
     : savedControlPlaneByOrigin(preferences, request.provider_origin);
   if (!controlPlane) {
@@ -15726,6 +15887,7 @@ async function openProviderEnvironmentFromDeepLink(
       providerOrigin: request.provider_origin,
       expectedProviderID: request.provider_id,
       requestedEnvPublicID: request.env_public_id,
+      requestedAccessPointOrigin: request.access_point_origin,
       label: request.label,
     });
     resetLauncherIssueState();
@@ -15734,9 +15896,35 @@ async function openProviderEnvironmentFromDeepLink(
   }
 
   try {
+    let environment = findProviderEnvironmentForAccessPointRoute(
+      preferences,
+      controlPlane,
+      request.env_public_id,
+      request.access_point_origin,
+    );
+    if (!environment) {
+      const synced = await syncSavedControlPlaneAccountWithState(
+        controlPlane.provider.provider_origin,
+        controlPlane.provider.provider_id,
+        { force: true },
+      );
+      preferences = synced.preferences;
+      controlPlane = synced.controlPlane;
+      environment = findProviderEnvironmentForAccessPointRoute(
+        preferences,
+        controlPlane,
+        request.env_public_id,
+        request.access_point_origin,
+      );
+    }
+    if (!environment) {
+      throw new Error('Desktop could not find this provider environment in the selected access point.');
+    }
     const authorized = await ensureControlPlaneAccessToken(preferences, controlPlane);
+    const accessPoint = providerAccessPointForEnvironment(authorized.controlPlane, environment);
     const openSession = await requestDesktopOpenSession(
       authorized.controlPlane.provider,
+      accessPoint,
       authorized.accessToken,
       request.env_public_id,
     );
@@ -15760,6 +15948,7 @@ async function openProviderEnvironmentFromDeepLink(
       providerOrigin: controlPlane.provider.provider_origin,
       expectedProviderID: controlPlane.provider.provider_id,
       requestedEnvPublicID: request.env_public_id,
+      requestedAccessPointOrigin: request.access_point_origin,
       label: request.label,
       displayLabel: controlPlane.display_label,
     });
@@ -15790,7 +15979,7 @@ async function completeControlPlaneAuthorizationFromDeepLink(
   );
   resetLauncherIssueState();
 
-  if (!pendingAuthorization.requested_env_public_id) {
+  if (!pendingAuthorization.requested_env_public_id || !pendingAuthorization.requested_access_point_origin) {
     await openDesktopWelcomeWindow({
       entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
       stealAppFocus: true,
@@ -15799,8 +15988,19 @@ async function completeControlPlaneAuthorizationFromDeepLink(
   }
 
   const authorized = await ensureControlPlaneAccessToken(connected.preferences, connected.controlPlane);
+  const environment = findProviderEnvironmentForAccessPointRoute(
+    authorized.preferences,
+    authorized.controlPlane,
+    pendingAuthorization.requested_env_public_id,
+    pendingAuthorization.requested_access_point_origin,
+  );
+  if (!environment) {
+    throw new Error('Desktop could not find this provider environment in the selected access point.');
+  }
+  const accessPoint = providerAccessPointForEnvironment(authorized.controlPlane, environment);
   const openSession = await requestDesktopOpenSession(
     authorized.controlPlane.provider,
+    accessPoint,
     authorized.accessToken,
     pendingAuthorization.requested_env_public_id,
   );

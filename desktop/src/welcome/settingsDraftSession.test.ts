@@ -94,12 +94,12 @@ describe('settingsDraftSession', () => {
 
     const reconciled = reconcileDesktopSettingsDraftSession(
       session,
-      surface('cp:https%3A%2F%2Fcp.example.invalid:env:env_demo', 'localhost:25000', 'controlplane'),
+      surface('provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo', 'localhost:25000', 'controlplane'),
       true,
     );
 
     expect(reconciled.dirty).toBe(false);
-    expect(reconciled.identity_key).toBe('environment_settings:controlplane:cp:https%3A%2F%2Fcp.example.invalid:env:env_demo');
+    expect(reconciled.identity_key).toBe('environment_settings:controlplane:provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo');
     expect(reconciled.draft.local_ui_bind).toBe('localhost:25000');
   });
 

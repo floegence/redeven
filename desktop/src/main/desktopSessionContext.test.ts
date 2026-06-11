@@ -24,20 +24,20 @@ describe('desktopSessionContext', () => {
 
   it('publishes provider identity from the provider target instead of the remote desktop route alone', () => {
     expect(desktopSessionContextSnapshotFromTarget(buildProviderEnvironmentDesktopTarget(testProviderEnvironment(
-      'https://cp.example.invalid/path',
+      'https://provider.example.invalid/path',
       'env_demo',
       {
         providerID: 'example_control_plane',
         label: 'Demo Environment',
       },
     ), { route: 'remote_desktop' }))).toEqual({
-      local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-      renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      local_environment_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
+      renderer_storage_scope_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       target_kind: 'local_environment',
       target_route: 'remote_desktop',
       session_source: 'provider_environment',
       label: 'Demo Environment',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       provider_id: 'example_control_plane',
       env_public_id: 'env_demo',
     });

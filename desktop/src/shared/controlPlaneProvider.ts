@@ -3,7 +3,19 @@ import type {
   DesktopProviderCatalogFreshness,
 } from './providerEnvironmentState';
 
-export type DesktopProviderProtocolVersion = 'rcpp-v1';
+export type DesktopProviderProtocolVersion = 'rcpp-v2';
+
+export type DesktopProviderAccessPoint = Readonly<{
+  access_point_id: string;
+  region: string;
+  display_name: string;
+  description: string;
+  access_point_origin: string;
+  country_code: string;
+  city: string;
+  status: string;
+  health_status: string;
+}>;
 
 export type DesktopControlPlaneProvider = Readonly<{
   protocol_version: DesktopProviderProtocolVersion;
@@ -11,6 +23,7 @@ export type DesktopControlPlaneProvider = Readonly<{
   display_name: string;
   provider_origin: string;
   documentation_url: string;
+  access_points: readonly DesktopProviderAccessPoint[];
 }>;
 
 export type DesktopControlPlaneAccount = Readonly<{
@@ -37,6 +50,9 @@ export type DesktopProviderEnvironment = Readonly<{
   provider_id: string;
   provider_origin: string;
   env_public_id: string;
+  region: string;
+  access_point_id: string;
+  access_point_origin: string;
   label: string;
   environment_url?: string;
   description: string;
@@ -133,7 +149,7 @@ export function desktopControlPlaneKey(providerOrigin: string, providerID: strin
 }
 
 function normalizeProviderProtocolVersion(value: unknown): DesktopProviderProtocolVersion | null {
-  return compact(value) === 'rcpp-v1' ? 'rcpp-v1' : null;
+  return compact(value) === 'rcpp-v2' ? 'rcpp-v2' : null;
 }
 
 function normalizeUnixMS(value: unknown): number {
@@ -207,6 +223,60 @@ export function normalizeDesktopProviderEnvironmentRuntimeHealthList(
   return out;
 }
 
+export function normalizeDesktopProviderAccessPoint(value: unknown): DesktopProviderAccessPoint | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const candidate = value as Record<string, unknown>;
+  const accessPointID = compact(candidate.access_point_id);
+  const region = compact(candidate.region);
+  const displayName = compact(candidate.display_name);
+  const status = compact(candidate.status);
+  let accessPointOrigin = '';
+  try {
+    accessPointOrigin = normalizeControlPlaneOrigin(compact(candidate.access_point_origin));
+  } catch {
+    return null;
+  }
+  if (
+    accessPointID === ''
+    || region === ''
+    || displayName === ''
+    || status === ''
+    || accessPointOrigin === ''
+  ) {
+    return null;
+  }
+
+  return {
+    access_point_id: accessPointID,
+    region,
+    display_name: displayName,
+    description: compact(candidate.description),
+    access_point_origin: accessPointOrigin,
+    country_code: compact(candidate.country_code),
+    city: compact(candidate.city),
+    status,
+    health_status: compact(candidate.health_status),
+  };
+}
+
+export function normalizeDesktopProviderAccessPointList(value: unknown): readonly DesktopProviderAccessPoint[] {
+  const source = Array.isArray(value) ? value : [];
+  const out: DesktopProviderAccessPoint[] = [];
+  const seenIDs = new Set<string>();
+  for (const item of source) {
+    const accessPoint = normalizeDesktopProviderAccessPoint(item);
+    if (!accessPoint || seenIDs.has(accessPoint.access_point_id)) {
+      continue;
+    }
+    seenIDs.add(accessPoint.access_point_id);
+    out.push(accessPoint);
+  }
+  return out;
+}
+
 export function normalizeDesktopControlPlaneProvider(value: unknown): DesktopControlPlaneProvider | null {
   if (!value || typeof value !== 'object') {
     return null;
@@ -221,7 +291,8 @@ export function normalizeDesktopControlPlaneProvider(value: unknown): DesktopCon
   const providerID = compact(candidate.provider_id);
   const displayName = compact(candidate.display_name);
   const documentationURL = compact(candidate.documentation_url);
-  if (providerID === '' || displayName === '' || documentationURL === '') {
+  const accessPoints = normalizeDesktopProviderAccessPointList(candidate.access_points);
+  if (providerID === '' || displayName === '' || documentationURL === '' || accessPoints.length === 0) {
     return null;
   }
 
@@ -238,6 +309,7 @@ export function normalizeDesktopControlPlaneProvider(value: unknown): DesktopCon
     display_name: displayName,
     provider_origin: providerOrigin,
     documentation_url: documentationURL,
+    access_points: accessPoints,
   };
 }
 
@@ -285,9 +357,23 @@ export function normalizeDesktopProviderEnvironment(
 
   const candidate = value as Record<string, unknown>;
   const envPublicID = compact(candidate.env_public_id);
+  const region = compact(candidate.region);
+  const accessPointID = compact(candidate.access_point_id);
   const label = compact(candidate.name);
   const environmentURL = normalizeEnvironmentURL(candidate.environment_url);
-  if (envPublicID === '' || label === '') {
+  let accessPointOrigin = '';
+  try {
+    accessPointOrigin = normalizeControlPlaneOrigin(compact(candidate.access_point_origin));
+  } catch {
+    return null;
+  }
+  if (
+    envPublicID === ''
+    || region === ''
+    || accessPointID === ''
+    || accessPointOrigin === ''
+    || label === ''
+  ) {
     return null;
   }
 
@@ -295,6 +381,9 @@ export function normalizeDesktopProviderEnvironment(
     provider_id: options.provider.provider_id,
     provider_origin: options.provider.provider_origin,
     env_public_id: envPublicID,
+    region,
+    access_point_id: accessPointID,
+    access_point_origin: accessPointOrigin,
     label,
     environment_url: environmentURL || undefined,
     description: compact(candidate.description),

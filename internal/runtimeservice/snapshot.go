@@ -110,6 +110,7 @@ type ProviderLinkBinding struct {
 	ProviderOrigin           string            `json:"provider_origin,omitempty"`
 	ProviderID               string            `json:"provider_id,omitempty"`
 	EnvPublicID              string            `json:"env_public_id,omitempty"`
+	AccessPointOrigin        string            `json:"access_point_origin,omitempty"`
 	LocalEnvironmentPublicID string            `json:"local_environment_public_id,omitempty"`
 	BindingGeneration        int64             `json:"binding_generation,omitempty"`
 	RemoteEnabled            bool              `json:"remote_enabled"`
@@ -255,6 +256,7 @@ func NormalizeProviderLinkBinding(binding ProviderLinkBinding, capability Capabi
 	binding.ProviderOrigin = strings.TrimSpace(binding.ProviderOrigin)
 	binding.ProviderID = strings.TrimSpace(binding.ProviderID)
 	binding.EnvPublicID = strings.TrimSpace(binding.EnvPublicID)
+	binding.AccessPointOrigin = strings.TrimSpace(binding.AccessPointOrigin)
 	binding.LocalEnvironmentPublicID = strings.TrimSpace(binding.LocalEnvironmentPublicID)
 	binding.LastErrorCode = strings.TrimSpace(binding.LastErrorCode)
 	binding.LastErrorMessage = strings.TrimSpace(binding.LastErrorMessage)

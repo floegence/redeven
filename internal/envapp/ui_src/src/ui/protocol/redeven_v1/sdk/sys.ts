@@ -75,6 +75,7 @@ export type RuntimeServiceProviderLinkBinding = {
   providerOrigin?: string;
   providerId?: string;
   envPublicId?: string;
+  accessPointOrigin?: string;
   localEnvironmentPublicId?: string;
   bindingGeneration?: number;
   remoteEnabled: boolean;

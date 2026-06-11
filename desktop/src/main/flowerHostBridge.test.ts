@@ -352,8 +352,8 @@ describe('Flower Host bridge lifecycle', () => {
     try {
       const bridge = await import('./flowerHostBridge');
       const openTargetSession = vi.fn(async () => ({
-        target_id: 'cp:test:env:env_a',
-        provider_origin: 'https://region.example.test',
+        target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
+        provider_origin: 'https://redeven.test',
         env_public_id: 'env_a',
         grant_client: { channel_id: 'ch_target' },
         capabilities: {

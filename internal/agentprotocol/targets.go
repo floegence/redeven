@@ -85,7 +85,7 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 		target.RemoteEnabled = runtimeStatus.RuntimeService.RemoteEnabled
 		target.DesktopManaged = runtimeStatus.Identity.DesktopManaged
 		if target.ControlplaneBaseURL == "" {
-			target.ControlplaneBaseURL = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.ProviderLink.ProviderOrigin)
+			target.ControlplaneBaseURL = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.ProviderLink.AccessPointOrigin)
 		}
 		if target.ControlplaneProvider == "" {
 			target.ControlplaneProvider = strings.TrimSpace(runtimeStatus.RuntimeService.Bindings.ProviderLink.ProviderID)

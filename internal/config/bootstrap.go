@@ -21,6 +21,7 @@ import (
 )
 
 type BootstrapArgs struct {
+	ProviderOrigin         string
 	ControlplaneBaseURL    string
 	ControlplaneProviderID string
 	EnvironmentID          string
@@ -42,6 +43,7 @@ type BootstrapArgs struct {
 type ProviderLinkBootstrapArgs struct {
 	ConfigPath string
 
+	ProviderOrigin         string
 	ControlplaneBaseURL    string
 	ControlplaneProviderID string
 	EnvironmentID          string
@@ -61,6 +63,10 @@ type ProviderLinkBootstrapArgs struct {
 }
 
 type bootstrapResponse struct {
+	ProviderID              string                      `json:"provider_id"`
+	ProviderOrigin          string                      `json:"provider_origin"`
+	AccessPointID           string                      `json:"access_point_id"`
+	AccessPointOrigin       string                      `json:"access_point_origin"`
 	Direct                  *directv1.DirectConnectInfo `json:"direct"`
 	LocalEnvironmentBinding *LocalEnvironmentBinding    `json:"local_environment_binding"`
 }
@@ -77,12 +83,9 @@ type LocalEnvironmentBinding struct {
 	LastSeenAtUnixMS         int64  `json:"last_seen_at_unix_ms,omitempty"`
 }
 
-type providerDiscoveryResponse struct {
-	ProviderID string `json:"provider_id"`
-}
-
 type bootstrapTicketExchangeRequest struct {
 	EnvPublicID              string `json:"env_public_id"`
+	ProviderOrigin           string `json:"provider_origin"`
 	LocalEnvironmentPublicID string `json:"local_environment_public_id"`
 	AgentInstanceID          string `json:"agent_instance_id"`
 	Hostname                 string `json:"hostname,omitempty"`
@@ -110,6 +113,7 @@ func BootstrapConfig(ctx context.Context, args BootstrapArgs) (writtenPath strin
 
 func providerLinkArgsFromBootstrapArgs(args BootstrapArgs) ProviderLinkBootstrapArgs {
 	return ProviderLinkBootstrapArgs{
+		ProviderOrigin:           args.ProviderOrigin,
 		ControlplaneBaseURL:      args.ControlplaneBaseURL,
 		ControlplaneProviderID:   args.ControlplaneProviderID,
 		EnvironmentID:            args.EnvironmentID,
@@ -144,17 +148,26 @@ func BootstrapProviderLink(ctx context.Context, args ProviderLinkBootstrapArgs) 
 
 func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapArgs) (*Config, error) {
 	baseURL := strings.TrimSpace(args.ControlplaneBaseURL)
+	providerOrigin := strings.TrimSpace(args.ProviderOrigin)
 	envID := strings.TrimSpace(args.EnvironmentID)
 	bootstrapTicket := normalizeBearerToken(args.BootstrapTicket)
 	cfgPath := strings.TrimSpace(args.ConfigPath)
 	if cfgPath == "" {
 		return nil, errors.New("missing config path")
 	}
-	if baseURL == "" || envID == "" {
-		return nil, errors.New("missing controlplane/env-id")
+	if providerOrigin == "" || baseURL == "" || envID == "" {
+		return nil, errors.New("missing provider/controlplane/env-id")
 	}
 	if bootstrapTicket == "" {
 		return nil, errors.New("missing bootstrap ticket")
+	}
+	providerOrigin, err := normalizeControlplaneBaseURL(providerOrigin)
+	if err != nil {
+		return nil, fmt.Errorf("invalid provider origin: %w", err)
+	}
+	baseURL, err = normalizeControlplaneBaseURL(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid controlplane url: %w", err)
 	}
 
 	var prev *Config
@@ -184,6 +197,7 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 
 	bootstrap, err := exchangeBootstrapTicket(ctx, baseURL, envID, bootstrapTicket, bootstrapTicketExchangeRequest{
 		EnvPublicID:              envID,
+		ProviderOrigin:           providerOrigin,
 		LocalEnvironmentPublicID: localEnvironmentPublicID,
 		AgentInstanceID:          agentInstanceID,
 		Hostname:                 firstNonEmpty(args.RuntimeHostname, hostnameBestEffort()),
@@ -211,17 +225,23 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 	if direct == nil || strings.TrimSpace(direct.WsUrl) == "" {
 		return nil, errors.New("invalid bootstrap response: missing direct.ws_url")
 	}
+	if strings.TrimSpace(bootstrap.ProviderOrigin) != providerOrigin {
+		return nil, errors.New("invalid bootstrap exchange response: provider_origin mismatch")
+	}
+	if strings.TrimSpace(bootstrap.AccessPointOrigin) != baseURL {
+		return nil, errors.New("invalid bootstrap exchange response: access_point_origin mismatch")
+	}
 
 	providerID := strings.TrimSpace(args.ControlplaneProviderID)
-	if providerID == "" && prev != nil {
-		prevBaseURL, prevErr := normalizeControlplaneBaseURL(prev.ControlplaneBaseURL)
-		nextBaseURL, nextErr := normalizeControlplaneBaseURL(baseURL)
-		if prevErr == nil && nextErr == nil && prevBaseURL == nextBaseURL && strings.TrimSpace(prev.EnvironmentID) == envID {
-			providerID = strings.TrimSpace(prev.ControlplaneProviderID)
-		}
+	responseProviderID := strings.TrimSpace(bootstrap.ProviderID)
+	if providerID == "" {
+		providerID = responseProviderID
 	}
-	if discoveredProviderID, discoveryErr := fetchProviderDiscoveryID(ctx, baseURL); discoveryErr == nil {
-		providerID = discoveredProviderID
+	if providerID == "" {
+		return nil, errors.New("invalid bootstrap exchange response: missing provider_id")
+	}
+	if responseProviderID != "" && responseProviderID != providerID {
+		return nil, errors.New("invalid bootstrap exchange response: provider_id mismatch")
 	}
 
 	agentHomeDir := strings.TrimSpace(args.AgentHomeDir)
@@ -245,6 +265,7 @@ func ResolveProviderLinkConfig(ctx context.Context, args ProviderLinkBootstrapAr
 	}
 
 	cfg := &Config{
+		ProviderOrigin:           providerOrigin,
 		ControlplaneBaseURL:      baseURL,
 		ControlplaneProviderID:   providerID,
 		EnvironmentID:            envID,
@@ -306,7 +327,7 @@ func exchangeBootstrapTicket(ctx context.Context, baseURL string, envID string, 
 	if err != nil {
 		return nil, fmt.Errorf("invalid controlplane url: %w", err)
 	}
-	u.Path = strings.TrimRight(u.Path, "/") + "/api/rcpp/v1/runtime/bootstrap/exchange"
+	u.Path = strings.TrimRight(u.Path, "/") + "/api/rcpp/v2/runtime/bootstrap/exchange"
 	u.RawQuery = ""
 
 	exchange.EnvPublicID = strings.TrimSpace(envID)
@@ -343,47 +364,6 @@ func exchangeBootstrapTicket(ctx context.Context, baseURL string, envID string, 
 		return nil, errors.New("invalid bootstrap exchange response: missing direct")
 	}
 	return &out, nil
-}
-
-func fetchProviderDiscoveryID(ctx context.Context, baseURL string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(baseURL))
-	if err != nil {
-		return "", fmt.Errorf("invalid controlplane url: %w", err)
-	}
-	u.Path = strings.TrimRight(u.Path, "/") + "/.well-known/redeven-provider.json"
-	u.RawQuery = ""
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Accept", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("provider discovery failed: status=%d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	if err != nil {
-		return "", err
-	}
-
-	var discovery providerDiscoveryResponse
-	if err := json.Unmarshal(body, &discovery); err != nil {
-		return "", fmt.Errorf("invalid provider discovery json: %w", err)
-	}
-	providerID := strings.TrimSpace(discovery.ProviderID)
-	if providerID == "" {
-		return "", errors.New("invalid provider discovery: missing provider_id")
-	}
-	return providerID, nil
 }
 
 func newAgentInstanceID() (string, error) {

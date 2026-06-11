@@ -48,6 +48,15 @@ function deriveControlPlaneBaseDomainFromSandboxBaseDomain(sandboxBaseDomain: st
   return [controlPlaneFirst, ...rest].join('.');
 }
 
+function deriveRuntimeBaseDomainFromSandboxBaseDomain(sandboxBaseDomain: string): string | null {
+  const normalized = splitHostname(sandboxBaseDomain).join('.');
+  if (normalized === 'redeven.online') {
+    return 'redeven.online';
+  }
+  const controlPlaneBaseDomain = deriveControlPlaneBaseDomainFromSandboxBaseDomain(sandboxBaseDomain);
+  return controlPlaneBaseDomain ? deriveRuntimeIsolationBaseDomain(controlPlaneBaseDomain) : null;
+}
+
 function deriveRuntimeIsolationBaseDomain(baseDomain: string): string | null {
   const labels = splitHostname(baseDomain);
   if (labels.length < 2) {
@@ -62,7 +71,7 @@ function deriveSandboxBaseDomainFromRuntimeIsolationBaseDomain(runtimeBaseDomain
     return 'redeven-sandbox.test';
   }
   if (normalized === 'redeven.online') {
-    return 'redeven-sandbox.com';
+    return 'redeven.online';
   }
   return null;
 }
@@ -73,16 +82,15 @@ function parseSandboxFamily(hostname: string): RemoteSessionFamily | null {
     return null;
   }
   const [sandboxID, region, ...rest] = labels;
-  if (!sandboxID || !region || !rest[0]?.endsWith('-sandbox')) {
+  if (!sandboxID || !region) {
     return null;
   }
   if (!isSupportedSandboxID(sandboxID)) {
     return null;
   }
   const sandboxBaseDomain = rest.join('.');
-  const controlPlaneBaseDomain = deriveControlPlaneBaseDomainFromSandboxBaseDomain(sandboxBaseDomain);
-  const runtimeBaseDomain = controlPlaneBaseDomain ? deriveRuntimeIsolationBaseDomain(controlPlaneBaseDomain) : null;
-  if (!controlPlaneBaseDomain || !runtimeBaseDomain) {
+  const runtimeBaseDomain = deriveRuntimeBaseDomainFromSandboxBaseDomain(sandboxBaseDomain);
+  if (!runtimeBaseDomain) {
     return null;
   }
   return {

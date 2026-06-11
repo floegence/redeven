@@ -122,7 +122,7 @@ describe('Flower Host secret resolver', () => {
     closers.push(resolver.close);
 
     const response = await postJSON(resolver.baseURL, resolver.token, {
-      provider_origin: 'https://region.example.test',
+      provider_origin: 'https://redeven.test',
       kind: 'control_plane_' + 'access_token',
     });
     expect(response).toEqual({
@@ -138,12 +138,12 @@ describe('Flower Host secret resolver', () => {
     const codec = createDesktopFlowerHostPlaintextSecretCodec();
     const resolver = await startFlowerHostSecretResolver(paths, codec, async (request) => {
       expect(request).toMatchObject({
-        target_id: 'cp:test:env:env_a',
+        target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
         env_public_id: 'env_a',
       });
       return {
-        target_id: 'cp:test:env:env_a',
-        provider_origin: 'https://region.example.test',
+        target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
+        provider_origin: 'https://redeven.test',
         env_public_id: 'env_a',
         grant_client: { channel_id: 'ch_target' },
         bootstrap_ticket: 'boot-ticket-must-not-leak',
@@ -161,7 +161,7 @@ describe('Flower Host secret resolver', () => {
     closers.push(resolver.close);
 
     const response = await postJSONPath(resolver.baseURL, resolver.token, '/v1/targets/open-session', {
-      target_id: 'cp:test:env:env_a',
+      target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
       env_public_id: 'env_a',
     });
     expect(response).toEqual({
@@ -169,8 +169,8 @@ describe('Flower Host secret resolver', () => {
       payload: {
         ok: true,
         data: {
-          target_id: 'cp:test:env:env_a',
-          provider_origin: 'https://region.example.test',
+          target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
+          provider_origin: 'https://redeven.test',
           env_public_id: 'env_a',
           grant_client: { channel_id: 'ch_target' },
           capabilities: {
@@ -198,8 +198,8 @@ describe('Flower Host secret resolver', () => {
       {
         name: 'missing channel id',
         grant: {
-          target_id: 'cp:test:env:env_a',
-          provider_origin: 'https://region.example.test',
+          target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
+          provider_origin: 'https://redeven.test',
           env_public_id: 'env_a',
           grant_client: {},
           capabilities: { can_read: true, can_write: false, can_execute: false },
@@ -210,8 +210,8 @@ describe('Flower Host secret resolver', () => {
       {
         name: 'non boolean capability',
         grant: {
-          target_id: 'cp:test:env:env_a',
-          provider_origin: 'https://region.example.test',
+          target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
+          provider_origin: 'https://redeven.test',
           env_public_id: 'env_a',
           grant_client: { channel_id: 'ch_target' },
           capabilities: { can_read: 'yes', can_write: false, can_execute: false },
@@ -222,8 +222,8 @@ describe('Flower Host secret resolver', () => {
       {
         name: 'expired grant',
         grant: {
-          target_id: 'cp:test:env:env_a',
-          provider_origin: 'https://region.example.test',
+          target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
+          provider_origin: 'https://redeven.test',
           env_public_id: 'env_a',
           grant_client: { channel_id: 'ch_target' },
           capabilities: { can_read: true, can_write: false, can_execute: false },
@@ -237,7 +237,7 @@ describe('Flower Host secret resolver', () => {
       const resolver = await startFlowerHostSecretResolver(paths, codec, async () => item.grant as never);
       closers.push(resolver.close);
       const response = await postJSONPath(resolver.baseURL, resolver.token, '/v1/targets/open-session', {
-        target_id: 'cp:test:env:env_a',
+        target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
         env_public_id: 'env_a',
       });
       expect(response.status, item.name).toBe(400);

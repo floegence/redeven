@@ -13,6 +13,7 @@ export const DESKTOP_OWNER_ID_ENV_NAME = 'REDEVEN_DESKTOP_OWNER_ID';
 export type DesktopRuntimeBootstrap = Readonly<
   {
     kind: 'bootstrap_ticket';
+    provider_origin: string;
     controlplane_url: string;
     env_id: string;
     bootstrap_ticket: string;
@@ -67,10 +68,13 @@ export function buildDesktopRuntimeArgs(
 
   const bootstrap = resolvedRuntimeBootstrap(options.bootstrap);
   if (bootstrap) {
-    const controlPlaneURL = bootstrap.controlplane_url;
-    const envID = bootstrap.env_id;
-    if (controlPlaneURL !== '' && envID !== '') {
+    const providerOrigin = String(bootstrap.provider_origin ?? '').trim();
+    const controlPlaneURL = String(bootstrap.controlplane_url ?? '').trim();
+    const envID = String(bootstrap.env_id ?? '').trim();
+    if (providerOrigin !== '' && controlPlaneURL !== '' && envID !== '') {
       args.push(
+        '--provider-origin',
+        providerOrigin,
         '--controlplane',
         controlPlaneURL,
         '--env-id',

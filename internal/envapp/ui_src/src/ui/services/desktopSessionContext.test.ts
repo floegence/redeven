@@ -41,12 +41,12 @@ describe('desktopSessionContext', () => {
       location: { origin: window.location.origin },
       redevenDesktopSessionContext: {
         getSnapshot: () => ({
-          local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-          renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+          local_environment_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
+          renderer_storage_scope_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
           target_kind: 'local_environment',
           target_route: 'remote_desktop',
           session_source: 'provider_environment',
-          provider_origin: ' https://cp.example.invalid ',
+          provider_origin: ' https://redeven.test ',
           provider_id: ' provider-1 ',
           env_public_id: ' env_demo ',
           label: ' Demo Environment ',
@@ -57,17 +57,17 @@ describe('desktopSessionContext', () => {
     setWindowHierarchy(parentWindow);
 
     expect(readDesktopSessionContextSnapshot()).toEqual({
-      local_environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-      renderer_storage_scope_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      local_environment_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
+      renderer_storage_scope_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
       target_kind: 'local_environment',
       target_route: 'remote_desktop',
       session_source: 'provider_environment',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://redeven.test',
       provider_id: 'provider-1',
       env_public_id: 'env_demo',
       label: 'Demo Environment',
     });
-    expect(desktopRendererStorageScopeID()).toBe('cp:https%3A%2F%2Fcp.example.invalid:env:env_demo');
+    expect(desktopRendererStorageScopeID()).toBe('provider:https%3A%2F%2Fredeven.test:env:env_demo');
   });
 
   it('falls back to the provided scope id when no desktop session context exists', () => {

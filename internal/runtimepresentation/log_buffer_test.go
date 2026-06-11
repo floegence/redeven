@@ -126,7 +126,9 @@ func TestInteractiveControlPlaneSetupAcceptsInput(t *testing.T) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	renderer.handleInteractiveBytes([]byte("https://region.example.test"))
+	renderer.handleInteractiveBytes([]byte("https://redeven.test"))
+	renderer.handleInteractiveBytes([]byte{13})
+	renderer.handleInteractiveBytes([]byte("https://dev.redeven.test"))
 	renderer.handleInteractiveBytes([]byte{13})
 	renderer.handleInteractiveBytes([]byte("env_123"))
 	renderer.handleInteractiveBytes([]byte{13})
@@ -142,7 +144,7 @@ func TestInteractiveControlPlaneSetupAcceptsInput(t *testing.T) {
 
 func TestRichRuntimeOverviewAndSessionsPanel(t *testing.T) {
 	controller := &fakeRuntimeController{
-		status: ControlPlaneStatus{Connected: true, Label: "connected to https://region.example.test", ActionLabel: "disconnect"},
+		status: ControlPlaneStatus{Connected: true, Label: "connected to https://dev.redeven.test", ActionLabel: "disconnect"},
 		overview: RuntimeOverview{
 			Version:          "v9.8.7",
 			Commit:           "abcdef123456",
@@ -159,7 +161,7 @@ func TestRichRuntimeOverviewAndSessionsPanel(t *testing.T) {
 			ProviderLink: RuntimeProviderLink{
 				State:          "linked",
 				ProviderID:     "provider_demo",
-				ProviderOrigin: "https://region.example.test",
+				ProviderOrigin: "https://redeven.test",
 			},
 		},
 		sessions: []RuntimeSession{

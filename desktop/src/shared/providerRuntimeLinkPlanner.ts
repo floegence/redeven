@@ -35,6 +35,7 @@ export type DesktopProviderRuntimeLinkPlan = Readonly<{
     provider_origin: string;
     provider_id: string;
     env_public_id: string;
+    access_point_origin: string;
   }>;
   message: string;
 }>;
@@ -83,6 +84,7 @@ export function buildDesktopProviderRuntimeLinkPlan(
     provider_origin: providerEnvironment.provider_origin,
     provider_id: providerEnvironment.provider_id,
     env_public_id: providerEnvironment.env_public_id,
+    access_point_origin: providerEnvironment.access_point_origin,
   });
   const binding = runtimeTarget.provider_link_binding;
   const state: DesktopProviderRuntimeLinkPlanState = (() => {
@@ -134,6 +136,7 @@ export function buildDesktopProviderRuntimeLinkPlan(
       provider_origin: providerEnvironment.provider_origin,
       provider_id: providerEnvironment.provider_id,
       env_public_id: providerEnvironment.env_public_id,
+      access_point_origin: providerEnvironment.access_point_origin,
     },
     message: planMessage(state, runtimeTarget, providerEnvironment),
   };

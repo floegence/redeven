@@ -167,7 +167,7 @@ func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.
 		Bindings: Bindings{
 			ProviderLink: ProviderLinkBinding{
 				State:                    ProviderLinkState(" linked "),
-				ProviderOrigin:           " https://cp.example.invalid ",
+				ProviderOrigin:           " https://provider.example.invalid ",
 				ProviderID:               " example_control_plane ",
 				EnvPublicID:              " env_demo ",
 				LocalEnvironmentPublicID: " lenv_demo ",
@@ -187,7 +187,7 @@ func TestNormalizeSnapshotNormalizesProviderLinkCapabilityAndBinding(t *testing.
 	if binding.State != ProviderLinkStateLinked || binding.RemoteEnabled {
 		t.Fatalf("unexpected provider-link state: %#v", binding)
 	}
-	if binding.ProviderOrigin != "https://cp.example.invalid" ||
+	if binding.ProviderOrigin != "https://provider.example.invalid" ||
 		binding.ProviderID != "example_control_plane" ||
 		binding.EnvPublicID != "env_demo" ||
 		binding.LocalEnvironmentPublicID != "lenv_demo" {
@@ -243,7 +243,7 @@ func TestNormalizeSnapshotPreservesProviderLinkRemoteEnabledFact(t *testing.T) {
 		Bindings: Bindings{
 			ProviderLink: ProviderLinkBinding{
 				State:          ProviderLinkStateLinked,
-				ProviderOrigin: "https://cp.example.invalid",
+				ProviderOrigin: "https://provider.example.invalid",
 				ProviderID:     "example_control_plane",
 				EnvPublicID:    "env_demo",
 				RemoteEnabled:  false,
@@ -268,7 +268,7 @@ func TestNormalizeSnapshotMarksProviderLinkUnsupportedWithoutCapability(t *testi
 		Bindings: Bindings{
 			ProviderLink: ProviderLinkBinding{
 				State:          ProviderLinkStateLinked,
-				ProviderOrigin: "https://cp.example.invalid",
+				ProviderOrigin: "https://provider.example.invalid",
 				ProviderID:     "example_control_plane",
 				EnvPublicID:    "env_demo",
 				RemoteEnabled:  true,

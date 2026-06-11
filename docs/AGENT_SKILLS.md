@@ -95,7 +95,7 @@ Agents must check `ok` before using `data`.
         "effective_run_mode": "hybrid",
         "remote_enabled": true,
         "desktop_managed": false,
-        "controlplane_base_url": "https://provider.example",
+        "controlplane_base_url": "https://dev.provider.example",
         "controlplane_provider_id": "provider_demo",
         "env_public_id": "env_123",
         "local_environment_public_id": "le_123",

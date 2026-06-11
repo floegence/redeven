@@ -373,15 +373,15 @@ func TestFlowerThreadToolTargetPolicySeparatesHostAndTargetThreads(t *testing.T)
 	}
 
 	targetPolicy := flowerThreadToolTargetPolicy(&threadstore.FlowerThreadMetadata{
-		PrimaryTargetID:     " cp:test:env:target_1 ",
-		ActiveTargetIDsJSON: `["cp:test:env:target_2","cp:test:env:target_1"," "]`,
+		PrimaryTargetID:     " provider:https%3A%2F%2Fredeven.test:env:target_1 ",
+		ActiveTargetIDsJSON: `["provider:https%3A%2F%2Fredeven.test:env:target_2","provider:https%3A%2F%2Fredeven.test:env:target_1"," "]`,
 	})
-	if targetPolicy.Mode != ai.ToolTargetModeExplicitTarget || targetPolicy.DefaultTargetID != "cp:test:env:target_1" {
+	if targetPolicy.Mode != ai.ToolTargetModeExplicitTarget || targetPolicy.DefaultTargetID != "provider:https%3A%2F%2Fredeven.test:env:target_1" {
 		t.Fatalf("target policy=%#v, want explicit target", targetPolicy)
 	}
 	if len(targetPolicy.AllowedTargetIDs) != 2 ||
-		targetPolicy.AllowedTargetIDs[0] != "cp:test:env:target_2" ||
-		targetPolicy.AllowedTargetIDs[1] != "cp:test:env:target_1" {
+		targetPolicy.AllowedTargetIDs[0] != "provider:https%3A%2F%2Fredeven.test:env:target_2" ||
+		targetPolicy.AllowedTargetIDs[1] != "provider:https%3A%2F%2Fredeven.test:env:target_1" {
 		t.Fatalf("allowed target ids=%#v, want active thread targets", targetPolicy.AllowedTargetIDs)
 	}
 }

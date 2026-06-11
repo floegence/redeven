@@ -49,6 +49,9 @@ type TestLocalEnvironmentOptions = Readonly<{
 
 type TestProviderBoundLocalEnvironmentOptions = Readonly<{
   providerID?: string;
+  region?: string;
+  accessPointID?: string;
+  accessPointOrigin?: string;
   label?: string;
   access?: TestLocalAccessOverrides;
   pinned?: boolean;
@@ -82,6 +85,9 @@ type TestDesktopPreferencesOptions = Readonly<Omit<Partial<DesktopPreferences>, 
 
 type TestProviderEnvironmentOptions = Readonly<{
   providerID?: string;
+  region?: string;
+  accessPointID?: string;
+  accessPointOrigin?: string;
   label?: string;
   pinned?: boolean;
   preferredOpenRoute?: DesktopLocalEnvironmentPreferredOpenRoute;
@@ -101,6 +107,25 @@ function testCurrentRuntime(
     desktop_owner_id: runtime.desktop_owner_id ?? 'desktop-owner-test',
     desktop_ownership: 'owned',
   };
+}
+
+function defaultTestAccessPointOrigin(providerOrigin: string): string {
+  try {
+    const parsed = new URL(providerOrigin);
+    if (parsed.hostname === 'redeven.test') {
+      return 'https://dev.redeven.test';
+    }
+    if (/^[a-z]+\.redeven\.(test|com)$/u.test(parsed.hostname)) {
+      return parsed.origin;
+    }
+    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+      return parsed.origin;
+    }
+    parsed.hostname = `dev.${parsed.hostname}`;
+    return parsed.toString().replace(/\/$/u, '');
+  } catch {
+    return 'https://dev.redeven.test';
+  }
 }
 
 function normalizeTestSavedEnvironment(environment: TestSavedEnvironmentInput): DesktopSavedEnvironment {
@@ -159,6 +184,9 @@ export function testProviderBoundLocalEnvironment(
   const layout = localEnvironmentStateLayout();
   const providerEnvironment = testProviderEnvironment(providerOrigin, envPublicID, {
     providerID: options.providerID ?? 'example_control_plane',
+    region: options.region,
+    accessPointID: options.accessPointID,
+    accessPointOrigin: options.accessPointOrigin,
     label: options.label,
     pinned: options.pinned,
     preferredOpenRoute: options.preferredOpenRoute,
@@ -186,8 +214,13 @@ export function testProviderEnvironment(
   envPublicID: string,
   options: TestProviderEnvironmentOptions = {},
 ): DesktopProviderEnvironmentRecord {
+  const region = options.region ?? 'dev';
+  const accessPointID = options.accessPointID ?? region;
   return createDesktopProviderEnvironmentRecord(providerOrigin, envPublicID, {
     providerID: options.providerID ?? 'example_control_plane',
+    region,
+    accessPointID,
+    accessPointOrigin: options.accessPointOrigin ?? defaultTestAccessPointOrigin(providerOrigin),
     label: options.label,
     pinned: options.pinned,
     preferredOpenRoute: options.preferredOpenRoute,
@@ -218,28 +251,11 @@ export function testDesktopPreferences(
       localProviderBinding.env_public_id,
       {
         providerID: localProviderBinding.provider_id,
+        accessPointOrigin: localProviderBinding.access_point_origin,
       },
     );
     if (!providerEnvironmentsByID.has(providerEnvironment.id)) {
       providerEnvironmentsByID.set(providerEnvironment.id, providerEnvironment);
-    }
-  }
-
-  for (const controlPlane of options.control_planes ?? base.control_planes) {
-    for (const environment of controlPlane.environments) {
-      const providerEnvironment = testProviderEnvironment(
-        controlPlane.provider.provider_origin,
-        environment.env_public_id,
-        {
-          providerID: controlPlane.provider.provider_id,
-          label: environment.label,
-          createdAtMS: controlPlane.last_synced_at_ms,
-          updatedAtMS: controlPlane.last_synced_at_ms,
-        },
-      );
-      if (!providerEnvironmentsByID.has(providerEnvironment.id)) {
-        providerEnvironmentsByID.set(providerEnvironment.id, providerEnvironment);
-      }
     }
   }
 
@@ -283,7 +299,8 @@ export function testLocalEnvironmentSession(
       local_ui_url: localUIURL,
       local_ui_urls: [localUIURL],
       ...(currentProviderBinding ? {
-        controlplane_base_url: currentProviderBinding.provider_origin,
+        provider_origin: currentProviderBinding.provider_origin,
+        controlplane_base_url: currentProviderBinding.access_point_origin,
         controlplane_provider_id: currentProviderBinding.provider_id,
         env_public_id: currentProviderBinding.env_public_id,
       } : {}),

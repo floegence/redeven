@@ -562,13 +562,13 @@ describe('LauncherOperationRegistry', () => {
   it('projects provider remote Open operations into action progress', () => {
     const registry = new LauncherOperationRegistry();
     const operation = registry.create({
-      operation_key: 'env:cp%3Aenv_demo:remote_desktop:open',
+      operation_key: 'env:provider%3Ahttps%253A%252F%252Fprovider.example.invalid%3Aenv%3Aenv_demo:remote_desktop:open',
       action: 'open_provider_environment',
       subject_kind: 'provider_environment',
-      subject_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
-      environment_id: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+      subject_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
+      environment_id: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
       environment_label: 'Demo Environment',
-      provider_origin: 'https://cp.example.invalid',
+      provider_origin: 'https://provider.example.invalid',
       provider_id: 'example_control_plane',
       phase: 'opening_window',
       title: 'Opening environment',
@@ -576,9 +576,9 @@ describe('LauncherOperationRegistry', () => {
       open_progress: openConnectionProgress({
         location: 'provider_remote',
         phase: 'opening_window',
-        environmentID: 'cp:https%3A%2F%2Fcp.example.invalid:env:env_demo',
+        environmentID: 'provider:https%3A%2F%2Fprovider.example.invalid:env:env_demo',
         environmentLabel: 'Demo Environment',
-        targetID: 'env:cp%3Aenv_demo:remote_desktop',
+        targetID: 'env:provider%3Ahttps%253A%252F%252Fprovider.example.invalid%3Aenv%3Aenv_demo:remote_desktop',
         targetLabel: 'Demo Environment',
         targetDetail: 'Provider route',
       }),

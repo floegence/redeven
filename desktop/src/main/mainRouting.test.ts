@@ -523,7 +523,7 @@ describe('main routing', () => {
     expect(routeSnapshotStart).toBeGreaterThanOrEqual(0);
     expect(routeSnapshotEnd).toBeGreaterThan(routeSnapshotStart);
     const routeSnapshotSrc = mainSrc.slice(routeSnapshotStart, routeSnapshotEnd);
-    expect(routeSnapshotSrc).toContain('const summary = controlPlaneSummary(controlPlane);');
+    expect(routeSnapshotSrc).toContain('const summary = controlPlaneSummary(controlPlane, preferences.provider_environments);');
     expect(routeSnapshotSrc).toContain('summary.environments.find');
     expect(routeSnapshotSrc).not.toContain('controlPlane.environments.find');
 

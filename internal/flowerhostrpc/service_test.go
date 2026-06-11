@@ -23,7 +23,7 @@ func TestExecuteTargetToolRejectsNonTargetTools(t *testing.T) {
 		CanExecute: true,
 	}, &TargetToolCall{
 		ToolCallID: "call_1",
-		TargetID:   "cp:test:env:env_a",
+		TargetID:   "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ToolName:   "web.search",
 		Arguments:  json.RawMessage(`{"query":"redeven"}`),
 	})
@@ -50,7 +50,7 @@ func TestExecuteTargetToolRejectsUnimplementedTargetTools(t *testing.T) {
 			CanExecute: true,
 		}, &TargetToolCall{
 			ToolCallID: "call_1",
-			TargetID:   "cp:test:env:env_a",
+			TargetID:   "provider:https%3A%2F%2Fredeven.test:env:env_a",
 			ToolName:   toolName,
 			Arguments:  json.RawMessage(`{}`),
 		})
@@ -74,7 +74,7 @@ func TestExecuteTargetToolDerivesPermissionsFromToolName(t *testing.T) {
 		CanExecute: false,
 	}, &TargetToolCall{
 		ToolCallID:           "call_1",
-		TargetID:             "cp:test:env:env_a",
+		TargetID:             "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ToolName:             "terminal.exec",
 		Arguments:            json.RawMessage(`{"command":"pwd"}`),
 		RequiredCapabilities: []string{"read"},
@@ -101,7 +101,7 @@ func TestExecuteTargetToolRejectsMismatchedTargetBinding(t *testing.T) {
 		CanExecute: true,
 	}, &TargetToolCall{
 		ToolCallID: "call_1",
-		TargetID:   "cp:test:env:env_a",
+		TargetID:   "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ToolName:   "file.read",
 		Arguments:  json.RawMessage(`{"file_path":"README.md"}`),
 	})
@@ -138,7 +138,7 @@ func TestExecuteTargetToolRunsLocalFileReadThroughInternalAI(t *testing.T) {
 		CanRead:    true,
 	}, &TargetToolCall{
 		ToolCallID: "call_1",
-		TargetID:   "cp:test:env:env_a",
+		TargetID:   "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ToolName:   "file.read",
 		Arguments:  json.RawMessage(`{"file_path":"note.txt"}`),
 	})
@@ -177,7 +177,7 @@ func TestExecuteTargetToolKeepsLocalPermissionBoundary(t *testing.T) {
 		CanWrite:   false,
 	}, &TargetToolCall{
 		ToolCallID: "call_1",
-		TargetID:   "cp:test:env:env_a",
+		TargetID:   "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ToolName:   "file.write",
 		Arguments:  json.RawMessage(`{"file_path":"note.txt","content":"nope"}`),
 	})

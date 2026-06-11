@@ -3,9 +3,10 @@ package runtimepresentation
 import "context"
 
 type ControlPlaneSetup struct {
-	ControlplaneURL string
-	EnvironmentID   string
-	BootstrapTicket string
+	ProviderOrigin    string
+	AccessPointOrigin string
+	EnvironmentID     string
+	BootstrapTicket   string
 }
 
 type ControlPlaneStatus struct {
@@ -31,6 +32,7 @@ type RuntimeProviderLink struct {
 	ProviderOrigin           string
 	ProviderID               string
 	EnvPublicID              string
+	AccessPointOrigin        string
 	LocalEnvironmentPublicID string
 	RemoteEnabled            bool
 	LastErrorCode            string

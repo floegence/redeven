@@ -1464,7 +1464,7 @@ function environmentFlowerPrimaryTargetID(environment: DesktopEnvironmentEntry):
   const providerOrigin = trimString(environment.provider_origin);
   const envPublicID = trimString(environment.env_public_id);
   if (environment.kind === 'provider_environment' && providerOrigin && envPublicID) {
-    return `cp:${encodeURIComponent(providerOrigin)}:env:${encodeURIComponent(envPublicID)}`;
+    return `provider:${encodeURIComponent(providerOrigin)}:env:${encodeURIComponent(envPublicID)}`;
   }
   return envPublicID
     || trimString(environment.provider_runtime_link_target?.id)
@@ -14856,7 +14856,7 @@ function ControlPlaneDialog(props: Readonly<{
             id="control-plane-label"
             value={props.state?.display_label ?? ''}
             onInput={(event) => props.updateField('display_label', event.currentTarget.value)}
-            placeholder="region.example.invalid"
+            placeholder="redeven.test"
             size="sm"
             class="w-full"
             spellcheck={false}
@@ -14868,7 +14868,7 @@ function ControlPlaneDialog(props: Readonly<{
             id="control-plane-origin"
             value={props.state?.provider_origin ?? ''}
             onInput={(event) => props.updateField('provider_origin', event.currentTarget.value)}
-            placeholder="https://region.example.invalid"
+            placeholder="https://redeven.test"
             size="sm"
             class="w-full"
             spellcheck={false}

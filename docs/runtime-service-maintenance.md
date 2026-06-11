@@ -273,9 +273,10 @@ paths that Desktop can read before adopting a process:
     },
     "provider_link": {
       "state": "linked",
-      "provider_origin": "https://dev.redeven.test",
+      "provider_origin": "https://redeven.test",
       "provider_id": "dev_redeven",
       "env_public_id": "env_xxx",
+      "access_point_origin": "https://dev.redeven.test",
       "local_environment_public_id": "le_xxx",
       "binding_generation": 7,
       "remote_enabled": true,
@@ -362,6 +363,7 @@ type RuntimeServiceProviderLinkBinding = Readonly<{
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
+  access_point_origin?: string;
   local_environment_public_id?: string;
   binding_generation?: number;
   remote_enabled: boolean;

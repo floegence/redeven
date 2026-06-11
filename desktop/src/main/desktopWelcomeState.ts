@@ -23,7 +23,11 @@ import type {
   DesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopGatewaySource } from '../shared/desktopGateway';
-import { desktopControlPlaneKey, type DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import {
+  desktopControlPlaneKey,
+  type DesktopControlPlaneSummary,
+  type DesktopProviderEnvironment,
+} from '../shared/controlPlaneProvider';
 import {
   DEFAULT_DESKTOP_SSH_BOOTSTRAP_STRATEGY,
   DEFAULT_DESKTOP_SSH_RELEASE_BASE_URL,
@@ -598,11 +602,39 @@ function openSessionsByProviderEnvironment(
   return out;
 }
 
+function providerEnvironmentSummaryFromRecord(
+  environment: DesktopProviderEnvironmentRecord,
+): DesktopProviderEnvironment {
+  return {
+    provider_id: environment.provider_id,
+    provider_origin: environment.provider_origin,
+    env_public_id: environment.env_public_id,
+    region: environment.region,
+    access_point_id: environment.access_point_id,
+    access_point_origin: environment.access_point_origin,
+    label: environment.label,
+    environment_url: environment.remote_catalog_entry?.environment_url || undefined,
+    description: environment.remote_catalog_entry?.description ?? '',
+    namespace_public_id: environment.remote_catalog_entry?.namespace_public_id ?? '',
+    namespace_name: environment.remote_catalog_entry?.namespace_name ?? '',
+    status: environment.remote_catalog_entry?.status ?? '',
+    lifecycle_status: environment.remote_catalog_entry?.lifecycle_status ?? '',
+    last_seen_at_unix_ms: environment.remote_catalog_entry?.last_seen_at_unix_ms ?? 0,
+  };
+}
+
 function fallbackControlPlaneSummaries(
   controlPlanes: DesktopPreferences['control_planes'],
+  providerEnvironments: readonly DesktopProviderEnvironmentRecord[],
 ): readonly DesktopControlPlaneSummary[] {
   return controlPlanes.map((controlPlane) => ({
     ...controlPlane,
+    environments: providerEnvironments
+      .filter((environment) => (
+        environment.provider_origin === controlPlane.provider.provider_origin
+        && environment.provider_id === controlPlane.provider.provider_id
+      ))
+      .map(providerEnvironmentSummaryFromRecord),
     sync_state: controlPlane.last_synced_at_ms > 0 ? 'ready' : 'idle',
     last_sync_attempt_at_ms: controlPlane.last_synced_at_ms,
     last_sync_error_code: '',
@@ -641,6 +673,7 @@ function providerEnvironmentCandidatesForSnapshot(
       provider_origin: environment.provider_origin,
       provider_id: environment.provider_id,
       env_public_id: environment.env_public_id,
+      access_point_origin: environment.access_point_origin,
       provider_label: compact(routeDetails.controlPlane?.display_label) || environment.provider_origin,
       route_state: providerEnvironmentCandidateRouteState(routeDetails.remoteRouteState),
       occupancy,
@@ -657,6 +690,7 @@ function linkedRuntimeTargetForProviderEnvironment(
     && target.provider_origin === environment.provider_origin
     && target.provider_id === environment.provider_id
     && target.env_public_id === environment.env_public_id
+    && target.access_point_origin === environment.access_point_origin
   )) ?? null;
 }
 
@@ -777,6 +811,7 @@ function buildProviderRuntimeLinkTarget(input: Readonly<{
     provider_origin: providerLinkBinding.provider_origin,
     provider_id: providerLinkBinding.provider_id,
     env_public_id: providerLinkBinding.env_public_id,
+    access_point_origin: providerLinkBinding.access_point_origin,
     can_connect_provider: blockedReasonCode === '' && providerConnectionState === 'unlinked',
     can_disconnect_provider: providerLinkBinding.state === 'linked',
     ...(blockedReasonCode !== '' ? { blocked_reason_code: blockedReasonCode } : {}),
@@ -836,6 +871,9 @@ function providerEnvironmentRecordsFromControlPlanes(
         environment.env_public_id,
         {
           providerID: controlPlane.provider.provider_id,
+          region: environment.region,
+          accessPointID: environment.access_point_id,
+          accessPointOrigin: environment.access_point_origin,
           label: environment.label,
           remoteCatalogEntry: desktopProviderEnvironmentRemoteCatalogEntryFromPublished(environment),
           createdAtMS: controlPlane.last_synced_at_ms,
@@ -864,8 +902,10 @@ function providerEnvironmentRecordsForSnapshot(
     const storedEnvironment = storedByKey.get(key);
     recordsByKey.set(key, storedEnvironment
       ? createDesktopProviderEnvironmentRecord(environment.provider_origin, environment.env_public_id, {
-          environmentID: environment.id,
           providerID: environment.provider_id,
+          region: environment.region,
+          accessPointID: environment.access_point_id,
+          accessPointOrigin: environment.access_point_origin,
           label: environment.label,
           pinned: storedEnvironment.pinned,
           preferredOpenRoute: storedEnvironment.preferred_open_route,
@@ -1964,7 +2004,10 @@ export function buildDesktopWelcomeSnapshot(
   args: BuildDesktopWelcomeSnapshotArgs,
 ): DesktopWelcomeSnapshot {
   const preferences = args.preferences;
-  const controlPlanes = args.controlPlanes ?? fallbackControlPlaneSummaries(preferences.control_planes);
+  const controlPlanes = args.controlPlanes ?? fallbackControlPlaneSummaries(
+    preferences.control_planes,
+    preferences.provider_environments,
+  );
   const snapshotPreferences: DesktopPreferences = {
     ...preferences,
     provider_environments: providerEnvironmentRecordsForSnapshot(preferences.provider_environments, controlPlanes),

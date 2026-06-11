@@ -20,7 +20,7 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 		case r.Method != http.MethodPost:
 			t.Fatalf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/api/rcpp/v1/runtime/bootstrap/exchange" {
+		if r.URL.Path != "/api/rcpp/v2/runtime/bootstrap/exchange" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
@@ -28,8 +28,12 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
+  "provider_id": "example_control_plane",
+  "provider_origin": "https://redeven.test",
+  "access_point_id": "dev",
+  "access_point_origin": "http://` + r.Host + `",
   "direct": {
-    "ws_url": "wss://region.example.invalid/control/ws",
+    "ws_url": "wss://dev.redeven.test/control/ws",
     "channel_id": "ch_123",
     "e2ee_psk_b64u": "cHNr",
     "channel_init_expire_at_unix_s": 4102444800
@@ -49,6 +53,7 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
 	}
 	if err := Save(layout.ConfigPath, &Config{
+		ProviderOrigin:           "https://redeven.test",
 		ControlplaneBaseURL:      "https://old.example.invalid",
 		EnvironmentID:            "env_old",
 		LocalEnvironmentPublicID: "le_existing",
@@ -63,6 +68,7 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	defer cancel()
 
 	writtenPath, err := BootstrapConfig(ctx, BootstrapArgs{
+		ProviderOrigin:      "https://redeven.test",
 		ControlplaneBaseURL: server.URL,
 		EnvironmentID:       "env_123",
 		BootstrapTicket:     "ticket-123",
@@ -82,6 +88,9 @@ func TestBootstrapConfigExplicitLogLevelOverridesPreviousConfig(t *testing.T) {
 	}
 	if cfg.LogLevel != "info" {
 		t.Fatalf("LogLevel = %q, want %q", cfg.LogLevel, "info")
+	}
+	if cfg.ProviderOrigin != "https://redeven.test" {
+		t.Fatalf("ProviderOrigin = %q, want %q", cfg.ProviderOrigin, "https://redeven.test")
 	}
 	if cfg.AgentInstanceID != "ai_existing" {
 		t.Fatalf("AgentInstanceID = %q, want %q", cfg.AgentInstanceID, "ai_existing")
@@ -154,7 +163,7 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 		case r.Method != http.MethodPost:
 			t.Fatalf("method = %s, want POST", r.Method)
 		}
-		if r.URL.Path != "/api/rcpp/v1/runtime/bootstrap/exchange" {
+		if r.URL.Path != "/api/rcpp/v2/runtime/bootstrap/exchange" {
 			t.Fatalf("path = %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer ticket-123" {
@@ -167,6 +176,9 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 		if payload.EnvPublicID != "env_123" {
 			t.Fatalf("EnvPublicID = %q", payload.EnvPublicID)
 		}
+		if payload.ProviderOrigin != "https://redeven.test" {
+			t.Fatalf("ProviderOrigin = %q", payload.ProviderOrigin)
+		}
 		if payload.LocalEnvironmentPublicID == "" {
 			t.Fatalf("LocalEnvironmentPublicID is empty")
 		}
@@ -175,8 +187,12 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{
+  "provider_id": "example_control_plane",
+  "provider_origin": "https://redeven.test",
+  "access_point_id": "dev",
+  "access_point_origin": "http://` + r.Host + `",
   "direct": {
-    "ws_url": "wss://region.example.invalid/control/ws",
+    "ws_url": "wss://dev.redeven.test/control/ws",
     "channel_id": "ch_ticket",
     "e2ee_psk_b64u": "cHNr",
     "channel_init_expire_at_unix_s": 4102444800
@@ -199,6 +215,7 @@ func TestBootstrapConfigSupportsBootstrapTicketExchange(t *testing.T) {
 	defer cancel()
 
 	writtenPath, err := BootstrapConfig(ctx, BootstrapArgs{
+		ProviderOrigin:      "https://redeven.test",
 		ControlplaneBaseURL: server.URL,
 		EnvironmentID:       "env_123",
 		BootstrapTicket:     "ticket-123",
@@ -234,7 +251,8 @@ func TestBootstrapConfigRejectsMissingBootstrapTicket(t *testing.T) {
 	defer cancel()
 
 	_, err := BootstrapConfig(ctx, BootstrapArgs{
-		ControlplaneBaseURL: "https://region.example.invalid",
+		ProviderOrigin:      "https://redeven.test",
+		ControlplaneBaseURL: "https://dev.redeven.test",
 		EnvironmentID:       "env_123",
 		StateRoot:           t.TempDir(),
 	})

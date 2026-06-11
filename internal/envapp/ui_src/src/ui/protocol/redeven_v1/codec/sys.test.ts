@@ -53,9 +53,10 @@ describe('sys codec', () => {
           },
           provider_link: {
             state: 'linked',
-            provider_origin: ' https://dev.redeven.test ',
+            provider_origin: ' https://redeven.test ',
             provider_id: ' dev_redeven ',
             env_public_id: ' env_demo ',
+            access_point_origin: ' https://dev.redeven.test ',
             local_environment_public_id: ' le_demo ',
             binding_generation: 7,
             remote_enabled: true,
@@ -112,9 +113,10 @@ describe('sys codec', () => {
           },
           providerLink: {
             state: 'linked',
-            providerOrigin: 'https://dev.redeven.test',
+            providerOrigin: 'https://redeven.test',
             providerId: 'dev_redeven',
             envPublicId: 'env_demo',
+            accessPointOrigin: 'https://dev.redeven.test',
             localEnvironmentPublicId: 'le_demo',
             bindingGeneration: 7,
             remoteEnabled: true,

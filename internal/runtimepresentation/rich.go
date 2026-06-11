@@ -460,7 +460,8 @@ func (r *Renderer) richAccessRows(width int, event Event, scenario richScenario)
 	}{
 		{"Local UI", firstNonEmpty(s.LocalUIURLs, s.LocalUIBind, "not started"), richAccent},
 		{"Environment", valueOr(envURL, "not connected"), richAccent},
-		{"Provider", valueOr(r.runtimeOverview(event).ProviderLink.ProviderOrigin, s.ControlplaneBaseURL, "not linked"), richText},
+		{"Provider", valueOr(r.runtimeOverview(event).ProviderLink.ProviderOrigin, s.ProviderOrigin, "not linked"), richText},
+		{"Access Point", valueOr(r.runtimeOverview(event).ProviderLink.AccessPointOrigin, s.ControlplaneBaseURL, "not linked"), richText},
 	}
 
 	var b strings.Builder
@@ -504,7 +505,7 @@ func (r *Renderer) richCompactAccessRows(width int, event Event, scenario richSc
 }
 
 func (r *Renderer) richControlPlaneSetupRows(width int) string {
-	labels := []string{"Control URL", "Environment", "Ticket"}
+	labels := []string{"Provider", "Access Point", "Environment", "Ticket"}
 	values := r.setup.Fields
 	var b strings.Builder
 	b.WriteString("│ ")
@@ -514,7 +515,7 @@ func (r *Renderer) richControlPlaneSetupRows(width int) string {
 	b.WriteString(" │\n")
 	for i, label := range labels {
 		value := values[i]
-		if i == 2 && value != "" {
+		if i == 3 && value != "" {
 			value = strings.Repeat("•", minInt(richVisibleLen(value), 18))
 		}
 		if i == r.setup.Active && !r.setup.Submitting {
@@ -551,8 +552,10 @@ func (r *Renderer) richControlPlaneSetupRows(width int) string {
 func richControlPlaneSetupPlaceholder(index int) string {
 	switch index {
 	case 0:
-		return "https://region.example.com"
+		return "https://redeven.test"
 	case 1:
+		return "https://dev.redeven.test"
+	case 2:
 		return "env_..."
 	default:
 		return "paste bootstrap ticket"

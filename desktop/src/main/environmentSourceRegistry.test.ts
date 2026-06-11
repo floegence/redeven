@@ -31,13 +31,28 @@ function gatewaySource(overrides: Partial<DesktopGatewaySource> = {}): DesktopGa
   };
 }
 
+function providerAccessPoint() {
+  return {
+    access_point_id: 'dev',
+    region: 'dev',
+    display_name: 'Development',
+    description: 'Development access point',
+    access_point_origin: 'https://dev.provider.example.invalid',
+    country_code: 'SG',
+    city: 'Singapore',
+    status: 'active',
+    health_status: 'healthy',
+  };
+}
+
 function controlPlaneSummary(): DesktopControlPlaneSummary {
   const provider = normalizeDesktopControlPlaneProvider({
-    protocol_version: 'rcpp-v1',
+    protocol_version: 'rcpp-v2',
     provider_id: 'example_provider',
     provider_origin: 'https://provider.example.invalid',
     display_name: 'Example Provider',
     documentation_url: 'https://provider.example.invalid/docs',
+    access_points: [providerAccessPoint()],
   });
   if (!provider) {
     throw new Error('test provider did not normalize');
