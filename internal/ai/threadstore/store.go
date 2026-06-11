@@ -368,13 +368,6 @@ func applyThreadListOptions(threads []Thread, opts threadListOptions) []Thread {
 	return out
 }
 
-func unixMsTime(ms int64) time.Time {
-	if ms <= 0 {
-		return time.Time{}
-	}
-	return time.UnixMilli(ms).UTC()
-}
-
 func (s *Store) ListAutoThreadTitleCandidates(ctx context.Context, limit int) ([]AutoThreadTitleCandidate, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
