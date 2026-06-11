@@ -12,8 +12,9 @@ const (
 )
 
 type ToolTargetPolicy struct {
-	Mode            string `json:"mode"`
-	DefaultTargetID string `json:"default_target_id,omitempty"`
+	Mode             string   `json:"mode"`
+	DefaultTargetID  string   `json:"default_target_id,omitempty"`
+	AllowedTargetIDs []string `json:"allowed_target_ids,omitempty"`
 }
 
 func normalizeToolTargetPolicy(in ToolTargetPolicy) ToolTargetPolicy {
@@ -25,9 +26,15 @@ func normalizeToolTargetPolicy(in ToolTargetPolicy) ToolTargetPolicy {
 	default:
 		mode = ToolTargetModeExplicitTarget
 	}
+	defaultTargetID := strings.TrimSpace(in.DefaultTargetID)
+	allowedTargetIDs := normalizedTargetIDs(in.AllowedTargetIDs)
+	if defaultTargetID != "" && len(allowedTargetIDs) == 0 {
+		allowedTargetIDs = []string{defaultTargetID}
+	}
 	return ToolTargetPolicy{
-		Mode:            mode,
-		DefaultTargetID: strings.TrimSpace(in.DefaultTargetID),
+		Mode:             mode,
+		DefaultTargetID:  defaultTargetID,
+		AllowedTargetIDs: allowedTargetIDs,
 	}
 }
 
@@ -87,7 +94,7 @@ func StripTargetToolArgs(args map[string]any) map[string]any {
 	return out
 }
 
-func targetIDFromToolArgs(args map[string]any, defaultTargetID string) string {
+func targetIDFromToolArgs(args map[string]any) string {
 	for _, key := range []string{"target_id", "targetId"} {
 		if raw, ok := args[key]; ok {
 			if value := strings.TrimSpace(anyToString(raw)); value != "" {
@@ -95,5 +102,43 @@ func targetIDFromToolArgs(args map[string]any, defaultTargetID string) string {
 			}
 		}
 	}
-	return strings.TrimSpace(defaultTargetID)
+	return ""
+}
+
+func targetAllowedByPolicy(policy ToolTargetPolicy, targetID string) bool {
+	targetID = strings.TrimSpace(targetID)
+	if targetID == "" {
+		return false
+	}
+	normalized := normalizeToolTargetPolicy(policy)
+	if len(normalized.AllowedTargetIDs) == 0 {
+		return true
+	}
+	for _, allowed := range normalized.AllowedTargetIDs {
+		if strings.TrimSpace(allowed) == targetID {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizedTargetIDs(values []string) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		seen := false
+		for _, existing := range out {
+			if existing == value {
+				seen = true
+				break
+			}
+		}
+		if !seen {
+			out = append(out, value)
+		}
+	}
+	return out
 }

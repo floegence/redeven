@@ -96,6 +96,40 @@ func TestHandleToolCall_ExplicitTargetPolicyUsesTargetExecutor(t *testing.T) {
 	}
 }
 
+func TestHandleToolCall_ExplicitTargetPolicyRejectsUnallowedTarget(t *testing.T) {
+	t.Parallel()
+
+	executor := &recordingTargetToolExecutor{}
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: t.TempDir(),
+		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+		ToolTargetPolicy: ToolTargetPolicy{
+			Mode:             ToolTargetModeExplicitTarget,
+			DefaultTargetID:  "cp:local:env:env_a",
+			AllowedTargetIDs: []string{"cp:local:env:env_a"},
+		},
+		TargetToolExecutor: executor,
+	})
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_term_1", "terminal.exec", map[string]any{
+		"target_id": "cp:local:env:env_b",
+		"command":   "pwd",
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall returned error: %v", err)
+	}
+	if outcome == nil || outcome.Success {
+		t.Fatalf("outcome=%#v, want policy failure", outcome)
+	}
+	if outcome.ToolError == nil || outcome.ToolError.Code != aitools.ErrorCodePermissionDenied {
+		t.Fatalf("tool error=%#v, want PERMISSION_DENIED", outcome.ToolError)
+	}
+	if executor.call.TargetID != "" {
+		t.Fatalf("target executor should not run for unallowed target: %#v", executor.call)
+	}
+}
+
 func TestHandleToolCall_LocalRuntimePolicyKeepsExistingToolBehavior(t *testing.T) {
 	t.Parallel()
 

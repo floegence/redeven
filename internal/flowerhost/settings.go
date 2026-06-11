@@ -35,6 +35,10 @@ type SecretResolver interface {
 	ResolveWebSearchProviderAPIKey(ctx context.Context, providerID string) (string, bool, error)
 }
 
+type SecretResolverHealthChecker interface {
+	CheckSecretResolver(ctx context.Context) error
+}
+
 type TargetSessionBroker interface {
 	TargetSessionBrokerEndpoint() (baseURL string, token string)
 }

@@ -16,6 +16,8 @@ const (
 	maxTodosPerWrite = 40
 )
 
+var controlSignalTodoNames = []string{"task_complete", "ask_user", "exit_plan_mode"}
+
 type TodoItem struct {
 	ID      string `json:"id"`
 	Content string `json:"content"`
@@ -123,4 +125,63 @@ func summarizeTodos(items []TodoItem) TodoSummary {
 		}
 	}
 	return out
+}
+
+func actionableTodoSummary(items []TodoItem) TodoSummary {
+	out := TodoSummary{}
+	for _, item := range items {
+		if todoControlSignalName(item.Content) != "" {
+			continue
+		}
+		out.Total++
+		switch strings.ToLower(strings.TrimSpace(item.Status)) {
+		case TodoStatusPending:
+			out.Pending++
+		case TodoStatusInProgress:
+			out.InProgress++
+		case TodoStatusCompleted:
+			out.Completed++
+		case TodoStatusCancelled:
+			out.Cancelled++
+		}
+	}
+	return out
+}
+
+func validateActionableTodoItems(items []TodoItem) error {
+	for i, item := range items {
+		signal := todoControlSignalName(item.Content)
+		if signal == "" {
+			continue
+		}
+		return fmt.Errorf("todo[%d]: %s is a control signal, not actionable work; remove this todo and call %s directly after actionable todos are complete", i, signal, signal)
+	}
+	return nil
+}
+
+func todoControlSignalName(content string) string {
+	content = strings.ToLower(strings.TrimSpace(content))
+	if content == "" {
+		return ""
+	}
+	content = strings.NewReplacer("`", "", "\"", "", "'", "", "：", ":", "，", ",", "。", ".").Replace(content)
+	for _, signal := range controlSignalTodoNames {
+		if !strings.Contains(content, signal) {
+			continue
+		}
+		if content == signal || strings.HasPrefix(content, signal+" ") || strings.HasPrefix(content, signal+":") {
+			return signal
+		}
+		for _, prefix := range []string{
+			"call ", "use ", "run ", "invoke ", "emit ",
+			"finish with ", "complete with ",
+			"调用", "使用", "执行", "用",
+			"调用 ", "使用 ", "执行 ", "用 ",
+		} {
+			if strings.HasPrefix(content, prefix+signal) {
+				return signal
+			}
+		}
+	}
+	return ""
 }

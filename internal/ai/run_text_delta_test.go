@@ -2,6 +2,7 @@ package ai
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -299,10 +300,103 @@ func TestReconcileCanonicalMarkdownMessage_UpdatesPersistedAssistantSnapshotText
 	}
 }
 
+func TestEmitTaskCompleteToolBlockProjectsActivityTimelineWithoutChangingAssistantText(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 1)
+	r := &run{
+		id:                       "run_task_complete_projection",
+		messageID:                "msg_task_complete_projection",
+		assistantCreatedAtUnixMs: 1700000000123,
+		onStreamEvent: func(ev any) {
+			events = append(events, ev)
+		},
+		assistantBlocks: []any{
+			&persistedMarkdownBlock{Type: "markdown", Content: "Final user-visible answer."},
+		},
+		nextBlockIndex:        1,
+		currentTextBlockIndex: 0,
+	}
+
+	r.emitTaskCompleteToolBlock("call_task_complete_1", "Final user-visible answer.", []string{" https://example.test/source ", ""})
+
+	if len(events) != 1 {
+		t.Fatalf("stream events=%d, want one activity update", len(events))
+	}
+	ev, ok := events[0].(streamEventBlockSet)
+	if !ok {
+		t.Fatalf("event type=%T, want streamEventBlockSet", events[0])
+	}
+	timeline, ok := ev.Block.(ActivityTimelineBlock)
+	if !ok {
+		t.Fatalf("event block=%T, want ActivityTimelineBlock", ev.Block)
+	}
+	if timeline.Type != activityTimelineBlockType || timeline.Summary.Status != "success" {
+		t.Fatalf("timeline=%#v, want successful activity timeline", timeline)
+	}
+	item, ok := findActivityItemInTimeline(timeline, "task_complete")
+	if !ok {
+		t.Fatalf("timeline missing task_complete item: %#v", timeline.Groups)
+	}
+	if item.Status != "success" || item.ToolID != "call_task_complete_1" {
+		t.Fatalf("task_complete item=%#v, want successful original call id", item)
+	}
+	if got := anyToString(item.Payload["result"]); got != "Final user-visible answer." {
+		t.Fatalf("payload result=%q, want final result", got)
+	}
+
+	rawJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != "Final user-visible answer." {
+		t.Fatalf("assistantText=%q, want visible markdown only", assistantText)
+	}
+	if !json.Valid([]byte(rawJSON)) {
+		t.Fatalf("assistant JSON invalid: %q", rawJSON)
+	}
+	if !strings.Contains(rawJSON, `"toolName":"task_complete"`) {
+		t.Fatalf("assistant JSON missing task_complete timeline: %s", rawJSON)
+	}
+}
+
+func findActivityItemInTimeline(timeline ActivityTimelineBlock, toolName string) (ActivityItem, bool) {
+	for _, group := range timeline.Groups {
+		for _, item := range group.Items {
+			if item.ToolName == toolName {
+				return item, true
+			}
+		}
+	}
+	return ActivityItem{}, false
+}
+
 func TestReconcileCanonicalWaitingUserMessage_ClearsProvisionalMarkdownBlocks(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
+	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
+		PromptID:   "rui_msg_waiting_user_tool_waiting",
+		MessageID:  "msg_waiting_user",
+		ToolID:     "tool_waiting",
+		ToolName:   "ask_user",
+		ReasonCode: AskUserReasonUserDecisionRequired,
+		Questions: []RequestUserInputQuestion{{
+			ID:                "question_1",
+			Header:            "Need input",
+			Question:          "Choose the next direction.",
+			ResponseMode:      requestUserInputResponseModeSelect,
+			ChoicesExhaustive: testBoolPtr(true),
+			Choices: []RequestUserInputChoice{{
+				ChoiceID: "choice_1",
+				Label:    "Option 1",
+				Kind:     requestUserInputChoiceKindSelect,
+			}},
+		}},
+	})
+	if prompt == nil {
+		t.Fatalf("prompt should not be nil")
+	}
 	r := &run{
 		messageID: "msg_waiting_user",
 		onStreamEvent: func(ev any) {
@@ -317,11 +411,12 @@ func TestReconcileCanonicalWaitingUserMessage_ClearsProvisionalMarkdownBlocks(t 
 				Status:   ToolCallStatusSuccess,
 				Args: map[string]any{
 					"questions": []map[string]any{{
-						"id":            "question_1",
-						"header":        "Need input",
-						"question":      "Choose the next direction.",
-						"is_secret":     false,
-						"response_mode": "select",
+						"id":                 "question_1",
+						"header":             "Need input",
+						"question":           "Choose the next direction.",
+						"is_secret":          false,
+						"response_mode":      "select",
+						"choices_exhaustive": true,
 						"choices": []map[string]any{{
 							"choice_id": "choice_1",
 							"label":     "Option 1",
@@ -330,19 +425,8 @@ func TestReconcileCanonicalWaitingUserMessage_ClearsProvisionalMarkdownBlocks(t 
 					}},
 				},
 				Result: map[string]any{
-					"waiting_user": true,
-					"questions": []map[string]any{{
-						"id":            "question_1",
-						"header":        "Need input",
-						"question":      "Choose the next direction.",
-						"is_secret":     false,
-						"response_mode": "select",
-						"choices": []map[string]any{{
-							"choice_id": "choice_1",
-							"label":     "Option 1",
-							"kind":      "select",
-						}},
-					}},
+					"waiting_prompt": prompt,
+					"waiting_user":   true,
 				},
 			},
 		},

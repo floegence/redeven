@@ -1,9 +1,6 @@
 package ai
 
-import (
-	"encoding/json"
-	"strings"
-)
+import "strings"
 
 const (
 	interactionContractSourceModel         = "model"
@@ -59,21 +56,6 @@ func normalizeInteractionContract(contract interactionContract) interactionContr
 	}
 	out.MustNotFinalizeWithQuestion = true
 	return out
-}
-
-func interactionContractFromAny(value any) interactionContract {
-	if value == nil {
-		return normalizeInteractionContract(interactionContract{Source: interactionContractSourceDeterministic})
-	}
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return normalizeInteractionContract(interactionContract{Source: interactionContractSourceDeterministic})
-	}
-	var contract interactionContract
-	if err := json.Unmarshal(raw, &contract); err != nil {
-		return normalizeInteractionContract(interactionContract{Source: interactionContractSourceDeterministic})
-	}
-	return normalizeInteractionContract(contract)
 }
 
 func mergeInteractionContractSeed(contract interactionContract, seed interactionContract) interactionContract {

@@ -278,12 +278,12 @@ func requestUserInputQuestionFromRecord(record map[string]any) (RequestUserInput
 }
 
 func requestUserInputQuestionFromModelRecord(record map[string]any) (RequestUserInputQuestion, string, bool) {
-	question, ok := requestUserInputQuestionFromRecordWithMode(record, false)
+	if requestUserInputRecordHasLegacyShape(record) {
+		return RequestUserInputQuestion{}, askUserGateReasonLegacyContractShape, false
+	}
+	question, ok := strictRequestUserInputQuestionFromRecord(record)
 	if !ok {
-		if requestUserInputRecordHasLegacyShape(record) {
-			return RequestUserInputQuestion{}, askUserGateReasonLegacyContractShape, false
-		}
-		return RequestUserInputQuestion{}, "", false
+		return RequestUserInputQuestion{}, askUserGateReasonInteractionShapeMismatch, false
 	}
 	return question, "", true
 }
@@ -479,6 +479,203 @@ func validateRequestUserInputQuestionsContract(questions []RequestUserInputQuest
 	return ""
 }
 
+func strictRequestUserInputChoice(choice RequestUserInputChoice) (RequestUserInputChoice, bool) {
+	choiceID := truncateRunes(strings.TrimSpace(choice.ChoiceID), 64)
+	label := truncateRunes(strings.TrimSpace(choice.Label), 200)
+	kind := normalizeRequestUserInputChoiceKind(choice.Kind)
+	if choiceID == "" || label == "" || kind == "" {
+		return RequestUserInputChoice{}, false
+	}
+	return RequestUserInputChoice{
+		ChoiceID:         choiceID,
+		Label:            label,
+		Description:      truncateRunes(strings.TrimSpace(choice.Description), 240),
+		Kind:             kind,
+		InputPlaceholder: truncateRunes(strings.TrimSpace(choice.InputPlaceholder), 160),
+		Actions:          normalizeRequestUserInputActions(choice.Actions),
+	}, true
+}
+
+func strictRequestUserInputChoicesFromAny(value any) ([]RequestUserInputChoice, bool) {
+	items := toAnySlice(value)
+	if len(items) == 0 {
+		return nil, true
+	}
+	choices := make([]RequestUserInputChoice, 0, len(items))
+	for _, item := range items {
+		record, ok := item.(map[string]any)
+		if !ok || record == nil {
+			return nil, false
+		}
+		actionsRaw := toAnySlice(record["actions"])
+		actions := make([]RequestUserInputAction, 0, len(actionsRaw))
+		for _, actionItem := range actionsRaw {
+			actionRecord, ok := actionItem.(map[string]any)
+			if !ok || actionRecord == nil {
+				return nil, false
+			}
+			action, ok := normalizeRequestUserInputAction(RequestUserInputAction{
+				Type: anyToString(actionRecord["type"]),
+				Mode: anyToString(actionRecord["mode"]),
+			})
+			if !ok {
+				return nil, false
+			}
+			actions = append(actions, action)
+		}
+		choice, ok := strictRequestUserInputChoice(RequestUserInputChoice{
+			ChoiceID:         anyToString(record["choice_id"]),
+			Label:            anyToString(record["label"]),
+			Description:      anyToString(record["description"]),
+			Kind:             anyToString(record["kind"]),
+			InputPlaceholder: anyToString(record["input_placeholder"]),
+			Actions:          actions,
+		})
+		if !ok {
+			return nil, false
+		}
+		choices = append(choices, choice)
+	}
+	return choices, true
+}
+
+func strictRequestUserInputQuestion(question RequestUserInputQuestion) (RequestUserInputQuestion, bool) {
+	id := truncateRunes(strings.TrimSpace(question.ID), 80)
+	header := truncateRunes(strings.TrimSpace(question.Header), 120)
+	text := truncateRunes(strings.TrimSpace(question.Question), 400)
+	responseMode := normalizeRequestUserInputResponseMode(question.ResponseMode)
+	if id == "" || header == "" || text == "" || responseMode == "" {
+		return RequestUserInputQuestion{}, false
+	}
+
+	choices := make([]RequestUserInputChoice, 0, len(question.Choices))
+	seenChoiceIDs := map[string]struct{}{}
+	seenLabels := map[string]struct{}{}
+	for _, rawChoice := range question.Choices {
+		choice, ok := strictRequestUserInputChoice(rawChoice)
+		if !ok {
+			return RequestUserInputQuestion{}, false
+		}
+		choiceKey := strings.ToLower(choice.ChoiceID)
+		labelKey := strings.ToLower(choice.Label)
+		if _, ok := seenChoiceIDs[choiceKey]; ok {
+			return RequestUserInputQuestion{}, false
+		}
+		if _, ok := seenLabels[labelKey]; ok {
+			return RequestUserInputQuestion{}, false
+		}
+		seenChoiceIDs[choiceKey] = struct{}{}
+		seenLabels[labelKey] = struct{}{}
+		choices = append(choices, choice)
+	}
+
+	if requestUserInputResponseModeRequiresChoices(responseMode) && len(requestUserInputSelectChoices(choices)) == 0 {
+		return RequestUserInputQuestion{}, false
+	}
+	if len(choices) > 0 && question.ChoicesExhaustive == nil {
+		return RequestUserInputQuestion{}, false
+	}
+	if question.ChoicesExhaustive != nil {
+		switch responseMode {
+		case requestUserInputResponseModeSelect:
+			if !*question.ChoicesExhaustive {
+				return RequestUserInputQuestion{}, false
+			}
+		case requestUserInputResponseModeSelectText:
+			if *question.ChoicesExhaustive {
+				return RequestUserInputQuestion{}, false
+			}
+		}
+	}
+
+	out := RequestUserInputQuestion{
+		ID:                id,
+		Header:            header,
+		Question:          text,
+		IsSecret:          question.IsSecret,
+		ResponseMode:      responseMode,
+		ChoicesExhaustive: cloneBoolPtr(question.ChoicesExhaustive),
+		WriteLabel:        truncateRunes(strings.TrimSpace(question.WriteLabel), 200),
+		WritePlaceholder:  truncateRunes(strings.TrimSpace(question.WritePlaceholder), 160),
+	}
+	if requestUserInputResponseModeRequiresChoices(responseMode) {
+		out.Choices = requestUserInputSelectChoices(choices)
+	} else if responseMode == requestUserInputResponseModeWrite && len(choices) > 0 {
+		return RequestUserInputQuestion{}, false
+	}
+	return out, true
+}
+
+func strictRequestUserInputQuestionFromRecord(record map[string]any) (RequestUserInputQuestion, bool) {
+	if record == nil {
+		return RequestUserInputQuestion{}, false
+	}
+	if _, ok := record["is_secret"]; !ok {
+		return RequestUserInputQuestion{}, false
+	}
+	if _, ok := record["response_mode"]; !ok {
+		return RequestUserInputQuestion{}, false
+	}
+	choices, ok := strictRequestUserInputChoicesFromAny(record["choices"])
+	if !ok {
+		return RequestUserInputQuestion{}, false
+	}
+	var choicesExhaustive *bool
+	if raw, ok := record["choices_exhaustive"]; ok {
+		value := anyToBool(raw)
+		choicesExhaustive = &value
+	}
+	return strictRequestUserInputQuestion(RequestUserInputQuestion{
+		ID:                anyToString(record["id"]),
+		Header:            anyToString(record["header"]),
+		Question:          anyToString(record["question"]),
+		IsSecret:          anyToBool(record["is_secret"]),
+		ResponseMode:      anyToString(record["response_mode"]),
+		ChoicesExhaustive: choicesExhaustive,
+		WriteLabel:        anyToString(record["write_label"]),
+		WritePlaceholder:  anyToString(record["write_placeholder"]),
+		Choices:           choices,
+	})
+}
+
+func strictRequestUserInputPrompt(prompt *RequestUserInputPrompt) *RequestUserInputPrompt {
+	if prompt == nil {
+		return nil
+	}
+	out := *prompt
+	out.PromptID = strings.TrimSpace(out.PromptID)
+	out.MessageID = strings.TrimSpace(out.MessageID)
+	out.ToolID = strings.TrimSpace(out.ToolID)
+	out.ToolName = strings.TrimSpace(out.ToolName)
+	if out.PromptID == "" || out.MessageID == "" || out.ToolID == "" || out.ToolName == "" {
+		return nil
+	}
+	out.ReasonCode = normalizeAskUserReasonCode(out.ReasonCode)
+	out.RequiredFromUser = normalizeRequestUserInputStringList(out.RequiredFromUser, 8, 200)
+	out.EvidenceRefs = normalizeRequestUserInputStringList(out.EvidenceRefs, 12, 120)
+	out.InteractionContract = normalizeInteractionContract(out.InteractionContract)
+	out.Questions = make([]RequestUserInputQuestion, 0, len(prompt.Questions))
+	seenIDs := map[string]struct{}{}
+	for _, question := range prompt.Questions {
+		next, ok := strictRequestUserInputQuestion(question)
+		if !ok {
+			return nil
+		}
+		key := strings.ToLower(next.ID)
+		if _, ok := seenIDs[key]; ok {
+			return nil
+		}
+		seenIDs[key] = struct{}{}
+		out.Questions = append(out.Questions, next)
+	}
+	if len(out.Questions) == 0 {
+		return nil
+	}
+	out.ContainsSecret = requestUserInputPromptContainsSecret(out)
+	out.PublicSummary = formatRequestUserInputAssistantSummary(out)
+	return &out
+}
+
 func normalizeRequestUserInputActions(actions []RequestUserInputAction) []RequestUserInputAction {
 	if len(actions) == 0 {
 		return nil
@@ -656,11 +853,12 @@ func normalizeRequestUserInputPrompt(prompt *RequestUserInputPrompt) *RequestUse
 	out := *prompt
 	out.MessageID = strings.TrimSpace(out.MessageID)
 	out.ToolID = strings.TrimSpace(out.ToolID)
+	out.ToolName = strings.TrimSpace(out.ToolName)
 	out.PromptID = strings.TrimSpace(out.PromptID)
 	if out.PromptID == "" {
 		out.PromptID = buildRequestUserInputPromptID(out.MessageID, out.ToolID)
 	}
-	if out.PromptID == "" || out.MessageID == "" || out.ToolID == "" {
+	if out.PromptID == "" || out.MessageID == "" || out.ToolID == "" || out.ToolName == "" {
 		return nil
 	}
 	out.ReasonCode = normalizeAskUserReasonCode(out.ReasonCode)
@@ -706,6 +904,7 @@ func parseRequestUserInputPromptJSON(raw string) *RequestUserInputPrompt {
 		PromptID            string              `json:"prompt_id"`
 		MessageID           string              `json:"message_id"`
 		ToolID              string              `json:"tool_id"`
+		ToolName            string              `json:"tool_name"`
 		ReasonCode          string              `json:"reason_code"`
 		RequiredFromUser    []string            `json:"required_from_user"`
 		EvidenceRefs        []string            `json:"evidence_refs"`
@@ -719,16 +918,17 @@ func parseRequestUserInputPromptJSON(raw string) *RequestUserInputPrompt {
 	}
 	questions := make([]RequestUserInputQuestion, 0, len(payload.Questions))
 	for _, item := range payload.Questions {
-		question, ok := requestUserInputQuestionFromRecord(item)
+		question, ok := strictRequestUserInputQuestionFromRecord(item)
 		if !ok {
-			continue
+			return nil
 		}
 		questions = append(questions, question)
 	}
-	return normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
+	return strictRequestUserInputPrompt(&RequestUserInputPrompt{
 		PromptID:            payload.PromptID,
 		MessageID:           payload.MessageID,
 		ToolID:              payload.ToolID,
+		ToolName:            payload.ToolName,
 		ReasonCode:          payload.ReasonCode,
 		RequiredFromUser:    payload.RequiredFromUser,
 		EvidenceRefs:        payload.EvidenceRefs,

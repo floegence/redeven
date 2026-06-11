@@ -32,6 +32,24 @@ func TestApplyUnifiedDiff_AcceptsCodexBeginPatchAddFile(t *testing.T) {
 	}
 }
 
+func TestApplyUnifiedDiff_AddFileErrorExplainsContentLinePrefix(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	patch := strings.Join([]string{
+		"*** Begin Patch",
+		"*** Add File: note.txt",
+		"hello",
+		"*** End Patch",
+	}, "\n")
+
+	if _, err := applyUnifiedDiff(workingDir, patch); err == nil {
+		t.Fatal("applyUnifiedDiff succeeded, want add-file line error")
+	} else if !strings.Contains(err.Error(), "must start with +") {
+		t.Fatalf("error=%q, want actionable + prefix guidance", err.Error())
+	}
+}
+
 func TestApplyUnifiedDiff_CodexUpdateWithoutLineNumbers(t *testing.T) {
 	t.Parallel()
 

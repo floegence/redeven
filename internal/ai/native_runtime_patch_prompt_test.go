@@ -42,6 +42,9 @@ func TestBuildLayeredSystemPrompt_PrefersStructuredFileOpsButKeepsApplyPatchComp
 	if !strings.Contains(prompt, "do NOT send `diff --git` or raw `---` / `+++` diffs for normal edits") {
 		t.Fatalf("prompt missing no-unified-diff guidance: %q", prompt)
 	}
+	if !strings.Contains(prompt, "prefix every new content line with `+`") {
+		t.Fatalf("prompt missing add-file content-line prefix guidance: %q", prompt)
+	}
 	if !strings.Contains(prompt, "re-read the current file contents and regenerate a fresh canonical Begin/End Patch once") {
 		t.Fatalf("prompt missing apply_patch recovery guidance: %q", prompt)
 	}

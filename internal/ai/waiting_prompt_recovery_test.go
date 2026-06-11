@@ -38,11 +38,15 @@ func testWaitingPromptAssistantMessageJSON(t *testing.T, prompt *RequestUserInpu
 			})
 		}
 		questionPayloads = append(questionPayloads, map[string]any{
-			"id":        question.ID,
-			"header":    question.Header,
-			"question":  question.Question,
-			"is_secret": question.IsSecret,
-			"choices":   choicePayloads,
+			"id":                 question.ID,
+			"header":             question.Header,
+			"question":           question.Question,
+			"is_secret":          question.IsSecret,
+			"response_mode":      question.ResponseMode,
+			"choices_exhaustive": question.ChoicesExhaustive,
+			"write_label":        question.WriteLabel,
+			"write_placeholder":  question.WritePlaceholder,
+			"choices":            choicePayloads,
 		})
 	}
 
@@ -62,8 +66,9 @@ func testWaitingPromptAssistantMessageJSON(t *testing.T, prompt *RequestUserInpu
 					"questions":          questionPayloads,
 				},
 				Result: map[string]any{
-					"questions":    questionPayloads,
-					"waiting_user": waitingUser,
+					"waiting_prompt": prompt,
+					"questions":      questionPayloads,
+					"waiting_user":   waitingUser,
 				},
 			},
 		},
@@ -125,9 +130,11 @@ func TestRequestUserInputPromptFromMessageJSON_ExtractsWaitingPrompt(t *testing.
 		AskUserReasonUserDecisionRequired,
 		[]RequestUserInputQuestion{
 			{
-				ID:       "mode_decision",
-				Header:   "Execution mode",
-				Question: "Switch to Act mode?",
+				ID:                "mode_decision",
+				Header:            "Execution mode",
+				Question:          "Switch to Act mode?",
+				ResponseMode:      requestUserInputResponseModeSelect,
+				ChoicesExhaustive: testBoolPtr(true),
 				Choices: []RequestUserInputChoice{
 					{
 						ChoiceID: "switch_to_act",

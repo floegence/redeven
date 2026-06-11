@@ -7,7 +7,7 @@ import {
   mapFlowerSettingsDraftToDesktop,
   type DesktopSettingsBridge,
 } from './desktopFlowerSurfaceAdapter';
-import type { DesktopFlowerHostSettingsSnapshot, DesktopFlowerHostThread } from '../../shared/flowerHostSettingsIPC';
+import type { DesktopFlowerHostInputRequest, DesktopFlowerHostSettingsSnapshot, DesktopFlowerHostThread } from '../../shared/flowerHostSettingsIPC';
 
 function desktopSnapshot(): DesktopFlowerHostSettingsSnapshot {
   return {
@@ -72,9 +72,57 @@ function desktopThread(): DesktopFlowerHostThread {
     model_id: 'default/gpt-4.1',
     created_at_ms: 1,
     updated_at_ms: 2,
+    status: 'idle',
+    source_label: 'this host',
+    target_labels: [],
     messages: [
-      { id: 'm1', role: 'user', content: 'hello', created_at_ms: 1 },
-      { id: 'm2', role: 'assistant', content: 'hi', created_at_ms: 2 },
+      { id: 'm1', role: 'user', content: 'hello', status: 'complete', created_at_ms: 1 },
+      { id: 'm2', role: 'assistant', content: 'hi', status: 'complete', created_at_ms: 2 },
+    ],
+  };
+}
+
+function desktopInputRequest(): DesktopFlowerHostInputRequest {
+  return {
+    prompt_id: 'prompt-ask-user',
+    message_id: 'message-ask-user',
+    tool_id: 'tool-ask-user',
+    tool_name: 'ask_user',
+    reason_code: 'needs_user_choice',
+    required_from_user: ['target'],
+    evidence_refs: ['m1'],
+    public_summary: 'Choose a target.',
+    contains_secret: false,
+    questions: [
+      {
+        id: 'target',
+        header: 'Deployment target',
+        question: 'Where should Flower deploy this change?',
+        response_mode: 'select_or_write',
+        choices_exhaustive: false,
+        write_label: 'Other target',
+        write_placeholder: 'Type another target',
+        choices: [
+          {
+            choice_id: 'staging',
+            label: 'Staging',
+            description: 'Use the validation environment.',
+            kind: 'select',
+            actions: [
+              {
+                type: 'set_mode',
+                mode: 'act',
+              },
+            ],
+          },
+          {
+            choice_id: 'other',
+            label: 'Other',
+            kind: 'write',
+            input_placeholder: 'Type target name',
+          },
+        ],
+      },
     ],
   };
 }
@@ -96,6 +144,7 @@ function desktopDecision() {
       allowed_target_ids: [],
     },
     available_handlers: [],
+    unavailable_handlers: [],
     handler_selection: {
       can_switch: false,
       requires_user_visible_confirmation: true,
@@ -104,8 +153,21 @@ function desktopDecision() {
       thread_kind: 'chat' as const,
       client_surface: 'flower_surface',
     },
+    host_presence: {
+      schema_version: 1 as const,
+      host_id: 'flower-host',
+      host_kind: 'global' as const,
+      carrier_kind: 'desktop' as const,
+      display_name: 'Flower Host',
+      state: 'online' as const,
+      endpoint: { visibility: 'local' },
+      capabilities: ['chat'],
+      last_seen_at_unix_ms: 1_700_000_000_000,
+    },
+    allowed_actions: ['start_thread'],
     ui_chips: [],
     blocker: null,
+    created_at_unix_ms: 1_700_000_000_000,
   };
 }
 
@@ -156,6 +218,7 @@ describe('Flower surface adapter for the host', () => {
     const listFlowerHostThreads = vi.fn(async () => ({ ok: true as const, threads: [desktopThread()] }));
     const resolveFlowerHostHandler = vi.fn(async () => ({ ok: true as const, decision: desktopDecision() }));
     const sendFlowerHostChat = vi.fn(async () => ({ ok: true as const, thread: desktopThread() }));
+    const submitFlowerHostInput = vi.fn(async () => ({ ok: true as const, thread: desktopThread() }));
     const bridge: DesktopSettingsBridge = {
       save: vi.fn(),
       cancel: vi.fn(),
@@ -165,6 +228,7 @@ describe('Flower surface adapter for the host', () => {
       loadFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
       resolveFlowerHostHandler,
       sendFlowerHostChat,
+      submitFlowerHostInput,
     };
     const adapter = createDesktopFlowerSurfaceAdapter(bridge);
 
@@ -178,12 +242,26 @@ describe('Flower surface adapter for the host', () => {
     })).resolves.toMatchObject({ config: { current_model_id: 'default/gpt-4.1' } });
     await expect(adapter.resolveHandler()).resolves.toMatchObject({ decision_id: 'decision-1' });
     await expect(adapter.sendMessage({ prompt: 'hello' })).resolves.toMatchObject({ thread_id: 'thread-1' });
+    await expect(adapter.submitInput({
+      thread_id: 'thread-1',
+      prompt_id: 'prompt-1',
+      answers: {
+        target: { choice_id: 'staging' },
+      },
+    })).resolves.toMatchObject({ thread_id: 'thread-1' });
 
     expect(loadFlowerHostSettings).toHaveBeenCalledTimes(1);
     expect(saveFlowerHostSettings).toHaveBeenCalledTimes(1);
     expect(listFlowerHostThreads).toHaveBeenCalledTimes(1);
     expect(resolveFlowerHostHandler).toHaveBeenCalledTimes(1);
     expect(sendFlowerHostChat).toHaveBeenCalledWith({ thread_id: undefined, prompt: 'hello' });
+    expect(submitFlowerHostInput).toHaveBeenCalledWith({
+      thread_id: 'thread-1',
+      prompt_id: 'prompt-1',
+      answers: {
+        target: { choice_id: 'staging' },
+      },
+    });
   });
 
   it('passes the visible handler decision when creating a new host thread', async () => {
@@ -198,6 +276,7 @@ describe('Flower surface adapter for the host', () => {
       loadFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
       resolveFlowerHostHandler: vi.fn(async () => ({ ok: true as const, decision })),
       sendFlowerHostChat,
+      submitFlowerHostInput: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
     };
     const adapter = createDesktopFlowerSurfaceAdapter(bridge);
 
@@ -219,7 +298,10 @@ describe('Flower surface adapter for the host', () => {
     const decision = desktopDecision();
     const sendFlowerHostChat = vi.fn(async () => ({
       ok: false as const,
-      error: 'DECISION_REVISION_EXPIRED: Flower handler selection is no longer current.',
+      error: {
+        code: 'DECISION_REVISION_EXPIRED',
+        message: 'Flower handler selection is no longer current.',
+      },
       fresh_decision: decision,
     }));
     const bridge: DesktopSettingsBridge = {
@@ -231,24 +313,142 @@ describe('Flower surface adapter for the host', () => {
       loadFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
       resolveFlowerHostHandler: vi.fn(async () => ({ ok: true as const, decision })),
       sendFlowerHostChat,
+      submitFlowerHostInput: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
     };
     const adapter = createDesktopFlowerSurfaceAdapter(bridge);
 
     await expect(adapter.sendMessage({ prompt: 'hello', decision })).rejects.toMatchObject({
-      message: 'DECISION_REVISION_EXPIRED: Flower handler selection is no longer current.',
+      code: 'DECISION_REVISION_EXPIRED',
+      message: 'Flower handler selection is no longer current.',
       fresh_decision: decision,
     });
   });
 
   it('projects Desktop threads into shared Flower thread snapshots', () => {
-    expect(mapDesktopFlowerThread({ ...desktopThread(), status: 'running' })).toMatchObject({
+    expect(mapDesktopFlowerThread({
+      ...desktopThread(),
+      status: 'running',
+      home_host_id: 'flower-host',
+      home_host_kind: 'global',
+    })).toMatchObject({
       thread_id: 'thread-1',
       status: 'running',
+      home_host_id: 'flower-host',
+      home_host_kind: 'global',
       source_label: 'this host',
       target_labels: [],
       messages: [
-        { id: 'm1', role: 'user', content: 'hello' },
-        { id: 'm2', role: 'assistant', content: 'hi' },
+        { id: 'm1', role: 'user', content: 'hello', status: 'complete' },
+        { id: 'm2', role: 'assistant', content: 'hi', status: 'complete' },
+      ],
+    });
+  });
+
+  it('preserves streaming blocks, tool activity, and run errors from Desktop IPC', () => {
+    const mapped = mapDesktopFlowerThread({
+      ...desktopThread(),
+      status: 'failed',
+      messages: [
+        {
+          id: 'm-streaming',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 3,
+          blocks: [
+            { type: 'thinking', content: 'Checking context.' },
+            { type: 'markdown', content: 'Partial answer' },
+          ],
+        },
+      ],
+      tool_activity: [
+        {
+          run_id: 'run-1',
+          tool_id: 'tool-terminal',
+          tool_name: 'terminal.exec',
+          status: 'success',
+          summary: 'Run command: go test ./...',
+          started_at_ms: 3,
+          ended_at_ms: 4,
+        },
+      ],
+      error: {
+        code: 'failed',
+        message: 'provider rejected request',
+      },
+    });
+
+    expect(mapped.messages[0]).toMatchObject({
+      status: 'streaming',
+      blocks: [
+        { type: 'thinking', content: 'Checking context.' },
+        { type: 'markdown', content: 'Partial answer' },
+      ],
+    });
+    expect(mapped.tool_activity).toEqual([
+      {
+        run_id: 'run-1',
+        tool_id: 'tool-terminal',
+        tool_name: 'terminal.exec',
+        status: 'success',
+        summary: 'Run command: go test ./...',
+        started_at_ms: 3,
+        ended_at_ms: 4,
+      },
+    ]);
+    expect(mapped.error).toEqual({
+      code: 'failed',
+      message: 'provider rejected request',
+    });
+  });
+
+  it('preserves structured input requests from Desktop IPC', () => {
+    const mapped = mapDesktopFlowerThread({
+      ...desktopThread(),
+      status: 'waiting_user',
+      input_request: desktopInputRequest(),
+    });
+
+    expect(mapped.input_request).toEqual({
+      prompt_id: 'prompt-ask-user',
+      message_id: 'message-ask-user',
+      tool_id: 'tool-ask-user',
+      tool_name: 'ask_user',
+      reason_code: 'needs_user_choice',
+      required_from_user: ['target'],
+      evidence_refs: ['m1'],
+      public_summary: 'Choose a target.',
+      contains_secret: false,
+      questions: [
+        {
+          id: 'target',
+          header: 'Deployment target',
+          question: 'Where should Flower deploy this change?',
+          response_mode: 'select_or_write',
+          choices_exhaustive: false,
+          write_label: 'Other target',
+          write_placeholder: 'Type another target',
+          choices: [
+            {
+              choice_id: 'staging',
+              label: 'Staging',
+              description: 'Use the validation environment.',
+              kind: 'select',
+              actions: [
+                {
+                  type: 'set_mode',
+                  mode: 'act',
+                },
+              ],
+            },
+            {
+              choice_id: 'other',
+              label: 'Other',
+              kind: 'write',
+              input_placeholder: 'Type target name',
+            },
+          ],
+        },
       ],
     });
   });

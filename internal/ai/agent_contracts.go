@@ -61,6 +61,7 @@ type Message struct {
 
 type ProviderControls struct {
 	ThinkingBudgetTokens int      `json:"thinking_budget_tokens,omitempty"`
+	DisableReasoning     bool     `json:"disable_reasoning,omitempty"`
 	CacheControl         string   `json:"cache_control,omitempty"`
 	ResponseFormat       string   `json:"response_format,omitempty"`
 	PreviousResponseID   string   `json:"previous_response_id,omitempty"`

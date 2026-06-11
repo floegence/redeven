@@ -91,7 +91,7 @@ describe('Flower Host secret resolver', () => {
     });
     expect(unsupported).toEqual({
       status: 400,
-      payload: { ok: false, error: 'unsupported secret kind' },
+      payload: { ok: false, error: { code: 'unsupported_secret_kind', message: 'Unsupported secret kind.' } },
     });
 
     const supported = await postJSON(resolver.baseURL, resolver.token, {
@@ -109,7 +109,7 @@ describe('Flower Host secret resolver', () => {
     });
     expect(unauthorized).toEqual({
       status: 401,
-      payload: { ok: false, error: 'unauthorized' },
+      payload: { ok: false, error: { code: 'unauthorized', message: 'Unauthorized Flower Host secret resolver request.' } },
     });
   });
 
@@ -127,7 +127,7 @@ describe('Flower Host secret resolver', () => {
     });
     expect(response).toEqual({
       status: 400,
-      payload: { ok: false, error: 'unsupported secret kind' },
+      payload: { ok: false, error: { code: 'unsupported_secret_kind', message: 'Unsupported secret kind.' } },
     });
   });
 
@@ -187,5 +187,67 @@ describe('Flower Host secret resolver', () => {
     expect(serialized).not.toContain('entry-ticket-must-not-leak');
     expect(serialized).not.toContain('provider-token-must-not-leak');
     expect(serialized).not.toContain('psk-must-not-leak');
+  });
+
+  it('rejects malformed target session grants at the resolver boundary', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-secret-resolver-test-'));
+    closers.push(() => fs.rm(root, { recursive: true, force: true }));
+    const paths = defaultDesktopFlowerHostPaths({ HOME: root }, () => '/ignored');
+    const codec = createDesktopFlowerHostPlaintextSecretCodec();
+    const malformed = [
+      {
+        name: 'missing channel id',
+        grant: {
+          target_id: 'cp:test:env:env_a',
+          provider_origin: 'https://region.example.test',
+          env_public_id: 'env_a',
+          grant_client: {},
+          capabilities: { can_read: true, can_write: false, can_execute: false },
+          expires_at_unix_ms: 4_102_444_800_000,
+        },
+        message: 'target session grant_client.channel_id',
+      },
+      {
+        name: 'non boolean capability',
+        grant: {
+          target_id: 'cp:test:env:env_a',
+          provider_origin: 'https://region.example.test',
+          env_public_id: 'env_a',
+          grant_client: { channel_id: 'ch_target' },
+          capabilities: { can_read: 'yes', can_write: false, can_execute: false },
+          expires_at_unix_ms: 4_102_444_800_000,
+        },
+        message: 'target session capabilities.can_read',
+      },
+      {
+        name: 'expired grant',
+        grant: {
+          target_id: 'cp:test:env:env_a',
+          provider_origin: 'https://region.example.test',
+          env_public_id: 'env_a',
+          grant_client: { channel_id: 'ch_target' },
+          capabilities: { can_read: true, can_write: false, can_execute: false },
+          expires_at_unix_ms: 1,
+        },
+        message: 'target session expires_at_unix_ms',
+      },
+    ];
+
+    for (const item of malformed) {
+      const resolver = await startFlowerHostSecretResolver(paths, codec, async () => item.grant as never);
+      closers.push(resolver.close);
+      const response = await postJSONPath(resolver.baseURL, resolver.token, '/v1/targets/open-session', {
+        target_id: 'cp:test:env:env_a',
+        env_public_id: 'env_a',
+      });
+      expect(response.status, item.name).toBe(400);
+      expect(response.payload).toMatchObject({
+        ok: false,
+        error: {
+          code: 'target_session_invalid',
+        },
+      });
+      expect(JSON.stringify(response.payload)).toContain(item.message);
+    }
   });
 });

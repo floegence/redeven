@@ -28,10 +28,92 @@ type secretResolveRequest struct {
 }
 
 type secretResolveResponse struct {
-	OK         bool   `json:"ok"`
-	Configured bool   `json:"configured"`
-	Value      string `json:"value,omitempty"`
-	Error      string `json:"error,omitempty"`
+	OK         bool                 `json:"ok"`
+	Configured bool                 `json:"configured"`
+	Value      string               `json:"value,omitempty"`
+	Error      loopbackErrorPayload `json:"error,omitempty"`
+}
+
+type secretResolverStatusResponse struct {
+	OK    bool                 `json:"ok"`
+	Error loopbackErrorPayload `json:"error,omitempty"`
+}
+
+type loopbackErrorPayload struct {
+	Code    string
+	Message string
+}
+
+func (e *loopbackErrorPayload) UnmarshalJSON(raw []byte) error {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		e.Message = strings.TrimSpace(text)
+		return nil
+	}
+	var record struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &record); err != nil {
+		return err
+	}
+	e.Code = strings.TrimSpace(record.Code)
+	e.Message = strings.TrimSpace(record.Message)
+	return nil
+}
+
+func (e loopbackErrorPayload) String() string {
+	message := strings.TrimSpace(e.Message)
+	if message != "" {
+		return message
+	}
+	if code := strings.TrimSpace(e.Code); code != "" {
+		return code
+	}
+	return ""
+}
+
+func (r HTTPSecretResolver) CheckSecretResolver(ctx context.Context) error {
+	baseURL := strings.TrimRight(strings.TrimSpace(r.BaseURL), "/")
+	token := strings.TrimSpace(r.Token)
+	if baseURL == "" || token == "" {
+		return nil
+	}
+	timeout := r.Timeout
+	if timeout <= 0 {
+		timeout = 3 * time.Second
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, baseURL+"/v1/status", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("authorization", "Bearer "+token)
+	client := r.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	var decoded secretResolverStatusResponse
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return err
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 || !decoded.OK {
+		message := decoded.Error.String()
+		if message == "" {
+			message = fmt.Sprintf("secret resolver status returned HTTP %d", resp.StatusCode)
+		}
+		return errors.New(message)
+	}
+	return nil
 }
 
 func (r HTTPSecretResolver) ResolveProviderAPIKey(ctx context.Context, providerID string) (string, bool, error) {
@@ -86,7 +168,7 @@ func (r HTTPSecretResolver) resolve(ctx context.Context, providerID string, kind
 		return "", false, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 || !decoded.OK {
-		message := strings.TrimSpace(decoded.Error)
+		message := decoded.Error.String()
 		if message == "" {
 			message = fmt.Sprintf("secret resolver returned HTTP %d", resp.StatusCode)
 		}

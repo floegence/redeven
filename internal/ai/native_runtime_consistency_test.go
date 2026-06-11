@@ -678,14 +678,29 @@ func TestIntegration_NativeSDK_OpenAI_ToolTimeout_RecoversWithoutRunTimeout(t *t
 	if err != nil {
 		t.Fatalf("ListRecentThreadToolCalls: %v", err)
 	}
-	if len(toolCalls) != 1 {
-		t.Fatalf("tool call records=%d, want 1; records=%+v", len(toolCalls), toolCalls)
+	if len(toolCalls) != 2 {
+		t.Fatalf("tool call records=%d, want timeout plus task_complete; records=%+v", len(toolCalls), toolCalls)
 	}
-	if toolCalls[0].Status != string(ToolCallStatusError) {
-		t.Fatalf("tool status=%q, want %q", toolCalls[0].Status, ToolCallStatusError)
+	byName := map[string]threadstore.ToolCallRecord{}
+	for _, call := range toolCalls {
+		byName[strings.TrimSpace(call.ToolName)] = call
 	}
-	if toolCalls[0].ErrorCode != "TIMEOUT" {
-		t.Fatalf("tool error_code=%q, want TIMEOUT", toolCalls[0].ErrorCode)
+	timeoutCall, ok := byName["terminal.exec"]
+	if !ok {
+		t.Fatalf("missing terminal.exec timeout record: %+v", toolCalls)
+	}
+	if timeoutCall.Status != string(ToolCallStatusError) {
+		t.Fatalf("tool status=%q, want %q", timeoutCall.Status, ToolCallStatusError)
+	}
+	if timeoutCall.ErrorCode != "TIMEOUT" {
+		t.Fatalf("tool error_code=%q, want TIMEOUT", timeoutCall.ErrorCode)
+	}
+	taskCompleteCall, ok := byName["task_complete"]
+	if !ok {
+		t.Fatalf("missing task_complete completion record: %+v", toolCalls)
+	}
+	if taskCompleteCall.Status != string(ToolCallStatusSuccess) || !strings.Contains(taskCompleteCall.ResultJSON, finalToken) {
+		t.Fatalf("task_complete record=%+v, want success with final token", taskCompleteCall)
 	}
 
 	steps, sawTimeoutSignal := mock.snapshot()

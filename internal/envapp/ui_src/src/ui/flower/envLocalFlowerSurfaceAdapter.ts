@@ -4,6 +4,8 @@ import { fetchGatewayJSON } from '../services/gatewayApi';
 import type { AgentSettingsResponse, AIConfig } from '../pages/settings/types';
 import type {
   FlowerChatMessage,
+  FlowerInputRequest,
+  FlowerInputRequestQuestion,
   FlowerProvider,
   FlowerProviderDraft,
   FlowerProviderModel,
@@ -53,6 +55,40 @@ type ThreadView = Readonly<{
   updated_at_unix_ms?: number;
   last_message_at_unix_ms?: number;
   last_message_preview?: string;
+  waiting_prompt?: ThreadWaitingPrompt;
+}>;
+
+type ThreadWaitingPrompt = Readonly<{
+  prompt_id?: string;
+  message_id?: string;
+  tool_id?: string;
+  tool_name?: string;
+  reason_code?: string;
+  required_from_user?: readonly string[];
+  evidence_refs?: readonly string[];
+  public_summary?: string;
+  contains_secret?: boolean;
+  questions?: readonly Readonly<{
+    id?: string;
+    header?: string;
+    question?: string;
+    is_secret?: boolean;
+    response_mode?: string;
+    choices_exhaustive?: boolean;
+    write_label?: string;
+    write_placeholder?: string;
+    choices?: readonly Readonly<{
+      choice_id?: string;
+      label?: string;
+      description?: string;
+      kind?: string;
+      input_placeholder?: string;
+      actions?: readonly Readonly<{
+        type?: string;
+        mode?: string;
+      }>[];
+    }>[];
+  }>[];
 }>;
 
 type ListThreadsResponse = Readonly<{
@@ -63,8 +99,14 @@ type CreateThreadResponse = Readonly<{
   thread?: ThreadView;
 }>;
 
+type FlowerInputResponseMode = NonNullable<FlowerInputRequestQuestion['response_mode']>;
+
 function trim(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function flowerContractError(message: string): never {
+  throw new Error(`Flower contract error: ${message}`);
 }
 
 function adapterCopy(options: EnvLocalFlowerSurfaceAdapterOptions): EnvLocalFlowerSurfaceAdapterCopy {
@@ -79,9 +121,11 @@ function adapterCopy(options: EnvLocalFlowerSurfaceAdapterOptions): EnvLocalFlow
   };
 }
 
-function unixMs(raw: unknown): number {
+function unixMs(raw: unknown, field: string): number {
   const value = Number(raw ?? 0);
-  if (!Number.isFinite(value) || value <= 0) return Date.now();
+  if (!Number.isFinite(value) || value <= 0) {
+    flowerContractError(`${field} must be a positive unix timestamp.`);
+  }
   return value > 10_000_000_000 ? Math.floor(value) : Math.floor(value * 1000);
 }
 
@@ -196,6 +240,9 @@ function draftToAIConfig(draft: FlowerSettingsDraft): AIConfig {
 
 function runStatus(raw: unknown): FlowerThreadStatus {
   switch (trim(raw).toLowerCase()) {
+    case '':
+    case 'idle':
+      return 'idle';
     case 'accepted':
     case 'running':
     case 'recovering':
@@ -212,7 +259,7 @@ function runStatus(raw: unknown): FlowerThreadStatus {
     case 'success':
       return 'success';
     default:
-      return 'idle';
+      flowerContractError(`thread.run_status is unsupported: ${trim(raw) || '<empty>'}.`);
   }
 }
 
@@ -255,7 +302,95 @@ function mapMessage(message: Message): FlowerChatMessage | null {
     id,
     role,
     content: messageText(message),
-    created_at_ms: unixMs(message.timestamp),
+    status: message.status,
+    created_at_ms: unixMs(message.timestamp, 'message.timestamp'),
+  };
+}
+
+function mapWaitingPrompt(prompt: ThreadWaitingPrompt | undefined): FlowerInputRequest | null {
+  if (!prompt) return null;
+  const promptID = trim(prompt?.prompt_id);
+  const messageID = trim(prompt?.message_id);
+  const toolID = trim(prompt?.tool_id);
+  const toolName = trim(prompt?.tool_name);
+  if (!promptID || !messageID || !toolID || !toolName) {
+    flowerContractError('waiting_prompt requires prompt_id, message_id, tool_id, and tool_name.');
+  }
+  const rawQuestions = prompt.questions ?? [];
+  if (rawQuestions.length === 0) {
+    flowerContractError('waiting_prompt.questions must be a non-empty array.');
+  }
+  const questions = rawQuestions
+    .map((question, questionIndex) => {
+      const id = trim(question.id);
+      const header = trim(question.header);
+      const text = trim(question.question);
+      if (!id || !header || !text) {
+        flowerContractError(`waiting_prompt.questions[${questionIndex}] requires id, header, and question.`);
+      }
+      const responseMode = trim(question.response_mode);
+      if (responseMode !== 'select' && responseMode !== 'write' && responseMode !== 'select_or_write') {
+        flowerContractError(`waiting_prompt.questions[${questionIndex}].response_mode is invalid.`);
+      }
+      const normalizedResponseMode: FlowerInputResponseMode = responseMode;
+      const choices = (question.choices ?? [])
+        .map((choice, choiceIndex) => {
+          const choiceID = trim(choice.choice_id);
+          const label = trim(choice.label);
+          const kind = trim(choice.kind);
+          if (!choiceID || !label || (kind !== 'select' && kind !== 'write')) {
+            flowerContractError(`waiting_prompt.questions[${questionIndex}].choices[${choiceIndex}] is incomplete.`);
+          }
+          const normalizedKind: 'select' | 'write' = kind;
+          const actions = (choice.actions ?? [])
+            .map((action, actionIndex) => {
+              const type = trim(action.type);
+              if (!type) {
+                flowerContractError(`waiting_prompt.questions[${questionIndex}].choices[${choiceIndex}].actions[${actionIndex}].type is required.`);
+              }
+              return {
+                type,
+                ...(trim(action.mode) ? { mode: trim(action.mode) } : {}),
+              };
+            })
+            .filter((action): action is NonNullable<typeof action> => action !== null);
+          return {
+            choice_id: choiceID,
+            label,
+            ...(trim(choice.description) ? { description: trim(choice.description) } : {}),
+            kind: normalizedKind,
+            ...(trim(choice.input_placeholder) ? { input_placeholder: trim(choice.input_placeholder) } : {}),
+            ...(actions.length > 0 ? { actions } : {}),
+          };
+        })
+        .filter((choice): choice is NonNullable<typeof choice> => choice !== null);
+      if ((normalizedResponseMode === 'select' || normalizedResponseMode === 'select_or_write') && choices.length === 0) {
+        flowerContractError(`waiting_prompt.questions[${questionIndex}] requires choices for ${normalizedResponseMode}.`);
+      }
+      return {
+        id,
+        header,
+        question: text,
+        ...(question.is_secret !== undefined ? { is_secret: Boolean(question.is_secret) } : {}),
+        response_mode: normalizedResponseMode,
+        ...(question.choices_exhaustive !== undefined ? { choices_exhaustive: Boolean(question.choices_exhaustive) } : {}),
+        ...(trim(question.write_label) ? { write_label: trim(question.write_label) } : {}),
+        ...(trim(question.write_placeholder) ? { write_placeholder: trim(question.write_placeholder) } : {}),
+        ...(choices.length > 0 ? { choices } : {}),
+      };
+    })
+    .filter((question): question is NonNullable<typeof question> => question !== null);
+  return {
+    prompt_id: promptID,
+    message_id: messageID,
+    tool_id: toolID,
+    tool_name: toolName,
+    ...(trim(prompt?.reason_code) ? { reason_code: trim(prompt?.reason_code) } : {}),
+    ...(Array.isArray(prompt?.required_from_user) ? { required_from_user: prompt.required_from_user.map(trim).filter(Boolean) } : {}),
+    ...(Array.isArray(prompt?.evidence_refs) ? { evidence_refs: prompt.evidence_refs.map(trim).filter(Boolean) } : {}),
+    questions,
+    ...(trim(prompt?.public_summary) ? { public_summary: trim(prompt?.public_summary) } : {}),
+    ...(prompt?.contains_secret !== undefined ? { contains_secret: Boolean(prompt.contains_secret) } : {}),
   };
 }
 
@@ -264,6 +399,7 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
   const threadID = trim(thread.thread_id);
   const title = trim(thread.title) || trim(thread.last_message_preview) || 'Ask Flower';
   const envLabel = trim(options.envLabel) || copy.currentEnvironment;
+  const inputRequest = mapWaitingPrompt(thread.waiting_prompt);
   return {
     thread_id: threadID,
     title,
@@ -271,12 +407,13 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
     home_host_id: `env:${trim(options.envPublicID) || 'current'}`,
     home_host_kind: 'env_local',
     origin_env_public_id: trim(options.envPublicID) || undefined,
-    created_at_ms: unixMs(thread.created_at_unix_ms),
-    updated_at_ms: unixMs(thread.updated_at_unix_ms ?? thread.last_message_at_unix_ms),
+    created_at_ms: unixMs(thread.created_at_unix_ms, 'thread.created_at_unix_ms'),
+    updated_at_ms: unixMs(thread.updated_at_unix_ms ?? thread.last_message_at_unix_ms, 'thread.updated_at_unix_ms'),
     status: runStatus(thread.run_status),
     source_label: envLabel,
     target_labels: [envLabel],
     messages,
+    ...(inputRequest ? { input_request: inputRequest } : {}),
   };
 }
 
@@ -284,8 +421,9 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
   const copy = adapterCopy(options);
   const envID = trim(options.envPublicID) || 'current';
   const envLabel = trim(options.envLabel) || copy.currentEnvironment;
+  const now = Date.now();
   return {
-    decision_id: `env-local-${envID}-${Date.now()}`,
+    decision_id: `env-local-${envID}-${now}`,
     decision_revision: 1,
     route: 'env_local',
     reason_code: 'current_env_only',
@@ -300,6 +438,7 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
       allowed_target_ids: [`env:${envID}`],
     },
     available_handlers: [],
+    unavailable_handlers: [],
     handler_selection: {
       can_switch: false,
       lock_reason: 'env_local_surface',
@@ -310,11 +449,25 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
       client_surface: 'env_app_flower_surface',
       primary_target_id: `env:${envID}`,
     },
+    host_presence: {
+      schema_version: 1,
+      host_id: `env:${envID}`,
+      host_kind: 'env_local',
+      carrier_kind: 'runtime',
+      display_name: envLabel,
+      state: 'online',
+      endpoint: { visibility: 'runtime' },
+      capabilities: ['chat', 'task'],
+      last_seen_at_unix_ms: now,
+    },
+    current_target_id: `env:${envID}`,
+    allowed_actions: ['start_thread'],
     ui_chips: [
       { kind: 'host', label: copy.usingCurrentEnvironment, tone: 'normal' },
       { kind: 'source', label: envLabel, tone: 'normal' },
     ],
     blocker: null,
+    created_at_unix_ms: now,
   };
 }
 
@@ -412,6 +565,34 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         },
       });
       return loadThread(threadID);
+    },
+    submitInput: async (input) => {
+      const tid = trim(input.thread_id);
+      const promptID = trim(input.prompt_id);
+      if (!tid) throw new Error(adapterCopy(options).missingThreadID);
+      if (!promptID) throw new Error('Missing input prompt id.');
+      await options.rpc.ai.submitStructuredPromptResponse({
+        threadId: tid,
+        response: {
+          promptId: promptID,
+          answers: Object.fromEntries(Object.entries(input.answers).map(([questionID, answer]) => [
+            questionID,
+            {
+              choiceId: trim(answer.choice_id) || undefined,
+              text: trim(answer.text) || undefined,
+            },
+          ])),
+        },
+        input: {
+          text: '',
+          attachments: [],
+        },
+        options: {
+          maxSteps: 10,
+          mode: 'act',
+        },
+      });
+      return loadThread(tid);
     },
   };
 }

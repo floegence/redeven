@@ -321,6 +321,24 @@ func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *te
 	t.Parallel()
 
 	const question = "Please choose one direction so I can continue."
+	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
+		PromptID:   "rui_msg_ask_user_tool_ask_user_waiting",
+		MessageID:  "msg_ask_user",
+		ToolID:     "tool_ask_user_waiting",
+		ToolName:   "ask_user",
+		ReasonCode: AskUserReasonUserDecisionRequired,
+		Questions: []RequestUserInputQuestion{{
+			ID:               "question_1",
+			Header:           question,
+			Question:         question,
+			ResponseMode:     requestUserInputResponseModeWrite,
+			WriteLabel:       "Your answer",
+			WritePlaceholder: "Type your answer",
+		}},
+	})
+	if prompt == nil {
+		t.Fatalf("prompt should not be nil")
+	}
 	r := &run{
 		messageID:                "msg_ask_user",
 		assistantCreatedAtUnixMs: 1700000000000,
@@ -344,19 +362,9 @@ func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *te
 				},
 				Status: ToolCallStatusSuccess,
 				Result: map[string]any{
-					"questions": []any{
-						map[string]any{
-							"id":                "question_1",
-							"header":            question,
-							"question":          question,
-							"is_secret":         false,
-							"response_mode":     requestUserInputResponseModeWrite,
-							"write_label":       "Your answer",
-							"write_placeholder": "Type your answer",
-						},
-					},
-					"source":       "model_signal",
-					"waiting_user": true,
+					"waiting_prompt": prompt,
+					"source":         "model_signal",
+					"waiting_user":   true,
 				},
 			},
 		},
@@ -407,6 +415,34 @@ func TestSnapshotAssistantMessageJSON_UsesVisibleMarkdownOnlyForAssistantText(t 
 func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 	t.Parallel()
 
+	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
+		PromptID:         "rui_msg_waiting_prompt_structured_tool_waiting_prompt_structured",
+		MessageID:        "msg_waiting_prompt_structured",
+		ToolID:           "tool_waiting_prompt_structured",
+		ToolName:         "ask_user",
+		ReasonCode:       AskUserReasonUserDecisionRequired,
+		RequiredFromUser: []string{"Choose execution mode"},
+		EvidenceRefs:     []string{"tool_approval_1"},
+		Questions: []RequestUserInputQuestion{{
+			ID:                "mode_decision",
+			Header:            "Execution mode",
+			Question:          "Need your confirmation",
+			ResponseMode:      requestUserInputResponseModeSelect,
+			ChoicesExhaustive: testBoolPtr(true),
+			Choices: []RequestUserInputChoice{{
+				ChoiceID: "switch_to_act",
+				Label:    "Switch to Act mode",
+				Kind:     requestUserInputChoiceKindSelect,
+				Actions: []RequestUserInputAction{{
+					Type: "set_mode",
+					Mode: "act",
+				}},
+			}},
+		}},
+	})
+	if prompt == nil {
+		t.Fatalf("prompt should not be nil")
+	}
 	r := &run{
 		messageID: "msg_waiting_prompt_structured",
 		assistantBlocks: []any{
@@ -419,83 +455,40 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 					"reason_code":        AskUserReasonUserDecisionRequired,
 					"required_from_user": []any{"Choose execution mode"},
 					"evidence_refs":      []any{"tool_approval_1"},
-					"questions": []any{
-						map[string]any{
-							"id":                 "mode_decision",
-							"header":             "Execution mode",
-							"question":           "Need your confirmation",
-							"is_secret":          false,
-							"response_mode":      requestUserInputResponseModeSelect,
-							"choices_exhaustive": true,
-							"choices": []any{
-								map[string]any{
-									"choice_id": "switch_to_act",
-									"label":     "Switch to Act mode",
-									"kind":      "select",
-									"actions": []any{
-										map[string]any{
-											"type": "set_mode",
-											"mode": "act",
-										},
-									},
-								},
-							},
-						},
-					},
+					"questions":          prompt.Questions,
 				},
 				Result: map[string]any{
-					"questions": []any{
-						map[string]any{
-							"id":                 "mode_decision",
-							"header":             "Execution mode",
-							"question":           "Need your confirmation",
-							"is_secret":          false,
-							"response_mode":      requestUserInputResponseModeSelect,
-							"choices_exhaustive": true,
-							"choices": []any{
-								map[string]any{
-									"choice_id": "switch_to_act",
-									"label":     "Switch to Act mode",
-									"kind":      "select",
-									"actions": []any{
-										map[string]any{
-											"type": "set_mode",
-											"mode": "act",
-										},
-									},
-								},
-							},
-						},
-					},
-					"waiting_user": true,
+					"waiting_prompt": prompt,
+					"questions":      prompt.Questions,
+					"waiting_user":   true,
 				},
 			},
 		},
 	}
 
-	prompt := r.snapshotWaitingPrompt()
-	if prompt == nil {
+	gotPrompt := r.snapshotWaitingPrompt()
+	if gotPrompt == nil {
 		t.Fatalf("snapshotWaitingPrompt returned nil")
 	}
-	if got := strings.TrimSpace(prompt.PromptID); got == "" {
+	if got := strings.TrimSpace(gotPrompt.PromptID); got == "" {
 		t.Fatalf("PromptID should not be empty")
 	}
-	if got := strings.TrimSpace(prompt.ToolID); got != "tool_waiting_prompt_structured" {
+	if got := strings.TrimSpace(gotPrompt.ToolID); got != "tool_waiting_prompt_structured" {
 		t.Fatalf("ToolID=%q, want %q", got, "tool_waiting_prompt_structured")
 	}
-	if got := strings.TrimSpace(prompt.ReasonCode); got != AskUserReasonUserDecisionRequired {
+	if got := strings.TrimSpace(gotPrompt.ReasonCode); got != AskUserReasonUserDecisionRequired {
 		t.Fatalf("ReasonCode=%q, want %q", got, AskUserReasonUserDecisionRequired)
 	}
-	if len(prompt.RequiredFromUser) != 1 || prompt.RequiredFromUser[0] != "Choose execution mode" {
-		t.Fatalf("RequiredFromUser=%v", prompt.RequiredFromUser)
+	if len(gotPrompt.RequiredFromUser) != 1 || gotPrompt.RequiredFromUser[0] != "Choose execution mode" {
+		t.Fatalf("RequiredFromUser=%v", gotPrompt.RequiredFromUser)
 	}
-	if len(prompt.EvidenceRefs) != 1 || prompt.EvidenceRefs[0] != "tool_approval_1" {
-		t.Fatalf("EvidenceRefs=%v", prompt.EvidenceRefs)
+	if len(gotPrompt.EvidenceRefs) != 1 || gotPrompt.EvidenceRefs[0] != "tool_approval_1" {
+		t.Fatalf("EvidenceRefs=%v", gotPrompt.EvidenceRefs)
 	}
-	if len(prompt.Questions) != 1 {
-		t.Fatalf("questions len=%d, want 1", len(prompt.Questions))
+	if len(gotPrompt.Questions) != 1 {
+		t.Fatalf("questions len=%d, want 1", len(gotPrompt.Questions))
 	}
-	if got := strings.TrimSpace(prompt.Questions[0].ID); got != "mode_decision" {
+	if got := strings.TrimSpace(gotPrompt.Questions[0].ID); got != "mode_decision" {
 		t.Fatalf("question id=%q, want %q", got, "mode_decision")
 	}
 	if len(prompt.Questions[0].Choices) != 1 {

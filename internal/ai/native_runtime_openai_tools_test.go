@@ -402,7 +402,7 @@ func TestDecorateChatCompletionParams_WebSearchPayloads(t *testing.T) {
 				Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("hello")},
 			}
 			tools := []openai.ChatCompletionToolParam{}
-			decorateChatCompletionParams(&params, tc.mode, &tools)
+			decorateChatCompletionParams(&params, tc.mode, false, &tools)
 			if len(tools) > 0 {
 				params.Tools = tools
 			}
@@ -422,6 +422,27 @@ func TestDecorateChatCompletionParams_WebSearchPayloads(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestDecorateChatCompletionParams_DisableReasoningMergesWithNativeSearch(t *testing.T) {
+	t.Parallel()
+
+	params := openai.ChatCompletionNewParams{
+		Model:    oshared.ChatModel("deepseek-v4-pro"),
+		Messages: []openai.ChatCompletionMessageParamUnion{openai.UserMessage("标题")},
+	}
+	tools := []openai.ChatCompletionToolParam{}
+	decorateChatCompletionParams(&params, providerWebSearchModeDeepSeekNative, true, &tools)
+	raw, err := json.Marshal(params)
+	if err != nil {
+		t.Fatalf("Marshal params: %v", err)
+	}
+	payload := string(raw)
+	for _, want := range []string{`"enable_search":true`, `"enable_thinking":false`, `"thinking":{"type":"disabled"}`} {
+		if !strings.Contains(payload, want) {
+			t.Fatalf("payload missing %s: %s", want, payload)
+		}
 	}
 }
 

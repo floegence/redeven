@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +119,28 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	}
 	if th.WaitingUserInputJSON != "" {
 		t.Fatalf("waiting prompt should be cleared, got %+v", th)
+	}
+}
+
+func TestStore_UpdateThreadRunStateRejectsUnsupportedStatus(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "mystery", "", "", "u1", "u1@example.com"); err == nil {
+		t.Fatalf("UpdateThreadRunState unsupported status error=nil, want error")
+	}
+	if err := s.UpsertRun(ctx, RunRecord{RunID: "run_1", EndpointID: "env_1", ThreadID: "th_1", State: "mystery"}); err == nil {
+		t.Fatalf("UpsertRun unsupported state error=nil, want error")
 	}
 }
 
@@ -253,7 +276,7 @@ func TestStore_SetAutoThreadTitle_GuardsAndManualRename(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	updated, err := s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Fix failing regression tests", "msg_1", "openai/gpt-5-mini", "thread_title_v1", 321, "u1", "u1@example.com")
+	updated, err := s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Fix failing regression tests", "msg_1", "openai/gpt-5-mini", "thread_title", 321, "u1", "u1@example.com")
 	if err != nil {
 		t.Fatalf("SetAutoThreadTitle first: %v", err)
 	}
@@ -280,11 +303,11 @@ func TestStore_SetAutoThreadTitle_GuardsAndManualRename(t *testing.T) {
 	if th.TitleModelID != "openai/gpt-5-mini" {
 		t.Fatalf("TitleModelID=%q, want openai/gpt-5-mini", th.TitleModelID)
 	}
-	if th.TitlePromptVersion != "thread_title_v1" {
-		t.Fatalf("TitlePromptVersion=%q, want thread_title_v1", th.TitlePromptVersion)
+	if th.TitlePromptVersion != "thread_title" {
+		t.Fatalf("TitlePromptVersion=%q, want thread_title", th.TitlePromptVersion)
 	}
 
-	updated, err = s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Different auto title", "msg_2", "openai/gpt-5-mini", "thread_title_v1", 322, "u1", "u1@example.com")
+	updated, err = s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Different auto title", "msg_2", "openai/gpt-5-mini", "thread_title", 322, "u1", "u1@example.com")
 	if err != nil {
 		t.Fatalf("SetAutoThreadTitle second: %v", err)
 	}
@@ -313,7 +336,7 @@ func TestStore_SetAutoThreadTitle_GuardsAndManualRename(t *testing.T) {
 		t.Fatalf("auto title metadata should be cleared after manual rename: %+v", th)
 	}
 
-	updated, err = s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Should not overwrite user blank title", "msg_3", "openai/gpt-5-mini", "thread_title_v1", 323, "u3", "u3@example.com")
+	updated, err = s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Should not overwrite user blank title", "msg_3", "openai/gpt-5-mini", "thread_title", 323, "u3", "u3@example.com")
 	if err != nil {
 		t.Fatalf("SetAutoThreadTitle after manual rename: %v", err)
 	}
@@ -322,7 +345,7 @@ func TestStore_SetAutoThreadTitle_GuardsAndManualRename(t *testing.T) {
 	}
 }
 
-func TestStore_SetAutoThreadTitle_OverwritesFallbackTitle(t *testing.T) {
+func TestStore_SetAutoThreadTitle_DoesNotOverwriteExistingAutoTitle(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -337,20 +360,20 @@ func TestStore_SetAutoThreadTitle_OverwritesFallbackTitle(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	updated, err := s.SetFallbackThreadTitle(ctx, "env_1", "th_1", "First request fallback", "msg_first", 321, "u1", "u1@example.com")
+	updated, err := s.SetAutoThreadTitle(ctx, "env_1", "th_1", "First generated title", "msg_first", "openai/gpt-5-mini", "thread_title", 321, "u1", "u1@example.com")
 	if err != nil {
-		t.Fatalf("SetFallbackThreadTitle: %v", err)
+		t.Fatalf("SetAutoThreadTitle first: %v", err)
 	}
 	if !updated {
-		t.Fatalf("SetFallbackThreadTitle updated=false, want true")
+		t.Fatalf("SetAutoThreadTitle first updated=false, want true")
 	}
 
-	updated, err = s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Generated better title", "msg_second", "openai/gpt-5-mini", "thread_title_v1", 322, "u2", "u2@example.com")
+	updated, err = s.SetAutoThreadTitle(ctx, "env_1", "th_1", "Generated better title", "msg_second", "openai/gpt-5-mini", "thread_title", 322, "u2", "u2@example.com")
 	if err != nil {
-		t.Fatalf("SetAutoThreadTitle overwrite fallback: %v", err)
+		t.Fatalf("SetAutoThreadTitle second: %v", err)
 	}
-	if !updated {
-		t.Fatalf("SetAutoThreadTitle overwrite fallback updated=false, want true")
+	if updated {
+		t.Fatalf("SetAutoThreadTitle second updated=true, want false")
 	}
 
 	th, err := s.GetThread(ctx, "env_1", "th_1")
@@ -360,17 +383,69 @@ func TestStore_SetAutoThreadTitle_OverwritesFallbackTitle(t *testing.T) {
 	if th == nil {
 		t.Fatalf("thread missing")
 	}
-	if th.Title != "Generated better title" {
-		t.Fatalf("Title=%q, want overwritten auto title", th.Title)
+	if th.Title != "First generated title" {
+		t.Fatalf("Title=%q, want original auto title", th.Title)
 	}
 	if th.TitleSource != ThreadTitleSourceAuto {
 		t.Fatalf("TitleSource=%q, want %q", th.TitleSource, ThreadTitleSourceAuto)
 	}
-	if th.TitleInputMessageID != "msg_second" {
-		t.Fatalf("TitleInputMessageID=%q, want msg_second", th.TitleInputMessageID)
+	if th.TitleInputMessageID != "msg_first" {
+		t.Fatalf("TitleInputMessageID=%q, want msg_first", th.TitleInputMessageID)
 	}
 	if th.TitleModelID != "openai/gpt-5-mini" {
 		t.Fatalf("TitleModelID=%q, want openai/gpt-5-mini", th.TitleModelID)
+	}
+}
+
+func TestStore_ListThreadsUsesStableCreatedAtOrder(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	for _, th := range []Thread{
+		{ThreadID: "older", EndpointID: "env_1", CreatedAtUnixMs: 1000, UpdatedAtUnixMs: 9000},
+		{ThreadID: "beta", EndpointID: "env_1", CreatedAtUnixMs: 3000, UpdatedAtUnixMs: 3000},
+		{ThreadID: "alpha", EndpointID: "env_1", CreatedAtUnixMs: 3000, UpdatedAtUnixMs: 3000},
+		{ThreadID: "newer", EndpointID: "env_1", CreatedAtUnixMs: 2000, UpdatedAtUnixMs: 2000},
+		{ThreadID: "other-env", EndpointID: "env_2", CreatedAtUnixMs: 4000, UpdatedAtUnixMs: 4000},
+	} {
+		if err := s.CreateThread(ctx, th); err != nil {
+			t.Fatalf("CreateThread(%s): %v", th.ThreadID, err)
+		}
+	}
+	if err := s.UpdateThreadRunState(ctx, "env_1", "older", "running", "", "", "u1", "u1@example.com"); err != nil {
+		t.Fatalf("UpdateThreadRunState: %v", err)
+	}
+
+	firstPage, cursor, err := s.ListThreads(ctx, "env_1", 2, ThreadsCursor{})
+	if err != nil {
+		t.Fatalf("ListThreads first: %v", err)
+	}
+	if got := storeThreadIDs(firstPage); !slices.Equal(got, []string{"alpha", "beta"}) {
+		t.Fatalf("first page ids=%v, want created_at desc/id asc", got)
+	}
+	if cursor == "" {
+		t.Fatalf("cursor empty, want next page cursor")
+	}
+	decoded, ok := DecodeCursor(cursor)
+	if !ok {
+		t.Fatalf("DecodeCursor(%q) failed", cursor)
+	}
+	secondPage, next, err := s.ListThreads(ctx, "env_1", 2, decoded)
+	if err != nil {
+		t.Fatalf("ListThreads second: %v", err)
+	}
+	if got := storeThreadIDs(secondPage); !slices.Equal(got, []string{"newer", "older"}) {
+		t.Fatalf("second page ids=%v, want created_at cursor order", got)
+	}
+	if next != "" {
+		t.Fatalf("next cursor=%q, want empty at end", next)
 	}
 }
 
@@ -2342,6 +2417,14 @@ SELECT COUNT(1)
 FROM sqlite_master
 WHERE type = 'index' AND name = ?
 `, indexName) == 1
+}
+
+func storeThreadIDs(threads []Thread) []string {
+	out := make([]string, 0, len(threads))
+	for _, thread := range threads {
+		out = append(out, thread.ThreadID)
+	}
+	return out
 }
 
 func tableHasColumnForTest(t *testing.T, db *sql.DB, tableName string, columnName string) bool {

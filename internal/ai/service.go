@@ -1433,6 +1433,14 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 		return decision, classifyErr
 	})
+	requestedExecutionContract := normalizeExecutionContractValue(req.Options.ExecutionContract)
+	if requestedExecutionContract == RunExecutionContractAgenticLoop {
+		policyDecision.Intent = RunIntentTask
+		policyDecision.ObjectiveMode = RunObjectiveModeReplace
+		if policyDecision.Reason = strings.TrimSpace(policyDecision.Reason); policyDecision.Reason == "" {
+			policyDecision.Reason = "requested_agentic_loop"
+		}
+	}
 	req.Options.Intent = policyDecision.Intent
 	req.Options.Complexity = normalizeTaskComplexity(policyDecision.Complexity)
 	req.Options.TodoPolicy = normalizeTodoPolicy(policyDecision.TodoPolicy)
@@ -1459,7 +1467,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		structuredResponseContinuation,
 	)
 	req.Options.ExecutionContract = normalizeExecutionContract(
-		policyDecision.ExecutionContract,
+		executionContractForPolicyDecision(policyDecision, requestedExecutionContract),
 		req.Options.Intent,
 		policyDecision.ObjectiveMode,
 		req.Options.Complexity,
@@ -1474,6 +1482,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	r.persistRunEvent("intent.classified", RealtimeStreamKindLifecycle, map[string]any{
 		"intent":                           policyDecision.Intent,
 		"execution_contract":               req.Options.ExecutionContract,
+		"requested_execution_contract":     requestedExecutionContract,
 		"reason":                           policyDecision.Reason,
 		"source":                           policyDecision.Source,
 		"objective_mode":                   policyDecision.ObjectiveMode,
@@ -1485,6 +1494,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	r.persistRunEvent("policy.classified", RealtimeStreamKindLifecycle, map[string]any{
 		"intent":                           req.Options.Intent,
 		"execution_contract":               req.Options.ExecutionContract,
+		"requested_execution_contract":     requestedExecutionContract,
 		"complexity":                       req.Options.Complexity,
 		"todo_policy":                      req.Options.TodoPolicy,
 		"minimum_todo_items":               req.Options.MinimumTodoItems,
@@ -1494,11 +1504,12 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		"structured_response_continuation": structuredResponseContinuation,
 	})
 	r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
-		"path":               req.Options.ExecutionContract,
-		"intent":             req.Options.Intent,
-		"execution_contract": req.Options.ExecutionContract,
-		"source":             policyDecision.Source,
-		"reason":             policyDecision.Reason,
+		"path":                         req.Options.ExecutionContract,
+		"intent":                       req.Options.Intent,
+		"execution_contract":           req.Options.ExecutionContract,
+		"requested_execution_contract": requestedExecutionContract,
+		"source":                       policyDecision.Source,
+		"reason":                       policyDecision.Reason,
 	})
 	effectiveInput := req.Input
 

@@ -79,12 +79,21 @@ func normalizeAskUserStringList(items []string, maxItems int, maxLen int) []stri
 }
 
 func defaultGuardAskUserSignal(question string, options []string, source string, evidenceRefs ...string) askUserSignal {
+	choices := requestUserInputChoicesFromLabels(options)
+	responseMode := requestUserInputResponseModeWrite
+	var choicesExhaustive *bool
+	if len(choices) > 0 {
+		responseMode = requestUserInputResponseModeSelect
+		choicesExhaustive = boolValuePtr(true)
+	}
 	signal := askUserSignal{
 		Questions: normalizeRequestUserInputQuestions([]RequestUserInputQuestion{{
-			ID:       "question_1",
-			Header:   strings.TrimSpace(question),
-			Question: strings.TrimSpace(question),
-			Choices:  requestUserInputChoicesFromLabels(options),
+			ID:                "question_1",
+			Header:            strings.TrimSpace(question),
+			Question:          strings.TrimSpace(question),
+			ResponseMode:      responseMode,
+			ChoicesExhaustive: choicesExhaustive,
+			Choices:           choices,
 		}}),
 	}
 	switch strings.TrimSpace(source) {

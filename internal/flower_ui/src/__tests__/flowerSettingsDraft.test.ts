@@ -15,8 +15,8 @@ describe('Flower thread list projection', () => {
       source_label: 'env A',
       target_labels: ['env B'],
       messages: [
-        { id: 'm1', role: 'user', content: 'Plan this transfer', created_at_ms: 1 },
-        { id: 'm2', role: 'assistant', content: 'Destination preview is ready.', created_at_ms: 2 },
+        { id: 'm1', role: 'user', content: 'Plan this transfer', status: 'complete', created_at_ms: 1 },
+        { id: 'm2', role: 'assistant', content: 'Destination preview is ready.', status: 'complete', created_at_ms: 2 },
       ],
     };
 

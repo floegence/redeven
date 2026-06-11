@@ -42,12 +42,16 @@ func defaultExecutionContractForPolicy(intent string, objectiveMode string, comp
 }
 
 func normalizeExecutionContract(raw string, intent string, objectiveMode string, complexity string, todoPolicy string, interaction interactionContract) string {
+	normalized := normalizeExecutionContractValue(raw)
+	if normalized == RunExecutionContractAgenticLoop {
+		return RunExecutionContractAgenticLoop
+	}
+
 	intent = normalizeRunIntent(intent)
 	if intent == RunIntentSocial || intent == RunIntentCreative {
 		return RunExecutionContractDirectReply
 	}
 
-	normalized := normalizeExecutionContractValue(raw)
 	if normalized == "" {
 		normalized = defaultExecutionContractForPolicy(intent, objectiveMode, complexity, todoPolicy, interaction)
 	}
@@ -68,4 +72,13 @@ func normalizeExecutionContract(raw string, intent string, objectiveMode string,
 		return RunExecutionContractHybridFirstTurn
 	}
 	return normalized
+}
+
+func executionContractForPolicyDecision(policy runPolicyDecision, requested string) string {
+	policy.ExecutionContract = normalizeExecutionContractValue(policy.ExecutionContract)
+	requested = normalizeExecutionContractValue(requested)
+	if requested == RunExecutionContractAgenticLoop {
+		return RunExecutionContractAgenticLoop
+	}
+	return policy.ExecutionContract
 }

@@ -31,6 +31,7 @@ type RequestUserInputPrompt struct {
 	PromptID            string                     `json:"prompt_id"`
 	MessageID           string                     `json:"message_id"`
 	ToolID              string                     `json:"tool_id"`
+	ToolName            string                     `json:"tool_name"`
 	ReasonCode          string                     `json:"reason_code,omitempty"`
 	RequiredFromUser    []string                   `json:"required_from_user,omitempty"`
 	EvidenceRefs        []string                   `json:"evidence_refs,omitempty"`

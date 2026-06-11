@@ -2,34 +2,28 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	flagent "github.com/floegence/floret/agentharness"
+	flsession "github.com/floegence/floret/session"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
 
 const (
-	autoThreadTitlePromptVersion = "thread_title_v1"
-	autoThreadTitleMaxRunes      = 80
-	autoThreadTitleMaxOutputLow  = 128
-	autoThreadTitleMaxOutputHigh = 4096
+	autoThreadTitlePromptVersion = flagent.ThreadTitleLogicalRequestID
 	autoThreadTitleMaxAttempts   = 3
 	autoThreadTitleRecoveryLimit = 128
 )
 
 type autoThreadTitleDecision struct {
 	Title  string
-	Reason string
-}
-
-type autoThreadTitleGenerationAttempt struct {
-	MaxOutputTokens int
+	Source string
 }
 
 type autoThreadTitleRequest struct {
@@ -59,6 +53,12 @@ type autoThreadTitleApplyResult struct {
 	Err    error
 }
 
+type resolvedProviderAdapter struct {
+	Adapter      Provider
+	ProviderType string
+	ModelName    string
+}
+
 type autoThreadTitleCoordinator struct {
 	svc *Service
 
@@ -75,111 +75,16 @@ type autoThreadTitleCoordinator struct {
 	workerWG  sync.WaitGroup
 }
 
-func buildAutoThreadTitleMessages(userInput string) []Message {
-	system := strings.Join([]string{
-		autoThreadTitlePromptVersion,
-		"You generate concise collaborative thread titles for an on-device coding assistant.",
-		"Return exactly one JSON object with keys: title, reason.",
-		"title must summarize the user's primary intent, not quote the raw message verbatim.",
-		"title must stay in the same language as the user text.",
-		"title must be plain text, a single line, and no more than 80 Unicode characters.",
-		"title must be specific enough for a history sidebar.",
-		"title must not mention chat, thread, assistant, or tool names unless they are central to the request.",
-		"title must not include secrets, credentials, or private values.",
-		"reason must be a short snake_case phrase.",
-		"Do not include markdown or extra text.",
-	}, "\n")
-	user := strings.Join([]string{
-		"Return JSON only: output exactly one JSON object.",
-		"",
-		"Public user text:",
-		strings.TrimSpace(userInput),
-	}, "\n")
-	return []Message{
-		{Role: "system", Content: []ContentPart{{Type: "text", Text: system}}},
-		{Role: "user", Content: []ContentPart{{Type: "text", Text: user}}},
-	}
-}
-
-func parseAutoThreadTitleDecision(raw string) (autoThreadTitleDecision, error) {
-	candidate := strings.TrimSpace(raw)
-	if candidate == "" {
-		return autoThreadTitleDecision{}, errors.New("empty auto title response")
-	}
-
-	if strings.HasPrefix(candidate, "```") {
-		candidate = strings.TrimPrefix(candidate, "```json")
-		candidate = strings.TrimPrefix(candidate, "```JSON")
-		candidate = strings.TrimPrefix(candidate, "```")
-		candidate = strings.TrimSuffix(candidate, "```")
-		candidate = strings.TrimSpace(candidate)
-	}
-
-	type payload struct {
-		Title  string `json:"title"`
-		Reason string `json:"reason"`
-	}
-
-	parse := func(text string) (payload, error) {
-		var out payload
-		if err := json.Unmarshal([]byte(text), &out); err != nil {
-			return payload{}, err
-		}
-		return out, nil
-	}
-
-	parsed, err := parse(candidate)
-	if err != nil {
-		embedded := extractFirstJSONObject(candidate)
-		if embedded == "" {
-			return autoThreadTitleDecision{}, fmt.Errorf("invalid auto title response: %w", err)
-		}
-		parsed, err = parse(embedded)
-		if err != nil {
-			return autoThreadTitleDecision{}, fmt.Errorf("invalid auto title JSON payload: %w", err)
-		}
-	}
-
-	title := normalizeAutoThreadTitle(parsed.Title)
-	if title == "" {
-		return autoThreadTitleDecision{}, errors.New("empty auto title")
-	}
-
-	return autoThreadTitleDecision{
-		Title:  title,
-		Reason: normalizeIntentReason(parsed.Reason),
-	}, nil
-}
-
-func normalizeAutoThreadTitle(raw string) string {
-	title := strings.TrimSpace(raw)
-	if title == "" {
-		return ""
-	}
-	title = strings.ReplaceAll(title, "\n", " ")
-	title = strings.ReplaceAll(title, "\r", " ")
-	title = strings.Join(strings.Fields(title), " ")
-	title = strings.Trim(title, "\"'` ")
-	title = truncateAutoThreadTitle(title, autoThreadTitleMaxRunes)
-	return strings.TrimSpace(title)
-}
-
-func truncateAutoThreadTitle(s string, maxRunes int) string {
-	if maxRunes <= 0 {
-		return ""
-	}
-	runes := []rune(s)
-	if len(runes) <= maxRunes {
-		return s
-	}
-	return strings.TrimSpace(string(runes[:maxRunes]))
-}
-
-func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Provider, string, error) {
+func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolvedProviderAdapter, error) {
 	if s == nil {
-		return nil, "", errors.New("nil service")
+		return resolvedProviderAdapter{}, errors.New("nil service")
 	}
 	providerType := strings.ToLower(strings.TrimSpace(resolved.Provider.Type))
+	modelName := strings.TrimSpace(resolved.ModelName)
+	if modelName == "" {
+		modelName = strings.TrimSpace(resolved.ID)
+	}
+
 	switch providerType {
 	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openai_compatible":
 	case DesktopModelSourceProviderType:
@@ -187,35 +92,51 @@ func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Provi
 		modelSource := s.desktopModelSource
 		s.mu.Unlock()
 		if modelSource == nil {
-			return nil, "", ErrNotConfigured
+			return resolvedProviderAdapter{}, ErrNotConfigured
 		}
 		modelID := strings.TrimSpace(resolved.DesktopModelSourceModelID)
 		if modelID == "" {
 			modelID = strings.TrimSpace(resolved.ID)
 		}
 		if !isDesktopModelSourceModelID(modelID) {
-			return nil, "", fmt.Errorf("invalid desktop model source model %q", resolved.ID)
+			return resolvedProviderAdapter{}, fmt.Errorf("invalid desktop model source model %q", resolved.ID)
 		}
-		return modelSource.Provider(modelID), "json_object", nil
+		return resolvedProviderAdapter{
+			Adapter:      modelSource.Provider(modelID),
+			ProviderType: providerType,
+			ModelName:    modelID,
+		}, nil
 	default:
-		return nil, "", fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
+		return resolvedProviderAdapter{}, fmt.Errorf("unsupported provider type %q", strings.TrimSpace(resolved.Provider.Type))
 	}
 	if s.resolveProviderKey == nil {
-		return nil, "", errors.New("missing provider key resolver")
+		return resolvedProviderAdapter{}, errors.New("missing provider key resolver")
 	}
 	apiKey, ok, err := s.resolveProviderKey(resolved.ProviderID)
 	if err != nil {
-		return nil, "", fmt.Errorf("resolve provider key failed: %w", err)
+		return resolvedProviderAdapter{}, fmt.Errorf("resolve provider key failed: %w", err)
 	}
 	if !ok || strings.TrimSpace(apiKey) == "" {
-		return nil, "", fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
+		return resolvedProviderAdapter{}, fmt.Errorf("missing api key for provider %q", resolved.ProviderID)
 	}
 	adapter, err := newProviderAdapter(providerType, strings.TrimSpace(resolved.Provider.BaseURL), strings.TrimSpace(apiKey), resolved.Provider.StrictToolSchema)
 	if err != nil {
-		return nil, "", fmt.Errorf("init provider adapter failed: %w", err)
+		return resolvedProviderAdapter{}, fmt.Errorf("init provider adapter failed: %w", err)
+	}
+	return resolvedProviderAdapter{
+		Adapter:      adapter,
+		ProviderType: providerType,
+		ModelName:    modelName,
+	}, nil
+}
+
+func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Provider, string, error) {
+	adapter, err := s.initResolvedProviderAdapter(resolved)
+	if err != nil {
+		return nil, "", err
 	}
 	responseFormat := "json_object"
-	switch providerType {
+	switch adapter.ProviderType {
 	case "openai_compatible", "moonshot", "chatglm", "deepseek", "qwen":
 		// Some OpenAI-compatible gateways return empty/incomplete outputs under forced
 		// json_object mode. Keep prompt-level JSON constraints and parse the text payload.
@@ -224,14 +145,14 @@ func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Provi
 		// under forced json_object mode even when the non-streaming endpoint succeeds.
 		responseFormat = ""
 	}
-	return adapter, responseFormat, nil
+	return adapter.Adapter, responseFormat, nil
 }
 
-func (s *Service) generateAutoThreadTitleByModel(ctx context.Context, resolved resolvedRunModel, userInput string) (autoThreadTitleDecision, error) {
+func (s *Service) generateAutoThreadTitleByModel(ctx context.Context, resolved resolvedRunModel, threadID string, messageID string, userInput string) (autoThreadTitleDecision, error) {
 	if s == nil {
 		return autoThreadTitleDecision{}, errors.New("nil service")
 	}
-	adapter, responseFormat, err := s.initStructuredOutputProvider(resolved)
+	adapter, err := s.initResolvedProviderAdapter(resolved)
 	if err != nil {
 		return autoThreadTitleDecision{}, err
 	}
@@ -243,68 +164,34 @@ func (s *Service) generateAutoThreadTitleByModel(ctx context.Context, resolved r
 	}
 	defer cancel()
 
-	attempts := []autoThreadTitleGenerationAttempt{
-		{MaxOutputTokens: autoThreadTitleMaxOutputLow},
-		{MaxOutputTokens: autoThreadTitleMaxOutputHigh},
+	generator := flagent.ProviderTitleGenerator{
+		Provider: newFloretProviderAdapter(
+			adapter.Adapter,
+			adapter.ProviderType,
+			adapter.ModelName,
+			config.AIModePlan,
+			ProviderControls{},
+			TurnBudgets{MaxSteps: 1},
+			"",
+			nil,
+			nil,
+			nil,
+		),
+		ProviderName: adapter.ProviderType,
+		Model:        adapter.ModelName,
 	}
-	var lastErr error
-	for idx, attempt := range attempts {
-		result, runErr := s.runAutoThreadTitleAttempt(titleCtx, adapter, responseFormat, resolved, userInput, attempt)
-		if runErr != nil {
-			return autoThreadTitleDecision{}, runErr
-		}
-		decision, parseErr := parseAutoThreadTitleDecision(result.Text)
-		if parseErr == nil {
-			return decision, nil
-		}
-		lastErr = parseErr
-		if idx >= len(attempts)-1 || !shouldRetryAutoThreadTitleWithExpandedBudget(result, attempt) {
-			break
-		}
+	result, err := generator.GenerateTitle(titleCtx, flagent.TitleRequest{
+		ThreadID: strings.TrimSpace(threadID),
+		TurnID:   strings.TrimSpace(messageID),
+		Messages: []flsession.Message{{
+			Role:    flsession.User,
+			Content: strings.TrimSpace(userInput),
+		}},
+	})
+	if err != nil {
+		return autoThreadTitleDecision{}, err
 	}
-	if lastErr == nil {
-		lastErr = errors.New("auto title generation returned no parseable text")
-	}
-	return autoThreadTitleDecision{}, lastErr
-}
-
-func (s *Service) runAutoThreadTitleAttempt(
-	ctx context.Context,
-	adapter Provider,
-	responseFormat string,
-	resolved resolvedRunModel,
-	userInput string,
-	attempt autoThreadTitleGenerationAttempt,
-) (TurnResult, error) {
-	if s == nil {
-		return TurnResult{}, errors.New("nil service")
-	}
-	if adapter == nil {
-		return TurnResult{}, errors.New("missing auto title provider")
-	}
-
-	maxOutputTokens := attempt.MaxOutputTokens
-	if maxOutputTokens <= 0 {
-		maxOutputTokens = autoThreadTitleMaxOutputLow
-	}
-
-	return adapter.StreamTurn(ctx, TurnRequest{
-		Model:            strings.TrimSpace(resolved.ModelName),
-		Messages:         buildAutoThreadTitleMessages(userInput),
-		Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: maxOutputTokens},
-		ModeFlags:        ModeFlags{Mode: config.AIModePlan},
-		ProviderControls: ProviderControls{ResponseFormat: responseFormat},
-	}, nil)
-}
-
-func shouldRetryAutoThreadTitleWithExpandedBudget(result TurnResult, attempt autoThreadTitleGenerationAttempt) bool {
-	if attempt.MaxOutputTokens >= autoThreadTitleMaxOutputHigh {
-		return false
-	}
-	if strings.EqualFold(strings.TrimSpace(result.FinishReason), "length") {
-		return true
-	}
-	return strings.TrimSpace(result.Text) == "" && strings.TrimSpace(result.Reasoning) != ""
+	return autoThreadTitleDecision{Title: result.Title, Source: string(result.Source)}, nil
 }
 
 func (s *Service) scheduleAutoThreadTitle(meta *session.Meta, threadID string, input effectiveCurrentUserInput) {
@@ -608,7 +495,7 @@ func (c *autoThreadTitleCoordinator) handleResult(req autoThreadTitleRequest, re
 		}
 		delay := delayFn(attempt)
 		scheduled := false
-		shouldFallback := false
+		exhausted := false
 		c.mu.Lock()
 		active, activeOK := c.inFlight[key]
 		if activeOK && autoThreadTitleRequestsMatch(active, req) {
@@ -616,7 +503,7 @@ func (c *autoThreadTitleCoordinator) handleResult(req autoThreadTitleRequest, re
 			_, hasNewerPending := c.pending[key]
 			if !hasNewerPending {
 				if attempt >= autoThreadTitleMaxAttempts {
-					shouldFallback = true
+					exhausted = true
 				} else {
 					current := req
 					current.Attempts = attempt
@@ -628,8 +515,17 @@ func (c *autoThreadTitleCoordinator) handleResult(req autoThreadTitleRequest, re
 		}
 		c.mu.Unlock()
 
-		if shouldFallback && c.svc != nil {
-			_ = c.svc.applyFallbackThreadTitleOnce(context.Background(), req, attempt)
+		if exhausted {
+			if c.svc != nil && c.svc.log != nil {
+				c.svc.log.Warn("thread auto title generation exhausted",
+					"endpoint_id", req.EndpointID,
+					"thread_id", req.ThreadID,
+					"message_id", req.MessageID,
+					"attempt", attempt,
+					"reason", result.Reason,
+					"error", result.Err,
+				)
+			}
 			return
 		}
 		if scheduled && c.svc != nil && c.svc.log != nil {
@@ -685,19 +581,6 @@ func autoThreadTitleRetryDelay(attempt int) time.Duration {
 	default:
 		return 30 * time.Second
 	}
-}
-
-func canRegenerateFromFallbackTitle(th *threadstore.Thread, req autoThreadTitleRequest) bool {
-	if th == nil {
-		return false
-	}
-	if strings.TrimSpace(th.TitleSource) != threadstore.ThreadTitleSourceAutoFallback {
-		return false
-	}
-	if strings.TrimSpace(th.Title) == "" {
-		return false
-	}
-	return strings.TrimSpace(th.TitleInputMessageID) != "" && strings.TrimSpace(th.TitleInputMessageID) != strings.TrimSpace(req.MessageID)
 }
 
 func (s *Service) recoverAutoThreadTitleRequest(ctx context.Context, endpointID string, threadID string) (autoThreadTitleRequest, bool, error) {
@@ -807,7 +690,7 @@ func (s *Service) applyAutoThreadTitleOnce(ctx context.Context, req autoThreadTi
 	if th == nil {
 		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "missing_thread"}
 	}
-	if strings.TrimSpace(th.Title) != "" && !canRegenerateFromFallbackTitle(th, req) {
+	if strings.TrimSpace(th.Title) != "" {
 		if logger != nil {
 			logger.Info("thread auto title skipped",
 				"endpoint_id", req.EndpointID,
@@ -843,7 +726,7 @@ func (s *Service) applyAutoThreadTitleOnce(ctx context.Context, req autoThreadTi
 		}
 		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusRetry, Reason: "resolve_model_failed", Err: err}
 	}
-	decision, err := s.generateAutoThreadTitleByModel(opCtx, resolved, req.PublicText)
+	decision, err := s.generateAutoThreadTitleByModel(opCtx, resolved, req.ThreadID, req.MessageID, req.PublicText)
 	if err != nil {
 		if logger != nil {
 			logger.Warn("thread auto title generation failed",
@@ -908,139 +791,9 @@ func (s *Service) applyAutoThreadTitleOnce(ctx context.Context, req autoThreadTi
 			"model_id", resolved.ID,
 			"prompt_version", autoThreadTitlePromptVersion,
 			"title_source", threadstore.ThreadTitleSourceAuto,
-			"decision_reason", decision.Reason,
+			"title_generator_source", decision.Source,
 		)
 	}
 	s.broadcastThreadSummary(req.EndpointID, req.ThreadID)
 	return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusApplied, Reason: "applied"}
-}
-
-func (s *Service) applyFallbackThreadTitleOnce(ctx context.Context, req autoThreadTitleRequest, attempts int) autoThreadTitleApplyResult {
-	if s == nil {
-		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "nil_service"}
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
-	req.EndpointID = strings.TrimSpace(req.EndpointID)
-	req.ThreadID = strings.TrimSpace(req.ThreadID)
-	req.MessageID = strings.TrimSpace(req.MessageID)
-	req.UpdatedByID = strings.TrimSpace(req.UpdatedByID)
-	req.UpdatedByEmail = strings.TrimSpace(req.UpdatedByEmail)
-	if req.EndpointID == "" || req.ThreadID == "" {
-		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "invalid_request"}
-	}
-
-	opCtx := ctx
-	cancel := func() {}
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		opCtx, cancel = context.WithTimeout(ctx, 20*time.Second)
-	}
-	defer cancel()
-
-	s.mu.Lock()
-	db := s.threadsDB
-	persistTO := s.persistOpTO
-	logger := s.log
-	s.mu.Unlock()
-	if db == nil {
-		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "service_not_ready"}
-	}
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
-
-	loadCtx, loadCancel := context.WithTimeout(opCtx, persistTO)
-	firstUser, err := db.GetFirstUserThreadMessage(loadCtx, req.EndpointID, req.ThreadID)
-	loadCancel()
-	if err != nil {
-		if logger != nil {
-			logger.Warn("thread auto title fallback load failed",
-				"endpoint_id", req.EndpointID,
-				"thread_id", req.ThreadID,
-				"message_id", req.MessageID,
-				"attempt", attempts,
-				"error", err,
-			)
-		}
-		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "fallback_load_failed", Err: err}
-	}
-	if firstUser == nil {
-		if logger != nil {
-			logger.Info("thread auto title fallback skipped",
-				"endpoint_id", req.EndpointID,
-				"thread_id", req.ThreadID,
-				"message_id", req.MessageID,
-				"attempt", attempts,
-				"reason", "fallback_missing_first_user_message",
-			)
-		}
-		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "fallback_missing_first_user_message"}
-	}
-
-	title := normalizeAutoThreadTitle(firstUser.TextContent)
-	if title == "" {
-		if logger != nil {
-			logger.Info("thread auto title fallback skipped",
-				"endpoint_id", req.EndpointID,
-				"thread_id", req.ThreadID,
-				"message_id", req.MessageID,
-				"attempt", attempts,
-				"reason", "fallback_empty_first_user_message",
-			)
-		}
-		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "fallback_empty_first_user_message"}
-	}
-
-	generatedAtUnixMs := time.Now().UnixMilli()
-	saveCtx, saveCancel := context.WithTimeout(opCtx, persistTO)
-	updated, err := db.SetFallbackThreadTitle(
-		saveCtx,
-		req.EndpointID,
-		req.ThreadID,
-		title,
-		strings.TrimSpace(firstUser.MessageID),
-		generatedAtUnixMs,
-		req.UpdatedByID,
-		req.UpdatedByEmail,
-	)
-	saveCancel()
-	if err != nil {
-		if logger != nil {
-			logger.Warn("thread auto title fallback persist failed",
-				"endpoint_id", req.EndpointID,
-				"thread_id", req.ThreadID,
-				"message_id", req.MessageID,
-				"attempt", attempts,
-				"error", err,
-			)
-		}
-		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "fallback_persist_failed", Err: err}
-	}
-	if !updated {
-		if logger != nil {
-			logger.Info("thread auto title fallback skipped",
-				"endpoint_id", req.EndpointID,
-				"thread_id", req.ThreadID,
-				"message_id", req.MessageID,
-				"attempt", attempts,
-				"reason", "fallback_guard_rejected",
-			)
-		}
-		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusTerminal, Reason: "fallback_guard_rejected"}
-	}
-
-	if logger != nil {
-		logger.Info("thread auto title fallback applied",
-			"endpoint_id", req.EndpointID,
-			"thread_id", req.ThreadID,
-			"message_id", req.MessageID,
-			"attempt", attempts,
-			"title_source", threadstore.ThreadTitleSourceAutoFallback,
-			"title_input_message_id", strings.TrimSpace(firstUser.MessageID),
-		)
-	}
-	s.broadcastThreadSummary(req.EndpointID, req.ThreadID)
-	return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusApplied, Reason: "fallback_applied"}
 }

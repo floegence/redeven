@@ -111,10 +111,10 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 
 	// Social and creative turns are direct conversational projections, not
 	// agentic tool-loop fallbacks. Task execution below has a single Floret path.
-	if intent == RunIntentSocial {
+	if executionContract != RunExecutionContractAgenticLoop && intent == RunIntentSocial {
 		return r.runNativeSocial(ctx, adapter, providerCfg, providerType, modelName, mode, req)
 	}
-	if intent == RunIntentCreative {
+	if executionContract != RunExecutionContractAgenticLoop && intent == RunIntentCreative {
 		return r.runNativeCreative(ctx, adapter, providerCfg, providerType, modelName, mode, req)
 	}
 
@@ -210,16 +210,21 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if completionContractForExecutionContract(executionContract) == completionContractFirstTurn {
 		completionPolicy = flengine.CompletionNaturalStop
 	}
+	hostLabels := floretHostLabelsForRun(r)
+	controlSpec, err := newFloretControlSpec(r, sharedState, controlTools, taskComplexity, mode)
+	if err != nil {
+		return r.failRun("Failed to initialize Floret control tools", err)
+	}
 	engineOptions := flengine.Options{
 		RunID:                  strings.TrimSpace(r.id),
 		SessionID:              strings.TrimSpace(r.threadID),
 		TraceID:                strings.TrimSpace(r.id),
 		ProviderName:           providerType,
 		Model:                  modelName,
-		Labels:                 flengine.RunLabels{Correlation: map[string]string{"thread_id": strings.TrimSpace(r.threadID), "message_id": strings.TrimSpace(r.messageID)}, Host: map[string]string{"endpoint_id": strings.TrimSpace(r.endpointID), "engine": "redeven"}},
+		Labels:                 flengine.RunLabels{Correlation: map[string]string{"thread_id": strings.TrimSpace(r.threadID), "message_id": strings.TrimSpace(r.messageID)}, Host: hostLabels},
 		ContextPolicy:          floretContextPolicy(contextWindow, inputContextLimit, req.Options.MaxOutputTokens),
 		CompletionPolicy:       completionPolicy,
-		ControlSpec:            newFloretControlSpec(r, sharedState, controlTools, taskComplexity, mode),
+		ControlSpec:            controlSpec,
 		PreviousProviderState:  previousState,
 		MaxToolCalls:           nativeHardMaxSteps,
 		MaxTotalTokens:         int64(req.Options.MaxInputTokens + req.Options.MaxOutputTokens),
@@ -316,7 +321,8 @@ func (r *run) projectFloretResult(ctx context.Context, result flengine.Result, r
 			if resultText == "" {
 				resultText = strings.TrimSpace(anyToString(signal.Payload["result"]))
 			}
-			for _, ref := range extractStringListFromAny(signal.Payload["evidence_refs"]) {
+			evidenceRefs := extractStringListFromAny(signal.Payload["evidence_refs"])
+			for _, ref := range evidenceRefs {
 				r.addWebSource("", ref)
 			}
 			if req.Options.RequireUserConfirmOnTaskComplete {
@@ -327,12 +333,6 @@ func (r *run) projectFloretResult(ctx context.Context, result flengine.Result, r
 				if !approved {
 					return r.failRun("Task completion rejected by user", errors.New("task completion rejected"))
 				}
-			}
-			if r.attemptRuntimeCloseout(step, state, complexity, mode, profile, req.Options.RequireUserConfirmOnTaskComplete, runtimeCloseoutAttempt{
-				Source:   runtimeCloseoutAttemptSourceTextOnlyTurn,
-				Fallback: resultText,
-			}) {
-				return nil
 			}
 			gatePassed, gateReason := evaluateTaskCompletionGate(resultText, state, complexity, mode)
 			r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
@@ -353,6 +353,7 @@ func (r *run) projectFloretResult(ctx context.Context, result flengine.Result, r
 			}
 			r.setCanonicalMarkdownCandidate(resultText)
 			r.reconcileCanonicalMarkdownMessage(resultText)
+			r.emitTaskCompleteToolBlock(strings.TrimSpace(signal.CallID), resultText, evidenceRefs)
 			r.emitSourcesToolBlock("task_complete")
 			r.setFinalizationReason("task_complete")
 			r.setEndReason("complete")
@@ -360,13 +361,13 @@ func (r *run) projectFloretResult(ctx context.Context, result flengine.Result, r
 			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 			return nil
 		}
-		if r.attemptRuntimeCloseout(step, state, complexity, mode, profile, req.Options.RequireUserConfirmOnTaskComplete, runtimeCloseoutAttempt{
-			Source:   runtimeCloseoutAttemptSourceTextOnlyTurn,
-			Fallback: result.Output,
-		}) {
-			return nil
-		}
 		if completionContractForExecutionContract(state.ExecutionContract) == completionContractFirstTurn && strings.TrimSpace(result.Output) != "" {
+			if r.attemptRuntimeCloseout(step, state, complexity, mode, profile, req.Options.RequireUserConfirmOnTaskComplete, runtimeCloseoutAttempt{
+				Source:   runtimeCloseoutAttemptSourceTextOnlyTurn,
+				Fallback: result.Output,
+			}) {
+				return nil
+			}
 			if !r.hasNonEmptyAssistantText() {
 				_ = r.appendTextDelta(strings.TrimSpace(result.Output))
 			}
@@ -553,6 +554,10 @@ func (r *run) projectFloretExitPlanModeWaiting(ctx context.Context, step int, si
 	result, ok := signal.Payload["waiting_prompt"].(*RequestUserInputPrompt)
 	if !ok || result == nil {
 		return errors.New("exit_plan_mode missing waiting prompt")
+	}
+	result = normalizeRequestUserInputPrompt(result)
+	if result == nil || strings.TrimSpace(result.ToolName) != "exit_plan_mode" {
+		return errors.New("exit_plan_mode waiting prompt has invalid tool identity")
 	}
 	exitResult := ExitPlanModeResult{
 		WaitingPrompt: result,

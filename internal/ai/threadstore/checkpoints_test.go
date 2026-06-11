@@ -587,7 +587,7 @@ func TestThreadCheckpoint_RestorePreservesTitleMetadata(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	updated, err := s.SetAutoThreadTitle(ctx, endpointID, threadID, "Fix flaky checkpoint test", "msg_title_1", "openai/gpt-5-mini", "thread_title_v1", now+1, "u1", "u1@example.com")
+	updated, err := s.SetAutoThreadTitle(ctx, endpointID, threadID, "Fix flaky checkpoint test", "msg_title_1", "openai/gpt-5-mini", "thread_title", now+1, "u1", "u1@example.com")
 	if err != nil {
 		t.Fatalf("SetAutoThreadTitle baseline: %v", err)
 	}
@@ -627,7 +627,7 @@ func TestThreadCheckpoint_RestorePreservesTitleMetadata(t *testing.T) {
 	if th.TitleModelID != "openai/gpt-5-mini" {
 		t.Fatalf("TitleModelID=%q, want openai/gpt-5-mini", th.TitleModelID)
 	}
-	if th.TitlePromptVersion != "thread_title_v1" {
-		t.Fatalf("TitlePromptVersion=%q, want thread_title_v1", th.TitlePromptVersion)
+	if th.TitlePromptVersion != "thread_title" {
+		t.Fatalf("TitlePromptVersion=%q, want thread_title", th.TitlePromptVersion)
 	}
 }

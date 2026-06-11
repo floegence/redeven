@@ -16,17 +16,21 @@ type floretControlProjector struct {
 	mode       string
 }
 
-func newFloretControlSpec(r *run, state *floretToolRuntimeState, activeTools []ToolDef, complexity string, mode string) flengine.ControlSpec {
+func newFloretControlSpec(r *run, state *floretToolRuntimeState, activeTools []ToolDef, complexity string, mode string) (flengine.ControlSpec, error) {
 	projector := floretControlProjector{
 		run:        r,
 		state:      state,
 		complexity: normalizeTaskComplexity(complexity),
 		mode:       strings.TrimSpace(mode),
 	}
-	return flengine.ControlSpec{
-		Definitions: floretControlDefinitionsFromTools(activeTools),
-		Project:     projector.Project,
+	definitions, err := floretControlDefinitionsFromTools(activeTools)
+	if err != nil {
+		return flengine.ControlSpec{}, err
 	}
+	return flengine.ControlSpec{
+		Definitions: definitions,
+		Project:     projector.Project,
+	}, nil
 }
 
 func (p floretControlProjector) Project(call flprovider.ToolCall) (flengine.ControlSignal, bool, error) {
@@ -95,6 +99,7 @@ func (p floretControlProjector) projectAskUser(call ToolCall) (flengine.ControlS
 			"source":                       "model_signal",
 			"gate_passed":                  pass,
 			"gate_reason":                  reason,
+			"contract_error":               signal.ContractError,
 			"question_len":                 len([]rune(strings.TrimSpace(signal.Question))),
 			"questions_count":              len(signal.Questions),
 			"choices_count":                requestUserInputQuestionChoiceCount(signal.Questions),
@@ -114,17 +119,19 @@ func (p floretControlProjector) projectAskUser(call ToolCall) (flengine.ControlS
 			Name:        "ask_user",
 			CallID:      strings.TrimSpace(call.ID),
 			Payload: map[string]any{
-				"rejected":    true,
-				"gate_reason": reason,
-				"source":      "model_signal",
+				"rejected":       true,
+				"gate_reason":    reason,
+				"contract_error": signal.ContractError,
+				"source":         "model_signal",
 			},
-			OutputText: askUserRejectionText(reason),
+			OutputText: askUserRejectionText(reason, signal.ContractError),
 		}, nil
 	}
 	payload := map[string]any{
 		"source":             "model_signal",
 		"questions":          signal.Questions,
 		"question":           signal.Question,
+		"tool_name":          "ask_user",
 		"reason_code":        signal.ReasonCode,
 		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
 		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
@@ -188,37 +195,42 @@ func flowerToolCallFromFloret(call flprovider.ToolCall) (ToolCall, error) {
 	}, nil
 }
 
-func askUserRejectionText(reason string) string {
+func askUserRejectionText(reason string, contractError string) string {
 	reason = strings.TrimSpace(reason)
+	contractError = strings.TrimSpace(contractError)
+	prefix := "ask_user was rejected. Regenerate the ask_user tool call with this exact canonical shape: questions:[{id,header,question,is_secret,response_mode,choices?,choices_exhaustive?,write_label?,write_placeholder?}], reason_code, required_from_user, evidence_refs. "
 	switch reason {
 	case "missing_reason_code":
-		return "ask_user was rejected because reason_code is missing or invalid. Regenerate ask_user with a valid structured reason."
+		return prefix + "reason_code is missing or invalid; use one of user_decision_required, permission_blocked, missing_external_input, conflicting_constraints, safety_confirmation."
 	case "missing_required_from_user":
-		return "ask_user was rejected because required_from_user is empty. Specify exactly what information is needed from the user."
+		return prefix + "required_from_user is empty; specify exactly what information or decision is needed from the user."
 	case askUserGateReasonMissingChoices:
-		return "ask_user was rejected because a choice-based question had no fixed choices. Use response_mode=\"select\" only for exhaustive fixed choices, response_mode=\"write\" for direct input, or response_mode=\"select_or_write\" for non-exhaustive fixed choices plus a typed fallback."
+		return prefix + "questions are missing or a choice-based question has no fixed choices. Use response_mode=\"write\" with no choices for direct input, response_mode=\"select\" with choices_exhaustive=true for exhaustive options, or response_mode=\"select_or_write\" with choices_exhaustive=false for options plus typed fallback."
 	case askUserGateReasonMissingChoicesExhaustive:
-		return "ask_user was rejected because a choice-based question omitted choices_exhaustive. Declare whether the fixed options are exhaustive."
+		return prefix + "a choice-based question omitted choices_exhaustive. Declare whether the fixed options are exhaustive."
 	case askUserGateReasonInconsistentChoiceContract:
-		return "ask_user was rejected because response_mode and choices_exhaustive disagree. Keep fixed-choice semantics consistent."
+		return prefix + "response_mode and choices_exhaustive disagree. Keep fixed-choice semantics consistent: select=true, select_or_write=false, write=no choices."
 	case askUserGateReasonInteractionShapeMismatch:
-		return "ask_user was rejected because it violated the user's requested interaction shape. Preserve explicit fixed-option and structured-input requirements."
+		if contractError != "" {
+			return prefix + "the questions payload is invalid (" + contractError + ") or violates the requested interaction shape. Preserve explicit fixed-option and structured-input requirements."
+		}
+		return prefix + "it violated the user's requested interaction shape. Preserve explicit fixed-option and structured-input requirements."
 	case askUserGateReasonLegacyContractShape:
-		return "ask_user was rejected because it used the retired options/is_other/detail_input contract. Regenerate with canonical questions[].choices[], response_mode, and choices_exhaustive fields."
+		return prefix + "it used the retired options/is_other/detail_input contract. Regenerate with canonical questions[].choices[], response_mode, and choices_exhaustive fields."
 	case "missing_evidence_refs":
-		return "ask_user was rejected because evidence_refs is empty for an evidence-backed reason. Provide concrete evidence refs from tool calls."
+		return prefix + "evidence_refs is empty for an evidence-backed reason. Provide concrete evidence refs from tool calls."
 	case "unresolved_evidence_refs":
-		return "ask_user was rejected because evidence_refs do not match known tool-call records. Use valid tool IDs as evidence refs."
+		return prefix + "evidence_refs do not match known tool-call records. Use valid tool IDs as evidence refs."
 	case "permission_reason_without_blocked_evidence":
-		return "ask_user was rejected because reason_code=permission_blocked requires blocked tool evidence."
+		return prefix + "reason_code=permission_blocked requires blocked tool evidence."
 	case "pending_todos_without_blocker":
-		return "ask_user was rejected because todos are still open. Continue execution, or update write_todos to mark blockers before asking the user."
+		return prefix + "todos are still open. Continue execution, or update write_todos to mark blockers before asking the user."
 	case todoRequirementMissingPolicyRequired:
-		return "ask_user was rejected because the run policy requires todo tracking, but no todo snapshot exists. Call write_todos first, then continue execution."
+		return prefix + "the run policy requires todo tracking, but no todo snapshot exists. Call write_todos first, then continue execution."
 	case todoRequirementInsufficientPolicyRequired:
-		return "ask_user was rejected because the current todo plan is smaller than the required minimum. Expand write_todos first, then continue execution."
+		return prefix + "the current todo plan is smaller than the required minimum. Expand write_todos first, then continue execution."
 	default:
-		return "ask_user was rejected by contract gate. Continue autonomously with available tools and call task_complete when done."
+		return prefix + "the contract gate rejected it. Continue autonomously with available tools when possible and call task_complete when done."
 	}
 }
 

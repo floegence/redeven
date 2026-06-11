@@ -1122,7 +1122,11 @@ func (s *Store) restoreThreadRowTx(ctx context.Context, tx *sql.Tx, endpointID s
 	if th.ThreadID != threadID || th.EndpointID != endpointID {
 		return errors.New("thread snapshot mismatch")
 	}
-	_, err := tx.ExecContext(ctx, `
+	runStatus, err := canonicalRunStatusForCreate(th.RunStatus)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `
 	UPDATE ai_threads
 	SET namespace_public_id = ?,
 	    model_id = ?,
@@ -1161,7 +1165,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		strings.TrimSpace(th.TitleInputMessageID),
 		strings.TrimSpace(th.TitleModelID),
 		strings.TrimSpace(th.TitlePromptVersion),
-		normalizeRunStatus(th.RunStatus),
+		runStatus,
 		th.RunUpdatedAtUnixMs,
 		strings.TrimSpace(th.RunError),
 		strings.TrimSpace(th.WaitingUserInputJSON),

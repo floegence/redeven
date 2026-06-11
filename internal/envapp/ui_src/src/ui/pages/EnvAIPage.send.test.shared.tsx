@@ -2,6 +2,11 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
+  const state: {
+    threadDetailWaitingPrompt: Record<string, unknown> | null;
+  } = {
+    threadDetailWaitingPrompt: null,
+  };
   const fetchGatewayJSONMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.includes('/_redeven_proxy/api/settings')) {
       return {
@@ -27,7 +32,17 @@ const mocks = vi.hoisted(() => {
     }
     if (url.includes('/_redeven_proxy/api/ai/threads/') && (!init || init.method === 'GET')) {
       const threadID = decodeURIComponent(url.split('/').pop() ?? 'thread-1');
-      return { thread: { thread_id: threadID, title: 'Loaded Env Flower thread', model_id: 'openai/gpt-5.2', run_status: 'success', created_at_unix_ms: 1, updated_at_unix_ms: 2 } };
+      return {
+        thread: {
+          thread_id: threadID,
+          title: 'Loaded Env Flower thread',
+          model_id: 'openai/gpt-5.2',
+          run_status: state.threadDetailWaitingPrompt ? 'waiting_user' : 'success',
+          created_at_unix_ms: 1,
+          updated_at_unix_ms: 2,
+          ...(state.threadDetailWaitingPrompt ? { waiting_prompt: state.threadDetailWaitingPrompt } : {}),
+        },
+      };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads?')) {
       return { threads: [{ thread_id: 'thread-1', title: 'Env Flower history', model_id: 'openai/gpt-5.2', run_status: 'success', created_at_unix_ms: 1, updated_at_unix_ms: 2 }] };
@@ -48,6 +63,7 @@ const mocks = vi.hoisted(() => {
       messageJson: {
         id: `msg-${threadId}`,
         role: 'assistant',
+        status: 'complete',
         timestamp: 10,
         blocks: [{ type: 'markdown', content: `Transcript for ${threadId}` }],
       },
@@ -58,6 +74,7 @@ const mocks = vi.hoisted(() => {
     fetchGatewayJSONMock,
     listMessagesMock,
     sendUserTurnMock,
+    state,
     subscribeThreadMock,
   };
 });
@@ -187,6 +204,7 @@ export function registerEnvAIPageSendTests() {
       mocks.sendUserTurnMock.mockClear();
       mocks.subscribeThreadMock.mockClear();
       mocks.listMessagesMock.mockClear();
+      mocks.state.threadDetailWaitingPrompt = null;
     });
 
     afterEach(() => {
@@ -216,6 +234,31 @@ export function registerEnvAIPageSendTests() {
         await flush();
         expect(mocks.listMessagesMock).toHaveBeenCalledWith({ threadId: 'thread-1', tail: true, limit: 200 });
         expect(host.textContent).toContain('Transcript for thread-1');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('shows a contract error instead of dropping malformed waiting prompts', async () => {
+      mocks.state.threadDetailWaitingPrompt = {
+        prompt_id: 'prompt-1',
+        message_id: 'message-1',
+        tool_id: 'tool-1',
+        questions: [{
+          id: 'next_step',
+          header: 'Need input',
+          question: 'Choose the next step.',
+          response_mode: 'select',
+          choices: [{ choice_id: 'continue', label: 'Continue', kind: 'select' }],
+        }],
+      };
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+        await flush();
+        expect(host.textContent).toContain('Flower contract error: waiting_prompt requires prompt_id, message_id, tool_id, and tool_name.');
+        expect(host.querySelector('[data-flower-input-request-card]')).toBeNull();
       } finally {
         dispose();
       }

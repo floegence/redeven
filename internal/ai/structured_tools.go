@@ -378,6 +378,7 @@ func (r *run) toolExitPlanMode(toolID string, args ExitPlanModeArgs) (ExitPlanMo
 	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
 		MessageID:        strings.TrimSpace(r.messageID),
 		ToolID:           toolID,
+		ToolName:         "exit_plan_mode",
 		ReasonCode:       AskUserReasonUserDecisionRequired,
 		RequiredFromUser: []string{"Choose whether to switch this thread to act mode so execution can continue."},
 		Questions: []RequestUserInputQuestion{
