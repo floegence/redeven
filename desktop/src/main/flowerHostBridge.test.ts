@@ -176,6 +176,8 @@ function validThreadResponse(): Record<string, unknown> {
     thread_id: 'thread-streaming',
     title: 'Streaming',
     model_id: 'deepseek/deepseek-chat',
+    working_dir: '/workspace/redeven',
+    pinned_at_ms: 123,
     created_at_ms: 10,
     updated_at_ms: 90,
     status: 'running',
@@ -444,6 +446,8 @@ describe('Flower Host bridge lifecycle', () => {
 
       expect(thread.created_at_ms).toBe(10);
       expect(thread.updated_at_ms).toBe(90);
+      expect(thread.working_dir).toBe('/workspace/redeven');
+      expect(thread.pinned_at_ms).toBe(123);
       expect(thread.messages[0]).toMatchObject({
         status: 'streaming',
         blocks: [
@@ -471,6 +475,25 @@ describe('Flower Host bridge lifecycle', () => {
     }
   });
 
+  it('treats missing working directory from older hosts as unavailable for optional copy action', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    const response = validThreadResponse();
+    delete response.working_dir;
+    threadResponse = response;
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      const thread = await bridge.loadFlowerHostThreadViaBridge({
+        ...bridgeArgs(root),
+        threadID: 'thread-streaming',
+      });
+
+      expect(thread.working_dir).toBe('');
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('preserves structured input requests from thread responses', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
     threadResponse = {
@@ -488,6 +511,33 @@ describe('Flower Host bridge lifecycle', () => {
 
       expect(thread.status).toBe('waiting_user');
       expect(thread.input_request).toEqual(validInputRequestResponse());
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('patches thread title and pinned state and forks through Flower Host thread endpoints', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    threadResponse = { thread: validThreadResponse() };
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      await expect(bridge.renameFlowerHostThreadViaBridge({
+        ...bridgeArgs(root),
+        request: { thread_id: 'thread-streaming', title: 'Renamed' },
+      })).resolves.toMatchObject({ thread_id: 'thread-streaming' });
+      await expect(bridge.setFlowerHostThreadPinnedViaBridge({
+        ...bridgeArgs(root),
+        request: { thread_id: 'thread-streaming', pinned: true },
+      })).resolves.toMatchObject({ pinned_at_ms: 123 });
+      await expect(bridge.forkFlowerHostThreadViaBridge({
+        ...bridgeArgs(root),
+        request: { thread_id: 'thread-streaming' },
+      })).resolves.toMatchObject({ thread_id: 'thread-streaming' });
+
+      expect(fetchRequests.some((request) => request.url.endsWith('/v1/thread/thread-streaming') && request.method === 'PATCH' && (request.body as { title?: string }).title === 'Renamed')).toBe(true);
+      expect(fetchRequests.some((request) => request.url.endsWith('/v1/thread/thread-streaming') && request.method === 'PATCH' && (request.body as { pinned?: boolean }).pinned === true)).toBe(true);
+      expect(fetchRequests.some((request) => request.url.endsWith('/v1/thread/thread-streaming/fork') && request.method === 'POST')).toBe(true);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

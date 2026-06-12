@@ -1263,6 +1263,208 @@ html.dark .flower-component-shell {
   color: var(--flower-thread-rail-foreground);
 }
 
+.flower-host-thread-card-menu-button {
+  position: absolute;
+  right: 0.375rem;
+  bottom: 0.375rem;
+  display: flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  color: var(--flower-thread-rail-subtle);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.flower-host-thread-card:hover .flower-host-thread-card-menu-button,
+.flower-host-thread-card:focus-within .flower-host-thread-card-menu-button {
+  opacity: 1;
+}
+
+.flower-host-thread-card-menu-button:hover,
+.flower-host-thread-card-menu-button:focus-visible {
+  background: color-mix(in srgb, var(--flower-thread-rail-accent) 88%, transparent);
+  color: var(--flower-thread-rail-foreground);
+  outline: none;
+}
+
+.flower-host-thread-pin-badge {
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--flower-thread-rail-control-border));
+  border-radius: 0.375rem;
+  padding: 0 0.25rem;
+  font-size: 0.625rem;
+  line-height: 1rem;
+  color: var(--flower-thread-rail-muted);
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+}
+
+.flower-host-thread-context-menu {
+  position: fixed;
+  z-index: 80;
+  width: 13.25rem;
+  padding: 0.25rem;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 0.5rem;
+  background: var(--flower-chat-surface-elevated, var(--card));
+  color: var(--foreground);
+  box-shadow:
+    0 20px 42px -26px color-mix(in srgb, black 52%, transparent),
+    0 8px 22px -18px color-mix(in srgb, black 44%, transparent);
+}
+
+.flower-host-thread-menu-item {
+  display: flex;
+  width: 100%;
+  min-height: 1.875rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  padding: 0.375rem 0.5rem;
+  text-align: left;
+  font-size: 0.8125rem;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.flower-host-thread-menu-item:hover,
+.flower-host-thread-menu-item:focus-visible {
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
+  outline: none;
+}
+
+.flower-host-thread-menu-item:disabled {
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+  cursor: not-allowed;
+}
+
+.flower-host-thread-menu-item[aria-busy="true"] {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.flower-host-thread-menu-separator {
+  height: 1px;
+  margin: 0.25rem 0.375rem;
+  background: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.flower-host-thread-action-error {
+  margin: 0 0.75rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--error, #ef4444) 28%, transparent);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  color: color-mix(in srgb, var(--error, #ef4444) 86%, var(--foreground));
+  background: color-mix(in srgb, var(--error, #ef4444) 7%, transparent);
+  font-size: 0.75rem;
+}
+
+.flower-host-thread-action-success {
+  margin: 0 0.75rem 0.75rem;
+  border: 1px solid color-mix(in srgb, #10b981 26%, transparent);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  color: color-mix(in srgb, #10b981 76%, var(--foreground));
+  background: color-mix(in srgb, #10b981 7%, transparent);
+  font-size: 0.75rem;
+}
+
+.flower-host-rename-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: color-mix(in srgb, black 28%, transparent);
+}
+
+.flower-host-rename-dialog {
+  width: min(100%, 22rem);
+  border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background: var(--flower-chat-surface-elevated, var(--card));
+  box-shadow: 0 24px 52px -34px color-mix(in srgb, black 58%, transparent);
+}
+
+.flower-host-rename-dialog h2 {
+  margin: 0 0 0.875rem;
+  font-size: 0.9375rem;
+  font-weight: 650;
+}
+
+.flower-host-rename-dialog label {
+  display: grid;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.flower-host-rename-input {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.625rem;
+  color: var(--foreground);
+  background: var(--background);
+}
+
+.flower-host-rename-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--primary) 32%, transparent);
+  outline-offset: 1px;
+}
+
+.flower-host-rename-input[aria-invalid="true"] {
+  border-color: color-mix(in srgb, var(--error, #ef4444) 48%, var(--border));
+}
+
+.flower-host-rename-error {
+  margin: 0.625rem 0 0;
+  color: color-mix(in srgb, var(--error, #ef4444) 86%, var(--foreground));
+  font-size: 0.75rem;
+}
+
+.flower-host-rename-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.flower-host-rename-secondary,
+.flower-host-rename-primary {
+  min-width: 4.25rem;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.flower-host-rename-secondary {
+  color: var(--foreground);
+  background: transparent;
+}
+
+.flower-host-rename-primary {
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.flower-host-rename-secondary:disabled,
+.flower-host-rename-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .flower-host-composer {
   border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
   border-radius: 1rem;

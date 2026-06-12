@@ -1950,6 +1950,88 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	}
 }
 
+func TestGateway_AIThreadForkDecodesBodyStrictly(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+	channelID := "ch_test_ai_thread_fork"
+	meta := session.Meta{
+		EndpointID:   "env_fork",
+		UserPublicID: "user_1",
+		UserEmail:    "user1@example.com",
+		CanRead:      true,
+		CanWrite:     true,
+		CanExecute:   true,
+	}
+	aiSvc, err := ai.NewService(ai.Options{
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "/bin/sh",
+	})
+	if err != nil {
+		t.Fatalf("ai.NewService: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = aiSvc.Close()
+	})
+	thread, err := aiSvc.CreateThread(context.Background(), &meta, "Fork source", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := aiSvc.AppendThreadMessage(context.Background(), &meta, thread.ThreadID, "user", "Fork me", "markdown"); err != nil {
+		t.Fatalf("AppendThreadMessage: %v", err)
+	}
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		AI:                 aiSvc,
+		ConfigPath:         writeTestConfig(t),
+		ResolveSessionMeta: resolveMetaForTest(channelID, meta),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	origin := envOriginWithChannel(channelID)
+	forkPath := "/_redeven_proxy/api/ai/threads/" + url.PathEscape(thread.ThreadID) + "/fork"
+
+	unknown := performGatewayRequest(gw, http.MethodPost, forkPath, origin, `{"unknown":true}`)
+	if unknown.Code != http.StatusBadRequest {
+		t.Fatalf("unknown fork body status=%d, want=%d body=%s", unknown.Code, http.StatusBadRequest, unknown.Body.String())
+	}
+	trailing := performGatewayRequest(gw, http.MethodPost, forkPath, origin, `{} {}`)
+	if trailing.Code != http.StatusBadRequest {
+		t.Fatalf("trailing fork body status=%d, want=%d body=%s", trailing.Code, http.StatusBadRequest, trailing.Body.String())
+	}
+	extraPath := performGatewayRequest(gw, http.MethodPost, forkPath+"/extra", origin, `{}`)
+	if extraPath.Code != http.StatusNotFound {
+		t.Fatalf("extra fork path status=%d, want=%d body=%s", extraPath.Code, http.StatusNotFound, extraPath.Body.String())
+	}
+
+	rr := performGatewayRequest(gw, http.MethodPost, forkPath, origin, `{"title":"Gateway fork"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("fork status=%d, want=%d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	var resp struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Thread struct {
+				ThreadID string `json:"thread_id"`
+				Title    string `json:"title"`
+			} `json:"thread"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal fork response: %v", err)
+	}
+	if !resp.OK || strings.TrimSpace(resp.Data.Thread.ThreadID) == "" || resp.Data.Thread.ThreadID == thread.ThreadID || resp.Data.Thread.Title != "Gateway fork" {
+		t.Fatalf("fork response=%+v, want titled fork", resp)
+	}
+}
+
 func TestGateway_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	t.Parallel()
 

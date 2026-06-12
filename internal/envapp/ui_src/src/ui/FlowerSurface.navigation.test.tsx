@@ -28,10 +28,14 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     ChevronLeft: Icon,
     Clock: Icon,
     Code: Icon,
+    Copy: Icon,
+    Folder: Icon,
     FolderOpen: Icon,
     GitBranch: Icon,
     GripVertical: Icon,
+    MoreHorizontal: Icon,
     Pencil: Icon,
+    Pin: Icon,
     Plus: Icon,
     Refresh: Icon,
     Search: Icon,
@@ -168,6 +172,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     thread_id: 'thread-1',
     title: 'Deploy plan',
     model_id: 'openai/gpt-5.2',
+    working_dir: '/workspace/redeven',
     created_at_ms: 1,
     updated_at_ms: 2,
     status: 'idle',
@@ -701,6 +706,175 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => threadOrder(host).length === 3);
 
     expect(threadOrder(host)).toEqual(['thread-a', 'thread-b', 'thread-c']);
+  });
+
+  it('opens thread actions from the keyboard and supports menu roving focus', async () => {
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      forkThread: vi.fn(async () => thread({ thread_id: 'thread-fork' })),
+      renameThread: vi.fn(async () => thread()),
+      setThreadPinned: vi.fn(async () => thread({ pinned_at_ms: 10 })),
+    });
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-1"] button')));
+
+    const rowButton = host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement;
+    rowButton.focus();
+    rowButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }));
+    await flush();
+
+    const menu = host.querySelector('[role="menu"]') as HTMLElement | null;
+    expect(menu).toBeTruthy();
+    const items = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    expect(items.map((item) => item.textContent?.trim())).toContain('Copy thread id');
+    expect(document.activeElement).toBe(items[0]);
+
+    items[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    await flush();
+    expect(document.activeElement).toBe(items[1]);
+    items[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true, cancelable: true }));
+    await flush();
+    expect(document.activeElement).toBe(items[items.length - 1]);
+    items[items.length - 1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await flush();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(rowButton);
+  });
+
+  it('disables fork for threads that are still running or waiting', async () => {
+    const forkThread = vi.fn(async () => thread({ thread_id: 'thread-fork' }));
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [
+        thread({ thread_id: 'thread-running', title: 'Running', status: 'running' }),
+        thread({ thread_id: 'thread-waiting', title: 'Waiting', status: 'waiting_user' }),
+      ]),
+      forkThread,
+    });
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running"]')));
+
+    (host.querySelector('[data-thread-id="thread-running"]') as HTMLElement)
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+    await flush();
+    const runningFork = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Fork')) as HTMLButtonElement;
+    expect(runningFork.disabled).toBe(true);
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await flush();
+    (host.querySelector('[data-thread-id="thread-waiting"]') as HTMLElement)
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+    await flush();
+    const waitingFork = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Fork')) as HTMLButtonElement;
+    expect(waitingFork.disabled).toBe(true);
+    expect(forkThread).not.toHaveBeenCalled();
+  });
+
+  it('copies thread metadata with fallback clipboard feedback', async () => {
+    Object.defineProperty(document, 'execCommand', {
+      configurable: true,
+      value: vi.fn(() => true),
+    });
+    const execCommand = vi.spyOn(document, 'execCommand').mockReturnValue(true);
+    const clipboard = navigator.clipboard;
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: undefined,
+    });
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [thread({ working_dir: '/workspace/redeven' })]),
+    });
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-1"]')));
+
+    (host.querySelector('[data-thread-id="thread-1"]') as HTMLElement)
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+    await flush();
+    (Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Copy thread id')) as HTMLButtonElement).click();
+    await flush();
+
+    expect(execCommand).toHaveBeenCalledWith('copy');
+    expect(host.textContent).toContain('Copied thread id.');
+    expect(document.activeElement).toBe(host.querySelector('[data-thread-id="thread-1"] button'));
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: clipboard,
+    });
+    execCommand.mockRestore();
+  });
+
+  it('shows rename failures inside the modal dialog', async () => {
+    const renameThread = vi.fn(async () => {
+      throw new Error('title too long');
+    });
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      renameThread,
+    });
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-1"]')));
+
+    (host.querySelector('[data-thread-id="thread-1"]') as HTMLElement)
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+    await flush();
+    (Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Rename')) as HTMLButtonElement).click();
+    await flush();
+    const dialog = host.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain('Rename conversation');
+    const input = dialog.querySelector('input') as HTMLInputElement;
+    input.value = 'A title that fails';
+    input.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await flush();
+    (Array.from(dialog.querySelectorAll('button')) as HTMLButtonElement[])
+      .find((button) => button.textContent?.includes('Save'))?.click();
+    await flush();
+
+    expect(renameThread).toHaveBeenCalled();
+    expect(dialog.textContent).toContain('title too long');
+    expect(host.querySelector('.flower-host-thread-action-error')).toBeNull();
+  });
+
+  it('disables all thread actions while a fork action is pending', async () => {
+    const forkControl: { resolve?: (thread: FlowerThreadSnapshot) => void } = {};
+    const forkThread = vi.fn(() => new Promise<FlowerThreadSnapshot>((resolve) => {
+      forkControl.resolve = resolve;
+    }));
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      forkThread,
+    });
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-1"]')));
+
+    const openForkMenu = async () => {
+      (host.querySelector('[data-thread-id="thread-1"]') as HTMLElement)
+        .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
+      await flush();
+      return Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+        .find((item) => item.textContent?.includes('Fork') || item.textContent?.includes('Working')) as HTMLButtonElement;
+    };
+    (await openForkMenu()).click();
+    await flush();
+    const pendingFork = await openForkMenu();
+
+    expect(forkThread).toHaveBeenCalledTimes(1);
+    expect(pendingFork.disabled).toBe(true);
+    expect(pendingFork.textContent).toContain('Working');
+
+    (host.querySelector('[data-thread-id="thread-2"]') as HTMLElement)
+      .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
+    await flush();
+    const secondThreadItems = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    expect(secondThreadItems.length).toBeGreaterThan(0);
+    expect(secondThreadItems.every((item) => item.disabled)).toBe(true);
+    secondThreadItems.find((item) => item.textContent?.includes('Fork'))?.click();
+    await flush();
+    expect(forkThread).toHaveBeenCalledTimes(1);
+
+    const completeFork = forkControl.resolve;
+    if (!completeFork) throw new Error('fork promise did not start');
+    completeFork(thread({ thread_id: 'thread-fork' }));
+    await waitFor(() => forkThread.mock.calls.length === 1);
   });
 
   it('preserves loaded selected-thread details while a summary-only list refresh is waiting for detail reload', async () => {

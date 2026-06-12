@@ -34,6 +34,7 @@ var (
 	ErrNotConfigured                      = errors.New("ai not configured")
 	ErrRunActive                          = errors.New("run already active")
 	ErrThreadBusy                         = errors.New("thread already active")
+	ErrThreadForkUnavailable              = errors.New("thread cannot be forked while active or waiting")
 	ErrModelLockViolation                 = errors.New("model lock violation")
 	ErrModelSwitchRequiresExplicitRestart = errors.New("model switch requires explicit restart")
 )

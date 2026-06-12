@@ -218,7 +218,6 @@ vi.mock('./pages/EnvAIPage', () => ({ EnvAIPage: () => <div /> }));
 vi.mock('./codex/CodexPage', () => ({ CodexPage: () => <div /> }));
 vi.mock('./codex/CodexProvider', () => ({ CodexProvider: (props: any) => <>{props.children}</> }));
 vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
-vi.mock('./pages/AIChatSidebar', () => ({ AIChatSidebar: () => <div /> }));
 vi.mock('./pages/EnvSettingsPage', () => ({ EnvSettingsPage: () => <div /> }));
 vi.mock('./pages/aiPermissions', () => ({ hasRWXPermissions: () => true }));
 vi.mock('./deck/redevenDeckWidgets', () => ({

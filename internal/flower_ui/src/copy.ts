@@ -29,6 +29,23 @@ export type FlowerThreadListCopy = Readonly<{
   untitled: string;
   working: string;
   deleteLabel: (title: string) => string;
+  contextMenuLabel: (title: string) => string;
+  copyThreadID: string;
+  copyWorkingDirectory: string;
+  threadIDLabel: string;
+  workingDirectoryLabel: string;
+  copied: (label: string) => string;
+  fork: string;
+  pin: string;
+  unpin: string;
+  pinnedGroup: string;
+  pinnedBadge: string;
+  rename: string;
+  renameTitle: string;
+  renameNameLabel: string;
+  cancel: string;
+  save: string;
+  saving: string;
   now: string;
   minutes: (count: number) => string;
   hours: (count: number) => string;
@@ -285,6 +302,23 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     untitled: 'Untitled chat',
     working: 'Working',
     deleteLabel: (title) => `Delete ${title}`,
+    contextMenuLabel: (title) => `Actions for ${title}`,
+    copyThreadID: 'Copy thread id',
+    copyWorkingDirectory: 'Copy work directory',
+    threadIDLabel: 'thread id',
+    workingDirectoryLabel: 'work directory',
+    copied: (label) => `Copied ${label}.`,
+    fork: 'Fork',
+    pin: 'Pin conversation',
+    unpin: 'Unpin conversation',
+    pinnedGroup: 'Pinned',
+    pinnedBadge: 'Pinned',
+    rename: 'Rename',
+    renameTitle: 'Rename conversation',
+    renameNameLabel: 'Name',
+    cancel: 'Cancel',
+    save: 'Save',
+    saving: 'Saving...',
     now: 'now',
     minutes: (count) => `${count}m`,
     hours: (count) => `${count}h`,

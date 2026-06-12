@@ -2,6 +2,9 @@ export const LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL = 'redeven-desktop:flower
 export const SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL = 'redeven-desktop:flower-host-settings-save';
 export const LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL = 'redeven-desktop:flower-host-threads-list';
 export const LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL = 'redeven-desktop:flower-host-thread-load';
+export const RENAME_DESKTOP_FLOWER_HOST_THREAD_CHANNEL = 'redeven-desktop:flower-host-thread-rename';
+export const SET_DESKTOP_FLOWER_HOST_THREAD_PINNED_CHANNEL = 'redeven-desktop:flower-host-thread-pinned-set';
+export const FORK_DESKTOP_FLOWER_HOST_THREAD_CHANNEL = 'redeven-desktop:flower-host-thread-fork';
 export const SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL = 'redeven-desktop:flower-host-chat-send';
 export const SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL = 'redeven-desktop:flower-host-input-submit';
 export const RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL = 'redeven-desktop:flower-host-handler-resolve';
@@ -287,6 +290,8 @@ export type DesktopFlowerHostThread = Readonly<{
   thread_id: string;
   title: string;
   model_id: string;
+  working_dir: string;
+  pinned_at_ms?: number;
   created_at_ms: number;
   updated_at_ms: number;
   status: DesktopFlowerHostThreadStatus;
@@ -298,6 +303,20 @@ export type DesktopFlowerHostThread = Readonly<{
   tool_activity?: readonly DesktopFlowerHostToolActivity[];
   input_request?: DesktopFlowerHostInputRequest | null;
   error?: DesktopFlowerHostThreadError | null;
+}>;
+
+export type DesktopFlowerHostRenameThreadRequest = Readonly<{
+  thread_id: string;
+  title: string;
+}>;
+
+export type DesktopFlowerHostSetThreadPinnedRequest = Readonly<{
+  thread_id: string;
+  pinned: boolean;
+}>;
+
+export type DesktopFlowerHostForkThreadRequest = Readonly<{
+  thread_id: string;
 }>;
 
 export type DesktopFlowerHostSendChatRequest = Readonly<{
@@ -333,6 +352,30 @@ export type ListDesktopFlowerHostThreadsResult = Readonly<
 >;
 
 export type LoadDesktopFlowerHostThreadResult = Readonly<
+  | {
+      ok: true;
+      thread: DesktopFlowerHostThread;
+    }
+  | DesktopFlowerHostFailure
+>;
+
+export type RenameDesktopFlowerHostThreadResult = Readonly<
+  | {
+      ok: true;
+      thread: DesktopFlowerHostThread;
+    }
+  | DesktopFlowerHostFailure
+>;
+
+export type SetDesktopFlowerHostThreadPinnedResult = Readonly<
+  | {
+      ok: true;
+      thread: DesktopFlowerHostThread;
+    }
+  | DesktopFlowerHostFailure
+>;
+
+export type ForkDesktopFlowerHostThreadResult = Readonly<
   | {
       ok: true;
       thread: DesktopFlowerHostThread;

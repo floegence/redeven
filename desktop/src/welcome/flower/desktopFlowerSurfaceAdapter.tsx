@@ -17,12 +17,15 @@ import type {
   DesktopFlowerHostTargetCacheEntry,
   DesktopFlowerHostThread,
   DesktopFlowerHostError,
+  ForkDesktopFlowerHostThreadResult,
   ListDesktopFlowerHostThreadsResult,
   LoadDesktopFlowerHostSettingsResult,
   LoadDesktopFlowerHostThreadResult,
+  RenameDesktopFlowerHostThreadResult,
   ResolveDesktopFlowerHostHandlerResult,
   SaveDesktopFlowerHostSettingsResult,
   SendDesktopFlowerHostChatResult,
+  SetDesktopFlowerHostThreadPinnedResult,
   SubmitDesktopFlowerHostInputResult,
 } from '../../shared/flowerHostSettingsIPC';
 import type {
@@ -47,6 +50,9 @@ export type DesktopSettingsBridge = Readonly<{
   saveFlowerHostSettings: (draft: DesktopFlowerHostSettingsDraft) => Promise<SaveDesktopFlowerHostSettingsResult>;
   listFlowerHostThreads: () => Promise<ListDesktopFlowerHostThreadsResult>;
   loadFlowerHostThread: (threadID: string) => Promise<LoadDesktopFlowerHostThreadResult>;
+  renameFlowerHostThread?: (request: { thread_id: string; title: string }) => Promise<RenameDesktopFlowerHostThreadResult>;
+  setFlowerHostThreadPinned?: (request: { thread_id: string; pinned: boolean }) => Promise<SetDesktopFlowerHostThreadPinnedResult>;
+  forkFlowerHostThread?: (request: { thread_id: string }) => Promise<ForkDesktopFlowerHostThreadResult>;
   resolveFlowerHostHandler: (request?: DesktopFlowerHostResolveHandlerRequest) => Promise<ResolveDesktopFlowerHostHandlerResult>;
   sendFlowerHostChat: (request: DesktopFlowerHostSendChatRequest) => Promise<SendDesktopFlowerHostChatResult>;
   submitFlowerHostInput: (request: DesktopFlowerHostSubmitInputRequest) => Promise<SubmitDesktopFlowerHostInputResult>;
@@ -214,6 +220,8 @@ export function mapDesktopFlowerThread(thread: DesktopFlowerHostThread): FlowerT
     thread_id: thread.thread_id,
     title: thread.title,
     model_id: thread.model_id,
+    working_dir: thread.working_dir,
+    ...(thread.pinned_at_ms ? { pinned_at_ms: thread.pinned_at_ms } : {}),
     created_at_ms: thread.created_at_ms,
     updated_at_ms: thread.updated_at_ms,
     status: thread.status,
@@ -263,6 +271,27 @@ export function createDesktopFlowerSurfaceAdapter(
       if (!result.ok) throw flowerHostError(result.error);
       return mapDesktopFlowerThread(result.thread);
     },
+    ...(bridge.renameFlowerHostThread ? {
+      renameThread: async (threadID, title) => {
+        const result = await bridge.renameFlowerHostThread!({ thread_id: threadID, title });
+        if (!result.ok) throw flowerHostError(result.error);
+        return mapDesktopFlowerThread(result.thread);
+      },
+    } : {}),
+    ...(bridge.setFlowerHostThreadPinned ? {
+      setThreadPinned: async (threadID, pinned) => {
+        const result = await bridge.setFlowerHostThreadPinned!({ thread_id: threadID, pinned });
+        if (!result.ok) throw flowerHostError(result.error);
+        return mapDesktopFlowerThread(result.thread);
+      },
+    } : {}),
+    ...(bridge.forkFlowerHostThread ? {
+      forkThread: async (threadID) => {
+        const result = await bridge.forkFlowerHostThread!({ thread_id: threadID });
+        if (!result.ok) throw flowerHostError(result.error);
+        return mapDesktopFlowerThread(result.thread);
+      },
+    } : {}),
     resolveHandler: async (request) => {
       const result = await bridge.resolveFlowerHostHandler(request);
       if (!result.ok) throw flowerHostError(result.error);

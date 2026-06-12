@@ -9,6 +9,8 @@ describe('Flower thread list projection', () => {
       thread_id: 'thread-1',
       title: 'Transfer plan',
       model_id: 'primary/gpt-4.1',
+      working_dir: '/workspace/redeven',
+      pinned_at_ms: 123,
       created_at_ms: 1,
       updated_at_ms: 2,
       status: 'success',
@@ -22,6 +24,9 @@ describe('Flower thread list projection', () => {
 
     expect(projectFlowerThreadListItem(thread)).toMatchObject({
       thread_id: 'thread-1',
+      working_dir: '/workspace/redeven',
+      pinned: true,
+      pinned_at_ms: 123,
       preview: 'Destination preview is ready.',
       source_label: 'env A',
       target_labels: ['env B'],

@@ -9,23 +9,32 @@ import {
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
+  FORK_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL,
   LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  RENAME_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL,
   SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL,
   SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  SET_DESKTOP_FLOWER_HOST_THREAD_PINNED_CHANNEL,
   SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL,
+  type DesktopFlowerHostForkThreadRequest,
+  type DesktopFlowerHostRenameThreadRequest,
   type DesktopFlowerHostResolveHandlerRequest,
   type DesktopFlowerHostSendChatRequest,
+  type DesktopFlowerHostSetThreadPinnedRequest,
   type DesktopFlowerHostSettingsDraft,
   type DesktopFlowerHostSubmitInputRequest,
+  type ForkDesktopFlowerHostThreadResult,
   type ListDesktopFlowerHostThreadsResult,
   type LoadDesktopFlowerHostThreadResult,
   type LoadDesktopFlowerHostSettingsResult,
+  type RenameDesktopFlowerHostThreadResult,
   type ResolveDesktopFlowerHostHandlerResult,
   type SendDesktopFlowerHostChatResult,
   type SaveDesktopFlowerHostSettingsResult,
+  type SetDesktopFlowerHostThreadPinnedResult,
   type SubmitDesktopFlowerHostInputResult,
 } from '../shared/flowerHostSettingsIPC';
 
@@ -41,6 +50,12 @@ export function bootstrapDesktopSettingsBridge(): void {
       ipcRenderer.invoke(LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL),
     loadFlowerHostThread: (threadID: string): Promise<LoadDesktopFlowerHostThreadResult> =>
       ipcRenderer.invoke(LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL, threadID),
+    renameFlowerHostThread: (request: DesktopFlowerHostRenameThreadRequest): Promise<RenameDesktopFlowerHostThreadResult> =>
+      ipcRenderer.invoke(RENAME_DESKTOP_FLOWER_HOST_THREAD_CHANNEL, request),
+    setFlowerHostThreadPinned: (request: DesktopFlowerHostSetThreadPinnedRequest): Promise<SetDesktopFlowerHostThreadPinnedResult> =>
+      ipcRenderer.invoke(SET_DESKTOP_FLOWER_HOST_THREAD_PINNED_CHANNEL, request),
+    forkFlowerHostThread: (request: DesktopFlowerHostForkThreadRequest): Promise<ForkDesktopFlowerHostThreadResult> =>
+      ipcRenderer.invoke(FORK_DESKTOP_FLOWER_HOST_THREAD_CHANNEL, request),
     resolveFlowerHostHandler: (request?: DesktopFlowerHostResolveHandlerRequest): Promise<ResolveDesktopFlowerHostHandlerResult> =>
       ipcRenderer.invoke(RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL, request),
     sendFlowerHostChat: (request: DesktopFlowerHostSendChatRequest): Promise<SendDesktopFlowerHostChatResult> =>

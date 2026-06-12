@@ -191,6 +191,8 @@ export type FlowerThreadSnapshot = Readonly<{
   thread_id: string;
   title: string;
   model_id: string;
+  working_dir: string;
+  pinned_at_ms?: number;
   home_host_id?: string;
   home_host_kind?: 'global' | 'env_local';
   origin_env_public_id?: string;
@@ -211,6 +213,9 @@ export type FlowerThreadListItem = Readonly<{
   thread_id: string;
   title: string;
   model_id: string;
+  working_dir: string;
+  pinned: boolean;
+  pinned_at_ms?: number;
   created_at_ms: number;
   updated_at_ms: number;
   preview: string;
@@ -315,6 +320,9 @@ export type FlowerSurfaceAdapter = Readonly<{
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread?: (threadID: string) => Promise<FlowerThreadSnapshot>;
+  renameThread?: (threadID: string, title: string) => Promise<FlowerThreadSnapshot>;
+  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadSnapshot>;
+  forkThread?: (threadID: string) => Promise<FlowerThreadSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   sendMessage: (input: FlowerSendMessageInput) => Promise<FlowerThreadSnapshot>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerThreadSnapshot>;
