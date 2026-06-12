@@ -1202,6 +1202,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-host-thread-card:hover {
+  transition: background-color 150ms ease, border-color 150ms ease;
   border-color: color-mix(in srgb, var(--primary) 15%, var(--flower-thread-rail-control-border));
   background: color-mix(in srgb, var(--flower-thread-rail-accent) 72%, transparent);
 }
@@ -1265,8 +1266,8 @@ html.dark .flower-component-shell {
 
 .flower-host-thread-card-menu-button {
   position: absolute;
-  right: 0.375rem;
-  bottom: 0.375rem;
+  right: 0.25rem;
+  top: 0.25rem;
   display: flex;
   width: 1.5rem;
   height: 1.5rem;
@@ -1289,8 +1290,8 @@ html.dark .flower-component-shell {
 
 .flower-host-thread-card-pin-button {
   position: absolute;
-  right: 2rem;
-  bottom: 0.375rem;
+  right: 1.875rem;
+  top: 0.25rem;
   display: flex;
   width: 1.5rem;
   height: 1.5rem;
@@ -1321,18 +1322,6 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--flower-thread-rail-accent) 88%, transparent);
   color: var(--flower-thread-rail-foreground);
   outline: none;
-}
-
-.flower-host-thread-pin-badge {
-  width: fit-content;
-  max-width: 100%;
-  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--flower-thread-rail-control-border));
-  border-radius: 0.375rem;
-  padding: 0 0.25rem;
-  font-size: 0.625rem;
-  line-height: 1rem;
-  color: var(--flower-thread-rail-muted);
-  background: color-mix(in srgb, var(--primary) 7%, transparent);
 }
 
 .flower-host-thread-context-menu {
