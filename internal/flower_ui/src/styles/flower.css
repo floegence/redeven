@@ -1209,7 +1209,6 @@ html.dark .flower-component-shell {
 .flower-host-thread-card-active {
   border-color: color-mix(in srgb, var(--primary) 26%, var(--flower-thread-rail-control-border));
   background: var(--flower-thread-rail-accent-strong);
-  box-shadow: inset 3px 0 0 var(--primary);
 }
 
 .flower-host-thread-list-title {

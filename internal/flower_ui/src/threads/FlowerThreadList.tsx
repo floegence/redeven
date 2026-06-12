@@ -112,7 +112,6 @@ export type FlowerThreadCardProps = Readonly<{
 export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.threadList;
   const title = () => props.item.title.trim() || copy().untitled;
-  const meta = () => props.item.read_only_reason || props.item.source_label || props.item.model_id;
   const running = () => props.item.status === 'running';
 
   return (
@@ -142,11 +141,8 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           <div class="flex min-w-0 items-center gap-1">
             <span class="flower-host-thread-list-title flex-1 truncate text-xs font-medium">{title()}</span>
           </div>
-          <Show when={running()} fallback={<Show when={props.item.preview}><p class="flower-host-thread-card-preview truncate text-[11px] leading-tight">{props.item.preview}</p></Show>}>
+          <Show when={running()}>
             <ProcessingIndicator variant="minimal" status={copy().working} class="h-3.5" />
-          </Show>
-          <Show when={meta()}>
-            <p class="flower-host-thread-card-meta truncate text-[10px] leading-tight">{meta()}</p>
           </Show>
           <Show when={props.item.target_labels.length > 0}>
             <div class="mt-1 flex min-w-0 flex-wrap gap-1">
