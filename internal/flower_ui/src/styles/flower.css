@@ -1290,7 +1290,7 @@ html.dark .flower-component-shell {
 
 .flower-host-thread-card-pin-button {
   position: absolute;
-  right: 1.875rem;
+  right: 1.8125rem;
   top: 0.25rem;
   display: flex;
   width: 1.5rem;
@@ -1437,7 +1437,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-host-rename-input:focus {
-  outline: 2px solid color-mix(in srgb, var(--primary) 32%, transparent);
+  outline: 1.5px solid color-mix(in srgb, var(--primary) 20%, transparent);
   outline-offset: 1px;
 }
 
