@@ -194,6 +194,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (existingIndex < 0) {
         return [thread, ...current];
       }
+      const existing = current[existingIndex];
+      if (
+        existing.title === thread.title &&
+        existing.status === thread.status &&
+        Number(existing.pinned_at_ms ?? 0) === Number(thread.pinned_at_ms ?? 0) &&
+        existing.created_at_ms === thread.created_at_ms &&
+        existing.updated_at_ms === thread.updated_at_ms
+      ) {
+        return current;
+      }
       const next = [...current];
       next[existingIndex] = thread;
       return next;
