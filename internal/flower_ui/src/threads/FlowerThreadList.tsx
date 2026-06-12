@@ -137,7 +137,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       <div class="pointer-events-none absolute right-2.5 top-2 flex h-5 min-w-7 items-center justify-end">
         <Show
           when={props.canDelete && props.onDelete}
-          fallback={<span class="flower-host-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0" aria-hidden="true">{fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>}
+          fallback={<span class="flower-host-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">{fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>}
         >
           <span class="flower-host-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">
             {fmtFlowerShortTime(props.item.created_at_ms, copy())}
@@ -167,7 +167,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
             props.onPin?.(props.item);
           }}
         >
-          <Pin class="h-3.5 w-3.5" />
+          <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />
         </button>
       </Show>
       <button
@@ -309,7 +309,7 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
       {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}
       {itemButton('copy_workdir', props.copy.copyWorkingDirectory, <Folder class="h-3.5 w-3.5" />, workdir() === '')}
       <div class="flower-host-thread-menu-separator" />
-      {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class="h-3.5 w-3.5" />, !props.canPin)}
+      {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin)}
       {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename)}
     </div>
   );

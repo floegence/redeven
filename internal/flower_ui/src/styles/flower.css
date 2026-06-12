@@ -1284,8 +1284,7 @@ html.dark .flower-component-shell {
     color 150ms ease;
 }
 
-.flower-host-thread-card:hover .flower-host-thread-card-menu-button,
-.flower-host-thread-card:focus-within .flower-host-thread-card-menu-button {
+.flower-host-thread-card:hover .flower-host-thread-card-menu-button {
   opacity: 1;
 }
 
@@ -1305,9 +1304,7 @@ html.dark .flower-component-shell {
   transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
 }
 
-.flower-host-thread-card:hover .flower-host-thread-card-pin-button,
-.flower-host-thread-card:focus-within .flower-host-thread-card-pin-button,
-.flower-host-thread-card-pin-button[data-pinned="true"] {
+.flower-host-thread-card:hover .flower-host-thread-card-pin-button {
   opacity: 1;
 }
 
@@ -1316,6 +1313,15 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--flower-thread-rail-accent) 88%, transparent);
   color: var(--flower-thread-rail-foreground);
   outline: none;
+}
+
+.flower-host-thread-card-pin-button[data-pinned="true"] {
+  color: var(--primary);
+}
+
+.flower-host-thread-card-pin-button[data-pinned="true"] svg path {
+  fill: currentColor;
+  stroke: none;
 }
 
 .flower-host-thread-card-dot-indicator {
