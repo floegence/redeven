@@ -51,6 +51,8 @@ type ThreadView = Readonly<{
   title?: string;
   model_id?: string;
   run_status?: string;
+  working_dir?: string;
+  pinned_at_unix_ms?: number;
   created_at_unix_ms?: number;
   updated_at_unix_ms?: number;
   last_message_at_unix_ms?: number;
@@ -404,6 +406,8 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
     thread_id: threadID,
     title,
     model_id: trim(thread.model_id),
+    working_dir: trim(thread.working_dir),
+    ...(Number(thread.pinned_at_unix_ms ?? 0) > 0 ? { pinned_at_ms: Math.floor(Number(thread.pinned_at_unix_ms)) } : {}),
     home_host_id: `env:${trim(options.envPublicID) || 'current'}`,
     home_host_kind: 'env_local',
     origin_env_public_id: trim(options.envPublicID) || undefined,
@@ -529,6 +533,37 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       return (result.threads ?? []).map((thread) => mapThread(thread, [], options));
     },
     loadThread,
+    renameThread: async (threadID, title) => {
+      const tid = trim(threadID);
+      if (!tid) throw new Error(adapterCopy(options).missingThreadID);
+      const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ title }),
+      });
+      const current = await loadThread(trim(threadResp.thread?.thread_id) || tid);
+      return current;
+    },
+    setThreadPinned: async (threadID, pinned) => {
+      const tid = trim(threadID);
+      if (!tid) throw new Error(adapterCopy(options).missingThreadID);
+      const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ pinned }),
+      });
+      const current = await loadThread(trim(threadResp.thread?.thread_id) || tid);
+      return current;
+    },
+    forkThread: async (threadID) => {
+      const tid = trim(threadID);
+      if (!tid) throw new Error(adapterCopy(options).missingThreadID);
+      const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/fork`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      const nextID = trim(threadResp.thread?.thread_id);
+      if (!nextID) throw new Error(adapterCopy(options).failedToCreateChat);
+      return loadThread(nextID);
+    },
     resolveHandler: async () => decision(options),
     sendMessage: async (input: FlowerSendMessageInput) => {
       const copy = adapterCopy(options);

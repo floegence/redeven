@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -449,6 +450,100 @@ func TestStore_ListThreadsUsesStableCreatedAtOrder(t *testing.T) {
 	}
 }
 
+func TestStore_ListThreadsPinnedFirstWithStableCursor(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	for _, th := range []Thread{
+		{ThreadID: "regular-new", EndpointID: "env_1", CreatedAtUnixMs: 5000, UpdatedAtUnixMs: 5000},
+		{ThreadID: "regular-old", EndpointID: "env_1", CreatedAtUnixMs: 1000, UpdatedAtUnixMs: 9000},
+		{ThreadID: "pinned-old", EndpointID: "env_1", CreatedAtUnixMs: 2000, UpdatedAtUnixMs: 2000, PinnedAtUnixMs: 10},
+		{ThreadID: "pinned-new", EndpointID: "env_1", CreatedAtUnixMs: 3000, UpdatedAtUnixMs: 3000, PinnedAtUnixMs: 20},
+	} {
+		if err := s.CreateThread(ctx, th); err != nil {
+			t.Fatalf("CreateThread(%s): %v", th.ThreadID, err)
+		}
+	}
+
+	firstPage, cursor, err := s.ListThreads(ctx, "env_1", 2, ThreadsCursor{})
+	if err != nil {
+		t.Fatalf("ListThreads first: %v", err)
+	}
+	if got := storeThreadIDs(firstPage); !slices.Equal(got, []string{"pinned-new", "pinned-old"}) {
+		t.Fatalf("first page ids=%v, want pinned first", got)
+	}
+	decoded, ok := DecodeCursor(cursor)
+	if !ok {
+		t.Fatalf("DecodeCursor(%q) failed", cursor)
+	}
+	if decoded.PinnedAtUnixMs != 10 {
+		t.Fatalf("decoded pinned_at=%d, want 10", decoded.PinnedAtUnixMs)
+	}
+	secondPage, next, err := s.ListThreads(ctx, "env_1", 2, decoded)
+	if err != nil {
+		t.Fatalf("ListThreads second: %v", err)
+	}
+	if got := storeThreadIDs(secondPage); !slices.Equal(got, []string{"regular-new", "regular-old"}) {
+		t.Fatalf("second page ids=%v, want regular order", got)
+	}
+	if next != "" {
+		t.Fatalf("next cursor=%q, want empty", next)
+	}
+}
+
+func TestStore_SetThreadPinnedDoesNotTouchUpdatedAt(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", CreatedAtUnixMs: 1000, UpdatedAtUnixMs: 2000}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	pinnedAt, err := s.SetThreadPinned(ctx, "env_1", "th_1", true, "u1", "u1@example.com")
+	if err != nil {
+		t.Fatalf("SetThreadPinned true: %v", err)
+	}
+	if pinnedAt <= 0 {
+		t.Fatalf("pinnedAt=%d, want positive", pinnedAt)
+	}
+	th, err := s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th.UpdatedAtUnixMs != 2000 {
+		t.Fatalf("UpdatedAtUnixMs=%d, want unchanged 2000", th.UpdatedAtUnixMs)
+	}
+	if th.PinnedAtUnixMs != pinnedAt {
+		t.Fatalf("PinnedAtUnixMs=%d, want %d", th.PinnedAtUnixMs, pinnedAt)
+	}
+	if _, err := s.SetThreadPinned(ctx, "env_1", "th_1", false, "u2", "u2@example.com"); err != nil {
+		t.Fatalf("SetThreadPinned false: %v", err)
+	}
+	th, err = s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread unpinned: %v", err)
+	}
+	if th.PinnedAtUnixMs != 0 {
+		t.Fatalf("PinnedAtUnixMs=%d, want 0", th.PinnedAtUnixMs)
+	}
+	if th.UpdatedAtUnixMs != 2000 {
+		t.Fatalf("UpdatedAtUnixMs after unpin=%d, want unchanged 2000", th.UpdatedAtUnixMs)
+	}
+}
+
 func TestStore_GetFirstUserThreadMessage_ReturnsOldestNonEmptyUserMessage(t *testing.T) {
 	t.Parallel()
 
@@ -744,7 +839,7 @@ PRAGMA user_version=1;
 		t.Fatalf("rows err: %v", err)
 	}
 
-	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "last_context_run_id", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version"} {
+	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "last_context_run_id", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version", "pinned_at_unix_ms"} {
 		if !cols[col] {
 			t.Fatalf("missing migrated column %q", col)
 		}
@@ -1717,6 +1812,294 @@ func TestBuildPreview_AssistantFallsBackToTaskCompleteResult(t *testing.T) {
 	preview := buildPreview("assistant", "", messageJSON)
 	if !strings.Contains(preview, "Completed the verification") {
 		t.Fatalf("preview=%q, want task_complete result fallback", preview)
+	}
+}
+
+func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{
+		ThreadID:            "th_src",
+		EndpointID:          "env_1",
+		NamespacePublicID:   "ns_1",
+		ModelID:             "openai/gpt-5",
+		ExecutionMode:       "plan",
+		WorkingDir:          "/workspace/repo",
+		Title:               "Source",
+		RunStatus:           "success",
+		LastContextRunID:    "run_src",
+		CreatedAtUnixMs:     100,
+		UpdatedAtUnixMs:     200,
+		LastMessageAtUnixMs: 300,
+		LastMessagePreview:  "latest answer",
+		PinnedAtUnixMs:      400,
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := s.InsertUpload(ctx, UploadRecord{
+		UploadID:        "upl_1",
+		EndpointID:      "env_1",
+		StorageRelPath:  "upl_1.data",
+		Name:            "fixture.txt",
+		MimeType:        "text/plain",
+		SizeBytes:       12,
+		State:           UploadStateStaged,
+		CreatedAtUnixMs: 90,
+	}); err != nil {
+		t.Fatalf("InsertUpload: %v", err)
+	}
+	if _, err := s.AppendMessageWithUploadRefs(ctx, "env_1", "th_src", Message{
+		MessageID:          "msg_user",
+		Role:               "user",
+		Status:             "complete",
+		AuthorUserPublicID: "u1",
+		AuthorUserEmail:    "u1@example.com",
+		CreatedAtUnixMs:    110,
+		UpdatedAtUnixMs:    110,
+		TextContent:        "msg_user",
+		MessageJSON:        `{"id":"msg_user","role":"user","reply_to":"msg_assistant","note":"msg_user","blocks":[{"type":"text","content":"msg_user"}]}`,
+	}, "u1", "u1@example.com", []string{"upl_1"}, 110); err != nil {
+		t.Fatalf("AppendMessageWithUploadRefs user: %v", err)
+	}
+	if _, err := s.AppendMessage(ctx, "env_1", "th_src", Message{
+		MessageID:       "msg_assistant",
+		Role:            "assistant",
+		Status:          "complete",
+		CreatedAtUnixMs: 120,
+		UpdatedAtUnixMs: 120,
+		TextContent:     "done",
+		MessageJSON:     `{"id":"msg_assistant","role":"assistant","source":"msg_user","blocks":[{"type":"activity-timeline","messageId":"msg_assistant","summary":{"id":"msg_user","source":"msg_user"}},{"type":"tool-call","toolName":"terminal.exec","args":{"id":"msg_user","source":"msg_user"},"result":{"id":"msg_user","source":"msg_user"}}]}`,
+	}, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("AppendMessage assistant: %v", err)
+	}
+	if err := s.AppendConversationTurn(ctx, ConversationTurn{
+		TurnID:             "turn_src",
+		EndpointID:         "env_1",
+		ThreadID:           "th_src",
+		RunID:              "run_src",
+		UserMessageID:      "msg_user",
+		AssistantMessageID: "msg_assistant",
+		CreatedAtUnixMs:    130,
+	}); err != nil {
+		t.Fatalf("AppendConversationTurn: %v", err)
+	}
+	sourceTurns, err := s.ListConversationTurns(ctx, "env_1", "th_src", 10)
+	if err != nil {
+		t.Fatalf("ListConversationTurns source: %v", err)
+	}
+	if len(sourceTurns) != 1 {
+		t.Fatalf("source turns=%d, want 1", len(sourceTurns))
+	}
+	if err := s.ReplaceStructuredUserInputs(ctx, "env_1", "th_src", "msg_user", []StructuredUserInputRecord{{
+		ResponseMessageID: "msg_user",
+		QuestionID:        "q1",
+		QuestionText:      "Need detail",
+		Text:              "answer",
+		PublicSummary:     "answered",
+		CreatedAtUnixMs:   135,
+	}}); err != nil {
+		t.Fatalf("ReplaceStructuredUserInputs: %v", err)
+	}
+	if err := s.ReplaceRequestUserInputSecretAnswers(ctx, "env_1", "th_src", "msg_user", []RequestUserInputSecretAnswerRecord{{
+		ResponseMessageID: "msg_user",
+		QuestionID:        "q_secret",
+		Text:              "raw secret",
+		CreatedAtUnixMs:   136,
+	}}); err != nil {
+		t.Fatalf("ReplaceRequestUserInputSecretAnswers: %v", err)
+	}
+	if _, err := s.ReplaceThreadTodosSnapshot(ctx, ThreadTodosSnapshot{
+		EndpointID:      "env_1",
+		ThreadID:        "th_src",
+		TodosJSON:       `[{"id":"todo_1","content":"ship","status":"in_progress"}]`,
+		UpdatedAtUnixMs: 140,
+		UpdatedByRunID:  "run_src",
+		UpdatedByToolID: "tool_src",
+	}, nil); err != nil {
+		t.Fatalf("ReplaceThreadTodosSnapshot: %v", err)
+	}
+	if err := s.UpsertMemoryItem(ctx, MemoryItemRecord{
+		MemoryID:        "mem_src",
+		EndpointID:      "env_1",
+		ThreadID:        "th_src",
+		Scope:           "working",
+		Kind:            "fact",
+		Content:         "remember this",
+		SourceRefsJSON:  `[{"message_id":"msg_user"}]`,
+		CreatedAtUnixMs: 150,
+		UpdatedAtUnixMs: 150,
+	}); err != nil {
+		t.Fatalf("UpsertMemoryItem: %v", err)
+	}
+	if err := s.SetThreadOpenGoal(ctx, "env_1", "th_src", "finish the forkable task"); err != nil {
+		t.Fatalf("SetThreadOpenGoal: %v", err)
+	}
+	if err := s.InsertContextSnapshot(ctx, ContextSnapshotRecord{
+		SnapshotID:       "snap_src",
+		EndpointID:       "env_1",
+		ThreadID:         "th_src",
+		Level:            "thread",
+		SummaryText:      "compressed source context",
+		CoversTurnFromID: sourceTurns[0].ID,
+		CoversTurnToID:   sourceTurns[0].ID,
+		QualityScore:     0.9,
+		CreatedAtUnixMs:  155,
+	}); err != nil {
+		t.Fatalf("InsertContextSnapshot: %v", err)
+	}
+	if err := s.UpsertExecutionSpan(ctx, ExecutionSpanRecord{
+		SpanID:          "span_src",
+		EndpointID:      "env_1",
+		ThreadID:        "th_src",
+		RunID:           "run_src",
+		Kind:            "tool",
+		Name:            "terminal.exec",
+		Status:          "success",
+		PayloadJSON:     `{"stdout":"ok"}`,
+		StartedAtUnixMs: 156,
+		EndedAtUnixMs:   157,
+		UpdatedAtUnixMs: 157,
+	}); err != nil {
+		t.Fatalf("UpsertExecutionSpan: %v", err)
+	}
+	if err := s.UpsertRun(ctx, RunRecord{RunID: "run_src", EndpointID: "env_1", ThreadID: "th_src", State: "success"}); err != nil {
+		t.Fatalf("UpsertRun: %v", err)
+	}
+	if err := s.UpsertFlowerThreadMetadata(ctx, FlowerThreadMetadata{
+		EndpointID:          "env_1",
+		ThreadID:            "th_src",
+		OwnerKind:           "thread_home",
+		OwnerID:             "flower-host",
+		ParentRunID:         "run_parent",
+		ContextJSON:         `{"ok":true}`,
+		ActionJSON:          `{"action":"ask"}`,
+		HomeHostID:          "flower-host",
+		HomeHostKind:        "global",
+		OriginEnvPublicID:   "env_origin",
+		PrimaryTargetID:     "target_1",
+		ActiveTargetIDsJSON: `["target_1"]`,
+		UpdatedAtUnixMs:     160,
+	}); err != nil {
+		t.Fatalf("UpsertFlowerThreadMetadata: %v", err)
+	}
+
+	forked, err := s.ForkThread(ctx, ForkThreadRequest{
+		EndpointID:            "env_1",
+		SourceThreadID:        "th_src",
+		DestinationThreadID:   "th_fork",
+		Title:                 "Forked",
+		CreatedByUserPublicID: "u2",
+		CreatedByUserEmail:    "u2@example.com",
+		CreatedAtUnixMs:       1000,
+	})
+	if err != nil {
+		t.Fatalf("ForkThread: %v", err)
+	}
+	if forked.ThreadID != "th_fork" || forked.Title != "Forked" {
+		t.Fatalf("forked thread mismatch: %+v", forked)
+	}
+	if forked.RunStatus != "idle" || forked.LastContextRunID != "" || forked.WaitingUserInputJSON != "" || forked.PinnedAtUnixMs != 0 {
+		t.Fatalf("forked run state not cleared: %+v", forked)
+	}
+	msgs, _, _, err := s.ListMessages(ctx, "env_1", "th_fork", 10, 0)
+	if err != nil {
+		t.Fatalf("ListMessages fork: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("fork messages=%d, want 2", len(msgs))
+	}
+	if msgs[0].MessageID == "msg_user" || !strings.Contains(msgs[0].MessageJSON, msgs[0].MessageID) || !strings.Contains(msgs[0].MessageJSON, `"note":"msg_user"`) || msgs[0].TextContent != "msg_user" {
+		t.Fatalf("fork user message id/json not rewritten: %+v", msgs[0])
+	}
+	var assistantJSON map[string]any
+	if err := json.Unmarshal([]byte(msgs[1].MessageJSON), &assistantJSON); err != nil {
+		t.Fatalf("assistant fork message json invalid: %v", err)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(assistantJSON["id"])); got != msgs[1].MessageID {
+		t.Fatalf("assistant fork message id=%q, want %q", got, msgs[1].MessageID)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(assistantJSON["source"])); got != "msg_user" {
+		t.Fatalf("assistant source=%q, want original non-reference source", got)
+	}
+	blocks, ok := assistantJSON["blocks"].([]any)
+	if !ok || len(blocks) != 2 {
+		t.Fatalf("assistant blocks=%#v, want 2 blocks", assistantJSON["blocks"])
+	}
+	timeline, _ := blocks[0].(map[string]any)
+	if got := strings.TrimSpace(fmt.Sprint(timeline["messageId"])); got != msgs[1].MessageID {
+		t.Fatalf("timeline messageId=%q, want %q", got, msgs[1].MessageID)
+	}
+	summary, _ := timeline["summary"].(map[string]any)
+	if got := strings.TrimSpace(fmt.Sprint(summary["id"])); got != "msg_user" {
+		t.Fatalf("timeline summary id=%q, want original tool payload id", got)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(summary["source"])); got != "msg_user" {
+		t.Fatalf("timeline summary source=%q, want original tool payload source", got)
+	}
+	tool, _ := blocks[1].(map[string]any)
+	args, _ := tool["args"].(map[string]any)
+	result, _ := tool["result"].(map[string]any)
+	if got := strings.TrimSpace(fmt.Sprint(args["id"])); got != "msg_user" {
+		t.Fatalf("tool args id=%q, want original payload id", got)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(result["source"])); got != "msg_user" {
+		t.Fatalf("tool result source=%q, want original payload source", got)
+	}
+	turns, err := s.ListConversationTurns(ctx, "env_1", "th_fork", 10)
+	if err != nil {
+		t.Fatalf("ListConversationTurns fork: %v", err)
+	}
+	if len(turns) != 1 || turns[0].RunID != "" || turns[0].UserMessageID != msgs[0].MessageID || turns[0].AssistantMessageID != msgs[1].MessageID {
+		t.Fatalf("fork turns mismatch: %+v messages=%+v", turns, msgs)
+	}
+	if todos, err := s.GetThreadTodosSnapshot(ctx, "env_1", "th_fork"); err != nil {
+		t.Fatalf("GetThreadTodosSnapshot fork: %v", err)
+	} else if todos.Version != 1 || todos.UpdatedByRunID != "" || !strings.Contains(todos.TodosJSON, "todo_1") {
+		t.Fatalf("fork todos mismatch: %+v", todos)
+	}
+	if memories, err := s.ListRecentMemoryItems(ctx, "env_1", "th_fork", 10); err != nil {
+		t.Fatalf("ListRecentMemoryItems fork: %v", err)
+	} else if len(memories) != 2 || memories[0].MemoryID == "mem_src" || !strings.Contains(memories[0].SourceRefsJSON, msgs[0].MessageID) {
+		t.Fatalf("fork memory mismatch: %+v", memories)
+	}
+	if goal, err := s.GetThreadOpenGoal(ctx, "env_1", "th_fork"); err != nil {
+		t.Fatalf("GetThreadOpenGoal fork: %v", err)
+	} else if goal != "finish the forkable task" {
+		t.Fatalf("fork open goal=%q, want source goal", goal)
+	}
+	if secrets := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_fork"); secrets != 0 {
+		t.Fatalf("fork secret answers=%d, want 0", secrets)
+	}
+	if snaps, err := s.ListContextSnapshots(ctx, "env_1", "th_fork", "thread", 10); err != nil {
+		t.Fatalf("ListContextSnapshots fork: %v", err)
+	} else if len(snaps) != 1 || snaps[0].SnapshotID == "snap_src" || snaps[0].SummaryText != "compressed source context" || snaps[0].CoversTurnFromID != turns[0].ID || snaps[0].CoversTurnToID != turns[0].ID {
+		t.Fatalf("fork context snapshots mismatch: %+v", snaps)
+	}
+	if spans, err := s.ListRecentExecutionSpansByThread(ctx, "env_1", "th_fork", 10); err != nil {
+		t.Fatalf("ListRecentExecutionSpansByThread fork: %v", err)
+	} else if len(spans) != 0 {
+		t.Fatalf("fork execution spans=%+v, want none", spans)
+	}
+	if refs := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_fork"); refs != 1 {
+		t.Fatalf("fork upload refs=%d, want 1", refs)
+	}
+	if runs := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_runs WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_fork"); runs != 0 {
+		t.Fatalf("fork runs=%d, want 0", runs)
+	}
+	meta, err := s.GetFlowerThreadMetadata(ctx, "env_1", "th_fork")
+	if err != nil {
+		t.Fatalf("GetFlowerThreadMetadata fork: %v", err)
+	}
+	if meta == nil || meta.ParentThreadID != "th_src" || meta.ParentRunID != "" || meta.HomeHostID != "flower-host" {
+		t.Fatalf("fork flower metadata mismatch: %+v", meta)
 	}
 }
 

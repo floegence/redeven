@@ -1330,6 +1330,134 @@ func TestListThreadsProjectsWaitingInputContractErrorOnThread(t *testing.T) {
 	}
 }
 
+func TestThreadMutationAndForkHTTPRoutes(t *testing.T) {
+	svc := newConfiguredTestService(t, staticSecretResolver{}, "http://127.0.0.1:1/v1")
+	ctx := context.Background()
+	source, err := svc.ai.CreateThread(ctx, svc.Meta(), "Original", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread() error = %v", err)
+	}
+	if err := svc.ai.UpsertFlowerThreadMetadata(ctx, threadstore.FlowerThreadMetadata{
+		EndpointID:     hostEndpointID,
+		ThreadID:       source.ThreadID,
+		HomeHostID:     svc.identity.HostID,
+		HomeHostKind:   svc.identity.HostKind,
+		OwnerKind:      "flower_host",
+		OwnerID:        svc.identity.HostID,
+		ParentThreadID: "",
+	}); err != nil {
+		t.Fatalf("UpsertFlowerThreadMetadata() error = %v", err)
+	}
+
+	renamed := "Renamed from service"
+	snapshot, err := svc.MutateThread(ctx, source.ThreadID, ThreadMutationRequest{Title: &renamed})
+	if err != nil {
+		t.Fatalf("MutateThread title error = %v", err)
+	}
+	if snapshot.Title != renamed || snapshot.WorkingDir == "" {
+		t.Fatalf("snapshot=%#v, want renamed thread with working_dir", snapshot)
+	}
+	pin := true
+	snapshot, err = svc.MutateThread(ctx, source.ThreadID, ThreadMutationRequest{Pinned: &pin})
+	if err != nil {
+		t.Fatalf("MutateThread pinned error = %v", err)
+	}
+	if snapshot.PinnedAtMs <= 0 {
+		t.Fatalf("pinned_at_ms=%d, want > 0", snapshot.PinnedAtMs)
+	}
+
+	srv := &Server{service: svc, token: "test-token"}
+	req := httptest.NewRequest(http.MethodGet, "/v1/thread/missing-thread", nil)
+	req.Header.Set("authorization", "Bearer test-token")
+	rr := httptest.NewRecorder()
+	srv.handleThreadDetail(rr, req)
+	if rr.Code != http.StatusNotFound || !strings.Contains(rr.Body.String(), "thread_not_found") {
+		t.Fatalf("GET missing thread status=%d body=%s, want 404 thread_not_found", rr.Code, rr.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPatch, "/v1/thread/"+source.ThreadID, strings.NewReader(`{"title":"Renamed over HTTP"}`))
+	req.Header.Set("authorization", "Bearer test-token")
+	rr = httptest.NewRecorder()
+	srv.handleThreadDetail(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("PATCH status=%d body=%s, want 200", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"title":"Renamed over HTTP"`) {
+		t.Fatalf("PATCH body=%s, want renamed title", rr.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPatch, "/v1/thread/"+source.ThreadID, strings.NewReader(`{"title":"bad","extra":true}`))
+	req.Header.Set("authorization", "Bearer test-token")
+	rr = httptest.NewRecorder()
+	srv.handleThreadDetail(rr, req)
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "unknown field") {
+		t.Fatalf("PATCH unknown field status=%d body=%s, want 400 unknown field", rr.Code, rr.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPatch, "/v1/thread/"+source.ThreadID, strings.NewReader(`{"title":"bad"} {}`))
+	req.Header.Set("authorization", "Bearer test-token")
+	rr = httptest.NewRecorder()
+	srv.handleThreadDetail(rr, req)
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "unexpected trailing JSON") {
+		t.Fatalf("PATCH trailing JSON status=%d body=%s, want 400 trailing JSON", rr.Code, rr.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/v1/thread/"+source.ThreadID+"/fork", strings.NewReader(`{}`))
+	req.Header.Set("authorization", "Bearer test-token")
+	rr = httptest.NewRecorder()
+	srv.handleThreadDetail(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("fork status=%d body=%s, want 200", rr.Code, rr.Body.String())
+	}
+	var forkResp struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Thread ThreadSnapshot `json:"thread"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &forkResp); err != nil {
+		t.Fatalf("decode fork response: %v body=%s", err, rr.Body.String())
+	}
+	if !forkResp.OK || forkResp.Data.Thread.ThreadID == "" || forkResp.Data.Thread.ThreadID == source.ThreadID {
+		t.Fatalf("fork response=%#v, want new thread", forkResp)
+	}
+	if forkResp.Data.Thread.Title != "Renamed over HTTP (fork)" || forkResp.Data.Thread.WorkingDir == "" || forkResp.Data.Thread.PinnedAtMs != 0 {
+		t.Fatalf("forked thread=%#v, want fork title, working_dir, and unpinned destination", forkResp.Data.Thread)
+	}
+	meta, err := svc.ai.GetFlowerThreadMetadata(ctx, hostEndpointID, forkResp.Data.Thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadMetadata() error = %v", err)
+	}
+	if meta == nil || meta.ParentThreadID != source.ThreadID {
+		t.Fatalf("fork metadata=%#v, want parent_thread_id=%q", meta, source.ThreadID)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/v1/thread/"+source.ThreadID+"/fork", strings.NewReader(`{"unknown":true}`))
+	req.Header.Set("authorization", "Bearer test-token")
+	rr = httptest.NewRecorder()
+	srv.handleThreadDetail(rr, req)
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "unknown field") {
+		t.Fatalf("fork unknown field status=%d body=%s, want 400 unknown field", rr.Code, rr.Body.String())
+	}
+
+	busy, err := svc.ai.CreateThread(ctx, svc.Meta(), "Busy", "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread busy error = %v", err)
+	}
+	store, err := threadstore.Open(svc.paths.ThreadstorePath)
+	if err != nil {
+		t.Fatalf("threadstore.Open() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	if err := store.UpdateThreadRunState(ctx, hostEndpointID, busy.ThreadID, string(ai.RunStateRunning), "", "", "", ""); err != nil {
+		t.Fatalf("UpdateThreadRunState() error = %v", err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/v1/thread/"+busy.ThreadID+"/fork", strings.NewReader(`{}`))
+	req.Header.Set("authorization", "Bearer test-token")
+	rr = httptest.NewRecorder()
+	srv.handleThreadDetail(rr, req)
+	if rr.Code != http.StatusConflict || !strings.Contains(rr.Body.String(), "thread_fork_unavailable") {
+		t.Fatalf("busy fork status=%d body=%s, want 409 thread_fork_unavailable", rr.Code, rr.Body.String())
+	}
+}
+
 func TestValidateCreateRequestRejectsMismatchedContextEnvelope(t *testing.T) {
 	svc := newConfiguredTestService(t, staticSecretResolver{}, "http://127.0.0.1:1/v1")
 	primaryTargetID := "env_a"

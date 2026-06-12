@@ -60,11 +60,14 @@ import {
   saveDesktopFlowerHostTargetCache,
 } from './desktopFlowerHostState';
 import {
+  forkFlowerHostThreadViaBridge,
   listFlowerHostThreadsViaBridge,
   loadFlowerHostThreadViaBridge,
   loadFlowerHostSettingsViaBridge,
+  renameFlowerHostThreadViaBridge,
   saveFlowerHostSettingsViaBridge,
   sendFlowerHostChatResultViaBridge,
+  setFlowerHostThreadPinnedViaBridge,
   submitFlowerHostInputViaBridge,
   resolveFlowerHostHandlerViaBridge,
   shutdownFlowerHostBridge,
@@ -302,24 +305,33 @@ import {
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
+  FORK_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL,
   LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  RENAME_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL,
   SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL,
   SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  SET_DESKTOP_FLOWER_HOST_THREAD_PINNED_CHANNEL,
   SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL,
   type DesktopFlowerHostError,
+  type DesktopFlowerHostForkThreadRequest,
+  type DesktopFlowerHostRenameThreadRequest,
   type DesktopFlowerHostResolveHandlerRequest,
   type DesktopFlowerHostSendChatRequest,
+  type DesktopFlowerHostSetThreadPinnedRequest,
   type DesktopFlowerHostSettingsDraft,
   type DesktopFlowerHostSubmitInputRequest,
+  type ForkDesktopFlowerHostThreadResult,
   type ListDesktopFlowerHostThreadsResult,
   type LoadDesktopFlowerHostThreadResult,
   type LoadDesktopFlowerHostSettingsResult,
+  type RenameDesktopFlowerHostThreadResult,
   type ResolveDesktopFlowerHostHandlerResult,
   type SendDesktopFlowerHostChatResult,
   type SaveDesktopFlowerHostSettingsResult,
+  type SetDesktopFlowerHostThreadPinnedResult,
   type SubmitDesktopFlowerHostInputResult,
 } from '../shared/flowerHostSettingsIPC';
 import {
@@ -16293,6 +16305,54 @@ if (!app.requestSingleInstanceLock()) {
         thread: await loadFlowerHostThreadViaBridge({
           ...flowerHostBridgeArgs(),
           threadID,
+        }),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: desktopFlowerHostErrorFromUnknown(error),
+      };
+    }
+  });
+  ipcMain.handle(RENAME_DESKTOP_FLOWER_HOST_THREAD_CHANNEL, async (_event, request: DesktopFlowerHostRenameThreadRequest): Promise<RenameDesktopFlowerHostThreadResult> => {
+    try {
+      return {
+        ok: true,
+        thread: await renameFlowerHostThreadViaBridge({
+          ...flowerHostBridgeArgs(),
+          request,
+        }),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: desktopFlowerHostErrorFromUnknown(error),
+      };
+    }
+  });
+  ipcMain.handle(SET_DESKTOP_FLOWER_HOST_THREAD_PINNED_CHANNEL, async (_event, request: DesktopFlowerHostSetThreadPinnedRequest): Promise<SetDesktopFlowerHostThreadPinnedResult> => {
+    try {
+      return {
+        ok: true,
+        thread: await setFlowerHostThreadPinnedViaBridge({
+          ...flowerHostBridgeArgs(),
+          request,
+        }),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: desktopFlowerHostErrorFromUnknown(error),
+      };
+    }
+  });
+  ipcMain.handle(FORK_DESKTOP_FLOWER_HOST_THREAD_CHANNEL, async (_event, request: DesktopFlowerHostForkThreadRequest): Promise<ForkDesktopFlowerHostThreadResult> => {
+    try {
+      return {
+        ok: true,
+        thread: await forkFlowerHostThreadViaBridge({
+          ...flowerHostBridgeArgs(),
+          request,
         }),
       };
     } catch (error) {

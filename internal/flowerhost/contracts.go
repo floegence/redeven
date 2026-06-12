@@ -459,6 +459,8 @@ type ThreadSnapshot struct {
 	ThreadID     string             `json:"thread_id"`
 	Title        string             `json:"title"`
 	ModelID      string             `json:"model_id"`
+	WorkingDir   string             `json:"working_dir"`
+	PinnedAtMs   int64              `json:"pinned_at_ms,omitempty"`
 	CreatedAtMs  int64              `json:"created_at_ms"`
 	UpdatedAtMs  int64              `json:"updated_at_ms"`
 	Status       string             `json:"status"`
@@ -483,6 +485,23 @@ type SendChatResponse struct {
 
 type SubmitChatInputResponse struct {
 	Thread *ThreadSnapshot `json:"thread"`
+}
+
+type ThreadMutationRequest struct {
+	Title  *string `json:"title,omitempty"`
+	Pinned *bool   `json:"pinned,omitempty"`
+}
+
+type ForkThreadRequest struct {
+	Title string `json:"title,omitempty"`
+}
+
+type ThreadMutationResponse struct {
+	Thread ThreadSnapshot `json:"thread"`
+}
+
+type ForkThreadResponse struct {
+	Thread ThreadSnapshot `json:"thread"`
 }
 
 type StartupReport struct {

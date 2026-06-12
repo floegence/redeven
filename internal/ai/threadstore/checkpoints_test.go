@@ -631,3 +631,46 @@ func TestThreadCheckpoint_RestorePreservesTitleMetadata(t *testing.T) {
 		t.Fatalf("TitlePromptVersion=%q, want thread_title", th.TitlePromptVersion)
 	}
 }
+
+func TestThreadCheckpoint_RestoreKeepsCurrentPinnedState(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+
+	endpointID := "env_cp_pin"
+	threadID := "th_cp_pin"
+	now := time.Now().UnixMilli()
+	if err := s.CreateThread(ctx, Thread{
+		ThreadID:        threadID,
+		EndpointID:      endpointID,
+		Title:           "Checkpoint pin",
+		CreatedAtUnixMs: now,
+		UpdatedAtUnixMs: now,
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	cpID := "cp_pin"
+	if _, err := s.CreateThreadCheckpoint(ctx, endpointID, threadID, cpID, "run_pin", CheckpointKindPreRun); err != nil {
+		t.Fatalf("CreateThreadCheckpoint: %v", err)
+	}
+	if _, err := s.SetThreadPinned(ctx, endpointID, threadID, true, "u1", "u1@example.com"); err != nil {
+		t.Fatalf("SetThreadPinned: %v", err)
+	}
+	if _, err := s.RestoreThreadCheckpoint(ctx, endpointID, threadID, cpID); err != nil {
+		t.Fatalf("RestoreThreadCheckpoint: %v", err)
+	}
+	th, err := s.GetThread(ctx, endpointID, threadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if th == nil || th.PinnedAtUnixMs <= 0 {
+		t.Fatalf("PinnedAtUnixMs=%d, want current pin state preserved after checkpoint restore", th.PinnedAtUnixMs)
+	}
+}

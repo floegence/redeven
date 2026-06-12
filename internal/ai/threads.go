@@ -140,6 +140,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		RunError:            runError,
 		WaitingPrompt:       s.threadWaitingPrompt(ctx, th, runStatus),
 		LastContextRunID:    strings.TrimSpace(th.LastContextRunID),
+		PinnedAtUnixMs:      th.PinnedAtUnixMs,
 		CreatedAtUnixMs:     th.CreatedAtUnixMs,
 		UpdatedAtUnixMs:     th.UpdatedAtUnixMs,
 		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
@@ -208,6 +209,7 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 			RunError:            runError,
 			WaitingPrompt:       s.threadWaitingPrompt(ctx, &t, runStatus),
 			LastContextRunID:    strings.TrimSpace(t.LastContextRunID),
+			PinnedAtUnixMs:      t.PinnedAtUnixMs,
 			CreatedAtUnixMs:     t.CreatedAtUnixMs,
 			UpdatedAtUnixMs:     t.UpdatedAtUnixMs,
 			LastMessageAtUnixMs: t.LastMessageAtUnixMs,
@@ -319,6 +321,7 @@ func (s *Service) CreateThread(ctx context.Context, meta *session.Meta, title st
 		RunError:            "",
 		WaitingPrompt:       nil,
 		LastContextRunID:    "",
+		PinnedAtUnixMs:      0,
 		CreatedAtUnixMs:     t.CreatedAtUnixMs,
 		UpdatedAtUnixMs:     t.UpdatedAtUnixMs,
 		LastMessageAtUnixMs: 0,
@@ -382,6 +385,108 @@ func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID
 	}
 	s.broadcastThreadSummary(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID))
 	return nil
+}
+
+func (s *Service) SetThreadPinned(ctx context.Context, meta *session.Meta, threadID string, pinned bool) (*ThreadView, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	if err := requireRWX(meta); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil, errors.New("missing thread_id")
+	}
+	if _, err := db.SetThreadPinned(ctx, meta.EndpointID, threadID, pinned, meta.UserPublicID, meta.UserEmail); err != nil {
+		return nil, err
+	}
+	s.broadcastThreadSummary(strings.TrimSpace(meta.EndpointID), threadID)
+	return s.GetThread(ctx, meta, threadID)
+}
+
+func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThreadID string, title string) (*ThreadView, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	if err := requireRWX(meta); err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	sourceThreadID = strings.TrimSpace(sourceThreadID)
+	if sourceThreadID == "" {
+		return nil, errors.New("missing thread_id")
+	}
+	endpointID := strings.TrimSpace(meta.EndpointID)
+	if endpointID == "" {
+		return nil, errors.New("invalid request")
+	}
+	source, err := db.GetThread(ctx, endpointID, sourceThreadID)
+	if err != nil {
+		return nil, err
+	}
+	if source == nil {
+		return nil, sql.ErrNoRows
+	}
+	if s.HasActiveThreadForEndpoint(endpointID, sourceThreadID) || threadForkBlockedByRunState(source) {
+		return nil, ErrThreadForkUnavailable
+	}
+	destinationID, err := NewThreadID()
+	if err != nil {
+		return nil, err
+	}
+	title = normalizeForkThreadTitle(title, source.Title, source.LastMessagePreview)
+	forked, err := db.ForkThread(ctx, threadstore.ForkThreadRequest{
+		EndpointID:            endpointID,
+		SourceThreadID:        sourceThreadID,
+		DestinationThreadID:   destinationID,
+		Title:                 title,
+		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
+		CreatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
+		CreatedAtUnixMs:       time.Now().UnixMilli(),
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.broadcastThreadSummary(endpointID, sourceThreadID)
+	s.broadcastThreadSummary(endpointID, destinationID)
+	return s.GetThread(ctx, meta, forked.ThreadID)
+}
+
+func threadForkBlockedByRunState(th *threadstore.Thread) bool {
+	if th == nil {
+		return false
+	}
+	if strings.TrimSpace(th.WaitingUserInputJSON) != "" {
+		return true
+	}
+	state := NormalizeRunState(th.RunStatus)
+	return IsActiveRunState(string(state)) || state == RunStateWaitingUser
+}
+
+func normalizeForkThreadTitle(requested string, sourceTitle string, sourcePreview string) string {
+	requested = strings.TrimSpace(requested)
+	if requested != "" {
+		return truncateRunes(requested, 200)
+	}
+	base := firstNonEmpty(strings.TrimSpace(sourceTitle), strings.TrimSpace(sourcePreview), "Untitled conversation")
+	suffix := " (fork)"
+	maxBase := 200 - len(suffix)
+	if maxBase < 1 {
+		return truncateRunes(base, 200)
+	}
+	return truncateRunes(base, maxBase) + suffix
 }
 
 func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, threadID string, modelID string) error {

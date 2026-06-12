@@ -3520,7 +3520,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
-			if body.Title == nil && body.ModelID == nil && body.ExecutionMode == nil {
+			if body.Title == nil && body.ModelID == nil && body.ExecutionMode == nil && body.Pinned == nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 				return
 			}
@@ -3556,6 +3556,16 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
+			if body.Pinned != nil {
+				if _, err := g.ai.SetThreadPinned(r.Context(), meta, threadID, *body.Pinned); err != nil {
+					status := http.StatusBadRequest
+					if errors.Is(err, sql.ErrNoRows) {
+						status = http.StatusNotFound
+					}
+					writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+					return
+				}
+			}
 			th, err := g.ai.GetThread(r.Context(), meta, threadID)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
@@ -3571,6 +3581,51 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+			return
+
+		case action == "fork" && r.Method == http.MethodPost && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body struct {
+				Title string `json:"title,omitempty"`
+			}
+			if err := dec.Decode(&body); err != nil && !errors.Is(err, io.EOF) {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			th, err := g.ai.ForkThread(r.Context(), meta, threadID, body.Title)
+			if err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, sql.ErrNoRows) {
+					status = http.StatusNotFound
+				} else if errors.Is(err, ai.ErrThreadForkUnavailable) {
+					status = http.StatusConflict
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			view, err := g.buildAIThreadEnvelope(r.Context(), meta, th)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+			return
+
+		case action == "fork" && r.Method == http.MethodPost:
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 			return
 
 		case action == "read" && r.Method == http.MethodPost:

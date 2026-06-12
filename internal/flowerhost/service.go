@@ -292,7 +292,66 @@ func (s *Service) GetThread(ctx context.Context, threadID string) (ThreadSnapsho
 	if s == nil {
 		return ThreadSnapshot{}, errors.New("nil Flower Host service")
 	}
-	return s.threadSnapshot(ctx, threadID, nil)
+	snapshot, err := s.threadSnapshot(ctx, threadID, nil)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ThreadSnapshot{}, newServiceError(http.StatusNotFound, "thread_not_found", "thread not found")
+	}
+	return snapshot, err
+}
+
+func (s *Service) MutateThread(ctx context.Context, threadID string, req ThreadMutationRequest) (ThreadSnapshot, error) {
+	if s == nil {
+		return ThreadSnapshot{}, errors.New("nil Flower Host service")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return ThreadSnapshot{}, newServiceError(http.StatusBadRequest, "missing_thread_id", "missing thread id")
+	}
+	if req.Title == nil && req.Pinned == nil {
+		return ThreadSnapshot{}, newServiceError(http.StatusBadRequest, "invalid_request", "missing mutation field")
+	}
+	if req.Title != nil {
+		if err := s.ai.RenameThread(ctx, s.Meta(), threadID, *req.Title); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ThreadSnapshot{}, newServiceError(http.StatusNotFound, "thread_not_found", "thread not found")
+			}
+			return ThreadSnapshot{}, err
+		}
+	}
+	var view *ai.ThreadView
+	if req.Pinned != nil {
+		next, err := s.ai.SetThreadPinned(ctx, s.Meta(), threadID, *req.Pinned)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ThreadSnapshot{}, newServiceError(http.StatusNotFound, "thread_not_found", "thread not found")
+			}
+			return ThreadSnapshot{}, err
+		}
+		view = next
+	}
+	return s.threadSnapshot(ctx, threadID, view)
+}
+
+func (s *Service) ForkThread(ctx context.Context, threadID string, req ForkThreadRequest) (ThreadSnapshot, error) {
+	if s == nil {
+		return ThreadSnapshot{}, errors.New("nil Flower Host service")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return ThreadSnapshot{}, newServiceError(http.StatusBadRequest, "missing_thread_id", "missing thread id")
+	}
+	view, err := s.ai.ForkThread(ctx, s.Meta(), threadID, req.Title)
+	if err != nil {
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			return ThreadSnapshot{}, newServiceError(http.StatusNotFound, "thread_not_found", "thread not found")
+		case errors.Is(err, ai.ErrThreadForkUnavailable):
+			return ThreadSnapshot{}, newServiceError(http.StatusConflict, "thread_fork_unavailable", "Flower thread cannot be forked while it is running or waiting for input.")
+		default:
+			return ThreadSnapshot{}, err
+		}
+	}
+	return s.threadSnapshot(ctx, view.ThreadID, view)
 }
 
 func (s *Service) SendChat(ctx context.Context, req ChatSendRequest) (SendChatResponse, error) {
@@ -689,6 +748,8 @@ func (s *Service) threadListSnapshot(ctx context.Context, view *ai.ThreadView) (
 		ThreadID:     strings.TrimSpace(view.ThreadID),
 		Title:        firstNonEmpty(view.Title, view.LastMessagePreview, "Untitled conversation"),
 		ModelID:      strings.TrimSpace(view.ModelID),
+		WorkingDir:   strings.TrimSpace(view.WorkingDir),
+		PinnedAtMs:   view.PinnedAtUnixMs,
 		CreatedAtMs:  view.CreatedAtUnixMs,
 		UpdatedAtMs:  maxInt64(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
 		Status:       status,
@@ -959,6 +1020,8 @@ func (s *Service) threadSnapshot(ctx context.Context, threadID string, view *ai.
 		ThreadID:     view.ThreadID,
 		Title:        firstNonEmpty(view.Title, view.LastMessagePreview, "Untitled conversation"),
 		ModelID:      view.ModelID,
+		WorkingDir:   strings.TrimSpace(view.WorkingDir),
+		PinnedAtMs:   view.PinnedAtUnixMs,
 		CreatedAtMs:  view.CreatedAtUnixMs,
 		UpdatedAtMs:  maxInt64(maxInt64(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs), latestMessageCreatedAt(decoded.Messages)),
 		Status:       status,

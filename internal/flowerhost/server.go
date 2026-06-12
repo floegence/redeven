@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -194,17 +195,79 @@ func (s *Server) handleThreadDetail(w http.ResponseWriter, r *http.Request) {
 	if !s.authorized(w, r) {
 		return
 	}
-	if r.Method != http.MethodGet {
-		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
-		return
-	}
-	threadID := strings.TrimSpace(strings.TrimPrefix(r.URL.Path, "/v1/thread/"))
-	if threadID == "" || strings.Contains(threadID, "/") {
+	threadID, action, ok := parseThreadActionPath(r.URL.Path)
+	if !ok || threadID == "" {
 		writeErrorResponse(w, http.StatusBadRequest, "missing_thread_id", "missing thread id")
 		return
 	}
-	thread, err := s.service.GetThread(r.Context(), threadID)
-	writeResult(w, thread, err)
+	switch {
+	case action == "" && r.Method == http.MethodGet:
+		thread, err := s.service.GetThread(r.Context(), threadID)
+		writeResult(w, thread, err)
+	case action == "" && r.Method == http.MethodPatch:
+		var req ThreadMutationRequest
+		if err := decodeStrictJSON(r.Body, &req); err != nil {
+			writeErrorResponse(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		thread, err := s.service.MutateThread(r.Context(), threadID, req)
+		writeResult(w, ThreadMutationResponse{Thread: thread}, err)
+	case action == "fork" && r.Method == http.MethodPost:
+		var req ForkThreadRequest
+		if err := decodeStrictJSON(r.Body, &req); err != nil && !errors.Is(err, io.EOF) {
+			writeErrorResponse(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		thread, err := s.service.ForkThread(r.Context(), threadID, req)
+		writeResult(w, ForkThreadResponse{Thread: thread}, err)
+	case action == "":
+		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+	default:
+		writeErrorResponse(w, http.StatusNotFound, "not_found", "not found")
+	}
+}
+
+func decodeStrictJSON(r io.Reader, v any) error {
+	if r == nil {
+		return io.EOF
+	}
+	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(v); err != nil {
+		return err
+	}
+	var extra json.RawMessage
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err != nil {
+			return err
+		}
+		return errors.New("unexpected trailing JSON")
+	}
+	return nil
+}
+
+func parseThreadActionPath(path string) (string, string, bool) {
+	rest := strings.TrimPrefix(path, "/v1/thread/")
+	if rest == path {
+		return "", "", false
+	}
+	rest = strings.Trim(rest, "/")
+	if rest == "" {
+		return "", "", false
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) > 2 {
+		return "", "", false
+	}
+	threadID := strings.TrimSpace(parts[0])
+	if threadID == "" {
+		return "", "", false
+	}
+	action := ""
+	if len(parts) == 2 {
+		action = strings.TrimSpace(parts[1])
+	}
+	return threadID, action, true
 }
 
 func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {

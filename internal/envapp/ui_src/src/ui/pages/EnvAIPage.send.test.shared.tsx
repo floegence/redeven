@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => {
           title: 'Loaded Env Flower thread',
           model_id: 'openai/gpt-5.2',
           run_status: state.threadDetailWaitingPrompt ? 'waiting_user' : 'success',
+          working_dir: '/workspace/env-flower',
           created_at_unix_ms: 1,
           updated_at_unix_ms: 2,
           ...(state.threadDetailWaitingPrompt ? { waiting_prompt: state.threadDetailWaitingPrompt } : {}),
@@ -45,10 +46,10 @@ const mocks = vi.hoisted(() => {
       };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads?')) {
-      return { threads: [{ thread_id: 'thread-1', title: 'Env Flower history', model_id: 'openai/gpt-5.2', run_status: 'success', created_at_unix_ms: 1, updated_at_unix_ms: 2 }] };
+      return { threads: [{ thread_id: 'thread-1', title: 'Env Flower history', model_id: 'openai/gpt-5.2', run_status: 'success', working_dir: '/workspace/env-flower', created_at_unix_ms: 1, updated_at_unix_ms: 2 }] };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads') && init?.method === 'POST') {
-      return { thread: { thread_id: 'thread-new', title: 'New Env Flower chat', model_id: 'openai/gpt-5.2', run_status: 'running', created_at_unix_ms: 3, updated_at_unix_ms: 4 } };
+      return { thread: { thread_id: 'thread-new', title: 'New Env Flower chat', model_id: 'openai/gpt-5.2', run_status: 'running', working_dir: '/workspace/env-flower', created_at_unix_ms: 3, updated_at_unix_ms: 4 } };
     }
     if (url.includes('/_redeven_proxy/api/ai/provider_bundle')) {
       return {};
@@ -92,10 +93,14 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     ChevronDown: Icon,
     ChevronLeft: Icon,
     Code: Icon,
+    Copy: Icon,
+    Folder: Icon,
     FolderOpen: Icon,
     GitBranch: Icon,
     GripVertical: Icon,
+    MoreHorizontal: Icon,
     Pencil: Icon,
+    Pin: Icon,
     Plus: Icon,
     Refresh: Icon,
     Search: Icon,
@@ -156,20 +161,63 @@ vi.mock('./EnvContext', () => ({
 
 vi.mock('../i18n', () => {
   const messages: Record<string, string> = {
+    'common.actions.cancel': 'Cancel',
     'common.actions.refresh': 'Refresh',
     'common.actions.retry': 'Retry',
     'common.actions.settings': 'Settings',
     'flowerChat.composer.describePlaceholder': 'Describe what you need',
     'flowerChat.composer.sendMessage': 'Send message',
     'flowerChat.composer.typeMessagePlaceholder': 'Message Flower',
+    'flowerChat.router.currentEnvHandler': 'Using this environment',
+    'flowerChat.router.currentEnvSource': 'Current environment',
     'flowerChat.router.conversationsAria': 'Flower conversations',
     'flowerChat.router.conversationsTitle': 'Conversations',
+    'flowerChat.router.enterMessageBeforeSending': 'Enter a message before sending.',
+    'flowerChat.router.envLocalSubtitle': 'Environment-local Flower',
+    'flowerChat.router.failedToCreateChat': 'Failed to create Flower chat.',
     'flowerChat.router.handlerResolving': 'Finding Flower',
     'flowerChat.router.handlerSelectionLabel': 'Flower',
     'flowerChat.router.handlerUnavailable': 'Flower is unavailable',
+    'flowerChat.router.missingThreadID': 'Missing thread id.',
     'flowerChat.router.newChat': 'New chat',
     'flowerChat.router.noConversations': 'No conversations yet',
     'flowerChat.router.searchConversations': 'Search conversations',
+    'flowerChat.router.selectModelBeforeChat': 'Select a Flower model before starting a chat.',
+    'flowerChat.sidebar.contextMenu.copied': 'Mock {label} copied',
+    'flowerChat.sidebar.contextMenu.copyThreadId': 'Mock copy thread ID',
+    'flowerChat.sidebar.contextMenu.copyWorkingDirectory': 'Mock copy working directory',
+    'flowerChat.sidebar.contextMenu.fork': 'Mock fork',
+    'flowerChat.sidebar.contextMenu.label': 'Mock actions for {title}',
+    'flowerChat.sidebar.contextMenu.pin': 'Mock pin conversation',
+    'flowerChat.sidebar.contextMenu.rename': 'Mock rename',
+    'flowerChat.sidebar.contextMenu.threadIdLabel': 'Mock thread ID',
+    'flowerChat.sidebar.contextMenu.unpin': 'Mock unpin conversation',
+    'flowerChat.sidebar.contextMenu.workingDirectoryLabel': 'Mock working directory',
+    'flowerChat.sidebar.delete.aria': 'Delete chat {title}',
+    'flowerChat.sidebar.description': 'Mock stable conversation order',
+    'flowerChat.sidebar.groups.older': 'Mock older',
+    'flowerChat.sidebar.groups.thisWeek': 'Mock this week',
+    'flowerChat.sidebar.groups.today': 'Mock today',
+    'flowerChat.sidebar.groups.yesterday': 'Mock yesterday',
+    'flowerChat.sidebar.pinnedBadge': 'Mock pinned',
+    'flowerChat.sidebar.pinnedGroup': 'Mock pinned group',
+    'flowerChat.sidebar.rename.nameLabel': 'Mock name',
+    'flowerChat.sidebar.rename.title': 'Mock rename conversation',
+    'flowerChat.sidebar.save': 'Mock save',
+    'flowerChat.sidebar.saving': 'Mock saving...',
+    'flowerChat.sidebar.status.done': 'Mock done',
+    'flowerChat.sidebar.status.failed': 'Mock failed',
+    'flowerChat.sidebar.status.idle': 'Mock idle',
+    'flowerChat.sidebar.status.readOnly': 'Mock read only',
+    'flowerChat.sidebar.status.running': 'Mock running',
+    'flowerChat.sidebar.status.waitingApproval': 'Mock waiting approval',
+    'flowerChat.sidebar.status.waitingInput': 'Mock waiting input',
+    'flowerChat.sidebar.time.days': 'Mock {count}d',
+    'flowerChat.sidebar.time.hours': 'Mock {count}h',
+    'flowerChat.sidebar.time.minutes': 'Mock {count}m',
+    'flowerChat.sidebar.time.now': 'Mock now',
+    'flowerChat.sidebar.untitledChat': 'Mock new chat',
+    'flowerChat.sidebar.working': 'Mock working',
   };
   return {
     useI18n: () => ({
@@ -234,6 +282,30 @@ export function registerEnvAIPageSendTests() {
         await flush();
         expect(mocks.listMessagesMock).toHaveBeenCalledWith({ threadId: 'thread-1', tail: true, limit: 200 });
         expect(host.textContent).toContain('Transcript for thread-1');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('uses Env-local i18n copy for the shared thread context menu', async () => {
+      const { host, dispose } = await renderPage();
+      try {
+        const card = host.querySelector('[data-thread-id="thread-1"]') as HTMLElement;
+        expect(card).toBeTruthy();
+        card.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: 96,
+          clientY: 80,
+        }));
+        await flush();
+        expect(host.textContent).toContain('Mock copy thread ID');
+        expect(host.textContent).toContain('Mock copy working directory');
+        expect(host.textContent).toContain('Mock fork');
+        expect(host.textContent).toContain('Mock pin conversation');
+        expect(host.textContent).toContain('Mock rename');
+        expect(host.textContent).not.toContain('Copy thread id');
+        expect(host.textContent).not.toContain('Copy work directory');
       } finally {
         dispose();
       }

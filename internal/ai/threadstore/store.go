@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -90,6 +89,7 @@ type Thread struct {
 	RunError               string `json:"run_error"`
 	WaitingUserInputJSON   string `json:"waiting_user_input_json"`
 	LastContextRunID       string `json:"last_context_run_id"`
+	PinnedAtUnixMs         int64  `json:"pinned_at_unix_ms"`
 
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
@@ -153,6 +153,7 @@ type QueuedTurn struct {
 }
 
 type ThreadsCursor struct {
+	PinnedAtUnixMs  int64
 	CreatedAtUnixMs int64
 	ThreadID        string
 }
@@ -161,7 +162,7 @@ const threadSelectColumnsSQL = `
   thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error,
-  waiting_user_input_json, last_context_run_id,
+  waiting_user_input_json, last_context_run_id, pinned_at_unix_ms,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
@@ -195,6 +196,7 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 		&t.RunError,
 		&t.WaitingUserInputJSON,
 		&t.LastContextRunID,
+		&t.PinnedAtUnixMs,
 		&t.CreatedByUserPublicID,
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
@@ -219,7 +221,7 @@ func EncodeCursor(c ThreadsCursor) string {
 	if c.CreatedAtUnixMs <= 0 || strings.TrimSpace(c.ThreadID) == "" {
 		return ""
 	}
-	raw := fmt.Sprintf("%d:%s", c.CreatedAtUnixMs, strings.TrimSpace(c.ThreadID))
+	raw := fmt.Sprintf("%d:%d:%s", nonNegativeInt64(c.PinnedAtUnixMs), c.CreatedAtUnixMs, strings.TrimSpace(c.ThreadID))
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
@@ -232,19 +234,31 @@ func DecodeCursor(raw string) (ThreadsCursor, bool) {
 	if err != nil {
 		return ThreadsCursor{}, false
 	}
-	parts := strings.SplitN(string(b), ":", 2)
-	if len(parts) != 2 {
+	parts := strings.SplitN(string(b), ":", 3)
+	if len(parts) != 2 && len(parts) != 3 {
 		return ThreadsCursor{}, false
 	}
-	ms, err := parseInt64(parts[0])
+	pinnedAt := int64(0)
+	createdIndex := 0
+	idIndex := 1
+	if len(parts) == 3 {
+		ms, err := parseInt64(parts[0])
+		if err != nil || ms < 0 {
+			return ThreadsCursor{}, false
+		}
+		pinnedAt = ms
+		createdIndex = 1
+		idIndex = 2
+	}
+	ms, err := parseInt64(parts[createdIndex])
 	if err != nil || ms <= 0 {
 		return ThreadsCursor{}, false
 	}
-	id := strings.TrimSpace(parts[1])
+	id := strings.TrimSpace(parts[idIndex])
 	if id == "" {
 		return ThreadsCursor{}, false
 	}
-	return ThreadsCursor{CreatedAtUnixMs: ms, ThreadID: id}, true
+	return ThreadsCursor{PinnedAtUnixMs: pinnedAt, CreatedAtUnixMs: ms, ThreadID: id}, true
 }
 
 func parseInt64(raw string) (int64, error) {
@@ -253,6 +267,13 @@ func parseInt64(raw string) (int64, error) {
 		return 0, errors.New("empty")
 	}
 	return strconv.ParseInt(raw, 10, 64)
+}
+
+func nonNegativeInt64(v int64) int64 {
+	if v < 0 {
+		return 0
+	}
+	return v
 }
 
 func isUniqueConstraintError(err error) bool {
@@ -288,13 +309,45 @@ func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, c
 	}
 
 	args := []any{endpointID}
-
 	q := fmt.Sprintf(`
 SELECT
 %s
 FROM ai_threads
 WHERE endpoint_id = ?
 `, threadSelectColumnsSQL)
+	if cursor.CreatedAtUnixMs > 0 && strings.TrimSpace(cursor.ThreadID) != "" {
+		cursorPinned := nonNegativeInt64(cursor.PinnedAtUnixMs)
+		cursorThreadID := strings.TrimSpace(cursor.ThreadID)
+		q += `
+  AND (
+    CASE WHEN pinned_at_unix_ms > 0 THEN 1 ELSE 0 END < CASE WHEN ? > 0 THEN 1 ELSE 0 END
+    OR (
+      CASE WHEN pinned_at_unix_ms > 0 THEN 1 ELSE 0 END = CASE WHEN ? > 0 THEN 1 ELSE 0 END
+      AND (
+        (? > 0 AND pinned_at_unix_ms < ?)
+        OR ((pinned_at_unix_ms = ? OR (? = 0 AND pinned_at_unix_ms <= 0)) AND created_at_unix_ms < ?)
+        OR ((pinned_at_unix_ms = ? OR (? = 0 AND pinned_at_unix_ms <= 0)) AND created_at_unix_ms = ? AND thread_id > ?)
+      )
+    )
+  )
+`
+		args = append(args,
+			cursorPinned,
+			cursorPinned,
+			cursorPinned, cursorPinned,
+			cursorPinned, cursorPinned, cursor.CreatedAtUnixMs,
+			cursorPinned, cursorPinned, cursor.CreatedAtUnixMs, cursorThreadID,
+		)
+	}
+	q += `
+ORDER BY
+  CASE WHEN pinned_at_unix_ms > 0 THEN 1 ELSE 0 END DESC,
+  pinned_at_unix_ms DESC,
+  created_at_unix_ms DESC,
+  thread_id ASC
+LIMIT ?
+`
+	args = append(args, limit+1)
 
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -302,7 +355,7 @@ WHERE endpoint_id = ?
 	}
 	defer rows.Close()
 
-	out := make([]Thread, 0, limit)
+	out := make([]Thread, 0, limit+1)
 	for rows.Next() {
 		var t Thread
 		if err := scanThreadRow(rows, &t); err != nil {
@@ -316,10 +369,6 @@ WHERE endpoint_id = ?
 	if len(out) == 0 {
 		return out, "", nil
 	}
-	out = applyThreadListOptions(out, threadListOptions{Limit: limit + 1, Cursor: cursor})
-	if len(out) == 0 {
-		return out, "", nil
-	}
 	hasMore := len(out) > limit
 	if hasMore {
 		out = out[:limit]
@@ -327,45 +376,9 @@ WHERE endpoint_id = ?
 	last := out[len(out)-1]
 	next := ""
 	if hasMore {
-		next = EncodeCursor(ThreadsCursor{CreatedAtUnixMs: last.CreatedAtUnixMs, ThreadID: last.ThreadID})
+		next = EncodeCursor(ThreadsCursor{PinnedAtUnixMs: last.PinnedAtUnixMs, CreatedAtUnixMs: last.CreatedAtUnixMs, ThreadID: last.ThreadID})
 	}
 	return out, next, nil
-}
-
-type threadListOptions struct {
-	Limit  int
-	Cursor ThreadsCursor
-}
-
-func applyThreadListOptions(threads []Thread, opts threadListOptions) []Thread {
-	out := make([]Thread, 0, len(threads))
-	for _, thread := range threads {
-		thread.ThreadID = strings.TrimSpace(thread.ThreadID)
-		if thread.ThreadID == "" {
-			continue
-		}
-		out = append(out, thread)
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		if out[i].CreatedAtUnixMs != out[j].CreatedAtUnixMs {
-			return out[i].CreatedAtUnixMs > out[j].CreatedAtUnixMs
-		}
-		return out[i].ThreadID < out[j].ThreadID
-	})
-	if opts.Cursor.CreatedAtUnixMs > 0 && strings.TrimSpace(opts.Cursor.ThreadID) != "" {
-		cursorID := strings.TrimSpace(opts.Cursor.ThreadID)
-		filtered := out[:0]
-		for _, thread := range out {
-			if thread.CreatedAtUnixMs < opts.Cursor.CreatedAtUnixMs || (thread.CreatedAtUnixMs == opts.Cursor.CreatedAtUnixMs && strings.TrimSpace(thread.ThreadID) > cursorID) {
-				filtered = append(filtered, thread)
-			}
-		}
-		out = filtered
-	}
-	if opts.Limit > 0 && len(out) > opts.Limit {
-		out = out[:opts.Limit]
-	}
-	return out
 }
 
 func (s *Store) ListAutoThreadTitleCandidates(ctx context.Context, limit int) ([]AutoThreadTitleCandidate, error) {
@@ -507,8 +520,8 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	  created_by_user_public_id, created_by_user_email,
 	  updated_by_user_public_id, updated_by_user_email,
 	  created_at_unix_ms, updated_at_unix_ms,
-	  last_message_at_unix_ms, last_message_preview
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	  last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
 		t.EndpointID,
@@ -536,6 +549,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.UpdatedAtUnixMs,
 		t.LastMessageAtUnixMs,
 		t.LastMessagePreview,
+		nonNegativeInt64(t.PinnedAtUnixMs),
 	)
 	return err
 }
@@ -668,6 +682,39 @@ WHERE endpoint_id = ? AND thread_id = ?
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+func (s *Store) SetThreadPinned(ctx context.Context, endpointID string, threadID string, pinned bool, updatedByID string, updatedByEmail string) (int64, error) {
+	if s == nil || s.db == nil {
+		return 0, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return 0, errors.New("invalid request")
+	}
+	pinnedAt := int64(0)
+	if pinned {
+		pinnedAt = time.Now().UnixMilli()
+	}
+	res, err := s.db.ExecContext(ctx, `
+UPDATE ai_threads
+SET pinned_at_unix_ms = ?,
+    updated_by_user_public_id = ?,
+    updated_by_user_email = ?
+WHERE endpoint_id = ? AND thread_id = ?
+`, pinnedAt, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return 0, sql.ErrNoRows
+	}
+	return pinnedAt, nil
 }
 
 func (s *Store) SetAutoThreadTitle(ctx context.Context, endpointID string, threadID string, title string, inputMessageID string, modelID string, promptVersion string, generatedAtUnixMs int64, updatedByID string, updatedByEmail string) (bool, error) {

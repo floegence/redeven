@@ -13,7 +13,6 @@ const srcRoot = process.env.REDEVEN_WORKBENCH_WHEEL_CONTRACT_SRC_ROOT
 
 const scanEntries = [
   'ui/codex',
-  'ui/pages/AIChatSidebar.tsx',
   'ui/pages/EnvAIPage.tsx',
   'ui/pages/EnvCodespacesPage.tsx',
   'ui/pages/EnvPortForwardsPage.tsx',

@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 29
+	threadstoreCurrentSchemaVersion = 30
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -57,6 +57,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 26, ToVersion: 27, Apply: migrateThreadstoreToV27},
 			{FromVersion: 27, ToVersion: 28, Apply: migrateThreadstoreToV28},
 			{FromVersion: 28, ToVersion: 29, Apply: migrateThreadstoreToV29},
+			{FromVersion: 29, ToVersion: 30, Apply: migrateThreadstoreToV30},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -251,6 +252,10 @@ func migrateThreadstoreToV29(tx *sql.Tx) error {
 	return ensureFlowerThreadMetadataOwnershipColumnsTx(tx)
 }
 
+func migrateThreadstoreToV30(tx *sql.Tx) error {
+	return ensureAIThreadsPinnedAtTx(tx)
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
@@ -269,6 +274,14 @@ func ensureAIThreadsWorkingDirTx(tx *sql.Tx) error {
 
 func ensureAIThreadsFollowupsRevisionTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "followups_revision", `ALTER TABLE ai_threads ADD COLUMN followups_revision INTEGER NOT NULL DEFAULT 0`)
+}
+
+func ensureAIThreadsPinnedAtTx(tx *sql.Tx) error {
+	if err := ensureColumnTx(tx, "ai_threads", "pinned_at_unix_ms", `ALTER TABLE ai_threads ADD COLUMN pinned_at_unix_ms INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_ai_threads_endpoint_pinned_created ON ai_threads(endpoint_id, pinned_at_unix_ms DESC, created_at_unix_ms DESC, thread_id ASC)`)
+	return err
 }
 
 func ensureAIThreadsRunStateColumnsTx(tx *sql.Tx) error {
@@ -966,6 +979,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"thread_id", "endpoint_id", "namespace_public_id", "model_id", "model_locked",
 			"execution_mode", "working_dir", "title", "title_source", "title_generated_at_unix_ms",
 			"title_input_message_id", "title_model_id", "title_prompt_version", "followups_revision",
+			"pinned_at_unix_ms",
 			"run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "last_context_run_id",
 			"created_by_user_public_id", "created_by_user_email", "updated_by_user_public_id",
 			"updated_by_user_email", "created_at_unix_ms", "updated_at_unix_ms",
@@ -1090,6 +1104,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 
 	requiredIndexes := []string{
 		"idx_ai_threads_endpoint_updated",
+		"idx_ai_threads_endpoint_pinned_created",
 		"idx_ai_messages_thread_id",
 		"idx_ai_runs_endpoint_thread_updated",
 		"idx_ai_tool_calls_run_id",

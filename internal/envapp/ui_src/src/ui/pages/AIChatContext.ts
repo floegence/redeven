@@ -135,6 +135,7 @@ export type ThreadView = Readonly<{
   model_locked?: boolean;
   execution_mode?: ExecutionMode;
   working_dir?: string;
+  pinned_at_unix_ms?: number;
   queued_turn_count?: number;
   run_status?: ThreadRunStatus;
   run_updated_at_unix_ms?: number;

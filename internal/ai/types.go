@@ -183,6 +183,7 @@ type ThreadView struct {
 	RunError            string                  `json:"run_error,omitempty"`
 	WaitingPrompt       *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
 	LastContextRunID    string                  `json:"last_context_run_id,omitempty"`
+	PinnedAtUnixMs      int64                   `json:"pinned_at_unix_ms,omitempty"`
 	CreatedAtUnixMs     int64                   `json:"created_at_unix_ms"`
 	UpdatedAtUnixMs     int64                   `json:"updated_at_unix_ms"`
 	LastMessageAtUnixMs int64                   `json:"last_message_at_unix_ms"`
@@ -209,6 +210,7 @@ type PatchThreadRequest struct {
 	Title         *string `json:"title,omitempty"`
 	ModelID       *string `json:"model_id,omitempty"`
 	ExecutionMode *string `json:"execution_mode,omitempty"`
+	Pinned        *bool   `json:"pinned,omitempty"`
 }
 
 type ListThreadMessagesResponse struct {

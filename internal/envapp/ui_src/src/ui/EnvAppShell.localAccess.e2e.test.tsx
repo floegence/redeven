@@ -407,7 +407,6 @@ vi.mock('./pages/EnvAIPage', () => ({
 vi.mock('./codex/CodexPage', () => ({ CodexPage: () => <div /> }));
 vi.mock('./codex/CodexProvider', () => ({ CodexProvider: (props: any) => <>{props.children}</> }));
 vi.mock('./codex/CodexSidebar', () => ({ CodexSidebar: () => <div /> }));
-vi.mock('./pages/AIChatSidebar', () => ({ AIChatSidebar: () => <div /> }));
 vi.mock('./pages/EnvSettingsPage', async () => {
   const { EnvContext } = await import('./pages/EnvContext');
   return {
