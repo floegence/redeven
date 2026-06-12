@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -55,12 +54,8 @@ func TestService_DeleteThreadRemovesOwnedUploadArtifacts(t *testing.T) {
 	}
 
 	dataPath := filepath.Join(svc.uploadsDir, uploadID+".data")
-	metaPath := filepath.Join(svc.uploadsDir, uploadID+".json")
 	if _, err := os.Stat(dataPath); err != nil {
 		t.Fatalf("stat dataPath: %v", err)
-	}
-	if _, err := os.Stat(metaPath); err != nil {
-		t.Fatalf("stat metaPath: %v", err)
 	}
 
 	if err := svc.DeleteThread(ctx, meta, thread.ThreadID, false); err != nil {
@@ -68,9 +63,6 @@ func TestService_DeleteThreadRemovesOwnedUploadArtifacts(t *testing.T) {
 	}
 	if _, err := os.Stat(dataPath); !os.IsNotExist(err) {
 		t.Fatalf("dataPath err=%v, want not exist", err)
-	}
-	if _, err := os.Stat(metaPath); !os.IsNotExist(err) {
-		t.Fatalf("metaPath err=%v, want not exist", err)
 	}
 	if _, err := svc.threadsDB.GetUpload(ctx, meta.EndpointID, uploadID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("GetUpload err=%v, want %v", err, sql.ErrNoRows)
@@ -164,46 +156,6 @@ func TestService_DeleteFollowupRemovesUploadArtifacts(t *testing.T) {
 	}
 }
 
-func TestService_OpenUploadAdoptsLegacySidecar(t *testing.T) {
-	t.Parallel()
-
-	svc := newTestService(t, nil)
-	meta := testUploadMeta()
-	ctx := context.Background()
-
-	uploadID := "upl_legacy_sidecar"
-	dataPath := filepath.Join(svc.uploadsDir, uploadID+".data")
-	metaPath := filepath.Join(svc.uploadsDir, uploadID+".json")
-	now := time.Now().UnixMilli()
-	if err := os.WriteFile(dataPath, []byte("legacy payload"), 0o600); err != nil {
-		t.Fatalf("WriteFile data: %v", err)
-	}
-	if err := os.WriteFile(metaPath, []byte(`{"id":"`+uploadID+`","name":"legacy.txt","size":14,"mime_type":"text/plain","created_at_unix_ms":`+strconv.FormatInt(now, 10)+`}`+"\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile meta: %v", err)
-	}
-
-	info, resolvedPath, err := svc.OpenUpload(ctx, meta.EndpointID, uploadID)
-	if err != nil {
-		t.Fatalf("OpenUpload: %v", err)
-	}
-	if resolvedPath != dataPath {
-		t.Fatalf("resolvedPath=%q, want %q", resolvedPath, dataPath)
-	}
-	if info == nil || info.Name != "legacy.txt" || info.MimeType != "text/plain" || info.Size != 14 {
-		t.Fatalf("unexpected upload info: %#v", info)
-	}
-	rec, err := svc.threadsDB.GetUpload(ctx, meta.EndpointID, uploadID)
-	if err != nil {
-		t.Fatalf("GetUpload: %v", err)
-	}
-	if rec.StorageRelPath != uploadID+".data" {
-		t.Fatalf("storage_relpath=%q, want %q", rec.StorageRelPath, uploadID+".data")
-	}
-	if rec.State != threadstore.UploadStateStaged {
-		t.Fatalf("state=%q, want %q", rec.State, threadstore.UploadStateStaged)
-	}
-}
-
 func TestService_OpenUploadRejectsMismatchedEndpoint(t *testing.T) {
 	t.Parallel()
 
@@ -211,13 +163,9 @@ func TestService_OpenUploadRejectsMismatchedEndpoint(t *testing.T) {
 	ctx := context.Background()
 	uploadID := "upl_endpoint_scoped"
 	dataPath := filepath.Join(svc.uploadsDir, uploadID+".data")
-	metaPath := filepath.Join(svc.uploadsDir, uploadID+".json")
 	now := time.Now().UnixMilli()
 	if err := os.WriteFile(dataPath, []byte("scoped"), 0o600); err != nil {
 		t.Fatalf("WriteFile data: %v", err)
-	}
-	if err := os.WriteFile(metaPath, []byte(`{"id":"`+uploadID+`","name":"scoped.txt","size":6,"mime_type":"text/plain","created_at_unix_ms":`+strconv.FormatInt(now, 10)+`}`+"\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile meta: %v", err)
 	}
 	if err := svc.threadsDB.InsertUpload(ctx, threadstore.UploadRecord{
 		UploadID:          uploadID,
@@ -249,12 +197,8 @@ func TestService_SweepPendingUploadsRemovesExpiredStagedUploads(t *testing.T) {
 
 	uploadID := "upl_expired_staged"
 	dataPath := filepath.Join(svc.uploadsDir, uploadID+".data")
-	metaPath := filepath.Join(svc.uploadsDir, uploadID+".json")
 	if err := os.WriteFile(dataPath, []byte("draft"), 0o600); err != nil {
 		t.Fatalf("WriteFile data: %v", err)
-	}
-	if err := os.WriteFile(metaPath, []byte(`{"id":"`+uploadID+`","name":"draft.txt","size":5,"mime_type":"text/plain","created_at_unix_ms":`+strconv.FormatInt(now-10_000, 10)+`}`+"\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile meta: %v", err)
 	}
 	if err := svc.threadsDB.InsertUpload(ctx, threadstore.UploadRecord{
 		UploadID:          uploadID,
@@ -300,9 +244,6 @@ func TestService_ProcessUploadCleanupCandidatesReschedulesDeleteFailures(t *test
 	}
 	if err := os.WriteFile(filepath.Join(dataDir, "nested.txt"), []byte("nested"), 0o600); err != nil {
 		t.Fatalf("WriteFile nested: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(svc.uploadsDir, uploadID+".json"), []byte(`{"id":"`+uploadID+`"}`+"\n"), 0o600); err != nil {
-		t.Fatalf("WriteFile meta: %v", err)
 	}
 	if err := svc.threadsDB.InsertUpload(ctx, threadstore.UploadRecord{
 		UploadID:          uploadID,

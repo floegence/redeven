@@ -347,7 +347,7 @@ func askUserToolInputSchema() map[string]any {
 				"type":        "array",
 				"minItems":    1,
 				"maxItems":    5,
-				"description": "Structured user-input questions. Each question must be fully specified; Host validation rejects missing ids, text, response_mode, invalid choice contracts, and legacy options/is_other shapes.",
+				"description": "Structured user-input questions. Each question must be fully specified with id, question, response_mode, and the required choice contract for that mode.",
 				"items": map[string]any{
 					"type": "object",
 					"properties": map[string]any{
@@ -356,13 +356,13 @@ func askUserToolInputSchema() map[string]any {
 						"question":           map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
 						"is_secret":          map[string]any{"type": "boolean"},
 						"response_mode":      map[string]any{"type": "string", "enum": []string{"select", "write", "select_or_write"}, "description": "select requires fixed choices and choices_exhaustive=true; write must omit choices; select_or_write requires fixed choices and choices_exhaustive=false."},
-						"choices_exhaustive": map[string]any{"type": "boolean", "description": "Required when choices are present. true only for exhaustive select; false for select_or_write with a typed fallback."},
-						"write_label":        map[string]any{"type": "string", "maxLength": 200, "description": "For select_or_write, the typed fallback label such as None of the above. For write, the direct input label."},
+						"choices_exhaustive": map[string]any{"type": "boolean", "description": "Required when choices are present. true only for exhaustive select; false for select_or_write with a custom text answer."},
+						"write_label":        map[string]any{"type": "string", "maxLength": 200, "description": "For select_or_write, the label for the custom text answer. For write, the direct input label."},
 						"write_placeholder":  map[string]any{"type": "string", "maxLength": 160},
 						"choices": map[string]any{
 							"type":        "array",
 							"maxItems":    4,
-							"description": "Fixed select choices only. Do not include Other/None as a write choice; use response_mode=select_or_write with choices_exhaustive=false for typed fallback.",
+							"description": "Fixed select choices only. Do not include Other/None as a choice; use response_mode=select_or_write with choices_exhaustive=false when custom text is allowed.",
 							"items": map[string]any{
 								"type": "object",
 								"properties": map[string]any{
@@ -525,7 +525,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "task_complete",
-			Description:  "You MUST call this tool when the task is done. Provide a detailed result summary describing what was accomplished.",
+			Description:  "Optionally report a detailed result summary when explicitly useful. A normal assistant final answer can complete the task without this tool.",
 			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"result": map[string]any{"type": "string"}, "evidence_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "remaining_risks": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "next_actions": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"result"}, "additionalProperties": false}),
 			ParallelSafe: true,
 			Mutating:     false,
@@ -535,7 +535,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "ask_user",
-			Description:  "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Preserve explicit interaction-shape constraints from the user, such as asking for fixed options, clickable choices, one-question-at-a-time, or indirect questioning. Each question must declare response_mode. Choice-based questions must also declare choices_exhaustive: use select only when choices_exhaustive=true, write for direct free text, and select_or_write when choices_exhaustive=false so the UI keeps a standardized typed fallback such as None of the above. If the user asks for answer choices, do not downgrade the question into pure write mode. choices[] should contain fixed options only. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
+			Description:  "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Preserve explicit interaction-shape constraints from the user, such as asking for fixed options, clickable choices, one-question-at-a-time, or indirect questioning. Each question must declare response_mode. Choice-based questions must also declare choices_exhaustive: use select only when choices_exhaustive=true, write for direct free text, and select_or_write when choices_exhaustive=false and custom text is allowed. If the user asks for answer choices, do not downgrade the question into pure write mode. choices[] should contain fixed options only. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
 			InputSchema:  toSchema(askUserToolInputSchema()),
 			ParallelSafe: true,
 			Mutating:     false,

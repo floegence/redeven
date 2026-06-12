@@ -1197,9 +1197,8 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			History:   history,
 			Input:     RunInput{Text: attemptInput},
 			Options: RunOptions{
-				Mode:            task.mode,
-				MaxSteps:        task.maxSteps,
-				MaxNoToolRounds: nativeDefaultNoToolRounds,
+				Mode:     task.mode,
+				MaxSteps: task.maxSteps,
 			},
 		}
 

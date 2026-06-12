@@ -2,51 +2,10 @@ package ai
 
 import (
 	"context"
-	"io"
-	"log/slog"
-	"os"
-	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/floegence/redeven/internal/session"
 )
-
-func TestNewService_SweepsOrphanLegacyWorkspaceCheckpointArtifacts(t *testing.T) {
-	t.Parallel()
-
-	stateDir := t.TempDir()
-	orphanDir := checkpointArtifactsDir(stateDir, "cp_orphan")
-	if err := os.MkdirAll(orphanDir, 0o700); err != nil {
-		t.Fatalf("MkdirAll orphanDir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(orphanDir, "snapshot.tar.gz"), []byte("legacy"), 0o600); err != nil {
-		t.Fatalf("WriteFile snapshot.tar.gz: %v", err)
-	}
-
-	svc, err := NewService(Options{
-		Logger:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		StateDir:         stateDir,
-		AgentHomeDir:     t.TempDir(),
-		Shell:            "/bin/bash",
-		PersistOpTimeout: 2 * time.Second,
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-	t.Cleanup(func() { _ = svc.Close() })
-
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(orphanDir); os.IsNotExist(err) {
-			return
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
-	if _, err := os.Stat(orphanDir); !os.IsNotExist(err) {
-		t.Fatalf("orphanDir stat err=%v, want not exist", err)
-	}
-}
 
 func TestPrepareRun_DoesNotCreateThreadCheckpoint(t *testing.T) {
 	t.Parallel()
@@ -109,7 +68,7 @@ func TestSendUserTurn_DoesNotCreateThreadCheckpoint(t *testing.T) {
 	assertThreadHasNoCheckpoints(t, ctx, svc, meta, thread.ThreadID)
 }
 
-func TestSubmitStructuredPromptResponse_DoesNotCreateThreadCheckpoint(t *testing.T) {
+func TestSubmitRequestUserInputResponse_DoesNotCreateThreadCheckpoint(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -130,7 +89,7 @@ func TestSubmitStructuredPromptResponse_DoesNotCreateThreadCheckpoint(t *testing
 	)
 	seedWaitingUserPrompt(t, svc, ctx, meta, thread.ThreadID, waitingPrompt)
 
-	resp, err := svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
+	resp, err := svc.SubmitRequestUserInputResponse(ctx, meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
@@ -140,10 +99,10 @@ func TestSubmitStructuredPromptResponse_DoesNotCreateThreadCheckpoint(t *testing
 		Options: RunOptions{MaxSteps: 1},
 	})
 	if err != nil {
-		t.Fatalf("SubmitStructuredPromptResponse: %v", err)
+		t.Fatalf("SubmitRequestUserInputResponse: %v", err)
 	}
 	if resp.RunID == "" {
-		t.Fatalf("SubmitStructuredPromptResponse run_id is empty")
+		t.Fatalf("SubmitRequestUserInputResponse run_id is empty")
 	}
 
 	assertThreadHasNoCheckpoints(t, ctx, svc, meta, thread.ThreadID)

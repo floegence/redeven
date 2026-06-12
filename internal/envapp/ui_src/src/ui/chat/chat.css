@@ -791,30 +791,19 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-activity-item-description { color: color-mix(in srgb, var(--muted-foreground) 88%, transparent); white-space: pre-wrap; word-break: break-word; }
 .chat-activity-item-actions { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: 0.25rem; }
 .chat-activity-approval-actions { display: inline-flex; align-items: center; gap: 0.3rem; }
-.chat-activity-approval-btn, .chat-activity-input-submit, .chat-activity-detail-action { appearance: none; border: 1px solid color-mix(in srgb, var(--border) 78%, transparent); border-radius: 0.42rem; background: color-mix(in srgb, var(--background) 88%, transparent); color: var(--foreground); padding: 0.24rem 0.48rem; font-size: 0.64rem; font-weight: 600; line-height: 1; cursor: pointer; }
-.chat-activity-approval-btn:hover, .chat-activity-input-submit:hover:not(:disabled), .chat-activity-detail-action:hover:not(:disabled) { border-color: color-mix(in srgb, var(--primary) 34%, var(--border)); background: color-mix(in srgb, var(--primary) 7%, var(--background)); }
-.chat-activity-approval-btn:focus-visible, .chat-activity-input-submit:focus-visible, .chat-activity-detail-action:focus-visible { outline: 1px solid color-mix(in srgb, var(--ring) 54%, transparent); outline-offset: 1px; }
-.chat-activity-approval-btn:disabled, .chat-activity-input-submit:disabled, .chat-activity-detail-action:disabled { cursor: not-allowed; opacity: 0.48; }
+.chat-activity-approval-btn, .chat-activity-detail-action { appearance: none; border: 1px solid color-mix(in srgb, var(--border) 78%, transparent); border-radius: 0.42rem; background: color-mix(in srgb, var(--background) 88%, transparent); color: var(--foreground); padding: 0.24rem 0.48rem; font-size: 0.64rem; font-weight: 600; line-height: 1; cursor: pointer; }
+.chat-activity-approval-btn:hover, .chat-activity-detail-action:hover:not(:disabled) { border-color: color-mix(in srgb, var(--primary) 34%, var(--border)); background: color-mix(in srgb, var(--primary) 7%, var(--background)); }
+.chat-activity-approval-btn:focus-visible, .chat-activity-detail-action:focus-visible { outline: 1px solid color-mix(in srgb, var(--ring) 54%, transparent); outline-offset: 1px; }
+.chat-activity-approval-btn:disabled, .chat-activity-detail-action:disabled { cursor: not-allowed; opacity: 0.48; }
 .chat-activity-approval-btn-approve { color: color-mix(in srgb, var(--success) 68%, var(--foreground)); }
 .chat-activity-approval-btn-reject { color: color-mix(in srgb, var(--destructive) 78%, var(--foreground)); }
-.chat-activity-input-request { display: grid; gap: 0.5rem; margin-top: 0.22rem; padding: 0.55rem; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 0.55rem; background: color-mix(in srgb, var(--card) 92%, transparent); }
-.chat-activity-input-request-resolved { opacity: 0.68; }
-.chat-activity-input-question { display: grid; gap: 0.4rem; }
-.chat-activity-input-question-text { color: var(--foreground); font-size: 0.74rem; line-height: 1.45; }
-.chat-activity-input-options { display: grid; gap: 0.35rem; }
-.chat-activity-input-option { display: flex; align-items: flex-start; gap: 0.45rem; padding: 0.44rem 0.5rem; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 0.5rem; background: color-mix(in srgb, var(--background) 80%, transparent); cursor: pointer; }
-.chat-activity-input-option:hover:not(.chat-activity-input-option-disabled) { border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
-.chat-activity-input-option-selected { border-color: color-mix(in srgb, var(--primary) 44%, var(--border)); background: color-mix(in srgb, var(--primary) 7%, var(--background)); }
-.chat-activity-input-option-disabled { cursor: not-allowed; opacity: 0.72; }
-.chat-activity-input-option input { margin-top: 0.1rem; accent-color: var(--primary); }
-.chat-activity-input-option-label { display: block; font-size: 0.7rem; color: var(--foreground); }
-.chat-activity-input-option-description { display: block; margin-top: 0.12rem; font-size: 0.62rem; color: var(--muted-foreground); }
-.chat-activity-input-text { min-height: 2rem; width: 100%; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 0.5rem; background: var(--background); color: var(--foreground); padding: 0 0.55rem; font-size: 0.72rem; }
-.chat-activity-input-text:focus { outline: 1px solid color-mix(in srgb, var(--ring) 52%, transparent); outline-offset: 1px; }
-.chat-activity-input-submit-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-.chat-activity-input-hint { font-size: 0.63rem; color: var(--muted-foreground); }
-.chat-activity-input-hint-error { color: var(--destructive); }
-.chat-activity-input-resolved { font-size: 0.63rem; color: var(--muted-foreground); }
+.chat-activity-user-input-audit { display: grid; gap: 0.42rem; margin-top: 0.2rem; padding: 0.48rem 0.55rem; border: 1px solid color-mix(in srgb, var(--border) 72%, transparent); border-radius: 0.5rem; background: color-mix(in srgb, var(--card) 90%, transparent); }
+.chat-activity-user-input-question { display: grid; gap: 0.2rem; }
+.chat-activity-user-input-question-text { color: var(--foreground); font-size: 0.68rem; line-height: 1.4; }
+.chat-activity-user-input-choices { display: flex; flex-wrap: wrap; gap: 0.24rem; }
+.chat-activity-user-input-choice { display: inline-flex; align-items: center; gap: 0.18rem; max-width: 100%; padding: 0.08rem 0.34rem; border: 1px solid color-mix(in srgb, var(--border) 68%, transparent); border-radius: 0.38rem; background: color-mix(in srgb, var(--muted) 18%, transparent); color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground)); font-size: 0.6rem; line-height: 1.25; }
+.chat-activity-user-input-choice-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-activity-user-input-choice-description { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--muted-foreground) 80%, transparent); }
 .chat-activity-detail-panel { display: grid; gap: 0.58rem; margin: 0.04rem 0.24rem 0.36rem 1.62rem; padding: 0.68rem; border: 1px solid color-mix(in srgb, var(--border) 76%, transparent); border-radius: 0.62rem; background: color-mix(in srgb, var(--card) 94%, transparent); color: var(--foreground); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03); }
 .chat-activity-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; min-width: 0; }
 .chat-activity-detail-heading { min-width: 0; display: grid; gap: 0.12rem; }

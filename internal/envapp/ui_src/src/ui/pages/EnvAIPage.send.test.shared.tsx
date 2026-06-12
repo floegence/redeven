@@ -330,7 +330,7 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(host.textContent).toContain('Flower contract error: waiting_prompt requires prompt_id, message_id, tool_id, and tool_name.');
-        expect(host.querySelector('[data-flower-input-request-card]')).toBeNull();
+        expect(host.querySelector('[data-flower-input-request-prompt]')).toBeNull();
       } finally {
         dispose();
       }

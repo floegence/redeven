@@ -11,8 +11,8 @@ import type {
   AIRealtimeEvent,
   AISendUserTurnRequest,
   AISendUserTurnResponse,
-  AISubmitStructuredPromptResponseRequest,
-  AISubmitStructuredPromptResponseResponse,
+  AISubmitRequestUserInputResponseRequest,
+  AISubmitRequestUserInputResponseResponse,
   AIStopThreadRequest,
   AIStopThreadResponse,
   AIRequestUserInputAction,
@@ -41,8 +41,8 @@ import type {
   wire_ai_list_messages_resp,
   wire_ai_send_user_turn_req,
   wire_ai_send_user_turn_resp,
-  wire_ai_submit_structured_prompt_response_req,
-  wire_ai_submit_structured_prompt_response_resp,
+  wire_ai_submit_request_user_input_response_req,
+  wire_ai_submit_request_user_input_response_resp,
   wire_ai_stop_thread_req,
   wire_ai_stop_thread_resp,
   wire_ai_subscribe_summary_resp,
@@ -124,14 +124,11 @@ function fromWireAIRequestUserInputAction(raw: wire_ai_request_user_input_action
 }
 
 function fromWireAIRequestUserInputChoice(raw: wire_ai_request_user_input_choice): AIRequestUserInputChoice | null {
-  const choiceId = String(raw?.choice_id ?? raw?.option_id ?? '').trim();
+  const choiceId = String(raw?.choice_id ?? '').trim();
   const label = String(raw?.label ?? '').trim();
   if (!choiceId || !label) return null;
   const kindRaw = String(raw?.kind ?? '').trim().toLowerCase();
-  const detailInputModeRaw = String(raw?.detail_input_mode ?? '').trim().toLowerCase();
-  const kind = kindRaw === 'write' || detailInputModeRaw === 'required' || detailInputModeRaw === 'optional'
-    ? 'write'
-    : 'select';
+  if (kindRaw !== 'select') return null;
   const actions = Array.isArray(raw?.actions)
     ? raw.actions.map(fromWireAIRequestUserInputAction).filter(Boolean) as AIRequestUserInputAction[]
     : [];
@@ -139,10 +136,7 @@ function fromWireAIRequestUserInputChoice(raw: wire_ai_request_user_input_choice
     choiceId,
     label,
     description: String(raw?.description ?? '').trim() || undefined,
-    kind,
-    inputPlaceholder: kind === 'write'
-      ? String(raw?.input_placeholder ?? raw?.detail_input_placeholder ?? '').trim() || undefined
-      : undefined,
+    kind: 'select',
     actions: actions.length > 0 ? actions : undefined,
   };
 }
@@ -152,43 +146,25 @@ function fromWireAIRequestUserInputQuestion(raw: wire_ai_request_user_input_ques
   const header = String(raw?.header ?? '').trim();
   const question = String(raw?.question ?? '').trim();
   if (!id || !header || !question) return null;
+  const responseMode = normalizeAskUserResponseMode(raw?.response_mode);
+  if (!responseMode) return null;
   const choices = Array.isArray(raw?.choices)
     ? raw.choices.map(fromWireAIRequestUserInputChoice).filter(Boolean) as AIRequestUserInputChoice[]
     : [];
-  const legacyChoices = choices.length > 0
-    ? choices
-    : Array.isArray(raw?.options)
-    ? raw.options.map(fromWireAIRequestUserInputChoice).filter(Boolean) as AIRequestUserInputChoice[]
-    : [];
-  if (legacyChoices.length === 0) {
-    legacyChoices.push({
-      choiceId: 'write',
-      label: header || question,
-      kind: 'write',
-      inputPlaceholder: 'Type your answer',
-    });
-  }
-  if (raw?.is_other) {
-    const hasOther = legacyChoices.some((choice) => choice.choiceId === 'other' || choice.label.toLowerCase() === 'none of the above');
-    if (!hasOther) {
-      legacyChoices.push({
-        choiceId: 'other',
-        label: 'None of the above',
-        description: 'Type another answer.',
-        kind: 'write',
-        inputPlaceholder: 'Type another answer',
-      });
-    }
-  }
+  if (responseMode === 'write' && choices.length > 0) return null;
+  if ((responseMode === 'select' || responseMode === 'select_or_write') && choices.length === 0) return null;
+  const writeLabel = String(raw?.write_label ?? '').trim();
+  const writePlaceholder = String(raw?.write_placeholder ?? '').trim();
+  if (responseMode === 'select_or_write' && (!writeLabel || !writePlaceholder)) return null;
   return {
     id,
     header,
     question,
     isSecret: Boolean(raw?.is_secret),
-    responseMode: normalizeAskUserResponseMode(raw?.response_mode),
-    writeLabel: String(raw?.write_label ?? '').trim() || undefined,
-    writePlaceholder: String(raw?.write_placeholder ?? '').trim() || undefined,
-    choices: legacyChoices.length > 0 ? legacyChoices : undefined,
+    responseMode,
+    writeLabel: writeLabel || undefined,
+    writePlaceholder: writePlaceholder || undefined,
+    choices: choices.length > 0 ? choices : undefined,
   };
 }
 
@@ -196,16 +172,19 @@ function fromWireAIWaitingPrompt(raw: wire_ai_waiting_prompt | undefined): AIReq
   const promptId = String(raw?.prompt_id ?? '').trim();
   const messageId = String(raw?.message_id ?? '').trim();
   const toolId = String(raw?.tool_id ?? '').trim();
-  if (!promptId || !messageId || !toolId) {
+  const toolName = String(raw?.tool_name ?? '').trim();
+  if (!promptId || !messageId || !toolId || !toolName) {
     return undefined;
   }
   const questions = Array.isArray(raw?.questions)
     ? raw.questions.map(fromWireAIRequestUserInputQuestion).filter(Boolean) as AIRequestUserInputQuestion[]
     : [];
+  if (questions.length === 0) return undefined;
   return {
     promptId,
     messageId,
     toolId,
+    toolName,
     reasonCode: String(raw?.reason_code ?? '').trim() || undefined,
     requiredFromUser: Array.isArray(raw?.required_from_user)
       ? raw.required_from_user.map((item) => String(item ?? '').trim()).filter(Boolean)
@@ -266,7 +245,7 @@ export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp
   };
 }
 
-export function toWireAISubmitStructuredPromptResponseRequest(req: AISubmitStructuredPromptResponseRequest): wire_ai_submit_structured_prompt_response_req {
+export function toWireAISubmitRequestUserInputResponseRequest(req: AISubmitRequestUserInputResponseRequest): wire_ai_submit_request_user_input_response_req {
   const answers: Record<string, wire_ai_request_user_input_answer> = {};
   for (const [questionId, answer] of Object.entries(req.response?.answers ?? {})) {
     const qid = String(questionId ?? '').trim();
@@ -302,7 +281,7 @@ export function toWireAISubmitStructuredPromptResponseRequest(req: AISubmitStruc
   };
 }
 
-export function fromWireAISubmitStructuredPromptResponseResponse(resp: wire_ai_submit_structured_prompt_response_resp): AISubmitStructuredPromptResponseResponse {
+export function fromWireAISubmitRequestUserInputResponseResponse(resp: wire_ai_submit_request_user_input_response_resp): AISubmitRequestUserInputResponseResponse {
   return {
     runId: String(resp?.run_id ?? '').trim(),
     kind: String(resp?.kind ?? '').trim(),

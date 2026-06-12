@@ -28,17 +28,16 @@ type Model struct {
 }
 
 type RequestUserInputPrompt struct {
-	PromptID            string                     `json:"prompt_id"`
-	MessageID           string                     `json:"message_id"`
-	ToolID              string                     `json:"tool_id"`
-	ToolName            string                     `json:"tool_name"`
-	ReasonCode          string                     `json:"reason_code,omitempty"`
-	RequiredFromUser    []string                   `json:"required_from_user,omitempty"`
-	EvidenceRefs        []string                   `json:"evidence_refs,omitempty"`
-	InteractionContract interactionContract        `json:"interaction_contract,omitempty"`
-	Questions           []RequestUserInputQuestion `json:"questions,omitempty"`
-	PublicSummary       string                     `json:"public_summary,omitempty"`
-	ContainsSecret      bool                       `json:"contains_secret,omitempty"`
+	PromptID         string                     `json:"prompt_id"`
+	MessageID        string                     `json:"message_id"`
+	ToolID           string                     `json:"tool_id"`
+	ToolName         string                     `json:"tool_name"`
+	ReasonCode       string                     `json:"reason_code,omitempty"`
+	RequiredFromUser []string                   `json:"required_from_user,omitempty"`
+	EvidenceRefs     []string                   `json:"evidence_refs,omitempty"`
+	Questions        []RequestUserInputQuestion `json:"questions,omitempty"`
+	PublicSummary    string                     `json:"public_summary,omitempty"`
+	ContainsSecret   bool                       `json:"contains_secret,omitempty"`
 }
 
 type RequestUserInputQuestion struct {
@@ -103,41 +102,7 @@ type RequestUserInputSecretAnswer struct {
 	Text       string `json:"text,omitempty"`
 }
 
-func (a *RequestUserInputAnswer) UnmarshalJSON(data []byte) error {
-	type answerJSON struct {
-		ChoiceID         string   `json:"choice_id"`
-		Text             string   `json:"text"`
-		SelectedOptionID string   `json:"selected_option_id"`
-		Answers          []string `json:"answers"`
-	}
-	var raw answerJSON
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return err
-	}
-	choiceID := strings.TrimSpace(raw.ChoiceID)
-	if choiceID == "" {
-		choiceID = strings.TrimSpace(raw.SelectedOptionID)
-	}
-	text := strings.TrimSpace(raw.Text)
-	if text == "" && len(raw.Answers) > 0 {
-		parts := make([]string, 0, len(raw.Answers))
-		for _, item := range raw.Answers {
-			item = strings.TrimSpace(item)
-			if item == "" {
-				continue
-			}
-			parts = append(parts, item)
-		}
-		text = strings.TrimSpace(strings.Join(parts, "\n"))
-	}
-	*a = RequestUserInputAnswer{
-		ChoiceID: choiceID,
-		Text:     text,
-	}
-	return nil
-}
-
-type SubmitStructuredPromptResponseRequest struct {
+type SubmitRequestUserInputResponseRequest struct {
 	ThreadID         string                   `json:"thread_id"`
 	Model            string                   `json:"model,omitempty"`
 	Response         RequestUserInputResponse `json:"response"`
@@ -147,7 +112,7 @@ type SubmitStructuredPromptResponseRequest struct {
 	SourceFollowupID string                   `json:"source_followup_id,omitempty"`
 }
 
-type SubmitStructuredPromptResponseResponse struct {
+type SubmitRequestUserInputResponseResponse struct {
 	RunID                   string `json:"run_id"`
 	Kind                    string `json:"kind"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
@@ -280,14 +245,13 @@ type RunStartRequest struct {
 
 // RunRequest is the internal run request for Go runtime execution (includes history).
 type RunRequest struct {
-	Model               string                       `json:"model"`
-	Objective           string                       `json:"objective,omitempty"`
-	History             []RunHistoryMsg              `json:"history"`
-	Input               RunInput                     `json:"input"`
-	Options             RunOptions                   `json:"options"`
-	ContextPack         contextmodel.PromptPack      `json:"-"`
-	ModelCapability     contextmodel.ModelCapability `json:"-"`
-	InteractionContract interactionContract          `json:"-"`
+	Model           string                       `json:"model"`
+	Objective       string                       `json:"objective,omitempty"`
+	History         []RunHistoryMsg              `json:"history"`
+	Input           RunInput                     `json:"input"`
+	Options         RunOptions                   `json:"options"`
+	ContextPack     contextmodel.PromptPack      `json:"-"`
+	ModelCapability contextmodel.ModelCapability `json:"-"`
 }
 
 type RunHistoryMsg struct {
@@ -300,13 +264,12 @@ type RunInput struct {
 	//
 	// When set, the agent will prefer this id over generating a new one so the UI can keep a stable
 	// message id across optimistic rendering, realtime events, and history backfill.
-	MessageID               string                          `json:"message_id,omitempty"`
-	Text                    string                          `json:"text"`
-	Attachments             []RunAttachmentIn               `json:"attachments"`
-	ContextAction           *ContextActionEnvelope          `json:"context_action,omitempty"`
-	StructuredResponse      *RequestUserInputResponseRecord `json:"-"`
-	SecretAnswers           []RequestUserInputSecretAnswer  `json:"-"`
-	InteractionContractSeed interactionContract             `json:"-"`
+	MessageID          string                          `json:"message_id,omitempty"`
+	Text               string                          `json:"text"`
+	Attachments        []RunAttachmentIn               `json:"attachments"`
+	ContextAction      *ContextActionEnvelope          `json:"context_action,omitempty"`
+	StructuredResponse *RequestUserInputResponseRecord `json:"-"`
+	SecretAnswers      []RequestUserInputSecretAnswer  `json:"-"`
 }
 
 type RunAttachmentIn struct {
@@ -318,11 +281,7 @@ type RunAttachmentIn struct {
 type RunOptions struct {
 	MaxSteps int `json:"max_steps"`
 
-	// MaxNoToolRounds controls no-tool backpressure rounds before forcing ask_user.
-	// Default: 3.
-	MaxNoToolRounds int `json:"max_no_tool_rounds,omitempty"`
-
-	// ReasoningOnly relaxes tool-pressure heuristics, but task completion still requires explicit task_complete.
+	// ReasoningOnly relaxes tool-pressure heuristics while preserving the same Floret turn flow.
 	ReasoningOnly bool `json:"reasoning_only,omitempty"`
 
 	// RequireUserConfirmOnTaskComplete forces explicit user confirmation when model emits task_complete.
@@ -342,26 +301,6 @@ type RunOptions struct {
 
 	// Mode overrides runtime mode for this run (act|plan).
 	Mode string `json:"mode,omitempty"`
-
-	// Intent is classified by the assistant runtime (social|creative|task).
-	// Clients should not set this field directly.
-	Intent string `json:"intent,omitempty"`
-
-	// ExecutionContract is classified by the runtime (direct_reply|hybrid_first_turn|agentic_loop).
-	// Clients should not set this field directly.
-	ExecutionContract string `json:"execution_contract,omitempty"`
-
-	// Complexity is classified by the runtime (simple|standard|complex).
-	// Clients should not set this field directly.
-	Complexity string `json:"complexity,omitempty"`
-
-	// TodoPolicy is classified by the runtime (none|recommended|required).
-	// Clients should not set this field directly.
-	TodoPolicy string `json:"todo_policy,omitempty"`
-
-	// MinimumTodoItems is enforced when TodoPolicy is required.
-	// Clients should not set this field directly.
-	MinimumTodoItems int `json:"minimum_todo_items,omitempty"`
 
 	// Provider controls.
 	ThinkingBudgetTokens int      `json:"thinking_budget_tokens,omitempty"`

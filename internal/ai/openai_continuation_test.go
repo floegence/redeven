@@ -51,11 +51,6 @@ func (m *openAIContinuationMock) handle(w http.ResponseWriter, r *http.Request) 
 	var req map[string]any
 	_ = json.Unmarshal(body, &req)
 
-	if isIntentClassifierRequest(req) {
-		writeOpenAIResponsesSSE(w, r, strings.TrimSpace(fmt.Sprint(req["model"])), "resp_classifier", classifyIntentResponseToken(req))
-		return
-	}
-
 	previousResponseID := ""
 	if raw, ok := req["previous_response_id"]; ok && raw != nil {
 		previousResponseID = strings.TrimSpace(fmt.Sprint(raw))
@@ -338,7 +333,7 @@ func TestIntegration_Service_OpenAIContinuationPersistsAndResumes(t *testing.T) 
 	}
 }
 
-func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDFallsBack(t *testing.T) {
+func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDReplaysWithoutState(t *testing.T) {
 	t.Parallel()
 
 	mock := &openAIContinuationMock{
@@ -352,12 +347,12 @@ func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDFallsBa
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	thread, err := svc.CreateThread(ctx, &meta, "Continuation fallback", "", "", "")
+	thread, err := svc.CreateThread(ctx, &meta, "Continuation replay", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	if err := svc.StartRun(ctx, &meta, "run_fallback_1", RunStartRequest{
+	if err := svc.StartRun(ctx, &meta, "run_replay_1", RunStartRequest{
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello"},
@@ -365,7 +360,7 @@ func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDFallsBa
 	}, httptest.NewRecorder()); err != nil {
 		t.Fatalf("StartRun first: %v", err)
 	}
-	if err := svc.StartRun(ctx, &meta, "run_fallback_2", RunStartRequest{
+	if err := svc.StartRun(ctx, &meta, "run_replay_2", RunStartRequest{
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello again"},
@@ -376,13 +371,13 @@ func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDFallsBa
 
 	previousIDs, issuedResponseIDs := mock.snapshot()
 	if len(previousIDs) != 3 {
-		t.Fatalf("previousIDs=%v, want 3 actual calls including fallback replay", previousIDs)
+		t.Fatalf("previousIDs=%v, want 3 actual calls including rejected state replay", previousIDs)
 	}
 	if previousIDs[0] != "" || previousIDs[1] != "resp_run_1" || previousIDs[2] != "" {
 		t.Fatalf("previousIDs=%v, want [\"\", \"resp_run_1\", \"\"]", previousIDs)
 	}
 	if len(issuedResponseIDs) != 2 || issuedResponseIDs[1] != "resp_run_2" {
-		t.Fatalf("issuedResponseIDs=%v, want final successful replay resp_run_2", issuedResponseIDs)
+		t.Fatalf("issuedResponseIDs=%v, want successful replay resp_run_2", issuedResponseIDs)
 	}
 
 	continuation, err := svc.threadsDB.GetThreadProviderContinuation(ctx, meta.EndpointID, thread.ThreadID)
@@ -390,7 +385,7 @@ func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDFallsBa
 		t.Fatalf("GetThreadProviderContinuation: %v", err)
 	}
 	if continuation == nil || continuation.ContinuationID != "resp_run_2" {
-		t.Fatalf("continuation after fallback=%+v, want resp_run_2", continuation)
+		t.Fatalf("continuation after replay=%+v, want resp_run_2", continuation)
 	}
 }
 
@@ -551,7 +546,7 @@ func TestRun_LoadProviderTurnResumeState_SkipsOnIncompatibleState(t *testing.T) 
 	}
 }
 
-func TestSyncThreadProviderContinuationAfterRun_ClearsOnTaskComplete(t *testing.T) {
+func TestSyncThreadProviderContinuationAfterRun_PersistsProviderState(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -586,7 +581,7 @@ func TestSyncThreadProviderContinuationAfterRun_ClearsOnTaskComplete(t *testing.
 		t.Fatalf("SetThreadProviderContinuation: %v", err)
 	}
 
-	if err := syncThreadProviderContinuationAfterRun(ctx, store, "env_sync", "th_sync", "task_complete", threadstore.ThreadProviderContinuation{
+	if err := syncThreadProviderContinuationAfterRun(ctx, store, "env_sync", "th_sync", threadstore.ThreadProviderContinuation{
 		Kind:            providerContinuationKindOpenAIResponses,
 		ContinuationID:  "resp_next",
 		ProviderID:      "openai",
@@ -601,7 +596,7 @@ func TestSyncThreadProviderContinuationAfterRun_ClearsOnTaskComplete(t *testing.
 	if err != nil {
 		t.Fatalf("GetThreadProviderContinuation: %v", err)
 	}
-	if got != nil {
-		t.Fatalf("continuation after task_complete=%+v, want nil", got)
+	if got == nil || got.ContinuationID != "resp_next" {
+		t.Fatalf("continuation after sync=%+v, want resp_next", got)
 	}
 }

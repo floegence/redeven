@@ -98,29 +98,6 @@ type RequestUserInputSecretAnswerRecord struct {
 	CreatedAtUnixMs   int64  `json:"created_at_unix_ms"`
 }
 
-func requestUserInputTextToLegacyAnswers(text string) []string {
-	text = strings.TrimSpace(text)
-	if text == "" {
-		return nil
-	}
-	return []string{text}
-}
-
-func requestUserInputTextFromLegacyAnswers(items []string) string {
-	if len(items) == 0 {
-		return ""
-	}
-	out := make([]string, 0, len(items))
-	for _, item := range items {
-		item = strings.TrimSpace(item)
-		if item == "" {
-			continue
-		}
-		out = append(out, item)
-	}
-	return strings.TrimSpace(strings.Join(out, "\n"))
-}
-
 // ProviderCapabilityRecord caches capability json by provider/model.
 type ProviderCapabilityRecord struct {
 	ProviderID      string `json:"provider_id"`
@@ -1152,12 +1129,6 @@ WHERE endpoint_id = ? AND thread_id = ? AND response_message_id = ?
 		if strings.TrimSpace(rec.QuestionID) == "" {
 			continue
 		}
-		answersJSON := "[]"
-		if answers := requestUserInputTextToLegacyAnswers(rec.Text); len(answers) > 0 {
-			if raw, err := json.Marshal(answers); err == nil {
-				answersJSON = string(raw)
-			}
-		}
 		createdAt := rec.CreatedAtUnixMs
 		if createdAt <= 0 {
 			createdAt = time.Now().UnixMilli()
@@ -1167,10 +1138,10 @@ INSERT INTO structured_user_inputs(
   endpoint_id, thread_id, response_message_id,
   prompt_id, tool_id, reason_code, question_id,
   header, question_text,
- selected_option_id, selected_option_label,
-  answers_json, public_summary, contains_secret, created_at_unix_ms
+ selected_choice_id, selected_choice_label,
+  response_text, public_summary, contains_secret, created_at_unix_ms
 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, endpointID, threadID, responseMessageID, strings.TrimSpace(rec.PromptID), strings.TrimSpace(rec.ToolID), strings.TrimSpace(rec.ReasonCode), strings.TrimSpace(rec.QuestionID), strings.TrimSpace(rec.Header), strings.TrimSpace(rec.QuestionText), strings.TrimSpace(rec.SelectedChoiceID), strings.TrimSpace(rec.SelectedChoiceLabel), strings.TrimSpace(answersJSON), strings.TrimSpace(rec.PublicSummary), boolToInt(rec.ContainsSecret), createdAt); err != nil {
+`, endpointID, threadID, responseMessageID, strings.TrimSpace(rec.PromptID), strings.TrimSpace(rec.ToolID), strings.TrimSpace(rec.ReasonCode), strings.TrimSpace(rec.QuestionID), strings.TrimSpace(rec.Header), strings.TrimSpace(rec.QuestionText), strings.TrimSpace(rec.SelectedChoiceID), strings.TrimSpace(rec.SelectedChoiceLabel), strings.TrimSpace(rec.Text), strings.TrimSpace(rec.PublicSummary), boolToInt(rec.ContainsSecret), createdAt); err != nil {
 			return err
 		}
 	}
@@ -1196,8 +1167,8 @@ func (s *Store) ListRecentStructuredUserInputs(ctx context.Context, endpointID s
 SELECT id, endpoint_id, thread_id, response_message_id,
        prompt_id, tool_id, reason_code, question_id,
        header, question_text,
-       selected_option_id, selected_option_label,
-       answers_json, public_summary, contains_secret, created_at_unix_ms
+       selected_choice_id, selected_choice_label,
+       response_text, public_summary, contains_secret, created_at_unix_ms
 FROM structured_user_inputs
 WHERE endpoint_id = ? AND thread_id = ?
 ORDER BY id DESC
@@ -1210,18 +1181,11 @@ LIMIT ?
 	tmp := make([]StructuredUserInputRecord, 0, limit)
 	for rows.Next() {
 		var (
-			rec         StructuredUserInputRecord
-			answersJSON string
-			secretInt   int
+			rec       StructuredUserInputRecord
+			secretInt int
 		)
-		if err := rows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.ResponseMessageID, &rec.PromptID, &rec.ToolID, &rec.ReasonCode, &rec.QuestionID, &rec.Header, &rec.QuestionText, &rec.SelectedChoiceID, &rec.SelectedChoiceLabel, &answersJSON, &rec.PublicSummary, &secretInt, &rec.CreatedAtUnixMs); err != nil {
+		if err := rows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.ResponseMessageID, &rec.PromptID, &rec.ToolID, &rec.ReasonCode, &rec.QuestionID, &rec.Header, &rec.QuestionText, &rec.SelectedChoiceID, &rec.SelectedChoiceLabel, &rec.Text, &rec.PublicSummary, &secretInt, &rec.CreatedAtUnixMs); err != nil {
 			return nil, err
-		}
-		if strings.TrimSpace(answersJSON) != "" {
-			var answers []string
-			if err := json.Unmarshal([]byte(answersJSON), &answers); err == nil {
-				rec.Text = requestUserInputTextFromLegacyAnswers(answers)
-			}
 		}
 		rec.ContainsSecret = secretInt != 0
 		tmp = append(tmp, rec)

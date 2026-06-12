@@ -117,15 +117,15 @@ type sendUserTurnResult struct {
 	err  error
 }
 
-type cmdSubmitStructuredPromptResponse struct {
+type cmdSubmitRequestUserInputResponse struct {
 	ctx  context.Context
 	meta *session.Meta
-	req  SubmitStructuredPromptResponseRequest
-	resp chan submitStructuredPromptResponseResult
+	req  SubmitRequestUserInputResponseRequest
+	resp chan submitRequestUserInputResponseResult
 }
 
-type submitStructuredPromptResponseResult struct {
-	resp SubmitStructuredPromptResponseResponse
+type submitRequestUserInputResponseResult struct {
+	resp SubmitRequestUserInputResponseResponse
 	err  error
 }
 
@@ -234,29 +234,29 @@ func (a *threadActor) SendUserTurn(ctx context.Context, meta *session.Meta, req 
 	}
 }
 
-func (a *threadActor) SubmitStructuredPromptResponse(ctx context.Context, meta *session.Meta, req SubmitStructuredPromptResponseRequest) (SubmitStructuredPromptResponseResponse, error) {
+func (a *threadActor) SubmitRequestUserInputResponse(ctx context.Context, meta *session.Meta, req SubmitRequestUserInputResponseRequest) (SubmitRequestUserInputResponseResponse, error) {
 	if a == nil {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("thread actor not ready")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("thread actor not ready")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	ch := make(chan submitStructuredPromptResponseResult, 1)
-	cmd := cmdSubmitStructuredPromptResponse{ctx: ctx, meta: meta, req: req, resp: ch}
+	ch := make(chan submitRequestUserInputResponseResult, 1)
+	cmd := cmdSubmitRequestUserInputResponse{ctx: ctx, meta: meta, req: req, resp: ch}
 
 	select {
 	case <-a.stopCh:
-		return SubmitStructuredPromptResponseResponse{}, errors.New("thread actor closed")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("thread actor closed")
 	case <-ctx.Done():
-		return SubmitStructuredPromptResponseResponse{}, ctx.Err()
+		return SubmitRequestUserInputResponseResponse{}, ctx.Err()
 	case a.inbox <- cmd:
 	}
 
 	select {
 	case <-a.stopCh:
-		return SubmitStructuredPromptResponseResponse{}, errors.New("thread actor closed")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("thread actor closed")
 	case <-ctx.Done():
-		return SubmitStructuredPromptResponseResponse{}, ctx.Err()
+		return SubmitRequestUserInputResponseResponse{}, ctx.Err()
 	case res := <-ch:
 		return res.resp, res.err
 	}
@@ -303,9 +303,9 @@ func (a *threadActor) loop() {
 			case cmdSendUserTurn:
 				resp, err := a.handleSendUserTurn(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- sendUserTurnResult{resp: resp, err: err}
-			case cmdSubmitStructuredPromptResponse:
-				resp, err := a.handleSubmitStructuredPromptResponse(cmd.ctx, cmd.meta, cmd.req)
-				cmd.resp <- submitStructuredPromptResponseResult{resp: resp, err: err}
+			case cmdSubmitRequestUserInputResponse:
+				resp, err := a.handleSubmitRequestUserInputResponse(cmd.ctx, cmd.meta, cmd.req)
+				cmd.resp <- submitRequestUserInputResponseResult{resp: resp, err: err}
 			case cmdStopThread:
 				resp, err := a.handleStopThread(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- stopThreadResult{resp: resp, err: err}
@@ -555,32 +555,32 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	}, nil
 }
 
-func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, meta *session.Meta, req SubmitStructuredPromptResponseRequest) (SubmitStructuredPromptResponseResponse, error) {
+func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, meta *session.Meta, req SubmitRequestUserInputResponseRequest) (SubmitRequestUserInputResponseResponse, error) {
 	if a == nil || a.mgr == nil || a.mgr.svc == nil {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("service not ready")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("service not ready")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := requireRWX(meta); err != nil {
-		return SubmitStructuredPromptResponseResponse{}, err
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	if !a.mgr.svc.Enabled() {
-		return SubmitStructuredPromptResponseResponse{}, ErrNotConfigured
+		return SubmitRequestUserInputResponseResponse{}, ErrNotConfigured
 	}
 
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	if endpointID == "" || endpointID != strings.TrimSpace(a.endpointID) {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("invalid request")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("invalid request")
 	}
 	threadID := strings.TrimSpace(req.ThreadID)
 	if threadID == "" || threadID != strings.TrimSpace(a.threadID) {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("invalid request")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("invalid request")
 	}
 	expected := strings.TrimSpace(req.ExpectedRunID)
 	activeRunID, _ := a.lookupActiveRun(endpointID, threadID)
 	if activeRunID != "" && expected != "" && expected != activeRunID {
-		return SubmitStructuredPromptResponseResponse{}, ErrRunChanged
+		return SubmitRequestUserInputResponseResponse{}, ErrRunChanged
 	}
 
 	a.mgr.svc.mu.Lock()
@@ -589,7 +589,7 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 	cfg := a.mgr.svc.cfg
 	a.mgr.svc.mu.Unlock()
 	if db == nil {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("threads store not ready")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("threads store not ready")
 	}
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
@@ -598,19 +598,19 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 	th, err := db.GetThread(tctx, endpointID, threadID)
 	cancel()
 	if err != nil {
-		return SubmitStructuredPromptResponseResponse{}, err
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	if th == nil {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("thread not found")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("thread not found")
 	}
 	requestedModel := strings.TrimSpace(req.Model)
 	if th.ModelLocked {
 		lockedModelID := strings.TrimSpace(th.ModelID)
 		if lockedModelID == "" {
-			return SubmitStructuredPromptResponseResponse{}, ErrModelLockViolation
+			return SubmitRequestUserInputResponseResponse{}, ErrModelLockViolation
 		}
 		if requestedModel != "" && requestedModel != lockedModelID {
-			return SubmitStructuredPromptResponseResponse{}, ErrModelSwitchRequiresExplicitRestart
+			return SubmitRequestUserInputResponseResponse{}, ErrModelSwitchRequiresExplicitRestart
 		}
 		req.Model = lockedModelID
 	}
@@ -627,19 +627,18 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 	}
 	openPrompt := a.mgr.svc.threadWaitingPrompt(ctx, th, runStatus)
 	if openPrompt == nil {
-		return SubmitStructuredPromptResponseResponse{}, ErrWaitingPromptChanged
+		return SubmitRequestUserInputResponseResponse{}, ErrWaitingPromptChanged
 	}
 	validatedResponse, err := validateRequestUserInputResponse(openPrompt, &req.Response)
 	if err != nil {
-		return SubmitStructuredPromptResponseResponse{}, err
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	responseRecord, secretAnswers, err := buildRequestUserInputResponseRecord(*openPrompt, *validatedResponse, req.Input.MessageID)
 	if err != nil {
-		return SubmitStructuredPromptResponseResponse{}, err
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	req.Input.StructuredResponse = &responseRecord
 	req.Input.SecretAnswers = secretAnswers
-	req.Input.InteractionContractSeed = normalizeInteractionContract(openPrompt.InteractionContract)
 
 	nextExecutionMode := resolvedExecutionMode
 	for _, question := range openPrompt.Questions {
@@ -662,7 +661,7 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 		uctx, ucancel := context.WithTimeout(ctx, persistTO)
 		if err := db.UpdateThreadExecutionMode(uctx, endpointID, threadID, nextExecutionMode); err != nil {
 			ucancel()
-			return SubmitStructuredPromptResponseResponse{}, err
+			return SubmitRequestUserInputResponseResponse{}, err
 		}
 		ucancel()
 		resolvedExecutionMode = nextExecutionMode
@@ -671,15 +670,15 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 	req.Options.Mode = resolvedExecutionMode
 
 	if activeRunID != "" {
-		return SubmitStructuredPromptResponseResponse{}, ErrRunChanged
+		return SubmitRequestUserInputResponseResponse{}, ErrRunChanged
 	}
 	runID, err := NewRunID()
 	if err != nil {
-		return SubmitStructuredPromptResponseResponse{}, err
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, req.Input)
 	if err != nil {
-		return SubmitStructuredPromptResponseResponse{}, err
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	req.Input = normalizedInput
 	a.mgr.svc.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
@@ -697,10 +696,10 @@ func (a *threadActor) handleSubmitStructuredPromptResponse(ctx context.Context, 
 		Options:  req.Options,
 	}
 	if err := a.mgr.svc.StartRunDetachedWithPersisted(meta, runID, startReq, persisted); err != nil {
-		return SubmitStructuredPromptResponseResponse{}, err
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	consumeSourceFollowup()
-	return SubmitStructuredPromptResponseResponse{
+	return SubmitRequestUserInputResponseResponse{
 		RunID:                   runID,
 		Kind:                    "start",
 		ConsumedWaitingPromptID: strings.TrimSpace(openPrompt.PromptID),

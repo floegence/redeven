@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toWireAISendUserTurnRequest } from './ai';
+import { fromWireAIEventNotify, toWireAISendUserTurnRequest } from './ai';
 
 describe('Redeven v1 AI codec', () => {
   it('passes Ask Flower context actions through sendUserTurn without permission material', () => {
@@ -54,5 +54,37 @@ describe('Redeven v1 AI codec', () => {
     });
     expect(JSON.stringify(req.input.context_action)).not.toContain('can_write');
     expect(JSON.stringify(req.input.context_action)).not.toContain('grant');
+  });
+
+  it('preserves request_user_input tool_name in realtime waiting prompts', () => {
+    const event = fromWireAIEventNotify({
+      event_type: 'thread_state',
+      endpoint_id: 'env-1',
+      thread_id: 'thread-1',
+      run_id: 'run-1',
+      at_unix_ms: 1000,
+      run_status: 'waiting_user',
+      waiting_prompt: {
+        prompt_id: 'prompt-1',
+        message_id: 'message-1',
+        tool_id: 'tool-1',
+        tool_name: 'ask_user',
+        questions: [{
+          id: 'next_step',
+          header: 'Need input',
+          question: 'Choose the next step.',
+          is_secret: false,
+          response_mode: 'select',
+          choices: [{ choice_id: 'continue', label: 'Continue', kind: 'select' }],
+        }],
+      },
+    });
+
+    expect(event?.waitingPrompt).toEqual(expect.objectContaining({
+      promptId: 'prompt-1',
+      messageId: 'message-1',
+      toolId: 'tool-1',
+      toolName: 'ask_user',
+    }));
   });
 });

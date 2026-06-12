@@ -51,52 +51,6 @@ func checkpointArtifactsDir(stateDir string, checkpointID string) string {
 	return filepath.Join(strings.TrimSpace(stateDir), "ai", "workspace_checkpoints", strings.TrimSpace(checkpointID))
 }
 
-func workspaceCheckpointArtifactsRoot(stateDir string) string {
-	return filepath.Join(strings.TrimSpace(stateDir), "ai", "workspace_checkpoints")
-}
-
-func listWorkspaceCheckpointArtifactIDs(stateDir string) ([]string, error) {
-	root := workspaceCheckpointArtifactsRoot(stateDir)
-	if strings.TrimSpace(root) == "" {
-		return nil, nil
-	}
-	entries, err := os.ReadDir(root)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	out := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		if entry == nil || !entry.IsDir() {
-			continue
-		}
-		name := strings.TrimSpace(entry.Name())
-		if name == "" {
-			continue
-		}
-		out = append(out, name)
-	}
-	sort.Strings(out)
-	return out, nil
-}
-
-func removeWorkspaceCheckpointArtifacts(stateDir string, checkpointID string) error {
-	checkpointID = strings.TrimSpace(checkpointID)
-	if checkpointID == "" {
-		return nil
-	}
-	dir := checkpointArtifactsDir(stateDir, checkpointID)
-	if strings.TrimSpace(dir) == "" {
-		return nil
-	}
-	if err := os.RemoveAll(dir); err != nil {
-		return err
-	}
-	return nil
-}
-
 func defaultWorkspaceTarExcludes() []string {
 	return []string{
 		".git",

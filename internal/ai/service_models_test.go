@@ -164,10 +164,9 @@ func TestDeriveThreadRunState(t *testing.T) {
 		wantMsg     string
 	}{
 		{name: "task complete success", endReason: "complete", finalReason: "task_complete", err: nil, wantState: "success", wantMsg: ""},
-		{name: "social reply success", endReason: "complete", finalReason: "social_reply", err: nil, wantState: "success", wantMsg: ""},
-		{name: "creative reply success", endReason: "complete", finalReason: "creative_reply", err: nil, wantState: "success", wantMsg: ""},
+		{name: "natural stop success", endReason: "complete", finalReason: "natural_stop", err: nil, wantState: "success", wantMsg: ""},
 		{name: "ask user waiting", endReason: "complete", finalReason: "ask_user_waiting_model", err: nil, wantState: "waiting_user", wantMsg: ""},
-		{name: "implicit complete rejected", endReason: "complete", finalReason: "implicit_complete_backpressure", err: nil, wantState: "failed", wantMsg: "Run ended without explicit completion."},
+		{name: "unknown final reason rejected", endReason: "complete", finalReason: "unknown_final_reason", err: nil, wantState: "failed", wantMsg: "Run ended without explicit completion."},
 		{name: "canceled", endReason: "canceled", finalReason: "", err: nil, wantState: "canceled", wantMsg: ""},
 		{name: "timed out", endReason: "timed_out", finalReason: "", err: nil, wantState: "timed_out", wantMsg: "Timed out."},
 		{name: "disconnected", endReason: "disconnected", finalReason: "", err: nil, wantState: "failed", wantMsg: "Disconnected."},

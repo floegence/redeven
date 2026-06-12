@@ -146,7 +146,7 @@ export type FlowerInputRequestChoice = Readonly<{
   choice_id: string;
   label: string;
   description?: string;
-  kind: 'select' | 'write';
+  kind: 'select';
   input_placeholder?: string;
   actions?: readonly FlowerInputRequestAction[];
 }>;

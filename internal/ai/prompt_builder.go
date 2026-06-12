@@ -38,19 +38,11 @@ type promptRuntimeSnapshot struct {
 	Objective                      string
 	TaskComplexity                 string
 	PromptProfile                  string
-	ExecutionContract              string
-	CompletionContract             string
-	TodoPolicy                     string
-	RequiredTodoMinimum            int
 	TodoStatus                     promptTodoStatus
 	RecentErrors                   []string
 	AvailableToolNames             string
 	AvailableSkills                []SkillMeta
 	ActiveSkills                   []SkillActivation
-	InteractionContract            interactionContract
-	ProtocolSurface                RunProtocolSurface
-	ProtocolCompletionMode         RunCompletionMode
-	ProtocolWaitingMode            RunWaitingMode
 	AllowUserInteraction           bool
 	SupportsAskUserQuestionBatches bool
 	ExceptionOverlay               string
@@ -62,9 +54,6 @@ type cachedPromptPrefixKey struct {
 	AllowUserInteraction           bool
 	SupportsAskUserQuestionBatches bool
 	PlanMode                       bool
-	ProtocolSurface                RunProtocolSurface
-	ProtocolCompletionMode         RunCompletionMode
-	ProtocolWaitingMode            RunWaitingMode
 }
 
 type promptStaticPrefixCache struct {
@@ -203,15 +192,6 @@ func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexit
 		allowUserInteraction = r == nil || !r.noUserInteraction
 	}
 
-	executionContract := normalizeExecutionContract(
-		state.ExecutionContract,
-		RunIntentTask,
-		RunObjectiveModeReplace,
-		complexity,
-		state.TodoPolicy,
-		state.InteractionContract,
-	)
-	completionContract := completionContractForExecutionContract(executionContract)
 	cwd := promptWorkingDirForRun(r)
 
 	availableToolNames := joinToolNames(tools)
@@ -225,22 +205,16 @@ func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexit
 		availableSkills = r.listSkills()
 		activeSkills = r.activeSkills()
 	}
-	protocolProfile := normalizeRunProtocolProfile(capability.ProtocolProfile)
-
 	return promptRuntimeSnapshot{
-		WorkingDir:          cwd,
-		LocalTime:           currentPromptLocalTimeContext(time.Now),
-		WorkspaceContext:    collectPromptWorkspaceContext(r, capability),
-		RoundIndex:          round,
-		IsFirstRound:        isFirstRound,
-		Mode:                strings.TrimSpace(mode),
-		Objective:           strings.TrimSpace(objective),
-		TaskComplexity:      complexity,
-		PromptProfile:       resolveRunPromptProfile(strings.TrimSpace(capability.PromptProfile), r, allowUserInteraction),
-		ExecutionContract:   executionContract,
-		CompletionContract:  completionContract,
-		TodoPolicy:          normalizeTodoPolicy(state.TodoPolicy),
-		RequiredTodoMinimum: requiredTodoCount(state),
+		WorkingDir:       cwd,
+		LocalTime:        currentPromptLocalTimeContext(time.Now),
+		WorkspaceContext: collectPromptWorkspaceContext(r, capability),
+		RoundIndex:       round,
+		IsFirstRound:     isFirstRound,
+		Mode:             strings.TrimSpace(mode),
+		Objective:        strings.TrimSpace(objective),
+		TaskComplexity:   complexity,
+		PromptProfile:    resolveRunPromptProfile(strings.TrimSpace(capability.PromptProfile), r, allowUserInteraction),
 		TodoStatus: promptTodoStatus{
 			TrackingEnabled:  state.TodoTrackingEnabled,
 			OpenCount:        state.TodoOpenCount,
@@ -252,10 +226,6 @@ func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexit
 		AvailableToolNames:             availableToolNames,
 		AvailableSkills:                availableSkills,
 		ActiveSkills:                   activeSkills,
-		InteractionContract:            state.InteractionContract,
-		ProtocolSurface:                protocolProfile.Surface,
-		ProtocolCompletionMode:         protocolProfile.CompletionMode,
-		ProtocolWaitingMode:            protocolProfile.WaitingMode,
 		AllowUserInteraction:           allowUserInteraction,
 		SupportsAskUserQuestionBatches: capability.SupportsAskUserQuestionBatches,
 		ExceptionOverlay:               strings.TrimSpace(exceptionOverlay),
@@ -280,7 +250,6 @@ func buildPromptDocument(snapshot promptRuntimeSnapshot) promptDocument {
 func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSnapshot) []promptSection {
 	sections := []promptSection{
 		buildPromptMandateSection(spec),
-		buildPromptProtocolSurfaceSection(snapshot),
 		buildPromptToolUsageSection(snapshot),
 	}
 	if section := buildPromptSubagentSection(spec); !section.isEmpty() {
@@ -316,12 +285,6 @@ func buildPromptStaticSections(spec promptProfileSpec, snapshot promptRuntimeSna
 
 func buildPromptDynamicSections(snapshot promptRuntimeSnapshot) []promptSection {
 	sections := []promptSection{}
-	if section := buildPromptCompletionContractSection(snapshot); !section.isEmpty() {
-		sections = append(sections, section)
-	}
-	if section := newPromptSection("active_interaction_contract", interactionContractPromptLines(snapshot.InteractionContract)...); !section.isEmpty() {
-		sections = append(sections, section)
-	}
 	sections = append(sections, buildPromptRuntimeContextSection(snapshot))
 	if section := buildPromptWorkspaceContextSection(snapshot); !section.isEmpty() {
 		sections = append(sections, section)
@@ -346,42 +309,16 @@ func buildPromptMandateSection(spec promptProfileSpec) promptSection {
 	return newPromptSection("identity_mandate", lines...)
 }
 
-func buildPromptProtocolSurfaceSection(snapshot promptRuntimeSnapshot) promptSection {
-	lines := []string{"# Active Protocol Surface"}
-	switch snapshot.ProtocolSurface {
-	case RunProtocolSurfaceStructuredFileOps:
-		lines = append(lines,
-			"- Primary file tools: `file.read`, `file.edit`, and `file.write`.",
-			"- `apply_patch` remains available as a compatibility fallback, not the default editing path.",
-		)
-		if snapshot.ProtocolWaitingMode == RunWaitingModeExitPlanMode {
-			lines = append(lines, "- In plan mode, use `exit_plan_mode` when execution requires switching the thread into act mode.")
-		}
-	default:
-		lines = append(lines,
-			"- Primary editing tool: `apply_patch`.",
-			"- Completion is explicit-signal driven.",
-		)
-	}
-	return newPromptSection("protocol_surface", lines...)
-}
-
 func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 	lines := []string{
 		"# Tool Usage Strategy",
 		"Follow this workflow for every task:",
 		"1. **Investigate** — Use terminal.exec to inspect the workspace, relevant local paths, and device state (rg/sed/cat for code; OS probes for diagnostics; curl for network data) and gather context.",
 		"2. **Plan** — Identify what needs to be done based on the information gathered.",
-	}
-	if snapshot.ProtocolSurface == RunProtocolSurfaceStructuredFileOps {
-		lines = append(lines, "3. **Act** — Use file.read for focused inspection, file.edit for exact replacements, file.write for full-file writes, and terminal.exec for validated command actions.")
-	} else {
-		lines = append(lines, "3. **Act** — Use apply_patch in canonical Begin/End Patch format for file edits; use terminal.exec for validated command actions.")
-	}
-	lines = append(lines,
+		"3. **Act** — Use the available file tools for file inspection and mutation, apply_patch for patch-shaped edits, and terminal.exec for validated command actions.",
 		"4. **Verify** — Use terminal.exec to run checks (tests/lint/build) and confirm correctness.",
-		"5. **Iterate** — If verification fails, diagnose the issue and repeat from step 1.",
-	)
+		"5. **Respond** — Reply naturally when the turn is complete; use ask_user only when the next step truly depends on user input.",
+	}
 	return newPromptSection("tool_usage_strategy", lines...)
 }
 
@@ -455,28 +392,15 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		"- When knowledge.search is available, query it first for domain background, then verify with terminal.exec before final conclusions.",
 		"- Do NOT expose internal evidence path:line details to end users unless they explicitly ask for repository-level traceability.",
 	}
-	if snapshot.ProtocolSurface == RunProtocolSurfaceStructuredFileOps {
-		lines = append(lines,
-			"- Prefer file.read for direct file inspection before falling back to shell-based file dumps.",
-			"- Prefer file.edit and file.write for normal file mutations instead of shell redirection or ad-hoc overwrite commands.",
-			"- When the task asks for verification or a verification command, use terminal.exec for that verification; file.read can supplement inspection but does not replace a real verification command.",
-			"- Keep file paths inside the active project boundary; the runtime home is only the outer sandbox.",
-			"- Treat the current working directory and any terminal.exec cwd/workdir as the same active project boundary; they must resolve to the current project root rather than some sibling path.",
-			"- Use apply_patch only when the structured file tools are insufficient or you truly need patch semantics.",
-			"- If you call apply_patch, send exactly one canonical patch document from `*** Begin Patch` to `*** End Patch` with relative paths.",
-			"- Use `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks inside apply_patch; do NOT send `diff --git` or raw `---` / `+++` diffs for normal edits.",
-			"- In apply_patch `*** Add File:` bodies, prefix every new content line with `+`.",
-		)
-	} else {
-		lines = append(lines,
-			"- If you can answer by reading files, use terminal.exec with rg/sed/cat first.",
-			"- Prefer apply_patch for file edits instead of shell redirection or ad-hoc overwrite commands.",
-			"- When you call apply_patch, send exactly one canonical patch document from `*** Begin Patch` to `*** End Patch` with relative paths.",
-			"- Use `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks inside apply_patch; do NOT send `diff --git` or raw `---` / `+++` diffs for normal edits.",
-			"- In apply_patch `*** Add File:` bodies, prefix every new content line with `+`.",
-		)
-	}
 	lines = append(lines,
+		"- Prefer the explicit file tools for direct file inspection or mutation when they are available.",
+		"- Prefer apply_patch for patch-shaped edits instead of shell redirection or ad-hoc overwrite commands.",
+		"- When the task asks for verification or a verification command, use terminal.exec for that verification; file inspection can supplement but does not replace a real verification command.",
+		"- Keep file paths inside the active project boundary; the runtime home is only the outer sandbox.",
+		"- Treat the current working directory and any terminal.exec cwd/workdir as the same active project boundary; they must resolve to the current project root rather than some sibling path.",
+		"- When you call apply_patch, send exactly one canonical patch document from `*** Begin Patch` to `*** End Patch` with relative paths.",
+		"- Use `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks inside apply_patch; do NOT send `diff --git` or raw `---` / `+++` diffs for normal edits.",
+		"- In apply_patch `*** Add File:` bodies, prefix every new content line with `+`.",
 		"- Use workdir/cwd fields on terminal.exec instead of running cd in the command string.",
 		"- For long-running commands (tests/build/lint), increase terminal.exec timeout_ms when justified, up to 10 minutes.",
 		"- Do NOT wrap terminal.exec commands with an extra `bash -lc` (terminal.exec already runs a shell with -lc).",
@@ -495,18 +419,12 @@ func buildPromptTodoDisciplineSection() promptSection {
 	return newPromptSection(
 		"todo_discipline",
 		"# Todo Discipline",
-		"- Follow the current todo policy from runtime context (none|recommended|required).",
-		"- If todo policy is required, call write_todos before finalization and satisfy the minimum todo count.",
-		"- If todo policy is recommended, prefer write_todos for multi-step execution and keep it updated.",
-		"- If todo policy is none, skip todos unless they clearly improve execution quality.",
+		"- Use write_todos for meaningful multi-step execution when it clarifies current work and remaining work.",
 		"- Skip write_todos for a single trivial step that can be completed immediately.",
 		"- Do NOT call write_todos with an empty list when there is no actionable work to track.",
 		"- Track only actionable work in write_todos. Do not create todos for control signals such as task_complete, ask_user, or exit_plan_mode.",
 		"- Keep exactly one todo as in_progress at a time.",
 		"- Update write_todos immediately when you start, complete, cancel, or discover work.",
-		"- Finish all feasible todos in this run before asking the user.",
-		"- Before finalization, update write_todos one last time so no actionable items remain open.",
-		"- Before task_complete, ensure all todos are completed or cancelled.",
 	)
 }
 
@@ -527,16 +445,10 @@ func buildPromptToolFailureRecoverySection(snapshot promptRuntimeSnapshot) promp
 		"- Do NOT pre-probe tool availability. Choose the best tool and try it.",
 		"- On tool error: read the tool_result payload, then either repair args (once) or switch tools.",
 	}
-	if snapshot.ProtocolSurface == RunProtocolSurfaceStructuredFileOps {
-		lines = append(lines,
-			"- If file.edit fails because the target text no longer matches, re-read the file and regenerate a fresh exact replacement once.",
-			"- If file.write would overwrite the wrong content, inspect the current file first and then rewrite deterministically.",
-			"- If apply_patch fails, re-read the current file contents and regenerate a fresh canonical Begin/End Patch once; do NOT fall back to shell redirection or ad-hoc file overwrite commands for normal edits.",
-		)
-	} else {
-		lines = append(lines, "- If apply_patch fails, re-read the current file contents and regenerate a fresh canonical Begin/End Patch once; do NOT fall back to shell redirection or ad-hoc file overwrite commands for normal edits.")
-	}
 	lines = append(lines,
+		"- If file.edit fails because the target text no longer matches, re-read the file and regenerate a fresh exact replacement once.",
+		"- If file.write would overwrite the wrong content, inspect the current file first and then rewrite deterministically.",
+		"- If apply_patch fails, re-read the current file contents and regenerate a fresh canonical Begin/End Patch once; do NOT fall back to shell redirection or ad-hoc file overwrite commands for normal edits.",
 		"- If web.search fails (e.g., missing API key), do NOT retry web.search; use terminal.exec with curl to query a public API or fetch an authoritative URL directly.",
 		"- If terminal.exec fails, reduce scope or switch tools; if blocked, follow the interaction policy in runtime context.",
 		"- If terminal.exec times out, do NOT rerun the same command unchanged. Reduce scope, raise timeout_ms only when justified, or switch strategy.",
@@ -547,20 +459,10 @@ func buildPromptToolFailureRecoverySection(snapshot promptRuntimeSnapshot) promp
 func buildPromptCommonWorkflowsSection(snapshot promptRuntimeSnapshot) promptSection {
 	lines := []string{
 		"# Common Workflows",
-		"- **Shell tasks**: terminal.exec → inspect output → task_complete",
-	}
-	if snapshot.ProtocolSurface == RunProtocolSurfaceStructuredFileOps {
-		lines = append(lines,
-			"- **File questions**: file.read or terminal.exec → analyze → finish according to the Completion Contract",
-			"- **Code changes**: file.read (inspect) → file.edit/file.write → terminal.exec (verify) → finish according to the Completion Contract",
-			"- **Debugging**: terminal.exec (reproduce) → file.edit/file.write or apply_patch → terminal.exec (verify) → finish according to the Completion Contract",
-		)
-	} else {
-		lines = append(lines,
-			"- **File questions**: terminal.exec (rg --files / rg pattern / sed -n) → analyze → task_complete",
-			"- **Code changes**: terminal.exec (inspect) → apply_patch (canonical Begin/End Patch) → terminal.exec (verify) → task_complete",
-			"- **Debugging**: terminal.exec (reproduce) → apply_patch fix (canonical Begin/End Patch) → terminal.exec (verify) → task_complete",
-		)
+		"- **Shell tasks**: terminal.exec → inspect output → final answer",
+		"- **File questions**: file.read or terminal.exec → analyze → final answer",
+		"- **Code changes**: file.read or terminal.exec → edit with file tools/apply_patch → terminal.exec (verify) → final answer",
+		"- **Debugging**: terminal.exec (reproduce) → edit with file tools/apply_patch → terminal.exec (verify) → final answer",
 	}
 	return newPromptSection("common_workflows", lines...)
 }
@@ -591,18 +493,18 @@ func buildPromptAskUserPolicySection(snapshot promptRuntimeSnapshot) promptSecti
 		"- Preserve explicit interaction-shape constraints from the user, such as fixed options, clickable choices, one-question-at-a-time, indirect questioning, or similar format requirements.",
 		"- When the user requires an indirect, non-leading, or proxy-based interaction, preserve that constraint in both `question` and `choices[]`. Do NOT directly name, bucket, or reveal the target attribute the user asked you to infer indirectly; ask about proxy signals or correlated situations instead.",
 		"- Use `response_mode:\"select\"` only when fixed choices are genuinely exhaustive by construction and you set `choices_exhaustive:true`.",
-		"- Use `response_mode:\"select_or_write\"` when fixed choices are not exhaustive and you set `choices_exhaustive:false`, so the UI preserves a standardized typed fallback.",
+		"- Use `response_mode:\"select_or_write\"` when fixed choices are not exhaustive and you set `choices_exhaustive:false`, so the user can either choose a fixed option or provide custom text.",
 		"- Use `response_mode:\"write\"` for direct-input questions with no fixed choices.",
-		"- For guided questionnaires, quizzes, guessing games, or hidden-target inference turns that narrow hypotheses about the user's real situation, default to a few fixed select choices plus a typed fallback instead of a pure write-only question.",
-		"- If the user explicitly asks for answer choices, fixed options, buttons, or clickable options, do NOT downgrade the question into pure `response_mode:\"write\"`; keep fixed choices and add a typed fallback via `response_mode:\"select_or_write\"` when needed.",
-		"- `choices[]` contains fixed options only. Do not encode the typed fallback as a fake write choice inside `choices[]`.",
-		"- For `response_mode:\"select_or_write\"`, the UI will render a standardized typed fallback such as `None of the above: ___`; provide `write_label` and optional `write_placeholder` when that wording matters.",
+		"- For guided questionnaires, quizzes, guessing games, or hidden-target inference turns that narrow hypotheses about the user's real situation, default to a few fixed select choices plus a custom text answer instead of a pure write-only question.",
+		"- If the user explicitly asks for answer choices, fixed options, buttons, or clickable options, do NOT downgrade the question into pure `response_mode:\"write\"`; keep fixed choices and allow custom text via `response_mode:\"select_or_write\"` when needed.",
+		"- `choices[]` contains fixed options only. Do not encode custom text as a fake write choice inside `choices[]`.",
+		"- For `response_mode:\"select_or_write\"`, provide `write_label` and optional `write_placeholder` when the custom text wording matters.",
 		"- When offering fixed options about the user's real situation, preference, habit, background, or other potentially non-exhaustive state, treat the set as non-exhaustive by default: use `response_mode:\"select_or_write\"` and `choices_exhaustive:false` unless the option set is genuinely exhaustive by construction.",
-		"- If the user explicitly asks for an `Other` or `None of the above` path, you MUST represent it via `response_mode:\"select_or_write\"` with `choices_exhaustive:false` rather than omitting the typed fallback.",
+		"- If the user explicitly asks for an `Other` or `None of the above` path, represent it via `response_mode:\"select_or_write\"` with `choices_exhaustive:false`.",
 		"- Keep choices concise and mutually exclusive. Put the best/default path first when that ordering matters.",
 		"- For deterministic UI actions, place actions on `questions[].choices[].actions` (for example {type:\"set_mode\",mode:\"act\"}).",
 	}
-	if snapshot.ProtocolWaitingMode == RunWaitingModeExitPlanMode {
+	if promptToolAvailable(snapshot.AvailableToolNames, "exit_plan_mode") {
 		lines = append(lines, "- Do NOT use ask_user for plan-to-act switching when exit_plan_mode is available; use exit_plan_mode instead.")
 	}
 	if snapshot.SupportsAskUserQuestionBatches {
@@ -632,7 +534,7 @@ func buildPromptPlanModeSection(spec promptProfileSpec, snapshot promptRuntimeSn
 		"- HTTP commands that write local files/state or send request bodies/uploads are mutating (for example `curl -o`, `curl -d`, `curl -F`, `curl -T`, `wget -O file`, `wget --post-data`).",
 	}
 	if snapshot.AllowUserInteraction {
-		if snapshot.ProtocolWaitingMode == RunWaitingModeExitPlanMode {
+		if promptToolAvailable(snapshot.AvailableToolNames, "exit_plan_mode") {
 			lines = append(lines,
 				"- If execution is required, call exit_plan_mode instead of constructing a manual mode-switch ask_user payload.",
 				"- Keep the summary concise and focused on why act mode is required.",
@@ -656,25 +558,6 @@ func buildPromptPlanModeSection(spec promptProfileSpec, snapshot promptRuntimeSn
 		)
 	}
 	return newPromptSection("plan_mode_rules", lines...)
-}
-
-func buildPromptCompletionContractSection(snapshot promptRuntimeSnapshot) promptSection {
-	lines := []string{"# Completion Contract"}
-	switch snapshot.CompletionContract {
-	case completionContractFirstTurn:
-		lines = append(lines,
-			"- This run starts in hybrid_first_turn mode: if the first turn fully resolves the objective, you may reply with the final markdown answer directly.",
-			"- If you continue beyond the first turn, switch to explicit signals: call task_complete when done or ask_user when structured user input is required.",
-		)
-	case completionContractExplicitOnly:
-		lines = append(lines,
-			"- You MUST call task_complete with a detailed result summary when done. Never end without it.",
-			"- Task runs are explicit-completion only: no task_complete means the task is not complete.",
-		)
-	default:
-		return promptSection{}
-	}
-	return newPromptSection("completion_contract", lines...)
 }
 
 func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSection {
@@ -701,28 +584,18 @@ func buildPromptRuntimeContextSection(snapshot promptRuntimeSnapshot) promptSect
 		fmt.Sprintf("- Current round: %d (first_round=%t)", snapshot.RoundIndex+1, snapshot.IsFirstRound),
 		fmt.Sprintf("- Mode: %s", snapshot.Mode),
 		fmt.Sprintf("- Prompt profile: %s", snapshot.PromptProfile),
-		fmt.Sprintf("- Protocol surface: %s", snapshot.ProtocolSurface),
-		fmt.Sprintf("- Execution contract: %s", snapshot.ExecutionContract),
-		fmt.Sprintf("- Completion contract: %s", snapshot.CompletionContract),
-		fmt.Sprintf("- Protocol completion mode: %s", snapshot.ProtocolCompletionMode),
-		fmt.Sprintf("- Protocol waiting mode: %s", snapshot.ProtocolWaitingMode),
 		fmt.Sprintf("- Task complexity: %s", snapshot.TaskComplexity),
-		fmt.Sprintf("- Todo policy: %s", snapshot.TodoPolicy),
 		fmt.Sprintf("- Available tools: %s", snapshot.AvailableToolNames),
 		fmt.Sprintf("- Objective: %s", snapshot.Objective),
 		fmt.Sprintf("- Recent errors: %s", recentErrors),
 		fmt.Sprintf("- Todo tracking: %s", todoStatus),
 	)
-	lines = append(lines, interactionContractRuntimeLines(snapshot.InteractionContract)...)
 	if snapshot.AllowUserInteraction {
 		lines = append(lines, fmt.Sprintf("- Ask-user question batches supported: %t", snapshot.SupportsAskUserQuestionBatches))
 	} else if resolvePromptProfileSpec(snapshot.PromptProfile).PrefersParentFacingReporting {
 		lines = append(lines, "- Interaction policy: user interaction is disabled in this run. Continue autonomously or finish with task_complete including blockers plus suggested parent actions.")
 	} else {
 		lines = append(lines, "- Interaction policy: user interaction is disabled in this run. Continue autonomously or finish with task_complete including blockers plus concrete next-step guidance for the user-facing thread.")
-	}
-	if snapshot.TodoPolicy == TodoPolicyRequired {
-		lines = append(lines, fmt.Sprintf("- Required todo minimum: %d", snapshot.RequiredTodoMinimum))
 	}
 	if len(snapshot.AvailableSkills) > 0 {
 		lines = append(lines, fmt.Sprintf("- Available skills: %s", joinSkillNames(snapshot.AvailableSkills)))
@@ -738,10 +611,20 @@ func promptStaticPrefixCacheKey(snapshot promptRuntimeSnapshot) cachedPromptPref
 		AllowUserInteraction:           snapshot.AllowUserInteraction,
 		SupportsAskUserQuestionBatches: snapshot.SupportsAskUserQuestionBatches,
 		PlanMode:                       isPlanMode(mode),
-		ProtocolSurface:                snapshot.ProtocolSurface,
-		ProtocolCompletionMode:         snapshot.ProtocolCompletionMode,
-		ProtocolWaitingMode:            snapshot.ProtocolWaitingMode,
 	}
+}
+
+func promptToolAvailable(names string, want string) bool {
+	want = strings.TrimSpace(want)
+	if want == "" {
+		return false
+	}
+	for _, name := range strings.Split(names, ",") {
+		if strings.TrimSpace(name) == want {
+			return true
+		}
+	}
+	return false
 }
 
 func isPlanMode(mode string) bool {

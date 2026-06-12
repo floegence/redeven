@@ -942,7 +942,7 @@ describe('FlowerSurface navigation', () => {
     expect(host.querySelector('.flower-host-error-card')?.textContent).toContain('Provider returned a structured failure.');
   });
 
-  it('renders structured input requests and blocks the normal composer while Flower waits', async () => {
+  it('renders structured input requests in the composer while Flower waits', async () => {
     const waitingThread = thread({
       thread_id: 'thread-waiting-input',
       title: 'Waiting input',
@@ -976,19 +976,85 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-waiting-input"] button')));
     (host.querySelector('[data-thread-id="thread-waiting-input"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-card]')));
+    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-prompt]')));
 
-    expect(host.querySelector('[data-flower-input-request-card]')?.textContent).toContain('Flower needs your input');
-    expect(host.querySelector('[data-flower-input-request-card]')?.textContent).toContain('Choose the deployment target before Flower continues.');
-    expect(host.querySelector('[data-flower-input-request-card]')?.textContent).toContain('Where should Flower deploy this change?');
-    expect(host.querySelector('[data-flower-input-request-card]')?.textContent).toContain('Staging');
-    expect(host.querySelector('[data-flower-input-request-card]')?.textContent).toContain('Production');
+    expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Waiting for your reply');
+    expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Choose the deployment target before Flower continues.');
+    expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Where should Flower deploy this change?');
+    expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Staging');
+    expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Production');
     expect(host.querySelector('.flower-host-tool-activity')?.textContent).toContain('ask_user');
     expect(host.querySelector('.flower-host-streaming-cursor')).toBeNull();
+    expect(host.querySelectorAll('textarea')).toHaveLength(1);
     expect((host.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
-    expect((host.querySelector('textarea') as HTMLTextAreaElement).placeholder).toBe('Answer the prompt above to continue this conversation.');
+    expect((host.querySelector('textarea') as HTMLTextAreaElement).placeholder).toBe('Choose an option to continue.');
     expect((Array.from(host.querySelectorAll('.flower-host-composer button')) as HTMLButtonElement[])
-      .some((button) => button.textContent?.includes('Send') && button.disabled)).toBe(true);
+      .some((button) => button.textContent?.includes('Continue') && button.disabled)).toBe(true);
+  });
+
+  it('uses the bottom composer password field for secret structured input', async () => {
+    const secretInputRequest = inputRequest({
+      contains_secret: true,
+      public_summary: 'Provide the deployment token before Flower continues.',
+      questions: [
+        {
+          id: 'deploy_token',
+          header: 'Deployment token',
+          question: 'Paste the deployment token.',
+          is_secret: true,
+          response_mode: 'write',
+          write_placeholder: 'Deployment token',
+        },
+      ],
+    });
+    const waitingThread = thread({
+      thread_id: 'thread-secret-input',
+      title: 'Secret input',
+      created_at_ms: 3_820,
+      updated_at_ms: 3_920,
+      status: 'waiting_user',
+      input_request: secretInputRequest,
+    });
+    const continuedThread = thread({
+      thread_id: 'thread-secret-input',
+      title: 'Secret input',
+      created_at_ms: 3_820,
+      updated_at_ms: 4_020,
+      status: 'running',
+      input_request: null,
+    });
+    const submitInput = vi.fn(async () => continuedThread);
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [waitingThread]),
+      loadThread: vi.fn(async () => waitingThread),
+      submitInput,
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-secret-input"] button')));
+    (host.querySelector('[data-thread-id="thread-secret-input"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(host.querySelector('.flower-host-composer input[type="password"]')));
+
+    expect(host.querySelectorAll('.flower-host-composer input[type="password"]')).toHaveLength(1);
+    expect(host.querySelector('.flower-host-composer textarea')).toBeNull();
+
+    const password = host.querySelector('.flower-host-composer input[type="password"]') as HTMLInputElement;
+    expect(password.placeholder).toBe('Deployment token');
+    password.value = 'secret-token';
+    password.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await flush();
+    (host.querySelector('.flower-host-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => submitInput.mock.calls.length > 0);
+
+    expect(submitInput).toHaveBeenCalledWith({
+      thread_id: 'thread-secret-input',
+      prompt_id: 'prompt-ask-user',
+      answers: {
+        deploy_token: {
+          text: 'secret-token',
+        },
+      },
+    });
   });
 
   it('submits selected structured input through the adapter and keeps the same thread', async () => {
@@ -1038,12 +1104,12 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-submit-input"] button')));
     (host.querySelector('[data-thread-id="thread-submit-input"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-card]')));
+    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-prompt]')));
 
     (Array.from(host.querySelectorAll('.flower-host-input-request-choice')) as HTMLButtonElement[])
       .find((button) => button.textContent?.includes('Staging'))?.click();
     await flush();
-    (host.querySelector('.flower-host-input-request-submit') as HTMLButtonElement).click();
+    (host.querySelector('.flower-host-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => submitInput.mock.calls.length > 0);
     await waitFor(() => host.textContent?.includes('Continuing with staging.') ?? false);
 
@@ -1056,11 +1122,11 @@ describe('FlowerSurface navigation', () => {
         },
       },
     });
-    expect(host.querySelector('[data-flower-input-request-card]')).toBeNull();
+    expect(host.querySelector('[data-flower-input-request-prompt]')).toBeNull();
     expect(host.textContent).toContain('Continuing with staging.');
   });
 
-  it('shows structured input submission failures inside the input card without losing the answer', async () => {
+  it('shows structured input submission failures in the composer without losing the answer', async () => {
     const waitingThread = thread({
       thread_id: 'thread-input-error',
       title: 'Input error',
@@ -1081,20 +1147,20 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-input-error"] button')));
     (host.querySelector('[data-thread-id="thread-input-error"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-card]')));
+    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-prompt]')));
 
     (Array.from(host.querySelectorAll('.flower-host-input-request-choice')) as HTMLButtonElement[])
       .find((button) => button.textContent?.includes('Production'))?.click();
     await flush();
-    (host.querySelector('.flower-host-input-request-submit') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('.flower-host-input-request-error')));
+    (host.querySelector('.flower-host-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(host.querySelector('.flower-host-composer-error')));
 
-    expect(host.querySelector('.flower-host-input-request-error')?.textContent).toContain('Flower is no longer waiting for that input.');
-    expect(host.querySelector('.flower-host-input-request-submit')?.textContent).toContain('Retry');
+    expect(host.querySelector('.flower-host-composer-error')?.textContent).toContain('Flower is no longer waiting for that input.');
+    expect(host.querySelector('.flower-host-composer-submit')?.textContent).toContain('Retry');
     expect(host.querySelector('.flower-host-input-request-choice-selected')?.textContent).toContain('Production');
   });
 
-  it('preserves waiting input cards while a summary-only list refresh is waiting for detail reload', async () => {
+  it('clears waiting prompts when a summary-only refresh reports a terminal thread', async () => {
     const detailedThread = thread({
       thread_id: 'thread-waiting-summary-refresh',
       title: 'Waiting survives refresh',
@@ -1106,6 +1172,7 @@ describe('FlowerSurface navigation', () => {
     const summaryOnlyThread = {
       ...detailedThread,
       updated_at_ms: 4_200,
+      status: 'success' as const,
       messages: [],
       tool_activity: undefined,
       input_request: undefined,
@@ -1128,13 +1195,56 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-waiting-summary-refresh"] button')));
     (host.querySelector('[data-thread-id="thread-waiting-summary-refresh"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-card]')));
+    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-prompt]')));
 
     listSnapshot = [summaryOnlyThread];
     (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
     await waitFor(() => delayedDetailReloadStarted);
 
-    expect(host.querySelector('[data-flower-input-request-card]')?.textContent).toContain('Where should Flower deploy this change?');
+    expect(host.querySelector('[data-flower-input-request-prompt]')).toBeNull();
+  });
+
+  it('ignores stale input requests when the thread is no longer waiting for user input', async () => {
+    const staleThread = thread({
+      thread_id: 'thread-stale-input',
+      title: 'Stale input',
+      created_at_ms: 3_890,
+      updated_at_ms: 3_990,
+      status: 'success',
+      input_request: inputRequest(),
+      messages: [
+        {
+          id: 'm-stale',
+          role: 'assistant',
+          content: 'This should behave like a normal thread.',
+          status: 'complete',
+          created_at_ms: 3_990,
+        },
+      ],
+    });
+    const sendMessage = vi.fn(async () => staleThread);
+    const submitInput = vi.fn(async () => staleThread);
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [staleThread]),
+      loadThread: vi.fn(async () => staleThread),
+      sendMessage,
+      submitInput,
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-stale-input"] button')));
+    (host.querySelector('[data-thread-id="thread-stale-input"] button') as HTMLButtonElement).click();
+    await waitFor(() => host.textContent?.includes('This should behave like a normal thread.') ?? false);
+
+    expect(host.querySelector('[data-flower-input-request-prompt]')).toBeNull();
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    expect(textarea.disabled).toBe(false);
+    textarea.value = 'Hello';
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await flush();
+    (host.querySelector('.flower-host-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => sendMessage.mock.calls.length > 0);
+    expect(submitInput).not.toHaveBeenCalled();
   });
 
   it('preserves loaded details for non-selected threads during summary-only list refreshes', async () => {
@@ -1167,19 +1277,29 @@ describe('FlowerSurface navigation', () => {
       error: undefined,
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [selectedThread, detailedThread];
+    let backgroundReloadStarted = false;
+    const loadThread = vi.fn((threadID: string) => {
+      if (threadID === 'thread-background') {
+        backgroundReloadStarted = true;
+        return new Promise<FlowerThreadSnapshot>(() => undefined);
+      }
+      return Promise.resolve(selectedThread);
+    });
     const host = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
-      loadThread: vi.fn(async () => selectedThread),
+      loadThread,
     });
 
-    await waitFor(() => host.textContent?.includes('Background preview remains available.') ?? false);
+    await waitFor(() => threadOrder(host).includes('thread-background'));
 
     (host.querySelector('[data-thread-id="thread-selected"] button') as HTMLButtonElement).click();
     await waitFor(() => host.querySelector('.flower-host-thread-card-active')?.getAttribute('data-thread-id') === 'thread-selected');
     listSnapshot = [selectedThread, summaryOnlyBackground];
     (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
     await flush();
+    (host.querySelector('[data-thread-id="thread-background"] button') as HTMLButtonElement).click();
+    await waitFor(() => backgroundReloadStarted);
 
     expect(host.textContent).toContain('Background preview remains available.');
   });

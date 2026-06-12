@@ -124,7 +124,7 @@ func TestSendUserTurn_ExpectedRunChanged_DoesNotPersistMessage(t *testing.T) {
 	}
 }
 
-func TestSubmitStructuredPromptResponse_WaitingPromptMismatch_DoesNotPersistMessage(t *testing.T) {
+func TestSubmitRequestUserInputResponse_WaitingPromptMismatch_DoesNotPersistMessage(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -160,7 +160,7 @@ func TestSubmitStructuredPromptResponse_WaitingPromptMismatch_DoesNotPersistMess
 		t.Fatalf("SendUserTurn err=%v, want %v", err, ErrWaitingUserQueueConflict)
 	}
 
-	_, err = svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
+	_, err = svc.SubmitRequestUserInputResponse(ctx, meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: RequestUserInputResponse{
@@ -173,7 +173,7 @@ func TestSubmitStructuredPromptResponse_WaitingPromptMismatch_DoesNotPersistMess
 		Options: RunOptions{MaxSteps: 1},
 	})
 	if !errors.Is(err, ErrWaitingPromptChanged) {
-		t.Fatalf("SubmitStructuredPromptResponse wrong-id err=%v, want %v", err, ErrWaitingPromptChanged)
+		t.Fatalf("SubmitRequestUserInputResponse wrong-id err=%v, want %v", err, ErrWaitingPromptChanged)
 	}
 
 	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
@@ -185,7 +185,7 @@ func TestSubmitStructuredPromptResponse_WaitingPromptMismatch_DoesNotPersistMess
 	}
 }
 
-func TestSubmitStructuredPromptResponse_WaitingPromptMatch_ReturnsConsumedPromptID(t *testing.T) {
+func TestSubmitRequestUserInputResponse_WaitingPromptMatch_ReturnsConsumedPromptID(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -209,7 +209,7 @@ func TestSubmitStructuredPromptResponse_WaitingPromptMatch_ReturnsConsumedPrompt
 	}
 	seedWaitingUserPrompt(t, svc, ctx, meta, th.ThreadID, waitingPrompt)
 
-	resp, err := svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
+	resp, err := svc.SubmitRequestUserInputResponse(ctx, meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
@@ -221,13 +221,13 @@ func TestSubmitStructuredPromptResponse_WaitingPromptMatch_ReturnsConsumedPrompt
 		Options: RunOptions{MaxSteps: 1},
 	})
 	if err != nil {
-		t.Fatalf("SubmitStructuredPromptResponse: %v", err)
+		t.Fatalf("SubmitRequestUserInputResponse: %v", err)
 	}
 	if got := strings.TrimSpace(resp.ConsumedWaitingPromptID); got != waitingPrompt.PromptID {
 		t.Fatalf("ConsumedWaitingPromptID=%q, want %q", got, waitingPrompt.PromptID)
 	}
 	if strings.TrimSpace(resp.RunID) == "" {
-		t.Fatalf("SubmitStructuredPromptResponse run_id is empty")
+		t.Fatalf("SubmitRequestUserInputResponse run_id is empty")
 	}
 
 	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
@@ -239,7 +239,7 @@ func TestSubmitStructuredPromptResponse_WaitingPromptMatch_ReturnsConsumedPrompt
 	}
 }
 
-func TestSubmitStructuredPromptResponse_WaitingChoiceSetMode_UpdatesThreadExecutionMode(t *testing.T) {
+func TestSubmitRequestUserInputResponse_WaitingChoiceSetMode_UpdatesThreadExecutionMode(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -257,9 +257,11 @@ func TestSubmitStructuredPromptResponse_WaitingChoiceSetMode_UpdatesThreadExecut
 		AskUserReasonUserDecisionRequired,
 		[]RequestUserInputQuestion{
 			{
-				ID:       "mode_decision",
-				Header:   "Execution mode",
-				Question: "Switch to Act mode?",
+				ID:                "mode_decision",
+				Header:            "Execution mode",
+				Question:          "Switch to Act mode?",
+				ResponseMode:      requestUserInputResponseModeSelect,
+				ChoicesExhaustive: testBoolPtr(true),
 				Choices: []RequestUserInputChoice{
 					{
 						ChoiceID: "switch_to_act",
@@ -281,7 +283,7 @@ func TestSubmitStructuredPromptResponse_WaitingChoiceSetMode_UpdatesThreadExecut
 	}
 	seedWaitingUserPrompt(t, svc, ctx, meta, th.ThreadID, waitingPrompt)
 
-	resp, err := svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
+	resp, err := svc.SubmitRequestUserInputResponse(ctx, meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
@@ -293,7 +295,7 @@ func TestSubmitStructuredPromptResponse_WaitingChoiceSetMode_UpdatesThreadExecut
 		Options: RunOptions{MaxSteps: 1, Mode: "plan"},
 	})
 	if err != nil {
-		t.Fatalf("SubmitStructuredPromptResponse: %v", err)
+		t.Fatalf("SubmitRequestUserInputResponse: %v", err)
 	}
 	if got := strings.TrimSpace(resp.ConsumedWaitingPromptID); got != waitingPrompt.PromptID {
 		t.Fatalf("ConsumedWaitingPromptID=%q, want %q", got, waitingPrompt.PromptID)
@@ -314,7 +316,7 @@ func TestSubmitStructuredPromptResponse_WaitingChoiceSetMode_UpdatesThreadExecut
 	}
 }
 
-func TestSubmitStructuredPromptResponse_PromptOnlyPersistsStructuredResponseContext(t *testing.T) {
+func TestSubmitRequestUserInputResponse_PromptOnlyPersistsStructuredResponseContext(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -332,9 +334,11 @@ func TestSubmitStructuredPromptResponse_PromptOnlyPersistsStructuredResponseCont
 		AskUserReasonUserDecisionRequired,
 		[]RequestUserInputQuestion{
 			{
-				ID:       "direction",
-				Header:   "Direction",
-				Question: "Choose a direction.",
+				ID:                "direction",
+				Header:            "Direction",
+				Question:          "Choose a direction.",
+				ResponseMode:      requestUserInputResponseModeSelect,
+				ChoicesExhaustive: testBoolPtr(true),
 				Choices: []RequestUserInputChoice{
 					{ChoiceID: "proceed", Label: "Proceed", Kind: requestUserInputChoiceKindSelect},
 				},
@@ -346,7 +350,7 @@ func TestSubmitStructuredPromptResponse_PromptOnlyPersistsStructuredResponseCont
 	}
 	seedWaitingUserPrompt(t, svc, ctx, meta, th.ThreadID, waitingPrompt)
 
-	resp, err := svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
+	resp, err := svc.SubmitRequestUserInputResponse(ctx, meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
@@ -356,10 +360,10 @@ func TestSubmitStructuredPromptResponse_PromptOnlyPersistsStructuredResponseCont
 		Options: RunOptions{MaxSteps: 1},
 	})
 	if err != nil {
-		t.Fatalf("SubmitStructuredPromptResponse: %v", err)
+		t.Fatalf("SubmitRequestUserInputResponse: %v", err)
 	}
 	if strings.TrimSpace(resp.RunID) == "" {
-		t.Fatalf("SubmitStructuredPromptResponse run_id is empty")
+		t.Fatalf("SubmitRequestUserInputResponse run_id is empty")
 	}
 
 	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
@@ -401,7 +405,7 @@ func TestSubmitStructuredPromptResponse_PromptOnlyPersistsStructuredResponseCont
 	}
 }
 
-func TestSubmitStructuredPromptResponse_SecretAnswerDoesNotLeakToTranscriptOrStructuredProjection(t *testing.T) {
+func TestSubmitRequestUserInputResponse_SecretAnswerDoesNotLeakToTranscriptOrStructuredProjection(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -419,13 +423,13 @@ func TestSubmitStructuredPromptResponse_SecretAnswerDoesNotLeakToTranscriptOrStr
 		AskUserReasonMissingExternalInput,
 		[]RequestUserInputQuestion{
 			{
-				ID:       "api_key",
-				Header:   "API key",
-				Question: "Provide the API key.",
-				IsSecret: true,
-				Choices: []RequestUserInputChoice{
-					{ChoiceID: "write", Label: "API key", Kind: requestUserInputChoiceKindWrite},
-				},
+				ID:               "api_key",
+				Header:           "API key",
+				Question:         "Provide the API key.",
+				IsSecret:         true,
+				ResponseMode:     requestUserInputResponseModeWrite,
+				WriteLabel:       "API key",
+				WritePlaceholder: "Type the API key",
 			},
 		},
 	)
@@ -435,20 +439,20 @@ func TestSubmitStructuredPromptResponse_SecretAnswerDoesNotLeakToTranscriptOrStr
 	seedWaitingUserPrompt(t, svc, ctx, meta, th.ThreadID, waitingPrompt)
 
 	const secretValue = "super-secret-token"
-	resp, err := svc.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
+	resp, err := svc.SubmitRequestUserInputResponse(ctx, meta, SubmitRequestUserInputResponseRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Response: testResponseForPrompt(waitingPrompt, map[string]RequestUserInputAnswer{
-			"api_key": {ChoiceID: "write", Text: secretValue},
+			"api_key": {Text: secretValue},
 		}),
 		Input:   RunInput{},
 		Options: RunOptions{MaxSteps: 1},
 	})
 	if err != nil {
-		t.Fatalf("SubmitStructuredPromptResponse: %v", err)
+		t.Fatalf("SubmitRequestUserInputResponse: %v", err)
 	}
 	if strings.TrimSpace(resp.RunID) == "" {
-		t.Fatalf("SubmitStructuredPromptResponse run_id is empty")
+		t.Fatalf("SubmitRequestUserInputResponse run_id is empty")
 	}
 
 	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)

@@ -1054,9 +1054,9 @@ function normalizeBridgeInputAction(value: unknown, field: string): DesktopFlowe
   };
 }
 
-function normalizeBridgeInputChoiceKind(value: unknown, field: string): 'select' | 'write' {
+function normalizeBridgeInputChoiceKind(value: unknown, field: string): 'select' {
   const kind = compact(value);
-  if (kind === 'select' || kind === 'write') {
+  if (kind === 'select') {
     return kind;
   }
   bridgeContractError(field, `has unsupported value ${JSON.stringify(kind)}`);

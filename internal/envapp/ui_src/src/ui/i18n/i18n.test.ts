@@ -381,8 +381,6 @@ describe('Env App i18n dictionaries', () => {
     expect(zhCN.t('accessGate.notice')).toContain('Runtime');
     expect(zhCN.t('chatChrome.copyMessage')).toBe('复制消息');
     expect(zhCN.t('chatActivity.command')).toBe('命令');
-    expect(zhCN.t('chatActivity.noneOfTheAbove')).toBe('以上都不是');
-    expect(zhCN.t('chatActivity.readyToContinue')).toBe('可以继续。');
     expect(zhCN.t('filePreview.saveFile')).toBe('保存文件');
     expect(zhCN.t('shell.nav.terminal')).toBe('终端');
     expect(zhCN.t('shell.nav.webServices')).toBe('Web服务');

@@ -12,14 +12,10 @@ export type wire_ai_request_user_input_action = {
 };
 
 export type wire_ai_request_user_input_choice = {
-  choice_id?: string;
-  option_id?: string;
+  choice_id: string;
   label: string;
   description?: string;
-  kind?: string;
-  input_placeholder?: string;
-  detail_input_mode?: string;
-  detail_input_placeholder?: string;
+  kind: 'select';
   actions?: wire_ai_request_user_input_action[];
 };
 
@@ -28,18 +24,17 @@ export type wire_ai_request_user_input_question = {
   header: string;
   question: string;
   is_secret: boolean;
-  response_mode?: string;
+  response_mode: string;
   write_label?: string;
   write_placeholder?: string;
   choices?: wire_ai_request_user_input_choice[];
-  is_other?: boolean;
-  options?: wire_ai_request_user_input_choice[];
 };
 
 export type wire_ai_waiting_prompt = {
   prompt_id: string;
   message_id: string;
   tool_id: string;
+  tool_name: string;
   reason_code?: string;
   required_from_user?: string[];
   evidence_refs?: string[];
@@ -51,8 +46,6 @@ export type wire_ai_waiting_prompt = {
 export type wire_ai_request_user_input_answer = {
   choice_id?: string;
   text?: string;
-  selected_option_id?: string;
-  answers?: string[];
 };
 
 export type wire_ai_request_user_input_response = {
@@ -87,7 +80,7 @@ export type wire_ai_send_user_turn_resp = {
   applied_execution_mode?: string;
 };
 
-export type wire_ai_submit_structured_prompt_response_req = {
+export type wire_ai_submit_request_user_input_response_req = {
   thread_id: string;
   model?: string;
   response: wire_ai_request_user_input_response;
@@ -104,7 +97,7 @@ export type wire_ai_submit_structured_prompt_response_req = {
   source_followup_id?: string;
 };
 
-export type wire_ai_submit_structured_prompt_response_resp = {
+export type wire_ai_submit_request_user_input_response_resp = {
   run_id: string;
   kind: string;
   consumed_waiting_prompt_id?: string;

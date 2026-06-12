@@ -67,7 +67,7 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 		}
 		var streamedText strings.Builder
 		var streamedReasoning strings.Builder
-		result, err := p.base.StreamTurn(ctx, turnReq, func(ev StreamEvent) {
+		onEvent := func(ev StreamEvent) {
 			switch ev.Type {
 			case StreamEventTextDelta:
 				if ev.Text == "" {
@@ -84,7 +84,20 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 				p.emitReasoningDelta(ev.Text)
 				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventReasoning, Text: ev.Text})
 			}
-		})
+		}
+		result, err := p.base.StreamTurn(ctx, turnReq, onEvent)
+		if err != nil && p.canReplayWithoutPreviousResponseID(req, turnReq, streamedText.String(), streamedReasoning.String(), err) {
+			replayReq := req
+			replayReq.PreviousState = nil
+			turnReq, err = p.turnRequest(replayReq)
+			if err != nil {
+				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
+				return
+			}
+			streamedText.Reset()
+			streamedReasoning.Reset()
+			result, err = p.base.StreamTurn(ctx, turnReq, onEvent)
+		}
 		if err != nil {
 			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
 			return
@@ -124,6 +137,22 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 		sendFloretProviderEvent(ctx, out, terminal)
 	}()
 	return out, nil
+}
+
+func (p *floretProviderAdapter) canReplayWithoutPreviousResponseID(req flruntime.ModelRequest, turnReq TurnRequest, streamedText string, streamedReasoning string, err error) bool {
+	if p == nil || !p.continuationSupported {
+		return false
+	}
+	if strings.TrimSpace(turnReq.ProviderControls.PreviousResponseID) == "" {
+		return false
+	}
+	if !p.shouldUsePreviousState(cloneFloretModelState(req.PreviousState), req.Step) {
+		return false
+	}
+	if strings.TrimSpace(streamedText) != "" || strings.TrimSpace(streamedReasoning) != "" {
+		return false
+	}
+	return isOpenAIContinuationRejection(err)
 }
 
 func (p *floretProviderAdapter) emitTextDelta(text string) {

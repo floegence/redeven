@@ -202,8 +202,6 @@ func flowerHostMockResponseToken(req map[string]any) string {
 	switch {
 	case strings.Contains(requestText, "You generate concise thread titles for an interactive AI agent."):
 		return "自动标题验收"
-	case strings.Contains(requestText, "execution_contract") && strings.Contains(requestText, "minimum_todo_items"):
-		return `{"intent":"task","execution_contract":"agentic_loop","reason":"model_classifier","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":1,"interaction_contract":{"enabled":false,"reason":"not_needed","single_question_per_turn":false,"fixed_choices_required":false,"open_text_fallback_required":false,"indirect_questions_only":false,"confidence":1}}`
 	default:
 		return "Assistant reply"
 	}
@@ -345,13 +343,10 @@ func TestNewService_UsesExplicitTargetToolPolicy(t *testing.T) {
 	}
 }
 
-func TestFlowerHostRunOptionsRequireExplicitAgenticCompletion(t *testing.T) {
+func TestFlowerHostRunOptionsExposeFloretNativeTools(t *testing.T) {
 	opts := flowerHostRunOptions()
 	if opts.MaxSteps != 24 {
 		t.Fatalf("MaxSteps=%d, want 24", opts.MaxSteps)
-	}
-	if opts.ExecutionContract != ai.RunExecutionContractAgenticLoop {
-		t.Fatalf("ExecutionContract=%q, want %q", opts.ExecutionContract, ai.RunExecutionContractAgenticLoop)
 	}
 	seen := map[string]bool{}
 	for _, name := range opts.ToolAllowlist {
@@ -835,20 +830,14 @@ func TestMapChatInputRequestPreservesWaitingPromptContract(t *testing.T) {
 			WriteLabel:        " Other target ",
 			WritePlaceholder:  " Type another target ",
 			Choices: []ai.RequestUserInputChoice{{
-				ChoiceID:         " staging ",
-				Label:            " Staging ",
-				Description:      " Use the validation environment. ",
-				Kind:             " select ",
-				InputPlaceholder: " ",
+				ChoiceID:    " staging ",
+				Label:       " Staging ",
+				Description: " Use the validation environment. ",
+				Kind:        " select ",
 				Actions: []ai.RequestUserInputAction{{
 					Type: " set_mode ",
 					Mode: " act ",
 				}},
-			}, {
-				ChoiceID:         " other ",
-				Label:            " Other ",
-				Kind:             " write ",
-				InputPlaceholder: " Type target name ",
 			}},
 		}},
 	})
@@ -883,14 +872,11 @@ func TestMapChatInputRequestPreservesWaitingPromptContract(t *testing.T) {
 	if question.WriteLabel != "Other target" || question.WritePlaceholder != "Type another target" {
 		t.Fatalf("write copy=(%q,%q), want trimmed labels", question.WriteLabel, question.WritePlaceholder)
 	}
-	if len(question.Choices) != 2 {
-		t.Fatalf("choices len=%d, want 2", len(question.Choices))
+	if len(question.Choices) != 1 {
+		t.Fatalf("choices len=%d, want 1", len(question.Choices))
 	}
 	if question.Choices[0].ChoiceID != "staging" || question.Choices[0].Kind != "select" || question.Choices[0].Actions[0].Type != "set_mode" || question.Choices[0].Actions[0].Mode != "act" {
 		t.Fatalf("first choice=%#v, want trimmed select choice with action", question.Choices[0])
-	}
-	if question.Choices[1].ChoiceID != "other" || question.Choices[1].Kind != "write" || question.Choices[1].InputPlaceholder != "Type target name" {
-		t.Fatalf("second choice=%#v, want write choice", question.Choices[1])
 	}
 }
 

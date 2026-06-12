@@ -67,29 +67,29 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 	return actor.SendUserTurn(ctx, meta, req)
 }
 
-func (s *Service) SubmitStructuredPromptResponse(ctx context.Context, meta *session.Meta, req SubmitStructuredPromptResponseRequest) (SubmitStructuredPromptResponseResponse, error) {
+func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *session.Meta, req SubmitRequestUserInputResponseRequest) (SubmitRequestUserInputResponseResponse, error) {
 	if s == nil {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("nil service")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("nil service")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := requireRWX(meta); err != nil {
-		return SubmitStructuredPromptResponseResponse{}, err
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	threadID := strings.TrimSpace(req.ThreadID)
 	if endpointID == "" || threadID == "" {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("invalid request")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("invalid request")
 	}
 	if s.threadMgr == nil {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("thread manager not ready")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("thread manager not ready")
 	}
 	actor := s.threadMgr.Get(endpointID, threadID)
 	if actor == nil {
-		return SubmitStructuredPromptResponseResponse{}, errors.New("thread actor not ready")
+		return SubmitRequestUserInputResponseResponse{}, errors.New("thread actor not ready")
 	}
-	return actor.SubmitStructuredPromptResponse(ctx, meta, req)
+	return actor.SubmitRequestUserInputResponse(ctx, meta, req)
 }
 
 func isSafeClientMessageID(raw string) bool {

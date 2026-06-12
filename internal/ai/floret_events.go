@@ -27,6 +27,13 @@ type floretEventSink struct {
 	run *run
 }
 
+func floretEventMetadataString(metadata map[string]any, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	return strings.TrimSpace(anyToString(metadata[key]))
+}
+
 func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r := s.run
 	if r == nil {
@@ -66,10 +73,11 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		r.emitContextCompactionEvent("context.compaction.floret", payload)
 	case floretEventContextContinue:
 		r.persistRunEvent("floret.context.continue", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index": ev.Step,
-			"message":    strings.TrimSpace(ev.Message),
-			"detail":     strings.TrimSpace(ev.Result),
-			"metadata":   ev.Metadata,
+			"step_index":          ev.Step,
+			"message":             strings.TrimSpace(ev.Message),
+			"detail":              strings.TrimSpace(ev.Result),
+			"continuation_reason": floretEventMetadataString(ev.Metadata, "continuation_reason"),
+			"metadata":            ev.Metadata,
 		})
 	case floretEventBudgetExceeded:
 		r.persistRunEvent("floret.budget.exceeded", RealtimeStreamKindLifecycle, map[string]any{
@@ -80,9 +88,11 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		r.touchActivity()
 	case floretEventStepEnd:
 		r.persistRunEvent("floret.step.end", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":    ev.Step,
-			"finish_reason": strings.TrimSpace(ev.FinishReason),
-			"metadata":      ev.Metadata,
+			"step_index":          ev.Step,
+			"finish_reason":       strings.TrimSpace(ev.FinishReason),
+			"completion_reason":   floretEventMetadataString(ev.Metadata, "completion_reason"),
+			"continuation_reason": floretEventMetadataString(ev.Metadata, "continuation_reason"),
+			"metadata":            ev.Metadata,
 		})
 	case floretEventRunEnd:
 		r.persistRunEvent("floret.run.end", RealtimeStreamKindLifecycle, map[string]any{

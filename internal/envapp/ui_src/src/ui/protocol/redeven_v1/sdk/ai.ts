@@ -19,8 +19,7 @@ export type AIRequestUserInputChoice = {
   choiceId: string;
   label: string;
   description?: string;
-  kind: 'select' | 'write';
-  inputPlaceholder?: string;
+  kind: 'select';
   actions?: AIRequestUserInputAction[];
 };
 
@@ -39,6 +38,7 @@ export type AIRequestUserInputPrompt = {
   promptId: string;
   messageId: string;
   toolId: string;
+  toolName: string;
   reasonCode?: string;
   requiredFromUser?: string[];
   evidenceRefs?: string[];
@@ -88,7 +88,7 @@ export type AISendUserTurnResponse = {
   appliedExecutionMode?: 'act' | 'plan';
 };
 
-export type AISubmitStructuredPromptResponseRequest = {
+export type AISubmitRequestUserInputResponseRequest = {
   threadId: string;
   model?: string;
   response: AIRequestUserInputResponse;
@@ -109,7 +109,7 @@ export type AISubmitStructuredPromptResponseRequest = {
   sourceFollowupId?: string;
 };
 
-export type AISubmitStructuredPromptResponseResponse = {
+export type AISubmitRequestUserInputResponseResponse = {
   runId: string;
   kind: string;
   consumedWaitingPromptId?: string;

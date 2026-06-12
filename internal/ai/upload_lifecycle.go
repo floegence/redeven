@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"os"
 	"path"
@@ -29,16 +28,6 @@ type resolvedUploadAttachment struct {
 	Name     string
 	MimeType string
 	Size     int64
-}
-
-type persistedUploadBlocks struct {
-	Blocks []json.RawMessage `json:"blocks"`
-}
-
-type persistedUploadBlock struct {
-	Type string `json:"type"`
-	URL  string `json:"url"`
-	Src  string `json:"src"`
 }
 
 func parseUploadIDFromURL(raw string) string {
@@ -146,7 +135,6 @@ func (s *Service) ensureUploadRecord(ctx context.Context, endpointID string, upl
 	}
 	s.mu.Lock()
 	db := s.threadsDB
-	uploadsDir := strings.TrimSpace(s.uploadsDir)
 	persistTO := s.persistOpTO
 	s.mu.Unlock()
 	if db == nil {
@@ -161,36 +149,7 @@ func (s *Service) ensureUploadRecord(ctx context.Context, endpointID string, upl
 	if err == nil {
 		return rec, nil
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return nil, err
-	}
-	meta, dataPath, readErr := readUpload(uploadsDir, uploadID)
-	if readErr != nil {
-		return nil, readErr
-	}
-	createdAt := meta.CreatedAt
-	if createdAt <= 0 {
-		createdAt = time.Now().UnixMilli()
-	}
-	pctx, cancel = context.WithTimeout(ctxOrBackground(ctx), persistTO)
-	err = db.EnsureUpload(pctx, threadstore.UploadRecord{
-		UploadID:          uploadID,
-		EndpointID:        endpointID,
-		StorageRelPath:    filepath.Base(strings.TrimSpace(dataPath)),
-		Name:              strings.TrimSpace(meta.Name),
-		MimeType:          strings.TrimSpace(meta.MimeType),
-		SizeBytes:         meta.Size,
-		State:             threadstore.UploadStateStaged,
-		CreatedAtUnixMs:   createdAt,
-		DeleteAfterUnixMs: createdAt + uploadStagedTTL.Milliseconds(),
-	})
-	cancel()
-	if err != nil {
-		return nil, err
-	}
-	pctx, cancel = context.WithTimeout(ctxOrBackground(ctx), persistTO)
-	defer cancel()
-	return db.GetUpload(pctx, endpointID, uploadID)
+	return nil, err
 }
 
 func ctxOrBackground(ctx context.Context) context.Context {
@@ -269,11 +228,8 @@ func (s *Service) removeUploadArtifacts(rec threadstore.UploadRecord) error {
 		dataRelPath = uploadID + ".data"
 	}
 	dataPath := filepath.Join(uploadsDir, filepath.Base(dataRelPath))
-	metaPath := filepath.Join(uploadsDir, uploadID+".json")
-	for _, path := range []string{dataPath, metaPath} {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return err
-		}
+	if err := os.Remove(dataPath); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	return nil
 }
@@ -395,135 +351,4 @@ func (s *Service) scheduleThreadstoreCompaction(reason string) {
 			s.log.Info("ai threadstore compacted", "reason", reason, "free_bytes", plan.FreeBytes, "freelist_pages", plan.FreelistCount, "incremental", plan.UseIncremental)
 		}
 	}()
-}
-
-func (s *Service) backfillLegacyThreadUploadRefs(ctx context.Context, endpointID string, threadID string) error {
-	if s == nil {
-		return errors.New("nil service")
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return errors.New("invalid request")
-	}
-	s.mu.Lock()
-	db := s.threadsDB
-	persistTO := s.persistOpTO
-	s.mu.Unlock()
-	if db == nil {
-		return errors.New("threads store not ready")
-	}
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
-	beforeID := int64(0)
-	for {
-		pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-		msgs, nextBeforeID, hasMore, err := db.ListMessages(pctx, endpointID, threadID, 500, beforeID)
-		cancel()
-		if err != nil {
-			return err
-		}
-		for _, msg := range msgs {
-			uploadIDs, err := s.collectUploadIDsFromPersistedMessage(ctx, endpointID, msg.MessageJSON)
-			if err != nil {
-				return err
-			}
-			if len(uploadIDs) == 0 {
-				continue
-			}
-			pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-			err = db.BindUploadsToRef(pctx, endpointID, threadID, threadstore.UploadRefKindMessage, msg.MessageID, uploadIDs, msg.CreatedAtUnixMs)
-			cancel()
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-		}
-		if !hasMore {
-			break
-		}
-		beforeID = nextBeforeID
-	}
-	for _, lane := range []string{threadstore.FollowupLaneQueued, threadstore.FollowupLaneDraft} {
-		pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-		followups, err := db.ListFollowupsByLane(pctx, endpointID, threadID, lane, 500)
-		cancel()
-		if err != nil {
-			return err
-		}
-		for _, rec := range followups {
-			uploadIDs, err := s.collectUploadIDsFromAttachments(ctx, endpointID, unmarshalQueuedTurnAttachments(rec.AttachmentsJSON))
-			if err != nil {
-				return err
-			}
-			if len(uploadIDs) == 0 {
-				continue
-			}
-			pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-			err = db.BindUploadsToRef(pctx, endpointID, threadID, threadstore.UploadRefKindQueuedTurn, rec.QueueID, uploadIDs, rec.CreatedAtUnixMs)
-			cancel()
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (s *Service) collectUploadIDsFromPersistedMessage(ctx context.Context, endpointID string, raw string) ([]string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, nil
-	}
-	var carrier persistedUploadBlocks
-	if err := json.Unmarshal([]byte(raw), &carrier); err != nil {
-		return nil, nil
-	}
-	uploadIDs := make([]string, 0, len(carrier.Blocks))
-	for _, blockRaw := range carrier.Blocks {
-		var block persistedUploadBlock
-		if err := json.Unmarshal(blockRaw, &block); err != nil {
-			continue
-		}
-		url := strings.TrimSpace(block.URL)
-		if url == "" {
-			url = strings.TrimSpace(block.Src)
-		}
-		uploadID := parseUploadIDFromURL(url)
-		if uploadID == "" {
-			continue
-		}
-		if _, err := s.ensureUploadRecord(ctx, endpointID, uploadID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				continue
-			}
-			if strings.Contains(strings.ToLower(err.Error()), "not found") {
-				continue
-			}
-			return nil, err
-		}
-		uploadIDs = append(uploadIDs, uploadID)
-	}
-	return uniqueStrings(uploadIDs), nil
-}
-
-func (s *Service) collectUploadIDsFromAttachments(ctx context.Context, endpointID string, attachments []RunAttachmentIn) ([]string, error) {
-	uploadIDs := make([]string, 0, len(attachments))
-	for _, item := range attachments {
-		uploadID := parseUploadIDFromURL(item.URL)
-		if uploadID == "" {
-			continue
-		}
-		if _, err := s.ensureUploadRecord(ctx, endpointID, uploadID); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				continue
-			}
-			if strings.Contains(strings.ToLower(err.Error()), "not found") {
-				continue
-			}
-			return nil, err
-		}
-		uploadIDs = append(uploadIDs, uploadID)
-	}
-	return uniqueStrings(uploadIDs), nil
 }

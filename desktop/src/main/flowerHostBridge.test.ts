@@ -247,12 +247,6 @@ function validInputRequestResponse(): Record<string, unknown> {
               },
             ],
           },
-          {
-            choice_id: 'other',
-            label: 'Other',
-            kind: 'write',
-            input_placeholder: 'Type target name',
-          },
         ],
       },
     ],

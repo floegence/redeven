@@ -388,7 +388,7 @@ func interactionPayloadFromToolBlock(block ToolCallBlock) map[string]any {
 		}
 	}
 	if result, ok := block.Result.(map[string]any); ok {
-		for _, key := range []string{"questions", "source", "reason_code", "required_from_user", "evidence_refs", "interaction_contract", "waiting_prompt", "waiting_user", "summary"} {
+		for _, key := range []string{"questions", "source", "reason_code", "required_from_user", "evidence_refs", "waiting_prompt", "waiting_user", "summary"} {
 			if value, exists := result[key]; exists {
 				payload[key] = value
 			}

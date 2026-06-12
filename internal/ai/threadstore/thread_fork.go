@@ -276,7 +276,7 @@ VALUES(?, ?, ?, '', ?, ?, ?)
 func copyForkStructuredInputsTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, messageIDMap map[string]string) error {
 	rows, err := tx.QueryContext(ctx, `
 SELECT response_message_id, prompt_id, tool_id, reason_code, question_id, header, question_text,
-       selected_option_id, selected_option_label, answers_json, public_summary, contains_secret, created_at_unix_ms
+       selected_choice_id, selected_choice_label, response_text, public_summary, contains_secret, created_at_unix_ms
 FROM structured_user_inputs
 WHERE endpoint_id = ? AND thread_id = ?
 ORDER BY id ASC
@@ -296,11 +296,11 @@ ORDER BY id ASC
 		var questionText string
 		var selectedChoiceID string
 		var selectedChoiceLabel string
-		var answersJSON string
+		var responseText string
 		var publicSummary string
 		var containsSecret int
 		var createdAt int64
-		if err := rows.Scan(&responseMessageID, &promptID, &toolID, &reasonCode, &questionID, &header, &questionText, &selectedChoiceID, &selectedChoiceLabel, &answersJSON, &publicSummary, &containsSecret, &createdAt); err != nil {
+		if err := rows.Scan(&responseMessageID, &promptID, &toolID, &reasonCode, &questionID, &header, &questionText, &selectedChoiceID, &selectedChoiceLabel, &responseText, &publicSummary, &containsSecret, &createdAt); err != nil {
 			return err
 		}
 		nextResponseID := mappedForkID(responseMessageID, messageIDMap)
@@ -311,9 +311,9 @@ ORDER BY id ASC
 INSERT INTO structured_user_inputs(
   endpoint_id, thread_id, response_message_id,
   prompt_id, tool_id, reason_code, question_id, header, question_text,
-  selected_option_id, selected_option_label, answers_json, public_summary, contains_secret, created_at_unix_ms
+  selected_choice_id, selected_choice_label, response_text, public_summary, contains_secret, created_at_unix_ms
 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, req.EndpointID, req.DestinationThreadID, nextResponseID, strings.TrimSpace(promptID), strings.TrimSpace(toolID), strings.TrimSpace(reasonCode), strings.TrimSpace(questionID), strings.TrimSpace(header), strings.TrimSpace(questionText), strings.TrimSpace(selectedChoiceID), strings.TrimSpace(selectedChoiceLabel), strings.TrimSpace(answersJSON), strings.TrimSpace(publicSummary), containsSecret, createdAt); err != nil {
+`, req.EndpointID, req.DestinationThreadID, nextResponseID, strings.TrimSpace(promptID), strings.TrimSpace(toolID), strings.TrimSpace(reasonCode), strings.TrimSpace(questionID), strings.TrimSpace(header), strings.TrimSpace(questionText), strings.TrimSpace(selectedChoiceID), strings.TrimSpace(selectedChoiceLabel), strings.TrimSpace(responseText), strings.TrimSpace(publicSummary), containsSecret, createdAt); err != nil {
 			return err
 		}
 	}

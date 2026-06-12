@@ -177,8 +177,8 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 		if strings.TrimSpace(reqString(req, "model")) != "kimi-k2.6" {
 			t.Fatalf("model=%q, want kimi-k2.6", reqString(req, "model"))
 		}
-		if got := extractOpenAIToolNames(req); len(got) != 1 || got[0] != structuredClassifierRunPolicyToolName {
-			t.Fatalf("tool_names=%v, want [%s]", got, structuredClassifierRunPolicyToolName)
+		if got := extractOpenAIToolNames(req); len(got) != 1 || got[0] != "ask_user" {
+			t.Fatalf("tool_names=%v, want [ask_user]", got)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -194,14 +194,14 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 					"message": map[string]any{
 						"role":              "assistant",
 						"content":           "",
-						"reasoning_content": "Use the tool payload as the classifier result.",
+						"reasoning_content": "Ask the user for the next decision.",
 						"tool_calls": []any{
 							map[string]any{
-								"id":   "emit_run_policy:0",
+								"id":   "ask_user:0",
 								"type": "function",
 								"function": map[string]any{
-									"name":      structuredClassifierRunPolicyToolName,
-									"arguments": `{"intent":"task","reason":"guided_structured_interaction_requested","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.95,"interaction_contract":{"enabled":true,"reason":"guided_option_interaction","single_question_per_turn":true,"fixed_choices_required":true,"open_text_fallback_required":true,"indirect_questions_only":true,"confidence":0.95}}`,
+									"name":      "ask_user",
+									"arguments": `{"questions":[{"id":"direction","header":"Direction","question":"Which direction should I take?","is_secret":false,"response_mode":"select","choices_exhaustive":true,"choices":[{"choice_id":"a","label":"Option A","kind":"select"}]}],"reason_code":"user_decision_required","required_from_user":["Choose the next direction."],"evidence_refs":[]}`,
 								},
 							},
 						},
@@ -232,9 +232,9 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 	result, err := direct.Turn(context.Background(), TurnRequest{
 		Model: "kimi-k2.6",
 		Messages: []Message{
-			{Role: "user", Content: []ContentPart{{Type: "text", Text: "classify this objective"}}},
+			{Role: "user", Content: []ContentPart{{Type: "text", Text: "ask the user"}}},
 		},
-		Tools: []ToolDef{runPolicyClassifierToolDef()},
+		Tools: []ToolDef{{Name: "ask_user"}},
 	})
 	if err != nil {
 		t.Fatalf("Turn: %v", err)
@@ -242,17 +242,17 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 	if result.FinishReason != "tool_calls" {
 		t.Fatalf("finish_reason=%q, want tool_calls", result.FinishReason)
 	}
-	if strings.TrimSpace(result.Reasoning) != "Use the tool payload as the classifier result." {
+	if strings.TrimSpace(result.Reasoning) != "Ask the user for the next decision." {
 		t.Fatalf("reasoning=%q", result.Reasoning)
 	}
 	if len(result.ToolCalls) != 1 {
 		t.Fatalf("tool_calls=%d, want 1", len(result.ToolCalls))
 	}
-	if result.ToolCalls[0].Name != structuredClassifierRunPolicyToolName {
-		t.Fatalf("tool_name=%q, want %q", result.ToolCalls[0].Name, structuredClassifierRunPolicyToolName)
+	if result.ToolCalls[0].Name != "ask_user" {
+		t.Fatalf("tool_name=%q, want ask_user", result.ToolCalls[0].Name)
 	}
-	if got := strings.TrimSpace(anyString(result.ToolCalls[0].Args["intent"])); got != RunIntentTask {
-		t.Fatalf("tool_args=%v, want intent=task", result.ToolCalls[0].Args)
+	if got := strings.TrimSpace(anyString(result.ToolCalls[0].Args["reason_code"])); got != AskUserReasonUserDecisionRequired {
+		t.Fatalf("tool_args=%v, want reason_code=%s", result.ToolCalls[0].Args, AskUserReasonUserDecisionRequired)
 	}
 }
 

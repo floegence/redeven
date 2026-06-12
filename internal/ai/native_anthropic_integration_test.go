@@ -18,9 +18,8 @@ import (
 )
 
 type anthropicMock struct {
-	token           string
-	classifierToken string
-	responses       []anthropicMockResponse
+	token     string
+	responses []anthropicMockResponse
 
 	mu               sync.Mutex
 	sawMessages      bool
@@ -55,48 +54,6 @@ func (m *anthropicMock) handle(w http.ResponseWriter, r *http.Request) {
 	_ = r.Body.Close()
 	var req map[string]any
 	_ = json.Unmarshal(body, &req)
-
-	if isIntentClassifierRequest(req) {
-		respToken := strings.TrimSpace(m.classifierToken)
-		if respToken == "" {
-			respToken = classifyIntentResponseToken(req)
-		}
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.Header().Set("Cache-Control", "no-store")
-		w.WriteHeader(http.StatusOK)
-		f, ok := w.(http.Flusher)
-		if !ok {
-			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
-			return
-		}
-		writeAnthropicSSEJSON(w, f, map[string]any{
-			"type":    "message_start",
-			"message": map[string]any{},
-		})
-		writeAnthropicSSEJSON(w, f, map[string]any{
-			"type":          "content_block_start",
-			"index":         0,
-			"content_block": map[string]any{"type": "text", "text": ""},
-		})
-		writeAnthropicSSEJSON(w, f, map[string]any{
-			"type":  "content_block_delta",
-			"index": 0,
-			"delta": map[string]any{"type": "text_delta", "text": respToken},
-		})
-		writeAnthropicSSEJSON(w, f, map[string]any{
-			"type":  "content_block_stop",
-			"index": 0,
-		})
-		writeAnthropicSSEJSON(w, f, map[string]any{
-			"type":  "message_delta",
-			"delta": map[string]any{"stop_reason": "end_turn", "stop_sequence": nil},
-			"usage": map[string]any{"output_tokens": 1},
-		})
-		writeAnthropicSSEJSON(w, f, map[string]any{
-			"type": "message_stop",
-		})
-		return
-	}
 
 	toolNames := make([]string, 0, 8)
 	if rawTools, ok := req["tools"].([]any); ok {
@@ -304,7 +261,7 @@ func TestIntegration_NativeSDK_Anthropic_Stream_Succeeds(t *testing.T) {
 	}
 }
 
-func TestIntegration_NativeSDK_Anthropic_CreativeLengthContinuationSucceeds(t *testing.T) {
+func TestIntegration_NativeSDK_Anthropic_LengthContinuationSucceeds(t *testing.T) {
 	t.Parallel()
 
 	mock := &anthropicMock{
@@ -318,12 +275,12 @@ func TestIntegration_NativeSDK_Anthropic_CreativeLengthContinuationSucceeds(t *t
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "creative", "", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "length continuation", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_test_native_anthropic_creative_length_1"
+	runID := "run_test_native_anthropic_length_1"
 	rr := httptest.NewRecorder()
 	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
@@ -368,17 +325,32 @@ func TestIntegration_NativeSDK_Anthropic_CreativeLengthContinuationSucceeds(t *t
 	if err != nil {
 		t.Fatalf("ListRunEvents: %v", err)
 	}
-	continuation := findRunEventPayload(t, runEvents.Events, "reply.continuation_requested")
+	var continuation map[string]any
+	for _, event := range runEvents.Events {
+		if event.EventType != "floret.step.end" {
+			continue
+		}
+		payload, ok := event.Payload.(map[string]any)
+		if !ok {
+			t.Fatalf("run event %q payload type=%T, want map[string]any", event.EventType, event.Payload)
+		}
+		if strings.TrimSpace(fmt.Sprint(payload["finish_reason"])) == "length" {
+			continuation = payload
+			break
+		}
+	}
+	if continuation == nil {
+		t.Fatalf("missing floret.step.end length event")
+	}
 	if got := strings.TrimSpace(fmt.Sprint(continuation["finish_reason"])); got != "length" {
 		t.Fatalf("continuation finish_reason=%q, want length", got)
 	}
 }
 
-func TestIntegration_NativeSDK_Anthropic_HybridFallbackContentFilterFails(t *testing.T) {
+func TestIntegration_NativeSDK_Anthropic_ContentFilterFails(t *testing.T) {
 	t.Parallel()
 
 	mock := &anthropicMock{
-		classifierToken: "not-json",
 		responses: []anthropicMockResponse{
 			{Text: "PARTIAL_STORY", StopReason: "refusal"},
 		},
@@ -388,21 +360,21 @@ func TestIntegration_NativeSDK_Anthropic_HybridFallbackContentFilterFails(t *tes
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "fallback blocked", "", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "content filter", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_test_native_anthropic_hybrid_blocked_1"
+	runID := "run_test_native_anthropic_content_filter_1"
 	rr := httptest.NewRecorder()
 	err = svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "请你输出一个5000字的故事"},
-		Options:  RunOptions{MaxSteps: 2, MaxNoToolRounds: 1},
+		Options:  RunOptions{MaxSteps: 2},
 	}, rr)
 	if err == nil {
-		t.Fatalf("StartRun should fail for content-filtered hybrid fallback")
+		t.Fatalf("StartRun should fail for content-filtered response")
 	}
 	if !strings.Contains(err.Error(), `finish_reason="content_filter"`) {
 		t.Fatalf("StartRun error=%q, want content_filter", err)
@@ -423,13 +395,6 @@ func TestIntegration_NativeSDK_Anthropic_HybridFallbackContentFilterFails(t *tes
 	if err != nil {
 		t.Fatalf("ListRunEvents: %v", err)
 	}
-	classified := findRunEventPayload(t, runEvents.Events, "intent.classified")
-	if got := strings.TrimSpace(fmt.Sprint(classified["intent_source"])); got != RunIntentSourceDeterministic {
-		t.Fatalf("intent_source=%q, want %q", got, RunIntentSourceDeterministic)
-	}
-	if got := strings.TrimSpace(fmt.Sprint(classified["execution_contract"])); got != RunExecutionContractHybridFirstTurn {
-		t.Fatalf("execution_contract=%q, want %q", got, RunExecutionContractHybridFirstTurn)
-	}
 	nativeResult := findRunEventPayload(t, runEvents.Events, "native.turn.result")
 	if got := strings.TrimSpace(fmt.Sprint(nativeResult["finish_reason"])); got != "content_filter" {
 		t.Fatalf("finish_reason=%q, want content_filter", got)
@@ -440,11 +405,10 @@ func TestIntegration_NativeSDK_Anthropic_HybridFallbackContentFilterFails(t *tes
 	}
 }
 
-func TestIntegration_NativeSDK_Anthropic_HybridFallbackLengthContinuationSucceeds(t *testing.T) {
+func TestIntegration_NativeSDK_Anthropic_IdentityLengthContinuationCompletesWithNaturalStop(t *testing.T) {
 	t.Parallel()
 
 	mock := &anthropicMock{
-		classifierToken: "not-json",
 		responses: []anthropicMockResponse{
 			{Text: "FIRST_PART", StopReason: "max_tokens"},
 			{Text: "SECOND_PART", StopReason: "end_turn"},
@@ -455,18 +419,18 @@ func TestIntegration_NativeSDK_Anthropic_HybridFallbackLengthContinuationSucceed
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "fallback continuation", "", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "identity continuation", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_test_native_anthropic_hybrid_length_1"
+	runID := "run_test_native_anthropic_identity_length_1"
 	rr := httptest.NewRecorder()
 	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "你是谁"},
-		Options:  RunOptions{MaxSteps: 4, MaxNoToolRounds: 1},
+		Options:  RunOptions{MaxSteps: 4},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
@@ -501,10 +465,8 @@ func TestIntegration_NativeSDK_Anthropic_HybridFallbackLengthContinuationSucceed
 	if err != nil {
 		t.Fatalf("ListRunEvents: %v", err)
 	}
-	for _, ev := range runEvents.Events {
-		if strings.TrimSpace(ev.EventType) != "execution.contract.promoted" {
-			continue
-		}
-		t.Fatalf("hybrid fallback continuation should not promote to agentic_loop, payload=%+v", ev.Payload)
+	endPayload := findRunEventPayload(t, runEvents.Events, "run.end")
+	if got := strings.TrimSpace(fmt.Sprint(endPayload["finalization_reason"])); got != "natural_stop" {
+		t.Fatalf("finalization_reason=%q, want %q", got, "natural_stop")
 	}
 }
