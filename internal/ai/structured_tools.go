@@ -75,14 +75,6 @@ type ExitPlanModeResult struct {
 	Summary       string                  `json:"summary,omitempty"`
 }
 
-type RuntimeCloseout struct {
-	Result       string   `json:"result"`
-	EvidenceRefs []string `json:"evidence_refs,omitempty"`
-	Risks        []string `json:"remaining_risks,omitempty"`
-	NextActions  []string `json:"next_actions,omitempty"`
-	Source       string   `json:"source"`
-}
-
 func mapToolFilePathError(err error) error {
 	switch {
 	case err == nil:

@@ -1,27 +1,14 @@
-import { For, Show, createMemo, createSignal } from 'solid-js';
+import { For, Show, createMemo } from 'solid-js';
 import type { Component, JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 
 import {
-  getSelectedAskUserChoice,
-  ASK_USER_SELECT_OR_WRITE_DEFAULT_LABEL,
-  ASK_USER_SELECT_OR_WRITE_DEFAULT_PLACEHOLDER,
-  ASK_USER_WRITE_DEFAULT_PLACEHOLDER,
-  normalizeAskUserDraft,
-  normalizeAskUserDraftForQuestion,
   normalizeAskUserQuestions,
-  questionHasDraftAnswer,
-  questionInputPlaceholder,
-  questionRequiresText,
-  questionSupportsAutoSubmit,
-  questionUsesDirectWriteInput,
-  type AskUserDraft,
   type AskUserQuestion,
 } from '../askUserContract';
 import { useChatContext } from '../ChatProvider';
 import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
 import type { ActivityItem } from '../types';
-import { useAIChatContext } from '../../pages/AIChatContext';
 import { useI18n } from '../../i18n';
 import { ActivityDetailPanel } from './ActivityDetailPanel';
 import type { ActivityDetailLoadState } from './activityDetailTypes';
@@ -46,30 +33,6 @@ export const ActivityChipList: Component<{ chips?: ActivityItem['chips'] }> = (p
 const stopLocalEvent: JSX.EventHandlerUnion<HTMLElement, Event> = (event) => {
   event.stopPropagation();
 };
-
-function localizedQuestionInputPlaceholder(
-  i18n: ReturnType<typeof useI18n>,
-  question: AskUserQuestion,
-  draft: AskUserDraft | undefined | null,
-): string {
-  const fallback = questionInputPlaceholder(question, draft);
-  if (fallback && fallback !== ASK_USER_WRITE_DEFAULT_PLACEHOLDER && fallback !== ASK_USER_SELECT_OR_WRITE_DEFAULT_PLACEHOLDER) {
-    return fallback;
-  }
-  if (question.isSecret) {
-    return i18n.t('chatActivity.enterSecretValue');
-  }
-  return question.responseMode === 'select_or_write'
-    ? i18n.t('chatActivity.typeAnotherAnswer')
-    : i18n.t('chatActivity.typeYourAnswer');
-}
-
-function localizedQuestionWriteLabel(i18n: ReturnType<typeof useI18n>, question: AskUserQuestion): string {
-  if (!question.writeLabel || question.writeLabel === ASK_USER_SELECT_OR_WRITE_DEFAULT_LABEL) {
-    return i18n.t('chatActivity.noneOfTheAbove');
-  }
-  return question.writeLabel;
-}
 
 const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem }> = (props) => {
   const ctx = useChatContext();
@@ -104,161 +67,41 @@ const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem
   );
 };
 
-const ActivityAskUserItem: Component<{ messageId: string; item: ActivityItem }> = (props) => {
-  const ai = useAIChatContext();
-  const i18n = useI18n();
-  const [submitting, setSubmitting] = createSignal(false);
-  const [submitError, setSubmitError] = createSignal('');
-  const activeThreadId = createMemo(() => String(ai.activeThreadId() ?? '').trim());
-  const waitingPrompt = createMemo(() => ai.activeThreadWaitingPrompt());
-  const waitingPromptId = createMemo(() => String(waitingPrompt()?.promptId ?? '').trim());
-  const payloadQuestions = createMemo(() => normalizeAskUserQuestions(props.item.payload?.questions));
-  const interactiveAllowed = createMemo(() => {
-    const prompt = waitingPrompt();
-    if (!prompt) return false;
-    return String(prompt.messageId ?? '').trim() === props.messageId
-      && String(prompt.toolId ?? '').trim() === String(props.item.toolId ?? '').trim();
-  });
-  const questions = createMemo(() => {
-    const prompt = waitingPrompt();
-    if (interactiveAllowed() && Array.isArray(prompt?.questions) && prompt.questions.length > 0) {
-      return prompt.questions;
-    }
-    return payloadQuestions();
-  });
-  const promptDrafts = createMemo(() => {
-    const tid = activeThreadId();
-    const promptId = waitingPromptId();
-    return tid && promptId ? ai.getStructuredPromptDrafts(tid, promptId) : {};
-  });
-  const controlsDisabled = createMemo(() => submitting() || !interactiveAllowed());
-  const waitingUnavailable = createMemo(() => (props.item.status === 'waiting' || props.item.status === 'waiting_approval') && !interactiveAllowed());
-  const unansweredQuestions = createMemo(() => questions().filter((question) => !questionHasDraftAnswer(question, promptDrafts()[question.id])));
-  const canSubmit = createMemo(() => interactiveAllowed() && unansweredQuestions().length === 0 && !submitting());
-
-  const setQuestionDraft = (questionId: string, next: AskUserDraft) => {
-    const tid = activeThreadId();
-    const promptId = waitingPromptId();
-    if (!tid || !promptId) return;
-    setSubmitError('');
-    ai.setStructuredPromptDraft(tid, promptId, questionId, normalizeAskUserDraft(next));
-  };
-
-  const submit = async () => {
-    if (!canSubmit()) return;
-    const tid = activeThreadId();
-    const promptId = waitingPromptId();
-    if (!tid || !promptId) return;
-    setSubmitting(true);
-    setSubmitError('');
-    try {
-      await ai.submitStructuredPromptResponse({ threadId: tid, promptId, answers: promptDrafts() });
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : String(error));
-      setSubmitting(false);
-    }
-  };
+const ActivityAskUserItem: Component<{ item: ActivityItem }> = (props) => {
+  const questions = createMemo(() => normalizeAskUserQuestions(props.item.payload?.questions));
+  const writeLabel = (question: AskUserQuestion) => String(question.writeLabel ?? '').trim();
 
   return (
-    <div
-      class={cn('chat-activity-input-request', !interactiveAllowed() && 'chat-activity-input-request-resolved')}
-      onClick={stopLocalEvent}
-      onKeyDown={stopLocalEvent}
-    >
+    <Show when={questions().length > 0}>
+      <div class="chat-activity-user-input-audit" onClick={stopLocalEvent} onKeyDown={stopLocalEvent}>
       <For each={questions()}>
         {(question: AskUserQuestion) => {
-          const draft = createMemo(() => normalizeAskUserDraftForQuestion(question, promptDrafts()[question.id]));
-          const selectedChoice = createMemo(() => getSelectedAskUserChoice(question, draft()));
-          const writeSelected = createMemo(() => question.responseMode === 'write' || (!!draft().writeSelected && !draft().choiceId));
-          const showChoiceList = createMemo(() => !questionUsesDirectWriteInput(question) && question.choices.length > 0);
-          const showTextInput = createMemo(() => questionRequiresText(question, draft()));
-          const autoSubmit = createMemo(() => questionSupportsAutoSubmit(question, questions().length));
-          const selectChoice = (choice: AskUserQuestion['choices'][number]) => {
-            setQuestionDraft(question.id, { choiceId: choice.choiceId, text: draft().text, writeSelected: undefined });
-            if (autoSubmit()) queueMicrotask(() => { void submit(); });
-          };
           return (
-            <div class="chat-activity-input-question">
-              <div class="chat-activity-input-question-text">{question.question}</div>
-              <Show when={showChoiceList()}>
-                <div class="chat-activity-input-options" role="radiogroup" aria-label={question.header}>
+            <div class="chat-activity-user-input-question">
+              <div class="chat-activity-user-input-question-text">{question.question}</div>
+              <Show when={question.choices.length > 0 || writeLabel(question)}>
+                <div class="chat-activity-user-input-choices">
                   <For each={question.choices}>
                     {(choice) => (
-                      <label class={cn(
-                        'chat-activity-input-option',
-                        draft().choiceId === choice.choiceId && 'chat-activity-input-option-selected',
-                        controlsDisabled() && 'chat-activity-input-option-disabled',
-                      )}>
-                        <input
-                          type="radio"
-                          name={`activity-reply-${props.item.toolId}-${question.id}`}
-                          checked={draft().choiceId === choice.choiceId}
-                          disabled={controlsDisabled()}
-                          onChange={() => selectChoice(choice)}
-                        />
-                        <span>
-                          <span class="chat-activity-input-option-label">{choice.label}</span>
+                      <span class="chat-activity-user-input-choice">
+                        <span class="chat-activity-user-input-choice-label">{choice.label}</span>
                           <Show when={choice.description}>
-                            {(description) => <span class="chat-activity-input-option-description">{description()}</span>}
+                          {(description) => <span class="chat-activity-user-input-choice-description">{description()}</span>}
                           </Show>
-                        </span>
-                      </label>
+                      </span>
                     )}
                   </For>
-                  <Show when={question.responseMode === 'select_or_write'}>
-                    <label class={cn(
-                      'chat-activity-input-option',
-                      writeSelected() && 'chat-activity-input-option-selected',
-                      controlsDisabled() && 'chat-activity-input-option-disabled',
-                    )}>
-                      <input
-                        type="radio"
-                        name={`activity-reply-${props.item.toolId}-${question.id}`}
-                        checked={writeSelected()}
-                        disabled={controlsDisabled()}
-                        onChange={() => setQuestionDraft(question.id, { choiceId: undefined, text: draft().text, writeSelected: true })}
-                      />
-                      <span>
-                        <span class="chat-activity-input-option-label">{localizedQuestionWriteLabel(i18n, question)}</span>
-                        <span class="chat-activity-input-option-description">{i18n.t('chatActivity.typeAnotherAnswer')}</span>
-                      </span>
-                    </label>
+                  <Show when={writeLabel(question)}>
+                    {(label) => <span class="chat-activity-user-input-choice">{label()}</span>}
                   </Show>
                 </div>
-              </Show>
-              <Show when={showTextInput()}>
-                <input
-                  class="chat-activity-input-text"
-                  type={question.isSecret ? 'password' : 'text'}
-                  value={draft().text ?? ''}
-                  placeholder={localizedQuestionInputPlaceholder(i18n, question, draft())}
-                  aria-label={selectedChoice()?.label ? `${question.header} - ${selectedChoice()!.label}` : question.header}
-                  disabled={controlsDisabled()}
-                  onInput={(event) => setQuestionDraft(question.id, { choiceId: undefined, text: event.currentTarget.value, writeSelected: true })}
-                />
               </Show>
             </div>
           );
         }}
       </For>
-      <Show
-        when={interactiveAllowed()}
-        fallback={<div class="chat-activity-input-resolved">{waitingUnavailable() ? i18n.t('chatActivity.inputUnavailable') : i18n.t('chatActivity.inputResolved')}</div>}
-      >
-        <Show when={!questions().some((question) => questionSupportsAutoSubmit(question, questions().length)) || submitError()}>
-          <div class="chat-activity-input-submit-row">
-            <button type="button" class="chat-activity-input-submit" disabled={!canSubmit()} onClick={() => void submit()}>
-              {submitError() ? i18n.t('common.actions.retry') : i18n.t('chatActivity.continue')}
-            </button>
-            <span class={cn('chat-activity-input-hint', submitError() && 'chat-activity-input-hint-error')}>
-              {submitError() || (unansweredQuestions().length > 0
-                ? i18n.tn('chatActivity.answerMoreQuestions', unansweredQuestions().length)
-                : i18n.t('chatActivity.readyToContinue'))}
-            </span>
-          </div>
-        </Show>
-      </Show>
-    </div>
+      </div>
+    </Show>
   );
 };
 
@@ -329,7 +172,7 @@ export const ActivityItemRow: Component<{
             {(description) => <div class="chat-activity-item-description">{description()}</div>}
           </Show>
           <Show when={props.item.renderer === 'blocking_prompt' || props.item.toolName === 'ask_user'}>
-            <ActivityAskUserItem messageId={props.messageId} item={props.item} />
+            <ActivityAskUserItem item={props.item} />
           </Show>
         </div>
         <div class="chat-activity-item-actions" onClick={stopLocalEvent} onKeyDown={stopLocalEvent}>

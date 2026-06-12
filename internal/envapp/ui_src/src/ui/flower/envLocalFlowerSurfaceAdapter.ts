@@ -340,10 +340,10 @@ function mapWaitingPrompt(prompt: ThreadWaitingPrompt | undefined): FlowerInputR
           const choiceID = trim(choice.choice_id);
           const label = trim(choice.label);
           const kind = trim(choice.kind);
-          if (!choiceID || !label || (kind !== 'select' && kind !== 'write')) {
+          if (!choiceID || !label || kind !== 'select') {
             flowerContractError(`waiting_prompt.questions[${questionIndex}].choices[${choiceIndex}] is incomplete.`);
           }
-          const normalizedKind: 'select' | 'write' = kind;
+          const normalizedKind: 'select' = kind;
           const actions = (choice.actions ?? [])
             .map((action, actionIndex) => {
               const type = trim(action.type);
@@ -401,7 +401,8 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
   const threadID = trim(thread.thread_id);
   const title = trim(thread.title) || trim(thread.last_message_preview) || 'Ask Flower';
   const envLabel = trim(options.envLabel) || copy.currentEnvironment;
-  const inputRequest = mapWaitingPrompt(thread.waiting_prompt);
+  const status = runStatus(thread.run_status);
+  const inputRequest = status === 'waiting_user' ? mapWaitingPrompt(thread.waiting_prompt) : null;
   return {
     thread_id: threadID,
     title,
@@ -413,7 +414,7 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
     origin_env_public_id: trim(options.envPublicID) || undefined,
     created_at_ms: unixMs(thread.created_at_unix_ms, 'thread.created_at_unix_ms'),
     updated_at_ms: unixMs(thread.updated_at_unix_ms ?? thread.last_message_at_unix_ms, 'thread.updated_at_unix_ms'),
-    status: runStatus(thread.run_status),
+    status,
     source_label: envLabel,
     target_labels: [envLabel],
     messages,
@@ -606,7 +607,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const promptID = trim(input.prompt_id);
       if (!tid) throw new Error(adapterCopy(options).missingThreadID);
       if (!promptID) throw new Error('Missing input prompt id.');
-      await options.rpc.ai.submitStructuredPromptResponse({
+      await options.rpc.ai.submitRequestUserInputResponse({
         threadId: tid,
         response: {
           promptId: promptID,

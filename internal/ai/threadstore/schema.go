@@ -237,7 +237,8 @@ func migrateThreadstoreToV25(tx *sql.Tx) error {
 }
 
 func migrateThreadstoreToV26(tx *sql.Tx) error {
-	return migrateLegacyToolCallTranscriptBlocksTx(tx)
+	_ = tx
+	return nil
 }
 
 func migrateThreadstoreToV27(tx *sql.Tx) error {
@@ -513,9 +514,9 @@ CREATE TABLE IF NOT EXISTS structured_user_inputs (
   question_id TEXT NOT NULL,
   header TEXT NOT NULL DEFAULT '',
   question_text TEXT NOT NULL DEFAULT '',
-  selected_option_id TEXT NOT NULL DEFAULT '',
-  selected_option_label TEXT NOT NULL DEFAULT '',
-  answers_json TEXT NOT NULL DEFAULT '[]',
+  selected_choice_id TEXT NOT NULL DEFAULT '',
+  selected_choice_label TEXT NOT NULL DEFAULT '',
+  response_text TEXT NOT NULL DEFAULT '',
   public_summary TEXT NOT NULL DEFAULT '',
   contains_secret INTEGER NOT NULL DEFAULT 0,
   created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
@@ -1058,8 +1059,8 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		},
 		"structured_user_inputs": {
 			"id", "endpoint_id", "thread_id", "response_message_id", "prompt_id", "tool_id",
-			"reason_code", "question_id", "header", "question_text", "selected_option_id",
-			"selected_option_label", "answers_json", "public_summary", "contains_secret",
+			"reason_code", "question_id", "header", "question_text", "selected_choice_id",
+			"selected_choice_label", "response_text", "public_summary", "contains_secret",
 			"created_at_unix_ms",
 		},
 		"request_user_input_secret_answers": {

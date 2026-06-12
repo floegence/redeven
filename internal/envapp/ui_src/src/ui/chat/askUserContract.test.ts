@@ -1,163 +1,96 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  normalizeAskUserQuestions,
-  questionCanAutofillFromComposer,
-  questionHasDraftAnswer,
-  questionRequiresText,
-} from './askUserContract';
+import { normalizeAskUserQuestions } from './askUserContract';
 
 describe('askUserContract', () => {
-  it('normalizes legacy is_other prompts into select_or_write with a standardized write fallback', () => {
+  it('normalizes canonical select questions', () => {
     const [question] = normalizeAskUserQuestions([
       {
-        id: 'question-1',
-        header: 'Situation',
-        question: 'Choose the closest situation.',
-        is_other: true,
-        options: [
-          { option_id: 'working', label: 'Already working' },
-          { option_id: 'studying', label: 'Studying full time' },
+        id: 'target',
+        header: 'Environment',
+        question: 'Which environment should Flower inspect?',
+        response_mode: 'select',
+        choices: [
+          { choice_id: 'staging', label: 'Staging', kind: 'select' },
+          { choice_id: 'production', label: 'Production', description: 'Live environment', kind: 'select' },
         ],
       },
     ]);
 
     expect(question).toEqual({
-      id: 'question-1',
-      header: 'Situation',
-      question: 'Choose the closest situation.',
+      id: 'target',
+      header: 'Environment',
+      question: 'Which environment should Flower inspect?',
       isSecret: false,
-      responseMode: 'select_or_write',
-      writeLabel: 'None of the above',
-      writePlaceholder: 'Type another answer',
+      responseMode: 'select',
       choices: [
-        { choiceId: 'working', label: 'Already working', kind: 'select', description: undefined, actions: undefined },
-        { choiceId: 'studying', label: 'Studying full time', kind: 'select', description: undefined, actions: undefined },
+        { choiceId: 'staging', label: 'Staging', kind: 'select', description: undefined, actions: undefined },
+        { choiceId: 'production', label: 'Production', kind: 'select', description: 'Live environment', actions: undefined },
       ],
     });
   });
 
-  it('preserves legacy write fallback when select choices exceed the display cap', () => {
+  it('normalizes canonical select_or_write questions only with explicit write metadata', () => {
     const [question] = normalizeAskUserQuestions([
       {
-        id: 'question-1',
-        header: 'Situation',
-        question: 'Choose the closest situation.',
-        is_other: true,
-        options: [
-          { option_id: 'one', label: 'One' },
-          { option_id: 'two', label: 'Two' },
-          { option_id: 'three', label: 'Three' },
-          { option_id: 'four', label: 'Four' },
-          { option_id: 'five', label: 'Five' },
+        id: 'target',
+        header: 'Environment',
+        question: 'Which environment should Flower inspect?',
+        response_mode: 'select_or_write',
+        write_label: 'Another environment',
+        write_placeholder: 'Type an environment name',
+        choices: [
+          { choice_id: 'staging', label: 'Staging', kind: 'select' },
         ],
       },
     ]);
 
     expect(question.responseMode).toBe('select_or_write');
-    expect(question.writeLabel).toBe('None of the above');
-    expect(question.writePlaceholder).toBe('Type another answer');
-    expect(question.choices.map((choice) => choice.label)).toEqual(['One', 'Two', 'Three', 'Four']);
+    expect(question.writeLabel).toBe('Another environment');
+    expect(question.writePlaceholder).toBe('Type an environment name');
+    expect(question.choices.map((choice) => choice.choiceId)).toEqual(['staging']);
   });
 
-  it('normalizes legacy option detail modes into a question-level write fallback', () => {
-    const [question] = normalizeAskUserQuestions([
+  it('ignores non-select choices', () => {
+    expect(normalizeAskUserQuestions([
       {
-        id: 'question-1',
-        header: 'Situation',
-        question: 'Choose the closest situation.',
-        options: [
-          { option_id: 'working', label: 'Already working' },
-          {
-            option_id: 'other',
-            label: 'Other',
-            detail_input_mode: 'optional',
-            detail_input_placeholder: 'Describe your current situation',
-          },
+        id: 'target',
+        header: 'Environment',
+        question: 'Which environment should Flower inspect?',
+        response_mode: 'select_or_write',
+        write_label: 'Another environment',
+        write_placeholder: 'Type an environment name',
+        choices: [
+          { choice_id: 'staging', label: 'Staging', kind: 'select' },
+          { choice_id: 'other', label: 'Other', kind: 'custom' },
         ],
       },
-    ]);
-
-    expect(question).toEqual({
-      id: 'question-1',
-      header: 'Situation',
-      question: 'Choose the closest situation.',
+    ])).toEqual([{
+      id: 'target',
+      header: 'Environment',
+      question: 'Which environment should Flower inspect?',
       isSecret: false,
       responseMode: 'select_or_write',
-      writeLabel: 'Other',
-      writePlaceholder: 'Describe your current situation',
+      writeLabel: 'Another environment',
+      writePlaceholder: 'Type an environment name',
       choices: [
-        { choiceId: 'working', label: 'Already working', kind: 'select', description: undefined, actions: undefined },
+        { choiceId: 'staging', label: 'Staging', description: undefined, kind: 'select', actions: undefined },
       ],
-    });
+    }]);
   });
 
-  it('uses the canonical localized write fallback when a write choice omits its label', () => {
-    const [question] = normalizeAskUserQuestions([
+  it('rejects camelCase prompt aliases at the Flower wire boundary', () => {
+    expect(normalizeAskUserQuestions([
       {
-        id: 'question-1',
-        header: 'Situation',
-        question: 'Choose the closest situation.',
-        response_mode: 'select_or_write',
+        id: 'target',
+        header: 'Environment',
+        question: 'Which environment should Flower inspect?',
+        responseMode: 'select',
+        isSecret: true,
         choices: [
-          { choice_id: 'working', label: 'Already working', kind: 'select' },
-          { choice_id: 'other', kind: 'write' },
+          { choiceId: 'staging', label: 'Staging', kind: 'select' },
         ],
       },
-    ]);
-
-    expect(question.responseMode).toBe('select_or_write');
-    expect(question.writeLabel).toBe('None of the above');
-    expect(question.writePlaceholder).toBe('Type another answer');
-    expect(question.choices.map((choice) => choice.label)).toEqual(['Already working']);
-  });
-
-  it('only autofills composer text when the question is direct-write or the write path is selected', () => {
-    const [mixedQuestion] = normalizeAskUserQuestions([
-      {
-        id: 'question-1',
-        header: 'Situation',
-        question: 'Choose the closest situation.',
-        response_mode: 'select_or_write',
-        write_label: 'None of the above',
-        write_placeholder: 'Type another answer',
-        choices: [
-          { choice_id: 'working', label: 'Already working', kind: 'select' },
-        ],
-      },
-    ]);
-    const [directWriteQuestion] = normalizeAskUserQuestions([
-      {
-        id: 'question-2',
-        header: 'Clarify',
-        question: 'What should Flower inspect next?',
-        response_mode: 'write',
-        write_placeholder: 'Type your answer',
-      },
-    ]);
-
-    expect(questionCanAutofillFromComposer(mixedQuestion, undefined)).toBe(false);
-    expect(questionCanAutofillFromComposer(mixedQuestion, { writeSelected: true })).toBe(true);
-    expect(questionCanAutofillFromComposer(directWriteQuestion, undefined)).toBe(true);
-  });
-
-  it('requires text before a write path counts as answered', () => {
-    const [question] = normalizeAskUserQuestions([
-      {
-        id: 'question-1',
-        header: 'Situation',
-        question: 'Choose the closest situation.',
-        response_mode: 'select_or_write',
-        write_label: 'Other',
-        write_placeholder: 'Describe your current situation',
-        choices: [
-          { choice_id: 'working', label: 'Already working', kind: 'select' },
-        ],
-      },
-    ]);
-
-    expect(questionRequiresText(question, { writeSelected: true })).toBe(true);
-    expect(questionHasDraftAnswer(question, { writeSelected: true })).toBe(false);
-    expect(questionHasDraftAnswer(question, { writeSelected: true, text: 'Working and studying part time' })).toBe(true);
+    ])).toEqual([]);
   });
 });

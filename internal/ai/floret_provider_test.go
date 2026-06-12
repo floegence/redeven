@@ -2,11 +2,13 @@ package ai
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"testing"
 
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
+	openai "github.com/openai/openai-go"
 )
 
 type recordingFlowerProvider struct {
@@ -16,6 +18,31 @@ type recordingFlowerProvider struct {
 func (p *recordingFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, _ func(StreamEvent)) (TurnResult, error) {
 	p.req = req
 	return TurnResult{FinishReason: "stop", Text: "ok"}, nil
+}
+
+type replayingFlowerProvider struct {
+	requests []TurnRequest
+}
+
+func (p *replayingFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, _ func(StreamEvent)) (TurnResult, error) {
+	p.requests = append(p.requests, req)
+	if len(p.requests) == 1 {
+		return TurnResult{}, &openai.Error{
+			StatusCode: http.StatusBadRequest,
+			Code:       "invalid_previous_response_id",
+			Param:      "previous_response_id",
+			Type:       "invalid_request_error",
+			Message:    "invalid previous_response_id",
+		}
+	}
+	return TurnResult{
+		FinishReason: "stop",
+		Text:         "ok",
+		ProviderState: &TurnProviderState{
+			ContinuationKind: providerContinuationKindOpenAIResponses,
+			ContinuationID:   "resp_next",
+		},
+	}, nil
 }
 
 func TestFloretProviderAdapter_DisableReasoningControlsProviderRequest(t *testing.T) {
@@ -89,6 +116,55 @@ func TestFloretProviderAdapter_UsesProjectedPreviousState(t *testing.T) {
 	}
 	if len(recorder.req.Messages) != 1 || messageTextForFloret(recorder.req.Messages[0], true) != "resume turn" {
 		t.Fatalf("messages=%#v, want projected resume history", recorder.req.Messages)
+	}
+}
+
+func TestFloretProviderAdapter_ReplaysWithoutRejectedPreviousResponseID(t *testing.T) {
+	t.Parallel()
+
+	recorder := &replayingFlowerProvider{}
+	adapter := newFloretProviderAdapter(
+		recorder,
+		"openai",
+		"gpt-5-mini",
+		"act",
+		ProviderControls{},
+		TurnBudgets{MaxSteps: 1},
+		"",
+		[]flruntime.TranscriptMessage{{Role: "user", Content: "resume turn"}},
+		nil,
+	)
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		Step:            1,
+		Model:           "gpt-5-mini",
+		Messages:        []flruntime.ModelMessage{{Role: "user", Content: "full history"}},
+		PreviousState:   &flruntime.ModelState{Kind: providerContinuationKindOpenAIResponses, ID: "resp_prev"},
+		MaxOutputTokens: 64,
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	var terminal *flruntime.ModelEvent
+	for event := range stream {
+		if event.Type == flruntime.ModelEventDone {
+			ev := event
+			terminal = &ev
+		}
+	}
+	if len(recorder.requests) != 2 {
+		t.Fatalf("request count=%d, want 2", len(recorder.requests))
+	}
+	if got := recorder.requests[0].ProviderControls.PreviousResponseID; got != "resp_prev" {
+		t.Fatalf("first PreviousResponseID=%q, want resp_prev", got)
+	}
+	if got := recorder.requests[1].ProviderControls.PreviousResponseID; got != "" {
+		t.Fatalf("replay PreviousResponseID=%q, want empty", got)
+	}
+	if len(recorder.requests[1].Messages) != 1 || messageTextForFloret(recorder.requests[1].Messages[0], true) != "full history" {
+		t.Fatalf("replay messages=%#v, want full projected history", recorder.requests[1].Messages)
+	}
+	if terminal == nil || terminal.ResponseState == nil || terminal.ResponseState.ID != "resp_next" {
+		t.Fatalf("terminal event=%#v, want resp_next state", terminal)
 	}
 }
 

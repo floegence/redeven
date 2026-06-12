@@ -312,7 +312,6 @@ func NewService(opts Options) (*Service, error) {
 	if svc.threadTitleCoordinator != nil {
 		svc.threadTitleCoordinator.ScheduleRecovery()
 	}
-	svc.scheduleLegacyWorkspaceCheckpointSweep()
 	svc.startBackgroundMaintenance()
 	return svc, nil
 }
@@ -1365,7 +1364,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			return
 		}
 		runStatus, runStatusErr := deriveThreadRunState(r.getEndReason(), r.getFinalizationReason(), retErr)
-		waitingPrompt := finalWaitingPromptForRunState(runStatus, r.snapshotWaitingPrompt(), assistantJSON)
+		waitingPrompt := waitingPromptForRunState(runStatus, r.snapshotWaitingPrompt())
 		if prepared.updateThreadRunState != nil {
 			prepared.updateThreadRunState(runStatus, runStatusErr, waitingPrompt)
 		}
@@ -1421,97 +1420,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		r.persistRunEvent("flower.context_action.received", RealtimeStreamKindLifecycle, payload)
 	}
 
-	structuredResponseContinuation := req.Input.StructuredResponse != nil && strings.TrimSpace(existingOpenGoal) != ""
-	policyDecision := classifyRunPolicy(effectiveCurrentInput.PublicText, req.Input.Attachments, existingOpenGoal, structuredResponseContinuation, func() (runPolicyDecision, error) {
-		decision, classifyErr := s.classifyRunPolicyByModel(ctx, resolvedModel, effectiveCurrentInput.PublicText, existingOpenGoal, structuredResponseContinuation)
-		if classifyErr != nil && r.log != nil {
-			r.log.Warn("model policy classification failed",
-				"thread_id", threadID,
-				"run_id", runID,
-				"model", model,
-				"error", classifyErr,
-			)
-		}
-		return decision, classifyErr
-	})
-	requestedExecutionContract := normalizeExecutionContractValue(req.Options.ExecutionContract)
-	if requestedExecutionContract == RunExecutionContractAgenticLoop {
-		policyDecision.Intent = RunIntentTask
-		policyDecision.ObjectiveMode = RunObjectiveModeReplace
-		if policyDecision.Reason = strings.TrimSpace(policyDecision.Reason); policyDecision.Reason == "" {
-			policyDecision.Reason = "requested_agentic_loop"
-		}
-	}
-	req.Options.Intent = policyDecision.Intent
-	req.Options.Complexity = normalizeTaskComplexity(policyDecision.Complexity)
-	req.Options.TodoPolicy = normalizeTodoPolicy(policyDecision.TodoPolicy)
-	req.Options.MinimumTodoItems = normalizeMinimumTodoItems(req.Options.TodoPolicy, policyDecision.MinimumTodoItems)
-
-	// open_goal is only updated by task intent explicit user input.
-	// social intent keeps existing open_goal unchanged.
 	openGoal := strings.TrimSpace(existingOpenGoal)
-	if req.Options.Intent == RunIntentTask && effectiveCurrentInput.PublicText != "" {
-		if existingOpenGoal != "" && strings.TrimSpace(policyDecision.ObjectiveMode) == RunObjectiveModeContinue {
-			openGoal = strings.TrimSpace(existingOpenGoal)
-		} else {
-			openGoal = effectiveCurrentInput.PublicText
-		}
-	}
-	interactionContractSeed := normalizeInteractionContract(req.Input.InteractionContractSeed)
-	if !interactionContractSeed.Enabled {
-		interactionContractSeed = normalizeInteractionContract(policyDecision.InteractionContract)
-	}
-	var interactionMeta interactionContractClassificationMetadata
-	policyDecision.InteractionContract, interactionMeta = resolveInteractionContractWithMetadata(
-		req.Options.Intent,
-		interactionContractSeed,
-		structuredResponseContinuation,
-	)
-	req.Options.ExecutionContract = normalizeExecutionContract(
-		executionContractForPolicyDecision(policyDecision, requestedExecutionContract),
-		req.Options.Intent,
-		policyDecision.ObjectiveMode,
-		req.Options.Complexity,
-		req.Options.TodoPolicy,
-		policyDecision.InteractionContract,
-	)
-	interactionPayload := policyDecision.InteractionContract.eventPayload()
-	interactionPayload["classification_mode"] = interactionMeta.Mode
-	interactionPayload["seed_reused"] = interactionMeta.SeedReused
-	interactionPayload["structured_response_continuation"] = interactionMeta.StructuredResponseContinuation
-	r.persistRunEvent("interaction.contract.classified", RealtimeStreamKindLifecycle, interactionPayload)
-	r.persistRunEvent("intent.classified", RealtimeStreamKindLifecycle, map[string]any{
-		"intent":                           policyDecision.Intent,
-		"execution_contract":               req.Options.ExecutionContract,
-		"requested_execution_contract":     requestedExecutionContract,
-		"reason":                           policyDecision.Reason,
-		"source":                           policyDecision.Source,
-		"objective_mode":                   policyDecision.ObjectiveMode,
-		"intent_source":                    policyDecision.Source,
-		"intent_reason":                    policyDecision.Reason,
-		"mode":                             req.Options.Mode,
-		"structured_response_continuation": structuredResponseContinuation,
-	})
-	r.persistRunEvent("policy.classified", RealtimeStreamKindLifecycle, map[string]any{
-		"intent":                           req.Options.Intent,
-		"execution_contract":               req.Options.ExecutionContract,
-		"requested_execution_contract":     requestedExecutionContract,
-		"complexity":                       req.Options.Complexity,
-		"todo_policy":                      req.Options.TodoPolicy,
-		"minimum_todo_items":               req.Options.MinimumTodoItems,
-		"source":                           policyDecision.Source,
-		"reason":                           policyDecision.Reason,
-		"confidence":                       policyDecision.Confidence,
-		"structured_response_continuation": structuredResponseContinuation,
-	})
-	r.persistRunEvent("intent.routed", RealtimeStreamKindLifecycle, map[string]any{
-		"path":                         req.Options.ExecutionContract,
-		"intent":                       req.Options.Intent,
-		"execution_contract":           req.Options.ExecutionContract,
-		"requested_execution_contract": requestedExecutionContract,
-		"source":                       policyDecision.Source,
-		"reason":                       policyDecision.Reason,
-	})
 	effectiveInput := req.Input
 
 	userMsgID := ""
@@ -1614,14 +1523,13 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	historyForRun := promptPackToHistory(promptPack, effectiveCurrentInput.PublicText)
 
 	runReq := RunRequest{
-		Model:               model,
-		Objective:           strings.TrimSpace(openGoal),
-		History:             historyForRun,
-		Input:               effectiveInput,
-		Options:             req.Options,
-		ContextPack:         promptPack,
-		ModelCapability:     modelCapability,
-		InteractionContract: normalizeInteractionContract(policyDecision.InteractionContract),
+		Model:           model,
+		Objective:       strings.TrimSpace(openGoal),
+		History:         historyForRun,
+		Input:           effectiveInput,
+		Options:         req.Options,
+		ContextPack:     promptPack,
+		ModelCapability: modelCapability,
 	}
 	runErr := r.run(ctx, runReq)
 	finalErr := runErr
@@ -1698,16 +1606,14 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	if db != nil {
 		continuationCtx, cancelContinuation := context.WithTimeout(context.Background(), persistTO)
 		continuationCandidate := r.getProviderContinuationCandidate()
-		if syncErr := syncThreadProviderContinuationAfterRun(continuationCtx, db, endpointID, threadID, finalReason, continuationCandidate); syncErr != nil && finalErr == nil {
+		if syncErr := syncThreadProviderContinuationAfterRun(continuationCtx, db, endpointID, threadID, continuationCandidate); syncErr != nil && finalErr == nil {
 			finalErr = syncErr
 		} else if syncErr == nil {
 			eventType := "provider.continuation.cleared"
 			payload := map[string]any{
 				"finalization_reason": finalReason,
 			}
-			if shouldClearThreadState(finalReason) {
-				payload["reason"] = "thread_completed"
-			} else if continuationCandidate.IsZero() {
+			if continuationCandidate.IsZero() {
 				payload["reason"] = "no_candidate"
 			} else {
 				eventType = "provider.continuation.persisted"
@@ -1722,22 +1628,11 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		}
 		cancelContinuation()
 	}
-	finalExecutionContract := r.getExecutionContract()
-	if finalExecutionContract == "" {
-		finalExecutionContract = normalizeExecutionContract(
-			req.Options.ExecutionContract,
-			req.Options.Intent,
-			policyDecision.ObjectiveMode,
-			req.Options.Complexity,
-			req.Options.TodoPolicy,
-			policyDecision.InteractionContract,
-		)
-	}
 	if s.contextRepo != nil {
 		stateCtx, cancelState := context.WithTimeout(context.Background(), persistTO)
-		if shouldClearOpenGoalAfterRun(existingOpenGoal, policyDecision, finalExecutionContract, finalReason) {
+		if shouldClearOpenGoalAfterRun(existingOpenGoal, finalReason) {
 			_ = s.contextRepo.SetOpenGoal(stateCtx, endpointID, threadID, "")
-		} else if shouldPersistOpenGoalAfterRun(finalExecutionContract, finalReason) && strings.TrimSpace(openGoal) != "" {
+		} else if shouldPersistOpenGoalAfterRun(finalReason) && strings.TrimSpace(openGoal) != "" {
 			_ = s.contextRepo.SetOpenGoal(stateCtx, endpointID, threadID, openGoal)
 		}
 		cancelState()
@@ -1934,72 +1829,46 @@ func (s *Service) resolvedDesktopModelSourceDefaultModel(ctx context.Context) (s
 	return "", false
 }
 
-func (s *Service) classifyRunPolicyByModel(ctx context.Context, resolved resolvedRunModel, userInput string, openGoal string, structuredResponse bool) (runPolicyDecision, error) {
-	if s == nil {
-		return runPolicyDecision{}, errors.New("nil service")
-	}
-	adapter, _, err := s.initStructuredOutputProvider(resolved)
-	if err != nil {
-		return runPolicyDecision{}, err
-	}
-
-	intentCtx := ctx
-	cancel := func() {}
-	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
-		intentCtx, cancel = context.WithTimeout(ctx, 12*time.Second)
-	}
-	defer cancel()
-
-	result, err := runStructuredClassifierTurn(intentCtx, adapter, strings.TrimSpace(resolved.ModelName), buildRunPolicyClassifierMessages(userInput, openGoal, structuredResponse), runPolicyClassifierToolDef(), structuredClassifierDefaultMaxOutputTokens)
-	if err != nil {
-		return runPolicyDecision{}, err
-	}
-	return parseModelRunPolicyDecision(structuredClassifierResultPayload(result, structuredClassifierRunPolicyToolName))
-}
-
 func shouldClearThreadState(finalReason string) bool {
 	switch strings.TrimSpace(finalReason) {
-	case "task_complete", "task_complete_forced":
+	case "task_complete", "natural_stop":
 		return true
 	default:
 		return false
 	}
 }
 
-func syncThreadProviderContinuationAfterRun(ctx context.Context, db *threadstore.Store, endpointID string, threadID string, finalReason string, continuation threadstore.ThreadProviderContinuation) error {
+func syncThreadProviderContinuationAfterRun(ctx context.Context, db *threadstore.Store, endpointID string, threadID string, continuation threadstore.ThreadProviderContinuation) error {
 	if db == nil {
 		return nil
 	}
-	if shouldClearThreadState(finalReason) || continuation.IsZero() {
+	if continuation.IsZero() {
 		return db.ClearThreadProviderContinuation(ctx, endpointID, threadID)
 	}
 	return db.SetThreadProviderContinuation(ctx, endpointID, threadID, continuation)
 }
 
-func shouldPersistOpenGoalAfterRun(executionContract string, finalReason string) bool {
+func shouldPersistOpenGoalAfterRun(finalReason string) bool {
 	if shouldClearThreadState(finalReason) {
 		return false
 	}
 	if classifyFinalizationReason(finalReason) == finalizationClassWaitingUser {
 		return true
 	}
-	return normalizeExecutionContractValue(executionContract) == RunExecutionContractAgenticLoop
+	return false
 }
 
-func shouldClearOpenGoalAfterRun(existingOpenGoal string, policy runPolicyDecision, executionContract string, finalReason string) bool {
+func shouldClearOpenGoalAfterRun(existingOpenGoal string, finalReason string) bool {
 	if shouldClearThreadState(finalReason) {
 		return true
 	}
-	if shouldPersistOpenGoalAfterRun(executionContract, finalReason) {
+	if shouldPersistOpenGoalAfterRun(finalReason) {
 		return false
 	}
 	if strings.TrimSpace(existingOpenGoal) == "" {
 		return false
 	}
-	if normalizeRunIntent(policy.Intent) != RunIntentTask {
-		return false
-	}
-	return normalizeObjectiveMode(policy.ObjectiveMode) == RunObjectiveModeReplace
+	return classifyFinalizationReason(finalReason) == finalizationClassSuccess
 }
 
 func promptPackToHistory(pack contextmodel.PromptPack, currentUserInput string) []RunHistoryMsg {

@@ -51,7 +51,7 @@ func TestMemoryExtractor_BlockerCreatedForFailedToolSpan(t *testing.T) {
 		RunID:              "run_1",
 		Objective:          "Fix build",
 		AssistantText:      "I found one blocked step.",
-		FinalizationReason: "implicit_complete_backpressure",
+		FinalizationReason: "blocked_no_user_interaction",
 	})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)
@@ -129,7 +129,7 @@ func TestMemoryExtractor_BlockerClearedIfToolSucceededInSameRun(t *testing.T) {
 		RunID:              "run_1",
 		Objective:          "Fix build",
 		AssistantText:      "I found one blocked step.",
-		FinalizationReason: "implicit_complete_backpressure",
+		FinalizationReason: "blocked_no_user_interaction",
 	})
 	if err != nil {
 		t.Fatalf("Extract: %v", err)

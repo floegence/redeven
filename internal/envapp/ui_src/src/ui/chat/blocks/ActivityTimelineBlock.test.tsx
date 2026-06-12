@@ -9,13 +9,6 @@ import type { ActivityTimelineBlock as ActivityTimelineBlockType } from '../type
 const approveToolCallMock = vi.hoisted(() => vi.fn());
 const fetchGatewayJSONMock = vi.hoisted(() => vi.fn());
 const writeTextToClipboardMock = vi.hoisted(() => vi.fn());
-const aiContextMock = vi.hoisted(() => ({
-  activeThreadId: vi.fn(() => 'thread_1'),
-  activeThreadWaitingPrompt: vi.fn(() => null),
-  getStructuredPromptDrafts: vi.fn(() => ({})),
-  setStructuredPromptDraft: vi.fn(),
-  submitStructuredPromptResponse: vi.fn(),
-}));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
@@ -25,10 +18,6 @@ vi.mock('../ChatProvider', () => ({
   useChatContext: () => ({
     approveToolCall: approveToolCallMock,
   }),
-}));
-
-vi.mock('../../pages/AIChatContext', () => ({
-  useAIChatContext: () => aiContextMock,
 }));
 
 vi.mock('../../services/gatewayApi', () => ({
@@ -108,11 +97,6 @@ afterEach(() => {
   approveToolCallMock.mockReset();
   fetchGatewayJSONMock.mockReset();
   writeTextToClipboardMock.mockReset();
-  aiContextMock.activeThreadId.mockReturnValue('thread_1');
-  aiContextMock.activeThreadWaitingPrompt.mockReturnValue(null);
-  aiContextMock.getStructuredPromptDrafts.mockReturnValue({});
-  aiContextMock.setStructuredPromptDraft.mockReset();
-  aiContextMock.submitStructuredPromptResponse.mockReset();
   document.body.innerHTML = '';
 });
 
@@ -583,7 +567,7 @@ describe('ActivityTimelineBlock', () => {
     expect(host.textContent).toContain('ok');
   });
 
-  it('does not call a still-waiting ask_user prompt resolved when active prompt data is missing', () => {
+  it('renders waiting ask_user activity as readonly status without local controls', () => {
     const block = baseBlock({
       summary: { status: 'waiting', totalItems: 1, visibleItems: 1, label: '1 input request' },
       groups: [{
@@ -617,7 +601,8 @@ describe('ActivityTimelineBlock', () => {
     const host = renderActivity(block);
 
     expect(host.textContent).toContain('Choose next step');
-    expect(host.textContent).toContain('Input unavailable');
-    expect(host.textContent).not.toContain('Input resolved');
+    const audit = host.querySelector('.chat-activity-user-input-audit');
+    expect(audit).not.toBeNull();
+    expect(audit?.querySelectorAll('input, textarea, button')).toHaveLength(0);
   });
 });

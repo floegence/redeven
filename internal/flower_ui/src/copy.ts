@@ -235,6 +235,7 @@ export type FlowerSurfaceCopy = Readonly<{
     inputRequestAnswerRequired?: string;
     inputRequestSubmitting?: string;
     inputRequestComposerPlaceholder?: string;
+    inputRequestChoicePlaceholder?: string;
     conversationsAria: string;
     resizeConversationsLabel: string;
     entryLabel: string;
@@ -281,13 +282,14 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     },
     toolApprovalRequired: 'Approval required',
     toolApprovalState: (state) => `Approval: ${state}`,
-    inputRequestTitle: 'Flower needs your input',
-    inputRequestDescription: 'Answer this structured prompt so Flower can continue the same run.',
+    inputRequestTitle: 'Waiting for your reply',
+    inputRequestDescription: 'Reply in the composer to continue this conversation.',
     inputRequestSubmit: 'Continue',
     inputRequestRetry: 'Retry',
-    inputRequestAnswerRequired: 'Answer every question before continuing.',
+    inputRequestAnswerRequired: 'Answer the waiting prompt before continuing.',
     inputRequestSubmitting: 'Submitting...',
-    inputRequestComposerPlaceholder: 'Answer the prompt above to continue this conversation.',
+    inputRequestComposerPlaceholder: 'Reply to continue this conversation.',
+    inputRequestChoicePlaceholder: 'Choose an option to continue.',
     conversationsAria: 'Flower conversations',
     resizeConversationsLabel: 'Resize conversations',
     entryLabel: 'Flower',

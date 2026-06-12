@@ -150,7 +150,6 @@ type run struct {
 	providerContinuation     threadstore.ThreadProviderContinuation
 
 	finalizationReason string
-	executionContract  string
 	currentModelID     string
 
 	webSearchToolEnabled bool
@@ -443,25 +442,6 @@ func (r *run) getProviderContinuationCandidate() threadstore.ThreadProviderConti
 	r.muAssistant.Lock()
 	defer r.muAssistant.Unlock()
 	return r.providerContinuation.Normalized()
-}
-
-func (r *run) setExecutionContract(contract string) {
-	if r == nil {
-		return
-	}
-	r.muCancel.Lock()
-	r.executionContract = normalizeExecutionContractValue(contract)
-	r.muCancel.Unlock()
-}
-
-func (r *run) getExecutionContract() string {
-	if r == nil {
-		return ""
-	}
-	r.muCancel.Lock()
-	v := normalizeExecutionContractValue(r.executionContract)
-	r.muCancel.Unlock()
-	return v
 }
 
 func (r *run) recordRuntimeToolCall() {
@@ -967,7 +947,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		ctx = context.Background()
 	}
 	r.setFinalizationReason("")
-	r.setExecutionContract(req.Options.ExecutionContract)
 	startedAt := time.Now()
 	r.persistRunRecord(RunStateRunning, "", "", startedAt.UnixMilli(), 0)
 	runStartPayload := map[string]any{
@@ -990,18 +969,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		eventType := "run.error"
 		finalizationReason := strings.TrimSpace(r.getFinalizationReason())
 		finalizationClass := classifyFinalizationReason(finalizationReason)
-		executionContract := r.getExecutionContract()
-		if executionContract == "" {
-			executionContract = normalizeExecutionContract(
-				req.Options.ExecutionContract,
-				req.Options.Intent,
-				RunObjectiveModeReplace,
-				req.Options.Complexity,
-				req.Options.TodoPolicy,
-				req.InteractionContract,
-			)
-		}
-		completionContract := completionContractForExecutionContract(executionContract)
 		switch endReason {
 		case "complete":
 			switch finalizationClass {
@@ -1019,7 +986,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				state = RunStateFailed
 				errCode = string(aitools.ErrorCodeUnknown)
 				if errMsg == "" {
-					errMsg = "Run ended without explicit completion."
+					errMsg = "Run ended without a recognized finalization reason."
 				}
 				eventType = "run.error"
 			}
@@ -1051,15 +1018,11 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 			"error":               errMsg,
 			"finalization_reason": finalizationReason,
 			"finalization_class":  finalizationClass,
-			"execution_contract":  executionContract,
-			"completion_contract": completionContract,
 		})
 		r.debug("ai.run.end",
 			"end_reason", endReason,
 			"finalization_reason", finalizationReason,
 			"finalization_class", finalizationClass,
-			"execution_contract", executionContract,
-			"completion_contract", completionContract,
 			"cancel_reason", strings.TrimSpace(r.getCancelReason()),
 			"duration_ms", time.Since(startedAt).Milliseconds(),
 			"state", string(state),
@@ -1311,16 +1274,6 @@ func (r *run) assistantMarkdownTextSnapshot() string {
 		parts = append(parts, txt)
 	}
 	return strings.TrimSpace(strings.Join(parts, "\n\n"))
-}
-
-func (r *run) canonicalAssistantMarkdownOrFallback(fallback string) string {
-	if r == nil {
-		return normalizeCanonicalMarkdownText(fallback)
-	}
-	if current := normalizeCanonicalMarkdownText(r.assistantMarkdownTextSnapshot()); current != "" {
-		return current
-	}
-	return normalizeCanonicalMarkdownText(fallback)
 }
 
 func normalizeCanonicalMarkdownText(text string) string {
@@ -2785,7 +2738,6 @@ func (r *run) snapshotWaitingPrompt() *RequestUserInputPrompt {
 	if len(r.assistantBlocks) == 0 {
 		return nil
 	}
-	var fallbackPrompt *RequestUserInputPrompt
 	for i := len(r.assistantBlocks) - 1; i >= 0; i-- {
 		prompt, waitingUser := extractAskUserPromptSnapshot(r.assistantBlocks[i], messageID)
 		if prompt == nil {
@@ -2794,11 +2746,8 @@ func (r *run) snapshotWaitingPrompt() *RequestUserInputPrompt {
 		if waitingUser {
 			return prompt
 		}
-		if fallbackPrompt == nil {
-			fallbackPrompt = prompt
-		}
 	}
-	return fallbackPrompt
+	return nil
 }
 
 func parseWebSearchResult(result any) (websearch.SearchResult, bool) {

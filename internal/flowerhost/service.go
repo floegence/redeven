@@ -449,7 +449,7 @@ func (s *Service) SubmitInput(ctx context.Context, req ChatSubmitInputRequest) (
 	if len(response.Answers) == 0 {
 		return SubmitChatInputResponse{}, newServiceError(http.StatusBadRequest, "input_answer_invalid", "Flower input answer is required.")
 	}
-	if _, err := s.ai.SubmitStructuredPromptResponse(ctx, s.Meta(), ai.SubmitStructuredPromptResponseRequest{
+	if _, err := s.ai.SubmitRequestUserInputResponse(ctx, s.Meta(), ai.SubmitRequestUserInputResponseRequest{
 		ThreadID: threadID,
 		Response: response,
 		Options:  flowerHostRunOptions(),
@@ -1467,7 +1467,7 @@ func validInputResponseMode(mode string) bool {
 
 func validInputChoiceKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "select", "write":
+	case "select":
 		return true
 	default:
 		return false
@@ -1893,8 +1893,7 @@ func flowerHostToolAllowlist() []string {
 
 func flowerHostRunOptions() ai.RunOptions {
 	return ai.RunOptions{
-		MaxSteps:          24,
-		ToolAllowlist:     flowerHostToolAllowlist(),
-		ExecutionContract: ai.RunExecutionContractAgenticLoop,
+		MaxSteps:      24,
+		ToolAllowlist: flowerHostToolAllowlist(),
 	}
 }

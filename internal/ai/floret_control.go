@@ -85,47 +85,26 @@ func (p floretControlProjector) projectAskUser(call ToolCall) (flruntime.TurnSig
 	if signal.Question == "" {
 		signal.Question = "I need clarification to continue safely."
 	}
-	state := runtimeState{}
-	if p.state != nil {
-		state = p.state.snapshot()
-	}
-	pass, reason := evaluateAskUserGate(signal, state, p.complexity)
-	if !pass && reason == "pending_todos_without_blocker" && state.TodoTrackingEnabled && state.TodoOpenCount > 0 {
-		pass = true
-		reason = "ok_waiting_todo_closeout"
-	}
+	reason := validateAskUserSignal(signal)
+	pass := reason == ""
 	if p.run != nil {
 		p.run.persistRunEvent("ask_user.attempt", RealtimeStreamKindLifecycle, map[string]any{
-			"source":                       "model_signal",
-			"gate_passed":                  pass,
-			"gate_reason":                  reason,
-			"contract_error":               signal.ContractError,
-			"question_len":                 len([]rune(strings.TrimSpace(signal.Question))),
-			"questions_count":              len(signal.Questions),
-			"choices_count":                requestUserInputQuestionChoiceCount(signal.Questions),
-			"reason_code":                  signal.ReasonCode,
-			"required_inputs_count":        len(signal.RequiredFromUser),
-			"evidence_refs_count":          len(signal.EvidenceRefs),
-			"validation_mode":              "deterministic_contract_state",
-			"complexity":                   p.complexity,
-			"todo_tracking":                state.TodoTrackingEnabled,
-			"todo_open_count":              state.TodoOpenCount,
-			"interaction_contract_enabled": normalizeInteractionContract(state.InteractionContract).Enabled,
+			"source":                "model_signal",
+			"gate_passed":           pass,
+			"gate_reason":           reason,
+			"contract_error":        signal.ContractError,
+			"question_len":          len([]rune(strings.TrimSpace(signal.Question))),
+			"questions_count":       len(signal.Questions),
+			"choices_count":         requestUserInputQuestionChoiceCount(signal.Questions),
+			"reason_code":           signal.ReasonCode,
+			"required_inputs_count": len(signal.RequiredFromUser),
+			"evidence_refs_count":   len(signal.EvidenceRefs),
+			"validation_mode":       "canonical_control_signal",
+			"complexity":            p.complexity,
 		})
 	}
 	if !pass {
-		return flruntime.TurnSignal{
-			Disposition: flruntime.SignalContinue,
-			Name:        "ask_user",
-			CallID:      strings.TrimSpace(call.ID),
-			Payload: map[string]any{
-				"rejected":       true,
-				"gate_reason":    reason,
-				"contract_error": signal.ContractError,
-				"source":         "model_signal",
-			},
-			OutputText: askUserRejectionText(reason, signal.ContractError),
-		}, nil
+		return flruntime.TurnSignal{}, errors.New(askUserValidationError(reason, signal.ContractError))
 	}
 	payload := map[string]any{
 		"source":             "model_signal",
@@ -155,13 +134,7 @@ func (p floretControlProjector) projectExitPlanMode(call ToolCall) (flruntime.Tu
 	}
 	result, err := p.run.toolExitPlanMode(strings.TrimSpace(call.ID), args)
 	if err != nil {
-		return flruntime.TurnSignal{
-			Disposition: flruntime.SignalContinue,
-			Name:        "exit_plan_mode",
-			CallID:      strings.TrimSpace(call.ID),
-			Payload:     map[string]any{"error": err.Error()},
-			OutputText:  "exit_plan_mode failed. Regenerate a concise reason and call exit_plan_mode again if act mode is still required.",
-		}, nil
+		return flruntime.TurnSignal{}, err
 	}
 	payload := map[string]any{
 		"source":         "exit_plan_mode",
@@ -195,42 +168,31 @@ func flowerToolCallFromFloret(call fltools.ToolCall) (ToolCall, error) {
 	}, nil
 }
 
-func askUserRejectionText(reason string, contractError string) string {
+func askUserValidationError(reason string, contractError string) string {
 	reason = strings.TrimSpace(reason)
 	contractError = strings.TrimSpace(contractError)
-	prefix := "ask_user was rejected. Regenerate the ask_user tool call with this exact canonical shape: questions:[{id,header,question,is_secret,response_mode,choices?,choices_exhaustive?,write_label?,write_placeholder?}], reason_code, required_from_user, evidence_refs. "
+	prefix := "invalid ask_user control signal: "
 	switch reason {
 	case "missing_reason_code":
-		return prefix + "reason_code is missing or invalid; use one of user_decision_required, permission_blocked, missing_external_input, conflicting_constraints, safety_confirmation."
+		return prefix + "reason_code is missing or invalid"
 	case "missing_required_from_user":
-		return prefix + "required_from_user is empty; specify exactly what information or decision is needed from the user."
+		return prefix + "required_from_user is empty"
 	case askUserGateReasonMissingChoices:
-		return prefix + "questions are missing or a choice-based question has no fixed choices. Use response_mode=\"write\" with no choices for direct input, response_mode=\"select\" with choices_exhaustive=true for exhaustive options, or response_mode=\"select_or_write\" with choices_exhaustive=false for options plus typed fallback."
+		return prefix + "questions are missing or a choice-based question has no fixed choices"
 	case askUserGateReasonMissingChoicesExhaustive:
-		return prefix + "a choice-based question omitted choices_exhaustive. Declare whether the fixed options are exhaustive."
+		return prefix + "a choice-based question omitted choices_exhaustive"
 	case askUserGateReasonInconsistentChoiceContract:
-		return prefix + "response_mode and choices_exhaustive disagree. Keep fixed-choice semantics consistent: select=true, select_or_write=false, write=no choices."
-	case askUserGateReasonInteractionShapeMismatch:
-		if contractError != "" {
-			return prefix + "the questions payload is invalid (" + contractError + ") or violates the requested interaction shape. Preserve explicit fixed-option and structured-input requirements."
-		}
-		return prefix + "it violated the user's requested interaction shape. Preserve explicit fixed-option and structured-input requirements."
-	case askUserGateReasonLegacyContractShape:
-		return prefix + "it used the retired options/is_other/detail_input contract. Regenerate with canonical questions[].choices[], response_mode, and choices_exhaustive fields."
+		return prefix + "response_mode and choices_exhaustive disagree"
 	case "missing_evidence_refs":
-		return prefix + "evidence_refs is empty for an evidence-backed reason. Provide concrete evidence refs from tool calls."
-	case "unresolved_evidence_refs":
-		return prefix + "evidence_refs do not match known tool-call records. Use valid tool IDs as evidence refs."
-	case "permission_reason_without_blocked_evidence":
-		return prefix + "reason_code=permission_blocked requires blocked tool evidence."
-	case "pending_todos_without_blocker":
-		return prefix + "todos are still open. Continue execution, or update write_todos to mark blockers before asking the user."
-	case todoRequirementMissingPolicyRequired:
-		return prefix + "the run policy requires todo tracking, but no todo snapshot exists. Call write_todos first, then continue execution."
-	case todoRequirementInsufficientPolicyRequired:
-		return prefix + "the current todo plan is smaller than the required minimum. Expand write_todos first, then continue execution."
+		return prefix + "evidence_refs is empty"
 	default:
-		return prefix + "the contract gate rejected it. Continue autonomously with available tools when possible and call task_complete when done."
+		if contractError != "" {
+			return prefix + contractError
+		}
+		if reason != "" {
+			return prefix + reason
+		}
+		return prefix + "validation failed"
 	}
 }
 

@@ -486,7 +486,6 @@ func runTask(
 
 	runOptions := ai.RunOptions{
 		MaxSteps:                         task.Runtime.MaxSteps,
-		MaxNoToolRounds:                  task.Runtime.MaxNoToolRounds,
 		ReasoningOnly:                    task.Runtime.ReasoningOnly,
 		RequireUserConfirmOnTaskComplete: task.Runtime.RequireUserConfirmOnTaskComplete,
 		NoUserInteraction:                task.Runtime.NoUserInteraction,

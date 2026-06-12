@@ -11,7 +11,7 @@ import {
 } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
-import { useRedevenRpc, type AIRealtimeEvent } from '../protocol/redeven_v1';
+import { useRedevenRpc, type AIRealtimeEvent, type AIRequestUserInputPrompt } from '../protocol/redeven_v1';
 import { useEnvContext } from './EnvContext';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import {
@@ -21,12 +21,9 @@ import {
 } from '../services/uiStorage';
 import { hasRWXPermissions } from './aiPermissions';
 import {
-  normalizeAskUserDraft,
-  normalizeAskUserDraftForQuestion,
   normalizeAskUserQuestions,
   type AskUserAction,
   type AskUserChoice,
-  type AskUserDraft,
   type AskUserQuestion,
 } from '../chat/askUserContract';
 
@@ -102,6 +99,7 @@ export type WaitingPromptView = Readonly<{
   promptId: string;
   messageId: string;
   toolId: string;
+  toolName: string;
   reasonCode?: string;
   requiredFromUser?: string[];
   evidenceRefs?: string[];
@@ -109,8 +107,6 @@ export type WaitingPromptView = Readonly<{
   containsSecret?: boolean;
   questions?: WaitingPromptQuestionView[];
 }>;
-
-export type StructuredPromptAnswerDraft = AskUserDraft;
 
 export type ThreadReadSnapshot = Readonly<{
   last_message_at_unix_ms: number;
@@ -140,7 +136,7 @@ export type ThreadView = Readonly<{
   run_status?: ThreadRunStatus;
   run_updated_at_unix_ms?: number;
   run_error?: string;
-  waiting_prompt?: WaitingPromptView;
+  waiting_prompt?: unknown;
   last_context_run_id?: string;
   created_at_unix_ms: number;
   updated_at_unix_ms: number;
@@ -221,32 +217,120 @@ function normalizeExecutionMode(raw: unknown): ExecutionMode {
   return mode === 'plan' ? 'plan' : 'act';
 }
 
+function threadIsWaitingUser(thread: ThreadView | null | undefined): boolean {
+  return normalizeThreadRunStatus(thread?.run_status) === 'waiting_user';
+}
+
+function normalizeWaitingPromptForThread(thread: ThreadView | null | undefined): WaitingPromptView | null {
+  if (!threadIsWaitingUser(thread)) return null;
+  return normalizeWaitingPrompt((thread as any)?.waiting_prompt);
+}
+
 function normalizeWaitingPrompt(raw: any): WaitingPromptView | null {
   if (!raw || typeof raw !== 'object') return null;
-  const promptID = String((raw as any).prompt_id ?? (raw as any).promptId ?? '').trim();
-  const messageID = String((raw as any).message_id ?? (raw as any).messageId ?? '').trim();
-  const toolID = String((raw as any).tool_id ?? (raw as any).toolId ?? '').trim();
-  if (!promptID || !messageID || !toolID) return null;
+  const promptID = String((raw as any).prompt_id ?? '').trim();
+  const messageID = String((raw as any).message_id ?? '').trim();
+  const toolID = String((raw as any).tool_id ?? '').trim();
+  const toolName = String((raw as any).tool_name ?? '').trim();
+  if (!promptID || !messageID || !toolID || !toolName) return null;
   const questions = normalizeAskUserQuestions((raw as any).questions);
   return {
     promptId: promptID,
     messageId: messageID,
     toolId: toolID,
-    reasonCode: String((raw as any).reason_code ?? (raw as any).reasonCode ?? '').trim() || undefined,
+    toolName,
+    reasonCode: String((raw as any).reason_code ?? '').trim() || undefined,
     requiredFromUser: Array.isArray((raw as any).required_from_user)
       ? (raw as any).required_from_user.map((item: unknown) => String(item ?? '').trim()).filter(Boolean)
       : undefined,
     evidenceRefs: Array.isArray((raw as any).evidence_refs)
       ? (raw as any).evidence_refs.map((item: unknown) => String(item ?? '').trim()).filter(Boolean)
       : undefined,
-    publicSummary: String((raw as any).public_summary ?? (raw as any).publicSummary ?? '').trim() || undefined,
-    containsSecret: Boolean((raw as any).contains_secret ?? (raw as any).containsSecret),
+    publicSummary: String((raw as any).public_summary ?? '').trim() || undefined,
+    containsSecret: Boolean((raw as any).contains_secret),
     questions: questions.length > 0 ? questions : undefined,
   };
 }
 
+function normalizeProtocolWaitingPrompt(raw: AIRequestUserInputPrompt | undefined): WaitingPromptView | null {
+  if (!raw) return null;
+  const promptID = String(raw.promptId ?? '').trim();
+  const messageID = String(raw.messageId ?? '').trim();
+  const toolID = String(raw.toolId ?? '').trim();
+  const toolName = String(raw.toolName ?? '').trim();
+  if (!promptID || !messageID || !toolID || !toolName) return null;
+  const questions = Array.isArray(raw.questions)
+    ? raw.questions.map((item): WaitingPromptQuestionView | null => {
+        const id = String(item?.id ?? '').trim();
+        const header = String(item?.header ?? '').trim();
+        const question = String(item?.question ?? '').trim();
+        const responseMode = item?.responseMode;
+        if (!id || !header || !question || (
+          responseMode !== 'select' &&
+          responseMode !== 'write' &&
+          responseMode !== 'select_or_write'
+        )) {
+          return null;
+        }
+        const choices = Array.isArray(item.choices)
+          ? item.choices.map((choice): WaitingPromptChoiceView | null => {
+              const choiceId = String(choice?.choiceId ?? '').trim();
+              const label = String(choice?.label ?? '').trim();
+              if (!choiceId || !label || choice?.kind !== 'select') return null;
+              const actions = Array.isArray(choice.actions)
+                ? choice.actions.map((action): WaitingPromptActionView | null => {
+                    const type = String(action?.type ?? '').trim().toLowerCase();
+                    if (!type) return null;
+                    const mode = action?.mode === 'plan' ? 'plan' : action?.mode === 'act' ? 'act' : undefined;
+                    return { type, mode };
+                  }).filter((action): action is WaitingPromptActionView => action !== null)
+                : [];
+              return {
+                choiceId,
+                label,
+                description: String(choice.description ?? '').trim() || undefined,
+                kind: 'select',
+                actions: actions.length > 0 ? actions : undefined,
+              };
+            }).filter((choice): choice is WaitingPromptChoiceView => choice !== null)
+          : [];
+        if (responseMode === 'write' && choices.length > 0) return null;
+        if ((responseMode === 'select' || responseMode === 'select_or_write') && choices.length === 0) return null;
+        if (responseMode === 'select_or_write' && (!String(item.writeLabel ?? '').trim() || !String(item.writePlaceholder ?? '').trim())) return null;
+        return {
+          id,
+          header,
+          question,
+          isSecret: Boolean(item.isSecret),
+          responseMode,
+          writeLabel: String(item.writeLabel ?? '').trim() || undefined,
+          writePlaceholder: String(item.writePlaceholder ?? '').trim() || undefined,
+          choices,
+        };
+      }).filter((question): question is WaitingPromptQuestionView => question !== null)
+    : [];
+  if (questions.length === 0) return null;
+  return {
+    promptId: promptID,
+    messageId: messageID,
+    toolId: toolID,
+    toolName,
+    reasonCode: String(raw.reasonCode ?? '').trim() || undefined,
+    requiredFromUser: Array.isArray(raw.requiredFromUser)
+      ? raw.requiredFromUser.map((item) => String(item ?? '').trim()).filter(Boolean)
+      : undefined,
+    evidenceRefs: Array.isArray(raw.evidenceRefs)
+      ? raw.evidenceRefs.map((item) => String(item ?? '').trim()).filter(Boolean)
+      : undefined,
+    publicSummary: String(raw.publicSummary ?? '').trim() || undefined,
+    containsSecret: Boolean(raw.containsSecret),
+    questions,
+  };
+}
+
 function normalizeThreadReadStatus(raw: any, thread?: ThreadView | null | undefined): ThreadReadStatus {
-  const waitingPrompt = normalizeWaitingPrompt((thread as any)?.waiting_prompt);
+  const waitingPrompt = normalizeWaitingPromptForThread(thread);
+  const canUseWaitingPrompt = threadIsWaitingUser(thread);
   const fallbackSnapshot: ThreadReadSnapshot = {
     last_message_at_unix_ms: Math.max(0, Math.floor(Number(thread?.last_message_at_unix_ms ?? 0) || 0)),
     waiting_prompt_id: String(waitingPrompt?.promptId ?? '').trim() || undefined,
@@ -258,7 +342,9 @@ function normalizeThreadReadStatus(raw: any, thread?: ThreadView | null | undefi
       0,
       Math.floor(Number(snapshotRaw?.last_message_at_unix_ms ?? fallbackSnapshot.last_message_at_unix_ms ?? 0) || 0),
     ),
-    waiting_prompt_id: String(snapshotRaw?.waiting_prompt_id ?? fallbackSnapshot.waiting_prompt_id ?? '').trim() || undefined,
+    waiting_prompt_id: canUseWaitingPrompt
+      ? String(snapshotRaw?.waiting_prompt_id ?? fallbackSnapshot.waiting_prompt_id ?? '').trim() || undefined
+      : undefined,
   };
   const readState: ThreadReadState = {
     last_read_message_at_unix_ms: Math.max(
@@ -275,7 +361,7 @@ function normalizeThreadReadStatus(raw: any, thread?: ThreadView | null | undefi
     )
   );
   return {
-    is_unread: Boolean(raw?.is_unread ?? inferredUnread),
+    is_unread: inferredUnread,
     snapshot,
     read_state: readState,
   };
@@ -401,18 +487,6 @@ export interface AIChatContextValue {
   confirmThreadRun: (threadId: string, runId: string) => void;
   clearThreadPendingRun: (threadId: string) => void;
   consumeWaitingPrompt: (threadId: string, promptId: string) => void;
-  setStructuredPromptDraft: (threadId: string, promptId: string, questionId: string, draft: StructuredPromptAnswerDraft | null) => void;
-  getStructuredPromptDrafts: (threadId: string, promptId: string) => Record<string, StructuredPromptAnswerDraft>;
-  submitStructuredPromptResponse: (args: {
-    threadId: string;
-    promptId: string;
-    answers: Record<string, StructuredPromptAnswerDraft>;
-    messageId?: string;
-    text?: string;
-    attachments?: Array<{ name: string; mimeType: string; url: string }>;
-    expectedRunId?: string;
-    sourceFollowupId?: string;
-  }) => Promise<{ runId?: string; consumedWaitingPromptId?: string; appliedExecutionMode?: ExecutionMode }>;
   isThreadRunning: (threadId: string | null | undefined) => boolean;
   isThreadUnread: (threadId: string | null | undefined) => boolean;
   onRealtimeEvent: (handler: (event: AIRealtimeEvent) => void) => () => void;
@@ -580,7 +654,6 @@ export function createAIChatContextValue(): AIChatContextValue {
   const [lastContextRunByThread, setLastContextRunByThread] = createSignal<Record<string, string>>({});
   const [pendingRunByThread, setPendingRunByThread] = createSignal<Record<string, true>>({});
   const [waitingPromptByThread, setWaitingPromptByThread] = createSignal<Record<string, WaitingPromptView | null>>({});
-  const [structuredPromptDraftsByPrompt, setStructuredPromptDraftsByPrompt] = createSignal<Record<string, Record<string, StructuredPromptAnswerDraft>>>({});
   const [markingReadKeyByThread, setMarkingReadKeyByThread] = createSignal<Record<string, string>>({});
 
   const realtimeListeners = new Set<(event: AIRealtimeEvent) => void>();
@@ -650,8 +723,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       return realtimeMap[tid] ?? null;
     }
 
-    const th = threadById().get(tid);
-    return normalizeWaitingPrompt((th as any)?.waiting_prompt);
+    return normalizeWaitingPromptForThread(threadById().get(tid));
   };
 
   const threadReadStatusForThread = (threadId: string | null | undefined): ThreadReadStatus => {
@@ -736,137 +808,6 @@ export function createAIChatContextValue(): AIChatContextValue {
     }
   };
 
-  const waitingPromptKey = (threadId: string, promptId: string): string => {
-    const tid = String(threadId ?? '').trim();
-    const pid = String(promptId ?? '').trim();
-    if (!tid || !pid) return '';
-    return `${tid}\u001f${pid}`;
-  };
-
-  const clearPendingWaitingChoicesForThread = (threadId: string, keepPromptId?: string) => {
-    const tid = String(threadId ?? '').trim();
-    if (!tid) return;
-    const keep = String(keepPromptId ?? '').trim();
-    setStructuredPromptDraftsByPrompt((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      const prefix = `${tid}\u001f`;
-      for (const key of Object.keys(next)) {
-        if (!key.startsWith(prefix)) continue;
-        if (keep && key === `${prefix}${keep}`) continue;
-        delete next[key];
-        changed = true;
-      }
-      return changed ? next : prev;
-    });
-  };
-
-  const setStructuredPromptDraft = (threadId: string, promptId: string, questionId: string, draft: StructuredPromptAnswerDraft | null) => {
-    const key = waitingPromptKey(threadId, promptId);
-    const qid = String(questionId ?? '').trim();
-    if (!key) return;
-    if (!qid) return;
-    if (!draft) {
-      setStructuredPromptDraftsByPrompt((prev) => {
-        const current = prev[key];
-        if (!current || !Object.prototype.hasOwnProperty.call(current, qid)) return prev;
-        const next = { ...prev };
-        const promptDrafts = { ...current };
-        delete promptDrafts[qid];
-        if (Object.keys(promptDrafts).length === 0) delete next[key];
-        else next[key] = promptDrafts;
-        return next;
-      });
-      return;
-    }
-    const normalized = normalizeAskUserDraft(draft);
-    setStructuredPromptDraftsByPrompt((prev) => ({
-      ...prev,
-      [key]: {
-        ...(prev[key] ?? {}),
-        [qid]: normalized,
-      },
-    }));
-  };
-
-  const getStructuredPromptDrafts = (threadId: string, promptId: string): Record<string, StructuredPromptAnswerDraft> => {
-    const key = waitingPromptKey(threadId, promptId);
-    if (!key) return {};
-    return structuredPromptDraftsByPrompt()[key] ?? {};
-  };
-
-  const submitStructuredPromptResponse: AIChatContextValue['submitStructuredPromptResponse'] = async (args) => {
-    const tid = String(args.threadId ?? '').trim();
-    const promptId = String(args.promptId ?? '').trim();
-    if (!tid || !promptId) {
-      throw new Error('Missing thread or prompt.');
-    }
-    const model = resolveThreadModelSelection(tid);
-    if (!model) {
-      throw new Error('Missing model.');
-    }
-    const waitingPrompt = waitingPromptForThread(tid);
-    const questionById = new Map((waitingPrompt?.questions ?? []).map((question) => [question.id, question] as const));
-    const answers: Record<string, { choiceId?: string; text?: string }> = {};
-    for (const [questionId, draft] of Object.entries(args.answers ?? {})) {
-      const qid = String(questionId ?? '').trim();
-      if (!qid) continue;
-      const question = questionById.get(qid);
-      const normalized = question ? normalizeAskUserDraftForQuestion(question, draft) : normalizeAskUserDraft(draft);
-      answers[qid] = {
-        choiceId: normalized.choiceId,
-        text: normalized.text,
-      };
-    }
-
-    markThreadPendingRun(tid);
-    try {
-      try {
-        await rpc.ai.subscribeThread({ threadId: tid });
-      } catch {
-        // Best effort.
-      }
-      const resp = await rpc.ai.submitStructuredPromptResponse({
-        threadId: tid,
-        model,
-        response: {
-          promptId,
-          answers,
-        },
-        input: {
-          messageId: String(args.messageId ?? '').trim() || undefined,
-          text: String(args.text ?? ''),
-          attachments: Array.isArray(args.attachments) ? args.attachments : [],
-        },
-        options: {
-          maxSteps: 10,
-          mode: activeThread()?.execution_mode ?? 'act',
-        },
-        expectedRunId: String(args.expectedRunId ?? '').trim() || undefined,
-        sourceFollowupId: String(args.sourceFollowupId ?? '').trim() || undefined,
-      });
-      const consumedPromptId = String(resp.consumedWaitingPromptId ?? '').trim();
-      if (consumedPromptId) {
-        consumeWaitingPrompt(tid, consumedPromptId);
-      }
-      const rid = String(resp.runId ?? '').trim();
-      if (rid) {
-        confirmThreadRun(tid, rid);
-      } else {
-        clearThreadPendingRun(tid);
-      }
-      bumpThreadsSeq();
-      return {
-        runId: rid || undefined,
-        consumedWaitingPromptId: consumedPromptId || undefined,
-        appliedExecutionMode: resp.appliedExecutionMode,
-      };
-    } catch (error) {
-      clearThreadPendingRun(tid);
-      throw error;
-    }
-  };
-
   const markThreadPendingRun = (threadId: string) => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
@@ -905,7 +846,6 @@ export function createAIChatContextValue(): AIChatContextValue {
     const current = waitingPromptForThread(tid);
     if (!current || String(current.promptId ?? '').trim() !== pid) return;
     setWaitingPromptByThread((prev) => ({ ...prev, [tid]: null }));
-    clearPendingWaitingChoicesForThread(tid);
   };
 
   const isThreadRunning = (threadId: string | null | undefined): boolean => {
@@ -943,7 +883,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       const status = normalizeThreadRunStatus(event.runStatus);
       const activeRunId = String(event.activeRunId ?? '').trim();
       const lastContextRunId = String(event.lastContextRunId ?? '').trim();
-      const waitingPrompt = normalizeWaitingPrompt(event.waitingPrompt);
+      const waitingPrompt = status === 'waiting_user' ? normalizeProtocolWaitingPrompt(event.waitingPrompt) : null;
 
       if (activeRunId && isActiveRunStatus(status)) {
         setActiveRunByThread((prev) => ({ ...prev, [tid]: activeRunId }));
@@ -958,11 +898,6 @@ export function createAIChatContextValue(): AIChatContextValue {
         clearThreadPendingRun(tid);
       }
       setThreadLastContextRunId(tid, lastContextRunId);
-      if (waitingPrompt) {
-        clearPendingWaitingChoicesForThread(tid, waitingPrompt.promptId);
-      } else {
-        clearPendingWaitingChoicesForThread(tid);
-      }
       setWaitingPromptByThread((prev) => ({ ...prev, [tid]: waitingPrompt }));
 
       bumpThreadsSeq();
@@ -992,7 +927,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (!rid) return;
 
     const nextStatus = normalizeThreadRunStatus(event.runStatus);
-    const waitingPrompt = normalizeWaitingPrompt(event.waitingPrompt);
+    const waitingPrompt = nextStatus === 'waiting_user' ? normalizeProtocolWaitingPrompt(event.waitingPrompt) : null;
     if (isActiveRunStatus(nextStatus)) {
       setActiveRunByThread((prev) => ({ ...prev, [tid]: rid }));
       clearThreadPendingRun(tid);
@@ -1004,11 +939,6 @@ export function createAIChatContextValue(): AIChatContextValue {
         return next;
       });
       clearThreadPendingRun(tid);
-    }
-    if (waitingPrompt) {
-      clearPendingWaitingChoicesForThread(tid, waitingPrompt.promptId);
-    } else {
-      clearPendingWaitingChoicesForThread(tid);
     }
     setWaitingPromptByThread((prev) => ({ ...prev, [tid]: waitingPrompt }));
 
@@ -1060,7 +990,6 @@ export function createAIChatContextValue(): AIChatContextValue {
       setLastContextRunByThread({});
       setPendingRunByThread({});
       setWaitingPromptByThread({});
-      setStructuredPromptDraftsByPrompt({});
     });
   });
 
@@ -1085,7 +1014,6 @@ export function createAIChatContextValue(): AIChatContextValue {
     setLastContextRunByThread({});
     setPendingRunByThread({});
     setWaitingPromptByThread({});
-    setStructuredPromptDraftsByPrompt({});
     setMarkingReadKeyByThread({});
   });
 
@@ -1563,9 +1491,6 @@ export function createAIChatContextValue(): AIChatContextValue {
     confirmThreadRun,
     clearThreadPendingRun,
     consumeWaitingPrompt,
-    setStructuredPromptDraft,
-    getStructuredPromptDrafts,
-    submitStructuredPromptResponse,
     isThreadRunning,
     isThreadUnread,
     onRealtimeEvent,

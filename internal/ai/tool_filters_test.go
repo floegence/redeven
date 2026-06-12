@@ -9,7 +9,7 @@ import (
 func TestNewModeToolFilter_DefaultBlocksPlanMutatingTools(t *testing.T) {
 	t.Parallel()
 
-	filter := newModeToolFilter(nil, defaultStructuredProtocolProfile(), true)
+	filter := newModeToolFilter(nil, true)
 	tools := []ToolDef{
 		{Name: "terminal.exec", Mutating: false},
 		{Name: "file.read", Mutating: false},
@@ -40,7 +40,7 @@ func TestNewModeToolFilter_ExecutionPolicyDoesNotDisablePlanReadonly(t *testing.
 			RequireUserApproval:    true,
 			BlockDangerousCommands: true,
 		},
-	}, defaultStructuredProtocolProfile(), true)
+	}, true)
 	tools := []ToolDef{
 		{Name: "terminal.exec", Mutating: false},
 		{Name: "file.read", Mutating: false},

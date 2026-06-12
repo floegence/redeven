@@ -6,11 +6,10 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-func newModeToolFilter(cfg *config.AIConfig, profile RunProtocolProfile, allowUserInteraction bool) ModeToolFilter {
+func newModeToolFilter(cfg *config.AIConfig, allowUserInteraction bool) ModeToolFilter {
 	_ = cfg
-	return protocolModeToolFilter{
+	return flowerModeToolFilter{
 		base:                 DefaultModeToolFilter{},
-		profile:              normalizeRunProtocolProfile(profile),
 		allowUserInteraction: allowUserInteraction,
 	}
 }
@@ -42,20 +41,18 @@ func (f allowlistModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) 
 	return out
 }
 
-type protocolModeToolFilter struct {
+type flowerModeToolFilter struct {
 	base                 ModeToolFilter
-	profile              RunProtocolProfile
 	allowUserInteraction bool
 }
 
-func (f protocolModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) []ToolDef {
+func (f flowerModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) []ToolDef {
 	base := f.base
 	if base == nil {
 		base = DefaultModeToolFilter{}
 	}
 	filtered := base.FilterToolsForMode(mode, all)
 	mode = strings.ToLower(strings.TrimSpace(mode))
-	profile := normalizeRunProtocolProfile(f.profile)
 	out := make([]ToolDef, 0, len(filtered))
 	for _, tool := range filtered {
 		name := strings.TrimSpace(tool.Name)
@@ -63,24 +60,12 @@ func (f protocolModeToolFilter) FilterToolsForMode(mode string, all []ToolDef) [
 			continue
 		}
 		switch name {
-		case "file.read", "file.edit", "file.write":
-			if profile.Surface != RunProtocolSurfaceStructuredFileOps {
-				continue
-			}
 		case "exit_plan_mode":
-			if profile.Surface != RunProtocolSurfaceStructuredFileOps || profile.WaitingMode != RunWaitingModeExitPlanMode || !f.allowUserInteraction || mode != config.AIModePlan {
-				continue
-			}
-		case "apply_patch":
-			if !profile.AllowPatchTool {
-				continue
-			}
-		case "task_complete":
-			if !profile.AllowSignalTools {
+			if !f.allowUserInteraction || mode != config.AIModePlan {
 				continue
 			}
 		case "ask_user":
-			if !profile.AllowSignalTools || !f.allowUserInteraction {
+			if !f.allowUserInteraction {
 				continue
 			}
 		}

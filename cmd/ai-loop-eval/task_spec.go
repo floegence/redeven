@@ -33,7 +33,6 @@ type taskWorkspaceSpec struct {
 type taskRuntimeSpec struct {
 	ExecutionMode                    string            `yaml:"execution_mode"`
 	MaxSteps                         int               `yaml:"max_steps"`
-	MaxNoToolRounds                  int               `yaml:"max_no_tool_rounds"`
 	TimeoutSeconds                   int               `yaml:"timeout_seconds"`
 	ReasoningOnly                    bool              `yaml:"reasoning_only"`
 	RequireUserConfirmOnTaskComplete bool              `yaml:"require_user_confirm_on_task_complete"`
@@ -103,7 +102,6 @@ type evalTaskWorkspace struct {
 type evalTaskRuntime struct {
 	ExecutionMode                    string            `json:"execution_mode"`
 	MaxSteps                         int               `json:"max_steps"`
-	MaxNoToolRounds                  int               `json:"max_no_tool_rounds,omitempty"`
 	TimeoutPerTurn                   time.Duration     `json:"-"`
 	TimeoutSeconds                   int               `json:"timeout_seconds"`
 	ReasoningOnly                    bool              `json:"reasoning_only,omitempty"`
@@ -184,9 +182,6 @@ func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) 
 		maxSteps = 4
 	}
 
-	if item.Runtime.MaxNoToolRounds < 0 {
-		return evalTask{}, fmt.Errorf("task %s has invalid max_no_tool_rounds", id)
-	}
 	workspace, err := normalizeTaskWorkspaceSpec(item.Runtime.Workspace, specDir)
 	if err != nil {
 		return evalTask{}, fmt.Errorf("task %s has invalid workspace config: %w", id, err)
@@ -239,7 +234,6 @@ func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) 
 		Runtime: evalTaskRuntime{
 			ExecutionMode:                    executionMode,
 			MaxSteps:                         maxSteps,
-			MaxNoToolRounds:                  item.Runtime.MaxNoToolRounds,
 			TimeoutPerTurn:                   time.Duration(timeoutSeconds) * time.Second,
 			TimeoutSeconds:                   timeoutSeconds,
 			ReasoningOnly:                    item.Runtime.ReasoningOnly,

@@ -15,16 +15,16 @@ import (
 const (
 	// Type IDs must stay in sync with
 	// internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
-	TypeID_AI_SEND_USER_TURN                    uint32 = 6001
-	TypeID_AI_RUN_CANCEL                        uint32 = 6002
-	TypeID_AI_SUBSCRIBE_SUMMARY                 uint32 = 6003
-	TypeID_AI_EVENT_NOTIFY                      uint32 = 6004 // notify (agent -> client)
-	TypeID_AI_TOOL_APPROVAL                     uint32 = 6005
-	TypeID_AI_MESSAGES_LIST                     uint32 = 6006
-	TypeID_AI_ACTIVE_RUN_SNAPSHOT               uint32 = 6007
-	TypeID_AI_SUBSCRIBE_THREAD                  uint32 = 6009
-	TypeID_AI_STOP_THREAD                       uint32 = 6011
-	TypeID_AI_SUBMIT_STRUCTURED_PROMPT_RESPONSE uint32 = 6012
+	TypeID_AI_SEND_USER_TURN                     uint32 = 6001
+	TypeID_AI_RUN_CANCEL                         uint32 = 6002
+	TypeID_AI_SUBSCRIBE_SUMMARY                  uint32 = 6003
+	TypeID_AI_EVENT_NOTIFY                       uint32 = 6004 // notify (agent -> client)
+	TypeID_AI_TOOL_APPROVAL                      uint32 = 6005
+	TypeID_AI_MESSAGES_LIST                      uint32 = 6006
+	TypeID_AI_ACTIVE_RUN_SNAPSHOT                uint32 = 6007
+	TypeID_AI_SUBSCRIBE_THREAD                   uint32 = 6009
+	TypeID_AI_STOP_THREAD                        uint32 = 6011
+	TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE uint32 = 6012
 )
 
 type aiSendUserTurnReq struct {
@@ -46,7 +46,7 @@ type aiSendUserTurnResp struct {
 	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
 }
 
-type aiSubmitStructuredPromptResponseReq struct {
+type aiSubmitRequestUserInputResponseReq struct {
 	ThreadID         string                   `json:"thread_id"`
 	Model            string                   `json:"model,omitempty"`
 	Response         RequestUserInputResponse `json:"response"`
@@ -56,7 +56,7 @@ type aiSubmitStructuredPromptResponseReq struct {
 	SourceFollowupID string                   `json:"source_followup_id,omitempty"`
 }
 
-type aiSubmitStructuredPromptResponseResp struct {
+type aiSubmitRequestUserInputResponseResp struct {
 	RunID                   string `json:"run_id"`
 	Kind                    string `json:"kind"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
@@ -175,7 +175,7 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		}, nil
 	})
 
-	accessgate.RegisterTyped[aiSubmitStructuredPromptResponseReq, aiSubmitStructuredPromptResponseResp](r, TypeID_AI_SUBMIT_STRUCTURED_PROMPT_RESPONSE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiSubmitStructuredPromptResponseReq) (*aiSubmitStructuredPromptResponseResp, error) {
+	accessgate.RegisterTyped[aiSubmitRequestUserInputResponseReq, aiSubmitRequestUserInputResponseResp](r, TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiSubmitRequestUserInputResponseReq) (*aiSubmitRequestUserInputResponseResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -185,7 +185,7 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
 		}
-		resp, err := s.SubmitStructuredPromptResponse(ctx, meta, SubmitStructuredPromptResponseRequest{
+		resp, err := s.SubmitRequestUserInputResponse(ctx, meta, SubmitRequestUserInputResponseRequest{
 			ThreadID:         strings.TrimSpace(req.ThreadID),
 			Model:            strings.TrimSpace(req.Model),
 			Response:         req.Response,
@@ -197,7 +197,7 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		if err != nil {
 			return nil, toAIRPCError(err)
 		}
-		return &aiSubmitStructuredPromptResponseResp{
+		return &aiSubmitRequestUserInputResponseResp{
 			RunID:                   strings.TrimSpace(resp.RunID),
 			Kind:                    strings.TrimSpace(resp.Kind),
 			ConsumedWaitingPromptID: strings.TrimSpace(resp.ConsumedWaitingPromptID),

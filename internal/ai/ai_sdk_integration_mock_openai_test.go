@@ -18,8 +18,7 @@ import (
 )
 
 type openAIMock struct {
-	token           string
-	classifierToken string
+	token string
 
 	mu           sync.Mutex
 	sawResponses bool
@@ -105,205 +104,6 @@ func extractOpenAIToolNames(req map[string]any) []string {
 	return nil
 }
 
-func isIntentClassifierRequest(req map[string]any) bool {
-	if req == nil {
-		return false
-	}
-	instructions := extractClassifierInstructions(req)
-	return strings.Contains(instructions, runPolicyClassifierMarker)
-}
-
-func classifyIntentResponseToken(req map[string]any) string {
-	instructions := extractClassifierInstructions(req)
-	userText := strings.ToLower(strings.TrimSpace(extractResponsesUserText(req)))
-	openGoalText, userMessage := extractIntentClassifierContext(userText)
-	guidedAgeGuess := strings.Contains(userMessage, "猜我的岁数") || strings.Contains(userMessage, "每个问题") || strings.Contains(userMessage, "几个选项")
-	guidedAgeGuess = guidedAgeGuess || strings.Contains(openGoalText, "猜我的岁数") || strings.Contains(openGoalText, "每个问题") || strings.Contains(openGoalText, "几个选项")
-	if userText == "" {
-		return `{"intent":"task","execution_contract":"hybrid_first_turn","reason":"empty_input","objective_mode":"replace","complexity":"simple","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.42}`
-	}
-	if guidedAgeGuess {
-		instructionsLower := strings.ToLower(strings.TrimSpace(instructions))
-		if strings.Contains(instructionsLower, "guided structured interaction") && strings.Contains(instructionsLower, "option-driven conversations") {
-			objectiveMode := "replace"
-			reason := "guided_structured_interaction_requested"
-			if strings.TrimSpace(openGoalText) != "" && !strings.Contains(userMessage, "猜我的岁数") {
-				objectiveMode = "continue"
-				reason = "guided_structured_interaction_continuation"
-			}
-			return fmt.Sprintf(`{"intent":"task","execution_contract":"agentic_loop","reason":"%s","objective_mode":"%s","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.89,"interaction_contract":{"enabled":true,"reason":"guided_option_interaction","single_question_per_turn":true,"fixed_choices_required":true,"open_text_fallback_required":true,"indirect_questions_only":true,"confidence":0.93}}`, reason, objectiveMode)
-		}
-		return `{"intent":"social","execution_contract":"direct_reply","reason":"guided_interaction_misclassified_without_prompt","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.61}`
-	}
-	if strings.TrimSpace(openGoalText) != "" {
-		continuationSignals := []string{"continue", "go on", "keep going", "proceed"}
-		for _, signal := range continuationSignals {
-			if strings.Contains(userMessage, signal) {
-				return `{"intent":"task","execution_contract":"agentic_loop","reason":"follow_up_to_open_goal","objective_mode":"continue","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.91}`
-			}
-		}
-	}
-	creativeSignals := []string{"write a story", "fairy tale", "poem", "creative writing", "童话", "故事", "小说", "诗歌", "文案"}
-	for _, signal := range creativeSignals {
-		if strings.Contains(userText, signal) {
-			return `{"intent":"creative","execution_contract":"direct_reply","reason":"creative_generation_requested","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.93}`
-		}
-	}
-	taskSignals := []string{
-		"say ", "analyze", "analysis", "implement", "fix", "edit", "change", "review",
-		"debug", "test", "build", "run", "list", "summarize", "check", "inspect",
-	}
-	for _, signal := range taskSignals {
-		if strings.Contains(userText, signal) {
-			return `{"intent":"task","execution_contract":"hybrid_first_turn","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.86}`
-		}
-	}
-	socialSignals := []string{"hello", "hi", "hey", "thanks", "thank you", "你好", "谢谢"}
-	for _, signal := range socialSignals {
-		if strings.Contains(userText, signal) {
-			return `{"intent":"social","execution_contract":"direct_reply","reason":"small_talk_detected","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.95}`
-		}
-	}
-	return `{"intent":"task","execution_contract":"hybrid_first_turn","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.78}`
-}
-
-func extractClassifierInstructions(req map[string]any) string {
-	if req == nil {
-		return ""
-	}
-	if instructions, _ := req["instructions"].(string); strings.TrimSpace(instructions) != "" {
-		return strings.TrimSpace(instructions)
-	}
-	rawSystem, ok := req["system"]
-	if !ok {
-		return ""
-	}
-	switch v := rawSystem.(type) {
-	case string:
-		return strings.TrimSpace(v)
-	case []any:
-		parts := make([]string, 0, len(v))
-		for _, item := range v {
-			block, ok := item.(map[string]any)
-			if !ok || block == nil {
-				continue
-			}
-			if strings.ToLower(strings.TrimSpace(fmt.Sprint(block["type"]))) != "text" {
-				continue
-			}
-			txt := strings.TrimSpace(fmt.Sprint(block["text"]))
-			if txt != "" {
-				parts = append(parts, txt)
-			}
-		}
-		return strings.Join(parts, "\n")
-	default:
-		return ""
-	}
-}
-
-func extractIntentClassifierContext(text string) (string, string) {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
-		return "", ""
-	}
-	const goalPrefix = "current open goal:"
-	const userPrefix = "user message:"
-	goalIdx := strings.Index(trimmed, goalPrefix)
-	userIdx := strings.Index(trimmed, userPrefix)
-	if goalIdx < 0 || userIdx < 0 || userIdx <= goalIdx {
-		return "", trimmed
-	}
-	openGoal := strings.TrimSpace(trimmed[goalIdx+len(goalPrefix) : userIdx])
-	userMessage := strings.TrimSpace(trimmed[userIdx+len(userPrefix):])
-	if openGoal == "(none)" {
-		openGoal = ""
-	}
-	return openGoal, userMessage
-}
-
-func extractResponsesUserText(req map[string]any) string {
-	rawInput, ok := req["input"]
-	if ok {
-		items, ok := rawInput.([]any)
-		if !ok {
-			return ""
-		}
-		for i := len(items) - 1; i >= 0; i-- {
-			msg, ok := items[i].(map[string]any)
-			if !ok || msg == nil {
-				continue
-			}
-			role := strings.ToLower(strings.TrimSpace(fmt.Sprint(msg["role"])))
-			if role != "user" {
-				continue
-			}
-			content, ok := msg["content"].([]any)
-			if !ok {
-				continue
-			}
-			parts := make([]string, 0, len(content))
-			for _, item := range content {
-				part, ok := item.(map[string]any)
-				if !ok || part == nil {
-					continue
-				}
-				if strings.ToLower(strings.TrimSpace(fmt.Sprint(part["type"]))) != "input_text" {
-					continue
-				}
-				txt := strings.TrimSpace(fmt.Sprint(part["text"]))
-				if txt != "" {
-					parts = append(parts, txt)
-				}
-			}
-			if len(parts) > 0 {
-				return strings.Join(parts, "\n")
-			}
-		}
-	}
-
-	rawMessages, ok := req["messages"]
-	if !ok {
-		return ""
-	}
-	items, ok := rawMessages.([]any)
-	if !ok {
-		return ""
-	}
-	for i := len(items) - 1; i >= 0; i-- {
-		msg, ok := items[i].(map[string]any)
-		if !ok || msg == nil {
-			continue
-		}
-		role := strings.ToLower(strings.TrimSpace(fmt.Sprint(msg["role"])))
-		if role != "user" {
-			continue
-		}
-		content, ok := msg["content"].([]any)
-		if !ok {
-			continue
-		}
-		parts := make([]string, 0, len(content))
-		for _, item := range content {
-			part, ok := item.(map[string]any)
-			if !ok || part == nil {
-				continue
-			}
-			if strings.ToLower(strings.TrimSpace(fmt.Sprint(part["type"]))) != "text" {
-				continue
-			}
-			txt := strings.TrimSpace(fmt.Sprint(part["text"]))
-			if txt != "" {
-				parts = append(parts, txt)
-			}
-		}
-		if len(parts) > 0 {
-			return strings.Join(parts, "\n")
-		}
-	}
-	return ""
-}
-
 func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 	if r == nil {
 		http.Error(w, "bad request", http.StatusBadRequest)
@@ -328,23 +128,14 @@ func (m *openAIMock) handle(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimSpace(r.URL.Path)
 	switch {
 	case strings.HasSuffix(path, "/responses"):
-		isClassifier := isIntentClassifierRequest(req)
 		respToken := m.token
-		if isClassifier {
-			respToken = strings.TrimSpace(m.classifierToken)
-			if respToken == "" {
-				respToken = classifyIntentResponseToken(req)
-			}
-		}
 		m.mu.Lock()
 		m.sawResponses = true
-		if !isClassifier {
-			m.requestToolNames = extractOpenAIToolNames(req)
-			m.requestInvalidTools = m.requestInvalidTools[:0]
-			for _, n := range m.requestToolNames {
-				if !isValidOpenAIToolName(n) {
-					m.requestInvalidTools = append(m.requestInvalidTools, n)
-				}
+		m.requestToolNames = extractOpenAIToolNames(req)
+		m.requestInvalidTools = m.requestInvalidTools[:0]
+		for _, n := range m.requestToolNames {
+			if !isValidOpenAIToolName(n) {
+				m.requestInvalidTools = append(m.requestInvalidTools, n)
 			}
 		}
 		m.mu.Unlock()
@@ -480,14 +271,6 @@ func (m *openAIMock) didSeeResponses() bool {
 	return v
 }
 
-func (m *openAIMock) toolNamesSnapshot() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]string, 0, len(m.requestToolNames))
-	out = append(out, m.requestToolNames...)
-	return out
-}
-
 func writeSSEJSON(w io.Writer, f http.Flusher, v any) {
 	b, _ := json.Marshal(v)
 	_, _ = io.WriteString(w, "data: ")
@@ -496,10 +279,10 @@ func writeSSEJSON(w io.Writer, f http.Flusher, v any) {
 	f.Flush()
 }
 
-func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T) {
+func TestIntegration_NativeSDK_OpenAI_IdentityQuestionCompletesWithNaturalStop(t *testing.T) {
 	t.Parallel()
 
-	token := "MOCK_OK_RESPONSES"
+	token := "我是 Flower。"
 	mock := &openAIMock{token: token}
 	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
 	t.Cleanup(srv.Close)
@@ -558,16 +341,17 @@ func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
+	th, err := svc.CreateThread(ctx, &meta, "你是谁", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
+	runID := "run_test_native_sdk_identity_1"
 	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, "run_test_native_sdk_1", RunStartRequest{
+	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "hello"},
+		Input:    RunInput{Text: "你是谁"},
 		Options:  RunOptions{MaxSteps: 1},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
@@ -587,6 +371,12 @@ func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T
 	if view == nil {
 		t.Fatalf("thread missing after run")
 	}
+	if got := strings.TrimSpace(view.RunStatus); got != string(RunStateSuccess) {
+		t.Fatalf("run_status=%q, want %q", got, RunStateSuccess)
+	}
+	if view.WaitingPrompt != nil {
+		t.Fatalf("waiting_prompt=%#v, want nil", view.WaitingPrompt)
+	}
 	if strings.TrimSpace(view.LastMessagePreview) == "" {
 		t.Fatalf("last_message_preview should not be empty")
 	}
@@ -599,6 +389,15 @@ func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT5_Succeeds(t *testing.T
 	}
 	if mock.didSeeChat() {
 		t.Fatalf("unexpected OpenAI Chat Completions API call (/chat/completions)")
+	}
+
+	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	endPayload := findRunEventPayload(t, runEvents.Events, "run.end")
+	if got := strings.TrimSpace(fmt.Sprint(endPayload["finalization_reason"])); got != "natural_stop" {
+		t.Fatalf("finalization_reason=%q, want %q", got, "natural_stop")
 	}
 }
 

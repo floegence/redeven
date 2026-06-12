@@ -83,7 +83,7 @@ vi.mock('../protocol/redeven_v1', () => ({
       },
       subscribeSummary: vi.fn(async () => ({ activeRuns: [] })),
       subscribeThread: vi.fn(async () => ({})),
-      submitStructuredPromptResponse: vi.fn(async () => ({ kind: 'start' })),
+      submitRequestUserInputResponse: vi.fn(async () => ({ kind: 'start' })),
     },
   }),
 }));
@@ -183,6 +183,72 @@ describe('AIChatContext context run tracking', () => {
 
       await Promise.resolve();
       expect(ctx.lastContextRunIdForThread('thread-1')).toBe('run_terminal');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('ignores stale waiting prompts unless the thread is waiting for user input', async () => {
+    threadsState = [makeThread({
+      run_status: 'success',
+      waiting_prompt: {
+        prompt_id: 'prompt-stale',
+        message_id: 'message-stale',
+        tool_id: 'tool-stale',
+        tool_name: 'ask_user',
+        questions: [{
+          id: 'next_step',
+          header: 'Need input',
+          question: 'Choose the next step.',
+          is_secret: false,
+          response_mode: 'select',
+          choices: [{ choice_id: 'continue', label: 'Continue', kind: 'select' }],
+        }],
+      },
+      read_status: {
+        is_unread: true,
+        snapshot: {
+          last_message_at_unix_ms: 1000,
+          waiting_prompt_id: 'prompt-stale',
+        },
+        read_state: {
+          last_read_message_at_unix_ms: 1000,
+        },
+      },
+    })];
+    const { ctx, dispose } = await renderContext();
+
+    try {
+      ctx.selectThreadId('thread-1');
+      await Promise.resolve();
+      expect(ctx.activeThreadWaitingPrompt()).toBeNull();
+      expect(ctx.isThreadUnread('thread-1')).toBe(false);
+
+      hoisted.realtimeHandler?.({
+        eventType: 'thread_state',
+        endpointId: 'env-1',
+        threadId: 'thread-1',
+        runId: 'run-stale',
+        atUnixMs: 1300,
+        runStatus: 'success',
+        waitingPrompt: {
+          promptId: 'prompt-stale-live',
+          messageId: 'message-stale-live',
+          toolId: 'tool-stale-live',
+          toolName: 'ask_user',
+          questions: [{
+            id: 'next_step',
+            header: 'Need input',
+            question: 'Choose the next step.',
+            isSecret: false,
+            responseMode: 'select',
+            choices: [{ choiceId: 'continue', label: 'Continue', kind: 'select' }],
+          }],
+        },
+      });
+      await Promise.resolve();
+
+      expect(ctx.activeThreadWaitingPrompt()).toBeNull();
     } finally {
       dispose();
     }

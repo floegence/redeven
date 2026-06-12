@@ -11,14 +11,10 @@ import (
 )
 
 const (
-	// CheckpointKindPreRun identifies the legacy snapshot rows retained for compatibility.
 	CheckpointKindPreRun = "pre_run"
 )
 
-// ThreadCheckpointRecord is a persisted compatibility record for a single thread checkpoint.
-//
-// Normal Flower runs no longer create new thread checkpoints, but legacy rows may still exist and
-// need cleanup or best-effort restore handling.
+// ThreadCheckpointRecord is a persisted record for a single thread checkpoint.
 type ThreadCheckpointRecord struct {
 	CheckpointID string `json:"checkpoint_id"`
 	EndpointID   string `json:"endpoint_id"`
@@ -30,7 +26,7 @@ type ThreadCheckpointRecord struct {
 
 	ThreadJSON    string `json:"thread_json"`
 	DerivedJSON   string `json:"derived_json"`
-	WorkspaceJSON string `json:"workspace_json"` // legacy compatibility payload; empty for new checkpoints
+	WorkspaceJSON string `json:"workspace_json"`
 
 	TranscriptMaxID    int64 `json:"transcript_max_id"`
 	TurnsMaxID         int64 `json:"turns_max_id"`
@@ -442,168 +438,6 @@ func (s *Store) PruneThreadCheckpoints(ctx context.Context, endpointID string, t
 	return deletedIDs, nil
 }
 
-func (s *Store) RestoreThreadCheckpoint(ctx context.Context, endpointID string, threadID string, checkpointID string) (*ThreadCheckpointRecord, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	checkpointID = strings.TrimSpace(checkpointID)
-	if endpointID == "" || threadID == "" || checkpointID == "" {
-		return nil, errors.New("invalid request")
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	rec, err := s.getThreadCheckpointTx(ctx, tx, endpointID, threadID, checkpointID)
-	if err != nil {
-		return nil, err
-	}
-	if rec == nil {
-		return nil, sql.ErrNoRows
-	}
-
-	// Parse snapshots.
-	var th Thread
-	if err := json.Unmarshal([]byte(rec.ThreadJSON), &th); err != nil {
-		return nil, fmt.Errorf("invalid thread_json: %w", err)
-	}
-	var derived threadCheckpointDerivedSnapshot
-	if err := json.Unmarshal([]byte(rec.DerivedJSON), &derived); err != nil {
-		return nil, fmt.Errorf("invalid derived_json: %w", err)
-	}
-
-	// Truncate append-only planes. Keep user transcript items even when they were
-	// appended after the checkpoint so user input is never dropped by stop/resend.
-	if _, err := tx.ExecContext(ctx, `
-DELETE FROM transcript_messages
-WHERE endpoint_id = ? AND thread_id = ? AND id > ?
-  AND LOWER(COALESCE(role, '')) <> 'user'
-`, endpointID, threadID, rec.TranscriptMaxID); err != nil {
-		return nil, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-DELETE FROM conversation_turns
-WHERE endpoint_id = ? AND thread_id = ? AND id > ?
-`, endpointID, threadID, rec.TurnsMaxID); err != nil {
-		return nil, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-DELETE FROM ai_run_events
-WHERE endpoint_id = ? AND thread_id = ? AND id > ?
-`, endpointID, threadID, rec.RunEventsMaxID); err != nil {
-		return nil, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-DELETE FROM ai_activity_items
-WHERE endpoint_id = ? AND thread_id = ? AND id > ?
-`, endpointID, threadID, rec.ActivityItemsMaxID); err != nil {
-		return nil, err
-	}
-	if rec.ToolCallsMaxID > 0 {
-		if _, err := tx.ExecContext(ctx, `
-DELETE FROM ai_tool_calls
-WHERE id IN (
-  SELECT tc.id
-  FROM ai_tool_calls tc
-  JOIN ai_runs r ON r.run_id = tc.run_id
-  WHERE r.endpoint_id = ? AND r.thread_id = ? AND tc.id > ?
-)
-`, endpointID, threadID, rec.ToolCallsMaxID); err != nil {
-			return nil, err
-		}
-	} else {
-		if _, err := tx.ExecContext(ctx, `
-DELETE FROM ai_tool_calls
-WHERE id IN (
-  SELECT tc.id
-  FROM ai_tool_calls tc
-  JOIN ai_runs r ON r.run_id = tc.run_id
-  WHERE r.endpoint_id = ? AND r.thread_id = ?
-)
-`, endpointID, threadID); err != nil {
-			return nil, err
-		}
-	}
-
-	// Restore derived state by replacement.
-	if err := replaceThreadDerivedTx(ctx, tx, endpointID, threadID, derived); err != nil {
-		return nil, err
-	}
-
-	// Restore thread row snapshot.
-	if err := s.restoreThreadRowTx(ctx, tx, endpointID, threadID, th); err != nil {
-		return nil, err
-	}
-
-	// Pop the checkpoint.
-	if _, err := tx.ExecContext(ctx, `
-DELETE FROM ai_thread_checkpoints
-WHERE endpoint_id = ? AND thread_id = ? AND checkpoint_id = ?
-`, endpointID, threadID, checkpointID); err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return rec, nil
-}
-
-func (s *Store) getThreadCheckpointTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, checkpointID string) (*ThreadCheckpointRecord, error) {
-	var rec ThreadCheckpointRecord
-	err := tx.QueryRowContext(ctx, `
-SELECT checkpoint_id, endpoint_id, thread_id, run_id, kind, created_at_unix_ms,
-       thread_json, derived_json, workspace_json,
-       transcript_max_id, turns_max_id, tool_calls_max_id, run_events_max_id, activity_items_max_id
-FROM ai_thread_checkpoints
-WHERE endpoint_id = ? AND thread_id = ? AND checkpoint_id = ?
-`, endpointID, threadID, checkpointID).Scan(
-		&rec.CheckpointID,
-		&rec.EndpointID,
-		&rec.ThreadID,
-		&rec.RunID,
-		&rec.Kind,
-		&rec.CreatedAtUnixMs,
-		&rec.ThreadJSON,
-		&rec.DerivedJSON,
-		&rec.WorkspaceJSON,
-		&rec.TranscriptMaxID,
-		&rec.TurnsMaxID,
-		&rec.ToolCallsMaxID,
-		&rec.RunEventsMaxID,
-		&rec.ActivityItemsMaxID,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	rec.CheckpointID = strings.TrimSpace(rec.CheckpointID)
-	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
-	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
-	rec.RunID = strings.TrimSpace(rec.RunID)
-	rec.Kind = normalizeCheckpointKind(rec.Kind)
-	rec.ThreadJSON = strings.TrimSpace(rec.ThreadJSON)
-	rec.DerivedJSON = strings.TrimSpace(rec.DerivedJSON)
-	rec.WorkspaceJSON = strings.TrimSpace(rec.WorkspaceJSON)
-	if rec.ThreadJSON == "" {
-		rec.ThreadJSON = "{}"
-	}
-	if rec.DerivedJSON == "" {
-		rec.DerivedJSON = "{}"
-	}
-	return &rec, nil
-}
-
 func (s *Store) getThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (*Thread, error) {
 	var t Thread
 	err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`
@@ -803,8 +637,8 @@ ORDER BY started_at_unix_ms ASC, span_id ASC
 SELECT id, endpoint_id, thread_id, response_message_id,
        prompt_id, tool_id, reason_code, question_id,
        header, question_text,
-       selected_option_id, selected_option_label,
-       answers_json, public_summary, contains_secret, created_at_unix_ms
+       selected_choice_id, selected_choice_label,
+       response_text, public_summary, contains_secret, created_at_unix_ms
 FROM structured_user_inputs
 WHERE endpoint_id = ? AND thread_id = ?
 ORDER BY id ASC
@@ -814,19 +648,12 @@ ORDER BY id ASC
 	}
 	for suiRows.Next() {
 		var (
-			rec         StructuredUserInputRecord
-			answersJSON string
-			secretInt   int
+			rec       StructuredUserInputRecord
+			secretInt int
 		)
-		if err := suiRows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.ResponseMessageID, &rec.PromptID, &rec.ToolID, &rec.ReasonCode, &rec.QuestionID, &rec.Header, &rec.QuestionText, &rec.SelectedChoiceID, &rec.SelectedChoiceLabel, &answersJSON, &rec.PublicSummary, &secretInt, &rec.CreatedAtUnixMs); err != nil {
+		if err := suiRows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.ResponseMessageID, &rec.PromptID, &rec.ToolID, &rec.ReasonCode, &rec.QuestionID, &rec.Header, &rec.QuestionText, &rec.SelectedChoiceID, &rec.SelectedChoiceLabel, &rec.Text, &rec.PublicSummary, &secretInt, &rec.CreatedAtUnixMs); err != nil {
 			_ = suiRows.Close()
 			return out, err
-		}
-		if strings.TrimSpace(answersJSON) != "" {
-			var answers []string
-			if err := json.Unmarshal([]byte(answersJSON), &answers); err == nil {
-				rec.Text = requestUserInputTextFromLegacyAnswers(answers)
-			}
 		}
 		rec.ContainsSecret = secretInt != 0
 		out.StructuredUserInputs = append(out.StructuredUserInputs, rec)
@@ -918,270 +745,6 @@ ORDER BY started_at_unix_ms ASC, run_id ASC
 	_ = rrows.Close()
 
 	return out, nil
-}
-
-func replaceThreadDerivedTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, snap threadCheckpointDerivedSnapshot) error {
-	if _, err := tx.ExecContext(ctx, `DELETE FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	for _, rec := range snap.MemoryItems {
-		rec.MemoryID = strings.TrimSpace(rec.MemoryID)
-		if rec.MemoryID == "" {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO memory_items(
-  memory_id, endpoint_id, thread_id,
-  scope, kind, content, source_refs_json,
-  importance, freshness, confidence,
-  created_at_unix_ms, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.MemoryID, endpointID, threadID, strings.TrimSpace(rec.Scope), strings.TrimSpace(rec.Kind), strings.TrimSpace(rec.Content), strings.TrimSpace(rec.SourceRefsJSON), rec.Importance, rec.Freshness, rec.Confidence, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs); err != nil {
-			return err
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM context_snapshots WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	for _, rec := range snap.ContextSnapshots {
-		rec.SnapshotID = strings.TrimSpace(rec.SnapshotID)
-		if rec.SnapshotID == "" {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO context_snapshots(
-  snapshot_id, endpoint_id, thread_id,
-  level, summary_text,
-  covers_turn_from_id, covers_turn_to_id,
-  quality_score, created_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.SnapshotID, endpointID, threadID, strings.TrimSpace(rec.Level), strings.TrimSpace(rec.SummaryText), rec.CoversTurnFromID, rec.CoversTurnToID, rec.QualityScore, rec.CreatedAtUnixMs); err != nil {
-			return err
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	for _, rec := range snap.ExecutionSpans {
-		rec.SpanID = strings.TrimSpace(rec.SpanID)
-		if rec.SpanID == "" {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO execution_spans(
-  span_id, endpoint_id, thread_id, run_id,
-  kind, name, status, payload_json,
-  started_at_unix_ms, ended_at_unix_ms, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.SpanID, endpointID, threadID, strings.TrimSpace(rec.RunID), strings.TrimSpace(rec.Kind), strings.TrimSpace(rec.Name), strings.TrimSpace(rec.Status), strings.TrimSpace(rec.PayloadJSON), rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.UpdatedAtUnixMs); err != nil {
-			return err
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	for _, rec := range snap.StructuredUserInputs {
-		if strings.TrimSpace(rec.QuestionID) == "" {
-			continue
-		}
-		answersJSON := "[]"
-		if answers := requestUserInputTextToLegacyAnswers(rec.Text); len(answers) > 0 {
-			if raw, err := json.Marshal(answers); err == nil {
-				answersJSON = string(raw)
-			}
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO structured_user_inputs(
-  endpoint_id, thread_id, response_message_id,
-  prompt_id, tool_id, reason_code, question_id,
-  header, question_text,
- selected_option_id, selected_option_label,
-  answers_json, public_summary, contains_secret, created_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, endpointID, threadID, strings.TrimSpace(rec.ResponseMessageID), strings.TrimSpace(rec.PromptID), strings.TrimSpace(rec.ToolID), strings.TrimSpace(rec.ReasonCode), strings.TrimSpace(rec.QuestionID), strings.TrimSpace(rec.Header), strings.TrimSpace(rec.QuestionText), strings.TrimSpace(rec.SelectedChoiceID), strings.TrimSpace(rec.SelectedChoiceLabel), strings.TrimSpace(answersJSON), strings.TrimSpace(rec.PublicSummary), boolToInt(rec.ContainsSecret), rec.CreatedAtUnixMs); err != nil {
-			return err
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	for _, rec := range snap.RequestUserInputSecrets {
-		questionID := strings.TrimSpace(rec.QuestionID)
-		responseMessageID := strings.TrimSpace(rec.ResponseMessageID)
-		answerText := strings.TrimSpace(rec.Text)
-		if questionID == "" || responseMessageID == "" {
-			continue
-		}
-		if answerText == "" {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO request_user_input_secret_answers(
-  endpoint_id, thread_id, response_message_id,
-  question_id, answer_index, answer_text, created_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?)
-`, endpointID, threadID, responseMessageID, questionID, 0, answerText, rec.CreatedAtUnixMs); err != nil {
-			return err
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_todos WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if snap.ThreadTodos != nil {
-		rec := *snap.ThreadTodos
-		if rec.Version > 0 || rec.UpdatedAtUnixMs > 0 {
-			if _, err := tx.ExecContext(ctx, `
-INSERT INTO ai_thread_todos(
-  endpoint_id, thread_id, version, todos_json,
-  updated_at_unix_ms, updated_by_run_id, updated_by_tool_id
-) VALUES(?, ?, ?, ?, ?, ?, ?)
-`, endpointID, threadID, rec.Version, strings.TrimSpace(rec.TodosJSON), rec.UpdatedAtUnixMs, strings.TrimSpace(rec.UpdatedByRunID), strings.TrimSpace(rec.UpdatedByToolID)); err != nil {
-				return err
-			}
-		}
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return err
-	}
-	if snap.ThreadState != nil {
-		st := *snap.ThreadState
-		if st.UpdatedAtUnixMs > 0 || st.OpenGoal != "" || st.LastAssistantSummary != "" || !st.ProviderContinuation.IsZero() {
-			if _, err := tx.ExecContext(ctx, `
-INSERT INTO ai_thread_state(
-  endpoint_id, thread_id, open_goal, last_assistant_summary,
-  provider_continuation_kind, provider_continuation_id, provider_continuation_provider_id,
-  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
-  updated_at_unix_ms
-)
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, endpointID, threadID, strings.TrimSpace(st.OpenGoal), strings.TrimSpace(st.LastAssistantSummary),
-				strings.TrimSpace(st.ProviderContinuation.Kind), strings.TrimSpace(st.ProviderContinuation.ContinuationID),
-				strings.TrimSpace(st.ProviderContinuation.ProviderID), strings.TrimSpace(st.ProviderContinuation.Model),
-				strings.TrimSpace(st.ProviderContinuation.BaseURL), st.ProviderContinuation.UpdatedAtUnixMs,
-				st.UpdatedAtUnixMs); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Delete run records that did not exist at the checkpoint time (best-effort).
-	if len(snap.RunIDs) == 0 {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM ai_runs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-			return err
-		}
-		return nil
-	}
-	keep := make([]string, 0, len(snap.RunIDs))
-	seen := map[string]struct{}{}
-	for _, rid := range snap.RunIDs {
-		rid = strings.TrimSpace(rid)
-		if rid == "" {
-			continue
-		}
-		if _, ok := seen[rid]; ok {
-			continue
-		}
-		seen[rid] = struct{}{}
-		keep = append(keep, rid)
-	}
-	if len(keep) == 0 {
-		if _, err := tx.ExecContext(ctx, `DELETE FROM ai_runs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-			return err
-		}
-		return nil
-	}
-	placeholders := strings.Repeat("?,", len(keep))
-	placeholders = strings.TrimSuffix(placeholders, ",")
-	args := make([]any, 0, 2+len(keep))
-	args = append(args, endpointID, threadID)
-	for _, rid := range keep {
-		args = append(args, rid)
-	}
-	q := fmt.Sprintf(`
-DELETE FROM ai_runs
-WHERE endpoint_id = ? AND thread_id = ? AND run_id NOT IN (%s)
-`, placeholders)
-	if _, err := tx.ExecContext(ctx, q, args...); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (s *Store) restoreThreadRowTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, th Thread) error {
-	th.ThreadID = strings.TrimSpace(th.ThreadID)
-	th.EndpointID = strings.TrimSpace(th.EndpointID)
-	if th.ThreadID == "" || th.EndpointID == "" {
-		return errors.New("invalid thread snapshot")
-	}
-	if th.ThreadID != threadID || th.EndpointID != endpointID {
-		return errors.New("thread snapshot mismatch")
-	}
-	runStatus, err := canonicalRunStatusForCreate(th.RunStatus)
-	if err != nil {
-		return err
-	}
-	_, err = tx.ExecContext(ctx, `
-	UPDATE ai_threads
-	SET namespace_public_id = ?,
-	    model_id = ?,
-	    model_locked = ?,
-	    execution_mode = ?,
-	    working_dir = ?,
-	    title = ?,
-	    title_source = ?,
-	    title_generated_at_unix_ms = ?,
-	    title_input_message_id = ?,
-	    title_model_id = ?,
-	    title_prompt_version = ?,
-	    run_status = ?,
-	    run_updated_at_unix_ms = ?,
-	    run_error = ?,
-	    waiting_user_input_json = ?,
-	    last_context_run_id = ?,
-	    created_by_user_public_id = ?,
-	    created_by_user_email = ?,
-	    updated_by_user_public_id = ?,
-    updated_by_user_email = ?,
-    created_at_unix_ms = ?,
-    updated_at_unix_ms = ?,
-    last_message_at_unix_ms = ?,
-    last_message_preview = ?
-WHERE endpoint_id = ? AND thread_id = ?
-`,
-		strings.TrimSpace(th.NamespacePublicID),
-		strings.TrimSpace(th.ModelID),
-		boolToInt(th.ModelLocked),
-		normalizeExecutionMode(strings.TrimSpace(th.ExecutionMode)),
-		strings.TrimSpace(th.WorkingDir),
-		strings.TrimSpace(th.Title),
-		normalizeThreadTitleSource(th.TitleSource),
-		th.TitleGeneratedAtUnixMs,
-		strings.TrimSpace(th.TitleInputMessageID),
-		strings.TrimSpace(th.TitleModelID),
-		strings.TrimSpace(th.TitlePromptVersion),
-		runStatus,
-		th.RunUpdatedAtUnixMs,
-		strings.TrimSpace(th.RunError),
-		strings.TrimSpace(th.WaitingUserInputJSON),
-		strings.TrimSpace(th.LastContextRunID),
-		strings.TrimSpace(th.CreatedByUserPublicID),
-		strings.TrimSpace(th.CreatedByUserEmail),
-		strings.TrimSpace(th.UpdatedByUserPublicID),
-		strings.TrimSpace(th.UpdatedByUserEmail),
-		th.CreatedAtUnixMs,
-		th.UpdatedAtUnixMs,
-		th.LastMessageAtUnixMs,
-		strings.TrimSpace(th.LastMessagePreview),
-		endpointID,
-		threadID,
-	)
-	return err
 }
 
 func pruneThreadCheckpointsTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, keep int) ([]string, error) {

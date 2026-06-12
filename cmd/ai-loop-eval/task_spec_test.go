@@ -26,7 +26,6 @@ tasks:
     runtime:
       execution_mode: plan
       max_steps: 3
-      max_no_tool_rounds: 1
       timeout_seconds: 20
       no_user_interaction: true
     assertions:

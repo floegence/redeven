@@ -126,7 +126,7 @@ vi.mock('../protocol/redeven_v1', () => ({
       onEvent: () => () => {},
       subscribeSummary: vi.fn(async () => ({ activeRuns: [] })),
       subscribeThread: vi.fn(async () => ({})),
-      submitStructuredPromptResponse: vi.fn(async () => ({ kind: 'start' })),
+      submitRequestUserInputResponse: vi.fn(async () => ({ kind: 'start' })),
     },
   }),
 }));

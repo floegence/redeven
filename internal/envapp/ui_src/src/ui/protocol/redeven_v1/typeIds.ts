@@ -70,7 +70,7 @@ export const redevenV1TypeIds = {
     getActiveRunSnapshot: 6007,
     subscribeThread: 6009,
     stopThread: 6011,
-    submitStructuredPromptResponse: 6012,
+    submitRequestUserInputResponse: 6012,
   },
   sessions: {
     listActive: 5001,

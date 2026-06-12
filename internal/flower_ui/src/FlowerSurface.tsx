@@ -76,6 +76,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [chatDraft, setChatDraft] = createSignal('');
   const [chatSubmitError, setChatSubmitError] = createSignal('');
   const [inputDrafts, setInputDrafts] = createSignal<Record<string, FlowerInputDraft>>({});
+  const [activeInputQuestionID, setActiveInputQuestionID] = createSignal('');
   const [inputSubmitError, setInputSubmitError] = createSignal('');
   const [inputSubmitting, setInputSubmitting] = createSignal(false);
   const [chatRunning, setChatRunning] = createSignal(false);
@@ -101,7 +102,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadLoadSequence = 0;
   let lastFocusedThreadID = '';
   let lastInputPromptSignature = '';
-  let composerRef: HTMLTextAreaElement | undefined;
+  let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
   let transcriptRef: HTMLDivElement | undefined;
   let renameDialogRef: HTMLDivElement | undefined;
   let renameInputRef: HTMLInputElement | undefined;
@@ -110,13 +111,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
   const selectedThreadRunning = createMemo(() => selectedThread()?.status === 'running');
-  const selectedInputRequest = createMemo(() => selectedThread()?.input_request ?? null);
+  const visibleInputRequest = (thread: FlowerThreadSnapshot | null | undefined): FlowerInputRequest | null => (
+    thread?.status === 'waiting_user' ? thread.input_request ?? null : null
+  );
+  const selectedInputRequest = createMemo(() => visibleInputRequest(selectedThread()));
   const selectedThreadHasContent = createMemo(() => {
     const thread = selectedThread();
     if (!thread) return false;
     return thread.messages.length > 0
       || (thread.tool_activity?.length ?? 0) > 0
-      || !!thread.input_request
+      || !!visibleInputRequest(thread)
       || trimString(thread.error?.message) !== '';
   });
   const selectedThreadLoading = createMemo(() => trimString(loadingThreadID()) !== '' && loadingThreadID() === selectedThreadID());
@@ -207,13 +211,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (existingIndex < 0) {
         return [thread, ...current];
       }
-      const existing = current[existingIndex];
-      if (
-        existing.title === thread.title &&
-        existing.status === thread.status &&
-        Number(existing.pinned_at_ms ?? 0) === Number(thread.pinned_at_ms ?? 0) &&
-        existing.created_at_ms === thread.created_at_ms
-      ) {
+      if (current[existingIndex] === thread) {
         return current;
       }
       const next = [...current];
@@ -333,7 +331,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const threadHasLoadedDetail = (thread: FlowerThreadSnapshot): boolean => (
-    thread.messages.length > 0 || thread.tool_activity !== undefined || thread.input_request !== undefined || thread.error !== undefined
+    thread.messages.length > 0 || thread.tool_activity !== undefined || visibleInputRequest(thread) !== null || thread.error !== undefined
   );
 
   const mergeThreadListSummary = (
@@ -343,7 +341,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ...summary,
     messages: existing.messages,
     ...(existing.tool_activity !== undefined ? { tool_activity: existing.tool_activity } : {}),
-    ...(existing.input_request !== undefined ? { input_request: existing.input_request } : {}),
+    ...(summary.status === 'waiting_user' && existing.input_request !== undefined ? { input_request: existing.input_request } : {}),
     ...(existing.error !== undefined ? { error: existing.error } : {}),
   });
 
@@ -497,6 +495,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     lastInputPromptSignature = signature;
     setInputDrafts({});
+    const textQuestion = selectedInputRequest()?.questions.find((question) => question.response_mode === 'write' || question.response_mode === 'select_or_write') ?? null;
+    setActiveInputQuestionID(textQuestion?.id ?? '');
     setInputSubmitError('');
   });
 
@@ -530,7 +530,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const prompt = trimString(composerRef?.value ?? chatDraft());
     setChatSubmitError('');
     if (selectedInputRequest()) {
-      setChatSubmitError(chatCopyValue('inputRequestComposerPlaceholder', 'Answer the prompt above to continue this conversation.'));
+      await submitInputRequest();
       return;
     }
     if (!snapshot()) {
@@ -710,7 +710,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       | 'inputRequestRetry'
       | 'inputRequestAnswerRequired'
       | 'inputRequestSubmitting'
-      | 'inputRequestComposerPlaceholder',
+      | 'inputRequestComposerPlaceholder'
+      | 'inputRequestChoicePlaceholder',
     fallback: string,
   ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
 
@@ -718,6 +719,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const questionMode = (question: FlowerInputRequestQuestion): NonNullable<FlowerInputRequestQuestion['response_mode']> => {
     return question.response_mode;
+  };
+
+  const questionAllowsText = (question: FlowerInputRequestQuestion): boolean => {
+    const mode = questionMode(question);
+    return mode === 'write' || mode === 'select_or_write';
   };
 
   const questionDraft = (questionID: string): FlowerInputDraft => inputDrafts()[questionID] ?? {};
@@ -733,50 +739,74 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setInputSubmitError('');
   };
 
-  const selectedChoiceForQuestion = (question: FlowerInputRequestQuestion): FlowerInputRequestChoice | null => {
-    const selectedChoiceID = trimString(questionDraft(question.id).choice_id);
-    if (!selectedChoiceID) return null;
-    return question.choices?.find((choice) => choice.choice_id === selectedChoiceID) ?? null;
-  };
-
   const selectInputChoice = (question: FlowerInputRequestQuestion, choice: FlowerInputRequestChoice) => {
-    const current = questionDraft(question.id);
     setQuestionDraft(question.id, {
       choice_id: choice.choice_id,
-      ...(choice.kind === 'write' && trimString(current.text) ? { text: current.text } : {}),
     });
   };
 
   const updateInputText = (question: FlowerInputRequestQuestion, text: string) => {
-    const current = questionDraft(question.id);
-    const selectedChoice = selectedChoiceForQuestion(question);
-    const shouldKeepChoice = selectedChoice?.kind === 'write' || questionMode(question) === 'select';
+    if (!questionAllowsText(question)) return;
     setQuestionDraft(question.id, {
-      ...(shouldKeepChoice && current.choice_id ? { choice_id: current.choice_id } : {}),
       text,
     });
   };
+
+  const updateComposerText = (value: string) => {
+    const waitingQuestion = activeInputQuestion();
+    if (selectedInputRequest() && waitingQuestion) {
+      updateInputText(waitingQuestion, value);
+      setInputSubmitError('');
+      return;
+    }
+    setChatDraft(value);
+    setChatSubmitError('');
+  };
+
+  const inputTextQuestions = createMemo(() => selectedInputRequest()?.questions.filter(questionAllowsText) ?? []);
+
+  const activeInputQuestion = createMemo(() => {
+    const questions = inputTextQuestions();
+    const activeID = trimString(activeInputQuestionID());
+    return questions.find((question) => question.id === activeID) ?? questions[0] ?? null;
+  });
+  const activeInputQuestionIsSecret = createMemo(() => !!selectedInputRequest() && !!activeInputQuestion()?.is_secret);
+
+  const composerTextValue = createMemo(() => {
+    if (!selectedInputRequest()) return chatDraft();
+    const question = activeInputQuestion();
+    return question ? questionDraft(question.id).text ?? '' : '';
+  });
+
+  const composerPlaceholder = createMemo(() => {
+    if (!selectedInputRequest()) return copy().chat.placeholder;
+    const question = activeInputQuestion();
+    if (!question) {
+      return chatCopyValue('inputRequestChoicePlaceholder', 'Choose an option to continue.');
+    }
+    return trimString(question.write_placeholder)
+      || trimString(question.question)
+      || chatCopyValue('inputRequestComposerPlaceholder', 'Reply to continue this conversation.');
+  });
+
+  const composerTextareaDisabled = createMemo(() => {
+    if (!selectedInputRequest()) return false;
+    return inputSubmitting() || !activeInputQuestion();
+  });
 
   const questionAnswer = (question: FlowerInputRequestQuestion): FlowerInputAnswer | null => {
     const draft = questionDraft(question.id);
     const choiceID = trimString(draft.choice_id);
     const text = trimString(draft.text);
     const mode = questionMode(question);
-    const selectedChoice = selectedChoiceForQuestion(question);
-    if (mode === 'write') {
-      return text ? { text } : null;
-    }
-    if (choiceID) {
-      if (selectedChoice?.kind === 'write' && !text) {
-        return null;
-      }
-      return {
-        choice_id: choiceID,
-        ...(text ? { text } : {}),
-      };
-    }
+
+    if (mode === 'write') return text ? { text } : null;
+    if (mode === 'select') return choiceID ? { choice_id: choiceID } : null;
     if (mode === 'select_or_write' && text) {
       return { text };
+    }
+    if (mode === 'select_or_write' && choiceID) {
+      return { choice_id: choiceID };
     }
     return null;
   };
@@ -794,6 +824,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     return answers;
   };
+
+  const inputRequestReadyToSubmit = createMemo(() => !!selectedInputRequest() && inputRequestAnswers() !== null);
+  const composerErrorMessage = createMemo(() => inputSubmitError() || chatSubmitError());
 
   const submitInputRequest = async () => {
     const thread = selectedThread();
@@ -815,6 +848,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       upsertThread(next);
       setSelectedThreadID(next.thread_id);
       setInputDrafts({});
+      setActiveInputQuestionID('');
       setInputSubmitError('');
       await refreshSelectedThread(next.thread_id);
     } catch (error) {
@@ -824,62 +858,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const inputTextControl = (question: FlowerInputRequestQuestion) => {
-    const selectedChoice = () => selectedChoiceForQuestion(question);
-    const placeholder = () => selectedChoice()?.input_placeholder
-      || question.write_placeholder
-      || chatCopyValue('inputRequestComposerPlaceholder', 'Answer the prompt above to continue this conversation.');
-    const value = () => questionDraft(question.id).text ?? '';
-    return (
-      <label class="flower-host-input-request-write">
-        <span>{question.write_label || selectedChoice()?.label || question.header}</span>
-        <Show
-          when={question.is_secret}
-          fallback={(
-            <textarea
-              class="flower-host-input-request-text"
-              value={value()}
-              placeholder={placeholder()}
-              disabled={inputSubmitting()}
-              rows={3}
-              onInput={(event) => updateInputText(question, event.currentTarget.value)}
-            />
-          )}
-        >
-          <input
-            class="flower-host-input-request-text"
-            type="password"
-            value={value()}
-            placeholder={placeholder()}
-            disabled={inputSubmitting()}
-            onInput={(event) => updateInputText(question, event.currentTarget.value)}
-          />
-        </Show>
-      </label>
-    );
-  };
-
-  const inputRequestCard = (request: FlowerInputRequest | null | undefined) => (
+  const inputRequestPrompt = (request: FlowerInputRequest | null | undefined) => (
     <Show when={request}>
       {(inputRequest) => (
-        <section class="flower-host-input-request-card" data-flower-input-request-card aria-label={chatCopyValue('inputRequestTitle', 'Flower needs your input')}>
+        <section class="flower-host-input-request-panel" data-flower-input-request-prompt aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}>
           <div class="flower-host-input-request-heading">
             <div class="flower-host-input-request-icon"><Clock class="h-4 w-4" /></div>
             <div class="flower-host-input-request-copy">
-              <div class="flower-host-input-request-title">{chatCopyValue('inputRequestTitle', 'Flower needs your input')}</div>
+              <div class="flower-host-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
               <div class="flower-host-input-request-description">
-                {inputRequest().public_summary || chatCopyValue('inputRequestDescription', 'Answer this structured prompt so Flower can continue the same run.')}
+                {inputRequest().public_summary || chatCopyValue('inputRequestDescription', 'Reply in the composer to continue this conversation.')}
               </div>
             </div>
           </div>
           <div class="flower-host-input-request-questions">
             <For each={inputRequest().questions}>
               {(question) => {
-                const mode = () => questionMode(question);
                 const selectedChoiceID = () => trimString(questionDraft(question.id).choice_id);
-                const showWriteInput = () => mode() === 'write' || mode() === 'select_or_write' || selectedChoiceForQuestion(question)?.kind === 'write';
                 return (
-                  <div class="flower-host-input-request-question">
+                  <div
+                    class={cn(
+                      'flower-host-input-request-question',
+                      activeInputQuestion()?.id === question.id && 'flower-host-input-request-question-active',
+                    )}
+                  >
                     <div class="flower-host-input-request-question-copy">
                       <div class="flower-host-input-request-question-header">{question.header}</div>
                       <div class="flower-host-input-request-question-text">{question.question}</div>
@@ -907,36 +909,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         </For>
                       </div>
                     </Show>
-                    <Show when={showWriteInput()}>
-                      {inputTextControl(question)}
-                    </Show>
                   </div>
                 );
               }}
             </For>
           </div>
-          <div class="flower-host-input-request-footer">
-            <Show when={inputSubmitError()}>
-              {(message) => (
-                <div role="alert" class="flower-host-input-request-error">
-                  <AlertTriangle class="h-3.5 w-3.5" />
-                  <span>{message()}</span>
-                </div>
-              )}
-            </Show>
-            <button
-              type="button"
-              class="flower-host-input-request-submit"
-              disabled={inputSubmitting()}
-              onClick={() => void submitInputRequest()}
-            >
-              {inputSubmitting()
-                ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
-                : inputSubmitError()
-                  ? chatCopyValue('inputRequestRetry', 'Retry')
-                  : chatCopyValue('inputRequestSubmit', 'Continue')}
-            </button>
-          </div>
+          <Show when={inputTextQuestions().length > 1}>
+            <div class="flower-host-input-request-text-targets" role="tablist" aria-label={chatCopyValue('inputRequestComposerPlaceholder', 'Reply to continue this conversation.')}>
+              <For each={inputTextQuestions()}>
+                {(question) => (
+                  <button
+                    type="button"
+                    class={cn(
+                      'flower-host-input-request-text-target',
+                      activeInputQuestion()?.id === question.id && 'flower-host-input-request-text-target-active',
+                    )}
+                    aria-selected={activeInputQuestion()?.id === question.id}
+                    disabled={inputSubmitting()}
+                    onClick={() => setActiveInputQuestionID(question.id)}
+                  >
+                    {question.write_label || question.header}
+                  </button>
+                )}
+              </For>
+            </div>
+          </Show>
         </section>
       )}
     </Show>
@@ -1120,7 +1117,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             >
               <For each={stableSelectedMessages()}>{messageBubble}</For>
               {toolActivity(selectedThread()?.tool_activity)}
-              {inputRequestCard(selectedThread()?.input_request)}
               <Show when={selectedThread()?.error}>
                 {(error) => errorNotice(copy().chat.runErrorTitle, error().message)}
               </Show>
@@ -1130,30 +1126,56 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <div class="flower-host-chat-bottom-dock flower-chat-bottom-dock">
           <div class="flower-host-chat-bottom-dock-track flower-chat-bottom-dock-track">
             <div class="flower-host-composer flower-chat-input-floating chat-input-container p-3">
-              <textarea
-                ref={composerRef}
-                class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
-                placeholder={selectedInputRequest()
-                  ? chatCopyValue('inputRequestComposerPlaceholder', 'Answer the prompt above to continue this conversation.')
-                  : copy().chat.placeholder}
-                value={chatDraft()}
-                disabled={!!selectedInputRequest() || inputSubmitting()}
-                onInput={(event) => {
-                  setChatDraft(event.currentTarget.value);
-                  setChatSubmitError('');
-                }}
-                onCompositionStart={() => setIsComposing(true)}
-                onCompositionEnd={(event) => {
-                  setIsComposing(false);
-                  setChatDraft(event.currentTarget.value);
-                }}
-                onKeyDown={(event) => {
-                  if (shouldSubmitOnEnterKeydown(event)) {
-                    event.preventDefault();
-                    void submitChat();
-                  }
-                }}
-              />
+              {inputRequestPrompt(selectedInputRequest())}
+              <Show
+                when={activeInputQuestionIsSecret()}
+                fallback={(
+                  <textarea
+                    ref={(el) => {
+                      composerRef = el;
+                    }}
+                    class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
+                    placeholder={composerPlaceholder()}
+                    value={composerTextValue()}
+                    disabled={composerTextareaDisabled()}
+                    onInput={(event) => updateComposerText(event.currentTarget.value)}
+                    onCompositionStart={() => setIsComposing(true)}
+                    onCompositionEnd={(event) => {
+                      setIsComposing(false);
+                      updateComposerText(event.currentTarget.value);
+                    }}
+                    onKeyDown={(event) => {
+                      if (shouldSubmitOnEnterKeydown(event)) {
+                        event.preventDefault();
+                        void submitChat();
+                      }
+                    }}
+                  />
+                )}
+              >
+                <input
+                  ref={(el) => {
+                    composerRef = el;
+                  }}
+                  type="password"
+                  class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
+                  placeholder={composerPlaceholder()}
+                  value={composerTextValue()}
+                  disabled={composerTextareaDisabled()}
+                  onInput={(event) => updateComposerText(event.currentTarget.value)}
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={(event) => {
+                    setIsComposing(false);
+                    updateComposerText(event.currentTarget.value);
+                  }}
+                  onKeyDown={(event) => {
+                    if (shouldSubmitOnEnterKeydown(event)) {
+                      event.preventDefault();
+                      void submitChat();
+                    }
+                  }}
+                />
+              </Show>
               <div class="flower-host-composer-footer">
                 <Show
                   when={!needsSetup()}
@@ -1168,66 +1190,77 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </>
                   )}
                 >
-                  <div class="flower-host-handler-stack" aria-live="polite">
-                    <Show when={canSwitchHandler()}>
-                      <label class="flower-host-handler-picker">
-                        <span class="flower-host-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
-                        <span class="flower-host-handler-picker-value">
-                          {handlerLoading()
-                            ? copy().chat.handlerResolving
-                            : selectedHandler()?.display_name || copy().chat.handlerUnavailable}
-                        </span>
-                        <ChevronDown class="flower-host-handler-picker-icon" />
-                        <select
-                          aria-label={copy().chat.handlerSelectionLabel}
-                          value={selectedHandler()?.handler_id ?? ''}
-                          disabled={handlerLoading()}
-                          onChange={(event) => switchHandler(event.currentTarget.value)}
-                        >
-                          <For each={handlerOptions()}>
-                            {(handler) => <option value={handler.handler_id}>{handler.display_name}</option>}
-                          </For>
-                        </select>
-                      </label>
-                    </Show>
-                    <Show when={!canSwitchHandler() && !readyHandlerDecision()}>
-                      <div class="flower-host-handler-selection">
-                        <span class="flower-host-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
-                        <Tag variant="warning" class="flower-host-handler-chip">
-                          {handlerLoading() ? copy().chat.handlerResolving : copy().chat.handlerUnavailable}
-                        </Tag>
-                      </div>
-                    </Show>
-                    <Show when={handlerError()}>
-                      <div role="alert" class="flower-host-handler-error-card">
-                        <div class="flower-host-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
-                        <div class="flower-host-handler-error-copy">
-                          <div class="flower-host-handler-error-title">{copy().chat.handlerUnavailable}</div>
-                          <div class="flower-host-handler-error-message">{handlerError()}</div>
+                  <Show when={!selectedInputRequest()} fallback={<div class="flower-host-handler-stack" aria-live="polite" />}>
+                    <div class="flower-host-handler-stack" aria-live="polite">
+                      <Show when={canSwitchHandler()}>
+                        <label class="flower-host-handler-picker">
+                          <span class="flower-host-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
+                          <span class="flower-host-handler-picker-value">
+                            {handlerLoading()
+                              ? copy().chat.handlerResolving
+                              : selectedHandler()?.display_name || copy().chat.handlerUnavailable}
+                          </span>
+                          <ChevronDown class="flower-host-handler-picker-icon" />
+                          <select
+                            aria-label={copy().chat.handlerSelectionLabel}
+                            value={selectedHandler()?.handler_id ?? ''}
+                            disabled={handlerLoading()}
+                            onChange={(event) => switchHandler(event.currentTarget.value)}
+                          >
+                            <For each={handlerOptions()}>
+                              {(handler) => <option value={handler.handler_id}>{handler.display_name}</option>}
+                            </For>
+                          </select>
+                        </label>
+                      </Show>
+                      <Show when={!canSwitchHandler() && !readyHandlerDecision()}>
+                        <div class="flower-host-handler-selection">
+                          <span class="flower-host-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
+                          <Tag variant="warning" class="flower-host-handler-chip">
+                            {handlerLoading() ? copy().chat.handlerResolving : copy().chat.handlerUnavailable}
+                          </Tag>
                         </div>
-                        <button
-                          type="button"
-                          class="flower-host-handler-retry"
-                          onClick={() => void resolveHandlerDecision().catch(() => undefined)}
-                        >
-                          {copy().chat.handlerRetry}
-                        </button>
-                      </div>
-                    </Show>
-                  </div>
+                      </Show>
+                      <Show when={handlerError()}>
+                        <div role="alert" class="flower-host-handler-error-card">
+                          <div class="flower-host-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
+                          <div class="flower-host-handler-error-copy">
+                            <div class="flower-host-handler-error-title">{copy().chat.handlerUnavailable}</div>
+                            <div class="flower-host-handler-error-message">{handlerError()}</div>
+                          </div>
+                          <button
+                            type="button"
+                            class="flower-host-handler-retry"
+                            onClick={() => void resolveHandlerDecision().catch(() => undefined)}
+                          >
+                            {copy().chat.handlerRetry}
+                          </button>
+                        </div>
+                      </Show>
+                    </div>
+                  </Show>
                   <Button
                     variant="primary"
                     icon={Send}
-                    disabled={chatRunning() || !!selectedInputRequest() || !readyForChat() || !readyHandlerDecision() || !trimString(chatDraft())}
-                    loading={chatRunning()}
+                    class="flower-host-composer-submit"
+                    disabled={selectedInputRequest()
+                      ? inputSubmitting() || !inputRequestReadyToSubmit()
+                      : chatRunning() || !readyForChat() || !readyHandlerDecision() || !trimString(chatDraft())}
+                    loading={selectedInputRequest() ? inputSubmitting() : chatRunning()}
                     onClick={() => void submitChat()}
                   >
-                    {copy().chat.send}
+                    {selectedInputRequest()
+                      ? inputSubmitting()
+                        ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
+                        : inputSubmitError()
+                          ? chatCopyValue('inputRequestRetry', 'Retry')
+                          : chatCopyValue('inputRequestSubmit', 'Continue')
+                      : copy().chat.send}
                   </Button>
                 </Show>
               </div>
             </div>
-            <Show when={chatSubmitError()}>
+            <Show when={composerErrorMessage()}>
               {(message) => <div class="flower-host-composer-error">{errorNotice(copy().chat.composerErrorTitle, message())}</div>}
             </Show>
           </div>

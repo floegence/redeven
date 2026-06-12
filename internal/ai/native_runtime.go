@@ -36,11 +36,7 @@ const (
 	nativeToolResultPruneRunes              = 480
 	nativeToolResultKeepTurns               = 2
 	providerContinuationKindOpenAIResponses = "openai_responses"
-	// nativeHardMaxSteps is the absolute safety net for the task-driven loop.
-	// The loop is now driven by explicit completion signals (task_complete,
-	// ask_user), NOT by a step budget. This constant only prevents
-	// runaway loops caused by bugs.
-	nativeHardMaxSteps = 200
+	nativeHardMaxSteps                      = 200
 )
 
 const (
@@ -139,15 +135,6 @@ type openAIProvider struct {
 	client           openai.Client
 	strictToolSchema bool
 	forceChat        bool
-}
-
-func runProviderTurn(ctx context.Context, provider Provider, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
-	if onEvent == nil {
-		if direct, ok := provider.(directTurnProvider); ok {
-			return direct.Turn(ctx, req)
-		}
-	}
-	return provider.StreamTurn(ctx, req, onEvent)
 }
 
 func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
@@ -2043,269 +2030,6 @@ func shouldUseStrictOpenAIToolSchema(providerType string, baseURL string) bool {
 	return host == "api.openai.com"
 }
 
-func (r *run) runNativeSocial(
-	execCtx context.Context,
-	adapter Provider,
-	providerCfg config.AIProvider,
-	providerType string,
-	modelName string,
-	mode string,
-	req RunRequest,
-) error {
-	return r.runNativeConversational(execCtx, adapter, providerCfg, providerType, modelName, mode, req, RunIntentSocial)
-}
-
-func (r *run) runNativeCreative(
-	execCtx context.Context,
-	adapter Provider,
-	providerCfg config.AIProvider,
-	providerType string,
-	modelName string,
-	mode string,
-	req RunRequest,
-) error {
-	return r.runNativeConversational(execCtx, adapter, providerCfg, providerType, modelName, mode, req, RunIntentCreative)
-}
-
-func (r *run) runNativeConversational(
-	execCtx context.Context,
-	adapter Provider,
-	providerCfg config.AIProvider,
-	providerType string,
-	modelName string,
-	mode string,
-	req RunRequest,
-	intent string,
-) error {
-	if r == nil {
-		return errors.New("nil run")
-	}
-	if adapter == nil {
-		return r.failRun("Failed to initialize provider adapter", errors.New("nil provider adapter"))
-	}
-	if r.finalizeIfContextCanceled(execCtx) {
-		return nil
-	}
-
-	intent = normalizeRunIntent(intent)
-	systemPrompt := r.buildSocialSystemPrompt()
-	finalizationReason := "social_reply"
-	fallbackText := "Hello! I'm here. Tell me what task you want to work on."
-	if intent == RunIntentCreative {
-		systemPrompt = r.buildCreativeSystemPrompt()
-		finalizationReason = "creative_reply"
-		fallbackText = "I can help with creative writing. Tell me the style, tone, and length you want."
-	}
-
-	r.emitLifecyclePhase("synthesizing", map[string]any{"intent": intent})
-	messages := buildMessagesForRun(req)
-	resumeState, resumeStateErr := r.loadProviderTurnResumeState(execCtx, providerCfg, providerType, modelName)
-	if resumeStateErr != nil {
-		r.persistRunEvent("provider.continuation.load_failed", RealtimeStreamKindLifecycle, map[string]any{
-			"provider_type": providerType,
-			"error":         sanitizeLogText(resumeStateErr.Error(), 240),
-			"intent":        intent,
-		})
-		resumeState = providerTurnResumeState{SkipReason: "load_failed"}
-	} else if resumeState.Enabled {
-		r.persistRunEvent("provider.continuation.available", RealtimeStreamKindLifecycle, map[string]any{
-			"provider_type":        providerType,
-			"provider_id":          strings.TrimSpace(providerCfg.ID),
-			"model":                modelName,
-			"continuation_kind":    providerContinuationKindOpenAIResponses,
-			"previous_response_id": resumeState.PreviousResponseID,
-			"provider_base_url":    canonicalProviderContinuationBaseURL(providerType, providerCfg.BaseURL),
-			"intent":               intent,
-		})
-	} else if strings.TrimSpace(resumeState.SkipReason) != "" {
-		r.persistRunEvent("provider.continuation.skipped", RealtimeStreamKindLifecycle, map[string]any{
-			"provider_type": providerType,
-			"provider_id":   strings.TrimSpace(providerCfg.ID),
-			"model":         modelName,
-			"reason":        resumeState.SkipReason,
-			"intent":        intent,
-		})
-	}
-	continuationCount := 0
-	for step := 0; ; step++ {
-		turnReq := TurnRequest{
-			Model:            modelName,
-			Messages:         composeTurnMessages(systemPrompt, messages),
-			Tools:            nil,
-			Budgets:          TurnBudgets{MaxSteps: 1, MaxInputTokens: req.Options.MaxInputTokens, MaxOutputToken: req.Options.MaxOutputTokens, MaxCostUSD: req.Options.MaxCostUSD},
-			ModeFlags:        ModeFlags{Mode: mode, ReasoningOnly: true},
-			ProviderControls: ProviderControls{ThinkingBudgetTokens: req.Options.ThinkingBudgetTokens, CacheControl: req.Options.CacheControl, ResponseFormat: req.Options.ResponseFormat, Temperature: req.Options.Temperature, TopP: req.Options.TopP},
-		}
-		baseTurnMessages := turnReq.Messages
-		resumeTurn := step == 0 && resumeState.Enabled && strings.TrimSpace(resumeState.PreviousResponseID) != ""
-		if resumeTurn {
-			turnReq.Messages = composeTurnMessages(systemPrompt, buildResumeMessagesForRun(req))
-			turnReq.ProviderControls.PreviousResponseID = resumeState.PreviousResponseID
-			r.persistRunEvent("provider.continuation.resume_requested", RealtimeStreamKindLifecycle, map[string]any{
-				"step_index":           step,
-				"provider_type":        providerType,
-				"previous_response_id": resumeState.PreviousResponseID,
-				"sent_messages":        len(turnReq.Messages),
-				"intent":               intent,
-			})
-		}
-		estimateTokens, estimateSource := estimateTurnTokens(providerType, turnReq)
-		contextWindow := nativeDefaultContextLimit
-		if req.ModelCapability.MaxContextTokens > 0 {
-			contextWindow = req.ModelCapability.MaxContextTokens
-		}
-		inputContextLimit := resolveInputContextLimit(contextWindow, req.Options.MaxInputTokens)
-		windowBasedThreshold := deriveModelWindowCompactionThreshold(contextWindow, inputContextLimit)
-		r.emitContextUsageEvent(contextUsageEventInput{
-			StepIndex:             step,
-			EstimateTokens:        estimateTokens,
-			EstimateSource:        estimateSource,
-			ContextWindow:         contextWindow,
-			ContextLimit:          inputContextLimit,
-			EffectiveThreshold:    resolveCompactionThreshold(req.Options.CompactionThreshold, contextWindow, inputContextLimit),
-			ConfiguredThreshold:   normalizeCompactionThreshold(req.Options.CompactionThreshold),
-			WindowBasedThreshold:  windowBasedThreshold,
-			TurnMessagesCount:     len(turnReq.Messages),
-			HistoryMessagesCount:  len(messages),
-			PromptPackEstimated:   req.ContextPack.EstimatedInputTokens,
-			ContextSectionsTokens: req.ContextPack.ContextSectionsTokenUsage,
-		})
-		endBusy := r.beginBusy()
-		stepResult, stepErr := adapter.StreamTurn(execCtx, turnReq, func(event StreamEvent) {
-			switch event.Type {
-			case StreamEventTextDelta:
-				if strings.TrimSpace(event.Text) != "" {
-					_ = r.appendTextDelta(event.Text)
-				}
-			case StreamEventThinkingDelta:
-				if strings.TrimSpace(event.Text) != "" {
-					r.touchActivity()
-					_ = r.appendThinkingDelta(event.Text)
-					r.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{
-						"delta": truncateRunes(event.Text, 2000),
-					})
-				}
-			}
-		})
-		endBusy()
-		if resumeTurn && stepErr != nil && isOpenAIContinuationRejection(stepErr) {
-			r.persistRunEvent("provider.continuation.invalidated", RealtimeStreamKindLifecycle, map[string]any{
-				"step_index":           step,
-				"provider_type":        providerType,
-				"previous_response_id": resumeState.PreviousResponseID,
-				"reason":               "provider_rejected_previous_response_id",
-				"error":                sanitizeLogText(stepErr.Error(), 240),
-				"intent":               intent,
-			})
-			resumeState = providerTurnResumeState{SkipReason: "provider_rejected_previous_response_id"}
-			r.setProviderContinuationCandidate(threadstore.ThreadProviderContinuation{})
-			turnReq.Messages = baseTurnMessages
-			turnReq.ProviderControls.PreviousResponseID = ""
-			estimateTokens, estimateSource = estimateTurnTokens(providerType, turnReq)
-			endBusy = r.beginBusy()
-			stepResult, stepErr = adapter.StreamTurn(execCtx, turnReq, func(event StreamEvent) {
-				switch event.Type {
-				case StreamEventTextDelta:
-					if strings.TrimSpace(event.Text) != "" {
-						_ = r.appendTextDelta(event.Text)
-					}
-				case StreamEventThinkingDelta:
-					if strings.TrimSpace(event.Text) != "" {
-						r.touchActivity()
-						_ = r.appendThinkingDelta(event.Text)
-						r.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{
-							"delta": truncateRunes(event.Text, 2000),
-						})
-					}
-				}
-			})
-			endBusy()
-			r.persistRunEvent("provider.continuation.fallback_replay", RealtimeStreamKindLifecycle, map[string]any{
-				"step_index":    step,
-				"provider_type": providerType,
-				"success":       stepErr == nil,
-				"intent":        intent,
-			})
-		}
-		if stepErr != nil {
-			if r.finalizeIfContextCanceled(execCtx) {
-				return nil
-			}
-			return r.failRun("Failed to generate conversational response", stepErr)
-		}
-
-		r.setProviderContinuationCandidate(buildProviderContinuationCandidate(
-			strings.TrimSpace(providerCfg.ID),
-			providerType,
-			modelName,
-			providerCfg.BaseURL,
-			stepResult.ProviderState,
-		))
-		finishReason := normalizeReplyFinishReason(stepResult.FinishReason)
-		r.recordRuntimeTurnUsage(stepResult.Usage, estimateTokens)
-		r.persistRunEvent("native.turn.result", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":    step,
-			"finish_reason": finishReason,
-			"tool_calls":    len(stepResult.ToolCalls),
-			"usage": map[string]any{
-				"input_tokens":     stepResult.Usage.InputTokens,
-				"output_tokens":    stepResult.Usage.OutputTokens,
-				"reasoning_tokens": stepResult.Usage.ReasoningTokens,
-			},
-			"estimate_tokens": estimateTokens,
-			"estimate_source": estimateSource,
-			"intent":          intent,
-		})
-		if canonical := r.canonicalAssistantMarkdownOrFallback(stepResult.Text); canonical != "" {
-			r.setCanonicalMarkdownCandidate(canonical)
-		}
-
-		switch classifyReplyFinish(finishReason) {
-		case replyFinishClassClean:
-			if !r.hasNonEmptyAssistantText() {
-				if txt := strings.TrimSpace(stepResult.Text); txt != "" {
-					_ = r.appendTextDelta(txt)
-				}
-			}
-			if !r.hasNonEmptyAssistantText() {
-				_ = r.appendTextDelta(fallbackText)
-			}
-			r.finalizeImplicitReply(step, finalizationReason, fallbackText)
-			return nil
-		case replyFinishClassRetry:
-			continuationCount++
-			if continuationCount > maxConversationalReplyContinuations {
-				return r.failReplyFinish(
-					step,
-					RunExecutionContractDirectReply,
-					finishReason,
-					"reply_finish_retry_exhausted",
-					"AI provider repeatedly truncated the reply before Flower could finish.",
-				)
-			}
-			r.persistReplyContinuation(step, RunExecutionContractDirectReply, finishReason)
-			messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: replyContinuationPrompt}}})
-			continue
-		case replyFinishClassBlocked:
-			return r.failReplyFinish(
-				step,
-				RunExecutionContractDirectReply,
-				finishReason,
-				"reply_finish_blocked",
-				"AI provider blocked the reply before Flower could finish the answer.",
-			)
-		default:
-			return r.failReplyFinish(
-				step,
-				RunExecutionContractDirectReply,
-				finishReason,
-				"reply_finish_invalid",
-				"AI provider returned an invalid terminal state for a direct reply.",
-			)
-		}
-	}
-}
-
 func buildInitialMessages(history []RunHistoryMsg, userInput string) []Message {
 	messages := make([]Message, 0, len(history)+1)
 	for _, msg := range history {
@@ -2638,138 +2362,12 @@ func (r *run) loadProviderTurnResumeState(ctx context.Context, providerCfg confi
 	return state, nil
 }
 
-func composeTurnMessages(systemPrompt string, history []Message) []Message {
-	messages := make([]Message, 0, len(history)+1)
-	if strings.TrimSpace(systemPrompt) != "" {
-		messages = append(messages, Message{Role: "system", Content: []ContentPart{{Type: "text", Text: strings.TrimSpace(systemPrompt)}}})
-	}
-	messages = append(messages, history...)
-	return messages
-}
-
-func estimateTurnTokens(providerType string, req TurnRequest) (int, string) {
-	providerType = strings.ToLower(strings.TrimSpace(providerType))
-	factor := 4.0
-	if providerType == "anthropic" {
-		factor = 3.8
-	}
-	chars := 0
-	for _, msg := range req.Messages {
-		for _, part := range msg.Content {
-			chars += len([]rune(part.Text))
-			chars += len([]rune(part.FileURI))
-			chars += len(part.JSON)
-		}
-	}
-	for _, tool := range req.Tools {
-		chars += len([]rune(tool.Name))
-		chars += len([]rune(tool.Description))
-		chars += len(tool.InputSchema)
-	}
-	estimate := int(float64(chars)/factor) + 32
-	if estimate < 0 {
-		estimate = 0
-	}
-	return estimate, "heuristic"
-}
-
 func estimateTextTokens(text string) int {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return 0
 	}
 	return len([]rune(text))/4 + 1
-}
-
-type contextUsageEventInput struct {
-	StepIndex             int
-	EstimateTokens        int
-	EstimateSource        string
-	ContextWindow         int
-	ContextLimit          int
-	EffectiveThreshold    float64
-	ConfiguredThreshold   float64
-	WindowBasedThreshold  float64
-	TurnMessagesCount     int
-	HistoryMessagesCount  int
-	PromptPackEstimated   int
-	ContextSectionsTokens map[string]int
-}
-
-func cloneIntMapToAny(in map[string]int) map[string]any {
-	if len(in) == 0 {
-		return map[string]any{}
-	}
-	out := make(map[string]any, len(in))
-	for key, value := range in {
-		key = strings.TrimSpace(key)
-		if key == "" {
-			continue
-		}
-		if value < 0 {
-			continue
-		}
-		out[key] = value
-	}
-	return out
-}
-
-func (r *run) emitContextUsageEvent(input contextUsageEventInput) {
-	if r == nil {
-		return
-	}
-	contextWindow := input.ContextWindow
-	if contextWindow <= 0 {
-		contextWindow = nativeDefaultContextLimit
-	}
-	limit := input.ContextLimit
-	if limit <= 0 {
-		limit = contextWindow
-	}
-	pressure := 0.0
-	if limit > 0 {
-		pressure = float64(input.EstimateTokens) / float64(limit)
-	}
-	usageBySection := cloneIntMapToAny(input.ContextSectionsTokens)
-	sectionsTotal := 0
-	for _, raw := range usageBySection {
-		value, ok := raw.(int)
-		if !ok {
-			continue
-		}
-		sectionsTotal += value
-	}
-	if sectionsTotal < 0 {
-		sectionsTotal = 0
-	}
-	unattributedTokens := input.EstimateTokens - sectionsTotal
-	if unattributedTokens < 0 {
-		unattributedTokens = 0
-	}
-	payload := map[string]any{
-		"step_index":               input.StepIndex,
-		"estimate_tokens":          input.EstimateTokens,
-		"estimate_source":          strings.TrimSpace(input.EstimateSource),
-		"context_window":           contextWindow,
-		"context_limit":            limit,
-		"pressure":                 pressure,
-		"usage_percent":            pressure * 100,
-		"effective_threshold":      input.EffectiveThreshold,
-		"configured_threshold":     input.ConfiguredThreshold,
-		"window_based_threshold":   input.WindowBasedThreshold,
-		"turn_messages":            input.TurnMessagesCount,
-		"history_messages":         input.HistoryMessagesCount,
-		"prompt_pack_estimate":     input.PromptPackEstimated,
-		"sections_tokens":          usageBySection,
-		"sections_tokens_total":    sectionsTotal,
-		"unattributed_tokens":      unattributedTokens,
-		"context_sections_present": len(usageBySection) > 0,
-	}
-	r.persistRunEvent("context.usage.updated", RealtimeStreamKindContext, payload)
-	r.sendStreamEvent(streamEventContextUsage{
-		Type:    "context-usage",
-		Payload: cloneAnyMap(payload),
-	})
 }
 
 func (r *run) emitContextCompactionEvent(eventType string, payload map[string]any) {
@@ -3441,34 +3039,15 @@ func normalizeAskUserOptions(options []string) []string {
 	return out
 }
 
-const (
-	replyContinuationPrompt             = "Continue from where you left off, without repeating previous content."
-	maxConversationalReplyContinuations = 3
-)
-
-func (r *run) persistReplyContinuation(step int, executionContract string, finishReason string) {
-	if r == nil {
-		return
-	}
-	r.persistRunEvent("reply.continuation_requested", RealtimeStreamKindLifecycle, map[string]any{
-		"step_index":          step,
-		"execution_contract":  normalizeExecutionContractValue(executionContract),
-		"completion_contract": completionContractForExecutionContract(executionContract),
-		"finish_reason":       normalizeReplyFinishReason(finishReason),
-	})
-}
-
-func (r *run) failReplyFinish(step int, executionContract string, finishReason string, finalizationReason string, errMsg string) error {
+func (r *run) failReplyFinish(step int, finishReason string, finalizationReason string, errMsg string) error {
 	if r == nil {
 		return errors.New(strings.TrimSpace(errMsg))
 	}
 	normalizedFinishReason := normalizeReplyFinishReason(finishReason)
 	r.persistRunEvent("reply.finish_rejected", RealtimeStreamKindLifecycle, map[string]any{
-		"step_index":          step,
-		"execution_contract":  normalizeExecutionContractValue(executionContract),
-		"completion_contract": completionContractForExecutionContract(executionContract),
-		"finish_reason":       normalizedFinishReason,
-		"finish_class":        string(classifyReplyFinish(normalizedFinishReason)),
+		"step_index":    step,
+		"finish_reason": normalizedFinishReason,
+		"finish_class":  string(classifyReplyFinish(normalizedFinishReason)),
 	})
 	if strings.TrimSpace(finalizationReason) != "" {
 		r.setFinalizationReason(finalizationReason)
@@ -3476,173 +3055,47 @@ func (r *run) failReplyFinish(step int, executionContract string, finishReason s
 	return r.failRun(errMsg, fmt.Errorf("provider returned finish_reason=%q", normalizedFinishReason))
 }
 
-func (r *run) finalizeImplicitReply(step int, finalizationReason string, fallback string) {
-	if r == nil {
-		return
-	}
-	canonical := r.canonicalAssistantMarkdownOrFallback(fallback)
-	if canonical != "" {
-		r.setCanonicalMarkdownCandidate(canonical)
-	}
-	r.reconcileCanonicalMarkdownMessage(fallback)
-	r.setFinalizationReason(finalizationReason)
-	r.setEndReason("complete")
-	r.emitLifecyclePhase("ended", map[string]any{"reason": finalizationReason, "step_index": step})
-	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
-}
-
 func finalizationReasonForAskUserSource(source string) string {
 	source = strings.TrimSpace(source)
 	if source == "model_signal" {
 		return "ask_user_waiting_model"
 	}
-	return "ask_user_waiting_guard"
-}
-
-func evaluateGuardAskUserGate(source string, state runtimeState, complexity string) (bool, string) {
-	source = strings.TrimSpace(source)
-	switch source {
-	case "provider_repeated_error", "complex_task_missing_todos", "hard_max_summary_failed", "hard_max_steps":
-		return true, "ok"
-	}
-	signal := defaultGuardAskUserSignal("guard check", nil, source, state.BlockedEvidenceRefs...)
-	if askUserReasonRequiresEvidence(signal.ReasonCode) {
-		if len(signal.EvidenceRefs) == 0 {
-			return false, "missing_evidence_refs"
-		}
-		matched, blocked := askUserEvidenceMatch(state, signal.EvidenceRefs)
-		if matched == 0 {
-			return false, "unresolved_evidence_refs"
-		}
-		if signal.ReasonCode == AskUserReasonPermissionBlocked && blocked == 0 {
-			return false, "permission_reason_without_blocked_evidence"
-		}
-	}
-	if required, reason := todoTrackingRequirement(complexity, state); required {
-		return false, reason
-	}
-	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 && len(state.BlockedActionFacts) == 0 {
-		return false, "pending_todos_without_blocker"
-	}
-	return true, "ok"
+	return ""
 }
 
 func evaluateTaskCompletionGate(resultText string, state runtimeState, complexity string, mode string) (bool, string) {
+	_ = state
+	_ = complexity
+	_ = mode
 	text := strings.TrimSpace(resultText)
 	if text == "" {
 		return false, "empty_result"
 	}
-	mode = strings.ToLower(strings.TrimSpace(mode))
-	if required, reason := todoTrackingRequirement(complexity, state); required {
-		return false, reason
-	}
-	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 {
-		// In plan mode, open todos are expected: they represent the execution plan that can
-		// be carried into act mode. Do not block task_complete on pending todos.
-		if mode == config.AIModePlan {
-			return true, "ok"
-		}
-		return false, "pending_todos"
-	}
 	return true, "ok"
 }
 
-func evaluateAskUserGate(signal askUserSignal, state runtimeState, complexity string) (bool, string) {
+func validateAskUserSignal(signal askUserSignal) string {
 	rawQuestions := append([]RequestUserInputQuestion(nil), signal.Questions...)
 	signal = normalizeAskUserSignal(signal)
 	if signal.ContractError != "" {
-		return false, signal.ContractError
+		return signal.ContractError
 	}
 	if strings.TrimSpace(signal.Question) == "" {
-		return false, "empty_question"
+		return "empty_question"
 	}
 	if signal.ReasonCode == "" {
-		return false, "missing_reason_code"
+		return "missing_reason_code"
 	}
 	if len(signal.RequiredFromUser) == 0 {
-		return false, "missing_required_from_user"
+		return "missing_required_from_user"
 	}
 	if reason := validateRequestUserInputQuestionsContract(rawQuestions); reason != "" {
-		return false, reason
+		return reason
 	}
-	if reason := validateAskUserInteractionContract(state.InteractionContract, rawQuestions); reason != "" {
-		return false, reason
+	if len(signal.EvidenceRefs) == 0 {
+		return "missing_evidence_refs"
 	}
-	if askUserReasonRequiresEvidence(signal.ReasonCode) {
-		if len(signal.EvidenceRefs) == 0 {
-			return false, "missing_evidence_refs"
-		}
-		matched, blocked := askUserEvidenceMatch(state, signal.EvidenceRefs)
-		if matched == 0 {
-			return false, "unresolved_evidence_refs"
-		}
-		if signal.ReasonCode == AskUserReasonPermissionBlocked && blocked == 0 {
-			return false, "permission_reason_without_blocked_evidence"
-		}
-	}
-	if required, reason := todoTrackingRequirement(complexity, state); required {
-		return false, reason
-	}
-	if state.TodoTrackingEnabled && state.TodoOpenCount > 0 && len(state.BlockedActionFacts) == 0 {
-		return false, "pending_todos_without_blocker"
-	}
-	return true, "ok"
-}
-
-func askUserEvidenceMatch(state runtimeState, refs []string) (matched int, blocked int) {
-	if len(refs) == 0 || len(state.ToolCallLedger) == 0 {
-		return 0, 0
-	}
-	for _, ref := range refs {
-		id := strings.TrimSpace(ref)
-		if id == "" {
-			continue
-		}
-		if strings.HasPrefix(strings.ToLower(id), "tool:") {
-			id = strings.TrimSpace(id[5:])
-		}
-		if id == "" {
-			continue
-		}
-		status := strings.TrimSpace(state.ToolCallLedger[id])
-		if status == "" {
-			continue
-		}
-		matched++
-		switch status {
-		case "failed", "aborted":
-			blocked++
-		}
-	}
-	return matched, blocked
-}
-
-const (
-	todoRequirementMissingPolicyRequired      = "missing_todos_for_policy_required"
-	todoRequirementInsufficientPolicyRequired = "insufficient_todos_for_policy_required"
-)
-
-func requiredTodoCount(state runtimeState) int {
-	return normalizeMinimumTodoItems(state.TodoPolicy, state.MinimumTodoItems)
-}
-
-func todoTrackingRequirement(complexity string, state runtimeState) (bool, string) {
-	_ = complexity
-
-	if normalizeTodoPolicy(state.TodoPolicy) == TodoPolicyRequired {
-		minItems := requiredTodoCount(state)
-		if !state.TodoTrackingEnabled {
-			return true, todoRequirementMissingPolicyRequired
-		}
-		if state.TodoTotalCount < minItems {
-			if state.TodoOpenCount == 0 && runtimeCloseoutHasVerifiedToolWork(state) {
-				return false, ""
-			}
-			return true, todoRequirementInsufficientPolicyRequired
-		}
-		return false, ""
-	}
-	return false, ""
+	return ""
 }
 
 func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *runtimeState, pack contextmodel.PromptPack) (string, bool) {
@@ -4061,13 +3514,12 @@ func (r *run) emitTaskCompleteToolBlock(toolID string, resultText string, eviden
 	r.emitPersistedToolBlockSet(idx, block)
 }
 
-func (r *run) emitAskUserToolBlock(signal askUserSignal, source string, contract interactionContract) {
+func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 	if r == nil {
 		return
 	}
 	signal = normalizeAskUserSignal(signal)
 	source = strings.TrimSpace(source)
-	contract = normalizeInteractionContract(contract)
 	questions := normalizeRequestUserInputQuestions(signal.Questions)
 	if len(questions) == 0 {
 		return
@@ -4088,34 +3540,31 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string, contract
 	r.needNewTextBlock = true
 	r.mu.Unlock()
 	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
-		MessageID:           strings.TrimSpace(r.messageID),
-		ToolID:              toolID,
-		ToolName:            "ask_user",
-		ReasonCode:          signal.ReasonCode,
-		RequiredFromUser:    append([]string(nil), signal.RequiredFromUser...),
-		EvidenceRefs:        append([]string(nil), signal.EvidenceRefs...),
-		InteractionContract: contract,
-		Questions:           questions,
+		MessageID:        strings.TrimSpace(r.messageID),
+		ToolID:           toolID,
+		ToolName:         "ask_user",
+		ReasonCode:       signal.ReasonCode,
+		RequiredFromUser: append([]string(nil), signal.RequiredFromUser...),
+		EvidenceRefs:     append([]string(nil), signal.EvidenceRefs...),
+		Questions:        questions,
 	})
 	if prompt == nil {
 		return
 	}
 	args := map[string]any{
-		"questions":            questions,
-		"reason_code":          signal.ReasonCode,
-		"required_from_user":   append([]string(nil), signal.RequiredFromUser...),
-		"evidence_refs":        append([]string(nil), signal.EvidenceRefs...),
-		"interaction_contract": contract,
+		"questions":          questions,
+		"reason_code":        signal.ReasonCode,
+		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
+		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
 	}
 	result := map[string]any{
-		"questions":            questions,
-		"source":               source,
-		"reason_code":          signal.ReasonCode,
-		"required_from_user":   append([]string(nil), signal.RequiredFromUser...),
-		"evidence_refs":        append([]string(nil), signal.EvidenceRefs...),
-		"interaction_contract": contract,
-		"waiting_prompt":       prompt,
-		"waiting_user":         true,
+		"questions":          questions,
+		"source":             source,
+		"reason_code":        signal.ReasonCode,
+		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
+		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
+		"waiting_prompt":     prompt,
+		"waiting_user":       true,
 	}
 	toolID = r.persistSyntheticToolSuccess(toolID, "ask_user", args, result)
 	block := ToolCallBlock{
@@ -4181,36 +3630,6 @@ func requestUserInputQuestionChoiceCount(questions []RequestUserInputQuestion) i
 		total += len(question.Choices)
 	}
 	return total
-}
-
-func (r *run) degradedSummary(state runtimeState, objective string) string {
-	done := strings.Join(state.CompletedActionFacts, "\n- ")
-	notDone := strings.Join(state.BlockedActionFacts, "\n- ")
-	next := strings.Join(state.PendingUserInputQueue, "\n- ")
-	if strings.TrimSpace(done) == "" {
-		done = "- No verified completed actions recorded."
-	} else {
-		done = "- " + done
-	}
-	if strings.TrimSpace(notDone) == "" {
-		notDone = "- No explicit blocked actions recorded."
-	} else {
-		notDone = "- " + notDone
-	}
-	if strings.TrimSpace(next) == "" {
-		next = "- Provide one concrete next step (path/command) to continue."
-	} else {
-		next = "- " + next
-	}
-	goal := strings.TrimSpace(objective)
-	if goal == "" {
-		goal = strings.TrimSpace(state.ActiveObjectiveDigest)
-	}
-	if goal == "" {
-		goal = "Current objective is not available."
-	}
-	next = next + "\n- Objective: " + truncateRunes(goal, 400)
-	return fmt.Sprintf("Done\n%s\n\nNot Done\n%s\n\nNext Actions\n%s", done, notDone, next)
 }
 
 func extractOpenAIResponseText(resp oresponses.Response) string {

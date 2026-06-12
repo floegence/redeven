@@ -11,8 +11,8 @@ import type {
   AIListMessagesResponse,
   AISendUserTurnRequest,
   AISendUserTurnResponse,
-  AISubmitStructuredPromptResponseRequest,
-  AISubmitStructuredPromptResponseResponse,
+  AISubmitRequestUserInputResponseRequest,
+  AISubmitRequestUserInputResponseResponse,
   AIStopThreadRequest,
   AIStopThreadResponse,
   AISubscribeSummaryResponse,
@@ -98,7 +98,7 @@ import {
   fromWireAIGetActiveRunSnapshotResponse,
   fromWireAIListMessagesResponse,
   fromWireAISendUserTurnResponse,
-  fromWireAISubmitStructuredPromptResponseResponse,
+  fromWireAISubmitRequestUserInputResponseResponse,
   fromWireAISubscribeSummaryResponse,
   fromWireAISubscribeThreadResponse,
   fromWireAIStopThreadResponse,
@@ -107,7 +107,7 @@ import {
   toWireAIGetActiveRunSnapshotRequest,
   toWireAIListMessagesRequest,
   toWireAISendUserTurnRequest,
-  toWireAISubmitStructuredPromptResponseRequest,
+  toWireAISubmitRequestUserInputResponseRequest,
   toWireAISubscribeThreadRequest,
   toWireAIStopThreadRequest,
   toWireAIToolApprovalRequest,
@@ -194,8 +194,8 @@ import type {
   wire_ai_list_messages_resp,
   wire_ai_send_user_turn_req,
   wire_ai_send_user_turn_resp,
-  wire_ai_submit_structured_prompt_response_req,
-  wire_ai_submit_structured_prompt_response_resp,
+  wire_ai_submit_request_user_input_response_req,
+  wire_ai_submit_request_user_input_response_resp,
   wire_ai_stop_thread_req,
   wire_ai_stop_thread_resp,
   wire_ai_subscribe_summary_resp,
@@ -335,7 +335,7 @@ export type RedevenV1Rpc = {
   ai: {
     cancelRun: (req: AICancelRunRequest) => Promise<AICancelRunResponse>;
     sendUserTurn: (req: AISendUserTurnRequest) => Promise<AISendUserTurnResponse>;
-    submitStructuredPromptResponse: (req: AISubmitStructuredPromptResponseRequest) => Promise<AISubmitStructuredPromptResponseResponse>;
+    submitRequestUserInputResponse: (req: AISubmitRequestUserInputResponseRequest) => Promise<AISubmitRequestUserInputResponseResponse>;
     subscribeSummary: () => Promise<AISubscribeSummaryResponse>;
     subscribeThread: (req: AISubscribeThreadRequest) => Promise<AISubscribeThreadResponse>;
     stopThread: (req: AIStopThreadRequest) => Promise<AIStopThreadResponse>;
@@ -644,10 +644,10 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call<wire_ai_send_user_turn_req, wire_ai_send_user_turn_resp>(redevenV1TypeIds.ai.sendUserTurn, payload);
         return fromWireAISendUserTurnResponse(resp);
       },
-      submitStructuredPromptResponse: async (req) => {
-        const payload = toWireAISubmitStructuredPromptResponseRequest(req);
-        const resp = await call<wire_ai_submit_structured_prompt_response_req, wire_ai_submit_structured_prompt_response_resp>(redevenV1TypeIds.ai.submitStructuredPromptResponse, payload);
-        return fromWireAISubmitStructuredPromptResponseResponse(resp);
+      submitRequestUserInputResponse: async (req) => {
+        const payload = toWireAISubmitRequestUserInputResponseRequest(req);
+        const resp = await call<wire_ai_submit_request_user_input_response_req, wire_ai_submit_request_user_input_response_resp>(redevenV1TypeIds.ai.submitRequestUserInputResponse, payload);
+        return fromWireAISubmitRequestUserInputResponseResponse(resp);
       },
       cancelRun: async (req) => {
         const payload = toWireAICancelRunRequest(req);
