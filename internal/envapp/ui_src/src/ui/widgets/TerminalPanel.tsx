@@ -1,7 +1,7 @@
 import { For, Index, Show, batch, createEffect, createMemo, createSignal, onCleanup, untrack } from 'solid-js';
 import { useCurrentWidgetId, useLayout, useNotification, useResolvedFloeConfig, useTheme, useViewActivation } from '@floegence/floe-webapp-core';
 import { Copy, Folder, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
-import { Panel, PanelContent } from '@floegence/floe-webapp-core/layout';
+
 import {
   Button,
   Dropdown,
@@ -3842,9 +3842,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   if (variant === 'deck' || variant === 'workbench') return body;
 
   return (
-    <Panel class="border border-border rounded-md overflow-hidden h-full">
-      <PanelContent class="p-0 h-full">{body}</PanelContent>
-    </Panel>
+    <div class="h-full overflow-hidden">{body}</div>
   );
 }
 
