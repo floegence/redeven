@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, Check, ChevronDown, Clock, GripVertical, Send, Settings, Terminal, Zap } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Check, ChevronDown, Clock, GripVertical, Plus, Send, Settings, Terminal, Zap } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -1233,7 +1233,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             title={copy().chat.newChat}
             onClick={startCompose}
           >
-            <FlowerSoftAuraIcon class="h-8 w-8 shrink-0" iconClass="redeven-flower-soft-aura-nav-svg" glowClass="redeven-flower-soft-aura-nav-glow" />
+            <Plus class="h-4 w-4 shrink-0" />
             <span class="flower-host-new-chat-label">{copy().chat.newChat}</span>
           </button>
         </div>

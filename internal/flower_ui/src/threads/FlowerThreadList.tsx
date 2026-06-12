@@ -79,6 +79,8 @@ export type FlowerThreadCardProps = Readonly<{
   onDelete?: () => void;
   onContextMenu?: (event: MouseEvent, item: FlowerThreadListItem) => void;
   onKeyboardMenu?: (event: KeyboardEvent, item: FlowerThreadListItem) => void;
+  onRename?: (item: FlowerThreadListItem) => void;
+  onPin?: (item: FlowerThreadListItem) => void;
 }>;
 
 export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
@@ -96,7 +98,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       data-flower-thread-busy={props.busy ? 'true' : 'false'}
       onContextMenu={(event) => props.onContextMenu?.(event, props.item)}
       class={cn(
-        'flower-host-thread-card group relative w-full cursor-pointer rounded-lg border transition-all duration-150',
+        'flower-host-thread-card group relative w-full cursor-pointer rounded-lg border transition-[background-color,border-color] duration-150',
         props.active && 'flower-host-thread-card-active',
       )}
     >
@@ -104,6 +106,10 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         type="button"
         class="flex w-full cursor-pointer items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
         onClick={props.onSelect}
+        onDblClick={(event) => {
+          event.preventDefault();
+          props.onRename?.(props.item);
+        }}
         onKeyDown={(event) => {
           if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
             props.onKeyboardMenu?.(event, props.item);
@@ -120,9 +126,6 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           <div class="flex min-w-0 items-center gap-1">
             <span class="flower-host-thread-list-title flex-1 truncate text-xs font-medium">{title()}</span>
           </div>
-          <Show when={props.item.preview.trim()}>
-            {(preview) => <span class="flower-host-thread-card-preview truncate text-[11px]">{preview()}</span>}
-          </Show>
           <Show when={running()}>
             <ProcessingIndicator variant="minimal" status={copy().working} class="h-3.5" />
           </Show>
@@ -162,6 +165,21 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           </button>
         </Show>
       </div>
+      <Show when={props.onPin}>
+        <button
+          type="button"
+          class="flower-host-thread-card-pin-button"
+          data-pinned={props.item.pinned ? 'true' : 'false'}
+          aria-label={props.item.pinned ? copy().unpin : copy().pin}
+          title={props.item.pinned ? copy().unpin : copy().pin}
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onPin?.(props.item);
+          }}
+        >
+          <Pin class="h-3.5 w-3.5" />
+        </button>
+      </Show>
       <button
         type="button"
         class="flower-host-thread-card-menu-button"
@@ -412,6 +430,8 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                       onDelete={props.onDelete ? () => props.onDelete?.(thread.thread_id) : undefined}
                       onContextMenu={openMenu}
                       onKeyboardMenu={openMenu}
+                      onRename={props.onMenuAction ? (item) => props.onMenuAction?.('rename', item) : undefined}
+                      onPin={props.canPin && props.onMenuAction ? (item) => props.onMenuAction?.('pin', item) : undefined}
                     />
                   )}
                 </For>
