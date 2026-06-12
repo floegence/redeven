@@ -120,6 +120,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || trimString(thread.error?.message) !== '';
   });
   const selectedThreadLoading = createMemo(() => trimString(loadingThreadID()) !== '' && loadingThreadID() === selectedThreadID());
+
+  const stableSelectedMessages = createMemo(
+    (prev: readonly FlowerChatMessage[] | undefined) => {
+      const msgs = selectedThread()?.messages ?? [];
+      if (!prev || prev.length !== msgs.length) return msgs;
+      for (let i = 0; i < msgs.length; i++) {
+        if (prev[i]?.id !== msgs[i]?.id || prev[i]?.status !== msgs[i]?.status || prev[i]?.content !== msgs[i]?.content) {
+          return msgs;
+        }
+      }
+      return prev;
+    },
+  );
   const selectedThreadRunErrorMessage = createMemo(() => trimString(selectedThread()?.error?.message));
   const threadItems = createMemo(() => threads().map(projectFlowerThreadListItem));
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
@@ -199,8 +212,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         existing.title === thread.title &&
         existing.status === thread.status &&
         Number(existing.pinned_at_ms ?? 0) === Number(thread.pinned_at_ms ?? 0) &&
-        existing.created_at_ms === thread.created_at_ms &&
-        existing.updated_at_ms === thread.updated_at_ms
+        existing.created_at_ms === thread.created_at_ms
       ) {
         return current;
       }
@@ -1106,7 +1118,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   ? setupGuide()
                   : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => setChatDraft(prompt)} />}
             >
-              <For each={selectedThread()?.messages ?? []}>{messageBubble}</For>
+              <For each={stableSelectedMessages()}>{messageBubble}</For>
               {toolActivity(selectedThread()?.tool_activity)}
               {inputRequestCard(selectedThread()?.input_request)}
               <Show when={selectedThread()?.error}>

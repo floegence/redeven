@@ -546,6 +546,7 @@ html.dark .flower-component-shell {
   position: relative;
   display: inline-block;
   width: 0.42rem;
+  will-change: background-position;
   height: 1.15em;
   margin-left: 0.16rem;
   vertical-align: -0.18em;
@@ -1315,6 +1316,11 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--flower-thread-rail-accent) 88%, transparent);
   color: var(--flower-thread-rail-foreground);
   outline: none;
+}
+
+.flower-host-thread-card-dot-indicator {
+  width: 0.5rem;
+  height: 0.5rem;
 }
 
 .flower-host-thread-card-menu-button:hover,

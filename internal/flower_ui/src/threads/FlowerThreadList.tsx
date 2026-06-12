@@ -117,21 +117,14 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         }}
       >
         <div class="relative mt-1.5 h-2 w-2 shrink-0">
-          <div class={cn('h-2 w-2 rounded-full', statusDotClass(props.item.status))} title={statusLabel(props.item.status, copy())} />
-          <Show when={running()}>
-            <div class="absolute inset-0 h-2 w-2 animate-pulse rounded-full bg-primary/50" />
+          <Show when={running()} fallback={<div class={cn('h-2 w-2 rounded-full', statusDotClass(props.item.status))} title={statusLabel(props.item.status, copy())} />}>
+            <ProcessingIndicator variant="minimal" status={copy().working} class="flower-host-thread-card-dot-indicator" />
           </Show>
         </div>
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div class="flex min-w-0 items-center gap-1">
             <span class="flower-host-thread-list-title flex-1 truncate text-xs font-medium">{title()}</span>
           </div>
-          <Show when={running()}>
-            <ProcessingIndicator variant="minimal" status={copy().working} class="h-3.5" />
-          </Show>
-          <Show when={!running() && props.busy}>
-            <ProcessingIndicator variant="minimal" status={copy().working} class="h-3.5" />
-          </Show>
           <Show when={props.item.target_labels.length > 0}>
             <div class="mt-1 flex min-w-0 flex-wrap gap-1">
               <For each={props.item.target_labels}>
@@ -404,14 +397,14 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
         <Search class="flower-host-thread-list-description pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
         <Input class="flower-host-thread-search-input pl-9" value={props.query} placeholder={copy().searchPlaceholder} onInput={(event) => props.onQueryChange(event.currentTarget.value)} />
       </label>
-      <div class="flower-host-scroll flex-1 space-y-3">
+      <div class="flower-host-scroll flex-1 space-y-2">
         <Show
           when={filtered().length > 0}
           fallback={<div class="flower-host-thread-empty rounded-lg border border-dashed p-6 text-sm">{copy().empty}</div>}
         >
           <For each={groups()}>
             {(group) => (
-              <section class="space-y-1.5">
+              <section class="space-y-1">
                 <h3 class="flower-host-thread-group-label px-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
                   {group.kind === 'pinned' ? copy().pinnedGroup : timeGroupLabel(group.group, copy())}
                 </h3>
