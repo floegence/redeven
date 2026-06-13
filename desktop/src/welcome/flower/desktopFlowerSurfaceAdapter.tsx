@@ -233,6 +233,7 @@ export function mapDesktopFlowerThread(thread: DesktopFlowerHostThread): FlowerT
     ...(thread.tool_activity ? { tool_activity: thread.tool_activity } : {}),
     ...(thread.input_request ? { input_request: mapInputRequest(thread.input_request) } : {}),
     ...(thread.error !== undefined ? { error: thread.error } : {}),
+    ...(thread.has_unread === true ? { has_unread: true } : {}),
   };
 }
 

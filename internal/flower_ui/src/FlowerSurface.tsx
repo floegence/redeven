@@ -1,5 +1,5 @@
 import type { Component } from 'solid-js';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, GripVertical, Plus, Settings, Terminal, Zap } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
@@ -151,6 +151,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return item;
     }),
   );
+  // Stable sidebar list items: only returns a new array reference when sidebar-visible fields change.
+  // This decouples the sidebar from the every-1200ms polling refresh of the selected thread,
+  // preventing CSS animations from restarting on every poll.
+  const sidebarListItems = createMemo(
+    on(
+      () => {
+        const items = threadItems();
+        return items.map((t) => `${t.thread_id}:${t.status}:${t.title}:${String(t.pinned)}:${t.pinned_at_ms ?? 0}`).join('|');
+      },
+      () => threadItems(),
+    ),
+  );
+
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
   const renameUnchanged = createMemo(() => trimString(renameDraft()) === trimString(renameOriginalTitle()));
   const currentModelID = createMemo(() => trimString(snapshot()?.config.current_model_id));
@@ -1318,7 +1331,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </button>
         </div>
         <FlowerThreadList
-          items={threadItems()}
+          items={sidebarListItems()}
           activeThreadID={selectedThreadID()}
           query={historyFilter()}
           refreshing={threadsRefreshing()}

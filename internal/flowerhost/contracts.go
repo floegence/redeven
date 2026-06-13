@@ -472,6 +472,7 @@ type ThreadSnapshot struct {
 	HomeHostKind string             `json:"home_host_kind,omitempty"`
 	SourceLabel  string             `json:"source_label"`
 	TargetLabels []string           `json:"target_labels"`
+		HasUnread    bool               `json:"has_unread"`
 }
 
 type ListThreadsResponse struct {

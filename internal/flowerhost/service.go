@@ -761,6 +761,7 @@ func (s *Service) threadListSnapshot(ctx context.Context, view *ai.ThreadView) (
 		HomeHostKind: homeHostKind,
 		SourceLabel:  sourceLabel,
 		TargetLabels: targetLabels,
+		HasUnread:    false,
 	}, nil
 }
 
@@ -1034,6 +1035,7 @@ func (s *Service) threadSnapshot(ctx context.Context, threadID string, view *ai.
 		HomeHostKind: homeHostKind,
 		SourceLabel:  sourceLabel,
 		TargetLabels: targetLabels,
+		HasUnread:    false,
 	}, nil
 }
 

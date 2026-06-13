@@ -1225,5 +1225,6 @@ function normalizeBridgeThread(thread: DesktopFlowerHostThread): DesktopFlowerHo
     ...(toolActivity ? { tool_activity: toolActivity } : {}),
     ...(inputRequest ? { input_request: inputRequest } : {}),
     ...(error ? { error } : {}),
+    ...(record.has_unread === true ? { has_unread: true } : {}),
   };
 }
