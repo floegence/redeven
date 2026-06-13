@@ -151,18 +151,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return item;
     }),
   );
-  // Stable sidebar list items: only returns a new array reference when sidebar-visible fields change.
-  // This decouples the sidebar from the every-1200ms polling refresh of the selected thread,
-  // preventing CSS animations from restarting on every poll.
-  const sidebarListItems = createMemo(
+  // Stable sidebar list items: only updates when sidebar-visible fields change.
+  // Uses createEffect(on(...)) bound to a signal rather than createMemo(on(...))
+  // because createMemo does not reliably propagate the inner on() recomputation
+  // in Solid 1.9.x (see FlowerThreadList.test.ts for the regression test).
+  const [sidebarListItems, setSidebarListItems] = createSignal<ReturnType<typeof threadItems>>([]);
+  createEffect(
     on(
       () => {
         const items = threadItems();
         return items.map((t) => `${t.thread_id}:${t.status}:${t.title}:${String(t.pinned)}:${t.pinned_at_ms ?? 0}`).join('|');
       },
-      () => threadItems(),
+      () => {
+        setSidebarListItems(threadItems());
+      },
     ),
   );
+  // Prime the signal on first render.
+  createEffect(() => {
+    const items = threadItems();
+    if (items.length > 0) setSidebarListItems(items);
+  });
 
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
   const renameUnchanged = createMemo(() => trimString(renameDraft()) === trimString(renameOriginalTitle()));
