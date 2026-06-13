@@ -2,6 +2,7 @@ package flowerhost
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -343,6 +344,91 @@ func TestNewService_UsesExplicitTargetToolPolicy(t *testing.T) {
 	}
 }
 
+func TestNewService_RebuildsInvalidLocalThreadstoreSchema(t *testing.T) {
+	t.Parallel()
+
+	paths, err := DefaultPaths(t.TempDir())
+	if err != nil {
+		t.Fatalf("DefaultPaths() error = %v", err)
+	}
+	store, err := threadstore.Open(paths.ThreadstorePath)
+	if err != nil {
+		t.Fatalf("threadstore.Open() error = %v", err)
+	}
+	if err := store.CreateThread(context.Background(), threadstore.Thread{ThreadID: "th_old", EndpointID: "flower-host", Title: "old"}); err != nil {
+		_ = store.Close()
+		t.Fatalf("CreateThread() error = %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	raw, err := sql.Open("sqlite", paths.ThreadstorePath)
+	if err != nil {
+		t.Fatalf("sql.Open() error = %v", err)
+	}
+	if _, err := raw.Exec(`
+DROP TABLE structured_user_inputs;
+CREATE TABLE structured_user_inputs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  response_message_id TEXT NOT NULL,
+  prompt_id TEXT NOT NULL DEFAULT '',
+  tool_id TEXT NOT NULL DEFAULT '',
+  reason_code TEXT NOT NULL DEFAULT '',
+  question_id TEXT NOT NULL,
+  header TEXT NOT NULL DEFAULT '',
+  question_text TEXT NOT NULL DEFAULT '',
+  response_text TEXT NOT NULL DEFAULT '',
+  public_summary TEXT NOT NULL DEFAULT '',
+  contains_secret INTEGER NOT NULL DEFAULT 0,
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(endpoint_id, thread_id, response_message_id, question_id)
+);
+CREATE INDEX idx_structured_user_inputs_recent
+ON structured_user_inputs(endpoint_id, thread_id, id DESC);
+`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("break structured_user_inputs schema: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
+	svc, err := NewService(context.Background(), ServiceOptions{
+		Paths:          paths,
+		Identity:       testIdentity(),
+		SecretResolver: staticSecretResolver{},
+		AgentHomeDir:   t.TempDir(),
+	})
+	if err != nil {
+		t.Fatalf("NewService() error = %v", err)
+	}
+	if svc.ai == nil {
+		t.Fatalf("ai service is nil")
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+
+	raw, err = sql.Open("sqlite", paths.ThreadstorePath)
+	if err != nil {
+		t.Fatalf("sql.Open() after rebuild error = %v", err)
+	}
+	defer func() { _ = raw.Close() }()
+	if !flowerHostTestTableHasColumn(t, raw, "structured_user_inputs", "selected_choice_id") {
+		t.Fatalf("rebuilt structured_user_inputs is missing selected_choice_id")
+	}
+	var threadCount int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM ai_threads`).Scan(&threadCount); err != nil {
+		t.Fatalf("count ai_threads: %v", err)
+	}
+	if threadCount != 0 {
+		t.Fatalf("ai_threads row count=%d, want reset database", threadCount)
+	}
+}
+
 func TestFlowerHostRunOptionsExposeFloretNativeTools(t *testing.T) {
 	opts := flowerHostRunOptions()
 	if opts.MaxSteps != 24 {
@@ -357,6 +443,33 @@ func TestFlowerHostRunOptionsExposeFloretNativeTools(t *testing.T) {
 			t.Fatalf("ToolAllowlist missing %q: %#v", name, opts.ToolAllowlist)
 		}
 	}
+}
+
+func flowerHostTestTableHasColumn(t *testing.T, db *sql.DB, tableName string, columnName string) bool {
+	t.Helper()
+	rows, err := db.Query(`PRAGMA table_info(` + tableName + `)`)
+	if err != nil {
+		t.Fatalf("PRAGMA table_info(%s): %v", tableName, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name string
+		var typ string
+		var notNull int
+		var dflt sql.NullString
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
+			t.Fatalf("scan table_info(%s): %v", tableName, err)
+		}
+		if strings.TrimSpace(name) == columnName {
+			return true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("table_info(%s) rows: %v", tableName, err)
+	}
+	return false
 }
 
 func TestFlowerThreadToolTargetPolicySeparatesHostAndTargetThreads(t *testing.T) {

@@ -50,9 +50,10 @@ type Options struct {
 	Logger   *slog.Logger
 	StateDir string
 
-	AgentHomeDir    string
-	Shell           string
-	FilesystemScope *filesystemscope.Registry
+	AgentHomeDir                  string
+	Shell                         string
+	FilesystemScope               *filesystemscope.Registry
+	ResetInvalidThreadstoreSchema bool
 
 	Config *config.AIConfig
 
@@ -210,7 +211,11 @@ func NewService(opts Options) (*Service, error) {
 	}
 
 	threadsPath := filepath.Join(strings.TrimSpace(opts.StateDir), "ai", "threads.sqlite")
-	ts, err := threadstore.Open(threadsPath)
+	openThreadstore := threadstore.Open
+	if opts.ResetInvalidThreadstoreSchema {
+		openThreadstore = threadstore.OpenResettingInvalidSchema
+	}
+	ts, err := openThreadstore(threadsPath)
 	if err != nil {
 		return nil, err
 	}
