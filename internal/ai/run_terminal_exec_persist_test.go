@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -118,7 +117,7 @@ func TestPersistToolCallSnapshot_TerminalExecResult_NotTruncated(t *testing.T) {
 	r.persistToolCallSnapshot(
 		"tool_1",
 		"terminal.exec",
-		ToolCallStatusSuccess,
+		toolCallStatusSuccess,
 		map[string]any{"command": "printf test"},
 		map[string]any{
 			"stdout":      longStdout,
@@ -154,192 +153,6 @@ func TestPersistToolCallSnapshot_TerminalExecResult_NotTruncated(t *testing.T) {
 	}
 }
 
-func TestHandleToolCall_TerminalExec_EmitsActivityTimelineFrames(t *testing.T) {
-	t.Parallel()
-
-	runID := "run_terminal_output_ref"
-	toolID := "tool_terminal_output_ref"
-	workspace := t.TempDir()
-
-	var (
-		mu        sync.Mutex
-		timelines []ActivityTimelineBlock
-	)
-
-	r := newRun(runOptions{
-		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		RunID:        runID,
-		AgentHomeDir: workspace,
-		Shell:        "bash",
-		SessionMeta: &session.Meta{
-			CanRead:    true,
-			CanWrite:   true,
-			CanExecute: true,
-		},
-		MessageID: "msg_terminal_output_ref",
-		OnStreamEvent: func(ev any) {
-			bs, ok := ev.(streamEventBlockSet)
-			if !ok {
-				return
-			}
-			block, ok := bs.Block.(ActivityTimelineBlock)
-			if !ok {
-				return
-			}
-			if _, ok := findActivityItemForTest(block, toolID); !ok {
-				return
-			}
-			mu.Lock()
-			timelines = append(timelines, block)
-			mu.Unlock()
-		},
-	})
-
-	outcome, err := r.handleToolCall(context.Background(), toolID, "terminal.exec", map[string]any{
-		"command": "printf ok",
-	})
-	if err != nil {
-		t.Fatalf("handleToolCall: %v", err)
-	}
-	if outcome == nil || !outcome.Success {
-		t.Fatalf("tool outcome should be success, got %+v", outcome)
-	}
-
-	mu.Lock()
-	frames := append([]ActivityTimelineBlock(nil), timelines...)
-	mu.Unlock()
-
-	if len(frames) == 0 {
-		t.Fatalf("expected activity timeline frames")
-	}
-
-	foundStatus := map[string]bool{}
-	for _, frame := range frames {
-		item, ok := findActivityItemForTest(frame, toolID)
-		if !ok {
-			continue
-		}
-		switch item.Status {
-		case string(ToolCallStatusPending), string(ToolCallStatusRunning), string(ToolCallStatusSuccess):
-			foundStatus[item.Status] = true
-		default:
-			continue
-		}
-		ref, ok := findActivityDetailRefForTest(item, "terminal_output")
-		if !ok {
-			t.Fatalf("status=%s missing terminal_output detail ref", item.Status)
-		}
-		if !strings.Contains(ref.Endpoint, runID) || !strings.Contains(ref.Endpoint, toolID) {
-			t.Fatalf("status=%s detail endpoint=%q, want run/tool ids", item.Status, ref.Endpoint)
-		}
-		if strings.TrimSpace(item.ToolName) != "terminal.exec" || strings.TrimSpace(item.Renderer) != "command" {
-			t.Fatalf("unexpected terminal activity item: %+v", item)
-		}
-	}
-
-	for _, status := range []string{string(ToolCallStatusPending), string(ToolCallStatusRunning), string(ToolCallStatusSuccess)} {
-		if !foundStatus[status] {
-			t.Fatalf("missing tool frame for status=%s", status)
-		}
-	}
-}
-
-func TestHandleToolCall_PendingFrameVisibleInSnapshotImmediately(t *testing.T) {
-	t.Parallel()
-
-	runID := "run_terminal_snapshot_consistency"
-	toolID := "tool_terminal_snapshot_consistency"
-	workspace := t.TempDir()
-
-	var (
-		mu                 sync.Mutex
-		checkedPending     bool
-		snapshotConsistent = true
-	)
-
-	var r *run
-	r = newRun(runOptions{
-		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		RunID:        runID,
-		AgentHomeDir: workspace,
-		Shell:        "bash",
-		SessionMeta: &session.Meta{
-			CanRead:    true,
-			CanWrite:   true,
-			CanExecute: true,
-		},
-		MessageID: "msg_terminal_snapshot_consistency",
-		OnStreamEvent: func(ev any) {
-			bs, ok := ev.(streamEventBlockSet)
-			if !ok {
-				return
-			}
-			block, ok := bs.Block.(ActivityTimelineBlock)
-			if !ok {
-				return
-			}
-			item, ok := findActivityItemForTest(block, toolID)
-			if !ok || item.Status != string(ToolCallStatusPending) {
-				return
-			}
-
-			raw, _, _, err := r.snapshotAssistantMessageJSON()
-
-			mu.Lock()
-			defer mu.Unlock()
-			checkedPending = true
-			if err != nil {
-				snapshotConsistent = false
-				return
-			}
-			var snapshot struct {
-				Blocks []json.RawMessage `json:"blocks"`
-			}
-			if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
-				snapshotConsistent = false
-				return
-			}
-			if bs.BlockIndex < 0 || bs.BlockIndex >= len(snapshot.Blocks) {
-				snapshotConsistent = false
-				return
-			}
-			rawBlock := snapshot.Blocks[bs.BlockIndex]
-			if len(rawBlock) == 0 || strings.EqualFold(strings.TrimSpace(string(rawBlock)), "null") {
-				snapshotConsistent = false
-				return
-			}
-			var persisted ActivityTimelineBlock
-			if err := json.Unmarshal(rawBlock, &persisted); err != nil {
-				snapshotConsistent = false
-				return
-			}
-			item, ok = findActivityItemForTest(persisted, toolID)
-			if !ok || item.Status != string(ToolCallStatusPending) {
-				snapshotConsistent = false
-			}
-		},
-	})
-
-	outcome, err := r.handleToolCall(context.Background(), toolID, "terminal.exec", map[string]any{
-		"command": "printf snapshot-consistency",
-	})
-	if err != nil {
-		t.Fatalf("handleToolCall: %v", err)
-	}
-	if outcome == nil || !outcome.Success {
-		t.Fatalf("tool outcome should be success, got %+v", outcome)
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-	if !checkedPending {
-		t.Fatalf("expected to inspect pending block-set frame")
-	}
-	if !snapshotConsistent {
-		t.Fatalf("snapshot did not include the emitted pending tool block")
-	}
-}
-
 func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(t *testing.T) {
 	t.Parallel()
 
@@ -364,11 +177,6 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 	workspace := t.TempDir()
 	toolID := "tool_terminal_timeout"
 
-	var (
-		mu         sync.Mutex
-		errorFrame ActivityTimelineBlock
-	)
-
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		RunID:        "run_terminal_timeout",
@@ -384,23 +192,6 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 			CanExecute: true,
 		},
 		PersistOpTimeout: 5 * time.Second,
-		OnStreamEvent: func(ev any) {
-			bs, ok := ev.(streamEventBlockSet)
-			if !ok {
-				return
-			}
-			block, ok := bs.Block.(ActivityTimelineBlock)
-			if !ok {
-				return
-			}
-			item, ok := findActivityItemForTest(block, toolID)
-			if !ok || item.Status != string(ToolCallStatusError) {
-				return
-			}
-			mu.Lock()
-			errorFrame = block
-			mu.Unlock()
-		},
 	})
 
 	outcome, err := r.handleToolCall(context.Background(), toolID, "terminal.exec", map[string]any{
@@ -437,24 +228,6 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 		t.Fatalf("timeout_source=%q, want %q", got, terminalExecTimeoutSourceRequested)
 	}
 
-	mu.Lock()
-	frame := errorFrame
-	mu.Unlock()
-	item, ok := findActivityItemForTest(frame, toolID)
-	if !ok || item.Status != string(ToolCallStatusError) {
-		t.Fatalf("missing error activity, got block=%+v", frame)
-	}
-	ref, ok := findActivityDetailRefForTest(item, "terminal_output")
-	if !ok {
-		t.Fatalf("error activity missing terminal_output detail ref: %+v", item)
-	}
-	if !strings.Contains(ref.Endpoint, "run_terminal_timeout") || !strings.Contains(ref.Endpoint, toolID) {
-		t.Fatalf("terminal detail endpoint=%q, want run/tool ids", ref.Endpoint)
-	}
-	if !activityItemHasChipForTest(item, "status", "Error", "") {
-		t.Fatalf("error activity missing status chip: %+v", item.Chips)
-	}
-
 	rec, err := store.GetToolCall(ctx, "env_1", "run_terminal_timeout", toolID)
 	if err != nil {
 		t.Fatalf("GetToolCall: %v", err)
@@ -462,8 +235,8 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 	if rec == nil {
 		t.Fatalf("GetToolCall returned nil")
 	}
-	if rec.Status != string(ToolCallStatusError) {
-		t.Fatalf("tool call status=%q, want %q", rec.Status, ToolCallStatusError)
+	if rec.Status != toolCallStatusError {
+		t.Fatalf("tool call status=%q, want %q", rec.Status, toolCallStatusError)
 	}
 	if rec.ErrorCode != "TIMEOUT" {
 		t.Fatalf("tool call error_code=%q, want TIMEOUT", rec.ErrorCode)
@@ -482,61 +255,4 @@ func TestHandleToolCall_TerminalExecTimeout_PersistsErrorWithOutputRefAndResult(
 	if got := strings.TrimSpace(anyToString(persisted["timeout_source"])); got != terminalExecTimeoutSourceRequested {
 		t.Fatalf("persisted timeout_source=%q, want %q", got, terminalExecTimeoutSourceRequested)
 	}
-
-	events, err := store.ListRunEvents(ctx, "env_1", "run_terminal_timeout", 200)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	for _, eventType := range []string{"activity.item.projected", "activity.group.updated", "activity.timeline.persisted"} {
-		if !hasRunEventForTest(events, eventType) {
-			t.Fatalf("missing activity projection event %q in %#v", eventType, events)
-		}
-	}
-}
-
-func findActivityItemForTest(block ActivityTimelineBlock, toolID string) (ActivityItem, bool) {
-	toolID = strings.TrimSpace(toolID)
-	for _, group := range block.Groups {
-		for _, item := range group.Items {
-			if strings.TrimSpace(item.ToolID) == toolID {
-				return item, true
-			}
-		}
-	}
-	return ActivityItem{}, false
-}
-
-func findActivityDetailRefForTest(item ActivityItem, kind string) (ActivityDetailRef, bool) {
-	kind = strings.TrimSpace(kind)
-	for _, ref := range item.DetailRefs {
-		if strings.TrimSpace(ref.Kind) == kind {
-			return ref, true
-		}
-	}
-	return ActivityDetailRef{}, false
-}
-
-func activityItemHasChipForTest(item ActivityItem, kind string, label string, value string) bool {
-	kind = strings.TrimSpace(kind)
-	label = strings.TrimSpace(label)
-	value = strings.TrimSpace(value)
-	for _, chip := range item.Chips {
-		if strings.TrimSpace(chip.Kind) != kind || strings.TrimSpace(chip.Label) != label {
-			continue
-		}
-		if value == "" || strings.TrimSpace(chip.Value) == value {
-			return true
-		}
-	}
-	return false
-}
-
-func hasRunEventForTest(events []threadstore.RunEventRecord, eventType string) bool {
-	eventType = strings.TrimSpace(eventType)
-	for _, event := range events {
-		if strings.TrimSpace(event.EventType) == eventType {
-			return true
-		}
-	}
-	return false
 }

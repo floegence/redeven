@@ -37,7 +37,7 @@ const stopLocalEvent: JSX.EventHandlerUnion<HTMLElement, Event> = (event) => {
 const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem }> = (props) => {
   const ctx = useChatContext();
   const i18n = useI18n();
-  const canApprove = createMemo(() => props.item.requiresApproval === true && props.item.approvalState === 'required');
+  const canApprove = createMemo(() => props.item.requires_approval === true && props.item.approval_state === 'requested');
 
   return (
     <Show when={canApprove()}>
@@ -47,7 +47,7 @@ const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem
           class="chat-activity-approval-btn chat-activity-approval-btn-approve"
           onClick={(event) => {
             event.stopPropagation();
-            ctx.approveToolCall(props.messageId, String(props.item.toolId ?? ''), true);
+            ctx.approveToolCall(props.messageId, String(props.item.tool_id ?? ''), true);
           }}
         >
           {i18n.t('chatActivity.allow')}
@@ -57,7 +57,7 @@ const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem
           class="chat-activity-approval-btn chat-activity-approval-btn-reject"
           onClick={(event) => {
             event.stopPropagation();
-            ctx.approveToolCall(props.messageId, String(props.item.toolId ?? ''), false);
+            ctx.approveToolCall(props.messageId, String(props.item.tool_id ?? ''), false);
           }}
         >
           {i18n.t('chatActivity.deny')}
@@ -68,7 +68,13 @@ const ActivityApprovalActions: Component<{ messageId: string; item: ActivityItem
 };
 
 const ActivityAskUserItem: Component<{ item: ActivityItem }> = (props) => {
-  const questions = createMemo(() => normalizeAskUserQuestions(props.item.payload?.questions));
+  const questions = createMemo(() => {
+    const payload = props.item.payload;
+    const record = payload && typeof payload === 'object' && !Array.isArray(payload)
+      ? payload as Record<string, unknown>
+      : {};
+    return normalizeAskUserQuestions(record.questions);
+  });
   const writeLabel = (question: AskUserQuestion) => String(question.writeLabel ?? '').trim();
 
   return (
@@ -112,7 +118,8 @@ function hasTextSelection(): boolean {
 
 export const ActivityItemRow: Component<{
   item: ActivityItem;
-  itemId: string;
+  item_id: string;
+  label: string;
   panelId: string;
   status: ActivityStatus;
   targetLabel: string;
@@ -123,7 +130,7 @@ export const ActivityItemRow: Component<{
   onToggle: () => void;
   onRetry: () => void;
 }> = (props) => {
-  const hasDetail = createMemo(() => Array.isArray(props.item.detailRefs) && props.item.detailRefs.length > 0);
+  const hasDetail = createMemo(() => Array.isArray(props.item.detail_refs) && props.item.detail_refs.length > 0);
   const toggleFromRow = () => {
     if (!hasDetail() || hasTextSelection()) return;
     props.onToggle();
@@ -138,7 +145,7 @@ export const ActivityItemRow: Component<{
   return (
     <div
       class={cn('chat-activity-item-shell', props.expanded && 'chat-activity-item-shell-expanded')}
-      data-item-id={props.itemId}
+      data-item-id={props.item_id}
       data-has-detail={hasDetail() ? 'true' : 'false'}
     >
       <div
@@ -162,7 +169,7 @@ export const ActivityItemRow: Component<{
         <ActivityStatusIcon status={props.status} class="chat-activity-item-status" />
         <div class="chat-activity-item-main">
           <div class="chat-activity-item-line">
-            <span class="chat-activity-item-label">{props.item.label}</span>
+            <span class="chat-activity-item-label">{props.label}</span>
             <Show when={props.targetLabel}>
               {(target) => <span class="chat-activity-item-target">{target()}</span>}
             </Show>
@@ -171,7 +178,7 @@ export const ActivityItemRow: Component<{
           <Show when={props.item.description && !props.targetLabel}>
             {(description) => <div class="chat-activity-item-description">{description()}</div>}
           </Show>
-          <Show when={props.item.renderer === 'blocking_prompt' || props.item.toolName === 'ask_user'}>
+          <Show when={props.item.renderer === 'blocking_prompt' || props.item.tool_name === 'ask_user'}>
             <ActivityAskUserItem item={props.item} />
           </Show>
         </div>

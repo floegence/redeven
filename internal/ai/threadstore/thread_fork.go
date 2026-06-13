@@ -211,9 +211,15 @@ ORDER BY id ASC
 		return nil, err
 	}
 
+	transcriptIDMap := map[string]string{}
+	for key, value := range messageIDMap {
+		transcriptIDMap[key] = value
+	}
+	transcriptIDMap[req.SourceThreadID] = req.DestinationThreadID
+
 	for _, rec := range messages {
 		nextMessageID := messageIDMap[rec.MessageID]
-		body, err := rewriteMessageJSONForFork(rec.MessageJSON, messageIDMap)
+		body, err := rewriteMessageJSONForFork(rec.MessageJSON, transcriptIDMap)
 		if err != nil {
 			return nil, err
 		}
@@ -632,7 +638,7 @@ func shouldRewriteForkMessageEnvelopeKey(key string) bool {
 
 func shouldRewriteForkMessageBlockKey(key string) bool {
 	switch strings.TrimSpace(key) {
-	case "message_id", "messageId":
+	case "message_id", "messageId", "thread_id", "turn_id":
 		return true
 	default:
 		return shouldRewriteForkMessageRefKey(key)

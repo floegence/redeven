@@ -226,20 +226,14 @@ func (m *streamMonitor) consumeBlock(block map[string]any) {
 		return
 	}
 	switch strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) {
-	case "tool-call":
-		m.consumeToolActivity(anyToString(block["toolName"]), anyToString(block["toolId"]), block["args"], anyToBool(block["requiresApproval"]), anyToString(block["approvalState"]))
 	case "activity-timeline":
-		groups, _ := block["groups"].([]any)
-		for _, rawGroup := range groups {
-			group, _ := rawGroup.(map[string]any)
-			items, _ := group["items"].([]any)
-			for _, rawItem := range items {
-				item, _ := rawItem.(map[string]any)
-				if len(item) == 0 {
-					continue
-				}
-				m.consumeToolActivity(anyToString(item["toolName"]), anyToString(item["toolId"]), item["payload"], anyToBool(item["requiresApproval"]), anyToString(item["approvalState"]))
+		items, _ := block["items"].([]any)
+		for _, rawItem := range items {
+			item, _ := rawItem.(map[string]any)
+			if len(item) == 0 {
+				continue
 			}
+			m.consumeToolActivity(anyToString(item["tool_name"]), anyToString(item["tool_id"]), nil, anyToBool(item["requires_approval"]), anyToString(item["approval_state"]))
 		}
 	}
 }
@@ -251,6 +245,9 @@ func (m *streamMonitor) consumeToolActivity(toolName string, toolID string, rawA
 		return
 	}
 	args, _ := rawArgs.(map[string]any)
+	if args == nil {
+		args = map[string]any{}
+	}
 	signature := toolName + "|" + compactJSON(args)
 
 	m.mu.Lock()
@@ -258,7 +255,7 @@ func (m *streamMonitor) consumeToolActivity(toolName string, toolID string, rawA
 	count := m.toolSigCounter[signature]
 	approvalState := strings.TrimSpace(strings.ToLower(approvalStateRaw))
 	_, approvalHandled := m.approvalSeen[toolID]
-	if requiresApproval && approvalState == "required" && toolID != "" && !approvalHandled {
+	if requiresApproval && approvalState == "requested" && toolID != "" && !approvalHandled {
 		m.approvalSeen[toolID] = struct{}{}
 		go m.rejectTool(toolID)
 	}
@@ -896,88 +893,26 @@ func extractLatestAssistantText(ctx context.Context, svc *ai.Service, meta *sess
 			continue
 		}
 		blocks, _ := obj["blocks"].([]any)
-		visible := make([]string, 0, len(blocks))
-		for _, rawBlock := range blocks {
-			block, _ := rawBlock.(map[string]any)
-			switch strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) {
-			case "markdown", "text", "thinking":
-				content := strings.TrimSpace(anyToString(block["content"]))
-				if content != "" {
-					visible = append(visible, content)
-				}
-			}
-		}
-		if len(visible) > 0 {
-			return strings.Join(visible, "\n\n")
-		}
-		for j := len(blocks) - 1; j >= 0; j-- {
-			block, _ := blocks[j].(map[string]any)
-			if structured := structuredAssistantText(block); structured != "" {
-				return structured
-			}
+		if visible := visibleAssistantTextFromBlocks(blocks); visible != "" {
+			return visible
 		}
 	}
 	return ""
 }
 
-func structuredAssistantText(block map[string]any) string {
-	switch normalizeName(anyToString(block["type"])) {
-	case "tool-call":
-		switch strings.TrimSpace(anyToString(block["toolName"])) {
-		case "ask_user":
-			return extractAskUserText(block["result"], block["args"])
-		case "task_complete":
-			return extractTaskCompleteText(block["args"])
-		}
-	case "activity-timeline":
-		groups, _ := block["groups"].([]any)
-		for i := len(groups) - 1; i >= 0; i-- {
-			group, _ := groups[i].(map[string]any)
-			items, _ := group["items"].([]any)
-			for j := len(items) - 1; j >= 0; j-- {
-				item, _ := items[j].(map[string]any)
-				payload := item["payload"]
-				switch strings.TrimSpace(anyToString(item["toolName"])) {
-				case "ask_user":
-					return extractAskUserText(payload)
-				case "task_complete":
-					return extractTaskCompleteText(payload)
-				}
+func visibleAssistantTextFromBlocks(blocks []any) string {
+	visible := make([]string, 0, len(blocks))
+	for _, rawBlock := range blocks {
+		block, _ := rawBlock.(map[string]any)
+		switch strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) {
+		case "markdown", "text", "thinking":
+			content := strings.TrimSpace(anyToString(block["content"]))
+			if content != "" {
+				visible = append(visible, content)
 			}
 		}
 	}
-	return ""
-}
-
-func extractAskUserText(candidates ...any) string {
-	for _, raw := range candidates {
-		obj, _ := raw.(map[string]any)
-		if len(obj) == 0 {
-			continue
-		}
-		if summary := strings.TrimSpace(anyToString(obj["public_summary"])); summary != "" {
-			return summary
-		}
-		questions, _ := obj["questions"].([]any)
-		for _, rawQuestion := range questions {
-			question, _ := rawQuestion.(map[string]any)
-			if text := strings.TrimSpace(anyToString(question["question"])); text != "" {
-				return text
-			}
-			if header := strings.TrimSpace(anyToString(question["header"])); header != "" {
-				return header
-			}
-		}
-	}
-	return ""
-}
-
-func extractTaskCompleteText(raw any) string {
-	obj, _ := raw.(map[string]any)
-	if len(obj) == 0 {
-		return ""
-	}
-	return strings.TrimSpace(anyToString(obj["result"]))
+	return strings.Join(visible, "\n\n")
 }
 
 func toMessageMap(v any) map[string]any {

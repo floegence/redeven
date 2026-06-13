@@ -18,14 +18,43 @@
         "role": "assistant",
         "blocks": [
           {
-            "type": "tool-call",
-            "toolName": "fs.list_dir",
-            "status": "success"
-          },
-          {
-            "type": "tool-call",
-            "toolName": "fs.read_file",
-            "status": "success"
+            "type": "activity-timeline",
+            "schema_version": 1,
+            "run_id": "run_normal_pass",
+            "thread_id": "thread_eval",
+            "turn_id": "a_1",
+            "trace_id": "run_normal_pass",
+            "summary": {
+              "status": "success",
+              "severity": "quiet",
+              "needs_attention": false,
+              "total_items": 2,
+              "counts": {
+                "success": 2
+              }
+            },
+            "items": [
+              {
+                "item_id": "tool_list_dir",
+                "tool_id": "tool_list_dir",
+                "tool_name": "fs.list_dir",
+                "kind": "tool",
+                "status": "success",
+                "severity": "quiet",
+                "needs_attention": false,
+                "requires_approval": false
+              },
+              {
+                "item_id": "tool_read_file",
+                "tool_id": "tool_read_file",
+                "tool_name": "fs.read_file",
+                "kind": "tool",
+                "status": "success",
+                "severity": "quiet",
+                "needs_attention": false,
+                "requires_approval": false
+              }
+            ]
           },
           {
             "type": "markdown",

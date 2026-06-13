@@ -347,19 +347,25 @@ func countToolCallsInBlocks(blocks []any) int64 {
 			continue
 		}
 		blockType := strings.ToLower(strings.TrimSpace(anyToString(block["type"])))
-		if blockType == "tool-call" {
-			name := strings.ToLower(strings.TrimSpace(anyToString(block["toolName"])))
-			if shouldCountSubagentTool(name) {
+		if blockType != activityTimelineBlockType {
+			continue
+		}
+		items, _ := block["items"].([]any)
+		for _, rawItem := range items {
+			item, ok := rawItem.(map[string]any)
+			if !ok {
+				continue
+			}
+			name := strings.ToLower(strings.TrimSpace(anyToString(item["tool_name"])))
+			if shouldCountSubagentActivityTool(name) {
 				total++
 			}
 		}
-		children, _ := block["children"].([]any)
-		total += countToolCallsInBlocks(children)
 	}
 	return total
 }
 
-func shouldCountSubagentTool(toolName string) bool {
+func shouldCountSubagentActivityTool(toolName string) bool {
 	switch strings.ToLower(strings.TrimSpace(toolName)) {
 	case "", "sources", "task_complete", "ask_user":
 		return false
@@ -1346,60 +1352,6 @@ func extractSubagentCompletionPayload(messageJSON string, fallbackSummary string
 		structured:   map[string]any{},
 	}
 
-	messageJSON = strings.TrimSpace(messageJSON)
-	if messageJSON == "" {
-		if structured := tryParseJSONResultObject(payload.summary); len(structured) > 0 {
-			payload.structured = structured
-		}
-		return payload
-	}
-
-	var message map[string]any
-	if err := json.Unmarshal([]byte(messageJSON), &message); err != nil {
-		if structured := tryParseJSONResultObject(payload.summary); len(structured) > 0 {
-			payload.structured = structured
-		}
-		return payload
-	}
-
-	var candidateResultText string
-	var candidateEvidenceRefs []string
-	var walk func(blocks []any)
-	walk = func(blocks []any) {
-		for _, raw := range blocks {
-			block, ok := raw.(map[string]any)
-			if !ok {
-				continue
-			}
-			blockType := strings.ToLower(strings.TrimSpace(anyToString(block["type"])))
-			if blockType == "tool-call" && strings.TrimSpace(anyToString(block["toolName"])) == "task_complete" {
-				args, _ := block["args"].(map[string]any)
-				resultText := strings.TrimSpace(anyToString(args["result"]))
-				evidenceRefs := normalizeUniqueNonEmptyList(extractStringSlice(args["evidence_refs"]))
-				if resultText != "" {
-					candidateResultText = resultText
-				}
-				if len(evidenceRefs) > 0 {
-					candidateEvidenceRefs = evidenceRefs
-				}
-			}
-			children, _ := block["children"].([]any)
-			if len(children) > 0 {
-				walk(children)
-			}
-		}
-	}
-	rawBlocks, _ := message["blocks"].([]any)
-	if len(rawBlocks) > 0 {
-		walk(rawBlocks)
-	}
-
-	if strings.TrimSpace(candidateResultText) != "" {
-		payload.summary = strings.TrimSpace(candidateResultText)
-	}
-	if len(candidateEvidenceRefs) > 0 {
-		payload.evidenceRefs = candidateEvidenceRefs
-	}
 	if structured := tryParseJSONResultObject(payload.summary); len(structured) > 0 {
 		payload.structured = structured
 	}

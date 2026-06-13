@@ -127,17 +127,12 @@ func TestToolFileWrite_CreatesNoopsAndSupportsExitPlanPrompt(t *testing.T) {
 		t.Fatalf("first choice actions=%+v, want set_mode act", question.Choices[0].Actions)
 	}
 
-	block := ToolCallBlock{
-		Type:     "tool-call",
-		ToolName: "exit_plan_mode",
-		ToolID:   "tool_exit_plan",
-		Result: map[string]any{
-			"waiting_prompt": exitResult.WaitingPrompt,
-			"waiting_user":   true,
-		},
+	r.setWaitingPrompt(exitResult.WaitingPrompt)
+	prompt := r.snapshotWaitingPrompt()
+	if prompt == nil {
+		t.Fatalf("expected exit_plan_mode waiting prompt snapshot")
 	}
-	prompt, waitingUser := extractAskUserPromptSnapshot(block, "msg_exit")
-	if prompt == nil || !waitingUser {
-		t.Fatalf("expected exit_plan_mode waiting prompt snapshot, got prompt=%+v waiting=%v", prompt, waitingUser)
+	if prompt.ToolID != "tool_exit_plan" || prompt.ToolName != "exit_plan_mode" || prompt.MessageID != "msg_exit" {
+		t.Fatalf("prompt identity=%+v, want exit_plan_mode prompt for msg_exit", prompt)
 	}
 }

@@ -751,22 +751,15 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-activity-timeline { margin: 0.125rem 0; border-left: 2px solid color-mix(in srgb, var(--border) 82%, transparent); padding-left: 0.625rem; color: var(--muted-foreground); user-select: text; }
 .chat-activity-timeline[data-status='error'] { border-left-color: color-mix(in srgb, var(--destructive) 70%, var(--border)); }
 .chat-activity-timeline[data-status='pending'], .chat-activity-timeline[data-status='running'] { border-left-color: color-mix(in srgb, var(--primary) 42%, var(--border)); }
-.chat-activity-timeline-summary { display: flex; align-items: center; gap: 0.45rem; min-height: 1.45rem; font-size: 0.7rem; line-height: 1.3; }
+.chat-activity-timeline-summary { appearance: none; display: flex; align-items: center; gap: 0.45rem; width: 100%; min-height: 1.45rem; padding: 0.1rem 0.18rem; border: 0; border-radius: 0.4rem; background: transparent; color: inherit; font-size: 0.7rem; line-height: 1.3; text-align: left; cursor: pointer; }
+.chat-activity-timeline-summary:hover { background: color-mix(in srgb, var(--muted) 24%, transparent); }
+.chat-activity-timeline-summary:focus-visible { outline: 1px solid color-mix(in srgb, var(--ring) 54%, transparent); outline-offset: 1px; }
 .chat-activity-timeline-summary-icon { flex-shrink: 0; }
 .chat-activity-timeline-summary-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground)); font-weight: 600; }
 .chat-activity-timeline-duration { margin-left: auto; flex-shrink: 0; font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--muted-foreground) 76%, transparent); }
-.chat-activity-timeline-groups { display: grid; gap: 0.18rem; margin-top: 0.18rem; }
-.chat-activity-group { min-width: 0; border-radius: 0.45rem; }
-.chat-activity-group-blocking, .chat-activity-group-error { background: color-mix(in srgb, var(--destructive) 5%, transparent); }
-.chat-activity-group-head { appearance: none; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 0.38rem; width: 100%; min-height: 1.65rem; padding: 0.18rem 0.28rem; border: 0; border-radius: 0.45rem; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.chat-activity-group-head:hover { background: color-mix(in srgb, var(--muted) 28%, transparent); }
-.chat-activity-group-head:focus-visible { outline: 1px solid color-mix(in srgb, var(--ring) 54%, transparent); outline-offset: 1px; }
-.chat-activity-group-chevron { display: inline-flex; width: 0.9rem; height: 0.9rem; color: color-mix(in srgb, var(--muted-foreground) 78%, transparent); transform: rotate(0deg); transition: transform 160ms ease; }
-.chat-activity-group-chevron svg { width: 0.9rem; height: 0.9rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-.chat-activity-group-chevron-open { transform: rotate(90deg); }
-.chat-activity-group-copy { min-width: 0; display: flex; align-items: baseline; gap: 0.4rem; }
-.chat-activity-group-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7rem; font-weight: 600; color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground)); }
-.chat-activity-group-subtitle { flex-shrink: 0; font-size: 0.63rem; color: color-mix(in srgb, var(--muted-foreground) 76%, transparent); }
+.chat-activity-timeline-chevron { display: inline-flex; width: 0.9rem; height: 0.9rem; flex-shrink: 0; color: color-mix(in srgb, var(--muted-foreground) 78%, transparent); transform: rotate(0deg); transition: transform 160ms ease; }
+.chat-activity-timeline-chevron svg { width: 0.9rem; height: 0.9rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chat-activity-timeline-chevron-open { transform: rotate(90deg); }
 .chat-activity-timeline-chips { display: inline-flex; align-items: center; gap: 0.24rem; min-width: 0; flex-wrap: wrap; }
 .chat-activity-timeline-chip { display: inline-flex; align-items: center; gap: 0.2rem; min-height: 1.1rem; max-width: 18ch; padding: 0.08rem 0.36rem; border: 1px solid color-mix(in srgb, var(--border) 68%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--muted) 24%, transparent); color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground)); font-size: 0.6rem; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-activity-timeline-chip-warning { border-color: color-mix(in srgb, var(--warning) 34%, var(--border)); color: color-mix(in srgb, var(--warning) 72%, var(--foreground)); }

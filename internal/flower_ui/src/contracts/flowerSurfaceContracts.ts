@@ -88,11 +88,6 @@ export type FlowerChatMessageRole = 'user' | 'assistant' | 'system';
 
 export type FlowerChatMessageStatus = 'sending' | 'streaming' | 'error' | 'complete';
 
-export type FlowerChatMessageBlock = Readonly<{
-  type: 'markdown' | 'text' | 'thinking';
-  content?: string;
-}>;
-
 export type FlowerChatMessage = Readonly<{
   id: string;
   role: FlowerChatMessageRole;
@@ -116,7 +111,7 @@ export type FlowerThreadError = Readonly<{
   code?: string;
 }>;
 
-export type FlowerToolActivityStatus =
+export type FlowerActivityStatus =
   | 'pending'
   | 'running'
   | 'waiting'
@@ -124,17 +119,79 @@ export type FlowerToolActivityStatus =
   | 'error'
   | 'canceled';
 
-export type FlowerToolActivity = Readonly<{
+export type FlowerActivityKind = 'tool' | 'hosted_tool' | 'approval' | 'control' | 'budget';
+export type FlowerActivitySeverity = 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
+export type FlowerActivityAttentionReason = 'running' | 'waiting' | 'approval' | 'error';
+export type FlowerActivityApprovalState = 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';
+
+export type FlowerActivityItem = Readonly<{
+  item_id: string;
+  tool_id?: string;
+  tool_name?: string;
+  kind: FlowerActivityKind;
+  status: FlowerActivityStatus;
+  severity: FlowerActivitySeverity;
+  needs_attention: boolean;
+  attention_reasons?: readonly FlowerActivityAttentionReason[];
+  requires_approval: boolean;
+  approval_state?: FlowerActivityApprovalState;
+  started_at_unix_ms?: number;
+  ended_at_unix_ms?: number;
+  metadata?: Readonly<Record<string, string>>;
+}>;
+
+export type FlowerActivityTimelineBlock = Readonly<{
+  type: 'activity-timeline';
+  schema_version: number;
   run_id?: string;
-  tool_id: string;
-  tool_name: string;
-  status: FlowerToolActivityStatus;
-  summary: string;
-  requires_approval?: boolean;
-  approval_state?: string;
-  error_message?: string;
-  started_at_ms?: number;
-  ended_at_ms?: number;
+  thread_id?: string;
+  turn_id?: string;
+  trace_id?: string;
+  summary: Readonly<{
+    status: FlowerActivityStatus;
+    severity: FlowerActivitySeverity;
+    needs_attention: boolean;
+    attention_reasons?: readonly FlowerActivityAttentionReason[];
+    total_items: number;
+    counts: Readonly<{
+      pending?: number;
+      running?: number;
+      waiting?: number;
+      success?: number;
+      error?: number;
+      canceled?: number;
+      approval?: number;
+    }>;
+    duration_ms?: number;
+  }>;
+  items: readonly FlowerActivityItem[];
+}>;
+
+export type FlowerChatMessageBlock =
+  | Readonly<{
+    type: 'markdown' | 'text' | 'thinking';
+    content?: string;
+  }>
+  | FlowerActivityTimelineBlock;
+
+export type FlowerTodoItem = Readonly<{
+  id: string;
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  note?: string;
+}>;
+
+export type FlowerTodoSnapshot = Readonly<{
+  version: number;
+  updated_at_ms: number;
+  summary: Readonly<{
+    total: number;
+    pending: number;
+    in_progress: number;
+    completed: number;
+    cancelled: number;
+  }>;
+  todos: readonly FlowerTodoItem[];
 }>;
 
 export type FlowerInputRequestAction = Readonly<{
@@ -204,7 +261,8 @@ export type FlowerThreadSnapshot = Readonly<{
   source_label: string;
   target_labels: readonly string[];
   messages: readonly FlowerChatMessage[];
-  tool_activity?: readonly FlowerToolActivity[];
+  activity_timeline?: readonly FlowerActivityTimelineBlock[];
+  todo_snapshot?: FlowerTodoSnapshot | null;
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
   has_unread: boolean;

@@ -197,7 +197,7 @@ export type DesktopFlowerHostThreadStatus =
   | 'success'
   | 'read_only';
 
-export type DesktopFlowerHostChatMessageBlock = Readonly<{
+export type DesktopFlowerHostChatTextBlock = Readonly<{
   type: 'markdown' | 'text' | 'thinking';
   content?: string;
 }>;
@@ -216,7 +216,7 @@ export type DesktopFlowerHostThreadError = Readonly<{
   code?: string;
 }>;
 
-export type DesktopFlowerHostToolActivityStatus =
+export type DesktopFlowerHostActivityStatus =
   | 'pending'
   | 'running'
   | 'waiting'
@@ -224,17 +224,74 @@ export type DesktopFlowerHostToolActivityStatus =
   | 'error'
   | 'canceled';
 
-export type DesktopFlowerHostToolActivity = Readonly<{
+export type DesktopFlowerHostActivityKind = 'tool' | 'hosted_tool' | 'approval' | 'control' | 'budget';
+export type DesktopFlowerHostActivitySeverity = 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
+export type DesktopFlowerHostActivityAttentionReason = 'running' | 'waiting' | 'approval' | 'error';
+export type DesktopFlowerHostActivityApprovalState = 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';
+
+export type DesktopFlowerHostActivityItem = Readonly<{
+  item_id: string;
+  tool_id?: string;
+  tool_name?: string;
+  kind: DesktopFlowerHostActivityKind;
+  status: DesktopFlowerHostActivityStatus;
+  severity: DesktopFlowerHostActivitySeverity;
+  needs_attention: boolean;
+  attention_reasons?: readonly DesktopFlowerHostActivityAttentionReason[];
+  requires_approval: boolean;
+  approval_state?: DesktopFlowerHostActivityApprovalState;
+  started_at_unix_ms?: number;
+  ended_at_unix_ms?: number;
+  metadata?: Readonly<Record<string, string>>;
+}>;
+
+export type DesktopFlowerHostActivityTimelineBlock = Readonly<{
+  type: 'activity-timeline';
+  schema_version: number;
   run_id?: string;
-  tool_id: string;
-  tool_name: string;
-  status: DesktopFlowerHostToolActivityStatus;
-  summary: string;
-  requires_approval?: boolean;
-  approval_state?: string;
-  error_message?: string;
-  started_at_ms?: number;
-  ended_at_ms?: number;
+  thread_id?: string;
+  turn_id?: string;
+  trace_id?: string;
+  summary: Readonly<{
+    status: DesktopFlowerHostActivityStatus;
+    severity: DesktopFlowerHostActivitySeverity;
+    needs_attention: boolean;
+    attention_reasons?: readonly DesktopFlowerHostActivityAttentionReason[];
+    total_items: number;
+    counts: Readonly<{
+      pending?: number;
+      running?: number;
+      waiting?: number;
+      success?: number;
+      error?: number;
+      canceled?: number;
+      approval?: number;
+    }>;
+    duration_ms?: number;
+  }>;
+  items: readonly DesktopFlowerHostActivityItem[];
+}>;
+
+export type DesktopFlowerHostChatMessageBlock = DesktopFlowerHostChatTextBlock | DesktopFlowerHostActivityTimelineBlock;
+
+export type DesktopFlowerHostTodoItem = Readonly<{
+  id: string;
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  note?: string;
+}>;
+
+export type DesktopFlowerHostTodoSnapshot = Readonly<{
+  version: number;
+  updated_at_ms: number;
+  summary: Readonly<{
+    total: number;
+    pending: number;
+    in_progress: number;
+    completed: number;
+    cancelled: number;
+  }>;
+  todos: readonly DesktopFlowerHostTodoItem[];
 }>;
 
 export type DesktopFlowerHostInputAction = Readonly<{
@@ -301,7 +358,8 @@ export type DesktopFlowerHostThread = Readonly<{
   source_label: string;
   target_labels: readonly string[];
   messages: readonly DesktopFlowerHostChatMessage[];
-  tool_activity?: readonly DesktopFlowerHostToolActivity[];
+  activity_timeline?: readonly DesktopFlowerHostActivityTimelineBlock[];
+  todo_snapshot?: DesktopFlowerHostTodoSnapshot | null;
   input_request?: DesktopFlowerHostInputRequest | null;
   error?: DesktopFlowerHostThreadError | null;
   has_unread: boolean;

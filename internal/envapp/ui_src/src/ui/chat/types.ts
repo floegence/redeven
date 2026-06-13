@@ -106,68 +106,69 @@ export interface ActivityTargetRef {
 }
 
 export interface ActivityDetailRef {
-  refId: string;
+  ref_id: string;
   kind: string;
-  toolId?: string;
-  fetchMode: 'inline' | 'endpoint';
+  tool_id?: string;
+  fetch_mode: 'inline' | 'endpoint';
   endpoint?: string;
   payload?: unknown;
   title: string;
 }
 
-export type ActivityItemStatus = 'pending' | 'running' | 'success' | 'error' | 'waiting' | string;
+export type ActivityItemStatus = 'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled';
+export type ActivityItemKind = 'tool' | 'hosted_tool' | 'approval' | 'control' | 'budget';
+export type ActivityItemSeverity = 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
+export type ActivityAttentionReason = 'running' | 'waiting' | 'approval' | 'error';
+export type ActivityApprovalState = 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';
 
 export interface ActivityItem {
-  itemId: string;
-  groupId?: string;
-  toolId?: string;
-  toolName?: string;
-  kind?: string;
-  renderer?: string;
+  item_id: string;
+  tool_id?: string;
+  tool_name?: string;
+  kind: ActivityItemKind;
   status: ActivityItemStatus;
-  severity?: 'quiet' | 'normal' | 'warning' | 'error' | 'blocking' | string;
-  label: string;
+  severity?: ActivityItemSeverity;
+  needs_attention: boolean;
+  attention_reasons?: ActivityAttentionReason[];
+  requires_approval: boolean;
+  approval_state?: ActivityApprovalState;
+  started_at_unix_ms?: number;
+  ended_at_unix_ms?: number;
+  metadata?: Record<string, string>;
+  label?: string;
   description?: string;
-  targetRefs?: ActivityTargetRef[];
+  renderer?: string;
   chips?: ActivityChip[];
-  detailRefs?: ActivityDetailRef[];
-  requiresApproval?: boolean;
-  approvalState?: 'required' | 'approved' | 'rejected' | string;
-  payload?: Record<string, unknown>;
-  metrics?: Record<string, unknown>;
-  startedAtUnixMs?: number;
-  endedAtUnixMs?: number;
-}
-
-export interface ActivityGroup {
-  groupId: string;
-  kind: string;
-  renderer: string;
-  status: ActivityItemStatus;
-  title: string;
-  subtitle?: string;
-  severity?: 'quiet' | 'normal' | 'warning' | 'error' | 'blocking' | string;
-  defaultOpen: boolean;
-  items: ActivityItem[];
-  chips?: ActivityChip[];
-  detailRefs?: ActivityDetailRef[];
-  startedAtUnixMs?: number;
-  endedAtUnixMs?: number;
+  target_refs?: ActivityTargetRef[];
+  detail_refs?: ActivityDetailRef[];
+  payload?: unknown;
 }
 
 export interface ActivityTimelineBlock {
   type: 'activity-timeline';
-  schemaVersion: number;
-  runId: string;
-  messageId: string;
+  schema_version: number;
+  run_id?: string;
+  thread_id?: string;
+  turn_id?: string;
+  trace_id?: string;
   summary: {
     status: ActivityItemStatus;
-    totalItems: number;
-    visibleItems: number;
-    durationMs?: number;
-    label: string;
+    severity: ActivityItemSeverity;
+    needs_attention: boolean;
+    attention_reasons?: ActivityAttentionReason[];
+    total_items: number;
+    counts: {
+      pending?: number;
+      running?: number;
+      waiting?: number;
+      success?: number;
+      error?: number;
+      canceled?: number;
+      approval?: number;
+    };
+    duration_ms?: number;
   };
-  groups: ActivityGroup[];
+  items: ActivityItem[];
 }
 
 export interface TodosBlock {

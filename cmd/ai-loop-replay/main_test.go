@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestRunReplay_UsesTaskCompleteFallback(t *testing.T) {
+func TestRunReplay_UsesActivityTimelineAndFinalText(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -19,11 +19,34 @@ func TestRunReplay_UsesTaskCompleteFallback(t *testing.T) {
         "role": "assistant",
         "blocks": [
           {
-            "type": "tool-call",
-            "toolName": "task_complete",
-            "args": {
-              "result": "Completed the verification and documented the remaining risks."
-            }
+            "type": "activity-timeline",
+            "schema_version": 1,
+            "run_id": "run_1",
+            "summary": {
+              "status": "success",
+              "severity": "quiet",
+              "needs_attention": false,
+              "total_items": 1,
+              "counts": {
+                "success": 1
+              }
+            },
+            "items": [
+              {
+                "item_id": "tool_done",
+                "tool_id": "tool_done",
+                "tool_name": "task_complete",
+                "kind": "control",
+                "status": "success",
+                "severity": "quiet",
+                "needs_attention": false,
+                "requires_approval": false
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "content": "Completed the verification and documented the remaining risks."
           }
         ]
       }
@@ -42,11 +65,14 @@ func TestRunReplay_UsesTaskCompleteFallback(t *testing.T) {
 		t.Fatalf("status=%q reasons=%v", report.Status, report.Reasons)
 	}
 	if report.AssistantChars == 0 {
-		t.Fatalf("expected structured fallback text to count as assistant text")
+		t.Fatalf("expected final text to count as assistant text")
+	}
+	if report.ToolCalls != 1 {
+		t.Fatalf("toolCalls=%d, want 1", report.ToolCalls)
 	}
 }
 
-func TestRunReplay_UsesAskUserFallback(t *testing.T) {
+func TestRunReplay_RejectsActivityOnlyAssistantOutput(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -59,19 +85,32 @@ func TestRunReplay_UsesAskUserFallback(t *testing.T) {
         "role": "assistant",
         "blocks": [
           {
-            "type": "tool-call",
-            "toolName": "ask_user",
-            "args": {
-              "questions": [
-                {
-                  "header": "Need mode switch",
-                  "question": "Switch this thread to act mode so I can apply the change."
-                }
-              ]
+            "type": "activity-timeline",
+            "schema_version": 1,
+            "run_id": "run_1",
+            "summary": {
+              "status": "waiting",
+              "severity": "blocking",
+              "needs_attention": true,
+              "attention_reasons": ["waiting"],
+              "total_items": 1,
+              "counts": {
+                "waiting": 1
+              }
             },
-            "result": {
-              "waiting_user": true
-            }
+            "items": [
+              {
+                "item_id": "tool_ask",
+                "tool_id": "tool_ask",
+                "tool_name": "ask_user",
+                "kind": "control",
+                "status": "waiting",
+                "severity": "blocking",
+                "needs_attention": true,
+                "attention_reasons": ["waiting"],
+                "requires_approval": false
+              }
+            ]
           }
         ]
       }
@@ -86,10 +125,13 @@ func TestRunReplay_UsesAskUserFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runReplay: %v", err)
 	}
-	if report.Status != "pass" {
-		t.Fatalf("status=%q reasons=%v", report.Status, report.Reasons)
+	if report.Status != "fail" {
+		t.Fatalf("status=%q reasons=%v, want fail", report.Status, report.Reasons)
 	}
-	if report.AssistantChars == 0 {
-		t.Fatalf("expected ask_user fallback text to count as assistant text")
+	if report.AssistantChars != 0 {
+		t.Fatalf("assistantChars=%d, want 0", report.AssistantChars)
+	}
+	if report.ToolCalls != 1 {
+		t.Fatalf("toolCalls=%d, want 1", report.ToolCalls)
 	}
 }

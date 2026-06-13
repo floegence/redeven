@@ -16,30 +16,28 @@ function activityMessage(): Message {
     timestamp: 1,
     blocks: [{
       type: 'activity-timeline',
-      schemaVersion: 1,
-      runId: 'run_1',
-      messageId: 'msg_approval',
-      summary: { status: 'waiting', totalItems: 1, visibleItems: 1, label: '1 approval' },
-      groups: [{
-        groupId: 'mutation',
-        kind: 'mutation',
+      schema_version: 1,
+      run_id: 'run_1',
+      turn_id: 'msg_approval',
+      summary: {
+        status: 'waiting',
+        severity: 'blocking',
+        needs_attention: true,
+        total_items: 1,
+        counts: { waiting: 1, approval: 1 },
+      },
+      items: [{
+        item_id: 'tool_patch',
+        tool_id: 'tool_patch',
+        tool_name: 'apply_patch',
+        kind: 'tool',
         renderer: 'file_change',
         status: 'waiting',
         severity: 'blocking',
-        title: 'Changed file',
-        defaultOpen: true,
-        items: [{
-          itemId: 'tool_patch',
-          toolId: 'tool_patch',
-          toolName: 'apply_patch',
-          kind: 'mutation',
-          renderer: 'file_change',
-          status: 'waiting',
-          severity: 'blocking',
-          label: 'Applied patch',
-          requiresApproval: true,
-          approvalState: 'required',
-        }],
+        needs_attention: true,
+        label: 'Applied patch',
+        requires_approval: true,
+        approval_state: 'requested',
       }],
     }],
   };
@@ -55,8 +53,8 @@ const Probe = () => {
   const itemState = () => {
     const block = ctx.messages()[0]?.blocks[0];
     if (block?.type !== 'activity-timeline') return '';
-    const item = block.groups[0]?.items[0];
-    return `${item?.status ?? ''}:${item?.approvalState ?? ''}`;
+    const item = block.items[0];
+    return `${item?.status ?? ''}:${item?.approval_state ?? ''}`;
   };
   return (
     <div>
@@ -91,7 +89,7 @@ describe('ChatProvider activity approvals', () => {
     const { host, onToolApproval } = renderProvider();
 
     expect(host.querySelector('[data-testid="summary"]')?.textContent).toBe('waiting');
-    expect(host.querySelector('[data-testid="item"]')?.textContent).toBe('waiting:required');
+    expect(host.querySelector('[data-testid="item"]')?.textContent).toBe('waiting:requested');
 
     const approve = host.querySelector('button') as HTMLButtonElement | null;
     approve?.dispatchEvent(new MouseEvent('click', { bubbles: true }));

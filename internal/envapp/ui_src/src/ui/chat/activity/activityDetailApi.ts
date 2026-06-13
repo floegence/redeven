@@ -5,14 +5,14 @@ import type { ActivityDetailPresentation } from './activityDetailTypes';
 
 export async function fetchActivityDetail(item: ActivityItem, ref: ActivityDetailRef): Promise<ActivityDetailPresentation> {
   let payload: unknown = {};
-  if (ref.fetchMode === 'endpoint' && ref.endpoint) {
+  if (ref.fetch_mode === 'endpoint' && ref.endpoint) {
     payload = await fetchGatewayJSON<unknown>(ref.endpoint, { method: 'GET' });
-  } else if (ref.fetchMode === 'inline') {
+  } else if (ref.fetch_mode === 'inline') {
     payload = ref.payload ?? {};
   }
   return normalizeActivityDetail(item, ref, payload);
 }
 
 export function activityDetailCacheKey(item: ActivityItem, ref: ActivityDetailRef): string {
-  return String(ref.refId || ref.endpoint || item.toolId || item.itemId).trim();
+  return String(ref.ref_id || ref.endpoint || item.tool_id || item.item_id).trim();
 }

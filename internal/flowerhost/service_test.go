@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/floegence/floret/observation"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
@@ -805,7 +806,7 @@ func TestServerSubmitInputRejectsWrongMethodAndMalformedRequests(t *testing.T) {
 	}
 }
 
-func TestDecodeRawMessagePreservesStreamingBlocksAndToolActivity(t *testing.T) {
+func TestDecodeRawMessagePreservesStreamingBlocksAndActivityTimeline(t *testing.T) {
 	raw := json.RawMessage(`{
 		"id":"msg_streaming",
 		"role":"assistant",
@@ -814,15 +815,14 @@ func TestDecodeRawMessagePreservesStreamingBlocksAndToolActivity(t *testing.T) {
 		"blocks":[
 			{"type":"thinking","content":"Checking the workspace."},
 			{"type":"markdown","content":"Partial reply"},
-			{"type":"activity-timeline","runId":"run_1","groups":[{"items":[
-				{"itemId":"item_read","toolId":"tool_read","toolName":"file.read","status":"running","label":"Read file: README.md","description":"Inspect README.md","startedAtUnixMs":1700000000001},
-				{"itemId":"item_terminal","toolId":"tool_terminal","toolName":"terminal.exec","status":"success","label":"Run command: go test ./...","endedAtUnixMs":1700000000002}
-			]}]},
-			{"type":"tool-call","toolName":"apply_patch","toolId":"tool_patch","args":{"path":"main.go"},"status":"failed","error":"patch rejected"}
+			{"type":"activity-timeline","schema_version":1,"run_id":"run_1","thread_id":"thread_1","turn_id":"msg_streaming","trace_id":"trace_1","summary":{"status":"running","severity":"normal","needs_attention":true,"attention_reasons":["running"],"total_items":2,"counts":{"running":1,"success":1}},"items":[
+				{"item_id":"tool_read","tool_id":"tool_read","tool_name":"file.read","kind":"tool","status":"running","severity":"normal","needs_attention":true,"attention_reasons":["running"],"requires_approval":false,"started_at_unix_ms":1700000000001},
+				{"item_id":"tool_terminal","tool_id":"tool_terminal","tool_name":"terminal.exec","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"ended_at_unix_ms":1700000000002}
+			]}
 		]
 	}`)
 
-	msg, activity, ok, err := decodeRawMessage(raw)
+	msg, timelines, ok, err := decodeRawMessage(raw)
 	if err != nil {
 		t.Fatalf("decodeRawMessage() error = %v", err)
 	}
@@ -835,24 +835,17 @@ func TestDecodeRawMessagePreservesStreamingBlocksAndToolActivity(t *testing.T) {
 	if msg.Content != "Partial reply" {
 		t.Fatalf("content=%q, want markdown content", msg.Content)
 	}
-	if len(msg.Blocks) != 2 || msg.Blocks[0].Type != "thinking" || msg.Blocks[1].Type != "markdown" {
-		t.Fatalf("blocks=%#v, want thinking and markdown blocks", msg.Blocks)
+	if len(msg.Blocks) != 3 || msg.Blocks[0].Type != "thinking" || msg.Blocks[1].Type != "markdown" || msg.Blocks[2].Type != "activity-timeline" {
+		t.Fatalf("blocks=%#v, want thinking, markdown, and activity timeline blocks", msg.Blocks)
 	}
-	if len(activity) != 3 {
-		t.Fatalf("activity len=%d, want 3: %#v", len(activity), activity)
+	if len(timelines) != 1 {
+		t.Fatalf("timelines len=%d, want 1: %#v", len(timelines), timelines)
 	}
-	byTool := map[string]ChatToolActivity{}
-	for _, item := range activity {
-		byTool[item.ToolName] = item
+	if timelines[0].RunID != "run_1" || timelines[0].Summary == nil || timelines[0].Summary.Status != observation.ActivityStatusRunning || len(timelines[0].Items) != 2 {
+		t.Fatalf("timeline=%#v, want running run_1 timeline with two items", timelines[0])
 	}
-	if byTool["file.read"].RunID != "run_1" || byTool["file.read"].Status != "running" {
-		t.Fatalf("file.read activity=%#v, want run_1 running", byTool["file.read"])
-	}
-	if byTool["terminal.exec"].Status != "success" {
-		t.Fatalf("terminal.exec activity=%#v, want success", byTool["terminal.exec"])
-	}
-	if byTool["apply_patch"].Status != "error" || byTool["apply_patch"].ErrorMessage != "patch rejected" {
-		t.Fatalf("apply_patch activity=%#v, want error with message", byTool["apply_patch"])
+	if msg.Blocks[2].RunID != "run_1" || msg.Blocks[2].Summary == nil || !msg.Blocks[2].Summary.NeedsAttention || len(msg.Blocks[2].Items) != 2 {
+		t.Fatalf("activity block=%#v, want preserved timeline summary", msg.Blocks[2])
 	}
 }
 
@@ -880,21 +873,55 @@ func TestDecodeMessagesRejectsCompleteMessageWithoutVisibleContent(t *testing.T)
 	}
 }
 
-func TestDecodeMessagesPreservesToolOnlyMessageAsActivity(t *testing.T) {
+func TestDecodeMessagesRejectsRemovedToolCallBlock(t *testing.T) {
 	decoded, err := decodeMessages([]any{
 		json.RawMessage(`{"id":"msg_tool_only","role":"assistant","status":"complete","timestamp":1700000000100,"blocks":[{"type":"tool-call","toolName":"terminal.exec","toolId":"tool_terminal","args":{"command":"go test ./..."},"status":"success"}]}`),
+	})
+	if err == nil || !strings.Contains(err.Error(), `message block type "tool-call" is unsupported`) {
+		t.Fatalf("decodeMessages() err=%v decoded=%#v, want removed tool-call block contract error", err, decoded)
+	}
+}
+
+func TestDecodeMessagesPreservesTimelineOnlyMessageAsActivityTimeline(t *testing.T) {
+	decoded, err := decodeMessages([]any{
+		json.RawMessage(`{"id":"msg_timeline_only","role":"assistant","status":"complete","timestamp":1700000000100,"blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_1","thread_id":"thread_1","turn_id":"msg_timeline_only","trace_id":"trace_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":2,"counts":{"success":2}},"items":[{"item_id":"tool_terminal","tool_id":"tool_terminal","tool_name":"terminal.exec","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false},{"item_id":"tool_done","tool_id":"tool_done","tool_name":"task_complete","kind":"control","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false}]}]}`),
 	})
 	if err != nil {
 		t.Fatalf("decodeMessages() error = %v", err)
 	}
 	if len(decoded.Messages) != 0 {
-		t.Fatalf("messages len=%d, want no visible chat bubble for tool-only message", len(decoded.Messages))
+		t.Fatalf("messages len=%d, want no visible chat bubble for timeline-only message", len(decoded.Messages))
 	}
-	if len(decoded.ToolActivity) != 1 {
-		t.Fatalf("tool activity len=%d, want 1: %#v", len(decoded.ToolActivity), decoded.ToolActivity)
+	if len(decoded.ActivityTimeline) != 1 {
+		t.Fatalf("activity timelines len=%d, want 1: %#v", len(decoded.ActivityTimeline), decoded.ActivityTimeline)
 	}
-	if decoded.ToolActivity[0].ToolName != "terminal.exec" || decoded.ToolActivity[0].Status != "success" {
-		t.Fatalf("tool activity=%#v, want terminal success", decoded.ToolActivity[0])
+	if got := decoded.ActivityTimeline[0].Summary.Status; got != observation.ActivityStatusSuccess {
+		t.Fatalf("summary status=%q, want success", got)
+	}
+	if len(decoded.ActivityTimeline[0].Items) != 2 {
+		t.Fatalf("items=%#v, want two activity items", decoded.ActivityTimeline[0].Items)
+	}
+}
+
+func TestDecodeActivityTimelineBlockRequiresFloretObservationContract(t *testing.T) {
+	timeline, err := decodeActivityTimelineBlock(json.RawMessage(`{
+		"type":"activity-timeline",
+		"schema_version":1,
+		"run_id":"run_minimal",
+		"thread_id":"thread_minimal",
+		"turn_id":"msg_minimal",
+		"trace_id":"trace_minimal",
+		"summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},
+		"items":[{"item_id":"tool_terminal","tool_id":"tool_terminal","tool_name":"terminal.exec","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false}]
+	}`))
+	if err != nil {
+		t.Fatalf("decodeActivityTimelineBlock() error = %v", err)
+	}
+	if timeline.RunID != "run_minimal" || len(timeline.Items) != 1 || timeline.Items[0].ToolName != "terminal.exec" {
+		t.Fatalf("timeline=%#v, want decoded Floret observation timeline", timeline)
+	}
+	if _, err := decodeActivityTimelineBlock(json.RawMessage(`{"type":"activity-timeline","runId":"run_old","groups":[]}`)); err == nil || !strings.Contains(err.Error(), "activity timeline schema version") {
+		t.Fatalf("decodeActivityTimelineBlock old payload err=%v, want schema contract error", err)
 	}
 }
 
@@ -940,19 +967,14 @@ func TestDecodeRawMessageRejectsMalformedPayloads(t *testing.T) {
 			want: "message block type",
 		},
 		{
-			name: "missing tool id",
+			name: "removed tool block",
 			raw:  json.RawMessage(`{"id":"m1","role":"assistant","status":"streaming","timestamp":1700000000000,"blocks":[{"type":"tool-call","toolName":"file.read","status":"running"}]}`),
-			want: "tool call requires toolId",
-		},
-		{
-			name: "unknown tool status",
-			raw:  json.RawMessage(`{"id":"m1","role":"assistant","status":"streaming","timestamp":1700000000000,"blocks":[{"type":"tool-call","toolName":"file.read","toolId":"tool_1","status":"almost_done"}]}`),
-			want: "tool call status",
+			want: "message block type",
 		},
 		{
 			name: "bad activity status",
-			raw:  json.RawMessage(`{"id":"m1","role":"assistant","status":"streaming","timestamp":1700000000000,"blocks":[{"type":"activity-timeline","runId":"run_1","groups":[{"items":[{"toolId":"tool_1","toolName":"file.read","status":"almost_done","label":"Read"}]}]}]}`),
-			want: "activity item",
+			raw:  json.RawMessage(`{"id":"m1","role":"assistant","status":"streaming","timestamp":1700000000000,"blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_1","summary":{"status":"almost_done","severity":"quiet","needs_attention":false,"total_items":0,"counts":{}},"items":[]}]}`),
+			want: "summary status",
 		},
 	}
 
@@ -963,83 +985,6 @@ func TestDecodeRawMessageRejectsMalformedPayloads(t *testing.T) {
 				t.Fatalf("decodeRawMessage() error=%v, want containing %q", err, tt.want)
 			}
 		})
-	}
-}
-
-func TestFlowerHostToolAllowlistHasDisplayAndSummaryCoverage(t *testing.T) {
-	for _, toolName := range flowerHostToolAllowlist() {
-		displayName := toolDisplayName(toolName)
-		if displayName == "" || displayName == toolName {
-			t.Fatalf("tool %q display name=%q, want friendly display name", toolName, displayName)
-		}
-		summary := summarizeToolActivity(toolName, map[string]any{
-			"path":    "README.md",
-			"command": "go test ./...",
-		}, "success", "")
-		if !strings.HasPrefix(summary, displayName) {
-			t.Fatalf("tool %q summary=%q, want prefix %q", toolName, summary, displayName)
-		}
-	}
-}
-
-func TestSummarizeToolActivityKeepsFailureContext(t *testing.T) {
-	got := summarizeToolActivity("file.read", map[string]any{
-		"file_path": "redeven-flower-acceptance-smoke/not-found-for-ui-check.txt",
-	}, "error", "file not found")
-	if !strings.Contains(got, "not-found-for-ui-check.txt") || !strings.Contains(got, "failed") {
-		t.Fatalf("summary=%q, want failing path and failure state", got)
-	}
-}
-
-func TestFlowerHostToolAllowlistDecodesEveryToolCallAsActivity(t *testing.T) {
-	blocks := []map[string]any{
-		{"type": "markdown", "content": "Using tools."},
-	}
-	for idx, toolName := range flowerHostToolAllowlist() {
-		blocks = append(blocks, map[string]any{
-			"type":     "tool-call",
-			"toolName": toolName,
-			"toolId":   "tool_" + strings.ReplaceAll(toolName, ".", "_"),
-			"args": map[string]any{
-				"path":    "README.md",
-				"command": "go test ./...",
-			},
-			"status": []string{"running", "success", "waiting"}[idx%3],
-		})
-	}
-	raw, err := json.Marshal(map[string]any{
-		"id":        "msg_tools",
-		"role":      "assistant",
-		"status":    "streaming",
-		"timestamp": int64(1700000000200),
-		"blocks":    blocks,
-	})
-	if err != nil {
-		t.Fatalf("Marshal tool message: %v", err)
-	}
-
-	_, activity, ok, err := decodeRawMessage(json.RawMessage(raw))
-	if err != nil {
-		t.Fatalf("decodeRawMessage() error = %v", err)
-	}
-	if !ok {
-		t.Fatalf("decodeRawMessage ok=false, want true")
-	}
-	if len(activity) != len(flowerHostToolAllowlist()) {
-		t.Fatalf("activity len=%d, want %d: %#v", len(activity), len(flowerHostToolAllowlist()), activity)
-	}
-	seen := map[string]ChatToolActivity{}
-	for _, item := range activity {
-		seen[item.ToolName] = item
-	}
-	for _, toolName := range flowerHostToolAllowlist() {
-		item, ok := seen[toolName]
-		if !ok {
-			t.Fatalf("missing tool activity for %q in %#v", toolName, activity)
-		}
-		if item.ToolID == "" || item.Status == "" || item.Summary == "" {
-			t.Fatalf("tool %q activity missing display fields: %#v", toolName, item)
-		}
 	}
 }
 
@@ -1137,161 +1082,6 @@ func TestMapChatInputRequestRejectsIncompletePrompt(t *testing.T) {
 	var coded codedServiceError
 	if !errors.As(err, &coded) || coded.ErrorCode() != "waiting_input_contract_invalid" {
 		t.Fatalf("error=%v, want waiting_input_contract_invalid", err)
-	}
-}
-
-func TestProjectInputRequestToolActivityMarksAskUserWaiting(t *testing.T) {
-	request := &ChatInputRequest{
-		PromptID:      "prompt-ask-user",
-		MessageID:     "message-ask-user",
-		ToolID:        "tool-ask-user",
-		ToolName:      "ask_user",
-		PublicSummary: "Choose a target before Flower continues.",
-		Questions: []ChatInputQuestion{{
-			ID:       "target",
-			Header:   "Deployment target",
-			Question: "Where should Flower deploy this change?",
-		}},
-	}
-	got, err := projectInputRequestToolActivity([]ChatToolActivity{{
-		RunID:        "run-1",
-		ToolID:       "tool-ask-user",
-		ToolName:     "ask_user",
-		Status:       "success",
-		Summary:      "Ask user done",
-		ErrorMessage: "old error",
-		EndedAtMs:    1700000000100,
-	}}, request)
-	if err != nil {
-		t.Fatalf("projectInputRequestToolActivity() error = %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("activity len=%d, want existing activity updated", len(got))
-	}
-	if got[0].Status != "waiting" || got[0].Summary != "Choose a target before Flower continues." || got[0].ErrorMessage != "" || got[0].EndedAtMs != 0 {
-		t.Fatalf("activity=%#v, want waiting input projection", got[0])
-	}
-}
-
-func TestProjectInputRequestToolActivityRejectsMismatchedToolName(t *testing.T) {
-	got, err := projectInputRequestToolActivity([]ChatToolActivity{{
-		ToolID:   "tool-ask-user",
-		ToolName: "file.read",
-		Status:   "success",
-		Summary:  "Read file",
-	}}, &ChatInputRequest{
-		PromptID:  "prompt-ask-user",
-		MessageID: "message-ask-user",
-		ToolID:    "tool-ask-user",
-		ToolName:  "ask_user",
-		Questions: []ChatInputQuestion{{
-			ID:       "target",
-			Header:   "Deployment target",
-			Question: "Where should Flower deploy this change?",
-		}},
-	})
-	if got != nil {
-		t.Fatalf("activity=%#v, want nil for mismatched tool identity", got)
-	}
-	var coded codedServiceError
-	if !errors.As(err, &coded) || coded.ErrorCode() != "waiting_input_contract_invalid" {
-		t.Fatalf("error=%v, want waiting_input_contract_invalid", err)
-	}
-}
-
-func TestProjectInputRequestToolActivityRejectsMissingActivity(t *testing.T) {
-	got, err := projectInputRequestToolActivity(nil, &ChatInputRequest{
-		PromptID:  "prompt-exit-plan",
-		MessageID: "message-exit-plan",
-		ToolID:    "opaque-tool-call-1",
-		ToolName:  "exit_plan_mode",
-		Questions: []ChatInputQuestion{{
-			ID:       "approve",
-			Header:   "Approve plan",
-			Question: "Continue?",
-		}},
-	})
-	if got != nil {
-		t.Fatalf("activity=%#v, want nil when matching tool activity is missing", got)
-	}
-	var coded codedServiceError
-	if !errors.As(err, &coded) || coded.ErrorCode() != "waiting_input_contract_invalid" {
-		t.Fatalf("error=%v, want waiting_input_contract_invalid", err)
-	}
-}
-
-func TestMergeToolActivityDedupesActiveAndStoredRecordsByToolID(t *testing.T) {
-	got := mergeToolActivity(
-		[]ChatToolActivity{{
-			ToolID:   "tool_read",
-			ToolName: "file.read",
-			Status:   "running",
-			Summary:  "Read file: README.md",
-		}},
-		[]ChatToolActivity{{
-			RunID:       "run_1",
-			ToolID:      "tool_read",
-			ToolName:    "file.read",
-			Status:      "success",
-			Summary:     "Read file: README.md",
-			StartedAtMs: 1700000000001,
-			EndedAtMs:   1700000000100,
-		}},
-	)
-	if len(got) != 1 {
-		t.Fatalf("activity len=%d, want one merged record: %#v", len(got), got)
-	}
-	if got[0].RunID != "run_1" || got[0].Status != "success" || got[0].StartedAtMs == 0 || got[0].EndedAtMs == 0 {
-		t.Fatalf("merged activity=%#v, want stored run id and terminal status", got[0])
-	}
-}
-
-func TestMergeToolActivityPromotesTerminalSummary(t *testing.T) {
-	got := mergeToolActivity(
-		[]ChatToolActivity{{
-			ToolID:   "tool_read",
-			ToolName: "file.read",
-			Status:   "running",
-			Summary:  "Read file",
-		}},
-		[]ChatToolActivity{{
-			RunID:    "run_1",
-			ToolID:   "tool_read",
-			ToolName: "file.read",
-			Status:   "error",
-			Summary:  "Read file: redeven-flower-acceptance-smoke/not-found-for-ui-check.txt failed",
-		}},
-	)
-	if len(got) != 1 {
-		t.Fatalf("activity len=%d, want one merged record: %#v", len(got), got)
-	}
-	if !strings.Contains(got[0].Summary, "not-found-for-ui-check.txt") || got[0].Status != "error" {
-		t.Fatalf("merged activity=%#v, want terminal summary with failing path", got[0])
-	}
-}
-
-func TestMergeToolActivityKeepsSameToolIDAcrossDifferentRuns(t *testing.T) {
-	got := mergeToolActivity(
-		[]ChatToolActivity{{
-			RunID:    "run_1",
-			ToolID:   "tool_read",
-			ToolName: "file.read",
-			Status:   "success",
-			Summary:  "Read file: first.txt",
-		}},
-		[]ChatToolActivity{{
-			RunID:    "run_2",
-			ToolID:   "tool_read",
-			ToolName: "file.read",
-			Status:   "error",
-			Summary:  "Read file failed",
-		}},
-	)
-	if len(got) != 2 {
-		t.Fatalf("activity len=%d, want two run-scoped records: %#v", len(got), got)
-	}
-	if got[0].RunID != "run_1" || got[1].RunID != "run_2" {
-		t.Fatalf("activity=%#v, want run-scoped order preserved", got)
 	}
 }
 

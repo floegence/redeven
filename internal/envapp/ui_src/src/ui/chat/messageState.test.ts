@@ -44,18 +44,33 @@ describe('messageState', () => {
         blockIndex: 1,
         block: {
           type: 'activity-timeline',
-          schemaVersion: 1,
-          runId: 'run_1',
-          messageId: 'm_ai_1',
-          summary: { status: 'running', totalItems: 1, visibleItems: 1, label: '1 activity item' },
-          groups: [],
+          schema_version: 1,
+          run_id: 'run_1',
+          turn_id: 'm_ai_1',
+          summary: {
+            status: 'running',
+            severity: 'normal',
+            needs_attention: true,
+            total_items: 1,
+            counts: { running: 1 },
+          },
+          items: [{
+            item_id: 'tool_1',
+            tool_id: 'tool_1',
+            tool_name: 'terminal.exec',
+            kind: 'tool',
+            status: 'running',
+            severity: 'normal',
+            needs_attention: true,
+            requires_approval: false,
+          }],
         },
       },
       { currentStreamingMessageId: withDelta.streamingMessageId, now: 120 },
     );
     expect(withActivityBlock.messages[0].blocks[1]).toMatchObject({
       type: 'activity-timeline',
-      runId: 'run_1',
+      run_id: 'run_1',
     });
 
     const ended = applyStreamEventToMessages(

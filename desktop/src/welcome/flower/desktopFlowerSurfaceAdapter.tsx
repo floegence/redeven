@@ -169,10 +169,15 @@ export function mapFlowerSettingsDraftToDesktop(draft: FlowerSettingsDraft): Des
 
 function mapMessage(message: DesktopFlowerHostChatMessage): FlowerChatMessage {
   const blocks = message.blocks
-    ?.map((block): FlowerChatMessageBlock => ({
-      type: block.type,
-      ...(block.content !== undefined ? { content: block.content } : {}),
-    })) ?? [];
+    ?.map((block): FlowerChatMessageBlock => {
+      if (block.type === 'activity-timeline') {
+        return block;
+      }
+      return {
+        type: block.type,
+        ...(block.content !== undefined ? { content: block.content } : {}),
+      };
+    }) ?? [];
   return {
     id: message.id,
     role: message.role,
@@ -232,7 +237,8 @@ export function mapDesktopFlowerThread(thread: DesktopFlowerHostThread): FlowerT
     source_label: thread.source_label,
     target_labels: thread.target_labels,
     messages: thread.messages.map(mapMessage),
-    ...(thread.tool_activity ? { tool_activity: thread.tool_activity } : {}),
+    ...(thread.activity_timeline ? { activity_timeline: thread.activity_timeline } : {}),
+    ...(thread.todo_snapshot !== undefined ? { todo_snapshot: thread.todo_snapshot } : {}),
     ...(thread.input_request ? { input_request: mapInputRequest(thread.input_request) } : {}),
     ...(thread.error !== undefined ? { error: thread.error } : {}),
     has_unread: thread.has_unread,

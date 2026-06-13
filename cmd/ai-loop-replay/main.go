@@ -80,7 +80,6 @@ func runReplay(path string) (replayReport, error) {
 			continue
 		}
 		visibleParts := make([]string, 0, len(message.Blocks))
-		structuredFallback := ""
 		for _, rawBlock := range message.Blocks {
 			block, ok := rawBlock.(map[string]any)
 			if !ok {
@@ -88,16 +87,8 @@ func runReplay(path string) (replayReport, error) {
 			}
 			typeName := strings.TrimSpace(strings.ToLower(anyToString(block["type"])))
 			switch typeName {
-			case "tool-call":
-				toolCalls++
-				if structuredFallback == "" {
-					structuredFallback = structuredAssistantText(block)
-				}
 			case "activity-timeline":
 				toolCalls += countActivityTimelineItems(block)
-				if structuredFallback == "" {
-					structuredFallback = structuredAssistantText(block)
-				}
 			case "markdown", "text", "thinking":
 				content := strings.TrimSpace(anyToString(block["content"]))
 				if content == "" {
@@ -108,10 +99,6 @@ func runReplay(path string) (replayReport, error) {
 		}
 		if len(visibleParts) > 0 {
 			assistantText = strings.Join(visibleParts, "\n\n")
-			continue
-		}
-		if structuredFallback != "" {
-			assistantText = structuredFallback
 		}
 	}
 
@@ -166,75 +153,30 @@ func containsAny(text string, hints []string) bool {
 	return false
 }
 
-func structuredAssistantText(block map[string]any) string {
-	switch strings.TrimSpace(strings.ToLower(anyToString(block["type"]))) {
-	case "tool-call":
-		switch strings.TrimSpace(anyToString(block["toolName"])) {
-		case "ask_user":
-			return extractAskUserText(block["result"], block["args"])
-		case "task_complete":
-			return extractTaskCompleteText(block["args"])
-		}
-	case "activity-timeline":
-		groups, _ := block["groups"].([]any)
-		for i := len(groups) - 1; i >= 0; i-- {
-			group, _ := groups[i].(map[string]any)
-			items, _ := group["items"].([]any)
-			for j := len(items) - 1; j >= 0; j-- {
-				item, _ := items[j].(map[string]any)
-				payload := item["payload"]
-				switch strings.TrimSpace(anyToString(item["toolName"])) {
-				case "ask_user":
-					return extractAskUserText(payload)
-				case "task_complete":
-					return extractTaskCompleteText(payload)
-				}
-			}
-		}
-	}
-	return ""
-}
-
 func countActivityTimelineItems(block map[string]any) int {
-	count := 0
-	groups, _ := block["groups"].([]any)
-	for _, rawGroup := range groups {
-		group, _ := rawGroup.(map[string]any)
-		items, _ := group["items"].([]any)
-		count += len(items)
+	items, _ := block["items"].([]any)
+	count := len(items)
+	if count == 0 {
+		summary, _ := block["summary"].(map[string]any)
+		if total := intFromJSONNumber(summary["total_items"]); total > 0 {
+			return total
+		}
 	}
 	return count
 }
 
-func extractAskUserText(candidates ...any) string {
-	for _, raw := range candidates {
-		obj, _ := raw.(map[string]any)
-		if len(obj) == 0 {
-			continue
+func intFromJSONNumber(v any) int {
+	switch x := v.(type) {
+	case float64:
+		if x > 0 {
+			return int(x)
 		}
-		if summary := strings.TrimSpace(anyToString(obj["public_summary"])); summary != "" {
-			return summary
-		}
-		questions, _ := obj["questions"].([]any)
-		for _, rawQuestion := range questions {
-			question, _ := rawQuestion.(map[string]any)
-			if text := strings.TrimSpace(anyToString(question["question"])); text != "" {
-				return text
-			}
-			if header := strings.TrimSpace(anyToString(question["header"])); header != "" {
-				return header
-			}
+	case int:
+		if x > 0 {
+			return x
 		}
 	}
-	return ""
-}
-
-func extractTaskCompleteText(raw any) string {
-	obj, _ := raw.(map[string]any)
-	if len(obj) == 0 {
-		return ""
-	}
-	return strings.TrimSpace(anyToString(obj["result"]))
+	return 0
 }
 
 func anyToString(v any) string {

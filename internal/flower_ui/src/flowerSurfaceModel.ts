@@ -9,8 +9,7 @@ export function trimString(value: string | null | undefined): string {
 
 function messagePreviewText(message: FlowerThreadSnapshot['messages'][number]): string {
   const fromBlocks = message.blocks
-    ?.filter((block) => block.type === 'markdown' || block.type === 'text')
-    .map((block) => trimString(block.content))
+    ?.map((block) => (block.type === 'markdown' || block.type === 'text' ? trimString(block.content) : ''))
     .filter(Boolean)
     .join('\n\n');
   return trimString(message.content || fromBlocks);

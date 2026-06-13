@@ -345,7 +345,7 @@ func classifyStreamKind(streamEvent any) RealtimeStreamKind {
 		return RealtimeStreamKindContext
 	case streamEventBlockStart:
 		switch strings.TrimSpace(strings.ToLower(ev.BlockType)) {
-		case "tool-call", activityTimelineBlockType:
+		case activityTimelineBlockType:
 			return RealtimeStreamKindTool
 		}
 		return RealtimeStreamKindAssistant
@@ -353,15 +353,9 @@ func classifyStreamKind(streamEvent any) RealtimeStreamKind {
 		blockMap, ok := ev.Block.(map[string]any)
 		if ok {
 			switch t, _ := blockMap["type"].(string); strings.TrimSpace(strings.ToLower(t)) {
-			case "tool-call", activityTimelineBlockType:
+			case activityTimelineBlockType:
 				return RealtimeStreamKindTool
 			}
-		}
-		if _, ok := ev.Block.(ToolCallBlock); ok {
-			return RealtimeStreamKindTool
-		}
-		if _, ok := ev.Block.(*ToolCallBlock); ok {
-			return RealtimeStreamKindTool
 		}
 		if _, ok := ev.Block.(ActivityTimelineBlock); ok {
 			return RealtimeStreamKindTool

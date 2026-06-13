@@ -24,8 +24,10 @@ import type {
   ChatCallbacks,
   VirtualListConfig,
   StreamEvent,
-  ActivityGroup,
+  ActivityAttentionReason,
   ActivityItem,
+  ActivityItemSeverity,
+  ActivityItemStatus,
   ActivityTimelineBlock,
 } from './types';
 import { DEFAULT_VIRTUAL_LIST_CONFIG } from './types';
@@ -47,7 +49,6 @@ function activityStatusRank(status: string | undefined): number {
     case 'error':
       return 5;
     case 'waiting':
-    case 'waiting_approval':
       return 4;
     case 'running':
       return 3;
@@ -75,8 +76,8 @@ function activitySeverityRank(severity: string | undefined): number {
   }
 }
 
-function rollupActivityStatus(items: ActivityItem[]): string {
-  let status = 'success';
+function rollupActivityStatus(items: ActivityItem[]): ActivityItemStatus {
+  let status: ActivityItemStatus = 'success';
   for (const item of items) {
     if (activityStatusRank(item.status) > activityStatusRank(status)) {
       status = item.status;
@@ -85,10 +86,10 @@ function rollupActivityStatus(items: ActivityItem[]): string {
   return status;
 }
 
-function rollupActivitySeverity(items: ActivityItem[]): string {
-  let severity = 'quiet';
+function rollupActivitySeverity(items: ActivityItem[]): ActivityItemSeverity {
+  let severity: ActivityItemSeverity = 'quiet';
   for (const item of items) {
-    const next = String(item.severity ?? '').trim() || (item.status === 'error' ? 'error' : 'quiet');
+    const next: ActivityItemSeverity = item.severity ?? (item.status === 'error' ? 'error' : 'quiet');
     if (activitySeverityRank(next) > activitySeverityRank(severity)) {
       severity = next;
     }
@@ -96,38 +97,61 @@ function rollupActivitySeverity(items: ActivityItem[]): string {
   return severity;
 }
 
-function updateActivityApprovalGroup(group: ActivityGroup, toolId: string, approved: boolean): ActivityGroup {
+function updateActivityApprovalItems(items: ActivityItem[], toolId: string, approved: boolean): {
+  items: ActivityItem[];
+  changed: boolean;
+} {
   let changed = false;
-  const items = group.items.map((item) => {
+  const nextItems = items.map((item) => {
     if (
-      String(item.toolId ?? '').trim() !== toolId ||
-      item.requiresApproval !== true ||
-      item.approvalState !== 'required'
+      String(item.tool_id ?? '').trim() !== toolId ||
+      item.requires_approval !== true ||
+      item.approval_state !== 'requested'
     ) {
       return item;
     }
     changed = true;
     return approved
-      ? { ...item, approvalState: 'approved' as const, status: 'running' as const, severity: 'normal' as const }
-      : { ...item, approvalState: 'rejected' as const, status: 'error' as const, severity: 'error' as const };
+      ? {
+        ...item,
+        approval_state: 'approved' as const,
+        status: 'running' as const,
+        severity: 'normal' as const,
+        needs_attention: true,
+        attention_reasons: ['running'] satisfies ActivityAttentionReason[],
+      }
+      : {
+        ...item,
+        approval_state: 'rejected' as const,
+        status: 'error' as const,
+        severity: 'error' as const,
+        needs_attention: true,
+        attention_reasons: ['error'] satisfies ActivityAttentionReason[],
+      };
   });
-  if (!changed) return group;
-  return {
-    ...group,
-    items,
-    status: rollupActivityStatus(items),
-    severity: rollupActivitySeverity(items),
-    defaultOpen: items.some((item) => item.status === 'waiting' || item.status === 'error' || item.requiresApproval === true),
-  };
+  return { items: nextItems, changed };
 }
 
-function updateActivityApprovalSummary(block: ActivityTimelineBlock, groups: ActivityGroup[]): ActivityTimelineBlock['summary'] {
-  const items = groups.flatMap((group) => group.items);
+function updateActivityApprovalSummary(block: ActivityTimelineBlock, items: ActivityItem[]): ActivityTimelineBlock['summary'] {
+  const status = rollupActivityStatus(items);
+  const severity = rollupActivitySeverity(items);
+  const counts: ActivityTimelineBlock['summary']['counts'] = {};
+  for (const item of items) {
+    if (item.status === 'pending') counts.pending = (counts.pending ?? 0) + 1;
+    if (item.status === 'running') counts.running = (counts.running ?? 0) + 1;
+    if (item.status === 'waiting') counts.waiting = (counts.waiting ?? 0) + 1;
+    if (item.status === 'success') counts.success = (counts.success ?? 0) + 1;
+    if (item.status === 'error') counts.error = (counts.error ?? 0) + 1;
+    if (item.status === 'canceled') counts.canceled = (counts.canceled ?? 0) + 1;
+    if (item.requires_approval) counts.approval = (counts.approval ?? 0) + 1;
+  }
   return {
     ...block.summary,
-    status: rollupActivityStatus(items),
-    totalItems: block.summary.totalItems || items.length,
-    visibleItems: block.summary.visibleItems || items.length,
+    status,
+    severity,
+    needs_attention: items.some((item) => item.needs_attention || item.status === 'running' || item.status === 'waiting' || item.status === 'error'),
+    total_items: block.summary.total_items || items.length,
+    counts,
   };
 }
 
@@ -459,13 +483,8 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
         ...msg,
         blocks: msg.blocks.map((block) => {
           if (block.type === 'activity-timeline') {
-            let changed = false;
-            const groups = block.groups.map((group) => {
-              const next = updateActivityApprovalGroup(group, toolId, approved);
-              if (next !== group) changed = true;
-              return next;
-            });
-            return changed ? { ...block, groups, summary: updateActivityApprovalSummary(block, groups) } : block;
+            const { items, changed } = updateActivityApprovalItems(block.items, toolId, approved);
+            return changed ? { ...block, items, summary: updateActivityApprovalSummary(block, items) } : block;
           }
           return block;
         }),
