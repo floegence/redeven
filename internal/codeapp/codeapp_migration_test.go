@@ -84,6 +84,63 @@ WHERE name = 'title_source'
 	}
 }
 
+func TestNewRebuildsInvalidThreadstoreSchema(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	dbPath := filepath.Join(stateDir, "ai", "threads.sqlite")
+	store, err := threadstore.Open(dbPath)
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	if err := store.CreateThread(context.Background(), threadstore.Thread{ThreadID: "th_old", EndpointID: "env_1", Title: "old"}); err != nil {
+		_ = store.Close()
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("store Close: %v", err)
+	}
+	if err := legacydb.ReplaceStructuredUserInputsWithoutSelectedChoice(dbPath); err != nil {
+		t.Fatalf("break structured_user_inputs schema: %v", err)
+	}
+
+	svc, err := New(context.Background(), Options{
+		Logger:       slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
+		StateDir:     stateDir,
+		StateRoot:    stateDir,
+		ConfigPath:   filepath.Join(stateDir, "config.json"),
+		AgentHomeDir: stateDir,
+		Shell:        "/bin/sh",
+		ResolveSessionMeta: func(string) (*session.Meta, bool) {
+			return nil, false
+		},
+		ResolveSessionTunnelURL: func(string) (string, bool) {
+			return "", false
+		},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = svc.Close() }()
+
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer func() { _ = raw.Close() }()
+
+	if got := countTableColumns(t, raw, "structured_user_inputs", "selected_choice_id"); got != 1 {
+		t.Fatalf("selected_choice_id column count=%d, want 1", got)
+	}
+	var threadCount int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM ai_threads`).Scan(&threadCount); err != nil {
+		t.Fatalf("count ai_threads: %v", err)
+	}
+	if threadCount != 0 {
+		t.Fatalf("ai_threads row count=%d, want reset database", threadCount)
+	}
+}
+
 func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 	t.Parallel()
 
@@ -153,4 +210,17 @@ func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 	if len(state.State.SessionIDs) != 0 {
 		t.Fatalf("session_ids=%#v, want stale sessions pruned", state.State.SessionIDs)
 	}
+}
+
+func countTableColumns(t *testing.T, db *sql.DB, tableName string, columnName string) int {
+	t.Helper()
+	var count int
+	if err := db.QueryRow(`
+SELECT COUNT(1)
+FROM pragma_table_info(?)
+WHERE name = ?
+`, tableName, columnName).Scan(&count); err != nil {
+		t.Fatalf("count table columns: %v", err)
+	}
+	return count
 }
