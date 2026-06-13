@@ -13,6 +13,13 @@ type TimeGroup = FlowerThreadTimeGroup;
 export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'pin' | 'rename';
 export type { FlowerThreadGroup };
 
+type FlowerThreadRenderGroup = Readonly<{
+  key: string;
+  kind: FlowerThreadGroup['kind'];
+  group?: TimeGroup;
+  threadIDs: readonly string[];
+}>;
+
 function canForkThreadItem(item: FlowerThreadListItem): boolean {
   switch (item.status) {
     case 'running':
@@ -329,7 +336,14 @@ export type FlowerThreadListProps = Readonly<{
 export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.threadList;
   const filtered = createMemo(() => filterFlowerThreadItems(props.items, props.query));
-  const groups = createMemo(() => groupFlowerThreadItems(filtered()));
+  const itemByID = createMemo(() => new Map(filtered().map((item) => [item.thread_id, item] as const)));
+  const groups = createMemo<readonly FlowerThreadRenderGroup[]>(() => groupFlowerThreadItems(filtered()).map((group) => (
+    group.kind === 'pinned'
+      ? { key: 'pinned', kind: group.kind, threadIDs: group.threads.map((thread) => thread.thread_id) }
+      : { key: `time:${group.group}`, kind: group.kind, group: group.group, threadIDs: group.threads.map((thread) => thread.thread_id) }
+  )));
+  const groupByKey = createMemo(() => new Map(groups().map((group) => [group.key, group] as const)));
+  const groupKeys = createMemo(() => groups().map((group) => group.key));
   const [menu, setMenu] = createSignal<{ item: FlowerThreadListItem; x: number; y: number; restore?: HTMLElement } | null>(null);
 
   const openMenu = (event: MouseEvent | KeyboardEvent, item: FlowerThreadListItem) => {
@@ -394,31 +408,41 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
           when={filtered().length > 0}
           fallback={<div class="flower-host-thread-empty rounded-lg border border-dashed p-6 text-sm">{copy().empty}</div>}
         >
-          <For each={groups()}>
-            {(group) => (
+          <For each={groupKeys()}>
+            {(groupKey) => {
+              const group = () => groupByKey().get(groupKey);
+              return (
               <section class="space-y-1">
                 <h3 class="flower-host-thread-group-label px-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
-                  {group.kind === 'pinned' ? copy().pinnedGroup : timeGroupLabel(group.group, copy())}
+                  {group()?.kind === 'pinned' ? copy().pinnedGroup : timeGroupLabel(group()?.group ?? 'older', copy())}
                 </h3>
-                <For each={group.threads}>
-                  {(thread) => (
-                    <FlowerThreadCard
-                      item={thread}
-                      active={props.activeThreadID === thread.thread_id}
-                      copy={copy()}
-                      canDelete={!!props.onDelete}
-                      busy={props.busyThreadID === thread.thread_id}
-                      onSelect={() => props.onSelect(thread.thread_id)}
-                      onDelete={props.onDelete ? () => props.onDelete?.(thread.thread_id) : undefined}
-                      onContextMenu={openMenu}
-                      onKeyboardMenu={openMenu}
-                      onRename={props.onMenuAction ? (item) => props.onMenuAction?.('rename', item) : undefined}
-                      onPin={props.canPin && props.onMenuAction ? (item) => props.onMenuAction?.('pin', item) : undefined}
-                    />
-                  )}
+                <For each={group()?.threadIDs ?? []}>
+                  {(threadID) => {
+                    const thread = () => itemByID().get(threadID);
+                    return (
+                      <Show when={thread()}>
+                        {(item) => (
+                          <FlowerThreadCard
+                            item={item()}
+                            active={props.activeThreadID === threadID}
+                            copy={copy()}
+                            canDelete={!!props.onDelete}
+                            busy={props.busyThreadID === threadID}
+                            onSelect={() => props.onSelect(threadID)}
+                            onDelete={props.onDelete ? () => props.onDelete?.(threadID) : undefined}
+                            onContextMenu={openMenu}
+                            onKeyboardMenu={openMenu}
+                            onRename={props.onMenuAction ? (value) => props.onMenuAction?.('rename', value) : undefined}
+                            onPin={props.canPin && props.onMenuAction ? (value) => props.onMenuAction?.('pin', value) : undefined}
+                          />
+                        )}
+                      </Show>
+                    );
+                  }}
                 </For>
               </section>
-            )}
+              );
+            }}
           </For>
         </Show>
       </div>

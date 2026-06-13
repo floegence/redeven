@@ -4,7 +4,7 @@ import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
 type TimeGroup = FlowerThreadTimeGroup;
 
 export type FlowerThreadIndicator = Readonly<{
-  visual: 'idle' | 'wave' | 'working' | 'waiting' | 'approval' | 'success' | 'failed' | 'stopped';
+  visual: 'none' | 'wave' | 'dot';
   attention: 'none' | 'unread';
   actionRequired: boolean;
   ariaStatus: string;
@@ -82,62 +82,37 @@ export function flowerThreadIndicator(
   copy: FlowerThreadListCopy = DEFAULT_FLOWER_SURFACE_COPY.threadList,
 ): FlowerThreadIndicator {
   const unread = item.read_status.is_unread === true;
+  const statusIndicator = (
+    ariaStatus: string,
+    visual: FlowerThreadIndicator['visual'],
+    actionRequired = false,
+  ): FlowerThreadIndicator => ({
+    visual,
+    attention: unread ? 'unread' : 'none',
+    actionRequired,
+    ariaStatus,
+    title: unread ? `${ariaStatus}, ${copy.unread}` : ariaStatus,
+  });
   switch (item.status) {
     case 'running':
       return {
-        visual: active ? 'wave' : 'working',
-        attention: unread ? 'unread' : 'none',
+        visual: 'wave',
+        attention: 'none',
         actionRequired: false,
         ariaStatus: copy.statuses.running,
-        title: unread ? `${copy.statuses.running}, ${copy.unread}` : copy.statuses.running,
+        title: copy.statuses.running,
       };
     case 'waiting_user':
-      return {
-        visual: 'waiting',
-        attention: unread ? 'unread' : 'none',
-        actionRequired: true,
-        ariaStatus: copy.statuses.waiting_user,
-        title: unread ? `${copy.statuses.waiting_user}, ${copy.unread}` : copy.statuses.waiting_user,
-      };
+      return statusIndicator(copy.statuses.waiting_user, !active && unread ? 'dot' : 'none', true);
     case 'waiting_approval':
-      return {
-        visual: 'approval',
-        attention: unread ? 'unread' : 'none',
-        actionRequired: true,
-        ariaStatus: copy.statuses.waiting_approval,
-        title: unread ? `${copy.statuses.waiting_approval}, ${copy.unread}` : copy.statuses.waiting_approval,
-      };
+      return statusIndicator(copy.statuses.waiting_approval, !active && unread ? 'dot' : 'none', true);
     case 'success':
-      return {
-        visual: 'success',
-        attention: unread ? 'unread' : 'none',
-        actionRequired: false,
-        ariaStatus: copy.statuses.success,
-        title: unread ? `${copy.statuses.success}, ${copy.unread}` : copy.statuses.success,
-      };
+      return statusIndicator(copy.statuses.success, unread ? 'dot' : 'none');
     case 'failed':
-      return {
-        visual: 'failed',
-        attention: unread ? 'unread' : 'none',
-        actionRequired: false,
-        ariaStatus: copy.statuses.failed,
-        title: unread ? `${copy.statuses.failed}, ${copy.unread}` : copy.statuses.failed,
-      };
+      return statusIndicator(copy.statuses.failed, unread ? 'dot' : 'none');
     case 'canceled':
-      return {
-        visual: 'stopped',
-        attention: unread ? 'unread' : 'none',
-        actionRequired: false,
-        ariaStatus: copy.statuses.canceled,
-        title: unread ? `${copy.statuses.canceled}, ${copy.unread}` : copy.statuses.canceled,
-      };
+      return statusIndicator(copy.statuses.canceled, unread ? 'dot' : 'none');
     default:
-      return {
-        visual: 'idle',
-        attention: unread ? 'unread' : 'none',
-        actionRequired: false,
-        ariaStatus: copy.statuses.idle,
-        title: unread ? `${copy.statuses.idle}, ${copy.unread}` : copy.statuses.idle,
-      };
+      return statusIndicator(copy.statuses.idle, unread ? 'dot' : 'none');
   }
 }

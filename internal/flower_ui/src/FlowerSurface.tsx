@@ -50,7 +50,7 @@ const THREAD_RAIL_WIDTH_STORAGE_KEY = 'redeven.flower.threadRailWidth';
 const THREAD_RAIL_WIDTH_DEFAULT = 272;
 const THREAD_RAIL_WIDTH_MIN = 220;
 const THREAD_RAIL_WIDTH_MAX = 380;
-const SIDEBAR_STABLE_ACTIVE_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval', 'waiting_user']);
+const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
 
 export {
   projectFlowerThreadListItem,
@@ -271,7 +271,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const threadItemSignature = (t: FlowerThreadSnapshot): string => {
     const visibleThread = threadWithLocalReadVisibility(t);
-    const stableLiveSidebar = t.thread_id === selectedThreadID() && SIDEBAR_STABLE_ACTIVE_STATUSES.has(t.status);
+    const stableLiveSidebar = SIDEBAR_STABLE_LIVE_STATUSES.has(t.status);
     return [
       t.thread_id,
       t.status,
@@ -283,8 +283,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       t.model_id ?? '',
       t.target_labels?.join('\x1e') ?? '',
       t.working_dir ?? '',
-      stableLiveSidebar ? 'live-selected' : String(visibleThread.read_status.is_unread),
-      stableLiveSidebar ? 'live-selected' : readSnapshotKey(t.read_status.snapshot),
+      stableLiveSidebar ? 'live' : String(visibleThread.read_status.is_unread),
+      stableLiveSidebar ? 'live' : readSnapshotKey(t.read_status.snapshot),
     ].join('\x1f');
   };
   const sidebarItemSignature = (t: FlowerThreadListItem): string => [
@@ -298,8 +298,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     t.model_id,
     t.target_labels.join('\x1e'),
     t.working_dir,
-    t.thread_id === selectedThreadID() && SIDEBAR_STABLE_ACTIVE_STATUSES.has(t.status) ? 'live-selected' : String(t.read_status.is_unread),
-    t.thread_id === selectedThreadID() && SIDEBAR_STABLE_ACTIVE_STATUSES.has(t.status) ? 'live-selected' : readSnapshotKey(t.read_status.snapshot),
+    SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : String(t.read_status.is_unread),
+    SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : readSnapshotKey(t.read_status.snapshot),
   ].join('\x1f');
   const threadItems = createMemo(() => {
     localReadVisibilityRevision();
@@ -734,6 +734,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const selectedID = selectedThreadID();
       const previousSelected = threads().find((thread) => thread.thread_id === selectedID) ?? null;
       const selectedSummary = next.find((thread) => thread.thread_id === selectedID) ?? null;
+      if (selectedID && selectedSummary?.read_status.is_unread) {
+        persistThreadRead(selectedID, selectedSummary.read_status.snapshot, threadLoadSequence);
+      }
       let mergedThreads: readonly FlowerThreadSnapshot[] = [];
       setThreads((current) => {
         mergedThreads = mergeThreadListRefresh(current, next, startedMutationRevision !== threadLocalMutationRevision);
