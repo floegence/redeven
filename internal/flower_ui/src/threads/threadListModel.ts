@@ -57,7 +57,7 @@ export function groupFlowerThreadItems(threads: readonly FlowerThreadListItem[])
 
 export function filterFlowerThreadItems(threads: readonly FlowerThreadListItem[], query: string): FlowerThreadListItem[] {
   const needle = query.trim().toLowerCase();
-  if (!needle) return [...threads];
+  if (!needle) return threads as FlowerThreadListItem[];
   return threads.filter((thread) => [
     thread.title,
     thread.preview,
