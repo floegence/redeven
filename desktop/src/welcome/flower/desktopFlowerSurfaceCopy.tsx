@@ -60,6 +60,7 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
       empty: t(i18n, k('threadList.empty')),
       untitled: t(i18n, k('threadList.untitled')),
       working: t(i18n, k('threadList.working')),
+      unread: t(i18n, k('threadList.unread')),
       deleteLabel: (title) => t(i18n, k('threadList.deleteLabel'), { title }),
       contextMenuLabel: (title) => t(i18n, k('threadList.contextMenuLabel'), { title }),
       copyThreadID: t(i18n, k('threadList.copyThreadID')),

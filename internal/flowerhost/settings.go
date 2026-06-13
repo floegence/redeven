@@ -261,6 +261,7 @@ func (s *ConfigStore) LoadIdentity(ctx context.Context) (HostIdentity, error) {
 			HostID:           id,
 			HostKind:         HostKindGlobal,
 			CarrierKind:      CarrierKindDesktop,
+			UserPublicID:     "user_local",
 			CreatedAtUnixMs:  now,
 			LastSeenAtUnixMs: now,
 		}
@@ -289,6 +290,12 @@ func normalizeIdentity(in HostIdentity) HostIdentity {
 	in.CarrierKind = strings.TrimSpace(in.CarrierKind)
 	if in.CarrierKind == "" {
 		in.CarrierKind = CarrierKindDesktop
+	}
+	in.UserPublicID = strings.TrimSpace(in.UserPublicID)
+	if in.UserPublicID == "" {
+		if id, err := newUserPublicID(); err == nil {
+			in.UserPublicID = id
+		}
 	}
 	if in.CreatedAtUnixMs <= 0 {
 		in.CreatedAtUnixMs = now

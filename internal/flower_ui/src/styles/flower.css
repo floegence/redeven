@@ -2438,6 +2438,10 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 }
 
 /* ---- thread card working wave indicator ---- */
+.flower-host-thread-indicator {
+  width: 14px;
+}
+
 .flower-host-thread-wave-bar {
   width: 2px;
   border-radius: 9999px;
@@ -2461,21 +2465,21 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   }
 }
 
-/* visibility toggled via parent data-flower-thread-status */
-.flower-host-thread-dot {
-  display: block;
-}
-
 .flower-host-thread-wave {
   display: none;
+}
+
+.flower-host-thread-unread-dot {
+  display: none;
+  background: var(--primary);
 }
 
 [data-flower-thread-status='running'] .flower-host-thread-wave {
   display: flex;
 }
 
-[data-flower-thread-status='running'] .flower-host-thread-dot {
-  display: none;
+[data-flower-thread-unread='true']:not([data-flower-thread-status='running']) .flower-host-thread-unread-dot {
+  display: block;
 }
 
 @media (prefers-reduced-motion: reduce) {

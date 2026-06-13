@@ -2,6 +2,7 @@ export const LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL = 'redeven-desktop:flower
 export const SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL = 'redeven-desktop:flower-host-settings-save';
 export const LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL = 'redeven-desktop:flower-host-threads-list';
 export const LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL = 'redeven-desktop:flower-host-thread-load';
+export const MARK_DESKTOP_FLOWER_HOST_THREAD_READ_CHANNEL = 'redeven-desktop:flower-host-thread-read-mark';
 export const RENAME_DESKTOP_FLOWER_HOST_THREAD_CHANNEL = 'redeven-desktop:flower-host-thread-rename';
 export const SET_DESKTOP_FLOWER_HOST_THREAD_PINNED_CHANNEL = 'redeven-desktop:flower-host-thread-pinned-set';
 export const FORK_DESKTOP_FLOWER_HOST_THREAD_CHANNEL = 'redeven-desktop:flower-host-thread-fork';
@@ -303,7 +304,11 @@ export type DesktopFlowerHostThread = Readonly<{
   tool_activity?: readonly DesktopFlowerHostToolActivity[];
   input_request?: DesktopFlowerHostInputRequest | null;
   error?: DesktopFlowerHostThreadError | null;
-  has_unread?: boolean;
+  has_unread: boolean;
+}>;
+
+export type DesktopFlowerHostMarkThreadReadRequest = Readonly<{
+  thread_id: string;
 }>;
 
 export type DesktopFlowerHostRenameThreadRequest = Readonly<{
@@ -353,6 +358,14 @@ export type ListDesktopFlowerHostThreadsResult = Readonly<
 >;
 
 export type LoadDesktopFlowerHostThreadResult = Readonly<
+  | {
+      ok: true;
+      thread: DesktopFlowerHostThread;
+    }
+  | DesktopFlowerHostFailure
+>;
+
+export type MarkDesktopFlowerHostThreadReadResult = Readonly<
   | {
       ok: true;
       thread: DesktopFlowerHostThread;

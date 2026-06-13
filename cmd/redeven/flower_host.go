@@ -17,6 +17,7 @@ import (
 
 	"github.com/floegence/redeven/internal/flowerhost"
 	"github.com/floegence/redeven/internal/lockfile"
+	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
 func (c *cli) flowerHostCmd(args []string) int {
@@ -85,16 +86,23 @@ func (c *cli) flowerHostCmd(args []string) int {
 		BaseURL: strings.TrimSpace(*secretResolverURL),
 		Token:   resolverToken,
 	}
+	readState, err := threadreadstate.Open(filepath.Join(paths.StateRoot, "gateway", "thread_read_state.sqlite"))
+	if err != nil {
+		fmt.Fprintf(c.stderr, "flower-host failed to open thread read state: %v\n", err)
+		return 1
+	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelWarn}))
 	svc, err := flowerhost.NewService(ctx, flowerhost.ServiceOptions{
 		Logger:         logger,
 		Paths:          paths,
 		Identity:       identity,
 		SecretResolver: resolver,
+		ReadState:      readState,
 		AgentHomeDir:   *agentHomeDir,
 		Shell:          *shell,
 	})
 	if err != nil {
+		_ = readState.Close()
 		fmt.Fprintf(c.stderr, "flower-host failed to start service: %v\n", err)
 		return 1
 	}

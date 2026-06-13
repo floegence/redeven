@@ -58,6 +58,21 @@ type ThreadView = Readonly<{
   last_message_at_unix_ms?: number;
   last_message_preview?: string;
   waiting_prompt?: ThreadWaitingPrompt;
+  read_status: ThreadReadStatus;
+}>;
+
+type ThreadReadSnapshot = Readonly<{
+  last_message_at_unix_ms: number;
+  waiting_prompt_id?: string;
+}>;
+
+type ThreadReadStatus = Readonly<{
+  is_unread: boolean;
+  snapshot: ThreadReadSnapshot;
+  read_state: Readonly<{
+    last_read_message_at_unix_ms: number;
+    last_seen_waiting_prompt_id?: string;
+  }>;
 }>;
 
 type ThreadWaitingPrompt = Readonly<{
@@ -101,6 +116,10 @@ type CreateThreadResponse = Readonly<{
   thread?: ThreadView;
 }>;
 
+type MarkThreadReadResponse = Readonly<{
+  read_status: ThreadReadStatus;
+}>;
+
 type FlowerInputResponseMode = NonNullable<FlowerInputRequestQuestion['response_mode']>;
 
 function trim(value: unknown): string {
@@ -109,6 +128,30 @@ function trim(value: unknown): string {
 
 function flowerContractError(message: string): never {
   throw new Error(`Flower contract error: ${message}`);
+}
+
+function readStatus(thread: ThreadView): ThreadReadStatus {
+  if (!thread.read_status || typeof thread.read_status !== 'object') {
+    flowerContractError('thread.read_status is required.');
+  }
+  if (typeof thread.read_status.is_unread !== 'boolean') {
+    flowerContractError('thread.read_status.is_unread must be a boolean.');
+  }
+  if (!thread.read_status.snapshot || typeof thread.read_status.snapshot !== 'object') {
+    flowerContractError('thread.read_status.snapshot is required.');
+  }
+  const lastMessageAtUnixMs = Number(thread.read_status.snapshot.last_message_at_unix_ms ?? 0);
+  if (!Number.isFinite(lastMessageAtUnixMs) || lastMessageAtUnixMs < 0) {
+    flowerContractError('thread.read_status.snapshot.last_message_at_unix_ms must be a non-negative number.');
+  }
+  if (!thread.read_status.read_state || typeof thread.read_status.read_state !== 'object') {
+    flowerContractError('thread.read_status.read_state is required.');
+  }
+  const lastReadMessageAtUnixMs = Number(thread.read_status.read_state.last_read_message_at_unix_ms ?? -1);
+  if (!Number.isFinite(lastReadMessageAtUnixMs) || lastReadMessageAtUnixMs < 0) {
+    flowerContractError('thread.read_status.read_state.last_read_message_at_unix_ms must be a non-negative number.');
+  }
+  return thread.read_status;
 }
 
 function adapterCopy(options: EnvLocalFlowerSurfaceAdapterOptions): EnvLocalFlowerSurfaceAdapterCopy {
@@ -403,6 +446,7 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
   const envLabel = trim(options.envLabel) || copy.currentEnvironment;
   const status = runStatus(thread.run_status);
   const inputRequest = status === 'waiting_user' ? mapWaitingPrompt(thread.waiting_prompt) : null;
+  const currentReadStatus = readStatus(thread);
   return {
     thread_id: threadID,
     title,
@@ -419,6 +463,7 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
     target_labels: [envLabel],
     messages,
     ...(inputRequest ? { input_request: inputRequest } : {}),
+    has_unread: currentReadStatus.is_unread === true,
   };
 }
 
@@ -500,7 +545,30 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     const messages = (messagesResp.messages ?? [])
       .map((item) => mapMessage(item.messageJson as Message))
       .filter((item): item is FlowerChatMessage => item !== null);
-    return mapThread(threadResp.thread ?? { thread_id: tid }, messages, options);
+    if (!threadResp.thread) flowerContractError('thread is required.');
+    return mapThread(threadResp.thread, messages, options);
+  };
+
+  const markThreadRead = async (threadID: string): Promise<FlowerThreadSnapshot> => {
+    const copy = adapterCopy(options);
+    const tid = trim(threadID);
+    if (!tid) throw new Error(copy.missingThreadID);
+    const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'GET' });
+    const thread = threadResp.thread;
+    if (!thread) flowerContractError('thread is required.');
+    const status = readStatus(thread);
+    const out = await fetchGatewayJSON<MarkThreadReadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/read`, {
+      method: 'POST',
+      body: JSON.stringify({
+        snapshot: {
+          last_message_at_unix_ms: Math.floor(status.snapshot.last_message_at_unix_ms),
+          waiting_prompt_id: trim(status.snapshot.waiting_prompt_id) || undefined,
+        },
+      }),
+    });
+    const nextReadStatus = out.read_status;
+    readStatus({ ...thread, read_status: nextReadStatus });
+    return loadThread(tid);
   };
 
   return {
@@ -534,6 +602,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       return (result.threads ?? []).map((thread) => mapThread(thread, [], options));
     },
     loadThread,
+    markThreadRead,
     renameThread: async (threadID, title) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(adapterCopy(options).missingThreadID);

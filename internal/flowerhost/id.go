@@ -24,6 +24,10 @@ func newHostID() (string, error) {
 	return "flower-host:" + id, nil
 }
 
+func newUserPublicID() (string, error) {
+	return randomToken("user_", 18)
+}
+
 func newDecisionID() (string, error) {
 	return randomToken("frd_", 18)
 }

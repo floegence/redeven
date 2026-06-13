@@ -1,5 +1,5 @@
 import type { Component } from 'solid-js';
-import { For, Show, createEffect, createMemo, createSignal, on, onCleanup, onMount } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, GripVertical, Plus, Settings, Terminal, Zap } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
@@ -108,6 +108,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let renameInputRef: HTMLInputElement | undefined;
   let renameRestoreRef: HTMLElement | undefined;
   let transcriptNearBottom = true;
+  const locallyReadThreadVersions = new Map<string, number>();
+  const persistingReadThreadIDs = new Set<string>();
+  const pendingReadPersistenceSequences = new Map<string, number>();
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
   const selectedThreadRunning = createMemo(() => selectedThread()?.status === 'running');
@@ -139,38 +142,62 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
   const selectedThreadRunErrorMessage = createMemo(() => trimString(selectedThread()?.error?.message));
   const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
+  const threadItemSignature = (t: FlowerThreadSnapshot): string => {
+    const visibleUnread = t.status === 'running' ? false : t.has_unread;
+    return [
+      t.thread_id,
+      t.status,
+      t.title,
+      String(Number(t.pinned_at_ms ?? 0) > 0),
+      String(Number(t.pinned_at_ms ?? 0)),
+      String(t.created_at_ms),
+      t.source_label ?? '',
+      t.model_id ?? '',
+      t.target_labels?.join('\x1e') ?? '',
+      t.working_dir ?? '',
+      String(visibleUnread),
+    ].join('\x1f');
+  };
+  const sidebarItemSignature = (t: FlowerThreadListItem): string => [
+    t.thread_id,
+    t.status,
+    t.title,
+    String(t.pinned),
+    String(t.pinned_at_ms ?? 0),
+    String(t.created_at_ms),
+    t.source_label,
+    t.model_id,
+    t.target_labels.join('\x1e'),
+    t.working_dir,
+    String(t.has_unread),
+  ].join('\x1f');
   const threadItems = createMemo(() =>
     threads().map((t) => {
-      const sig = `${t.status}|${t.title}|${Number(t.pinned_at_ms ?? 0)}|${t.created_at_ms}|${t.source_label ?? ''}|${t.model_id ?? ''}|${t.target_labels?.join(',') ?? ''}|${t.working_dir ?? ''}`;
+      const visibleUnread = t.status === 'running' ? false : t.has_unread;
+      const sig = threadItemSignature(t);
       const cached = threadItemCache.get(t.thread_id);
       if (cached && cached.sig === sig) {
         return cached.item;
       }
-      const item = projectFlowerThreadListItem(t);
+      const item = projectFlowerThreadListItem({
+        ...t,
+        has_unread: visibleUnread,
+      });
       threadItemCache.set(t.thread_id, { item, sig });
       return item;
     }),
   );
   // Stable sidebar list items: only updates when sidebar-visible fields change.
-  // Uses createEffect(on(...)) bound to a signal rather than createMemo(on(...))
-  // because createMemo does not reliably propagate the inner on() recomputation
-  // in Solid 1.9.x (see FlowerThreadList.test.ts for the regression test).
+  // Detail refreshes can update the selected thread transcript frequently; the
+  // sidebar must not receive a new item array unless its own visible model changed.
   const [sidebarListItems, setSidebarListItems] = createSignal<ReturnType<typeof threadItems>>([]);
-  createEffect(
-    on(
-      () => {
-        const items = threadItems();
-        return items.map((t) => `${t.thread_id}:${t.status}:${t.title}:${String(t.pinned)}:${t.pinned_at_ms ?? 0}`).join('|');
-      },
-      () => {
-        setSidebarListItems(threadItems());
-      },
-    ),
-  );
-  // Prime the signal on first render.
+  let lastSidebarListSignature: string | null = null;
   createEffect(() => {
     const items = threadItems();
-    if (items.length > 0) setSidebarListItems(items);
+    const signature = items.map(sidebarItemSignature).join('\x1d');
+    if (signature === lastSidebarListSignature) return;
+    lastSidebarListSignature = signature;
+    setSidebarListItems(items);
   });
 
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
@@ -252,6 +279,68 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       next[existingIndex] = thread;
       return next;
     });
+  };
+
+  const markThreadReadLocally = (threadID: string, observed?: FlowerThreadSnapshot) => {
+    const tid = trimString(threadID);
+    if (!tid) return;
+    setThreads((current) => {
+      let changed = false;
+      const next = current.map((thread) => {
+        if (thread.thread_id !== tid) return thread;
+        const updatedAtMs = Math.max(
+          Number(locallyReadThreadVersions.get(tid) ?? 0),
+          Number(observed?.updated_at_ms ?? thread.updated_at_ms ?? 0),
+        );
+        locallyReadThreadVersions.set(tid, updatedAtMs);
+        if (!thread.has_unread || thread.status === 'running') return thread;
+        changed = true;
+        return { ...thread, has_unread: false };
+      });
+      return changed ? next : current;
+    });
+    if (observed) {
+      locallyReadThreadVersions.set(tid, Math.max(
+        Number(locallyReadThreadVersions.get(tid) ?? 0),
+        Number(observed.updated_at_ms ?? 0),
+      ));
+    }
+  };
+
+  const withLocalReadVisibility = (thread: FlowerThreadSnapshot): FlowerThreadSnapshot => {
+    const readVersion = locallyReadThreadVersions.get(thread.thread_id);
+    if (readVersion === undefined) return thread;
+    if (thread.updated_at_ms > readVersion) {
+      locallyReadThreadVersions.delete(thread.thread_id);
+      return thread;
+    }
+    return thread.has_unread ? { ...thread, has_unread: false } : thread;
+  };
+
+  const persistThreadRead = (threadID: string, sequence: number) => {
+    const tid = trimString(threadID);
+    if (!tid) return;
+    if (persistingReadThreadIDs.has(tid)) {
+      pendingReadPersistenceSequences.set(tid, sequence);
+      return;
+    }
+    persistingReadThreadIDs.add(tid);
+    void props.adapter.markThreadRead(tid)
+      .then(() => {
+        if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
+        markThreadReadLocally(tid);
+      })
+      .catch((error) => {
+        if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
+        setThreadActionError(getErrorMessage(error));
+      })
+      .finally(() => {
+        persistingReadThreadIDs.delete(tid);
+        const pendingSequence = pendingReadPersistenceSequences.get(tid);
+        pendingReadPersistenceSequences.delete(tid);
+        if (pendingSequence === undefined || pendingSequence !== threadLoadSequence || selectedThreadID() !== tid) return;
+        persistThreadRead(tid, pendingSequence);
+      });
   };
 
   const writeClipboardText = async (value: string, label: string) => {
@@ -407,13 +496,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setChatSubmitError('');
     setInputSubmitError('');
     setThreadLoadError('');
+    setThreadActionError('');
+    markThreadReadLocally(tid);
     returnToChat();
-    if (!props.adapter.loadThread) return;
+    persistThreadRead(tid, sequence);
+    if (!props.adapter.loadThread) {
+      return;
+    }
     setLoadingThreadID(tid);
     try {
       const thread = await props.adapter.loadThread(tid);
       if (sequence !== threadLoadSequence) return;
-      upsertThread(thread);
+      markThreadReadLocally(tid, thread);
+      upsertThread({ ...thread, has_unread: false });
       setSelectedThreadID(thread.thread_id);
       setLoadingThreadID('');
     } catch (error) {
@@ -426,10 +521,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const refreshSelectedThread = async (threadID: string) => {
     const tid = trimString(threadID);
     if (!tid || !props.adapter.loadThread) return;
+    const sequence = threadLoadSequence;
     try {
       const thread = await props.adapter.loadThread(tid);
       if (selectedThreadID() !== thread.thread_id) return;
-      upsertThread(thread);
+      markThreadReadLocally(tid, thread);
+      upsertThread({ ...thread, has_unread: false });
+      if (thread.has_unread) {
+        persistThreadRead(tid, sequence);
+      }
       setThreadLoadError('');
     } catch (error) {
       setThreadLoadError(getErrorMessage(error));
@@ -444,13 +544,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const selectedID = selectedThreadID();
       const previousSelected = threads().find((thread) => thread.thread_id === selectedID) ?? null;
       const selectedSummary = next.find((thread) => thread.thread_id === selectedID) ?? null;
-      setThreads((current) => mergeThreadListRefresh(current, next));
+      const visibleNext = next.map(withLocalReadVisibility);
+      setThreads((current) => mergeThreadListRefresh(current, visibleNext));
       const focusedThreadID = trimString(props.focusThreadID);
       setSelectedThreadID((current) => {
-        if (focusedThreadID && next.some((thread) => thread.thread_id === focusedThreadID)) {
+        if (focusedThreadID && visibleNext.some((thread) => thread.thread_id === focusedThreadID)) {
           return focusedThreadID;
         }
-        return current && !next.some((thread) => thread.thread_id === current) ? '' : current;
+        return current && !visibleNext.some((thread) => thread.thread_id === current) ? '' : current;
       });
       if (
         selectedID

@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
 type staticSecretResolver struct{}
@@ -42,6 +44,15 @@ func (r *mutableSecretResolver) ResolveProviderAPIKey(context.Context, string) (
 
 func (r *mutableSecretResolver) ResolveWebSearchProviderAPIKey(context.Context, string) (string, bool, error) {
 	return "", false, nil
+}
+
+func newTestReadState(t *testing.T) *threadreadstate.Store {
+	t.Helper()
+	store, err := threadreadstate.Open(filepath.Join(t.TempDir(), "thread_read_state.sqlite"))
+	if err != nil {
+		t.Fatalf("threadreadstate.Open() error = %v", err)
+	}
+	return store
 }
 
 type flowerHostOpenAIMock struct {
@@ -259,6 +270,7 @@ func newTestService(t *testing.T) *Service {
 		Paths:          paths,
 		Identity:       testIdentity(),
 		SecretResolver: staticSecretResolver{},
+		ReadState:      newTestReadState(t),
 		AgentHomeDir:   t.TempDir(),
 	})
 	if err != nil {
@@ -292,6 +304,7 @@ func newConfiguredTestService(t *testing.T, resolver SecretResolver, baseURL str
 		Paths:          paths,
 		Identity:       testIdentity(),
 		SecretResolver: resolver,
+		ReadState:      newTestReadState(t),
 		AgentHomeDir:   t.TempDir(),
 	})
 	if err != nil {
@@ -325,6 +338,7 @@ func newConfiguredDeepSeekTestService(t *testing.T, resolver SecretResolver, bas
 		Paths:          paths,
 		Identity:       testIdentity(),
 		SecretResolver: resolver,
+		ReadState:      newTestReadState(t),
 		AgentHomeDir:   t.TempDir(),
 	})
 	if err != nil {
@@ -332,6 +346,113 @@ func newConfiguredDeepSeekTestService(t *testing.T, resolver SecretResolver, bas
 	}
 	t.Cleanup(func() { _ = svc.Close() })
 	return svc
+}
+
+func createFlowerHostOwnedThread(t *testing.T, svc *Service, title string) *ai.ThreadView {
+	t.Helper()
+	ctx := context.Background()
+	thread, err := svc.ai.CreateThread(ctx, svc.Meta(), title, "openai/gpt-5-mini", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread() error = %v", err)
+	}
+	if err := svc.ai.UpsertFlowerThreadMetadata(ctx, threadstore.FlowerThreadMetadata{
+		EndpointID:      hostEndpointID,
+		ThreadID:        thread.ThreadID,
+		HomeHostID:      svc.identity.HostID,
+		HomeHostKind:    svc.identity.HostKind,
+		OwnerKind:       "flower_host",
+		OwnerID:         svc.identity.HostID,
+		UpdatedAtUnixMs: unixMs(),
+	}); err != nil {
+		t.Fatalf("UpsertFlowerThreadMetadata() error = %v", err)
+	}
+	return thread
+}
+
+func appendFlowerHostAssistantMessage(t *testing.T, svc *Service, threadID string, messageID string, createdAtUnixMs int64, text string) {
+	t.Helper()
+	store, err := threadstore.Open(svc.paths.ThreadstorePath)
+	if err != nil {
+		t.Fatalf("threadstore.Open() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	body, err := json.Marshal(map[string]any{
+		"id":        messageID,
+		"role":      "assistant",
+		"status":    "complete",
+		"timestamp": createdAtUnixMs,
+		"blocks": []map[string]any{{
+			"type":    "markdown",
+			"content": text,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal message: %v", err)
+	}
+	if _, err := store.AppendMessage(context.Background(), hostEndpointID, threadID, threadstore.Message{
+		ThreadID:        threadID,
+		EndpointID:      hostEndpointID,
+		MessageID:       messageID,
+		Role:            "assistant",
+		Status:          "complete",
+		CreatedAtUnixMs: createdAtUnixMs,
+		UpdatedAtUnixMs: createdAtUnixMs,
+		TextContent:     text,
+		MessageJSON:     string(body),
+	}, svc.identity.UserPublicID, ""); err != nil {
+		t.Fatalf("AppendMessage() error = %v", err)
+	}
+}
+
+func setFlowerHostWaitingPrompt(t *testing.T, svc *Service, threadID string, promptID string) {
+	t.Helper()
+	store, err := threadstore.Open(svc.paths.ThreadstorePath)
+	if err != nil {
+		t.Fatalf("threadstore.Open() error = %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	body, err := json.Marshal(ai.RequestUserInputPrompt{
+		PromptID:      promptID,
+		MessageID:     "msg_" + promptID,
+		ToolID:        "tool_" + promptID,
+		ToolName:      "ask_user",
+		ReasonCode:    "clarification",
+		PublicSummary: "Needs user input",
+		Questions: []ai.RequestUserInputQuestion{{
+			ID:           "question_" + promptID,
+			Header:       "Question",
+			Question:     "Which option should Flower use?",
+			ResponseMode: "write",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal waiting prompt: %v", err)
+	}
+	runID := "run_" + promptID
+	if err := store.UpsertRun(context.Background(), threadstore.RunRecord{
+		RunID:           runID,
+		EndpointID:      hostEndpointID,
+		ThreadID:        threadID,
+		MessageID:       "msg_" + promptID,
+		State:           string(ai.RunStateWaitingUser),
+		StartedAtUnixMs: 1700000000400,
+		UpdatedAtUnixMs: 1700000000400,
+	}); err != nil {
+		t.Fatalf("UpsertRun() error = %v", err)
+	}
+	if err := store.UpsertToolCall(context.Background(), threadstore.ToolCallRecord{
+		RunID:           runID,
+		ToolID:          "tool_" + promptID,
+		ToolName:        "ask_user",
+		Status:          "waiting",
+		ArgsJSON:        `{"reason_code":"clarification"}`,
+		StartedAtUnixMs: 1700000000400,
+	}); err != nil {
+		t.Fatalf("UpsertToolCall() error = %v", err)
+	}
+	if err := store.UpdateThreadRunState(context.Background(), hostEndpointID, threadID, string(ai.RunStateWaitingUser), "", string(body), svc.identity.UserPublicID, ""); err != nil {
+		t.Fatalf("UpdateThreadRunState() error = %v", err)
+	}
 }
 
 func TestNewService_UsesExplicitTargetToolPolicy(t *testing.T) {
@@ -400,6 +521,7 @@ ON structured_user_inputs(endpoint_id, thread_id, id DESC);
 		Paths:          paths,
 		Identity:       testIdentity(),
 		SecretResolver: staticSecretResolver{},
+		ReadState:      newTestReadState(t),
 		AgentHomeDir:   t.TempDir(),
 	})
 	if err != nil {
@@ -1269,6 +1391,169 @@ func TestCreateThreadRejectsStaleDecisionWhenSecretBecomesUnavailable(t *testing
 	}
 	if len(threads.Threads) != 0 {
 		t.Fatalf("threads=%#v, want no created threads", threads.Threads)
+	}
+}
+
+func TestFlowerHostReadStateTracksMessagesAndExplicitRead(t *testing.T) {
+	svc := newConfiguredTestService(t, staticSecretResolver{}, "http://127.0.0.1:1/v1")
+	ctx := context.Background()
+	thread := createFlowerHostOwnedThread(t, svc, "Read state")
+
+	initial, err := svc.ListThreads(ctx)
+	if err != nil {
+		t.Fatalf("ListThreads initial error = %v", err)
+	}
+	if len(initial.Threads) != 1 || initial.Threads[0].ThreadID != thread.ThreadID {
+		t.Fatalf("initial threads=%#v, want created thread", initial.Threads)
+	}
+	if initial.Threads[0].HasUnread {
+		t.Fatalf("initial thread has_unread=true, want seeded read state")
+	}
+
+	appendFlowerHostAssistantMessage(t, svc, thread.ThreadID, "msg_assistant_unread", thread.CreatedAtUnixMs+100, "New assistant update")
+	unread, err := svc.ListThreads(ctx)
+	if err != nil {
+		t.Fatalf("ListThreads unread error = %v", err)
+	}
+	if len(unread.Threads) != 1 || !unread.Threads[0].HasUnread {
+		t.Fatalf("threads=%#v, want new message to mark thread unread", unread.Threads)
+	}
+	detail, err := svc.GetThread(ctx, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread() error = %v", err)
+	}
+	if !detail.HasUnread {
+		t.Fatalf("detail has_unread=false, want unread before explicit read")
+	}
+
+	read, err := svc.MarkThreadRead(ctx, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("MarkThreadRead() error = %v", err)
+	}
+	if read.HasUnread {
+		t.Fatalf("mark read response has_unread=true, want false")
+	}
+	afterRead, err := svc.ListThreads(ctx)
+	if err != nil {
+		t.Fatalf("ListThreads after read error = %v", err)
+	}
+	if len(afterRead.Threads) != 1 || afterRead.Threads[0].HasUnread {
+		t.Fatalf("threads=%#v, want persisted read state", afterRead.Threads)
+	}
+}
+
+func TestFlowerHostReadStateIgnoresTitleAndPinnedUpdates(t *testing.T) {
+	svc := newConfiguredTestService(t, staticSecretResolver{}, "http://127.0.0.1:1/v1")
+	ctx := context.Background()
+	thread := createFlowerHostOwnedThread(t, svc, "Stable metadata")
+	appendFlowerHostAssistantMessage(t, svc, thread.ThreadID, "msg_metadata_read", thread.CreatedAtUnixMs+100, "Already read")
+	if _, err := svc.MarkThreadRead(ctx, thread.ThreadID); err != nil {
+		t.Fatalf("MarkThreadRead() error = %v", err)
+	}
+
+	title := "Renamed without unread"
+	renamed, err := svc.MutateThread(ctx, thread.ThreadID, ThreadMutationRequest{Title: &title})
+	if err != nil {
+		t.Fatalf("MutateThread title error = %v", err)
+	}
+	if renamed.HasUnread {
+		t.Fatalf("renamed snapshot has_unread=true, want title update to stay read")
+	}
+	pinned := true
+	pinnedSnapshot, err := svc.MutateThread(ctx, thread.ThreadID, ThreadMutationRequest{Pinned: &pinned})
+	if err != nil {
+		t.Fatalf("MutateThread pinned error = %v", err)
+	}
+	if pinnedSnapshot.HasUnread {
+		t.Fatalf("pinned snapshot has_unread=true, want pinned update to stay read")
+	}
+	list, err := svc.ListThreads(ctx)
+	if err != nil {
+		t.Fatalf("ListThreads() error = %v", err)
+	}
+	if len(list.Threads) != 1 || list.Threads[0].HasUnread {
+		t.Fatalf("threads=%#v, want metadata updates to stay read", list.Threads)
+	}
+}
+
+func TestFlowerHostReadStateTracksWaitingPromptChanges(t *testing.T) {
+	svc := newConfiguredTestService(t, staticSecretResolver{}, "http://127.0.0.1:1/v1")
+	ctx := context.Background()
+	thread := createFlowerHostOwnedThread(t, svc, "Waiting prompt")
+	if _, err := svc.ListThreads(ctx); err != nil {
+		t.Fatalf("ListThreads seed error = %v", err)
+	}
+
+	setFlowerHostWaitingPrompt(t, svc, thread.ThreadID, "prompt_one")
+	waiting, err := svc.ListThreads(ctx)
+	if err != nil {
+		t.Fatalf("ListThreads waiting error = %v", err)
+	}
+	if len(waiting.Threads) != 1 || !waiting.Threads[0].HasUnread {
+		t.Fatalf("threads=%#v, want new waiting prompt unread", waiting.Threads)
+	}
+	if _, err := svc.MarkThreadRead(ctx, thread.ThreadID); err != nil {
+		t.Fatalf("MarkThreadRead waiting error = %v", err)
+	}
+	read, err := svc.ListThreads(ctx)
+	if err != nil {
+		t.Fatalf("ListThreads read waiting error = %v", err)
+	}
+	if len(read.Threads) != 1 || read.Threads[0].HasUnread {
+		t.Fatalf("threads=%#v, want waiting prompt marked read", read.Threads)
+	}
+
+	setFlowerHostWaitingPrompt(t, svc, thread.ThreadID, "prompt_two")
+	next, err := svc.ListThreads(ctx)
+	if err != nil {
+		t.Fatalf("ListThreads next waiting error = %v", err)
+	}
+	if len(next.Threads) != 1 || !next.Threads[0].HasUnread {
+		t.Fatalf("threads=%#v, want changed waiting prompt unread", next.Threads)
+	}
+}
+
+func TestFlowerHostMarkReadHTTPRoute(t *testing.T) {
+	svc := newConfiguredTestService(t, staticSecretResolver{}, "http://127.0.0.1:1/v1")
+	thread := createFlowerHostOwnedThread(t, svc, "HTTP read")
+	appendFlowerHostAssistantMessage(t, svc, thread.ThreadID, "msg_http_read", thread.CreatedAtUnixMs+100, "Unread over HTTP")
+	srv := &Server{service: svc, token: "test-token"}
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/thread/"+thread.ThreadID+"/read", strings.NewReader(`{}`))
+	req.Header.Set("authorization", "Bearer test-token")
+	rr := httptest.NewRecorder()
+	srv.handleThreadDetail(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("read status=%d body=%s, want 200", rr.Code, rr.Body.String())
+	}
+	var readResp struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Thread ThreadSnapshot `json:"thread"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &readResp); err != nil {
+		t.Fatalf("decode read response: %v body=%s", err, rr.Body.String())
+	}
+	if !readResp.OK || readResp.Data.Thread.ThreadID != thread.ThreadID || readResp.Data.Thread.HasUnread {
+		t.Fatalf("read response=%#v, want matching read thread", readResp)
+	}
+
+	appendFlowerHostAssistantMessage(t, svc, thread.ThreadID, "msg_http_read_empty_body", thread.CreatedAtUnixMs+200, "Unread over empty body")
+	req = httptest.NewRequest(http.MethodPost, "/v1/thread/"+thread.ThreadID+"/read", http.NoBody)
+	req.Header.Set("authorization", "Bearer test-token")
+	rr = httptest.NewRecorder()
+	srv.handleThreadDetail(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("read empty body status=%d body=%s, want 200", rr.Code, rr.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/v1/thread/"+thread.ThreadID+"/read", strings.NewReader(`{"unknown":true}`))
+	req.Header.Set("authorization", "Bearer test-token")
+	rr = httptest.NewRecorder()
+	srv.handleThreadDetail(rr, req)
+	if rr.Code != http.StatusBadRequest || !strings.Contains(rr.Body.String(), "unknown field") {
+		t.Fatalf("read unknown field status=%d body=%s, want 400 unknown field", rr.Code, rr.Body.String())
 	}
 }
 

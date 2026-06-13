@@ -64,6 +64,7 @@ import {
   listFlowerHostThreadsViaBridge,
   loadFlowerHostThreadViaBridge,
   loadFlowerHostSettingsViaBridge,
+  markFlowerHostThreadReadViaBridge,
   renameFlowerHostThreadViaBridge,
   saveFlowerHostSettingsViaBridge,
   sendFlowerHostChatResultViaBridge,
@@ -309,6 +310,7 @@ import {
   LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL,
   LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
+  MARK_DESKTOP_FLOWER_HOST_THREAD_READ_CHANNEL,
   RENAME_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL,
   SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL,
@@ -317,6 +319,7 @@ import {
   SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL,
   type DesktopFlowerHostError,
   type DesktopFlowerHostForkThreadRequest,
+  type DesktopFlowerHostMarkThreadReadRequest,
   type DesktopFlowerHostRenameThreadRequest,
   type DesktopFlowerHostResolveHandlerRequest,
   type DesktopFlowerHostSendChatRequest,
@@ -327,6 +330,7 @@ import {
   type ListDesktopFlowerHostThreadsResult,
   type LoadDesktopFlowerHostThreadResult,
   type LoadDesktopFlowerHostSettingsResult,
+  type MarkDesktopFlowerHostThreadReadResult,
   type RenameDesktopFlowerHostThreadResult,
   type ResolveDesktopFlowerHostHandlerResult,
   type SendDesktopFlowerHostChatResult,
@@ -16305,6 +16309,22 @@ if (!app.requestSingleInstanceLock()) {
         thread: await loadFlowerHostThreadViaBridge({
           ...flowerHostBridgeArgs(),
           threadID,
+        }),
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        error: desktopFlowerHostErrorFromUnknown(error),
+      };
+    }
+  });
+  ipcMain.handle(MARK_DESKTOP_FLOWER_HOST_THREAD_READ_CHANNEL, async (_event, request: DesktopFlowerHostMarkThreadReadRequest): Promise<MarkDesktopFlowerHostThreadReadResult> => {
+    try {
+      return {
+        ok: true,
+        thread: await markFlowerHostThreadReadViaBridge({
+          ...flowerHostBridgeArgs(),
+          request,
         }),
       };
     } catch (error) {

@@ -3,9 +3,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const state: {
+    omitReadState: boolean;
     threadDetailWaitingPrompt: Record<string, unknown> | null;
   } = {
+    omitReadState: false,
     threadDetailWaitingPrompt: null,
+  };
+  const readStatus = (lastMessageAtUnixMs: number, waitingPromptID = '') => {
+    const snapshot = {
+      last_message_at_unix_ms: lastMessageAtUnixMs,
+      ...(waitingPromptID ? { waiting_prompt_id: waitingPromptID } : {}),
+    };
+    return {
+      is_unread: false,
+      snapshot,
+      ...(!state.omitReadState ? {
+        read_state: {
+          last_read_message_at_unix_ms: lastMessageAtUnixMs,
+          ...(waitingPromptID ? { last_seen_waiting_prompt_id: waitingPromptID } : {}),
+        },
+      } : {}),
+    };
   };
   const fetchGatewayJSONMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.includes('/_redeven_proxy/api/settings')) {
@@ -32,6 +50,7 @@ const mocks = vi.hoisted(() => {
     }
     if (url.includes('/_redeven_proxy/api/ai/threads/') && (!init || init.method === 'GET')) {
       const threadID = decodeURIComponent(url.split('/').pop() ?? 'thread-1');
+      const waitingPromptID = String(state.threadDetailWaitingPrompt?.prompt_id ?? '').trim();
       return {
         thread: {
           thread_id: threadID,
@@ -41,15 +60,19 @@ const mocks = vi.hoisted(() => {
           working_dir: '/workspace/env-flower',
           created_at_unix_ms: 1,
           updated_at_unix_ms: 2,
+          read_status: readStatus(2_000, waitingPromptID),
           ...(state.threadDetailWaitingPrompt ? { waiting_prompt: state.threadDetailWaitingPrompt } : {}),
         },
       };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads?')) {
-      return { threads: [{ thread_id: 'thread-1', title: 'Env Flower history', model_id: 'openai/gpt-5.2', run_status: 'success', working_dir: '/workspace/env-flower', created_at_unix_ms: 1, updated_at_unix_ms: 2 }] };
+      return { threads: [{ thread_id: 'thread-1', title: 'Env Flower history', model_id: 'openai/gpt-5.2', run_status: 'success', working_dir: '/workspace/env-flower', created_at_unix_ms: 1, updated_at_unix_ms: 2, read_status: readStatus(2_000) }] };
+    }
+    if (url.includes('/_redeven_proxy/api/ai/threads/') && init?.method === 'POST' && url.endsWith('/read')) {
+      return { read_status: readStatus(2_000) };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads') && init?.method === 'POST') {
-      return { thread: { thread_id: 'thread-new', title: 'New Env Flower chat', model_id: 'openai/gpt-5.2', run_status: 'running', working_dir: '/workspace/env-flower', created_at_unix_ms: 3, updated_at_unix_ms: 4 } };
+      return { thread: { thread_id: 'thread-new', title: 'New Env Flower chat', model_id: 'openai/gpt-5.2', run_status: 'running', working_dir: '/workspace/env-flower', created_at_unix_ms: 3, updated_at_unix_ms: 4, read_status: readStatus(4_000) } };
     }
     if (url.includes('/_redeven_proxy/api/ai/provider_bundle')) {
       return {};
@@ -218,6 +241,7 @@ vi.mock('../i18n', () => {
     'flowerChat.sidebar.time.minutes': 'Mock {count}m',
     'flowerChat.sidebar.time.now': 'Mock now',
     'flowerChat.sidebar.untitledChat': 'Mock new chat',
+    'flowerChat.sidebar.unread': 'Mock unread',
     'flowerChat.sidebar.working': 'Mock working',
   };
   return {
@@ -253,6 +277,7 @@ export function registerEnvAIPageSendTests() {
       mocks.sendUserTurnMock.mockClear();
       mocks.subscribeThreadMock.mockClear();
       mocks.listMessagesMock.mockClear();
+      mocks.state.omitReadState = false;
       mocks.state.threadDetailWaitingPrompt = null;
     });
 
@@ -332,6 +357,18 @@ export function registerEnvAIPageSendTests() {
         await flush();
         expect(host.textContent).toContain('Flower contract error: waiting_prompt requires prompt_id, message_id, tool_id, and tool_name.');
         expect(host.querySelector('[data-flower-input-request-prompt]')).toBeNull();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('requires read_status.read_state from the Env-local gateway contract', async () => {
+      mocks.state.omitReadState = true;
+      const { host, dispose } = await renderPage();
+      try {
+        await flush();
+        await flush();
+        expect(host.textContent).toContain('Flower contract error: thread.read_status.read_state is required.');
       } finally {
         dispose();
       }

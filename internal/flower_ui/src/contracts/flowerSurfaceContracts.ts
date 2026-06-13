@@ -207,7 +207,7 @@ export type FlowerThreadSnapshot = Readonly<{
   tool_activity?: readonly FlowerToolActivity[];
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
-  has_unread?: boolean;
+  has_unread: boolean;
 }>;
 
 export type FlowerThreadListItem = Readonly<{
@@ -224,7 +224,7 @@ export type FlowerThreadListItem = Readonly<{
   source_label: string;
   target_labels: readonly string[];
   read_only_reason?: string;
-  has_unread?: boolean;
+  has_unread: boolean;
 }>;
 
 export type FlowerHandlerRef = Readonly<{
@@ -322,6 +322,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread?: (threadID: string) => Promise<FlowerThreadSnapshot>;
+  markThreadRead: (threadID: string) => Promise<FlowerThreadSnapshot>;
   renameThread?: (threadID: string, title: string) => Promise<FlowerThreadSnapshot>;
   setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadSnapshot>;
   forkThread?: (threadID: string) => Promise<FlowerThreadSnapshot>;

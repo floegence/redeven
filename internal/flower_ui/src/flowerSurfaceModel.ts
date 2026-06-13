@@ -31,6 +31,6 @@ export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot): Flowe
     status: thread.status,
     source_label: thread.source_label,
     target_labels: thread.target_labels,
-    ...(thread.has_unread !== undefined ? { has_unread: thread.has_unread } : {}),
+    has_unread: thread.has_unread,
   };
 }

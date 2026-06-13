@@ -1126,6 +1126,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('props.runtime.settings.resolveFlowerHostHandler');
     expect(appSrc).toContain('buildEnvironmentFlowerPrompt(i18n(), environment, cleanPrompt)');
     expect(appSrc).toContain('props.runtime.settings.sendFlowerHostChat');
+    expect(appSrc).toContain('typeof candidate.markFlowerHostThreadRead');
+    expect(appSrc).toContain('typeof candidate.renameFlowerHostThread');
+    expect(appSrc).toContain('typeof candidate.setFlowerHostThreadPinned');
+    expect(appSrc).toContain('typeof candidate.forkFlowerHostThread');
+    expect(appSrc).toContain('typeof candidate.submitFlowerHostInput');
     expect(appSrc).toContain("reply_mode: 'background'");
     expect(appSrc).toContain('decision_id: decision.decision_id');
     expect(appSrc).toContain('selected_handler_id: decision.selected_handler?.handler_id');

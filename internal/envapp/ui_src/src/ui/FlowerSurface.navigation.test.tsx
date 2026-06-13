@@ -115,6 +115,16 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 async function waitFor(condition: () => boolean, timeoutMs = 1000): Promise<void> {
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
@@ -179,6 +189,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     status: 'idle',
     source_label: 'This host',
     target_labels: [],
+    has_unread: false,
     messages: [
       {
         id: 'm1',
@@ -301,6 +312,7 @@ function adapter(configured = true): FlowerSurfaceAdapter {
       thread(),
       thread({ thread_id: 'thread-2', title: 'Review branch', updated_at_ms: 3 }),
     ]),
+    markThreadRead: vi.fn(async (threadID: string) => thread({ thread_id: threadID, has_unread: false })),
     resolveHandler: vi.fn(async () => decision()),
     sendMessage: vi.fn(async () => thread()),
     submitInput: vi.fn(async () => thread({ status: 'running' })),
@@ -694,6 +706,318 @@ describe('FlowerSurface navigation', () => {
     expect(host.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('idle');
     expect(host.querySelector('[data-thread-id="thread-older"]')?.getAttribute('data-flower-thread-active')).toBe('true');
     expect(host.querySelector('[data-thread-id="thread-older"]')?.getAttribute('data-flower-thread-status')).toBe('idle');
+  });
+
+  it('clears the unread sidebar dot immediately when a thread is selected', async () => {
+    const unreadThread = thread({
+      thread_id: 'thread-unread',
+      title: 'Unread thread',
+      has_unread: true,
+    });
+    const markThreadRead = vi.fn(async () => ({
+      ...unreadThread,
+      has_unread: false,
+    }));
+    const loadThread = vi.fn(async () => ({
+      ...unreadThread,
+      has_unread: false,
+      messages: [
+        ...unreadThread.messages,
+        {
+          id: 'm-unread-assistant',
+          role: 'assistant' as const,
+          content: 'Fresh result.',
+          status: 'complete' as const,
+          created_at_ms: 3,
+        },
+      ],
+    }));
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [unreadThread]),
+      loadThread,
+      markThreadRead,
+    });
+
+    await waitFor(() => host.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    expect(host.querySelector('[data-thread-id="thread-unread"] .flower-host-thread-unread-dot')).toBeTruthy();
+
+    (host.querySelector('[data-thread-id="thread-unread"] button') as HTMLButtonElement).click();
+    await waitFor(() => host.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread') === 'false');
+    await waitFor(() => markThreadRead.mock.calls.length > 0);
+
+    expect(markThreadRead).toHaveBeenCalledWith('thread-unread');
+    expect(loadThread).toHaveBeenCalledWith('thread-unread');
+    expect(host.textContent).toContain('Fresh result.');
+  });
+
+  it('keeps the running wave indicator stable across selected thread detail refreshes', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-running-wave',
+      title: 'Running wave',
+      status: 'running',
+      has_unread: true,
+      updated_at_ms: 5_000,
+      messages: [
+        {
+          id: 'm-running',
+          role: 'assistant',
+          content: 'Working...',
+          status: 'streaming',
+          created_at_ms: 5_000,
+        },
+      ],
+    });
+    const firstDetail = {
+      ...runningThread,
+      has_unread: false,
+    };
+    const refreshedDetail = {
+      ...firstDetail,
+      updated_at_ms: 5_800,
+      messages: [
+        {
+          id: 'm-running',
+          role: 'assistant' as const,
+          content: 'Working... still flowing',
+          status: 'streaming' as const,
+          created_at_ms: 5_000,
+        },
+      ],
+    };
+    const listThreads = vi.fn(async () => [runningThread]);
+    const loadThread = vi.fn(async () => (loadThread.mock.calls.length === 1 ? firstDetail : refreshedDetail));
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads,
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-wave"] button')));
+    const cardBeforeClick = host.querySelector('[data-thread-id="thread-running-wave"]') as HTMLElement;
+    expect(cardBeforeClick.getAttribute('data-flower-thread-status')).toBe('running');
+    expect(cardBeforeClick.getAttribute('data-flower-thread-unread')).toBe('false');
+    const waveBeforeClick = cardBeforeClick.querySelector('.flower-host-thread-wave');
+    expect(waveBeforeClick).toBeTruthy();
+
+    (cardBeforeClick.querySelector('button') as HTMLButtonElement).click();
+    await waitFor(() => loadThread.mock.calls.length > 0);
+    const waveAfterSelect = host.querySelector('[data-thread-id="thread-running-wave"] .flower-host-thread-wave');
+    expect(waveAfterSelect).toBe(waveBeforeClick);
+    expect(host.querySelector('[data-thread-id="thread-running-wave"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+
+    await waitFor(() => loadThread.mock.calls.length > 1);
+    expect(host.querySelector('[data-thread-id="thread-running-wave"] .flower-host-thread-wave')).toBe(waveAfterSelect);
+    expect(host.textContent).toContain('Working... still flowing');
+  });
+
+  it('persists read state when a selected running thread receives unread detail refreshes', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-running-read',
+      title: 'Running read persistence',
+      status: 'running',
+      has_unread: false,
+      updated_at_ms: 6_000,
+      messages: [
+        {
+          id: 'm-running-read',
+          role: 'assistant',
+          content: 'Working...',
+          status: 'streaming',
+          created_at_ms: 6_000,
+        },
+      ],
+    });
+    const unreadDetail = {
+      ...runningThread,
+      has_unread: true,
+      updated_at_ms: 6_500,
+      messages: [
+        {
+          id: 'm-running-read',
+          role: 'assistant' as const,
+          content: 'Fresh selected update',
+          status: 'streaming' as const,
+          created_at_ms: 6_500,
+        },
+      ],
+    };
+    let detailHasFreshUnread = false;
+    const markThreadRead = vi.fn(async () => ({
+      ...(detailHasFreshUnread ? unreadDetail : runningThread),
+      has_unread: false,
+    }));
+    const loadThread = vi.fn(async () => (detailHasFreshUnread ? unreadDetail : runningThread));
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread,
+      markThreadRead,
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-read"] button')));
+    (host.querySelector('[data-thread-id="thread-running-read"] button') as HTMLButtonElement).click();
+
+    await waitFor(() => markThreadRead.mock.calls.length === 1);
+    detailHasFreshUnread = true;
+    await waitFor(() => markThreadRead.mock.calls.length >= 2, 2500);
+
+    expect(host.querySelector('[data-thread-id="thread-running-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(host.textContent).toContain('Fresh selected update');
+  });
+
+  it('queues a final read persistence when unread detail arrives before an in-flight mark-read completes', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-running-final-read',
+      title: 'Final read persistence',
+      status: 'running',
+      has_unread: false,
+      updated_at_ms: 8_000,
+      messages: [
+        {
+          id: 'm-running-final',
+          role: 'assistant',
+          content: 'Working...',
+          status: 'streaming',
+          created_at_ms: 8_000,
+        },
+      ],
+    });
+    const finalUnreadDetail = {
+      ...runningThread,
+      status: 'success' as const,
+      has_unread: true,
+      updated_at_ms: 8_500,
+      messages: [
+        {
+          id: 'm-running-final',
+          role: 'assistant' as const,
+          content: 'Final selected update',
+          status: 'complete' as const,
+          created_at_ms: 8_500,
+        },
+      ],
+    };
+    const firstRead = deferred<FlowerThreadSnapshot>();
+    const markThreadRead = vi.fn(async () => {
+      if (markThreadRead.mock.calls.length === 1) {
+        return firstRead.promise;
+      }
+      return {
+        ...finalUnreadDetail,
+        has_unread: false,
+      };
+    });
+    let detailHasFinalUnread = false;
+    const loadThread = vi.fn(async () => (detailHasFinalUnread ? finalUnreadDetail : runningThread));
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread,
+      markThreadRead,
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-final-read"] button')));
+    (host.querySelector('[data-thread-id="thread-running-final-read"] button') as HTMLButtonElement).click();
+    await waitFor(() => markThreadRead.mock.calls.length === 1);
+
+    detailHasFinalUnread = true;
+    await waitFor(() => host.textContent?.includes('Final selected update') ?? false, 2500);
+    expect(host.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('success');
+    expect(markThreadRead).toHaveBeenCalledTimes(1);
+
+    firstRead.resolve({
+      ...runningThread,
+      has_unread: false,
+    });
+    await waitFor(() => markThreadRead.mock.calls.length >= 2);
+
+    expect(host.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+  });
+
+  it('keeps a clicked thread visually read across stale list refreshes until a newer version arrives', async () => {
+    const unreadThread = thread({
+      thread_id: 'thread-refresh-race',
+      title: 'Refresh race',
+      updated_at_ms: 7_000,
+      has_unread: true,
+    });
+    const newerUnreadThread = {
+      ...unreadThread,
+      updated_at_ms: 7_500,
+      has_unread: true,
+    };
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [unreadThread];
+    const markThreadRead = vi.fn(() => new Promise<FlowerThreadSnapshot>(() => undefined));
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => listSnapshot),
+      loadThread: vi.fn(async () => ({ ...unreadThread, has_unread: false })),
+      markThreadRead,
+    });
+
+    await waitFor(() => host.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    (host.querySelector('[data-thread-id="thread-refresh-race"] button') as HTMLButtonElement).click();
+    await waitFor(() => host.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'false');
+
+    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    await flush();
+    expect(host.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+
+    (host.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+    await flush();
+    listSnapshot = [newerUnreadThread];
+    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => host.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'true');
+  });
+
+  it('updates sidebar-visible target labels through the stable sidebar list model', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-stable-wave-labels',
+      title: 'Stable wave labels',
+      status: 'running',
+      target_labels: ['Before target'],
+    });
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => listSnapshot),
+    });
+
+    await waitFor(() => host.textContent?.includes('Before target') ?? false);
+
+    listSnapshot = [{
+      ...runningThread,
+      target_labels: ['After target'],
+    }];
+    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+
+    await waitFor(() => host.textContent?.includes('After target') ?? false);
+    expect(host.textContent).not.toContain('Before target');
+  });
+
+  it('does not restore the unread dot when mark-read persistence fails', async () => {
+    const unreadThread = thread({
+      thread_id: 'thread-mark-read-error',
+      title: 'Unread failure',
+      has_unread: true,
+    });
+    const markThreadRead = vi.fn(async () => {
+      throw new Error('read state unavailable');
+    });
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [unreadThread]),
+      loadThread: vi.fn(async () => unreadThread),
+      markThreadRead,
+    });
+
+    await waitFor(() => host.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    (host.querySelector('[data-thread-id="thread-mark-read-error"] button') as HTMLButtonElement).click();
+    await waitFor(() => markThreadRead.mock.calls.length > 0);
+
+    expect(host.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(host.querySelector('.flower-host-thread-action-error')?.textContent).toContain('read state unavailable');
   });
 
   it('uses thread id as a stable tie breaker when conversations share a creation time', async () => {

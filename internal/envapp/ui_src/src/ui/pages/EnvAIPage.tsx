@@ -37,6 +37,7 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers): FlowerSurfaceCopy {
       empty: i18n.t('flowerChat.router.noConversations'),
       untitled: i18n.t('flowerChat.sidebar.untitledChat'),
       working: i18n.t('flowerChat.sidebar.working'),
+      unread: i18n.t('flowerChat.sidebar.unread'),
       deleteLabel: (title) => i18n.t('flowerChat.sidebar.delete.aria', { title }),
       contextMenuLabel: (title) => i18n.t('flowerChat.sidebar.contextMenu.label', { title }),
       copyThreadID: i18n.t('flowerChat.sidebar.contextMenu.copyThreadId'),

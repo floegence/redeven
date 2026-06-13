@@ -472,7 +472,7 @@ type ThreadSnapshot struct {
 	HomeHostKind string             `json:"home_host_kind,omitempty"`
 	SourceLabel  string             `json:"source_label"`
 	TargetLabels []string           `json:"target_labels"`
-		HasUnread    bool               `json:"has_unread"`
+	HasUnread    bool               `json:"has_unread"`
 }
 
 type ListThreadsResponse struct {
@@ -498,6 +498,10 @@ type ForkThreadRequest struct {
 }
 
 type ThreadMutationResponse struct {
+	Thread ThreadSnapshot `json:"thread"`
+}
+
+type ThreadReadResponse struct {
 	Thread ThreadSnapshot `json:"thread"`
 }
 

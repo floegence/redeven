@@ -9,6 +9,7 @@ import {
   type DesktopFlowerHostChatMessageBlock,
   type DesktopFlowerHostForkThreadRequest,
   type DesktopFlowerHostInputRequest,
+  type DesktopFlowerHostMarkThreadReadRequest,
   type DesktopFlowerHostRenameThreadRequest,
   type DesktopFlowerHostSendChatRequest,
   type DesktopFlowerHostSetThreadPinnedRequest,
@@ -550,6 +551,24 @@ export async function loadFlowerHostThreadViaBridge(args: FlowerHostBridgeArgs &
   }
   const result = await requestJSON<DesktopFlowerHostThread>(client, `/v1/thread/${encodeURIComponent(threadID)}`);
   return normalizeBridgeThread(result);
+}
+
+export async function markFlowerHostThreadReadViaBridge(args: FlowerHostBridgeArgs & Readonly<{
+  request: DesktopFlowerHostMarkThreadReadRequest;
+}>): Promise<DesktopFlowerHostThread> {
+  const client = await ensureFlowerHostBridge(args);
+  const threadID = compact(args.request.thread_id);
+  if (!threadID) {
+    throw new Error('Flower thread id is required.');
+  }
+  const result = await requestJSON<{ thread?: DesktopFlowerHostThread }>(client, `/v1/thread/${encodeURIComponent(threadID)}/read`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  if (!result.thread) {
+    bridgeContractError('thread_read.thread', 'is required');
+  }
+  return normalizeBridgeThread(result.thread);
 }
 
 export async function renameFlowerHostThreadViaBridge(args: FlowerHostBridgeArgs & Readonly<{
@@ -1204,7 +1223,6 @@ function normalizeBridgeThread(thread: DesktopFlowerHostThread): DesktopFlowerHo
   const homeHostKind = normalizeBridgeHostKind(record.home_host_kind, 'thread.home_host_kind');
   const homeHostID = optionalBridgeString(record.home_host_id, 'thread.home_host_id');
   const inputRequest = normalizeBridgeInputRequest(record.input_request, 'thread.input_request');
-  const workingDir = optionalBridgeString(record.working_dir, 'thread.working_dir') ?? '';
   const pinnedAtMs = record.pinned_at_ms === undefined || record.pinned_at_ms === null
     ? undefined
     : requireBridgeTimestamp(record.pinned_at_ms, 'thread.pinned_at_ms');
@@ -1212,7 +1230,7 @@ function normalizeBridgeThread(thread: DesktopFlowerHostThread): DesktopFlowerHo
     thread_id: requireBridgeString(record.thread_id, 'thread.thread_id'),
     title: requireBridgeString(record.title, 'thread.title'),
     model_id: requireBridgeString(record.model_id, 'thread.model_id', { allowEmpty: true }),
-    working_dir: workingDir,
+    working_dir: requireBridgeString(record.working_dir, 'thread.working_dir', { allowEmpty: true }),
     ...(pinnedAtMs ? { pinned_at_ms: pinnedAtMs } : {}),
     created_at_ms: requireBridgeTimestamp(record.created_at_ms, 'thread.created_at_ms'),
     updated_at_ms: requireBridgeTimestamp(record.updated_at_ms, 'thread.updated_at_ms'),
@@ -1225,6 +1243,6 @@ function normalizeBridgeThread(thread: DesktopFlowerHostThread): DesktopFlowerHo
     ...(toolActivity ? { tool_activity: toolActivity } : {}),
     ...(inputRequest ? { input_request: inputRequest } : {}),
     ...(error ? { error } : {}),
-    ...(record.has_unread === true ? { has_unread: true } : {}),
+    has_unread: requireBridgeBoolean(record.has_unread, 'thread.has_unread'),
   };
 }

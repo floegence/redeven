@@ -28,6 +28,7 @@ export type FlowerThreadListCopy = Readonly<{
   empty: string;
   untitled: string;
   working: string;
+  unread: string;
   deleteLabel: (title: string) => string;
   contextMenuLabel: (title: string) => string;
   copyThreadID: string;
@@ -303,6 +304,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     empty: 'No conversations yet.',
     untitled: 'Untitled chat',
     working: 'Working',
+    unread: 'Unread',
     deleteLabel: (title) => `Delete ${title}`,
     contextMenuLabel: (title) => `Actions for ${title}`,
     copyThreadID: 'Copy thread id',

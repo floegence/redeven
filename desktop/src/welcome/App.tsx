@@ -2624,8 +2624,13 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
     || typeof candidate.saveFlowerHostSettings !== 'function'
     || typeof candidate.listFlowerHostThreads !== 'function'
     || typeof candidate.loadFlowerHostThread !== 'function'
+    || typeof candidate.markFlowerHostThreadRead !== 'function'
+    || typeof candidate.renameFlowerHostThread !== 'function'
+    || typeof candidate.setFlowerHostThreadPinned !== 'function'
+    || typeof candidate.forkFlowerHostThread !== 'function'
     || typeof candidate.resolveFlowerHostHandler !== 'function'
     || typeof candidate.sendFlowerHostChat !== 'function'
+    || typeof candidate.submitFlowerHostInput !== 'function'
   ) {
     return null;
   }

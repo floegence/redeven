@@ -21,6 +21,7 @@ import type {
   ListDesktopFlowerHostThreadsResult,
   LoadDesktopFlowerHostSettingsResult,
   LoadDesktopFlowerHostThreadResult,
+  MarkDesktopFlowerHostThreadReadResult,
   RenameDesktopFlowerHostThreadResult,
   ResolveDesktopFlowerHostHandlerResult,
   SaveDesktopFlowerHostSettingsResult,
@@ -50,9 +51,10 @@ export type DesktopSettingsBridge = Readonly<{
   saveFlowerHostSettings: (draft: DesktopFlowerHostSettingsDraft) => Promise<SaveDesktopFlowerHostSettingsResult>;
   listFlowerHostThreads: () => Promise<ListDesktopFlowerHostThreadsResult>;
   loadFlowerHostThread: (threadID: string) => Promise<LoadDesktopFlowerHostThreadResult>;
-  renameFlowerHostThread?: (request: { thread_id: string; title: string }) => Promise<RenameDesktopFlowerHostThreadResult>;
-  setFlowerHostThreadPinned?: (request: { thread_id: string; pinned: boolean }) => Promise<SetDesktopFlowerHostThreadPinnedResult>;
-  forkFlowerHostThread?: (request: { thread_id: string }) => Promise<ForkDesktopFlowerHostThreadResult>;
+  markFlowerHostThreadRead: (request: { thread_id: string }) => Promise<MarkDesktopFlowerHostThreadReadResult>;
+  renameFlowerHostThread: (request: { thread_id: string; title: string }) => Promise<RenameDesktopFlowerHostThreadResult>;
+  setFlowerHostThreadPinned: (request: { thread_id: string; pinned: boolean }) => Promise<SetDesktopFlowerHostThreadPinnedResult>;
+  forkFlowerHostThread: (request: { thread_id: string }) => Promise<ForkDesktopFlowerHostThreadResult>;
   resolveFlowerHostHandler: (request?: DesktopFlowerHostResolveHandlerRequest) => Promise<ResolveDesktopFlowerHostHandlerResult>;
   sendFlowerHostChat: (request: DesktopFlowerHostSendChatRequest) => Promise<SendDesktopFlowerHostChatResult>;
   submitFlowerHostInput: (request: DesktopFlowerHostSubmitInputRequest) => Promise<SubmitDesktopFlowerHostInputResult>;
@@ -233,7 +235,7 @@ export function mapDesktopFlowerThread(thread: DesktopFlowerHostThread): FlowerT
     ...(thread.tool_activity ? { tool_activity: thread.tool_activity } : {}),
     ...(thread.input_request ? { input_request: mapInputRequest(thread.input_request) } : {}),
     ...(thread.error !== undefined ? { error: thread.error } : {}),
-    ...(thread.has_unread === true ? { has_unread: true } : {}),
+    has_unread: thread.has_unread,
   };
 }
 
@@ -272,27 +274,26 @@ export function createDesktopFlowerSurfaceAdapter(
       if (!result.ok) throw flowerHostError(result.error);
       return mapDesktopFlowerThread(result.thread);
     },
-    ...(bridge.renameFlowerHostThread ? {
-      renameThread: async (threadID, title) => {
-        const result = await bridge.renameFlowerHostThread!({ thread_id: threadID, title });
-        if (!result.ok) throw flowerHostError(result.error);
-        return mapDesktopFlowerThread(result.thread);
-      },
-    } : {}),
-    ...(bridge.setFlowerHostThreadPinned ? {
-      setThreadPinned: async (threadID, pinned) => {
-        const result = await bridge.setFlowerHostThreadPinned!({ thread_id: threadID, pinned });
-        if (!result.ok) throw flowerHostError(result.error);
-        return mapDesktopFlowerThread(result.thread);
-      },
-    } : {}),
-    ...(bridge.forkFlowerHostThread ? {
-      forkThread: async (threadID) => {
-        const result = await bridge.forkFlowerHostThread!({ thread_id: threadID });
-        if (!result.ok) throw flowerHostError(result.error);
-        return mapDesktopFlowerThread(result.thread);
-      },
-    } : {}),
+    markThreadRead: async (threadID) => {
+      const result = await bridge.markFlowerHostThreadRead({ thread_id: threadID });
+      if (!result.ok) throw flowerHostError(result.error);
+      return mapDesktopFlowerThread(result.thread);
+    },
+    renameThread: async (threadID, title) => {
+      const result = await bridge.renameFlowerHostThread({ thread_id: threadID, title });
+      if (!result.ok) throw flowerHostError(result.error);
+      return mapDesktopFlowerThread(result.thread);
+    },
+    setThreadPinned: async (threadID, pinned) => {
+      const result = await bridge.setFlowerHostThreadPinned({ thread_id: threadID, pinned });
+      if (!result.ok) throw flowerHostError(result.error);
+      return mapDesktopFlowerThread(result.thread);
+    },
+    forkThread: async (threadID) => {
+      const result = await bridge.forkFlowerHostThread({ thread_id: threadID });
+      if (!result.ok) throw flowerHostError(result.error);
+      return mapDesktopFlowerThread(result.thread);
+    },
     resolveHandler: async (request) => {
       const result = await bridge.resolveFlowerHostHandler(request);
       if (!result.ok) throw flowerHostError(result.error);
