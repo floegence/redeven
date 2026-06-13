@@ -7546,7 +7546,7 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
   const [prompt, setPrompt] = createSignal('');
   const [validationError, setValidationError] = createSignal('');
   const [handlerDecision, setHandlerDecision] = createSignal<DesktopFlowerHostRouterDecision | null>(null);
-  const [handlerResolving, setHandlerResolving] = createSignal(false);
+  const [handlerStatus, setHandlerStatus] = createSignal<'starting' | 'resolving' | 'ready' | 'blocked' | 'failed'>('starting');
   const [handlerError, setHandlerError] = createSignal('');
   const [isComposing, setIsComposing] = createSignal(false);
   const [sending, setSending] = createSignal(false);
@@ -7560,12 +7560,25 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
   const position = createMemo(() => resolveEnvironmentFlowerWindowPosition(props.state?.anchor, sizing()));
   const selectedHandler = createMemo(() => handlerDecision()?.selected_handler ?? null);
   const handlerReady = createMemo(() => {
-    const decision = handlerDecision();
-    return !!decision?.selected_handler && !decision.blocker && decision.route !== 'blocked';
+    return handlerStatus() === 'ready';
   });
   const handlerNeedsSetup = createMemo(() => {
     const decision = handlerDecision();
     return decision?.reason_code === 'host_not_configured' || decision?.blocker?.code === 'host_not_configured';
+  });
+  const handlerChipLabel = createMemo(() => {
+    switch (handlerStatus()) {
+      case 'ready':
+        return selectedHandler()?.display_name || props.i18n.t('flowerSurface.chat.handlerResolving');
+      case 'blocked':
+        return props.i18n.t('flowerSurface.chat.handlerBlockedTitle');
+      case 'failed':
+        return props.i18n.t('flowerSurface.chat.handlerStartFailedTitle');
+      case 'resolving':
+        return props.i18n.t('flowerSurface.chat.handlerResolving');
+      case 'starting':
+        return props.i18n.t('flowerSurface.chat.handlerStarting');
+    }
   });
   const canSend = createMemo(() => trimString(prompt()) !== '' && !sending() && handlerReady());
   let textareaRef: HTMLTextAreaElement | undefined;
@@ -7578,10 +7591,10 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
     setHandlerError('');
     setValidationError('');
     if (!current) {
-      setHandlerResolving(false);
+      setHandlerStatus('starting');
       return;
     }
-    setHandlerResolving(true);
+    setHandlerStatus('resolving');
     void props.resolveFlowerHandler(current)
       .then((decision) => {
         if (seq !== handlerRequestSeq) {
@@ -7589,18 +7602,15 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
         }
         setHandlerDecision(decision);
         setHandlerError(decision.blocker?.message ?? '');
+        setHandlerStatus(decision.selected_handler && !decision.blocker && decision.route !== 'blocked' ? 'ready' : 'blocked');
       })
       .catch((error) => {
         if (seq !== handlerRequestSeq) {
           return;
         }
         setHandlerError(getErrorMessage(error));
+        setHandlerStatus('failed');
       })
-      .finally(() => {
-        if (seq === handlerRequestSeq) {
-          setHandlerResolving(false);
-        }
-      });
   };
 
   createEffect(() => {
@@ -7609,7 +7619,7 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
       setValidationError('');
       setHandlerDecision(null);
       setHandlerError('');
-      setHandlerResolving(false);
+      setHandlerStatus('starting');
     }
   });
 
@@ -7668,7 +7678,7 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
     }
     const decision = handlerDecision();
     if (!decision?.selected_handler || decision.blocker || decision.route === 'blocked') {
-      setValidationError(handlerError() || props.i18n.t('flowerSurface.chat.handlerUnavailable'));
+      setValidationError(handlerError() || props.i18n.t('flowerSurface.chat.handlerStillStarting'));
       return;
     }
     setSending(true);
@@ -7684,6 +7694,7 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
         setHandlerDecision(freshDecision);
         displayError = freshDecision?.blocker?.message ?? displayError;
         setHandlerError(displayError);
+        setHandlerStatus(freshDecision?.selected_handler && !freshDecision.blocker && freshDecision.route !== 'blocked' ? 'ready' : 'blocked');
       }
       setValidationError(displayError);
       requestAnimationFrame(() => textareaRef?.focus());
@@ -7775,12 +7786,10 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
                     <span>{props.i18n.t('environmentCenter.askFlowerCardPromptLabel')}</span>
                     <span>{sending() ? props.i18n.t('environmentCenter.askFlowerCardSending') : props.i18n.t('environmentCenter.askFlowerCardReplyHint')}</span>
                   </div>
-                  <div class="redeven-environment-flower-window__handler" data-unavailable={!handlerReady() && !handlerResolving() ? '' : undefined}>
+                  <div class="redeven-environment-flower-window__handler" data-unavailable={handlerStatus() === 'blocked' || handlerStatus() === 'failed' ? '' : undefined}>
                     <span class="redeven-environment-flower-window__handler-label">{props.i18n.t('flowerSurface.chat.handlerSelectionLabel')}</span>
                     <span class="redeven-environment-flower-window__handler-chip">
-                      {handlerResolving()
-                        ? props.i18n.t('flowerSurface.chat.handlerResolving')
-                        : selectedHandler()?.display_name || props.i18n.t('flowerSurface.chat.handlerUnavailable')}
+                      {handlerChipLabel()}
                     </span>
                   </div>
                   <div class="redeven-environment-flower-window__input-shell">

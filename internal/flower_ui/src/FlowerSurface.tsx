@@ -39,6 +39,12 @@ type FlowerInputDraft = Readonly<{
   choice_id?: string;
   text?: string;
 }>;
+type FlowerHandlerResolutionState =
+  | Readonly<{ status: 'starting' }>
+  | Readonly<{ status: 'resolving'; decision: FlowerRouterDecision | null }>
+  | Readonly<{ status: 'ready'; decision: FlowerRouterDecision }>
+  | Readonly<{ status: 'blocked'; decision: FlowerRouterDecision; message: string }>
+  | Readonly<{ status: 'failed'; decision: FlowerRouterDecision | null; message: string }>;
 
 const THREAD_RAIL_WIDTH_STORAGE_KEY = 'redeven.flower.threadRailWidth';
 const THREAD_RAIL_WIDTH_DEFAULT = 272;
@@ -91,9 +97,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
   const [isComposing, setIsComposing] = createSignal(false);
-  const [handlerDecision, setHandlerDecision] = createSignal<FlowerRouterDecision | null>(null);
-  const [handlerLoading, setHandlerLoading] = createSignal(false);
-  const [handlerError, setHandlerError] = createSignal('');
+  const [handlerState, setHandlerState] = createSignal<FlowerHandlerResolutionState>({ status: 'starting' });
   const [threadLoadError, setThreadLoadError] = createSignal('');
   const [threadActionError, setThreadActionError] = createSignal('');
   const [threadActionSuccess, setThreadActionSuccess] = createSignal('');
@@ -343,9 +347,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!snapshot()?.config.enabled || !currentModelID() || !provider || !secrets?.provider_api_key_configured) return false;
     return provider.web_search?.mode !== 'brave' || Boolean(secrets.web_search_api_key_configured);
   });
-  const selectedHandler = createMemo(() => handlerDecision()?.selected_handler ?? null);
+  const currentHandlerDecision = createMemo(() => {
+    const state = handlerState();
+    return 'decision' in state ? state.decision : null;
+  });
+  const selectedHandler = createMemo(() => currentHandlerDecision()?.selected_handler ?? null);
   const handlerOptions = createMemo(() => {
-    const decision = handlerDecision();
+    const decision = currentHandlerDecision();
     const selected = decision?.selected_handler;
     const items = [...(decision?.available_handlers ?? [])];
     if (selected && !items.some((item) => item.handler_id === selected.handler_id)) {
@@ -354,20 +362,61 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return items;
   });
   const canSwitchHandler = createMemo(() => {
-    const decision = handlerDecision();
+    const decision = currentHandlerDecision();
     return !selectedThreadID() && !!decision?.handler_selection.can_switch && handlerOptions().length > 1;
   });
   const readyHandlerDecision = createMemo(() => {
-    const decision = handlerDecision();
+    const state = handlerState();
+    if (state.status !== 'ready') return false;
+    const decision = state.decision;
     return !!decision?.selected_handler && !decision.blocker && decision.route !== 'blocked';
+  });
+  const handlerBusy = createMemo(() => {
+    const status = handlerState().status;
+    return status === 'starting' || status === 'resolving';
+  });
+  const handlerChipLabel = createMemo(() => {
+    const state = handlerState();
+    switch (state.status) {
+      case 'ready':
+        return selectedHandler()?.display_name || copy().chat.handlerResolving;
+      case 'blocked':
+        return copy().chat.handlerBlockedTitle;
+      case 'failed':
+        return copy().chat.handlerStartFailedTitle;
+      case 'resolving':
+        return copy().chat.handlerResolving;
+      case 'starting':
+        return copy().chat.handlerStarting;
+    }
+  });
+  const handlerNotice = createMemo(() => {
+    const state = handlerState();
+    if (state.status === 'blocked' && readyForChat()) {
+      return { title: copy().chat.handlerBlockedTitle, message: state.message };
+    }
+    if (state.status === 'failed') {
+      return { title: copy().chat.handlerStartFailedTitle, message: state.message };
+    }
+    return null;
   });
   const needsSetup = createMemo(() => !!snapshot() && !readyForChat());
 
+  const handlerStateFromDecision = (decision: FlowerRouterDecision): FlowerHandlerResolutionState => {
+    if (decision.selected_handler && !decision.blocker && decision.route !== 'blocked') {
+      return { status: 'ready', decision };
+    }
+    return {
+      status: 'blocked',
+      decision,
+      message: trimString(decision.blocker?.message) || trimString(decision.primary_message) || copy().chat.handlerBlockedTitle,
+    };
+  };
+
   const resolveHandlerDecision = async (requestedHandlerID?: string, previousDecision?: FlowerRouterDecision | null) => {
-    setHandlerLoading(true);
-    setHandlerError('');
+    const baseDecision = previousDecision ?? currentHandlerDecision();
+    setHandlerState({ status: 'resolving', decision: baseDecision });
     try {
-      const baseDecision = previousDecision ?? handlerDecision();
       const next = await props.adapter.resolveHandler({
         thread_kind: 'chat',
         client_surface: baseDecision?.decision_scope.client_surface || 'flower_surface',
@@ -375,18 +424,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         ...(baseDecision?.decision_scope.primary_target_id ? { primary_target_id: baseDecision.decision_scope.primary_target_id } : {}),
         ...(trimString(requestedHandlerID) ? { requested_handler_id: trimString(requestedHandlerID) } : {}),
       });
-      setHandlerDecision(next);
-      if (next.blocker?.message && readyForChat()) {
-        setHandlerError(next.blocker.message);
-      }
+      setHandlerState(handlerStateFromDecision(next));
       return next;
     } catch (error) {
       const message = getErrorMessage(error);
-      setHandlerError(message);
-      setHandlerDecision(null);
+      setHandlerState({ status: 'failed', decision: baseDecision, message });
       throw new Error(message);
-    } finally {
-      setHandlerLoading(false);
     }
   };
 
@@ -862,9 +905,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setChatSubmitError(copy().chat.enterMessageBeforeSending);
       return;
     }
-    const decision = handlerDecision() ?? await resolveHandlerDecision();
+    const decision = currentHandlerDecision() ?? await resolveHandlerDecision();
     if (!decision.selected_handler || decision.blocker || decision.route === 'blocked') {
-      setChatSubmitError(decision.blocker?.message || handlerError() || copy().chat.handlerUnavailable);
+      setChatSubmitError(decision.blocker?.message || copy().chat.handlerStillStarting);
       return;
     }
     setChatRunning(true);
@@ -886,8 +929,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } catch (error) {
       const failure = error as FlowerSendMessageFailure;
       if (failure.fresh_decision) {
-        setHandlerDecision(failure.fresh_decision);
-        setHandlerError(failure.fresh_decision.blocker?.message ?? '');
+        setHandlerState(handlerStateFromDecision(failure.fresh_decision));
       }
       setChatSubmitError(getErrorMessage(error));
     } finally {
@@ -909,7 +951,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const switchHandler = (handlerID: string) => {
-    const previous = handlerDecision();
+    const previous = currentHandlerDecision();
     void resolveHandlerDecision(handlerID, previous).catch(() => undefined);
   };
 
@@ -1719,15 +1761,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         <label class="flower-host-handler-picker">
                           <span class="flower-host-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
                           <span class="flower-host-handler-picker-value">
-                            {handlerLoading()
-                              ? copy().chat.handlerResolving
-                              : selectedHandler()?.display_name || copy().chat.handlerUnavailable}
+                            {handlerBusy()
+                              ? handlerChipLabel()
+                              : selectedHandler()?.display_name || handlerChipLabel()}
                           </span>
                           <ChevronDown class="flower-host-handler-picker-icon" />
                           <select
                             aria-label={copy().chat.handlerSelectionLabel}
                             value={selectedHandler()?.handler_id ?? ''}
-                            disabled={handlerLoading()}
+                            disabled={handlerBusy()}
                             onChange={(event) => switchHandler(event.currentTarget.value)}
                           >
                             <For each={handlerOptions()}>
@@ -1740,16 +1782,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         <div class="flower-host-handler-selection">
                           <span class="flower-host-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
                           <Tag variant="warning" class="flower-host-handler-chip">
-                            {handlerLoading() ? copy().chat.handlerResolving : copy().chat.handlerUnavailable}
+                            {handlerChipLabel()}
                           </Tag>
                         </div>
                       </Show>
-                      <Show when={handlerError()}>
-                        <div role="alert" class="flower-host-handler-error-card">
+                      <Show when={handlerNotice()}>
+                        {(notice) => <div role="alert" class="flower-host-handler-error-card">
                           <div class="flower-host-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
                           <div class="flower-host-handler-error-copy">
-                            <div class="flower-host-handler-error-title">{copy().chat.handlerUnavailable}</div>
-                            <div class="flower-host-handler-error-message">{handlerError()}</div>
+                            <div class="flower-host-handler-error-title">{notice().title}</div>
+                            <div class="flower-host-handler-error-message">{notice().message}</div>
                           </div>
                           <button
                             type="button"
@@ -1758,7 +1800,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           >
                             {copy().chat.handlerRetry}
                           </button>
-                        </div>
+                        </div>}
                       </Show>
                     </div>
                   </Show>

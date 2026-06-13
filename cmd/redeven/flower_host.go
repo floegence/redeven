@@ -86,7 +86,7 @@ func (c *cli) flowerHostCmd(args []string) int {
 		BaseURL: strings.TrimSpace(*secretResolverURL),
 		Token:   resolverToken,
 	}
-	readState, err := threadreadstate.Open(filepath.Join(paths.StateRoot, "gateway", "thread_read_state.sqlite"))
+	readState, err := threadreadstate.OpenResettingInvalidSchema(filepath.Join(paths.StateRoot, "gateway", "thread_read_state.sqlite"))
 	if err != nil {
 		fmt.Fprintf(c.stderr, "flower-host failed to open thread read state: %v\n", err)
 		return 1
