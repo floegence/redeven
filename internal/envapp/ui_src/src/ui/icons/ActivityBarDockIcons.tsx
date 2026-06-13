@@ -73,12 +73,11 @@ export function ActivityBarCodespacesIcon(props: { class?: string }) {
 export function ActivityBarPortsIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <circle cx="12" cy="10" r="5.5" stroke="currentColor" stroke-opacity=".55" stroke-width="1" fill="currentColor" fill-opacity=".12" />
-      <ellipse cx="12" cy="7" rx="6" ry="2" stroke="currentColor" stroke-opacity=".28" stroke-width=".5" fill="none" />
-      <ellipse cx="12" cy="13" rx="6" ry="2" stroke="currentColor" stroke-opacity=".28" stroke-width=".5" fill="none" />
-      <path d="M12 4.5 a 8 8 0 0 0 0 11 a 8 8 0 0 0 0 -11" stroke="currentColor" stroke-opacity=".28" stroke-width=".5" fill="none" />
-      <line x1="12" y1="4.5" x2="12" y2="15.5" stroke="currentColor" stroke-opacity=".28" stroke-width=".5" />
-      <text x="12" y="21" text-anchor="middle" font-family="'Inter','SF Pro Display',-apple-system,sans-serif" font-size="5" font-weight="800" letter-spacing=".4" fill="currentColor" fill-opacity=".7">HTTP</text>
+      <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-opacity=".55" stroke-width="1" fill="currentColor" fill-opacity=".12" />
+      <ellipse cx="12" cy="8.5" rx="7.5" ry="2.5" stroke="currentColor" stroke-opacity=".20" stroke-width=".6" fill="none" />
+      <ellipse cx="12" cy="15.5" rx="7.5" ry="2.5" stroke="currentColor" stroke-opacity=".20" stroke-width=".6" fill="none" />
+      <path d="M12 5 a 10 10 0 0 0 0 14 a 10 10 0 0 0 0 -14" stroke="currentColor" stroke-opacity=".20" stroke-width=".6" fill="none" />
+      <line x1="12" y1="5" x2="12" y2="19" stroke="currentColor" stroke-opacity=".20" stroke-width=".6" />
     </svg>
   );
 }
