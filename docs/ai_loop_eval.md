@@ -161,7 +161,7 @@ Current runtime hard-fail events are:
 - `signal.recovery.attempt` for structured signal recovery turns
 - `guard.hard_max_steps` for absolute loop guard exhaustion
 
-The evaluator still accepts the legacy event names `turn.completion.continue`, `task.loop.continue`, and `turn.loop.exhausted` when reading older reports, but task specs should use the current runtime event names.
+Task specs should use the current runtime event names. The evaluator contract for new reports is the event list above.
 
 ## Replay validation
 
@@ -171,7 +171,7 @@ The evaluator still accepts the legacy event names `turn.completion.continue`, `
 - tool-heavy runs without a concrete conclusion
 - empty assistant output after structured Flower tool completion
 
-Replay now treats `activity-timeline` interaction items, legacy `ask_user` tool blocks, and `task_complete` blocks as valid assistant-visible output when no markdown/text block exists.
+Replay counts `activity-timeline` items as structured activity, but assistant-visible output must come from `markdown`, `text`, or `thinking` blocks. Raw `tool-call` blocks and signal payloads are not valid Flower chat output.
 
 Fixtures live in:
 

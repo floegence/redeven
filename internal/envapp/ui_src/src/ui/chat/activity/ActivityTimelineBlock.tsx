@@ -5,11 +5,10 @@ import { cn } from '@floegence/floe-webapp-core';
 import { ActivityStatusIcon, formatActivityDuration, type ActivityStatus } from '../status/ActivityLine';
 import type {
   ActivityDetailRef,
-  ActivityGroup,
   ActivityItem,
   ActivityTimelineBlock as ActivityTimelineBlockType,
 } from '../types';
-import { ActivityChipList, ActivityItemRow } from './ActivityItemRow';
+import { ActivityItemRow } from './ActivityItemRow';
 import { activityDetailCacheKey, fetchActivityDetail } from './activityDetailApi';
 import type { ActivityDetailLoadState } from './activityDetailTypes';
 
@@ -30,7 +29,6 @@ function toActivityStatus(status: string | undefined): ActivityStatus {
       return 'success';
     case 'pending':
     case 'waiting':
-    case 'waiting_approval':
       return 'pending';
     default:
       return 'info';
@@ -38,51 +36,67 @@ function toActivityStatus(status: string | undefined): ActivityStatus {
 }
 
 function isBlockingItem(item: ActivityItem): boolean {
-  return (item.requiresApproval === true && item.approvalState === 'required')
+  return (item.requires_approval === true && item.approval_state === 'requested')
     || item.status === 'waiting'
-    || item.status === 'waiting_approval'
     || item.severity === 'blocking';
 }
 
 function itemKey(item: ActivityItem, index: number): string {
-  return String(item.itemId || item.toolId || index).trim() || String(index);
-}
-
-function groupKey(group: ActivityGroup, index: number): string {
-  return String(group.groupId || index).trim() || String(index);
+  return String(item.item_id || item.tool_id || index).trim() || String(index);
 }
 
 function targetLabel(item: ActivityItem): string {
-  const first = Array.isArray(item.targetRefs) ? item.targetRefs[0] : undefined;
+  const first = Array.isArray(item.target_refs) ? item.target_refs[0] : undefined;
   return String(first?.label ?? item.description ?? '').trim();
 }
 
 function primaryDetailRef(item: ActivityItem): ActivityDetailRef | undefined {
-  return Array.isArray(item.detailRefs) ? item.detailRefs[0] : undefined;
+  return Array.isArray(item.detail_refs) ? item.detail_refs[0] : undefined;
 }
 
-function panelIdFor(blockIndex: number, itemId: string): string {
-  return `activity-detail-${blockIndex}-${itemId.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+function panelIdFor(blockIndex: number, item_id: string): string {
+  return `activity-detail-${blockIndex}-${item_id.replace(/[^a-zA-Z0-9_-]/g, '-')}`;
+}
+
+function itemLabel(item: ActivityItem): string {
+  const explicit = String(item.label ?? '').trim();
+  if (explicit) return explicit;
+  const toolName = String(item.tool_name ?? '').trim();
+  switch (toolName) {
+    case 'terminal.exec':
+      return item.status === 'error' ? 'Command failed' : item.status === 'running' ? 'Running command' : 'Ran command';
+    case 'write_todos':
+      return 'Updated tasks';
+    case 'ask_user':
+      return 'Requested input';
+    case 'task_complete':
+      return 'Completed';
+    default:
+      return toolName || String(item.kind ?? '').trim() || 'Activity';
+  }
+}
+
+function summaryLabel(block: ActivityTimelineBlockType): string {
+  const items = Array.isArray(block.items) ? block.items : [];
+  if (items.length === 1) return itemLabel(items[0]);
+  const total = block.summary?.total_items || items.length;
+  return total === 1 ? '1 activity' : `${total} activities`;
+}
+
+function defaultTimelineOpen(block: ActivityTimelineBlockType): boolean {
+  return block.summary?.needs_attention === true || block.summary?.status !== 'success';
 }
 
 export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (props) => {
-  const [openByGroup, setOpenByGroup] = createSignal<Record<string, boolean>>({});
+  const [open, setOpen] = createSignal<boolean | null>(null);
   const [openByItem, setOpenByItem] = createSignal<Record<string, boolean>>({});
   const [detailStates, setDetailStates] = createSignal<Record<string, ActivityDetailLoadState>>({});
 
-  const hasGroups = createMemo(() => Array.isArray(props.block.groups) && props.block.groups.length > 0);
+  const items = createMemo(() => Array.isArray(props.block.items) ? props.block.items : []);
+  const hasItems = createMemo(() => items().length > 0);
   const summaryStatus = createMemo(() => toActivityStatus(props.block.summary?.status));
-  const durationLabel = createMemo(() => formatActivityDuration(props.block.summary?.durationMs));
-
-  const isGroupOpen = (group: ActivityGroup, index: number) => {
-    const key = groupKey(group, index);
-    const local = openByGroup()[key];
-    return typeof local === 'boolean' ? local : Boolean(group.defaultOpen);
-  };
-  const toggleGroup = (group: ActivityGroup, index: number) => {
-    const key = groupKey(group, index);
-    setOpenByGroup((prev) => ({ ...prev, [key]: !isGroupOpen(group, index) }));
-  };
+  const durationLabel = createMemo(() => formatActivityDuration(props.block.summary?.duration_ms));
+  const expanded = createMemo(() => open() ?? defaultTimelineOpen(props.block));
 
   const detailStateFor = (item: ActivityItem, ref: ActivityDetailRef | undefined): ActivityDetailLoadState => {
     if (!ref) return { status: 'idle' };
@@ -113,10 +127,10 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
     }
   };
 
-  const toggleItem = (item: ActivityItem, ref: ActivityDetailRef | undefined, itemId: string) => {
+  const toggleItem = (item: ActivityItem, ref: ActivityDetailRef | undefined, item_id: string) => {
     if (!ref) return;
-    const nextOpen = !openByItem()[itemId];
-    setOpenByItem((prev) => ({ ...prev, [itemId]: nextOpen }));
+    const nextOpen = !openByItem()[item_id];
+    setOpenByItem((prev) => ({ ...prev, [item_id]: nextOpen }));
     if (nextOpen) ensureDetailLoaded(item, ref);
   };
 
@@ -126,72 +140,51 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
   };
 
   return (
-    <Show when={hasGroups()}>
+    <Show when={hasItems()}>
       <div class={cn('chat-activity-timeline', props.class)} data-status={summaryStatus()}>
-        <div class="chat-activity-timeline-summary">
+        <button
+          type="button"
+          class="chat-activity-timeline-summary"
+          aria-expanded={expanded()}
+          onClick={() => setOpen(!expanded())}
+        >
+          <span class={cn('chat-activity-timeline-chevron', expanded() && 'chat-activity-timeline-chevron-open')} aria-hidden="true">
+            <svg viewBox="0 0 16 16"><path d="M5.5 3.75 9.75 8 5.5 12.25" /></svg>
+          </span>
           <ActivityStatusIcon status={summaryStatus()} class="chat-activity-timeline-summary-icon" />
-          <span class="chat-activity-timeline-summary-text">{props.block.summary?.label || 'Activity'}</span>
+          <span class="chat-activity-timeline-summary-text">{summaryLabel(props.block)}</span>
           <Show when={durationLabel()}>
             {(value) => <span class="chat-activity-timeline-duration">{value()}</span>}
           </Show>
-        </div>
+        </button>
 
-        <div class="chat-activity-timeline-groups">
-          <For each={props.block.groups}>
-            {(group, groupIndex) => {
-              const expanded = createMemo(() => isGroupOpen(group, groupIndex()));
-              return (
-                <div class={cn('chat-activity-group', group.severity && `chat-activity-group-${group.severity}`)}>
-                  <button
-                    type="button"
-                    class="chat-activity-group-head"
-                    aria-expanded={expanded()}
-                    onClick={() => toggleGroup(group, groupIndex())}
-                  >
-                    <span class={cn('chat-activity-group-chevron', expanded() && 'chat-activity-group-chevron-open')} aria-hidden="true">
-                      <svg viewBox="0 0 16 16"><path d="M5.5 3.75 9.75 8 5.5 12.25" /></svg>
-                    </span>
-                    <ActivityStatusIcon status={toActivityStatus(group.status)} />
-                    <span class="chat-activity-group-copy">
-                      <span class="chat-activity-group-title">{group.title}</span>
-                      <Show when={group.subtitle}>
-                        {(subtitle) => <span class="chat-activity-group-subtitle">{subtitle()}</span>}
-                      </Show>
-                    </span>
-                    <ActivityChipList chips={group.chips} />
-                  </button>
-
-                  <Show when={expanded()}>
-                    <div class="chat-activity-items">
-                      <For each={group.items}>
-                        {(item, itemIndex) => {
-                          const id = createMemo(() => itemKey(item, itemIndex()));
-                          const ref = createMemo(() => primaryDetailRef(item));
-                          const panelId = createMemo(() => panelIdFor(props.blockIndex, id()));
-                          return (
-                            <ActivityItemRow
-                              item={item}
-                              itemId={id()}
-                              panelId={panelId()}
-                              status={toActivityStatus(item.status)}
-                              targetLabel={targetLabel(item)}
-                              blocking={isBlockingItem(item)}
-                              messageId={props.messageId}
-                              expanded={Boolean(openByItem()[id()])}
-                              detailState={detailStateFor(item, ref())}
-                              onToggle={() => toggleItem(item, ref(), id())}
-                              onRetry={() => retryItem(item, ref())}
-                            />
-                          );
-                        }}
-                      </For>
-                    </div>
-                  </Show>
-                </div>
-              );
-            }}
-          </For>
-        </div>
+        <Show when={expanded()}>
+          <div class="chat-activity-items">
+            <For each={items()}>
+              {(item, itemIndex) => {
+                const id = createMemo(() => itemKey(item, itemIndex()));
+                const ref = createMemo(() => primaryDetailRef(item));
+                const panelId = createMemo(() => panelIdFor(props.blockIndex, id()));
+                return (
+                  <ActivityItemRow
+                    item={item}
+                    item_id={id()}
+                    label={itemLabel(item)}
+                    panelId={panelId()}
+                    status={toActivityStatus(item.status)}
+                    targetLabel={targetLabel(item)}
+                    blocking={isBlockingItem(item)}
+                    messageId={props.messageId}
+                    expanded={Boolean(openByItem()[id()])}
+                    detailState={detailStateFor(item, ref())}
+                    onToggle={() => toggleItem(item, ref(), id())}
+                    onRetry={() => retryItem(item, ref())}
+                  />
+                );
+              }}
+            </For>
+          </div>
+        </Show>
       </div>
     </Show>
   );

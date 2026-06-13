@@ -41,3 +41,45 @@ func TestRenderTaskTurns_ReplacesWorkspacePlaceholder(t *testing.T) {
 		t.Fatalf("turns[1]=%q", turns[1])
 	}
 }
+
+func TestStreamMonitorConsumesSnakeCaseActivityTimelineItems(t *testing.T) {
+	t.Parallel()
+
+	monitor := newStreamMonitor(nil, nil, "run_1", nil, func() {})
+	monitor.consumeBlock(map[string]any{
+		"type": "activity-timeline",
+		"items": []any{
+			map[string]any{
+				"item_id":           "tool_1",
+				"tool_id":           "tool_1",
+				"tool_name":         "terminal.exec",
+				"kind":              "tool",
+				"status":            "success",
+				"severity":          "quiet",
+				"needs_attention":   false,
+				"requires_approval": false,
+			},
+		},
+	})
+
+	if got := monitor.toolSigCounter["terminal.exec|{}"]; got != 1 {
+		t.Fatalf("tool signature count=%d, want 1", got)
+	}
+}
+
+func TestExtractLatestAssistantTextIgnoresRawToolCallBlocks(t *testing.T) {
+	t.Parallel()
+
+	got := visibleAssistantTextFromBlocks([]any{
+		map[string]any{
+			"type":     "tool-call",
+			"toolName": "task_complete",
+			"args": map[string]any{
+				"result": "This raw tool payload must not become visible output.",
+			},
+		},
+	})
+	if got != "" {
+		t.Fatalf("visibleAssistantTextFromBlocks()=%q, want empty", got)
+	}
+}

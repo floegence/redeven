@@ -14,6 +14,7 @@ import (
 
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
+	"github.com/floegence/floret/observation"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
@@ -360,7 +361,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 		return TurnResult{}, err
 	}
 	// Some OpenAI-compatible gateways omit `response.completed` even when they have already
-	// streamed usable text/tool-call deltas. Treat missing completion as a soft-failure
+	// streamed usable text or tool call deltas. Treat missing completion as a soft-failure
 	// and continue best-effort when we have enough information to proceed.
 	hasToolCall := false
 	for _, pc := range partials {
@@ -1496,7 +1497,6 @@ func buildOpenAIInput(messages []Message) (oresponses.ResponseInputParam, string
 				}
 			}
 			if len(content) == 0 {
-				// Backward-compatible fallback: collapse text parts into a single string message.
 				if txt := joinMessageText(msg); txt != "" {
 					content = append(content, oresponses.ResponseInputContentUnionParam{
 						OfInputText: &oresponses.ResponseInputTextParam{Text: txt},
@@ -3412,20 +3412,15 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 	if err != nil {
 		return false, err
 	}
-	r.mu.Lock()
-	idx := r.reserveActivityTimelineBlockIndexLocked()
-	r.needNewTextBlock = true
-	r.mu.Unlock()
-	block := ToolCallBlock{
-		Type:             "tool-call",
-		ToolName:         "task_complete",
-		ToolID:           toolID,
-		Args:             map[string]any{"result": truncateRunes(strings.TrimSpace(resultText), 500)},
-		RequiresApproval: true,
-		ApprovalState:    "required",
-		Status:           ToolCallStatusPending,
-	}
-	r.emitPersistedToolBlockSet(idx, block)
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolApprovalRequested,
+		ToolID:     toolID,
+		ToolName:   "task_complete",
+		ObservedAt: time.Now(),
+		Metadata: map[string]any{
+			"approval_id": toolID,
+		},
+	})
 
 	ch := make(chan bool, 1)
 	r.mu.Lock()
@@ -3448,28 +3443,46 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 	select {
 	case approved := <-ch:
 		if approved {
-			block.ApprovalState = "approved"
-			block.Status = ToolCallStatusSuccess
-			r.emitPersistedToolBlockSet(idx, block)
+			r.recordObservationActivityEvent(observation.Event{
+				Type:       observation.EventTypeToolApprovalApproved,
+				ToolID:     toolID,
+				ToolName:   "task_complete",
+				ObservedAt: time.Now(),
+				Metadata: map[string]any{
+					"approval_id": toolID,
+				},
+			})
 			return true, nil
 		}
-		block.ApprovalState = "rejected"
-		block.Status = ToolCallStatusError
-		block.Error = "Rejected by user"
-		r.emitPersistedToolBlockSet(idx, block)
+		r.recordObservationActivityEvent(observation.Event{
+			Type:       observation.EventTypeToolApprovalRejected,
+			ToolID:     toolID,
+			ToolName:   "task_complete",
+			Error:      "Rejected by user",
+			ObservedAt: time.Now(),
+			Metadata: map[string]any{
+				"approval_id": toolID,
+			},
+		})
 		return false, nil
 	case <-ctx.Done():
 		return false, ctx.Err()
 	case <-timer.C:
-		block.ApprovalState = "rejected"
-		block.Status = ToolCallStatusError
-		block.Error = "Approval timed out"
-		r.emitPersistedToolBlockSet(idx, block)
+		r.recordObservationActivityEvent(observation.Event{
+			Type:       observation.EventTypeToolApprovalTimedOut,
+			ToolID:     toolID,
+			ToolName:   "task_complete",
+			Error:      "Approval timed out",
+			ObservedAt: time.Now(),
+			Metadata: map[string]any{
+				"approval_id": toolID,
+			},
+		})
 		return false, errors.New("approval timed out")
 	}
 }
 
-func (r *run) emitTaskCompleteToolBlock(toolID string, resultText string, evidenceRefs []string) {
+func (r *run) recordTaskCompleteSignal(toolID string, resultText string, evidenceRefs []string) {
 	if r == nil {
 		return
 	}
@@ -3499,22 +3512,21 @@ func (r *run) emitTaskCompleteToolBlock(toolID string, resultText string, eviden
 		result["evidence_refs"] = append([]string(nil), cleanEvidenceRefs...)
 	}
 	toolID = r.persistSyntheticToolSuccess(toolID, "task_complete", args, result)
-	r.mu.Lock()
-	idx := r.reserveActivityTimelineBlockIndexLocked()
-	r.needNewTextBlock = true
-	r.mu.Unlock()
-	block := ToolCallBlock{
-		Type:     "tool-call",
-		ToolName: "task_complete",
-		ToolID:   toolID,
-		Args:     args,
-		Status:   ToolCallStatusSuccess,
-		Result:   result,
-	}
-	r.emitPersistedToolBlockSet(idx, block)
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeControlSignal,
+		ToolID:     toolID,
+		ToolName:   "task_complete",
+		ToolKind:   "control",
+		Result:     truncateRunes(resultText, 500),
+		ObservedAt: time.Now(),
+		Metadata: map[string]any{
+			"control_disposition": "terminal",
+			"result_count":        len(cleanEvidenceRefs),
+		},
+	})
 }
 
-func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
+func (r *run) recordAskUserWaitingSignal(signal askUserSignal, source string) {
 	if r == nil {
 		return
 	}
@@ -3535,10 +3547,6 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 	if err != nil {
 		toolID = "tool_ask_user_waiting"
 	}
-	r.mu.Lock()
-	idx := r.reserveActivityTimelineBlockIndexLocked()
-	r.needNewTextBlock = true
-	r.mu.Unlock()
 	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
 		MessageID:        strings.TrimSpace(r.messageID),
 		ToolID:           toolID,
@@ -3551,6 +3559,7 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 	if prompt == nil {
 		return
 	}
+	r.setWaitingPrompt(prompt)
 	args := map[string]any{
 		"questions":          questions,
 		"reason_code":        signal.ReasonCode,
@@ -3567,18 +3576,21 @@ func (r *run) emitAskUserToolBlock(signal askUserSignal, source string) {
 		"waiting_user":       true,
 	}
 	toolID = r.persistSyntheticToolSuccess(toolID, "ask_user", args, result)
-	block := ToolCallBlock{
-		Type:     "tool-call",
-		ToolName: "ask_user",
-		ToolID:   toolID,
-		Args:     args,
-		Status:   ToolCallStatusSuccess,
-		Result:   result,
-	}
-	r.emitPersistedToolBlockSet(idx, block)
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeControlSignal,
+		ToolID:     toolID,
+		ToolName:   "ask_user",
+		ToolKind:   "control",
+		ObservedAt: time.Now(),
+		Metadata: map[string]any{
+			"control_disposition": "waiting",
+			"result_count":        len(questions),
+			"strategy":            source,
+		},
+	})
 }
 
-func (r *run) emitExitPlanModeToolBlock(toolID string, args ExitPlanModeArgs, result ExitPlanModeResult) {
+func (r *run) recordExitPlanModeWaitingSignal(toolID string, args ExitPlanModeArgs, result ExitPlanModeResult) {
 	if r == nil || result.WaitingPrompt == nil {
 		return
 	}
@@ -3596,10 +3608,7 @@ func (r *run) emitExitPlanModeToolBlock(toolID string, args ExitPlanModeArgs, re
 	if prompt == nil {
 		return
 	}
-	r.mu.Lock()
-	idx := r.reserveActivityTimelineBlockIndexLocked()
-	r.needNewTextBlock = true
-	r.mu.Unlock()
+	r.setWaitingPrompt(prompt)
 	blockArgs := map[string]any{}
 	if args.Summary != "" {
 		blockArgs["summary"] = args.Summary
@@ -3613,15 +3622,17 @@ func (r *run) emitExitPlanModeToolBlock(toolID string, args ExitPlanModeArgs, re
 		"waiting_user":   true,
 	}
 	toolID = r.persistSyntheticToolSuccess(toolID, "exit_plan_mode", blockArgs, blockResult)
-	block := ToolCallBlock{
-		Type:     "tool-call",
-		ToolName: "exit_plan_mode",
-		ToolID:   toolID,
-		Args:     blockArgs,
-		Status:   ToolCallStatusSuccess,
-		Result:   blockResult,
-	}
-	r.emitPersistedToolBlockSet(idx, block)
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeControlSignal,
+		ToolID:     toolID,
+		ToolName:   "exit_plan_mode",
+		ToolKind:   "control",
+		ObservedAt: time.Now(),
+		Metadata: map[string]any{
+			"control_disposition": "waiting",
+			"result_count":        len(prompt.Questions),
+		},
+	})
 }
 
 func requestUserInputQuestionChoiceCount(questions []RequestUserInputQuestion) int {

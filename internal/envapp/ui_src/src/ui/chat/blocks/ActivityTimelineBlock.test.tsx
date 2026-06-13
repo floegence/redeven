@@ -4,7 +4,7 @@ import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ActivityTimelineBlock } from './ActivityTimelineBlock';
-import type { ActivityTimelineBlock as ActivityTimelineBlockType } from '../types';
+import type { ActivityItem, ActivityTimelineBlock as ActivityTimelineBlockType } from '../types';
 
 const approveToolCallMock = vi.hoisted(() => vi.fn());
 const fetchGatewayJSONMock = vi.hoisted(() => vi.fn());
@@ -30,49 +30,60 @@ vi.mock('../../utils/clipboard', () => ({
 
 const renderDisposers: Array<() => void> = [];
 
+function baseSummary(
+  status: ActivityTimelineBlockType['summary']['status'] = 'success',
+  totalItems = 1,
+): ActivityTimelineBlockType['summary'] {
+  const counts: ActivityTimelineBlockType['summary']['counts'] = {};
+  if (status === 'pending') counts.pending = totalItems;
+  if (status === 'running') counts.running = totalItems;
+  if (status === 'waiting') counts.waiting = totalItems;
+  if (status === 'success') counts.success = totalItems;
+  if (status === 'error') counts.error = totalItems;
+  if (status === 'canceled') counts.canceled = totalItems;
+  return {
+    status,
+    severity: status === 'success' ? 'quiet' : status === 'error' ? 'error' : 'blocking',
+    needs_attention: status !== 'success',
+    total_items: totalItems,
+    counts,
+  };
+}
+
+function baseItem(overrides: Partial<ActivityItem> = {}): ActivityItem {
+  return {
+    item_id: 'tool_1',
+    tool_id: 'tool_1',
+    tool_name: 'terminal.exec',
+    kind: 'tool',
+    renderer: 'command',
+    status: 'success',
+    severity: 'quiet',
+    needs_attention: false,
+    requires_approval: false,
+    label: 'Ran command',
+    description: 'go test ./...',
+    detail_refs: [{
+      ref_id: 'terminal_output:tool_1',
+      kind: 'terminal_output',
+      tool_id: 'tool_1',
+      fetch_mode: 'endpoint',
+      endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_1/output',
+      title: 'Command output',
+    }],
+    ...overrides,
+  };
+}
+
 function baseBlock(overrides: Partial<ActivityTimelineBlockType> = {}): ActivityTimelineBlockType {
+  const items = overrides.items ?? [baseItem()];
   return {
     type: 'activity-timeline',
-    schemaVersion: 1,
-    runId: 'run_1',
-    messageId: 'msg_1',
-    summary: {
-      status: 'success',
-      totalItems: 1,
-      visibleItems: 1,
-      label: '1 command',
-    },
-    groups: [
-      {
-        groupId: 'command',
-        kind: 'command',
-        renderer: 'command',
-        status: 'success',
-        title: 'Ran command',
-        defaultOpen: false,
-        items: [
-          {
-            itemId: 'tool_1',
-            toolId: 'tool_1',
-            toolName: 'terminal.exec',
-            kind: 'command',
-            renderer: 'command',
-            status: 'success',
-            severity: 'quiet',
-            label: 'Ran command',
-            description: 'go test ./...',
-            detailRefs: [{
-              refId: 'terminal_output:tool_1',
-              kind: 'terminal_output',
-              toolId: 'tool_1',
-              fetchMode: 'endpoint',
-              endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_1/output',
-              title: 'Command output',
-            }],
-          },
-        ],
-      },
-    ],
+    schema_version: 1,
+    run_id: 'run_1',
+    turn_id: 'msg_1',
+    summary: overrides.summary ?? baseSummary('success', items.length),
+    items,
     ...overrides,
   };
 }
@@ -90,6 +101,11 @@ async function flushAsync(): Promise<void> {
   await Promise.resolve();
 }
 
+function expandTimeline(host: HTMLElement): void {
+  const summary = host.querySelector('.chat-activity-timeline-summary') as HTMLButtonElement | null;
+  summary?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+}
+
 afterEach(() => {
   while (renderDisposers.length > 0) {
     renderDisposers.pop()?.();
@@ -101,7 +117,7 @@ afterEach(() => {
 });
 
 describe('ActivityTimelineBlock', () => {
-  it('keeps groups compact and opens terminal details from the item row', async () => {
+  it('keeps activity compact and opens terminal details from the item row', async () => {
     fetchGatewayJSONMock.mockResolvedValue({
       status: 'success',
       stdout: 'ok\n',
@@ -113,16 +129,13 @@ describe('ActivityTimelineBlock', () => {
     writeTextToClipboardMock.mockResolvedValue(undefined);
     const host = renderActivity();
 
-    expect(host.textContent).toContain('1 command');
     expect(host.textContent).toContain('Ran command');
     expect(host.textContent).not.toContain('go test ./...');
 
-    const header = host.querySelector('.chat-activity-group-head') as HTMLButtonElement | null;
-    header?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expandTimeline(host);
     await flushAsync();
 
     expect(host.textContent).toContain('go test ./...');
-
     expect(host.textContent).not.toContain('Details');
 
     const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
@@ -148,9 +161,7 @@ describe('ActivityTimelineBlock', () => {
   it('supports keyboard expansion and keeps rows without details non-interactive', async () => {
     fetchGatewayJSONMock.mockResolvedValue({ stdout: 'ok\n', stderr: '' });
     const host = renderActivity();
-
-    const header = host.querySelector('.chat-activity-group-head') as HTMLButtonElement | null;
-    header?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expandTimeline(host);
     await flushAsync();
 
     const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
@@ -166,25 +177,15 @@ describe('ActivityTimelineBlock', () => {
     expect(row?.getAttribute('aria-expanded')).toBe('false');
 
     const noDetailHost = renderActivity(baseBlock({
-      groups: [{
-        groupId: 'command',
-        kind: 'command',
-        renderer: 'command',
-        status: 'success',
-        title: 'Ran command',
-        defaultOpen: true,
-        items: [{
-          itemId: 'tool_no_detail',
-          toolId: 'tool_no_detail',
-          toolName: 'terminal.exec',
-          kind: 'command',
-          renderer: 'command',
-          status: 'success',
-          label: 'Ran command',
-          description: 'pwd',
-        }],
-      }],
+      summary: baseSummary('success'),
+      items: [baseItem({
+        item_id: 'tool_no_detail',
+        tool_id: 'tool_no_detail',
+        description: 'pwd',
+        detail_refs: undefined,
+      })],
     }));
+    expandTimeline(noDetailHost);
     const noDetailRow = noDetailHost.querySelector('.chat-activity-item') as HTMLDivElement | null;
     noDetailRow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
@@ -194,33 +195,21 @@ describe('ActivityTimelineBlock', () => {
 
   it('uses inline detail payloads without making an endpoint request', async () => {
     const host = renderActivity(baseBlock({
-      groups: [{
-        groupId: 'command',
-        kind: 'command',
-        renderer: 'command',
-        status: 'success',
-        title: 'Ran command',
-        defaultOpen: true,
-        items: [{
-          itemId: 'tool_inline',
-          toolId: 'tool_inline',
-          toolName: 'terminal.exec',
-          kind: 'command',
-          renderer: 'command',
-          status: 'success',
-          label: 'Ran command',
-          description: 'pwd',
-          detailRefs: [{
-            refId: 'terminal_output:tool_inline',
-            kind: 'terminal_output',
-            toolId: 'tool_inline',
-            fetchMode: 'inline',
-            title: 'Command output',
-            payload: { stdout: '/workspace\n', exit_code: 0 },
-          }],
+      items: [baseItem({
+        item_id: 'tool_inline',
+        tool_id: 'tool_inline',
+        description: 'pwd',
+        detail_refs: [{
+          ref_id: 'terminal_output:tool_inline',
+          kind: 'terminal_output',
+          tool_id: 'tool_inline',
+          fetch_mode: 'inline',
+          title: 'Command output',
+          payload: { stdout: '/workspace\n', exit_code: 0 },
         }],
-      }],
+      })],
     }));
+    expandTimeline(host);
 
     const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
     row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -238,17 +227,8 @@ describe('ActivityTimelineBlock', () => {
       value: () => ({ toString: () => 'selected output text' }),
     });
     try {
-      const host = renderActivity(baseBlock({
-        groups: [{
-          groupId: 'command',
-          kind: 'command',
-          renderer: 'command',
-          status: 'success',
-          title: 'Ran command',
-          defaultOpen: true,
-          items: baseBlock().groups[0].items,
-        }],
-      }));
+      const host = renderActivity();
+      expandTimeline(host);
 
       const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
       row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -267,36 +247,27 @@ describe('ActivityTimelineBlock', () => {
 
   it('routes approval actions through the chat context', () => {
     const block = baseBlock({
-      summary: { status: 'waiting', totalItems: 1, visibleItems: 1, label: '1 approval' },
-      groups: [{
-        groupId: 'mutation',
-        kind: 'mutation',
+      summary: baseSummary('waiting'),
+      items: [baseItem({
+        item_id: 'tool_patch',
+        tool_id: 'tool_patch',
+        tool_name: 'apply_patch',
         renderer: 'file_change',
         status: 'waiting',
         severity: 'blocking',
-        title: 'Changed file',
-        defaultOpen: true,
-        items: [{
-          itemId: 'tool_patch',
-          toolId: 'tool_patch',
-          toolName: 'apply_patch',
-          kind: 'mutation',
-          renderer: 'file_change',
-          status: 'waiting',
-          severity: 'blocking',
-          label: 'Applied patch',
-          requiresApproval: true,
-          approvalState: 'required',
-          detailRefs: [{
-            refId: 'tool_detail:tool_patch',
-            kind: 'tool_detail',
-            toolId: 'tool_patch',
-            fetchMode: 'endpoint',
-            endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_patch/detail',
-            title: 'Tool detail',
-          }],
+        needs_attention: true,
+        label: 'Applied patch',
+        requires_approval: true,
+        approval_state: 'requested',
+        detail_refs: [{
+          ref_id: 'tool_detail:tool_patch',
+          kind: 'tool_detail',
+          tool_id: 'tool_patch',
+          fetch_mode: 'endpoint',
+          endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_patch/detail',
+          title: 'Tool detail',
         }],
-      }],
+      })],
     });
     const host = renderActivity(block);
 
@@ -320,33 +291,23 @@ describe('ActivityTimelineBlock', () => {
       },
     });
     const host = renderActivity(baseBlock({
-      summary: { status: 'success', totalItems: 1, visibleItems: 1, label: '1 todo update' },
-      groups: [{
-        groupId: 'todos',
-        kind: 'todo',
+      items: [baseItem({
+        item_id: 'tool_todos',
+        tool_id: 'tool_todos',
+        tool_name: 'write_todos',
         renderer: 'todos',
-        status: 'success',
-        title: 'Updated todos',
-        defaultOpen: true,
-        items: [{
-          itemId: 'tool_todos',
-          toolId: 'tool_todos',
-          toolName: 'write_todos',
-          kind: 'todo',
-          renderer: 'todos',
-          status: 'success',
-          label: 'Updated todos',
-          detailRefs: [{
-            refId: 'tool_detail:tool_todos',
-            kind: 'tool_detail',
-            toolId: 'tool_todos',
-            fetchMode: 'endpoint',
-            endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_todos/detail',
-            title: 'Tool detail',
-          }],
+        label: 'Updated todos',
+        detail_refs: [{
+          ref_id: 'tool_detail:tool_todos',
+          kind: 'tool_detail',
+          tool_id: 'tool_todos',
+          fetch_mode: 'endpoint',
+          endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_todos/detail',
+          title: 'Tool detail',
         }],
-      }],
+      })],
     }));
+    expandTimeline(host);
 
     const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
     row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -369,33 +330,23 @@ describe('ActivityTimelineBlock', () => {
       },
     });
     const host = renderActivity(baseBlock({
-      summary: { status: 'success', totalItems: 1, visibleItems: 1, label: '1 todo update' },
-      groups: [{
-        groupId: 'todos',
-        kind: 'todo',
+      items: [baseItem({
+        item_id: 'tool_todos',
+        tool_id: 'tool_todos',
+        tool_name: 'write_todos',
         renderer: 'todos',
-        status: 'success',
-        title: 'Updated todos',
-        defaultOpen: true,
-        items: [{
-          itemId: 'tool_todos',
-          toolId: 'tool_todos',
-          toolName: 'write_todos',
-          kind: 'todo',
-          renderer: 'todos',
-          status: 'success',
-          label: 'Updated todos',
-          detailRefs: [{
-            refId: 'tool_detail:tool_todos',
-            kind: 'tool_detail',
-            toolId: 'tool_todos',
-            fetchMode: 'endpoint',
-            endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_todos/detail',
-            title: 'Tool detail',
-          }],
+        label: 'Updated todos',
+        detail_refs: [{
+          ref_id: 'tool_detail:tool_todos',
+          kind: 'tool_detail',
+          tool_id: 'tool_todos',
+          fetch_mode: 'endpoint',
+          endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_todos/detail',
+          title: 'Tool detail',
         }],
-      }],
+      })],
     }));
+    expandTimeline(host);
 
     const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
     row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -412,68 +363,54 @@ describe('ActivityTimelineBlock', () => {
 
   it('renders file, web, and generic tool details without exposing raw JSON', async () => {
     const block = baseBlock({
-      summary: { status: 'success', totalItems: 3, visibleItems: 3, label: '3 actions' },
-      groups: [{
-        groupId: 'mixed',
-        kind: 'mixed',
-        renderer: 'mixed',
-        status: 'success',
-        title: 'Activity',
-        defaultOpen: true,
-        items: [
-          {
-            itemId: 'tool_patch',
-            toolId: 'tool_patch',
-            toolName: 'apply_patch',
-            kind: 'mutation',
-            renderer: 'file_change',
-            status: 'success',
-            label: 'Applied patch',
-            detailRefs: [{
-              refId: 'tool_detail:tool_patch',
-              kind: 'tool_detail',
-              toolId: 'tool_patch',
-              fetchMode: 'endpoint',
-              endpoint: '/patch',
-              title: 'Tool detail',
-            }],
-          },
-          {
-            itemId: 'tool_web',
-            toolId: 'tool_web',
-            toolName: 'web.search',
-            kind: 'research',
-            renderer: 'sources',
-            status: 'success',
-            label: 'Searched the web',
-            detailRefs: [{
-              refId: 'tool_detail:tool_web',
-              kind: 'tool_detail',
-              toolId: 'tool_web',
-              fetchMode: 'endpoint',
-              endpoint: '/web',
-              title: 'Tool detail',
-            }],
-          },
-          {
-            itemId: 'tool_skill',
-            toolId: 'tool_skill',
-            toolName: 'use_skill',
-            kind: 'skill',
-            renderer: 'skill',
-            status: 'success',
-            label: 'Loaded skill',
-            detailRefs: [{
-              refId: 'tool_detail:tool_skill',
-              kind: 'tool_detail',
-              toolId: 'tool_skill',
-              fetchMode: 'endpoint',
-              endpoint: '/skill',
-              title: 'Tool detail',
-            }],
-          },
-        ],
-      }],
+      summary: baseSummary('success', 3),
+      items: [
+        baseItem({
+          item_id: 'tool_patch',
+          tool_id: 'tool_patch',
+          tool_name: 'apply_patch',
+          renderer: 'file_change',
+          label: 'Applied patch',
+          detail_refs: [{
+            ref_id: 'tool_detail:tool_patch',
+            kind: 'tool_detail',
+            tool_id: 'tool_patch',
+            fetch_mode: 'endpoint',
+            endpoint: '/patch',
+            title: 'Tool detail',
+          }],
+        }),
+        baseItem({
+          item_id: 'tool_web',
+          tool_id: 'tool_web',
+          tool_name: 'web.search',
+          renderer: 'sources',
+          label: 'Searched the web',
+          detail_refs: [{
+            ref_id: 'tool_detail:tool_web',
+            kind: 'tool_detail',
+            tool_id: 'tool_web',
+            fetch_mode: 'endpoint',
+            endpoint: '/web',
+            title: 'Tool detail',
+          }],
+        }),
+        baseItem({
+          item_id: 'tool_skill',
+          tool_id: 'tool_skill',
+          tool_name: 'use_skill',
+          renderer: 'skill',
+          label: 'Loaded skill',
+          detail_refs: [{
+            ref_id: 'tool_detail:tool_skill',
+            kind: 'tool_detail',
+            tool_id: 'tool_skill',
+            fetch_mode: 'endpoint',
+            endpoint: '/skill',
+            title: 'Tool detail',
+          }],
+        }),
+      ],
     });
     fetchGatewayJSONMock.mockImplementation((endpoint: string) => {
       if (endpoint === '/patch') {
@@ -499,6 +436,7 @@ describe('ActivityTimelineBlock', () => {
       });
     });
     const host = renderActivity(block);
+    expandTimeline(host);
     const rows = [...host.querySelectorAll('.chat-activity-item-clickable')] as HTMLDivElement[];
 
     rows[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -522,32 +460,21 @@ describe('ActivityTimelineBlock', () => {
   it('shows a product error state and retry action when detail loading fails', async () => {
     fetchGatewayJSONMock.mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce({ stdout: 'ok\n' });
     const host = renderActivity(baseBlock({
-      groups: [{
-        groupId: 'command',
-        kind: 'command',
-        renderer: 'command',
+      summary: baseSummary('error'),
+      items: [baseItem({
         status: 'error',
-        title: 'Ran command',
-        defaultOpen: true,
-        items: [{
-          itemId: 'tool_1',
-          toolId: 'tool_1',
-          toolName: 'terminal.exec',
-          kind: 'command',
-          renderer: 'command',
-          status: 'error',
-          label: 'Ran command',
-          description: 'go test ./...',
-          detailRefs: [{
-            refId: 'terminal_output:tool_1',
-            kind: 'terminal_output',
-            toolId: 'tool_1',
-            fetchMode: 'endpoint',
-            endpoint: '/output',
-            title: 'Command output',
-          }],
+        severity: 'error',
+        needs_attention: true,
+        label: 'Ran command',
+        detail_refs: [{
+          ref_id: 'terminal_output:tool_1',
+          kind: 'terminal_output',
+          tool_id: 'tool_1',
+          fetch_mode: 'endpoint',
+          endpoint: '/output',
+          title: 'Command output',
         }],
-      }],
+      })],
     }));
 
     const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
@@ -569,34 +496,26 @@ describe('ActivityTimelineBlock', () => {
 
   it('renders waiting ask_user activity as readonly status without local controls', () => {
     const block = baseBlock({
-      summary: { status: 'waiting', totalItems: 1, visibleItems: 1, label: '1 input request' },
-      groups: [{
-        groupId: 'interaction',
-        kind: 'interaction',
+      summary: baseSummary('waiting'),
+      items: [baseItem({
+        item_id: 'tool_ask',
+        tool_id: 'tool_ask',
+        tool_name: 'ask_user',
         renderer: 'blocking_prompt',
         status: 'waiting',
         severity: 'blocking',
-        title: 'Needs input',
-        defaultOpen: true,
-        items: [{
-          itemId: 'tool_ask',
-          toolId: 'tool_ask',
-          toolName: 'ask_user',
-          kind: 'interaction',
-          renderer: 'blocking_prompt',
-          status: 'waiting',
-          severity: 'blocking',
-          label: 'Input requested',
-          payload: {
-            questions: [{
-              id: 'q1',
-              header: 'Need input',
-              question: 'Choose next step',
-              response_mode: 'write',
-            }],
-          },
-        }],
-      }],
+        needs_attention: true,
+        label: 'Input requested',
+        detail_refs: undefined,
+        payload: {
+          questions: [{
+            id: 'q1',
+            header: 'Need input',
+            question: 'Choose next step',
+            response_mode: 'write',
+          }],
+        },
+      })],
     });
     const host = renderActivity(block);
 

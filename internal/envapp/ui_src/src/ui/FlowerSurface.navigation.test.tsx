@@ -6,12 +6,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FlowerSurface } from '../../../../flower_ui/src';
 import type {
+  FlowerActivityItem,
+  FlowerActivityTimelineBlock,
   FlowerInputRequest,
   FlowerRouterDecision,
   FlowerSettingsDraft,
   FlowerSurfaceAdapter,
   FlowerSettingsSnapshot,
   FlowerThreadSnapshot,
+  FlowerActivityStatus,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -200,6 +203,64 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
       },
     ],
     ...overrides,
+  };
+}
+
+function activityItem(overrides: Partial<FlowerActivityItem> = {}): FlowerActivityItem {
+  return {
+    item_id: 'tool-terminal',
+    tool_id: 'tool-terminal',
+    tool_name: 'terminal.exec',
+    kind: 'tool',
+    status: 'success',
+    severity: 'quiet',
+    needs_attention: false,
+    requires_approval: false,
+    ...overrides,
+  };
+}
+
+function activityTimeline(args: {
+  run_id?: string;
+  turn_id?: string;
+  status?: FlowerActivityStatus;
+  severity?: 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
+  needs_attention?: boolean;
+  items: readonly FlowerActivityItem[];
+}): FlowerActivityTimelineBlock {
+  const status = args.status ?? 'success';
+  const severity = args.severity ?? (status === 'success' ? 'quiet' : status === 'error' ? 'error' : 'normal');
+  const counts: {
+    pending?: number;
+    running?: number;
+    waiting?: number;
+    success?: number;
+    error?: number;
+    canceled?: number;
+    approval?: number;
+  } = {};
+  for (const item of args.items) {
+    if (item.status === 'pending') counts.pending = (counts.pending ?? 0) + 1;
+    if (item.status === 'running') counts.running = (counts.running ?? 0) + 1;
+    if (item.status === 'waiting') counts.waiting = (counts.waiting ?? 0) + 1;
+    if (item.status === 'success') counts.success = (counts.success ?? 0) + 1;
+    if (item.status === 'error') counts.error = (counts.error ?? 0) + 1;
+    if (item.status === 'canceled') counts.canceled = (counts.canceled ?? 0) + 1;
+    if (item.requires_approval) counts.approval = (counts.approval ?? 0) + 1;
+  }
+  return {
+    type: 'activity-timeline' as const,
+    schema_version: 1,
+    run_id: args.run_id ?? 'run-1',
+    turn_id: args.turn_id ?? 'm-1',
+    summary: {
+      status,
+      severity,
+      needs_attention: args.needs_attention ?? args.items.some((item) => item.needs_attention),
+      total_items: args.items.length,
+      counts,
+    },
+    items: args.items,
   };
 }
 
@@ -1211,13 +1272,21 @@ describe('FlowerSurface navigation', () => {
       created_at_ms: 3_000,
       updated_at_ms: 3_100,
       status: 'running',
-      tool_activity: [
-        {
-          tool_id: 'tool-read',
-          tool_name: 'file.read',
+      activity_timeline: [
+        activityTimeline({
           status: 'running',
-          summary: 'Read file: AGENTS.md',
-        },
+          severity: 'normal',
+          needs_attention: true,
+          items: [activityItem({
+            item_id: 'tool-read',
+            tool_id: 'tool-read',
+            tool_name: 'file.read',
+            status: 'running',
+            severity: 'normal',
+            needs_attention: true,
+            metadata: { target: 'AGENTS.md' },
+          })],
+        }),
       ],
       error: {
         code: 'failed',
@@ -1237,7 +1306,7 @@ describe('FlowerSurface navigation', () => {
       ...detailedThread,
       updated_at_ms: 3_500,
       messages: [],
-      tool_activity: undefined,
+      activity_timeline: undefined,
       error: undefined,
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [detailedThread];
@@ -1264,7 +1333,7 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => delayedDetailReloadStarted);
 
     expect(host.textContent).toContain('Loaded detail stays visible.');
-    expect(host.textContent).toContain('Read file: AGENTS.md');
+    expect(host.textContent).toContain('file.read');
     expect(host.querySelector('.flower-host-tool-activity')).toBeTruthy();
     expect(host.querySelector('.flower-host-error-card')?.textContent).toContain('Provider returned a structured failure.');
   });
@@ -1277,13 +1346,22 @@ describe('FlowerSurface navigation', () => {
       updated_at_ms: 3_900,
       status: 'waiting_user',
       input_request: inputRequest(),
-      tool_activity: [
-        {
-          tool_id: 'tool-ask-user',
-          tool_name: 'ask_user',
+      activity_timeline: [
+        activityTimeline({
           status: 'waiting',
-          summary: 'Waiting for deployment target',
-        },
+          severity: 'blocking',
+          needs_attention: true,
+          items: [activityItem({
+            item_id: 'tool-ask-user',
+            tool_id: 'tool-ask-user',
+            tool_name: 'ask_user',
+            kind: 'control',
+            status: 'waiting',
+            severity: 'blocking',
+            needs_attention: true,
+            attention_reasons: ['waiting'],
+          })],
+        }),
       ],
       messages: [
         {
@@ -1501,7 +1579,7 @@ describe('FlowerSurface navigation', () => {
       updated_at_ms: 4_200,
       status: 'success' as const,
       messages: [],
-      tool_activity: undefined,
+      activity_timeline: undefined,
       input_request: undefined,
       error: undefined,
     };
@@ -1600,7 +1678,7 @@ describe('FlowerSurface navigation', () => {
       ...detailedThread,
       updated_at_ms: 4_500,
       messages: [],
-      tool_activity: undefined,
+      activity_timeline: undefined,
       error: undefined,
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [selectedThread, detailedThread];
@@ -1638,7 +1716,7 @@ describe('FlowerSurface navigation', () => {
       created_at_ms: 4_800,
       updated_at_ms: 4_900,
       messages: [],
-      tool_activity: undefined,
+      activity_timeline: undefined,
       error: undefined,
     });
     let loadStarted = false;
@@ -1703,37 +1781,57 @@ describe('FlowerSurface navigation', () => {
     expect(host.textContent).toContain('Streaming partial answer');
   });
 
-  it('shows every Flower tool activity item without dropping tool names', async () => {
-    const toolNames = [
-      'file.read',
-      'file.edit',
-      'file.write',
-      'apply_patch',
+  it('shows completed Flower activity as a digest before expanding every tool name', async () => {
+    const tool_names = [
       'terminal.exec',
-      'task_complete',
-      'ask_user',
-      'exit_plan_mode',
+      'terminal.exec',
+      'terminal.exec',
+      'terminal.exec',
+      'terminal.exec',
       'write_todos',
+      'task_complete',
     ] as const;
     const toolsThread = thread({
       thread_id: 'thread-tools',
       title: 'Tool activity',
       created_at_ms: 6_000,
       updated_at_ms: 6_500,
-      status: 'running',
-      tool_activity: toolNames.map((toolName, index) => ({
-        tool_id: `tool-${index}`,
-        tool_name: toolName,
-        status: index % 3 === 0 ? 'running' : index % 3 === 1 ? 'success' : 'waiting',
-        summary: `Used ${toolName}`,
-        requires_approval: toolName === 'file.write',
-        approval_state: toolName === 'file.write' ? 'approved' : undefined,
-      })),
+      status: 'success',
+      activity_timeline: [
+        activityTimeline({
+          run_id: 'run-tools',
+          turn_id: 'm-tools',
+          items: tool_names.map((tool_name, index) => activityItem({
+            item_id: `item-${index}`,
+            tool_id: `tool-${index}`,
+            tool_name,
+            kind: tool_name === 'task_complete' ? 'control' : 'tool',
+            status: 'success',
+            severity: 'quiet',
+          })),
+        }),
+      ],
+      todo_snapshot: {
+        version: 4,
+        updated_at_ms: 6_450,
+        summary: {
+          total: 3,
+          pending: 0,
+          in_progress: 0,
+          completed: 3,
+          cancelled: 0,
+        },
+        todos: [
+          { id: 'search', content: 'Search recent AI agent updates', status: 'completed' },
+          { id: 'synthesize', content: 'Synthesize findings', status: 'completed' },
+          { id: 'present', content: 'Draft final answer', status: 'completed' },
+        ],
+      },
       messages: [
         {
           id: 'm-tools',
           role: 'assistant',
-          content: 'I am using tools.',
+          content: 'I finished the answer before the audit trail.',
           status: 'complete',
           created_at_ms: 6_500,
         },
@@ -1749,13 +1847,144 @@ describe('FlowerSurface navigation', () => {
     (host.querySelector('[data-thread-id="thread-tools"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(host.querySelector('.flower-host-tool-activity')));
 
+    expect(host.textContent).toContain('I finished the answer before the audit trail.');
     expect(host.querySelector('.flower-host-tool-activity-heading')?.textContent).toContain('Tool activity');
-    expect(host.querySelectorAll('.flower-host-tool-activity-item')).toHaveLength(toolNames.length);
-    for (const toolName of toolNames) {
-      expect(host.textContent).toContain(toolName);
-      expect(host.textContent).toContain(`Used ${toolName}`);
+    expect(host.textContent).toContain('Ran 5 commands · Updated todos · Completed');
+    expect(host.textContent).toContain('3 / 3 completed');
+    expect(host.textContent).not.toContain('Draft final answer');
+    expect(host.querySelectorAll('.flower-host-tool-activity-item')).toHaveLength(0);
+
+    (host.querySelector('.flower-host-activity-digest-button') as HTMLButtonElement).click();
+    await waitFor(() => host.querySelectorAll('.flower-host-tool-activity-item').length === tool_names.length);
+    for (const tool_name of tool_names) {
+      expect(host.textContent).toContain(tool_name);
     }
-    expect(host.querySelector('.flower-host-tool-activity-item')?.getAttribute('aria-label')).toContain('file.read');
+    expect(host.querySelector('.flower-host-tool-activity-item')?.getAttribute('aria-label')).toContain('terminal.exec');
+
+    (host.querySelector('.flower-host-todo-snapshot-head') as HTMLButtonElement).click();
+    await waitFor(() => host.textContent?.includes('Draft final answer') ?? false);
+  });
+
+  it('keeps waiting activity visible even if a timeline summary is marked digest', async () => {
+    const waitingThread = thread({
+      thread_id: 'thread-waiting-activity',
+      title: 'Waiting activity',
+      created_at_ms: 6_700,
+      updated_at_ms: 6_900,
+      status: 'waiting_user',
+      activity_timeline: [
+        activityTimeline({
+          run_id: 'run-waiting',
+          turn_id: 'm-waiting',
+          status: 'success',
+          severity: 'quiet',
+          needs_attention: true,
+          items: [activityItem({
+            item_id: 'tool-ask',
+            tool_id: 'tool-ask',
+            tool_name: 'ask_user',
+            kind: 'control',
+            status: 'waiting',
+            severity: 'blocking',
+            needs_attention: true,
+            attention_reasons: ['waiting'],
+            metadata: { prompt: 'Choose a target before continuing.' },
+          })],
+        }),
+      ],
+      messages: [
+        {
+          id: 'm-waiting',
+          role: 'assistant',
+          content: 'I need one choice.',
+          status: 'complete',
+          created_at_ms: 6_900,
+        },
+      ],
+    });
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [waitingThread]),
+      loadThread: vi.fn(async () => waitingThread),
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-waiting-activity"] button')));
+    (host.querySelector('[data-thread-id="thread-waiting-activity"] button') as HTMLButtonElement).click();
+    await waitFor(() => host.textContent?.includes('Requested input') ?? false);
+
+    expect(host.querySelectorAll('.flower-host-tool-activity-item')).toHaveLength(1);
+    expect(host.querySelector('.flower-host-activity-digest-button')?.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it.each([
+    {
+      name: 'running',
+      status: 'running' as FlowerActivityStatus,
+      severity: 'normal' as const,
+    },
+    {
+      name: 'error',
+      status: 'error' as FlowerActivityStatus,
+      severity: 'error' as const,
+      description: 'stderr includes a failing test.',
+    },
+    {
+      name: 'approval',
+	      status: 'pending' as FlowerActivityStatus,
+	      severity: 'blocking' as const,
+	      requires_approval: true,
+	      approval_state: 'requested' as const,
+	    },
+  ])('keeps $name activity visible even if a timeline summary is marked digest', async (scenario) => {
+    const attentionThread = thread({
+      thread_id: `thread-${scenario.name}-activity`,
+      title: `${scenario.name} activity`,
+      created_at_ms: 6_910,
+      updated_at_ms: 6_950,
+      status: scenario.status === 'running' ? 'running' : scenario.status === 'error' ? 'failed' : 'waiting_user',
+      activity_timeline: [
+        activityTimeline({
+          run_id: `run-${scenario.name}`,
+          turn_id: `m-${scenario.name}`,
+          status: 'success',
+          severity: 'quiet',
+          needs_attention: true,
+          items: [activityItem({
+            item_id: `item-${scenario.name}`,
+            tool_id: `tool-${scenario.name}`,
+            tool_name: scenario.requires_approval ? 'terminal.exec' : 'shell.exec',
+            kind: 'tool',
+            status: scenario.status,
+            severity: scenario.severity,
+            needs_attention: true,
+            requires_approval: scenario.requires_approval ?? false,
+            approval_state: scenario.approval_state,
+            metadata: scenario.description ? { detail: scenario.description } : undefined,
+          })],
+        }),
+      ],
+      messages: [
+        {
+          id: `m-${scenario.name}`,
+          role: 'assistant',
+          content: `Working on ${scenario.name}.`,
+          status: scenario.status === 'error' ? 'error' : 'complete',
+          created_at_ms: 6_950,
+        },
+      ],
+    });
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [attentionThread]),
+      loadThread: vi.fn(async () => attentionThread),
+    });
+
+    await waitFor(() => Boolean(host.querySelector(`[data-thread-id="thread-${scenario.name}-activity"] button`)));
+    (host.querySelector(`[data-thread-id="thread-${scenario.name}-activity"] button`) as HTMLButtonElement).click();
+    await waitFor(() => host.querySelectorAll('.flower-host-tool-activity-item').length === 1);
+
+    expect(host.querySelectorAll('.flower-host-tool-activity-item')).toHaveLength(1);
+    expect(host.querySelector('.flower-host-activity-digest-button')?.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('renders run and message errors as structured error cards', async () => {

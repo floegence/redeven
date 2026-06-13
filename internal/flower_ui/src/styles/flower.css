@@ -720,6 +720,134 @@ html.dark .flower-component-shell {
   gap: 0.375rem;
 }
 
+.flower-host-activity-runs,
+.flower-host-activity-group-list {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.flower-host-activity-run {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.flower-host-activity-digest-button {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 1.35rem minmax(0, 1fr) auto 1rem;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 50%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--flower-chat-surface) 54%, transparent);
+  color: inherit;
+  cursor: pointer;
+  padding: 0.45rem 0.55rem;
+  text-align: left;
+}
+
+.flower-host-activity-digest-button:hover,
+.flower-host-activity-digest-button:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--primary) 5%, var(--flower-chat-surface));
+  outline: none;
+}
+
+.flower-host-activity-digest-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.flower-host-activity-digest-title {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.flower-host-activity-digest-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 650;
+}
+
+.flower-host-activity-chevron {
+  justify-self: center;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
+  transition: transform 140ms ease;
+}
+
+.flower-host-activity-chevron-open {
+  transform: rotate(180deg);
+}
+
+.flower-host-activity-group {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.35rem;
+  border-left: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent);
+  padding-left: 0.55rem;
+}
+
+.flower-host-activity-group-head {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 1rem minmax(0, auto) minmax(4rem, 1fr);
+  align-items: center;
+  gap: 0.35rem;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+  cursor: pointer;
+  padding: 0.1rem 0;
+  text-align: left;
+}
+
+.flower-host-activity-group-head:hover {
+  color: var(--foreground);
+}
+
+.flower-host-activity-group-head:focus-visible {
+  border-radius: 0.35rem;
+  color: var(--foreground);
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 58%, transparent);
+}
+
+.flower-host-activity-group-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.flower-host-activity-group-subtitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 650;
+}
+
 .flower-host-tool-activity-item {
   display: grid;
   min-width: 0;
@@ -791,6 +919,18 @@ html.dark .flower-component-shell {
   font-weight: 600;
 }
 
+.flower-host-tool-activity-description {
+  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
+}
+
+.flower-host-activity-group .flower-host-tool-activity-summary,
+.flower-host-activity-group .flower-host-tool-activity-name {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 .flower-host-tool-activity-status,
 .flower-host-tool-activity-approval {
   display: inline-flex;
@@ -859,6 +999,137 @@ html.dark .flower-component-shell {
   white-space: nowrap;
   font-size: 0.6875rem;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+}
+
+.flower-host-todo-snapshot {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, #10b981 20%, var(--flower-chat-surface-border));
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 52%, transparent);
+  padding: 0.55rem;
+}
+
+.flower-host-todo-snapshot-head {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: 1.35rem minmax(0, 1fr) 1rem;
+  align-items: center;
+  gap: 0.5rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
+.flower-host-todo-snapshot-head:hover,
+.flower-host-todo-snapshot-head:focus-visible {
+  border-radius: 0.375rem;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+  outline: none;
+}
+
+.flower-host-todo-snapshot-icon,
+.flower-host-todo-check {
+  display: flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, #10b981 13%, transparent);
+  color: color-mix(in srgb, #10b981 74%, var(--foreground) 26%);
+}
+
+.flower-host-todo-snapshot-copy,
+.flower-host-todo-item-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.08rem;
+}
+
+.flower-host-todo-snapshot-title {
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  font-weight: 750;
+}
+
+.flower-host-todo-snapshot-meta {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.71875rem;
+  font-weight: 650;
+}
+
+.flower-host-todo-list {
+  display: grid;
+  min-width: 0;
+  gap: 0.35rem;
+}
+
+.flower-host-todo-item {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 1.35rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 42%, transparent);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--flower-chat-surface) 38%, transparent);
+  padding: 0.4rem 0.5rem;
+}
+
+.flower-host-todo-item-pending .flower-host-todo-check,
+.flower-host-todo-item-in_progress .flower-host-todo-check {
+  background: color-mix(in srgb, var(--warning, #f59e0b) 12%, transparent);
+  color: color-mix(in srgb, var(--warning, #f59e0b) 76%, var(--foreground) 24%);
+}
+
+.flower-host-todo-item-cancelled .flower-host-todo-check {
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  color: var(--destructive);
+}
+
+.flower-host-todo-item-content {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--foreground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 650;
+}
+
+.flower-host-todo-item-note {
+  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
+  font-size: 0.71875rem;
+  font-weight: 600;
+}
+
+.flower-host-todo-status {
+  display: inline-flex;
+  max-width: 8rem;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 50%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted) 24%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+  padding: 0.12rem 0.45rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 750;
 }
 
 .flower-host-input-request-panel {
@@ -1075,6 +1346,16 @@ html.dark .flower-component-shell {
 }
 
 @container (max-width: 860px) {
+  .flower-host-activity-digest-button {
+    grid-template-columns: 1.35rem minmax(0, 1fr) 1rem;
+  }
+
+  .flower-host-activity-digest-button > .flower-host-tool-activity-status {
+    grid-column: 2;
+    justify-self: start;
+    max-width: 100%;
+  }
+
   .flower-host-tool-activity-item {
     grid-template-columns: 1.35rem minmax(0, 1fr);
     align-items: start;
@@ -1104,6 +1385,21 @@ html.dark .flower-component-shell {
 @media (max-width: 780px) {
   .flower-host-message-bubble,
   .flower-host-message-bubble-user {
+    max-width: 100%;
+  }
+
+  .flower-host-activity-digest-button,
+  .flower-host-todo-snapshot-head {
+    grid-template-columns: 1.35rem minmax(0, 1fr) 1rem;
+  }
+
+  .flower-host-todo-item {
+    grid-template-columns: 1.35rem minmax(0, 1fr);
+  }
+
+  .flower-host-todo-status {
+    grid-column: 2;
+    justify-self: start;
     max-width: 100%;
   }
 

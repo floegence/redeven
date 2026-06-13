@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/floegence/floret/observation"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
@@ -125,7 +126,6 @@ type run struct {
 
 	mu              sync.Mutex
 	toolApprovals   map[string]chan bool // tool_id -> decision channel
-	toolBlockIndex  map[string]int       // tool_id -> blockIndex
 	waitingApproval bool
 
 	muLifecycle         sync.Mutex
@@ -145,8 +145,8 @@ type run struct {
 	assistantCreatedAtUnixMs int64
 	assistantBlocks          []any
 	assistantAnswer          assistantAnswerState
-	activityItems            map[string]ActivityItem
-	activityOrder            []string
+	activityEvents           []observation.Event
+	waitingPrompt            *RequestUserInputPrompt
 	providerContinuation     threadstore.ThreadProviderContinuation
 
 	finalizationReason string
@@ -155,9 +155,9 @@ type run struct {
 	webSearchToolEnabled bool
 	webSearchMode        string
 
-	collectedWebSources        map[string]SourceRef // url -> source
-	collectedWebSourceOrder    []string
-	sourcesBlockAlreadyEmitted bool
+	collectedWebSources            map[string]SourceRef // url -> source
+	collectedWebSourceOrder        []string
+	sourcesActivityAlreadyRecorded bool
 
 	subagentDepth         int
 	allowSubagentDelegate bool
@@ -221,7 +221,6 @@ func newRun(opts runOptions) *run {
 		onStreamEvent:             opts.OnStreamEvent,
 		w:                         opts.Writer,
 		toolApprovals:             make(map[string]chan bool),
-		toolBlockIndex:            make(map[string]int),
 		maxWallTime:               opts.MaxWallTime,
 		idleTimeout:               opts.IdleTimeout,
 		toolApprovalTO:            opts.ToolApprovalTimeout,
@@ -231,8 +230,7 @@ func newRun(opts runOptions) *run {
 		collectedWebSourceOrder:   make([]string, 0, 8),
 		currentThinkingBlockIndex: -1,
 		activityBlockIndex:        -1,
-		activityItems:             make(map[string]ActivityItem),
-		activityOrder:             make([]string, 0, 16),
+		activityEvents:            make([]observation.Event, 0, 32),
 		subagentDepth:             opts.SubagentDepth,
 		forceReadonlyExec:         opts.ForceReadonlyExec,
 		toolTargetPolicy:          normalizeToolTargetPolicy(opts.ToolTargetPolicy),
@@ -1345,19 +1343,6 @@ func (r *run) markdownBlockIndicesLocked() []int {
 	return idxs
 }
 
-func (r *run) hasWaitingAskUserBlockLocked() bool {
-	if r == nil {
-		return false
-	}
-	for _, blk := range r.assistantBlocks {
-		_, askUser, waitingUser, _ := extractAskUserToolIdentity(blk)
-		if askUser && waitingUser {
-			return true
-		}
-	}
-	return false
-}
-
 func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
 	if r == nil {
 		return false
@@ -1468,7 +1453,7 @@ func (r *run) reconcileCanonicalWaitingUserMessage() bool {
 	}
 
 	r.muAssistant.Lock()
-	if !r.hasWaitingAskUserBlockLocked() {
+	if r.waitingPrompt == nil {
 		r.muAssistant.Unlock()
 		return false
 	}
@@ -1631,7 +1616,14 @@ type toolCallOutcome struct {
 	RecoveryAction string
 }
 
-func (r *run) persistToolCallSnapshot(toolID string, toolName string, status ToolCallStatus, args map[string]any, result any, toolErr *aitools.ToolError, recoveryAction string, startedAt time.Time, endedAt time.Time) {
+const (
+	toolCallStatusPending = "pending"
+	toolCallStatusRunning = "running"
+	toolCallStatusSuccess = "success"
+	toolCallStatusError   = "error"
+)
+
+func (r *run) persistToolCallSnapshot(toolID string, toolName string, status string, args map[string]any, result any, toolErr *aitools.ToolError, recoveryAction string, startedAt time.Time, endedAt time.Time) {
 	if r == nil {
 		return
 	}
@@ -1666,7 +1658,7 @@ func (r *run) persistToolCallSnapshot(toolID string, toolName string, status Too
 		RunID:           strings.TrimSpace(r.id),
 		ToolID:          strings.TrimSpace(toolID),
 		ToolName:        strings.TrimSpace(toolName),
-		Status:          strings.TrimSpace(string(status)),
+		Status:          strings.TrimSpace(status),
 		ArgsJSON:        argsPersist,
 		ResultJSON:      resultPersist,
 		ErrorCode:       errCode,
@@ -1704,7 +1696,7 @@ func (r *run) persistSyntheticToolSuccess(toolID string, toolName string, args m
 		"tool_name": toolName,
 		"args":      redactAnyForLog("args", argsCopy, 0),
 	})
-	r.persistToolCallSnapshot(toolID, toolName, ToolCallStatusSuccess, argsCopy, result, nil, "", startedAt, startedAt)
+	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusSuccess, argsCopy, result, nil, "", startedAt, startedAt)
 	r.persistRunEvent("tool.result", RealtimeStreamKindTool, map[string]any{
 		"tool_id":   toolID,
 		"tool_name": toolName,
@@ -1883,36 +1875,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		"args_preview", previewAnyForLog(redactToolArgsForLog(toolName, args), 512),
 	)
 
-	r.mu.Lock()
-	idx := r.reserveActivityTimelineBlockIndexLocked()
-	r.needNewTextBlock = true
-	r.needNewThinkingBlock = true
-	r.toolBlockIndex[toolID] = idx
-	r.mu.Unlock()
-
-	block := ToolCallBlock{
-		Type:     "tool-call",
-		ToolName: toolName,
-		ToolID:   toolID,
-		Args:     argsForPersist,
-		Status:   ToolCallStatusPending,
-	}
-	if toolName == "terminal.exec" {
-		// Keep output_ref available across pending/running/error so the UI can always reconcile runtime status.
-		block.Result = buildTerminalExecBlockResult(strings.TrimSpace(r.id), strings.TrimSpace(toolID), terminalExecResultMeta)
-	}
-
-	if requireApprovalForInvocation {
-		block.RequiresApproval = true
-		block.ApprovalState = "required"
-	}
-
-	r.emitPersistedToolBlockSet(idx, block)
 	persistResult := any(nil)
 	if toolName == "terminal.exec" {
 		persistResult = terminalExecResultMeta
 	}
-	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, persistResult, nil, "", toolStartedAt, time.Now())
+	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusPending, argsForPersist, persistResult, nil, "", toolStartedAt, time.Now())
 
 	setToolError := func(toolErr *aitools.ToolError, recoveryAction string, partialResult any) {
 		if toolErr == nil {
@@ -1946,14 +1913,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		if toolName == "terminal.exec" && errorResult == nil {
 			errorResult = terminalExecResultMeta
 		}
-		block.Status = ToolCallStatusError
-		block.Error = toolErr.Message
-		block.ErrorDetails = toolErr
-		if toolName == "terminal.exec" {
-			block.Result = buildTerminalExecBlockResult(strings.TrimSpace(r.id), strings.TrimSpace(toolID), errorResult)
-		}
-		r.emitPersistedToolBlockSet(idx, block)
-		r.persistToolCallSnapshot(toolID, toolName, block.Status, args, errorResult, toolErr, recoveryAction, toolStartedAt, time.Now())
+		r.persistToolCallSnapshot(toolID, toolName, toolCallStatusError, argsForPersist, errorResult, toolErr, recoveryAction, toolStartedAt, time.Now())
 		r.persistRunEvent("tool.error", RealtimeStreamKindTool, map[string]any{
 			"tool_id":   toolID,
 			"tool_name": toolName,
@@ -2055,12 +2015,21 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		return outcome, nil
 	}
 
-	if block.RequiresApproval {
+	if requireApprovalForInvocation {
 		ch := make(chan bool, 1)
 		r.mu.Lock()
 		r.toolApprovals[toolID] = ch
 		r.waitingApproval = true
 		r.mu.Unlock()
+		r.recordObservationActivityEvent(observation.Event{
+			Type:       observation.EventTypeToolApprovalRequested,
+			ToolID:     toolID,
+			ToolName:   toolName,
+			ObservedAt: time.Now(),
+			Metadata: map[string]any{
+				"approval_id": toolID,
+			},
+		})
 		r.persistRunEvent("tool.approval.requested", RealtimeStreamKindLifecycle, map[string]any{"tool_id": toolID, "tool_name": toolName})
 		r.debug("ai.run.tool.approval.requested", "tool_id", toolID, "tool_name", toolName)
 
@@ -2087,28 +2056,63 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		r.mu.Unlock()
 
 		if waitErr != "" {
-			block.ApprovalState = "rejected"
 			toolErr := &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				toolErr = &aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Timed out", Retryable: true}
 			}
+			r.recordObservationActivityEvent(observation.Event{
+				Type:       observation.EventTypeToolApprovalCanceled,
+				ToolID:     toolID,
+				ToolName:   toolName,
+				Error:      strings.TrimSpace(toolErr.Message),
+				ObservedAt: time.Now(),
+				Metadata: map[string]any{
+					"approval_id": toolID,
+				},
+			})
 			setToolError(toolErr, "", nil)
 			return outcome, nil
 		}
 		if timedOut {
 			toolErr := &aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Approval timed out", Retryable: true}
-			block.ApprovalState = "rejected"
+			r.recordObservationActivityEvent(observation.Event{
+				Type:       observation.EventTypeToolApprovalTimedOut,
+				ToolID:     toolID,
+				ToolName:   toolName,
+				Error:      strings.TrimSpace(toolErr.Message),
+				ObservedAt: time.Now(),
+				Metadata: map[string]any{
+					"approval_id": toolID,
+				},
+			})
 			setToolError(toolErr, "", nil)
 			return outcome, nil
 		}
 		if !approved {
 			toolErr := &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "Rejected by user", Retryable: false}
-			block.ApprovalState = "rejected"
+			r.recordObservationActivityEvent(observation.Event{
+				Type:       observation.EventTypeToolApprovalRejected,
+				ToolID:     toolID,
+				ToolName:   toolName,
+				Error:      strings.TrimSpace(toolErr.Message),
+				ObservedAt: time.Now(),
+				Metadata: map[string]any{
+					"approval_id": toolID,
+				},
+			})
 			setToolError(toolErr, "", nil)
 			return outcome, nil
 		}
 
-		block.ApprovalState = "approved"
+		r.recordObservationActivityEvent(observation.Event{
+			Type:       observation.EventTypeToolApprovalApproved,
+			ToolID:     toolID,
+			ToolName:   toolName,
+			ObservedAt: time.Now(),
+			Metadata: map[string]any{
+				"approval_id": toolID,
+			},
+		})
 		r.persistRunEvent("tool.approval.approved", RealtimeStreamKindLifecycle, map[string]any{"tool_id": toolID, "tool_name": toolName})
 		r.debug("ai.run.tool.approval.approved", "tool_id", toolID, "tool_name", toolName)
 	}
@@ -2116,13 +2120,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
 	endBusy := r.beginBusy()
 	defer endBusy()
-	block.Status = ToolCallStatusRunning
-	r.emitPersistedToolBlockSet(idx, block)
 	persistResult = nil
 	if toolName == "terminal.exec" {
 		persistResult = terminalExecResultMeta
 	}
-	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, persistResult, nil, "", toolStartedAt, time.Now())
+	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusRunning, argsForPersist, persistResult, nil, "", toolStartedAt, time.Now())
 
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
@@ -2150,24 +2152,12 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		}
 	}
 
-	block.Status = ToolCallStatusSuccess
-	block.Result = result
-	block.Error = ""
-	block.ErrorDetails = nil
-	if toolName == "terminal.exec" {
-		block.Result = buildTerminalExecBlockResult(strings.TrimSpace(r.id), strings.TrimSpace(toolID), result)
-	}
-
 	if toolName == "web.search" {
 		if parsed, ok := parseWebSearchResult(result); ok {
 			r.recordWebSearchSources(parsed)
-			if md := formatWebSearchMarkdown(parsed); md != "" {
-				block.Children = []any{map[string]any{"type": "markdown", "content": md}}
-			}
 		}
 	}
-	r.emitPersistedToolBlockSet(idx, block)
-	r.persistToolCallSnapshot(toolID, toolName, block.Status, args, result, nil, "", toolStartedAt, time.Now())
+	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusSuccess, argsForPersist, result, nil, "", toolStartedAt, time.Now())
 	r.persistRunEvent("tool.result", RealtimeStreamKindTool, map[string]any{
 		"tool_id":   toolID,
 		"tool_name": toolName,
@@ -2291,15 +2281,6 @@ func (r *run) persistAppendThinkingDelta(idx int, delta string) {
 	}
 }
 
-func (r *run) emitPersistedToolBlockSet(idx int, block ToolCallBlock) {
-	if r == nil || idx < 0 {
-		return
-	}
-	// Persist the compact activity projection before emitting so active-run snapshots cannot regress.
-	activityIdx, timeline := r.projectAndPersistToolActivity(idx, block)
-	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: activityIdx, Block: timeline})
-}
-
 func normalizeSnapshotMessageStatus(status string) string {
 	switch strings.TrimSpace(strings.ToLower(status)) {
 	case "sending":
@@ -2368,14 +2349,8 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 	}
 
 	// Text for history: concatenate user-visible assistant text blocks.
-	var (
-		sb             strings.Builder
-		askUserSummary string
-	)
+	var sb strings.Builder
 	for _, blk := range blocks {
-		if askUserSummary == "" {
-			askUserSummary = extractAskUserSummaryFromBlock(blk)
-		}
 		text := assistantVisibleTextFromBlock(blk)
 		if text == "" {
 			continue
@@ -2388,7 +2363,7 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 
 	assistantText := strings.TrimSpace(sb.String())
 	if assistantText == "" {
-		assistantText = askUserSummary
+		assistantText = r.waitingPromptSummarySnapshot()
 	}
 	if assistantText == "" {
 		assistantText = r.canonicalMarkdownTextSnapshot("")
@@ -2398,54 +2373,6 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 
 func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 	return r.snapshotAssistantMessageJSONWithStatus("complete")
-}
-
-func extractAskUserSummaryFromBlock(block any) string {
-	if summary := activityAskUserSummaryFromBlock(block); summary != "" {
-		return summary
-	}
-	switch v := block.(type) {
-	case ToolCallBlock:
-		switch strings.TrimSpace(v.ToolName) {
-		case "ask_user", "exit_plan_mode":
-		default:
-			return ""
-		}
-		if summary := extractAskUserSummaryFromAny(v.Args); summary != "" {
-			return summary
-		}
-		return extractAskUserSummaryFromAny(v.Result)
-	case *ToolCallBlock:
-		if v == nil {
-			return ""
-		}
-		switch strings.TrimSpace(v.ToolName) {
-		case "ask_user", "exit_plan_mode":
-		default:
-			return ""
-		}
-		if summary := extractAskUserSummaryFromAny(v.Args); summary != "" {
-			return summary
-		}
-		return extractAskUserSummaryFromAny(v.Result)
-	case map[string]any:
-		typ, _ := v["type"].(string)
-		if strings.TrimSpace(typ) != "tool-call" {
-			return ""
-		}
-		toolName, _ := v["toolName"].(string)
-		switch strings.TrimSpace(toolName) {
-		case "ask_user", "exit_plan_mode":
-		default:
-			return ""
-		}
-		if summary := extractAskUserSummaryFromAny(v["args"]); summary != "" {
-			return summary
-		}
-		return extractAskUserSummaryFromAny(v["result"])
-	default:
-		return ""
-	}
 }
 
 func assistantVisibleTextFromBlock(block any) string {
@@ -2460,46 +2387,12 @@ func assistantVisibleTextFromBlock(block any) string {
 	}
 }
 
-func extractAskUserSummaryFromAny(value any) string {
-	switch v := value.(type) {
-	case map[string]any:
-		if prompt := requestUserInputPromptFromAnyValue(v["waiting_prompt"], "", "", ""); prompt != nil {
-			return formatRequestUserInputAssistantSummary(*prompt)
-		}
-	default:
-		if prompt := requestUserInputPromptFromAnyValue(value, "", "", ""); prompt != nil {
-			return formatRequestUserInputAssistantSummary(*prompt)
-		}
+func (r *run) waitingPromptSummarySnapshot() string {
+	prompt := r.snapshotWaitingPrompt()
+	if prompt == nil {
+		return ""
 	}
-	return ""
-}
-
-func requestUserInputPromptFromAnyValue(value any, messageID string, toolID string, toolName string) *RequestUserInputPrompt {
-	if value == nil {
-		return nil
-	}
-	raw, err := json.Marshal(value)
-	if err != nil {
-		return nil
-	}
-	var prompt RequestUserInputPrompt
-	if err := json.Unmarshal(raw, &prompt); err != nil {
-		return nil
-	}
-	normalized := strictRequestUserInputPrompt(&prompt)
-	if normalized == nil {
-		return nil
-	}
-	if want := strings.TrimSpace(messageID); want != "" && strings.TrimSpace(normalized.MessageID) != want {
-		return nil
-	}
-	if want := strings.TrimSpace(toolID); want != "" && strings.TrimSpace(normalized.ToolID) != want {
-		return nil
-	}
-	if want := strings.TrimSpace(toolName); want != "" && strings.TrimSpace(normalized.ToolName) != want {
-		return nil
-	}
-	return normalized
+	return formatRequestUserInputAssistantSummary(*prompt)
 }
 
 func toAnySlice(value any) []any {
@@ -2540,26 +2433,6 @@ func extractStringListFromAny(value any) []string {
 	return out
 }
 
-func extractAskUserQuestions(args any, result any) []RequestUserInputQuestion {
-	if rec, ok := result.(map[string]any); ok {
-		if prompt := requestUserInputPromptFromAnyValue(rec["waiting_prompt"], "", "", ""); prompt != nil {
-			return prompt.Questions
-		}
-		if questions := parseAskUserQuestionsAny(rec["questions"]); len(questions) > 0 {
-			return questions
-		}
-	}
-	if questions := parseAskUserQuestionsAny(args); len(questions) > 0 {
-		return questions
-	}
-	if rec, ok := args.(map[string]any); ok {
-		if questions := parseAskUserQuestionsAny(rec["questions"]); len(questions) > 0 {
-			return questions
-		}
-	}
-	return nil
-}
-
 func parseAskUserQuestionsAny(value any) []RequestUserInputQuestion {
 	switch v := value.(type) {
 	case []RequestUserInputQuestion:
@@ -2582,172 +2455,6 @@ func parseAskUserQuestionsAny(value any) []RequestUserInputQuestion {
 		questions = append(questions, question)
 	}
 	return normalizeRequestUserInputQuestions(questions)
-}
-
-func extractAskUserToolIdentity(block any) (toolID string, askUser bool, waitingUser bool, questions []RequestUserInputQuestion) {
-	if prompt, waiting := activityPromptSnapshotFromBlock(block, ""); prompt != nil && strings.TrimSpace(prompt.ToolID) != "" {
-		return strings.TrimSpace(prompt.ToolID), true, waiting, prompt.Questions
-	}
-	switch v := block.(type) {
-	case ToolCallBlock:
-		switch strings.TrimSpace(v.ToolName) {
-		case "ask_user":
-			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID), "ask_user")
-			if prompt == nil {
-				return "", false, false, nil
-			}
-			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), prompt.Questions
-		case "exit_plan_mode":
-			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID), "exit_plan_mode")
-			if prompt == nil {
-				return "", false, false, nil
-			}
-			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), prompt.Questions
-		default:
-			return "", false, false, nil
-		}
-	case *ToolCallBlock:
-		if v == nil {
-			return "", false, false, nil
-		}
-		switch strings.TrimSpace(v.ToolName) {
-		case "ask_user":
-			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID), "ask_user")
-			if prompt == nil {
-				return "", false, false, nil
-			}
-			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), prompt.Questions
-		case "exit_plan_mode":
-			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v.Result), "", strings.TrimSpace(v.ToolID), "exit_plan_mode")
-			if prompt == nil {
-				return "", false, false, nil
-			}
-			return strings.TrimSpace(v.ToolID), true, extractAskUserWaitingFlag(v.Result), prompt.Questions
-		default:
-			return "", false, false, nil
-		}
-	case map[string]any:
-		typ, _ := v["type"].(string)
-		if strings.TrimSpace(typ) != "tool-call" {
-			return "", false, false, nil
-		}
-		toolName, _ := v["toolName"].(string)
-		switch strings.TrimSpace(toolName) {
-		case "ask_user":
-			toolID, _ := v["toolId"].(string)
-			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v["result"]), "", strings.TrimSpace(toolID), "ask_user")
-			if prompt == nil {
-				return "", false, false, nil
-			}
-			return strings.TrimSpace(toolID), true, extractAskUserWaitingFlag(v["result"]), prompt.Questions
-		case "exit_plan_mode":
-			toolID, _ := v["toolId"].(string)
-			prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(v["result"]), "", strings.TrimSpace(toolID), "exit_plan_mode")
-			if prompt == nil {
-				return "", false, false, nil
-			}
-			return strings.TrimSpace(toolID), true, extractAskUserWaitingFlag(v["result"]), prompt.Questions
-		default:
-			return "", false, false, nil
-		}
-	default:
-		return "", false, false, nil
-	}
-}
-
-func extractNestedWaitingPromptAny(value any) any {
-	m, _ := value.(map[string]any)
-	if len(m) == 0 {
-		return nil
-	}
-	return m["waiting_prompt"]
-}
-
-func extractAskUserWaitingFlag(value any) bool {
-	m, ok := value.(map[string]any)
-	if !ok || m == nil {
-		return false
-	}
-	raw, ok := m["waiting_user"]
-	if !ok {
-		return false
-	}
-	switch v := raw.(type) {
-	case bool:
-		return v
-	case string:
-		return strings.EqualFold(strings.TrimSpace(v), "true")
-	default:
-		return false
-	}
-}
-
-func extractAskUserPromptSnapshot(block any, messageID string) (*RequestUserInputPrompt, bool) {
-	if prompt, waitingUser := activityPromptSnapshotFromBlock(block, messageID); prompt != nil {
-		return prompt, waitingUser
-	}
-	toolID, askUser, waitingUser, _ := extractAskUserToolIdentity(block)
-	if !askUser || strings.TrimSpace(toolID) == "" {
-		return nil, false
-	}
-
-	var result map[string]any
-	switch v := block.(type) {
-	case ToolCallBlock:
-		result, _ = v.Result.(map[string]any)
-	case *ToolCallBlock:
-		if v == nil {
-			return nil, false
-		}
-		result, _ = v.Result.(map[string]any)
-	case map[string]any:
-		result, _ = v["result"].(map[string]any)
-	default:
-		return nil, false
-	}
-
-	toolName := ""
-	switch v := block.(type) {
-	case ToolCallBlock:
-		toolName = strings.TrimSpace(v.ToolName)
-	case *ToolCallBlock:
-		if v != nil {
-			toolName = strings.TrimSpace(v.ToolName)
-		}
-	case map[string]any:
-		toolName = strings.TrimSpace(anyToString(v["toolName"]))
-	}
-	if prompt := requestUserInputPromptFromAnyValue(extractNestedWaitingPromptAny(result), strings.TrimSpace(messageID), strings.TrimSpace(toolID), toolName); prompt != nil {
-		return prompt, waitingUser
-	}
-	return nil, false
-}
-
-func (r *run) snapshotWaitingPrompt() *RequestUserInputPrompt {
-	if r == nil {
-		return nil
-	}
-	messageID := strings.TrimSpace(r.messageID)
-	if messageID == "" {
-		return nil
-	}
-
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-
-	if len(r.assistantBlocks) == 0 {
-		return nil
-	}
-	for i := len(r.assistantBlocks) - 1; i >= 0; i-- {
-		prompt, waitingUser := extractAskUserPromptSnapshot(r.assistantBlocks[i], messageID)
-		if prompt == nil {
-			continue
-		}
-		if waitingUser {
-			return prompt
-		}
-	}
-	return nil
 }
 
 func parseWebSearchResult(result any) (websearch.SearchResult, bool) {
@@ -2777,81 +2484,6 @@ func parseWebSearchResult(result any) (websearch.SearchResult, bool) {
 		}
 		return out, true
 	}
-}
-
-func escapeMarkdownLinkText(s string) string {
-	if s == "" {
-		return ""
-	}
-	s = strings.ReplaceAll(s, "[", "\\[")
-	s = strings.ReplaceAll(s, "]", "\\]")
-	return s
-}
-
-func formatWebSearchMarkdown(res websearch.SearchResult) string {
-	items := res.Results
-	if len(items) == 0 {
-		items = res.Sources
-	}
-	if len(items) == 0 {
-		return ""
-	}
-
-	var sb strings.Builder
-	sb.WriteString("Top results:\n")
-	shown := 0
-	for _, item := range items {
-		rawURL := strings.TrimSpace(item.URL)
-		if rawURL == "" {
-			continue
-		}
-		title := strings.TrimSpace(item.Title)
-		if title == "" {
-			title = rawURL
-		}
-		title = escapeMarkdownLinkText(title)
-		snippet := strings.TrimSpace(item.Snippet)
-		snippet = strings.ReplaceAll(snippet, "\n", " ")
-		snippet = strings.ReplaceAll(snippet, "\r", " ")
-		snippet = strings.TrimSpace(snippet)
-
-		shown++
-		if snippet != "" {
-			sb.WriteString(fmt.Sprintf("%d. [%s](%s) - %s\n", shown, title, rawURL, snippet))
-		} else {
-			sb.WriteString(fmt.Sprintf("%d. [%s](%s)\n", shown, title, rawURL))
-		}
-		if shown >= 8 {
-			break
-		}
-	}
-	return strings.TrimSpace(sb.String())
-}
-
-func formatSourcesMarkdown(sources []SourceRef) string {
-	if len(sources) == 0 {
-		return ""
-	}
-	var sb strings.Builder
-	sb.WriteString("Sources:\n")
-	shown := 0
-	for _, src := range sources {
-		url := strings.TrimSpace(src.URL)
-		if url == "" {
-			continue
-		}
-		title := strings.TrimSpace(src.Title)
-		if title == "" {
-			title = url
-		}
-		title = escapeMarkdownLinkText(title)
-		shown++
-		sb.WriteString(fmt.Sprintf("%d. [%s](%s)\n", shown, title, url))
-		if shown >= 20 {
-			break
-		}
-	}
-	return strings.TrimSpace(sb.String())
 }
 
 func normalizeWebURL(raw string) (string, bool) {
@@ -2926,16 +2558,14 @@ func (r *run) recordWebSearchSources(res websearch.SearchResult) {
 	}
 }
 
-func (r *run) emitSourcesToolBlock(source string) {
+func (r *run) recordSourcesActivity(_ string) {
 	if r == nil {
 		return
 	}
-	source = strings.TrimSpace(source)
 
 	var sources []SourceRef
-	var idx int
 	r.mu.Lock()
-	if r.sourcesBlockAlreadyEmitted {
+	if r.sourcesActivityAlreadyRecorded {
 		r.mu.Unlock()
 		return
 	}
@@ -2953,29 +2583,23 @@ func (r *run) emitSourcesToolBlock(source string) {
 		r.mu.Unlock()
 		return
 	}
-	r.sourcesBlockAlreadyEmitted = true
-	idx = r.reserveActivityTimelineBlockIndexLocked()
-	r.needNewTextBlock = true
-	r.needNewThinkingBlock = true
+	r.sourcesActivityAlreadyRecorded = true
 	r.mu.Unlock()
 
 	toolID, err := newToolID()
 	if err != nil {
-		toolID = "tool_sources"
+		toolID = "activity_sources"
 	}
-	block := ToolCallBlock{
-		Type:     "tool-call",
-		ToolName: "sources",
-		ToolID:   toolID,
-		Args:     map[string]any{"source": source},
-		Status:   ToolCallStatusSuccess,
-		Result:   map[string]any{"sources": sources},
-		Children: nil,
-	}
-	if md := formatSourcesMarkdown(sources); md != "" {
-		block.Children = []any{map[string]any{"type": "markdown", "content": md}}
-	}
-	r.emitPersistedToolBlockSet(idx, block)
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeHostedToolResult,
+		ToolID:     toolID,
+		ToolName:   "sources",
+		ToolKind:   "hosted",
+		ObservedAt: time.Now(),
+		Metadata: map[string]any{
+			"result_count": len(sources),
+		},
+	})
 }
 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, toolName string, args map[string]any) (any, error) {
@@ -3671,38 +3295,6 @@ func defaultTerminalExecRunner(ctx context.Context, inv terminalExecInvocation) 
 		return outcome, nil
 	}
 	return terminalExecOutcome{}, runErr
-}
-
-func buildTerminalExecBlockResult(runID string, toolID string, raw any) map[string]any {
-	out := map[string]any{
-		"output_ref": map[string]any{
-			"run_id":  strings.TrimSpace(runID),
-			"tool_id": strings.TrimSpace(toolID),
-		},
-	}
-	resultMap, _ := raw.(map[string]any)
-	if resultMap == nil {
-		return out
-	}
-	copyField := func(key string) {
-		if v, ok := resultMap[key]; ok {
-			out[key] = v
-		}
-	}
-	copyField("exit_code")
-	copyField("duration_ms")
-	copyField("timed_out")
-	copyField("truncated")
-	copyField("timeout_ms")
-	copyField("requested_timeout_ms")
-	copyField("timeout_source")
-	if stdout, _ := resultMap["stdout"].(string); stdout != "" {
-		out["stdout_bytes"] = len(stdout)
-	}
-	if stderr, _ := resultMap["stderr"].(string); stderr != "" {
-		out["stderr_bytes"] = len(stderr)
-	}
-	return out
 }
 
 func terminalExecTimeoutToolError(result any) *aitools.ToolError {

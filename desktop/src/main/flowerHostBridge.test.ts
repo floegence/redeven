@@ -171,6 +171,44 @@ function bridgeArgs(root: string) {
   };
 }
 
+function validActivityTimeline(): Record<string, unknown> {
+  return {
+    type: 'activity-timeline',
+    schema_version: 1,
+    run_id: 'run-1',
+    turn_id: 'm-streaming',
+    summary: {
+      status: 'success',
+      severity: 'quiet',
+      needs_attention: false,
+      total_items: 2,
+      counts: { success: 2 },
+    },
+    items: [
+      {
+        item_id: 'tool-terminal',
+        tool_id: 'tool-terminal',
+        tool_name: 'terminal.exec',
+        kind: 'tool',
+        status: 'success',
+        severity: 'quiet',
+        needs_attention: false,
+        requires_approval: false,
+      },
+      {
+        item_id: 'tool-done',
+        tool_id: 'tool-done',
+        tool_name: 'task_complete',
+        kind: 'control',
+        status: 'success',
+        severity: 'quiet',
+        needs_attention: false,
+        requires_approval: false,
+      },
+    ],
+  };
+}
+
 function validThreadResponse(): Record<string, unknown> {
   return {
     thread_id: 'thread-streaming',
@@ -194,20 +232,28 @@ function validThreadResponse(): Record<string, unknown> {
         blocks: [
           { type: 'thinking', content: 'Checking context.' },
           { type: 'markdown', content: 'Partial answer' },
+          validActivityTimeline(),
         ],
       },
     ],
-    tool_activity: [
-      {
-        run_id: 'run-1',
-        tool_id: 'tool-terminal',
-        tool_name: 'terminal.exec',
-        status: 'success',
-        summary: 'Run command',
-        started_at_ms: 80,
-        ended_at_ms: 89,
-      },
+    activity_timeline: [
+      validActivityTimeline(),
     ],
+    todo_snapshot: {
+      version: 4,
+      updated_at_ms: 95,
+      summary: {
+        total: 2,
+        pending: 0,
+        in_progress: 0,
+        completed: 2,
+        cancelled: 0,
+      },
+      todos: [
+        { id: 'todo-1', content: 'Inspect context', status: 'completed' },
+        { id: 'todo-2', content: 'Write answer', status: 'completed' },
+      ],
+    },
     error: {
       code: 'failed',
       message: 'provider rejected request',
@@ -428,7 +474,7 @@ describe('Flower Host bridge lifecycle', () => {
     }
   });
 
-  it('preserves message blocks, tool activity, errors, and stable creation time from thread responses', async () => {
+  it('preserves message blocks, activity timelines, errors, and stable creation time from thread responses', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
     threadResponse = validThreadResponse();
     try {
@@ -449,23 +495,84 @@ describe('Flower Host bridge lifecycle', () => {
         blocks: [
           { type: 'thinking', content: 'Checking context.' },
           { type: 'markdown', content: 'Partial answer' },
+          expect.objectContaining({
+            type: 'activity-timeline',
+            run_id: 'run-1',
+            summary: expect.objectContaining({
+              status: 'success',
+              total_items: 2,
+            }),
+          }),
         ],
       });
-      expect(thread.tool_activity).toEqual([
-        {
-          run_id: 'run-1',
-          tool_id: 'tool-terminal',
-          tool_name: 'terminal.exec',
+      expect(thread.activity_timeline?.[0]).toMatchObject({
+        type: 'activity-timeline',
+        run_id: 'run-1',
+        summary: {
           status: 'success',
-          summary: 'Run command',
-          started_at_ms: 80,
-          ended_at_ms: 89,
+          severity: 'quiet',
+          needs_attention: false,
+          total_items: 2,
+          counts: { success: 2 },
         },
-      ]);
+        items: [
+          expect.objectContaining({
+            item_id: 'tool-terminal',
+            tool_name: 'terminal.exec',
+            status: 'success',
+          }),
+          expect.objectContaining({
+            item_id: 'tool-done',
+            tool_name: 'task_complete',
+            kind: 'control',
+          }),
+        ],
+      });
+      expect(thread.todo_snapshot).toEqual({
+        version: 4,
+        updated_at_ms: 95,
+        summary: {
+          total: 2,
+          pending: 0,
+          in_progress: 0,
+          completed: 2,
+          cancelled: 0,
+        },
+        todos: [
+          { id: 'todo-1', content: 'Inspect context', status: 'completed' },
+          { id: 'todo-2', content: 'Write answer', status: 'completed' },
+        ],
+      });
       expect(thread.error).toEqual({
         code: 'failed',
         message: 'provider rejected request',
       });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects unsupported activity approval states from thread responses', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    const timeline = validActivityTimeline();
+    const items = timeline.items as Array<Record<string, unknown>>;
+    items[0] = {
+      ...items[0],
+      requires_approval: true,
+      approval_state: 'required',
+    };
+    threadResponse = {
+      ...validThreadResponse(),
+      messages: [],
+      activity_timeline: [timeline],
+    };
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      await expect(bridge.loadFlowerHostThreadViaBridge({
+        ...bridgeArgs(root),
+        threadID: 'thread-streaming',
+      })).rejects.toThrow('thread.activity_timeline[0].items[0].approval_state has unsupported value "required"');
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

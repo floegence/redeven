@@ -342,33 +342,9 @@ func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *te
 	r := &run{
 		messageID:                "msg_ask_user",
 		assistantCreatedAtUnixMs: 1700000000000,
-		assistantBlocks: []any{
-			ToolCallBlock{
-				Type:     "tool-call",
-				ToolName: "ask_user",
-				ToolID:   "tool_ask_user_waiting",
-				Args: map[string]any{
-					"questions": []any{
-						map[string]any{
-							"id":                "question_1",
-							"header":            question,
-							"question":          question,
-							"is_secret":         false,
-							"response_mode":     requestUserInputResponseModeWrite,
-							"write_label":       "Your answer",
-							"write_placeholder": "Type your answer",
-						},
-					},
-				},
-				Status: ToolCallStatusSuccess,
-				Result: map[string]any{
-					"waiting_prompt": prompt,
-					"source":         "model_signal",
-					"waiting_user":   true,
-				},
-			},
-		},
+		assistantBlocks:          []any{activityTimelinePlaceholder("run_ask_user")},
 	}
+	r.setWaitingPrompt(prompt)
 
 	rawJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()
 	if err != nil {
@@ -380,8 +356,8 @@ func TestSnapshotAssistantMessageJSON_UsesAskUserQuestionWhenMarkdownEmpty(t *te
 	if assistantAt != 1700000000000 {
 		t.Fatalf("assistantAt=%d, want %d", assistantAt, 1700000000000)
 	}
-	if !strings.Contains(rawJSON, `"toolName":"ask_user"`) {
-		t.Fatalf("assistant JSON missing ask_user block: %s", rawJSON)
+	if strings.Contains(rawJSON, `"tool-call"`) || strings.Contains(rawJSON, `"toolName"`) {
+		t.Fatalf("assistant JSON contains removed tool-call block: %s", rawJSON)
 	}
 }
 
@@ -444,27 +420,10 @@ func TestSnapshotWaitingPrompt_ExtractsStructuredQuestions(t *testing.T) {
 		t.Fatalf("prompt should not be nil")
 	}
 	r := &run{
-		messageID: "msg_waiting_prompt_structured",
-		assistantBlocks: []any{
-			ToolCallBlock{
-				Type:     "tool-call",
-				ToolName: "ask_user",
-				ToolID:   "tool_waiting_prompt_structured",
-				Status:   ToolCallStatusSuccess,
-				Args: map[string]any{
-					"reason_code":        AskUserReasonUserDecisionRequired,
-					"required_from_user": []any{"Choose execution mode"},
-					"evidence_refs":      []any{"tool_approval_1"},
-					"questions":          prompt.Questions,
-				},
-				Result: map[string]any{
-					"waiting_prompt": prompt,
-					"questions":      prompt.Questions,
-					"waiting_user":   true,
-				},
-			},
-		},
+		messageID:       "msg_waiting_prompt_structured",
+		assistantBlocks: []any{activityTimelinePlaceholder("run_waiting_prompt_structured")},
 	}
+	r.setWaitingPrompt(prompt)
 
 	gotPrompt := r.snapshotWaitingPrompt()
 	if gotPrompt == nil {
@@ -519,24 +478,7 @@ func TestSnapshotAssistantMessageJSON_PrefersMarkdownOverAskUserQuestion(t *test
 		assistantCreatedAtUnixMs: 1700000000001,
 		assistantBlocks: []any{
 			&persistedMarkdownBlock{Type: "markdown", Content: "completed summary"},
-			map[string]any{
-				"type":     "tool-call",
-				"toolName": "ask_user",
-				"toolId":   "tool_ask_user_waiting",
-				"args": map[string]any{
-					"questions": []any{
-						map[string]any{
-							"id":                "question_1",
-							"header":            "Please provide more details",
-							"question":          "Please provide more details",
-							"is_secret":         false,
-							"response_mode":     requestUserInputResponseModeWrite,
-							"write_label":       "Your answer",
-							"write_placeholder": "Type your answer",
-						},
-					},
-				},
-			},
+			activityTimelinePlaceholder("run_markdown_first"),
 		},
 	}
 

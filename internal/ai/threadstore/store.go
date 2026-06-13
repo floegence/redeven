@@ -1752,30 +1752,6 @@ type ToolCallRecord struct {
 	LatencyMS       int64  `json:"latency_ms"`
 }
 
-type ActivityItemRecord struct {
-	ID              int64  `json:"id,omitempty"`
-	EndpointID      string `json:"endpoint_id"`
-	ThreadID        string `json:"thread_id"`
-	RunID           string `json:"run_id"`
-	MessageID       string `json:"message_id"`
-	GroupID         string `json:"group_id"`
-	ItemID          string `json:"item_id"`
-	ToolID          string `json:"tool_id"`
-	ToolName        string `json:"tool_name"`
-	Kind            string `json:"kind"`
-	Renderer        string `json:"renderer"`
-	Status          string `json:"status"`
-	Severity        string `json:"severity"`
-	SummaryJSON     string `json:"summary_json"`
-	DetailRefsJSON  string `json:"detail_refs_json"`
-	TargetRefsJSON  string `json:"target_refs_json"`
-	PayloadJSON     string `json:"payload_json"`
-	OrderIndex      int    `json:"order_index"`
-	StartedAtUnixMs int64  `json:"started_at_unix_ms"`
-	EndedAtUnixMs   int64  `json:"ended_at_unix_ms"`
-	UpdatedAtUnixMs int64  `json:"updated_at_unix_ms"`
-}
-
 type RunEventRecord struct {
 	ID          int64  `json:"id"`
 	EndpointID  string `json:"endpoint_id"`
@@ -2139,142 +2115,6 @@ ON CONFLICT(run_id, tool_id) DO UPDATE SET
   latency_ms=excluded.latency_ms
 `, rec.RunID, rec.ToolID, rec.ToolName, rec.Status, rec.ArgsJSON, rec.ResultJSON, rec.ErrorCode, rec.ErrorMessage, boolToInt(rec.Retryable), rec.RecoveryAction, rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.LatencyMS)
 	return err
-}
-
-func (s *Store) UpsertActivityItem(ctx context.Context, rec ActivityItemRecord) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
-	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
-	rec.RunID = strings.TrimSpace(rec.RunID)
-	rec.MessageID = strings.TrimSpace(rec.MessageID)
-	rec.GroupID = strings.TrimSpace(rec.GroupID)
-	rec.ItemID = strings.TrimSpace(rec.ItemID)
-	rec.ToolID = strings.TrimSpace(rec.ToolID)
-	rec.ToolName = strings.TrimSpace(rec.ToolName)
-	rec.Kind = strings.TrimSpace(rec.Kind)
-	rec.Renderer = strings.TrimSpace(rec.Renderer)
-	rec.Status = strings.TrimSpace(rec.Status)
-	rec.Severity = strings.TrimSpace(rec.Severity)
-	rec.SummaryJSON = strings.TrimSpace(rec.SummaryJSON)
-	rec.DetailRefsJSON = strings.TrimSpace(rec.DetailRefsJSON)
-	rec.TargetRefsJSON = strings.TrimSpace(rec.TargetRefsJSON)
-	rec.PayloadJSON = strings.TrimSpace(rec.PayloadJSON)
-	if rec.EndpointID == "" || rec.ThreadID == "" || rec.RunID == "" || rec.MessageID == "" || rec.GroupID == "" || rec.ItemID == "" || rec.Kind == "" || rec.Renderer == "" || rec.Status == "" {
-		return errors.New("invalid activity item record")
-	}
-	if rec.Severity == "" {
-		rec.Severity = "normal"
-	}
-	if rec.SummaryJSON == "" {
-		rec.SummaryJSON = "{}"
-	}
-	if rec.DetailRefsJSON == "" {
-		rec.DetailRefsJSON = "[]"
-	}
-	if rec.TargetRefsJSON == "" {
-		rec.TargetRefsJSON = "[]"
-	}
-	if rec.PayloadJSON == "" {
-		rec.PayloadJSON = "{}"
-	}
-	now := time.Now().UnixMilli()
-	if rec.UpdatedAtUnixMs <= 0 {
-		rec.UpdatedAtUnixMs = now
-	}
-	_, err := s.db.ExecContext(ctx, `
-INSERT INTO ai_activity_items(
-  endpoint_id, thread_id, run_id, message_id, group_id, item_id,
-  tool_id, tool_name, kind, renderer, status, severity,
-  summary_json, detail_refs_json, target_refs_json, payload_json,
-  order_index, started_at_unix_ms, ended_at_unix_ms, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(run_id, item_id) DO UPDATE SET
-  endpoint_id=excluded.endpoint_id,
-  thread_id=excluded.thread_id,
-  message_id=excluded.message_id,
-  group_id=excluded.group_id,
-  tool_id=excluded.tool_id,
-  tool_name=excluded.tool_name,
-  kind=excluded.kind,
-  renderer=excluded.renderer,
-  status=excluded.status,
-  severity=excluded.severity,
-  summary_json=excluded.summary_json,
-  detail_refs_json=excluded.detail_refs_json,
-  target_refs_json=excluded.target_refs_json,
-  payload_json=excluded.payload_json,
-  order_index=excluded.order_index,
-  started_at_unix_ms=excluded.started_at_unix_ms,
-  ended_at_unix_ms=excluded.ended_at_unix_ms,
-  updated_at_unix_ms=excluded.updated_at_unix_ms
-`, rec.EndpointID, rec.ThreadID, rec.RunID, rec.MessageID, rec.GroupID, rec.ItemID, rec.ToolID, rec.ToolName, rec.Kind, rec.Renderer, rec.Status, rec.Severity, rec.SummaryJSON, rec.DetailRefsJSON, rec.TargetRefsJSON, rec.PayloadJSON, rec.OrderIndex, rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.UpdatedAtUnixMs)
-	return err
-}
-
-func (s *Store) ListRunActivityItems(ctx context.Context, endpointID string, runID string) ([]ActivityItemRecord, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	runID = strings.TrimSpace(runID)
-	if endpointID == "" || runID == "" {
-		return nil, errors.New("invalid activity items request")
-	}
-	rows, err := s.db.QueryContext(ctx, `
-SELECT id, endpoint_id, thread_id, run_id, message_id, group_id, item_id,
-       tool_id, tool_name, kind, renderer, status, severity,
-       summary_json, detail_refs_json, target_refs_json, payload_json,
-       order_index, started_at_unix_ms, ended_at_unix_ms, updated_at_unix_ms
-FROM ai_activity_items
-WHERE endpoint_id = ? AND run_id = ?
-ORDER BY order_index ASC, id ASC
-`, endpointID, runID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make([]ActivityItemRecord, 0, 16)
-	for rows.Next() {
-		var rec ActivityItemRecord
-		if err := rows.Scan(
-			&rec.ID,
-			&rec.EndpointID,
-			&rec.ThreadID,
-			&rec.RunID,
-			&rec.MessageID,
-			&rec.GroupID,
-			&rec.ItemID,
-			&rec.ToolID,
-			&rec.ToolName,
-			&rec.Kind,
-			&rec.Renderer,
-			&rec.Status,
-			&rec.Severity,
-			&rec.SummaryJSON,
-			&rec.DetailRefsJSON,
-			&rec.TargetRefsJSON,
-			&rec.PayloadJSON,
-			&rec.OrderIndex,
-			&rec.StartedAtUnixMs,
-			&rec.EndedAtUnixMs,
-			&rec.UpdatedAtUnixMs,
-		); err != nil {
-			return nil, err
-		}
-		out = append(out, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (s *Store) ListRecentThreadToolCalls(ctx context.Context, endpointID string, threadID string, limit int) ([]ToolCallRecord, error) {
@@ -2680,10 +2520,7 @@ func buildPreview(role string, text string, messageJSON string) string {
 }
 
 func latestAssistantPreviewText(messageJSON string) string {
-	if latest := latestAssistantVisibleText(messageJSON); latest != "" {
-		return latest
-	}
-	return latestAssistantStructuredPreview(messageJSON)
+	return latestAssistantVisibleText(messageJSON)
 }
 
 func latestAssistantVisibleText(messageJSON string) string {
@@ -2717,113 +2554,28 @@ func assistantVisibleTextFromBlock(raw json.RawMessage) string {
 		return ""
 	}
 	switch strings.ToLower(strings.TrimSpace(meta.Type)) {
-	case "markdown":
+	case "markdown", "text", "thinking":
 		var block struct {
 			Content string `json:"content"`
+			Text    string `json:"text"`
 		}
 		if err := json.Unmarshal(raw, &block); err != nil {
 			return ""
 		}
-		return strings.TrimSpace(block.Content)
+		return strings.TrimSpace(firstNonEmpty(block.Content, block.Text))
 	default:
 		return ""
 	}
 }
 
-func latestAssistantStructuredPreview(messageJSON string) string {
-	raw := strings.TrimSpace(messageJSON)
-	if raw == "" {
-		return ""
-	}
-
-	var payload struct {
-		Blocks []json.RawMessage `json:"blocks"`
-	}
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return ""
-	}
-	for i := len(payload.Blocks) - 1; i >= 0; i-- {
-		if preview := assistantStructuredPreviewFromBlock(payload.Blocks[i]); preview != "" {
-			return preview
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			return value
 		}
 	}
 	return ""
-}
-
-func assistantStructuredPreviewFromBlock(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	var meta struct {
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(raw, &meta); err != nil {
-		return ""
-	}
-	switch strings.ToLower(strings.TrimSpace(meta.Type)) {
-	case "tool-call":
-		var block struct {
-			ToolName string          `json:"toolName"`
-			Args     json.RawMessage `json:"args"`
-			Result   json.RawMessage `json:"result"`
-		}
-		if err := json.Unmarshal(raw, &block); err != nil {
-			return ""
-		}
-		switch strings.TrimSpace(block.ToolName) {
-		case "ask_user":
-			return extractAskUserPreviewText(block.Result, block.Args)
-		case "task_complete":
-			return extractTaskCompletePreviewText(block.Args)
-		default:
-			return ""
-		}
-	default:
-		return ""
-	}
-}
-
-func extractAskUserPreviewText(candidates ...json.RawMessage) string {
-	for _, raw := range candidates {
-		if len(raw) == 0 {
-			continue
-		}
-		var payload struct {
-			PublicSummary string `json:"public_summary"`
-			Questions     []struct {
-				Header   string `json:"header"`
-				Question string `json:"question"`
-			} `json:"questions"`
-		}
-		if err := json.Unmarshal(raw, &payload); err != nil {
-			continue
-		}
-		if summary := strings.TrimSpace(payload.PublicSummary); summary != "" {
-			return summary
-		}
-		for _, question := range payload.Questions {
-			if text := strings.TrimSpace(question.Question); text != "" {
-				return text
-			}
-			if header := strings.TrimSpace(question.Header); header != "" {
-				return header
-			}
-		}
-	}
-	return ""
-}
-
-func extractTaskCompletePreviewText(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	var payload struct {
-		Result string `json:"result"`
-	}
-	if err := json.Unmarshal(raw, &payload); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(payload.Result)
 }
 
 func truncateRunes(s string, max int) string {

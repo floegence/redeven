@@ -39,6 +39,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if r == nil {
 		return
 	}
+	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:
 		r.persistRunEvent("floret.provider.request", RealtimeStreamKindLifecycle, map[string]any{
@@ -106,7 +107,5 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"tool_name": strings.TrimSpace(ev.ToolName),
 			"metadata":  ev.Metadata,
 		})
-	default:
-		// Tool call/result UI and persistence are owned by Flower's tool execution path.
 	}
 }

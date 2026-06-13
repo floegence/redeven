@@ -232,6 +232,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if err != nil && result.Status == "" {
 		return r.failRun("Failed to run Floret projected turn", err)
 	}
+	r.publishActivityTimeline(result.ActivityTimeline)
 	r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), estimateFloretHistoryTokens(systemPrompt, history, activeTools))
 	providerState := flProvider.currentProviderState()
 	r.setProviderContinuationCandidate(buildProviderContinuationCandidate(
@@ -321,8 +322,8 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.Projecte
 			}
 			r.setCanonicalMarkdownCandidate(resultText)
 			r.reconcileCanonicalMarkdownMessage(resultText)
-			r.emitTaskCompleteToolBlock(strings.TrimSpace(signal.CallID), resultText, evidenceRefs)
-			r.emitSourcesToolBlock("task_complete")
+			r.recordTaskCompleteSignal(strings.TrimSpace(signal.CallID), resultText, evidenceRefs)
+			r.recordSourcesActivity("task_complete")
 			r.setFinalizationReason("task_complete")
 			r.setEndReason("complete")
 			r.emitLifecyclePhase("ended", map[string]any{"reason": "task_complete", "step_index": step})
@@ -472,7 +473,7 @@ func (r *run) projectFloretAskUserWaiting(step int, signal *flruntime.TurnSignal
 	if ask.Question == "" {
 		ask.Question = "I need clarification to continue safely."
 	}
-	r.emitAskUserToolBlock(ask, "model_signal")
+	r.recordAskUserWaitingSignal(ask, "model_signal")
 	r.reconcileCanonicalWaitingUserMessage()
 	finalReason := finalizationReasonForAskUserSource("model_signal")
 	r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
@@ -515,7 +516,7 @@ func (r *run) projectFloretExitPlanModeWaiting(step int, signal *flruntime.TurnS
 		WaitingPrompt: result,
 		Summary:       strings.TrimSpace(anyToString(signal.Payload["summary"])),
 	}
-	r.emitExitPlanModeToolBlock(strings.TrimSpace(signal.CallID), args, exitResult)
+	r.recordExitPlanModeWaitingSignal(strings.TrimSpace(signal.CallID), args, exitResult)
 	r.reconcileCanonicalWaitingUserMessage()
 	r.persistRunEvent("exit_plan_mode.waiting", RealtimeStreamKindLifecycle, map[string]any{
 		"summary":             strings.TrimSpace(exitResult.Summary),

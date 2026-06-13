@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/floegence/floret/observation"
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/filesystemscope"
@@ -1037,27 +1038,18 @@ func (s *Service) threadSnapshot(ctx context.Context, threadID string, view *ai.
 		return ThreadSnapshot{}, err
 	}
 	if runID, raw, err := s.ai.GetActiveRunSnapshot(s.Meta(), threadID); err == nil && strings.TrimSpace(raw) != "" {
-		activeMessage, activeActivity, visible, err := decodeRawMessage(json.RawMessage(raw))
+		activeMessage, activeTimeline, visible, err := decodeRawMessage(json.RawMessage(raw))
 		if err != nil {
 			return ThreadSnapshot{}, fmt.Errorf("decode active Flower run snapshot: %w", err)
 		}
 		if visible {
 			decoded = decoded.upsertMessage(activeMessage)
 		}
-		decoded.ToolActivity = mergeToolActivity(decoded.ToolActivity, withRunID(activeActivity, runID))
+		decoded.ActivityTimeline = mergeActivityTimeline(decoded.ActivityTimeline, withRunIDActivityTimeline(activeTimeline, runID))
 	} else if err != nil {
 		return ThreadSnapshot{}, err
 	}
-	toolActivity, err := s.threadToolActivity(ctx, threadID)
-	if err != nil {
-		return ThreadSnapshot{}, err
-	}
-	toolActivity = mergeToolActivity(decoded.ToolActivity, toolActivity)
 	inputRequest, err := mapChatInputRequest(view.WaitingPrompt)
-	if err != nil {
-		return ThreadSnapshot{}, err
-	}
-	toolActivity, err = projectInputRequestToolActivity(toolActivity, inputRequest)
 	if err != nil {
 		return ThreadSnapshot{}, err
 	}
@@ -1083,25 +1075,69 @@ func (s *Service) threadSnapshot(ctx context.Context, threadID string, view *ai.
 	if err != nil {
 		return ThreadSnapshot{}, err
 	}
+	todoSnapshot, err := s.threadTodoSnapshot(ctx, threadID)
+	if err != nil {
+		return ThreadSnapshot{}, err
+	}
 	return ThreadSnapshot{
-		ThreadID:     view.ThreadID,
-		Title:        firstNonEmpty(view.Title, view.LastMessagePreview, "Untitled conversation"),
-		ModelID:      view.ModelID,
-		WorkingDir:   strings.TrimSpace(view.WorkingDir),
-		PinnedAtMs:   view.PinnedAtUnixMs,
-		CreatedAtMs:  view.CreatedAtUnixMs,
-		UpdatedAtMs:  updatedAtMs,
-		Status:       status,
-		Messages:     decoded.Messages,
-		ToolActivity: toolActivity,
-		InputRequest: inputRequest,
-		Error:        runError,
-		HomeHostID:   homeHostID,
-		HomeHostKind: homeHostKind,
-		SourceLabel:  sourceLabel,
-		TargetLabels: targetLabels,
-		HasUnread:    flowerThreadHasUnread(readSnapshot, readRecord),
+		ThreadID:         view.ThreadID,
+		Title:            firstNonEmpty(view.Title, view.LastMessagePreview, "Untitled conversation"),
+		ModelID:          view.ModelID,
+		WorkingDir:       strings.TrimSpace(view.WorkingDir),
+		PinnedAtMs:       view.PinnedAtUnixMs,
+		CreatedAtMs:      view.CreatedAtUnixMs,
+		UpdatedAtMs:      updatedAtMs,
+		Status:           status,
+		Messages:         decoded.Messages,
+		ActivityTimeline: decoded.ActivityTimeline,
+		TodoSnapshot:     todoSnapshot,
+		InputRequest:     inputRequest,
+		Error:            runError,
+		HomeHostID:       homeHostID,
+		HomeHostKind:     homeHostKind,
+		SourceLabel:      sourceLabel,
+		TargetLabels:     targetLabels,
+		HasUnread:        flowerThreadHasUnread(readSnapshot, readRecord),
 	}, nil
+}
+
+func (s *Service) threadTodoSnapshot(ctx context.Context, threadID string) (*ChatTodoSnapshot, error) {
+	if s == nil || s.ai == nil {
+		return nil, errors.New("nil Flower Host service")
+	}
+	view, err := s.ai.GetThreadTodos(ctx, s.Meta(), threadID)
+	if err != nil {
+		return nil, err
+	}
+	if view == nil || (view.Version <= 0 && len(view.Todos) == 0) {
+		return nil, nil
+	}
+	out := &ChatTodoSnapshot{
+		Version:     view.Version,
+		UpdatedAtMs: view.UpdatedAtUnixMs,
+		Todos:       make([]ChatTodoItem, 0, len(view.Todos)),
+	}
+	for _, item := range view.Todos {
+		status := strings.TrimSpace(item.Status)
+		out.Todos = append(out.Todos, ChatTodoItem{
+			ID:      strings.TrimSpace(item.ID),
+			Content: strings.TrimSpace(item.Content),
+			Status:  status,
+			Note:    strings.TrimSpace(item.Note),
+		})
+		out.Summary.Total++
+		switch status {
+		case ai.TodoStatusPending:
+			out.Summary.Pending++
+		case ai.TodoStatusInProgress:
+			out.Summary.InProgress++
+		case ai.TodoStatusCompleted:
+			out.Summary.Completed++
+		case ai.TodoStatusCancelled:
+			out.Summary.Cancelled++
+		}
+	}
+	return out, nil
 }
 
 func (s *Service) ensureThreadListReadRecords(ctx context.Context, views []ai.ThreadView) (map[string]threadreadstate.Record, error) {
@@ -1242,8 +1278,8 @@ func cloneBoolPtr(value *bool) *bool {
 }
 
 type decodedThreadMessages struct {
-	Messages     []ChatMessage
-	ToolActivity []ChatToolActivity
+	Messages         []ChatMessage
+	ActivityTimeline []ChatMessageBlock
 }
 
 func (d decodedThreadMessages) upsertMessage(message ChatMessage) decodedThreadMessages {
@@ -1261,15 +1297,15 @@ func (d decodedThreadMessages) upsertMessage(message ChatMessage) decodedThreadM
 
 func decodeMessages(values []any) (decodedThreadMessages, error) {
 	out := decodedThreadMessages{
-		Messages:     make([]ChatMessage, 0, len(values)),
-		ToolActivity: []ChatToolActivity{},
+		Messages:         make([]ChatMessage, 0, len(values)),
+		ActivityTimeline: []ChatMessageBlock{},
 	}
 	for index, value := range values {
-		msg, activity, visible, err := decodeRawMessage(value)
+		msg, timelines, visible, err := decodeRawMessage(value)
 		if err != nil {
 			return decodedThreadMessages{}, fmt.Errorf("decode Flower message %d: %w", index, err)
 		}
-		out.ToolActivity = mergeToolActivity(out.ToolActivity, activity)
+		out.ActivityTimeline = mergeActivityTimeline(out.ActivityTimeline, timelines)
 		if visible {
 			out.Messages = append(out.Messages, msg)
 		}
@@ -1277,7 +1313,7 @@ func decodeMessages(values []any) (decodedThreadMessages, error) {
 	return out, nil
 }
 
-func decodeRawMessage(value any) (ChatMessage, []ChatToolActivity, bool, error) {
+func decodeRawMessage(value any) (ChatMessage, []ChatMessageBlock, bool, error) {
 	var raw []byte
 	switch v := value.(type) {
 	case json.RawMessage:
@@ -1320,8 +1356,9 @@ func decodeRawMessage(value any) (ChatMessage, []ChatToolActivity, bool, error) 
 	}
 	contentParts := make([]string, 0, len(record.Blocks))
 	blocks := make([]ChatMessageBlock, 0, len(record.Blocks))
-	activity := make([]ChatToolActivity, 0)
+	timelines := make([]ChatMessageBlock, 0)
 	hasNonTextPayload := false
+	hasRenderableMessageBlock := false
 	for index, block := range record.Blocks {
 		var base struct {
 			Type           string `json:"type"`
@@ -1340,11 +1377,13 @@ func decodeRawMessage(value any) (ChatMessage, []ChatToolActivity, bool, error) 
 			if text != "" {
 				contentParts = append(contentParts, text)
 				blocks = append(blocks, ChatMessageBlock{Type: blockType, Content: text})
+				hasRenderableMessageBlock = true
 			}
 		case "thinking":
 			text := strings.TrimSpace(firstNonEmpty(base.Content, base.Text))
 			if text != "" {
 				blocks = append(blocks, ChatMessageBlock{Type: "thinking", Content: text})
+				hasRenderableMessageBlock = true
 			}
 		case "image", "file":
 			hasNonTextPayload = true
@@ -1354,31 +1393,27 @@ func decodeRawMessage(value any) (ChatMessage, []ChatToolActivity, bool, error) 
 			if text != "" && !base.ContainsSecret {
 				contentParts = append(contentParts, text)
 				blocks = append(blocks, ChatMessageBlock{Type: "text", Content: text})
+				hasRenderableMessageBlock = true
 			} else if base.ContainsSecret {
 				hasNonTextPayload = true
 			}
 		case "activity-timeline":
-			items, err := decodeActivityTimelineBlock(block)
+			timeline, err := decodeActivityTimelineBlock(block)
 			if err != nil {
 				return ChatMessage{}, nil, false, fmt.Errorf("decode activity timeline block %d: %w", index, err)
 			}
-			activity = mergeToolActivity(activity, items)
-		case "tool-call":
-			item, err := decodeToolCallBlock(block)
-			if err != nil {
-				return ChatMessage{}, nil, false, fmt.Errorf("decode tool call block %d: %w", index, err)
-			}
-			activity = mergeToolActivity(activity, []ChatToolActivity{item})
+			blocks = append(blocks, timeline)
+			timelines = mergeActivityTimeline(timelines, []ChatMessageBlock{timeline})
 		default:
 			return ChatMessage{}, nil, false, fmt.Errorf("message block type %q is unsupported", blockType)
 		}
 	}
 	content := strings.TrimSpace(strings.Join(contentParts, "\n\n"))
-	if content == "" && len(blocks) == 0 && status != "streaming" {
-		if len(activity) == 0 && !hasNonTextPayload {
+	if content == "" && !hasRenderableMessageBlock && status != "streaming" {
+		if len(timelines) == 0 && !hasNonTextPayload {
 			return ChatMessage{}, nil, false, errors.New("message has no visible content")
 		}
-		return ChatMessage{}, activity, false, nil
+		return ChatMessage{}, timelines, false, nil
 	}
 	return ChatMessage{
 		ID:          id,
@@ -1387,124 +1422,29 @@ func decodeRawMessage(value any) (ChatMessage, []ChatToolActivity, bool, error) 
 		Status:      status,
 		CreatedAtMs: record.Timestamp,
 		Blocks:      blocks,
-	}, activity, true, nil
+	}, timelines, true, nil
 }
 
-func decodeActivityTimelineBlock(raw json.RawMessage) ([]ChatToolActivity, error) {
-	var timeline struct {
-		RunID  string `json:"runId"`
-		Groups []struct {
-			Items []struct {
-				ItemID           string `json:"itemId"`
-				ToolID           string `json:"toolId"`
-				ToolName         string `json:"toolName"`
-				Status           string `json:"status"`
-				Label            string `json:"label"`
-				Description      string `json:"description"`
-				RequiresApproval bool   `json:"requiresApproval"`
-				ApprovalState    string `json:"approvalState"`
-				StartedAtUnixMS  int64  `json:"startedAtUnixMs"`
-				EndedAtUnixMS    int64  `json:"endedAtUnixMs"`
-			} `json:"items"`
-		} `json:"groups"`
-	}
+func decodeActivityTimelineBlock(raw json.RawMessage) (ChatMessageBlock, error) {
+	var timeline ai.ActivityTimelineBlock
 	if err := json.Unmarshal(raw, &timeline); err != nil {
-		return nil, err
+		return ChatMessageBlock{}, err
 	}
-	out := make([]ChatToolActivity, 0)
-	for groupIndex, group := range timeline.Groups {
-		for itemIndex, item := range group.Items {
-			toolID := strings.TrimSpace(item.ToolID)
-			toolName := strings.TrimSpace(item.ToolName)
-			if toolID == "" || toolName == "" {
-				return nil, fmt.Errorf("activity item %d.%d requires toolId and toolName", groupIndex, itemIndex)
-			}
-			summary := firstNonEmpty(item.Label, item.Description, toolDisplayName(toolName))
-			status, ok := normalizeToolActivityStatus(item.Status)
-			if !ok {
-				return nil, fmt.Errorf("activity item %d.%d status %q is unsupported", groupIndex, itemIndex, strings.TrimSpace(item.Status))
-			}
-			out = append(out, ChatToolActivity{
-				RunID:            strings.TrimSpace(timeline.RunID),
-				ToolID:           toolID,
-				ToolName:         toolName,
-				Status:           status,
-				Summary:          summary,
-				RequiresApproval: item.RequiresApproval,
-				ApprovalState:    strings.TrimSpace(item.ApprovalState),
-				StartedAtMs:      item.StartedAtUnixMS,
-				EndedAtMs:        item.EndedAtUnixMS,
-			})
-		}
+	timeline.Type = "activity-timeline"
+	if err := observation.ValidateActivityTimeline(timeline.ActivityTimeline); err != nil {
+		return ChatMessageBlock{}, err
 	}
-	return out, nil
-}
-
-func decodeToolCallBlock(raw json.RawMessage) (ChatToolActivity, error) {
-	var block struct {
-		ToolName         string         `json:"toolName"`
-		ToolID           string         `json:"toolId"`
-		Args             map[string]any `json:"args"`
-		RequiresApproval bool           `json:"requiresApproval"`
-		ApprovalState    string         `json:"approvalState"`
-		Status           string         `json:"status"`
-		Error            string         `json:"error"`
-	}
-	if err := json.Unmarshal(raw, &block); err != nil {
-		return ChatToolActivity{}, err
-	}
-	toolID := strings.TrimSpace(block.ToolID)
-	toolName := strings.TrimSpace(block.ToolName)
-	if toolID == "" || toolName == "" {
-		return ChatToolActivity{}, errors.New("tool call requires toolId and toolName")
-	}
-	status, ok := normalizeToolActivityStatus(block.Status)
-	if !ok {
-		return ChatToolActivity{}, fmt.Errorf("tool call status %q is unsupported", strings.TrimSpace(block.Status))
-	}
-	errorMessage := strings.TrimSpace(block.Error)
-	return ChatToolActivity{
-		ToolID:           toolID,
-		ToolName:         toolName,
-		Status:           status,
-		Summary:          summarizeToolActivity(toolName, block.Args, status, errorMessage),
-		RequiresApproval: block.RequiresApproval,
-		ApprovalState:    strings.TrimSpace(block.ApprovalState),
-		ErrorMessage:     errorMessage,
+	summary := timeline.Summary
+	return ChatMessageBlock{
+		Type:          "activity-timeline",
+		SchemaVersion: timeline.SchemaVersion,
+		RunID:         strings.TrimSpace(timeline.RunID),
+		ThreadID:      strings.TrimSpace(timeline.ThreadID),
+		TurnID:        strings.TrimSpace(timeline.TurnID),
+		TraceID:       strings.TrimSpace(timeline.TraceID),
+		Summary:       &summary,
+		Items:         append([]observation.ActivityItem(nil), timeline.Items...),
 	}, nil
-}
-
-func (s *Service) threadToolActivity(ctx context.Context, threadID string) ([]ChatToolActivity, error) {
-	records, err := s.ai.ListRecentThreadToolCalls(ctx, s.Meta(), threadID, 80)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]ChatToolActivity, 0, len(records))
-	for index, record := range records {
-		args, err := decodeJSONObject(record.ArgsJSON)
-		if err != nil {
-			return nil, fmt.Errorf("decode stored tool call %d arguments: %w", index, err)
-		}
-		status, ok := normalizeToolActivityStatus(record.Status)
-		if !ok {
-			return nil, fmt.Errorf("stored tool call %d status %q is unsupported", index, strings.TrimSpace(record.Status))
-		}
-		errorMessage := strings.TrimSpace(record.ErrorMessage)
-		if strings.TrimSpace(record.ToolID) == "" || strings.TrimSpace(record.ToolName) == "" {
-			return nil, fmt.Errorf("stored tool call %d requires tool_id and tool_name", index)
-		}
-		out = append(out, ChatToolActivity{
-			RunID:        strings.TrimSpace(record.RunID),
-			ToolID:       strings.TrimSpace(record.ToolID),
-			ToolName:     strings.TrimSpace(record.ToolName),
-			Status:       status,
-			Summary:      summarizeToolActivity(record.ToolName, args, status, errorMessage),
-			ErrorMessage: errorMessage,
-			StartedAtMs:  record.StartedAtUnixMs,
-			EndedAtMs:    record.EndedAtUnixMs,
-		})
-	}
-	return out, nil
 }
 
 func mapChatInputRequest(prompt *ai.RequestUserInputPrompt) (*ChatInputRequest, error) {
@@ -1600,164 +1540,37 @@ func validInputChoiceKind(kind string) bool {
 	}
 }
 
-func projectInputRequestToolActivity(items []ChatToolActivity, request *ChatInputRequest) ([]ChatToolActivity, error) {
-	if request == nil {
-		return items, nil
-	}
-	toolID := strings.TrimSpace(request.ToolID)
-	toolName := strings.TrimSpace(request.ToolName)
-	if toolID == "" || toolName == "" {
-		return nil, newServiceError(http.StatusConflict, "waiting_input_contract_invalid", "Flower waiting input request is missing its tool identity.")
-	}
-	summary := inputRequestToolSummary(request)
-	out := append([]ChatToolActivity(nil), items...)
-	for idx, item := range out {
-		if strings.TrimSpace(item.ToolID) != toolID || strings.TrimSpace(item.ToolName) != toolName {
-			continue
+func mergeActivityTimeline(primary []ChatMessageBlock, secondary []ChatMessageBlock) []ChatMessageBlock {
+	out := make([]ChatMessageBlock, 0, len(primary)+len(secondary))
+	seen := map[string]int{}
+	appendOne := func(timeline ChatMessageBlock) {
+		timeline.Type = "activity-timeline"
+		key := strings.TrimSpace(timeline.RunID) + "\x00" + strings.TrimSpace(timeline.TurnID)
+		if key == "\x00" {
+			key = fmt.Sprintf("timeline:%d", len(out))
 		}
-		item.Status = "waiting"
-		item.Summary = summary
-		item.ErrorMessage = ""
-		item.EndedAtMs = 0
-		out[idx] = item
-		return out, nil
-	}
-	return nil, newServiceError(http.StatusConflict, "waiting_input_contract_invalid", "Flower waiting input request is missing its matching tool activity.")
-}
-
-func inputRequestToolSummary(request *ChatInputRequest) string {
-	if request == nil {
-		return "Awaiting user input"
-	}
-	if strings.TrimSpace(request.PublicSummary) != "" {
-		return strings.TrimSpace(request.PublicSummary)
-	}
-	if len(request.Questions) > 0 {
-		if strings.TrimSpace(request.Questions[0].Header) != "" {
-			return "Awaiting input: " + strings.TrimSpace(request.Questions[0].Header)
-		}
-		if strings.TrimSpace(request.Questions[0].Question) != "" {
-			return "Awaiting input: " + strings.TrimSpace(request.Questions[0].Question)
-		}
-	}
-	return "Awaiting user input"
-}
-
-func decodeJSONObject(raw string) (map[string]any, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, nil
-	}
-	var out map[string]any
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func mergeToolActivity(primary []ChatToolActivity, secondary []ChatToolActivity) []ChatToolActivity {
-	out := make([]ChatToolActivity, 0, len(primary)+len(secondary))
-	seenExact := map[string]int{}
-	findMergeIndex := func(item ChatToolActivity) (int, bool) {
-		if idx, ok := seenExact[item.RunID+"\x00"+item.ToolID]; ok {
-			return idx, true
-		}
-		if item.RunID != "" {
-			if idx, ok := seenExact["\x00"+item.ToolID]; ok && strings.TrimSpace(out[idx].RunID) == "" {
-				return idx, true
-			}
-			return 0, false
-		}
-		matched := -1
-		for idx, existing := range out {
-			if strings.TrimSpace(existing.ToolID) != item.ToolID {
-				continue
-			}
-			if matched >= 0 {
-				return 0, false
-			}
-			matched = idx
-		}
-		if matched < 0 {
-			return 0, false
-		}
-		return matched, true
-	}
-	appendOne := func(item ChatToolActivity) {
-		item.ToolID = strings.TrimSpace(item.ToolID)
-		item.ToolName = strings.TrimSpace(item.ToolName)
-		item.RunID = strings.TrimSpace(item.RunID)
-		item.Status = strings.TrimSpace(item.Status)
-		item.Summary = strings.TrimSpace(item.Summary)
-		item.ErrorMessage = strings.TrimSpace(item.ErrorMessage)
-		item.ApprovalState = strings.TrimSpace(item.ApprovalState)
-		idx, ok := findMergeIndex(item)
-		if ok {
-			existing := out[idx]
-			oldKey := strings.TrimSpace(existing.RunID) + "\x00" + strings.TrimSpace(existing.ToolID)
-			if existing.ToolName == "" {
-				existing.ToolName = item.ToolName
-			}
-			if item.Summary != "" && toolActivityStatusRank(item.Status) >= toolActivityStatusRank(existing.Status) {
-				existing.Summary = item.Summary
-			}
-			if toolActivityStatusRank(item.Status) >= toolActivityStatusRank(existing.Status) {
-				existing.Status = item.Status
-			}
-			if existing.ErrorMessage == "" {
-				existing.ErrorMessage = item.ErrorMessage
-			}
-			if existing.RunID == "" {
-				existing.RunID = item.RunID
-			}
-			if existing.StartedAtMs == 0 {
-				existing.StartedAtMs = item.StartedAtMs
-			}
-			if existing.EndedAtMs == 0 {
-				existing.EndedAtMs = item.EndedAtMs
-			}
-			if !existing.RequiresApproval {
-				existing.RequiresApproval = item.RequiresApproval
-			}
-			if existing.ApprovalState == "" {
-				existing.ApprovalState = item.ApprovalState
-			}
-			out[idx] = existing
-			delete(seenExact, oldKey)
-			seenExact[strings.TrimSpace(existing.RunID)+"\x00"+strings.TrimSpace(existing.ToolID)] = idx
+		if idx, ok := seen[key]; ok {
+			out[idx] = timeline
 			return
 		}
-		seenExact[item.RunID+"\x00"+item.ToolID] = len(out)
-		out = append(out, item)
+		seen[key] = len(out)
+		out = append(out, timeline)
 	}
-	for _, item := range primary {
-		appendOne(item)
+	for _, timeline := range primary {
+		appendOne(timeline)
 	}
-	for _, item := range secondary {
-		appendOne(item)
+	for _, timeline := range secondary {
+		appendOne(timeline)
 	}
 	return out
 }
 
-func toolActivityStatusRank(status string) int {
-	switch strings.TrimSpace(status) {
-	case "success", "error", "canceled":
-		return 3
-	case "running", "waiting":
-		return 2
-	case "pending":
-		return 1
-	default:
-		return 0
-	}
-}
-
-func withRunID(items []ChatToolActivity, runID string) []ChatToolActivity {
+func withRunIDActivityTimeline(items []ChatMessageBlock, runID string) []ChatMessageBlock {
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
 		return items
 	}
-	out := make([]ChatToolActivity, 0, len(items))
+	out := make([]ChatMessageBlock, 0, len(items))
 	for _, item := range items {
 		if strings.TrimSpace(item.RunID) == "" {
 			item.RunID = runID
@@ -1765,102 +1578,6 @@ func withRunID(items []ChatToolActivity, runID string) []ChatToolActivity {
 		out = append(out, item)
 	}
 	return out
-}
-
-func summarizeToolActivity(toolName string, args map[string]any, status string, errorMessage string) string {
-	name := toolDisplayName(toolName)
-	detail := toolActivityDetail(toolName, args)
-	if strings.TrimSpace(errorMessage) != "" {
-		if detail == "" {
-			return name + " failed"
-		}
-		return name + ": " + detail + " failed"
-	}
-	if detail == "" {
-		return name
-	}
-	return name + ": " + detail
-}
-
-func toolActivityDetail(toolName string, args map[string]any) string {
-	switch strings.TrimSpace(toolName) {
-	case "terminal.exec":
-		return stringField(args, "command", "cmd")
-	case "file.read", "file.edit", "file.write":
-		return stringField(args, "path", "file_path", "filePath")
-	case "apply_patch":
-		return "workspace patch"
-	case "write_todos":
-		return "todo list"
-	case "ask_user":
-		return "user input"
-	case "exit_plan_mode":
-		return "approval request"
-	case "task_complete":
-		return "final response"
-	default:
-		return ""
-	}
-}
-
-func stringField(values map[string]any, keys ...string) string {
-	for _, key := range keys {
-		value := strings.TrimSpace(anyToString(values[key]))
-		if value != "" {
-			return value
-		}
-	}
-	return ""
-}
-
-func toolDisplayName(toolName string) string {
-	switch strings.TrimSpace(toolName) {
-	case "file.read":
-		return "Read file"
-	case "file.edit":
-		return "Edit file"
-	case "file.write":
-		return "Write file"
-	case "apply_patch":
-		return "Apply patch"
-	case "terminal.exec":
-		return "Run command"
-	case "task_complete":
-		return "Complete task"
-	case "ask_user":
-		return "Ask user"
-	case "exit_plan_mode":
-		return "Request mode switch"
-	case "write_todos":
-		return "Update todos"
-	case "web.search":
-		return "Search web"
-	default:
-		toolName = strings.TrimSpace(toolName)
-		if toolName == "" {
-			return "Use tool"
-		}
-		return toolName
-	}
-}
-
-func normalizeToolActivityStatus(status string) (string, bool) {
-	switch strings.TrimSpace(strings.ToLower(status)) {
-	case "pending", "queued":
-		return "pending", true
-	case "running", "recovering":
-		return "running", true
-	case "waiting", "waiting_user", "waiting_approval":
-		return "waiting", true
-	case "success", "succeeded", "completed", "complete":
-		return "success", true
-	case "error", "failed", "failure":
-		return "error", true
-	case "canceled", "cancelled":
-		return "canceled", true
-	default:
-		return "", false
-	}
 }
 
 func normalizeChatMessageRole(role string) (string, bool) {

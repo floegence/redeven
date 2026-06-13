@@ -104,7 +104,7 @@ function statusFrom(value: unknown): ActivityDetailStatus {
   if (normalized === 'success' || normalized === 'succeeded' || normalized === 'complete' || normalized === 'completed') return 'success';
   if (normalized === 'error' || normalized === 'failed' || normalized === 'failure') return 'error';
   if (normalized === 'pending') return 'pending';
-  if (normalized === 'waiting' || normalized === 'waiting_approval') return 'waiting';
+  if (normalized === 'waiting') return 'waiting';
   return 'info';
 }
 
@@ -130,18 +130,18 @@ function formatDuration(ms: number | undefined): string | undefined {
 }
 
 function itemTarget(item: ActivityItem): string {
-  const first = Array.isArray(item.targetRefs) ? item.targetRefs[0] : undefined;
+  const first = Array.isArray(item.target_refs) ? item.target_refs[0] : undefined;
   return String(first?.label ?? item.description ?? '').trim();
 }
 
 function detailID(item: ActivityItem, ref: ActivityDetailRef): string {
-  return String(ref.refId || item.itemId || item.toolId || `${item.label}:${ref.kind}`).trim();
+  return String(ref.ref_id || item.item_id || item.tool_id || `${item.label}:${ref.kind}`).trim();
 }
 
 function basePresentation(item: ActivityItem, ref: ActivityDetailRef, payload: unknown): ActivityDetailPresentation {
   const rec = asRecord(payload);
   const status = statusFrom(readString(rec, 'status') || item.status);
-  const latency = readNumber(rec, 'latency_ms', 'duration_ms', 'durationMs');
+  const latency = readNumber(rec, 'latency_ms', 'duration_ms');
   const chips: ActivityDetailChip[] = [
     { labelKey: statusLabelKey(status), tone: statusTone(status) },
   ];
@@ -152,9 +152,9 @@ function basePresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
     ...(ref.title || item.label ? { title: ref.title || item.label } : { titleKey: 'chatActivity.fallback.toolDetail' }),
     subtitle: itemTarget(item),
     status,
-    toolName: readString(rec, 'tool_name', 'toolName') || item.toolName,
-    startedAtUnixMs: readNumber(rec, 'started_at_unix_ms', 'startedAtUnixMs'),
-    endedAtUnixMs: readNumber(rec, 'ended_at_unix_ms', 'endedAtUnixMs'),
+    toolName: readString(rec, 'tool_name') || item.tool_name,
+    startedAtUnixMs: readNumber(rec, 'started_at_unix_ms'),
+    endedAtUnixMs: readNumber(rec, 'ended_at_unix_ms'),
     durationMs: latency,
     chips,
     sections: [],
@@ -165,13 +165,13 @@ function basePresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
 function terminalPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: unknown): ActivityDetailPresentation {
   const rec = asRecord(payload);
   const presentation = basePresentation(item, ref, payload);
-  const exitCode = readNumber(rec, 'exit_code', 'exitCode');
-  const durationMs = readNumber(rec, 'duration_ms', 'durationMs');
+  const exitCode = readNumber(rec, 'exit_code');
+  const durationMs = readNumber(rec, 'duration_ms');
   const stdout = readRawString(rec, 'stdout');
   const stderr = readRawString(rec, 'stderr');
   const command = itemTarget(item);
-  const timeoutMs = readNumber(rec, 'timeout_ms', 'timeoutMs');
-  const timedOut = readBoolean(rec, 'timed_out', 'timedOut');
+  const timeoutMs = readNumber(rec, 'timeout_ms');
+  const timedOut = readBoolean(rec, 'timed_out');
   const truncated = readBoolean(rec, 'truncated');
 
   if (typeof exitCode === 'number') {
@@ -227,12 +227,12 @@ function todoPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
     titleKey: 'chatActivity.sectionTitle.todoChanges',
     items: todos.map((entry) => {
       const todo = asRecord(entry);
-      const rawBeforeStatus = todo.before_status ?? todo.beforeStatus;
+      const rawBeforeStatus = todo.before_status;
       return {
         id: readString(todo, 'id'),
         ...todoContent(todo),
         beforeStatus: rawBeforeStatus === undefined || rawBeforeStatus === null ? undefined : normalizeTodoStatus(rawBeforeStatus),
-        afterStatus: normalizeTodoStatus(todo.status ?? todo.after_status ?? todo.afterStatus),
+        afterStatus: normalizeTodoStatus(todo.status ?? todo.after_status),
         note: readString(todo, 'note'),
       };
     }),
@@ -297,7 +297,7 @@ function filePresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
   const args = asRecord(rec.args);
   const patch = readString(args, 'patch');
   const files = patch ? patchFiles(patch) : [];
-  const directPath = readString(args, 'file_path', 'path') || item.targetRefs?.find((target) => target.kind === 'file')?.path || itemTarget(item);
+  const directPath = readString(args, 'file_path', 'path') || item.target_refs?.find((target) => target.kind === 'file')?.path || itemTarget(item);
   if (files.length === 0 && directPath) {
     files.push({
       path: directPath,
@@ -320,9 +320,9 @@ function fileReadContentPresentation(item: ActivityItem, ref: ActivityDetailRef,
   const filePath = readString(args, 'file_path', 'path') || itemTarget(item);
   if (!filePath) return null;
   const content = readRawString(result, 'content');
-  const lineOffset = readNumber(result, 'line_offset', 'lineOffset');
-  const lineCount = readNumber(result, 'line_count', 'lineCount');
-  const totalLines = readNumber(result, 'total_lines', 'totalLines');
+  const lineOffset = readNumber(result, 'line_offset');
+  const lineCount = readNumber(result, 'line_count');
+  const totalLines = readNumber(result, 'total_lines');
   const truncated = readBoolean(result, 'truncated');
 
   const presentation: ActivityDetailPresentation = {
@@ -330,10 +330,10 @@ function fileReadContentPresentation(item: ActivityItem, ref: ActivityDetailRef,
     ...(item.label ? { title: item.label } : { titleKey: 'chatActivity.fallback.readFile' }),
     subtitle: filePath,
     status: 'success',
-    toolName: readString(rec, 'tool_name', 'toolName') || item.toolName,
-    startedAtUnixMs: readNumber(rec, 'started_at_unix_ms', 'startedAtUnixMs'),
-    endedAtUnixMs: readNumber(rec, 'ended_at_unix_ms', 'endedAtUnixMs'),
-    durationMs: readNumber(rec, 'latency_ms', 'duration_ms', 'durationMs'),
+    toolName: readString(rec, 'tool_name') || item.tool_name,
+    startedAtUnixMs: readNumber(rec, 'started_at_unix_ms'),
+    endedAtUnixMs: readNumber(rec, 'ended_at_unix_ms'),
+    durationMs: readNumber(rec, 'latency_ms', 'duration_ms'),
     chips: [],
     sections: [],
     copyTargets: [],
@@ -371,7 +371,7 @@ function webPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: un
       snippet: readString(source, 'snippet', 'summary', 'content'),
     };
   }).filter((source) => source.title || source.titleKey || source.url);
-  const targetSources = (item.targetRefs ?? [])
+  const targetSources = (item.target_refs ?? [])
     .filter((target) => target.kind === 'url' || target.uri)
     .map((target) => ({ title: target.label, url: target.uri }));
   const allSources = sources.length > 0 ? sources : targetSources;
@@ -386,14 +386,14 @@ function webPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: un
 }
 
 function errorSection(payload: AnyRecord): ActivityDetailSection | null {
-  const message = readString(payload, 'error_message', 'errorMessage', 'error');
+  const message = readString(payload, 'error_message', 'error');
   if (!message) return null;
   return {
     kind: 'error',
-    code: readString(payload, 'error_code', 'errorCode'),
+    code: readString(payload, 'error_code'),
     message,
     retryable: readBoolean(payload, 'retryable'),
-    recoveryAction: readString(payload, 'recovery_action', 'recoveryAction'),
+    recoveryAction: readString(payload, 'recovery_action'),
   };
 }
 
@@ -470,8 +470,8 @@ function structuredPresentation(item: ActivityItem, ref: ActivityDetailRef, payl
       fields: [
         {
           labelKey: 'chatActivity.field.tool',
-          value: presentation.toolName || item.toolName,
-          valueKey: presentation.toolName || item.toolName ? undefined : 'chatActivity.fallback.unknownTool',
+          value: presentation.toolName || item.tool_name,
+          valueKey: presentation.toolName || item.tool_name ? undefined : 'chatActivity.fallback.unknownTool',
         },
         { labelKey: 'chatActivity.field.status', valueKey: statusLabelKey(presentation.status) },
       ],

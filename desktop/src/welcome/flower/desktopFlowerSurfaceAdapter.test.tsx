@@ -85,6 +85,44 @@ function desktopThread(): DesktopFlowerHostThread {
   };
 }
 
+function desktopActivityTimeline() {
+  return {
+    type: 'activity-timeline' as const,
+    schema_version: 1,
+    run_id: 'run-1',
+    turn_id: 'm-streaming',
+    summary: {
+      status: 'success' as const,
+      severity: 'quiet' as const,
+      needs_attention: false,
+      total_items: 2,
+      counts: { success: 2 },
+    },
+    items: [
+      {
+        item_id: 'tool-terminal',
+        tool_id: 'tool-terminal',
+        tool_name: 'terminal.exec',
+        kind: 'tool' as const,
+        status: 'success' as const,
+        severity: 'quiet' as const,
+        needs_attention: false,
+        requires_approval: false,
+      },
+      {
+        item_id: 'tool-done',
+        tool_id: 'tool-done',
+        tool_name: 'task_complete',
+        kind: 'control' as const,
+        status: 'success' as const,
+        severity: 'quiet' as const,
+        needs_attention: false,
+        requires_approval: false,
+      },
+    ],
+  };
+}
+
 function desktopInputRequest(): DesktopFlowerHostInputRequest {
   return {
     prompt_id: 'prompt-ask-user',
@@ -373,10 +411,11 @@ describe('Flower surface adapter for the host', () => {
     expect(mapDesktopFlowerThread({ ...desktopThread(), has_unread: false }).has_unread).toBe(false);
   });
 
-  it('preserves streaming blocks, tool activity, and run errors from Desktop IPC', () => {
+  it('preserves streaming blocks, activity timelines, todos, and run errors from Desktop IPC', () => {
     const mapped = mapDesktopFlowerThread({
       ...desktopThread(),
       status: 'failed',
+      has_unread: false,
       messages: [
         {
           id: 'm-streaming',
@@ -387,20 +426,26 @@ describe('Flower surface adapter for the host', () => {
           blocks: [
             { type: 'thinking', content: 'Checking context.' },
             { type: 'markdown', content: 'Partial answer' },
+            desktopActivityTimeline(),
           ],
         },
       ],
-      tool_activity: [
-        {
-          run_id: 'run-1',
-          tool_id: 'tool-terminal',
-          tool_name: 'terminal.exec',
-          status: 'success',
-          summary: 'Run command: go test ./...',
-          started_at_ms: 3,
-          ended_at_ms: 4,
+      activity_timeline: [desktopActivityTimeline()],
+      todo_snapshot: {
+        version: 4,
+        updated_at_ms: 5,
+        summary: {
+          total: 2,
+          pending: 0,
+          in_progress: 0,
+          completed: 2,
+          cancelled: 0,
         },
-      ],
+        todos: [
+          { id: 'todo-1', content: 'Inspect context', status: 'completed' },
+          { id: 'todo-2', content: 'Write answer', status: 'completed' },
+        ],
+      },
       error: {
         code: 'failed',
         message: 'provider rejected request',
@@ -412,19 +457,47 @@ describe('Flower surface adapter for the host', () => {
       blocks: [
         { type: 'thinking', content: 'Checking context.' },
         { type: 'markdown', content: 'Partial answer' },
+        expect.objectContaining({
+          type: 'activity-timeline',
+          run_id: 'run-1',
+          summary: expect.objectContaining({
+            status: 'success',
+            total_items: 2,
+          }),
+        }),
       ],
     });
-    expect(mapped.tool_activity).toEqual([
-      {
-        run_id: 'run-1',
-        tool_id: 'tool-terminal',
-        tool_name: 'terminal.exec',
+    expect(mapped.activity_timeline?.[0]).toMatchObject({
+      type: 'activity-timeline',
+      run_id: 'run-1',
+      summary: {
         status: 'success',
-        summary: 'Run command: go test ./...',
-        started_at_ms: 3,
-        ended_at_ms: 4,
+        severity: 'quiet',
+        needs_attention: false,
+        total_items: 2,
+        counts: { success: 2 },
       },
-    ]);
+      items: [
+        expect.objectContaining({ item_id: 'tool-terminal', tool_name: 'terminal.exec' }),
+        expect.objectContaining({ item_id: 'tool-done', tool_name: 'task_complete' }),
+      ],
+    });
+    expect(mapped.todo_snapshot).toEqual({
+      version: 4,
+      updated_at_ms: 5,
+      summary: {
+        total: 2,
+        pending: 0,
+        in_progress: 0,
+        completed: 2,
+        cancelled: 0,
+      },
+      todos: [
+        { id: 'todo-1', content: 'Inspect context', status: 'completed' },
+        { id: 'todo-2', content: 'Write answer', status: 'completed' },
+      ],
+    });
+    expect(mapped.has_unread).toBe(false);
     expect(mapped.error).toEqual({
       code: 'failed',
       message: 'provider rejected request',

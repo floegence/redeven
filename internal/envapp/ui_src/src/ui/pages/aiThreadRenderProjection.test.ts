@@ -42,26 +42,27 @@ describe('aiThreadRenderProjection', () => {
         blocks: [
           {
             type: 'activity-timeline',
-            schemaVersion: 1,
-            runId: 'run_1',
-            messageId: 'm_ai_1',
-            summary: { status: 'running', totalItems: 1, visibleItems: 1, label: '1 activity item' },
-            groups: [{
-              groupId: 'approval',
-              kind: 'interaction',
-              renderer: 'blocking_prompt',
+            schema_version: 1,
+            run_id: 'run_1',
+            turn_id: 'm_ai_1',
+            summary: {
               status: 'running',
-              title: 'Needs input',
-              defaultOpen: true,
-              items: [{
-                itemId: 'tool_1',
-                toolId: 'tool_1',
-                toolName: 'file.edit',
-                status: 'running',
-                label: 'Edited file',
-                requiresApproval: true,
-                approvalState: 'approved',
-              }],
+              severity: 'normal',
+              needs_attention: true,
+              total_items: 1,
+              counts: { running: 1, approval: 1 },
+            },
+            items: [{
+              item_id: 'tool_1',
+              tool_id: 'tool_1',
+              tool_name: 'file.edit',
+              kind: 'tool',
+              status: 'running',
+              severity: 'normal',
+              needs_attention: true,
+              label: 'Edited file',
+              requires_approval: true,
+              approval_state: 'approved',
             }],
           },
         ],
@@ -76,26 +77,27 @@ describe('aiThreadRenderProjection', () => {
         blocks: [
           {
             type: 'activity-timeline',
-            schemaVersion: 1,
-            runId: 'run_1',
-            messageId: 'm_ai_1',
-            summary: { status: 'waiting', totalItems: 1, visibleItems: 1, label: '1 activity item' },
-            groups: [{
-              groupId: 'approval',
-              kind: 'interaction',
-              renderer: 'blocking_prompt',
+            schema_version: 1,
+            run_id: 'run_1',
+            turn_id: 'm_ai_1',
+            summary: {
               status: 'waiting',
-              title: 'Needs input',
-              defaultOpen: true,
-              items: [{
-                itemId: 'tool_1',
-                toolId: 'tool_1',
-                toolName: 'file.edit',
-                status: 'pending',
-                label: 'Edited file',
-                requiresApproval: true,
-                approvalState: 'required',
-              }],
+              severity: 'blocking',
+              needs_attention: true,
+              total_items: 1,
+              counts: { waiting: 1, approval: 1 },
+            },
+            items: [{
+              item_id: 'tool_1',
+              tool_id: 'tool_1',
+              tool_name: 'file.edit',
+              kind: 'tool',
+              status: 'pending',
+              severity: 'normal',
+              needs_attention: true,
+              label: 'Edited file',
+              requires_approval: true,
+              approval_state: 'requested',
             }],
           },
         ],
@@ -105,8 +107,8 @@ describe('aiThreadRenderProjection', () => {
     ];
 
     const carried = carryForwardTransientMessageState(previousRendered, refreshedTranscript);
-    expect((carried[0].blocks[0] as any).groups[0].items[0].approvalState).toBe('approved');
-    expect((carried[0].blocks[0] as any).groups[0].items[0].status).toBe('running');
+    expect((carried[0].blocks[0] as any).items[0].approval_state).toBe('approved');
+    expect((carried[0].blocks[0] as any).items[0].status).toBe('running');
   });
 
   it('syncs subagent blocks with the latest derived snapshot', () => {

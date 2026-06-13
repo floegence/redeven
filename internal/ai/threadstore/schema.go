@@ -230,10 +230,8 @@ func migrateThreadstoreToV24(tx *sql.Tx) error {
 }
 
 func migrateThreadstoreToV25(tx *sql.Tx) error {
-	if err := ensureActivityItemsTableTx(tx); err != nil {
-		return err
-	}
-	return ensureThreadCheckpointActivityItemsMaxIDTx(tx)
+	_ = tx
+	return nil
 }
 
 func migrateThreadstoreToV26(tx *sql.Tx) error {
@@ -403,33 +401,6 @@ CREATE TABLE IF NOT EXISTS ai_tool_calls (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_tool_calls_run_id ON ai_tool_calls(run_id, id ASC);
 
-CREATE TABLE IF NOT EXISTS ai_activity_items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  endpoint_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  run_id TEXT NOT NULL,
-  message_id TEXT NOT NULL,
-  group_id TEXT NOT NULL,
-  item_id TEXT NOT NULL,
-  tool_id TEXT NOT NULL DEFAULT '',
-  tool_name TEXT NOT NULL DEFAULT '',
-  kind TEXT NOT NULL,
-  renderer TEXT NOT NULL,
-  status TEXT NOT NULL,
-  severity TEXT NOT NULL DEFAULT 'normal',
-  summary_json TEXT NOT NULL DEFAULT '{}',
-  detail_refs_json TEXT NOT NULL DEFAULT '[]',
-  target_refs_json TEXT NOT NULL DEFAULT '[]',
-  payload_json TEXT NOT NULL DEFAULT '{}',
-  order_index INTEGER NOT NULL DEFAULT 0,
-  started_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  UNIQUE(run_id, item_id)
-);
-CREATE INDEX IF NOT EXISTS idx_ai_activity_items_run_order ON ai_activity_items(run_id, order_index ASC, id ASC);
-CREATE INDEX IF NOT EXISTS idx_ai_activity_items_thread ON ai_activity_items(endpoint_id, thread_id, id ASC);
-
 CREATE TABLE IF NOT EXISTS ai_run_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   endpoint_id TEXT NOT NULL,
@@ -461,44 +432,6 @@ CREATE TABLE IF NOT EXISTS ai_thread_state (
 		return err
 	}
 	return nil
-}
-
-func ensureActivityItemsTableTx(tx *sql.Tx) error {
-	if _, err := tx.Exec(`
-CREATE TABLE IF NOT EXISTS ai_activity_items (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  endpoint_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  run_id TEXT NOT NULL,
-  message_id TEXT NOT NULL,
-  group_id TEXT NOT NULL,
-  item_id TEXT NOT NULL,
-  tool_id TEXT NOT NULL DEFAULT '',
-  tool_name TEXT NOT NULL DEFAULT '',
-  kind TEXT NOT NULL,
-  renderer TEXT NOT NULL,
-  status TEXT NOT NULL,
-  severity TEXT NOT NULL DEFAULT 'normal',
-  summary_json TEXT NOT NULL DEFAULT '{}',
-  detail_refs_json TEXT NOT NULL DEFAULT '[]',
-  target_refs_json TEXT NOT NULL DEFAULT '[]',
-  payload_json TEXT NOT NULL DEFAULT '{}',
-  order_index INTEGER NOT NULL DEFAULT 0,
-  started_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  UNIQUE(run_id, item_id)
-);
-CREATE INDEX IF NOT EXISTS idx_ai_activity_items_run_order ON ai_activity_items(run_id, order_index ASC, id ASC);
-CREATE INDEX IF NOT EXISTS idx_ai_activity_items_thread ON ai_activity_items(endpoint_id, thread_id, id ASC);
-`); err != nil {
-		return err
-	}
-	return nil
-}
-
-func ensureThreadCheckpointActivityItemsMaxIDTx(tx *sql.Tx) error {
-	return ensureColumnTx(tx, "ai_thread_checkpoints", "activity_items_max_id", `ALTER TABLE ai_thread_checkpoints ADD COLUMN activity_items_max_id INTEGER NOT NULL DEFAULT 0`)
 }
 
 func ensureStructuredUserInputTablesTx(tx *sql.Tx) error {
@@ -697,8 +630,7 @@ CREATE TABLE IF NOT EXISTS ai_thread_checkpoints (
   transcript_max_id INTEGER NOT NULL DEFAULT 0,
   turns_max_id INTEGER NOT NULL DEFAULT 0,
   tool_calls_max_id INTEGER NOT NULL DEFAULT 0,
-  run_events_max_id INTEGER NOT NULL DEFAULT 0,
-  activity_items_max_id INTEGER NOT NULL DEFAULT 0
+  run_events_max_id INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_ai_thread_checkpoints_thread_created ON ai_thread_checkpoints(endpoint_id, thread_id, created_at_unix_ms DESC, checkpoint_id DESC);
 CREATE INDEX IF NOT EXISTS idx_ai_thread_checkpoints_run_id ON ai_thread_checkpoints(run_id);
@@ -936,7 +868,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_messages",
 		"ai_runs",
 		"ai_tool_calls",
-		"ai_activity_items",
 		"ai_run_events",
 		"ai_thread_state",
 		"ai_thread_todos",
@@ -1001,12 +932,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"error_code", "error_message", "retryable", "recovery_action", "started_at_unix_ms",
 			"ended_at_unix_ms", "latency_ms",
 		},
-		"ai_activity_items": {
-			"id", "endpoint_id", "thread_id", "run_id", "message_id", "group_id", "item_id",
-			"tool_id", "tool_name", "kind", "renderer", "status", "severity", "summary_json",
-			"detail_refs_json", "target_refs_json", "payload_json", "order_index",
-			"started_at_unix_ms", "ended_at_unix_ms", "updated_at_unix_ms",
-		},
 		"ai_run_events": {
 			"id", "endpoint_id", "thread_id", "run_id", "stream_kind", "event_type",
 			"payload_json", "at_unix_ms",
@@ -1024,7 +949,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_thread_checkpoints": {
 			"checkpoint_id", "endpoint_id", "thread_id", "run_id", "kind", "created_at_unix_ms",
 			"thread_json", "derived_json", "workspace_json", "transcript_max_id",
-			"turns_max_id", "tool_calls_max_id", "run_events_max_id", "activity_items_max_id",
+			"turns_max_id", "tool_calls_max_id", "run_events_max_id",
 		},
 		"ai_queued_turns": {
 			"queue_id", "endpoint_id", "thread_id", "channel_id", "lane", "sort_index",
@@ -1109,8 +1034,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"idx_ai_messages_thread_id",
 		"idx_ai_runs_endpoint_thread_updated",
 		"idx_ai_tool_calls_run_id",
-		"idx_ai_activity_items_run_order",
-		"idx_ai_activity_items_thread",
 		"idx_ai_run_events_run_id",
 		"idx_ai_run_events_endpoint_thread",
 		"idx_ai_thread_todos_updated",

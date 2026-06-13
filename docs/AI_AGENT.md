@@ -143,12 +143,12 @@ Installer note:
 
 ## Threadstore Persistence Contract
 
-- Flower thread persistence is thread-scoped by default. Deleting a thread removes its transcript rows, queued followups, run records, tool-call records, activity items, run events, checkpoints, structured waiting-input rows, todos, thread state, and derived context planes.
+- Flower thread persistence is thread-scoped by default. Deleting a thread removes its transcript rows, queued followups, run records, tool-call records, run events, checkpoints, structured waiting-input rows, todos, thread state, and derived context planes.
 - Upload blobs are persisted as first-class threadstore resources (`ai_uploads`) with explicit message/followup references (`ai_upload_refs`) instead of relying on transcript JSON scraping as the steady-state ownership source.
 - Fresh uploads start as staged runtime-local blobs. Once a message or queued followup claims them, they become thread-owned resources; deleting that thread or deleting an unconsumed followup removes the corresponding refs, deletes any newly unreferenced upload blobs/metadata, and then runs best-effort SQLite compaction so on-disk usage converges after cleanup.
 - Checkpoint restore follows the same ownership boundary: thread-scoped run/tool/activity/event artifacts that were created after the checkpoint are pruned during restore instead of being left behind as residual history.
-- Historical transcript rows that still contain raw `tool-call` blocks are migrated into `activity-timeline` blocks, and recoverable activity items are inserted into `ai_activity_items`. The current renderer does not keep a parallel raw tool-card display path.
-- The `workspace_json` column is now a legacy compatibility payload only. New checkpoints are thread-state-only; old workspace checkpoint artifacts are cleaned up best-effort during retention pruning, thread deletion, and startup orphan sweeps.
+- Assistant transcript blocks use `markdown`, `text`, `thinking`, and `activity-timeline`. Raw `tool-call` blocks are not a Flower chat contract.
+- Checkpoints are thread-state-only and do not persist a separate workspace payload.
 - OpenAI Responses continuation state is persisted in `ai_thread_state` together with other thread-scoped runtime metadata. Flower updates that state only after the assistant transcript has been durably appended, clears it when a run reaches terminal task completion or when no fresh continuation survives the run, and invalidates it before retrying a local replay turn if the provider rejects `previous_response_id`.
 - `provider_capabilities` is intentionally a global cache keyed by provider/model and is not deleted with any single thread.
 - The current shipped schema keeps semantic memory in `memory_items`. Redeven does not currently ship a separate persistent embeddings table until the runtime fully owns that lifecycle.

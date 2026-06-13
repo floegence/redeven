@@ -7,6 +7,8 @@ import type { Readable } from 'node:stream';
 import {
   type DesktopFlowerHostChatMessage,
   type DesktopFlowerHostChatMessageBlock,
+  type DesktopFlowerHostActivityItem,
+  type DesktopFlowerHostActivityTimelineBlock,
   type DesktopFlowerHostForkThreadRequest,
   type DesktopFlowerHostInputRequest,
   type DesktopFlowerHostMarkThreadReadRequest,
@@ -17,8 +19,9 @@ import {
   type DesktopFlowerHostSettingsSnapshot,
   type DesktopFlowerHostSubmitInputRequest,
   type DesktopFlowerHostTargetCache,
-  type DesktopFlowerHostToolActivity,
   type DesktopFlowerHostThread,
+  type DesktopFlowerHostTodoItem,
+  type DesktopFlowerHostTodoSnapshot,
   type DesktopFlowerHostRouterDecision,
   type DesktopFlowerHostError,
   type DesktopFlowerHostPresence,
@@ -732,6 +735,13 @@ function requireBridgeNumber(value: unknown, field: string): number {
   return number;
 }
 
+function optionalBridgeNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return requireBridgeNumber(value, field);
+}
+
 function requireBridgeBoolean(value: unknown, field: string): boolean {
   if (typeof value !== 'boolean') {
     bridgeContractError(field, 'must be a boolean');
@@ -994,9 +1004,46 @@ function normalizeBridgeCreateFailure(value: unknown, field: string): FlowerHost
   };
 }
 
+function normalizeBridgeActivityTimelineBlock(value: unknown, field: string): DesktopFlowerHostActivityTimelineBlock {
+  const record = requireBridgeObject(value, field);
+  const summary = requireBridgeObject(record.summary, `${field}.summary`);
+  if (!Array.isArray(record.items)) {
+    bridgeContractError(`${field}.items`, 'must be an array');
+  }
+  const runID = optionalBridgeString(record.run_id, `${field}.run_id`);
+  const threadID = optionalBridgeString(record.thread_id, `${field}.thread_id`);
+  const turnID = optionalBridgeString(record.turn_id, `${field}.turn_id`);
+  const traceID = optionalBridgeString(record.trace_id, `${field}.trace_id`);
+  const attentionReasons = summary.attention_reasons === undefined
+    ? undefined
+    : normalizeBridgeActivityAttentionReasons(summary.attention_reasons, `${field}.summary.attention_reasons`);
+  const durationMS = optionalBridgeNumber(summary.duration_ms, `${field}.summary.duration_ms`);
+  return {
+    type: 'activity-timeline',
+    schema_version: requireBridgeNumber(record.schema_version, `${field}.schema_version`),
+    ...(runID ? { run_id: runID } : {}),
+    ...(threadID ? { thread_id: threadID } : {}),
+    ...(turnID ? { turn_id: turnID } : {}),
+    ...(traceID ? { trace_id: traceID } : {}),
+    summary: {
+      status: normalizeBridgeActivityStatus(summary.status, `${field}.summary.status`),
+      severity: normalizeBridgeActivitySeverity(summary.severity, `${field}.summary.severity`),
+      needs_attention: requireBridgeBoolean(summary.needs_attention, `${field}.summary.needs_attention`),
+      ...(attentionReasons ? { attention_reasons: attentionReasons } : {}),
+      total_items: requireBridgeNumber(summary.total_items, `${field}.summary.total_items`),
+      counts: normalizeBridgeActivityCounts(summary.counts, `${field}.summary.counts`),
+      ...(durationMS !== undefined ? { duration_ms: durationMS } : {}),
+    },
+    items: record.items.map((item, index) => normalizeBridgeActivityItem(item, `${field}.items[${index}]`)),
+  };
+}
+
 function normalizeBridgeMessageBlock(block: unknown, field: string): DesktopFlowerHostChatMessageBlock {
   const record = requireBridgeObject(block, field);
   const type = compact(record.type);
+  if (type === 'activity-timeline') {
+    return normalizeBridgeActivityTimelineBlock(block, field);
+  }
   if (type !== 'markdown' && type !== 'text' && type !== 'thinking') {
     bridgeContractError(`${field}.type`, `has unsupported value ${JSON.stringify(type)}`);
   }
@@ -1027,7 +1074,7 @@ function normalizeBridgeMessage(message: unknown, field: string): DesktopFlowerH
   };
 }
 
-function normalizeBridgeToolActivityStatus(value: unknown, field: string): DesktopFlowerHostToolActivity['status'] {
+function normalizeBridgeActivityStatus(value: unknown, field: string): DesktopFlowerHostActivityTimelineBlock['summary']['status'] {
   const status = compact(value);
   if (
     status === 'pending'
@@ -1042,25 +1089,98 @@ function normalizeBridgeToolActivityStatus(value: unknown, field: string): Deskt
   bridgeContractError(field, `has unsupported value ${JSON.stringify(status)}`);
 }
 
-function normalizeBridgeToolActivity(item: unknown, field: string): DesktopFlowerHostToolActivity {
-  const record = requireBridgeObject(item, field);
-  const runID = optionalBridgeString(record.run_id, `${field}.run_id`);
-  const requiresApproval = optionalBridgeBoolean(record.requires_approval, `${field}.requires_approval`);
-  const approvalState = optionalBridgeString(record.approval_state, `${field}.approval_state`);
-  const errorMessage = optionalBridgeString(record.error_message, `${field}.error_message`);
-  const startedAtMS = optionalBridgeTimestamp(record.started_at_ms, `${field}.started_at_ms`);
-  const endedAtMS = optionalBridgeTimestamp(record.ended_at_ms, `${field}.ended_at_ms`);
+function normalizeBridgeActivityKind(value: unknown, field: string): DesktopFlowerHostActivityItem['kind'] {
+  const kind = compact(value);
+  if (kind === 'tool' || kind === 'hosted_tool' || kind === 'approval' || kind === 'control' || kind === 'budget') {
+    return kind;
+  }
+  bridgeContractError(field, `has unsupported value ${JSON.stringify(kind)}`);
+}
+
+function normalizeBridgeActivitySeverity(value: unknown, field: string): DesktopFlowerHostActivityItem['severity'] {
+  const severity = compact(value);
+  if (severity === 'quiet' || severity === 'normal' || severity === 'warning' || severity === 'error' || severity === 'blocking') {
+    return severity;
+  }
+  bridgeContractError(field, `has unsupported value ${JSON.stringify(severity)}`);
+}
+
+function normalizeBridgeActivityAttentionReasons(value: unknown, field: string): NonNullable<DesktopFlowerHostActivityItem['attention_reasons']> {
+  if (!Array.isArray(value)) {
+    bridgeContractError(field, 'must be an array');
+  }
+  return value.map((item, index) => {
+    const reason = compact(item);
+    if (reason === 'running' || reason === 'waiting' || reason === 'approval' || reason === 'error') {
+      return reason;
+    }
+    bridgeContractError(`${field}[${index}]`, `has unsupported value ${JSON.stringify(reason)}`);
+  });
+}
+
+function normalizeBridgeActivityApprovalState(value: unknown, field: string): DesktopFlowerHostActivityItem['approval_state'] | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const state = compact(value);
+  if (state === '') {
+    return undefined;
+  }
+  if (state === 'requested' || state === 'approved' || state === 'rejected' || state === 'timed_out' || state === 'canceled') {
+    return state;
+  }
+  bridgeContractError(field, `has unsupported value ${JSON.stringify(state)}`);
+}
+
+function normalizeBridgeActivityCounts(value: unknown, field: string): DesktopFlowerHostActivityTimelineBlock['summary']['counts'] {
+  const record = requireBridgeObject(value, field);
+  const keys = ['pending', 'running', 'waiting', 'success', 'error', 'canceled', 'approval'] as const;
+  const out: Record<string, number> = {};
+  for (const key of keys) {
+    if (record[key] !== undefined) {
+      out[key] = requireBridgeNumber(record[key], `${field}.${key}`);
+    }
+  }
+  return out;
+}
+
+function normalizeBridgeActivityMetadata(value: unknown, field: string): Readonly<Record<string, string>> | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const record = requireBridgeObject(value, field);
+  const out: Record<string, string> = {};
+  for (const [key, item] of Object.entries(record)) {
+    out[key] = requireBridgeString(item, `${field}.${key}`, { allowEmpty: true });
+  }
+  return out;
+}
+
+function normalizeBridgeActivityItem(value: unknown, field: string): DesktopFlowerHostActivityItem {
+  const record = requireBridgeObject(value, field);
+  const toolID = optionalBridgeString(record.tool_id, `${field}.tool_id`);
+  const toolName = optionalBridgeString(record.tool_name, `${field}.tool_name`);
+  const attentionReasons = record.attention_reasons === undefined
+    ? undefined
+    : normalizeBridgeActivityAttentionReasons(record.attention_reasons, `${field}.attention_reasons`);
+  const approvalState = normalizeBridgeActivityApprovalState(record.approval_state, `${field}.approval_state`);
+  const startedAtUnixMS = optionalBridgeTimestamp(record.started_at_unix_ms, `${field}.started_at_unix_ms`);
+  const endedAtUnixMS = optionalBridgeTimestamp(record.ended_at_unix_ms, `${field}.ended_at_unix_ms`);
+  const metadata = normalizeBridgeActivityMetadata(record.metadata, `${field}.metadata`);
   return {
-    ...(runID ? { run_id: runID } : {}),
-    tool_id: requireBridgeString(record.tool_id, `${field}.tool_id`),
-    tool_name: requireBridgeString(record.tool_name, `${field}.tool_name`),
-    status: normalizeBridgeToolActivityStatus(record.status, `${field}.status`),
-    summary: requireBridgeString(record.summary, `${field}.summary`),
-    ...(requiresApproval !== undefined ? { requires_approval: requiresApproval } : {}),
+    item_id: requireBridgeString(record.item_id, `${field}.item_id`),
+    ...(toolID ? { tool_id: toolID } : {}),
+    ...(toolName ? { tool_name: toolName } : {}),
+    kind: normalizeBridgeActivityKind(record.kind, `${field}.kind`),
+    status: normalizeBridgeActivityStatus(record.status, `${field}.status`),
+    severity: normalizeBridgeActivitySeverity(record.severity, `${field}.severity`),
+    needs_attention: requireBridgeBoolean(record.needs_attention, `${field}.needs_attention`),
+    ...(attentionReasons ? { attention_reasons: attentionReasons } : {}),
+    requires_approval: requireBridgeBoolean(record.requires_approval, `${field}.requires_approval`),
     ...(approvalState ? { approval_state: approvalState } : {}),
-    ...(errorMessage ? { error_message: errorMessage } : {}),
-    ...(startedAtMS ? { started_at_ms: startedAtMS } : {}),
-    ...(endedAtMS ? { ended_at_ms: endedAtMS } : {}),
+    ...(startedAtUnixMS ? { started_at_unix_ms: startedAtUnixMS } : {}),
+    ...(endedAtUnixMS ? { ended_at_unix_ms: endedAtUnixMS } : {}),
+    ...(metadata ? { metadata } : {}),
   };
 }
 
@@ -1205,24 +1325,70 @@ function normalizeBridgeThreadError(value: unknown, field: string): DesktopFlowe
   };
 }
 
+function normalizeBridgeTodoStatus(value: unknown, field: string): DesktopFlowerHostTodoItem['status'] {
+  const status = compact(value);
+  if (status === 'pending' || status === 'in_progress' || status === 'completed' || status === 'cancelled') {
+    return status;
+  }
+  bridgeContractError(field, `has unsupported value ${JSON.stringify(status)}`);
+}
+
+function normalizeBridgeTodoItem(value: unknown, field: string): DesktopFlowerHostTodoItem {
+  const record = requireBridgeObject(value, field);
+  const note = optionalBridgeString(record.note, `${field}.note`);
+  return {
+    id: requireBridgeString(record.id, `${field}.id`),
+    content: requireBridgeString(record.content, `${field}.content`),
+    status: normalizeBridgeTodoStatus(record.status, `${field}.status`),
+    ...(note ? { note } : {}),
+  };
+}
+
+function normalizeBridgeTodoSnapshot(value: unknown, field: string): DesktopFlowerHostTodoSnapshot | null | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === null) {
+    return null;
+  }
+  const record = requireBridgeObject(value, field);
+  const summary = requireBridgeObject(record.summary, `${field}.summary`);
+  if (!Array.isArray(record.todos)) {
+    bridgeContractError(`${field}.todos`, 'must be an array');
+  }
+  return {
+    version: requireBridgeNumber(record.version, `${field}.version`),
+    updated_at_ms: requireBridgeNumber(record.updated_at_ms, `${field}.updated_at_ms`),
+    summary: {
+      total: requireBridgeNumber(summary.total, `${field}.summary.total`),
+      pending: requireBridgeNumber(summary.pending, `${field}.summary.pending`),
+      in_progress: requireBridgeNumber(summary.in_progress, `${field}.summary.in_progress`),
+      completed: requireBridgeNumber(summary.completed, `${field}.summary.completed`),
+      cancelled: requireBridgeNumber(summary.cancelled, `${field}.summary.cancelled`),
+    },
+    todos: record.todos.map((todo, index) => normalizeBridgeTodoItem(todo, `${field}.todos[${index}]`)),
+  };
+}
+
 function normalizeBridgeThread(thread: DesktopFlowerHostThread): DesktopFlowerHostThread {
   const record = requireBridgeObject(thread, 'thread');
   if (!Array.isArray(record.messages)) {
     bridgeContractError('thread.messages', 'must be an array');
   }
-  if (record.tool_activity !== undefined && !Array.isArray(record.tool_activity)) {
-    bridgeContractError('thread.tool_activity', 'must be an array');
+  if (record.activity_timeline !== undefined && !Array.isArray(record.activity_timeline)) {
+    bridgeContractError('thread.activity_timeline', 'must be an array');
   }
   const messages: readonly DesktopFlowerHostChatMessage[] = record.messages
     .map((message, index) => normalizeBridgeMessage(message, `thread.messages[${index}]`));
-  const toolActivity = Array.isArray(record.tool_activity)
-    ? record.tool_activity.map((item, index) => normalizeBridgeToolActivity(item, `thread.tool_activity[${index}]`))
+  const activityTimeline = Array.isArray(record.activity_timeline)
+    ? record.activity_timeline.map((timeline, index) => normalizeBridgeActivityTimelineBlock(timeline, `thread.activity_timeline[${index}]`))
     : undefined;
   const status = normalizeBridgeThreadStatus(record.status, 'thread.status');
   const error = normalizeBridgeThreadError(record.error, 'thread.error');
   const homeHostKind = normalizeBridgeHostKind(record.home_host_kind, 'thread.home_host_kind');
   const homeHostID = optionalBridgeString(record.home_host_id, 'thread.home_host_id');
   const inputRequest = normalizeBridgeInputRequest(record.input_request, 'thread.input_request');
+  const todoSnapshot = normalizeBridgeTodoSnapshot(record.todo_snapshot, 'thread.todo_snapshot');
   const pinnedAtMs = record.pinned_at_ms === undefined || record.pinned_at_ms === null
     ? undefined
     : requireBridgeTimestamp(record.pinned_at_ms, 'thread.pinned_at_ms');
@@ -1240,7 +1406,8 @@ function normalizeBridgeThread(thread: DesktopFlowerHostThread): DesktopFlowerHo
     source_label: requireBridgeString(record.source_label, 'thread.source_label'),
     target_labels: requireBridgeStringArray(record.target_labels, 'thread.target_labels'),
     messages,
-    ...(toolActivity ? { tool_activity: toolActivity } : {}),
+    ...(activityTimeline ? { activity_timeline: activityTimeline } : {}),
+    ...(todoSnapshot !== undefined ? { todo_snapshot: todoSnapshot } : {}),
     ...(inputRequest ? { input_request: inputRequest } : {}),
     ...(error ? { error } : {}),
     has_unread: requireBridgeBoolean(record.has_unread, 'thread.has_unread'),

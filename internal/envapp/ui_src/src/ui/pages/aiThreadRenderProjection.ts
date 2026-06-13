@@ -1,4 +1,10 @@
-import type { Message, MessageBlock } from '../chat/types';
+import type {
+  ActivityApprovalState,
+  ActivityItemSeverity,
+  ActivityItemStatus,
+  Message,
+  MessageBlock,
+} from '../chat/types';
 import type { SubagentView } from './aiDataNormalizers';
 import { sameSubagentViewContent } from './aiSubagentState';
 
@@ -209,10 +215,10 @@ function carryForwardBlocks(previousBlocks: MessageBlock[], nextBlocks: MessageB
 
 function findMatchingPreviousBlock(previousBlocks: MessageBlock[], nextBlock: MessageBlock, index: number): MessageBlock | null {
   if (nextBlock.type === 'activity-timeline') {
-    const runId = String(nextBlock.runId ?? '').trim();
+    const runId = String(nextBlock.run_id ?? '').trim();
     if (runId) {
       const match = previousBlocks.find(
-        (block) => block.type === 'activity-timeline' && String(block.runId ?? '').trim() === runId,
+        (block) => block.type === 'activity-timeline' && String(block.run_id ?? '').trim() === runId,
       );
       if (match) return match;
     }
@@ -225,56 +231,49 @@ function findMatchingPreviousBlock(previousBlocks: MessageBlock[], nextBlock: Me
 
 function carryForwardActivityTimelineState(previous: ActivityTimelineBlock, next: ActivityTimelineBlock): ActivityTimelineBlock {
   const previousByToolId = new Map<string, {
-    approvalState?: string;
-    status?: string;
-    severity?: string;
+    approval_state?: ActivityApprovalState;
+    status?: ActivityItemStatus;
+    severity?: ActivityItemSeverity;
   }>();
-  for (const group of previous.groups) {
-    for (const item of group.items) {
-      const toolId = String(item.toolId ?? '').trim();
-      if (!toolId || item.requiresApproval !== true) continue;
-      previousByToolId.set(toolId, {
-        approvalState: item.approvalState,
-        status: item.status,
-        severity: item.severity,
-      });
-    }
+  for (const item of previous.items) {
+    const toolID = String(item.tool_id ?? '').trim();
+    if (!toolID || item.requires_approval !== true) continue;
+    previousByToolId.set(toolID, {
+      approval_state: item.approval_state,
+      status: item.status,
+      severity: item.severity,
+    });
   }
   if (previousByToolId.size === 0) {
     return next;
   }
 
   let changed = false;
-  const groups = next.groups.map((group) => {
-    let groupChanged = false;
-    const items = group.items.map((item) => {
-      const toolId = String(item.toolId ?? '').trim();
-      const previousItem = toolId ? previousByToolId.get(toolId) : undefined;
-      if (
-        !previousItem ||
-        item.requiresApproval !== true ||
-        !previousItem.approvalState ||
-        previousItem.approvalState === item.approvalState
-      ) {
-        return item;
-      }
-      groupChanged = true;
-      changed = true;
-      return {
-        ...item,
-        approvalState: previousItem.approvalState,
-        status: previousItem.status === 'error' || previousItem.approvalState === 'rejected'
-          ? 'error'
-          : previousItem.approvalState === 'approved' && item.status === 'pending'
-            ? 'running'
-            : item.status,
-        severity: previousItem.approvalState === 'rejected' ? 'error' : item.severity,
-      };
-    });
-    return groupChanged ? { ...group, items } : group;
+  const items = next.items.map((item) => {
+    const toolID = String(item.tool_id ?? '').trim();
+    const previousItem = toolID ? previousByToolId.get(toolID) : undefined;
+    if (
+      !previousItem ||
+      item.requires_approval !== true ||
+      !previousItem.approval_state ||
+      previousItem.approval_state === item.approval_state
+    ) {
+      return item;
+    }
+    changed = true;
+    return {
+      ...item,
+      approval_state: previousItem.approval_state,
+      status: previousItem.status === 'error' || previousItem.approval_state === 'rejected'
+        ? 'error'
+        : previousItem.approval_state === 'approved' && item.status === 'pending'
+          ? 'running'
+          : item.status,
+      severity: previousItem.approval_state === 'rejected' ? 'error' : item.severity,
+    };
   });
 
-  return changed ? { ...next, groups } : next;
+  return changed ? { ...next, items } : next;
 }
 
 function carryForwardChecklistState(previous: ChecklistBlock, next: ChecklistBlock): ChecklistBlock {

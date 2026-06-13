@@ -848,7 +848,7 @@ PRAGMA user_version=1;
 		t.Fatalf("missing migrated queued turn column %q", "context_action_json")
 	}
 
-	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_activity_items", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers", "ai_flower_thread_metadata", "ai_flower_transfers", "ai_flower_handoffs"} {
+	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "context_snapshots", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers", "ai_flower_thread_metadata", "ai_flower_transfers", "ai_flower_handoffs"} {
 		var exists int
 		if err := s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
@@ -1208,30 +1208,6 @@ INSERT INTO ai_messages(
 	}); err != nil {
 		t.Fatalf("AppendRunEvent: %v", err)
 	}
-	if err := s.UpsertActivityItem(ctx, ActivityItemRecord{
-		EndpointID:      endpointID,
-		ThreadID:        threadID,
-		RunID:           "run_1",
-		MessageID:       "msg_1",
-		GroupID:         "command",
-		ItemID:          "tool_1",
-		ToolID:          "tool_1",
-		ToolName:        "terminal.exec",
-		Kind:            "command",
-		Renderer:        "command",
-		Status:          "success",
-		Severity:        "quiet",
-		SummaryJSON:     `{"label":"Ran command"}`,
-		DetailRefsJSON:  `[]`,
-		TargetRefsJSON:  `[]`,
-		PayloadJSON:     `{}`,
-		OrderIndex:      0,
-		StartedAtUnixMs: 111,
-		EndedAtUnixMs:   112,
-		UpdatedAtUnixMs: 113,
-	}); err != nil {
-		t.Fatalf("UpsertActivityItem: %v", err)
-	}
 	if _, err := s.CreateThreadCheckpoint(ctx, endpointID, threadID, "cp_1", "run_1", CheckpointKindPreRun); err != nil {
 		t.Fatalf("CreateThreadCheckpoint: %v", err)
 	}
@@ -1307,7 +1283,6 @@ INSERT INTO ai_messages(
 		"ai_queued_turns":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_runs":                           countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_runs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_run_events":                     countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_run_events WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
-		"ai_activity_items":                 countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_activity_items WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_thread_checkpoints":             countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_checkpoints WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_flower_thread_metadata":         countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_flower_thread_metadata WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_flower_transfers":               countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_flower_transfers WHERE endpoint_id = ? AND (source_thread_id = ? OR destination_thread_id = ?)`, endpointID, threadID, threadID),
@@ -1667,7 +1642,7 @@ func TestStore_GetToolCall(t *testing.T) {
 func TestBuildPreview_AssistantUsesLatestMarkdownBlock(t *testing.T) {
 	t.Parallel()
 
-	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"markdown","content":"I will quickly scan the project layout first."},{"type":"tool-call","toolName":"terminal.exec"},{"type":"markdown","content":"Findings:\n- Has clear module boundaries.\nEvidence:\n- README.md defines run steps."}],"status":"complete","timestamp":1}`
+	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"markdown","content":"I will quickly scan the project layout first."},{"type":"activity-timeline","schema_version":1,"run_id":"run_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[{"item_id":"tool_terminal","tool_id":"tool_terminal","tool_name":"terminal.exec","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false}]},{"type":"markdown","content":"Findings:\n- Has clear module boundaries.\nEvidence:\n- README.md defines run steps."}],"status":"complete","timestamp":1}`
 	text := "I will quickly scan the project layout first.\nFindings:\n- Has clear module boundaries.\nEvidence:\n- README.md defines run steps."
 
 	preview := buildPreview("assistant", text, messageJSON)
@@ -1679,28 +1654,25 @@ func TestBuildPreview_AssistantUsesLatestMarkdownBlock(t *testing.T) {
 	}
 }
 
-func TestBuildPreview_AssistantIgnoresThinkingBlocks(t *testing.T) {
+func TestBuildPreview_AssistantUsesLatestVisibleThinkingBlock(t *testing.T) {
 	t.Parallel()
 
 	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"markdown","content":"Initial summary."},{"type":"thinking","content":"Verified the runtime emits visible reasoning blocks."}],"status":"complete","timestamp":1}`
 
 	preview := buildPreview("assistant", "", messageJSON)
-	if !strings.Contains(preview, "Initial summary") {
-		t.Fatalf("preview=%q, want latest visible markdown content", preview)
-	}
-	if strings.Contains(preview, "visible reasoning blocks") {
-		t.Fatalf("preview=%q, should ignore thinking content", preview)
+	if !strings.Contains(preview, "visible reasoning blocks") {
+		t.Fatalf("preview=%q, want latest visible thinking content", preview)
 	}
 }
 
-func TestBuildPreview_AssistantPrefersVisibleTextOverToolCallFallback(t *testing.T) {
+func TestBuildPreview_AssistantUsesThinkingWhenNoMarkdownIsPresent(t *testing.T) {
 	t.Parallel()
 
-	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"thinking","content":"Visible reasoning should stay user-facing."},{"type":"tool-call","toolName":"ask_user","toolId":"tool_1","args":{"questions":[{"id":"question_1","header":"Need guidance","question":"Choose the next direction."}]}}],"status":"complete","timestamp":1}`
+	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"thinking","content":"Visible reasoning should stay user-facing."},{"type":"activity-timeline","schema_version":1,"run_id":"run_1","summary":{"status":"waiting","severity":"blocking","needs_attention":true,"attention_reasons":["waiting"],"total_items":1,"counts":{"waiting":1}},"items":[{"item_id":"tool_1","tool_id":"tool_1","tool_name":"ask_user","kind":"control","status":"waiting","severity":"blocking","needs_attention":true,"attention_reasons":["waiting"],"requires_approval":false}]}],"status":"complete","timestamp":1}`
 
 	preview := buildPreview("assistant", "", messageJSON)
-	if !strings.Contains(preview, "Choose the next direction") {
-		t.Fatalf("preview=%q, want tool-call fallback when only thinking is present", preview)
+	if !strings.Contains(preview, "Visible reasoning") {
+		t.Fatalf("preview=%q, want visible thinking text when no markdown is present", preview)
 	}
 }
 
@@ -1714,21 +1686,21 @@ func TestBuildPreview_AssistantFallsBackWhenMessageJSONInvalid(t *testing.T) {
 	}
 }
 
-func TestBuildPreview_AssistantFallsBackToAskUserQuestion(t *testing.T) {
+func TestBuildPreview_AssistantReturnsEmptyWithoutVisibleText(t *testing.T) {
 	t.Parallel()
 
-	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"tool-call","toolName":"ask_user","toolId":"tool_1","args":{"questions":[{"id":"question_1","header":"Need guidance","question":"I hit repeated tool failures while inspecting the file. Choose the next direction.","response_mode":"write","write_label":"Your answer","write_placeholder":"Type your answer"}],"reason_code":"conflicting_constraints","required_from_user":["Choose the next direction."],"evidence_refs":["tool:terminal_exec:1"]},"result":{"questions":[{"id":"question_1","header":"Need guidance","question":"I hit repeated tool failures while inspecting the file. Choose the next direction.","response_mode":"write","write_label":"Your answer","write_placeholder":"Type your answer"}],"waiting_user":true}}],"status":"complete","timestamp":1}`
+	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_1","summary":{"status":"waiting","severity":"blocking","needs_attention":true,"attention_reasons":["waiting"],"total_items":1,"counts":{"waiting":1}},"items":[{"item_id":"tool_1","tool_id":"tool_1","tool_name":"ask_user","kind":"control","status":"waiting","severity":"blocking","needs_attention":true,"attention_reasons":["waiting"],"requires_approval":false}]}],"status":"complete","timestamp":1}`
 
 	preview := buildPreview("assistant", "", messageJSON)
-	if !strings.Contains(preview, "Choose the next direction") {
-		t.Fatalf("preview=%q, want ask_user question fallback", preview)
+	if preview != "" {
+		t.Fatalf("preview=%q, want empty preview without visible text", preview)
 	}
 }
 
-func TestBuildPreview_AssistantFallsBackToTaskCompleteResult(t *testing.T) {
+func TestBuildPreview_AssistantUsesTextBlockForFinalConclusion(t *testing.T) {
 	t.Parallel()
 
-	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"tool-call","toolName":"task_complete","toolId":"tool_1","args":{"result":"Completed the verification and documented the remaining risks."}}],"status":"complete","timestamp":1}`
+	messageJSON := `{"id":"m1","role":"assistant","blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[{"item_id":"tool_1","tool_id":"tool_1","tool_name":"task_complete","kind":"control","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false}]},{"type":"text","content":"Completed the verification and documented the remaining risks."}],"status":"complete","timestamp":1}`
 
 	preview := buildPreview("assistant", "", messageJSON)
 	if !strings.Contains(preview, "Completed the verification") {
@@ -1797,7 +1769,7 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 		CreatedAtUnixMs: 120,
 		UpdatedAtUnixMs: 120,
 		TextContent:     "done",
-		MessageJSON:     `{"id":"msg_assistant","role":"assistant","source":"msg_user","blocks":[{"type":"activity-timeline","messageId":"msg_assistant","summary":{"id":"msg_user","source":"msg_user"}},{"type":"tool-call","toolName":"terminal.exec","args":{"id":"msg_user","source":"msg_user"},"result":{"id":"msg_user","source":"msg_user"}}]}`,
+		MessageJSON:     `{"id":"msg_assistant","role":"assistant","source":"msg_user","blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_src","thread_id":"th_src","turn_id":"msg_assistant","trace_id":"run_src","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[{"item_id":"tool_terminal","tool_id":"tool_terminal","tool_name":"terminal.exec","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"metadata":{"source":"msg_user"}}]},{"type":"markdown","content":"done"}]}`,
 	}, "u1", "u1@example.com"); err != nil {
 		t.Fatalf("AppendMessage assistant: %v", err)
 	}
@@ -1954,25 +1926,34 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	if !ok || len(blocks) != 2 {
 		t.Fatalf("assistant blocks=%#v, want 2 blocks", assistantJSON["blocks"])
 	}
-	timeline, _ := blocks[0].(map[string]any)
-	if got := strings.TrimSpace(fmt.Sprint(timeline["messageId"])); got != msgs[1].MessageID {
-		t.Fatalf("timeline messageId=%q, want %q", got, msgs[1].MessageID)
+	timeline, ok := blocks[0].(map[string]any)
+	if !ok {
+		t.Fatalf("timeline block=%#v, want object", blocks[0])
 	}
-	summary, _ := timeline["summary"].(map[string]any)
-	if got := strings.TrimSpace(fmt.Sprint(summary["id"])); got != "msg_user" {
-		t.Fatalf("timeline summary id=%q, want original tool payload id", got)
+	if got := strings.TrimSpace(fmt.Sprint(timeline["thread_id"])); got != "th_fork" {
+		t.Fatalf("timeline thread_id=%q, want fork thread", got)
 	}
-	if got := strings.TrimSpace(fmt.Sprint(summary["source"])); got != "msg_user" {
-		t.Fatalf("timeline summary source=%q, want original tool payload source", got)
+	if got := strings.TrimSpace(fmt.Sprint(timeline["turn_id"])); got != msgs[1].MessageID {
+		t.Fatalf("timeline turn_id=%q, want %q", got, msgs[1].MessageID)
 	}
-	tool, _ := blocks[1].(map[string]any)
-	args, _ := tool["args"].(map[string]any)
-	result, _ := tool["result"].(map[string]any)
-	if got := strings.TrimSpace(fmt.Sprint(args["id"])); got != "msg_user" {
-		t.Fatalf("tool args id=%q, want original payload id", got)
+	items, ok := timeline["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("timeline items=%#v, want one item", timeline["items"])
 	}
-	if got := strings.TrimSpace(fmt.Sprint(result["source"])); got != "msg_user" {
-		t.Fatalf("tool result source=%q, want original payload source", got)
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("timeline item=%#v, want object", items[0])
+	}
+	metadata, ok := item["metadata"].(map[string]any)
+	if !ok {
+		t.Fatalf("timeline item metadata=%#v, want object", item["metadata"])
+	}
+	if got := strings.TrimSpace(fmt.Sprint(metadata["source"])); got != "msg_user" {
+		t.Fatalf("timeline metadata source=%q, want original non-reference value", got)
+	}
+	markdown, ok := blocks[1].(map[string]any)
+	if !ok || strings.TrimSpace(fmt.Sprint(markdown["type"])) != "markdown" || strings.TrimSpace(fmt.Sprint(markdown["content"])) != "done" {
+		t.Fatalf("assistant final block=%#v, want markdown conclusion", blocks[1])
 	}
 	turns, err := s.ListConversationTurns(ctx, "env_1", "th_fork", 10)
 	if err != nil {

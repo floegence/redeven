@@ -4,19 +4,23 @@ import { normalizeActivityDetail } from './activityDetailPresentation';
 import type { ActivityDetailRef, ActivityItem } from '../types';
 
 const baseItem: ActivityItem = {
-  itemId: 'item-1',
-  toolId: 'tool-1',
-  toolName: 'shell',
+  item_id: 'item-1',
+  tool_id: 'tool-1',
+  tool_name: 'shell',
+  kind: 'tool',
   renderer: 'command',
   status: 'success',
+  severity: 'quiet',
+  needs_attention: false,
+  requires_approval: false,
   label: 'Run tests',
-  targetRefs: [{ kind: 'command', label: 'npm test' }],
+  target_refs: [{ kind: 'command', label: 'npm test' }],
 };
 
 const inlineRef: ActivityDetailRef = {
-  refId: 'detail-1',
+  ref_id: 'detail-1',
   kind: 'terminal',
-  fetchMode: 'inline',
+  fetch_mode: 'inline',
   title: '',
 };
 
@@ -47,7 +51,7 @@ describe('activityDetailPresentation', () => {
       ...baseItem,
       renderer: 'unknown',
       label: '',
-      targetRefs: [],
+      target_refs: [],
     }, { ...inlineRef, kind: 'tool_detail' }, {
       args: { query: 'Flower prompt text should remain literal.' },
       result: { total: 2 },
@@ -92,6 +96,34 @@ describe('activityDetailPresentation', () => {
         text: 'pending:',
         textKey: 'chatActivity.fallback.untitledTodo',
         textPrefixSeparator: ':',
+      }),
+    ]));
+  });
+
+  it('ignores camelCase todo status payload fields', () => {
+    const detail = normalizeActivityDetail({
+      ...baseItem,
+      renderer: 'todos',
+    }, { ...inlineRef, kind: 'todo_delta' }, {
+      result: {
+        todos: [
+          {
+            id: 'todo-1',
+            content: 'Update the contract',
+            beforeStatus: 'completed',
+            afterStatus: 'completed',
+          },
+        ],
+      },
+    });
+
+    expect(detail.sections).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'todo_delta',
+        items: [expect.objectContaining({
+          beforeStatus: undefined,
+          afterStatus: 'pending',
+        })],
       }),
     ]));
   });

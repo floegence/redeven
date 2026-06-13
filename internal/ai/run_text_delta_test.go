@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/floegence/floret/observation"
 )
 
 func TestTrimMarkdownDeltaOverlap_RemovesLargePrefixOverlap(t *testing.T) {
@@ -39,13 +41,30 @@ func TestTrimMarkdownDeltaOverlap_LeavesDifferentDeltaUntouched(t *testing.T) {
 	}
 }
 
+func activityTimelinePlaceholder(runID string) ActivityTimelineBlock {
+	return newActivityTimelineBlock(observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         runID,
+		ThreadID:      "thread_" + runID,
+		TurnID:        "msg_" + runID,
+		TraceID:       runID,
+		Summary: observation.ActivitySummary{
+			Status:     observation.ActivityStatusSuccess,
+			Severity:   observation.ActivitySeverityQuiet,
+			TotalItems: 0,
+			Counts:     observation.ActivityCounts{},
+		},
+		Items: []observation.ActivityItem{},
+	})
+}
+
 func TestAssistantMarkdownTextSnapshot_JoinsMarkdownBlocksOnly(t *testing.T) {
 	t.Parallel()
 
 	r := &run{
 		assistantBlocks: []any{
 			&persistedMarkdownBlock{Type: "markdown", Content: "first part"},
-			ToolCallBlock{Type: "tool-call", ToolName: "terminal.exec"},
+			activityTimelinePlaceholder("run_snapshot"),
 			&persistedMarkdownBlock{Type: "markdown", Content: "second part"},
 		},
 	}
@@ -172,7 +191,7 @@ func TestReconcileCanonicalMarkdownMessage_PublishesCanonicalBeforeClearingEarli
 		},
 		assistantBlocks: []any{
 			&persistedMarkdownBlock{Type: "markdown", Content: "intro"},
-			ToolCallBlock{Type: "tool-call", ToolName: "terminal.exec"},
+			activityTimelinePlaceholder("run_mixed"),
 			&persistedMarkdownBlock{Type: "markdown", Content: "teaser"},
 		},
 	}
@@ -228,7 +247,7 @@ func TestReconcileCanonicalMarkdownMessage_AppendsMarkdownWhenNoMarkdownBlocksEx
 		},
 		assistantBlocks: []any{
 			&persistedThinkingBlock{Type: "thinking", Content: "thinking"},
-			ToolCallBlock{Type: "tool-call", ToolName: "task_complete"},
+			activityTimelinePlaceholder("run_append"),
 		},
 		nextBlockIndex: 2,
 	}
@@ -264,7 +283,7 @@ func TestReconcileCanonicalMarkdownMessage_UpdatesPersistedAssistantSnapshotText
 		assistantCreatedAtUnixMs: 123,
 		assistantBlocks: []any{
 			&persistedMarkdownBlock{Type: "markdown", Content: "intro"},
-			ToolCallBlock{Type: "tool-call", ToolName: "terminal.exec"},
+			activityTimelinePlaceholder("run_snapshot"),
 			&persistedMarkdownBlock{Type: "markdown", Content: "teaser"},
 		},
 	}
@@ -300,7 +319,7 @@ func TestReconcileCanonicalMarkdownMessage_UpdatesPersistedAssistantSnapshotText
 	}
 }
 
-func TestEmitTaskCompleteToolBlockProjectsActivityTimelineWithoutChangingAssistantText(t *testing.T) {
+func TestRecordTaskCompleteSignalPublishesActivityTimelineWithoutChangingAssistantText(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 1)
@@ -318,7 +337,7 @@ func TestEmitTaskCompleteToolBlockProjectsActivityTimelineWithoutChangingAssista
 		currentTextBlockIndex: 0,
 	}
 
-	r.emitTaskCompleteToolBlock("call_task_complete_1", "Final user-visible answer.", []string{" https://example.test/source ", ""})
+	r.recordTaskCompleteSignal("call_task_complete_1", "Final user-visible answer.", []string{" https://example.test/source ", ""})
 
 	if len(events) != 1 {
 		t.Fatalf("stream events=%d, want one activity update", len(events))
@@ -331,18 +350,15 @@ func TestEmitTaskCompleteToolBlockProjectsActivityTimelineWithoutChangingAssista
 	if !ok {
 		t.Fatalf("event block=%T, want ActivityTimelineBlock", ev.Block)
 	}
-	if timeline.Type != activityTimelineBlockType || timeline.Summary.Status != "success" {
+	if timeline.Type != activityTimelineBlockType || timeline.Summary.Status != observation.ActivityStatusSuccess {
 		t.Fatalf("timeline=%#v, want successful activity timeline", timeline)
 	}
 	item, ok := findActivityItemInTimeline(timeline, "task_complete")
 	if !ok {
-		t.Fatalf("timeline missing task_complete item: %#v", timeline.Groups)
+		t.Fatalf("timeline missing task_complete item: %#v", timeline.Items)
 	}
-	if item.Status != "success" || item.ToolID != "call_task_complete_1" {
+	if item.Status != observation.ActivityStatusSuccess || item.ToolID != "call_task_complete_1" || item.Kind != observation.ActivityKindControl {
 		t.Fatalf("task_complete item=%#v, want successful original call id", item)
-	}
-	if got := anyToString(item.Payload["result"]); got != "Final user-visible answer." {
-		t.Fatalf("payload result=%q, want final result", got)
 	}
 
 	rawJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
@@ -355,20 +371,18 @@ func TestEmitTaskCompleteToolBlockProjectsActivityTimelineWithoutChangingAssista
 	if !json.Valid([]byte(rawJSON)) {
 		t.Fatalf("assistant JSON invalid: %q", rawJSON)
 	}
-	if !strings.Contains(rawJSON, `"toolName":"task_complete"`) {
+	if !strings.Contains(rawJSON, `"tool_name":"task_complete"`) {
 		t.Fatalf("assistant JSON missing task_complete timeline: %s", rawJSON)
 	}
 }
 
-func findActivityItemInTimeline(timeline ActivityTimelineBlock, toolName string) (ActivityItem, bool) {
-	for _, group := range timeline.Groups {
-		for _, item := range group.Items {
-			if item.ToolName == toolName {
-				return item, true
-			}
+func findActivityItemInTimeline(timeline ActivityTimelineBlock, toolName string) (observation.ActivityItem, bool) {
+	for _, item := range timeline.Items {
+		if item.ToolName == toolName {
+			return item, true
 		}
 	}
-	return ActivityItem{}, false
+	return observation.ActivityItem{}, false
 }
 
 func TestReconcileCanonicalWaitingUserMessage_ClearsProvisionalMarkdownBlocks(t *testing.T) {
@@ -404,33 +418,10 @@ func TestReconcileCanonicalWaitingUserMessage_ClearsProvisionalMarkdownBlocks(t 
 		},
 		assistantBlocks: []any{
 			&persistedMarkdownBlock{Type: "markdown", Content: "Provisional question text"},
-			ToolCallBlock{
-				Type:     "tool-call",
-				ToolName: "ask_user",
-				ToolID:   "tool_waiting",
-				Status:   ToolCallStatusSuccess,
-				Args: map[string]any{
-					"questions": []map[string]any{{
-						"id":                 "question_1",
-						"header":             "Need input",
-						"question":           "Choose the next direction.",
-						"is_secret":          false,
-						"response_mode":      "select",
-						"choices_exhaustive": true,
-						"choices": []map[string]any{{
-							"choice_id": "choice_1",
-							"label":     "Option 1",
-							"kind":      "select",
-						}},
-					}},
-				},
-				Result: map[string]any{
-					"waiting_prompt": prompt,
-					"waiting_user":   true,
-				},
-			},
+			activityTimelinePlaceholder("run_waiting_user"),
 		},
 	}
+	r.setWaitingPrompt(prompt)
 
 	if !r.reconcileCanonicalWaitingUserMessage() {
 		t.Fatalf("reconcileCanonicalWaitingUserMessage returned false, want true")

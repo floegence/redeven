@@ -32,6 +32,11 @@ describe('Flower thread list projection', () => {
       source_label: 'env A',
       target_labels: ['env B'],
       status: 'success',
+      has_unread: false,
+    });
+    expect(projectFlowerThreadListItem({ ...thread, has_unread: true })).toMatchObject({
+      thread_id: 'thread-1',
+      has_unread: true,
     });
   });
 });

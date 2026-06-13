@@ -9,6 +9,8 @@ import { FlowerEmptyState } from './chat/FlowerEmptyState';
 import type { FlowerSurfaceCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
 import type {
+  FlowerActivityItem,
+  FlowerActivityTimelineBlock,
   FlowerInputAnswer,
   FlowerInputRequest,
   FlowerInputRequestChoice,
@@ -21,7 +23,8 @@ import type {
   FlowerThreadListItem,
   FlowerThreadSnapshot,
   FlowerChatMessage,
-  FlowerToolActivity,
+  FlowerActivityStatus,
+  FlowerTodoSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import { FlowerIcon } from './icons/FlowerIcon';
@@ -99,6 +102,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [loadingThreadID, setLoadingThreadID] = createSignal('');
   const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
   const [threadRailResizing, setThreadRailResizing] = createSignal(false);
+  const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
+  const [openTodoThreads, setOpenTodoThreads] = createSignal<Record<string, boolean>>({});
   let threadLoadSequence = 0;
   let lastFocusedThreadID = '';
   let lastInputPromptSignature = '';
@@ -122,7 +127,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const thread = selectedThread();
     if (!thread) return false;
     return thread.messages.length > 0
-      || (thread.tool_activity?.length ?? 0) > 0
+      || (thread.activity_timeline?.length ?? 0) > 0
+      || (thread.todo_snapshot?.todos.length ?? 0) > 0
       || !!visibleInputRequest(thread)
       || trimString(thread.error?.message) !== '';
   });
@@ -454,7 +460,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const threadHasLoadedDetail = (thread: FlowerThreadSnapshot): boolean => (
-    thread.messages.length > 0 || thread.tool_activity !== undefined || visibleInputRequest(thread) !== null || thread.error !== undefined
+    thread.messages.length > 0
+    || thread.activity_timeline !== undefined
+    || thread.todo_snapshot !== undefined
+    || visibleInputRequest(thread) !== null
+    || thread.error !== undefined
   );
 
   const mergeThreadListSummary = (
@@ -463,7 +473,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): FlowerThreadSnapshot => ({
     ...summary,
     messages: existing.messages,
-    ...(existing.tool_activity !== undefined ? { tool_activity: existing.tool_activity } : {}),
+    ...(existing.activity_timeline !== undefined ? { activity_timeline: existing.activity_timeline } : {}),
+    ...(existing.todo_snapshot !== undefined ? { todo_snapshot: existing.todo_snapshot } : {}),
     ...(summary.status === 'waiting_user' && existing.input_request !== undefined ? { input_request: existing.input_request } : {}),
     ...(existing.error !== undefined ? { error: existing.error } : {}),
   });
@@ -477,7 +488,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const existing = byID.get(thread.thread_id);
       if (!existing) return thread;
       const listSummaryOnly = thread.messages.length === 0
-        && thread.tool_activity === undefined
+        && thread.activity_timeline === undefined
+        && thread.todo_snapshot === undefined
         && thread.input_request === undefined
         && thread.error === undefined;
       if (listSummaryOnly && threadHasLoadedDetail(existing)) {
@@ -789,15 +801,37 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         message.id,
         message.status,
         message.content,
-        message.blocks?.map((block) => `${block.type}:${block.content ?? ''}`).join('|') ?? '',
+        message.blocks?.map((block) => (
+          block.type === 'activity-timeline'
+            ? `${block.type}:${block.run_id ?? ''}:${block.turn_id ?? ''}:${block.summary.status}:${block.summary.total_items}:${block.items.map((item) => `${item.item_id}:${item.status}:${item.tool_name ?? ''}:${item.needs_attention ? 'attention' : ''}`).join('|')}`
+            : `${block.type}:${block.content ?? ''}`
+        )).join('|') ?? '',
       ].join('\x1e')).join('\x1d'),
-      thread.tool_activity?.map((item) => [
-        item.tool_id,
-        item.status,
-        item.summary,
-        item.error_message ?? '',
-        item.approval_state ?? '',
+      thread.activity_timeline?.map((timeline) => [
+        timeline.run_id ?? '',
+        timeline.turn_id ?? '',
+        timeline.summary.status,
+        timeline.summary.severity,
+        timeline.summary.total_items,
+        timeline.summary.needs_attention ? 'attention' : '',
+        timeline.items.map((item) => [
+          item.item_id,
+          item.tool_id ?? '',
+          item.tool_name ?? '',
+          item.kind,
+          item.status,
+          item.severity,
+          item.needs_attention ? 'attention' : '',
+          item.approval_state ?? '',
+        ].join(':')).join('|'),
       ].join('\x1e')).join('\x1d') ?? '',
+      thread.todo_snapshot
+        ? [
+            thread.todo_snapshot.version,
+            thread.todo_snapshot.updated_at_ms,
+            thread.todo_snapshot.todos.map((todo) => `${todo.id}:${todo.status}:${todo.content}:${todo.note ?? ''}`).join('|'),
+          ].join('\x1e')
+        : '',
       thread.input_request
         ? [
             thread.input_request.prompt_id,
@@ -1075,8 +1109,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const messageText = (message: FlowerChatMessage): string => {
-    const blocks = message.blocks?.filter((block) => block.type === 'markdown' || block.type === 'text') ?? [];
-    const text = blocks.map((block) => trimString(block.content)).filter(Boolean).join('\n\n');
+    const text = (message.blocks ?? [])
+      .map((block) => (block.type === 'markdown' || block.type === 'text' ? trimString(block.content) : ''))
+      .filter(Boolean)
+      .join('\n\n');
     return trimString(message.content) || trimString(text);
   };
 
@@ -1118,8 +1154,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const toolStatusIcon = (item: FlowerToolActivity) => {
-    switch (item.status) {
+  const statusIcon = (status: FlowerActivityStatus) => {
+    switch (status) {
       case 'success':
         return <Check class="h-3.5 w-3.5" />;
       case 'error':
@@ -1133,57 +1169,265 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const toolApprovalText = (item: FlowerToolActivity): string => {
-    const state = trimString(item.approval_state);
-    if (state) return copy().chat.toolApprovalState(state);
-    return item.requires_approval ? copy().chat.toolApprovalRequired : '';
+  const activityItemNeedsAttention = (item: Pick<FlowerActivityItem, 'status' | 'requires_approval' | 'severity' | 'needs_attention'>): boolean => (
+    item.needs_attention
+    ||
+    item.status === 'error'
+    || item.status === 'waiting'
+    || item.status === 'running'
+    || item.status === 'pending'
+    || item.requires_approval === true
+    || item.severity === 'blocking'
+  );
+
+  const compactCount = (count: number, singular: string, plural = `${singular}s`): string => (
+    count === 1 ? `1 ${singular}` : `${count} ${plural}`
+  );
+
+  const activityDigestLabelFromItems = (items: readonly Pick<FlowerActivityItem, 'tool_name' | 'kind'>[]): string => {
+    const counts = new Map<string, number>();
+    for (const item of items) {
+      const name = trimString(item.tool_name || item.kind);
+      counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    const parts: string[] = [];
+    const commands = counts.get('terminal.exec') ?? 0;
+    if (commands > 0) parts.push(`Ran ${compactCount(commands, 'command')}`);
+    const todoUpdates = counts.get('write_todos') ?? 0;
+    if (todoUpdates === 1) parts.push('Updated todos');
+    if (todoUpdates > 1) parts.push(`Updated todos ${todoUpdates} times`);
+    const completion = counts.get('task_complete') ?? 0;
+    if (completion > 0) parts.push('Completed');
+    return parts.length > 0 ? parts.join(' · ') : compactCount(items.length, 'activity item');
   };
 
-  const toolActivityAriaLabel = (item: FlowerToolActivity): string => {
+  const activityDisplayPolicy = (timeline: FlowerActivityTimelineBlock): 'digest' | 'attention' | 'expanded' => {
+    if (timeline.summary.needs_attention || timeline.items.some(activityItemNeedsAttention)) return 'attention';
+    return timeline.summary.status === 'success' ? 'digest' : 'expanded';
+  };
+
+  const formatActivityDuration = (durationMs: number | undefined): string => {
+    const value = Number(durationMs ?? 0);
+    if (!Number.isFinite(value) || value <= 0) return '';
+    if (value < 1000) return `${Math.round(value)}ms`;
+    if (value < 60_000) return `${Math.round(value / 1000)}s`;
+    const minutes = Math.floor(value / 60_000);
+    const seconds = Math.round((value % 60_000) / 1000);
+    return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  };
+
+  const activityTimelineKey = (timeline: FlowerActivityTimelineBlock, index: number): string => (
+    [selectedThreadID(), timeline.run_id, timeline.turn_id, String(index)].map(trimString).filter(Boolean).join(':')
+  );
+
+  const activityTimelineOpen = (timeline: FlowerActivityTimelineBlock, index: number): boolean => {
+    const key = activityTimelineKey(timeline, index);
+    const local = openActivityRuns()[key];
+    if (typeof local === 'boolean') return local;
+    return activityDisplayPolicy(timeline) !== 'digest';
+  };
+
+  const toggleActivityTimeline = (timeline: FlowerActivityTimelineBlock, index: number) => {
+    const key = activityTimelineKey(timeline, index);
+    setOpenActivityRuns((current) => ({ ...current, [key]: !activityTimelineOpen(timeline, index) }));
+  };
+
+  const activityTimelinesForThread = (thread: FlowerThreadSnapshot | null | undefined): readonly FlowerActivityTimelineBlock[] => {
+    if (!thread) return [];
+    if ((thread.activity_timeline?.length ?? 0) > 0) return thread.activity_timeline ?? [];
+    return thread.messages.flatMap((message) => (
+      message.blocks?.filter((block): block is FlowerActivityTimelineBlock => block.type === 'activity-timeline') ?? []
+    ));
+  };
+
+  const activityItemLabel = (item: FlowerActivityItem): string => {
+    const toolName = trimString(item.tool_name);
+    switch (toolName) {
+      case 'terminal.exec':
+        return item.status === 'success' ? 'Ran command' : item.status === 'error' ? 'Command failed' : 'Running command';
+      case 'write_todos':
+        return 'Updated tasks';
+      case 'task_complete':
+        return 'Completion signal';
+      case 'ask_user':
+      case 'exit_plan_mode':
+        return 'Requested input';
+      default:
+        return toolName || item.kind || 'Activity';
+    }
+  };
+
+  const activityItemMeta = (item: FlowerActivityItem): string => {
     const parts = [
-      item.summary,
+      item.tool_name,
+      item.metadata?.result_count ? `${item.metadata.result_count} results` : '',
+      item.metadata?.visible_bytes ? `${item.metadata.visible_bytes} bytes` : '',
+      item.approval_state ? copy().chat.toolApprovalState(item.approval_state) : '',
+    ].map(trimString).filter(Boolean);
+    return parts.join(' · ');
+  };
+
+  const activityItemAriaLabel = (item: FlowerActivityItem): string => (
+    [
+      activityItemLabel(item),
       item.tool_name,
       copy().chat.toolStatuses[item.status],
-      toolApprovalText(item),
-      trimString(item.error_message),
-    ].filter(Boolean);
-    return parts.join('. ');
-  };
+      item.requires_approval ? copy().chat.toolApprovalState(trimString(item.approval_state) || 'requested') : '',
+    ].filter(Boolean).join('. ')
+  );
 
-  const toolActivity = (items: readonly FlowerToolActivity[] | undefined) => (
-    <Show when={(items?.length ?? 0) > 0}>
+  const activityTimeline = (timelines: readonly FlowerActivityTimelineBlock[]) => (
+    <Show when={timelines.length > 0}>
       <section class="flower-host-tool-activity" aria-label={copy().chat.toolActivityLabel}>
         <div class="flower-host-tool-activity-heading">
           <Zap class="h-3.5 w-3.5" />
           <span>{copy().chat.toolActivityLabel}</span>
         </div>
-        <div class="flower-host-tool-activity-list" role="list">
-          <For each={items ?? []}>
-            {(item) => (
-              <div
-                class={cn('flower-host-tool-activity-item', `flower-host-tool-activity-item-${item.status}`)}
-                role="listitem"
-                aria-label={toolActivityAriaLabel(item)}
-              >
-                <span class="flower-host-tool-activity-icon">{toolStatusIcon(item)}</span>
-                <span class="flower-host-tool-activity-main">
-                  <span class="flower-host-tool-activity-summary">{item.summary}</span>
-                  <Show when={item.error_message}>
-                    <span class="flower-host-tool-activity-error">{item.error_message}</span>
+        <div class="flower-host-activity-runs">
+          <For each={timelines}>
+            {(timeline, timelineIndex) => {
+              const runOpen = createMemo(() => activityTimelineOpen(timeline, timelineIndex()));
+              const policy = createMemo(() => activityDisplayPolicy(timeline));
+              const duration = createMemo(() => formatActivityDuration(timeline.summary.duration_ms));
+              const total = createMemo(() => timeline.summary.total_items || timeline.items.length);
+              const digestLabel = createMemo(() => activityDigestLabelFromItems(timeline.items));
+              return (
+                <div class={cn('flower-host-activity-run', `flower-host-activity-run-${timeline.summary.status}`)} data-display-policy={policy()}>
+                  <button
+                    type="button"
+                    class="flower-host-activity-digest-button"
+                    aria-expanded={runOpen()}
+                    onClick={() => toggleActivityTimeline(timeline, timelineIndex())}
+                  >
+                    <span class="flower-host-tool-activity-icon">{statusIcon(timeline.summary.status)}</span>
+                    <span class="flower-host-activity-digest-copy">
+                      <span class="flower-host-activity-digest-title">{digestLabel()}</span>
+                      <span class="flower-host-activity-digest-meta">
+                        {compactCount(total(), 'item')}
+                        <Show when={duration()}>
+                          {(value) => <span> · {value()}</span>}
+                        </Show>
+                      </span>
+                    </span>
+                    <span class={cn('flower-host-tool-activity-status', `flower-host-tool-activity-status-${timeline.summary.status}`)}>
+                      {copy().chat.toolStatuses[timeline.summary.status]}
+                    </span>
+                    <ChevronDown class={cn('flower-host-activity-chevron h-3.5 w-3.5', runOpen() && 'flower-host-activity-chevron-open')} />
+                  </button>
+                  <Show when={runOpen()}>
+                    <div class="flower-host-tool-activity-list" role="list">
+                      <For each={timeline.items}>
+                        {(item) => (
+                          <div
+                            class={cn('flower-host-tool-activity-item', `flower-host-tool-activity-item-${item.status}`)}
+                            role="listitem"
+                            aria-label={activityItemAriaLabel(item)}
+                          >
+                            <span class="flower-host-tool-activity-icon">{statusIcon(item.status)}</span>
+                            <span class="flower-host-tool-activity-main">
+                              <span class="flower-host-tool-activity-summary">{activityItemLabel(item)}</span>
+                              <Show when={activityItemMeta(item)}>
+                                {(meta) => <span class="flower-host-tool-activity-description">{meta()}</span>}
+                              </Show>
+                            </span>
+                            <span class={cn('flower-host-tool-activity-status', `flower-host-tool-activity-status-${item.status}`)}>
+                              {copy().chat.toolStatuses[item.status]}
+                            </span>
+                            <Show when={item.requires_approval}>
+                              <span class="flower-host-tool-activity-approval">
+                                {copy().chat.toolApprovalState(trimString(item.approval_state) || 'requested')}
+                              </span>
+                            </Show>
+                            <span class="flower-host-tool-activity-name">{item.tool_name || item.tool_id || item.item_id}</span>
+                          </div>
+                        )}
+                      </For>
+                    </div>
                   </Show>
-                </span>
-                <span class={cn('flower-host-tool-activity-status', `flower-host-tool-activity-status-${item.status}`)}>
-                  {copy().chat.toolStatuses[item.status]}
-                </span>
-                <Show when={toolApprovalText(item)}>
-                  {(approval) => <span class="flower-host-tool-activity-approval">{approval()}</span>}
-                </Show>
-                <span class="flower-host-tool-activity-name">{item.tool_name}</span>
-              </div>
-            )}
+                </div>
+              );
+            }}
           </For>
         </div>
       </section>
+    </Show>
+  );
+
+  const todoThreadKey = (): string => selectedThread()?.thread_id || 'draft';
+
+  const todoSnapshotOpen = (snapshot: FlowerTodoSnapshot): boolean => {
+    const local = openTodoThreads()[todoThreadKey()];
+    if (typeof local === 'boolean') return local;
+    return snapshot.summary.in_progress > 0 || snapshot.summary.pending > 0;
+  };
+
+  const toggleTodoSnapshot = (snapshot: FlowerTodoSnapshot) => {
+    setOpenTodoThreads((current) => ({ ...current, [todoThreadKey()]: !todoSnapshotOpen(snapshot) }));
+  };
+
+  const todoStatusLabel = (status: FlowerTodoSnapshot['todos'][number]['status']): string => {
+    switch (status) {
+      case 'completed':
+        return 'Done';
+      case 'in_progress':
+        return 'In progress';
+      case 'cancelled':
+        return 'Canceled';
+      case 'pending':
+        return 'Pending';
+    }
+  };
+
+  const todoSnapshotPanel = (snapshot: FlowerTodoSnapshot | null | undefined) => (
+    <Show when={snapshot && snapshot.todos.length > 0 ? snapshot : null}>
+      {(todoSnapshot) => {
+        const open = createMemo(() => todoSnapshotOpen(todoSnapshot()));
+        const currentTodo = createMemo(() => (
+          todoSnapshot().todos.find((todo) => todo.status === 'in_progress')
+          ?? todoSnapshot().todos.find((todo) => todo.status === 'pending')
+          ?? todoSnapshot().todos[0]
+        ));
+        return (
+          <section class="flower-host-todo-snapshot" aria-label="Tasks">
+            <button
+              type="button"
+              class="flower-host-todo-snapshot-head"
+              aria-expanded={open()}
+              onClick={() => toggleTodoSnapshot(todoSnapshot())}
+            >
+              <span class="flower-host-todo-snapshot-icon"><Check class="h-3.5 w-3.5" /></span>
+              <span class="flower-host-todo-snapshot-copy">
+                <span class="flower-host-todo-snapshot-title">Tasks</span>
+                <span class="flower-host-todo-snapshot-meta">
+                  {todoSnapshot().summary.completed} / {todoSnapshot().summary.total} completed
+                  <Show when={currentTodo()}>
+                    {(todo) => <span> · {todo().content}</span>}
+                  </Show>
+                </span>
+              </span>
+              <ChevronDown class={cn('flower-host-activity-chevron h-3.5 w-3.5', open() && 'flower-host-activity-chevron-open')} />
+            </button>
+            <Show when={open()}>
+              <div class="flower-host-todo-list" role="list">
+                <For each={todoSnapshot().todos}>
+                  {(todo) => (
+                    <div class={cn('flower-host-todo-item', `flower-host-todo-item-${todo.status}`)} role="listitem">
+                      <span class="flower-host-todo-check">{todo.status === 'completed' ? <Check class="h-3.5 w-3.5" /> : <Clock class="h-3.5 w-3.5" />}</span>
+                      <span class="flower-host-todo-item-copy">
+                        <span class="flower-host-todo-item-content">{todo.content}</span>
+                        <Show when={todo.note}>
+                          {(note) => <span class="flower-host-todo-item-note">{note()}</span>}
+                        </Show>
+                      </span>
+                      <span class={cn('flower-host-todo-status', `flower-host-todo-status-${todo.status}`)}>{todoStatusLabel(todo.status)}</span>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </Show>
+          </section>
+        );
+      }}
     </Show>
   );
 
@@ -1251,7 +1495,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => setChatDraft(prompt)} />}
             >
               <For each={stableSelectedMessages()}>{messageBubble}</For>
-              {toolActivity(selectedThread()?.tool_activity)}
+              {todoSnapshotPanel(selectedThread()?.todo_snapshot)}
+              {activityTimeline(activityTimelinesForThread(selectedThread()))}
               <Show when={selectedThread()?.error}>
                 {(error) => errorNotice(copy().chat.runErrorTitle, error().message)}
               </Show>
