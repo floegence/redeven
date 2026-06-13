@@ -7,7 +7,24 @@ import {
   mapFlowerSettingsDraftToDesktop,
   type DesktopSettingsBridge,
 } from './desktopFlowerSurfaceAdapter';
-import type { DesktopFlowerHostInputRequest, DesktopFlowerHostSettingsSnapshot, DesktopFlowerHostThread } from '../../shared/flowerHostSettingsIPC';
+import type { DesktopFlowerHostInputRequest, DesktopFlowerHostSettingsSnapshot, DesktopFlowerHostThread, DesktopFlowerHostThreadReadStatus } from '../../shared/flowerHostSettingsIPC';
+
+function desktopReadStatus(isUnread = false, revision = 2, status = 'idle'): DesktopFlowerHostThreadReadStatus {
+  const signature = `status:${status}\u001factivity:${revision}`;
+  return {
+    is_unread: isUnread,
+    snapshot: {
+      activity_revision: revision,
+      last_message_at_unix_ms: revision,
+      activity_signature: signature,
+    },
+    read_state: {
+      last_seen_activity_revision: isUnread ? Math.max(0, revision - 1) : revision,
+      last_read_message_at_unix_ms: isUnread ? Math.max(0, revision - 1) : revision,
+      last_seen_activity_signature: isUnread ? `status:${status}\u001factivity:${Math.max(0, revision - 1)}` : signature,
+    },
+  };
+}
 
 function desktopSnapshot(): DesktopFlowerHostSettingsSnapshot {
   return {
@@ -77,7 +94,7 @@ function desktopThread(): DesktopFlowerHostThread {
     status: 'idle',
     source_label: 'this host',
     target_labels: [],
-    has_unread: false,
+    read_status: desktopReadStatus(false),
     messages: [
       { id: 'm1', role: 'user', content: 'hello', status: 'complete', created_at_ms: 1 },
       { id: 'm2', role: 'assistant', content: 'hi', status: 'complete', created_at_ms: 2 },
@@ -254,7 +271,7 @@ describe('Flower surface adapter for the host', () => {
     const resolveFlowerHostHandler = vi.fn(async () => ({ ok: true as const, decision: desktopDecision() }));
     const sendFlowerHostChat = vi.fn(async () => ({ ok: true as const, thread: desktopThread() }));
     const submitFlowerHostInput = vi.fn(async () => ({ ok: true as const, thread: desktopThread() }));
-    const markFlowerHostThreadRead = vi.fn(async () => ({ ok: true as const, thread: { ...desktopThread(), has_unread: false } }));
+    const markFlowerHostThreadRead = vi.fn(async (request) => ({ ok: true as const, thread: { ...desktopThread(), read_status: desktopReadStatus(false, request.snapshot.activity_revision, 'idle') } }));
     const renameFlowerHostThread = vi.fn(async () => ({ ok: true as const, thread: { ...desktopThread(), title: 'Renamed' } }));
     const setFlowerHostThreadPinned = vi.fn(async () => ({ ok: true as const, thread: { ...desktopThread(), pinned_at_ms: 456 } }));
     const forkFlowerHostThread = vi.fn(async () => ({ ok: true as const, thread: { ...desktopThread(), thread_id: 'thread-fork' } }));
@@ -285,7 +302,9 @@ describe('Flower surface adapter for the host', () => {
     })).resolves.toMatchObject({ config: { current_model_id: 'default/gpt-4.1' } });
     await expect(adapter.resolveHandler()).resolves.toMatchObject({ decision_id: 'decision-1' });
     await expect(adapter.sendMessage({ prompt: 'hello' })).resolves.toMatchObject({ thread_id: 'thread-1' });
-    await expect(adapter.markThreadRead('thread-1')).resolves.toMatchObject({ thread_id: 'thread-1', has_unread: false });
+    const markSnapshot = desktopThread().read_status.snapshot;
+    await expect(adapter.markThreadRead('thread-1', markSnapshot)).resolves.toMatchObject({ thread_id: 'thread-1', read_status: { is_unread: false } });
+    expect(markFlowerHostThreadRead).toHaveBeenCalledWith({ thread_id: 'thread-1', snapshot: markSnapshot });
     await expect(adapter.renameThread?.('thread-1', 'Renamed')).resolves.toMatchObject({ title: 'Renamed' });
     await expect(adapter.setThreadPinned?.('thread-1', true)).resolves.toMatchObject({ pinned_at_ms: 456 });
     await expect(adapter.forkThread?.('thread-1')).resolves.toMatchObject({ thread_id: 'thread-fork' });
@@ -302,7 +321,7 @@ describe('Flower surface adapter for the host', () => {
     expect(listFlowerHostThreads).toHaveBeenCalledTimes(1);
     expect(resolveFlowerHostHandler).toHaveBeenCalledTimes(1);
     expect(sendFlowerHostChat).toHaveBeenCalledWith({ thread_id: undefined, prompt: 'hello' });
-    expect(markFlowerHostThreadRead).toHaveBeenCalledWith({ thread_id: 'thread-1' });
+    expect(markFlowerHostThreadRead).toHaveBeenCalledWith({ thread_id: 'thread-1', snapshot: markSnapshot });
     expect(renameFlowerHostThread).toHaveBeenCalledWith({ thread_id: 'thread-1', title: 'Renamed' });
     expect(setFlowerHostThreadPinned).toHaveBeenCalledWith({ thread_id: 'thread-1', pinned: true });
     expect(forkFlowerHostThread).toHaveBeenCalledWith({ thread_id: 'thread-1' });
@@ -394,7 +413,7 @@ describe('Flower surface adapter for the host', () => {
       working_dir: '/workspace/redeven',
       pinned_at_ms: 123,
       status: 'running',
-      has_unread: false,
+      read_status: { is_unread: false },
       home_host_id: 'flower-host',
       home_host_kind: 'global',
       source_label: 'this host',
@@ -406,16 +425,15 @@ describe('Flower surface adapter for the host', () => {
     });
   });
 
-  it('preserves Desktop unread state in shared thread snapshots', () => {
-    expect(mapDesktopFlowerThread({ ...desktopThread(), has_unread: true }).has_unread).toBe(true);
-    expect(mapDesktopFlowerThread({ ...desktopThread(), has_unread: false }).has_unread).toBe(false);
+  it('preserves Desktop read status in shared thread snapshots', () => {
+    expect(mapDesktopFlowerThread({ ...desktopThread(), read_status: desktopReadStatus(true) }).read_status.is_unread).toBe(true);
+    expect(mapDesktopFlowerThread({ ...desktopThread(), read_status: desktopReadStatus(false) }).read_status.is_unread).toBe(false);
   });
 
   it('preserves streaming blocks, activity timelines, todos, and run errors from Desktop IPC', () => {
     const mapped = mapDesktopFlowerThread({
       ...desktopThread(),
       status: 'failed',
-      has_unread: false,
       messages: [
         {
           id: 'm-streaming',
@@ -497,7 +515,7 @@ describe('Flower surface adapter for the host', () => {
         { id: 'todo-2', content: 'Write answer', status: 'completed' },
       ],
     });
-    expect(mapped.has_unread).toBe(false);
+    expect(mapped.read_status.is_unread).toBe(false);
     expect(mapped.error).toEqual({
       code: 'failed',
       message: 'provider rejected request',

@@ -66,7 +66,7 @@ type Options struct {
 	// SecretsStore holds user-managed secrets (such as AI provider API keys).
 	// If nil, the gateway will derive a default secrets path from ConfigPath.
 	SecretsStore *settings.SecretsStore
-	// ThreadReadStateStore persists per-user per-surface thread read watermarks.
+	// ThreadReadStateStore persists scoped per-surface thread read watermarks.
 	ThreadReadStateStore *threadreadstate.Store
 	// AgentHomeDir is the canonical absolute path to the default home directory.
 	AgentHomeDir    string

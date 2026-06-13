@@ -13,6 +13,7 @@ import type {
   FlowerSettingsDraft,
   FlowerSurfaceAdapter,
   FlowerSettingsSnapshot,
+  FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerActivityStatus,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -181,6 +182,23 @@ function settingsSnapshot(configured = true): FlowerSettingsSnapshot {
   };
 }
 
+function readStatus(isUnread = false, revision = 2, status = 'idle'): FlowerThreadReadStatus {
+  const signature = `status:${status}\u001factivity:${revision}`;
+  return {
+    is_unread: isUnread,
+    snapshot: {
+      activity_revision: revision,
+      last_message_at_unix_ms: revision,
+      activity_signature: signature,
+    },
+    read_state: {
+      last_seen_activity_revision: isUnread ? Math.max(0, revision - 1) : revision,
+      last_read_message_at_unix_ms: isUnread ? Math.max(0, revision - 1) : revision,
+      last_seen_activity_signature: isUnread ? `status:${status}\u001factivity:${Math.max(0, revision - 1)}` : signature,
+    },
+  };
+}
+
 function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnapshot {
   return {
     thread_id: 'thread-1',
@@ -192,7 +210,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     status: 'idle',
     source_label: 'This host',
     target_labels: [],
-    has_unread: false,
+    read_status: readStatus(false),
     messages: [
       {
         id: 'm1',
@@ -373,7 +391,19 @@ function adapter(configured = true): FlowerSurfaceAdapter {
       thread(),
       thread({ thread_id: 'thread-2', title: 'Review branch', updated_at_ms: 3 }),
     ]),
-    markThreadRead: vi.fn(async (threadID: string) => thread({ thread_id: threadID, has_unread: false })),
+    markThreadRead: vi.fn(async (threadID: string, snapshot) => thread({
+      thread_id: threadID,
+      read_status: {
+        is_unread: false,
+        snapshot,
+        read_state: {
+          last_seen_activity_revision: snapshot.activity_revision,
+          last_read_message_at_unix_ms: snapshot.last_message_at_unix_ms,
+          last_seen_activity_signature: snapshot.activity_signature,
+          ...(snapshot.waiting_prompt_id ? { last_seen_waiting_prompt_id: snapshot.waiting_prompt_id } : {}),
+        },
+      },
+    })),
     resolveHandler: vi.fn(async () => decision()),
     sendMessage: vi.fn(async () => thread()),
     submitInput: vi.fn(async () => thread({ status: 'running' })),
@@ -407,27 +437,33 @@ function mutableSettingsAdapter(configured = true): FlowerSurfaceAdapter & Reado
   };
 }
 
-function renderSurface(configured = true): HTMLDivElement {
-  const host = document.createElement('div');
-  document.body.appendChild(host);
-  render(() => <FlowerSurface adapter={adapter(configured)} />, host);
-  return host;
-}
-
-function renderSurfaceWithAdapter(surfaceAdapter: FlowerSurfaceAdapter): HTMLDivElement {
-  const host = document.createElement('div');
-  document.body.appendChild(host);
-  render(() => <FlowerSurface adapter={surfaceAdapter} />, host);
-  return host;
-}
-
 function threadOrder(host: HTMLElement): string[] {
   return Array.from(host.querySelectorAll('[data-thread-id]'))
     .map((node) => node.getAttribute('data-thread-id') ?? '');
 }
 
 describe('FlowerSurface navigation', () => {
+  const disposers: Array<() => void> = [];
+
+  const mountFlowerSurface = (surfaceAdapter: FlowerSurfaceAdapter): HTMLDivElement => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    disposers.push(render(() => <FlowerSurface adapter={surfaceAdapter} />, host));
+    return host;
+  };
+
+  function renderSurface(configured = true): HTMLDivElement {
+    return mountFlowerSurface(adapter(configured));
+  }
+
+  function renderSurfaceWithAdapter(surfaceAdapter: FlowerSurfaceAdapter): HTMLDivElement {
+    return mountFlowerSurface(surfaceAdapter);
+  }
+
   afterEach(() => {
+    while (disposers.length > 0) {
+      disposers.pop()?.();
+    }
     document.body.innerHTML = '';
   });
 
@@ -484,9 +520,7 @@ describe('FlowerSurface navigation', () => {
 
   it('keeps enable guidance beside the disabled notice and only shows saved feedback briefly', async () => {
     const surfaceAdapter = mutableSettingsAdapter(false);
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    render(() => <FlowerSurface adapter={surfaceAdapter} />, host);
+    const host = renderSurfaceWithAdapter(surfaceAdapter);
     await flush();
 
     (host.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
@@ -527,13 +561,11 @@ describe('FlowerSurface navigation', () => {
       },
       provider_secrets: [],
     };
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    render(() => <FlowerSurface adapter={{
+    const host = renderSurfaceWithAdapter({
       ...surfaceAdapter,
       loadSettings: vi.fn(async () => emptySnapshot),
       saveSettings: vi.fn(async () => emptySnapshot),
-    }} />, host);
+    });
     await flush();
 
     (host.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
@@ -580,9 +612,7 @@ describe('FlowerSurface navigation', () => {
       ...adapter(true),
       resolveHandler: vi.fn(async () => blockedDecision()),
     };
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    render(() => <FlowerSurface adapter={failingAdapter} />, host);
+    const host = renderSurfaceWithAdapter(failingAdapter);
     await flush();
 
     expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Flower handler unavailable');
@@ -622,13 +652,11 @@ describe('FlowerSurface navigation', () => {
       handler_selection: secondDecision.handler_selection,
     }));
     const sendMessage = vi.fn(async () => thread());
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    render(() => <FlowerSurface adapter={{
+    const host = renderSurfaceWithAdapter({
       ...adapter(true),
       resolveHandler,
       sendMessage,
-    }} />, host);
+    });
     await flush();
 
     const selector = host.querySelector('.flower-host-handler-picker select') as HTMLSelectElement;
@@ -691,14 +719,12 @@ describe('FlowerSurface navigation', () => {
     });
     const sendMessage = vi.fn(async () => sentThread);
     const loadThread = vi.fn(async () => completeThread);
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    render(() => <FlowerSurface adapter={{
+    const host = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
       loadThread,
       sendMessage,
-    }} />, host);
+    });
     await waitFor(() => Boolean(host.querySelector('textarea')));
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
@@ -773,15 +799,23 @@ describe('FlowerSurface navigation', () => {
     const unreadThread = thread({
       thread_id: 'thread-unread',
       title: 'Unread thread',
-      has_unread: true,
+      read_status: readStatus(true, 3, 'success'),
     });
-    const markThreadRead = vi.fn(async () => ({
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => ({
       ...unreadThread,
-      has_unread: false,
+      read_status: {
+        is_unread: false,
+        snapshot,
+        read_state: {
+          last_seen_activity_revision: snapshot.activity_revision,
+          last_read_message_at_unix_ms: snapshot.last_message_at_unix_ms,
+          last_seen_activity_signature: snapshot.activity_signature,
+        },
+      },
     }));
     const loadThread = vi.fn(async () => ({
       ...unreadThread,
-      has_unread: false,
+      read_status: readStatus(false, 3, 'success'),
       messages: [
         ...unreadThread.messages,
         {
@@ -801,13 +835,14 @@ describe('FlowerSurface navigation', () => {
     });
 
     await waitFor(() => host.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread') === 'true');
-    expect(host.querySelector('[data-thread-id="thread-unread"] .flower-host-thread-unread-dot')).toBeTruthy();
+    expect(host.querySelector('[data-thread-id="thread-unread"] .flower-host-thread-status-dot')).toBeTruthy();
 
     (host.querySelector('[data-thread-id="thread-unread"] button') as HTMLButtonElement).click();
     await waitFor(() => host.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread') === 'false');
     await waitFor(() => markThreadRead.mock.calls.length > 0);
 
-    expect(markThreadRead).toHaveBeenCalledWith('thread-unread');
+    expect(markThreadRead.mock.calls[0]?.[0]).toBe('thread-unread');
+    expect(markThreadRead.mock.calls[0]?.[1]).toMatchObject(unreadThread.read_status.snapshot);
     expect(loadThread).toHaveBeenCalledWith('thread-unread');
     expect(host.textContent).toContain('Fresh result.');
   });
@@ -817,7 +852,7 @@ describe('FlowerSurface navigation', () => {
       thread_id: 'thread-running-wave',
       title: 'Running wave',
       status: 'running',
-      has_unread: true,
+      read_status: readStatus(true, 5_000, 'running'),
       updated_at_ms: 5_000,
       messages: [
         {
@@ -831,7 +866,7 @@ describe('FlowerSurface navigation', () => {
     });
     const firstDetail = {
       ...runningThread,
-      has_unread: false,
+      read_status: readStatus(false, 5_000, 'running'),
     };
     const refreshedDetail = {
       ...firstDetail,
@@ -857,14 +892,16 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-wave"] button')));
     const cardBeforeClick = host.querySelector('[data-thread-id="thread-running-wave"]') as HTMLElement;
     expect(cardBeforeClick.getAttribute('data-flower-thread-status')).toBe('running');
-    expect(cardBeforeClick.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(cardBeforeClick.getAttribute('data-flower-thread-unread')).toBe('true');
+    expect(cardBeforeClick.getAttribute('data-flower-thread-indicator')).toBe('working');
     const waveBeforeClick = cardBeforeClick.querySelector('.flower-host-thread-wave');
     expect(waveBeforeClick).toBeTruthy();
 
     (cardBeforeClick.querySelector('button') as HTMLButtonElement).click();
     await waitFor(() => loadThread.mock.calls.length > 0);
     const waveAfterSelect = host.querySelector('[data-thread-id="thread-running-wave"] .flower-host-thread-wave');
-    expect(waveAfterSelect).toBe(waveBeforeClick);
+    expect(waveAfterSelect).toBeTruthy();
+    expect(waveAfterSelect).not.toBe(waveBeforeClick);
     expect(host.querySelector('[data-thread-id="thread-running-wave"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
 
     await waitFor(() => loadThread.mock.calls.length > 1);
@@ -877,7 +914,7 @@ describe('FlowerSurface navigation', () => {
       thread_id: 'thread-running-read',
       title: 'Running read persistence',
       status: 'running',
-      has_unread: false,
+      read_status: readStatus(false, 6_000, 'running'),
       updated_at_ms: 6_000,
       messages: [
         {
@@ -891,7 +928,7 @@ describe('FlowerSurface navigation', () => {
     });
     const unreadDetail = {
       ...runningThread,
-      has_unread: true,
+      read_status: readStatus(true, 6_500, 'running'),
       updated_at_ms: 6_500,
       messages: [
         {
@@ -904,14 +941,23 @@ describe('FlowerSurface navigation', () => {
       ],
     };
     let detailHasFreshUnread = false;
-    const markThreadRead = vi.fn(async () => ({
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => ({
       ...(detailHasFreshUnread ? unreadDetail : runningThread),
-      has_unread: false,
+      read_status: {
+        is_unread: false,
+        snapshot,
+        read_state: {
+          last_seen_activity_revision: snapshot.activity_revision,
+          last_read_message_at_unix_ms: snapshot.last_message_at_unix_ms,
+          last_seen_activity_signature: snapshot.activity_signature,
+        },
+      },
     }));
     const loadThread = vi.fn(async () => (detailHasFreshUnread ? unreadDetail : runningThread));
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
     const host = renderSurfaceWithAdapter({
       ...adapter(true),
-      listThreads: vi.fn(async () => [runningThread]),
+      listThreads: vi.fn(async () => listSnapshot),
       loadThread,
       markThreadRead,
     });
@@ -919,12 +965,73 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-read"] button')));
     (host.querySelector('[data-thread-id="thread-running-read"] button') as HTMLButtonElement).click();
 
-    await waitFor(() => markThreadRead.mock.calls.length === 1);
     detailHasFreshUnread = true;
-    await waitFor(() => markThreadRead.mock.calls.length >= 2, 2500);
+    listSnapshot = [unreadDetail];
+    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => markThreadRead.mock.calls.length >= 1, 2500);
 
     expect(host.querySelector('[data-thread-id="thread-running-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
     expect(host.textContent).toContain('Fresh selected update');
+  });
+
+  it('keeps the selected running wave node stable when a fresh unread snapshot arrives', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-selected-live-snapshot',
+      title: 'Selected live snapshot',
+      status: 'running',
+      read_status: readStatus(false, 10_000, 'running'),
+      updated_at_ms: 10_000,
+      messages: [
+        {
+          id: 'm-live-a',
+          role: 'assistant',
+          content: 'Working...',
+          status: 'streaming',
+          created_at_ms: 10_000,
+        },
+      ],
+    });
+    const freshUnreadDetail = {
+      ...runningThread,
+      read_status: readStatus(true, 10_500, 'running'),
+      updated_at_ms: 10_500,
+      messages: [
+        {
+          id: 'm-live-a',
+          role: 'assistant' as const,
+          content: 'Working with fresh output',
+          status: 'streaming' as const,
+          created_at_ms: 10_500,
+        },
+      ],
+    };
+    let detailIsFresh = false;
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
+    const loadThread = vi.fn(async () => (detailIsFresh ? freshUnreadDetail : runningThread));
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => ({
+      ...freshUnreadDetail,
+      read_status: readStatus(false, snapshot.activity_revision, 'running'),
+    }));
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => listSnapshot),
+      loadThread,
+      markThreadRead,
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-selected-live-snapshot"] button')));
+    (host.querySelector('[data-thread-id="thread-selected-live-snapshot"] button') as HTMLButtonElement).click();
+    await waitFor(() => host.querySelector('[data-thread-id="thread-selected-live-snapshot"]')?.getAttribute('data-flower-thread-indicator') === 'wave');
+    const waveBeforeFreshSnapshot = host.querySelector('[data-thread-id="thread-selected-live-snapshot"] .flower-host-thread-wave');
+
+    detailIsFresh = true;
+    listSnapshot = [freshUnreadDetail];
+    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+
+    await waitFor(() => host.textContent?.includes('Working with fresh output') ?? false);
+    await waitFor(() => markThreadRead.mock.calls.length > 0);
+    expect(host.querySelector('[data-thread-id="thread-selected-live-snapshot"] .flower-host-thread-wave')).toBe(waveBeforeFreshSnapshot);
+    expect(host.querySelector('[data-thread-id="thread-selected-live-snapshot"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
   });
 
   it('queues a final read persistence when unread detail arrives before an in-flight mark-read completes', async () => {
@@ -932,7 +1039,7 @@ describe('FlowerSurface navigation', () => {
       thread_id: 'thread-running-final-read',
       title: 'Final read persistence',
       status: 'running',
-      has_unread: false,
+      read_status: readStatus(true, 8_000, 'running'),
       updated_at_ms: 8_000,
       messages: [
         {
@@ -947,7 +1054,7 @@ describe('FlowerSurface navigation', () => {
     const finalUnreadDetail = {
       ...runningThread,
       status: 'success' as const,
-      has_unread: true,
+      read_status: readStatus(true, 8_500, 'success'),
       updated_at_ms: 8_500,
       messages: [
         {
@@ -966,14 +1073,15 @@ describe('FlowerSurface navigation', () => {
       }
       return {
         ...finalUnreadDetail,
-        has_unread: false,
+        read_status: readStatus(false, 8_500, 'success'),
       };
     });
     let detailHasFinalUnread = false;
     const loadThread = vi.fn(async () => (detailHasFinalUnread ? finalUnreadDetail : runningThread));
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
     const host = renderSurfaceWithAdapter({
       ...adapter(true),
-      listThreads: vi.fn(async () => [runningThread]),
+      listThreads: vi.fn(async () => listSnapshot),
       loadThread,
       markThreadRead,
     });
@@ -981,19 +1089,91 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-final-read"] button')));
     (host.querySelector('[data-thread-id="thread-running-final-read"] button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length === 1);
-
     detailHasFinalUnread = true;
+    listSnapshot = [finalUnreadDetail];
+    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
     await waitFor(() => host.textContent?.includes('Final selected update') ?? false, 2500);
     expect(host.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('success');
     expect(markThreadRead).toHaveBeenCalledTimes(1);
 
     firstRead.resolve({
       ...runningThread,
-      has_unread: false,
+      read_status: readStatus(false, 8_000, 'running'),
     });
     await waitFor(() => markThreadRead.mock.calls.length >= 2);
 
     expect(host.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+  });
+
+  it('persists a queued final read even after the user leaves the thread', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-running-final-after-leave',
+      title: 'Final read after leave',
+      status: 'running',
+      read_status: readStatus(true, 11_000, 'running'),
+      updated_at_ms: 11_000,
+      messages: [
+        {
+          id: 'm-running-leave',
+          role: 'assistant',
+          content: 'Working before leave',
+          status: 'streaming',
+          created_at_ms: 11_000,
+        },
+      ],
+    });
+    const finalUnreadDetail = {
+      ...runningThread,
+      status: 'success' as const,
+      read_status: readStatus(true, 11_500, 'success'),
+      updated_at_ms: 11_500,
+      messages: [
+        {
+          id: 'm-running-leave',
+          role: 'assistant' as const,
+          content: 'Final before leaving',
+          status: 'complete' as const,
+          created_at_ms: 11_500,
+        },
+      ],
+    };
+    const firstRead = deferred<FlowerThreadSnapshot>();
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => {
+      if (markThreadRead.mock.calls.length === 1) {
+        return firstRead.promise;
+      }
+      return {
+        ...finalUnreadDetail,
+        read_status: readStatus(false, snapshot.activity_revision, 'success'),
+      };
+    });
+    let detailHasFinalUnread = false;
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => listSnapshot),
+      loadThread: vi.fn(async () => (detailHasFinalUnread ? finalUnreadDetail : runningThread)),
+      markThreadRead,
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-final-after-leave"] button')));
+    (host.querySelector('[data-thread-id="thread-running-final-after-leave"] button') as HTMLButtonElement).click();
+    await waitFor(() => markThreadRead.mock.calls.length === 1);
+
+    detailHasFinalUnread = true;
+    listSnapshot = [finalUnreadDetail];
+    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => host.textContent?.includes('Final before leaving') ?? false);
+
+    (host.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+    firstRead.resolve({
+      ...runningThread,
+      read_status: readStatus(false, 11_000, 'running'),
+    });
+    await waitFor(() => markThreadRead.mock.calls.length >= 2);
+
+    expect(markThreadRead.mock.calls[1]?.[0]).toBe('thread-running-final-after-leave');
+    expect(markThreadRead.mock.calls[1]?.[1]).toMatchObject(finalUnreadDetail.read_status.snapshot);
   });
 
   it('keeps a clicked thread visually read across stale list refreshes until a newer version arrives', async () => {
@@ -1001,19 +1181,19 @@ describe('FlowerSurface navigation', () => {
       thread_id: 'thread-refresh-race',
       title: 'Refresh race',
       updated_at_ms: 7_000,
-      has_unread: true,
+      read_status: readStatus(true, 7_000, 'success'),
     });
     const newerUnreadThread = {
       ...unreadThread,
       updated_at_ms: 7_500,
-      has_unread: true,
+      read_status: readStatus(true, 7_500, 'success'),
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [unreadThread];
     const markThreadRead = vi.fn(() => new Promise<FlowerThreadSnapshot>(() => undefined));
     const host = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
-      loadThread: vi.fn(async () => ({ ...unreadThread, has_unread: false })),
+      loadThread: vi.fn(async () => ({ ...unreadThread, read_status: readStatus(false, 7_000, 'success') })),
       markThreadRead,
     });
 
@@ -1057,11 +1237,11 @@ describe('FlowerSurface navigation', () => {
     expect(host.textContent).not.toContain('Before target');
   });
 
-  it('does not restore the unread dot when mark-read persistence fails', async () => {
+  it('restores the unread dot when mark-read persistence fails', async () => {
     const unreadThread = thread({
       thread_id: 'thread-mark-read-error',
       title: 'Unread failure',
-      has_unread: true,
+      read_status: readStatus(true, 9_000, 'success'),
     });
     const markThreadRead = vi.fn(async () => {
       throw new Error('read state unavailable');
@@ -1077,7 +1257,7 @@ describe('FlowerSurface navigation', () => {
     (host.querySelector('[data-thread-id="thread-mark-read-error"] button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length > 0);
 
-    expect(host.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(host.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
     expect(host.querySelector('.flower-host-thread-action-error')?.textContent).toContain('read state unavailable');
   });
 
@@ -1336,6 +1516,76 @@ describe('FlowerSurface navigation', () => {
     expect(host.textContent).toContain('file.read');
     expect(host.querySelector('.flower-host-tool-activity')).toBeTruthy();
     expect(host.querySelector('.flower-host-error-card')?.textContent).toContain('Provider returned a structured failure.');
+  });
+
+  it('keeps background terminal refreshes when selected detail polling mutates the list', async () => {
+    const selectedInitial = thread({
+      thread_id: 'thread-selected-live',
+      title: 'Selected live',
+      created_at_ms: 4_000,
+      updated_at_ms: 4_100,
+      status: 'running',
+      read_status: readStatus(false, 410, 'running'),
+    });
+    const selectedDetail = {
+      ...selectedInitial,
+      updated_at_ms: 4_200,
+      read_status: readStatus(false, 420, 'running'),
+      messages: [
+        {
+          id: 'm-selected-live',
+          role: 'assistant' as const,
+          content: 'Selected detail refreshed.',
+          status: 'streaming' as const,
+          created_at_ms: 4_200,
+        },
+      ],
+    };
+    const backgroundRunning = thread({
+      thread_id: 'thread-background-live',
+      title: 'Background live',
+      created_at_ms: 3_000,
+      updated_at_ms: 3_100,
+      status: 'running',
+      read_status: readStatus(false, 310, 'running'),
+      messages: [],
+    });
+    const backgroundDone = {
+      ...backgroundRunning,
+      updated_at_ms: 3_200,
+      status: 'success' as const,
+      read_status: readStatus(true, 320, 'success'),
+    };
+    let listCalls = 0;
+    const listThreads = vi.fn(() => {
+      listCalls += 1;
+      if (listCalls === 1) return Promise.resolve([selectedInitial, backgroundRunning]);
+      return Promise.resolve([selectedDetail, backgroundDone]);
+    });
+    let loadCalls = 0;
+    const loadThread = vi.fn(async (threadID: string) => {
+      loadCalls += 1;
+      return threadID === 'thread-selected-live'
+        ? { ...selectedDetail, updated_at_ms: selectedDetail.updated_at_ms + loadCalls }
+        : backgroundRunning;
+    });
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads,
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-selected-live"] button')));
+    (host.querySelector('[data-thread-id="thread-selected-live"] button') as HTMLButtonElement).click();
+    await waitFor(() => loadThread.mock.calls.length >= 1);
+    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => listCalls >= 2);
+
+    await wait(1250);
+    await flush();
+    expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
+    await waitFor(() => host.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-indicator') === 'success');
+    expect(host.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
   });
 
   it('renders structured input requests in the composer while Flower waits', async () => {

@@ -30,6 +30,6 @@ export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot): Flowe
     status: thread.status,
     source_label: thread.source_label,
     target_labels: thread.target_labels,
-    has_unread: thread.has_unread,
+    read_status: thread.read_status,
   };
 }

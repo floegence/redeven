@@ -109,12 +109,16 @@ export type WaitingPromptView = Readonly<{
 }>;
 
 export type ThreadReadSnapshot = Readonly<{
+  activity_revision: number;
   last_message_at_unix_ms: number;
+  activity_signature: string;
   waiting_prompt_id?: string;
 }>;
 
 export type ThreadReadState = Readonly<{
+  last_seen_activity_revision: number;
   last_read_message_at_unix_ms: number;
+  last_seen_activity_signature: string;
   last_seen_waiting_prompt_id?: string;
 }>;
 
@@ -142,7 +146,7 @@ export type ThreadView = Readonly<{
   updated_at_unix_ms: number;
   last_message_at_unix_ms: number;
   last_message_preview: string;
-  read_status?: ThreadReadStatus;
+  read_status: ThreadReadStatus;
 }>;
 
 export type ListThreadsResponse = Readonly<{
@@ -328,40 +332,45 @@ function normalizeProtocolWaitingPrompt(raw: AIRequestUserInputPrompt | undefine
   };
 }
 
-function normalizeThreadReadStatus(raw: any, thread?: ThreadView | null | undefined): ThreadReadStatus {
-  const waitingPrompt = normalizeWaitingPromptForThread(thread);
-  const canUseWaitingPrompt = threadIsWaitingUser(thread);
-  const fallbackSnapshot: ThreadReadSnapshot = {
-    last_message_at_unix_ms: Math.max(0, Math.floor(Number(thread?.last_message_at_unix_ms ?? 0) || 0)),
-    waiting_prompt_id: String(waitingPrompt?.promptId ?? '').trim() || undefined,
-  };
+function normalizeNonNegativeInteger(raw: unknown, field: string): number {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`AI thread read_status.${field} must be a non-negative number.`);
+  }
+  return Math.floor(value);
+}
+
+function normalizeThreadReadStatus(raw: any): ThreadReadStatus {
   const snapshotRaw = raw && typeof raw === 'object' ? (raw as any).snapshot : null;
   const readStateRaw = raw && typeof raw === 'object' ? (raw as any).read_state : null;
+  if (!snapshotRaw || typeof snapshotRaw !== 'object') {
+    throw new Error('AI thread read_status.snapshot is required.');
+  }
+  if (!readStateRaw || typeof readStateRaw !== 'object') {
+    throw new Error('AI thread read_status.read_state is required.');
+  }
+  const activitySignature = String(snapshotRaw.activity_signature ?? '').trim();
+  if (!activitySignature) {
+    throw new Error('AI thread read_status.snapshot.activity_signature is required.');
+  }
+  const lastSeenActivitySignature = String(readStateRaw.last_seen_activity_signature ?? '').trim();
+  if (typeof readStateRaw.last_seen_activity_signature !== 'string') {
+    throw new Error('AI thread read_status.read_state.last_seen_activity_signature must be a string.');
+  }
   const snapshot: ThreadReadSnapshot = {
-    last_message_at_unix_ms: Math.max(
-      0,
-      Math.floor(Number(snapshotRaw?.last_message_at_unix_ms ?? fallbackSnapshot.last_message_at_unix_ms ?? 0) || 0),
-    ),
-    waiting_prompt_id: canUseWaitingPrompt
-      ? String(snapshotRaw?.waiting_prompt_id ?? fallbackSnapshot.waiting_prompt_id ?? '').trim() || undefined
-      : undefined,
+    activity_revision: normalizeNonNegativeInteger(snapshotRaw.activity_revision, 'snapshot.activity_revision'),
+    last_message_at_unix_ms: normalizeNonNegativeInteger(snapshotRaw.last_message_at_unix_ms, 'snapshot.last_message_at_unix_ms'),
+    activity_signature: activitySignature,
+    waiting_prompt_id: String(snapshotRaw.waiting_prompt_id ?? '').trim() || undefined,
   };
   const readState: ThreadReadState = {
-    last_read_message_at_unix_ms: Math.max(
-      0,
-      Math.floor(Number(readStateRaw?.last_read_message_at_unix_ms ?? snapshot.last_message_at_unix_ms ?? 0) || 0),
-    ),
-    last_seen_waiting_prompt_id: String(readStateRaw?.last_seen_waiting_prompt_id ?? snapshot.waiting_prompt_id ?? '').trim() || undefined,
+    last_seen_activity_revision: normalizeNonNegativeInteger(readStateRaw.last_seen_activity_revision, 'read_state.last_seen_activity_revision'),
+    last_read_message_at_unix_ms: normalizeNonNegativeInteger(readStateRaw.last_read_message_at_unix_ms, 'read_state.last_read_message_at_unix_ms'),
+    last_seen_activity_signature: lastSeenActivitySignature,
+    last_seen_waiting_prompt_id: String(readStateRaw.last_seen_waiting_prompt_id ?? '').trim() || undefined,
   };
-  const inferredUnread = (
-    snapshot.last_message_at_unix_ms > readState.last_read_message_at_unix_ms ||
-    (
-      !!snapshot.waiting_prompt_id &&
-      snapshot.waiting_prompt_id !== readState.last_seen_waiting_prompt_id
-    )
-  );
   return {
-    is_unread: inferredUnread,
+    is_unread: raw.is_unread === true,
     snapshot,
     read_state: readState,
   };
@@ -429,13 +438,7 @@ export function normalizeModelsResponse(raw: unknown): ModelsResponse {
 
 function threadNeedsReadMark(readStatus: ThreadReadStatus | null | undefined): boolean {
   if (!readStatus) return false;
-  return (
-    readStatus.snapshot.last_message_at_unix_ms > readStatus.read_state.last_read_message_at_unix_ms ||
-    (
-      !!readStatus.snapshot.waiting_prompt_id &&
-      readStatus.snapshot.waiting_prompt_id !== readStatus.read_state.last_seen_waiting_prompt_id
-    )
-  );
+  return readStatus.is_unread === true;
 }
 
 function isActiveRunStatus(status: ThreadRunStatus): boolean {
@@ -726,29 +729,13 @@ export function createAIChatContextValue(): AIChatContextValue {
     return normalizeWaitingPromptForThread(threadById().get(tid));
   };
 
-  const threadReadStatusForThread = (threadId: string | null | undefined): ThreadReadStatus => {
+  const threadReadStatusForThread = (threadId: string | null | undefined): ThreadReadStatus | null => {
     const tid = String(threadId ?? '').trim();
-    if (!tid) {
-      return normalizeThreadReadStatus(null, null);
-    }
+    if (!tid) return null;
 
     const thread = threadById().get(tid);
-    const normalized = normalizeThreadReadStatus((thread as any)?.read_status, thread);
-    const waitingPromptID = String(waitingPromptForThread(tid)?.promptId ?? '').trim();
-    if (!waitingPromptID || waitingPromptID === normalized.snapshot.waiting_prompt_id) {
-      return normalized;
-    }
-    const next = {
-      ...normalized,
-      snapshot: {
-        ...normalized.snapshot,
-        waiting_prompt_id: waitingPromptID,
-      },
-    };
-    return {
-      ...next,
-      is_unread: threadNeedsReadMark(next),
-    };
+    if (!thread) return null;
+    return normalizeThreadReadStatus(thread.read_status);
   };
 
   const updateThreadReadStatus = (threadId: string, readStatus: ThreadReadStatus): void => {
@@ -776,7 +763,9 @@ export function createAIChatContextValue(): AIChatContextValue {
 
     const requestKey = [
       tid,
+      String(readStatus.snapshot.activity_revision ?? 0),
       String(readStatus.snapshot.last_message_at_unix_ms ?? 0),
+      String(readStatus.snapshot.activity_signature ?? '').trim(),
       String(readStatus.snapshot.waiting_prompt_id ?? '').trim(),
     ].join('\u001f');
     if (markingReadKeyByThread()[tid] === requestKey) return;
@@ -789,13 +778,15 @@ export function createAIChatContextValue(): AIChatContextValue {
           method: 'POST',
           body: JSON.stringify({
             snapshot: {
+              activity_revision: readStatus.snapshot.activity_revision,
               last_message_at_unix_ms: readStatus.snapshot.last_message_at_unix_ms,
+              activity_signature: readStatus.snapshot.activity_signature,
               waiting_prompt_id: readStatus.snapshot.waiting_prompt_id,
             },
           }),
         },
       );
-      updateThreadReadStatus(tid, normalizeThreadReadStatus(resp?.read_status, threadById().get(tid) ?? null));
+      updateThreadReadStatus(tid, normalizeThreadReadStatus(resp?.read_status));
     } catch {
       // Best effort; future list refreshes can retry.
     } finally {
@@ -864,7 +855,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const tid = String(threadId ?? '').trim();
     if (!tid) return false;
     if (tid === String(activeThreadId() ?? '').trim()) return false;
-    return threadReadStatusForThread(tid).is_unread;
+    return threadReadStatusForThread(tid)?.is_unread ?? false;
   };
 
   const onRealtimeEvent = (handler: (event: AIRealtimeEvent) => void) => {
@@ -1098,6 +1089,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     const tid = String(activeThreadId() ?? '').trim();
     if (!tid) return;
     const readStatus = threadReadStatusForThread(tid);
+    if (!readStatus) return;
     void markThreadRead(tid, readStatus);
   });
 

@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/floegence/floret/observation"
@@ -321,7 +323,7 @@ func (s *Service) GetThread(ctx context.Context, threadID string) (ThreadSnapsho
 	return snapshot, err
 }
 
-func (s *Service) MarkThreadRead(ctx context.Context, threadID string) (ThreadSnapshot, error) {
+func (s *Service) MarkThreadRead(ctx context.Context, threadID string, req ThreadReadRequest) (ThreadSnapshot, error) {
 	if s == nil {
 		return ThreadSnapshot{}, errors.New("nil Flower Host service")
 	}
@@ -339,23 +341,43 @@ func (s *Service) MarkThreadRead(ctx context.Context, threadID string) (ThreadSn
 	if view == nil {
 		return ThreadSnapshot{}, newServiceError(http.StatusNotFound, "thread_not_found", "thread not found")
 	}
-	snapshot, err := s.threadSnapshot(ctx, threadID, view)
+	requestSnapshot := threadreadstate.FlowerSnapshot{
+		ActivityRevision:    req.Snapshot.ActivityRevision,
+		LastMessageAtUnixMs: req.Snapshot.LastMessageAtUnixMs,
+		ActivitySignature:   strings.TrimSpace(req.Snapshot.ActivitySignature),
+		WaitingPromptID:     strings.TrimSpace(req.Snapshot.WaitingPromptID),
+	}
+	currentThread, err := s.threadSnapshot(ctx, threadID, view)
 	if err != nil {
 		return ThreadSnapshot{}, err
 	}
-	if err := s.advanceThreadReadSnapshot(ctx, threadID, flowerReadSnapshotFromView(*view, latestMessageCreatedAt(snapshot.Messages))); err != nil {
+	currentSnapshot := threadReadSnapshotFromContract(currentThread.ReadStatus.Snapshot)
+	requestSnapshot = normalizeFlowerReadSnapshot(requestSnapshot)
+	if requestSnapshot.ActivitySignature == "" {
+		return ThreadSnapshot{}, newServiceError(http.StatusBadRequest, "missing_read_snapshot_activity_signature", "missing read snapshot activity signature")
+	}
+	if requestSnapshot.ActivityRevision > currentSnapshot.ActivityRevision || requestSnapshot.LastMessageAtUnixMs > currentSnapshot.LastMessageAtUnixMs {
+		return ThreadSnapshot{}, newServiceError(http.StatusBadRequest, "read_snapshot_exceeds_thread", "read snapshot exceeds current thread state")
+	}
+	if requestSnapshot.ActivityRevision == currentSnapshot.ActivityRevision &&
+		(requestSnapshot.ActivitySignature != currentSnapshot.ActivitySignature || requestSnapshot.WaitingPromptID != currentSnapshot.WaitingPromptID) {
+		return ThreadSnapshot{}, newServiceError(http.StatusBadRequest, "read_snapshot_mismatched_thread_activity", "read snapshot does not match current thread activity")
+	}
+	if _, err := s.advanceThreadReadSnapshot(ctx, threadID, requestSnapshot); err != nil {
 		return ThreadSnapshot{}, err
 	}
-	snapshot.HasUnread = false
+	snapshot, err := s.threadSnapshot(ctx, threadID, nil)
+	if err != nil {
+		return ThreadSnapshot{}, err
+	}
 	return snapshot, nil
 }
 
-func (s *Service) advanceThreadReadSnapshot(ctx context.Context, threadID string, snapshot threadreadstate.FlowerSnapshot) error {
+func (s *Service) advanceThreadReadSnapshot(ctx context.Context, threadID string, snapshot threadreadstate.FlowerSnapshot) (threadreadstate.Record, error) {
 	if s == nil || s.reads == nil {
-		return errors.New("missing Flower Host thread read state store")
+		return threadreadstate.Record{}, errors.New("missing Flower Host thread read state store")
 	}
-	_, err := s.reads.AdvanceFlower(ctx, hostEndpointID, s.readUserPublicID(), threadID, snapshot)
-	return err
+	return s.reads.AdvanceFlower(ctx, hostEndpointID, threadID, snapshot)
 }
 
 func (s *Service) MutateThread(ctx context.Context, threadID string, req ThreadMutationRequest) (ThreadSnapshot, error) {
@@ -821,7 +843,7 @@ func (s *Service) threadListSnapshot(ctx context.Context, view *ai.ThreadView, r
 		HomeHostKind: homeHostKind,
 		SourceLabel:  sourceLabel,
 		TargetLabels: targetLabels,
-		HasUnread:    flowerThreadHasUnread(readSnapshot, readRecord),
+		ReadStatus:   flowerReadStatus(readSnapshot, readRecord),
 	}, nil
 }
 
@@ -1097,7 +1119,7 @@ func (s *Service) threadSnapshot(ctx context.Context, threadID string, view *ai.
 		HomeHostKind:     homeHostKind,
 		SourceLabel:      sourceLabel,
 		TargetLabels:     targetLabels,
-		HasUnread:        flowerThreadHasUnread(readSnapshot, readRecord),
+		ReadStatus:       flowerReadStatus(readSnapshot, readRecord),
 	}, nil
 }
 
@@ -1152,7 +1174,7 @@ func (s *Service) ensureThreadListReadRecords(ctx context.Context, views []ai.Th
 		}
 		snapshots[threadID] = flowerReadSnapshotFromView(view)
 	}
-	return s.reads.EnsureFlower(ctx, hostEndpointID, s.readUserPublicID(), snapshots)
+	return s.reads.EnsureFlower(ctx, hostEndpointID, snapshots)
 }
 
 func (s *Service) ensureThreadReadRecord(ctx context.Context, threadID string, snapshot threadreadstate.FlowerSnapshot) (threadreadstate.Record, error) {
@@ -1163,7 +1185,7 @@ func (s *Service) ensureThreadReadRecord(ctx context.Context, threadID string, s
 	if threadID == "" {
 		return threadreadstate.Record{}, errors.New("missing thread_id")
 	}
-	records, err := s.reads.EnsureFlower(ctx, hostEndpointID, s.readUserPublicID(), map[string]threadreadstate.FlowerSnapshot{
+	records, err := s.reads.EnsureFlower(ctx, hostEndpointID, map[string]threadreadstate.FlowerSnapshot{
 		threadID: snapshot,
 	})
 	if err != nil {
@@ -1172,30 +1194,178 @@ func (s *Service) ensureThreadReadRecord(ctx context.Context, threadID string, s
 	return records[threadID], nil
 }
 
-func (s *Service) readUserPublicID() string {
-	return strings.TrimSpace(s.identity.UserPublicID)
-}
-
 func flowerReadSnapshotFromView(view ai.ThreadView, visibleMessageAtUnixMs ...int64) threadreadstate.FlowerSnapshot {
 	waitingPromptID := ""
-	if view.WaitingPrompt != nil {
+	if normalizeActivityStatusToken(view.RunStatus) == "waiting_user" && view.WaitingPrompt != nil {
 		waitingPromptID = strings.TrimSpace(view.WaitingPrompt.PromptID)
 	}
 	lastMessageAtUnixMs := view.LastMessageAtUnixMs
 	for _, ts := range visibleMessageAtUnixMs {
 		lastMessageAtUnixMs = maxInt64(lastMessageAtUnixMs, ts)
 	}
+	activityRevision := flowerActivityRevision(view.RunStatus, maxInt64(lastMessageAtUnixMs, view.RunUpdatedAtUnixMs))
 	return threadreadstate.FlowerSnapshot{
+		ActivityRevision:    activityRevision,
 		LastMessageAtUnixMs: lastMessageAtUnixMs,
+		ActivitySignature:   flowerActivitySignature(view.RunStatus, view.LastContextRunID, activityRevision, waitingPromptID, view.LastMessagePreview),
 		WaitingPromptID:     waitingPromptID,
 	}
 }
 
-func flowerThreadHasUnread(snapshot threadreadstate.FlowerSnapshot, record threadreadstate.Record) bool {
+func flowerReadStatus(snapshot threadreadstate.FlowerSnapshot, record threadreadstate.Record) ThreadReadStatus {
+	snapshot = normalizeFlowerReadSnapshot(snapshot)
+	record = normalizeFlowerReadRecord(record)
+	return ThreadReadStatus{
+		IsUnread: flowerThreadIsUnread(snapshot, record),
+		Snapshot: ThreadActivitySnapshot{
+			ActivityRevision:    snapshot.ActivityRevision,
+			LastMessageAtUnixMs: snapshot.LastMessageAtUnixMs,
+			ActivitySignature:   snapshot.ActivitySignature,
+			WaitingPromptID:     snapshot.WaitingPromptID,
+		},
+		ReadState: ThreadReadState{
+			LastSeenActivityRevision:  record.LastSeenActivityRevision,
+			LastReadMessageAtUnixMs:   record.LastReadMessageAtUnixMs,
+			LastSeenActivitySignature: record.LastSeenActivitySignature,
+			LastSeenWaitingPromptID:   record.LastSeenWaitingPromptID,
+		},
+	}
+}
+
+func threadReadSnapshotFromContract(snapshot ThreadActivitySnapshot) threadreadstate.FlowerSnapshot {
+	return normalizeFlowerReadSnapshot(threadreadstate.FlowerSnapshot{
+		ActivityRevision:    snapshot.ActivityRevision,
+		LastMessageAtUnixMs: snapshot.LastMessageAtUnixMs,
+		ActivitySignature:   strings.TrimSpace(snapshot.ActivitySignature),
+		WaitingPromptID:     strings.TrimSpace(snapshot.WaitingPromptID),
+	})
+}
+
+func normalizeFlowerReadSnapshot(snapshot threadreadstate.FlowerSnapshot) threadreadstate.FlowerSnapshot {
+	if snapshot.ActivityRevision < 0 {
+		snapshot.ActivityRevision = 0
+	}
+	if snapshot.LastMessageAtUnixMs < 0 {
+		snapshot.LastMessageAtUnixMs = 0
+	}
+	if snapshot.ActivityRevision < snapshot.LastMessageAtUnixMs {
+		snapshot.ActivityRevision = snapshot.LastMessageAtUnixMs
+	}
+	snapshot.ActivitySignature = strings.TrimSpace(snapshot.ActivitySignature)
+	snapshot.WaitingPromptID = strings.TrimSpace(snapshot.WaitingPromptID)
+	return snapshot
+}
+
+func normalizeFlowerReadRecord(record threadreadstate.Record) threadreadstate.Record {
+	if record.LastSeenActivityRevision < 0 {
+		record.LastSeenActivityRevision = 0
+	}
+	if record.LastReadMessageAtUnixMs < 0 {
+		record.LastReadMessageAtUnixMs = 0
+	}
+	record.LastSeenActivitySignature = strings.TrimSpace(record.LastSeenActivitySignature)
+	record.LastSeenWaitingPromptID = strings.TrimSpace(record.LastSeenWaitingPromptID)
+	return record
+}
+
+func flowerThreadIsUnread(snapshot threadreadstate.FlowerSnapshot, record threadreadstate.Record) bool {
+	if snapshot.ActivityRevision > record.LastSeenActivityRevision {
+		return true
+	}
 	if snapshot.LastMessageAtUnixMs > record.LastReadMessageAtUnixMs {
 		return true
 	}
+	if snapshot.ActivitySignature != "" && snapshot.ActivitySignature != record.LastSeenActivitySignature {
+		return true
+	}
 	return snapshot.WaitingPromptID != "" && snapshot.WaitingPromptID != strings.TrimSpace(record.LastSeenWaitingPromptID)
+}
+
+func flowerActivitySignature(status string, turnID string, activityRevision int64, waitingPromptID string, lastMessagePreview string) string {
+	tokens := make([]string, 0, 4)
+	normalizedStatus := normalizeActivityStatusToken(status)
+	if normalizedStatus != "" {
+		tokens = append(tokens, "status:"+normalizedStatus)
+	}
+	if turnID = strings.TrimSpace(turnID); turnID != "" {
+		tokens = append(tokens, "turn:"+turnID)
+	}
+	tokens = append(tokens, "activity:"+strconv.FormatInt(maxInt64(0, activityRevision), 10))
+	if waitingPromptID = strings.TrimSpace(waitingPromptID); waitingPromptID != "" {
+		tokens = append(tokens, "prompt:"+waitingPromptID)
+	}
+	if messageToken := flowerMessagePreviewToken(lastMessagePreview); messageToken != "" {
+		tokens = append(tokens, "message:"+messageToken)
+	}
+	return strings.Join(tokens, "\u001f")
+}
+
+func flowerMessagePreviewToken(preview string) string {
+	preview = strings.TrimSpace(preview)
+	if preview == "" {
+		return ""
+	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(preview))
+	return strconv.FormatUint(h.Sum64(), 36)
+}
+
+func flowerActivityRevision(status string, baseUnixMs int64) int64 {
+	if baseUnixMs <= 0 {
+		return flowerRunStatusRevisionOrdinal(status)
+	}
+	return baseUnixMs*10 + flowerRunStatusRevisionOrdinal(status)
+}
+
+func flowerRunStatusRevisionOrdinal(status string) int64 {
+	switch normalizeActivityStatusToken(status) {
+	case "", "idle":
+		return 0
+	case "accepted":
+		return 1
+	case "running", "recovering", "finalizing":
+		return 2
+	case "waiting_approval":
+		return 3
+	case "waiting_user":
+		return 4
+	case "success", "completed":
+		return 5
+	case "failed", "timed_out", "canceled", "cancelled":
+		return 6
+	default:
+		return 0
+	}
+}
+
+func normalizeActivityStatusToken(value string) string {
+	value = strings.TrimSpace(value)
+	value = camelSplitASCII(value)
+	value = strings.ReplaceAll(value, "-", "_")
+	value = strings.ReplaceAll(value, " ", "_")
+	return strings.ToLower(value)
+}
+
+func camelSplitASCII(value string) string {
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	for index, r := range value {
+		if index > 0 && isLowerAlphaNumeric(rune(value[index-1])) && isUpperAlpha(r) {
+			builder.WriteByte('_')
+		}
+		builder.WriteRune(r)
+	}
+	return builder.String()
+}
+
+func isLowerAlphaNumeric(r rune) bool {
+	return (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+}
+
+func isUpperAlpha(r rune) bool {
+	return r >= 'A' && r <= 'Z'
 }
 
 func (s *Service) threadOwnershipLabels(meta *threadstore.FlowerThreadMetadata) (string, string, string, []string) {
@@ -1698,6 +1868,8 @@ func mapRunStatus(status string) (string, error) {
 		return "failed", nil
 	case ai.RunStateSuccess:
 		return "success", nil
+	case ai.RunStateCanceled:
+		return "canceled", nil
 	default:
 		return "idle", nil
 	}

@@ -1,7 +1,23 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
-import { filterFlowerThreadItems, groupFlowerThreadItems } from './threadListModel';
+import type { FlowerThreadListItem, FlowerThreadReadStatus } from '../contracts/flowerSurfaceContracts';
+import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems } from './threadListModel';
+
+function readStatus(isUnread = false): FlowerThreadReadStatus {
+  return {
+    is_unread: isUnread,
+    snapshot: {
+      activity_revision: isUnread ? 2 : 1,
+      last_message_at_unix_ms: 1,
+      activity_signature: isUnread ? 'status:success\u001factivity:2' : 'status:idle\u001factivity:1',
+    },
+    read_state: {
+      last_seen_activity_revision: 1,
+      last_read_message_at_unix_ms: 1,
+      last_seen_activity_signature: 'status:idle\u001factivity:1',
+    },
+  };
+}
 
 function thread(overrides: Partial<FlowerThreadListItem> = {}): FlowerThreadListItem {
   return {
@@ -16,7 +32,7 @@ function thread(overrides: Partial<FlowerThreadListItem> = {}): FlowerThreadList
     status: 'idle',
     source_label: 'this host',
     target_labels: [],
-    has_unread: false,
+    read_status: readStatus(false),
     ...overrides,
   };
 }
@@ -43,6 +59,19 @@ describe('groupFlowerThreadItems', () => {
       threads: [{ thread_id: 'regular' }],
     });
     vi.useRealTimers();
+  });
+});
+
+describe('flowerThreadIndicator', () => {
+  it('shows wave only for the selected running thread', () => {
+    expect(flowerThreadIndicator(thread({ status: 'running' }), true).visual).toBe('wave');
+    expect(flowerThreadIndicator(thread({ status: 'running' }), false).visual).toBe('working');
+  });
+
+  it('preserves terminal lifecycle dots with unread attention', () => {
+    const indicator = flowerThreadIndicator(thread({ status: 'success', read_status: readStatus(true) }), false);
+    expect(indicator.visual).toBe('success');
+    expect(indicator.attention).toBe('unread');
   });
 });
 

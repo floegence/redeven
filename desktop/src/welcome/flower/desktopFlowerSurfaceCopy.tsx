@@ -90,6 +90,7 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
         waiting_approval: t(i18n, k('threadList.statusWaitingApproval')),
         failed: t(i18n, k('threadList.statusFailed')),
         success: t(i18n, k('threadList.statusSuccess')),
+        canceled: t(i18n, k('threadList.statusCanceled')),
         read_only: t(i18n, k('threadList.statusReadOnly')),
       },
       groups: {

@@ -54,6 +54,19 @@ const makeThread = (overrides: Partial<ThreadView> = {}): ThreadView => ({
   updated_at_unix_ms: 1000,
   last_message_at_unix_ms: 1000,
   last_message_preview: 'preview',
+  read_status: {
+    is_unread: false,
+    snapshot: {
+      activity_revision: 1000,
+      last_message_at_unix_ms: 1000,
+      activity_signature: 'status:idle\u001factivity:1000',
+    },
+    read_state: {
+      last_seen_activity_revision: 1000,
+      last_read_message_at_unix_ms: 1000,
+      last_seen_activity_signature: 'status:idle\u001factivity:1000',
+    },
+  },
   ...overrides,
 });
 
@@ -206,13 +219,16 @@ describe('AIChatContext context run tracking', () => {
         }],
       },
       read_status: {
-        is_unread: true,
+        is_unread: false,
         snapshot: {
+          activity_revision: 1000,
           last_message_at_unix_ms: 1000,
-          waiting_prompt_id: 'prompt-stale',
+          activity_signature: 'status:success\u001factivity:1000',
         },
         read_state: {
+          last_seen_activity_revision: 1000,
           last_read_message_at_unix_ms: 1000,
+          last_seen_activity_signature: 'status:success\u001factivity:1000',
         },
       },
     })];

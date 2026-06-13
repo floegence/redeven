@@ -16,6 +16,8 @@ type Surface string
 const (
 	SurfaceFlower Surface = "flower"
 	SurfaceCodex  Surface = "codex"
+
+	FlowerRuntimeScopeID = "runtime"
 )
 
 type Store struct {
@@ -24,9 +26,10 @@ type Store struct {
 
 type Record struct {
 	EndpointID                string  `json:"endpoint_id"`
-	UserPublicID              string  `json:"user_public_id"`
+	ScopeID                   string  `json:"scope_id"`
 	Surface                   Surface `json:"surface"`
 	ThreadID                  string  `json:"thread_id"`
+	LastSeenActivityRevision  int64   `json:"last_seen_activity_revision"`
 	LastReadMessageAtUnixMs   int64   `json:"last_read_message_at_unix_ms"`
 	LastSeenWaitingPromptID   string  `json:"last_seen_waiting_prompt_id"`
 	LastReadUpdatedAtUnixS    int64   `json:"last_read_updated_at_unix_s"`
@@ -35,7 +38,9 @@ type Record struct {
 }
 
 type FlowerSnapshot struct {
+	ActivityRevision    int64
 	LastMessageAtUnixMs int64
+	ActivitySignature   string
 	WaitingPromptID     string
 }
 
@@ -62,10 +67,9 @@ func (s *Store) Close() error {
 func (s *Store) EnsureFlower(
 	ctx context.Context,
 	endpointID string,
-	userPublicID string,
 	snapshots map[string]FlowerSnapshot,
 ) (map[string]Record, error) {
-	return s.ensure(ctx, endpointID, userPublicID, SurfaceFlower, snapshots, nil)
+	return s.ensure(ctx, endpointID, FlowerRuntimeScopeID, SurfaceFlower, snapshots, nil)
 }
 
 func (s *Store) EnsureCodex(
@@ -80,15 +84,14 @@ func (s *Store) EnsureCodex(
 func (s *Store) AdvanceFlower(
 	ctx context.Context,
 	endpointID string,
-	userPublicID string,
 	threadID string,
 	snapshot FlowerSnapshot,
 ) (Record, error) {
 	record, err := s.advance(ctx, recordKey{
-		EndpointID:   endpointID,
-		UserPublicID: userPublicID,
-		Surface:      SurfaceFlower,
-		ThreadID:     threadID,
+		EndpointID: endpointID,
+		ScopeID:    FlowerRuntimeScopeID,
+		Surface:    SurfaceFlower,
+		ThreadID:   threadID,
 	}, snapshot, CodexSnapshot{})
 	if err != nil {
 		return Record{}, err
@@ -104,10 +107,10 @@ func (s *Store) AdvanceCodex(
 	snapshot CodexSnapshot,
 ) (Record, error) {
 	record, err := s.advance(ctx, recordKey{
-		EndpointID:   endpointID,
-		UserPublicID: userPublicID,
-		Surface:      SurfaceCodex,
-		ThreadID:     threadID,
+		EndpointID: endpointID,
+		ScopeID:    userPublicID,
+		Surface:    SurfaceCodex,
+		ThreadID:   threadID,
 	}, FlowerSnapshot{}, snapshot)
 	if err != nil {
 		return Record{}, err
@@ -186,10 +189,10 @@ func (s *Store) RestoreRecords(ctx context.Context, records []Record) error {
 }
 
 type recordKey struct {
-	EndpointID   string
-	UserPublicID string
-	Surface      Surface
-	ThreadID     string
+	EndpointID string
+	ScopeID    string
+	Surface    Surface
+	ThreadID   string
 }
 
 type threadScopeKey struct {
@@ -201,7 +204,7 @@ type threadScopeKey struct {
 func (s *Store) ensure(
 	ctx context.Context,
 	endpointID string,
-	userPublicID string,
+	scopeID string,
 	surface Surface,
 	flowerSnapshots map[string]FlowerSnapshot,
 	codexSnapshots map[string]CodexSnapshot,
@@ -209,7 +212,7 @@ func (s *Store) ensure(
 	if s == nil || s.db == nil {
 		return nil, errors.New("thread read state store not initialized")
 	}
-	key, err := normalizeScope(endpointID, userPublicID, surface)
+	key, err := normalizeScope(endpointID, scopeID, surface)
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +257,7 @@ func (s *Store) ensure(
 		}
 		record := Record{
 			EndpointID:      key.EndpointID,
-			UserPublicID:    key.UserPublicID,
+			ScopeID:         key.ScopeID,
 			Surface:         key.Surface,
 			ThreadID:        threadID,
 			UpdatedAtUnixMs: nowUnixMs,
@@ -301,10 +304,10 @@ func (s *Store) advance(
 	}
 	if current == nil {
 		current = &Record{
-			EndpointID:   key.EndpointID,
-			UserPublicID: key.UserPublicID,
-			Surface:      key.Surface,
-			ThreadID:     key.ThreadID,
+			EndpointID: key.EndpointID,
+			ScopeID:    key.ScopeID,
+			Surface:    key.Surface,
+			ThreadID:   key.ThreadID,
 		}
 	}
 
@@ -329,15 +332,16 @@ func (s *Store) advance(
 
 func loadRecordTx(ctx context.Context, tx *sql.Tx, key recordKey) (*Record, error) {
 	row := tx.QueryRowContext(ctx, `
-SELECT endpoint_id, user_public_id, surface, thread_id,
+SELECT endpoint_id, scope_id, surface, thread_id,
+       last_seen_activity_revision,
        last_read_message_at_unix_ms, last_seen_waiting_prompt_id,
        last_read_updated_at_unix_s, last_seen_activity_signature,
        updated_at_unix_ms
 FROM thread_read_state
-WHERE endpoint_id = ? AND user_public_id = ? AND surface = ? AND thread_id = ?
+WHERE endpoint_id = ? AND scope_id = ? AND surface = ? AND thread_id = ?
 `,
 		key.EndpointID,
-		key.UserPublicID,
+		key.ScopeID,
 		string(key.Surface),
 		key.ThreadID,
 	)
@@ -354,19 +358,20 @@ WHERE endpoint_id = ? AND user_public_id = ? AND surface = ? AND thread_id = ?
 func loadRecordsByThreadTx(ctx context.Context, tx *sql.Tx, key recordKey, threadIDs []string) (map[string]Record, error) {
 	placeholders := make([]string, 0, len(threadIDs))
 	args := make([]any, 0, 3+len(threadIDs))
-	args = append(args, key.EndpointID, key.UserPublicID, string(key.Surface))
+	args = append(args, key.EndpointID, key.ScopeID, string(key.Surface))
 	for _, threadID := range threadIDs {
 		placeholders = append(placeholders, "?")
 		args = append(args, threadID)
 	}
 
 	query := `
-SELECT endpoint_id, user_public_id, surface, thread_id,
+SELECT endpoint_id, scope_id, surface, thread_id,
+       last_seen_activity_revision,
        last_read_message_at_unix_ms, last_seen_waiting_prompt_id,
        last_read_updated_at_unix_s, last_seen_activity_signature,
        updated_at_unix_ms
 FROM thread_read_state
-WHERE endpoint_id = ? AND user_public_id = ? AND surface = ? AND thread_id IN (` + strings.Join(placeholders, ",") + `)
+WHERE endpoint_id = ? AND scope_id = ? AND surface = ? AND thread_id IN (` + strings.Join(placeholders, ",") + `)
 `
 
 	rows, err := tx.QueryContext(ctx, query, args...)
@@ -391,13 +396,14 @@ WHERE endpoint_id = ? AND user_public_id = ? AND surface = ? AND thread_id IN (`
 
 func loadThreadScopeRecordsTx(ctx context.Context, tx *sql.Tx, scope threadScopeKey) ([]Record, error) {
 	rows, err := tx.QueryContext(ctx, `
-SELECT endpoint_id, user_public_id, surface, thread_id,
+SELECT endpoint_id, scope_id, surface, thread_id,
+       last_seen_activity_revision,
        last_read_message_at_unix_ms, last_seen_waiting_prompt_id,
        last_read_updated_at_unix_s, last_seen_activity_signature,
        updated_at_unix_ms
 FROM thread_read_state
 WHERE endpoint_id = ? AND surface = ? AND thread_id = ?
-ORDER BY user_public_id ASC
+ORDER BY scope_id ASC
 `, scope.EndpointID, string(scope.Surface), scope.ThreadID)
 	if err != nil {
 		return nil, err
@@ -422,17 +428,19 @@ func upsertRecordTx(ctx context.Context, tx *sql.Tx, record Record) error {
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO thread_read_state (
   endpoint_id,
-  user_public_id,
+  scope_id,
   surface,
   thread_id,
+  last_seen_activity_revision,
   last_read_message_at_unix_ms,
   last_seen_waiting_prompt_id,
   last_read_updated_at_unix_s,
   last_seen_activity_signature,
   updated_at_unix_ms
 )
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(endpoint_id, user_public_id, surface, thread_id) DO UPDATE SET
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(endpoint_id, scope_id, surface, thread_id) DO UPDATE SET
+  last_seen_activity_revision = excluded.last_seen_activity_revision,
   last_read_message_at_unix_ms = excluded.last_read_message_at_unix_ms,
   last_seen_waiting_prompt_id = excluded.last_seen_waiting_prompt_id,
   last_read_updated_at_unix_s = excluded.last_read_updated_at_unix_s,
@@ -440,9 +448,10 @@ ON CONFLICT(endpoint_id, user_public_id, surface, thread_id) DO UPDATE SET
   updated_at_unix_ms = excluded.updated_at_unix_ms
 `,
 		record.EndpointID,
-		record.UserPublicID,
+		record.ScopeID,
 		string(record.Surface),
 		record.ThreadID,
+		record.LastSeenActivityRevision,
 		record.LastReadMessageAtUnixMs,
 		record.LastSeenWaitingPromptID,
 		record.LastReadUpdatedAtUnixS,
@@ -461,9 +470,10 @@ func scanRecord(scan rowScanner) (Record, error) {
 	var record Record
 	if err := scan.Scan(
 		&record.EndpointID,
-		&record.UserPublicID,
+		&record.ScopeID,
 		&surface,
 		&record.ThreadID,
+		&record.LastSeenActivityRevision,
 		&record.LastReadMessageAtUnixMs,
 		&record.LastSeenWaitingPromptID,
 		&record.LastReadUpdatedAtUnixS,
@@ -474,27 +484,30 @@ func scanRecord(scan rowScanner) (Record, error) {
 	}
 	record.Surface = Surface(strings.TrimSpace(surface))
 	record.EndpointID = strings.TrimSpace(record.EndpointID)
-	record.UserPublicID = strings.TrimSpace(record.UserPublicID)
+	record.ScopeID = strings.TrimSpace(record.ScopeID)
 	record.ThreadID = strings.TrimSpace(record.ThreadID)
+	if record.LastSeenActivityRevision < 0 {
+		record.LastSeenActivityRevision = 0
+	}
 	record.LastSeenWaitingPromptID = strings.TrimSpace(record.LastSeenWaitingPromptID)
 	record.LastSeenActivitySignature = strings.TrimSpace(record.LastSeenActivitySignature)
 	return record, nil
 }
 
-func normalizeScope(endpointID string, userPublicID string, surface Surface) (recordKey, error) {
+func normalizeScope(endpointID string, scopeID string, surface Surface) (recordKey, error) {
 	key := recordKey{
-		EndpointID:   endpointID,
-		UserPublicID: userPublicID,
-		Surface:      surface,
+		EndpointID: endpointID,
+		ScopeID:    scopeID,
+		Surface:    surface,
 	}
 	key.EndpointID = strings.TrimSpace(key.EndpointID)
-	key.UserPublicID = strings.TrimSpace(key.UserPublicID)
+	key.ScopeID = strings.TrimSpace(key.ScopeID)
 	key.Surface = normalizeSurface(key.Surface)
 	if key.EndpointID == "" {
 		return recordKey{}, errors.New("missing endpoint_id")
 	}
-	if key.UserPublicID == "" {
-		return recordKey{}, errors.New("missing user_public_id")
+	if key.ScopeID == "" {
+		return recordKey{}, errors.New("missing scope_id")
 	}
 	if key.Surface == "" {
 		return recordKey{}, errors.New("missing surface")
@@ -504,14 +517,14 @@ func normalizeScope(endpointID string, userPublicID string, surface Surface) (re
 
 func normalizeKey(key recordKey) (recordKey, error) {
 	key.EndpointID = strings.TrimSpace(key.EndpointID)
-	key.UserPublicID = strings.TrimSpace(key.UserPublicID)
+	key.ScopeID = strings.TrimSpace(key.ScopeID)
 	key.ThreadID = normalizeThreadID(key.ThreadID)
 	key.Surface = normalizeSurface(key.Surface)
 	if key.EndpointID == "" {
 		return recordKey{}, errors.New("missing endpoint_id")
 	}
-	if key.UserPublicID == "" {
-		return recordKey{}, errors.New("missing user_public_id")
+	if key.ScopeID == "" {
+		return recordKey{}, errors.New("missing scope_id")
 	}
 	if key.Surface == "" {
 		return recordKey{}, errors.New("missing surface")
@@ -540,18 +553,21 @@ func normalizeThreadScope(scope threadScopeKey) (threadScopeKey, error) {
 
 func normalizeRecord(record Record) (Record, error) {
 	key, err := normalizeKey(recordKey{
-		EndpointID:   record.EndpointID,
-		UserPublicID: record.UserPublicID,
-		Surface:      record.Surface,
-		ThreadID:     record.ThreadID,
+		EndpointID: record.EndpointID,
+		ScopeID:    record.ScopeID,
+		Surface:    record.Surface,
+		ThreadID:   record.ThreadID,
 	})
 	if err != nil {
 		return Record{}, err
 	}
 	record.EndpointID = key.EndpointID
-	record.UserPublicID = key.UserPublicID
+	record.ScopeID = key.ScopeID
 	record.Surface = key.Surface
 	record.ThreadID = key.ThreadID
+	if record.LastSeenActivityRevision < 0 {
+		record.LastSeenActivityRevision = 0
+	}
 	record.LastSeenWaitingPromptID = strings.TrimSpace(record.LastSeenWaitingPromptID)
 	record.LastSeenActivitySignature = strings.TrimSpace(record.LastSeenActivitySignature)
 	return record, nil
@@ -573,8 +589,12 @@ func normalizeThreadID(threadID string) string {
 }
 
 func normalizeFlowerSnapshot(snapshot FlowerSnapshot) FlowerSnapshot {
+	activityRevision := maxInt64(0, snapshot.ActivityRevision)
+	lastMessageAtUnixMs := maxInt64(0, snapshot.LastMessageAtUnixMs)
 	return FlowerSnapshot{
-		LastMessageAtUnixMs: maxInt64(0, snapshot.LastMessageAtUnixMs),
+		ActivityRevision:    maxInt64(activityRevision, lastMessageAtUnixMs),
+		LastMessageAtUnixMs: lastMessageAtUnixMs,
+		ActivitySignature:   strings.TrimSpace(snapshot.ActivitySignature),
 		WaitingPromptID:     strings.TrimSpace(snapshot.WaitingPromptID),
 	}
 }
@@ -588,8 +608,10 @@ func normalizeCodexSnapshot(snapshot CodexSnapshot) CodexSnapshot {
 
 func applyFlowerSeed(record Record, snapshot FlowerSnapshot) Record {
 	snapshot = normalizeFlowerSnapshot(snapshot)
+	record.LastSeenActivityRevision = snapshot.ActivityRevision
 	record.LastReadMessageAtUnixMs = snapshot.LastMessageAtUnixMs
 	record.LastSeenWaitingPromptID = snapshot.WaitingPromptID
+	record.LastSeenActivitySignature = snapshot.ActivitySignature
 	return record
 }
 
@@ -602,10 +624,12 @@ func applyCodexSeed(record Record, snapshot CodexSnapshot) Record {
 
 func applyFlowerAdvance(record Record, snapshot FlowerSnapshot) Record {
 	snapshot = normalizeFlowerSnapshot(snapshot)
-	record.LastReadMessageAtUnixMs = maxInt64(record.LastReadMessageAtUnixMs, snapshot.LastMessageAtUnixMs)
-	if snapshot.WaitingPromptID != "" {
+	if snapshot.ActivityRevision >= record.LastSeenActivityRevision {
+		record.LastSeenActivityRevision = snapshot.ActivityRevision
+		record.LastSeenActivitySignature = snapshot.ActivitySignature
 		record.LastSeenWaitingPromptID = snapshot.WaitingPromptID
 	}
+	record.LastReadMessageAtUnixMs = maxInt64(record.LastReadMessageAtUnixMs, snapshot.LastMessageAtUnixMs)
 	return record
 }
 

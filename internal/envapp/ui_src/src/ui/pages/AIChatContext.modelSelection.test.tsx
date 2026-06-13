@@ -89,10 +89,14 @@ const makeThread = (overrides: Partial<ThreadView> = {}): ThreadView => ({
   read_status: {
     is_unread: false,
     snapshot: {
+      activity_revision: 1000,
       last_message_at_unix_ms: 1000,
+      activity_signature: 'status:idle\u001factivity:1000',
     },
     read_state: {
+      last_seen_activity_revision: 1000,
       last_read_message_at_unix_ms: 1000,
+      last_seen_activity_signature: 'status:idle\u001factivity:1000',
     },
   },
   ...overrides,
@@ -225,18 +229,7 @@ describe('AIChatContext model selection', () => {
           const threadId = decodeURIComponent(parts[parts.length - 2] ?? '');
           const thread = threadsState.find((entry) => entry.thread_id === threadId) ?? makeThread({ thread_id: threadId });
           return {
-            read_status: {
-              is_unread: false,
-              snapshot: thread.read_status?.snapshot ?? { last_message_at_unix_ms: thread.last_message_at_unix_ms },
-              read_state: thread.read_status?.snapshot
-                ? {
-                    last_read_message_at_unix_ms: thread.read_status.snapshot.last_message_at_unix_ms,
-                    last_seen_waiting_prompt_id: thread.read_status.snapshot.waiting_prompt_id,
-                  }
-                : {
-                    last_read_message_at_unix_ms: thread.last_message_at_unix_ms,
-                  },
-            },
+            read_status: thread.read_status,
           };
         }
         const threadId = decodeURIComponent(url.split('/').pop() ?? '');

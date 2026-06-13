@@ -104,6 +104,7 @@ export type FlowerThreadStatus =
   | 'waiting_approval'
   | 'failed'
   | 'success'
+  | 'canceled'
   | 'read_only';
 
 export type FlowerThreadError = Readonly<{
@@ -244,6 +245,26 @@ export type FlowerSubmitInputRequest = Readonly<{
   answers: Readonly<Record<string, FlowerInputAnswer>>;
 }>;
 
+export type FlowerThreadActivitySnapshot = Readonly<{
+  activity_revision: number;
+  last_message_at_unix_ms: number;
+  activity_signature: string;
+  waiting_prompt_id?: string;
+}>;
+
+export type FlowerThreadReadState = Readonly<{
+  last_seen_activity_revision: number;
+  last_read_message_at_unix_ms: number;
+  last_seen_activity_signature: string;
+  last_seen_waiting_prompt_id?: string;
+}>;
+
+export type FlowerThreadReadStatus = Readonly<{
+  is_unread: boolean;
+  snapshot: FlowerThreadActivitySnapshot;
+  read_state: FlowerThreadReadState;
+}>;
+
 export type FlowerThreadSnapshot = Readonly<{
   thread_id: string;
   title: string;
@@ -265,7 +286,7 @@ export type FlowerThreadSnapshot = Readonly<{
   todo_snapshot?: FlowerTodoSnapshot | null;
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
-  has_unread: boolean;
+  read_status: FlowerThreadReadStatus;
 }>;
 
 export type FlowerThreadListItem = Readonly<{
@@ -282,7 +303,7 @@ export type FlowerThreadListItem = Readonly<{
   source_label: string;
   target_labels: readonly string[];
   read_only_reason?: string;
-  has_unread: boolean;
+  read_status: FlowerThreadReadStatus;
 }>;
 
 export type FlowerHandlerRef = Readonly<{
@@ -380,7 +401,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread?: (threadID: string) => Promise<FlowerThreadSnapshot>;
-  markThreadRead: (threadID: string) => Promise<FlowerThreadSnapshot>;
+  markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadSnapshot>;
   renameThread?: (threadID: string, title: string) => Promise<FlowerThreadSnapshot>;
   setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadSnapshot>;
   forkThread?: (threadID: string) => Promise<FlowerThreadSnapshot>;

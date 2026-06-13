@@ -3,7 +3,9 @@ package gateway
 import (
 	"context"
 	"errors"
+	"hash/fnv"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/floegence/redeven/internal/ai"
@@ -13,13 +15,17 @@ import (
 )
 
 type flowerThreadUnreadSnapshotView struct {
+	ActivityRevision    int64  `json:"activity_revision"`
 	LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms"`
+	ActivitySignature   string `json:"activity_signature"`
 	WaitingPromptID     string `json:"waiting_prompt_id,omitempty"`
 }
 
 type flowerThreadReadStateView struct {
-	LastReadMessageAtUnixMs int64  `json:"last_read_message_at_unix_ms"`
-	LastSeenWaitingPromptID string `json:"last_seen_waiting_prompt_id,omitempty"`
+	LastSeenActivityRevision  int64  `json:"last_seen_activity_revision"`
+	LastReadMessageAtUnixMs   int64  `json:"last_read_message_at_unix_ms"`
+	LastSeenActivitySignature string `json:"last_seen_activity_signature"`
+	LastSeenWaitingPromptID   string `json:"last_seen_waiting_prompt_id,omitempty"`
 }
 
 type flowerThreadReadStatusView struct {
@@ -178,7 +184,9 @@ func (g *Gateway) markAIThreadRead(
 	req aiMarkThreadReadRequest,
 ) (aiMarkThreadReadResponse, error) {
 	snapshot, err := g.validateFlowerReadSnapshot(ctx, meta, threadID, threadreadstate.FlowerSnapshot{
+		ActivityRevision:    req.Snapshot.ActivityRevision,
 		LastMessageAtUnixMs: req.Snapshot.LastMessageAtUnixMs,
+		ActivitySignature:   strings.TrimSpace(req.Snapshot.ActivitySignature),
 		WaitingPromptID:     strings.TrimSpace(req.Snapshot.WaitingPromptID),
 	})
 	if err != nil {
@@ -188,8 +196,19 @@ func (g *Gateway) markAIThreadRead(
 	if err != nil {
 		return aiMarkThreadReadResponse{}, err
 	}
+	current := snapshot
+	if g != nil && g.ai != nil && meta != nil {
+		thread, err := g.ai.GetThread(ctx, meta, threadID)
+		if err != nil {
+			return aiMarkThreadReadResponse{}, err
+		}
+		if thread == nil {
+			return aiMarkThreadReadResponse{}, errors.New("thread not found")
+		}
+		current = flowerSnapshotFromThread(*thread)
+	}
 	return aiMarkThreadReadResponse{
-		ReadStatus: flowerReadStatusView(snapshot, record),
+		ReadStatus: flowerReadStatusView(current, record),
 	}, nil
 }
 
@@ -234,7 +253,7 @@ func (g *Gateway) ensureFlowerReadRecords(
 	if g == nil || g.threadReadState == nil || meta == nil {
 		return seedFlowerRecords(snapshots), nil
 	}
-	return g.threadReadState.EnsureFlower(ctx, meta.EndpointID, meta.UserPublicID, snapshots)
+	return g.threadReadState.EnsureFlower(ctx, meta.EndpointID, snapshots)
 }
 
 func (g *Gateway) ensureCodexReadRecords(
@@ -274,6 +293,9 @@ func (g *Gateway) validateFlowerReadSnapshot(
 	snapshot threadreadstate.FlowerSnapshot,
 ) (threadreadstate.FlowerSnapshot, error) {
 	snapshot = normalizeFlowerSnapshot(snapshot)
+	if snapshot.ActivitySignature == "" {
+		return threadreadstate.FlowerSnapshot{}, errors.New("missing read snapshot activity signature")
+	}
 	if g == nil || g.ai == nil || meta == nil {
 		return snapshot, nil
 	}
@@ -285,8 +307,17 @@ func (g *Gateway) validateFlowerReadSnapshot(
 		return threadreadstate.FlowerSnapshot{}, errors.New("thread not found")
 	}
 	current := normalizeFlowerSnapshot(flowerSnapshotFromThread(*thread))
+	if snapshot.ActivityRevision > current.ActivityRevision {
+		return threadreadstate.FlowerSnapshot{}, errors.New("read snapshot exceeds current thread state")
+	}
 	if snapshot.LastMessageAtUnixMs > current.LastMessageAtUnixMs {
 		return threadreadstate.FlowerSnapshot{}, errors.New("read snapshot exceeds current thread state")
+	}
+	if snapshot.ActivityRevision == current.ActivityRevision && snapshot.ActivitySignature != current.ActivitySignature {
+		return threadreadstate.FlowerSnapshot{}, errors.New("read snapshot does not match current thread activity")
+	}
+	if snapshot.ActivityRevision == current.ActivityRevision && snapshot.WaitingPromptID != current.WaitingPromptID {
+		return threadreadstate.FlowerSnapshot{}, errors.New("read snapshot does not match current thread activity")
 	}
 	return snapshot, nil
 }
@@ -323,22 +354,27 @@ func (g *Gateway) advanceFlowerReadRecord(
 	if g == nil || g.threadReadState == nil || meta == nil {
 		if meta == nil {
 			return threadreadstate.Record{
-				Surface:                 threadreadstate.SurfaceFlower,
-				ThreadID:                strings.TrimSpace(threadID),
-				LastReadMessageAtUnixMs: snapshot.LastMessageAtUnixMs,
-				LastSeenWaitingPromptID: strings.TrimSpace(snapshot.WaitingPromptID),
+				Surface:                   threadreadstate.SurfaceFlower,
+				ScopeID:                   threadreadstate.FlowerRuntimeScopeID,
+				ThreadID:                  strings.TrimSpace(threadID),
+				LastSeenActivityRevision:  snapshot.ActivityRevision,
+				LastReadMessageAtUnixMs:   snapshot.LastMessageAtUnixMs,
+				LastSeenActivitySignature: strings.TrimSpace(snapshot.ActivitySignature),
+				LastSeenWaitingPromptID:   strings.TrimSpace(snapshot.WaitingPromptID),
 			}, nil
 		}
 		return threadreadstate.Record{
-			EndpointID:              strings.TrimSpace(meta.EndpointID),
-			UserPublicID:            strings.TrimSpace(meta.UserPublicID),
-			Surface:                 threadreadstate.SurfaceFlower,
-			ThreadID:                strings.TrimSpace(threadID),
-			LastReadMessageAtUnixMs: snapshot.LastMessageAtUnixMs,
-			LastSeenWaitingPromptID: strings.TrimSpace(snapshot.WaitingPromptID),
+			EndpointID:                strings.TrimSpace(meta.EndpointID),
+			ScopeID:                   threadreadstate.FlowerRuntimeScopeID,
+			Surface:                   threadreadstate.SurfaceFlower,
+			ThreadID:                  strings.TrimSpace(threadID),
+			LastSeenActivityRevision:  snapshot.ActivityRevision,
+			LastReadMessageAtUnixMs:   snapshot.LastMessageAtUnixMs,
+			LastSeenActivitySignature: strings.TrimSpace(snapshot.ActivitySignature),
+			LastSeenWaitingPromptID:   strings.TrimSpace(snapshot.WaitingPromptID),
 		}, nil
 	}
-	return g.threadReadState.AdvanceFlower(ctx, meta.EndpointID, meta.UserPublicID, threadID, snapshot)
+	return g.threadReadState.AdvanceFlower(ctx, meta.EndpointID, threadID, snapshot)
 }
 
 func (g *Gateway) advanceCodexReadRecord(
@@ -358,7 +394,7 @@ func (g *Gateway) advanceCodexReadRecord(
 		}
 		return threadreadstate.Record{
 			EndpointID:                strings.TrimSpace(meta.EndpointID),
-			UserPublicID:              strings.TrimSpace(meta.UserPublicID),
+			ScopeID:                   strings.TrimSpace(meta.UserPublicID),
 			Surface:                   threadreadstate.SurfaceCodex,
 			ThreadID:                  strings.TrimSpace(threadID),
 			LastReadUpdatedAtUnixS:    snapshot.UpdatedAtUnixS,
@@ -446,11 +482,14 @@ func buildCodexThreadView(thread codexbridge.Thread, pending []codexbridge.Pendi
 
 func flowerSnapshotFromThread(thread ai.ThreadView) threadreadstate.FlowerSnapshot {
 	waitingPromptID := ""
-	if thread.WaitingPrompt != nil {
+	if normalizeStatusToken(thread.RunStatus) == "waiting_user" && thread.WaitingPrompt != nil {
 		waitingPromptID = strings.TrimSpace(thread.WaitingPrompt.PromptID)
 	}
+	activityRevision := flowerActivityRevision(thread)
 	return threadreadstate.FlowerSnapshot{
+		ActivityRevision:    activityRevision,
 		LastMessageAtUnixMs: thread.LastMessageAtUnixMs,
+		ActivitySignature:   flowerActivitySignature(thread.RunStatus, thread.LastContextRunID, activityRevision, waitingPromptID, thread.LastMessagePreview),
 		WaitingPromptID:     waitingPromptID,
 	}
 }
@@ -459,14 +498,18 @@ func flowerReadStatusView(snapshot threadreadstate.FlowerSnapshot, record thread
 	snapshot = normalizeFlowerSnapshot(snapshot)
 	record = normalizeFlowerRecord(record)
 	return flowerThreadReadStatusView{
-		IsUnread: flowerHasUnread(snapshot, record),
+		IsUnread: flowerIsUnread(snapshot, record),
 		Snapshot: flowerThreadUnreadSnapshotView{
+			ActivityRevision:    snapshot.ActivityRevision,
 			LastMessageAtUnixMs: snapshot.LastMessageAtUnixMs,
+			ActivitySignature:   snapshot.ActivitySignature,
 			WaitingPromptID:     snapshot.WaitingPromptID,
 		},
 		ReadState: flowerThreadReadStateView{
-			LastReadMessageAtUnixMs: record.LastReadMessageAtUnixMs,
-			LastSeenWaitingPromptID: record.LastSeenWaitingPromptID,
+			LastSeenActivityRevision:  record.LastSeenActivityRevision,
+			LastReadMessageAtUnixMs:   record.LastReadMessageAtUnixMs,
+			LastSeenActivitySignature: record.LastSeenActivitySignature,
+			LastSeenWaitingPromptID:   record.LastSeenWaitingPromptID,
 		},
 	}
 }
@@ -476,10 +519,13 @@ func seedFlowerRecords(snapshots map[string]threadreadstate.FlowerSnapshot) map[
 	for threadID, snapshot := range snapshots {
 		snapshot = normalizeFlowerSnapshot(snapshot)
 		out[threadID] = threadreadstate.Record{
-			ThreadID:                strings.TrimSpace(threadID),
-			Surface:                 threadreadstate.SurfaceFlower,
-			LastReadMessageAtUnixMs: snapshot.LastMessageAtUnixMs,
-			LastSeenWaitingPromptID: snapshot.WaitingPromptID,
+			ThreadID:                  strings.TrimSpace(threadID),
+			Surface:                   threadreadstate.SurfaceFlower,
+			ScopeID:                   threadreadstate.FlowerRuntimeScopeID,
+			LastSeenActivityRevision:  snapshot.ActivityRevision,
+			LastReadMessageAtUnixMs:   snapshot.LastMessageAtUnixMs,
+			LastSeenActivitySignature: snapshot.ActivitySignature,
+			LastSeenWaitingPromptID:   snapshot.WaitingPromptID,
 		}
 	}
 	return out
@@ -489,6 +535,13 @@ func normalizeFlowerSnapshot(snapshot threadreadstate.FlowerSnapshot) threadread
 	if snapshot.LastMessageAtUnixMs < 0 {
 		snapshot.LastMessageAtUnixMs = 0
 	}
+	if snapshot.ActivityRevision < 0 {
+		snapshot.ActivityRevision = 0
+	}
+	if snapshot.ActivityRevision < snapshot.LastMessageAtUnixMs {
+		snapshot.ActivityRevision = snapshot.LastMessageAtUnixMs
+	}
+	snapshot.ActivitySignature = strings.TrimSpace(snapshot.ActivitySignature)
 	snapshot.WaitingPromptID = strings.TrimSpace(snapshot.WaitingPromptID)
 	return snapshot
 }
@@ -497,15 +550,90 @@ func normalizeFlowerRecord(record threadreadstate.Record) threadreadstate.Record
 	if record.LastReadMessageAtUnixMs < 0 {
 		record.LastReadMessageAtUnixMs = 0
 	}
+	if record.LastSeenActivityRevision < 0 {
+		record.LastSeenActivityRevision = 0
+	}
+	record.LastSeenActivitySignature = strings.TrimSpace(record.LastSeenActivitySignature)
 	record.LastSeenWaitingPromptID = strings.TrimSpace(record.LastSeenWaitingPromptID)
 	return record
 }
 
-func flowerHasUnread(snapshot threadreadstate.FlowerSnapshot, record threadreadstate.Record) bool {
+func flowerIsUnread(snapshot threadreadstate.FlowerSnapshot, record threadreadstate.Record) bool {
+	if snapshot.ActivityRevision > record.LastSeenActivityRevision {
+		return true
+	}
 	if snapshot.LastMessageAtUnixMs > record.LastReadMessageAtUnixMs {
 		return true
 	}
+	if snapshot.ActivitySignature != "" && snapshot.ActivitySignature != record.LastSeenActivitySignature {
+		return true
+	}
 	return snapshot.WaitingPromptID != "" && snapshot.WaitingPromptID != record.LastSeenWaitingPromptID
+}
+
+func flowerActivityRevision(thread ai.ThreadView) int64 {
+	base := maxInt64(thread.LastMessageAtUnixMs, thread.RunUpdatedAtUnixMs)
+	if base <= 0 {
+		return flowerRunStatusRevisionOrdinal(thread.RunStatus)
+	}
+	return base*10 + flowerRunStatusRevisionOrdinal(thread.RunStatus)
+}
+
+func flowerActivitySignature(status string, turnID string, activityRevision int64, waitingPromptID string, lastMessagePreview string) string {
+	tokens := make([]string, 0, 4)
+	normalizedStatus := normalizeStatusToken(status)
+	if normalizedStatus != "" {
+		tokens = append(tokens, "status:"+normalizedStatus)
+	}
+	if turnID = strings.TrimSpace(turnID); turnID != "" {
+		tokens = append(tokens, "turn:"+turnID)
+	}
+	tokens = append(tokens, "activity:"+formatInt64Token(activityRevision))
+	if waitingPromptID = strings.TrimSpace(waitingPromptID); waitingPromptID != "" {
+		tokens = append(tokens, "prompt:"+waitingPromptID)
+	}
+	if messageToken := flowerMessagePreviewToken(lastMessagePreview); messageToken != "" {
+		tokens = append(tokens, "message:"+messageToken)
+	}
+	return strings.Join(tokens, "\u001f")
+}
+
+func flowerMessagePreviewToken(preview string) string {
+	preview = strings.TrimSpace(preview)
+	if preview == "" {
+		return ""
+	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(preview))
+	return strconv.FormatUint(h.Sum64(), 36)
+}
+
+func flowerRunStatusRevisionOrdinal(status string) int64 {
+	switch normalizeStatusToken(status) {
+	case "", "idle":
+		return 0
+	case "accepted":
+		return 1
+	case "running", "recovering", "finalizing":
+		return 2
+	case "waiting_approval":
+		return 3
+	case "waiting_user":
+		return 4
+	case "success", "completed":
+		return 5
+	case "failed", "timed_out", "canceled", "cancelled":
+		return 6
+	default:
+		return 0
+	}
+}
+
+func formatInt64Token(value int64) string {
+	if value < 0 {
+		value = 0
+	}
+	return strconv.FormatInt(value, 10)
 }
 
 func codexSnapshotFromThread(
@@ -522,7 +650,7 @@ func codexReadStatusView(snapshot threadreadstate.CodexSnapshot, record threadre
 	snapshot = normalizeCodexSnapshot(snapshot)
 	record = normalizeCodexRecord(record)
 	return codexThreadReadStatusView{
-		IsUnread: codexHasUnread(snapshot, record),
+		IsUnread: codexIsUnread(snapshot, record),
 		Snapshot: codexThreadUnreadSnapshotView{
 			UpdatedAtUnixS:    snapshot.UpdatedAtUnixS,
 			ActivitySignature: snapshot.ActivitySignature,
@@ -564,7 +692,7 @@ func normalizeCodexRecord(record threadreadstate.Record) threadreadstate.Record 
 	return record
 }
 
-func codexHasUnread(snapshot threadreadstate.CodexSnapshot, record threadreadstate.Record) bool {
+func codexIsUnread(snapshot threadreadstate.CodexSnapshot, record threadreadstate.Record) bool {
 	if snapshot.UpdatedAtUnixS > record.LastReadUpdatedAtUnixS {
 		return true
 	}
@@ -631,4 +759,11 @@ func isLowerAlphaNumeric(r rune) bool {
 
 func isUpperAlpha(r rune) bool {
 	return r >= 'A' && r <= 'Z'
+}
+
+func maxInt64(left int64, right int64) int64 {
+	if left > right {
+		return left
+	}
+	return right
 }

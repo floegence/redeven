@@ -221,7 +221,19 @@ function validThreadResponse(): Record<string, unknown> {
     status: 'running',
     source_label: 'this host',
     target_labels: [],
-    has_unread: false,
+    read_status: {
+      is_unread: false,
+      snapshot: {
+        activity_revision: 900,
+        last_message_at_unix_ms: 90,
+        activity_signature: 'status:running\u001factivity:900',
+      },
+      read_state: {
+        last_seen_activity_revision: 900,
+        last_read_message_at_unix_ms: 90,
+        last_seen_activity_signature: 'status:running\u001factivity:900',
+      },
+    },
     messages: [
       {
         id: 'm-streaming',
@@ -489,7 +501,7 @@ describe('Flower Host bridge lifecycle', () => {
       expect(thread.updated_at_ms).toBe(90);
       expect(thread.working_dir).toBe('/workspace/redeven');
       expect(thread.pinned_at_ms).toBe(123);
-      expect(thread.has_unread).toBe(false);
+      expect(thread.read_status.is_unread).toBe(false);
       expect(thread.messages[0]).toMatchObject({
         status: 'streaming',
         blocks: [
@@ -600,6 +612,24 @@ describe('Flower Host bridge lifecycle', () => {
     }
   });
 
+  it('accepts canceled thread status from Flower Host responses', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      threadResponse = {
+        ...validThreadResponse(),
+        status: 'canceled',
+      };
+      await expect(bridge.loadFlowerHostThreadViaBridge({
+        ...bridgeArgs(root),
+        threadID: 'thread-streaming',
+      })).resolves.toMatchObject({ status: 'canceled' });
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('patches thread title and pinned state and forks through Flower Host thread endpoints', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
     threadResponse = { thread: validThreadResponse() };
@@ -629,19 +659,26 @@ describe('Flower Host bridge lifecycle', () => {
 
   it('marks a Flower Host thread read through the read endpoint', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
-    threadResponse = { thread: { ...validThreadResponse(), has_unread: false } };
+    threadResponse = { thread: validThreadResponse() };
     try {
       const bridge = await import('./flowerHostBridge');
 
       await expect(bridge.markFlowerHostThreadReadViaBridge({
         ...bridgeArgs(root),
-        request: { thread_id: 'thread-streaming' },
+        request: {
+          thread_id: 'thread-streaming',
+          snapshot: {
+            activity_revision: 900,
+            last_message_at_unix_ms: 90,
+            activity_signature: 'status:running\u001factivity:900',
+          },
+        },
       })).resolves.toMatchObject({
         thread_id: 'thread-streaming',
-        has_unread: false,
+        read_status: { is_unread: false },
       });
 
-      expect(fetchRequests.some((request) => request.url.endsWith('/v1/thread/thread-streaming/read') && request.method === 'POST')).toBe(true);
+      expect(fetchRequests.some((request) => request.url.endsWith('/v1/thread/thread-streaming/read') && request.method === 'POST' && (request.body as { snapshot?: unknown }).snapshot)).toBe(true);
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -698,13 +735,13 @@ describe('Flower Host bridge lifecycle', () => {
           message: 'thread.status',
         },
         {
-          name: 'missing unread state',
+          name: 'missing read status',
           thread: (() => {
             const thread = validThreadResponse();
-            delete thread.has_unread;
+            delete thread.read_status;
             return thread;
           })(),
-          message: 'thread.has_unread',
+          message: 'thread.read_status',
         },
         {
           name: 'missing working directory',
