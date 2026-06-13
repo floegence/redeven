@@ -566,7 +566,14 @@ export async function markFlowerHostThreadReadViaBridge(args: FlowerHostBridgeAr
   }
   const result = await requestJSON<{ thread?: DesktopFlowerHostThread }>(client, `/v1/thread/${encodeURIComponent(threadID)}/read`, {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify({
+      snapshot: {
+        activity_revision: Math.floor(Number(args.request.snapshot.activity_revision)),
+        last_message_at_unix_ms: Math.floor(Number(args.request.snapshot.last_message_at_unix_ms)),
+        activity_signature: compact(args.request.snapshot.activity_signature),
+        ...(compact(args.request.snapshot.waiting_prompt_id) ? { waiting_prompt_id: compact(args.request.snapshot.waiting_prompt_id) } : {}),
+      },
+    }),
   });
   if (!result.thread) {
     bridgeContractError('thread_read.thread', 'is required');
@@ -1295,6 +1302,7 @@ function normalizeBridgeThreadStatus(value: unknown, field: string): DesktopFlow
     'waiting_approval',
     'failed',
     'success',
+    'canceled',
     'read_only',
   ].includes(status)) {
     return status as DesktopFlowerHostThread['status'];
@@ -1370,6 +1378,29 @@ function normalizeBridgeTodoSnapshot(value: unknown, field: string): DesktopFlow
   };
 }
 
+function normalizeBridgeThreadReadStatus(value: unknown, field: string): DesktopFlowerHostThread['read_status'] {
+  const record = requireBridgeObject(value, field);
+  const snapshot = requireBridgeObject(record.snapshot, `${field}.snapshot`);
+  const readState = requireBridgeObject(record.read_state, `${field}.read_state`);
+  const activitySignature = requireBridgeString(snapshot.activity_signature, `${field}.snapshot.activity_signature`);
+  const lastSeenActivitySignature = requireBridgeString(readState.last_seen_activity_signature, `${field}.read_state.last_seen_activity_signature`, { allowEmpty: true });
+  return {
+    is_unread: requireBridgeBoolean(record.is_unread, `${field}.is_unread`),
+    snapshot: {
+      activity_revision: requireBridgeTimestamp(snapshot.activity_revision, `${field}.snapshot.activity_revision`),
+      last_message_at_unix_ms: requireBridgeTimestamp(snapshot.last_message_at_unix_ms, `${field}.snapshot.last_message_at_unix_ms`),
+      activity_signature: activitySignature,
+      ...(compact(snapshot.waiting_prompt_id) ? { waiting_prompt_id: compact(snapshot.waiting_prompt_id) } : {}),
+    },
+    read_state: {
+      last_seen_activity_revision: requireBridgeTimestamp(readState.last_seen_activity_revision, `${field}.read_state.last_seen_activity_revision`),
+      last_read_message_at_unix_ms: requireBridgeTimestamp(readState.last_read_message_at_unix_ms, `${field}.read_state.last_read_message_at_unix_ms`),
+      last_seen_activity_signature: lastSeenActivitySignature,
+      ...(compact(readState.last_seen_waiting_prompt_id) ? { last_seen_waiting_prompt_id: compact(readState.last_seen_waiting_prompt_id) } : {}),
+    },
+  };
+}
+
 function normalizeBridgeThread(thread: DesktopFlowerHostThread): DesktopFlowerHostThread {
   const record = requireBridgeObject(thread, 'thread');
   if (!Array.isArray(record.messages)) {
@@ -1410,6 +1441,6 @@ function normalizeBridgeThread(thread: DesktopFlowerHostThread): DesktopFlowerHo
     ...(todoSnapshot !== undefined ? { todo_snapshot: todoSnapshot } : {}),
     ...(inputRequest ? { input_request: inputRequest } : {}),
     ...(error ? { error } : {}),
-    has_unread: requireBridgeBoolean(record.has_unread, 'thread.has_unread'),
+    read_status: normalizeBridgeThreadReadStatus(record.read_status, 'thread.read_status'),
   };
 }

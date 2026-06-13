@@ -195,6 +195,7 @@ export type DesktopFlowerHostThreadStatus =
   | 'waiting_approval'
   | 'failed'
   | 'success'
+  | 'canceled'
   | 'read_only';
 
 export type DesktopFlowerHostChatTextBlock = Readonly<{
@@ -344,6 +345,26 @@ export type DesktopFlowerHostSubmitInputRequest = Readonly<{
   answers: Readonly<Record<string, DesktopFlowerHostInputAnswer>>;
 }>;
 
+export type DesktopFlowerHostThreadActivitySnapshot = Readonly<{
+  activity_revision: number;
+  last_message_at_unix_ms: number;
+  activity_signature: string;
+  waiting_prompt_id?: string;
+}>;
+
+export type DesktopFlowerHostThreadReadState = Readonly<{
+  last_seen_activity_revision: number;
+  last_read_message_at_unix_ms: number;
+  last_seen_activity_signature: string;
+  last_seen_waiting_prompt_id?: string;
+}>;
+
+export type DesktopFlowerHostThreadReadStatus = Readonly<{
+  is_unread: boolean;
+  snapshot: DesktopFlowerHostThreadActivitySnapshot;
+  read_state: DesktopFlowerHostThreadReadState;
+}>;
+
 export type DesktopFlowerHostThread = Readonly<{
   thread_id: string;
   title: string;
@@ -362,11 +383,12 @@ export type DesktopFlowerHostThread = Readonly<{
   todo_snapshot?: DesktopFlowerHostTodoSnapshot | null;
   input_request?: DesktopFlowerHostInputRequest | null;
   error?: DesktopFlowerHostThreadError | null;
-  has_unread: boolean;
+  read_status: DesktopFlowerHostThreadReadStatus;
 }>;
 
 export type DesktopFlowerHostMarkThreadReadRequest = Readonly<{
   thread_id: string;
+  snapshot: DesktopFlowerHostThreadActivitySnapshot;
 }>;
 
 export type DesktopFlowerHostRenameThreadRequest = Readonly<{

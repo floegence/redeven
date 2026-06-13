@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
 import { projectFlowerThreadListItem } from '../flowerSurfaceModel';
-import type { FlowerThreadSnapshot } from '../contracts/flowerSurfaceContracts';
+import type { FlowerThreadReadStatus, FlowerThreadSnapshot } from '../contracts/flowerSurfaceContracts';
+
+function readStatus(isUnread = false): FlowerThreadReadStatus {
+  return {
+    is_unread: isUnread,
+    snapshot: {
+      activity_revision: 2,
+      last_message_at_unix_ms: 2,
+      activity_signature: 'status:success\u001factivity:2',
+    },
+    read_state: {
+      last_seen_activity_revision: isUnread ? 1 : 2,
+      last_read_message_at_unix_ms: isUnread ? 1 : 2,
+      last_seen_activity_signature: isUnread ? 'status:running\u001factivity:1' : 'status:success\u001factivity:2',
+    },
+  };
+}
 
 describe('Flower thread list projection', () => {
   it('uses the latest non-empty message as the shared thread preview', () => {
@@ -16,7 +32,7 @@ describe('Flower thread list projection', () => {
       status: 'success',
       source_label: 'env A',
       target_labels: ['env B'],
-      has_unread: false,
+      read_status: readStatus(false),
       messages: [
         { id: 'm1', role: 'user', content: 'Plan this transfer', status: 'complete', created_at_ms: 1 },
         { id: 'm2', role: 'assistant', content: 'Destination preview is ready.', status: 'complete', created_at_ms: 2 },
@@ -32,11 +48,11 @@ describe('Flower thread list projection', () => {
       source_label: 'env A',
       target_labels: ['env B'],
       status: 'success',
-      has_unread: false,
+      read_status: readStatus(false),
     });
-    expect(projectFlowerThreadListItem({ ...thread, has_unread: true })).toMatchObject({
+    expect(projectFlowerThreadListItem({ ...thread, read_status: readStatus(true) })).toMatchObject({
       thread_id: 'thread-1',
-      has_unread: true,
+      read_status: readStatus(true),
     });
   });
 });

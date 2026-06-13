@@ -1722,7 +1722,7 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 	}
 }
 
-func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
+func TestGateway_AIThreadReadState_ListDetailAndReadAreRuntimeScoped(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -1795,12 +1795,16 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	}
 
 	type aiThreadReadStatusSnapshot struct {
+		ActivityRevision    int64  `json:"activity_revision"`
 		LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms"`
+		ActivitySignature   string `json:"activity_signature"`
 		WaitingPromptID     string `json:"waiting_prompt_id"`
 	}
 	type aiThreadReadStatusState struct {
-		LastReadMessageAtUnixMs int64  `json:"last_read_message_at_unix_ms"`
-		LastSeenWaitingPromptID string `json:"last_seen_waiting_prompt_id"`
+		LastSeenActivityRevision  int64  `json:"last_seen_activity_revision"`
+		LastReadMessageAtUnixMs   int64  `json:"last_read_message_at_unix_ms"`
+		LastSeenActivitySignature string `json:"last_seen_activity_signature"`
+		LastSeenWaitingPromptID   string `json:"last_seen_waiting_prompt_id"`
 	}
 	type aiThreadReadStatus struct {
 		IsUnread  bool                       `json:"is_unread"`
@@ -1865,7 +1869,9 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		t.Helper()
 		bodyBytes, err := json.Marshal(map[string]any{
 			"snapshot": map[string]any{
+				"activity_revision":       snapshot.ActivityRevision,
 				"last_message_at_unix_ms": snapshot.LastMessageAtUnixMs,
+				"activity_signature":      snapshot.ActivitySignature,
 				"waiting_prompt_id":       snapshot.WaitingPromptID,
 			},
 		})
@@ -1919,9 +1925,12 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	if !detail.Data.Thread.ReadStatus.IsUnread {
 		t.Fatalf("user1 detail is_unread=false after new message, want=true")
 	}
+	staleSnapshot := detail.Data.Thread.ReadStatus.Snapshot
 
 	invalidRead := performAIMarkRead(originUser1, aiThreadReadStatusSnapshot{
-		LastMessageAtUnixMs: detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs + 1,
+		ActivityRevision:    detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision + 1,
+		LastMessageAtUnixMs: detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs,
+		ActivitySignature:   detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature,
 		WaitingPromptID:     detail.Data.Thread.ReadStatus.Snapshot.WaitingPromptID,
 	})
 	if invalidRead.Code != http.StatusBadRequest {
@@ -1929,6 +1938,30 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	}
 	if !readDetail(originUser1).Data.Thread.ReadStatus.IsUnread {
 		t.Fatalf("user1 detail is_unread=false after rejected future mark-read, want=true")
+	}
+	mismatchedRead := performAIMarkRead(originUser1, aiThreadReadStatusSnapshot{
+		ActivityRevision:    detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision,
+		LastMessageAtUnixMs: detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs,
+		ActivitySignature:   detail.Data.Thread.ReadStatus.Snapshot.ActivitySignature + "\u001fstale",
+		WaitingPromptID:     detail.Data.Thread.ReadStatus.Snapshot.WaitingPromptID,
+	})
+	if mismatchedRead.Code != http.StatusBadRequest {
+		t.Fatalf("mismatched ai mark-read status=%d, want=%d body=%s", mismatchedRead.Code, http.StatusBadRequest, mismatchedRead.Body.String())
+	}
+
+	if err := aiSvc.AppendThreadMessage(context.Background(), &creatorMeta, thread.ThreadID, "user", "Concurrent prompt", "markdown"); err != nil {
+		t.Fatalf("AppendThreadMessage(concurrent): %v", err)
+	}
+	staleMarked := markRead(originUser1, staleSnapshot)
+	if !staleMarked.Data.ReadStatus.IsUnread {
+		t.Fatalf("stale mark-read response is_unread=false after concurrent activity, want true")
+	}
+	if staleMarked.Data.ReadStatus.Snapshot.ActivityRevision <= staleSnapshot.ActivityRevision {
+		t.Fatalf("stale mark-read response activity_revision=%d, want newer than %d", staleMarked.Data.ReadStatus.Snapshot.ActivityRevision, staleSnapshot.ActivityRevision)
+	}
+	detail = readDetail(originUser1)
+	if !detail.Data.Thread.ReadStatus.IsUnread {
+		t.Fatalf("user1 detail is_unread=false after concurrent activity, want=true")
 	}
 
 	marked := markRead(originUser1, detail.Data.Thread.ReadStatus.Snapshot)
@@ -1938,6 +1971,9 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	if marked.Data.ReadStatus.ReadState.LastReadMessageAtUnixMs != detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs {
 		t.Fatalf("mark-read last_read_message_at_unix_ms=%d, want=%d", marked.Data.ReadStatus.ReadState.LastReadMessageAtUnixMs, detail.Data.Thread.ReadStatus.Snapshot.LastMessageAtUnixMs)
 	}
+	if marked.Data.ReadStatus.ReadState.LastSeenActivityRevision != detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision {
+		t.Fatalf("mark-read last_seen_activity_revision=%d, want=%d", marked.Data.ReadStatus.ReadState.LastSeenActivityRevision, detail.Data.Thread.ReadStatus.Snapshot.ActivityRevision)
+	}
 
 	userOneAfterRead := readList(originUser1)
 	if userOneAfterRead.Data.Threads[0].ReadStatus.IsUnread {
@@ -1945,8 +1981,8 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	}
 
 	userTwoAfterRead := readList(originUser2)
-	if !userTwoAfterRead.Data.Threads[0].ReadStatus.IsUnread {
-		t.Fatalf("user2 list is_unread=false after user1 mark-read, want=true")
+	if userTwoAfterRead.Data.Threads[0].ReadStatus.IsUnread {
+		t.Fatalf("user2 list is_unread=true after user1 mark-read, want shared runtime read-state")
 	}
 }
 
@@ -2086,21 +2122,25 @@ func TestGateway_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, "user_1", map[string]threadreadstate.FlowerSnapshot{
+	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, map[string]threadreadstate.FlowerSnapshot{
 		thread.ThreadID: {
+			ActivityRevision:    100,
 			LastMessageAtUnixMs: 100,
+			ActivitySignature:   "status:waiting_user\u001factivity:100\u001fprompt:prompt_1",
 			WaitingPromptID:     "prompt_1",
 		},
 	}); err != nil {
-		t.Fatalf("EnsureFlower(user_1): %v", err)
+		t.Fatalf("EnsureFlower(runtime first): %v", err)
 	}
-	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, "user_2", map[string]threadreadstate.FlowerSnapshot{
+	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, map[string]threadreadstate.FlowerSnapshot{
 		thread.ThreadID: {
+			ActivityRevision:    110,
 			LastMessageAtUnixMs: 110,
+			ActivitySignature:   "status:waiting_user\u001factivity:110\u001fprompt:prompt_2",
 			WaitingPromptID:     "prompt_2",
 		},
 	}); err != nil {
-		t.Fatalf("EnsureFlower(user_2): %v", err)
+		t.Fatalf("EnsureFlower(runtime second): %v", err)
 	}
 
 	gw, err := New(Options{
@@ -2175,21 +2215,25 @@ func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimary
 	}
 
 	threadID := "th_missing_restore"
-	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", "user_1", map[string]threadreadstate.FlowerSnapshot{
+	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", map[string]threadreadstate.FlowerSnapshot{
 		threadID: {
+			ActivityRevision:    200,
 			LastMessageAtUnixMs: 200,
+			ActivitySignature:   "status:waiting_user\u001factivity:200\u001fprompt:prompt_1",
 			WaitingPromptID:     "prompt_1",
 		},
 	}); err != nil {
-		t.Fatalf("EnsureFlower(user_1): %v", err)
+		t.Fatalf("EnsureFlower(runtime first): %v", err)
 	}
-	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", "user_2", map[string]threadreadstate.FlowerSnapshot{
+	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", map[string]threadreadstate.FlowerSnapshot{
 		threadID: {
+			ActivityRevision:    210,
 			LastMessageAtUnixMs: 210,
+			ActivitySignature:   "status:waiting_user\u001factivity:210\u001fprompt:prompt_2",
 			WaitingPromptID:     "prompt_2",
 		},
 	}); err != nil {
-		t.Fatalf("EnsureFlower(user_2): %v", err)
+		t.Fatalf("EnsureFlower(runtime second): %v", err)
 	}
 
 	gw, err := New(Options{
@@ -2228,11 +2272,11 @@ func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimary
 	if err != nil {
 		t.Fatalf("DeleteThread(restored verify): %v", err)
 	}
-	if len(restored) != 2 {
-		t.Fatalf("len(restored)=%d, want 2", len(restored))
+	if len(restored) != 1 {
+		t.Fatalf("len(restored)=%d, want 1", len(restored))
 	}
-	if restored[0].UserPublicID != "user_1" || restored[1].UserPublicID != "user_2" {
-		t.Fatalf("restored users=%v, want [user_1 user_2]", []string{restored[0].UserPublicID, restored[1].UserPublicID})
+	if restored[0].ScopeID != threadreadstate.FlowerRuntimeScopeID {
+		t.Fatalf("restored scope=%q, want %q", restored[0].ScopeID, threadreadstate.FlowerRuntimeScopeID)
 	}
 }
 

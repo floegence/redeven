@@ -213,11 +213,12 @@ func (s *Server) handleThreadDetail(w http.ResponseWriter, r *http.Request) {
 		thread, err := s.service.MutateThread(r.Context(), threadID, req)
 		writeResult(w, ThreadMutationResponse{Thread: thread}, err)
 	case action == "read" && r.Method == http.MethodPost:
-		if err := decodeStrictJSON(r.Body, &struct{}{}); err != nil && !errors.Is(err, io.EOF) {
+		var req ThreadReadRequest
+		if err := decodeStrictJSON(r.Body, &req); err != nil {
 			writeErrorResponse(w, http.StatusBadRequest, "invalid_request", err.Error())
 			return
 		}
-		thread, err := s.service.MarkThreadRead(r.Context(), threadID)
+		thread, err := s.service.MarkThreadRead(r.Context(), threadID, req)
 		writeResult(w, ThreadReadResponse{Thread: thread}, err)
 	case action == "fork" && r.Method == http.MethodPost:
 		var req ForkThreadRequest

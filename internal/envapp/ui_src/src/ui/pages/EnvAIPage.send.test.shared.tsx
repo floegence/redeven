@@ -10,8 +10,14 @@ const mocks = vi.hoisted(() => {
     threadDetailWaitingPrompt: null,
   };
   const readStatus = (lastMessageAtUnixMs: number, waitingPromptID = '') => {
+    const activityRevision = lastMessageAtUnixMs;
+    const activitySignature = waitingPromptID
+      ? `status:waiting_user\u001factivity:${activityRevision}\u001fprompt:${waitingPromptID}`
+      : `status:success\u001factivity:${activityRevision}`;
     const snapshot = {
+      activity_revision: activityRevision,
       last_message_at_unix_ms: lastMessageAtUnixMs,
+      activity_signature: activitySignature,
       ...(waitingPromptID ? { waiting_prompt_id: waitingPromptID } : {}),
     };
     return {
@@ -19,7 +25,9 @@ const mocks = vi.hoisted(() => {
       snapshot,
       ...(!state.omitReadState ? {
         read_state: {
+          last_seen_activity_revision: activityRevision,
           last_read_message_at_unix_ms: lastMessageAtUnixMs,
+          last_seen_activity_signature: activitySignature,
           ...(waitingPromptID ? { last_seen_waiting_prompt_id: waitingPromptID } : {}),
         },
       } : {}),

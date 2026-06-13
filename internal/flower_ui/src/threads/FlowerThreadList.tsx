@@ -7,7 +7,7 @@ import { Input, Tag } from '@floegence/floe-webapp-core/ui';
 import type { FlowerThreadListCopy, FlowerThreadTimeGroup } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
 import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
-import { filterFlowerThreadItems, groupFlowerThreadItems, type FlowerThreadGroup } from './threadListModel';
+import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems, type FlowerThreadGroup } from './threadListModel';
 
 type TimeGroup = FlowerThreadTimeGroup;
 export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'pin' | 'rename';
@@ -64,6 +64,12 @@ export type FlowerThreadCardProps = Readonly<{
 export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.threadList;
   const title = () => props.item.title.trim() || copy().untitled;
+  const indicator = createMemo(() => flowerThreadIndicator(props.item, props.active, copy()));
+  const ariaLabel = () => [
+    title(),
+    indicator().ariaStatus,
+    indicator().attention === 'unread' ? copy().unread : '',
+  ].filter(Boolean).join(', ');
 
   return (
     <div
@@ -73,7 +79,9 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       data-flower-thread-status={props.item.status}
       data-flower-thread-active={props.active ? 'true' : 'false'}
       data-flower-thread-busy={props.busy ? 'true' : 'false'}
-      data-flower-thread-unread={props.item.has_unread ? 'true' : 'false'}
+      data-flower-thread-indicator={indicator().visual}
+      data-flower-thread-unread={indicator().attention === 'unread' ? 'true' : 'false'}
+      data-flower-thread-action-required={indicator().actionRequired ? 'true' : 'false'}
       onContextMenu={(event) => props.onContextMenu?.(event, props.item)}
       class={cn(
         'flower-host-thread-card group relative w-full cursor-pointer rounded-lg border',
@@ -83,6 +91,8 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       <button
         type="button"
         class="flex w-full cursor-pointer items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
+        aria-label={ariaLabel()}
+        aria-current={props.active ? 'true' : undefined}
         onClick={props.onSelect}
         onDblClick={(event) => {
           event.preventDefault();
@@ -94,14 +104,14 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           }
         }}
       >
-        <div class="flower-host-thread-indicator relative mt-1.5 flex h-2 shrink-0 items-center justify-center" aria-hidden="true">
-          <div class="flower-host-thread-wave h-2 items-center gap-0.5" title={copy().statuses.running}>
+        <div class="flower-host-thread-indicator relative mt-1.5 flex h-2 shrink-0 items-center justify-center" aria-hidden="true" title={indicator().title}>
+          <div class="flower-host-thread-wave h-2 items-center gap-0.5">
             <div class="flower-host-thread-wave-bar" style="animation-delay: 0ms" />
             <div class="flower-host-thread-wave-bar" style="animation-delay: 180ms" />
             <div class="flower-host-thread-wave-bar" style="animation-delay: 360ms" />
             <div class="flower-host-thread-wave-bar" style="animation-delay: 540ms" />
           </div>
-          <div class="flower-host-thread-unread-dot h-2 w-2 rounded-full" title={copy().unread} />
+          <div class="flower-host-thread-status-dot h-2 w-2 rounded-full" />
         </div>
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div class="flex min-w-0 items-center gap-1">

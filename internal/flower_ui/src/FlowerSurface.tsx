@@ -20,7 +20,9 @@ import type {
   FlowerSurfaceAdapter,
   FlowerSendMessageFailure,
   FlowerRouterDecision,
+  FlowerThreadActivitySnapshot,
   FlowerThreadListItem,
+  FlowerThreadStatus,
   FlowerThreadSnapshot,
   FlowerChatMessage,
   FlowerActivityStatus,
@@ -42,6 +44,7 @@ const THREAD_RAIL_WIDTH_STORAGE_KEY = 'redeven.flower.threadRailWidth';
 const THREAD_RAIL_WIDTH_DEFAULT = 272;
 const THREAD_RAIL_WIDTH_MIN = 220;
 const THREAD_RAIL_WIDTH_MAX = 380;
+const SIDEBAR_STABLE_ACTIVE_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval', 'waiting_user']);
 
 export {
   projectFlowerThreadListItem,
@@ -94,6 +97,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadLoadError, setThreadLoadError] = createSignal('');
   const [threadActionError, setThreadActionError] = createSignal('');
   const [threadActionSuccess, setThreadActionSuccess] = createSignal('');
+  const [localReadVisibilityRevision, setLocalReadVisibilityRevision] = createSignal(0);
   const [threadActionBusy, setThreadActionBusy] = createSignal<{ threadID: string; action: FlowerThreadMenuAction } | null>(null);
   const [renameThreadID, setRenameThreadID] = createSignal('');
   const [renameDraft, setRenameDraft] = createSignal('');
@@ -105,6 +109,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
   const [openTodoThreads, setOpenTodoThreads] = createSignal<Record<string, boolean>>({});
   let threadLoadSequence = 0;
+  let threadLocalMutationRevision = 0;
+  let threadsRefreshSequence = 0;
   let lastFocusedThreadID = '';
   let lastInputPromptSignature = '';
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
@@ -113,9 +119,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let renameInputRef: HTMLInputElement | undefined;
   let renameRestoreRef: HTMLElement | undefined;
   let transcriptNearBottom = true;
-  const locallyReadThreadVersions = new Map<string, number>();
+  let backgroundThreadsRefreshInFlight = false;
+  let selectedThreadRefreshInFlight = false;
+  const locallyReadSnapshots = new Map<string, string>();
   const persistingReadThreadIDs = new Set<string>();
-  const pendingReadPersistenceSequences = new Map<string, number>();
+  const pendingReadPersistenceSnapshots = new Map<string, FlowerThreadActivitySnapshot>();
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
   const selectedThreadRunning = createMemo(() => selectedThread()?.status === 'running');
@@ -148,8 +156,118 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
   const selectedThreadRunErrorMessage = createMemo(() => trimString(selectedThread()?.error?.message));
   const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
+  const readSnapshotKey = (snapshot: FlowerThreadActivitySnapshot | null | undefined): string => [
+    String(Math.max(0, Math.floor(Number(snapshot?.activity_revision ?? 0)))),
+    String(Math.max(0, Math.floor(Number(snapshot?.last_message_at_unix_ms ?? 0)))),
+    trimString(snapshot?.activity_signature),
+    trimString(snapshot?.waiting_prompt_id),
+  ].join('\x1e');
+  const activityTimelineSignature = (timeline: FlowerActivityTimelineBlock): string => [
+    timeline.run_id ?? '',
+    timeline.turn_id ?? '',
+    timeline.summary.status,
+    timeline.summary.severity,
+    String(timeline.summary.total_items),
+    timeline.summary.needs_attention ? 'attention' : '',
+    Object.entries(timeline.summary.counts).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}:${value}`).join('|'),
+    timeline.items.map((item) => [
+      item.item_id,
+      item.tool_id ?? '',
+      item.tool_name ?? '',
+      item.kind,
+      item.status,
+      item.severity,
+      item.needs_attention ? 'attention' : '',
+      item.approval_state ?? '',
+    ].join(':')).join('|'),
+  ].join('\x1e');
+  const messageBlockSignature = (block: NonNullable<FlowerChatMessage['blocks']>[number]): string => (
+    block.type === 'activity-timeline'
+      ? `activity:${activityTimelineSignature(block)}`
+      : `${block.type}:${block.content ?? ''}`
+  );
+  const todoSnapshotSignature = (snapshot: FlowerTodoSnapshot | null | undefined): string => (
+    snapshot
+      ? [
+          String(snapshot.version),
+          String(snapshot.updated_at_ms),
+          snapshot.todos.map((todo) => `${todo.id}:${todo.status}:${todo.content}:${todo.note ?? ''}`).join('|'),
+        ].join('\x1e')
+      : ''
+  );
+  const threadSnapshotSignature = (thread: FlowerThreadSnapshot): string => [
+    thread.thread_id,
+    thread.title,
+    thread.model_id,
+    thread.working_dir,
+    String(Number(thread.pinned_at_ms ?? 0)),
+    String(thread.created_at_ms),
+    String(thread.updated_at_ms),
+    thread.status,
+    thread.source_label,
+    thread.target_labels.join('\x1e'),
+    String(thread.read_status.is_unread),
+    readSnapshotKey(thread.read_status.snapshot),
+    String(thread.read_status.read_state.last_seen_activity_revision),
+    String(thread.read_status.read_state.last_read_message_at_unix_ms),
+    thread.read_status.read_state.last_seen_activity_signature,
+    trimString(thread.read_status.read_state.last_seen_waiting_prompt_id),
+    thread.messages.map((message) => [
+      message.id,
+      message.role,
+      message.content,
+      message.status,
+      String(message.created_at_ms),
+      message.blocks?.map(messageBlockSignature).join('\x1d') ?? '',
+    ].join('\x1e')).join('\x1d'),
+    thread.activity_timeline?.map(activityTimelineSignature).join('\x1d') ?? '',
+    todoSnapshotSignature(thread.todo_snapshot),
+    thread.input_request
+      ? [
+          thread.input_request.prompt_id,
+          thread.input_request.message_id,
+          thread.input_request.tool_id,
+          thread.input_request.tool_name,
+          thread.input_request.reason_code,
+          thread.input_request.public_summary,
+          thread.input_request.questions.map((question) => [
+            question.id,
+            question.header,
+            question.question,
+            question.response_mode,
+            question.write_label ?? '',
+            question.write_placeholder ?? '',
+            question.is_secret ? 'secret' : '',
+            question.choices?.map((choice) => [
+              choice.choice_id,
+              choice.label,
+              choice.description ?? '',
+              choice.kind ?? '',
+            ].join('\x1f')).join('\x1e') ?? '',
+          ].join('\x1e')).join('\x1d'),
+        ].join('\x1e')
+      : '',
+    thread.error ? `${thread.error.code ?? ''}\x1e${thread.error.message}` : '',
+  ].join('\x1f');
+  const sameThreadSnapshot = (left: FlowerThreadSnapshot, right: FlowerThreadSnapshot): boolean => (
+    left === right || threadSnapshotSignature(left) === threadSnapshotSignature(right)
+  );
+  const readStatusWithUnread = (thread: FlowerThreadSnapshot, isUnread: boolean): FlowerThreadSnapshot => (
+    thread.read_status.is_unread === isUnread
+      ? thread
+      : { ...thread, read_status: { ...thread.read_status, is_unread: isUnread } }
+  );
+  const threadWithLocalReadVisibility = (thread: FlowerThreadSnapshot): FlowerThreadSnapshot => {
+    if (!thread.read_status.is_unread) return thread;
+    const localKey = locallyReadSnapshots.get(thread.thread_id);
+    if (!localKey || localKey !== readSnapshotKey(thread.read_status.snapshot)) {
+      return thread;
+    }
+    return readStatusWithUnread(thread, false);
+  };
   const threadItemSignature = (t: FlowerThreadSnapshot): string => {
-    const visibleUnread = t.status === 'running' ? false : t.has_unread;
+    const visibleThread = threadWithLocalReadVisibility(t);
+    const stableLiveSidebar = t.thread_id === selectedThreadID() && SIDEBAR_STABLE_ACTIVE_STATUSES.has(t.status);
     return [
       t.thread_id,
       t.status,
@@ -161,7 +279,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       t.model_id ?? '',
       t.target_labels?.join('\x1e') ?? '',
       t.working_dir ?? '',
-      String(visibleUnread),
+      stableLiveSidebar ? 'live-selected' : String(visibleThread.read_status.is_unread),
+      stableLiveSidebar ? 'live-selected' : readSnapshotKey(t.read_status.snapshot),
     ].join('\x1f');
   };
   const sidebarItemSignature = (t: FlowerThreadListItem): string => [
@@ -175,24 +294,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     t.model_id,
     t.target_labels.join('\x1e'),
     t.working_dir,
-    String(t.has_unread),
+    t.thread_id === selectedThreadID() && SIDEBAR_STABLE_ACTIVE_STATUSES.has(t.status) ? 'live-selected' : String(t.read_status.is_unread),
+    t.thread_id === selectedThreadID() && SIDEBAR_STABLE_ACTIVE_STATUSES.has(t.status) ? 'live-selected' : readSnapshotKey(t.read_status.snapshot),
   ].join('\x1f');
-  const threadItems = createMemo(() =>
-    threads().map((t) => {
-      const visibleUnread = t.status === 'running' ? false : t.has_unread;
+  const threadItems = createMemo(() => {
+    localReadVisibilityRevision();
+    return threads().map((t) => {
+      const visibleThread = threadWithLocalReadVisibility(t);
       const sig = threadItemSignature(t);
       const cached = threadItemCache.get(t.thread_id);
       if (cached && cached.sig === sig) {
         return cached.item;
       }
-      const item = projectFlowerThreadListItem({
-        ...t,
-        has_unread: visibleUnread,
-      });
+      const item = projectFlowerThreadListItem(visibleThread);
       threadItemCache.set(t.thread_id, { item, sig });
       return item;
-    }),
-  );
+    });
+  });
   // Stable sidebar list items: only updates when sidebar-visible fields change.
   // Detail refreshes can update the selected thread transcript frequently; the
   // sidebar must not receive a new item array unless its own visible model changed.
@@ -276,76 +394,63 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setThreads((current) => {
       const existingIndex = current.findIndex((item) => item.thread_id === thread.thread_id);
       if (existingIndex < 0) {
+        threadLocalMutationRevision += 1;
         return [thread, ...current];
       }
-      if (current[existingIndex] === thread) {
+      if (sameThreadSnapshot(current[existingIndex], thread)) {
         return current;
       }
       const next = [...current];
       next[existingIndex] = thread;
+      threadLocalMutationRevision += 1;
       return next;
     });
   };
 
-  const markThreadReadLocally = (threadID: string, observed?: FlowerThreadSnapshot) => {
+  const markThreadReadLocally = (threadID: string, snapshot: FlowerThreadActivitySnapshot) => {
     const tid = trimString(threadID);
     if (!tid) return;
-    setThreads((current) => {
-      let changed = false;
-      const next = current.map((thread) => {
-        if (thread.thread_id !== tid) return thread;
-        const updatedAtMs = Math.max(
-          Number(locallyReadThreadVersions.get(tid) ?? 0),
-          Number(observed?.updated_at_ms ?? thread.updated_at_ms ?? 0),
-        );
-        locallyReadThreadVersions.set(tid, updatedAtMs);
-        if (!thread.has_unread || thread.status === 'running') return thread;
-        changed = true;
-        return { ...thread, has_unread: false };
-      });
-      return changed ? next : current;
-    });
-    if (observed) {
-      locallyReadThreadVersions.set(tid, Math.max(
-        Number(locallyReadThreadVersions.get(tid) ?? 0),
-        Number(observed.updated_at_ms ?? 0),
-      ));
+    const key = readSnapshotKey(snapshot);
+    if (!key) return;
+    locallyReadSnapshots.set(tid, key);
+    setLocalReadVisibilityRevision((revision) => revision + 1);
+  };
+
+  const clearLocalReadVisibility = (threadID: string) => {
+    const tid = trimString(threadID);
+    if (!tid) return;
+    if (locallyReadSnapshots.delete(tid)) {
+      setLocalReadVisibilityRevision((revision) => revision + 1);
     }
   };
 
-  const withLocalReadVisibility = (thread: FlowerThreadSnapshot): FlowerThreadSnapshot => {
-    const readVersion = locallyReadThreadVersions.get(thread.thread_id);
-    if (readVersion === undefined) return thread;
-    if (thread.updated_at_ms > readVersion) {
-      locallyReadThreadVersions.delete(thread.thread_id);
-      return thread;
-    }
-    return thread.has_unread ? { ...thread, has_unread: false } : thread;
-  };
-
-  const persistThreadRead = (threadID: string, sequence: number) => {
+  const persistThreadRead = (threadID: string, snapshot: FlowerThreadActivitySnapshot, sequence: number) => {
     const tid = trimString(threadID);
     if (!tid) return;
+    markThreadReadLocally(tid, snapshot);
     if (persistingReadThreadIDs.has(tid)) {
-      pendingReadPersistenceSequences.set(tid, sequence);
+      pendingReadPersistenceSnapshots.set(tid, snapshot);
       return;
     }
     persistingReadThreadIDs.add(tid);
-    void props.adapter.markThreadRead(tid)
-      .then(() => {
-        if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
-        markThreadReadLocally(tid);
+    void props.adapter.markThreadRead(tid, snapshot)
+      .then((thread) => {
+        if (sequence === threadLoadSequence && selectedThreadID() === tid) {
+          upsertThread(thread);
+        }
+        clearLocalReadVisibility(tid);
       })
       .catch((error) => {
+        clearLocalReadVisibility(tid);
         if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
         setThreadActionError(getErrorMessage(error));
       })
       .finally(() => {
         persistingReadThreadIDs.delete(tid);
-        const pendingSequence = pendingReadPersistenceSequences.get(tid);
-        pendingReadPersistenceSequences.delete(tid);
-        if (pendingSequence === undefined || pendingSequence !== threadLoadSequence || selectedThreadID() !== tid) return;
-        persistThreadRead(tid, pendingSequence);
+        const pendingSnapshot = pendingReadPersistenceSnapshots.get(tid);
+        pendingReadPersistenceSnapshots.delete(tid);
+        if (!pendingSnapshot) return;
+        persistThreadRead(tid, pendingSnapshot, sequence);
       });
   };
 
@@ -482,9 +587,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const mergeThreadListRefresh = (
     current: readonly FlowerThreadSnapshot[],
     next: readonly FlowerThreadSnapshot[],
+    preserveMissingCurrentThreads = false,
   ): readonly FlowerThreadSnapshot[] => {
     const byID = new Map(current.map((thread) => [thread.thread_id, thread] as const));
-    return next.map((thread) => {
+    const nextIDs = new Set(next.map((thread) => thread.thread_id));
+    const merged = next.map((thread) => {
       const existing = byID.get(thread.thread_id);
       if (!existing) return thread;
       const listSummaryOnly = thread.messages.length === 0
@@ -497,21 +604,40 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return thread;
     });
+    if (preserveMissingCurrentThreads) {
+      for (const thread of current) {
+        if (!nextIDs.has(thread.thread_id)) {
+          merged.push(thread);
+        }
+      }
+    } else {
+      const selectedID = selectedThreadID();
+      const selectedThread = current.find((thread) => thread.thread_id === selectedID);
+      if (selectedThread && !nextIDs.has(selectedID) && threadHasLoadedDetail(selectedThread)) {
+        merged.push(selectedThread);
+      }
+    }
+    if (current.length === merged.length && current.every((thread, index) => sameThreadSnapshot(thread, merged[index]))) {
+      return current;
+    }
+    return merged;
   };
 
   const loadAndSelectThread = async (threadID: string) => {
     const tid = trimString(threadID);
     if (!tid) return;
     const sequence = ++threadLoadSequence;
+    const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
     transcriptNearBottom = true;
     setSelectedThreadID(tid);
     setChatSubmitError('');
     setInputSubmitError('');
     setThreadLoadError('');
     setThreadActionError('');
-    markThreadReadLocally(tid);
     returnToChat();
-    persistThreadRead(tid, sequence);
+    if (existing?.read_status.is_unread) {
+      persistThreadRead(tid, existing.read_status.snapshot, sequence);
+    }
     if (!props.adapter.loadThread) {
       return;
     }
@@ -519,8 +645,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       const thread = await props.adapter.loadThread(tid);
       if (sequence !== threadLoadSequence) return;
-      markThreadReadLocally(tid, thread);
-      upsertThread({ ...thread, has_unread: false });
+      upsertThread(thread);
+      if (thread.read_status.is_unread) {
+        persistThreadRead(tid, thread.read_status.snapshot, sequence);
+      }
       setSelectedThreadID(thread.thread_id);
       setLoadingThreadID('');
     } catch (error) {
@@ -537,10 +665,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       const thread = await props.adapter.loadThread(tid);
       if (selectedThreadID() !== thread.thread_id) return;
-      markThreadReadLocally(tid, thread);
-      upsertThread({ ...thread, has_unread: false });
-      if (thread.has_unread) {
-        persistThreadRead(tid, sequence);
+      if (thread.read_status.is_unread) {
+        markThreadReadLocally(tid, thread.read_status.snapshot);
+      }
+      upsertThread(thread);
+      if (thread.read_status.is_unread) {
+        persistThreadRead(tid, thread.read_status.snapshot, sequence);
       }
       setThreadLoadError('');
     } catch (error) {
@@ -549,21 +679,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const refreshThreads = async (): Promise<boolean> => {
+    const refreshSequence = ++threadsRefreshSequence;
+    const startedMutationRevision = threadLocalMutationRevision;
     setThreadsRefreshing(true);
     try {
       const next = await props.adapter.listThreads();
+      if (refreshSequence !== threadsRefreshSequence) {
+        return false;
+      }
       setLoadError('');
       const selectedID = selectedThreadID();
       const previousSelected = threads().find((thread) => thread.thread_id === selectedID) ?? null;
       const selectedSummary = next.find((thread) => thread.thread_id === selectedID) ?? null;
-      const visibleNext = next.map(withLocalReadVisibility);
-      setThreads((current) => mergeThreadListRefresh(current, visibleNext));
+      let mergedThreads: readonly FlowerThreadSnapshot[] = [];
+      setThreads((current) => {
+        mergedThreads = mergeThreadListRefresh(current, next, startedMutationRevision !== threadLocalMutationRevision);
+        return mergedThreads;
+      });
       const focusedThreadID = trimString(props.focusThreadID);
       setSelectedThreadID((current) => {
-        if (focusedThreadID && visibleNext.some((thread) => thread.thread_id === focusedThreadID)) {
+        if (focusedThreadID && mergedThreads.some((thread) => thread.thread_id === focusedThreadID)) {
           return focusedThreadID;
         }
-        return current && !visibleNext.some((thread) => thread.thread_id === current) ? '' : current;
+        return current && !mergedThreads.some((thread) => thread.thread_id === current) ? '' : current;
       });
       if (
         selectedID
@@ -584,12 +722,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const loadSurface = async () => {
+    const startedMutationRevision = threadLocalMutationRevision;
     try {
       const next = await props.adapter.loadSettings();
       setSnapshot(next);
       setLoadError('');
       await resolveHandlerDecision().catch(() => undefined);
-      await refreshThreads();
+      if (startedMutationRevision === threadLocalMutationRevision) {
+        await refreshThreads();
+      }
     } catch (error) {
       setLoadError(getErrorMessage(error));
     }
@@ -627,11 +768,40 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!threadID || !selectedThreadRunning()) {
       return;
     }
+    const tick = () => {
+      if (selectedThreadRefreshInFlight) return;
+      selectedThreadRefreshInFlight = true;
+      void refreshSelectedThread(threadID).finally(() => {
+        selectedThreadRefreshInFlight = false;
+      });
+    };
     const timer = window.setInterval(() => {
-      void refreshSelectedThread(threadID);
+      tick();
     }, 1200);
-    void refreshSelectedThread(threadID);
+    tick();
     onCleanup(() => window.clearInterval(timer));
+  });
+
+  createEffect(() => {
+    const selectedID = selectedThreadID();
+    const hasBackgroundActiveThread = threads().some((thread) => (
+      thread.thread_id !== selectedID
+      && (thread.status === 'running' || thread.status === 'waiting_approval' || thread.status === 'waiting_user')
+    ));
+    if (!hasBackgroundActiveThread) return;
+    const tick = () => {
+      if (backgroundThreadsRefreshInFlight) return;
+      backgroundThreadsRefreshInFlight = true;
+      void refreshThreads().finally(() => {
+        backgroundThreadsRefreshInFlight = false;
+      });
+    };
+    const timer = window.setInterval(tick, 1800);
+    tick();
+    onCleanup(() => {
+      window.clearInterval(timer);
+      backgroundThreadsRefreshInFlight = false;
+    });
   });
 
   createEffect(() => {
@@ -801,37 +971,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         message.id,
         message.status,
         message.content,
-        message.blocks?.map((block) => (
-          block.type === 'activity-timeline'
-            ? `${block.type}:${block.run_id ?? ''}:${block.turn_id ?? ''}:${block.summary.status}:${block.summary.total_items}:${block.items.map((item) => `${item.item_id}:${item.status}:${item.tool_name ?? ''}:${item.needs_attention ? 'attention' : ''}`).join('|')}`
-            : `${block.type}:${block.content ?? ''}`
-        )).join('|') ?? '',
+        message.blocks?.map(messageBlockSignature).join('|') ?? '',
       ].join('\x1e')).join('\x1d'),
-      thread.activity_timeline?.map((timeline) => [
-        timeline.run_id ?? '',
-        timeline.turn_id ?? '',
-        timeline.summary.status,
-        timeline.summary.severity,
-        timeline.summary.total_items,
-        timeline.summary.needs_attention ? 'attention' : '',
-        timeline.items.map((item) => [
-          item.item_id,
-          item.tool_id ?? '',
-          item.tool_name ?? '',
-          item.kind,
-          item.status,
-          item.severity,
-          item.needs_attention ? 'attention' : '',
-          item.approval_state ?? '',
-        ].join(':')).join('|'),
-      ].join('\x1e')).join('\x1d') ?? '',
-      thread.todo_snapshot
-        ? [
-            thread.todo_snapshot.version,
-            thread.todo_snapshot.updated_at_ms,
-            thread.todo_snapshot.todos.map((todo) => `${todo.id}:${todo.status}:${todo.content}:${todo.note ?? ''}`).join('|'),
-          ].join('\x1e')
-        : '',
+      thread.activity_timeline?.map(activityTimelineSignature).join('\x1d') ?? '',
+      todoSnapshotSignature(thread.todo_snapshot),
       thread.input_request
         ? [
             thread.input_request.prompt_id,

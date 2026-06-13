@@ -334,6 +334,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       waiting_approval: 'Waiting for approval',
       failed: 'Failed',
       success: 'Done',
+      canceled: 'Canceled',
       read_only: 'Read only',
     },
     groups: {

@@ -1,7 +1,15 @@
-import type { FlowerThreadTimeGroup } from '../copy';
+import { DEFAULT_FLOWER_SURFACE_COPY, type FlowerThreadListCopy, type FlowerThreadTimeGroup } from '../copy';
 import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
 
 type TimeGroup = FlowerThreadTimeGroup;
+
+export type FlowerThreadIndicator = Readonly<{
+  visual: 'idle' | 'wave' | 'working' | 'waiting' | 'approval' | 'success' | 'failed' | 'stopped';
+  attention: 'none' | 'unread';
+  actionRequired: boolean;
+  ariaStatus: string;
+  title: string;
+}>;
 
 export type FlowerThreadGroup =
   | Readonly<{ kind: 'pinned'; threads: FlowerThreadListItem[] }>
@@ -66,4 +74,70 @@ export function filterFlowerThreadItems(threads: readonly FlowerThreadListItem[]
     thread.read_only_reason,
     ...thread.target_labels,
   ].join(' ').toLowerCase().includes(needle));
+}
+
+export function flowerThreadIndicator(
+  item: FlowerThreadListItem,
+  active: boolean,
+  copy: FlowerThreadListCopy = DEFAULT_FLOWER_SURFACE_COPY.threadList,
+): FlowerThreadIndicator {
+  const unread = item.read_status.is_unread === true;
+  switch (item.status) {
+    case 'running':
+      return {
+        visual: active ? 'wave' : 'working',
+        attention: unread ? 'unread' : 'none',
+        actionRequired: false,
+        ariaStatus: copy.statuses.running,
+        title: unread ? `${copy.statuses.running}, ${copy.unread}` : copy.statuses.running,
+      };
+    case 'waiting_user':
+      return {
+        visual: 'waiting',
+        attention: unread ? 'unread' : 'none',
+        actionRequired: true,
+        ariaStatus: copy.statuses.waiting_user,
+        title: unread ? `${copy.statuses.waiting_user}, ${copy.unread}` : copy.statuses.waiting_user,
+      };
+    case 'waiting_approval':
+      return {
+        visual: 'approval',
+        attention: unread ? 'unread' : 'none',
+        actionRequired: true,
+        ariaStatus: copy.statuses.waiting_approval,
+        title: unread ? `${copy.statuses.waiting_approval}, ${copy.unread}` : copy.statuses.waiting_approval,
+      };
+    case 'success':
+      return {
+        visual: 'success',
+        attention: unread ? 'unread' : 'none',
+        actionRequired: false,
+        ariaStatus: copy.statuses.success,
+        title: unread ? `${copy.statuses.success}, ${copy.unread}` : copy.statuses.success,
+      };
+    case 'failed':
+      return {
+        visual: 'failed',
+        attention: unread ? 'unread' : 'none',
+        actionRequired: false,
+        ariaStatus: copy.statuses.failed,
+        title: unread ? `${copy.statuses.failed}, ${copy.unread}` : copy.statuses.failed,
+      };
+    case 'canceled':
+      return {
+        visual: 'stopped',
+        attention: unread ? 'unread' : 'none',
+        actionRequired: false,
+        ariaStatus: copy.statuses.canceled,
+        title: unread ? `${copy.statuses.canceled}, ${copy.unread}` : copy.statuses.canceled,
+      };
+    default:
+      return {
+        visual: 'idle',
+        attention: unread ? 'unread' : 'none',
+        actionRequired: false,
+        ariaStatus: copy.statuses.idle,
+        title: unread ? `${copy.statuses.idle}, ${copy.unread}` : copy.statuses.idle,
+      };
+  }
 }

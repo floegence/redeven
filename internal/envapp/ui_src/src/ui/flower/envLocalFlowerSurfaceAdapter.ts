@@ -14,6 +14,8 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
+  FlowerThreadActivitySnapshot,
+  FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerThreadStatus,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -61,19 +63,7 @@ type ThreadView = Readonly<{
   read_status: ThreadReadStatus;
 }>;
 
-type ThreadReadSnapshot = Readonly<{
-  last_message_at_unix_ms: number;
-  waiting_prompt_id?: string;
-}>;
-
-type ThreadReadStatus = Readonly<{
-  is_unread: boolean;
-  snapshot: ThreadReadSnapshot;
-  read_state: Readonly<{
-    last_read_message_at_unix_ms: number;
-    last_seen_waiting_prompt_id?: string;
-  }>;
-}>;
+type ThreadReadStatus = FlowerThreadReadStatus;
 
 type ThreadWaitingPrompt = Readonly<{
   prompt_id?: string;
@@ -144,6 +134,14 @@ function readStatus(thread: ThreadView): ThreadReadStatus {
   if (!Number.isFinite(lastMessageAtUnixMs) || lastMessageAtUnixMs < 0) {
     flowerContractError('thread.read_status.snapshot.last_message_at_unix_ms must be a non-negative number.');
   }
+  const activityRevision = Number(thread.read_status.snapshot.activity_revision);
+  if (!Number.isFinite(activityRevision) || activityRevision < 0) {
+    flowerContractError('thread.read_status.snapshot.activity_revision must be a non-negative number.');
+  }
+  const activitySignature = trim(thread.read_status.snapshot.activity_signature);
+  if (!activitySignature) {
+    flowerContractError('thread.read_status.snapshot.activity_signature is required.');
+  }
   if (!thread.read_status.read_state || typeof thread.read_status.read_state !== 'object') {
     flowerContractError('thread.read_status.read_state is required.');
   }
@@ -151,7 +149,29 @@ function readStatus(thread: ThreadView): ThreadReadStatus {
   if (!Number.isFinite(lastReadMessageAtUnixMs) || lastReadMessageAtUnixMs < 0) {
     flowerContractError('thread.read_status.read_state.last_read_message_at_unix_ms must be a non-negative number.');
   }
-  return thread.read_status;
+  const lastSeenActivityRevision = Number(thread.read_status.read_state.last_seen_activity_revision);
+  if (!Number.isFinite(lastSeenActivityRevision) || lastSeenActivityRevision < 0) {
+    flowerContractError('thread.read_status.read_state.last_seen_activity_revision must be a non-negative number.');
+  }
+  const lastSeenActivitySignature = trim(thread.read_status.read_state.last_seen_activity_signature);
+  if (typeof thread.read_status.read_state.last_seen_activity_signature !== 'string') {
+    flowerContractError('thread.read_status.read_state.last_seen_activity_signature must be a string.');
+  }
+  return {
+    is_unread: thread.read_status.is_unread,
+    snapshot: {
+      activity_revision: Math.floor(activityRevision),
+      last_message_at_unix_ms: Math.floor(lastMessageAtUnixMs),
+      activity_signature: activitySignature,
+      ...(trim(thread.read_status.snapshot.waiting_prompt_id) ? { waiting_prompt_id: trim(thread.read_status.snapshot.waiting_prompt_id) } : {}),
+    },
+    read_state: {
+      last_seen_activity_revision: Math.floor(lastSeenActivityRevision),
+      last_read_message_at_unix_ms: Math.floor(lastReadMessageAtUnixMs),
+      last_seen_activity_signature: lastSeenActivitySignature,
+      ...(trim(thread.read_status.read_state.last_seen_waiting_prompt_id) ? { last_seen_waiting_prompt_id: trim(thread.read_status.read_state.last_seen_waiting_prompt_id) } : {}),
+    },
+  };
 }
 
 function adapterCopy(options: EnvLocalFlowerSurfaceAdapterOptions): EnvLocalFlowerSurfaceAdapterCopy {
@@ -298,9 +318,10 @@ function runStatus(raw: unknown): FlowerThreadStatus {
     case 'waiting_user':
       return 'waiting_user';
     case 'failed':
-    case 'canceled':
     case 'timed_out':
       return 'failed';
+    case 'canceled':
+      return 'canceled';
     case 'success':
       return 'success';
     default:
@@ -463,7 +484,7 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
     target_labels: [envLabel],
     messages,
     ...(inputRequest ? { input_request: inputRequest } : {}),
-    has_unread: currentReadStatus.is_unread === true,
+    read_status: currentReadStatus,
   };
 }
 
@@ -549,20 +570,22 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     return mapThread(threadResp.thread, messages, options);
   };
 
-  const markThreadRead = async (threadID: string): Promise<FlowerThreadSnapshot> => {
+  const markThreadRead = async (threadID: string, snapshot: FlowerThreadActivitySnapshot): Promise<FlowerThreadSnapshot> => {
     const copy = adapterCopy(options);
     const tid = trim(threadID);
     if (!tid) throw new Error(copy.missingThreadID);
     const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'GET' });
     const thread = threadResp.thread;
     if (!thread) flowerContractError('thread is required.');
-    const status = readStatus(thread);
+    readStatus(thread);
     const out = await fetchGatewayJSON<MarkThreadReadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/read`, {
       method: 'POST',
       body: JSON.stringify({
         snapshot: {
-          last_message_at_unix_ms: Math.floor(status.snapshot.last_message_at_unix_ms),
-          waiting_prompt_id: trim(status.snapshot.waiting_prompt_id) || undefined,
+          activity_revision: Math.floor(Number(snapshot.activity_revision)),
+          last_message_at_unix_ms: Math.floor(Number(snapshot.last_message_at_unix_ms)),
+          activity_signature: trim(snapshot.activity_signature),
+          waiting_prompt_id: trim(snapshot.waiting_prompt_id) || undefined,
         },
       }),
     });

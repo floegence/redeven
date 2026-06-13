@@ -472,6 +472,26 @@ type ChatSubmitInputRequest struct {
 	Answers  map[string]ChatInputAnswer `json:"answers"`
 }
 
+type ThreadActivitySnapshot struct {
+	ActivityRevision    int64  `json:"activity_revision"`
+	LastMessageAtUnixMs int64  `json:"last_message_at_unix_ms"`
+	ActivitySignature   string `json:"activity_signature"`
+	WaitingPromptID     string `json:"waiting_prompt_id,omitempty"`
+}
+
+type ThreadReadState struct {
+	LastSeenActivityRevision  int64  `json:"last_seen_activity_revision"`
+	LastReadMessageAtUnixMs   int64  `json:"last_read_message_at_unix_ms"`
+	LastSeenActivitySignature string `json:"last_seen_activity_signature"`
+	LastSeenWaitingPromptID   string `json:"last_seen_waiting_prompt_id,omitempty"`
+}
+
+type ThreadReadStatus struct {
+	IsUnread  bool                   `json:"is_unread"`
+	Snapshot  ThreadActivitySnapshot `json:"snapshot"`
+	ReadState ThreadReadState        `json:"read_state"`
+}
+
 type ThreadSnapshot struct {
 	ThreadID         string             `json:"thread_id"`
 	Title            string             `json:"title"`
@@ -490,7 +510,7 @@ type ThreadSnapshot struct {
 	HomeHostKind     string             `json:"home_host_kind,omitempty"`
 	SourceLabel      string             `json:"source_label"`
 	TargetLabels     []string           `json:"target_labels"`
-	HasUnread        bool               `json:"has_unread"`
+	ReadStatus       ThreadReadStatus   `json:"read_status"`
 }
 
 type ListThreadsResponse struct {
@@ -521,6 +541,10 @@ type ThreadMutationResponse struct {
 
 type ThreadReadResponse struct {
 	Thread ThreadSnapshot `json:"thread"`
+}
+
+type ThreadReadRequest struct {
+	Snapshot ThreadActivitySnapshot `json:"snapshot"`
 }
 
 type ForkThreadResponse struct {
