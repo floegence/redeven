@@ -248,24 +248,6 @@ function validThreadResponse(): Record<string, unknown> {
         ],
       },
     ],
-    activity_timeline: [
-      validActivityTimeline(),
-    ],
-    todo_snapshot: {
-      version: 4,
-      updated_at_ms: 95,
-      summary: {
-        total: 2,
-        pending: 0,
-        in_progress: 0,
-        completed: 2,
-        cancelled: 0,
-      },
-      todos: [
-        { id: 'todo-1', content: 'Inspect context', status: 'completed' },
-        { id: 'todo-2', content: 'Write answer', status: 'completed' },
-      ],
-    },
     error: {
       code: 'failed',
       message: 'provider rejected request',
@@ -517,7 +499,7 @@ describe('Flower Host bridge lifecycle', () => {
           }),
         ],
       });
-      expect(thread.activity_timeline?.[0]).toMatchObject({
+      expect(thread.messages[0]?.blocks?.[2]).toMatchObject({
         type: 'activity-timeline',
         run_id: 'run-1',
         summary: {
@@ -540,21 +522,6 @@ describe('Flower Host bridge lifecycle', () => {
           }),
         ],
       });
-      expect(thread.todo_snapshot).toEqual({
-        version: 4,
-        updated_at_ms: 95,
-        summary: {
-          total: 2,
-          pending: 0,
-          in_progress: 0,
-          completed: 2,
-          cancelled: 0,
-        },
-        todos: [
-          { id: 'todo-1', content: 'Inspect context', status: 'completed' },
-          { id: 'todo-2', content: 'Write answer', status: 'completed' },
-        ],
-      });
       expect(thread.error).toEqual({
         code: 'failed',
         message: 'provider rejected request',
@@ -575,8 +542,16 @@ describe('Flower Host bridge lifecycle', () => {
     };
     threadResponse = {
       ...validThreadResponse(),
-      messages: [],
-      activity_timeline: [timeline],
+      messages: [
+        {
+          id: 'm-invalid-activity',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 90,
+          blocks: [timeline],
+        },
+      ],
     };
     try {
       const bridge = await import('./flowerHostBridge');
@@ -584,7 +559,7 @@ describe('Flower Host bridge lifecycle', () => {
       await expect(bridge.loadFlowerHostThreadViaBridge({
         ...bridgeArgs(root),
         threadID: 'thread-streaming',
-      })).rejects.toThrow('thread.activity_timeline[0].items[0].approval_state has unsupported value "required"');
+      })).rejects.toThrow('thread.messages[0].blocks[0].items[0].approval_state has unsupported value "required"');
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

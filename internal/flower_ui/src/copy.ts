@@ -228,7 +228,6 @@ export type FlowerSurfaceCopy = Readonly<{
     threadLoadErrorTitle: string;
     threadLoading: string;
     composerErrorTitle: string;
-    toolActivityLabel: string;
     toolStatuses: Readonly<Record<'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled', string>>;
     toolApprovalRequired: string;
     toolApprovalState: (state: string) => string;
@@ -278,7 +277,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     threadLoadErrorTitle: 'Conversation could not load.',
     threadLoading: 'Loading conversation...',
     composerErrorTitle: 'Flower could not send.',
-    toolActivityLabel: 'Tool activity',
     toolStatuses: {
       pending: 'Pending',
       running: 'Running',

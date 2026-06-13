@@ -3,7 +3,9 @@ import type { Message, MessageBlock } from '../chat/types';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import type { AgentSettingsResponse, AIConfig } from '../pages/settings/types';
 import type {
+  FlowerActivityTimelineBlock,
   FlowerChatMessage,
+  FlowerChatMessageBlock,
   FlowerInputRequest,
   FlowerInputRequestQuestion,
   FlowerProvider,
@@ -356,6 +358,56 @@ function blockText(block: MessageBlock): string {
   }
 }
 
+function mapActivityTimelineBlock(block: Extract<MessageBlock, { type: 'activity-timeline' }>): FlowerActivityTimelineBlock {
+  return {
+    type: 'activity-timeline',
+    schema_version: block.schema_version,
+    ...(trim(block.run_id) ? { run_id: trim(block.run_id) } : {}),
+    ...(trim(block.thread_id) ? { thread_id: trim(block.thread_id) } : {}),
+    ...(trim(block.turn_id) ? { turn_id: trim(block.turn_id) } : {}),
+    ...(trim(block.trace_id) ? { trace_id: trim(block.trace_id) } : {}),
+    summary: {
+      status: block.summary.status,
+      severity: block.summary.severity,
+      needs_attention: Boolean(block.summary.needs_attention),
+      ...(Array.isArray(block.summary.attention_reasons) && block.summary.attention_reasons.length > 0 ? { attention_reasons: block.summary.attention_reasons } : {}),
+      total_items: Math.max(0, Math.floor(Number(block.summary.total_items ?? block.items.length))),
+      counts: { ...block.summary.counts },
+      ...(positiveInteger(block.summary.duration_ms) ? { duration_ms: positiveInteger(block.summary.duration_ms) } : {}),
+    },
+    items: block.items.map((item) => ({
+      item_id: trim(item.item_id),
+      ...(trim(item.tool_id) ? { tool_id: trim(item.tool_id) } : {}),
+      ...(trim(item.tool_name) ? { tool_name: trim(item.tool_name) } : {}),
+      kind: item.kind,
+      status: item.status,
+      severity: item.severity ?? 'normal',
+      needs_attention: Boolean(item.needs_attention),
+      ...(Array.isArray(item.attention_reasons) && item.attention_reasons.length > 0 ? { attention_reasons: item.attention_reasons } : {}),
+      requires_approval: Boolean(item.requires_approval),
+      ...(item.approval_state ? { approval_state: item.approval_state } : {}),
+      ...(positiveInteger(item.started_at_unix_ms) ? { started_at_unix_ms: positiveInteger(item.started_at_unix_ms) } : {}),
+      ...(positiveInteger(item.ended_at_unix_ms) ? { ended_at_unix_ms: positiveInteger(item.ended_at_unix_ms) } : {}),
+      ...(item.metadata ? { metadata: Object.fromEntries(Object.entries(item.metadata).map(([key, value]) => [trim(key), trim(value)]).filter(([key, value]) => key && value)) } : {}),
+    })).filter((item) => item.item_id),
+  };
+}
+
+function mapMessageBlock(block: MessageBlock): FlowerChatMessageBlock | null {
+  switch (block.type) {
+    case 'markdown':
+    case 'text':
+    case 'thinking':
+      return trim(block.content) ? { type: block.type, content: trim(block.content) } : null;
+    case 'activity-timeline':
+      return mapActivityTimelineBlock(block);
+    default: {
+      const content = blockText(block);
+      return content ? { type: 'text', content } : null;
+    }
+  }
+}
+
 function messageText(message: Message): string {
   return message.blocks.map(blockText).filter(Boolean).join('\n\n');
 }
@@ -364,12 +416,16 @@ function mapMessage(message: Message): FlowerChatMessage | null {
   const id = trim(message.id);
   const role = trim(message.role).toLowerCase();
   if (!id || (role !== 'user' && role !== 'assistant' && role !== 'system')) return null;
+  const blocks = message.blocks
+    .map(mapMessageBlock)
+    .filter((block): block is FlowerChatMessageBlock => block !== null);
   return {
     id,
     role,
     content: messageText(message),
     status: message.status,
     created_at_ms: unixMs(message.timestamp, 'message.timestamp'),
+    ...(blocks.length > 0 ? { blocks } : {}),
   };
 }
 

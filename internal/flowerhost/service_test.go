@@ -807,7 +807,7 @@ func TestDecodeRawMessagePreservesStreamingBlocksAndActivityTimeline(t *testing.
 		]
 	}`)
 
-	msg, timelines, ok, err := decodeRawMessage(raw)
+	msg, ok, err := decodeRawMessage(raw)
 	if err != nil {
 		t.Fatalf("decodeRawMessage() error = %v", err)
 	}
@@ -822,12 +822,6 @@ func TestDecodeRawMessagePreservesStreamingBlocksAndActivityTimeline(t *testing.
 	}
 	if len(msg.Blocks) != 3 || msg.Blocks[0].Type != "thinking" || msg.Blocks[1].Type != "markdown" || msg.Blocks[2].Type != "activity-timeline" {
 		t.Fatalf("blocks=%#v, want thinking, markdown, and activity timeline blocks", msg.Blocks)
-	}
-	if len(timelines) != 1 {
-		t.Fatalf("timelines len=%d, want 1: %#v", len(timelines), timelines)
-	}
-	if timelines[0].RunID != "run_1" || timelines[0].Summary == nil || timelines[0].Summary.Status != observation.ActivityStatusRunning || len(timelines[0].Items) != 2 {
-		t.Fatalf("timeline=%#v, want running run_1 timeline with two items", timelines[0])
 	}
 	if msg.Blocks[2].RunID != "run_1" || msg.Blocks[2].Summary == nil || !msg.Blocks[2].Summary.NeedsAttention || len(msg.Blocks[2].Items) != 2 {
 		t.Fatalf("activity block=%#v, want preserved timeline summary", msg.Blocks[2])
@@ -867,24 +861,24 @@ func TestDecodeMessagesRejectsRemovedToolCallBlock(t *testing.T) {
 	}
 }
 
-func TestDecodeMessagesPreservesTimelineOnlyMessageAsActivityTimeline(t *testing.T) {
+func TestDecodeMessagesPreservesTimelineOnlyMessage(t *testing.T) {
 	decoded, err := decodeMessages([]any{
 		json.RawMessage(`{"id":"msg_timeline_only","role":"assistant","status":"complete","timestamp":1700000000100,"blocks":[{"type":"activity-timeline","schema_version":1,"run_id":"run_1","thread_id":"thread_1","turn_id":"msg_timeline_only","trace_id":"trace_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":2,"counts":{"success":2}},"items":[{"item_id":"tool_terminal","tool_id":"tool_terminal","tool_name":"terminal.exec","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false},{"item_id":"tool_done","tool_id":"tool_done","tool_name":"task_complete","kind":"control","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false}]}]}`),
 	})
 	if err != nil {
 		t.Fatalf("decodeMessages() error = %v", err)
 	}
-	if len(decoded.Messages) != 0 {
-		t.Fatalf("messages len=%d, want no visible chat bubble for timeline-only message", len(decoded.Messages))
+	if len(decoded.Messages) != 1 {
+		t.Fatalf("messages len=%d, want visible timeline-only message", len(decoded.Messages))
 	}
-	if len(decoded.ActivityTimeline) != 1 {
-		t.Fatalf("activity timelines len=%d, want 1: %#v", len(decoded.ActivityTimeline), decoded.ActivityTimeline)
+	if len(decoded.Messages[0].Blocks) != 1 || decoded.Messages[0].Blocks[0].Type != "activity-timeline" {
+		t.Fatalf("blocks=%#v, want one activity timeline block", decoded.Messages[0].Blocks)
 	}
-	if got := decoded.ActivityTimeline[0].Summary.Status; got != observation.ActivityStatusSuccess {
+	if got := decoded.Messages[0].Blocks[0].Summary.Status; got != observation.ActivityStatusSuccess {
 		t.Fatalf("summary status=%q, want success", got)
 	}
-	if len(decoded.ActivityTimeline[0].Items) != 2 {
-		t.Fatalf("items=%#v, want two activity items", decoded.ActivityTimeline[0].Items)
+	if len(decoded.Messages[0].Blocks[0].Items) != 2 {
+		t.Fatalf("items=%#v, want two activity items", decoded.Messages[0].Blocks[0].Items)
 	}
 }
 
@@ -965,7 +959,7 @@ func TestDecodeRawMessageRejectsMalformedPayloads(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, _, _, err := decodeRawMessage(tt.raw)
+			_, _, err := decodeRawMessage(tt.raw)
 			if err == nil || !strings.Contains(err.Error(), tt.want) {
 				t.Fatalf("decodeRawMessage() error=%v, want containing %q", err, tt.want)
 			}

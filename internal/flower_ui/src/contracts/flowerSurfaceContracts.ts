@@ -175,26 +175,6 @@ export type FlowerChatMessageBlock =
   }>
   | FlowerActivityTimelineBlock;
 
-export type FlowerTodoItem = Readonly<{
-  id: string;
-  content: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
-  note?: string;
-}>;
-
-export type FlowerTodoSnapshot = Readonly<{
-  version: number;
-  updated_at_ms: number;
-  summary: Readonly<{
-    total: number;
-    pending: number;
-    in_progress: number;
-    completed: number;
-    cancelled: number;
-  }>;
-  todos: readonly FlowerTodoItem[];
-}>;
-
 export type FlowerInputRequestAction = Readonly<{
   type: string;
   mode?: string;
@@ -282,8 +262,6 @@ export type FlowerThreadSnapshot = Readonly<{
   source_label: string;
   target_labels: readonly string[];
   messages: readonly FlowerChatMessage[];
-  activity_timeline?: readonly FlowerActivityTimelineBlock[];
-  todo_snapshot?: FlowerTodoSnapshot | null;
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
   read_status: FlowerThreadReadStatus;

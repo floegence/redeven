@@ -400,28 +400,6 @@ type ChatRunError struct {
 	Code    string `json:"code,omitempty"`
 }
 
-type ChatTodoSnapshot struct {
-	Version     int64           `json:"version"`
-	UpdatedAtMs int64           `json:"updated_at_ms"`
-	Summary     ChatTodoSummary `json:"summary"`
-	Todos       []ChatTodoItem  `json:"todos"`
-}
-
-type ChatTodoSummary struct {
-	Total      int `json:"total"`
-	Pending    int `json:"pending"`
-	InProgress int `json:"in_progress"`
-	Completed  int `json:"completed"`
-	Cancelled  int `json:"cancelled"`
-}
-
-type ChatTodoItem struct {
-	ID      string `json:"id"`
-	Content string `json:"content"`
-	Status  string `json:"status"`
-	Note    string `json:"note,omitempty"`
-}
-
 type ChatInputRequest struct {
 	PromptID         string              `json:"prompt_id"`
 	MessageID        string              `json:"message_id"`
@@ -493,24 +471,22 @@ type ThreadReadStatus struct {
 }
 
 type ThreadSnapshot struct {
-	ThreadID         string             `json:"thread_id"`
-	Title            string             `json:"title"`
-	ModelID          string             `json:"model_id"`
-	WorkingDir       string             `json:"working_dir"`
-	PinnedAtMs       int64              `json:"pinned_at_ms,omitempty"`
-	CreatedAtMs      int64              `json:"created_at_ms"`
-	UpdatedAtMs      int64              `json:"updated_at_ms"`
-	Status           string             `json:"status"`
-	Messages         []ChatMessage      `json:"messages"`
-	ActivityTimeline []ChatMessageBlock `json:"activity_timeline,omitempty"`
-	TodoSnapshot     *ChatTodoSnapshot  `json:"todo_snapshot,omitempty"`
-	InputRequest     *ChatInputRequest  `json:"input_request,omitempty"`
-	Error            *ChatRunError      `json:"error,omitempty"`
-	HomeHostID       string             `json:"home_host_id,omitempty"`
-	HomeHostKind     string             `json:"home_host_kind,omitempty"`
-	SourceLabel      string             `json:"source_label"`
-	TargetLabels     []string           `json:"target_labels"`
-	ReadStatus       ThreadReadStatus   `json:"read_status"`
+	ThreadID     string            `json:"thread_id"`
+	Title        string            `json:"title"`
+	ModelID      string            `json:"model_id"`
+	WorkingDir   string            `json:"working_dir"`
+	PinnedAtMs   int64             `json:"pinned_at_ms,omitempty"`
+	CreatedAtMs  int64             `json:"created_at_ms"`
+	UpdatedAtMs  int64             `json:"updated_at_ms"`
+	Status       string            `json:"status"`
+	Messages     []ChatMessage     `json:"messages"`
+	InputRequest *ChatInputRequest `json:"input_request,omitempty"`
+	Error        *ChatRunError     `json:"error,omitempty"`
+	HomeHostID   string            `json:"home_host_id,omitempty"`
+	HomeHostKind string            `json:"home_host_kind,omitempty"`
+	SourceLabel  string            `json:"source_label"`
+	TargetLabels []string          `json:"target_labels"`
+	ReadStatus   ThreadReadStatus  `json:"read_status"`
 }
 
 type ListThreadsResponse struct {

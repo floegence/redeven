@@ -39,7 +39,6 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
       threadLoadErrorTitle: t(i18n, k('chat.threadLoadErrorTitle')),
       threadLoading: t(i18n, k('chat.threadLoading')),
       composerErrorTitle: t(i18n, k('chat.composerErrorTitle')),
-      toolActivityLabel: t(i18n, k('chat.toolActivityLabel')),
       toolStatuses: {
         pending: t(i18n, k('chat.toolStatusPending')),
         running: t(i18n, k('chat.toolStatusRunning')),

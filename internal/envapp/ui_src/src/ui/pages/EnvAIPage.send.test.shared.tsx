@@ -140,6 +140,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Settings: Icon,
     Shield: Icon,
     Sparkles: Icon,
+    Terminal: Icon,
     Trash: Icon,
     X: Icon,
     Zap: Icon,
@@ -319,6 +320,101 @@ export function registerEnvAIPageSendTests() {
         await flush();
         expect(mocks.listMessagesMock).toHaveBeenCalledWith({ threadId: 'thread-1', tail: true, limit: 200 });
         expect(host.textContent).toContain('Transcript for thread-1');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('maps Env-local message blocks into the shared Flower inline transcript', async () => {
+      mocks.listMessagesMock.mockResolvedValueOnce({
+        messages: [
+          {
+            rowId: 1,
+            messageJson: {
+              id: 'msg-inline',
+              role: 'assistant',
+              status: 'complete',
+              timestamp: 10,
+              blocks: [
+                { type: 'markdown', content: 'I will inspect the Env workspace.' },
+                {
+                  type: 'activity-timeline',
+                  schema_version: 1,
+                  run_id: 'run-inline',
+                  turn_id: 'msg-inline',
+                  summary: {
+                    status: 'success',
+                    severity: 'quiet',
+                    needs_attention: false,
+                    total_items: 1,
+                    counts: { success: 1 },
+                    duration_ms: 1250,
+                  },
+                  items: [{
+                    item_id: 'tool-read',
+                    tool_id: 'tool-read',
+                    tool_name: 'terminal.exec',
+                    kind: 'tool',
+                    status: 'success',
+                    severity: 'quiet',
+                    needs_attention: false,
+                    requires_approval: false,
+                    started_at_unix_ms: 10,
+                    ended_at_unix_ms: 1260,
+                    metadata: { command: 'pwd' },
+                  }],
+                },
+                { type: 'markdown', content: 'Env workspace inspection is complete.' },
+              ],
+            } as any,
+          },
+          {
+            rowId: 2,
+            messageJson: {
+              id: 'msg-activity-only',
+              role: 'assistant',
+              status: 'complete',
+              timestamp: 11,
+              blocks: [{
+                type: 'activity-timeline',
+                schema_version: 1,
+                run_id: 'run-activity-only',
+                turn_id: 'msg-activity-only',
+                summary: {
+                  status: 'success',
+                  severity: 'quiet',
+                  needs_attention: false,
+                  total_items: 1,
+                  counts: { success: 1 },
+                },
+                items: [{
+                  item_id: 'tool-search',
+                  tool_id: 'tool-search',
+                  tool_name: 'web.search',
+                  kind: 'hosted_tool',
+                  status: 'success',
+                  severity: 'quiet',
+                  needs_attention: false,
+                  requires_approval: false,
+                  metadata: { query: 'Flower inline transcript' },
+                }],
+              }],
+            } as any,
+          },
+        ],
+      } as any);
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+        await flush();
+        const transcriptText = host.textContent ?? '';
+        expect(transcriptText.indexOf('I will inspect the Env workspace.')).toBeLessThan(transcriptText.indexOf('Ran command'));
+        expect(transcriptText.indexOf('Ran command')).toBeLessThan(transcriptText.indexOf('Env workspace inspection is complete.'));
+        expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(2);
+        expect(host.textContent).toContain('pwd');
+        expect(host.textContent).toContain('Search web');
+        expect(host.textContent).toContain('Flower inline transcript');
       } finally {
         dispose();
       }
