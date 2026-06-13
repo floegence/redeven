@@ -22,6 +22,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = (props: any) => <span data-icon class={props.class} />;
   return {
     AlertTriangle: Icon,
+    ArrowUp: Icon,
     Bot: Icon,
     Check: Icon,
     ChevronDown: Icon,
@@ -514,8 +515,9 @@ describe('FlowerSurface navigation', () => {
     expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Flower handler unavailable');
     expect(host.querySelector('.flower-host-handler-error-card')?.textContent).toContain('Configure Flower before chatting.');
     expect(host.querySelector('.flower-host-handler-retry')?.textContent).toContain('Retry');
-    expect((Array.from(host.querySelectorAll('.flower-host-composer button')) as HTMLButtonElement[])
-      .some((button) => button.textContent?.includes('Send') && button.disabled)).toBe(true);
+    const sendButton = host.querySelector('.flower-host-composer-submit') as HTMLButtonElement | null;
+    expect(sendButton?.getAttribute('aria-label')).toBe('Send');
+    expect(sendButton?.disabled).toBe(true);
   });
 
   it('switches handlers before the first message and keeps the selected thread decision-free', async () => {
@@ -629,10 +631,11 @@ describe('FlowerSurface navigation', () => {
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'verify Flower';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    await waitFor(() => (Array.from(host.querySelectorAll('.flower-host-composer button')) as HTMLButtonElement[])
-      .some((button) => button.textContent?.includes('Send') && !button.disabled));
-    const send = (Array.from(host.querySelectorAll('.flower-host-composer button')) as HTMLButtonElement[])
-      .find((button) => button.textContent?.includes('Send') && !button.disabled) as HTMLButtonElement;
+    await waitFor(() => {
+      const button = host.querySelector('.flower-host-composer-submit') as HTMLButtonElement | null;
+      return Boolean(button && !button.disabled);
+    });
+    const send = host.querySelector('.flower-host-composer-submit') as HTMLButtonElement;
     send.click();
     await waitFor(() => sendMessage.mock.calls.length > 0);
     await waitFor(() => loadThread.mock.calls.length > 0);

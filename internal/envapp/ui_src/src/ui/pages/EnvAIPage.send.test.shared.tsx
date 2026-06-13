@@ -88,6 +88,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = (props: any) => <span data-icon class={props.class} />;
   return {
     AlertTriangle: Icon,
+    ArrowUp: Icon,
     Bot: Icon,
     Check: Icon,
     ChevronDown: Icon,
@@ -343,7 +344,7 @@ export function registerEnvAIPageSendTests() {
         textarea.value = '你好，Flower';
         textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
         await flush();
-        const sendButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Send message')) as HTMLButtonElement | undefined;
+        const sendButton = host.querySelector('button.flower-host-composer-submit[aria-label="Send message"]') as HTMLButtonElement | null;
         expect(sendButton).toBeTruthy();
         expect(sendButton?.disabled).toBe(false);
         sendButton?.click();
