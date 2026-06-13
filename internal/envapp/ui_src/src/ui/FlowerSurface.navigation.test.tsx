@@ -119,6 +119,10 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function retiredHandlerUnavailableCopy(): string {
+  return ['Flower handler', 'unavailable'].join(' ');
+}
+
 function deferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
   let reject!: (reason?: unknown) => void;
@@ -595,7 +599,7 @@ describe('FlowerSurface navigation', () => {
     expect(host.querySelector('.flower-host-setup-guide')?.textContent).toContain('Set up Flower');
     expect(host.querySelector('.flower-host-setup-guide')?.textContent).toContain('Choose a provider, model, and API key once.');
     expect(host.querySelector('.flower-host-handler-error')).toBeNull();
-    expect(host.textContent).not.toContain('Flower handler unavailable');
+    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
     textarea!.value = 'hello';
@@ -607,7 +611,42 @@ describe('FlowerSurface navigation', () => {
     expect(host.querySelector('button[aria-label="Back to chat"]')).toBeTruthy();
   });
 
-  it('shows handler errors near the composer instead of pretending a host is selected', async () => {
+  it('shows a starting handler state before settings finish loading', async () => {
+    const settings = deferred<FlowerSettingsSnapshot>();
+    const resolveHandler = vi.fn(async () => decision());
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      loadSettings: vi.fn(() => settings.promise),
+      resolveHandler,
+    });
+    await flush();
+
+    expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Starting Flower...');
+    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
+    expect(resolveHandler).not.toHaveBeenCalled();
+
+    settings.resolve(settingsSnapshot(true));
+    await waitFor(() => resolveHandler.mock.calls.length === 1);
+    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
+  });
+
+  it('keeps handler resolution pending without showing an unavailable error', async () => {
+    const handler = deferred<FlowerRouterDecision>();
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      resolveHandler: vi.fn(() => handler.promise),
+    });
+    await waitFor(() => Boolean(host.querySelector('.flower-host-handler-chip')));
+
+    expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Choosing Flower...');
+    expect(host.querySelector('.flower-host-handler-error-card')).toBeNull();
+    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
+
+    handler.resolve(decision());
+    await waitFor(() => host.querySelector('.flower-host-handler-chip') === null);
+  });
+
+  it('shows handler blockers near the composer without pretending a host is selected', async () => {
     const failingAdapter = {
       ...adapter(true),
       resolveHandler: vi.fn(async () => blockedDecision()),
@@ -615,12 +654,27 @@ describe('FlowerSurface navigation', () => {
     const host = renderSurfaceWithAdapter(failingAdapter);
     await flush();
 
-    expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Flower handler unavailable');
+    expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Flower needs attention');
     expect(host.querySelector('.flower-host-handler-error-card')?.textContent).toContain('Configure Flower before chatting.');
     expect(host.querySelector('.flower-host-handler-retry')?.textContent).toContain('Retry');
+    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
     const sendButton = host.querySelector('.flower-host-composer-submit') as HTMLButtonElement | null;
     expect(sendButton?.getAttribute('aria-label')).toBe('Send');
     expect(sendButton?.disabled).toBe(true);
+  });
+
+  it('shows startup failures as recoverable Flower start errors', async () => {
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      resolveHandler: vi.fn(async () => {
+        throw new Error('Timed out waiting for Flower Host readiness.');
+      }),
+    });
+    await flush();
+
+    expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Flower could not start');
+    expect(host.querySelector('.flower-host-handler-error-card')?.textContent).toContain('Timed out waiting for Flower Host readiness.');
+    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
   });
 
   it('switches handlers before the first message and keeps the selected thread decision-free', async () => {

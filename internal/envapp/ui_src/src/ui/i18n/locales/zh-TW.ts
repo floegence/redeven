@@ -565,8 +565,11 @@ export const zhTW = {
     },
     router: {
       handlerSelectionLabel: "處理方",
+      handlerStarting: "正在啟動 Flower...",
       handlerResolving: "正在選擇 Flower...",
-      handlerUnavailable: "Flower 處理方不可用",
+      handlerBlockedTitle: "Flower 需要處理",
+      handlerStartFailedTitle: "Flower 啟動失敗",
+      handlerStillStarting: "Flower 仍在啟動。",
       conversationsAria: "Flower 對話",
       conversationsTitle: "對話",
       searchConversations: "搜尋對話...",

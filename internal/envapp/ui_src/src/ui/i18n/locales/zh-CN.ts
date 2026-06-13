@@ -859,8 +859,11 @@ export const zhCN = {
     },
     router: {
       handlerSelectionLabel: "处理方",
+      handlerStarting: "正在启动 Flower...",
       handlerResolving: "正在选择 Flower...",
-      handlerUnavailable: "Flower 处理方不可用",
+      handlerBlockedTitle: "Flower 需要处理",
+      handlerStartFailedTitle: "Flower 启动失败",
+      handlerStillStarting: "Flower 仍在启动。",
       conversationsAria: "Flower 对话",
       conversationsTitle: "对话",
       searchConversations: "搜索对话...",

@@ -214,8 +214,11 @@ export type FlowerSurfaceCopy = Readonly<{
     placeholder: string;
     fromHost: (host: string) => string;
     handlerSelectionLabel: string;
+    handlerStarting: string;
     handlerResolving: string;
-    handlerUnavailable: string;
+    handlerBlockedTitle: string;
+    handlerStartFailedTitle: string;
+    handlerStillStarting: string;
     handlerRetry: string;
     send: string;
     runErrorTitle: string;
@@ -261,8 +264,11 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     placeholder: 'Ask Flower anything...',
     fromHost: (host) => `From ${host}`,
     handlerSelectionLabel: 'Handled by',
+    handlerStarting: 'Starting Flower...',
     handlerResolving: 'Choosing Flower...',
-    handlerUnavailable: 'Flower handler unavailable',
+    handlerBlockedTitle: 'Flower needs attention',
+    handlerStartFailedTitle: 'Flower could not start',
+    handlerStillStarting: 'Flower is still starting.',
     handlerRetry: 'Retry',
     send: 'Send',
     runErrorTitle: 'Flower could not finish this reply.',

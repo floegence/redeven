@@ -879,8 +879,11 @@ export const enUS = defineDictionary({
     },
     router: {
       handlerSelectionLabel: 'Handled by',
+      handlerStarting: 'Starting Flower...',
       handlerResolving: 'Choosing Flower...',
-      handlerUnavailable: 'Flower handler unavailable',
+      handlerBlockedTitle: 'Flower needs attention',
+      handlerStartFailedTitle: 'Flower could not start',
+      handlerStillStarting: 'Flower is still starting.',
       conversationsAria: 'Flower conversations',
       conversationsTitle: 'Conversations',
       searchConversations: 'Search conversations...',

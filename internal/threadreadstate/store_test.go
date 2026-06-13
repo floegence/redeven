@@ -2,9 +2,13 @@ package threadreadstate
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
 func openTestStore(t *testing.T) *Store {
@@ -261,5 +265,79 @@ func TestStore_DeleteThreadRemovesSurfaceRecordsAndRestoreRecords(t *testing.T) 
 	}
 	if len(otherDeleted) != 1 || otherDeleted[0].ScopeID != FlowerRuntimeScopeID {
 		t.Fatalf("otherDeleted=%+v, want one runtime scope record", otherDeleted)
+	}
+}
+
+func TestStore_OpenResettingInvalidSchemaRebuildsCurrentDatabase(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "thread_read_state.sqlite")
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if _, err := store.EnsureFlower(context.Background(), "env_1", map[string]FlowerSnapshot{
+		"th_old": {LastMessageAtUnixMs: 120},
+	}); err != nil {
+		_ = store.Close()
+		t.Fatalf("EnsureFlower: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	if _, err := raw.Exec(`
+DROP TABLE thread_read_state;
+CREATE TABLE thread_read_state (
+  endpoint_id TEXT NOT NULL,
+  surface TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  last_seen_activity_revision INTEGER NOT NULL DEFAULT 0,
+  last_read_message_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_seen_waiting_prompt_id TEXT NOT NULL DEFAULT '',
+  last_read_updated_at_unix_s INTEGER NOT NULL DEFAULT 0,
+  last_seen_activity_signature TEXT NOT NULL DEFAULT '',
+  updated_at_unix_ms INTEGER NOT NULL,
+  PRIMARY KEY (endpoint_id, surface, thread_id)
+);
+`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("break thread_read_state schema: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
+	_, err = Open(dbPath)
+	if err == nil {
+		t.Fatalf("Open succeeded, want schema verify error")
+	}
+	var schemaErr *sqliteutil.SchemaVerifyError
+	if !errors.As(err, &schemaErr) {
+		t.Fatalf("Open error=%v, want SchemaVerifyError", err)
+	}
+
+	store, err = OpenResettingInvalidSchema(dbPath)
+	if err != nil {
+		t.Fatalf("OpenResettingInvalidSchema: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = store.Close()
+	})
+	if _, err := store.EnsureFlower(context.Background(), "env_1", map[string]FlowerSnapshot{
+		"th_new": {LastMessageAtUnixMs: 200},
+	}); err != nil {
+		t.Fatalf("EnsureFlower after rebuild: %v", err)
+	}
+	var count int
+	if err := store.db.QueryRow(`SELECT COUNT(1) FROM thread_read_state WHERE thread_id = 'th_old'`).Scan(&count); err != nil {
+		t.Fatalf("count old records: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("old record count=%d, want reset database", count)
 	}
 }
