@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
-import { groupFlowerThreadItems } from './threadListModel';
+import { filterFlowerThreadItems, groupFlowerThreadItems } from './threadListModel';
 
 function thread(overrides: Partial<FlowerThreadListItem> = {}): FlowerThreadListItem {
   return {
@@ -42,5 +42,32 @@ describe('groupFlowerThreadItems', () => {
       threads: [{ thread_id: 'regular' }],
     });
     vi.useRealTimers();
+  });
+});
+
+describe('filterFlowerThreadItems', () => {
+  // filterFlowerThreadItems returns the same array reference when there is
+  // no search query. This is important for the sidebar data pipeline:
+  // Solid's <For> uses reference identity to skip DOM reconciliation,
+  // so preserving the input array reference prevents unnecessary re-renders.
+
+  it('returns the same array reference when query is empty', () => {
+    const items = [
+      thread({ thread_id: 'a', status: 'running' }),
+      thread({ thread_id: 'b', status: 'success' }),
+    ];
+    const result = filterFlowerThreadItems(items, '');
+    expect(result).toBe(items);
+  });
+
+  it('returns a new array when a search query is active', () => {
+    const items = [
+      thread({ thread_id: 'a', title: 'Alpha' }),
+      thread({ thread_id: 'b', title: 'Beta' }),
+    ];
+    const result = filterFlowerThreadItems(items, 'alpha');
+    expect(result).not.toBe(items);
+    expect(result).toHaveLength(1);
+    expect(result[0].thread_id).toBe('a');
   });
 });
