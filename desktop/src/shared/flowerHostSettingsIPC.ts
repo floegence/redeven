@@ -303,6 +303,7 @@ export type DesktopFlowerHostThread = Readonly<{
   tool_activity?: readonly DesktopFlowerHostToolActivity[];
   input_request?: DesktopFlowerHostInputRequest | null;
   error?: DesktopFlowerHostThreadError | null;
+  has_unread?: boolean;
 }>;
 
 export type DesktopFlowerHostRenameThreadRequest = Readonly<{
