@@ -19,6 +19,7 @@ import (
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/testutil/legacydb"
 	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
@@ -498,37 +499,8 @@ func TestNewService_RebuildsInvalidLocalThreadstoreSchema(t *testing.T) {
 		t.Fatalf("Close() error = %v", err)
 	}
 
-	raw, err := sql.Open("sqlite", paths.ThreadstorePath)
-	if err != nil {
-		t.Fatalf("sql.Open() error = %v", err)
-	}
-	if _, err := raw.Exec(`
-DROP TABLE structured_user_inputs;
-CREATE TABLE structured_user_inputs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  endpoint_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  response_message_id TEXT NOT NULL,
-  prompt_id TEXT NOT NULL DEFAULT '',
-  tool_id TEXT NOT NULL DEFAULT '',
-  reason_code TEXT NOT NULL DEFAULT '',
-  question_id TEXT NOT NULL,
-  header TEXT NOT NULL DEFAULT '',
-  question_text TEXT NOT NULL DEFAULT '',
-  response_text TEXT NOT NULL DEFAULT '',
-  public_summary TEXT NOT NULL DEFAULT '',
-  contains_secret INTEGER NOT NULL DEFAULT 0,
-  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  UNIQUE(endpoint_id, thread_id, response_message_id, question_id)
-);
-CREATE INDEX idx_structured_user_inputs_recent
-ON structured_user_inputs(endpoint_id, thread_id, id DESC);
-`); err != nil {
-		_ = raw.Close()
+	if err := legacydb.ReplaceStructuredUserInputsWithoutSelectedChoice(paths.ThreadstorePath); err != nil {
 		t.Fatalf("break structured_user_inputs schema: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close raw db: %v", err)
 	}
 
 	svc, err := NewService(context.Background(), ServiceOptions{
@@ -548,7 +520,7 @@ ON structured_user_inputs(endpoint_id, thread_id, id DESC);
 		t.Fatalf("Close() error = %v", err)
 	}
 
-	raw, err = sql.Open("sqlite", paths.ThreadstorePath)
+	raw, err := sql.Open("sqlite", paths.ThreadstorePath)
 	if err != nil {
 		t.Fatalf("sql.Open() after rebuild error = %v", err)
 	}

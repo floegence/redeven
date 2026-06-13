@@ -238,7 +238,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 
 	threadReadStatePath := filepath.Join(stateAbs, "gateway", "thread_read_state.sqlite")
-	threadReadStateStore, err := threadreadstate.Open(threadReadStatePath)
+	threadReadStateStore, err := threadreadstate.OpenResettingInvalidSchema(threadReadStatePath)
 	if err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()

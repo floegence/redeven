@@ -108,13 +108,12 @@ func NewService(ctx context.Context, opts ServiceOptions) (*Service, error) {
 		router:   NewRouter(identity),
 	}
 	aiSvc, err := ai.NewService(ai.Options{
-		Logger:                        logger,
-		StateDir:                      opts.Paths.StateDir,
-		AgentHomeDir:                  agentHomeDir,
-		Shell:                         opts.Shell,
-		FilesystemScope:               scope,
-		ResetInvalidThreadstoreSchema: true,
-		Config:                        cfg,
+		Logger:          logger,
+		StateDir:        opts.Paths.StateDir,
+		AgentHomeDir:    agentHomeDir,
+		Shell:           opts.Shell,
+		FilesystemScope: scope,
+		Config:          cfg,
 		ToolTargetPolicy: ai.ToolTargetPolicy{
 			Mode: ai.ToolTargetModeExplicitTarget,
 		},
