@@ -15,6 +15,7 @@ import (
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/filesystemscope"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/threadreadstate"
 )
 
 const hostEndpointID = "flower-host"
@@ -26,6 +27,7 @@ type ServiceOptions struct {
 	Identity       HostIdentity
 	SecretResolver SecretResolver
 	TargetBroker   TargetSessionBroker
+	ReadState      *threadreadstate.Store
 	AgentHomeDir   string
 	Shell          string
 }
@@ -38,6 +40,7 @@ type Service struct {
 	resolver SecretResolver
 	router   *Router
 	ai       *ai.Service
+	reads    *threadreadstate.Store
 }
 
 func NewService(ctx context.Context, opts ServiceOptions) (*Service, error) {
@@ -56,6 +59,9 @@ func NewService(ctx context.Context, opts ServiceOptions) (*Service, error) {
 			return nil, err
 		}
 		identity = loaded
+	}
+	if opts.ReadState == nil {
+		return nil, errors.New("missing Flower Host thread read state store")
 	}
 	doc, err := store.LoadConfig(ctx)
 	if err != nil {
@@ -133,6 +139,7 @@ func NewService(ctx context.Context, opts ServiceOptions) (*Service, error) {
 		return nil, err
 	}
 	svc.ai = aiSvc
+	svc.reads = opts.ReadState
 	svc.refreshRouterHealth(ctx, doc)
 	return svc, nil
 }
@@ -172,10 +179,19 @@ func (s *Service) primaryTargetIDForThread(ctx context.Context, threadID string)
 }
 
 func (s *Service) Close() error {
-	if s == nil || s.ai == nil {
+	if s == nil {
 		return nil
 	}
-	return s.ai.Close()
+	var err error
+	if s.ai != nil {
+		err = s.ai.Close()
+	}
+	if s.reads != nil {
+		if closeErr := s.reads.Close(); err == nil {
+			err = closeErr
+		}
+	}
+	return err
 }
 
 func (s *Service) Meta() *session.Meta {
@@ -279,8 +295,12 @@ func (s *Service) ListThreads(ctx context.Context) (ListThreadsResponse, error) 
 		return ListThreadsResponse{}, err
 	}
 	out := ListThreadsResponse{Threads: make([]ThreadSnapshot, 0, len(list.Threads))}
+	readRecords, err := s.ensureThreadListReadRecords(ctx, list.Threads)
+	if err != nil {
+		return ListThreadsResponse{}, err
+	}
 	for _, view := range list.Threads {
-		snapshot, err := s.threadListSnapshot(ctx, &view)
+		snapshot, err := s.threadListSnapshot(ctx, &view, readRecords[strings.TrimSpace(view.ThreadID)])
 		if err != nil {
 			return ListThreadsResponse{}, err
 		}
@@ -298,6 +318,43 @@ func (s *Service) GetThread(ctx context.Context, threadID string) (ThreadSnapsho
 		return ThreadSnapshot{}, newServiceError(http.StatusNotFound, "thread_not_found", "thread not found")
 	}
 	return snapshot, err
+}
+
+func (s *Service) MarkThreadRead(ctx context.Context, threadID string) (ThreadSnapshot, error) {
+	if s == nil {
+		return ThreadSnapshot{}, errors.New("nil Flower Host service")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return ThreadSnapshot{}, newServiceError(http.StatusBadRequest, "missing_thread_id", "missing thread id")
+	}
+	view, err := s.ai.GetThread(ctx, s.Meta(), threadID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ThreadSnapshot{}, newServiceError(http.StatusNotFound, "thread_not_found", "thread not found")
+	}
+	if err != nil {
+		return ThreadSnapshot{}, err
+	}
+	if view == nil {
+		return ThreadSnapshot{}, newServiceError(http.StatusNotFound, "thread_not_found", "thread not found")
+	}
+	snapshot, err := s.threadSnapshot(ctx, threadID, view)
+	if err != nil {
+		return ThreadSnapshot{}, err
+	}
+	if err := s.advanceThreadReadSnapshot(ctx, threadID, flowerReadSnapshotFromView(*view, latestMessageCreatedAt(snapshot.Messages))); err != nil {
+		return ThreadSnapshot{}, err
+	}
+	snapshot.HasUnread = false
+	return snapshot, nil
+}
+
+func (s *Service) advanceThreadReadSnapshot(ctx context.Context, threadID string, snapshot threadreadstate.FlowerSnapshot) error {
+	if s == nil || s.reads == nil {
+		return errors.New("missing Flower Host thread read state store")
+	}
+	_, err := s.reads.AdvanceFlower(ctx, hostEndpointID, s.readUserPublicID(), threadID, snapshot)
+	return err
 }
 
 func (s *Service) MutateThread(ctx context.Context, threadID string, req ThreadMutationRequest) (ThreadSnapshot, error) {
@@ -713,7 +770,7 @@ func (s *Service) validateContextActionForSend(ctx context.Context, threadID str
 	return nil
 }
 
-func (s *Service) threadListSnapshot(ctx context.Context, view *ai.ThreadView) (ThreadSnapshot, error) {
+func (s *Service) threadListSnapshot(ctx context.Context, view *ai.ThreadView, readRecord threadreadstate.Record) (ThreadSnapshot, error) {
 	if view == nil {
 		return ThreadSnapshot{}, errors.New("missing thread view")
 	}
@@ -745,6 +802,8 @@ func (s *Service) threadListSnapshot(ctx context.Context, view *ai.ThreadView) (
 			status = "failed"
 		}
 	}
+	updatedAtMs := maxInt64(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs)
+	readSnapshot := flowerReadSnapshotFromView(*view)
 	return ThreadSnapshot{
 		ThreadID:     strings.TrimSpace(view.ThreadID),
 		Title:        firstNonEmpty(view.Title, view.LastMessagePreview, "Untitled conversation"),
@@ -752,7 +811,7 @@ func (s *Service) threadListSnapshot(ctx context.Context, view *ai.ThreadView) (
 		WorkingDir:   strings.TrimSpace(view.WorkingDir),
 		PinnedAtMs:   view.PinnedAtUnixMs,
 		CreatedAtMs:  view.CreatedAtUnixMs,
-		UpdatedAtMs:  maxInt64(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs),
+		UpdatedAtMs:  updatedAtMs,
 		Status:       status,
 		Messages:     []ChatMessage{},
 		InputRequest: inputRequest,
@@ -761,7 +820,7 @@ func (s *Service) threadListSnapshot(ctx context.Context, view *ai.ThreadView) (
 		HomeHostKind: homeHostKind,
 		SourceLabel:  sourceLabel,
 		TargetLabels: targetLabels,
-		HasUnread:    false,
+		HasUnread:    flowerThreadHasUnread(readSnapshot, readRecord),
 	}, nil
 }
 
@@ -1018,6 +1077,12 @@ func (s *Service) threadSnapshot(ctx context.Context, threadID string, view *ai.
 	if err != nil {
 		return ThreadSnapshot{}, err
 	}
+	updatedAtMs := maxInt64(maxInt64(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs), latestMessageCreatedAt(decoded.Messages))
+	readSnapshot := flowerReadSnapshotFromView(*view, latestMessageCreatedAt(decoded.Messages))
+	readRecord, err := s.ensureThreadReadRecord(ctx, strings.TrimSpace(view.ThreadID), readSnapshot)
+	if err != nil {
+		return ThreadSnapshot{}, err
+	}
 	return ThreadSnapshot{
 		ThreadID:     view.ThreadID,
 		Title:        firstNonEmpty(view.Title, view.LastMessagePreview, "Untitled conversation"),
@@ -1025,7 +1090,7 @@ func (s *Service) threadSnapshot(ctx context.Context, threadID string, view *ai.
 		WorkingDir:   strings.TrimSpace(view.WorkingDir),
 		PinnedAtMs:   view.PinnedAtUnixMs,
 		CreatedAtMs:  view.CreatedAtUnixMs,
-		UpdatedAtMs:  maxInt64(maxInt64(view.UpdatedAtUnixMs, view.LastMessageAtUnixMs), latestMessageCreatedAt(decoded.Messages)),
+		UpdatedAtMs:  updatedAtMs,
 		Status:       status,
 		Messages:     decoded.Messages,
 		ToolActivity: toolActivity,
@@ -1035,8 +1100,66 @@ func (s *Service) threadSnapshot(ctx context.Context, threadID string, view *ai.
 		HomeHostKind: homeHostKind,
 		SourceLabel:  sourceLabel,
 		TargetLabels: targetLabels,
-		HasUnread:    false,
+		HasUnread:    flowerThreadHasUnread(readSnapshot, readRecord),
 	}, nil
+}
+
+func (s *Service) ensureThreadListReadRecords(ctx context.Context, views []ai.ThreadView) (map[string]threadreadstate.Record, error) {
+	if s == nil || s.reads == nil {
+		return nil, errors.New("missing Flower Host thread read state store")
+	}
+	snapshots := make(map[string]threadreadstate.FlowerSnapshot, len(views))
+	for _, view := range views {
+		threadID := strings.TrimSpace(view.ThreadID)
+		if threadID == "" {
+			continue
+		}
+		snapshots[threadID] = flowerReadSnapshotFromView(view)
+	}
+	return s.reads.EnsureFlower(ctx, hostEndpointID, s.readUserPublicID(), snapshots)
+}
+
+func (s *Service) ensureThreadReadRecord(ctx context.Context, threadID string, snapshot threadreadstate.FlowerSnapshot) (threadreadstate.Record, error) {
+	if s == nil || s.reads == nil {
+		return threadreadstate.Record{}, errors.New("missing Flower Host thread read state store")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return threadreadstate.Record{}, errors.New("missing thread_id")
+	}
+	records, err := s.reads.EnsureFlower(ctx, hostEndpointID, s.readUserPublicID(), map[string]threadreadstate.FlowerSnapshot{
+		threadID: snapshot,
+	})
+	if err != nil {
+		return threadreadstate.Record{}, err
+	}
+	return records[threadID], nil
+}
+
+func (s *Service) readUserPublicID() string {
+	return strings.TrimSpace(s.identity.UserPublicID)
+}
+
+func flowerReadSnapshotFromView(view ai.ThreadView, visibleMessageAtUnixMs ...int64) threadreadstate.FlowerSnapshot {
+	waitingPromptID := ""
+	if view.WaitingPrompt != nil {
+		waitingPromptID = strings.TrimSpace(view.WaitingPrompt.PromptID)
+	}
+	lastMessageAtUnixMs := view.LastMessageAtUnixMs
+	for _, ts := range visibleMessageAtUnixMs {
+		lastMessageAtUnixMs = maxInt64(lastMessageAtUnixMs, ts)
+	}
+	return threadreadstate.FlowerSnapshot{
+		LastMessageAtUnixMs: lastMessageAtUnixMs,
+		WaitingPromptID:     waitingPromptID,
+	}
+}
+
+func flowerThreadHasUnread(snapshot threadreadstate.FlowerSnapshot, record threadreadstate.Record) bool {
+	if snapshot.LastMessageAtUnixMs > record.LastReadMessageAtUnixMs {
+		return true
+	}
+	return snapshot.WaitingPromptID != "" && snapshot.WaitingPromptID != strings.TrimSpace(record.LastSeenWaitingPromptID)
 }
 
 func (s *Service) threadOwnershipLabels(meta *threadstore.FlowerThreadMetadata) (string, string, string, []string) {

@@ -6,7 +6,7 @@ import { Input, Tag } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerThreadListCopy, FlowerThreadTimeGroup } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
-import type { FlowerThreadListItem, FlowerThreadStatus } from '../contracts/flowerSurfaceContracts';
+import type { FlowerThreadListItem } from '../contracts/flowerSurfaceContracts';
 import { filterFlowerThreadItems, groupFlowerThreadItems, type FlowerThreadGroup } from './threadListModel';
 
 type TimeGroup = FlowerThreadTimeGroup;
@@ -23,28 +23,6 @@ function canForkThreadItem(item: FlowerThreadListItem): boolean {
     default:
       return true;
   }
-}
-
-function statusDotClass(status: FlowerThreadStatus): string {
-  switch (status) {
-    case 'running':
-      return 'bg-primary';
-    case 'waiting_approval':
-    case 'waiting_user':
-      return 'bg-amber-500';
-    case 'success':
-      return 'bg-emerald-500';
-    case 'failed':
-      return 'bg-error';
-    case 'read_only':
-      return 'bg-muted-foreground/50';
-    default:
-      return 'bg-muted-foreground/30';
-  }
-}
-
-function statusLabel(status: FlowerThreadStatus, copy: FlowerThreadListCopy): string {
-  return copy.statuses[status] ?? copy.statuses.idle;
 }
 
 function timeGroupLabel(group: TimeGroup, copy: FlowerThreadListCopy): string {
@@ -95,6 +73,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       data-flower-thread-status={props.item.status}
       data-flower-thread-active={props.active ? 'true' : 'false'}
       data-flower-thread-busy={props.busy ? 'true' : 'false'}
+      data-flower-thread-unread={props.item.has_unread ? 'true' : 'false'}
       onContextMenu={(event) => props.onContextMenu?.(event, props.item)}
       class={cn(
         'flower-host-thread-card group relative w-full cursor-pointer rounded-lg border',
@@ -115,14 +94,14 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           }
         }}
       >
-        <div class="relative mt-1.5 flex h-2 shrink-0 items-center">
-          <div class="flower-host-thread-wave hidden h-2 items-center gap-0.5">
+        <div class="flower-host-thread-indicator relative mt-1.5 flex h-2 shrink-0 items-center justify-center" aria-hidden="true">
+          <div class="flower-host-thread-wave h-2 items-center gap-0.5" title={copy().statuses.running}>
             <div class="flower-host-thread-wave-bar" style="animation-delay: 0ms" />
             <div class="flower-host-thread-wave-bar" style="animation-delay: 180ms" />
             <div class="flower-host-thread-wave-bar" style="animation-delay: 360ms" />
             <div class="flower-host-thread-wave-bar" style="animation-delay: 540ms" />
           </div>
-          <div class={cn('flower-host-thread-dot h-2 w-2 rounded-full', statusDotClass(props.item.status))} title={statusLabel(props.item.status, copy())} />
+          <div class="flower-host-thread-unread-dot h-2 w-2 rounded-full" title={copy().unread} />
         </div>
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div class="flex min-w-0 items-center gap-1">

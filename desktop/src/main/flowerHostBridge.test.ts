@@ -183,6 +183,7 @@ function validThreadResponse(): Record<string, unknown> {
     status: 'running',
     source_label: 'this host',
     target_labels: [],
+    has_unread: false,
     messages: [
       {
         id: 'm-streaming',
@@ -442,6 +443,7 @@ describe('Flower Host bridge lifecycle', () => {
       expect(thread.updated_at_ms).toBe(90);
       expect(thread.working_dir).toBe('/workspace/redeven');
       expect(thread.pinned_at_ms).toBe(123);
+      expect(thread.has_unread).toBe(false);
       expect(thread.messages[0]).toMatchObject({
         status: 'streaming',
         blocks: [
@@ -464,25 +466,6 @@ describe('Flower Host bridge lifecycle', () => {
         code: 'failed',
         message: 'provider rejected request',
       });
-    } finally {
-      await fs.rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it('treats missing working directory from older hosts as unavailable for optional copy action', async () => {
-    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
-    const response = validThreadResponse();
-    delete response.working_dir;
-    threadResponse = response;
-    try {
-      const bridge = await import('./flowerHostBridge');
-
-      const thread = await bridge.loadFlowerHostThreadViaBridge({
-        ...bridgeArgs(root),
-        threadID: 'thread-streaming',
-      });
-
-      expect(thread.working_dir).toBe('');
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }
@@ -537,6 +520,26 @@ describe('Flower Host bridge lifecycle', () => {
     }
   });
 
+  it('marks a Flower Host thread read through the read endpoint', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    threadResponse = { thread: { ...validThreadResponse(), has_unread: false } };
+    try {
+      const bridge = await import('./flowerHostBridge');
+
+      await expect(bridge.markFlowerHostThreadReadViaBridge({
+        ...bridgeArgs(root),
+        request: { thread_id: 'thread-streaming' },
+      })).resolves.toMatchObject({
+        thread_id: 'thread-streaming',
+        has_unread: false,
+      });
+
+      expect(fetchRequests.some((request) => request.url.endsWith('/v1/thread/thread-streaming/read') && request.method === 'POST')).toBe(true);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('posts structured input answers and normalizes the returned thread', async () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
     chatInputResponse = {
@@ -586,6 +589,24 @@ describe('Flower Host bridge lifecycle', () => {
             return thread;
           })(),
           message: 'thread.status',
+        },
+        {
+          name: 'missing unread state',
+          thread: (() => {
+            const thread = validThreadResponse();
+            delete thread.has_unread;
+            return thread;
+          })(),
+          message: 'thread.has_unread',
+        },
+        {
+          name: 'missing working directory',
+          thread: (() => {
+            const thread = validThreadResponse();
+            delete thread.working_dir;
+            return thread;
+          })(),
+          message: 'thread.working_dir',
         },
         {
           name: 'missing source label',

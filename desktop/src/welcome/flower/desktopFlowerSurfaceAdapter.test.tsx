@@ -77,6 +77,7 @@ function desktopThread(): DesktopFlowerHostThread {
     status: 'idle',
     source_label: 'this host',
     target_labels: [],
+    has_unread: false,
     messages: [
       { id: 'm1', role: 'user', content: 'hello', status: 'complete', created_at_ms: 1 },
       { id: 'm2', role: 'assistant', content: 'hi', status: 'complete', created_at_ms: 2 },
@@ -215,6 +216,7 @@ describe('Flower surface adapter for the host', () => {
     const resolveFlowerHostHandler = vi.fn(async () => ({ ok: true as const, decision: desktopDecision() }));
     const sendFlowerHostChat = vi.fn(async () => ({ ok: true as const, thread: desktopThread() }));
     const submitFlowerHostInput = vi.fn(async () => ({ ok: true as const, thread: desktopThread() }));
+    const markFlowerHostThreadRead = vi.fn(async () => ({ ok: true as const, thread: { ...desktopThread(), has_unread: false } }));
     const renameFlowerHostThread = vi.fn(async () => ({ ok: true as const, thread: { ...desktopThread(), title: 'Renamed' } }));
     const setFlowerHostThreadPinned = vi.fn(async () => ({ ok: true as const, thread: { ...desktopThread(), pinned_at_ms: 456 } }));
     const forkFlowerHostThread = vi.fn(async () => ({ ok: true as const, thread: { ...desktopThread(), thread_id: 'thread-fork' } }));
@@ -225,6 +227,7 @@ describe('Flower surface adapter for the host', () => {
       saveFlowerHostSettings,
       listFlowerHostThreads,
       loadFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
+      markFlowerHostThreadRead,
       renameFlowerHostThread,
       setFlowerHostThreadPinned,
       forkFlowerHostThread,
@@ -244,6 +247,7 @@ describe('Flower surface adapter for the host', () => {
     })).resolves.toMatchObject({ config: { current_model_id: 'default/gpt-4.1' } });
     await expect(adapter.resolveHandler()).resolves.toMatchObject({ decision_id: 'decision-1' });
     await expect(adapter.sendMessage({ prompt: 'hello' })).resolves.toMatchObject({ thread_id: 'thread-1' });
+    await expect(adapter.markThreadRead('thread-1')).resolves.toMatchObject({ thread_id: 'thread-1', has_unread: false });
     await expect(adapter.renameThread?.('thread-1', 'Renamed')).resolves.toMatchObject({ title: 'Renamed' });
     await expect(adapter.setThreadPinned?.('thread-1', true)).resolves.toMatchObject({ pinned_at_ms: 456 });
     await expect(adapter.forkThread?.('thread-1')).resolves.toMatchObject({ thread_id: 'thread-fork' });
@@ -260,6 +264,7 @@ describe('Flower surface adapter for the host', () => {
     expect(listFlowerHostThreads).toHaveBeenCalledTimes(1);
     expect(resolveFlowerHostHandler).toHaveBeenCalledTimes(1);
     expect(sendFlowerHostChat).toHaveBeenCalledWith({ thread_id: undefined, prompt: 'hello' });
+    expect(markFlowerHostThreadRead).toHaveBeenCalledWith({ thread_id: 'thread-1' });
     expect(renameFlowerHostThread).toHaveBeenCalledWith({ thread_id: 'thread-1', title: 'Renamed' });
     expect(setFlowerHostThreadPinned).toHaveBeenCalledWith({ thread_id: 'thread-1', pinned: true });
     expect(forkFlowerHostThread).toHaveBeenCalledWith({ thread_id: 'thread-1' });
@@ -272,27 +277,6 @@ describe('Flower surface adapter for the host', () => {
     });
   });
 
-  it('keeps thread mutation actions optional for older Desktop preload bridges', async () => {
-    const bridge: DesktopSettingsBridge = {
-      save: vi.fn(),
-      cancel: vi.fn(),
-      loadFlowerHostSettings: vi.fn(async () => ({ ok: true as const, snapshot: desktopSnapshot() })),
-      saveFlowerHostSettings: vi.fn(async () => ({ ok: true as const, snapshot: desktopSnapshot() })),
-      listFlowerHostThreads: vi.fn(async () => ({ ok: true as const, threads: [desktopThread()] })),
-      loadFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
-      resolveFlowerHostHandler: vi.fn(async () => ({ ok: true as const, decision: desktopDecision() })),
-      sendFlowerHostChat: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
-      submitFlowerHostInput: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
-    };
-    const adapter = createDesktopFlowerSurfaceAdapter(bridge);
-
-    await expect(adapter.loadSettings()).resolves.toMatchObject({ config: { current_model_id: 'default/gpt-4.1' } });
-    await expect(adapter.listThreads()).resolves.toHaveLength(1);
-    expect(adapter.renameThread).toBeUndefined();
-    expect(adapter.setThreadPinned).toBeUndefined();
-    expect(adapter.forkThread).toBeUndefined();
-  });
-
   it('passes the visible handler decision when creating a new host thread', async () => {
     const decision = desktopDecision();
     const sendFlowerHostChat = vi.fn(async () => ({ ok: true as const, thread: desktopThread() }));
@@ -303,6 +287,7 @@ describe('Flower surface adapter for the host', () => {
       saveFlowerHostSettings: vi.fn(async () => ({ ok: true as const, snapshot: desktopSnapshot() })),
       listFlowerHostThreads: vi.fn(async () => ({ ok: true as const, threads: [] })),
       loadFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
+      markFlowerHostThreadRead: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
       renameFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
       setFlowerHostThreadPinned: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
       forkFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
@@ -343,6 +328,7 @@ describe('Flower surface adapter for the host', () => {
       saveFlowerHostSettings: vi.fn(async () => ({ ok: true as const, snapshot: desktopSnapshot() })),
       listFlowerHostThreads: vi.fn(async () => ({ ok: true as const, threads: [] })),
       loadFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
+      markFlowerHostThreadRead: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
       renameFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
       setFlowerHostThreadPinned: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
       forkFlowerHostThread: vi.fn(async () => ({ ok: true as const, thread: desktopThread() })),
@@ -370,6 +356,7 @@ describe('Flower surface adapter for the host', () => {
       working_dir: '/workspace/redeven',
       pinned_at_ms: 123,
       status: 'running',
+      has_unread: false,
       home_host_id: 'flower-host',
       home_host_kind: 'global',
       source_label: 'this host',
@@ -379,6 +366,11 @@ describe('Flower surface adapter for the host', () => {
         { id: 'm2', role: 'assistant', content: 'hi', status: 'complete' },
       ],
     });
+  });
+
+  it('preserves Desktop unread state in shared thread snapshots', () => {
+    expect(mapDesktopFlowerThread({ ...desktopThread(), has_unread: true }).has_unread).toBe(true);
+    expect(mapDesktopFlowerThread({ ...desktopThread(), has_unread: false }).has_unread).toBe(false);
   });
 
   it('preserves streaming blocks, tool activity, and run errors from Desktop IPC', () => {

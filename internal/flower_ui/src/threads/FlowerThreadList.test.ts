@@ -16,6 +16,7 @@ function thread(overrides: Partial<FlowerThreadListItem> = {}): FlowerThreadList
     status: 'idle',
     source_label: 'this host',
     target_labels: [],
+    has_unread: false,
     ...overrides,
   };
 }

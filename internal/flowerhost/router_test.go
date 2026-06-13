@@ -11,6 +11,7 @@ func testIdentity() HostIdentity {
 		HostID:        "flower-host:test",
 		HostKind:      HostKindGlobal,
 		CarrierKind:   CarrierKindDesktop,
+		UserPublicID:  "user_flower_host_test",
 	}
 }
 
