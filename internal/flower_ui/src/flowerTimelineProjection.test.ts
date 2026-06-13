@@ -1,0 +1,161 @@
+import { describe, expect, it } from 'vitest';
+
+import type {
+  FlowerActivityItem,
+  FlowerActivityTimelineBlock,
+  FlowerThreadSnapshot,
+} from './contracts/flowerSurfaceContracts';
+import { buildFlowerTimelineEntries } from './flowerTimelineProjection';
+
+function activityItem(overrides: Partial<FlowerActivityItem> = {}): FlowerActivityItem {
+  return {
+    item_id: 'tool-1',
+    tool_id: 'tool-1',
+    tool_name: 'terminal.exec',
+    kind: 'tool',
+    status: 'success',
+    severity: 'quiet',
+    needs_attention: false,
+    requires_approval: false,
+    ...overrides,
+  };
+}
+
+function activityTimeline(overrides: Partial<FlowerActivityTimelineBlock> = {}): FlowerActivityTimelineBlock {
+  const items = overrides.items ?? [activityItem()];
+  return {
+    type: 'activity-timeline',
+    schema_version: 1,
+    run_id: 'run-1',
+    turn_id: 'turn-1',
+    summary: {
+      status: 'success',
+      severity: 'quiet',
+      needs_attention: false,
+      total_items: items.length,
+      counts: { success: items.length },
+      ...overrides.summary,
+    },
+    items,
+    ...overrides,
+  };
+}
+
+function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnapshot {
+  return {
+    thread_id: 'thread-1',
+    title: 'Thread',
+    model_id: 'openai/gpt-5.2',
+    working_dir: '/workspace',
+    created_at_ms: 1,
+    updated_at_ms: 2,
+    status: 'success',
+    source_label: 'This host',
+    target_labels: [],
+    messages: [],
+    read_status: {
+      is_unread: false,
+      snapshot: {
+        activity_revision: 1,
+        last_message_at_unix_ms: 2,
+        activity_signature: 'activity:1',
+      },
+      read_state: {
+        last_seen_activity_revision: 1,
+        last_read_message_at_unix_ms: 2,
+        last_seen_activity_signature: 'activity:1',
+      },
+    },
+    ...overrides,
+  };
+}
+
+describe('buildFlowerTimelineEntries', () => {
+  it('keeps message block order across content, activity, and final content', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'I will inspect.\n\nFinal answer.',
+          status: 'complete',
+          created_at_ms: 2,
+          blocks: [
+            { type: 'markdown', content: 'I will inspect.' },
+            activityTimeline(),
+            { type: 'markdown', content: 'Final answer.' },
+          ],
+        },
+      ],
+    }));
+
+    expect(entries).toHaveLength(1);
+    const first = entries[0];
+    expect(first?.type).toBe('message');
+    if (first?.type !== 'message') throw new Error('expected message entry');
+    expect(first.blocks.map((block) => block.type)).toEqual(['content', 'activity', 'content']);
+    expect(first.blocks.map((block) => (block.type === 'content' ? block.content : block.block.run_id))).toEqual([
+      'I will inspect.',
+      'run-1',
+      'Final answer.',
+    ]);
+  });
+
+  it('keeps activity-only assistant messages visible', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-tools',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 2,
+          blocks: [activityTimeline()],
+        },
+      ],
+    }));
+
+    expect(entries).toHaveLength(1);
+    const first = entries[0];
+    expect(first?.type).toBe('message');
+    if (first?.type !== 'message') throw new Error('expected message entry');
+    expect(first.blocks).toHaveLength(1);
+    expect(first.blocks[0]?.type).toBe('activity');
+  });
+
+  it('appends waiting input and thread errors as transcript entries', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      status: 'waiting_user',
+      messages: [
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'I need a decision.',
+          status: 'complete',
+          created_at_ms: 2,
+        },
+      ],
+      input_request: {
+        prompt_id: 'prompt-1',
+        message_id: 'assistant-1',
+        tool_id: 'tool-ask',
+        tool_name: 'ask_user',
+        questions: [
+          {
+            id: 'choice',
+            header: 'Decision',
+            question: 'Continue?',
+            response_mode: 'select',
+            choices: [{ choice_id: 'yes', label: 'Yes', kind: 'select' }],
+          },
+        ],
+      },
+      error: {
+        code: 'failed',
+        message: 'Provider stopped.',
+      },
+    }));
+
+    expect(entries.map((entry) => entry.type)).toEqual(['message', 'input_request', 'error']);
+  });
+});

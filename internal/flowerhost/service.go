@@ -1058,15 +1058,14 @@ func (s *Service) threadSnapshot(ctx context.Context, threadID string, view *ai.
 	if err != nil {
 		return ThreadSnapshot{}, err
 	}
-	if runID, raw, err := s.ai.GetActiveRunSnapshot(s.Meta(), threadID); err == nil && strings.TrimSpace(raw) != "" {
-		activeMessage, activeTimeline, visible, err := decodeRawMessage(json.RawMessage(raw))
+	if _, raw, err := s.ai.GetActiveRunSnapshot(s.Meta(), threadID); err == nil && strings.TrimSpace(raw) != "" {
+		activeMessage, visible, err := decodeRawMessage(json.RawMessage(raw))
 		if err != nil {
 			return ThreadSnapshot{}, fmt.Errorf("decode active Flower run snapshot: %w", err)
 		}
 		if visible {
 			decoded = decoded.upsertMessage(activeMessage)
 		}
-		decoded.ActivityTimeline = mergeActivityTimeline(decoded.ActivityTimeline, withRunIDActivityTimeline(activeTimeline, runID))
 	} else if err != nil {
 		return ThreadSnapshot{}, err
 	}
@@ -1096,69 +1095,24 @@ func (s *Service) threadSnapshot(ctx context.Context, threadID string, view *ai.
 	if err != nil {
 		return ThreadSnapshot{}, err
 	}
-	todoSnapshot, err := s.threadTodoSnapshot(ctx, threadID)
-	if err != nil {
-		return ThreadSnapshot{}, err
-	}
 	return ThreadSnapshot{
-		ThreadID:         view.ThreadID,
-		Title:            firstNonEmpty(view.Title, view.LastMessagePreview, "Untitled conversation"),
-		ModelID:          view.ModelID,
-		WorkingDir:       strings.TrimSpace(view.WorkingDir),
-		PinnedAtMs:       view.PinnedAtUnixMs,
-		CreatedAtMs:      view.CreatedAtUnixMs,
-		UpdatedAtMs:      updatedAtMs,
-		Status:           status,
-		Messages:         decoded.Messages,
-		ActivityTimeline: decoded.ActivityTimeline,
-		TodoSnapshot:     todoSnapshot,
-		InputRequest:     inputRequest,
-		Error:            runError,
-		HomeHostID:       homeHostID,
-		HomeHostKind:     homeHostKind,
-		SourceLabel:      sourceLabel,
-		TargetLabels:     targetLabels,
-		ReadStatus:       flowerReadStatus(readSnapshot, readRecord),
+		ThreadID:     view.ThreadID,
+		Title:        firstNonEmpty(view.Title, view.LastMessagePreview, "Untitled conversation"),
+		ModelID:      view.ModelID,
+		WorkingDir:   strings.TrimSpace(view.WorkingDir),
+		PinnedAtMs:   view.PinnedAtUnixMs,
+		CreatedAtMs:  view.CreatedAtUnixMs,
+		UpdatedAtMs:  updatedAtMs,
+		Status:       status,
+		Messages:     decoded.Messages,
+		InputRequest: inputRequest,
+		Error:        runError,
+		HomeHostID:   homeHostID,
+		HomeHostKind: homeHostKind,
+		SourceLabel:  sourceLabel,
+		TargetLabels: targetLabels,
+		ReadStatus:   flowerReadStatus(readSnapshot, readRecord),
 	}, nil
-}
-
-func (s *Service) threadTodoSnapshot(ctx context.Context, threadID string) (*ChatTodoSnapshot, error) {
-	if s == nil || s.ai == nil {
-		return nil, errors.New("nil Flower Host service")
-	}
-	view, err := s.ai.GetThreadTodos(ctx, s.Meta(), threadID)
-	if err != nil {
-		return nil, err
-	}
-	if view == nil || (view.Version <= 0 && len(view.Todos) == 0) {
-		return nil, nil
-	}
-	out := &ChatTodoSnapshot{
-		Version:     view.Version,
-		UpdatedAtMs: view.UpdatedAtUnixMs,
-		Todos:       make([]ChatTodoItem, 0, len(view.Todos)),
-	}
-	for _, item := range view.Todos {
-		status := strings.TrimSpace(item.Status)
-		out.Todos = append(out.Todos, ChatTodoItem{
-			ID:      strings.TrimSpace(item.ID),
-			Content: strings.TrimSpace(item.Content),
-			Status:  status,
-			Note:    strings.TrimSpace(item.Note),
-		})
-		out.Summary.Total++
-		switch status {
-		case ai.TodoStatusPending:
-			out.Summary.Pending++
-		case ai.TodoStatusInProgress:
-			out.Summary.InProgress++
-		case ai.TodoStatusCompleted:
-			out.Summary.Completed++
-		case ai.TodoStatusCancelled:
-			out.Summary.Cancelled++
-		}
-	}
-	return out, nil
 }
 
 func (s *Service) ensureThreadListReadRecords(ctx context.Context, views []ai.ThreadView) (map[string]threadreadstate.Record, error) {
@@ -1447,8 +1401,7 @@ func cloneBoolPtr(value *bool) *bool {
 }
 
 type decodedThreadMessages struct {
-	Messages         []ChatMessage
-	ActivityTimeline []ChatMessageBlock
+	Messages []ChatMessage
 }
 
 func (d decodedThreadMessages) upsertMessage(message ChatMessage) decodedThreadMessages {
@@ -1466,15 +1419,13 @@ func (d decodedThreadMessages) upsertMessage(message ChatMessage) decodedThreadM
 
 func decodeMessages(values []any) (decodedThreadMessages, error) {
 	out := decodedThreadMessages{
-		Messages:         make([]ChatMessage, 0, len(values)),
-		ActivityTimeline: []ChatMessageBlock{},
+		Messages: make([]ChatMessage, 0, len(values)),
 	}
 	for index, value := range values {
-		msg, timelines, visible, err := decodeRawMessage(value)
+		msg, visible, err := decodeRawMessage(value)
 		if err != nil {
 			return decodedThreadMessages{}, fmt.Errorf("decode Flower message %d: %w", index, err)
 		}
-		out.ActivityTimeline = mergeActivityTimeline(out.ActivityTimeline, timelines)
 		if visible {
 			out.Messages = append(out.Messages, msg)
 		}
@@ -1482,7 +1433,7 @@ func decodeMessages(values []any) (decodedThreadMessages, error) {
 	return out, nil
 }
 
-func decodeRawMessage(value any) (ChatMessage, []ChatMessageBlock, bool, error) {
+func decodeRawMessage(value any) (ChatMessage, bool, error) {
 	var raw []byte
 	switch v := value.(type) {
 	case json.RawMessage:
@@ -1494,7 +1445,7 @@ func decodeRawMessage(value any) (ChatMessage, []ChatMessageBlock, bool, error) 
 	default:
 		b, err := json.Marshal(v)
 		if err != nil {
-			return ChatMessage{}, nil, false, fmt.Errorf("marshal message JSON: %w", err)
+			return ChatMessage{}, false, fmt.Errorf("marshal message JSON: %w", err)
 		}
 		raw = b
 	}
@@ -1506,26 +1457,25 @@ func decodeRawMessage(value any) (ChatMessage, []ChatMessageBlock, bool, error) 
 		Blocks    []json.RawMessage `json:"blocks"`
 	}
 	if err := json.Unmarshal(raw, &record); err != nil {
-		return ChatMessage{}, nil, false, fmt.Errorf("parse message JSON: %w", err)
+		return ChatMessage{}, false, fmt.Errorf("parse message JSON: %w", err)
 	}
 	id := strings.TrimSpace(record.ID)
 	role, ok := normalizeChatMessageRole(record.Role)
 	if id == "" {
-		return ChatMessage{}, nil, false, errors.New("message id is required")
+		return ChatMessage{}, false, errors.New("message id is required")
 	}
 	if !ok {
-		return ChatMessage{}, nil, false, fmt.Errorf("message role %q is unsupported", strings.TrimSpace(record.Role))
+		return ChatMessage{}, false, fmt.Errorf("message role %q is unsupported", strings.TrimSpace(record.Role))
 	}
 	if record.Timestamp <= 0 {
-		return ChatMessage{}, nil, false, errors.New("message timestamp must be a positive millisecond timestamp")
+		return ChatMessage{}, false, errors.New("message timestamp must be a positive millisecond timestamp")
 	}
 	status, ok := normalizeChatMessageStatus(record.Status)
 	if !ok {
-		return ChatMessage{}, nil, false, fmt.Errorf("message status %q is unsupported", strings.TrimSpace(record.Status))
+		return ChatMessage{}, false, fmt.Errorf("message status %q is unsupported", strings.TrimSpace(record.Status))
 	}
 	contentParts := make([]string, 0, len(record.Blocks))
 	blocks := make([]ChatMessageBlock, 0, len(record.Blocks))
-	timelines := make([]ChatMessageBlock, 0)
 	hasNonTextPayload := false
 	hasRenderableMessageBlock := false
 	for index, block := range record.Blocks {
@@ -1537,7 +1487,7 @@ func decodeRawMessage(value any) (ChatMessage, []ChatMessageBlock, bool, error) 
 			ContainsSecret bool   `json:"contains_secret"`
 		}
 		if err := json.Unmarshal(block, &base); err != nil {
-			return ChatMessage{}, nil, false, fmt.Errorf("parse message block %d: %w", index, err)
+			return ChatMessage{}, false, fmt.Errorf("parse message block %d: %w", index, err)
 		}
 		blockType := strings.TrimSpace(base.Type)
 		switch blockType {
@@ -1569,20 +1519,20 @@ func decodeRawMessage(value any) (ChatMessage, []ChatMessageBlock, bool, error) 
 		case "activity-timeline":
 			timeline, err := decodeActivityTimelineBlock(block)
 			if err != nil {
-				return ChatMessage{}, nil, false, fmt.Errorf("decode activity timeline block %d: %w", index, err)
+				return ChatMessage{}, false, fmt.Errorf("decode activity timeline block %d: %w", index, err)
 			}
 			blocks = append(blocks, timeline)
-			timelines = mergeActivityTimeline(timelines, []ChatMessageBlock{timeline})
+			hasRenderableMessageBlock = true
 		default:
-			return ChatMessage{}, nil, false, fmt.Errorf("message block type %q is unsupported", blockType)
+			return ChatMessage{}, false, fmt.Errorf("message block type %q is unsupported", blockType)
 		}
 	}
 	content := strings.TrimSpace(strings.Join(contentParts, "\n\n"))
 	if content == "" && !hasRenderableMessageBlock && status != "streaming" {
-		if len(timelines) == 0 && !hasNonTextPayload {
-			return ChatMessage{}, nil, false, errors.New("message has no visible content")
+		if !hasNonTextPayload {
+			return ChatMessage{}, false, errors.New("message has no visible content")
 		}
-		return ChatMessage{}, timelines, false, nil
+		return ChatMessage{}, false, nil
 	}
 	return ChatMessage{
 		ID:          id,
@@ -1591,7 +1541,7 @@ func decodeRawMessage(value any) (ChatMessage, []ChatMessageBlock, bool, error) 
 		Status:      status,
 		CreatedAtMs: record.Timestamp,
 		Blocks:      blocks,
-	}, timelines, true, nil
+	}, true, nil
 }
 
 func decodeActivityTimelineBlock(raw json.RawMessage) (ChatMessageBlock, error) {
@@ -1707,46 +1657,6 @@ func validInputChoiceKind(kind string) bool {
 	default:
 		return false
 	}
-}
-
-func mergeActivityTimeline(primary []ChatMessageBlock, secondary []ChatMessageBlock) []ChatMessageBlock {
-	out := make([]ChatMessageBlock, 0, len(primary)+len(secondary))
-	seen := map[string]int{}
-	appendOne := func(timeline ChatMessageBlock) {
-		timeline.Type = "activity-timeline"
-		key := strings.TrimSpace(timeline.RunID) + "\x00" + strings.TrimSpace(timeline.TurnID)
-		if key == "\x00" {
-			key = fmt.Sprintf("timeline:%d", len(out))
-		}
-		if idx, ok := seen[key]; ok {
-			out[idx] = timeline
-			return
-		}
-		seen[key] = len(out)
-		out = append(out, timeline)
-	}
-	for _, timeline := range primary {
-		appendOne(timeline)
-	}
-	for _, timeline := range secondary {
-		appendOne(timeline)
-	}
-	return out
-}
-
-func withRunIDActivityTimeline(items []ChatMessageBlock, runID string) []ChatMessageBlock {
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
-		return items
-	}
-	out := make([]ChatMessageBlock, 0, len(items))
-	for _, item := range items {
-		if strings.TrimSpace(item.RunID) == "" {
-			item.RunID = runID
-		}
-		out = append(out, item)
-	}
-	return out
 }
 
 func normalizeChatMessageRole(role string) (string, bool) {

@@ -239,8 +239,6 @@ export function mapDesktopFlowerThread(thread: DesktopFlowerHostThread): FlowerT
     source_label: thread.source_label,
     target_labels: thread.target_labels,
     messages: thread.messages.map(mapMessage),
-    ...(thread.activity_timeline ? { activity_timeline: thread.activity_timeline } : {}),
-    ...(thread.todo_snapshot !== undefined ? { todo_snapshot: thread.todo_snapshot } : {}),
     ...(thread.input_request ? { input_request: mapInputRequest(thread.input_request) } : {}),
     ...(thread.error !== undefined ? { error: thread.error } : {}),
     read_status: thread.read_status,

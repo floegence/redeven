@@ -430,7 +430,7 @@ describe('Flower surface adapter for the host', () => {
     expect(mapDesktopFlowerThread({ ...desktopThread(), read_status: desktopReadStatus(false) }).read_status.is_unread).toBe(false);
   });
 
-  it('preserves streaming blocks, activity timelines, todos, and run errors from Desktop IPC', () => {
+  it('preserves streaming blocks, activity timelines, and run errors from Desktop IPC', () => {
     const mapped = mapDesktopFlowerThread({
       ...desktopThread(),
       status: 'failed',
@@ -448,22 +448,6 @@ describe('Flower surface adapter for the host', () => {
           ],
         },
       ],
-      activity_timeline: [desktopActivityTimeline()],
-      todo_snapshot: {
-        version: 4,
-        updated_at_ms: 5,
-        summary: {
-          total: 2,
-          pending: 0,
-          in_progress: 0,
-          completed: 2,
-          cancelled: 0,
-        },
-        todos: [
-          { id: 'todo-1', content: 'Inspect context', status: 'completed' },
-          { id: 'todo-2', content: 'Write answer', status: 'completed' },
-        ],
-      },
       error: {
         code: 'failed',
         message: 'provider rejected request',
@@ -485,7 +469,7 @@ describe('Flower surface adapter for the host', () => {
         }),
       ],
     });
-    expect(mapped.activity_timeline?.[0]).toMatchObject({
+    expect(mapped.messages[0]?.blocks?.[2]).toMatchObject({
       type: 'activity-timeline',
       run_id: 'run-1',
       summary: {
@@ -498,21 +482,6 @@ describe('Flower surface adapter for the host', () => {
       items: [
         expect.objectContaining({ item_id: 'tool-terminal', tool_name: 'terminal.exec' }),
         expect.objectContaining({ item_id: 'tool-done', tool_name: 'task_complete' }),
-      ],
-    });
-    expect(mapped.todo_snapshot).toEqual({
-      version: 4,
-      updated_at_ms: 5,
-      summary: {
-        total: 2,
-        pending: 0,
-        in_progress: 0,
-        completed: 2,
-        cancelled: 0,
-      },
-      todos: [
-        { id: 'todo-1', content: 'Inspect context', status: 'completed' },
-        { id: 'todo-2', content: 'Write answer', status: 'completed' },
       ],
     });
     expect(mapped.read_status.is_unread).toBe(false);

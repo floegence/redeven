@@ -1508,22 +1508,6 @@ describe('FlowerSurface navigation', () => {
       created_at_ms: 3_000,
       updated_at_ms: 3_100,
       status: 'running',
-      activity_timeline: [
-        activityTimeline({
-          status: 'running',
-          severity: 'normal',
-          needs_attention: true,
-          items: [activityItem({
-            item_id: 'tool-read',
-            tool_id: 'tool-read',
-            tool_name: 'file.read',
-            status: 'running',
-            severity: 'normal',
-            needs_attention: true,
-            metadata: { target: 'AGENTS.md' },
-          })],
-        }),
-      ],
       error: {
         code: 'failed',
         message: 'Provider returned a structured failure.',
@@ -1535,6 +1519,23 @@ describe('FlowerSurface navigation', () => {
           content: 'Loaded detail stays visible.',
           status: 'complete',
           created_at_ms: 3_100,
+          blocks: [
+            { type: 'markdown', content: 'Loaded detail stays visible.' },
+            activityTimeline({
+              status: 'running',
+              severity: 'normal',
+              needs_attention: true,
+              items: [activityItem({
+                item_id: 'tool-read',
+                tool_id: 'tool-read',
+                tool_name: 'file.read',
+                status: 'running',
+                severity: 'normal',
+                needs_attention: true,
+                metadata: { target: 'AGENTS.md' },
+              })],
+            }),
+          ],
         },
       ],
     });
@@ -1542,7 +1543,6 @@ describe('FlowerSurface navigation', () => {
       ...detailedThread,
       updated_at_ms: 3_500,
       messages: [],
-      activity_timeline: undefined,
       error: undefined,
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [detailedThread];
@@ -1570,7 +1570,7 @@ describe('FlowerSurface navigation', () => {
 
     expect(host.textContent).toContain('Loaded detail stays visible.');
     expect(host.textContent).toContain('file.read');
-    expect(host.querySelector('.flower-host-tool-activity')).toBeTruthy();
+    expect(host.querySelector('.flower-host-activity-inline')).toBeTruthy();
     expect(host.querySelector('.flower-host-error-card')?.textContent).toContain('Provider returned a structured failure.');
   });
 
@@ -1652,23 +1652,6 @@ describe('FlowerSurface navigation', () => {
       updated_at_ms: 3_900,
       status: 'waiting_user',
       input_request: inputRequest(),
-      activity_timeline: [
-        activityTimeline({
-          status: 'waiting',
-          severity: 'blocking',
-          needs_attention: true,
-          items: [activityItem({
-            item_id: 'tool-ask-user',
-            tool_id: 'tool-ask-user',
-            tool_name: 'ask_user',
-            kind: 'control',
-            status: 'waiting',
-            severity: 'blocking',
-            needs_attention: true,
-            attention_reasons: ['waiting'],
-          })],
-        }),
-      ],
       messages: [
         {
           id: 'm-waiting-input',
@@ -1676,6 +1659,24 @@ describe('FlowerSurface navigation', () => {
           content: 'I need one choice before continuing.',
           status: 'complete',
           created_at_ms: 3_900,
+          blocks: [
+            { type: 'markdown', content: 'I need one choice before continuing.' },
+            activityTimeline({
+              status: 'waiting',
+              severity: 'blocking',
+              needs_attention: true,
+              items: [activityItem({
+                item_id: 'tool-ask-user',
+                tool_id: 'tool-ask-user',
+                tool_name: 'ask_user',
+                kind: 'control',
+                status: 'waiting',
+                severity: 'blocking',
+                needs_attention: true,
+                attention_reasons: ['waiting'],
+              })],
+            }),
+          ],
         },
       ],
     });
@@ -1694,7 +1695,7 @@ describe('FlowerSurface navigation', () => {
     expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Where should Flower deploy this change?');
     expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Staging');
     expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Production');
-    expect(host.querySelector('.flower-host-tool-activity')?.textContent).toContain('ask_user');
+    expect(host.querySelector('.flower-host-activity-inline')?.textContent).toContain('Requested input');
     expect(host.querySelector('.flower-host-streaming-cursor')).toBeNull();
     expect(host.querySelectorAll('textarea')).toHaveLength(1);
     expect((host.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
@@ -1885,7 +1886,6 @@ describe('FlowerSurface navigation', () => {
       updated_at_ms: 4_200,
       status: 'success' as const,
       messages: [],
-      activity_timeline: undefined,
       input_request: undefined,
       error: undefined,
     };
@@ -1984,7 +1984,6 @@ describe('FlowerSurface navigation', () => {
       ...detailedThread,
       updated_at_ms: 4_500,
       messages: [],
-      activity_timeline: undefined,
       error: undefined,
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [selectedThread, detailedThread];
@@ -2022,7 +2021,6 @@ describe('FlowerSurface navigation', () => {
       created_at_ms: 4_800,
       updated_at_ms: 4_900,
       messages: [],
-      activity_timeline: undefined,
       error: undefined,
     });
     let loadStarted = false;
@@ -2087,7 +2085,7 @@ describe('FlowerSurface navigation', () => {
     expect(host.textContent).toContain('Streaming partial answer');
   });
 
-  it('shows completed Flower activity as a digest before expanding every tool name', async () => {
+  it('shows completed Flower activity inline between assistant text blocks', async () => {
     const tool_names = [
       'terminal.exec',
       'terminal.exec',
@@ -2103,43 +2101,29 @@ describe('FlowerSurface navigation', () => {
       created_at_ms: 6_000,
       updated_at_ms: 6_500,
       status: 'success',
-      activity_timeline: [
-        activityTimeline({
-          run_id: 'run-tools',
-          turn_id: 'm-tools',
-          items: tool_names.map((tool_name, index) => activityItem({
-            item_id: `item-${index}`,
-            tool_id: `tool-${index}`,
-            tool_name,
-            kind: tool_name === 'task_complete' ? 'control' : 'tool',
-            status: 'success',
-            severity: 'quiet',
-          })),
-        }),
-      ],
-      todo_snapshot: {
-        version: 4,
-        updated_at_ms: 6_450,
-        summary: {
-          total: 3,
-          pending: 0,
-          in_progress: 0,
-          completed: 3,
-          cancelled: 0,
-        },
-        todos: [
-          { id: 'search', content: 'Search recent AI agent updates', status: 'completed' },
-          { id: 'synthesize', content: 'Synthesize findings', status: 'completed' },
-          { id: 'present', content: 'Draft final answer', status: 'completed' },
-        ],
-      },
       messages: [
         {
           id: 'm-tools',
           role: 'assistant',
-          content: 'I finished the answer before the audit trail.',
+          content: 'I will check the workspace.\n\nI finished the answer after the audit trail.',
           status: 'complete',
           created_at_ms: 6_500,
+          blocks: [
+            { type: 'markdown', content: 'I will check the workspace.' },
+            activityTimeline({
+              run_id: 'run-tools',
+              turn_id: 'm-tools',
+              items: tool_names.map((tool_name, index) => activityItem({
+                item_id: `item-${index}`,
+                tool_id: `tool-${index}`,
+                tool_name,
+                kind: tool_name === 'task_complete' ? 'control' : 'tool',
+                status: 'success',
+                severity: 'quiet',
+              })),
+            }),
+            { type: 'markdown', content: 'I finished the answer after the audit trail.' },
+          ],
         },
       ],
     });
@@ -2151,24 +2135,117 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-tools"] button')));
     (host.querySelector('[data-thread-id="thread-tools"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('.flower-host-tool-activity')));
+    await waitFor(() => Boolean(host.querySelector('.flower-host-activity-inline')));
 
-    expect(host.textContent).toContain('I finished the answer before the audit trail.');
-    expect(host.querySelector('.flower-host-tool-activity-heading')?.textContent).toContain('Tool activity');
-    expect(host.textContent).toContain('Ran 5 commands · Updated todos · Completed');
-    expect(host.textContent).toContain('3 / 3 completed');
+    const transcriptText = host.textContent ?? '';
+    expect(transcriptText.indexOf('I will check the workspace.')).toBeLessThan(transcriptText.indexOf('Ran command'));
+    expect(transcriptText.indexOf('Ran command')).toBeLessThan(transcriptText.indexOf('I finished the answer after the audit trail.'));
+    expect(host.querySelector('.flower-host-tool-activity')).toBeNull();
+    expect(host.querySelector('.flower-host-todo-snapshot')).toBeNull();
+    expect(host.textContent).not.toContain('3 / 3 completed');
     expect(host.textContent).not.toContain('Draft final answer');
-    expect(host.querySelectorAll('.flower-host-tool-activity-item')).toHaveLength(0);
-
-    (host.querySelector('.flower-host-activity-digest-button') as HTMLButtonElement).click();
-    await waitFor(() => host.querySelectorAll('.flower-host-tool-activity-item').length === tool_names.length);
+    expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(tool_names.length);
     for (const tool_name of tool_names) {
       expect(host.textContent).toContain(tool_name);
     }
-    expect(host.querySelector('.flower-host-tool-activity-item')?.getAttribute('aria-label')).toContain('terminal.exec');
+    expect(host.querySelector('.flower-host-activity-inline-row')?.getAttribute('aria-label')).toContain('terminal.exec');
+  });
 
-    (host.querySelector('.flower-host-todo-snapshot-head') as HTMLButtonElement).click();
-    await waitFor(() => host.textContent?.includes('Draft final answer') ?? false);
+  it('refreshes inline activity when message block fields change in place', async () => {
+    const runningActivity = activityTimeline({
+      run_id: 'run-refresh-block',
+      turn_id: 'm-refresh-block',
+      status: 'running',
+      severity: 'normal',
+      needs_attention: true,
+      items: [activityItem({
+        item_id: 'tool-refresh',
+        tool_id: 'tool-refresh',
+        tool_name: 'terminal.exec',
+        status: 'running',
+        severity: 'normal',
+        needs_attention: true,
+        started_at_unix_ms: 6_000,
+        metadata: { command: 'npm test' },
+      })],
+    });
+    const completeActivity = activityTimeline({
+      run_id: 'run-refresh-block',
+      turn_id: 'm-refresh-block',
+      status: 'success',
+      severity: 'quiet',
+      needs_attention: false,
+      items: [activityItem({
+        item_id: 'tool-refresh',
+        tool_id: 'tool-refresh',
+        tool_name: 'terminal.exec',
+        status: 'success',
+        severity: 'quiet',
+        needs_attention: false,
+        started_at_unix_ms: 6_000,
+        ended_at_unix_ms: 7_250,
+        metadata: { command: 'npm test' },
+      })],
+    });
+    const runningThread = thread({
+      thread_id: 'thread-refresh-block',
+      title: 'Refresh block',
+      created_at_ms: 6_000,
+      updated_at_ms: 6_100,
+      status: 'idle',
+      messages: [
+        {
+          id: 'm-refresh-block',
+          role: 'assistant',
+          content: 'Running tests.',
+          status: 'complete',
+          created_at_ms: 6_100,
+          blocks: [
+            { type: 'markdown', content: 'Running tests.' },
+            runningActivity,
+          ],
+        },
+      ],
+    });
+    const completeThread = {
+      ...runningThread,
+      updated_at_ms: 6_200,
+      status: 'success' as const,
+      messages: [
+        {
+          id: 'm-refresh-block',
+          role: 'assistant' as const,
+          content: 'Running tests.\n\nTests passed.',
+          status: 'complete' as const,
+          created_at_ms: 6_100,
+          blocks: [
+            { type: 'markdown' as const, content: 'Running tests.' },
+            completeActivity,
+            { type: 'markdown' as const, content: 'Tests passed.' },
+          ],
+        },
+      ],
+    };
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
+    const loadThread = vi.fn(async () => (loadThread.mock.calls.length === 1 ? runningThread : completeThread));
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => listSnapshot),
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-refresh-block"] button')));
+    (host.querySelector('[data-thread-id="thread-refresh-block"] button') as HTMLButtonElement).click();
+    await waitFor(() => host.querySelector('.flower-host-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'running');
+
+    listSnapshot = [completeThread];
+    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+
+    await waitFor(() => host.querySelector('.flower-host-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'success');
+    expect(host.textContent).toContain('Done');
+    expect(host.textContent).toContain('1s');
+    expect(host.textContent).toContain('Tests passed.');
+    expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('keeps waiting activity visible even if a timeline summary is marked digest', async () => {
@@ -2178,26 +2255,6 @@ describe('FlowerSurface navigation', () => {
       created_at_ms: 6_700,
       updated_at_ms: 6_900,
       status: 'waiting_user',
-      activity_timeline: [
-        activityTimeline({
-          run_id: 'run-waiting',
-          turn_id: 'm-waiting',
-          status: 'success',
-          severity: 'quiet',
-          needs_attention: true,
-          items: [activityItem({
-            item_id: 'tool-ask',
-            tool_id: 'tool-ask',
-            tool_name: 'ask_user',
-            kind: 'control',
-            status: 'waiting',
-            severity: 'blocking',
-            needs_attention: true,
-            attention_reasons: ['waiting'],
-            metadata: { prompt: 'Choose a target before continuing.' },
-          })],
-        }),
-      ],
       messages: [
         {
           id: 'm-waiting',
@@ -2205,6 +2262,27 @@ describe('FlowerSurface navigation', () => {
           content: 'I need one choice.',
           status: 'complete',
           created_at_ms: 6_900,
+          blocks: [
+            { type: 'markdown', content: 'I need one choice.' },
+            activityTimeline({
+              run_id: 'run-waiting',
+              turn_id: 'm-waiting',
+              status: 'success',
+              severity: 'quiet',
+              needs_attention: true,
+              items: [activityItem({
+                item_id: 'tool-ask',
+                tool_id: 'tool-ask',
+                tool_name: 'ask_user',
+                kind: 'control',
+                status: 'waiting',
+                severity: 'blocking',
+                needs_attention: true,
+                attention_reasons: ['waiting'],
+                metadata: { prompt: 'Choose a target before continuing.' },
+              })],
+            }),
+          ],
         },
       ],
     });
@@ -2218,8 +2296,8 @@ describe('FlowerSurface navigation', () => {
     (host.querySelector('[data-thread-id="thread-waiting-activity"] button') as HTMLButtonElement).click();
     await waitFor(() => host.textContent?.includes('Requested input') ?? false);
 
-    expect(host.querySelectorAll('.flower-host-tool-activity-item')).toHaveLength(1);
-    expect(host.querySelector('.flower-host-activity-digest-button')?.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(1);
+    expect(host.querySelector('.flower-host-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
   });
 
   it.each([
@@ -2248,27 +2326,6 @@ describe('FlowerSurface navigation', () => {
       created_at_ms: 6_910,
       updated_at_ms: 6_950,
       status: scenario.status === 'running' ? 'running' : scenario.status === 'error' ? 'failed' : 'waiting_user',
-      activity_timeline: [
-        activityTimeline({
-          run_id: `run-${scenario.name}`,
-          turn_id: `m-${scenario.name}`,
-          status: 'success',
-          severity: 'quiet',
-          needs_attention: true,
-          items: [activityItem({
-            item_id: `item-${scenario.name}`,
-            tool_id: `tool-${scenario.name}`,
-            tool_name: scenario.requires_approval ? 'terminal.exec' : 'shell.exec',
-            kind: 'tool',
-            status: scenario.status,
-            severity: scenario.severity,
-            needs_attention: true,
-            requires_approval: scenario.requires_approval ?? false,
-            approval_state: scenario.approval_state,
-            metadata: scenario.description ? { detail: scenario.description } : undefined,
-          })],
-        }),
-      ],
       messages: [
         {
           id: `m-${scenario.name}`,
@@ -2276,6 +2333,28 @@ describe('FlowerSurface navigation', () => {
           content: `Working on ${scenario.name}.`,
           status: scenario.status === 'error' ? 'error' : 'complete',
           created_at_ms: 6_950,
+          blocks: [
+            { type: 'markdown', content: `Working on ${scenario.name}.` },
+            activityTimeline({
+              run_id: `run-${scenario.name}`,
+              turn_id: `m-${scenario.name}`,
+              status: 'success',
+              severity: 'quiet',
+              needs_attention: true,
+              items: [activityItem({
+                item_id: `item-${scenario.name}`,
+                tool_id: `tool-${scenario.name}`,
+                tool_name: scenario.requires_approval ? 'terminal.exec' : 'shell.exec',
+                kind: 'tool',
+                status: scenario.status,
+                severity: scenario.severity,
+                needs_attention: true,
+                requires_approval: scenario.requires_approval ?? false,
+                approval_state: scenario.approval_state,
+                metadata: scenario.description ? { detail: scenario.description } : undefined,
+              })],
+            }),
+          ],
         },
       ],
     });
@@ -2287,10 +2366,14 @@ describe('FlowerSurface navigation', () => {
 
     await waitFor(() => Boolean(host.querySelector(`[data-thread-id="thread-${scenario.name}-activity"] button`)));
     (host.querySelector(`[data-thread-id="thread-${scenario.name}-activity"] button`) as HTMLButtonElement).click();
-    await waitFor(() => host.querySelectorAll('.flower-host-tool-activity-item').length === 1);
+    await waitFor(() => host.querySelectorAll('.flower-host-activity-inline-row').length === 1);
 
-    expect(host.querySelectorAll('.flower-host-tool-activity-item')).toHaveLength(1);
-    expect(host.querySelector('.flower-host-activity-digest-button')?.getAttribute('aria-expanded')).toBe('true');
+    expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(1);
+    if (scenario.name === 'running') {
+      expect(host.querySelector('.flower-host-activity-inline-button')?.getAttribute('aria-expanded')).toBeNull();
+    } else {
+      expect(host.querySelector('.flower-host-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
+    }
   });
 
   it('renders run and message errors as structured error cards', async () => {

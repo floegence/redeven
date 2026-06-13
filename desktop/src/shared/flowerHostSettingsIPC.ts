@@ -275,26 +275,6 @@ export type DesktopFlowerHostActivityTimelineBlock = Readonly<{
 
 export type DesktopFlowerHostChatMessageBlock = DesktopFlowerHostChatTextBlock | DesktopFlowerHostActivityTimelineBlock;
 
-export type DesktopFlowerHostTodoItem = Readonly<{
-  id: string;
-  content: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
-  note?: string;
-}>;
-
-export type DesktopFlowerHostTodoSnapshot = Readonly<{
-  version: number;
-  updated_at_ms: number;
-  summary: Readonly<{
-    total: number;
-    pending: number;
-    in_progress: number;
-    completed: number;
-    cancelled: number;
-  }>;
-  todos: readonly DesktopFlowerHostTodoItem[];
-}>;
-
 export type DesktopFlowerHostInputAction = Readonly<{
   type: string;
   mode?: string;
@@ -379,8 +359,6 @@ export type DesktopFlowerHostThread = Readonly<{
   source_label: string;
   target_labels: readonly string[];
   messages: readonly DesktopFlowerHostChatMessage[];
-  activity_timeline?: readonly DesktopFlowerHostActivityTimelineBlock[];
-  todo_snapshot?: DesktopFlowerHostTodoSnapshot | null;
   input_request?: DesktopFlowerHostInputRequest | null;
   error?: DesktopFlowerHostThreadError | null;
   read_status: DesktopFlowerHostThreadReadStatus;
