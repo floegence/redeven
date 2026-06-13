@@ -63,15 +63,49 @@ describe('groupFlowerThreadItems', () => {
 });
 
 describe('flowerThreadIndicator', () => {
-  it('shows wave only for the selected running thread', () => {
+  it('shows wave for every running thread regardless of selection or unread state', () => {
     expect(flowerThreadIndicator(thread({ status: 'running' }), true).visual).toBe('wave');
-    expect(flowerThreadIndicator(thread({ status: 'running' }), false).visual).toBe('working');
+    expect(flowerThreadIndicator(thread({ status: 'running' }), false).visual).toBe('wave');
+    expect(flowerThreadIndicator(thread({ status: 'running', read_status: readStatus(true) }), false)).toMatchObject({
+      visual: 'wave',
+      attention: 'none',
+      actionRequired: false,
+    });
   });
 
-  it('preserves terminal lifecycle dots with unread attention', () => {
-    const indicator = flowerThreadIndicator(thread({ status: 'success', read_status: readStatus(true) }), false);
-    expect(indicator.visual).toBe('success');
-    expect(indicator.attention).toBe('unread');
+  it('shows a generic unread dot for terminal unread threads and no dot once read', () => {
+    for (const status of ['success', 'failed', 'canceled', 'idle', 'read_only'] as const) {
+      expect(flowerThreadIndicator(thread({ status, read_status: readStatus(true) }), false)).toMatchObject({
+        visual: 'dot',
+        attention: 'unread',
+        actionRequired: false,
+      });
+      expect(flowerThreadIndicator(thread({ status, read_status: readStatus(false) }), false)).toMatchObject({
+        visual: 'none',
+        attention: 'none',
+        actionRequired: false,
+      });
+    }
+  });
+
+  it('keeps waiting prompts actionable while the sidebar dot still means unread', () => {
+    for (const status of ['waiting_user', 'waiting_approval'] as const) {
+      expect(flowerThreadIndicator(thread({ status, read_status: readStatus(false) }), false)).toMatchObject({
+        visual: 'none',
+        attention: 'none',
+        actionRequired: true,
+      });
+      expect(flowerThreadIndicator(thread({ status, read_status: readStatus(true) }), false)).toMatchObject({
+        visual: 'dot',
+        attention: 'unread',
+        actionRequired: true,
+      });
+      expect(flowerThreadIndicator(thread({ status, read_status: readStatus(true) }), true)).toMatchObject({
+        visual: 'none',
+        attention: 'unread',
+        actionRequired: true,
+      });
+    }
   });
 });
 

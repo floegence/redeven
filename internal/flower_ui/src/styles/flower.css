@@ -2733,7 +2733,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   animation: redeven-flower-breathe 2.8s ease-in-out 1.35s infinite;
 }
 
-/* ---- thread card lifecycle indicator ---- */
+/* ---- thread card live/read indicator ---- */
 .flower-host-thread-indicator {
   width: 16px;
 }
@@ -2775,39 +2775,13 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   display: flex;
 }
 
-[data-flower-thread-indicator='working'] .flower-host-thread-status-dot,
-[data-flower-thread-indicator='waiting'] .flower-host-thread-status-dot,
-[data-flower-thread-indicator='approval'] .flower-host-thread-status-dot,
-[data-flower-thread-indicator='success'] .flower-host-thread-status-dot,
-[data-flower-thread-indicator='failed'] .flower-host-thread-status-dot,
-[data-flower-thread-indicator='stopped'] .flower-host-thread-status-dot,
-[data-flower-thread-indicator='idle'] .flower-host-thread-status-dot {
+[data-flower-thread-indicator='dot'] .flower-host-thread-status-dot {
   display: block;
-}
-
-[data-flower-thread-indicator='working'] .flower-host-thread-status-dot {
   background: var(--primary);
 }
 
-[data-flower-thread-indicator='waiting'] .flower-host-thread-status-dot,
-[data-flower-thread-indicator='approval'] .flower-host-thread-status-dot {
+[data-flower-thread-action-required='true'] .flower-host-thread-status-dot {
   background: var(--warning, #f59e0b);
-}
-
-[data-flower-thread-indicator='success'] .flower-host-thread-status-dot {
-  background: var(--success, #16a34a);
-}
-
-[data-flower-thread-indicator='failed'] .flower-host-thread-status-dot {
-  background: var(--error, #ef4444);
-}
-
-[data-flower-thread-indicator='stopped'] .flower-host-thread-status-dot {
-  background: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
-}
-
-[data-flower-thread-indicator='idle'] .flower-host-thread-status-dot {
-  background: color-mix(in srgb, var(--muted-foreground) 34%, transparent);
 }
 
 [data-flower-thread-unread='true'] .flower-host-thread-status-dot,

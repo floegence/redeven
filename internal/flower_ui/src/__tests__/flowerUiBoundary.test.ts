@@ -90,6 +90,17 @@ describe('shared Flower UI boundary', () => {
     expect(cssSrc).not.toContain('flower-component-nav-item');
   });
 
+  it('keeps thread sidebar indicators as visual primitives instead of lifecycle color dots', () => {
+    const modelSrc = readText(path.join(flowerRoot, 'threads', 'threadListModel.ts'));
+    const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
+    const staleVisuals = ['working', 'waiting', 'approval', 'success', 'failed', 'stopped', 'idle'];
+
+    expect(modelSrc).toContain("visual: 'none' | 'wave' | 'dot'");
+    for (const visual of staleVisuals) {
+      expect(cssSrc).not.toContain(`data-flower-thread-indicator='${visual}'`);
+    }
+  });
+
   it('keeps Flower settings mounted and saves provider dialogs directly', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
     const settingsSrc = readText(path.join(flowerRoot, 'settings', 'FlowerSettingsSurface.tsx'));

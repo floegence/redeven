@@ -946,8 +946,8 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-wave"] button')));
     const cardBeforeClick = host.querySelector('[data-thread-id="thread-running-wave"]') as HTMLElement;
     expect(cardBeforeClick.getAttribute('data-flower-thread-status')).toBe('running');
-    expect(cardBeforeClick.getAttribute('data-flower-thread-unread')).toBe('true');
-    expect(cardBeforeClick.getAttribute('data-flower-thread-indicator')).toBe('working');
+    expect(cardBeforeClick.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(cardBeforeClick.getAttribute('data-flower-thread-indicator')).toBe('wave');
     const waveBeforeClick = cardBeforeClick.querySelector('.flower-host-thread-wave');
     expect(waveBeforeClick).toBeTruthy();
 
@@ -955,7 +955,7 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => loadThread.mock.calls.length > 0);
     const waveAfterSelect = host.querySelector('[data-thread-id="thread-running-wave"] .flower-host-thread-wave');
     expect(waveAfterSelect).toBeTruthy();
-    expect(waveAfterSelect).not.toBe(waveBeforeClick);
+    expect(waveAfterSelect).toBe(waveBeforeClick);
     expect(host.querySelector('[data-thread-id="thread-running-wave"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
 
     await waitFor(() => loadThread.mock.calls.length > 1);
@@ -1148,6 +1148,8 @@ describe('FlowerSurface navigation', () => {
     (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
     await waitFor(() => host.textContent?.includes('Final selected update') ?? false, 2500);
     expect(host.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('success');
+    expect(host.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-indicator')).toBe('none');
+    expect(host.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
     expect(markThreadRead).toHaveBeenCalledTimes(1);
 
     firstRead.resolve({
@@ -1638,7 +1640,7 @@ describe('FlowerSurface navigation', () => {
     await wait(1250);
     await flush();
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
-    await waitFor(() => host.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-indicator') === 'success');
+    await waitFor(() => host.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-indicator') === 'dot');
     expect(host.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
   });
 
