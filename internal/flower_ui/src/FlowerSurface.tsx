@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, Check, ChevronDown, Clock, GripVertical, Plus, Send, Settings, Terminal, Zap } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, GripVertical, Plus, Settings, Terminal, Zap } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -1239,24 +1239,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       </Show>
                     </div>
                   </Show>
-                  <Button
-                    variant="primary"
-                    icon={Send}
-                    class="flower-host-composer-submit"
-                    disabled={selectedInputRequest()
-                      ? inputSubmitting() || !inputRequestReadyToSubmit()
-                      : chatRunning() || !readyForChat() || !readyHandlerDecision() || !trimString(chatDraft())}
-                    loading={selectedInputRequest() ? inputSubmitting() : chatRunning()}
-                    onClick={() => void submitChat()}
+                  <Show
+                    when={selectedInputRequest()}
+                    fallback={(
+                      <Button
+                        variant="primary"
+                        icon={ArrowUp}
+                        size="icon"
+                        class="flower-host-composer-submit rounded-full"
+                        disabled={chatRunning() || !readyForChat() || !readyHandlerDecision() || !trimString(chatDraft())}
+                        loading={chatRunning()}
+                        onClick={() => void submitChat()}
+                      />
+                    )}
                   >
-                    {selectedInputRequest()
-                      ? inputSubmitting()
+                    <Button
+                      variant="primary"
+                      icon={ArrowUp}
+                      class="flower-host-composer-submit"
+                      disabled={inputSubmitting() || !inputRequestReadyToSubmit()}
+                      loading={inputSubmitting()}
+                      onClick={() => void submitChat()}
+                    >
+                      {inputSubmitting()
                         ? chatCopyValue('inputRequestSubmitting', 'Submitting...')
                         : inputSubmitError()
                           ? chatCopyValue('inputRequestRetry', 'Retry')
-                          : chatCopyValue('inputRequestSubmit', 'Continue')
-                      : copy().chat.send}
-                  </Button>
+                          : chatCopyValue('inputRequestSubmit', 'Continue')}
+                    </Button>
+                  </Show>
                 </Show>
               </div>
             </div>
