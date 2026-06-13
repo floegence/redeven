@@ -2,7 +2,7 @@ import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, Folder, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, X } from '@floegence/floe-webapp-core/icons';
-import { Input, ProcessingIndicator, Tag } from '@floegence/floe-webapp-core/ui';
+import { Input, Tag } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerThreadListCopy, FlowerThreadTimeGroup } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -86,7 +86,6 @@ export type FlowerThreadCardProps = Readonly<{
 export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.threadList;
   const title = () => props.item.title.trim() || copy().untitled;
-  const running = () => props.item.status === 'running';
 
   return (
     <div
@@ -116,10 +115,14 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           }
         }}
       >
-        <div class="relative mt-1.5 h-2 w-2 shrink-0">
-          <Show when={running()} fallback={<div class={cn('h-2 w-2 rounded-full', statusDotClass(props.item.status))} title={statusLabel(props.item.status, copy())} />}>
-            <ProcessingIndicator variant="minimal" status={copy().working} class="flower-host-thread-card-dot-indicator" />
-          </Show>
+        <div class="relative mt-1.5 flex h-2 shrink-0 items-center">
+          <div class="flower-host-thread-wave hidden h-2 items-center gap-0.5">
+            <div class="flower-host-thread-wave-bar" style="animation-delay: 0ms" />
+            <div class="flower-host-thread-wave-bar" style="animation-delay: 180ms" />
+            <div class="flower-host-thread-wave-bar" style="animation-delay: 360ms" />
+            <div class="flower-host-thread-wave-bar" style="animation-delay: 540ms" />
+          </div>
+          <div class={cn('flower-host-thread-dot h-2 w-2 rounded-full', statusDotClass(props.item.status))} title={statusLabel(props.item.status, copy())} />
         </div>
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div class="flex min-w-0 items-center gap-1">

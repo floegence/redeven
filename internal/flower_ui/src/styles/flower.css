@@ -2437,10 +2437,52 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   animation: redeven-flower-breathe 2.8s ease-in-out 1.35s infinite;
 }
 
+/* ---- thread card working wave indicator ---- */
+.flower-host-thread-wave-bar {
+  width: 2px;
+  border-radius: 9999px;
+  background: var(--primary);
+  animation: flower-thread-wave 2.4s ease-in-out infinite;
+}
+
+@keyframes flower-thread-wave {
+  0%,
+  100% {
+    height: 3px;
+  }
+  25% {
+    height: 8px;
+  }
+  50% {
+    height: 5px;
+  }
+  75% {
+    height: 7px;
+  }
+}
+
+/* visibility toggled via parent data-flower-thread-status */
+.flower-host-thread-dot {
+  display: block;
+}
+
+.flower-host-thread-wave {
+  display: none;
+}
+
+[data-flower-thread-status='running'] .flower-host-thread-wave {
+  display: flex;
+}
+
+[data-flower-thread-status='running'] .flower-host-thread-dot {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flower-host-streaming-cursor,
   .redeven-flower-icon-spin,
-  .redeven-flower-icon-breathe {
+  .redeven-flower-icon-breathe,
+  .flower-host-thread-wave-bar {
     animation: none !important;
     transform: none !important;
   }
