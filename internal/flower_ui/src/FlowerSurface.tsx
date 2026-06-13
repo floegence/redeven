@@ -1247,6 +1247,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         icon={ArrowUp}
                         size="icon"
                         class="flower-host-composer-submit rounded-full"
+                        aria-label={copy().chat.send}
+                        title={copy().chat.send}
                         disabled={chatRunning() || !readyForChat() || !readyHandlerDecision() || !trimString(chatDraft())}
                         loading={chatRunning()}
                         onClick={() => void submitChat()}
