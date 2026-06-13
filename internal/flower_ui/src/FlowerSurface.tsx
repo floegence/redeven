@@ -138,7 +138,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     },
   );
   const selectedThreadRunErrorMessage = createMemo(() => trimString(selectedThread()?.error?.message));
-  const threadItems = createMemo(() => threads().map(projectFlowerThreadListItem));
+  const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
+  const threadItems = createMemo(() =>
+    threads().map((t) => {
+      const sig = `${t.status}|${t.title}|${Number(t.pinned_at_ms ?? 0)}|${t.created_at_ms}|${t.source_label ?? ''}|${t.model_id ?? ''}|${t.target_labels?.join(',') ?? ''}|${t.working_dir ?? ''}`;
+      const cached = threadItemCache.get(t.thread_id);
+      if (cached && cached.sig === sig) {
+        return cached.item;
+      }
+      const item = projectFlowerThreadListItem(t);
+      threadItemCache.set(t.thread_id, { item, sig });
+      return item;
+    }),
+  );
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
   const renameUnchanged = createMemo(() => trimString(renameDraft()) === trimString(renameOriginalTitle()));
   const currentModelID = createMemo(() => trimString(snapshot()?.config.current_model_id));
