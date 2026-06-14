@@ -169,6 +169,62 @@ body {
  * light and dark themes.
  */
 
+/* ── Dialog layout: desktop titlebar safe area ── */
+
+[data-floe-dialog-overlay-root][data-floe-dialog-mode='global'] {
+  --redeven-welcome-dialog-titlebar-offset: var(--redeven-desktop-titlebar-height);
+  --redeven-welcome-dialog-edge-gap: 1rem;
+  --redeven-welcome-dialog-available-height: max(
+    12rem,
+    calc(100dvh - var(--redeven-welcome-dialog-titlebar-offset) - (var(--redeven-welcome-dialog-edge-gap) * 2))
+  );
+  --redeven-welcome-dialog-panel-max-height: var(--redeven-welcome-dialog-available-height);
+
+  app-region: no-drag;
+  padding:
+    calc(var(--redeven-welcome-dialog-titlebar-offset) + var(--redeven-welcome-dialog-edge-gap))
+    var(--redeven-welcome-dialog-edge-gap)
+    var(--redeven-welcome-dialog-edge-gap);
+}
+
+[data-floe-dialog-overlay-root][data-floe-dialog-mode='global'] [data-floe-dialog-panel] {
+  app-region: no-drag;
+  margin-block: auto;
+  max-height: var(--redeven-welcome-dialog-panel-max-height);
+}
+
+[data-floe-dialog-overlay-root][data-floe-dialog-mode='global'] [data-floe-dialog-backdrop] {
+  app-region: no-drag;
+}
+
+.redeven-welcome-dialog-panel {
+  display: flex;
+  flex-direction: column;
+  max-width: none;
+  overflow: hidden;
+  padding: 0;
+}
+
+.redeven-welcome-dialog-panel > div:first-child {
+  border-bottom: 0;
+  padding-bottom: 0.5rem;
+}
+
+.redeven-welcome-dialog-panel > div:nth-child(2) {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  padding-top: 0.5rem;
+}
+
+.redeven-welcome-dialog-panel--settings {
+  width: min(52rem, 96vw);
+}
+
+.redeven-welcome-dialog-panel--connection {
+  width: min(58rem, 96vw);
+}
+
 /* ── Dialog backdrop: lower opacity, stronger blur ── */
 
 [data-floe-dialog-backdrop] {
