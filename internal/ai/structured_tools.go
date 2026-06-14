@@ -17,12 +17,14 @@ const (
 )
 
 type DiffHunkView struct {
-	OldStart int      `json:"old_start"`
-	OldLines int      `json:"old_lines"`
-	NewStart int      `json:"new_start"`
-	NewLines int      `json:"new_lines"`
-	Before   []string `json:"before,omitempty"`
-	After    []string `json:"after,omitempty"`
+	OldStart    int      `json:"old_start"`
+	OldLines    int      `json:"old_lines"`
+	NewStart    int      `json:"new_start"`
+	NewLines    int      `json:"new_lines"`
+	Before      []string `json:"before,omitempty"`
+	After       []string `json:"after,omitempty"`
+	BeforeKinds []string `json:"before_kinds,omitempty"`
+	AfterKinds  []string `json:"after_kinds,omitempty"`
 }
 
 type FileReadArgs struct {
@@ -54,10 +56,24 @@ type FileWriteArgs struct {
 
 type FileMutationResult struct {
 	FilePath       string         `json:"file_path"`
+	OldPath        string         `json:"old_path,omitempty"`
+	NewPath        string         `json:"new_path,omitempty"`
 	ChangeType     string         `json:"change_type"`
 	StructuredDiff []DiffHunkView `json:"structured_diff,omitempty"`
 	OriginalFile   string         `json:"original_file,omitempty"`
 	UpdatedFile    string         `json:"updated_file,omitempty"`
+	Truncated      bool           `json:"truncated,omitempty"`
+}
+
+type ApplyPatchResult struct {
+	FilesChanged     int                  `json:"files_changed"`
+	Hunks            int                  `json:"hunks"`
+	Additions        int                  `json:"additions"`
+	Deletions        int                  `json:"deletions"`
+	InputFormat      string               `json:"input_format"`
+	NormalizedFormat string               `json:"normalized_format"`
+	Files            []patchFileSummary   `json:"files"`
+	Mutations        []FileMutationResult `json:"mutations"`
 }
 
 type ExitPlanPromptRef struct {
@@ -157,26 +173,70 @@ func buildStructuredDiff(before string, after string) []DiffHunkView {
 		afterEnd = prefix
 	}
 	return []DiffHunkView{{
-		OldStart: prefix + 1,
-		OldLines: beforeEnd - prefix,
-		NewStart: prefix + 1,
-		NewLines: afterEnd - prefix,
-		Before:   append([]string(nil), beforeLines[prefix:beforeEnd]...),
-		After:    append([]string(nil), afterLines[prefix:afterEnd]...),
+		OldStart:    prefix + 1,
+		OldLines:    beforeEnd - prefix,
+		NewStart:    prefix + 1,
+		NewLines:    afterEnd - prefix,
+		Before:      append([]string(nil), beforeLines[prefix:beforeEnd]...),
+		After:       append([]string(nil), afterLines[prefix:afterEnd]...),
+		BeforeKinds: repeatedDiffLineKind("removed", beforeEnd-prefix),
+		AfterKinds:  repeatedDiffLineKind("added", afterEnd-prefix),
 	}}
 }
 
-func newFileMutationResult(filePath string, changeType string, before string, after string) FileMutationResult {
-	result := FileMutationResult{
-		FilePath:   strings.TrimSpace(filePath),
-		ChangeType: strings.TrimSpace(changeType),
+func repeatedDiffLineKind(kind string, count int) []string {
+	if count <= 0 {
+		return nil
 	}
+	out := make([]string, count)
+	for i := range out {
+		out[i] = kind
+	}
+	return out
+}
+
+func newFileMutationResult(filePath string, changeType string, before string, after string) FileMutationResult {
+	return newFileMutationResultWithPaths(filePath, "", "", changeType, before, after)
+}
+
+func newFileMutationResultWithPaths(filePath string, oldPath string, newPath string, changeType string, before string, after string) FileMutationResult {
+	result := newFileMutationResultWithStructuredDiff(filePath, oldPath, newPath, changeType, buildStructuredDiff(before, after))
 	if before != after {
-		result.StructuredDiff = buildStructuredDiff(before, after)
 		result.OriginalFile = before
 		result.UpdatedFile = after
 	}
 	return result
+}
+
+func newFileMutationResultWithStructuredDiff(filePath string, oldPath string, newPath string, changeType string, structuredDiff []DiffHunkView) FileMutationResult {
+	result := FileMutationResult{
+		FilePath:       strings.TrimSpace(filePath),
+		OldPath:        strings.TrimSpace(oldPath),
+		NewPath:        strings.TrimSpace(newPath),
+		ChangeType:     strings.TrimSpace(changeType),
+		StructuredDiff: cloneDiffHunkViews(structuredDiff),
+	}
+	return result
+}
+
+func cloneDiffHunkViews(in []DiffHunkView) []DiffHunkView {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]DiffHunkView, 0, len(in))
+	for _, hunk := range in {
+		out = append(out, DiffHunkView{
+			OldStart:    hunk.OldStart,
+			OldLines:    hunk.OldLines,
+			NewStart:    hunk.NewStart,
+			NewLines:    hunk.NewLines,
+			Before:      append([]string(nil), hunk.Before...),
+			After:       append([]string(nil), hunk.After...),
+			BeforeKinds: append([]string(nil), hunk.BeforeKinds...),
+			AfterKinds:  append([]string(nil), hunk.AfterKinds...),
+		})
+	}
+	return out
 }
 
 func normalizeFileReadWindow(offset int, limit int) (startLine int, lineLimit int) {

@@ -30,6 +30,8 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envLabel: string;
   rpc: RedevenV1Rpc;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
+  openFileBrowser?: FlowerSurfaceAdapter['openFileBrowser'];
+  openFilePreview?: FlowerSurfaceAdapter['openFilePreview'];
 }>;
 
 export type EnvLocalFlowerSurfaceAdapterCopy = Readonly<{
@@ -179,7 +181,7 @@ function validateActivityPayloadKey(key: string, field: string) {
 }
 
 function normalizeActivityJSONValue(value: unknown, field: string, depth: number): unknown {
-  if (depth > 5) {
+  if (depth > 8) {
     flowerContractError(`${field} exceeds maximum depth.`);
   }
   if (value === null || typeof value === 'boolean') return value;
@@ -942,5 +944,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       });
       return loadThread(tid);
     },
+    ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
+    ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
   };
 }

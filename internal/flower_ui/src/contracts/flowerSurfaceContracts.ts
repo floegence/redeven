@@ -387,6 +387,12 @@ export type FlowerSendMessageFailure = Error & Readonly<{
   fresh_decision?: FlowerRouterDecision;
 }>;
 
+export type FlowerFileOpenRequest = Readonly<{
+  path: string;
+  source_activity_id: string;
+  working_dir?: string;
+}>;
+
 export type FlowerSurfaceHostDescriptor = Readonly<{
   host_id: string;
   host_kind: 'global' | 'env_local';
@@ -408,4 +414,6 @@ export type FlowerSurfaceAdapter = Readonly<{
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   sendMessage: (input: FlowerSendMessageInput) => Promise<FlowerThreadSnapshot>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerThreadSnapshot>;
+  openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
+  openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
 }>;

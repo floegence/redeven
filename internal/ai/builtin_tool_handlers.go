@@ -183,6 +183,14 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 			m["truncated"] = true
 		}
 		return m, truncated
+	case "file.read":
+		return normalizeFileReadPayload(payload)
+	case "file.edit", "file.write":
+		return normalizeFileMutationPayload(payload)
+	case "apply_patch":
+		return normalizeApplyPatchPayload(payload)
+	case "write_todos":
+		return normalizeTodosPayload(payload)
 	default:
 		if payload == nil {
 			return nil, false
@@ -201,6 +209,189 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 		}
 		return normalized, false
 	}
+}
+
+func normalizeJSONCompatibleToolPayload(payload any) (any, bool) {
+	if payload == nil {
+		return nil, false
+	}
+	b, err := json.Marshal(payload)
+	if err != nil || len(b) == 0 {
+		return payload, false
+	}
+	var normalized any
+	if err := json.Unmarshal(b, &normalized); err != nil {
+		return payload, false
+	}
+	return normalized, false
+}
+
+func normalizeFileReadPayload(payload any) (any, bool) {
+	normalized, _ := normalizeJSONCompatibleToolPayload(payload)
+	record, ok := normalized.(map[string]any)
+	if !ok || record == nil {
+		return normalized, false
+	}
+	truncated := false
+	if readBoolField(record, "truncated") {
+		truncated = true
+	}
+	if content, ok := record["content"].(string); ok {
+		trimmed, hit := truncateByRunes(content, 4000)
+		record["content"] = trimmed
+		truncated = truncated || hit
+	}
+	if truncated {
+		record["truncated"] = true
+	}
+	return record, truncated
+}
+
+func normalizeTodosPayload(payload any) (any, bool) {
+	normalized, _ := normalizeJSONCompatibleToolPayload(payload)
+	record, ok := normalized.(map[string]any)
+	if !ok || record == nil {
+		return normalized, false
+	}
+	truncated := false
+	if todos, ok := record["todos"].([]any); ok {
+		truncated = truncateTodoActivityItems(todos) || truncated
+	}
+	if result, ok := record["result"].(map[string]any); ok {
+		if todos, ok := result["todos"].([]any); ok {
+			truncated = truncateTodoActivityItems(todos) || truncated
+		}
+	}
+	if args, ok := record["args"].(map[string]any); ok {
+		if todos, ok := args["todos"].([]any); ok {
+			truncated = truncateTodoActivityItems(todos) || truncated
+		}
+	}
+	if explanation, ok := record["explanation"].(string); ok {
+		trimmed, hit := truncateByRunes(explanation, 500)
+		record["explanation"] = trimmed
+		truncated = truncated || hit
+	}
+	if truncated {
+		record["truncated"] = true
+	}
+	return record, truncated
+}
+
+func truncateTodoActivityItems(items []any) bool {
+	truncated := false
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok || item == nil {
+			continue
+		}
+		for _, field := range []string{"id", "content", "note"} {
+			value, ok := item[field].(string)
+			if !ok {
+				continue
+			}
+			limit := 240
+			if field == "id" {
+				limit = 80
+			}
+			trimmed, hit := truncateByRunes(value, limit)
+			item[field] = trimmed
+			truncated = truncated || hit
+		}
+	}
+	return truncated
+}
+
+func normalizeFileMutationPayload(payload any) (any, bool) {
+	normalized, _ := normalizeJSONCompatibleToolPayload(payload)
+	record, ok := normalized.(map[string]any)
+	if !ok || record == nil {
+		return normalized, false
+	}
+	truncated := truncateFileMutationRecord(record)
+	return record, truncated
+}
+
+func normalizeApplyPatchPayload(payload any) (any, bool) {
+	normalized, _ := normalizeJSONCompatibleToolPayload(payload)
+	record, ok := normalized.(map[string]any)
+	if !ok || record == nil {
+		return normalized, false
+	}
+	truncated := false
+	if mutations, ok := record["mutations"].([]any); ok {
+		for _, raw := range mutations {
+			mutation, ok := raw.(map[string]any)
+			if !ok || mutation == nil {
+				continue
+			}
+			truncated = truncateFileMutationRecord(mutation) || truncated
+		}
+	}
+	if truncated {
+		record["truncated"] = true
+	}
+	return record, truncated
+}
+
+func truncateFileMutationRecord(record map[string]any) bool {
+	truncated := false
+	if original, ok := record["original_file"].(string); ok {
+		trimmed, hit := truncateByRunes(original, 2000)
+		record["original_file"] = trimmed
+		truncated = truncated || hit
+	}
+	if updated, ok := record["updated_file"].(string); ok {
+		trimmed, hit := truncateByRunes(updated, 2000)
+		record["updated_file"] = trimmed
+		truncated = truncated || hit
+	}
+	if hunks, ok := record["structured_diff"].([]any); ok {
+		for _, raw := range hunks {
+			hunk, ok := raw.(map[string]any)
+			if !ok || hunk == nil {
+				continue
+			}
+			truncated = truncateDiffHunkLines(hunk, "before", 4000) || truncated
+			truncated = truncateDiffHunkLines(hunk, "after", 4000) || truncated
+		}
+	}
+	if truncated {
+		record["truncated"] = true
+	}
+	return truncated
+}
+
+func truncateDiffHunkLines(hunk map[string]any, key string, maxRunes int) bool {
+	lines, ok := hunk[key].([]any)
+	if !ok || len(lines) == 0 {
+		return false
+	}
+	remaining := maxRunes
+	truncated := false
+	out := make([]any, 0, len(lines))
+	for _, raw := range lines {
+		line, ok := raw.(string)
+		if !ok {
+			out = append(out, raw)
+			continue
+		}
+		if remaining <= 0 {
+			truncated = true
+			continue
+		}
+		trimmed, hit := truncateByRunes(line, remaining)
+		out = append(out, trimmed)
+		remaining -= len([]rune(trimmed))
+		if hit {
+			truncated = true
+			remaining = 0
+		}
+	}
+	if truncated {
+		hunk[key] = out
+	}
+	return truncated
 }
 
 func truncateByRunes(in string, max int) (string, bool) {

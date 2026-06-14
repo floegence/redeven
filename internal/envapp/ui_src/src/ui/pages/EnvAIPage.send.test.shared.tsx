@@ -90,6 +90,8 @@ const mocks = vi.hoisted(() => {
 
   const sendUserTurnMock = vi.fn(async () => ({ runId: 'run-1', kind: 'start' }));
   const subscribeThreadMock = vi.fn(async () => ({ runId: 'run-subscribe' }));
+  const openFileBrowserAtPathMock = vi.fn(async () => undefined);
+  const openFilePreviewMock = vi.fn(async () => undefined);
   const listMessagesMock = vi.fn(async ({ threadId }: { threadId: string }) => ({
     messages: [{
       messageJson: {
@@ -105,6 +107,8 @@ const mocks = vi.hoisted(() => {
   return {
     fetchGatewayJSONMock,
     listMessagesMock,
+    openFileBrowserAtPathMock,
+    openFilePreviewMock,
     sendUserTurnMock,
     state,
     subscribeThreadMock,
@@ -126,6 +130,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     ChevronLeft: Icon,
     Code: Icon,
     Copy: Icon,
+    FileText: Icon,
     Folder: Icon,
     FolderOpen: Icon,
     GitBranch: Icon,
@@ -189,6 +194,8 @@ vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
     env_id: () => 'env-1',
     env: () => ({ name: 'Demo Env' }),
+    openFileBrowserAtPath: mocks.openFileBrowserAtPathMock,
+    openFilePreview: mocks.openFilePreviewMock,
   }),
 }));
 
@@ -289,6 +296,8 @@ export function registerEnvAIPageSendTests() {
       mocks.sendUserTurnMock.mockClear();
       mocks.subscribeThreadMock.mockClear();
       mocks.listMessagesMock.mockClear();
+      mocks.openFileBrowserAtPathMock.mockClear();
+      mocks.openFilePreviewMock.mockClear();
       mocks.state.omitReadState = false;
       mocks.state.threadDetailWaitingPrompt = null;
     });
@@ -469,6 +478,172 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(host.textContent).toContain('Flower contract error: activity_item.target_refs[0].line must be a non-negative integer.');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('opens Env file browser and preview from Flower file activity details', async () => {
+      mocks.listMessagesMock.mockResolvedValueOnce({
+        messages: [{
+          rowId: 1,
+          messageJson: {
+            id: 'msg-file-read',
+            role: 'assistant',
+            status: 'complete',
+            timestamp: 10,
+            blocks: [{
+              type: 'activity-timeline',
+              schema_version: 1,
+              run_id: 'run-file-read',
+              summary: {
+                status: 'success',
+                severity: 'quiet',
+                needs_attention: false,
+                total_items: 1,
+                counts: { success: 1 },
+              },
+              items: [{
+                item_id: 'tool-file-read',
+                tool_id: 'tool-file-read',
+                tool_name: 'file.read',
+                kind: 'tool',
+                status: 'success',
+                severity: 'quiet',
+                needs_attention: false,
+                requires_approval: false,
+                label: '/workspace/env-flower/src/app.ts',
+                renderer: 'file',
+                target_refs: [{ kind: 'file', label: '/workspace/env-flower/src/app.ts', path: '/workspace/env-flower/src/app.ts' }],
+                payload: {
+                  operation: 'read',
+                  file_path: '/workspace/env-flower/src/app.ts',
+                  content: 'export const app = true;\n',
+                  line_offset: 1,
+                  line_count: 1,
+                  total_lines: 1,
+                },
+              }],
+            }],
+          } as any,
+        }],
+      } as any);
+
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+        await flush();
+        expect(host.textContent).toContain('Read');
+        expect(host.textContent).toContain('/workspace/env-flower/src/app.ts');
+        (host.querySelector('[data-flower-activity-item-id="tool-file-read"] .flower-host-activity-inline-button') as HTMLButtonElement).click();
+        await flush();
+        const browse = host.querySelector('button[aria-label="Browse folder for /workspace/env-flower/src/app.ts"]') as HTMLButtonElement | null;
+        const preview = host.querySelector('button[aria-label="Preview /workspace/env-flower/src/app.ts"]') as HTMLButtonElement | null;
+        expect(browse).toBeTruthy();
+        expect(preview).toBeTruthy();
+        browse?.click();
+        preview?.click();
+        await flush();
+        expect(mocks.openFileBrowserAtPathMock).toHaveBeenCalledWith('/workspace/env-flower/src', {
+          title: 'Flower file context',
+          openStrategy: 'focus_latest_or_create',
+        });
+        expect(mocks.openFilePreviewMock).toHaveBeenCalledWith(expect.objectContaining({
+          path: '/workspace/env-flower/src/app.ts',
+          type: 'file',
+        }), {
+          focus: true,
+          reusePolicy: 'same_file_or_create',
+        });
+      } finally {
+        dispose();
+      }
+    });
+
+    it('opens Env file browser and preview from relative apply_patch diff details', async () => {
+      mocks.listMessagesMock.mockResolvedValueOnce({
+        messages: [{
+          rowId: 1,
+          messageJson: {
+            id: 'msg-patch',
+            role: 'assistant',
+            status: 'complete',
+            timestamp: 10,
+            blocks: [{
+              type: 'activity-timeline',
+              schema_version: 1,
+              run_id: 'run-patch',
+              summary: {
+                status: 'success',
+                severity: 'quiet',
+                needs_attention: false,
+                total_items: 1,
+                counts: { success: 1 },
+              },
+              items: [{
+                item_id: 'tool-patch',
+                tool_id: 'tool-patch',
+                tool_name: 'apply_patch',
+                kind: 'tool',
+                status: 'success',
+                severity: 'quiet',
+                needs_attention: false,
+                requires_approval: false,
+                label: 'apply_patch',
+                renderer: 'patch',
+                payload: {
+                  operation: 'apply_patch',
+                  mutations: [{
+                    file_path: 'src/app.ts',
+                    change_type: 'update',
+                    structured_diff: [{
+                      old_start: 1,
+                      old_lines: 3,
+                      new_start: 1,
+                      new_lines: 3,
+                      before: ['export const oldValue = 1;', 'shared();'],
+                      after: ['export const newValue = 2;', 'shared();'],
+                      before_kinds: ['removed', 'context'],
+                      after_kinds: ['added', 'context'],
+                    }],
+                    original_file: 'export const oldValue = 1;\nshared();\n',
+                    updated_file: 'export const newValue = 2;\nshared();\n',
+                  }],
+                },
+              }],
+            }],
+          } as any,
+        }],
+      } as any);
+
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+        await flush();
+        expect(host.textContent).toContain('Edit');
+        expect(host.textContent).toContain('src/app.ts');
+        (host.querySelector('[data-flower-activity-item-id="tool-patch"] .flower-host-activity-inline-button') as HTMLButtonElement).click();
+        await flush();
+        const browse = host.querySelector('button[aria-label="Browse folder for src/app.ts"]') as HTMLButtonElement | null;
+        const preview = host.querySelector('button[aria-label="Preview src/app.ts"]') as HTMLButtonElement | null;
+        expect(browse).toBeTruthy();
+        expect(preview).toBeTruthy();
+        browse?.click();
+        preview?.click();
+        await flush();
+        expect(mocks.openFileBrowserAtPathMock).toHaveBeenCalledWith('/workspace/env-flower/src', {
+          title: 'Flower file context',
+          openStrategy: 'focus_latest_or_create',
+        });
+        expect(mocks.openFilePreviewMock).toHaveBeenCalledWith(expect.objectContaining({
+          path: '/workspace/env-flower/src/app.ts',
+          type: 'file',
+        }), {
+          focus: true,
+          reusePolicy: 'same_file_or_create',
+        });
       } finally {
         dispose();
       }

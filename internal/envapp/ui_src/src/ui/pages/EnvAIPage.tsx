@@ -5,6 +5,8 @@ import { DEFAULT_FLOWER_SURFACE_COPY, type FlowerSurfaceCopy } from '../../../..
 import { useRedevenRpc } from '../protocol/redeven_v1';
 import { createEnvLocalFlowerSurfaceAdapter } from '../flower/envLocalFlowerSurfaceAdapter';
 import { useI18n, type I18nHelpers } from '../i18n';
+import { dirnameAbsolute, resolvePathAgainstWorkingDir } from '../utils/askFlowerPath';
+import { fileItemFromPath } from '../utils/filePreviewItem';
 import { useEnvContext } from './EnvContext';
 
 function trim(value: unknown): string {
@@ -100,6 +102,22 @@ export function EnvAIPage() {
       enterMessageBeforeSending: i18n.t('flowerChat.router.enterMessageBeforeSending'),
       selectModelBeforeChat: i18n.t('flowerChat.router.selectModelBeforeChat'),
       failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
+    },
+    openFileBrowser: async (request) => {
+      const path = resolvePathAgainstWorkingDir(request.path, request.working_dir ?? '');
+      if (!path) return;
+      await env.openFileBrowserAtPath(dirnameAbsolute(path) || path, {
+        title: 'Flower file context',
+        openStrategy: 'focus_latest_or_create',
+      });
+    },
+    openFilePreview: async (request) => {
+      const path = resolvePathAgainstWorkingDir(request.path, request.working_dir ?? '');
+      if (!path) return;
+      await env.openFilePreview(fileItemFromPath(path), {
+        focus: true,
+        reusePolicy: 'same_file_or_create',
+      });
     },
   }));
 

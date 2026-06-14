@@ -180,7 +180,7 @@ func TestReconcileCanonicalMarkdownMessage_ReplacesPureMarkdownBlock(t *testing.
 	}
 }
 
-func TestReconcileCanonicalMarkdownMessage_PublishesCanonicalBeforeClearingEarlierMarkdown(t *testing.T) {
+func TestReconcileCanonicalMarkdownMessage_AppendsCanonicalWithoutClearingEarlierMarkdown(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
@@ -202,37 +202,36 @@ func TestReconcileCanonicalMarkdownMessage_PublishesCanonicalBeforeClearingEarli
 	}
 
 	first, _ := r.assistantBlocks[0].(*persistedMarkdownBlock)
-	last, _ := r.assistantBlocks[2].(*persistedMarkdownBlock)
-	if first == nil || first.Content != "" {
-		t.Fatalf("assistantBlocks[0]=%+v, want cleared markdown block", first)
+	middle, _ := r.assistantBlocks[2].(*persistedMarkdownBlock)
+	last, _ := r.assistantBlocks[3].(*persistedMarkdownBlock)
+	if first == nil || first.Content != "intro" {
+		t.Fatalf("assistantBlocks[0]=%+v, want preserved intro markdown block", first)
+	}
+	if middle == nil || middle.Content != "teaser" {
+		t.Fatalf("assistantBlocks[2]=%+v, want preserved teaser markdown block", middle)
 	}
 	if last == nil || last.Content != "canonical" {
-		t.Fatalf("assistantBlocks[2]=%+v, want canonical markdown block", last)
+		t.Fatalf("assistantBlocks[3]=%+v, want appended canonical markdown block", last)
 	}
 	if len(events) != 2 {
 		t.Fatalf("stream events=%d, want 2", len(events))
 	}
+	if _, ok := events[0].(streamEventBlockStart); !ok {
+		t.Fatalf("event[0]=%T, want streamEventBlockStart", events[0])
+	}
 	firstEvent, ok := events[0].(streamEventBlockSet)
 	if !ok {
-		t.Fatalf("event[0]=%T, want streamEventBlockSet", events[0])
+		firstEvent, ok = events[1].(streamEventBlockSet)
+		if !ok {
+			t.Fatalf("event[1]=%T, want streamEventBlockSet", events[1])
+		}
 	}
-	if firstEvent.BlockIndex != 2 {
-		t.Fatalf("event[0]=%+v, want canonical update for index 2 first", firstEvent)
+	if firstEvent.BlockIndex != 3 {
+		t.Fatalf("block-set=%+v, want canonical append at index 3", firstEvent)
 	}
 	firstBlock, ok := firstEvent.Block.(persistedMarkdownBlock)
 	if !ok || firstBlock.Content != "canonical" {
-		t.Fatalf("event[0] block=%T %+v, want canonical markdown block", firstEvent.Block, firstEvent.Block)
-	}
-	secondEvent, ok := events[1].(streamEventBlockSet)
-	if !ok {
-		t.Fatalf("event[1]=%T, want streamEventBlockSet", events[1])
-	}
-	if secondEvent.BlockIndex != 0 {
-		t.Fatalf("event[1]=%+v, want trailing clear for index 0", secondEvent)
-	}
-	secondBlock, ok := secondEvent.Block.(persistedMarkdownBlock)
-	if !ok || secondBlock.Content != "" {
-		t.Fatalf("event[1] block=%T %+v, want cleared markdown block", secondEvent.Block, secondEvent.Block)
+		t.Fatalf("block-set block=%T %+v, want canonical markdown block", firstEvent.Block, firstEvent.Block)
 	}
 }
 
@@ -305,17 +304,21 @@ func TestReconcileCanonicalMarkdownMessage_UpdatesPersistedAssistantSnapshotText
 	if err := json.Unmarshal([]byte(rawJSON), &msg); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
-	if len(msg.Blocks) != 3 {
-		t.Fatalf("blocks len=%d, want 3", len(msg.Blocks))
+	if len(msg.Blocks) != 4 {
+		t.Fatalf("blocks len=%d, want 4", len(msg.Blocks))
 	}
 
 	first, ok := msg.Blocks[0].(map[string]any)
-	if !ok || first["type"] != "markdown" || first["content"] != "" {
-		t.Fatalf("blocks[0]=%T %+v, want cleared markdown block", msg.Blocks[0], msg.Blocks[0])
+	if !ok || first["type"] != "markdown" || first["content"] != "intro" {
+		t.Fatalf("blocks[0]=%T %+v, want preserved intro markdown block", msg.Blocks[0], msg.Blocks[0])
 	}
-	last, ok := msg.Blocks[2].(map[string]any)
+	middle, ok := msg.Blocks[2].(map[string]any)
+	if !ok || middle["type"] != "markdown" || middle["content"] != "teaser" {
+		t.Fatalf("blocks[2]=%T %+v, want preserved teaser markdown block", msg.Blocks[2], msg.Blocks[2])
+	}
+	last, ok := msg.Blocks[3].(map[string]any)
 	if !ok || last["type"] != "markdown" || last["content"] != "canonical final answer" {
-		t.Fatalf("blocks[2]=%T %+v, want canonical final answer", msg.Blocks[2], msg.Blocks[2])
+		t.Fatalf("blocks[3]=%T %+v, want canonical final answer", msg.Blocks[3], msg.Blocks[3])
 	}
 }
 

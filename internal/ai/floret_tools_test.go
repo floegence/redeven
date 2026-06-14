@@ -153,6 +153,34 @@ func TestFloretActivityForFileCallsOmitsSensitiveEditAndWriteBodies(t *testing.T
 	}
 }
 
+func TestFloretActivityForApplyPatchCallOmitsPatchBody(t *testing.T) {
+	t.Parallel()
+
+	patch := strings.Join([]string{
+		"*** Begin Patch",
+		"*** Update File: internal/ai/run.go",
+		"@@",
+		"-old",
+		"+new",
+		"*** End Patch",
+	}, "\n")
+	activity := floretActivityForToolCall("apply_patch", map[string]any{"patch": patch})
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	if activity.Renderer != observation.ActivityRendererPatch {
+		t.Fatalf("renderer=%q, want patch", activity.Renderer)
+	}
+	if _, ok := activity.Payload["patch"]; ok {
+		t.Fatalf("apply_patch call payload must not include full patch: %#v", activity.Payload)
+	}
+	for _, key := range []string{"patch_sha256", "patch_bytes", "patch_lines", "files_changed", "hunks", "additions", "deletions"} {
+		if _, ok := activity.Payload[key]; !ok {
+			t.Fatalf("apply_patch call payload missing %s: %#v", key, activity.Payload)
+		}
+	}
+}
+
 func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnlyFields(t *testing.T) {
 	t.Parallel()
 
@@ -187,6 +215,70 @@ func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnly
 	}
 	if len(activity.Chips) == 0 || activity.Chips[0].Kind != "exit_code" || activity.Chips[0].Value != "0" {
 		t.Fatalf("chips=%#v, want exit code chip", activity.Chips)
+	}
+}
+
+func TestFloretToolResultActivityCarriesApplyPatchMutations(t *testing.T) {
+	t.Parallel()
+
+	activity := floretActivityForToolResult(ToolResult{
+		ToolID:   "call_patch_1",
+		ToolName: "apply_patch",
+		Status:   toolResultStatusSuccess,
+		Summary:  "patch applied",
+		Data: ApplyPatchResult{
+			FilesChanged:     1,
+			Hunks:            1,
+			Additions:        1,
+			Deletions:        1,
+			InputFormat:      "begin_patch",
+			NormalizedFormat: "begin_patch",
+			Mutations: []FileMutationResult{{
+				FilePath:   "/workspace/app.ts",
+				NewPath:    "/workspace/app.ts",
+				ChangeType: "update",
+				StructuredDiff: []DiffHunkView{{
+					OldStart:    1,
+					OldLines:    1,
+					NewStart:    1,
+					NewLines:    1,
+					Before:      []string{"old"},
+					After:       []string{"new"},
+					BeforeKinds: []string{"removed"},
+					AfterKinds:  []string{"added"},
+				}},
+				OriginalFile: "old\n",
+				UpdatedFile:  "new\n",
+			}},
+		},
+	})
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	if activity.Renderer != observation.ActivityRendererPatch {
+		t.Fatalf("renderer=%q, want patch", activity.Renderer)
+	}
+	mutations := toAnySlice(activity.Payload["mutations"])
+	if len(mutations) != 1 {
+		t.Fatalf("mutations=%#v, want one mutation", activity.Payload["mutations"])
+	}
+	mutation, ok := mutations[0].(map[string]any)
+	if !ok {
+		t.Fatalf("mutation=%#v, want map", mutations[0])
+	}
+	if anyToString(mutation["file_path"]) != "/workspace/app.ts" || anyToString(mutation["change_type"]) != "update" {
+		t.Fatalf("mutation=%#v, want path and change type", mutation)
+	}
+	if len(toAnySlice(mutation["structured_diff"])) != 1 {
+		t.Fatalf("structured_diff=%#v, want one hunk", mutation["structured_diff"])
+	}
+	hunks := toAnySlice(mutation["structured_diff"])
+	hunk, _ := hunks[0].(map[string]any)
+	if len(toAnySlice(hunk["before_kinds"])) != 1 || len(toAnySlice(hunk["after_kinds"])) != 1 {
+		t.Fatalf("structured diff must carry line kinds: %#v", hunk)
+	}
+	if anyToString(mutation["original_file"]) != "old\n" || anyToString(mutation["updated_file"]) != "new\n" {
+		t.Fatalf("mutation file bodies=%#v", mutation)
 	}
 }
 

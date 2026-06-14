@@ -1365,8 +1365,6 @@ func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
 	r.muAssistant.Lock()
 	updates := make([]markdownUpdate, 0, 4)
 
-	// Keep mixed tool/thinking transcripts intact, but ensure the canonical completion
-	// text is what remains user-visible at the end of the assistant message.
 	if idx := r.pureMarkdownBlockIndexLocked(); idx >= 0 && idx < len(r.assistantBlocks) {
 		block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
 		if !ok || block == nil {
@@ -1399,25 +1397,27 @@ func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
 		} else {
 			target := idxs[len(idxs)-1]
 			block, ok := r.assistantBlocks[target].(*persistedMarkdownBlock)
-			if ok && block != nil && strings.TrimSpace(block.Content) != canonical {
+			if ok && block != nil && strings.TrimSpace(block.Content) == canonical {
+				r.muAssistant.Unlock()
+				return false
+			}
+			if ok && block != nil && strings.TrimSpace(block.Content) == "" {
 				block.Content = canonical
 				updates = append(updates, markdownUpdate{
 					index: target,
 					block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
 				})
-			}
-			for _, idx := range idxs[:len(idxs)-1] {
-				block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
-				if !ok || block == nil {
-					continue
+			} else {
+				idx := len(r.assistantBlocks)
+				r.persistEnsureIndex(idx)
+				r.assistantBlocks[idx] = &persistedMarkdownBlock{Type: "markdown", Content: canonical}
+				if r.nextBlockIndex <= idx {
+					r.nextBlockIndex = idx + 1
 				}
-				if block.Content == "" {
-					continue
-				}
-				block.Content = ""
 				updates = append(updates, markdownUpdate{
 					index: idx,
-					block: persistedMarkdownBlock{Type: "markdown", Content: ""},
+					start: true,
+					block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
 				})
 			}
 		}
@@ -2352,20 +2352,27 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 		return "", "", 0, err
 	}
 
-	// Text for history: concatenate user-visible assistant text blocks.
+	canonical := r.canonicalMarkdownTextSnapshot("")
+	// Text for history uses the canonical answer when available; display
+	// blocks above keep the full visible transcript ordering for the UI.
 	var sb strings.Builder
-	for _, blk := range blocks {
-		text := assistantVisibleTextFromBlock(blk)
-		if text == "" {
-			continue
+	if canonical == "" {
+		for _, blk := range blocks {
+			text := assistantVisibleTextFromBlock(blk)
+			if text == "" {
+				continue
+			}
+			if sb.Len() > 0 {
+				sb.WriteString("\n\n")
+			}
+			sb.WriteString(text)
 		}
-		if sb.Len() > 0 {
-			sb.WriteString("\n\n")
-		}
-		sb.WriteString(text)
 	}
 
-	assistantText := strings.TrimSpace(sb.String())
+	assistantText := canonical
+	if assistantText == "" {
+		assistantText = strings.TrimSpace(sb.String())
+	}
 	if assistantText == "" {
 		assistantText = r.waitingPromptSummarySnapshot()
 	}
@@ -3047,14 +3054,15 @@ func (r *run) toolApplyPatch(ctx context.Context, patchText string) (any, error)
 	}
 
 	filesChanged, hunks, additions, deletions, files := summarizePatchFiles(parsed.files)
-	return map[string]any{
-		"files_changed":     filesChanged,
-		"hunks":             hunks,
-		"additions":         additions,
-		"deletions":         deletions,
-		"input_format":      string(parsed.inputFormat),
-		"normalized_format": string(parsed.normalizedFormat),
-		"files":             files,
+	return ApplyPatchResult{
+		FilesChanged:     filesChanged,
+		Hunks:            hunks,
+		Additions:        additions,
+		Deletions:        deletions,
+		InputFormat:      string(parsed.inputFormat),
+		NormalizedFormat: string(parsed.normalizedFormat),
+		Files:            files,
+		Mutations:        parsed.mutations,
 	}, nil
 }
 
