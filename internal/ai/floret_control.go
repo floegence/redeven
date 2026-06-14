@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
 )
@@ -65,7 +66,12 @@ func (p floretControlProjector) projectTaskComplete(call ToolCall) flruntime.Tur
 		Name:        "task_complete",
 		CallID:      strings.TrimSpace(call.ID),
 		Payload:     payload,
-		OutputText:  resultText,
+		Activity: &observation.ActivityPresentation{
+			Label:    "task_complete",
+			Renderer: observation.ActivityRendererCompletion,
+			Payload:  floretCompletionPayload(call.Args, resultText, evidenceRefs),
+		},
+		OutputText: resultText,
 	}
 }
 
@@ -120,7 +126,13 @@ func (p floretControlProjector) projectAskUser(call ToolCall) (flruntime.TurnSig
 		Name:        "ask_user",
 		CallID:      strings.TrimSpace(call.ID),
 		Payload:     payload,
-		OutputText:  signal.Question,
+		Activity: &observation.ActivityPresentation{
+			Label:       "Waiting for user input",
+			Description: signal.Question,
+			Renderer:    observation.ActivityRendererQuestion,
+			Payload:     floretQuestionPayload(signal),
+		},
+		OutputText: signal.Question,
 	}, nil
 }
 
@@ -147,8 +159,42 @@ func (p floretControlProjector) projectExitPlanMode(call ToolCall) (flruntime.Tu
 		Name:        "exit_plan_mode",
 		CallID:      strings.TrimSpace(call.ID),
 		Payload:     payload,
-		OutputText:  buildExitPlanModeQuestion(args.Summary),
+		Activity: &observation.ActivityPresentation{
+			Label:       "Exit plan mode",
+			Description: buildExitPlanModeQuestion(args.Summary),
+			Renderer:    observation.ActivityRendererQuestion,
+			Payload: map[string]any{
+				"summary":         strings.TrimSpace(args.Summary),
+				"allowed_prompts": args.AllowedPrompts,
+			},
+		},
+		OutputText: buildExitPlanModeQuestion(args.Summary),
 	}, nil
+}
+
+func floretCompletionPayload(args map[string]any, resultText string, evidenceRefs []string) map[string]any {
+	payload := map[string]any{
+		"result": strings.TrimSpace(resultText),
+	}
+	if len(evidenceRefs) > 0 {
+		payload["evidence_refs"] = append([]string(nil), evidenceRefs...)
+	}
+	if risks := extractStringSlice(args["remaining_risks"]); len(risks) > 0 {
+		payload["remaining_risks"] = risks
+	}
+	if next := extractStringSlice(args["next_actions"]); len(next) > 0 {
+		payload["next_actions"] = next
+	}
+	return payload
+}
+
+func floretQuestionPayload(signal askUserSignal) map[string]any {
+	return map[string]any{
+		"reason_code":        strings.TrimSpace(signal.ReasonCode),
+		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
+		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
+		"questions":          normalizeRequestUserInputQuestions(signal.Questions),
+	}
 }
 
 func flowerToolCallFromFloret(call fltools.ToolCall) (ToolCall, error) {

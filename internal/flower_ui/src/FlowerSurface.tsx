@@ -34,6 +34,7 @@ import {
   type FlowerRenderableMessageBlock,
   type FlowerTimelineEntry,
 } from './flowerTimelineProjection';
+import { presentFlowerActivityItem } from './flowerActivityPresentation';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
@@ -1285,64 +1286,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setOpenActivityRuns((current) => ({ ...current, [key]: !activityItemOpen(timeline, item, blockKey, index) }));
   };
 
-  const activityItemLabel = (item: FlowerActivityItem): string => {
-    const toolName = trimString(item.tool_name);
-    switch (toolName) {
-      case 'terminal.exec':
-        return item.status === 'success' ? 'Ran command' : item.status === 'error' ? 'Command failed' : 'Running command';
-      case 'web.search':
-      case 'web_search':
-      case 'brave.search':
-        return 'Search web';
-      case 'file.read':
-      case 'read_file':
-        return 'Read file';
-      case 'file.search':
-      case 'grep':
-      case 'rg':
-        return 'Search files';
-      case 'write_todos':
-        return 'Updated tasks';
-      case 'task_complete':
-        return 'Completion signal';
-      case 'ask_user':
-      case 'exit_plan_mode':
-        return 'Requested input';
-      default:
-        return toolName || item.kind || 'Activity';
-    }
-  };
-
-  const activityItemMeta = (item: FlowerActivityItem): string => {
-    const parts = [
-      item.metadata?.command,
-      item.metadata?.query,
-      item.metadata?.path,
-      item.metadata?.target,
-      item.metadata?.result_count ? `${item.metadata.result_count} results` : '',
-      item.metadata?.visible_bytes ? `${item.metadata.visible_bytes} bytes` : '',
-      item.approval_state ? copy().chat.toolApprovalState(item.approval_state) : '',
-      item.tool_name,
-    ].map(trimString).filter(Boolean);
-    return parts.join(' · ');
-  };
-
-  const activityItemDetailLines = (item: FlowerActivityItem): readonly string[] => {
-    const lines: string[] = [];
-    const metadata = item.metadata ?? {};
-    for (const key of ['command', 'query', 'path', 'target', 'prompt', 'detail', 'summary', 'stderr', 'stdout']) {
-      const value = trimString(metadata[key]);
-      if (value) lines.push(`${key}: ${value}`);
-    }
-    if (item.requires_approval) {
-      lines.push(copy().chat.toolApprovalState(trimString(item.approval_state) || 'requested'));
-    }
-    return lines;
-  };
-
   const activityItemAriaLabel = (item: FlowerActivityItem): string => (
     [
-      activityItemLabel(item),
+      presentFlowerActivityItem(item).label,
       item.tool_name,
       copy().chat.toolStatuses[item.status],
       item.requires_approval ? copy().chat.toolApprovalState(trimString(item.approval_state) || 'requested') : '',
@@ -1351,8 +1297,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const activityRow = (timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem, blockKey: string, index: number) => {
     const open = createMemo(() => activityItemOpen(timeline, item, blockKey, index));
-    const detailLines = createMemo(() => activityItemDetailLines(item));
-    const expandable = createMemo(() => detailLines().length > 0);
+    const presentation = createMemo(() => presentFlowerActivityItem(item));
     const duration = createMemo(() => {
       const ownDuration = item.started_at_unix_ms && item.ended_at_unix_ms
         ? item.ended_at_unix_ms - item.started_at_unix_ms
@@ -1369,14 +1314,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <button
           type="button"
           class="flower-host-activity-inline-button"
-          aria-expanded={expandable() ? open() : undefined}
-          disabled={!expandable()}
-          onClick={() => expandable() && toggleActivityItem(timeline, item, blockKey, index)}
+          aria-expanded={open()}
+          onClick={() => toggleActivityItem(timeline, item, blockKey, index)}
         >
           <span class="flower-host-activity-inline-icon">{statusIcon(item.status)}</span>
           <span class="flower-host-activity-inline-copy">
-            <span class="flower-host-activity-inline-title">{activityItemLabel(item)}</span>
-            <Show when={activityItemMeta(item)}>
+            <span class="flower-host-activity-inline-title">{presentation().label}</span>
+            <Show when={presentation().meta}>
               {(meta) => <span class="flower-host-activity-inline-detail">{meta()}</span>}
             </Show>
           </span>
@@ -1386,14 +1330,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <span class={cn('flower-host-activity-inline-status', `flower-host-activity-inline-status-${item.status}`)}>
             {copy().chat.toolStatuses[item.status]}
           </span>
-          <Show when={expandable()}>
-            <ChevronDown class={cn('flower-host-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-host-activity-inline-chevron-open')} />
-          </Show>
+          <ChevronDown class={cn('flower-host-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-host-activity-inline-chevron-open')} />
         </button>
-        <Show when={expandable() && open()}>
+        <Show when={open()}>
           <div class="flower-host-activity-inline-details">
-            <For each={detailLines()}>
-              {(line) => <div class="flower-host-activity-inline-detail-line">{line}</div>}
+            <For each={presentation().detailLines}>
+              {(line) => (
+                <div class="flower-host-activity-inline-detail-line">
+                  <span class="flower-host-activity-inline-detail-key">{line.label}</span>
+                  <span class={cn('flower-host-activity-inline-detail-value', line.tone === 'code' && 'flower-host-activity-inline-detail-value-code')}>{line.value}</span>
+                </div>
+              )}
             </For>
           </div>
         </Show>

@@ -62,6 +62,12 @@ export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock)
       item.approval_state ?? '',
       String(item.started_at_unix_ms ?? ''),
       String(item.ended_at_unix_ms ?? ''),
+      item.label ?? '',
+      item.description ?? '',
+      item.renderer ?? '',
+      item.chips?.map((chip) => [chip.kind, chip.label, chip.value ?? '', chip.tone ?? ''].join(',')).join(';') ?? '',
+      item.target_refs?.map((ref) => [ref.kind, ref.label, ref.uri ?? '', ref.path ?? '', String(ref.line ?? '')].join(',')).join(';') ?? '',
+      item.payload ? JSON.stringify(item.payload) : '',
       item.metadata ? Object.entries(item.metadata).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}:${value}`).join(',') : '',
     ].join(':')).join('|'),
   ].join('\x1e');

@@ -169,7 +169,7 @@ function terminalPresentation(item: ActivityItem, ref: ActivityDetailRef, payloa
   const durationMs = readNumber(rec, 'duration_ms');
   const stdout = readRawString(rec, 'stdout');
   const stderr = readRawString(rec, 'stderr');
-  const command = itemTarget(item);
+  const command = readString(rec, 'command') || itemTarget(item);
   const timeoutMs = readNumber(rec, 'timeout_ms');
   const timedOut = readBoolean(rec, 'timed_out');
   const truncated = readBoolean(rec, 'truncated');
@@ -219,7 +219,7 @@ function todoPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
   const rec = asRecord(payload);
   const args = asRecord(rec.args);
   const result = asRecord(rec.result);
-  const todos = asArray(result.todos).length > 0 ? asArray(result.todos) : asArray(args.todos);
+  const todos = asArray(rec.todos).length > 0 ? asArray(rec.todos) : asArray(result.todos).length > 0 ? asArray(result.todos) : asArray(args.todos);
   if (todos.length === 0) return null;
   const presentation = basePresentation(item, ref, payload);
   const section: TodoDetailSection = {
@@ -253,26 +253,34 @@ function todoPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: u
   return ensureContent(presentation);
 }
 
-function presentationDetailKind(item: ActivityItem, ref: ActivityDetailRef): ActivityDetailSection['kind'] {
+function presentationDetailKind(item: ActivityItem, ref: ActivityDetailRef, payload: unknown): ActivityDetailSection['kind'] {
   const explicitKind = String(ref.kind ?? '').trim();
   if (explicitKind && explicitKind !== 'tool_detail') {
     if (['terminal', 'todo_delta', 'file_change', 'file_read_content', 'web_results', 'error', 'structured_fields'].includes(explicitKind)) {
       return explicitKind as ActivityDetailSection['kind'];
     }
-    if (explicitKind === 'terminal_output') return 'terminal';
   }
   const renderer = String(item.renderer ?? '').trim();
-  if (renderer === 'command') return 'terminal';
+  if (renderer === 'terminal') return 'terminal';
   if (renderer === 'todos') return 'todo_delta';
-  if (renderer === 'file_change') return 'file_change';
-  if (renderer === 'file_context') return 'file_read_content';
-  if (renderer === 'sources' || renderer === 'knowledge') return 'web_results';
+  if (renderer === 'file') {
+    const detailPayload = Object.keys(asRecord(ref.payload)).length > 0 ? asRecord(ref.payload) : asRecord(payload);
+    const operation = readString(detailPayload, 'operation');
+    if (operation === 'read' || Object.prototype.hasOwnProperty.call(detailPayload, 'content')) {
+      return 'file_read_content';
+    }
+    return 'file_change';
+  }
+  if (renderer === 'patch') return 'file_change';
+  if (renderer === 'web_search') return 'web_results';
   return 'structured_fields';
 }
 
-function fileOperation(item: ActivityItem, path: string, args: AnyRecord): FileChangeDetailSection['files'][number]['operation'] {
-  if (item.renderer === 'file_context') return 'read';
-  if (readString(args, 'operation') === 'delete') return 'deleted';
+function fileOperation(item: ActivityItem, path: string, payload: AnyRecord, args: AnyRecord): FileChangeDetailSection['files'][number]['operation'] {
+  const operation = readString(payload, 'operation') || readString(args, 'operation');
+  if (operation === 'read') return 'read';
+  if (operation === 'delete') return 'deleted';
+  if (operation === 'apply_patch') return path ? 'updated' : 'unknown';
   return path ? 'updated' : 'unknown';
 }
 
@@ -295,14 +303,14 @@ function patchFiles(patch: string): FileChangeDetailSection['files'] {
 function filePresentation(item: ActivityItem, ref: ActivityDetailRef, payload: unknown): ActivityDetailPresentation | null {
   const rec = asRecord(payload);
   const args = asRecord(rec.args);
-  const patch = readString(args, 'patch');
+  const patch = readString(rec, 'patch') || readString(args, 'patch');
   const files = patch ? patchFiles(patch) : [];
-  const directPath = readString(args, 'file_path', 'path') || item.target_refs?.find((target) => target.kind === 'file')?.path || itemTarget(item);
+  const directPath = readString(rec, 'file_path', 'path') || readString(args, 'file_path', 'path') || item.target_refs?.find((target) => target.kind === 'file')?.path || itemTarget(item);
   if (files.length === 0 && directPath) {
     files.push({
       path: directPath,
-      operation: fileOperation(item, directPath, args),
-      summary: readString(args, 'summary') || item.description,
+      operation: fileOperation(item, directPath, rec, args),
+      summary: readString(rec, 'summary') || readString(args, 'summary') || item.description,
     });
   }
   if (files.length === 0) return null;
@@ -317,13 +325,13 @@ function fileReadContentPresentation(item: ActivityItem, ref: ActivityDetailRef,
   const rec = asRecord(payload);
   const args = asRecord(rec.args);
   const result = asRecord(rec.result);
-  const filePath = readString(args, 'file_path', 'path') || itemTarget(item);
+  const filePath = readString(rec, 'file_path', 'path') || readString(args, 'file_path', 'path') || itemTarget(item);
   if (!filePath) return null;
-  const content = readRawString(result, 'content');
-  const lineOffset = readNumber(result, 'line_offset');
-  const lineCount = readNumber(result, 'line_count');
-  const totalLines = readNumber(result, 'total_lines');
-  const truncated = readBoolean(result, 'truncated');
+  const content = readRawString(rec, 'content') || readRawString(result, 'content');
+  const lineOffset = readNumber(rec, 'line_offset', 'offset') ?? readNumber(result, 'line_offset', 'offset');
+  const lineCount = readNumber(rec, 'line_count', 'lines') ?? readNumber(result, 'line_count', 'lines');
+  const totalLines = readNumber(rec, 'total_lines') ?? readNumber(result, 'total_lines');
+  const truncated = readBoolean(rec, 'truncated') ?? readBoolean(result, 'truncated');
 
   const presentation: ActivityDetailPresentation = {
     detailId: detailID(item, ref),
@@ -360,7 +368,7 @@ function webPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: un
   const rec = asRecord(payload);
   const args = asRecord(rec.args);
   const result = asRecord(rec.result);
-  const sourceInputs = asArray(result.sources).length > 0 ? asArray(result.sources) : asArray(result.results);
+  const sourceInputs = asArray(rec.sources).length > 0 ? asArray(rec.sources) : asArray(rec.results).length > 0 ? asArray(rec.results) : asArray(result.sources).length > 0 ? asArray(result.sources) : asArray(result.results);
   const sources: WebDetailSection['sources'] = sourceInputs.map((entry) => {
     const source = asRecord(entry);
     const title = readString(source, 'title', 'name') || readString(source, 'url', 'uri');
@@ -375,7 +383,7 @@ function webPresentation(item: ActivityItem, ref: ActivityDetailRef, payload: un
     .filter((target) => target.kind === 'url' || target.uri)
     .map((target) => ({ title: target.label, url: target.uri }));
   const allSources = sources.length > 0 ? sources : targetSources;
-  const query = readString(args, 'query') || itemTarget(item);
+  const query = readString(rec, 'query') || readString(args, 'query') || itemTarget(item);
   if (!query && allSources.length === 0) return null;
   const presentation = basePresentation(item, ref, payload);
   const section: WebDetailSection = { kind: 'web_results', query, sources: allSources };
@@ -459,6 +467,7 @@ function structuredPresentation(item: ActivityItem, ref: ActivityDetailRef, payl
   const rec = asRecord(payload);
   const presentation = basePresentation(item, ref, payload);
   const groups = [
+    structuredGroup('chatActivity.sectionTitle.summary', rec),
     structuredGroup('chatActivity.sectionTitle.arguments', rec.args),
     structuredGroup('chatActivity.sectionTitle.result', rec.result),
   ].filter((group): group is NonNullable<typeof group> => group !== null);
@@ -500,7 +509,7 @@ function ensureContent(presentation: ActivityDetailPresentation): ActivityDetail
 }
 
 export function normalizeActivityDetail(item: ActivityItem, ref: ActivityDetailRef, payload: unknown): ActivityDetailPresentation {
-  const detailKind = presentationDetailKind(item, ref);
+  const detailKind = presentationDetailKind(item, ref, payload);
   if (detailKind === 'terminal') {
     return terminalPresentation(item, ref, payload);
   }

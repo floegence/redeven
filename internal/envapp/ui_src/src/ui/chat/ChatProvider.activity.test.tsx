@@ -31,7 +31,7 @@ function activityMessage(): Message {
         tool_id: 'tool_patch',
         tool_name: 'apply_patch',
         kind: 'tool',
-        renderer: 'file_change',
+        renderer: 'patch',
         status: 'waiting',
         severity: 'blocking',
         needs_attention: true,

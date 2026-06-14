@@ -125,12 +125,13 @@ export const ActivityItemRow: Component<{
   targetLabel: string;
   blocking: boolean;
   messageId: string;
+  hasDetail?: boolean;
   expanded: boolean;
   detailState: ActivityDetailLoadState;
   onToggle: () => void;
   onRetry: () => void;
 }> = (props) => {
-  const hasDetail = createMemo(() => Array.isArray(props.item.detail_refs) && props.item.detail_refs.length > 0);
+  const hasDetail = createMemo(() => props.hasDetail ?? (Array.isArray(props.item.detail_refs) && props.item.detail_refs.length > 0));
   const toggleFromRow = () => {
     if (!hasDetail() || hasTextSelection()) return;
     props.onToggle();
@@ -178,7 +179,7 @@ export const ActivityItemRow: Component<{
           <Show when={props.item.description && !props.targetLabel}>
             {(description) => <div class="chat-activity-item-description">{description()}</div>}
           </Show>
-          <Show when={props.item.renderer === 'blocking_prompt' || props.item.tool_name === 'ask_user'}>
+          <Show when={props.item.renderer === 'question' || props.item.tool_name === 'ask_user'}>
             <ActivityAskUserItem item={props.item} />
           </Show>
         </div>

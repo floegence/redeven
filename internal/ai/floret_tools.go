@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/floegence/floret/observation"
 	fltools "github.com/floegence/floret/tools"
 )
 
@@ -174,6 +175,10 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 		OpenWorld:    false,
 		ParallelSafe: floretToolParallelSafe(def, effects),
 		Permission:   fltools.PermissionSpec{Mode: fltools.PermissionAllow},
+		Activity: func(inv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
+			args, _ := inv.Args.(map[string]any)
+			return floretActivityForToolCall(strings.TrimSpace(def.Name), args), nil
+		},
 		Annotations: map[string]any{
 			"source":              strings.TrimSpace(def.Source),
 			"namespace":           strings.TrimSpace(def.Namespace),
@@ -232,7 +237,396 @@ func floretToolResultFromFlower(result ToolResult) fltools.Result {
 		Name:       strings.TrimSpace(result.ToolName),
 		Text:       string(text),
 		Structured: structured,
+		Activity:   floretActivityForToolResult(result),
 		IsError:    strings.TrimSpace(result.Status) != "" && strings.TrimSpace(result.Status) != toolResultStatusSuccess,
+	}
+}
+
+func floretActivityForToolCall(toolName string, args map[string]any) *observation.ActivityPresentation {
+	toolName = strings.TrimSpace(toolName)
+	payload := activityCallPayloadForTool(toolName, args)
+	switch toolName {
+	case "terminal.exec":
+		command := strings.TrimSpace(anyToString(args["command"]))
+		if command == "" {
+			command = "terminal.exec"
+		}
+		cwd := firstNonEmptyString(anyToString(args["cwd"]), anyToString(args["workdir"]))
+		if cwd != "" {
+			payload["cwd"] = cwd
+		}
+		return &observation.ActivityPresentation{
+			Label:       command,
+			Description: strings.TrimSpace(anyToString(args["description"])),
+			Renderer:    observation.ActivityRendererTerminal,
+			Chips:       []observation.ActivityChip{{Kind: "tool", Label: "shell", Tone: "neutral"}},
+			Payload:     payload,
+		}
+	case "file.read":
+		path := strings.TrimSpace(anyToString(args["file_path"]))
+		return &observation.ActivityPresentation{
+			Label:      firstNonEmptyString(path, "file.read"),
+			Renderer:   observation.ActivityRendererFile,
+			TargetRefs: activityTargetRefsForPath(path),
+			Payload:    mapWithOperation(payload, "read"),
+		}
+	case "file.edit":
+		path := strings.TrimSpace(anyToString(args["file_path"]))
+		return &observation.ActivityPresentation{
+			Label:      firstNonEmptyString(path, "file.edit"),
+			Renderer:   observation.ActivityRendererFile,
+			TargetRefs: activityTargetRefsForPath(path),
+			Payload:    mapWithOperation(payload, "edit"),
+		}
+	case "file.write":
+		path := strings.TrimSpace(anyToString(args["file_path"]))
+		return &observation.ActivityPresentation{
+			Label:      firstNonEmptyString(path, "file.write"),
+			Renderer:   observation.ActivityRendererFile,
+			TargetRefs: activityTargetRefsForPath(path),
+			Payload:    mapWithOperation(payload, "write"),
+		}
+	case "apply_patch":
+		return &observation.ActivityPresentation{
+			Label:    "apply_patch",
+			Renderer: observation.ActivityRendererPatch,
+			Payload:  mapWithOperation(payload, "apply_patch"),
+		}
+	case "web.search":
+		query := strings.TrimSpace(anyToString(args["query"]))
+		return &observation.ActivityPresentation{
+			Label:    firstNonEmptyString(query, "web.search"),
+			Renderer: observation.ActivityRendererWebSearch,
+			Payload:  payload,
+		}
+	case "knowledge.search":
+		query := strings.TrimSpace(anyToString(args["query"]))
+		return &observation.ActivityPresentation{
+			Label:    firstNonEmptyString(query, "knowledge.search"),
+			Renderer: observation.ActivityRendererStructured,
+			Payload:  mapWithOperation(payload, "knowledge.search"),
+		}
+	case "write_todos":
+		return &observation.ActivityPresentation{
+			Label:    "Update todos",
+			Renderer: observation.ActivityRendererTodos,
+			Payload:  payload,
+		}
+	case "use_skill":
+		name := strings.TrimSpace(anyToString(args["name"]))
+		return &observation.ActivityPresentation{
+			Label:    firstNonEmptyString(name, "use_skill"),
+			Renderer: observation.ActivityRendererStructured,
+			Payload:  mapWithOperation(payload, "use_skill"),
+		}
+	case "subagents":
+		action := strings.TrimSpace(anyToString(args["action"]))
+		return &observation.ActivityPresentation{
+			Label:    firstNonEmptyString(action, "subagents"),
+			Renderer: observation.ActivityRendererStructured,
+			Payload:  mapWithOperation(payload, "subagents"),
+		}
+	default:
+		if toolName == "" {
+			return nil
+		}
+		return &observation.ActivityPresentation{
+			Label:    toolName,
+			Renderer: observation.ActivityRendererStructured,
+			Payload:  payload,
+		}
+	}
+}
+
+func activityCallPayloadForTool(toolName string, args map[string]any) map[string]any {
+	out := map[string]any{}
+	addString := func(key string) {
+		if value := strings.TrimSpace(anyToString(args[key])); value != "" {
+			out[key] = value
+		}
+	}
+	addScalar := func(key string) {
+		switch value := args[key].(type) {
+		case string:
+			if strings.TrimSpace(value) != "" {
+				out[key] = strings.TrimSpace(value)
+			}
+		case bool:
+			out[key] = value
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+			out[key] = value
+		}
+	}
+	switch strings.TrimSpace(toolName) {
+	case "terminal.exec":
+		addString("command")
+		if cwd := firstNonEmptyString(anyToString(args["cwd"]), anyToString(args["workdir"])); cwd != "" {
+			out["cwd"] = cwd
+		}
+		addScalar("timeout_ms")
+		addString("description")
+	case "file.read":
+		addString("file_path")
+		addString("path")
+		addScalar("offset")
+		addScalar("limit")
+	case "file.edit":
+		addString("file_path")
+		addString("path")
+		addScalar("replace_all")
+	case "file.write":
+		addString("file_path")
+		addString("path")
+	case "apply_patch":
+		if patch := strings.TrimSpace(anyToString(args["patch"])); patch != "" {
+			out["patch"] = patch
+		}
+	case "web.search", "knowledge.search":
+		addString("query")
+		addScalar("count")
+		addString("provider")
+	case "write_todos":
+		if todos := toAnySlice(args["todos"]); len(todos) > 0 {
+			out["todos"] = sanitizedTodoActivityItems(todos)
+		}
+		addScalar("expected_version")
+		addString("explanation")
+	case "use_skill":
+		addString("name")
+	case "subagents":
+		addString("action")
+		addScalar("limit")
+	}
+	return out
+}
+
+func sanitizedTodoActivityItems(items []any) []any {
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		record, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		clean := map[string]any{}
+		for _, key := range []string{"id", "content", "status", "note"} {
+			if value := strings.TrimSpace(anyToString(record[key])); value != "" {
+				clean[key] = value
+			}
+		}
+		if len(clean) > 0 {
+			out = append(out, clean)
+		}
+	}
+	return out
+}
+
+func floretActivityForToolResult(result ToolResult) *observation.ActivityPresentation {
+	toolName := strings.TrimSpace(result.ToolName)
+	payload := activityPayloadFromResultData(result.Data)
+	payload["status"] = strings.TrimSpace(result.Status)
+	payload["summary"] = strings.TrimSpace(result.Summary)
+	payload["details"] = strings.TrimSpace(result.Details)
+	payload["truncated"] = result.Truncated
+	if result.ContentRef != "" {
+		payload["content_ref"] = strings.TrimSpace(result.ContentRef)
+	}
+	if result.Error != nil {
+		payload["error"] = result.Error
+	}
+	switch toolName {
+	case "terminal.exec":
+		return &observation.ActivityPresentation{
+			Label:    strings.TrimSpace(anyToString(payload["command"])),
+			Renderer: observation.ActivityRendererTerminal,
+			Chips:    terminalActivityChips(payload),
+			Payload:  payload,
+		}
+	case "file.read":
+		path := firstNonEmptyString(anyToString(payload["file_path"]), anyToString(payload["path"]))
+		return &observation.ActivityPresentation{
+			Label:      path,
+			Renderer:   observation.ActivityRendererFile,
+			TargetRefs: activityTargetRefsForPath(path),
+			Chips:      fileActivityChips(payload),
+			Payload:    mapWithOperation(payload, "read"),
+		}
+	case "file.edit", "file.write":
+		path := firstNonEmptyString(anyToString(payload["file_path"]), anyToString(payload["path"]))
+		operation := "edit"
+		if toolName == "file.write" {
+			operation = "write"
+		}
+		return &observation.ActivityPresentation{
+			Label:      path,
+			Renderer:   observation.ActivityRendererFile,
+			TargetRefs: activityTargetRefsForPath(path),
+			Chips:      fileActivityChips(payload),
+			Payload:    mapWithOperation(payload, operation),
+		}
+	case "apply_patch":
+		return &observation.ActivityPresentation{
+			Label:    "apply_patch",
+			Renderer: observation.ActivityRendererPatch,
+			Chips:    fileActivityChips(payload),
+			Payload:  mapWithOperation(payload, "apply_patch"),
+		}
+	case "web.search":
+		return &observation.ActivityPresentation{
+			Label:    strings.TrimSpace(anyToString(payload["query"])),
+			Renderer: observation.ActivityRendererWebSearch,
+			Chips:    webSearchActivityChips(payload),
+			Payload:  payload,
+		}
+	case "write_todos":
+		return &observation.ActivityPresentation{
+			Label:    "Update todos",
+			Renderer: observation.ActivityRendererTodos,
+			Chips:    todoActivityChips(payload),
+			Payload:  payload,
+		}
+	default:
+		if toolName == "" {
+			return nil
+		}
+		return &observation.ActivityPresentation{
+			Label:    toolName,
+			Renderer: observation.ActivityRendererStructured,
+			Payload:  payload,
+		}
+	}
+}
+
+func activityPayloadFromResultData(data any) map[string]any {
+	if data == nil {
+		return map[string]any{}
+	}
+	if record, ok := data.(map[string]any); ok {
+		return cloneAnyMap(record)
+	}
+	raw, err := json.Marshal(data)
+	if err != nil || len(raw) == 0 {
+		return map[string]any{"value": strings.TrimSpace(fmt.Sprint(data))}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err == nil && out != nil {
+		return out
+	}
+	var value any
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return map[string]any{"value": string(raw)}
+	}
+	return map[string]any{"value": value}
+}
+
+func mapWithOperation(in map[string]any, operation string) map[string]any {
+	out := cloneAnyMap(in)
+	if operation != "" {
+		out["operation"] = operation
+	}
+	return out
+}
+
+func activityTargetRefsForPath(path string) []observation.ActivityTargetRef {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	return []observation.ActivityTargetRef{{Kind: "file", Label: path, Path: path}}
+}
+
+func terminalActivityChips(payload map[string]any) []observation.ActivityChip {
+	chips := []observation.ActivityChip{}
+	if exit := activityScalarString(payload["exit_code"]); strings.TrimSpace(exit) != "" {
+		tone := "neutral"
+		if strings.TrimSpace(exit) != "0" {
+			tone = "danger"
+		}
+		chips = append(chips, observation.ActivityChip{Kind: "exit_code", Label: "exit", Value: exit, Tone: tone})
+	}
+	if duration := activityScalarString(payload["duration_ms"]); strings.TrimSpace(duration) != "" {
+		chips = append(chips, observation.ActivityChip{Kind: "duration", Label: "duration", Value: duration + " ms", Tone: "neutral"})
+	}
+	if readBoolField(payload, "truncated") {
+		chips = append(chips, observation.ActivityChip{Kind: "truncated", Label: "truncated", Tone: "warning"})
+	}
+	return chips
+}
+
+func fileActivityChips(payload map[string]any) []observation.ActivityChip {
+	chips := []observation.ActivityChip{}
+	if value := activityScalarString(payload["change_type"]); strings.TrimSpace(value) != "" {
+		chips = append(chips, observation.ActivityChip{Kind: "change", Label: strings.TrimSpace(value), Tone: "neutral"})
+	}
+	if value := activityScalarString(payload["line_count"]); strings.TrimSpace(value) != "" {
+		chips = append(chips, observation.ActivityChip{Kind: "lines", Label: "lines", Value: value, Tone: "neutral"})
+	}
+	if readBoolField(payload, "truncated") {
+		chips = append(chips, observation.ActivityChip{Kind: "truncated", Label: "truncated", Tone: "warning"})
+	}
+	return chips
+}
+
+func webSearchActivityChips(payload map[string]any) []observation.ActivityChip {
+	count := len(toAnySlice(payload["sources"]))
+	if count == 0 {
+		count = len(toAnySlice(payload["results"]))
+	}
+	if count <= 0 {
+		return nil
+	}
+	return []observation.ActivityChip{{Kind: "results", Label: "results", Value: fmt.Sprintf("%d", count), Tone: "neutral"}}
+}
+
+func todoActivityChips(payload map[string]any) []observation.ActivityChip {
+	counts := map[string]int{}
+	for _, item := range toAnySlice(payload["todos"]) {
+		record, _ := item.(map[string]any)
+		status := strings.TrimSpace(anyToString(record["status"]))
+		if status != "" {
+			counts[status]++
+		}
+	}
+	chips := []observation.ActivityChip{}
+	for _, status := range []string{"pending", "in_progress", "completed", "cancelled"} {
+		if count := counts[status]; count > 0 {
+			chips = append(chips, observation.ActivityChip{Kind: status, Label: status, Value: fmt.Sprintf("%d", count), Tone: "neutral"})
+		}
+	}
+	return chips
+}
+
+func activityScalarString(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	case int:
+		return fmt.Sprintf("%d", v)
+	case int8:
+		return fmt.Sprintf("%d", v)
+	case int16:
+		return fmt.Sprintf("%d", v)
+	case int32:
+		return fmt.Sprintf("%d", v)
+	case int64:
+		return fmt.Sprintf("%d", v)
+	case uint:
+		return fmt.Sprintf("%d", v)
+	case uint8:
+		return fmt.Sprintf("%d", v)
+	case uint16:
+		return fmt.Sprintf("%d", v)
+	case uint32:
+		return fmt.Sprintf("%d", v)
+	case uint64:
+		return fmt.Sprintf("%d", v)
+	case float32:
+		return fmt.Sprintf("%g", v)
+	case float64:
+		return fmt.Sprintf("%g", v)
+	default:
+		return ""
 	}
 }
 

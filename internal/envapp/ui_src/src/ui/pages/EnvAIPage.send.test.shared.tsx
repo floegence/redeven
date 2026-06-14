@@ -358,11 +358,13 @@ export function registerEnvAIPageSendTests() {
                     status: 'success',
                     severity: 'quiet',
                     needs_attention: false,
-                    requires_approval: false,
-                    started_at_unix_ms: 10,
-                    ended_at_unix_ms: 1260,
-                    metadata: { command: 'pwd' },
-                  }],
+	                    requires_approval: false,
+	                    started_at_unix_ms: 10,
+	                    ended_at_unix_ms: 1260,
+	                    label: 'pwd',
+	                    renderer: 'terminal',
+	                    payload: { command: 'pwd', exit_code: 0 },
+	                  }],
                 },
                 { type: 'markdown', content: 'Env workspace inspection is complete.' },
               ],
@@ -393,10 +395,68 @@ export function registerEnvAIPageSendTests() {
                   tool_name: 'web.search',
                   kind: 'hosted_tool',
                   status: 'success',
+	                  severity: 'quiet',
+	                  needs_attention: false,
+	                  requires_approval: false,
+	                  label: 'Flower inline transcript',
+	                  renderer: 'web_search',
+	                  payload: { query: 'Flower inline transcript', sources: [] },
+	                }],
+              }],
+            } as any,
+          },
+        ],
+      } as any);
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+	        await flush();
+	        const transcriptText = host.textContent ?? '';
+	        expect(transcriptText.indexOf('I will inspect the Env workspace.')).toBeLessThan(transcriptText.indexOf('pwd'));
+	        expect(transcriptText.indexOf('pwd')).toBeLessThan(transcriptText.indexOf('Env workspace inspection is complete.'));
+	        expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(2);
+	        expect(host.textContent).toContain('pwd');
+	        expect(host.textContent).toContain('Flower inline transcript');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('rejects malformed Env-local activity target line fields', async () => {
+      mocks.listMessagesMock.mockResolvedValueOnce({
+        messages: [
+          {
+            rowId: 1,
+            messageJson: {
+              id: 'msg-invalid-activity',
+              role: 'assistant',
+              status: 'complete',
+              timestamp: 10,
+              blocks: [{
+                type: 'activity-timeline',
+                schema_version: 1,
+                run_id: 'run-invalid',
+                summary: {
+                  status: 'success',
+                  severity: 'quiet',
+                  needs_attention: false,
+                  total_items: 1,
+                  counts: { success: 1 },
+                },
+                items: [{
+                  item_id: 'tool-invalid',
+                  tool_id: 'tool-invalid',
+                  tool_name: 'terminal.exec',
+                  kind: 'tool',
+                  status: 'success',
                   severity: 'quiet',
                   needs_attention: false,
                   requires_approval: false,
-                  metadata: { query: 'Flower inline transcript' },
+                  label: 'pwd',
+                  renderer: 'terminal',
+                  target_refs: [{ kind: 'file', label: 'app.ts', path: 'app.ts', line: '12' }],
+                  payload: { command: 'pwd' },
                 }],
               }],
             } as any,
@@ -408,13 +468,7 @@ export function registerEnvAIPageSendTests() {
         (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
         await flush();
         await flush();
-        const transcriptText = host.textContent ?? '';
-        expect(transcriptText.indexOf('I will inspect the Env workspace.')).toBeLessThan(transcriptText.indexOf('Ran command'));
-        expect(transcriptText.indexOf('Ran command')).toBeLessThan(transcriptText.indexOf('Env workspace inspection is complete.'));
-        expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(2);
-        expect(host.textContent).toContain('pwd');
-        expect(host.textContent).toContain('Search web');
-        expect(host.textContent).toContain('Flower inline transcript');
+        expect(host.textContent).toContain('Flower contract error: activity_item.target_refs[0].line must be a non-negative integer.');
       } finally {
         dispose();
       }

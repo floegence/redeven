@@ -262,6 +262,60 @@ func TestStore_AppendMessage_DoesNotPopulateEmptyTitle(t *testing.T) {
 	}
 }
 
+func TestStore_AppendMessage_MonotonicThreadActivityTimestamp(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", CreatedAtUnixMs: 100, UpdatedAtUnixMs: 100}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	appendMessage := func(id string, text string) {
+		t.Helper()
+		if _, err := s.AppendMessage(ctx, "env_1", "th_1", Message{
+			ThreadID:        "th_1",
+			EndpointID:      "env_1",
+			MessageID:       id,
+			Role:            "user",
+			Status:          "complete",
+			CreatedAtUnixMs: 1000,
+			UpdatedAtUnixMs: 1000,
+			TextContent:     text,
+			MessageJSON:     fmt.Sprintf(`{"id":%q,"role":"user","blocks":[{"type":"markdown","content":%q}],"status":"complete","timestamp":1000}`, id, text),
+		}, "u1", "u1@example.com"); err != nil {
+			t.Fatalf("AppendMessage(%s): %v", id, err)
+		}
+	}
+
+	appendMessage("msg_1", "first")
+	first, err := s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread(first): %v", err)
+	}
+	appendMessage("msg_2", "second")
+	second, err := s.GetThread(ctx, "env_1", "th_1")
+	if err != nil {
+		t.Fatalf("GetThread(second): %v", err)
+	}
+
+	if second.UpdatedAtUnixMs <= first.UpdatedAtUnixMs {
+		t.Fatalf("UpdatedAtUnixMs did not advance: first=%d second=%d", first.UpdatedAtUnixMs, second.UpdatedAtUnixMs)
+	}
+	if second.LastMessageAtUnixMs <= first.LastMessageAtUnixMs {
+		t.Fatalf("LastMessageAtUnixMs did not advance: first=%d second=%d", first.LastMessageAtUnixMs, second.LastMessageAtUnixMs)
+	}
+	if !strings.Contains(second.LastMessagePreview, "second") {
+		t.Fatalf("LastMessagePreview=%q, want second message", second.LastMessagePreview)
+	}
+}
+
 func TestStore_SetAutoThreadTitle_GuardsAndManualRename(t *testing.T) {
 	t.Parallel()
 

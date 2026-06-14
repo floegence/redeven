@@ -778,8 +778,8 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-activity-item-chevron-open { transform: rotate(90deg); }
 .chat-activity-item-status { margin-top: 0.08rem; flex-shrink: 0; }
 .chat-activity-item-main { min-width: 0; display: grid; gap: 0.25rem; }
-.chat-activity-item-line { min-width: 0; display: flex; align-items: baseline; gap: 0.35rem; flex-wrap: wrap; }
-.chat-activity-item-label { color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground)); font-weight: 500; }
+.chat-activity-item-line { min-width: 0; display: flex; align-items: baseline; gap: 0.35rem; flex-wrap: nowrap; }
+.chat-activity-item-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground)); font-weight: 500; }
 .chat-activity-item-target { min-width: 0; max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground)); }
 .chat-activity-item-description { color: color-mix(in srgb, var(--muted-foreground) 88%, transparent); white-space: pre-wrap; word-break: break-word; }
 .chat-activity-item-actions { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: 0.25rem; }

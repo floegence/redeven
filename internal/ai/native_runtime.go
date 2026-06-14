@@ -3486,6 +3486,35 @@ func (r *run) recordTaskCompleteSignal(toolID string, resultText string, evidenc
 	if r == nil {
 		return
 	}
+	toolID = r.persistTaskCompleteSignal(toolID, resultText, evidenceRefs)
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeControlSignal,
+		ToolID:     toolID,
+		ToolName:   "task_complete",
+		ToolKind:   "control",
+		Result:     truncateRunes(strings.TrimSpace(resultText), 500),
+		ObservedAt: time.Now(),
+		Metadata: map[string]any{
+			"control_disposition": "terminal",
+			"result_count":        len(normalizeEvidenceRefs(evidenceRefs)),
+		},
+	})
+}
+
+func normalizeEvidenceRefs(evidenceRefs []string) []string {
+	cleanEvidenceRefs := make([]string, 0, len(evidenceRefs))
+	for _, ref := range evidenceRefs {
+		if ref = strings.TrimSpace(ref); ref != "" {
+			cleanEvidenceRefs = append(cleanEvidenceRefs, ref)
+		}
+	}
+	return cleanEvidenceRefs
+}
+
+func (r *run) persistTaskCompleteSignal(toolID string, resultText string, evidenceRefs []string) string {
+	if r == nil {
+		return strings.TrimSpace(toolID)
+	}
 	toolID = strings.TrimSpace(toolID)
 	if toolID == "" {
 		if id, err := newToolID(); err == nil {
@@ -3495,12 +3524,7 @@ func (r *run) recordTaskCompleteSignal(toolID string, resultText string, evidenc
 		}
 	}
 	resultText = strings.TrimSpace(resultText)
-	cleanEvidenceRefs := make([]string, 0, len(evidenceRefs))
-	for _, ref := range evidenceRefs {
-		if ref = strings.TrimSpace(ref); ref != "" {
-			cleanEvidenceRefs = append(cleanEvidenceRefs, ref)
-		}
-	}
+	cleanEvidenceRefs := normalizeEvidenceRefs(evidenceRefs)
 	args := map[string]any{
 		"result": truncateRunes(resultText, 500),
 	}
@@ -3512,36 +3536,25 @@ func (r *run) recordTaskCompleteSignal(toolID string, resultText string, evidenc
 		result["evidence_refs"] = append([]string(nil), cleanEvidenceRefs...)
 	}
 	toolID = r.persistSyntheticToolSuccess(toolID, "task_complete", args, result)
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeControlSignal,
-		ToolID:     toolID,
-		ToolName:   "task_complete",
-		ToolKind:   "control",
-		Result:     truncateRunes(resultText, 500),
-		ObservedAt: time.Now(),
-		Metadata: map[string]any{
-			"control_disposition": "terminal",
-			"result_count":        len(cleanEvidenceRefs),
-		},
-	})
+	return toolID
 }
 
-func (r *run) recordAskUserWaitingSignal(signal askUserSignal, source string) {
+func (r *run) persistAskUserWaitingSignal(signal askUserSignal, source string) (string, int) {
 	if r == nil {
-		return
+		return "", 0
 	}
 	signal = normalizeAskUserSignal(signal)
 	source = strings.TrimSpace(source)
 	questions := normalizeRequestUserInputQuestions(signal.Questions)
 	if len(questions) == 0 {
-		return
+		return "", 0
 	}
 	question := strings.TrimSpace(signal.Question)
 	if question == "" {
 		question = strings.TrimSpace(questions[0].Question)
 	}
 	if question == "" {
-		return
+		return "", 0
 	}
 	toolID, err := newToolID()
 	if err != nil {
@@ -3557,7 +3570,7 @@ func (r *run) recordAskUserWaitingSignal(signal askUserSignal, source string) {
 		Questions:        questions,
 	})
 	if prompt == nil {
-		return
+		return "", 0
 	}
 	r.setWaitingPrompt(prompt)
 	args := map[string]any{
@@ -3576,23 +3589,12 @@ func (r *run) recordAskUserWaitingSignal(signal askUserSignal, source string) {
 		"waiting_user":       true,
 	}
 	toolID = r.persistSyntheticToolSuccess(toolID, "ask_user", args, result)
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeControlSignal,
-		ToolID:     toolID,
-		ToolName:   "ask_user",
-		ToolKind:   "control",
-		ObservedAt: time.Now(),
-		Metadata: map[string]any{
-			"control_disposition": "waiting",
-			"result_count":        len(questions),
-			"strategy":            source,
-		},
-	})
+	return toolID, len(questions)
 }
 
-func (r *run) recordExitPlanModeWaitingSignal(toolID string, args ExitPlanModeArgs, result ExitPlanModeResult) {
+func (r *run) persistExitPlanModeWaitingSignal(toolID string, args ExitPlanModeArgs, result ExitPlanModeResult) (string, int) {
 	if r == nil || result.WaitingPrompt == nil {
-		return
+		return "", 0
 	}
 	toolID = strings.TrimSpace(toolID)
 	if toolID == "" {
@@ -3606,7 +3608,7 @@ func (r *run) recordExitPlanModeWaitingSignal(toolID string, args ExitPlanModeAr
 	args.AllowedPrompts = normalizeExitPlanPromptRefs(args.AllowedPrompts)
 	prompt := normalizeRequestUserInputPrompt(result.WaitingPrompt)
 	if prompt == nil {
-		return
+		return "", 0
 	}
 	r.setWaitingPrompt(prompt)
 	blockArgs := map[string]any{}
@@ -3622,17 +3624,7 @@ func (r *run) recordExitPlanModeWaitingSignal(toolID string, args ExitPlanModeAr
 		"waiting_user":   true,
 	}
 	toolID = r.persistSyntheticToolSuccess(toolID, "exit_plan_mode", blockArgs, blockResult)
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeControlSignal,
-		ToolID:     toolID,
-		ToolName:   "exit_plan_mode",
-		ToolKind:   "control",
-		ObservedAt: time.Now(),
-		Metadata: map[string]any{
-			"control_disposition": "waiting",
-			"result_count":        len(prompt.Questions),
-		},
-	})
+	return toolID, len(prompt.Questions)
 }
 
 func requestUserInputQuestionChoiceCount(questions []RequestUserInputQuestion) int {

@@ -733,11 +733,10 @@ function requireBridgeString(value: unknown, field: string, options: Readonly<{ 
 }
 
 function requireBridgeNumber(value: unknown, field: string): number {
-  const number = Number(value);
-  if (!Number.isFinite(number)) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
     bridgeContractError(field, 'must be a number');
   }
-  return number;
+  return value;
 }
 
 function optionalBridgeNumber(value: unknown, field: string): number | undefined {
@@ -1137,6 +1136,29 @@ function normalizeBridgeActivityApprovalState(value: unknown, field: string): De
   bridgeContractError(field, `has unsupported value ${JSON.stringify(state)}`);
 }
 
+function normalizeBridgeActivityRenderer(value: unknown, field: string): DesktopFlowerHostActivityItem['renderer'] | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  const renderer = compact(value);
+  if (renderer === '') {
+    return undefined;
+  }
+  if (
+    renderer === 'structured'
+    || renderer === 'terminal'
+    || renderer === 'file'
+    || renderer === 'patch'
+    || renderer === 'web_search'
+    || renderer === 'todos'
+    || renderer === 'question'
+    || renderer === 'completion'
+  ) {
+    return renderer;
+  }
+  bridgeContractError(field, `has unsupported value ${JSON.stringify(renderer)}`);
+}
+
 function normalizeBridgeActivityCounts(value: unknown, field: string): DesktopFlowerHostActivityTimelineBlock['summary']['counts'] {
   const record = requireBridgeObject(value, field);
   const keys = ['pending', 'running', 'waiting', 'success', 'error', 'canceled', 'approval'] as const;
@@ -1147,6 +1169,132 @@ function normalizeBridgeActivityCounts(value: unknown, field: string): DesktopFl
     }
   }
   return out;
+}
+
+function requireBridgeActivityToken(value: unknown, field: string, maxLength: number): string {
+  const token = requireBridgeString(value, field);
+  if (token.length > maxLength || !/^[A-Za-z0-9_.:-]+$/.test(token)) {
+    bridgeContractError(field, `must be a token up to ${maxLength} characters`);
+  }
+  return token;
+}
+
+function requireBridgeBoundedString(value: unknown, field: string, maxLength: number, options: Readonly<{ allowEmpty?: boolean }> = {}): string {
+  const text = requireBridgeString(value, field, options);
+  if (text.length > maxLength) {
+    bridgeContractError(field, `must be at most ${maxLength} characters`);
+  }
+  return text;
+}
+
+function optionalBridgeBoundedString(value: unknown, field: string, maxLength: number): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return requireBridgeBoundedString(value, field, maxLength, { allowEmpty: true });
+}
+
+function normalizeBridgeJSONValue(value: unknown, field: string, depth = 0): unknown {
+  if (depth > 5) {
+    bridgeContractError(field, 'exceeds maximum depth');
+  }
+  if (value === null || typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    if (value.length > 8000) {
+      bridgeContractError(field, 'must be at most 8000 characters');
+    }
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      bridgeContractError(field, 'must be a finite number');
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item, index) => normalizeBridgeJSONValue(item, `${field}[${index}]`, depth + 1));
+  }
+  if (typeof value === 'object' && value !== null) {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (key.length > 80 || !/^[A-Za-z0-9_.:-]+$/.test(key)) {
+        bridgeContractError(`${field}.${key}`, 'must use token keys up to 80 characters');
+      }
+      out[key] = normalizeBridgeJSONValue(item, `${field}.${key}`, depth + 1);
+    }
+    return out;
+  }
+  bridgeContractError(field, 'must be JSON-compatible');
+}
+
+function normalizeBridgeActivityPayload(value: unknown, field: string): Readonly<Record<string, unknown>> | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    bridgeContractError(field, 'must be an object');
+  }
+  const record = requireBridgeObject(value, field);
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(record)) {
+    if (key.length > 80 || !/^[A-Za-z0-9_.:-]+$/.test(key)) {
+      bridgeContractError(`${field}.${key}`, 'must use token keys up to 80 characters');
+    }
+    out[key] = normalizeBridgeJSONValue(item, `${field}.${key}`, 1);
+  }
+  return out;
+}
+
+function normalizeBridgeActivityChips(value: unknown, field: string): NonNullable<DesktopFlowerHostActivityItem['chips']> | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    bridgeContractError(field, 'must be an array');
+  }
+  return value.map((item, index) => {
+    const record = requireBridgeObject(item, `${field}[${index}]`);
+    const valueText = optionalBridgeBoundedString(record.value, `${field}[${index}].value`, 120);
+    const tone = record.tone === undefined || record.tone === null
+      ? undefined
+      : requireBridgeActivityToken(record.tone, `${field}[${index}].tone`, 32);
+    return {
+      kind: requireBridgeActivityToken(record.kind, `${field}[${index}].kind`, 64),
+      label: requireBridgeBoundedString(record.label, `${field}[${index}].label`, 120),
+      ...(valueText ? { value: valueText } : {}),
+      ...(tone ? { tone } : {}),
+    };
+  });
+}
+
+function normalizeBridgeActivityTargetRefs(value: unknown, field: string): NonNullable<DesktopFlowerHostActivityItem['target_refs']> | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (!Array.isArray(value)) {
+    bridgeContractError(field, 'must be an array');
+  }
+  return value.map((item, index) => {
+    const record = requireBridgeObject(item, `${field}[${index}]`);
+    const uri = optionalBridgeBoundedString(record.uri, `${field}[${index}].uri`, 1000);
+    if (uri && !uri.startsWith('http://') && !uri.startsWith('https://') && !uri.startsWith('artifact://')) {
+      bridgeContractError(`${field}[${index}].uri`, 'must use http, https, or artifact scheme');
+    }
+    const targetPath = optionalBridgeBoundedString(record.path, `${field}[${index}].path`, 500);
+    const line = optionalBridgeNumber(record.line, `${field}[${index}].line`);
+    if (line !== undefined && (!Number.isInteger(line) || line < 0)) {
+      bridgeContractError(`${field}[${index}].line`, 'must be a non-negative integer');
+    }
+    return {
+      kind: requireBridgeActivityToken(record.kind, `${field}[${index}].kind`, 64),
+      label: requireBridgeBoundedString(record.label, `${field}[${index}].label`, 240),
+      ...(uri ? { uri } : {}),
+      ...(targetPath ? { path: targetPath } : {}),
+      ...(line !== undefined ? { line } : {}),
+    };
+  });
 }
 
 function normalizeBridgeActivityMetadata(value: unknown, field: string): Readonly<Record<string, string>> | undefined {
@@ -1171,6 +1319,12 @@ function normalizeBridgeActivityItem(value: unknown, field: string): DesktopFlow
   const approvalState = normalizeBridgeActivityApprovalState(record.approval_state, `${field}.approval_state`);
   const startedAtUnixMS = optionalBridgeTimestamp(record.started_at_unix_ms, `${field}.started_at_unix_ms`);
   const endedAtUnixMS = optionalBridgeTimestamp(record.ended_at_unix_ms, `${field}.ended_at_unix_ms`);
+  const label = optionalBridgeString(record.label, `${field}.label`);
+  const description = optionalBridgeString(record.description, `${field}.description`);
+  const renderer = normalizeBridgeActivityRenderer(record.renderer, `${field}.renderer`);
+  const chips = normalizeBridgeActivityChips(record.chips, `${field}.chips`);
+  const targetRefs = normalizeBridgeActivityTargetRefs(record.target_refs, `${field}.target_refs`);
+  const payload = normalizeBridgeActivityPayload(record.payload, `${field}.payload`);
   const metadata = normalizeBridgeActivityMetadata(record.metadata, `${field}.metadata`);
   return {
     item_id: requireBridgeString(record.item_id, `${field}.item_id`),
@@ -1185,6 +1339,12 @@ function normalizeBridgeActivityItem(value: unknown, field: string): DesktopFlow
     ...(approvalState ? { approval_state: approvalState } : {}),
     ...(startedAtUnixMS ? { started_at_unix_ms: startedAtUnixMS } : {}),
     ...(endedAtUnixMS ? { ended_at_unix_ms: endedAtUnixMS } : {}),
+    ...(label ? { label } : {}),
+    ...(description ? { description } : {}),
+    ...(renderer ? { renderer } : {}),
+    ...(chips && chips.length > 0 ? { chips } : {}),
+    ...(targetRefs && targetRefs.length > 0 ? { target_refs: targetRefs } : {}),
+    ...(payload ? { payload } : {}),
     ...(metadata ? { metadata } : {}),
   };
 }

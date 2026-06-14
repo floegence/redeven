@@ -56,16 +56,16 @@ function baseItem(overrides: Partial<ActivityItem> = {}): ActivityItem {
     tool_id: 'tool_1',
     tool_name: 'terminal.exec',
     kind: 'tool',
-    renderer: 'command',
+    renderer: 'terminal',
     status: 'success',
     severity: 'quiet',
     needs_attention: false,
     requires_approval: false,
-    label: 'Ran command',
-    description: 'go test ./...',
+    label: 'go test ./...',
+    description: 'Run tests',
     detail_refs: [{
-      ref_id: 'terminal_output:tool_1',
-      kind: 'terminal_output',
+      ref_id: 'terminal:tool_1',
+      kind: 'terminal',
       tool_id: 'tool_1',
       fetch_mode: 'endpoint',
       endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_1/output',
@@ -129,14 +129,14 @@ describe('ActivityTimelineBlock', () => {
     writeTextToClipboardMock.mockResolvedValue(undefined);
     const host = renderActivity();
 
-    expect(host.textContent).toContain('Ran command');
-    expect(host.textContent).not.toContain('go test ./...');
+    expect(host.textContent).toContain('go test ./...');
 
     expandTimeline(host);
     await flushAsync();
 
     expect(host.textContent).toContain('go test ./...');
     expect(host.textContent).not.toContain('Details');
+    expect(host.querySelector('.chat-activity-item-label')).not.toBeNull();
 
     const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
     row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -158,7 +158,7 @@ describe('ActivityTimelineBlock', () => {
     expect(copyButton?.textContent).toBe('Copied');
   });
 
-  it('supports keyboard expansion and keeps rows without details non-interactive', async () => {
+  it('supports keyboard expansion and opens rows without explicit detail refs', async () => {
     fetchGatewayJSONMock.mockResolvedValue({ stdout: 'ok\n', stderr: '' });
     const host = renderActivity();
     expandTimeline(host);
@@ -189,8 +189,40 @@ describe('ActivityTimelineBlock', () => {
     const noDetailRow = noDetailHost.querySelector('.chat-activity-item') as HTMLDivElement | null;
     noDetailRow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-    expect(noDetailRow?.getAttribute('role')).toBeNull();
-    expect(noDetailHost.querySelector('.chat-activity-detail-panel')).toBeNull();
+    expect(noDetailRow?.getAttribute('role')).toBe('button');
+    expect(noDetailRow?.getAttribute('aria-expanded')).toBe('true');
+    expect(noDetailHost.querySelector('.chat-activity-detail-panel')).not.toBeNull();
+  });
+
+  it('opens structured activity payloads without detail refs', async () => {
+    const host = renderActivity(baseBlock({
+      items: [baseItem({
+        detail_refs: undefined,
+        renderer: 'terminal',
+        label: 'npm run build -- --mode production',
+        payload: {
+          command: 'npm run build -- --mode production',
+          cwd: '/workspace/redeven',
+          stdout: 'built\n',
+          stderr: '',
+          exit_code: 0,
+          duration_ms: 42,
+          truncated: false,
+        },
+      })],
+    }));
+    expandTimeline(host);
+    await flushAsync();
+
+    const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
+    expect(row).not.toBeNull();
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(fetchGatewayJSONMock).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('npm run build -- --mode production');
+    expect(host.textContent).toContain('/workspace/redeven');
+    expect(host.textContent).toContain('built');
   });
 
   it('uses inline detail payloads without making an endpoint request', async () => {
@@ -200,8 +232,8 @@ describe('ActivityTimelineBlock', () => {
         tool_id: 'tool_inline',
         description: 'pwd',
         detail_refs: [{
-          ref_id: 'terminal_output:tool_inline',
-          kind: 'terminal_output',
+          ref_id: 'terminal:tool_inline',
+          kind: 'terminal',
           tool_id: 'tool_inline',
           fetch_mode: 'inline',
           title: 'Command output',
@@ -252,7 +284,7 @@ describe('ActivityTimelineBlock', () => {
         item_id: 'tool_patch',
         tool_id: 'tool_patch',
         tool_name: 'apply_patch',
-        renderer: 'file_change',
+        renderer: 'patch',
         status: 'waiting',
         severity: 'blocking',
         needs_attention: true,
@@ -369,7 +401,7 @@ describe('ActivityTimelineBlock', () => {
           item_id: 'tool_patch',
           tool_id: 'tool_patch',
           tool_name: 'apply_patch',
-          renderer: 'file_change',
+          renderer: 'patch',
           label: 'Applied patch',
           detail_refs: [{
             ref_id: 'tool_detail:tool_patch',
@@ -384,7 +416,7 @@ describe('ActivityTimelineBlock', () => {
           item_id: 'tool_web',
           tool_id: 'tool_web',
           tool_name: 'web.search',
-          renderer: 'sources',
+          renderer: 'web_search',
           label: 'Searched the web',
           detail_refs: [{
             ref_id: 'tool_detail:tool_web',
@@ -399,7 +431,7 @@ describe('ActivityTimelineBlock', () => {
           item_id: 'tool_skill',
           tool_id: 'tool_skill',
           tool_name: 'use_skill',
-          renderer: 'skill',
+          renderer: 'structured',
           label: 'Loaded skill',
           detail_refs: [{
             ref_id: 'tool_detail:tool_skill',
@@ -465,10 +497,10 @@ describe('ActivityTimelineBlock', () => {
         status: 'error',
         severity: 'error',
         needs_attention: true,
-        label: 'Ran command',
+        label: 'npm test',
         detail_refs: [{
-          ref_id: 'terminal_output:tool_1',
-          kind: 'terminal_output',
+          ref_id: 'terminal:tool_1',
+          kind: 'terminal',
           tool_id: 'tool_1',
           fetch_mode: 'endpoint',
           endpoint: '/output',
@@ -501,7 +533,7 @@ describe('ActivityTimelineBlock', () => {
         item_id: 'tool_ask',
         tool_id: 'tool_ask',
         tool_name: 'ask_user',
-        renderer: 'blocking_prompt',
+        renderer: 'question',
         status: 'waiting',
         severity: 'blocking',
         needs_attention: true,

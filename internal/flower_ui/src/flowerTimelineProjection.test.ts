@@ -101,6 +101,59 @@ describe('buildFlowerTimelineEntries', () => {
     ]);
   });
 
+  it('keeps separate activity segments between assistant text blocks', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-ordered',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 2,
+          blocks: [
+            { type: 'markdown', content: 'I will inspect.' },
+            activityTimeline({
+              run_id: 'run-terminal',
+              items: [activityItem({
+                item_id: 'tool-terminal',
+                tool_id: 'tool-terminal',
+                tool_name: 'terminal.exec',
+                renderer: 'terminal',
+                label: 'ls -la',
+                payload: { command: 'ls -la' },
+              })],
+            }),
+            { type: 'markdown', content: 'Now I will read a file.' },
+            activityTimeline({
+              run_id: 'run-file',
+              items: [activityItem({
+                item_id: 'tool-file',
+                tool_id: 'tool-file',
+                tool_name: 'file.read',
+                renderer: 'file',
+                label: 'package.json',
+                payload: { operation: 'read', path: 'package.json' },
+              })],
+            }),
+            { type: 'markdown', content: 'Done.' },
+          ],
+        },
+      ],
+    }));
+
+    const first = entries[0];
+    expect(first?.type).toBe('message');
+    if (first?.type !== 'message') throw new Error('expected message entry');
+    expect(first.blocks.map((block) => block.type)).toEqual(['content', 'activity', 'content', 'activity', 'content']);
+    expect(first.blocks.map((block) => (block.type === 'activity' ? block.block.items[0]?.label : block.content))).toEqual([
+      'I will inspect.',
+      'ls -la',
+      'Now I will read a file.',
+      'package.json',
+      'Done.',
+    ]);
+  });
+
   it('keeps activity-only assistant messages visible', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [

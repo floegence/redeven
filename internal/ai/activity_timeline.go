@@ -26,14 +26,24 @@ func newActivityTimelineBlock(timeline observation.ActivityTimeline) ActivityTim
 	}
 }
 
-func (r *run) ensureActivityTimelineBlockIndex(preferred int) int {
+func (r *run) finishActivitySegment() {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.activitySegmentActive = false
+	r.activitySegmentBlockIndex = -1
+	r.mu.Unlock()
+}
+
+func (r *run) ensureActivitySegmentBlockIndex(preferred int) int {
 	if r == nil {
 		return -1
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.activityTimelineStarted {
-		return r.activityBlockIndex
+	if r.activitySegmentActive && r.activitySegmentBlockIndex >= 0 {
+		return r.activitySegmentBlockIndex
 	}
 	idx := preferred
 	if idx < 0 {
@@ -42,8 +52,9 @@ func (r *run) ensureActivityTimelineBlockIndex(preferred int) int {
 	if idx < 0 {
 		idx = 0
 	}
-	r.activityBlockIndex = idx
-	r.activityTimelineStarted = true
+	r.activitySegmentActive = true
+	r.activitySegmentBlockIndex = idx
+	r.activitySegmentEvents = nil
 	if r.nextBlockIndex <= idx {
 		r.nextBlockIndex = idx + 1
 	}
@@ -63,6 +74,9 @@ func (r *run) recordObservationActivityEvent(ev observation.Event) {
 	if r == nil || !isActivityObservationEvent(ev.Type) {
 		return
 	}
+	if r.ensureActivitySegmentBlockIndex(-1) < 0 {
+		return
+	}
 	if ev.RunID == "" {
 		ev.RunID = strings.TrimSpace(r.id)
 	}
@@ -79,11 +93,24 @@ func (r *run) recordObservationActivityEvent(ev observation.Event) {
 		ev.ObservedAt = time.Now()
 	}
 	r.muAssistant.Lock()
-	r.activityEvents = append(r.activityEvents, ev)
-	events := append([]observation.Event(nil), r.activityEvents...)
+	r.activitySegmentEvents = append(r.activitySegmentEvents, ev)
+	events := append([]observation.Event(nil), r.activitySegmentEvents...)
 	r.muAssistant.Unlock()
 
 	timeline := observation.BuildActivityTimeline(r.activityRunMeta(), events, time.Now().UnixMilli())
+	r.publishActivityTimeline(timeline)
+}
+
+func (r *run) publishFinalActivityTimeline(timeline observation.ActivityTimeline) {
+	if r == nil || len(timeline.Items) == 0 {
+		return
+	}
+	r.mu.Lock()
+	hasSegment := r.activityTimelineProjected
+	r.mu.Unlock()
+	if hasSegment {
+		return
+	}
 	r.publishActivityTimeline(timeline)
 }
 
@@ -98,7 +125,7 @@ func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
 		})
 		return
 	}
-	idx := r.ensureActivityTimelineBlockIndex(-1)
+	idx := r.ensureActivitySegmentBlockIndex(-1)
 	if idx < 0 {
 		return
 	}
@@ -119,6 +146,9 @@ func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
 		"total_items":     timeline.Summary.TotalItems,
 	})
 	r.sendStreamEvent(streamEventBlockSet{Type: "block-set", MessageID: r.messageID, BlockIndex: idx, Block: block})
+	r.mu.Lock()
+	r.activityTimelineProjected = true
+	r.mu.Unlock()
 }
 
 func (r *run) normalizeActivityTimeline(timeline observation.ActivityTimeline) observation.ActivityTimeline {
@@ -175,6 +205,7 @@ func observationEventFromFloret(ev flruntime.Event) observation.Event {
 		ArgsHash:     strings.TrimSpace(ev.ArgsHash),
 		DurationMS:   ev.DurationMS,
 		FinishReason: strings.TrimSpace(ev.FinishReason),
+		Activity:     ev.Activity,
 		Metadata:     ev.Metadata,
 		ObservedAt:   observedAt,
 	}
