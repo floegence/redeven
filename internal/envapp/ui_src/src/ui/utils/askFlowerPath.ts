@@ -55,6 +55,26 @@ export function dirnameAbsolute(path: string): string {
   return dirname(normalized);
 }
 
+export function resolvePathAgainstWorkingDir(path: string, workingDir: string): string {
+  const rawPath = String(path ?? '').trim().replace(/\\+/g, '/');
+  if (!rawPath) return '';
+  const absolute = normalizeAbsolutePath(rawPath);
+  if (absolute) return absolute;
+
+  const base = normalizeAbsolutePath(workingDir);
+  if (!base) return '';
+  const parts = base.split('/').filter(Boolean);
+  for (const part of rawPath.split('/')) {
+    if (!part || part === '.') continue;
+    if (part === '..') {
+      parts.pop();
+      continue;
+    }
+    parts.push(part);
+  }
+  return normalizeAbsolutePath(`/${parts.join('/')}`);
+}
+
 export function basenameFromAbsolutePath(path: string): string {
   const normalized = normalizeAbsolutePath(path);
   if (!normalized || normalized === '/') return 'File';

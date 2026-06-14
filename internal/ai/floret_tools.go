@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -379,7 +380,14 @@ func activityCallPayloadForTool(toolName string, args map[string]any) map[string
 		addString("path")
 	case "apply_patch":
 		if patch := strings.TrimSpace(anyToString(args["patch"])); patch != "" {
-			out["patch"] = patch
+			filesChanged, hunks, additions, deletions := summarizeUnifiedDiff(patch)
+			out["patch_sha256"] = fmt.Sprintf("%x", sha256.Sum256([]byte(patch)))
+			out["patch_bytes"] = len([]byte(patch))
+			out["patch_lines"] = len(strings.Split(patch, "\n"))
+			out["files_changed"] = filesChanged
+			out["hunks"] = hunks
+			out["additions"] = additions
+			out["deletions"] = deletions
 		}
 	case "web.search", "knowledge.search":
 		addString("query")
@@ -426,7 +434,9 @@ func floretActivityForToolResult(result ToolResult) *observation.ActivityPresent
 	payload["status"] = strings.TrimSpace(result.Status)
 	payload["summary"] = strings.TrimSpace(result.Summary)
 	payload["details"] = strings.TrimSpace(result.Details)
-	payload["truncated"] = result.Truncated
+	if result.Truncated || readBoolField(payload, "truncated") {
+		payload["truncated"] = true
+	}
 	if result.ContentRef != "" {
 		payload["content_ref"] = strings.TrimSpace(result.ContentRef)
 	}

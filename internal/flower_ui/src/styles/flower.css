@@ -788,12 +788,29 @@ html.dark .flower-component-shell {
 }
 
 .flower-host-activity-inline-title {
+  display: inline-flex;
   min-width: 0;
+  max-width: 100%;
+  align-items: baseline;
+  gap: 0.35rem;
   overflow: hidden;
   color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
   font-size: 0.78125rem;
   font-weight: 700;
   line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-host-activity-inline-title-verb {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground) 12%);
+  font-weight: 800;
+}
+
+.flower-host-activity-inline-title-target {
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -842,16 +859,15 @@ html.dark .flower-component-shell {
 }
 
 .flower-host-activity-inline-details {
-  max-height: 10rem;
+  max-height: 20rem;
   margin: 0.125rem 0 0.25rem 1.375rem;
   overflow: auto;
   border-left: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
   padding-left: 0.625rem;
   color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-family: var(--font-sans, inherit);
   font-size: 0.6875rem;
   line-height: 1.45;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
@@ -956,6 +972,174 @@ html.dark .flower-component-shell {
 .flower-host-activity-todo-note {
   color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   font-weight: 560;
+}
+
+.flower-host-activity-file-read,
+.flower-host-activity-file-diff-list,
+.flower-host-activity-file-diff-file {
+  display: grid;
+  min-width: 0;
+  gap: 0.375rem;
+}
+
+.flower-host-activity-file-diff-file + .flower-host-activity-file-diff-file {
+  margin-top: 0.5rem;
+}
+
+.flower-host-activity-file-toolbar {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.flower-host-activity-file-meta,
+.flower-host-activity-file-path {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
+  font-size: 0.71875rem;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-host-activity-file-path {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+}
+
+.flower-host-activity-file-change,
+.flower-host-activity-file-truncated {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--muted-foreground) 76%, transparent);
+  font-size: 0.65625rem;
+  font-weight: 750;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.flower-host-activity-file-truncated {
+  color: color-mix(in srgb, var(--warning, #f59e0b) 76%, var(--foreground) 24%);
+}
+
+.flower-host-activity-file-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.1875rem;
+  margin-left: auto;
+}
+
+.flower-host-activity-file-action-button {
+  display: inline-flex;
+  width: 1.375rem;
+  height: 1.375rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.flower-host-activity-file-action-button:hover,
+.flower-host-activity-file-action-button:focus-visible {
+  border-color: color-mix(in srgb, var(--flower-chat-surface-border) 80%, transparent);
+  background: color-mix(in srgb, var(--muted) 34%, transparent);
+  color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground) 16%);
+  outline: none;
+}
+
+.flower-host-activity-file-read-content {
+  max-height: 12rem;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--muted) 16%, transparent);
+  padding: 0.5rem 0.625rem;
+  color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground) 24%);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.flower-host-activity-file-diff-grid {
+  display: grid;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--muted) 10%, transparent);
+}
+
+.flower-host-activity-file-diff-hunk {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.flower-host-activity-file-diff-hunk + .flower-host-activity-file-diff-hunk {
+  border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 68%, transparent);
+}
+
+.flower-host-activity-file-diff-heading {
+  min-width: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 68%, transparent);
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  padding: 0.25rem 0.5rem;
+  color: color-mix(in srgb, var(--muted-foreground) 80%, var(--foreground) 20%);
+  font-size: 0.65625rem;
+  font-weight: 800;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.flower-host-activity-file-diff-side-new {
+  border-left: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 68%, transparent);
+}
+
+.flower-host-activity-file-diff-side {
+  min-width: 0;
+  overflow: auto;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+}
+
+.flower-host-activity-file-diff-line {
+  display: grid;
+  min-width: max-content;
+  grid-template-columns: 2.5rem minmax(10rem, 1fr);
+  gap: 0.5rem;
+  padding: 0.125rem 0.5rem;
+  color: color-mix(in srgb, var(--foreground) 74%, var(--muted-foreground) 26%);
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.flower-host-activity-file-diff-line-number {
+  color: color-mix(in srgb, var(--muted-foreground) 66%, transparent);
+  text-align: right;
+  user-select: none;
+}
+
+.flower-host-activity-file-diff-line-removed {
+  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+}
+
+.flower-host-activity-file-diff-line-added {
+  background: color-mix(in srgb, #10b981 10%, transparent);
+}
+
+.flower-host-activity-file-diff-empty {
+  grid-column: 1 / -1;
+  padding: 0.5rem;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
+  font-size: 0.71875rem;
+  font-weight: 650;
 }
 
 .flower-host-input-request-panel {
@@ -1203,6 +1387,27 @@ html.dark .flower-component-shell {
   .flower-host-activity-inline-detail-line {
     grid-template-columns: 1fr;
     gap: 0.125rem;
+  }
+
+  .flower-host-activity-file-toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .flower-host-activity-file-diff-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .flower-host-activity-file-diff-hunk {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .flower-host-activity-file-diff-side-new {
+    border-left: 0;
+  }
+
+  .flower-host-activity-file-diff-side-new {
+    border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 68%, transparent);
   }
 }
 

@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, FileText, FolderOpen, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -34,7 +34,15 @@ import {
   type FlowerRenderableMessageBlock,
   type FlowerTimelineEntry,
 } from './flowerTimelineProjection';
-import { presentFlowerActivityItem, type FlowerActivityDetailBlock, type FlowerActivityTodoStatus } from './flowerActivityPresentation';
+import {
+  presentFlowerActivityItem,
+  type FlowerActivityDetailBlock,
+  type FlowerActivityDiffFile,
+  type FlowerActivityFileAction,
+  type FlowerActivityDiffLineKind,
+  type FlowerActivityTitle,
+  type FlowerActivityTodoStatus,
+} from './flowerActivityPresentation';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
@@ -1321,7 +1329,167 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ].filter(Boolean).join('. ')
   );
 
-  const activityDetailBlock = (block: FlowerActivityDetailBlock) => {
+  const activityTitle = (title: FlowerActivityTitle) => {
+    if (title.kind === 'file') {
+      return (
+        <>
+          <strong class="flower-host-activity-inline-title-verb">{title.verb}</strong>
+          <span class="flower-host-activity-inline-title-target">{title.path}</span>
+        </>
+      );
+    }
+    return <span class="flower-host-activity-inline-title-target">{title.kind === 'command' ? title.command : title.text}</span>;
+  };
+
+  const openActivityFileBrowser = (activityID: string, action: FlowerActivityFileAction) => {
+    const path = trimString(action.path);
+    if (!path || !props.adapter.openFileBrowser) return;
+    void props.adapter.openFileBrowser({ path, source_activity_id: activityID, working_dir: trimString(selectedThread()?.working_dir) || undefined }).catch((error) => {
+      setThreadActionError(getErrorMessage(error));
+    });
+  };
+
+  const openActivityFilePreview = (activityID: string, action: FlowerActivityFileAction) => {
+    const path = trimString(action.path);
+    if (!path || !props.adapter.openFilePreview) return;
+    void props.adapter.openFilePreview({ path, source_activity_id: activityID, working_dir: trimString(selectedThread()?.working_dir) || undefined }).catch((error) => {
+      setThreadActionError(getErrorMessage(error));
+    });
+  };
+
+  const fileActionButtons = (activityID: string, action: FlowerActivityFileAction) => (
+    <div class="flower-host-activity-file-actions" aria-label="File actions">
+      <Show when={action.can_browse_directory && trimString(action.path) && props.adapter.openFileBrowser}>
+        <button
+          type="button"
+          class="flower-host-activity-file-action-button"
+          title="Browse folder"
+          aria-label={`Browse folder for ${action.path}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            openActivityFileBrowser(activityID, action);
+          }}
+        >
+          <FolderOpen class="h-3.5 w-3.5" />
+        </button>
+      </Show>
+      <Show when={action.can_preview && trimString(action.path) && props.adapter.openFilePreview}>
+        <button
+          type="button"
+          class="flower-host-activity-file-action-button"
+          title="Preview file"
+          aria-label={`Preview ${action.path}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            openActivityFilePreview(activityID, action);
+          }}
+        >
+          <FileText class="h-3.5 w-3.5" />
+        </button>
+      </Show>
+    </div>
+  );
+
+  const detailLinesBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'structured' | 'terminal' }>) => (
+    <>
+      <For each={block.lines}>
+        {(line) => (
+          <div class="flower-host-activity-inline-detail-line">
+            <span class="flower-host-activity-inline-detail-key">{line.label}</span>
+            <span class={cn('flower-host-activity-inline-detail-value', line.tone === 'code' && 'flower-host-activity-inline-detail-value-code')}>{line.value}</span>
+          </div>
+        )}
+      </For>
+    </>
+  );
+
+  const fileReadBlock = (activityID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_read' }>) => {
+    const lineSummary = (() => {
+      const start = Math.max(1, Math.floor(Number(block.line_offset || 1)));
+      const count = Math.max(0, Math.floor(Number(block.line_count || 0)));
+      const total = Math.max(0, Math.floor(Number(block.total_lines || 0)));
+      if (count <= 0) return total > 0 ? `0 lines of ${total}` : '0 lines';
+      const end = start + count - 1;
+      return total > 0 ? `lines ${start}-${end} of ${total}` : `lines ${start}-${end}`;
+    })();
+    return (
+      <div class="flower-host-activity-file-read">
+        <div class="flower-host-activity-file-toolbar">
+          <span class="flower-host-activity-file-meta">
+            {lineSummary}
+            <Show when={block.truncated}>
+              <span class="flower-host-activity-file-truncated"> · truncated</span>
+            </Show>
+          </span>
+          {fileActionButtons(activityID, block.action)}
+        </div>
+        <pre class="flower-host-activity-file-read-content"><code>{block.content}</code></pre>
+      </div>
+    );
+  };
+
+  const diffLineCount = (start: number, index: number): number => Math.max(1, Math.floor(Number(start || 1))) + index;
+  const diffLineClass = (kind: FlowerActivityDiffLineKind | undefined) => cn(
+    'flower-host-activity-file-diff-line',
+    kind === 'removed' && 'flower-host-activity-file-diff-line-removed',
+    kind === 'added' && 'flower-host-activity-file-diff-line-added',
+  );
+
+  const fileDiffBlock = (activityID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_diff' }>) => (
+    <div class="flower-host-activity-file-diff-list">
+      <For each={block.files}>
+        {(file) => fileDiffFile(activityID, file)}
+      </For>
+    </div>
+  );
+
+  const fileDiffFile = (activityID: string, file: FlowerActivityDiffFile) => (
+    <section class="flower-host-activity-file-diff-file">
+      <div class="flower-host-activity-file-toolbar">
+        <span class="flower-host-activity-file-path">{file.path}</span>
+        <span class="flower-host-activity-file-change">{file.change_type}</span>
+        <Show when={file.truncated}>
+          <span class="flower-host-activity-file-truncated">Diff truncated</span>
+        </Show>
+        {fileActionButtons(activityID, file.action)}
+      </div>
+      <div class="flower-host-activity-file-diff-grid">
+        <For each={file.hunks}>
+          {(hunk) => (
+            <div class="flower-host-activity-file-diff-hunk">
+              <div class="flower-host-activity-file-diff-side flower-host-activity-file-diff-side-old">
+                <div class="flower-host-activity-file-diff-heading">old</div>
+                <For each={hunk.before.length > 0 ? hunk.before : ['']}>
+                  {(line, index) => (
+                    <div class={line === '' ? 'flower-host-activity-file-diff-line' : diffLineClass(hunk.before_kinds[index()])}>
+                      <span class="flower-host-activity-file-diff-line-number">{line === '' ? '' : diffLineCount(hunk.old_start, index())}</span>
+                      <code>{line}</code>
+                    </div>
+                  )}
+                </For>
+              </div>
+              <div class="flower-host-activity-file-diff-side flower-host-activity-file-diff-side-new">
+                <div class="flower-host-activity-file-diff-heading">new</div>
+                <For each={hunk.after.length > 0 ? hunk.after : ['']}>
+                  {(line, index) => (
+                    <div class={line === '' ? 'flower-host-activity-file-diff-line' : diffLineClass(hunk.after_kinds[index()])}>
+                      <span class="flower-host-activity-file-diff-line-number">{line === '' ? '' : diffLineCount(hunk.new_start, index())}</span>
+                      <code>{line}</code>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </div>
+          )}
+        </For>
+        <Show when={file.hunks.length === 0}>
+          <div class="flower-host-activity-file-diff-empty">No textual diff</div>
+        </Show>
+      </div>
+    </section>
+  );
+
+  const activityDetailBlock = (activityID: string, block: FlowerActivityDetailBlock) => {
     if (block.kind === 'todos') {
       return (
         <div class="flower-host-activity-todo-list" role="list" aria-label="Todos">
@@ -1350,18 +1518,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       );
     }
-    return (
-      <>
-        <For each={block.lines}>
-          {(line) => (
-            <div class="flower-host-activity-inline-detail-line">
-              <span class="flower-host-activity-inline-detail-key">{line.label}</span>
-              <span class={cn('flower-host-activity-inline-detail-value', line.tone === 'code' && 'flower-host-activity-inline-detail-value-code')}>{line.value}</span>
-            </div>
-          )}
-        </For>
-      </>
-    );
+    if (block.kind === 'file_read') return fileReadBlock(activityID, block);
+    if (block.kind === 'file_diff') return fileDiffBlock(activityID, block);
+    return detailLinesBlock(block);
   };
 
   const activityRow = (timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem, blockKey: string, index: number) => {
@@ -1388,7 +1547,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         >
           <span class="flower-host-activity-inline-icon">{statusIcon(item.status)}</span>
           <span class="flower-host-activity-inline-copy">
-            <span class="flower-host-activity-inline-title">{presentation().label}</span>
+            <span class="flower-host-activity-inline-title">{activityTitle(presentation().title)}</span>
             <Show when={presentation().meta}>
               {(meta) => <span class="flower-host-activity-inline-detail">{meta()}</span>}
             </Show>
@@ -1404,7 +1563,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <Show when={open()}>
           <div class="flower-host-activity-inline-details">
             <For each={presentation().detailBlocks}>
-              {(block) => activityDetailBlock(block)}
+              {(block) => activityDetailBlock(item.item_id, block)}
             </For>
           </div>
         </Show>

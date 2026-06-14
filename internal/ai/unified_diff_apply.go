@@ -64,6 +64,7 @@ type parsedPatch struct {
 	inputFormat      patchInputFormat
 	normalizedFormat patchInputFormat
 	files            []unifiedDiffFile
+	mutations        []FileMutationResult
 }
 
 type patchFileSummary struct {
@@ -519,6 +520,7 @@ type patchFilePlan struct {
 	write    bool
 	perm     fs.FileMode
 	contents []byte
+	mutation FileMutationResult
 }
 
 func applyUnifiedDiff(workingDirAbs string, patchText string) (parsedPatch, error) {
@@ -539,6 +541,7 @@ func applyUnifiedDiff(workingDirAbs string, patchText string) (parsedPatch, erro
 			return parsedPatch{}, err
 		}
 		plans = append(plans, plan)
+		parsed.mutations = append(parsed.mutations, plan.mutation)
 	}
 
 	// Apply after full validation to avoid partially-applied patches on parse errors.
@@ -584,7 +587,15 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 		if oldPath == "/dev/null" {
 			return patchFilePlan{}, errors.New("invalid delete diff: old path is /dev/null")
 		}
-		return patchFilePlan{oldAbs: oldAbs, delete: true}, nil
+		originalBytes, err := os.ReadFile(oldAbs)
+		if err != nil {
+			return patchFilePlan{}, err
+		}
+		return patchFilePlan{
+			oldAbs:   oldAbs,
+			delete:   true,
+			mutation: newFileMutationResultWithPaths(oldAbs, oldAbs, "", "delete", string(originalBytes), ""),
+		}, nil
 	}
 
 	// Determine baseline file and permissions.
@@ -620,6 +631,11 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 			return patchFilePlan{}, applyErr
 		}
 	}
+	mutation := newFileMutationResultWithStructuredDiff(newAbs, oldAbs, newAbs, patchMutationChangeType(fd), structuredDiffFromPatchFile(fd))
+	if string(fileBytes) != string(next) {
+		mutation.OriginalFile = string(fileBytes)
+		mutation.UpdatedFile = string(next)
+	}
 	return patchFilePlan{
 		oldAbs:   oldAbs,
 		newAbs:   newAbs,
@@ -627,7 +643,63 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 		write:    true,
 		perm:     perm,
 		contents: next,
+		mutation: mutation,
 	}, nil
+}
+
+func structuredDiffFromPatchFile(fd unifiedDiffFile) []DiffHunkView {
+	out := make([]DiffHunkView, 0, len(fd.hunks))
+	for _, hunk := range fd.hunks {
+		view := DiffHunkView{
+			OldStart: hunk.oldStart,
+			OldLines: hunk.oldCount,
+			NewStart: hunk.newStart,
+			NewLines: hunk.newCount,
+		}
+		for _, line := range hunk.lines {
+			if line == "" {
+				continue
+			}
+			text := ""
+			if len(line) > 1 {
+				text = line[1:]
+			}
+			switch line[0] {
+			case ' ':
+				view.Before = append(view.Before, text)
+				view.BeforeKinds = append(view.BeforeKinds, "context")
+			case '-':
+				view.Before = append(view.Before, text)
+				view.BeforeKinds = append(view.BeforeKinds, "removed")
+			}
+			switch line[0] {
+			case ' ':
+				view.After = append(view.After, text)
+				view.AfterKinds = append(view.AfterKinds, "context")
+			case '+':
+				view.After = append(view.After, text)
+				view.AfterKinds = append(view.AfterKinds, "added")
+			}
+		}
+		if len(view.Before) == 0 && len(view.After) == 0 {
+			continue
+		}
+		out = append(out, view)
+	}
+	return out
+}
+
+func patchMutationChangeType(fd unifiedDiffFile) string {
+	switch classifyPatchFileChange(fd) {
+	case "added":
+		return "create"
+	case "deleted":
+		return "delete"
+	case "renamed":
+		return "rename"
+	default:
+		return "update"
+	}
 }
 
 func resolvePatchPath(workingDirAbs string, raw string) (string, error) {

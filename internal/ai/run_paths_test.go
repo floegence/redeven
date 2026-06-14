@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,13 @@ func canonicalPath(path string) string {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err == nil && strings.TrimSpace(resolved) != "" {
 		return filepath.Clean(resolved)
+	}
+	dir, base := filepath.Split(path)
+	if dir != "" && base != "" {
+		resolvedDir, err := filepath.EvalSymlinks(filepath.Clean(dir))
+		if err == nil && strings.TrimSpace(resolvedDir) != "" {
+			return filepath.Clean(filepath.Join(resolvedDir, base))
+		}
 	}
 	return path
 }
@@ -271,18 +279,27 @@ func TestToolApplyPatch_CreatesFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("toolApplyPatch: %v", err)
 	}
-	m, ok := out.(map[string]any)
+	result, ok := out.(ApplyPatchResult)
 	if !ok {
 		t.Fatalf("unexpected result type: %T", out)
 	}
-	if got := int(m["files_changed"].(int)); got != 1 {
+	if got := result.FilesChanged; got != 1 {
 		t.Fatalf("files_changed=%d, want 1", got)
 	}
-	if got := anyToString(m["input_format"]); got != "unified_diff" {
+	if got := result.InputFormat; got != "unified_diff" {
 		t.Fatalf("input_format=%q, want %q", got, "unified_diff")
 	}
-	if got := anyToString(m["normalized_format"]); got != "begin_patch" {
+	if got := result.NormalizedFormat; got != "begin_patch" {
 		t.Fatalf("normalized_format=%q, want %q", got, "begin_patch")
+	}
+	if len(result.Mutations) != 1 || result.Mutations[0].ChangeType != "create" || canonicalPath(result.Mutations[0].FilePath) != canonicalPath(filepath.Join(workingDir, "note.txt")) {
+		t.Fatalf("mutations=%+v, want one create mutation", result.Mutations)
+	}
+	if canonicalPath(result.Mutations[0].NewPath) != canonicalPath(filepath.Join(workingDir, "note.txt")) || result.Mutations[0].OldPath != "" {
+		t.Fatalf("mutation paths=%+v, want only new path", result.Mutations[0])
+	}
+	if strings.TrimSpace(result.Mutations[0].UpdatedFile) != "hello patch" || len(result.Mutations[0].StructuredDiff) != 1 {
+		t.Fatalf("mutation detail=%+v, want updated file and structured diff", result.Mutations[0])
 	}
 	got, err := os.ReadFile(filepath.Join(workingDir, "note.txt"))
 	if err != nil {
@@ -290,6 +307,43 @@ func TestToolApplyPatch_CreatesFile(t *testing.T) {
 	}
 	if strings.TrimSpace(string(got)) != "hello patch" {
 		t.Fatalf("content=%q, want %q", string(got), "hello patch")
+	}
+}
+
+func TestToolApplyPatch_ReportsDeletedFileMutation(t *testing.T) {
+	t.Parallel()
+
+	workingDir := t.TempDir()
+	target := filepath.Join(workingDir, "old.txt")
+	if err := os.WriteFile(target, []byte("remove me\n"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	r := &run{agentHomeDir: workingDir, workingDir: workingDir}
+	patch := strings.Join([]string{
+		"*** Begin Patch",
+		"*** Delete File: old.txt",
+		"*** End Patch",
+	}, "\n")
+
+	out, err := r.toolApplyPatch(context.Background(), patch)
+	if err != nil {
+		t.Fatalf("toolApplyPatch: %v", err)
+	}
+	result, ok := out.(ApplyPatchResult)
+	if !ok {
+		t.Fatalf("unexpected result type: %T", out)
+	}
+	if len(result.Mutations) != 1 || result.Mutations[0].ChangeType != "delete" {
+		t.Fatalf("mutations=%+v, want one delete mutation", result.Mutations)
+	}
+	if canonicalPath(result.Mutations[0].FilePath) != canonicalPath(target) || canonicalPath(result.Mutations[0].OldPath) != canonicalPath(target) || result.Mutations[0].NewPath != "" {
+		t.Fatalf("mutation paths=%+v, want only old path", result.Mutations[0])
+	}
+	if strings.TrimSpace(result.Mutations[0].OriginalFile) != "remove me" || result.Mutations[0].UpdatedFile != "" {
+		t.Fatalf("mutation detail=%+v, want original content and empty updated content", result.Mutations[0])
+	}
+	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("target stat err=%v, want not exist", err)
 	}
 }
 
