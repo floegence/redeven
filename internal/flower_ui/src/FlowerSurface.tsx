@@ -34,7 +34,7 @@ import {
   type FlowerRenderableMessageBlock,
   type FlowerTimelineEntry,
 } from './flowerTimelineProjection';
-import { presentFlowerActivityItem } from './flowerActivityPresentation';
+import { presentFlowerActivityItem, type FlowerActivityDetailBlock, type FlowerActivityTodoStatus } from './flowerActivityPresentation';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
@@ -1249,6 +1249,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
+  const todoStatusLabel = (status: FlowerActivityTodoStatus): string => {
+    switch (status) {
+      case 'completed':
+        return 'Completed';
+      case 'in_progress':
+        return 'In progress';
+      case 'cancelled':
+        return 'Cancelled';
+      case 'pending':
+        return 'Pending';
+    }
+  };
+
+  const todoStatusIcon = (status: FlowerActivityTodoStatus) => {
+    switch (status) {
+      case 'completed':
+        return <Check class="h-3 w-3" />;
+      case 'in_progress':
+        return <Terminal class="h-3 w-3" />;
+      case 'cancelled':
+        return <AlertTriangle class="h-3 w-3" />;
+      case 'pending':
+        return <Clock class="h-3 w-3" />;
+    }
+  };
+
   const activityItemNeedsAttention = (item: Pick<FlowerActivityItem, 'status' | 'requires_approval' | 'severity' | 'needs_attention'>): boolean => (
     item.needs_attention
     ||
@@ -1295,6 +1321,49 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ].filter(Boolean).join('. ')
   );
 
+  const activityDetailBlock = (block: FlowerActivityDetailBlock) => {
+    if (block.kind === 'todos') {
+      return (
+        <div class="flower-host-activity-todo-list" role="list" aria-label="Todos">
+          <For each={block.items}>
+            {(todo) => (
+              <div
+                class={cn('flower-host-activity-todo-item', `flower-host-activity-todo-item-${todo.status}`)}
+                role="listitem"
+                data-status={todo.status}
+              >
+                <span class="flower-host-activity-todo-marker" aria-hidden="true">{todoStatusIcon(todo.status)}</span>
+                <span class="flower-host-activity-todo-copy">
+                  <span class={cn('flower-host-activity-todo-content', todo.status === 'completed' && 'flower-host-activity-todo-content-completed')}>
+                    {todo.content}
+                  </span>
+                  <span class="flower-host-activity-todo-meta">
+                    {todoStatusLabel(todo.status)}
+                    <Show when={todo.note}>
+                      {(note) => <span class="flower-host-activity-todo-note"> · {note()}</span>}
+                    </Show>
+                  </span>
+                </span>
+              </div>
+            )}
+          </For>
+        </div>
+      );
+    }
+    return (
+      <>
+        <For each={block.lines}>
+          {(line) => (
+            <div class="flower-host-activity-inline-detail-line">
+              <span class="flower-host-activity-inline-detail-key">{line.label}</span>
+              <span class={cn('flower-host-activity-inline-detail-value', line.tone === 'code' && 'flower-host-activity-inline-detail-value-code')}>{line.value}</span>
+            </div>
+          )}
+        </For>
+      </>
+    );
+  };
+
   const activityRow = (timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem, blockKey: string, index: number) => {
     const open = createMemo(() => activityItemOpen(timeline, item, blockKey, index));
     const presentation = createMemo(() => presentFlowerActivityItem(item));
@@ -1334,13 +1403,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </button>
         <Show when={open()}>
           <div class="flower-host-activity-inline-details">
-            <For each={presentation().detailLines}>
-              {(line) => (
-                <div class="flower-host-activity-inline-detail-line">
-                  <span class="flower-host-activity-inline-detail-key">{line.label}</span>
-                  <span class={cn('flower-host-activity-inline-detail-value', line.tone === 'code' && 'flower-host-activity-inline-detail-value-code')}>{line.value}</span>
-                </div>
-              )}
+            <For each={presentation().detailBlocks}>
+              {(block) => activityDetailBlock(block)}
             </For>
           </div>
         </Show>
@@ -1349,26 +1413,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const activityBlock = (block: FlowerActivityTimelineBlock, blockKey: string) => (
-    <div class="flower-host-activity-inline" data-flower-activity-run-id={block.run_id}>
-      <Show
-        when={block.items.length > 0}
-        fallback={(
-          <div class={cn('flower-host-activity-inline-row', `flower-host-activity-inline-row-${block.summary.status}`)}>
-            <div class="flower-host-activity-inline-button flower-host-activity-inline-button-static">
-              <span class="flower-host-activity-inline-icon">{statusIcon(block.summary.status)}</span>
-              <span class="flower-host-activity-inline-copy">
-                <span class="flower-host-activity-inline-title">Activity updated</span>
-                <span class="flower-host-activity-inline-detail">{copy().chat.toolStatuses[block.summary.status]}</span>
-              </span>
-            </div>
-          </div>
-        )}
-      >
+    <Show when={block.items.length > 0}>
+      <div class="flower-host-activity-inline" data-flower-activity-run-id={block.run_id}>
         <For each={block.items}>
           {(item, index) => activityRow(block, item, blockKey, index())}
         </For>
-      </Show>
-    </div>
+      </div>
+    </Show>
   );
 
   const messageContentBubble = (

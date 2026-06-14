@@ -99,6 +99,7 @@ function contentBlocksFromMessage(message: FlowerChatMessage): readonly FlowerRe
   return sourceBlocks.flatMap((block, index): readonly FlowerRenderableMessageBlock[] => {
     const key = `${message.id}:block:${index}`;
     if (block.type === 'activity-timeline') {
+      if (block.items.length === 0) return [];
       return [{ type: 'activity', key, block }];
     }
     const content = trimString(block.content);
@@ -108,12 +109,18 @@ function contentBlocksFromMessage(message: FlowerChatMessage): readonly FlowerRe
 
 export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined): readonly FlowerTimelineEntry[] {
   if (!thread) return [];
-  const entries: FlowerTimelineEntry[] = thread.messages.map((message) => ({
-    type: 'message',
-    key: `message:${message.id}`,
-    message,
-    blocks: contentBlocksFromMessage(message),
-  }));
+  const entries: FlowerTimelineEntry[] = thread.messages.flatMap((message): readonly FlowerTimelineEntry[] => {
+    const blocks = contentBlocksFromMessage(message);
+    if (blocks.length === 0 && message.status !== 'streaming' && message.status !== 'error') {
+      return [];
+    }
+    return [{
+      type: 'message',
+      key: `message:${message.id}`,
+      message,
+      blocks,
+    }];
+  });
   if (thread.status === 'waiting_user' && thread.input_request) {
     entries.push({
       type: 'input_request',

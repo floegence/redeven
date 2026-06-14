@@ -176,6 +176,23 @@ describe('buildFlowerTimelineEntries', () => {
     expect(first.blocks[0]?.type).toBe('activity');
   });
 
+  it('does not render empty activity timeline blocks', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-empty-activity',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 2,
+          blocks: [activityTimeline({ items: [], summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 0, counts: {} } })],
+        },
+      ],
+    }));
+
+    expect(entries).toHaveLength(0);
+  });
+
   it('appends waiting input and thread errors as transcript entries', () => {
     const entries = buildFlowerTimelineEntries(thread({
       status: 'waiting_user',
