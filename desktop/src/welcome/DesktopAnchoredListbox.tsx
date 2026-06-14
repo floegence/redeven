@@ -48,6 +48,7 @@ export function resolveDesktopAnchoredListboxGeometry(options: Readonly<{
   overlayHeight: number;
   viewportWidth: number;
   viewportHeight: number;
+  viewportTopInset: number;
   maxHeight?: number;
   minHeight?: number;
   width?: number;
@@ -56,11 +57,13 @@ export function resolveDesktopAnchoredListboxGeometry(options: Readonly<{
   const minHeight = Math.max(1, Math.min(options.minHeight ?? DEFAULT_MIN_HEIGHT, maxHeight));
   const viewportWidth = Math.max(0, options.viewportWidth);
   const viewportHeight = Math.max(0, options.viewportHeight);
+  const viewportTopInset = Math.max(0, options.viewportTopInset);
+  const topBoundary = LISTBOX_MARGIN + viewportTopInset;
   const requestedWidth = options.width ?? options.anchorRect.width;
   const width = Math.max(1, Math.min(Math.max(options.anchorRect.width, requestedWidth), Math.max(1, viewportWidth - (LISTBOX_MARGIN * 2))));
   const left = clamp(options.anchorRect.left, LISTBOX_MARGIN, viewportWidth - width - LISTBOX_MARGIN);
   const availableBelow = Math.max(0, viewportHeight - options.anchorRect.bottom - LISTBOX_MARGIN - LISTBOX_GAP);
-  const availableAbove = Math.max(0, options.anchorRect.top - LISTBOX_MARGIN - LISTBOX_GAP);
+  const availableAbove = Math.max(0, options.anchorRect.top - topBoundary - LISTBOX_GAP);
   const desiredHeight = Math.max(minHeight, Math.min(maxHeight, options.overlayHeight || maxHeight));
   const placement: DesktopAnchoredListboxPlacement = availableBelow >= Math.min(desiredHeight, minHeight) || availableBelow >= availableAbove
     ? 'bottom'
@@ -75,10 +78,24 @@ export function resolveDesktopAnchoredListboxGeometry(options: Readonly<{
   return {
     placement,
     left,
-    top: clamp(rawTop, LISTBOX_MARGIN, viewportHeight - renderedHeight - LISTBOX_MARGIN),
+    top: clamp(rawTop, topBoundary, viewportHeight - renderedHeight - LISTBOX_MARGIN),
     width,
     maxHeight: resolvedMaxHeight,
   };
+}
+
+function readDesktopTitlebarTopInset(): number {
+  if (typeof document === 'undefined') {
+    throw new Error('Desktop anchored listbox requires document chrome variables.');
+  }
+  const rawValue = getComputedStyle(document.documentElement)
+    .getPropertyValue('--redeven-desktop-titlebar-height')
+    .trim();
+  const value = Number.parseFloat(rawValue);
+  if (!Number.isFinite(value)) {
+    throw new Error('Desktop anchored listbox requires --redeven-desktop-titlebar-height.');
+  }
+  return Math.max(0, value);
 }
 
 export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
@@ -108,6 +125,7 @@ export function DesktopAnchoredListbox(props: DesktopAnchoredListboxProps) {
       overlayHeight: overlayRef.getBoundingClientRect().height,
       viewportWidth,
       viewportHeight,
+      viewportTopInset: readDesktopTitlebarTopInset(),
       maxHeight: props.maxHeight,
       minHeight: props.minHeight,
       width: props.width,

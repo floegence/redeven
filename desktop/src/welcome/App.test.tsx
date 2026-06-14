@@ -66,6 +66,10 @@ function readWelcomeStyles(): string {
   return fs.readFileSync(path.join(__dirname, 'index.css'), 'utf8');
 }
 
+function readWindowChromeContractSource(): string {
+  return fs.readFileSync(path.join(__dirname, '..', 'shared', 'windowChromeContract.ts'), 'utf8');
+}
+
 function readInstalledDialogSource(): string {
   return fs.readFileSync(
     path.join(
@@ -82,6 +86,16 @@ function readInstalledDialogSource(): string {
     ),
     'utf8',
   );
+}
+
+function cssRuleBlock(styles: string, selector: string): string {
+  const ruleStart = styles.indexOf(`${selector} {`);
+  expect(ruleStart).toBeGreaterThanOrEqual(0);
+  const bodyStart = styles.indexOf('{', ruleStart);
+  const bodyEnd = styles.indexOf('\n}', bodyStart);
+  expect(bodyStart).toBeGreaterThan(ruleStart);
+  expect(bodyEnd).toBeGreaterThan(bodyStart);
+  return styles.slice(ruleStart, bodyEnd + 2);
 }
 
 function testProviderAccessPoint(providerOrigin: string) {
@@ -1230,6 +1244,9 @@ describe('DesktopWelcomeShell', () => {
     expect(listboxSrc).toContain('style={{');
     expect(listboxSrc).toContain('width?: number;');
     expect(listboxSrc).toContain('resolveDesktopAnchoredListboxGeometry');
+    expect(listboxSrc).toContain('function readDesktopTitlebarTopInset(): number');
+    expect(listboxSrc).toContain("getPropertyValue('--redeven-desktop-titlebar-height')");
+    expect(listboxSrc).toContain('viewportTopInset: readDesktopTitlebarTopInset()');
     expect(listboxSrc).toContain('IMPORTANT: Dialog form listboxes must live outside dialog scroll containers.');
   });
 
@@ -1900,6 +1917,76 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('background: var(--error);');
     expect(styles).toContain('color: var(--error-foreground);');
     expect(dialogSrc).toContain('variant: "ghost-destructive"');
+  });
+
+  it('keeps Welcome global dialogs below desktop titlebar chrome without scattered height math', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+    const chromeSrc = readWindowChromeContractSource();
+    const dialogSrc = readInstalledDialogSource();
+    const overlayRule = cssRuleBlock(styles, "[data-floe-dialog-overlay-root][data-floe-dialog-mode='global']");
+    const panelRule = cssRuleBlock(styles, "[data-floe-dialog-overlay-root][data-floe-dialog-mode='global'] [data-floe-dialog-panel]");
+    const backdropRule = cssRuleBlock(styles, "[data-floe-dialog-overlay-root][data-floe-dialog-mode='global'] [data-floe-dialog-backdrop]");
+    const semanticPanelRule = cssRuleBlock(styles, '.redeven-welcome-dialog-panel');
+    const dialogBodyRule = cssRuleBlock(styles, '.redeven-welcome-dialog-panel > div:nth-child(2)');
+
+    expect(dialogSrc).toContain('data-floe-dialog-overlay-root');
+    expect(dialogSrc).toContain('data-floe-dialog-mode');
+    expect(dialogSrc).toContain('return r() ? "surface" : "global";');
+    expect(dialogSrc).toContain('"global"');
+    expect(dialogSrc).toContain('"fixed inset-0 box-border z-50 p-4"');
+    expect(dialogSrc).toContain('data-floe-dialog-backdrop');
+    expect(dialogSrc).toContain('data-floe-dialog-panel');
+    expect(dialogSrc).toContain('"flex flex-col", e.class');
+    expect(dialogSrc).toContain('return r() ? void 0 : "true";');
+    expect(dialogSrc).toContain('return n(ve, {');
+    expect(dialogSrc).toContain('ke as ConfirmDialog');
+    expect(chromeSrc).toContain("'--redeven-desktop-titlebar-height': `${snapshot.titleBarHeight}px`");
+    expect(chromeSrc).toContain("[data-floe-shell-slot='top-bar']");
+    expect(chromeSrc).toContain('app-region: drag;');
+
+    expect(overlayRule).toContain('--redeven-welcome-dialog-titlebar-offset: var(--redeven-desktop-titlebar-height);');
+    expect(overlayRule).not.toContain('var(--redeven-desktop-titlebar-height,');
+    expect(overlayRule).toContain('--redeven-welcome-dialog-edge-gap: 1rem;');
+    expect(overlayRule).toContain('calc(100dvh - var(--redeven-welcome-dialog-titlebar-offset) - (var(--redeven-welcome-dialog-edge-gap) * 2))');
+    expect(overlayRule).toContain('--redeven-welcome-dialog-panel-max-height: var(--redeven-welcome-dialog-available-height);');
+    expect(overlayRule).toContain('padding:\n    calc(var(--redeven-welcome-dialog-titlebar-offset) + var(--redeven-welcome-dialog-edge-gap))');
+    expect(overlayRule).toContain('app-region: no-drag;');
+    expect(panelRule).toContain('app-region: no-drag;');
+    expect(panelRule).toContain('margin-block: auto;');
+    expect(panelRule).toContain('max-height: var(--redeven-welcome-dialog-panel-max-height);');
+    expect(backdropRule).toContain('app-region: no-drag;');
+    expect(semanticPanelRule).toContain('display: flex;');
+    expect(semanticPanelRule).toContain('flex-direction: column;');
+    expect(semanticPanelRule).toContain('max-width: none;');
+    expect(semanticPanelRule).toContain('overflow: hidden;');
+    expect(semanticPanelRule).toContain('padding: 0;');
+    expect(dialogBodyRule).toContain('min-height: 0;');
+    expect(dialogBodyRule).toContain('flex: 1 1 auto;');
+    expect(dialogBodyRule).toContain('overflow: auto;');
+    expect(styles).toContain('.redeven-welcome-dialog-panel--settings');
+    expect(styles).toContain('width: min(52rem, 96vw);');
+    expect(styles).toContain('.redeven-welcome-dialog-panel--connection');
+    expect(styles).toContain('width: min(58rem, 96vw);');
+
+    expect(appSrc).toContain("const WELCOME_DIALOG_PANEL_CLASS = 'redeven-welcome-dialog-panel';");
+    expect(appSrc).toContain("'redeven-welcome-dialog-panel--settings'");
+    expect(appSrc).toContain("'redeven-welcome-dialog-panel--connection'");
+    expect(appSrc).not.toContain("[&>div:first-child]");
+    expect(appSrc).not.toContain("[&>div:nth-child(2)]");
+    expect(appSrc).not.toContain("[&>div:last-child]");
+    expect(appSrc).not.toContain('max-h-[calc(100dvh-1rem)]');
+    expect(appSrc).not.toContain('max-h-[calc(100dvh-3rem)]');
+    expect(appSrc).not.toContain('100dvh');
+    expect((styles.match(/100dvh/g) ?? []).length).toBe(1);
+
+    expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
+    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(6);
+    expect((appSrc.match(/class=\{LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS\}/g) ?? []).length).toBe(2);
+    expect((appSrc.match(/class=\{CONNECTION_DIALOG_CLASS\}/g) ?? []).length).toBe(2);
+    expect(appSrc).toContain('function ControlPlaneDialog');
+    expect(appSrc).toContain("title={props.i18n.t('connectionDialog.addProviderTitle')}");
+    expect(appSrc).toContain('open={providerRuntimeLinkDialogOpen()}');
   });
 
   it('uses Gateway-specific deletion copy for Gateway-owned profiles', () => {

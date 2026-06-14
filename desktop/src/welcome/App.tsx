@@ -12768,18 +12768,16 @@ function GatewayDisabledIcon(props: Readonly<{ class?: string }>) {
   );
 }
 
+const WELCOME_DIALOG_PANEL_CLASS = 'redeven-welcome-dialog-panel';
+
 const LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS = cn(
-  'flex max-w-none flex-col overflow-hidden rounded-md p-0',
-  '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
-  '[&>div:last-child]:min-h-0 [&>div:last-child]:flex-1 [&>div:last-child]:overflow-auto [&>div:last-child]:pt-2',
-  'max-h-[calc(100dvh-1rem)] w-[min(52rem,96vw)]',
+  WELCOME_DIALOG_PANEL_CLASS,
+  'redeven-welcome-dialog-panel--settings',
 );
 
 const CONNECTION_DIALOG_CLASS = cn(
-  'flex max-w-none flex-col overflow-hidden rounded-md p-0',
-  '[&>div:first-child]:border-b-0 [&>div:first-child]:pb-2',
-  '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:overflow-auto [&>div:nth-child(2)]:pt-2',
-  'max-h-[calc(100dvh-3rem)] w-[min(58rem,96vw)]',
+  WELCOME_DIALOG_PANEL_CLASS,
+  'redeven-welcome-dialog-panel--connection',
 );
 
 const LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS = 'redeven-tile rounded-md border border-border px-4 py-4 redeven-settings-detail-card';

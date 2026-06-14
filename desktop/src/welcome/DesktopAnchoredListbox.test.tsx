@@ -23,6 +23,7 @@ describe('DesktopAnchoredListbox', () => {
       overlayHeight: 220,
       viewportWidth: 900,
       viewportHeight: 700,
+      viewportTopInset: 40,
       maxHeight: 320,
     });
 
@@ -41,6 +42,7 @@ describe('DesktopAnchoredListbox', () => {
       overlayHeight: 260,
       viewportWidth: 1100,
       viewportHeight: 620,
+      viewportTopInset: 40,
       maxHeight: 320,
     });
 
@@ -49,12 +51,28 @@ describe('DesktopAnchoredListbox', () => {
     expect(geometry.maxHeight).toBe(320);
   });
 
+  it('keeps top-placed listboxes below the desktop titlebar safe area', () => {
+    const geometry = resolveDesktopAnchoredListboxGeometry({
+      anchorRect: rect(180, 92, 320, 32),
+      overlayHeight: 180,
+      viewportWidth: 900,
+      viewportHeight: 150,
+      viewportTopInset: 40,
+      maxHeight: 320,
+    });
+
+    expect(geometry.placement).toBe('top');
+    expect(geometry.top).toBe(48);
+    expect(geometry.maxHeight).toBe(38);
+  });
+
   it('keeps the listbox inside narrow viewports and constrains available height', () => {
     const geometry = resolveDesktopAnchoredListboxGeometry({
       anchorRect: rect(4, 92, 500, 32),
       overlayHeight: 360,
       viewportWidth: 360,
       viewportHeight: 260,
+      viewportTopInset: 40,
       maxHeight: 320,
     });
 
@@ -70,6 +88,7 @@ describe('DesktopAnchoredListbox', () => {
       overlayHeight: 220,
       viewportWidth: 900,
       viewportHeight: 700,
+      viewportTopInset: 40,
       maxHeight: 320,
       width: 288,
     });
