@@ -74,8 +74,8 @@ export function ActivityBarPortsIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
       <circle cx="12" cy="12" r="7" stroke="currentColor" stroke-opacity=".55" stroke-width="1" fill="currentColor" fill-opacity=".12" />
-      <path d="M12 5 A 7 7 0 0 0 12 19 A 7 7 0 0 0 12 5" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2" fill="none" />
-      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-opacity=".4" stroke-width="1.2" />
+      <path d="M12 5 A 4.5 7 0 0 0 12 19 A 4.5 7 0 0 0 12 5" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" fill="none" stroke-linecap="round" />
+      <line x1="5" y1="12" x2="19" y2="12" stroke="currentColor" stroke-opacity=".5" stroke-width="1.5" stroke-linecap="round" />
     </svg>
   );
 }
