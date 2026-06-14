@@ -34,6 +34,9 @@ func (r *run) finishActivitySegment() {
 	r.activitySegmentActive = false
 	r.activitySegmentBlockIndex = -1
 	r.mu.Unlock()
+	r.muAssistant.Lock()
+	r.activitySegmentEvents = nil
+	r.muAssistant.Unlock()
 }
 
 func (r *run) ensureActivitySegmentBlockIndex(preferred int) int {
@@ -41,9 +44,10 @@ func (r *run) ensureActivitySegmentBlockIndex(preferred int) int {
 		return -1
 	}
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	if r.activitySegmentActive && r.activitySegmentBlockIndex >= 0 {
-		return r.activitySegmentBlockIndex
+		idx := r.activitySegmentBlockIndex
+		r.mu.Unlock()
+		return idx
 	}
 	idx := preferred
 	if idx < 0 {
@@ -54,12 +58,15 @@ func (r *run) ensureActivitySegmentBlockIndex(preferred int) int {
 	}
 	r.activitySegmentActive = true
 	r.activitySegmentBlockIndex = idx
-	r.activitySegmentEvents = nil
 	if r.nextBlockIndex <= idx {
 		r.nextBlockIndex = idx + 1
 	}
 	r.needNewTextBlock = true
 	r.needNewThinkingBlock = true
+	r.mu.Unlock()
+	r.muAssistant.Lock()
+	r.activitySegmentEvents = nil
+	r.muAssistant.Unlock()
 	return idx
 }
 
@@ -72,9 +79,6 @@ func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
 
 func (r *run) recordObservationActivityEvent(ev observation.Event) {
 	if r == nil || !isActivityObservationEvent(ev.Type) {
-		return
-	}
-	if r.ensureActivitySegmentBlockIndex(-1) < 0 {
 		return
 	}
 	if ev.RunID == "" {
@@ -91,6 +95,25 @@ func (r *run) recordObservationActivityEvent(ev observation.Event) {
 	}
 	if ev.ObservedAt.IsZero() {
 		ev.ObservedAt = time.Now()
+	}
+
+	r.mu.Lock()
+	segmentActive := r.activitySegmentActive
+	r.mu.Unlock()
+	r.muAssistant.Lock()
+	previewEvents := make([]observation.Event, 0, len(r.activitySegmentEvents)+1)
+	if segmentActive {
+		previewEvents = append(previewEvents, r.activitySegmentEvents...)
+	}
+	previewEvents = append(previewEvents, ev)
+	r.muAssistant.Unlock()
+	preview := observation.BuildActivityTimeline(r.activityRunMeta(), previewEvents, time.Now().UnixMilli())
+	if len(preview.Items) == 0 {
+		return
+	}
+
+	if r.ensureActivitySegmentBlockIndex(-1) < 0 {
+		return
 	}
 	r.muAssistant.Lock()
 	r.activitySegmentEvents = append(r.activitySegmentEvents, ev)
@@ -119,6 +142,9 @@ func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
 		return
 	}
 	timeline = r.normalizeActivityTimeline(timeline)
+	if len(timeline.Items) == 0 {
+		return
+	}
 	if err := observation.ValidateActivityTimeline(timeline); err != nil {
 		r.persistRunEvent("activity.timeline.invalid", RealtimeStreamKindTool, map[string]any{
 			"error": sanitizeLogText(err.Error(), 240),

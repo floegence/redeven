@@ -70,7 +70,58 @@ describe('presentFlowerActivityItem', () => {
 
     expect(presentation.label).toBe('Update todos');
     expect(presentation.meta).toContain('completed 1');
-    expect(presentation.detailLines.some((line) => line.label === 'todos' && line.value.includes('Inspect thread ordering'))).toBe(true);
+    expect(presentation.detailLines.some((line) => line.label === 'todos')).toBe(false);
+    expect(presentation.detailBlocks).toContainEqual({
+      kind: 'todos',
+      items: [
+        { content: 'Inspect thread ordering', status: 'completed' },
+        { content: 'Verify detail rows', status: 'in_progress' },
+      ],
+    });
+  });
+
+  it('reads todo details from result payloads without exposing JSON', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'write_todos',
+      renderer: 'todos',
+      payload: {
+        result: {
+          todos: [
+            { id: 'todo-1', content: 'Recheck empty activity blocks', status: 'done', note: 'verified locally' },
+          ],
+        },
+      },
+    }));
+
+    expect(presentation.detailLines.some((line) => line.value.includes('"todos"'))).toBe(false);
+    expect(presentation.detailBlocks).toContainEqual({
+      kind: 'todos',
+      items: [
+        { id: 'todo-1', content: 'Recheck empty activity blocks', status: 'completed', note: 'verified locally' },
+      ],
+    });
+  });
+
+  it('reads todo details from args payloads without exposing JSON', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'write_todos',
+      renderer: 'todos',
+      payload: {
+        args: {
+          todos: [
+            { content: 'Validate args todo rendering', status: 'active' },
+          ],
+        },
+      },
+    }));
+
+    expect(presentation.detailLines.some((line) => line.value.includes('"todos"'))).toBe(false);
+    expect(presentation.detailBlocks).toContainEqual({
+      kind: 'todos',
+      items: [
+        { content: 'Validate args todo rendering', status: 'in_progress' },
+      ],
+    });
   });
 
   it('keeps every row expandable with identity details', () => {
@@ -83,5 +134,6 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('terminal.exec');
     expect(presentation.detailLines.length).toBeGreaterThan(0);
     expect(presentation.detailLines.map((line) => line.label)).toContain('status');
+    expect(presentation.detailBlocks.length).toBeGreaterThan(0);
   });
 });

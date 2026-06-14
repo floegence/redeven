@@ -10,10 +10,30 @@ export type FlowerActivityDetailLine = Readonly<{
   tone?: 'code' | 'muted';
 }>;
 
+export type FlowerActivityTodoStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
+export type FlowerActivityTodoItem = Readonly<{
+  id?: string;
+  content: string;
+  status: FlowerActivityTodoStatus;
+  note?: string;
+}>;
+
+export type FlowerActivityDetailBlock =
+  | Readonly<{
+    kind: 'lines';
+    lines: readonly FlowerActivityDetailLine[];
+  }>
+  | Readonly<{
+    kind: 'todos';
+    items: readonly FlowerActivityTodoItem[];
+  }>;
+
 export type FlowerActivityPresentation = Readonly<{
   label: string;
   meta: string;
   detailLines: readonly FlowerActivityDetailLine[];
+  detailBlocks: readonly FlowerActivityDetailBlock[];
 }>;
 
 const DETAIL_LABELS: Readonly<Record<string, string>> = {
@@ -44,7 +64,6 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   count: 'count',
   sources: 'sources',
   results: 'results',
-  todos: 'todos',
   counts: 'counts',
   expected_version: 'version',
   explanation: 'explanation',
@@ -68,7 +87,7 @@ const RENDERER_DETAIL_KEYS: Readonly<Record<FlowerActivityRenderer, readonly str
   file: ['operation', 'path', 'file_path', 'offset', 'limit', 'bytes', 'lines', 'line_count', 'truncated', 'content', 'summary', 'details', 'error'],
   patch: ['operation', 'files', 'patch', 'truncated', 'summary', 'details', 'error'],
   web_search: ['query', 'provider', 'count', 'sources', 'results', 'summary', 'details', 'error'],
-  todos: ['todos', 'counts', 'expected_version', 'explanation', 'summary', 'details', 'error'],
+  todos: ['counts', 'expected_version', 'explanation', 'summary', 'details', 'error'],
   question: ['reason_code', 'required_from_user', 'questions', 'contains_secret', 'summary', 'details', 'error'],
   completion: ['result', 'evidence_refs', 'remaining_risks', 'next_actions', 'summary', 'details', 'error'],
   structured: ['summary', 'details', 'status', 'error', 'content_ref'],
@@ -90,6 +109,14 @@ function payloadValue(payload: Readonly<Record<string, unknown>> | undefined, ..
   return '';
 }
 
+function asRecord(value: unknown): Readonly<Record<string, unknown>> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Readonly<Record<string, unknown>> : {};
+}
+
+function asArray(value: unknown): readonly unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function compactJSON(value: unknown): string {
   if (value === undefined || value === null) return '';
   const scalar = scalarText(value);
@@ -99,6 +126,38 @@ function compactJSON(value: unknown): string {
   } catch {
     return '';
   }
+}
+
+function normalizeTodoStatus(value: unknown): FlowerActivityTodoStatus {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (normalized === 'completed' || normalized === 'complete' || normalized === 'done') return 'completed';
+  if (normalized === 'in_progress' || normalized === 'in progress' || normalized === 'active' || normalized === 'running') return 'in_progress';
+  if (normalized === 'cancelled' || normalized === 'canceled') return 'cancelled';
+  return 'pending';
+}
+
+function todoItemsFromPayload(payload: Readonly<Record<string, unknown>> | undefined): readonly FlowerActivityTodoItem[] {
+  if (!payload) return [];
+  const result = asRecord(payload.result);
+  const args = asRecord(payload.args);
+  const source = asArray(payload.todos).length > 0
+    ? asArray(payload.todos)
+    : asArray(result.todos).length > 0
+      ? asArray(result.todos)
+      : asArray(args.todos);
+  return source.map((entry) => {
+    const record = asRecord(entry);
+    const content = payloadValue(record, 'content', 'title', 'task', 'text', 'description');
+    if (!content) return null;
+    const id = payloadValue(record, 'id');
+    const note = payloadValue(record, 'note');
+    return {
+      ...(id ? { id } : {}),
+      content,
+      status: normalizeTodoStatus(record.after_status ?? record.status),
+      ...(note ? { note } : {}),
+    };
+  }).filter((todo): todo is FlowerActivityTodoItem => todo !== null);
 }
 
 function rendererForItem(item: FlowerActivityItem): FlowerActivityRenderer {
@@ -183,6 +242,11 @@ function detailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: 
   };
 }
 
+function shouldIncludeDetailKey(renderer: FlowerActivityRenderer, key: string): boolean {
+  if (renderer !== 'todos') return true;
+  return key !== 'todos' && key !== 'args' && key !== 'result' && key !== 'counts';
+}
+
 function uniqueDetailLines(lines: readonly FlowerActivityDetailLine[]): readonly FlowerActivityDetailLine[] {
   const seen = new Set<string>();
   const out: FlowerActivityDetailLine[] = [];
@@ -199,9 +263,11 @@ function detailLinesForItem(item: FlowerActivityItem, renderer: FlowerActivityRe
   const payload = item.payload ?? {};
   const orderedKeys = new Set<string>(RENDERER_DETAIL_KEYS[renderer] ?? RENDERER_DETAIL_KEYS.structured);
   for (const key of Object.keys(payload).sort()) {
+    if (!shouldIncludeDetailKey(renderer, key)) continue;
     orderedKeys.add(key);
   }
   const lines = Array.from(orderedKeys)
+    .filter((key) => shouldIncludeDetailKey(renderer, key))
     .map((key) => detailLineFromPayload(payload, key))
     .filter((line): line is FlowerActivityDetailLine => line !== null);
   if (item.requires_approval) {
@@ -224,9 +290,19 @@ function detailLinesForItem(item: FlowerActivityItem, renderer: FlowerActivityRe
 
 export function presentFlowerActivityItem(item: FlowerActivityItem): FlowerActivityPresentation {
   const renderer = rendererForItem(item);
+  const detailLines = detailLinesForItem(item, renderer);
+  const todoItems = renderer === 'todos' ? todoItemsFromPayload(item.payload) : [];
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  if (todoItems.length > 0) {
+    detailBlocks.push({ kind: 'todos', items: todoItems });
+  }
+  if (detailLines.length > 0) {
+    detailBlocks.push({ kind: 'lines', lines: detailLines });
+  }
   return {
     label: labelForItem(item, renderer),
     meta: metaForItem(item),
-    detailLines: detailLinesForItem(item, renderer),
+    detailLines,
+    detailBlocks,
   };
 }

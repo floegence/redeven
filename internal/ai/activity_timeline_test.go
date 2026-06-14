@@ -66,6 +66,94 @@ func TestRecordObservationActivityEventPublishesFloretTimelineBlock(t *testing.T
 	}
 }
 
+func TestRecordObservationActivityEventSkipsEmptyTimeline(t *testing.T) {
+	t.Parallel()
+
+	streamFrames := 0
+	r := &run{
+		id:                        "run_empty",
+		threadID:                  "thread_empty",
+		messageID:                 "msg_empty",
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 2),
+		nextBlockIndex:            0,
+		onStreamEvent: func(ev any) {
+			if _, ok := ev.(streamEventBlockSet); ok {
+				streamFrames++
+			}
+		},
+	}
+
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeRunEnd,
+		Message:    string(observation.ActivityStatusSuccess),
+		ObservedAt: time.UnixMilli(1000),
+	})
+
+	if len(r.assistantBlocks) != 0 {
+		t.Fatalf("assistantBlocks=%#v, want no activity block", r.assistantBlocks)
+	}
+	if streamFrames != 0 {
+		t.Fatalf("streamFrames=%d, want 0", streamFrames)
+	}
+	if r.activitySegmentBlockIndex != -1 || r.activitySegmentActive || r.nextBlockIndex != 0 {
+		t.Fatalf("activity segment state index=%d active=%v next=%d, want untouched", r.activitySegmentBlockIndex, r.activitySegmentActive, r.nextBlockIndex)
+	}
+}
+
+func TestRecordObservationActivityEventClosesRunningItemOnRunEnd(t *testing.T) {
+	t.Parallel()
+
+	var frames []ActivityTimelineBlock
+	r := &run{
+		id:                        "run_close",
+		threadID:                  "thread_close",
+		messageID:                 "msg_close",
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 2),
+		nextBlockIndex:            0,
+		onStreamEvent: func(ev any) {
+			bs, ok := ev.(streamEventBlockSet)
+			if !ok {
+				return
+			}
+			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
+				frames = append(frames, block)
+			}
+		},
+	}
+
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolCall,
+		ToolID:     "tool_running",
+		ToolName:   "terminal.exec",
+		ObservedAt: time.UnixMilli(1000),
+	})
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeRunEnd,
+		Message:    string(observation.ActivityStatusSuccess),
+		ObservedAt: time.UnixMilli(1300),
+	})
+
+	if len(frames) != 2 {
+		t.Fatalf("timeline frames=%d, want 2", len(frames))
+	}
+	latest := frames[len(frames)-1]
+	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusSuccess {
+		t.Fatalf("summary=%+v, want successful one-item timeline", latest.Summary)
+	}
+	item := latest.Items[0]
+	if item.ToolID != "tool_running" || item.Status != observation.ActivityStatusSuccess {
+		t.Fatalf("item=%+v, want running tool closed as success", item)
+	}
+	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 1300 {
+		t.Fatalf("item timing=%+v, want run_end to close timing", item)
+	}
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks len=%d, want one activity block", len(r.assistantBlocks))
+	}
+}
+
 func TestRecordObservationActivityEventKeepsActivitySegmentsInBlockOrder(t *testing.T) {
 	t.Parallel()
 
