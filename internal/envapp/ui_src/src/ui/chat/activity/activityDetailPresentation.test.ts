@@ -8,7 +8,7 @@ const baseItem: ActivityItem = {
   tool_id: 'tool-1',
   tool_name: 'shell',
   kind: 'tool',
-  renderer: 'command',
+  renderer: 'terminal',
   status: 'success',
   severity: 'quiet',
   needs_attention: false,
@@ -97,6 +97,39 @@ describe('activityDetailPresentation', () => {
         textKey: 'chatActivity.fallback.untitledTodo',
         textPrefixSeparator: ':',
       }),
+    ]));
+  });
+
+  it('renders file read payload content with semantic read details', () => {
+    const detail = normalizeActivityDetail({
+      ...baseItem,
+      tool_name: 'file.read',
+      renderer: 'file',
+      label: 'internal/ai/run.go',
+      target_refs: [{ kind: 'file', label: 'internal/ai/run.go', path: 'internal/ai/run.go' }],
+    }, { ...inlineRef, kind: 'tool_detail' }, {
+      operation: 'read',
+      file_path: 'internal/ai/run.go',
+      content: 'package ai\n',
+      line_offset: 10,
+      line_count: 1,
+      total_lines: 200,
+      truncated: false,
+    });
+
+    expect(detail.sections).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'file_read_content',
+        filePath: 'internal/ai/run.go',
+        content: 'package ai\n',
+        lineOffset: 10,
+        lineCount: 1,
+        totalLines: 200,
+        truncated: false,
+      }),
+    ]));
+    expect(detail.copyTargets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'content', text: 'package ai\n' }),
     ]));
   });
 

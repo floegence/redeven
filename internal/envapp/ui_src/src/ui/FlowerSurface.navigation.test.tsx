@@ -1670,10 +1670,23 @@ describe('FlowerSurface navigation', () => {
                 tool_id: 'tool-ask-user',
                 tool_name: 'ask_user',
                 kind: 'control',
+                label: 'Requested input',
+                description: 'Choose the deployment target before Flower continues.',
+                renderer: 'question',
                 status: 'waiting',
                 severity: 'blocking',
                 needs_attention: true,
                 attention_reasons: ['waiting'],
+                payload: {
+                  reason_code: 'needs_user_choice',
+                  required_from_user: ['deployment_target'],
+                  questions: [{
+                    id: 'deployment_target',
+                    header: 'Deployment target',
+                    question: 'Where should Flower deploy this change?',
+                  }],
+                  contains_secret: false,
+                },
               })],
             }),
           ],
@@ -2120,6 +2133,23 @@ describe('FlowerSurface navigation', () => {
                 kind: tool_name === 'task_complete' ? 'control' : 'tool',
                 status: 'success',
                 severity: 'quiet',
+                ...(tool_name === 'terminal.exec'
+                  ? {
+                      label: `npm run check:${index}`,
+                      renderer: 'terminal',
+                      payload: { command: `npm run check:${index}`, exit_code: 0 },
+                    }
+                  : tool_name === 'write_todos'
+                    ? {
+                        label: 'Update todos',
+                        renderer: 'todos',
+                        payload: { todos: [{ content: 'Verify inline activity', status: 'completed' }] },
+                      }
+                    : {
+                        label: 'task_complete',
+                        renderer: 'completion',
+                        payload: { result: 'done' },
+                      }),
               })),
             }),
             { type: 'markdown', content: 'I finished the answer after the audit trail.' },
@@ -2138,8 +2168,8 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => Boolean(host.querySelector('.flower-host-activity-inline')));
 
     const transcriptText = host.textContent ?? '';
-    expect(transcriptText.indexOf('I will check the workspace.')).toBeLessThan(transcriptText.indexOf('Ran command'));
-    expect(transcriptText.indexOf('Ran command')).toBeLessThan(transcriptText.indexOf('I finished the answer after the audit trail.'));
+    expect(transcriptText.indexOf('I will check the workspace.')).toBeLessThan(transcriptText.indexOf('npm run check:0'));
+    expect(transcriptText.indexOf('npm run check:0')).toBeLessThan(transcriptText.indexOf('I finished the answer after the audit trail.'));
     expect(host.querySelector('.flower-host-tool-activity')).toBeNull();
     expect(host.querySelector('.flower-host-todo-snapshot')).toBeNull();
     expect(host.textContent).not.toContain('3 / 3 completed');
@@ -2166,7 +2196,9 @@ describe('FlowerSurface navigation', () => {
         severity: 'normal',
         needs_attention: true,
         started_at_unix_ms: 6_000,
-        metadata: { command: 'npm test' },
+        label: 'npm test',
+        renderer: 'terminal',
+        payload: { command: 'npm test' },
       })],
     });
     const completeActivity = activityTimeline({
@@ -2184,7 +2216,9 @@ describe('FlowerSurface navigation', () => {
         needs_attention: false,
         started_at_unix_ms: 6_000,
         ended_at_unix_ms: 7_250,
-        metadata: { command: 'npm test' },
+        label: 'npm test',
+        renderer: 'terminal',
+        payload: { command: 'npm test', exit_code: 0 },
       })],
     });
     const runningThread = thread({
@@ -2275,11 +2309,23 @@ describe('FlowerSurface navigation', () => {
                 tool_id: 'tool-ask',
                 tool_name: 'ask_user',
                 kind: 'control',
+                label: 'Requested input',
+                description: 'Choose a target before continuing.',
+                renderer: 'question',
                 status: 'waiting',
                 severity: 'blocking',
                 needs_attention: true,
                 attention_reasons: ['waiting'],
-                metadata: { prompt: 'Choose a target before continuing.' },
+                payload: {
+                  reason_code: 'needs_user_choice',
+                  required_from_user: ['target'],
+                  questions: [{
+                    id: 'target',
+                    header: 'Target',
+                    question: 'Choose a target before continuing.',
+                  }],
+                  contains_secret: false,
+                },
               })],
             }),
           ],
@@ -2314,11 +2360,11 @@ describe('FlowerSurface navigation', () => {
     },
     {
       name: 'approval',
-	      status: 'pending' as FlowerActivityStatus,
-	      severity: 'blocking' as const,
-	      requires_approval: true,
-	      approval_state: 'requested' as const,
-	    },
+      status: 'pending' as FlowerActivityStatus,
+      severity: 'blocking' as const,
+      requires_approval: true,
+      approval_state: 'requested' as const,
+    },
   ])('keeps $name activity visible even if a timeline summary is marked digest', async (scenario) => {
     const attentionThread = thread({
       thread_id: `thread-${scenario.name}-activity`,
@@ -2346,12 +2392,18 @@ describe('FlowerSurface navigation', () => {
                 tool_id: `tool-${scenario.name}`,
                 tool_name: scenario.requires_approval ? 'terminal.exec' : 'shell.exec',
                 kind: 'tool',
+                label: `npm run check:${scenario.name}`,
+                renderer: 'terminal',
                 status: scenario.status,
                 severity: scenario.severity,
                 needs_attention: true,
                 requires_approval: scenario.requires_approval ?? false,
                 approval_state: scenario.approval_state,
-                metadata: scenario.description ? { detail: scenario.description } : undefined,
+                description: scenario.description,
+                payload: {
+                  command: `npm run check:${scenario.name}`,
+                  ...(scenario.description ? { stderr: scenario.description } : {}),
+                },
               })],
             }),
           ],
@@ -2369,11 +2421,7 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => host.querySelectorAll('.flower-host-activity-inline-row').length === 1);
 
     expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(1);
-    if (scenario.name === 'running') {
-      expect(host.querySelector('.flower-host-activity-inline-button')?.getAttribute('aria-expanded')).toBeNull();
-    } else {
-      expect(host.querySelector('.flower-host-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
-    }
+    expect(host.querySelector('.flower-host-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('renders run and message errors as structured error cards', async () => {

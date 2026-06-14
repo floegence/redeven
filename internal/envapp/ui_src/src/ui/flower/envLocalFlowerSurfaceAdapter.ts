@@ -3,7 +3,10 @@ import type { Message, MessageBlock } from '../chat/types';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import type { AgentSettingsResponse, AIConfig } from '../pages/settings/types';
 import type {
+  FlowerActivityChip,
   FlowerActivityTimelineBlock,
+  FlowerActivityTargetRef,
+  FlowerActivityRenderer,
   FlowerChatMessage,
   FlowerChatMessageBlock,
   FlowerInputRequest,
@@ -114,12 +117,161 @@ type MarkThreadReadResponse = Readonly<{
 
 type FlowerInputResponseMode = NonNullable<FlowerInputRequestQuestion['response_mode']>;
 
+const FLOWER_ACTIVITY_RENDERERS = new Set<FlowerActivityRenderer>([
+  'structured',
+  'terminal',
+  'file',
+  'patch',
+  'web_search',
+  'todos',
+  'question',
+  'completion',
+]);
+
 function trim(value: unknown): string {
   return String(value ?? '').trim();
 }
 
 function flowerContractError(message: string): never {
   throw new Error(`Flower contract error: ${message}`);
+}
+
+function normalizeActivityRenderer(value: unknown, field: string): FlowerActivityRenderer | undefined {
+  const renderer = trim(value);
+  if (!renderer) return undefined;
+  if (FLOWER_ACTIVITY_RENDERERS.has(renderer as FlowerActivityRenderer)) {
+    return renderer as FlowerActivityRenderer;
+  }
+  flowerContractError(`${field} is unsupported: ${renderer}.`);
+}
+
+function requireActivityString(value: unknown, field: string, maxLength: number, allowEmpty = false): string {
+  if (typeof value !== 'string') {
+    flowerContractError(`${field} must be a string.`);
+  }
+  const text = value.trim();
+  if (!allowEmpty && !text) {
+    flowerContractError(`${field} is required.`);
+  }
+  if (text.length > maxLength) {
+    flowerContractError(`${field} must be at most ${maxLength} characters.`);
+  }
+  return text;
+}
+
+function optionalActivityString(value: unknown, field: string, maxLength: number): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  return requireActivityString(value, field, maxLength, true);
+}
+
+function requireActivityToken(value: unknown, field: string, maxLength: number): string {
+  const token = requireActivityString(value, field, maxLength);
+  if (!/^[A-Za-z0-9_.:-]+$/.test(token)) {
+    flowerContractError(`${field} must be a token up to ${maxLength} characters.`);
+  }
+  return token;
+}
+
+function validateActivityPayloadKey(key: string, field: string) {
+  if (key.length > 80 || !/^[A-Za-z0-9_.:-]+$/.test(key)) {
+    flowerContractError(`${field} must use token keys up to 80 characters.`);
+  }
+}
+
+function normalizeActivityJSONValue(value: unknown, field: string, depth: number): unknown {
+  if (depth > 5) {
+    flowerContractError(`${field} exceeds maximum depth.`);
+  }
+  if (value === null || typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    if (value.length > 8000) {
+      flowerContractError(`${field} must be at most 8000 characters.`);
+    }
+    return value;
+  }
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value)) {
+      flowerContractError(`${field} must be a finite number.`);
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item, index) => normalizeActivityJSONValue(item, `${field}[${index}]`, depth + 1));
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value)) {
+      validateActivityPayloadKey(key, `${field}.${key}`);
+      out[key] = normalizeActivityJSONValue(item, `${field}.${key}`, depth + 1);
+    }
+    return out;
+  }
+  flowerContractError(`${field} must be JSON-compatible.`);
+}
+
+function normalizeActivityPayload(value: unknown, field: string): Readonly<Record<string, unknown>> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    flowerContractError(`${field} must be an object.`);
+  }
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    validateActivityPayloadKey(key, `${field}.${key}`);
+    out[key] = normalizeActivityJSONValue(item, `${field}.${key}`, 1);
+  }
+  return out;
+}
+
+function normalizeActivityChips(value: unknown, field: string): readonly FlowerActivityChip[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) {
+    flowerContractError(`${field} must be an array.`);
+  }
+  return value.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      flowerContractError(`${field}[${index}] must be an object.`);
+    }
+    const record = item as Record<string, unknown>;
+    const chipValue = optionalActivityString(record.value, `${field}[${index}].value`, 120);
+    const tone = record.tone === undefined || record.tone === null
+      ? undefined
+      : requireActivityToken(record.tone, `${field}[${index}].tone`, 32);
+    return {
+      kind: requireActivityToken(record.kind, `${field}[${index}].kind`, 64),
+      label: requireActivityString(record.label, `${field}[${index}].label`, 120),
+      ...(chipValue ? { value: chipValue } : {}),
+      ...(tone ? { tone } : {}),
+    };
+  });
+}
+
+function normalizeActivityTargetRefs(value: unknown, field: string): readonly FlowerActivityTargetRef[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!Array.isArray(value)) {
+    flowerContractError(`${field} must be an array.`);
+  }
+  return value.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      flowerContractError(`${field}[${index}] must be an object.`);
+    }
+    const record = item as Record<string, unknown>;
+    const uri = optionalActivityString(record.uri, `${field}[${index}].uri`, 1000);
+    if (uri && !uri.startsWith('http://') && !uri.startsWith('https://') && !uri.startsWith('artifact://')) {
+      flowerContractError(`${field}[${index}].uri must use http, https, or artifact scheme.`);
+    }
+    const line = record.line === undefined || record.line === null ? undefined : record.line;
+    if (line !== undefined && (typeof line !== 'number' || !Number.isInteger(line) || line < 0)) {
+      flowerContractError(`${field}[${index}].line must be a non-negative integer.`);
+    }
+    const targetPath = optionalActivityString(record.path, `${field}[${index}].path`, 500);
+    return {
+      kind: requireActivityToken(record.kind, `${field}[${index}].kind`, 64),
+      label: requireActivityString(record.label, `${field}[${index}].label`, 240),
+      ...(uri ? { uri } : {}),
+      ...(targetPath ? { path: targetPath } : {}),
+      ...(typeof line === 'number' ? { line } : {}),
+    };
+  });
 }
 
 function readStatus(thread: ThreadView): ThreadReadStatus {
@@ -375,21 +527,33 @@ function mapActivityTimelineBlock(block: Extract<MessageBlock, { type: 'activity
       counts: { ...block.summary.counts },
       ...(positiveInteger(block.summary.duration_ms) ? { duration_ms: positiveInteger(block.summary.duration_ms) } : {}),
     },
-    items: block.items.map((item) => ({
-      item_id: trim(item.item_id),
-      ...(trim(item.tool_id) ? { tool_id: trim(item.tool_id) } : {}),
-      ...(trim(item.tool_name) ? { tool_name: trim(item.tool_name) } : {}),
-      kind: item.kind,
-      status: item.status,
-      severity: item.severity ?? 'normal',
-      needs_attention: Boolean(item.needs_attention),
-      ...(Array.isArray(item.attention_reasons) && item.attention_reasons.length > 0 ? { attention_reasons: item.attention_reasons } : {}),
-      requires_approval: Boolean(item.requires_approval),
-      ...(item.approval_state ? { approval_state: item.approval_state } : {}),
-      ...(positiveInteger(item.started_at_unix_ms) ? { started_at_unix_ms: positiveInteger(item.started_at_unix_ms) } : {}),
-      ...(positiveInteger(item.ended_at_unix_ms) ? { ended_at_unix_ms: positiveInteger(item.ended_at_unix_ms) } : {}),
-      ...(item.metadata ? { metadata: Object.fromEntries(Object.entries(item.metadata).map(([key, value]) => [trim(key), trim(value)]).filter(([key, value]) => key && value)) } : {}),
-    })).filter((item) => item.item_id),
+    items: block.items.map((item) => {
+      const renderer = normalizeActivityRenderer(item.renderer, 'activity_item.renderer');
+      const payload = normalizeActivityPayload(item.payload, 'activity_item.payload');
+      const chips = normalizeActivityChips(item.chips, 'activity_item.chips');
+      const targetRefs = normalizeActivityTargetRefs(item.target_refs, 'activity_item.target_refs');
+      return {
+        item_id: trim(item.item_id),
+        ...(trim(item.tool_id) ? { tool_id: trim(item.tool_id) } : {}),
+        ...(trim(item.tool_name) ? { tool_name: trim(item.tool_name) } : {}),
+        kind: item.kind,
+        status: item.status,
+        severity: item.severity ?? 'normal',
+        needs_attention: Boolean(item.needs_attention),
+        ...(Array.isArray(item.attention_reasons) && item.attention_reasons.length > 0 ? { attention_reasons: item.attention_reasons } : {}),
+        requires_approval: Boolean(item.requires_approval),
+        ...(item.approval_state ? { approval_state: item.approval_state } : {}),
+        ...(positiveInteger(item.started_at_unix_ms) ? { started_at_unix_ms: positiveInteger(item.started_at_unix_ms) } : {}),
+        ...(positiveInteger(item.ended_at_unix_ms) ? { ended_at_unix_ms: positiveInteger(item.ended_at_unix_ms) } : {}),
+        ...(trim(item.label) ? { label: trim(item.label) } : {}),
+        ...(trim(item.description) ? { description: trim(item.description) } : {}),
+        ...(renderer ? { renderer } : {}),
+        ...(chips && chips.length > 0 ? { chips } : {}),
+        ...(targetRefs && targetRefs.length > 0 ? { target_refs: targetRefs } : {}),
+        ...(payload ? { payload } : {}),
+        ...(item.metadata ? { metadata: Object.fromEntries(Object.entries(item.metadata).map(([key, value]) => [trim(key), trim(value)]).filter(([key, value]) => key && value)) } : {}),
+      };
+    }).filter((item) => item.item_id),
   };
 }
 

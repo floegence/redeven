@@ -124,6 +124,22 @@ export type FlowerActivityKind = 'tool' | 'hosted_tool' | 'approval' | 'control'
 export type FlowerActivitySeverity = 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
 export type FlowerActivityAttentionReason = 'running' | 'waiting' | 'approval' | 'error';
 export type FlowerActivityApprovalState = 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';
+export type FlowerActivityRenderer = 'structured' | 'terminal' | 'file' | 'patch' | 'web_search' | 'todos' | 'question' | 'completion';
+
+export type FlowerActivityChip = Readonly<{
+  kind: string;
+  label: string;
+  value?: string;
+  tone?: string;
+}>;
+
+export type FlowerActivityTargetRef = Readonly<{
+  kind: string;
+  label: string;
+  uri?: string;
+  path?: string;
+  line?: number;
+}>;
 
 export type FlowerActivityItem = Readonly<{
   item_id: string;
@@ -138,6 +154,12 @@ export type FlowerActivityItem = Readonly<{
   approval_state?: FlowerActivityApprovalState;
   started_at_unix_ms?: number;
   ended_at_unix_ms?: number;
+  label?: string;
+  description?: string;
+  renderer?: FlowerActivityRenderer;
+  chips?: readonly FlowerActivityChip[];
+  target_refs?: readonly FlowerActivityTargetRef[];
+  payload?: Readonly<Record<string, unknown>>;
   metadata?: Readonly<Record<string, string>>;
 }>;
 

@@ -125,6 +125,20 @@ function desktopActivityTimeline() {
         severity: 'quiet' as const,
         needs_attention: false,
         requires_approval: false,
+        label: 'npm run build -- --mode production',
+        renderer: 'terminal' as const,
+        chips: [
+          { kind: 'exit_code', label: 'exit', value: '0', tone: 'neutral' },
+        ],
+        target_refs: [
+          { kind: 'workspace', label: 'redeven', path: '/workspace/redeven' },
+        ],
+        payload: {
+          command: 'npm run build -- --mode production',
+          cwd: '/workspace/redeven',
+          exit_code: 0,
+          stdout: 'built\n',
+        },
       },
       {
         item_id: 'tool-done',
@@ -135,6 +149,11 @@ function desktopActivityTimeline() {
         severity: 'quiet' as const,
         needs_attention: false,
         requires_approval: false,
+        label: 'task_complete',
+        renderer: 'completion' as const,
+        payload: {
+          result: 'Build completed.',
+        },
       },
     ],
   };
@@ -480,8 +499,25 @@ describe('Flower surface adapter for the host', () => {
         counts: { success: 2 },
       },
       items: [
-        expect.objectContaining({ item_id: 'tool-terminal', tool_name: 'terminal.exec' }),
-        expect.objectContaining({ item_id: 'tool-done', tool_name: 'task_complete' }),
+        expect.objectContaining({
+          item_id: 'tool-terminal',
+          tool_name: 'terminal.exec',
+          label: 'npm run build -- --mode production',
+          renderer: 'terminal',
+          chips: [{ kind: 'exit_code', label: 'exit', value: '0', tone: 'neutral' }],
+          target_refs: [{ kind: 'workspace', label: 'redeven', path: '/workspace/redeven' }],
+          payload: expect.objectContaining({
+            command: 'npm run build -- --mode production',
+            cwd: '/workspace/redeven',
+            stdout: 'built\n',
+          }),
+        }),
+        expect.objectContaining({
+          item_id: 'tool-done',
+          tool_name: 'task_complete',
+          renderer: 'completion',
+          payload: expect.objectContaining({ result: 'Build completed.' }),
+        }),
       ],
     });
     expect(mapped.read_status.is_unread).toBe(false);

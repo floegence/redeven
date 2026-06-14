@@ -13,11 +13,12 @@ func TestRecordObservationActivityEventPublishesFloretTimelineBlock(t *testing.T
 
 	var frames []ActivityTimelineBlock
 	r := &run{
-		id:             "run_activity",
-		threadID:       "thread_activity",
-		messageID:      "msg_activity",
-		activityEvents: make([]observation.Event, 0, 4),
-		nextBlockIndex: 0,
+		id:                        "run_activity",
+		threadID:                  "thread_activity",
+		messageID:                 "msg_activity",
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 4),
+		nextBlockIndex:            0,
 		onStreamEvent: func(ev any) {
 			bs, ok := ev.(streamEventBlockSet)
 			if !ok {
@@ -65,6 +66,138 @@ func TestRecordObservationActivityEventPublishesFloretTimelineBlock(t *testing.T
 	}
 }
 
+func TestRecordObservationActivityEventKeepsActivitySegmentsInBlockOrder(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		id:                        "run_order",
+		threadID:                  "thread_order",
+		messageID:                 "msg_order",
+		currentTextBlockIndex:     -1,
+		needNewTextBlock:          true,
+		currentThinkingBlockIndex: -1,
+		needNewThinkingBlock:      true,
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 4),
+	}
+
+	if err := r.appendTextDelta("I will inspect the workspace."); err != nil {
+		t.Fatalf("append first text: %v", err)
+	}
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolCall,
+		ToolID:     "tool_ls",
+		ToolName:   "terminal.exec",
+		Activity:   &observation.ActivityPresentation{Label: "ls -la", Renderer: observation.ActivityRendererTerminal},
+		ObservedAt: time.UnixMilli(1000),
+	})
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolResult,
+		ToolID:     "tool_ls",
+		ToolName:   "terminal.exec",
+		ObservedAt: time.UnixMilli(1100),
+	})
+	if err := r.appendTextDelta("Now I will read the package file."); err != nil {
+		t.Fatalf("append second text: %v", err)
+	}
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolCall,
+		ToolID:     "tool_read",
+		ToolName:   "file.read",
+		Activity:   &observation.ActivityPresentation{Label: "package.json", Renderer: observation.ActivityRendererFile},
+		ObservedAt: time.UnixMilli(1200),
+	})
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolResult,
+		ToolID:     "tool_read",
+		ToolName:   "file.read",
+		ObservedAt: time.UnixMilli(1300),
+	})
+
+	if len(r.assistantBlocks) != 4 {
+		t.Fatalf("assistantBlocks len=%d, want 4: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	firstText, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || firstText.Content != "I will inspect the workspace." {
+		t.Fatalf("block[0]=%T %+v, want first markdown", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	firstActivity, ok := r.assistantBlocks[1].(ActivityTimelineBlock)
+	if !ok || len(firstActivity.Items) != 1 || firstActivity.Items[0].ToolID != "tool_ls" || firstActivity.Items[0].Label != "ls -la" {
+		t.Fatalf("block[1]=%T %+v, want ls activity only", r.assistantBlocks[1], r.assistantBlocks[1])
+	}
+	secondText, ok := r.assistantBlocks[2].(*persistedMarkdownBlock)
+	if !ok || secondText.Content != "Now I will read the package file." {
+		t.Fatalf("block[2]=%T %+v, want second markdown", r.assistantBlocks[2], r.assistantBlocks[2])
+	}
+	secondActivity, ok := r.assistantBlocks[3].(ActivityTimelineBlock)
+	if !ok || len(secondActivity.Items) != 1 || secondActivity.Items[0].ToolID != "tool_read" || secondActivity.Items[0].Label != "package.json" {
+		t.Fatalf("block[3]=%T %+v, want file activity only", r.assistantBlocks[3], r.assistantBlocks[3])
+	}
+}
+
+func TestPublishFinalActivityTimelineDoesNotAppendAfterProjectedSegment(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		id:                        "run_final_skip",
+		threadID:                  "thread_final_skip",
+		messageID:                 "msg_final_skip",
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 2),
+	}
+
+	r.recordObservationActivityEvent(observation.Event{
+		Type:     observation.EventTypeControlSignal,
+		ToolID:   "call_task_complete",
+		ToolName: "task_complete",
+		ToolKind: "control",
+		Activity: &observation.ActivityPresentation{
+			Label:    "task_complete",
+			Renderer: observation.ActivityRendererCompletion,
+			Payload:  map[string]any{"result": "Done."},
+		},
+		ObservedAt: time.UnixMilli(1000),
+	})
+	if err := r.appendTextDelta("Done."); err != nil {
+		t.Fatalf("appendTextDelta: %v", err)
+	}
+	r.publishFinalActivityTimeline(observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         "run_final_skip",
+		ThreadID:      "thread_final_skip",
+		TurnID:        "msg_final_skip",
+		TraceID:       "run_final_skip",
+		Summary: observation.ActivitySummary{
+			Status:     observation.ActivityStatusSuccess,
+			Severity:   observation.ActivitySeverityQuiet,
+			TotalItems: 1,
+			Counts:     observation.ActivityCounts{Success: 1},
+		},
+		Items: []observation.ActivityItem{{
+			ItemID:         "control:call_task_complete",
+			ToolID:         "call_task_complete",
+			ToolName:       "task_complete",
+			Kind:           observation.ActivityKindControl,
+			Status:         observation.ActivityStatusSuccess,
+			Severity:       observation.ActivitySeverityQuiet,
+			NeedsAttention: false,
+			Renderer:       observation.ActivityRendererCompletion,
+			Payload:        map[string]any{"result": "Done."},
+		}},
+	})
+
+	if len(r.assistantBlocks) != 2 {
+		t.Fatalf("assistantBlocks len=%d, want 2: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	if _, ok := r.assistantBlocks[0].(ActivityTimelineBlock); !ok {
+		t.Fatalf("block[0]=%T, want activity timeline", r.assistantBlocks[0])
+	}
+	text, ok := r.assistantBlocks[1].(*persistedMarkdownBlock)
+	if !ok || text.Content != "Done." {
+		t.Fatalf("block[1]=%T %+v, want final markdown", r.assistantBlocks[1], r.assistantBlocks[1])
+	}
+}
+
 func TestActivityTimelineFromAnyDecodesSnakeCaseBlock(t *testing.T) {
 	t.Parallel()
 
@@ -91,6 +224,15 @@ func TestActivityTimelineFromAnyDecodesSnakeCaseBlock(t *testing.T) {
 				"status":          "success",
 				"severity":        "normal",
 				"needs_attention": false,
+				"label":           "package.json",
+				"renderer":        "file",
+				"chips": []any{
+					map[string]any{"kind": "lines", "label": "lines", "value": "42", "tone": "neutral"},
+				},
+				"target_refs": []any{
+					map[string]any{"kind": "file", "label": "package.json", "path": "package.json"},
+				},
+				"payload": map[string]any{"operation": "read", "path": "package.json"},
 			},
 		},
 	}
@@ -102,7 +244,7 @@ func TestActivityTimelineFromAnyDecodesSnakeCaseBlock(t *testing.T) {
 	if err := observation.ValidateActivityTimeline(timeline); err != nil {
 		t.Fatalf("ValidateActivityTimeline: %v", err)
 	}
-	if timeline.RunID != "run_1" || timeline.Items[0].ToolName != "file.read" {
+	if timeline.RunID != "run_1" || timeline.Items[0].ToolName != "file.read" || timeline.Items[0].Renderer != observation.ActivityRendererFile {
 		t.Fatalf("timeline=%+v", timeline)
 	}
 }
@@ -130,6 +272,10 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 			Status:         observation.ActivityStatusSuccess,
 			Severity:       observation.ActivitySeverityNormal,
 			NeedsAttention: false,
+			Label:          "npm test",
+			Renderer:       observation.ActivityRendererTerminal,
+			Chips:          []observation.ActivityChip{{Kind: "exit_code", Label: "exit", Value: "0", Tone: "neutral"}},
+			Payload:        map[string]any{"command": "npm test", "exit_code": 0},
 		}},
 	})
 
@@ -144,6 +290,12 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 	for _, key := range []string{"schema_version", "run_id", "thread_id", "turn_id", "trace_id", "summary", "items"} {
 		if _, ok := decoded[key]; !ok {
 			t.Fatalf("missing key %q in %s", key, raw)
+		}
+	}
+	item := decoded["items"].([]any)[0].(map[string]any)
+	for _, key := range []string{"label", "renderer", "chips", "payload"} {
+		if _, ok := item[key]; !ok {
+			t.Fatalf("missing item key %q in %s", key, raw)
 		}
 	}
 	for _, key := range []string{"schemaVersion", "runId", "messageId", "groups"} {

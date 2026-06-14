@@ -138,16 +138,17 @@ type run struct {
 	needNewTextBlock          bool
 	currentThinkingBlockIndex int
 	needNewThinkingBlock      bool
-	activityBlockIndex        int
-	activityTimelineStarted   bool
+	activitySegmentActive     bool
+	activitySegmentBlockIndex int
 
-	muAssistant              sync.Mutex
-	assistantCreatedAtUnixMs int64
-	assistantBlocks          []any
-	assistantAnswer          assistantAnswerState
-	activityEvents           []observation.Event
-	waitingPrompt            *RequestUserInputPrompt
-	providerContinuation     threadstore.ThreadProviderContinuation
+	muAssistant               sync.Mutex
+	assistantCreatedAtUnixMs  int64
+	assistantBlocks           []any
+	assistantAnswer           assistantAnswerState
+	activitySegmentEvents     []observation.Event
+	activityTimelineProjected bool
+	waitingPrompt             *RequestUserInputPrompt
+	providerContinuation      threadstore.ThreadProviderContinuation
 
 	finalizationReason string
 	currentModelID     string
@@ -229,8 +230,9 @@ func newRun(opts runOptions) *run {
 		collectedWebSources:       make(map[string]SourceRef),
 		collectedWebSourceOrder:   make([]string, 0, 8),
 		currentThinkingBlockIndex: -1,
-		activityBlockIndex:        -1,
-		activityEvents:            make([]observation.Event, 0, 32),
+		activitySegmentActive:     false,
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 8),
 		subagentDepth:             opts.SubagentDepth,
 		forceReadonlyExec:         opts.ForceReadonlyExec,
 		toolTargetPolicy:          normalizeToolTargetPolicy(opts.ToolTargetPolicy),
@@ -1135,6 +1137,7 @@ func (r *run) appendTextDelta(delta string) error {
 		return nil
 	}
 	if r.needNewTextBlock {
+		r.finishActivitySegment()
 		idx := r.nextBlockIndex
 		r.nextBlockIndex++
 		r.currentTextBlockIndex = idx
@@ -1157,6 +1160,7 @@ func (r *run) appendThinkingDelta(delta string) error {
 		return nil
 	}
 	if r.needNewThinkingBlock || r.currentThinkingBlockIndex < 0 {
+		r.finishActivitySegment()
 		idx := r.nextBlockIndex
 		r.nextBlockIndex++
 		r.currentThinkingBlockIndex = idx

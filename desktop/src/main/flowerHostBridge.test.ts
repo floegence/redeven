@@ -194,6 +194,25 @@ function validActivityTimeline(): Record<string, unknown> {
         severity: 'quiet',
         needs_attention: false,
         requires_approval: false,
+        label: 'npm run build -- --mode production',
+        description: 'Build the app',
+        renderer: 'terminal',
+        chips: [
+          { kind: 'exit_code', label: 'exit', value: '0', tone: 'neutral' },
+          { kind: 'duration', label: 'duration', value: '42 ms', tone: 'neutral' },
+        ],
+        target_refs: [
+          { kind: 'workspace', label: 'redeven', path: '/workspace/redeven' },
+        ],
+        payload: {
+          command: 'npm run build -- --mode production',
+          cwd: '/workspace/redeven',
+          exit_code: 0,
+          duration_ms: 42,
+          stdout: 'built\n',
+          stderr: '',
+          truncated: false,
+        },
       },
       {
         item_id: 'tool-done',
@@ -204,6 +223,12 @@ function validActivityTimeline(): Record<string, unknown> {
         severity: 'quiet',
         needs_attention: false,
         requires_approval: false,
+        label: 'task_complete',
+        renderer: 'completion',
+        payload: {
+          result: 'Build completed.',
+          evidence_refs: ['tool-terminal'],
+        },
       },
     ],
   };
@@ -514,11 +539,30 @@ describe('Flower Host bridge lifecycle', () => {
             item_id: 'tool-terminal',
             tool_name: 'terminal.exec',
             status: 'success',
+            label: 'npm run build -- --mode production',
+            renderer: 'terminal',
+            chips: [
+              { kind: 'exit_code', label: 'exit', value: '0', tone: 'neutral' },
+              { kind: 'duration', label: 'duration', value: '42 ms', tone: 'neutral' },
+            ],
+            target_refs: [
+              { kind: 'workspace', label: 'redeven', path: '/workspace/redeven' },
+            ],
+            payload: expect.objectContaining({
+              command: 'npm run build -- --mode production',
+              cwd: '/workspace/redeven',
+              exit_code: 0,
+              stdout: 'built\n',
+            }),
           }),
           expect.objectContaining({
             item_id: 'tool-done',
             tool_name: 'task_complete',
             kind: 'control',
+            renderer: 'completion',
+            payload: expect.objectContaining({
+              result: 'Build completed.',
+            }),
           }),
         ],
       });
@@ -560,6 +604,141 @@ describe('Flower Host bridge lifecycle', () => {
         ...bridgeArgs(root),
         threadID: 'thread-streaming',
       })).rejects.toThrow('thread.messages[0].blocks[0].items[0].approval_state has unsupported value "required"');
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects unsupported activity presentation fields from thread responses', async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-flower-bridge-test-'));
+    try {
+      const bridge = await import('./flowerHostBridge');
+      for (const item of [
+        {
+          name: 'unsupported renderer',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.renderer = 'terminal/v2';
+          },
+          message: 'thread.messages[0].blocks[0].items[0].renderer has unsupported value "terminal/v2"',
+        },
+        {
+          name: 'invalid chip list',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.chips = [{ kind: 'exit_code', value: '0' }];
+          },
+          message: 'thread.messages[0].blocks[0].items[0].chips[0].label',
+        },
+        {
+          name: 'invalid payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.payload = 'command text';
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload',
+        },
+        {
+          name: 'payload array',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.payload = ['command text'];
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload must be an object',
+        },
+        {
+          name: 'invalid payload key',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.payload = { 'bad key': 'value' };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.bad key must use token keys up to 80 characters',
+        },
+        {
+          name: 'deep payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.payload = {
+              a: {
+                b: {
+                  c: {
+                    d: {
+                      e: {
+                        f: 'too deep',
+                      },
+                    },
+                  },
+                },
+              },
+            };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.a.b.c.d.e.f exceeds maximum depth',
+        },
+        {
+          name: 'long payload string',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.payload = { command: 'x'.repeat(8001) };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.command must be at most 8000 characters',
+        },
+        {
+          name: 'invalid chip kind',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.chips = [{ kind: 'bad kind', label: 'bad' }];
+          },
+          message: 'thread.messages[0].blocks[0].items[0].chips[0].kind must be a token up to 64 characters',
+        },
+        {
+          name: 'invalid chip tone',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.chips = [{ kind: 'exit_code', label: 'exit', tone: 'bad tone' }];
+          },
+          message: 'thread.messages[0].blocks[0].items[0].chips[0].tone must be a token up to 32 characters',
+        },
+        {
+          name: 'invalid target URI',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.target_refs = [{ kind: 'file', label: 'secret', uri: 'file:///private/key' }];
+          },
+          message: 'thread.messages[0].blocks[0].items[0].target_refs[0].uri must use http, https, or artifact scheme',
+        },
+        {
+          name: 'negative target line',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.target_refs = [{ kind: 'file', label: 'app.ts', path: 'app.ts', line: -1 }];
+          },
+          message: 'thread.messages[0].blocks[0].items[0].target_refs[0].line must be a non-negative integer',
+        },
+        {
+          name: 'fractional target line',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.target_refs = [{ kind: 'file', label: 'app.ts', path: 'app.ts', line: 1.5 }];
+          },
+          message: 'thread.messages[0].blocks[0].items[0].target_refs[0].line must be a non-negative integer',
+        },
+        {
+          name: 'string target line',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.target_refs = [{ kind: 'file', label: 'app.ts', path: 'app.ts', line: '12' }];
+          },
+          message: 'thread.messages[0].blocks[0].items[0].target_refs[0].line must be a number',
+        },
+      ]) {
+        const timeline = validActivityTimeline();
+        const items = timeline.items as Array<Record<string, unknown>>;
+        item.mutate(items[0]);
+        threadResponse = {
+          ...validThreadResponse(),
+          messages: [
+            {
+              id: 'm-invalid-activity-presentation',
+              role: 'assistant',
+              content: '',
+              status: 'complete',
+              created_at_ms: 90,
+              blocks: [timeline],
+            },
+          ],
+        };
+        await expect(bridge.loadFlowerHostThreadViaBridge({
+          ...bridgeArgs(root),
+          threadID: 'thread-streaming',
+        }), item.name).rejects.toThrow(item.message);
+      }
     } finally {
       await fs.rm(root, { recursive: true, force: true });
     }

@@ -51,7 +51,23 @@ function targetLabel(item: ActivityItem): string {
 }
 
 function primaryDetailRef(item: ActivityItem): ActivityDetailRef | undefined {
-  return Array.isArray(item.detail_refs) ? item.detail_refs[0] : undefined;
+  const explicit = Array.isArray(item.detail_refs) ? item.detail_refs[0] : undefined;
+  if (explicit) return explicit;
+  const itemID = itemKey(item, 0);
+  return {
+    ref_id: `activity:${itemID}:payload`,
+    kind: 'tool_detail',
+    tool_id: item.tool_id,
+    fetch_mode: 'inline',
+    payload: item.payload ?? {
+      item_id: item.item_id,
+      tool_id: item.tool_id,
+      tool_name: item.tool_name,
+      kind: item.kind,
+      status: item.status,
+    },
+    title: String(item.label ?? item.tool_name ?? item.kind ?? 'Activity').trim() || 'Activity',
+  };
 }
 
 function panelIdFor(blockIndex: number, item_id: string): string {
@@ -61,19 +77,27 @@ function panelIdFor(blockIndex: number, item_id: string): string {
 function itemLabel(item: ActivityItem): string {
   const explicit = String(item.label ?? '').trim();
   if (explicit) return explicit;
-  const toolName = String(item.tool_name ?? '').trim();
-  switch (toolName) {
-    case 'terminal.exec':
-      return item.status === 'error' ? 'Command failed' : item.status === 'running' ? 'Running command' : 'Ran command';
-    case 'write_todos':
-      return 'Updated tasks';
-    case 'ask_user':
-      return 'Requested input';
-    case 'task_complete':
-      return 'Completed';
-    default:
-      return toolName || String(item.kind ?? '').trim() || 'Activity';
+  const payload = item.payload && typeof item.payload === 'object' && !Array.isArray(item.payload)
+    ? item.payload as Record<string, unknown>
+    : {};
+  const payloadText = (...keys: string[]) => {
+    for (const key of keys) {
+      const value = payload[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+      if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    }
+    return '';
+  };
+  if (String(item.renderer ?? '').trim() === 'terminal') {
+    const command = payloadText('command');
+    if (command) return command;
   }
+  if (String(item.renderer ?? '').trim() === 'web_search') {
+    const query = payloadText('query');
+    if (query) return query;
+  }
+  const toolName = String(item.tool_name ?? '').trim();
+  return toolName || String(item.kind ?? '').trim() || 'Activity';
 }
 
 function summaryLabel(block: ActivityTimelineBlockType): string {
@@ -175,6 +199,7 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                     targetLabel={targetLabel(item)}
                     blocking={isBlockingItem(item)}
                     messageId={props.messageId}
+                    hasDetail={Boolean(ref())}
                     expanded={Boolean(openByItem()[id()])}
                     detailState={detailStateFor(item, ref())}
                     onToggle={() => toggleItem(item, ref(), id())}

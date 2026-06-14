@@ -36,8 +36,8 @@ func TestInMemoryToolRegistry_AcceptsDeclaredPresentationSpec(t *testing.T) {
 	if len(snapshot) != 1 {
 		t.Fatalf("snapshot len=%d, want 1", len(snapshot))
 	}
-	if snapshot[0].Presentation.Renderer != "command" {
-		t.Fatalf("renderer=%q, want command", snapshot[0].Presentation.Renderer)
+	if snapshot[0].Presentation.Renderer != "terminal" {
+		t.Fatalf("renderer=%q, want terminal", snapshot[0].Presentation.Renderer)
 	}
 }
 

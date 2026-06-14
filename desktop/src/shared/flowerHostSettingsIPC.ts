@@ -229,6 +229,22 @@ export type DesktopFlowerHostActivityKind = 'tool' | 'hosted_tool' | 'approval' 
 export type DesktopFlowerHostActivitySeverity = 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
 export type DesktopFlowerHostActivityAttentionReason = 'running' | 'waiting' | 'approval' | 'error';
 export type DesktopFlowerHostActivityApprovalState = 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';
+export type DesktopFlowerHostActivityRenderer = 'structured' | 'terminal' | 'file' | 'patch' | 'web_search' | 'todos' | 'question' | 'completion';
+
+export type DesktopFlowerHostActivityChip = Readonly<{
+  kind: string;
+  label: string;
+  value?: string;
+  tone?: string;
+}>;
+
+export type DesktopFlowerHostActivityTargetRef = Readonly<{
+  kind: string;
+  label: string;
+  uri?: string;
+  path?: string;
+  line?: number;
+}>;
 
 export type DesktopFlowerHostActivityItem = Readonly<{
   item_id: string;
@@ -243,6 +259,12 @@ export type DesktopFlowerHostActivityItem = Readonly<{
   approval_state?: DesktopFlowerHostActivityApprovalState;
   started_at_unix_ms?: number;
   ended_at_unix_ms?: number;
+  label?: string;
+  description?: string;
+  renderer?: DesktopFlowerHostActivityRenderer;
+  chips?: readonly DesktopFlowerHostActivityChip[];
+  target_refs?: readonly DesktopFlowerHostActivityTargetRef[];
+  payload?: Readonly<Record<string, unknown>>;
   metadata?: Readonly<Record<string, string>>;
 }>;
 

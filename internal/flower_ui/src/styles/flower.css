@@ -788,11 +788,14 @@ html.dark .flower-component-shell {
 }
 
 .flower-host-activity-inline-title {
-  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
   color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
   font-size: 0.78125rem;
   font-weight: 700;
   line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .flower-host-activity-inline-detail {
@@ -854,6 +857,28 @@ html.dark .flower-component-shell {
 
 .flower-host-activity-inline-detail-line + .flower-host-activity-inline-detail-line {
   margin-top: 0.125rem;
+}
+
+.flower-host-activity-inline-detail-line {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 6.25rem minmax(0, 1fr);
+  gap: 0.5rem;
+}
+
+.flower-host-activity-inline-detail-key {
+  color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
+  font-family: var(--font-sans, inherit);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.flower-host-activity-inline-detail-value {
+  min-width: 0;
+}
+
+.flower-host-activity-inline-detail-value-code {
+  color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground) 24%);
 }
 
 .flower-host-input-request-panel {
@@ -1092,6 +1117,15 @@ html.dark .flower-component-shell {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.08rem;
+  }
+
+  .flower-host-activity-inline-title {
+    width: 100%;
+  }
+
+  .flower-host-activity-inline-detail-line {
+    grid-template-columns: 1fr;
+    gap: 0.125rem;
   }
 }
 

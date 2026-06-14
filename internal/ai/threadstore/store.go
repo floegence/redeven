@@ -1359,6 +1359,20 @@ INSERT INTO transcript_messages(
 		return 0, err
 	}
 	rowID, _ := res.LastInsertId()
+	var currentUpdatedAt int64
+	var currentLastMessageAt int64
+	if err := tx.QueryRowContext(ctx, `
+SELECT updated_at_unix_ms, last_message_at_unix_ms
+FROM ai_threads
+WHERE endpoint_id = ? AND thread_id = ?
+`, endpointID, threadID).Scan(&currentUpdatedAt, &currentLastMessageAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, sql.ErrNoRows
+		}
+		return 0, err
+	}
+	threadUpdatedAt := maxInt64(m.UpdatedAtUnixMs, currentUpdatedAt+1)
+	lastMessageAt := maxInt64(m.CreatedAtUnixMs, currentLastMessageAt+1)
 	updateRes, err := tx.ExecContext(ctx, `
 UPDATE ai_threads
 SET updated_at_unix_ms = ?,
@@ -1368,10 +1382,10 @@ SET updated_at_unix_ms = ?,
     last_message_preview = ?
 WHERE endpoint_id = ? AND thread_id = ?
 `,
-		m.UpdatedAtUnixMs,
+		threadUpdatedAt,
 		strings.TrimSpace(updatedByID),
 		strings.TrimSpace(updatedByEmail),
-		m.CreatedAtUnixMs,
+		lastMessageAt,
 		preview,
 		endpointID,
 		threadID,
@@ -2576,6 +2590,13 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func maxInt64(a int64, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func truncateRunes(s string, max int) string {

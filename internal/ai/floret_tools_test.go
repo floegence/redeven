@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/floret/observation"
 	fltools "github.com/floegence/floret/tools"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -83,6 +84,109 @@ func TestFloretToolDefinitionRejectsInvalidSchema(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "invalid input schema") {
 		t.Fatalf("error=%v, want invalid input schema", err)
+	}
+}
+
+func TestFloretActivityForTerminalCallUsesCommandAsLabel(t *testing.T) {
+	t.Parallel()
+
+	activity := floretActivityForToolCall("terminal.exec", map[string]any{
+		"command":    "npm run build -- --mode production",
+		"cwd":        "/workspace/app",
+		"timeout_ms": 120000,
+		"stdin":      "secret\nvalue",
+	})
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	if activity.Label != "npm run build -- --mode production" {
+		t.Fatalf("label=%q, want command", activity.Label)
+	}
+	if activity.Renderer != observation.ActivityRendererTerminal {
+		t.Fatalf("renderer=%q, want terminal", activity.Renderer)
+	}
+	if activity.Payload["command"] != "npm run build -- --mode production" || activity.Payload["cwd"] != "/workspace/app" {
+		t.Fatalf("payload=%#v, want command and cwd", activity.Payload)
+	}
+	if _, ok := activity.Payload["stdin"]; ok {
+		t.Fatalf("terminal activity payload must not include stdin: %#v", activity.Payload)
+	}
+}
+
+func TestFloretActivityForFileCallsOmitsSensitiveEditAndWriteBodies(t *testing.T) {
+	t.Parallel()
+
+	edit := floretActivityForToolCall("file.edit", map[string]any{
+		"file_path":   "internal/ai/run.go",
+		"old_string":  "secret old text",
+		"new_string":  "secret new text",
+		"replace_all": true,
+	})
+	if edit == nil {
+		t.Fatal("edit activity is nil")
+	}
+	if edit.Payload["operation"] != "edit" || edit.Payload["file_path"] != "internal/ai/run.go" || edit.Payload["replace_all"] != true {
+		t.Fatalf("edit payload=%#v", edit.Payload)
+	}
+	if _, ok := edit.Payload["old_string"]; ok {
+		t.Fatalf("edit activity payload must not include old_string: %#v", edit.Payload)
+	}
+	if _, ok := edit.Payload["new_string"]; ok {
+		t.Fatalf("edit activity payload must not include new_string: %#v", edit.Payload)
+	}
+
+	write := floretActivityForToolCall("file.write", map[string]any{
+		"file_path":    "internal/ai/run.go",
+		"content_utf8": "secret body",
+	})
+	if write == nil {
+		t.Fatal("write activity is nil")
+	}
+	if write.Payload["operation"] != "write" || write.Payload["file_path"] != "internal/ai/run.go" {
+		t.Fatalf("write payload=%#v", write.Payload)
+	}
+	if _, ok := write.Payload["content_utf8"]; ok {
+		t.Fatalf("write activity payload must not include content_utf8: %#v", write.Payload)
+	}
+	if _, ok := write.Payload["content"]; ok {
+		t.Fatalf("write activity payload must not include content: %#v", write.Payload)
+	}
+}
+
+func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnlyFields(t *testing.T) {
+	t.Parallel()
+
+	activity := floretActivityForToolResult(ToolResult{
+		ToolID:   "call_terminal_1",
+		ToolName: "terminal.exec",
+		Status:   toolResultStatusSuccess,
+		Summary:  "command completed",
+		Data: map[string]any{
+			"stdout":      "ok\n",
+			"stderr":      "",
+			"exit_code":   0,
+			"duration_ms": 42,
+			"timed_out":   false,
+			"truncated":   false,
+		},
+	})
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	if activity.Renderer != observation.ActivityRendererTerminal {
+		t.Fatalf("renderer=%q, want terminal", activity.Renderer)
+	}
+	if strings.TrimSpace(activity.Label) != "" {
+		t.Fatalf("result-only label=%q, want empty until call/result merge supplies command", activity.Label)
+	}
+	if _, ok := activity.Payload["command"]; ok {
+		t.Fatalf("result-only payload should not invent command: %#v", activity.Payload)
+	}
+	if got := anyToString(activity.Payload["stdout"]); got != "ok\n" {
+		t.Fatalf("stdout=%q", got)
+	}
+	if len(activity.Chips) == 0 || activity.Chips[0].Kind != "exit_code" || activity.Chips[0].Value != "0" {
+		t.Fatalf("chips=%#v, want exit code chip", activity.Chips)
 	}
 }
 
