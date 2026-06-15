@@ -564,9 +564,6 @@ export const ptBR = {
       actTitle: "Modo orientado à execução para ações diretas de ferramentas",
     },
     router: {
-      handlerSelectionLabel: "Handled by",
-      handlerStarting: "Starting Flower...",
-      handlerResolving: "Choosing Flower...",
       handlerBlockedTitle: "Flower needs attention",
       handlerStartFailedTitle: "Flower could not start",
       handlerStillStarting: "Flower is still starting.",

@@ -328,6 +328,7 @@ import {
   type DesktopSettingsBridge,
 } from './flower/localEnvironmentFlowerSurfaceAdapter';
 import { createDesktopFlowerSurfaceCopy } from './flower/desktopFlowerSurfaceCopy';
+import { formatFlowerCurrentModelLabel } from '../../../internal/flower_ui/src/flowerModelLabel';
 import type { FlowerRouterDecision } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 
 type DesktopLauncherBridge = Readonly<{
@@ -5974,6 +5975,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
+  async function resolveEnvironmentFlowerModelLabel(): Promise<string> {
+    const snapshot = await createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings).loadSettings();
+    return formatFlowerCurrentModelLabel(snapshot.config, i18n().t('flowerSurface.chat.noModelSelected'));
+  }
+
   async function sendEnvironmentFlowerPrompt(
     environment: DesktopEnvironmentEntry,
     prompt: string,
@@ -6239,6 +6245,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         state={environmentFlowerComposer()}
         onClose={closeEnvironmentFlowerComposer}
         resolveFlowerHandler={resolveEnvironmentFlowerHandler}
+        resolveFlowerModelLabel={resolveEnvironmentFlowerModelLabel}
         sendFlowerPrompt={sendEnvironmentFlowerPrompt}
         openFlowerSurface={async () => {
           closeEnvironmentFlowerComposer();
@@ -7500,6 +7507,7 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
   state: EnvironmentFlowerComposerState | null;
   onClose: () => void;
   resolveFlowerHandler: (environment: DesktopEnvironmentEntry) => Promise<FlowerRouterDecision>;
+  resolveFlowerModelLabel: () => Promise<string>;
   sendFlowerPrompt: (environment: DesktopEnvironmentEntry, prompt: string, decision: FlowerRouterDecision) => Promise<string>;
   openFlowerSurface: () => Promise<void>;
 }>) {
@@ -7508,6 +7516,7 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
   const [handlerDecision, setHandlerDecision] = createSignal<FlowerRouterDecision | null>(null);
   const [handlerStatus, setHandlerStatus] = createSignal<'starting' | 'resolving' | 'ready' | 'blocked' | 'failed'>('starting');
   const [handlerError, setHandlerError] = createSignal('');
+  const [modelLabel, setModelLabel] = createSignal('');
   const [isComposing, setIsComposing] = createSignal(false);
   const [sending, setSending] = createSignal(false);
   const [viewport, setViewport] = createSignal(currentViewportSize());
@@ -7518,7 +7527,6 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
   });
   const sizing = createMemo(() => resolveEnvironmentFlowerWindowSizing(viewport()));
   const position = createMemo(() => resolveEnvironmentFlowerWindowPosition(props.state?.anchor, sizing()));
-  const selectedHandler = createMemo(() => handlerDecision()?.selected_handler ?? null);
   const handlerReady = createMemo(() => {
     return handlerStatus() === 'ready';
   });
@@ -7526,23 +7534,10 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
     const decision = handlerDecision();
     return decision?.reason_code === 'runtime_not_configured' || decision?.blocker?.code === 'runtime_not_configured';
   });
-  const handlerChipLabel = createMemo(() => {
-    switch (handlerStatus()) {
-      case 'ready':
-        return selectedHandler()?.display_name || props.i18n.t('flowerSurface.chat.handlerResolving');
-      case 'blocked':
-        return props.i18n.t('flowerSurface.chat.handlerBlockedTitle');
-      case 'failed':
-        return props.i18n.t('flowerSurface.chat.handlerStartFailedTitle');
-      case 'resolving':
-        return props.i18n.t('flowerSurface.chat.handlerResolving');
-      case 'starting':
-        return props.i18n.t('flowerSurface.chat.handlerStarting');
-    }
-  });
   const canSend = createMemo(() => trimString(prompt()) !== '' && !sending() && handlerReady());
   let textareaRef: HTMLTextAreaElement | undefined;
   let handlerRequestSeq = 0;
+  let modelRequestSeq = 0;
 
   const resolveCurrentHandler = (current = environment()) => {
     handlerRequestSeq += 1;
@@ -7573,6 +7568,29 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
       })
   };
 
+  const resolveCurrentModelLabel = (current = environment()) => {
+    modelRequestSeq += 1;
+    const seq = modelRequestSeq;
+    if (!current) {
+      setModelLabel('');
+      return;
+    }
+    setModelLabel(props.i18n.t('flowerSurface.chat.loadingSettings'));
+    void props.resolveFlowerModelLabel()
+      .then((label) => {
+        if (seq !== modelRequestSeq) {
+          return;
+        }
+        setModelLabel(trimString(label) || props.i18n.t('flowerSurface.chat.noModelSelected'));
+      })
+      .catch(() => {
+        if (seq !== modelRequestSeq) {
+          return;
+        }
+        setModelLabel(props.i18n.t('flowerSurface.chat.noModelSelected'));
+      });
+  };
+
   createEffect(() => {
     if (!props.state) {
       setPrompt('');
@@ -7580,12 +7598,14 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
       setHandlerDecision(null);
       setHandlerError('');
       setHandlerStatus('starting');
+      setModelLabel('');
     }
   });
 
   createEffect(() => {
     const current = environment();
     resolveCurrentHandler(current);
+    resolveCurrentModelLabel(current);
   });
 
   createEffect(() => {
@@ -7746,10 +7766,10 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
                     <span>{props.i18n.t('environmentCenter.askFlowerCardPromptLabel')}</span>
                     <span>{sending() ? props.i18n.t('environmentCenter.askFlowerCardSending') : props.i18n.t('environmentCenter.askFlowerCardReplyHint')}</span>
                   </div>
-                  <div class="redeven-environment-flower-window__handler" data-unavailable={handlerStatus() === 'blocked' || handlerStatus() === 'failed' ? '' : undefined}>
-                    <span class="redeven-environment-flower-window__handler-label">{props.i18n.t('flowerSurface.chat.handlerSelectionLabel')}</span>
-                    <span class="redeven-environment-flower-window__handler-chip">
-                      {handlerChipLabel()}
+                  <div class="redeven-environment-flower-window__model">
+                    <span class="redeven-environment-flower-window__model-label">{props.i18n.t('flowerSurface.chat.modelLabel')}</span>
+                    <span class="redeven-environment-flower-window__model-chip">
+                      {modelLabel() || props.i18n.t('flowerSurface.chat.loadingSettings')}
                     </span>
                   </div>
                   <div class="redeven-environment-flower-window__input-shell">

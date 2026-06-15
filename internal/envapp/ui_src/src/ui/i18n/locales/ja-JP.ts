@@ -564,9 +564,6 @@ export const jaJP = {
       actTitle: "直接ツール操作を実行する実行優先モード",
     },
     router: {
-      handlerSelectionLabel: "Handled by",
-      handlerStarting: "Starting Flower...",
-      handlerResolving: "Choosing Flower...",
       handlerBlockedTitle: "Flower needs attention",
       handlerStartFailedTitle: "Flower could not start",
       handlerStillStarting: "Flower is still starting.",

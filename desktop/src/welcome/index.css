@@ -635,7 +635,7 @@ body {
   white-space: nowrap;
 }
 
-.redeven-environment-flower-window__handler {
+.redeven-environment-flower-window__model {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -646,12 +646,12 @@ body {
   line-height: 1.2;
 }
 
-.redeven-environment-flower-window__handler-label {
+.redeven-environment-flower-window__model-label {
   flex: 0 0 auto;
   font-weight: 650;
 }
 
-.redeven-environment-flower-window__handler-chip {
+.redeven-environment-flower-window__model-chip {
   min-width: 0;
   max-width: 10.5rem;
   overflow: hidden;
@@ -662,48 +662,6 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 680;
-}
-
-.redeven-environment-flower-window__handler[data-unavailable] .redeven-environment-flower-window__handler-chip {
-  background: color-mix(in srgb, var(--warning) 14%, var(--muted) 44%);
-  color: color-mix(in srgb, var(--warning) 66%, var(--foreground) 34%);
-}
-
-.redeven-environment-flower-window__handler-error {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--error);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.redeven-environment-flower-window__handler-retry {
-  flex: 0 0 auto;
-  border: 0;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--primary) 9%, transparent);
-  color: color-mix(in srgb, var(--primary) 72%, var(--foreground) 28%);
-  cursor: pointer;
-  font-size: 0.66rem;
-  font-weight: 720;
-  line-height: 1;
-  padding: 0.18rem 0.42rem;
-  transition:
-    background-color 150ms ease,
-    color 150ms ease,
-    transform 150ms ease;
-}
-
-.redeven-environment-flower-window__handler-retry:hover {
-  background: color-mix(in srgb, var(--primary) 15%, var(--muted) 26%);
-  color: color-mix(in srgb, var(--primary) 86%, var(--foreground) 14%);
-  transform: translateY(-1px);
-}
-
-.redeven-environment-flower-window__handler-retry:disabled {
-  cursor: not-allowed;
-  opacity: 0.48;
-  transform: none;
 }
 
 .redeven-environment-flower-window__setup {

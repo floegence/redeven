@@ -58,6 +58,7 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('npm run build -- --mode production');
     expect(presentation.title).toEqual({ kind: 'command', command: 'npm run build -- --mode production' });
     expect(presentation.meta).toContain('exit 0');
+    expect(presentation.meta).not.toContain('terminal.exec');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('command:npm run build -- --mode production');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('stdout:built');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('cwd');

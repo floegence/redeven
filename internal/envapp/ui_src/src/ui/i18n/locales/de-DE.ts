@@ -564,9 +564,6 @@ export const deDE = {
       actTitle: "Ausführungsorientierter Modus für direkte Tool-Aktionen",
     },
     router: {
-      handlerSelectionLabel: "Handled by",
-      handlerStarting: "Starting Flower...",
-      handlerResolving: "Choosing Flower...",
       handlerBlockedTitle: "Flower needs attention",
       handlerStartFailedTitle: "Flower could not start",
       handlerStillStarting: "Flower is still starting.",

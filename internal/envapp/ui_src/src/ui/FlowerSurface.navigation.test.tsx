@@ -663,7 +663,8 @@ describe('FlowerSurface navigation', () => {
     });
     await flush();
 
-    expect(runtime.querySelector('.flower-handler-chip')?.textContent).toContain('Starting Flower...');
+    expect(runtime.querySelector('.flower-model-selection')?.textContent).toContain('Model');
+    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('No model selected');
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
     expect(resolveHandler).not.toHaveBeenCalled();
 
@@ -678,14 +679,17 @@ describe('FlowerSurface navigation', () => {
       ...adapter(true),
       resolveHandler: vi.fn(() => handler.promise),
     });
-    await waitFor(() => Boolean(runtime.querySelector('.flower-handler-chip')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-chip')));
 
-    expect(runtime.querySelector('.flower-handler-chip')?.textContent).toContain('Choosing Flower...');
+    expect(runtime.querySelector('.flower-model-selection')?.textContent).toContain('Model');
+    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
     expect(runtime.querySelector('.flower-handler-error-card')).toBeNull();
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
 
     handler.resolve(decision());
-    await waitFor(() => runtime.querySelector('.flower-handler-chip')?.textContent?.includes('Using Local AI Profile') ?? false);
+    await flush();
+    expect(runtime.textContent).not.toContain('Using Local AI Profile');
+    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
   });
 
   it('shows handler blockers near the composer without pretending a runtime is selected', async () => {
@@ -696,7 +700,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter(failingAdapter);
     await flush();
 
-    expect(runtime.querySelector('.flower-handler-chip')?.textContent).toContain('Flower needs attention');
+    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
     expect(runtime.querySelector('.flower-handler-error-card')?.textContent).toContain('Configure Flower before chatting.');
     expect(runtime.querySelector('.flower-handler-retry')?.textContent).toContain('Retry');
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
@@ -714,12 +718,12 @@ describe('FlowerSurface navigation', () => {
     });
     await flush();
 
-    expect(runtime.querySelector('.flower-handler-chip')?.textContent).toContain('Flower could not start');
+    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
     expect(runtime.querySelector('.flower-handler-error-card')?.textContent).toContain('Timed out waiting for Flower readiness.');
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
   });
 
-  it('switches handlers before the first message and keeps the selected thread decision-free', async () => {
+  it('keeps handler choices out of the composer and keeps selected thread sends decision-free', async () => {
     const secondDecision: FlowerRouterDecision = {
       ...decision(),
       decision_id: 'decision-2',
@@ -755,12 +759,8 @@ describe('FlowerSurface navigation', () => {
     });
     await flush();
 
-    const selector = runtime.querySelector('.flower-handler-picker select') as HTMLSelectElement;
-    selector.value = 'runtime-2';
-    selector.dispatchEvent(new Event('change', { bubbles: true }));
-    await flush();
-
-    expect(resolveHandler).toHaveBeenCalledWith(expect.objectContaining({ requested_handler_id: 'runtime-2' }));
+    expect(runtime.querySelector('.flower-model-selection')?.textContent).toContain('Model');
+    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
 
     (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
     await flush();
@@ -2247,6 +2247,10 @@ describe('FlowerSurface navigation', () => {
 
     expect(runtime.querySelector('.flower-transcript-stack')).toBeTruthy();
     expect(runtime.querySelector('.flower-message-bubble-streaming')?.textContent).toContain('Streaming partial answer');
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-block-stack-assistant')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-plain')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-framed')).toBeNull();
+    expect(runtime.querySelector('[data-flower-message-role="user"] .flower-message-bubble-framed')).toBeTruthy();
     expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
     expect(runtime.textContent).toContain('Streaming partial answer');
   });
@@ -2328,11 +2332,76 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.textContent).not.toContain('3 / 3 completed');
     expect(runtime.textContent).not.toContain('Draft final answer');
     expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(tool_names.length);
-    expect(runtime.textContent).toContain('terminal.exec');
+    expect(runtime.textContent).not.toContain('terminal.execterminal.exec');
     expect(runtime.textContent).toContain('Update todos');
     expect(runtime.textContent).toContain('completed 1');
     expect(runtime.textContent).toContain('task_complete');
     expect(runtime.querySelector('.flower-activity-inline-row')?.getAttribute('aria-label')).toContain('terminal.exec');
+  });
+
+  it('hides approval-only terminal noise while keeping command and output details visible', async () => {
+    const terminalThread = thread({
+      thread_id: 'thread-terminal-output',
+      title: 'Terminal output',
+      created_at_ms: 6_600,
+      updated_at_ms: 6_700,
+      status: 'success',
+      messages: [
+        {
+          id: 'm-terminal-output',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 6_700,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-terminal-output',
+              turn_id: 'm-terminal-output',
+              items: [
+                activityItem({
+                  item_id: 'approval-only',
+                  tool_id: 'approval-only',
+                  tool_name: 'terminal.exec',
+                  kind: 'approval',
+                  requires_approval: true,
+                  approval_state: 'approved',
+                }),
+                activityItem({
+                  item_id: 'terminal-real',
+                  tool_id: 'terminal-real',
+                  tool_name: 'terminal.exec',
+                  label: 'terminal.exec',
+                  renderer: 'terminal',
+                  payload: {
+                    command: 'curl -s https://example.com',
+                    exit_code: 0,
+                    stdout: 'example response',
+                    stderr: '',
+                  },
+                }),
+              ],
+            }),
+          ],
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [terminalThread]),
+      loadThread: vi.fn(async () => terminalThread),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-terminal-output"] button')));
+    (runtime.querySelector('[data-thread-id="thread-terminal-output"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('.flower-activity-inline-row').length === 1);
+
+    expect(runtime.querySelector('[data-flower-activity-item-id="approval-only"]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-activity-item-id="terminal-real"]')).toBeTruthy();
+    expect(runtime.textContent).toContain('curl -s https://example.com');
+    (runtime.querySelector('[data-flower-activity-item-id="terminal-real"] .flower-activity-inline-button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('example response') ?? false);
+    expect(runtime.textContent).toContain('example response');
+    expect(runtime.textContent).not.toContain('approvalapproved');
   });
 
   it('refreshes inline activity when message block fields change in place', async () => {

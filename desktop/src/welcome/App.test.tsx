@@ -1160,8 +1160,9 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('class="redeven-environment-flower-window');
     expect(appSrc).toContain('class="redeven-environment-flower-window__context"');
     expect(appSrc).toContain('class="redeven-environment-flower-window__context-accent"');
-    expect(appSrc).toContain('class="redeven-environment-flower-window__handler"');
-    expect(appSrc).toContain("props.i18n.t('flowerSurface.chat.handlerSelectionLabel')");
+    expect(appSrc).toContain('class="redeven-environment-flower-window__model"');
+    expect(appSrc).toContain("props.i18n.t('flowerSurface.chat.modelLabel')");
+    expect(appSrc).toContain('resolveFlowerModelLabel={resolveEnvironmentFlowerModelLabel}');
     expect(appSrc).toContain('const handlerNeedsSetup = createMemo');
     expect(appSrc).toContain('class="redeven-environment-flower-window__setup"');
     expect(appSrc).toContain("props.i18n.t('flowerSurface.chat.needsProviderNotice')");
@@ -1175,7 +1176,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-environment-card__flower-button:hover .redeven-environment-card__flower-icon');
     expect(styles).toContain('animation: redeven-flower-intro-spin');
     expect(styles).toContain('.redeven-environment-flower-window__context-accent');
-    expect(styles).toContain('.redeven-environment-flower-window__handler-chip');
+    expect(styles).toContain('.redeven-environment-flower-window__model-chip');
     expect(styles).toContain('.redeven-environment-flower-window__setup-button');
     expect(styles).toContain('color-mix(in srgb, var(--primary) 22%, var(--border) 68%)');
     expect(styles).toContain('.redeven-environment-flower-window__dock');
