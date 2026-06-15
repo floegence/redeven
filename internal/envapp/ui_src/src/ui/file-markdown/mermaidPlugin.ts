@@ -1,7 +1,10 @@
 import mermaid from 'mermaid';
 
 let mermaidInitialized = false;
-let renderGen = 0;
+
+export interface MermaidRunOptions {
+  shouldContinue?: () => boolean;
+}
 
 export function setupMermaid(theme: 'dark' | 'light'): void {
   const themeVars = theme === 'dark'
@@ -76,10 +79,12 @@ export function setupMermaid(theme: 'dark' | 'light'): void {
   mermaidInitialized = true;
 }
 
-export async function runMermaid(root: HTMLElement): Promise<void> {
+export async function runMermaid(root: HTMLElement, options: MermaidRunOptions = {}): Promise<void> {
   if (!mermaidInitialized) return;
 
-  const gen = (renderGen += 1);
+  const shouldContinue = options.shouldContinue ?? (() => true);
+  if (!shouldContinue() || !root.isConnected) return;
+
   const elements = root.querySelectorAll<HTMLElement>('.mermaid');
 
   // Create off-screen sandbox for proper font metrics
@@ -90,7 +95,7 @@ export async function runMermaid(root: HTMLElement): Promise<void> {
 
   try {
     for (const el of elements) {
-      if (gen !== renderGen) return;
+      if (!shouldContinue() || !root.contains(el) || !el.isConnected) return;
       const src = el.getAttribute('data-mermaid-src');
       if (!src) continue;
 
@@ -103,6 +108,8 @@ export async function runMermaid(root: HTMLElement): Promise<void> {
         sandbox.appendChild(container);
 
         const { svg } = await mermaid.render(id, code);
+        if (!shouldContinue() || !root.contains(el) || !el.isConnected) return;
+
         el.innerHTML = svg;
         const svgEl = el.querySelector('svg');
         if (svgEl) {
@@ -112,6 +119,7 @@ export async function runMermaid(root: HTMLElement): Promise<void> {
 
         container.remove();
       } catch (err) {
+        if (!shouldContinue() || !root.contains(el) || !el.isConnected) return;
         const message = err instanceof Error ? err.message : String(err);
         el.innerHTML = renderMermaidError(message, el.getAttribute('data-mermaid-src') ?? '');
       }

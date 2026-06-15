@@ -1,19 +1,35 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
+import DOMPurify from 'dompurify';
 import { FileMarkdown } from './FileMarkdown';
 
 const postProcessMock = vi.hoisted(() => vi.fn());
+const runMermaidMock = vi.hoisted(() => vi.fn());
+const buildTocMock = vi.hoisted(() => vi.fn());
+const actualBuildToc = vi.hoisted(() => ({
+  current: undefined as undefined | ((container: HTMLElement) => unknown),
+}));
 
 vi.mock('./mermaidPlugin', () => ({
   setupMermaid: vi.fn(),
-  runMermaid: vi.fn().mockResolvedValue(undefined),
+  runMermaid: (...args: unknown[]) => runMermaidMock(...args),
 }));
 
 vi.mock('./postProcess', () => ({
   postProcess: (...args: unknown[]) => postProcessMock(...args),
 }));
+
+vi.mock('./tocBuilder', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./tocBuilder')>();
+  actualBuildToc.current = actual.buildToc;
+  return {
+    ...actual,
+    buildToc: (container: HTMLElement) => buildTocMock(container),
+  };
+});
 
 function rect(top: number, height = 24): DOMRect {
   return {
@@ -53,8 +69,26 @@ function activeTocText(host: HTMLElement): string {
   return host.querySelector<HTMLElement>('.fm-toc-active')?.textContent?.trim() ?? '';
 }
 
+function markdownBodyText(host: HTMLElement): string {
+  return host.querySelector<HTMLElement>('.file-markdown-body')?.textContent ?? '';
+}
+
+function previewWarning(host: HTMLElement): HTMLElement | null {
+  return host.querySelector<HTMLElement>('.fm-preview-warning[role="status"]');
+}
+
+function previewFatal(host: HTMLElement): HTMLElement | null {
+  return host.querySelector<HTMLElement>('.fm-preview-fatal');
+}
+
+function shouldContinueForRun(callIndex: number): (() => boolean) | undefined {
+  return (runMermaidMock.mock.calls[callIndex]?.[1] as { shouldContinue?: () => boolean } | undefined)?.shouldContinue;
+}
+
 describe('FileMarkdown', () => {
   beforeEach(() => {
+    runMermaidMock.mockResolvedValue(undefined);
+    buildTocMock.mockImplementation((container: HTMLElement) => actualBuildToc.current?.(container));
     vi.stubGlobal('CSS', {
       ...(globalThis.CSS ?? {}),
       escape: (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, '\\$&'),
@@ -72,6 +106,7 @@ describe('FileMarkdown', () => {
     document.documentElement.removeAttribute('data-theme');
     document.documentElement.removeAttribute('data-theme-switching');
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     vi.clearAllMocks();
   });
 
@@ -117,6 +152,325 @@ describe('FileMarkdown', () => {
       await flushAsync();
 
       expect(postProcessMock).toHaveBeenCalledTimes(2);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('ignores stale asynchronous markdown post-render work after content changes', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    let resolveFirstRender!: () => void;
+    runMermaidMock
+      .mockImplementationOnce(() => new Promise<void>((resolve) => {
+        resolveFirstRender = resolve;
+      }))
+      .mockResolvedValue(undefined);
+
+    const [content, setContent] = createSignal('# Old Heading\n\nOld body');
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={content()}
+      />
+    ), host);
+
+    try {
+      await vi.waitFor(() => {
+        expect(runMermaidMock).toHaveBeenCalledTimes(1);
+      });
+      expect(shouldContinueForRun(0)?.()).toBe(true);
+
+      setContent('# New Heading\n\nNew body');
+
+      await vi.waitFor(() => {
+        expect(runMermaidMock).toHaveBeenCalledTimes(2);
+        expect(activeTocText(host)).toBe('New Heading');
+      });
+      expect(postProcessMock).toHaveBeenCalledTimes(1);
+      expect(buildTocMock).toHaveBeenCalledTimes(1);
+      expect(shouldContinueForRun(0)?.()).toBe(false);
+      expect(shouldContinueForRun(1)?.()).toBe(true);
+
+      resolveFirstRender();
+      await flushAsync();
+
+      expect(activeTocText(host)).toBe('New Heading');
+      expect(postProcessMock).toHaveBeenCalledTimes(1);
+      expect(buildTocMock).toHaveBeenCalledTimes(1);
+      expect(previewWarning(host)).toBeNull();
+      expect(previewFatal(host)).toBeNull();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not commit pending markdown work after the component is disposed', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const unhandledReasons: unknown[] = [];
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      unhandledReasons.push(event.reason);
+    };
+
+    let resolveRender!: () => void;
+    runMermaidMock.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveRender = resolve;
+    }));
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={'# Start\n\nDetails'}
+      />
+    ), host);
+
+    try {
+      await vi.waitFor(() => {
+        expect(runMermaidMock).toHaveBeenCalledTimes(1);
+      });
+
+      dispose();
+      expect(shouldContinueForRun(0)?.()).toBe(false);
+
+      resolveRender();
+      await flushAsync();
+
+      expect(postProcessMock).not.toHaveBeenCalled();
+      expect(buildTocMock).not.toHaveBeenCalled();
+      expect(unhandledReasons).toEqual([]);
+    } finally {
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    }
+  });
+
+  it('keeps the existing TOC DOM when content changes without changing headings', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [content, setContent] = createSignal('# Stable Heading\n\nFirst body');
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={content()}
+      />
+    ), host);
+
+    try {
+      await vi.waitFor(() => {
+        expect(activeTocText(host)).toBe('Stable Heading');
+      });
+
+      const initialTocLink = host.querySelector<HTMLAnchorElement>('a[href="#stable-heading"]');
+      expect(initialTocLink).toBeTruthy();
+
+      setContent('# Stable Heading\n\nSecond body');
+
+      await vi.waitFor(() => {
+        expect(host.querySelector('.file-markdown-body')?.textContent).toContain('Second body');
+        expect(postProcessMock).toHaveBeenCalledTimes(2);
+      });
+
+      expect(host.querySelector<HTMLAnchorElement>('a[href="#stable-heading"]')).toBe(initialTocLink);
+      expect(activeTocText(host)).toBe('Stable Heading');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('renders markdown post-processing failures as non-blocking preview warnings', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    postProcessMock.mockImplementationOnce(() => {
+      throw new Error('post-process exploded');
+    });
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={'# Start\n\nDetails'}
+      />
+    ), host);
+
+    try {
+      await vi.waitFor(() => {
+        expect(previewWarning(host)?.textContent).toContain('Preview enhancements unavailable');
+      });
+      expect(postProcessMock).toHaveBeenCalledTimes(1);
+      expect(markdownBodyText(host)).toContain('Start');
+      expect(markdownBodyText(host)).toContain('Details');
+      expect(previewFatal(host)).toBeNull();
+      expect(host.querySelector(`.${['fm', 'render', 'error'].join('-')}`)).toBeNull();
+      expect(host.querySelector('.fm-toc-panel')).toBeNull();
+      const floatingSlot = host.querySelector<HTMLElement>('.fm-floating-toolbar-slot-warning');
+      const floatingToolbar = floatingSlot?.querySelector<HTMLElement>('.fm-toolbar-floating-inline');
+      expect(floatingSlot).toBeTruthy();
+      expect(floatingToolbar).toBeTruthy();
+      expect(floatingSlot!.compareDocumentPosition(previewWarning(host)!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(consoleError).toHaveBeenCalledWith('Markdown preview post-process failed:', expect.any(Error));
+
+      const detailsButton = Array.from(host.querySelectorAll('button'))
+        .find((button) => button.textContent?.includes('Technical details'));
+      expect(detailsButton).toBeTruthy();
+      detailsButton!.click();
+
+      await vi.waitFor(() => {
+        expect(host.querySelector('.fm-preview-warning-details')?.textContent).toContain('postprocess: post-process exploded');
+      });
+
+      const copyButton = Array.from(host.querySelectorAll('button'))
+        .find((button) => button.textContent?.includes('Copy error details'));
+      expect(copyButton).toBeTruthy();
+      copyButton!.click();
+
+      await vi.waitFor(() => {
+        expect(writeText).toHaveBeenCalledWith('postprocess: post-process exploded');
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('recovers from a markdown post-processing warning on the next successful render', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const [content, setContent] = createSignal('# Broken\n\nDetails');
+    postProcessMock.mockImplementationOnce(() => {
+      throw new Error('post-process exploded');
+    });
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={content()}
+      />
+    ), host);
+
+    try {
+      await vi.waitFor(() => {
+        expect(previewWarning(host)?.textContent).toContain('Preview enhancements unavailable');
+      });
+
+      setContent('# Recovered\n\nDetails');
+
+      await vi.waitFor(() => {
+        expect(previewWarning(host)).toBeNull();
+        expect(previewFatal(host)).toBeNull();
+        expect(activeTocText(host)).toBe('Recovered');
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps markdown readable when Mermaid infrastructure rejects unexpectedly', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    runMermaidMock.mockRejectedValueOnce(new Error('mermaid worker unavailable'));
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={'# Diagram Notes\n\n```mermaid\ngraph TD\nA-->B\n```'}
+      />
+    ), host);
+
+    try {
+      await vi.waitFor(() => {
+        expect(previewWarning(host)?.textContent).toContain('Diagram enhancements unavailable');
+      });
+      expect(markdownBodyText(host)).toContain('Diagram Notes');
+      expect(previewWarning(host)?.textContent).toContain('document is still readable');
+      expect(previewFatal(host)).toBeNull();
+      expect(activeTocText(host)).toBe('Diagram Notes');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps markdown readable and hides Contents when TOC construction fails', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    buildTocMock.mockImplementationOnce(() => {
+      throw new Error('toc exploded');
+    });
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={'# Start\n\n## Section\n\nDetails'}
+      />
+    ), host);
+
+    try {
+      await vi.waitFor(() => {
+        expect(previewWarning(host)?.textContent).toContain('Contents unavailable');
+      });
+      expect(markdownBodyText(host)).toContain('Start');
+      expect(markdownBodyText(host)).toContain('Details');
+      expect(previewFatal(host)).toBeNull();
+      expect(host.querySelector('.fm-toc-panel')).toBeNull();
+      expect(activeTocText(host)).toBe('');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('renders fatal markdown failures as full-pane errors and recovers without stale issue state', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const sanitize = vi.spyOn(DOMPurify, 'sanitize');
+    const [content, setContent] = createSignal('# Broken\n\nDetails');
+    sanitize.mockImplementationOnce(() => {
+      throw new Error('sanitize exploded');
+    });
+
+    const dispose = render(() => (
+      <FileMarkdown
+        filePath="/workspace/README.md"
+        content={content()}
+      />
+    ), host);
+
+    try {
+      await vi.waitFor(() => {
+        expect(previewFatal(host)?.textContent).toContain('Failed to render preview');
+      });
+      expect(previewFatal(host)?.textContent).toContain('Copy error details');
+      expect(markdownBodyText(host)).toBe('');
+      expect(previewWarning(host)).toBeNull();
+      expect(host.querySelector('.fm-toc-panel')).toBeNull();
+
+      setContent('# Recovered\n\nDetails');
+
+      await vi.waitFor(() => {
+        expect(previewFatal(host)).toBeNull();
+        expect(markdownBodyText(host)).toContain('Recovered');
+        expect(activeTocText(host)).toBe('Recovered');
+      });
+
+      postProcessMock.mockImplementationOnce(() => {
+        throw new Error('later warning');
+      });
+      setContent('# Warning Later\n\nDetails');
+
+      await vi.waitFor(() => {
+        expect(previewWarning(host)?.textContent).toContain('Preview enhancements unavailable');
+      });
+      expect(previewFatal(host)).toBeNull();
+      expect(markdownBodyText(host)).toContain('Warning Later');
     } finally {
       dispose();
     }
@@ -357,13 +711,16 @@ describe('FileMarkdown', () => {
 
       const wrapper = host.querySelector<HTMLElement>('.file-markdown-wrapper');
       const panel = host.querySelector<HTMLElement>('.fm-toc-panel');
-      const toolbar = host.querySelector<HTMLElement>('.fm-toolbar');
+      const toolbar = panel?.querySelector<HTMLElement>('.fm-toolbar');
+      const responsiveToolbar = host.querySelector<HTMLElement>('.fm-floating-toolbar-slot > .fm-toolbar-floating');
       const title = host.querySelector<HTMLElement>('.fm-toc-title');
       expect(wrapper).toBeTruthy();
       expect(panel).toBeTruthy();
       expect(toolbar).toBeTruthy();
+      expect(responsiveToolbar).toBeTruthy();
       expect(title).toBeTruthy();
       expect(panel!.contains(toolbar!)).toBe(true);
+      expect(panel!.contains(responsiveToolbar!)).toBe(false);
       expect(panel!.compareDocumentPosition(toolbar!) & Node.DOCUMENT_POSITION_CONTAINED_BY).toBeTruthy();
       expect(toolbar!.compareDocumentPosition(title!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(Array.from(wrapper!.children).some((child) => child.classList.contains('fm-toolbar'))).toBe(false);

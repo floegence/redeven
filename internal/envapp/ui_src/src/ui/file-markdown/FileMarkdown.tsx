@@ -1,6 +1,7 @@
 import {
   For,
   Show,
+  batch,
   createEffect,
   createMemo,
   createSignal,
@@ -8,6 +9,12 @@ import {
   onMount,
 } from 'solid-js';
 import DOMPurify from 'dompurify';
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Copy,
+} from '@floegence/floe-webapp-core/icons';
 import './FileMarkdown.css';
 import { extractMath, reinjectMath } from './mathPlugin';
 import { setupMermaid, runMermaid } from './mermaidPlugin';
@@ -17,6 +24,8 @@ import { postProcess } from './postProcess';
 import { parseMarkdown } from './markedConfig';
 import { resolveFileMarkdownLink } from './linkResolver';
 import { buildRedevenFileResourceUrl } from '../utils/filePreviewResource';
+import { useI18n } from '../i18n';
+import { FilePreviewErrorState } from '../widgets/FilePreviewErrorState';
 import type { JSX } from 'solid-js';
 
 export interface FileMarkdownFileLinkTarget {
@@ -39,6 +48,19 @@ const TOC_ACTIVE_ANCHOR_OFFSET_PX = 88;
 const TOC_SCROLL_BOTTOM_EPSILON_PX = 2;
 const TOC_NAVIGATION_SETTLE_MS = 520;
 const TOC_SCROLL_TOP_OFFSET_PX = 8;
+
+interface MarkdownRenderResult {
+  html: string;
+  fatalIssue: MarkdownPreviewIssue | null;
+}
+
+type MarkdownPreviewIssuePhase = 'parse' | 'mermaid' | 'postprocess' | 'toc';
+
+interface MarkdownPreviewIssue {
+  severity: 'fatal' | 'warning';
+  phase: MarkdownPreviewIssuePhase;
+  message: string;
+}
 
 function resolveImagePaths(markdown: string, mdFilePath: string): string {
   const dir = mdFilePath.replace(/[/\\][^/\\]*$/, '') || '/';
@@ -79,18 +101,74 @@ function resolveImagePaths(markdown: string, mdFilePath: string): string {
   return result;
 }
 
+function formatMarkdownPreviewError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  const message = String(error ?? '').trim();
+  return message || 'Unknown markdown render error';
+}
+
+function markdownPreviewIssuesEqual(
+  left: MarkdownPreviewIssue | null,
+  right: MarkdownPreviewIssue | null,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return left.severity === right.severity
+    && left.phase === right.phase
+    && left.message === right.message;
+}
+
+function formatMarkdownPreviewIssueDetails(issue: MarkdownPreviewIssue): string {
+  return `${issue.phase}: ${issue.message}`;
+}
+
+function tocItemsEqual(left: readonly TocItem[], right: readonly TocItem[]): boolean {
+  const pending: Array<readonly [readonly TocItem[], readonly TocItem[]]> = [[left, right]];
+
+  while (pending.length > 0) {
+    const [currentLeft, currentRight] = pending.pop()!;
+    if (currentLeft === currentRight) continue;
+    if (currentLeft.length !== currentRight.length) return false;
+
+    for (let index = 0; index < currentLeft.length; index += 1) {
+      const leftItem = currentLeft[index];
+      const rightItem = currentRight[index];
+      if (
+        leftItem.id !== rightItem.id
+        || leftItem.text !== rightItem.text
+        || leftItem.level !== rightItem.level
+        || leftItem.children.length !== rightItem.children.length
+      ) {
+        return false;
+      }
+      pending.push([leftItem.children, rightItem.children]);
+    }
+  }
+
+  return true;
+}
+
 export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
+  const i18n = useI18n();
   const [readingMode, setReadingMode] = createSignal(true);
   const [tocVisible, setTocVisible] = createSignal(props.showToc !== false);
   const [tocItems, setTocItems] = createSignal<TocItem[]>([]);
   const [activeTocId, setActiveTocId] = createSignal('');
+  const [fatalIssue, setFatalIssue] = createSignal<MarkdownPreviewIssue | null>(null);
+  const [warningIssue, setWarningIssue] = createSignal<MarkdownPreviewIssue | null>(null);
+  const [warningDetailsOpen, setWarningDetailsOpen] = createSignal(false);
+  const [warningDetailsCopied, setWarningDetailsCopied] = createSignal(false);
   let containerRef!: HTMLDivElement;
   let activeTocUpdateRaf: number | undefined;
   let tocNavigationTargetId = '';
   let tocNavigationReleaseTimer: number | undefined;
+  let warningCopyResetTimer: number | undefined;
   let themeRefreshRaf: number | undefined;
   let themeObserver: MutationObserver | undefined;
-  let renderGen = 0;
+  let renderTaskSeq = 0;
+  let disposed = false;
 
   const showToc = () => props.showToc !== false;
 
@@ -102,53 +180,61 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
     return 'light';
   }
 
-  const renderedHtml = createMemo(() => {
-    renderGen += 1;
-    const gen = renderGen;
+  const renderedHtml = createMemo<MarkdownRenderResult>(() => {
+    try {
+      // 0. Resolve relative image paths before parsing
+      const mdPath = props.filePath ?? '';
+      const contentWithResolvedImages = mdPath
+        ? resolveImagePaths(props.content, mdPath)
+        : props.content;
 
-    // 0. Resolve relative image paths before parsing
-    const mdPath = props.filePath ?? '';
-    const contentWithResolvedImages = mdPath
-      ? resolveImagePaths(props.content, mdPath)
-      : props.content;
+      // 1. Extract frontmatter
+      const { body, html: fmHtml } = extractFrontmatter(contentWithResolvedImages);
 
-    // 1. Extract frontmatter
-    const { body, html: fmHtml } = extractFrontmatter(contentWithResolvedImages);
+      // 2. Extract and pre-render math
+      const { renders: mathRenders, processed: processedMath } = extractMath(body);
 
-    // 2. Extract and pre-render math
-    const { renders: mathRenders, processed: processedMath } = extractMath(body);
+      // 3. Parse markdown
+      let html = parseMarkdown(processedMath);
 
-    // 3. Parse markdown
-    let html = parseMarkdown(processedMath);
+      // 4. Reinject math
+      html = reinjectMath(html, mathRenders);
 
-    // 4. Reinject math
-    html = reinjectMath(html, mathRenders);
+      // 5. Prepend frontmatter
+      if (fmHtml) {
+        html = fmHtml + html;
+      }
 
-    // 5. Prepend frontmatter
-    if (fmHtml) {
-      html = fmHtml + html;
+      // 6. Sanitize
+      html = DOMPurify.sanitize(html, {
+        ADD_TAGS: [
+          'foreignObject', 'annotation-xml', 'semantics', 'annotation',
+          'math', 'mi', 'mo', 'mn', 'mrow', 'msup', 'msub', 'msubsup',
+          'mfrac', 'mspace', 'mtext', 'menclose', 'munder', 'mover',
+          'munderover', 'mtable', 'mtr', 'mtd', 'mstyle',
+          'svg', 'path', 'circle', 'line', 'rect', 'polyline', 'polygon',
+          'text', 'tspan', 'g', 'defs', 'marker', 'use',
+        ],
+        ADD_ATTR: ['align', 'target', 'mathvariant', 'displaystyle', 'mathcolor', 'd', 'cx', 'cy', 'r',
+          'x', 'y', 'x1', 'x2', 'y1', 'y2', 'width', 'height', 'viewBox', 'fill',
+          'stroke', 'stroke-width', 'transform', 'marker-end', 'marker-start',
+          'text-anchor', 'dominant-baseline', 'font-size', 'font-family', 'font-weight',
+          'data-mermaid-src',
+        ],
+        ALLOW_UNKNOWN_PROTOCOLS: false,
+      });
+
+      return { html, fatalIssue: null };
+    } catch (error) {
+      return {
+        html: '',
+        fatalIssue: {
+          severity: 'fatal',
+          phase: 'parse',
+          message: formatMarkdownPreviewError(error),
+        },
+      };
     }
-
-    // 6. Sanitize
-    html = DOMPurify.sanitize(html, {
-      ADD_TAGS: [
-        'foreignObject', 'annotation-xml', 'semantics', 'annotation',
-        'math', 'mi', 'mo', 'mn', 'mrow', 'msup', 'msub', 'msubsup',
-        'mfrac', 'mspace', 'mtext', 'menclose', 'munder', 'mover',
-        'munderover', 'mtable', 'mtr', 'mtd', 'mstyle',
-        'svg', 'path', 'circle', 'line', 'rect', 'polyline', 'polygon',
-        'text', 'tspan', 'g', 'defs', 'marker', 'use',
-      ],
-      ADD_ATTR: ['align', 'target', 'mathvariant', 'displaystyle', 'mathcolor', 'd', 'cx', 'cy', 'r',
-        'x', 'y', 'x1', 'x2', 'y1', 'y2', 'width', 'height', 'viewBox', 'fill',
-        'stroke', 'stroke-width', 'transform', 'marker-end', 'marker-start',
-        'text-anchor', 'dominant-baseline', 'font-size', 'font-family', 'font-weight',
-        'data-mermaid-src',
-      ],
-      ALLOW_UNKNOWN_PROTOCOLS: false,
-    });
-
-    return { html, gen };
   });
 
   onMount(() => {
@@ -165,7 +251,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
 
         const refresh = () => {
           themeRefreshRaf = undefined;
-          postProcess(containerRef);
+          runPostProcessForVisibleDocument();
         };
 
         themeRefreshRaf = typeof window.requestAnimationFrame === 'function'
@@ -180,27 +266,175 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   });
 
   createEffect(() => {
-    const { html, gen } = renderedHtml();
-    if (!containerRef) return;
+    const { html, fatalIssue: nextFatalIssue } = renderedHtml();
+    const shouldShowToc = showToc();
+    const target = containerRef;
+    const taskSeq = (renderTaskSeq += 1);
+    let canceled = false;
 
-    containerRef.innerHTML = html;
-
-    // Run mermaid after DOM update
-    void runMermaid(containerRef).then(() => {
-      if (gen !== renderGen) return; // Stale
-      postProcess(containerRef);
-
-      // Build TOC
-      if (showToc()) {
-        const nextTocItems = buildToc(containerRef);
-        setTocItems(nextTocItems);
-        updateActiveTocFromScrollNow();
-      } else {
-        setTocItems([]);
-        setActiveTocId('');
-      }
+    onCleanup(() => {
+      canceled = true;
     });
+
+    if (!target) return;
+
+    const isCurrentTask = () => (
+      !disposed
+      && !canceled
+      && taskSeq === renderTaskSeq
+      && target === containerRef
+      && target.isConnected
+    );
+
+    if (nextFatalIssue) {
+      target.innerHTML = '';
+      batch(() => {
+        setFatalIssueIfChanged(nextFatalIssue);
+        clearWarningIssue();
+        setTocItemsIfChanged([]);
+        setActiveTocIdIfChanged('');
+      });
+      return;
+    }
+
+    batch(() => {
+      setFatalIssueIfChanged(null);
+      clearWarningIssue();
+    });
+    target.innerHTML = html;
+
+    void (async () => {
+      try {
+        await runMermaid(target, { shouldContinue: isCurrentTask });
+      } catch (error) {
+        if (!isCurrentTask()) return;
+        console.error('Markdown preview Mermaid enhancement failed:', error);
+        commitWarningIssue({
+          severity: 'warning',
+          phase: 'mermaid',
+          message: formatMarkdownPreviewError(error),
+        });
+      }
+      if (!isCurrentTask()) return;
+
+      try {
+        postProcess(target);
+      } catch (error) {
+        if (!isCurrentTask()) return;
+        console.error('Markdown preview post-process failed:', error);
+        batch(() => {
+          commitWarningIssue({
+            severity: 'warning',
+            phase: 'postprocess',
+            message: formatMarkdownPreviewError(error),
+          });
+          setTocItemsIfChanged([]);
+          setActiveTocIdIfChanged('');
+        });
+        return;
+      }
+      if (!isCurrentTask()) return;
+
+      try {
+        commitTocState(target, shouldShowToc);
+      } catch (error) {
+        if (!isCurrentTask()) return;
+        console.error('Markdown preview table of contents failed:', error);
+        batch(() => {
+          commitWarningIssue({
+            severity: 'warning',
+            phase: 'toc',
+            message: formatMarkdownPreviewError(error),
+          });
+          setTocItemsIfChanged([]);
+          setActiveTocIdIfChanged('');
+        });
+      }
+    })();
   });
+
+  function setFatalIssueIfChanged(nextIssue: MarkdownPreviewIssue | null): void {
+    setFatalIssue((current) => (
+      markdownPreviewIssuesEqual(current, nextIssue) ? current : nextIssue
+    ));
+  }
+
+  function resetWarningDetailsState(): void {
+    setWarningDetailsOpen(false);
+    setWarningDetailsCopied(false);
+    if (warningCopyResetTimer !== undefined) {
+      window.clearTimeout(warningCopyResetTimer);
+      warningCopyResetTimer = undefined;
+    }
+  }
+
+  function commitWarningIssue(nextIssue: MarkdownPreviewIssue): void {
+    let changed = false;
+    setWarningIssue((current) => {
+      if (markdownPreviewIssuesEqual(current, nextIssue)) return current;
+      changed = true;
+      return nextIssue;
+    });
+    if (changed) {
+      resetWarningDetailsState();
+    }
+  }
+
+  function clearWarningIssue(phase?: MarkdownPreviewIssuePhase): void {
+    let changed = false;
+    setWarningIssue((current) => {
+      if (!current || (phase && current.phase !== phase)) return current;
+      changed = true;
+      return null;
+    });
+    if (changed) {
+      resetWarningDetailsState();
+    }
+  }
+
+  function setTocItemsIfChanged(nextTocItems: TocItem[]): void {
+    setTocItems((current) => (
+      tocItemsEqual(current, nextTocItems) ? current : nextTocItems
+    ));
+  }
+
+  function setActiveTocIdIfChanged(nextActiveId: string): void {
+    setActiveTocId((current) => (
+      current === nextActiveId ? current : nextActiveId
+    ));
+  }
+
+  function commitTocState(target: HTMLElement, shouldShowToc: boolean): void {
+    if (!shouldShowToc) {
+      batch(() => {
+        setTocItemsIfChanged([]);
+        setActiveTocIdIfChanged('');
+      });
+      return;
+    }
+
+    const nextTocItems = buildToc(target);
+    batch(() => {
+      setTocItemsIfChanged(nextTocItems);
+      updateActiveTocFromScrollNow();
+    });
+  }
+
+  function runPostProcessForVisibleDocument(): void {
+    if (disposed || fatalIssue() || !containerRef?.isConnected) return;
+
+    try {
+      postProcess(containerRef);
+      clearWarningIssue('postprocess');
+    } catch (error) {
+      console.error('Markdown preview post-process failed:', error);
+      commitWarningIssue({
+        severity: 'warning',
+        phase: 'postprocess',
+        message: formatMarkdownPreviewError(error),
+      });
+    }
+  }
 
   function getTocHeadings(): HTMLElement[] {
     return Array.from(containerRef.querySelectorAll<HTMLElement>(TOC_HEADING_SELECTOR))
@@ -249,7 +483,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
     if (tocNavigationTargetId) return;
 
     const nextActiveId = computeActiveTocIdFromScroll();
-    setActiveTocId(nextActiveId);
+    setActiveTocIdIfChanged(nextActiveId);
   }
 
   function scheduleActiveTocFromScroll(): void {
@@ -285,7 +519,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
 
   function startTocNavigation(targetId: string): void {
     tocNavigationTargetId = targetId;
-    setActiveTocId(targetId);
+    setActiveTocIdIfChanged(targetId);
     scheduleTocNavigationFinish();
   }
 
@@ -355,7 +589,12 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   }
 
   onCleanup(() => {
+    disposed = true;
+    renderTaskSeq += 1;
     themeObserver?.disconnect();
+    if (warningCopyResetTimer !== undefined) {
+      window.clearTimeout(warningCopyResetTimer);
+    }
     if (themeRefreshRaf !== undefined) {
       if (typeof window.cancelAnimationFrame === 'function') {
         window.cancelAnimationFrame(themeRefreshRaf);
@@ -407,9 +646,9 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
     </li>
   );
 
-  const renderToolbar = (placement: 'toc' | 'floating'): JSX.Element => (
+  const renderToolbar = (placement: 'toc' | 'floating', inline = false): JSX.Element => (
     <div
-      class={`fm-toolbar${placement === 'toc' ? ' fm-toolbar-toc' : ' fm-toolbar-floating'}`}
+      class={`fm-toolbar${placement === 'toc' ? ' fm-toolbar-toc' : ' fm-toolbar-floating'}${inline ? ' fm-toolbar-floating-inline' : ''}`}
       aria-label="Markdown preview controls"
     >
       <button
@@ -439,38 +678,138 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
     </div>
   );
 
+  function warningTitle(issue: MarkdownPreviewIssue): string {
+    switch (issue.phase) {
+      case 'mermaid':
+        return i18n.t('filePreview.markdownWarningMermaidTitle');
+      case 'toc':
+        return i18n.t('filePreview.markdownWarningTocTitle');
+      case 'postprocess':
+      case 'parse':
+        return i18n.t('filePreview.markdownWarningPostprocessTitle');
+    }
+  }
+
+  function warningDescription(issue: MarkdownPreviewIssue): string {
+    switch (issue.phase) {
+      case 'mermaid':
+        return i18n.t('filePreview.markdownWarningMermaidDescription');
+      case 'toc':
+        return i18n.t('filePreview.markdownWarningTocDescription');
+      case 'postprocess':
+      case 'parse':
+        return i18n.t('filePreview.markdownWarningPostprocessDescription');
+    }
+  }
+
+  async function copyWarningDetails(issue: MarkdownPreviewIssue): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(formatMarkdownPreviewIssueDetails(issue));
+    } catch {
+      return;
+    }
+
+    setWarningDetailsCopied(true);
+    if (warningCopyResetTimer !== undefined) {
+      window.clearTimeout(warningCopyResetTimer);
+    }
+    warningCopyResetTimer = window.setTimeout(() => {
+      setWarningDetailsCopied(false);
+      warningCopyResetTimer = undefined;
+    }, 1600);
+  }
+
+  const renderWarningIssue = (issue: MarkdownPreviewIssue): JSX.Element => (
+    <section class="fm-preview-warning" role="status" aria-live="polite">
+      <AlertTriangle class="fm-preview-warning-icon" />
+      <div class="fm-preview-warning-copy">
+        <div class="fm-preview-warning-title">{warningTitle(issue)}</div>
+        <div class="fm-preview-warning-description">{warningDescription(issue)}</div>
+        <div class="fm-preview-warning-actions">
+          <button
+            type="button"
+            class="fm-preview-warning-action"
+            aria-expanded={warningDetailsOpen()}
+            onClick={() => setWarningDetailsOpen((open) => !open)}
+        >
+          <Show when={warningDetailsOpen()} fallback={<ChevronRight class="fm-preview-warning-action-icon" />}>
+            <ChevronDown class="fm-preview-warning-action-icon" />
+            </Show>
+            {i18n.t('filePreview.technicalDetails')}
+          </button>
+          <button
+            type="button"
+            class="fm-preview-warning-action"
+            onClick={() => void copyWarningDetails(issue)}
+          >
+            <Show when={warningDetailsCopied()} fallback={<Copy class="fm-preview-warning-action-icon" />}>
+              <span class="fm-preview-warning-copied">{i18n.t('chatChrome.copied')}</span>
+            </Show>
+            {i18n.t('filePreview.copyErrorDetails')}
+          </button>
+        </div>
+        <Show when={warningDetailsOpen()}>
+          <code class="fm-preview-warning-details">{formatMarkdownPreviewIssueDetails(issue)}</code>
+        </Show>
+      </div>
+    </section>
+  );
+
   return (
     <div class={`file-markdown-wrapper${props.class ? ` ${props.class}` : ''}`} style="display: flex; height: 100%; min-height: 0;">
       <div style="position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden;">
-        <Show when={!(tocVisible() && tocItems().length > 0)}>
-          {renderToolbar('floating')}
+        <Show when={fatalIssue()}>
+          {(issue) => (
+            <div class="fm-preview-fatal">
+              <FilePreviewErrorState
+                errorType="render_error"
+                message={formatMarkdownPreviewIssueDetails(issue())}
+              />
+            </div>
+          )}
         </Show>
 
         <div
-          ref={containerRef!}
-          class={`file-markdown-body${readingMode() ? ' file-markdown-reading' : ''}`}
-          style="flex: 1; min-width: 0; overflow-y: auto;"
-          onClick={handleMarkdownClick}
-          onScroll={handleMarkdownScroll}
-          onPointerDown={cancelTocNavigation}
-          onWheel={cancelTocNavigation}
-          onTouchStart={cancelTocNavigation}
-        />
-
-        <Show when={tocVisible() && tocItems().length > 0}>
-          <div
-            class="fm-toc-panel"
-            style={{ width: '280px', 'flex-shrink': 0 }}
-          >
-            {renderToolbar('toc')}
-            <div class="fm-toc-title">Contents</div>
-            <ul class="fm-toc-list">
-              <For each={tocItems()}>
-                {(item) => renderTocItem(item, 1)}
-              </For>
-            </ul>
+          class="fm-markdown-layout"
+          hidden={fatalIssue() !== null}
+          aria-hidden={fatalIssue() !== null ? 'true' : undefined}
+        >
+          <div class="fm-floating-toolbar-slot" classList={{ 'fm-floating-toolbar-slot-warning': warningIssue() !== null }}>
+            {renderToolbar('floating', warningIssue() !== null)}
           </div>
-        </Show>
+
+          <div class="fm-markdown-column">
+            <Show when={warningIssue()}>
+              {(issue) => renderWarningIssue(issue())}
+            </Show>
+
+            <div
+              ref={containerRef!}
+              class={`file-markdown-body${readingMode() ? ' file-markdown-reading' : ''}`}
+              style="flex: 1; min-width: 0; overflow-y: auto;"
+              onClick={handleMarkdownClick}
+              onScroll={handleMarkdownScroll}
+              onPointerDown={cancelTocNavigation}
+              onWheel={cancelTocNavigation}
+              onTouchStart={cancelTocNavigation}
+            />
+          </div>
+
+          <Show when={tocVisible() && tocItems().length > 0}>
+            <div
+              class="fm-toc-panel"
+              style={{ width: '280px', 'flex-shrink': 0 }}
+            >
+              {renderToolbar('toc')}
+              <div class="fm-toc-title">Contents</div>
+              <ul class="fm-toc-list">
+                <For each={tocItems()}>
+                  {(item) => renderTocItem(item, 1)}
+                </For>
+              </ul>
+            </div>
+          </Show>
+        </div>
       </div>
     </div>
   );

@@ -84,7 +84,7 @@ export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
           <button
             type="button"
             class={[
-              'inline-flex items-center gap-1.5 rounded-md border border-border/70 px-2.5 py-1.5',
+              'inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/70 px-2.5 py-1.5',
               'text-xs text-muted-foreground transition-colors duration-150',
               'hover:border-border hover:bg-accent hover:text-foreground',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -105,7 +105,7 @@ export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
           <button
             type="button"
             class={[
-              'inline-flex items-center gap-1.5 rounded-md border border-border/70 px-2.5 py-1.5',
+              'inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/70 px-2.5 py-1.5',
               'text-xs text-muted-foreground transition-colors duration-150',
               'hover:border-border hover:bg-accent hover:text-foreground',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -121,11 +121,12 @@ export function FilePreviewErrorState(props: FilePreviewErrorStateProps) {
         <button
           type="button"
           class={[
-            'mt-4 inline-flex items-center gap-1 rounded-md px-2 py-1',
+            'mt-4 inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1',
             'text-[11px] text-muted-foreground/70 transition-colors duration-150',
             'hover:bg-accent hover:text-muted-foreground',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           ].join(' ')}
+          aria-expanded={detailsOpen()}
           onClick={() => setDetailsOpen((prev) => !prev)}
         >
           <Show when={detailsOpen()} fallback={<ChevronRight class="h-3 w-3" />}>
