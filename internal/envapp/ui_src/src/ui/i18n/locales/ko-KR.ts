@@ -564,9 +564,6 @@ export const koKR = {
       actTitle: "직접 도구 작업을 위한 실행 우선 모드",
     },
     router: {
-      handlerSelectionLabel: "Handled by",
-      handlerStarting: "Starting Flower...",
-      handlerResolving: "Choosing Flower...",
       handlerBlockedTitle: "Flower needs attention",
       handlerStartFailedTitle: "Flower could not start",
       handlerStillStarting: "Flower is still starting.",

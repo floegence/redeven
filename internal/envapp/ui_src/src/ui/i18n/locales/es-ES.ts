@@ -564,9 +564,6 @@ export const esES = {
       actTitle: "Modo orientado a ejecución para acciones directas de herramientas",
     },
     router: {
-      handlerSelectionLabel: "Handled by",
-      handlerStarting: "Starting Flower...",
-      handlerResolving: "Choosing Flower...",
       handlerBlockedTitle: "Flower needs attention",
       handlerStartFailedTitle: "Flower could not start",
       handlerStillStarting: "Flower is still starting.",

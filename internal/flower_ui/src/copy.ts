@@ -214,9 +214,8 @@ export type FlowerSurfaceCopy = Readonly<{
     openSettings: string;
     placeholder: string;
     fromSource: (source: string) => string;
-    handlerSelectionLabel: string;
-    handlerStarting: string;
-    handlerResolving: string;
+    modelLabel: string;
+    noModelSelected: string;
     handlerBlockedTitle: string;
     handlerStartFailedTitle: string;
     handlerStillStarting: string;
@@ -277,9 +276,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     openSettings: 'Open Settings',
     placeholder: 'Ask Flower anything...',
     fromSource: (source) => `From ${source}`,
-    handlerSelectionLabel: 'Handled by',
-    handlerStarting: 'Starting Flower...',
-    handlerResolving: 'Choosing Flower...',
+    modelLabel: 'Model',
+    noModelSelected: 'No model selected',
     handlerBlockedTitle: 'Flower needs attention',
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',

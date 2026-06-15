@@ -858,9 +858,6 @@ export const zhCN = {
       actTitle: "优先执行模式，可直接执行工具操作",
     },
     router: {
-      handlerSelectionLabel: "处理方",
-      handlerStarting: "正在启动 Flower...",
-      handlerResolving: "正在选择 Flower...",
       handlerBlockedTitle: "Flower 需要处理",
       handlerStartFailedTitle: "Flower 启动失败",
       handlerStillStarting: "Flower 仍在启动。",

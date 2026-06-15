@@ -225,6 +225,7 @@ vi.mock('../i18n', () => {
     'flowerChat.composer.describePlaceholder': 'Describe what you need',
     'flowerChat.composer.sendMessage': 'Send message',
     'flowerChat.composer.typeMessagePlaceholder': 'Message Flower',
+    'flowerChat.model.label': 'Model',
     'flowerChat.router.currentEnvHandler': 'Using this environment',
     'flowerChat.router.currentEnvSource': 'Current environment',
     'flowerChat.router.conversationsAria': 'Flower conversations',
@@ -232,9 +233,6 @@ vi.mock('../i18n', () => {
     'flowerChat.router.enterMessageBeforeSending': 'Enter a message before sending.',
     'flowerChat.router.envLocalSubtitle': 'Environment-local Flower',
     'flowerChat.router.failedToCreateChat': 'Failed to create Flower chat.',
-    'flowerChat.router.handlerResolving': 'Finding Flower',
-    'flowerChat.router.handlerStarting': 'Starting Flower',
-    'flowerChat.router.handlerSelectionLabel': 'Flower',
     'flowerChat.router.handlerBlockedTitle': 'Flower needs attention',
     'flowerChat.router.handlerStartFailedTitle': 'Flower could not start',
     'flowerChat.router.handlerStillStarting': 'Flower is still starting',
@@ -326,7 +324,7 @@ export function registerEnvAIPageSendTests() {
       document.body.innerHTML = '';
     });
 
-    it('renders the shared Flower layout with New chat, thread history, settings, and handler visibility', async () => {
+    it('renders the shared Flower layout with New chat, thread history, settings, and model visibility', async () => {
       const { host, dispose } = await renderPage();
       try {
         expect(host.querySelector('.flower-component-thread-rail')).toBeTruthy();
@@ -334,7 +332,8 @@ export function registerEnvAIPageSendTests() {
         const chatHeader = host.querySelector('.flower-chat-header');
         expect(chatHeader?.querySelector('.flower-chat-header-title')?.textContent).toContain('Describe what you need');
         expect(chatHeader?.textContent).not.toContain('Ready');
-        expect(host.querySelector('.flower-handler-selection')?.textContent).toContain('Using this environment');
+        expect(host.querySelector('.flower-model-selection')?.textContent).toContain('Model');
+        expect(host.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
         expect(host.querySelector('button[aria-label="Settings"]')).toBeTruthy();
       } finally {
         dispose();

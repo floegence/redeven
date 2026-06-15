@@ -878,9 +878,6 @@ export const enUS = defineDictionary({
       actTitle: 'Execution-first mode for direct tool actions',
     },
     router: {
-      handlerSelectionLabel: 'Handled by',
-      handlerStarting: 'Starting Flower...',
-      handlerResolving: 'Choosing Flower...',
       handlerBlockedTitle: 'Flower needs attention',
       handlerStartFailedTitle: 'Flower could not start',
       handlerStillStarting: 'Flower is still starting.',

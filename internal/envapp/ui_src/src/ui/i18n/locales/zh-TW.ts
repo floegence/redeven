@@ -564,9 +564,6 @@ export const zhTW = {
       actTitle: "優先執行模式，可直接執行工具操作",
     },
     router: {
-      handlerSelectionLabel: "處理方",
-      handlerStarting: "正在啟動 Flower...",
-      handlerResolving: "正在選擇 Flower...",
       handlerBlockedTitle: "Flower 需要處理",
       handlerStartFailedTitle: "Flower 啟動失敗",
       handlerStillStarting: "Flower 仍在啟動。",

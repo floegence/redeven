@@ -153,6 +153,8 @@ html.dark .flower-component-shell {
   --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated, var(--card));
   --flower-chat-surface-border: var(--redeven-surface-panel-border, var(--border));
   --flower-chat-dock-track-max-width: 112rem;
+  --flower-chat-text-column-width: 58rem;
+  --flower-chat-user-bubble-width: 44rem;
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -227,79 +229,42 @@ html.dark .flower-component-shell {
   gap: 0.375rem;
 }
 
-.flower-handler-selection {
+.flower-model-stack {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
+  gap: 0.5rem;
+}
+
+.flower-model-selection {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
   gap: 0.375rem;
 }
 
-.flower-handler-picker {
-  position: relative;
-  display: inline-grid;
-  max-width: min(24rem, 100%);
-  min-width: 0;
-  grid-template-columns: auto minmax(0, 1fr) 1rem;
-  align-items: center;
-  gap: 0.35rem;
-  cursor: pointer;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--muted) 34%, transparent);
-  color: var(--foreground);
-  padding: 0.25rem 0.55rem 0.25rem 0.65rem;
-  transition:
-    background-color 150ms ease,
-    box-shadow 150ms ease,
-    color 150ms ease;
-}
-
-.flower-handler-picker:hover,
-.flower-handler-picker:focus-within {
-  background: color-mix(in srgb, var(--primary) 8%, var(--muted) 32%);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
-}
-
-.flower-handler-picker-value {
-  min-width: 0;
-  overflow: hidden;
-  color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.flower-handler-picker-icon {
-  width: 1rem;
-  height: 1rem;
-  color: color-mix(in srgb, var(--muted-foreground) 76%, var(--foreground) 24%);
-}
-
-.flower-handler-picker select {
-  position: absolute;
-  inset: 0;
-  cursor: pointer;
-  opacity: 0;
-}
-
-.flower-handler-picker select:disabled {
-  cursor: not-allowed;
-}
-
-.flower-handler-selection-label {
+.flower-model-selection-label {
+  flex: 0 0 auto;
   color: var(--muted-foreground);
   font-size: 0.75rem;
   font-weight: 600;
 }
 
-.flower-handler-chip {
-  max-width: 14rem;
+.flower-model-chip {
   min-width: 0;
+  max-width: min(24rem, 62vw);
   overflow: hidden;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--muted) 34%, transparent);
+  color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
+  padding: 0.1875rem 0.55rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .flower-handler-error-card {
@@ -437,16 +402,16 @@ html.dark .flower-component-shell {
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
-  padding: clamp(0.75rem, 1.2vw, 1.125rem) clamp(0.75rem, 1.45vw, 1.25rem) 1rem;
+  padding: clamp(0.875rem, 1.8vw, 1.5rem) clamp(0.875rem, 4vw, 3.5rem) 1rem;
   scrollbar-gutter: stable;
 }
 
 .flower-transcript-stack {
   display: flex;
-  width: min(100%, var(--flower-chat-dock-track-max-width));
+  width: min(100%, var(--flower-chat-text-column-width));
   min-width: 0;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
   margin: 0 auto;
 }
 
@@ -455,7 +420,7 @@ html.dark .flower-component-shell {
   z-index: 1;
   flex: 0 0 auto;
   background: transparent;
-  padding: 0 clamp(0.625rem, 1.2vw, 1rem) calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  padding: 0 clamp(0.875rem, 4vw, 3.5rem) calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
 
 .flower-chat-bottom-dock::before {
@@ -469,7 +434,7 @@ html.dark .flower-component-shell {
 
 .flower-chat-bottom-dock-track {
   position: relative;
-  width: min(100%, var(--flower-chat-dock-track-max-width));
+  width: min(100%, var(--flower-chat-text-column-width));
   margin: 0 auto;
 }
 
@@ -488,11 +453,8 @@ html.dark .flower-component-shell {
 }
 
 .flower-message-bubble {
-  max-width: min(100%, 78rem);
+  max-width: 100%;
   min-width: 0;
-  border: 1px solid transparent;
-  border-radius: 0.5rem;
-  padding: 0.625rem 0.75rem;
   font-size: 0.875rem;
   line-height: 1.65;
   letter-spacing: 0;
@@ -502,27 +464,41 @@ html.dark .flower-component-shell {
   user-select: text;
 }
 
+.flower-message-bubble-framed {
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+}
+
+.flower-message-bubble-plain {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
 .flower-message-bubble-user {
-  max-width: min(78%, 44rem);
+  max-width: min(78%, var(--flower-chat-user-bubble-width));
   background: color-mix(in srgb, var(--primary) 15%, var(--flower-chat-surface-elevated));
   border-color: color-mix(in srgb, var(--primary) 22%, transparent);
   color: color-mix(in srgb, var(--foreground) 95%, var(--primary) 5%);
 }
 
 .flower-message-bubble-assistant {
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 64%, transparent);
-  border-color: color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent);
   color: var(--foreground);
 }
 
-.flower-message-bubble-streaming {
+.flower-message-bubble-framed.flower-message-bubble-streaming {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
 .flower-message-bubble-error {
+  border: 1px solid color-mix(in srgb, var(--destructive) 30%, var(--flower-chat-surface-border));
+  border-radius: 0.5rem;
   border-color: color-mix(in srgb, var(--destructive) 30%, var(--flower-chat-surface-border));
   background: color-mix(in srgb, var(--destructive) 7%, var(--flower-chat-surface-elevated));
+  padding: 0.625rem 0.75rem;
 }
 
 .flower-message-error-kicker {
@@ -722,18 +698,18 @@ html.dark .flower-component-shell {
 
 .flower-message-block-stack {
   display: flex;
-  width: min(100%, 46rem);
+  width: 100%;
   min-width: 0;
   flex-direction: column;
   gap: 0.375rem;
 }
 
-.flower-message-row-user .flower-message-block-stack {
+.flower-message-block-stack-user {
   align-items: flex-end;
 }
 
-.flower-message-row-assistant .flower-message-block-stack {
-  align-items: flex-start;
+.flower-message-block-stack-assistant {
+  align-items: stretch;
 }
 
 .flower-message-bubble-thinking {
@@ -744,7 +720,7 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline {
   display: grid;
-  width: min(100%, 42rem);
+  width: 100%;
   min-width: 0;
   gap: 0.125rem;
   border-left: 2px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);

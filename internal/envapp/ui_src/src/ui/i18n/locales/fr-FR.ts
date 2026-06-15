@@ -564,9 +564,6 @@ export const frFR = {
       actTitle: "Mode orienté exécution pour les actions directes des outils",
     },
     router: {
-      handlerSelectionLabel: "Handled by",
-      handlerStarting: "Starting Flower...",
-      handlerResolving: "Choosing Flower...",
       handlerBlockedTitle: "Flower needs attention",
       handlerStartFailedTitle: "Flower could not start",
       handlerStillStarting: "Flower is still starting.",

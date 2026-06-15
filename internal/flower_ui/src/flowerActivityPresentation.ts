@@ -353,6 +353,21 @@ function metaForItem(item: FlowerActivityItem): string {
   return Array.from(new Set(parts)).join(' · ');
 }
 
+function metaForTerminalItem(item: FlowerActivityItem): string {
+  const payload = item.payload ?? {};
+  const exit = payloadValue(payload, 'exit_code');
+  const duration = payloadValue(payload, 'duration_ms');
+  const timeout = payloadValue(payload, 'timed_out') === 'true' ? 'timed out' : '';
+  const parts = [
+    trimString(item.description),
+    ...chipText(item),
+    exit ? `exit ${exit}` : '',
+    duration ? `${duration}ms` : '',
+    timeout,
+  ].filter(Boolean);
+  return Array.from(new Set(parts)).join(' · ');
+}
+
 function detailLineTone(key: string): FlowerActivityDetailLine['tone'] {
   return key === 'command' || key === 'stdout' || key === 'stderr' ? 'code' : undefined;
 }
@@ -574,7 +589,7 @@ export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?
   return {
     label: titleText(title),
     title,
-    meta: metaForItem(item),
+    meta: renderer === 'terminal' ? metaForTerminalItem(item) : metaForItem(item),
     detailLines,
     detailBlocks,
   };

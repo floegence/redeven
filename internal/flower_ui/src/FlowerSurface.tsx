@@ -2,7 +2,7 @@ import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, FileText, FolderOpen, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
-import { Button, Tag } from '@floegence/floe-webapp-core/ui';
+import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
@@ -34,6 +34,7 @@ import {
   type FlowerRenderableMessageBlock,
   type FlowerTimelineEntry,
 } from './flowerTimelineProjection';
+import { formatFlowerCurrentModelLabel } from './flowerModelLabel';
 import {
   presentFlowerActivityItem,
   type FlowerActivityDetailBlock,
@@ -312,6 +313,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const providerID = current.split('/')[0] ?? '';
     return snapshot()?.config.providers.find((provider) => provider.id === providerID) ?? null;
   });
+  const currentModelLabel = createMemo(() => {
+    const current = snapshot();
+    return current ? formatFlowerCurrentModelLabel(current.config, copy().chat.noModelSelected) : copy().chat.noModelSelected;
+  });
   const activeProviderSecrets = createMemo(() => {
     const provider = activeProvider();
     if (!provider) return null;
@@ -333,53 +338,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const state = handlerState();
     return 'decision' in state ? state.decision : null;
   });
-  const selectedHandler = createMemo(() => currentHandlerDecision()?.selected_handler ?? null);
-  const handlerOptions = createMemo(() => {
-    const decision = currentHandlerDecision();
-    const selected = decision?.selected_handler;
-    const items = [...(decision?.available_handlers ?? [])];
-    if (selected && !items.some((item) => item.handler_id === selected.handler_id)) {
-      items.unshift(selected);
-    }
-    return items;
-  });
-  const canSwitchHandler = createMemo(() => {
-    const decision = currentHandlerDecision();
-    return !selectedThreadID() && !!decision?.handler_selection.can_switch && handlerOptions().length > 1;
-  });
   const readyHandlerDecision = createMemo(() => {
     const state = handlerState();
     if (state.status !== 'ready') return false;
     const decision = state.decision;
     return !!decision?.selected_handler && !decision.blocker && decision.route !== 'blocked';
-  });
-  const handlerBusy = createMemo(() => {
-    const status = handlerState().status;
-    return status === 'starting' || status === 'resolving';
-  });
-  const handlerChipLabel = createMemo(() => {
-    const state = handlerState();
-    switch (state.status) {
-      case 'ready':
-        return selectedHandler()?.display_name || copy().chat.handlerResolving;
-      case 'blocked':
-        return copy().chat.handlerBlockedTitle;
-      case 'failed':
-        return copy().chat.handlerStartFailedTitle;
-      case 'resolving':
-        return copy().chat.handlerResolving;
-      case 'starting':
-        return copy().chat.handlerStarting;
-    }
-  });
-  const handlerStatusLabels = createMemo(() => {
-    const decision = currentHandlerDecision();
-    const chips = (decision?.ui_chips ?? [])
-      .map((chip) => trimString(chip.label))
-      .filter(Boolean);
-    if (chips.length > 0) return chips;
-    const selectedLabel = trimString(selectedHandler()?.display_name);
-    return selectedLabel ? [selectedLabel] : [];
   });
   const handlerNotice = createMemo(() => {
     const state = handlerState();
@@ -943,11 +906,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     returnToChat();
   };
 
-  const switchHandler = (handlerID: string) => {
-    const previous = currentHandlerDecision();
-    void resolveHandlerDecision(handlerID, previous).catch(() => undefined);
-  };
-
   const startThreadRailResize = (event: PointerEvent) => {
     event.preventDefault();
     setThreadRailResizing(true);
@@ -1381,6 +1339,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const activityItemDefaultOpen = (item: FlowerActivityItem): boolean => activityItemNeedsAttention(item);
+  const activityItemHasVisiblePayload = (item: FlowerActivityItem): boolean => {
+    const label = trimString(item.label);
+    const toolName = trimString(item.tool_name);
+    const kind = trimString(item.kind);
+    if (label && label !== toolName && label !== kind) return true;
+    if (trimString(item.description)) return true;
+    if (item.payload && Object.keys(item.payload).length > 0) return true;
+    if ((item.chips ?? []).length > 0 || (item.target_refs ?? []).length > 0) return true;
+    return item.status !== 'success';
+  };
+  const activityItemVisible = (item: FlowerActivityItem): boolean => {
+    if (item.requires_approval && !activityItemHasVisiblePayload(item)) return false;
+    return true;
+  };
 
   const activityItemOpen = (timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem, blockKey: string, index: number): boolean => {
     const key = activityItemKey(timeline, item, blockKey, index);
@@ -1659,9 +1631,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const activityBlock = (messageID: string, blockIndex: number, block: FlowerActivityTimelineBlock, blockKey: string) => (
-    <Show when={block.items.length > 0}>
+    <Show when={block.items.some(activityItemVisible)}>
       <div class="flower-activity-inline" data-flower-activity-run-id={block.run_id}>
-        <For each={block.items}>
+        <For each={block.items.filter(activityItemVisible)}>
           {(item, index) => activityRow(messageID, blockIndex, block, item, blockKey, index())}
         </For>
       </div>
@@ -1676,6 +1648,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ) => (
     <div class={cn(
       'flower-message-bubble',
+      message.role === 'user'
+        ? 'flower-message-bubble-framed'
+        : 'flower-message-bubble-plain',
       message.role === 'user'
         ? 'flower-message-bubble-user'
         : 'flower-message-bubble-assistant',
@@ -1728,7 +1703,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-flower-message-role={message.role}
         data-flower-message-status={message.status}
       >
-        <div class="flower-message-block-stack">
+        <div class={cn('flower-message-block-stack', message.role === 'user' ? 'flower-message-block-stack-user' : 'flower-message-block-stack-assistant')}>
           <For each={blocks}>
             {(block) => (
               <Show
@@ -1892,49 +1867,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </>
                   )}
                 >
-                  <Show when={!selectedInputRequest()} fallback={<div class="flower-handler-stack" aria-live="polite" />}>
-                    <div class="flower-handler-stack" aria-live="polite">
-                      <Show when={canSwitchHandler()}>
-                        <label class="flower-handler-picker">
-                          <span class="flower-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
-                          <span class="flower-handler-picker-value">
-                            {handlerBusy()
-                              ? handlerChipLabel()
-                              : selectedHandler()?.display_name || handlerChipLabel()}
-                          </span>
-                          <ChevronDown class="flower-handler-picker-icon" />
-                          <select
-                            aria-label={copy().chat.handlerSelectionLabel}
-                            value={selectedHandler()?.handler_id ?? ''}
-                            disabled={handlerBusy()}
-                            onChange={(event) => switchHandler(event.currentTarget.value)}
-                          >
-                            <For each={handlerOptions()}>
-                              {(handler) => <option value={handler.handler_id}>{handler.display_name}</option>}
-                            </For>
-                          </select>
-                        </label>
-                      </Show>
-                      <Show when={!canSwitchHandler()}>
-                        <Show
-                          when={readyHandlerDecision()}
-                          fallback={(
-                            <div class="flower-handler-selection">
-                              <span class="flower-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
-                              <Tag variant="warning" class="flower-handler-chip">
-                                {handlerChipLabel()}
-                              </Tag>
-                            </div>
-                          )}
-                        >
-                          <div class="flower-handler-selection">
-                            <span class="flower-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
-                            <For each={handlerStatusLabels()}>
-                              {(label) => <Tag variant="neutral" class="flower-handler-chip">{label}</Tag>}
-                            </For>
-                          </div>
-                        </Show>
-                      </Show>
+                  <Show when={!selectedInputRequest()} fallback={<div class="flower-model-stack" aria-live="polite" />}>
+                    <div class="flower-model-stack" aria-live="polite">
+                      <div class="flower-model-selection">
+                        <span class="flower-model-selection-label">{copy().chat.modelLabel}</span>
+                        <span class="flower-model-chip">{currentModelLabel()}</span>
+                      </div>
                       <Show when={handlerNotice()}>
                         {(notice) => <div role="alert" class="flower-handler-error-card">
                           <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
