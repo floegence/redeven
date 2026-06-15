@@ -21,7 +21,6 @@ import {
   Refresh,
   Save,
   Search,
-  Send,
   Settings,
   MoreHorizontal,
   Shield,
@@ -43,7 +42,6 @@ import {
   CommandPalette,
   ConfirmDialog,
   Dialog,
-  FloatingWindow,
   Input,
   SegmentedControl,
   Tag,
@@ -110,7 +108,7 @@ import {
   type RuntimeServiceSnapshot,
   type RuntimeServiceWorkload,
 } from '../shared/runtimeService';
-import { FlowerIcon, FlowerSoftAuraIcon, FlowerSurface } from '../../../internal/flower_ui/src';
+import { FlowerIcon, FlowerSoftAuraIcon, FlowerSurface, type FlowerSurfaceDraftIntent } from '../../../internal/flower_ui/src';
 import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
   openConnectionPhaseSequence,
@@ -324,12 +322,9 @@ import { runGatewaySourceAction } from './gatewaySourceActionRunner';
 import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnimation';
 import {
   createLocalEnvironmentFlowerSurfaceAdapter,
-  sendLocalEnvironmentFlowerPrompt,
   type DesktopSettingsBridge,
 } from './flower/localEnvironmentFlowerSurfaceAdapter';
 import { createDesktopFlowerSurfaceCopy } from './flower/desktopFlowerSurfaceCopy';
-import { formatFlowerCurrentModelLabel } from '../../../internal/flower_ui/src/flowerModelLabel';
-import type { FlowerRouterDecision } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -1471,23 +1466,6 @@ function environmentFlowerContextSummary(i18n: DesktopI18n, environment: Desktop
   return fields.join(' · ');
 }
 
-function buildEnvironmentFlowerPrompt(
-  i18n: DesktopI18n,
-  environment: DesktopEnvironmentEntry,
-  message: string,
-): string {
-  const summary = environmentFlowerContextSummary(i18n, environment);
-  const lines = [
-    `From Desktop Environment: ${environment.label}`,
-    `Environment ID: ${environment.id}`,
-  ];
-  if (summary) {
-    lines.push(`Context: ${summary}`);
-  }
-  lines.push('', trimString(message));
-  return lines.join('\n');
-}
-
 function environmentFlowerPrimaryTargetID(environment: DesktopEnvironmentEntry): string {
   const providerOrigin = trimString(environment.provider_origin);
   const envPublicID = trimString(environment.env_public_id);
@@ -1552,67 +1530,6 @@ function buildEnvironmentFlowerContextEnvelope(environment: DesktopEnvironmentEn
         status_label: 'Ready',
       },
     },
-  };
-}
-
-type EnvironmentFlowerComposerState = Readonly<{
-  environment: DesktopEnvironmentEntry;
-  anchor?: { x: number; y: number };
-}>;
-
-function currentViewportSize(): { width: number; height: number } {
-  if (typeof window === 'undefined') {
-    return { width: 1440, height: 900 };
-  }
-  return {
-    width: Math.max(320, window.innerWidth),
-    height: Math.max(320, window.innerHeight),
-  };
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) {
-    return min;
-  }
-  return Math.min(Math.max(value, min), max);
-}
-
-function resolveEnvironmentFlowerWindowSizing(viewport: { width: number; height: number }): Readonly<{
-  defaultSize: { width: number; height: number };
-  minSize: { width: number; height: number };
-  maxSize: { width: number; height: number };
-  margin: number;
-}> {
-  const compact = viewport.width < 640;
-  const margin = compact ? 8 : 12;
-  const maxSize = {
-    width: Math.max(300, viewport.width - margin * 2),
-    height: Math.max(360, viewport.height - margin * 2),
-  };
-  const defaultSize = {
-    width: Math.min(compact ? 360 : 480, maxSize.width),
-    height: Math.min(compact ? 420 : 460, maxSize.height),
-  };
-  const minSize = {
-    width: Math.min(compact ? 300 : 360, maxSize.width),
-    height: Math.min(compact ? 340 : 380, maxSize.height),
-  };
-  return { defaultSize, minSize, maxSize, margin };
-}
-
-function resolveEnvironmentFlowerWindowPosition(
-  anchor: EnvironmentFlowerComposerState['anchor'],
-  sizing: ReturnType<typeof resolveEnvironmentFlowerWindowSizing>,
-): { x: number; y: number } | undefined {
-  if (!anchor || typeof window === 'undefined') {
-    return undefined;
-  }
-  const offset = 10;
-  const maxX = Math.max(sizing.margin, window.innerWidth - sizing.defaultSize.width - sizing.margin);
-  const maxY = Math.max(sizing.margin, window.innerHeight - sizing.defaultSize.height - sizing.margin);
-  return {
-    x: clampNumber(anchor.x + offset, sizing.margin, maxX),
-    y: clampNumber(anchor.y + offset, sizing.margin, maxY),
   };
 }
 
@@ -2955,8 +2872,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
   const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
-  const [environmentFlowerComposer, setEnvironmentFlowerComposer] = createSignal<EnvironmentFlowerComposerState | null>(null);
-  const [focusedFlowerThreadID, setFocusedFlowerThreadID] = createSignal('');
+  const [flowerDraftIntent, setFlowerDraftIntent] = createSignal<FlowerSurfaceDraftIntent | null>(null);
   const deleteTargetOperation = createMemo(() => {
     const target = deleteTarget();
     if (!target) {
@@ -5968,43 +5884,22 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  async function resolveEnvironmentFlowerHandler(_environment: DesktopEnvironmentEntry): Promise<FlowerRouterDecision> {
-    return createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings).resolveHandler({
-      thread_kind: 'task',
-      client_surface: 'welcome_ask_flower',
+  function openEnvironmentFlowerSurface(environment: DesktopEnvironmentEntry): void {
+    const cleanLabel = trimString(environment.label) || i18n().t('environmentCenter.thisEnvironment');
+    const contextSummary = environmentFlowerContextSummary(i18n(), environment);
+    const prompt = [
+      `From Desktop Environment: ${cleanLabel}`,
+      `Environment ID: ${environment.id}`,
+      contextSummary ? `Context: ${contextSummary}` : '',
+      '',
+      '',
+    ].filter((line, index, lines) => !(index === lines.length - 1 && line === '')).join('\n');
+    setFlowerDraftIntent({
+      id: `${environment.id}:${Date.now()}`,
+      prompt,
+      context_action: buildEnvironmentFlowerContextEnvelope(environment).raw,
     });
-  }
-
-  async function resolveEnvironmentFlowerModelLabel(): Promise<string> {
-    const snapshot = await createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings).loadSettings();
-    return formatFlowerCurrentModelLabel(snapshot.config, i18n().t('flowerSurface.chat.noModelSelected'));
-  }
-
-  async function sendEnvironmentFlowerPrompt(
-    environment: DesktopEnvironmentEntry,
-    prompt: string,
-    _decision: FlowerRouterDecision,
-  ): Promise<string> {
-    const cleanPrompt = trimString(prompt);
-    if (!cleanPrompt) {
-      return '';
-    }
-    const envelope = buildEnvironmentFlowerContextEnvelope(environment);
-    const thread = await sendLocalEnvironmentFlowerPrompt(props.runtime.settings, {
-      prompt: buildEnvironmentFlowerPrompt(i18n(), environment, cleanPrompt),
-      contextAction: envelope.raw,
-    });
-    setFocusedFlowerThreadID(thread.thread_id);
-    showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
-    return thread.thread_id;
-  }
-
-  function openEnvironmentFlowerComposer(environment: DesktopEnvironmentEntry, anchor?: { x: number; y: number }): void {
-    setEnvironmentFlowerComposer({ environment, anchor });
-  }
-
-  function closeEnvironmentFlowerComposer(): void {
-    setEnvironmentFlowerComposer(null);
+    void performLauncherAction({ kind: 'open_flower' });
   }
 
   async function openEnvironmentCenterSurface(): Promise<void> {
@@ -6185,7 +6080,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               openEnvironment={openEnvironment}
               runLocalEnvironmentAction={triggerLocalEnvironmentAction}
               refreshEnvironmentRuntime={refreshEnvironmentRuntime}
-              openEnvironmentFlowerComposer={openEnvironmentFlowerComposer}
+              openEnvironmentFlowerSurface={openEnvironmentFlowerSurface}
               runEnvironmentGuidanceAction={runEnvironmentGuidanceAction}
               runDesktopUpdateHandoff={async (environmentID, label) => {
                 const result = await performLauncherAction({
@@ -6235,23 +6130,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
             })}
             copy={createDesktopFlowerSurfaceCopy(i18n())}
-            focusThreadID={focusedFlowerThreadID()}
+            draftIntent={flowerDraftIntent()}
           />
         </Show>
       </DesktopLauncherShell>
-
-      <EnvironmentFlowerComposerWindow
-        i18n={i18n()}
-        state={environmentFlowerComposer()}
-        onClose={closeEnvironmentFlowerComposer}
-        resolveFlowerHandler={resolveEnvironmentFlowerHandler}
-        resolveFlowerModelLabel={resolveEnvironmentFlowerModelLabel}
-        sendFlowerPrompt={sendEnvironmentFlowerPrompt}
-        openFlowerSurface={async () => {
-          closeEnvironmentFlowerComposer();
-          await openFlowerSurface();
-        }}
-      />
 
       <DesktopActionToastViewport
         i18n={i18n()}
@@ -6692,7 +6574,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
-  openEnvironmentFlowerComposer: (environment: DesktopEnvironmentEntry, anchor?: { x: number; y: number }) => void;
+  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry) => void;
   runEnvironmentGuidanceAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -7050,7 +6932,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 openEnvironment={props.openEnvironment}
                 runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                 refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
-                openEnvironmentFlowerComposer={props.openEnvironmentFlowerComposer}
+                openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
                 runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                 runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
                 runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
@@ -7127,7 +7009,7 @@ function EnvironmentCardsPanel(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
-  openEnvironmentFlowerComposer: (environment: DesktopEnvironmentEntry, anchor?: { x: number; y: number }) => void;
+  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry) => void;
   runEnvironmentGuidanceAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -7372,7 +7254,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     openEnvironment={props.openEnvironment}
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
-                    openEnvironmentFlowerComposer={props.openEnvironmentFlowerComposer}
+                    openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
                     runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
@@ -7414,7 +7296,7 @@ function EnvironmentCardsPanel(props: Readonly<{
                     openEnvironment={props.openEnvironment}
                     runLocalEnvironmentAction={props.runLocalEnvironmentAction}
                     refreshEnvironmentRuntime={props.refreshEnvironmentRuntime}
-                    openEnvironmentFlowerComposer={props.openEnvironmentFlowerComposer}
+                    openEnvironmentFlowerSurface={props.openEnvironmentFlowerSurface}
                     runEnvironmentGuidanceAction={props.runEnvironmentGuidanceAction}
                     runDesktopUpdateHandoff={props.runDesktopUpdateHandoff}
                     runEnvironmentCardFactAction={props.runEnvironmentCardFactAction}
@@ -7499,328 +7381,6 @@ function EnvironmentStatusIndicator(props: Readonly<{
       <span class="redeven-status-indicator__dot" aria-hidden="true" />
       {props.children}
     </span>
-  );
-}
-
-function EnvironmentFlowerComposerWindow(props: Readonly<{
-  i18n: DesktopI18n;
-  state: EnvironmentFlowerComposerState | null;
-  onClose: () => void;
-  resolveFlowerHandler: (environment: DesktopEnvironmentEntry) => Promise<FlowerRouterDecision>;
-  resolveFlowerModelLabel: () => Promise<string>;
-  sendFlowerPrompt: (environment: DesktopEnvironmentEntry, prompt: string, decision: FlowerRouterDecision) => Promise<string>;
-  openFlowerSurface: () => Promise<void>;
-}>) {
-  const [prompt, setPrompt] = createSignal('');
-  const [validationError, setValidationError] = createSignal('');
-  const [handlerDecision, setHandlerDecision] = createSignal<FlowerRouterDecision | null>(null);
-  const [handlerStatus, setHandlerStatus] = createSignal<'starting' | 'resolving' | 'ready' | 'blocked' | 'failed'>('starting');
-  const [handlerError, setHandlerError] = createSignal('');
-  const [modelLabel, setModelLabel] = createSignal('');
-  const [isComposing, setIsComposing] = createSignal(false);
-  const [sending, setSending] = createSignal(false);
-  const [viewport, setViewport] = createSignal(currentViewportSize());
-  const environment = createMemo(() => props.state?.environment ?? null);
-  const contextSummary = createMemo(() => {
-    const current = environment();
-    return current ? environmentFlowerContextSummary(props.i18n, current) : '';
-  });
-  const sizing = createMemo(() => resolveEnvironmentFlowerWindowSizing(viewport()));
-  const position = createMemo(() => resolveEnvironmentFlowerWindowPosition(props.state?.anchor, sizing()));
-  const handlerReady = createMemo(() => {
-    return handlerStatus() === 'ready';
-  });
-  const handlerNeedsSetup = createMemo(() => {
-    const decision = handlerDecision();
-    return decision?.reason_code === 'runtime_not_configured' || decision?.blocker?.code === 'runtime_not_configured';
-  });
-  const canSend = createMemo(() => trimString(prompt()) !== '' && !sending() && handlerReady());
-  let textareaRef: HTMLTextAreaElement | undefined;
-  let handlerRequestSeq = 0;
-  let modelRequestSeq = 0;
-
-  const resolveCurrentHandler = (current = environment()) => {
-    handlerRequestSeq += 1;
-    const seq = handlerRequestSeq;
-    setHandlerDecision(null);
-    setHandlerError('');
-    setValidationError('');
-    if (!current) {
-      setHandlerStatus('starting');
-      return;
-    }
-    setHandlerStatus('resolving');
-    void props.resolveFlowerHandler(current)
-      .then((decision) => {
-        if (seq !== handlerRequestSeq) {
-          return;
-        }
-        setHandlerDecision(decision);
-        setHandlerError(decision.blocker?.message ?? '');
-        setHandlerStatus(decision.selected_handler && !decision.blocker && decision.route !== 'blocked' ? 'ready' : 'blocked');
-      })
-      .catch((error) => {
-        if (seq !== handlerRequestSeq) {
-          return;
-        }
-        setHandlerError(getErrorMessage(error));
-        setHandlerStatus('failed');
-      })
-  };
-
-  const resolveCurrentModelLabel = (current = environment()) => {
-    modelRequestSeq += 1;
-    const seq = modelRequestSeq;
-    if (!current) {
-      setModelLabel('');
-      return;
-    }
-    setModelLabel(props.i18n.t('flowerSurface.chat.loadingSettings'));
-    void props.resolveFlowerModelLabel()
-      .then((label) => {
-        if (seq !== modelRequestSeq) {
-          return;
-        }
-        setModelLabel(trimString(label) || props.i18n.t('flowerSurface.chat.noModelSelected'));
-      })
-      .catch(() => {
-        if (seq !== modelRequestSeq) {
-          return;
-        }
-        setModelLabel(props.i18n.t('flowerSurface.chat.noModelSelected'));
-      });
-  };
-
-  createEffect(() => {
-    if (!props.state) {
-      setPrompt('');
-      setValidationError('');
-      setHandlerDecision(null);
-      setHandlerError('');
-      setHandlerStatus('starting');
-      setModelLabel('');
-    }
-  });
-
-  createEffect(() => {
-    const current = environment();
-    resolveCurrentHandler(current);
-    resolveCurrentModelLabel(current);
-  });
-
-  createEffect(() => {
-    if (!props.state || typeof document === 'undefined') {
-      return;
-    }
-
-    const handleOutsidePointerDown = (event: PointerEvent) => {
-      if (sending()) {
-        return;
-      }
-      const target = event.target instanceof Element ? event.target : null;
-      if (target?.closest('.redeven-environment-flower-window')) {
-        return;
-      }
-      props.onClose();
-    };
-
-    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
-    onCleanup(() => document.removeEventListener('pointerdown', handleOutsidePointerDown, true));
-  });
-
-  createEffect(() => {
-    if (!props.state) {
-      return;
-    }
-    setValidationError('');
-    requestAnimationFrame(() => textareaRef?.focus());
-  });
-
-  createEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-    const syncViewport = () => setViewport(currentViewportSize());
-    window.addEventListener('resize', syncViewport);
-    onCleanup(() => window.removeEventListener('resize', syncViewport));
-  });
-
-  const sendToFlower = async () => {
-    const current = environment();
-    if (!current) {
-      return;
-    }
-    const message = trimString(prompt());
-    if (!message) {
-      setValidationError(props.i18n.t('environmentCenter.askFlowerCardNoMessage'));
-      requestAnimationFrame(() => textareaRef?.focus());
-      return;
-    }
-    const decision = handlerDecision();
-    if (!decision?.selected_handler || decision.blocker || decision.route === 'blocked') {
-      setValidationError(handlerError() || props.i18n.t('flowerSurface.chat.handlerStillStarting'));
-      return;
-    }
-    setSending(true);
-    try {
-      await props.sendFlowerPrompt(current, message, decision);
-      await props.openFlowerSurface();
-      setPrompt('');
-      props.onClose();
-    } catch (error) {
-      let displayError = getErrorMessage(error);
-      if (typeof error === 'object' && error && 'fresh_decision' in error) {
-        const freshDecision = (error as { fresh_decision?: FlowerRouterDecision }).fresh_decision ?? null;
-        setHandlerDecision(freshDecision);
-        displayError = freshDecision?.blocker?.message ?? displayError;
-        setHandlerError(displayError);
-        setHandlerStatus(freshDecision?.selected_handler && !freshDecision.blocker && freshDecision.route !== 'blocked' ? 'ready' : 'blocked');
-      }
-      setValidationError(displayError);
-      requestAnimationFrame(() => textareaRef?.focus());
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const shouldSubmitOnEnterKeydown = (event: KeyboardEvent): boolean => {
-    if (event.isComposing || isComposing()) {
-      return false;
-    }
-    return event.key === 'Enter' && !event.shiftKey;
-  };
-
-  return (
-    <Show when={environment()} keyed>
-      {(current) => (
-        <FloatingWindow
-          open
-          onOpenChange={(open) => {
-            if (!open && !sending()) {
-              props.onClose();
-            }
-          }}
-          title={props.i18n.t('environmentCenter.askFlowerCardTitle')}
-          defaultPosition={position()}
-          defaultSize={sizing().defaultSize}
-          minSize={sizing().minSize}
-          maxSize={sizing().maxSize}
-          zIndex={240}
-          class="redeven-environment-flower-window ask-flower-composer-window border-border/65 shadow-[0_28px_72px_-42px_rgba(15,23,42,0.38)]"
-        >
-          <div class="redeven-environment-flower-window__body">
-            <div class="redeven-environment-flower-window__scroll">
-              <div class="redeven-environment-flower-window__message">
-                <span class="redeven-environment-flower-window__avatar" aria-hidden="true">
-                  <FlowerSoftAuraIcon
-                    class="redeven-environment-flower-window__avatar-aura redeven-flower-icon-breathe"
-                    iconClass="redeven-flower-icon-spin"
-                    glowClass="redeven-environment-flower-window__avatar-glow"
-                  />
-                </span>
-                <div class="redeven-environment-flower-window__bubble">
-                  <div class="redeven-environment-flower-window__eyebrow">
-                    {props.i18n.t('environmentCenter.askFlowerCardEyebrow')}
-                  </div>
-                  <div class="redeven-environment-flower-window__question">
-                    {props.i18n.t('environmentCenter.askFlowerCardDescription')}
-                  </div>
-                  <div class="redeven-environment-flower-window__context">
-                    <div class="redeven-environment-flower-window__context-accent" aria-hidden="true" />
-                    <div class="redeven-environment-flower-window__context-copy">
-                      <div class="redeven-environment-flower-window__context-label">{props.i18n.t('environmentCenter.askFlowerCardContextLabel')}</div>
-                      <div class="redeven-environment-flower-window__context-name">{current.label}</div>
-                      <Show when={contextSummary()}>
-                        {(summary) => <div class="redeven-environment-flower-window__context-detail">{summary()}</div>}
-                      </Show>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <Show
-              when={!handlerNeedsSetup()}
-              fallback={(
-                <div class="redeven-environment-flower-window__dock">
-                  <div class="redeven-environment-flower-window__setup">
-                    <div class="redeven-environment-flower-window__setup-copy">
-                      <div class="redeven-environment-flower-window__setup-title">{props.i18n.t('flowerSurface.chat.setupNeeded')}</div>
-                      <div class="redeven-environment-flower-window__setup-description">{props.i18n.t('flowerSurface.chat.needsProviderNotice')}</div>
-                    </div>
-                    <button
-                      type="button"
-                      class="redeven-environment-flower-window__setup-button"
-                      disabled={sending()}
-                      onClick={() => void props.openFlowerSurface()}
-                    >
-                      <Settings class="h-3.5 w-3.5" />
-                      <span>{props.i18n.t('flowerSurface.chat.openSettings')}</span>
-                    </button>
-                  </div>
-                </div>
-              )}
-            >
-              <div class="redeven-environment-flower-window__dock">
-                <div class="redeven-environment-flower-window__composer flower-chat-input-floating chat-input-container">
-                  <div class="redeven-environment-flower-window__composer-heading">
-                    <span>{props.i18n.t('environmentCenter.askFlowerCardPromptLabel')}</span>
-                    <span>{sending() ? props.i18n.t('environmentCenter.askFlowerCardSending') : props.i18n.t('environmentCenter.askFlowerCardReplyHint')}</span>
-                  </div>
-                  <div class="redeven-environment-flower-window__model">
-                    <span class="redeven-environment-flower-window__model-label">{props.i18n.t('flowerSurface.chat.modelLabel')}</span>
-                    <span class="redeven-environment-flower-window__model-chip">
-                      {modelLabel() || props.i18n.t('flowerSurface.chat.loadingSettings')}
-                    </span>
-                  </div>
-                  <div class="redeven-environment-flower-window__input-shell">
-                    <textarea
-                      ref={textareaRef}
-                      class="redeven-environment-flower-window__textarea flower-chat-input-textarea"
-                      value={prompt()}
-                      placeholder={props.i18n.t('environmentCenter.askFlowerCardPlaceholder')}
-                      disabled={sending()}
-                      onInput={(event) => {
-                        setPrompt(event.currentTarget.value);
-                        if (validationError()) {
-                          setValidationError('');
-                        }
-                      }}
-                      onCompositionStart={() => setIsComposing(true)}
-                      onCompositionEnd={(event) => {
-                        setIsComposing(false);
-                        setPrompt(event.currentTarget.value);
-                        if (validationError()) {
-                          setValidationError('');
-                        }
-                      }}
-                      onKeyDown={(event) => {
-                        if (shouldSubmitOnEnterKeydown(event)) {
-                          event.preventDefault();
-                          void sendToFlower();
-                        }
-                      }}
-                    />
-                    <Show when={validationError()}>
-                      {(error) => <div class="redeven-environment-flower-window__error">{error()}</div>}
-                    </Show>
-                    <button
-                      type="button"
-                      class={cn('redeven-environment-flower-window__send chat-input-send-btn flower-chat-input-send-btn', canSend() && 'chat-input-send-btn-active')}
-                      disabled={!canSend()}
-                      aria-label={props.i18n.t('environmentCenter.askFlowerCardSend')}
-                      title={props.i18n.t('environmentCenter.askFlowerCardSend')}
-                      onClick={() => void sendToFlower()}
-                    >
-                      <Send class="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </Show>
-          </div>
-        </FloatingWindow>
-      )}
-    </Show>
   );
 }
 
@@ -9688,7 +9248,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
-  openEnvironmentFlowerComposer: (environment: DesktopEnvironmentEntry, anchor?: { x: number; y: number }) => void;
+  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry) => void;
   runEnvironmentGuidanceAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -9960,10 +9520,7 @@ function EnvironmentConnectionCard(props: Readonly<{
               title={props.i18n.t('environmentCenter.askFlowerForLabel', { label: props.environment.label })}
               onClick={(event) => {
                 event.stopPropagation();
-                props.openEnvironmentFlowerComposer(props.environment, {
-                  x: event.clientX,
-                  y: event.clientY,
-                });
+                props.openEnvironmentFlowerSurface(props.environment);
               }}
             >
               <FlowerSoftAuraIcon
