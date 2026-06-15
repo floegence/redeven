@@ -642,58 +642,81 @@ html.dark .flower-component-shell {
 
 .flower-thread-loading {
   display: grid;
-  width: min(100%, 34rem);
-  grid-template-columns: 2.5rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.875rem;
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 54%, transparent);
-  border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 54%, transparent);
-  padding: 0.875rem;
+  width: 100%;
+  min-height: min(34rem, 62vh);
+  place-items: center;
+  padding: clamp(1rem, 4vw, 3rem);
+  color: var(--foreground);
 }
 
-.flower-thread-loading-copy {
-  min-width: 0;
+.flower-thread-loading-panel {
+  display: grid;
+  width: min(24rem, 100%);
+  justify-items: center;
+  gap: 1rem;
+  text-align: center;
 }
 
-.flower-thread-loading-title {
-  color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground) 16%);
-  font-size: 0.875rem;
+.flower-thread-loading-eyebrow {
+  color: color-mix(in srgb, var(--foreground) 38%, transparent);
+  font-size: 0.6875rem;
   font-weight: 700;
-  line-height: 1.35;
+  letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
-.flower-thread-loading-line {
-  width: 72%;
-  height: 0.45rem;
-  margin-top: 0.45rem;
+.flower-thread-loading-eyebrow::before {
+  content: attr(data-label);
+}
+
+.flower-thread-loading-indicator {
+  width: 10.5rem;
+  height: 3px;
   border-radius: 9999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--foreground) 13%, transparent);
+}
+
+.flower-thread-loading-indicator-bar {
+  width: 42%;
+  height: 100%;
+  border-radius: inherit;
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--muted-foreground) 12%, transparent),
-    color-mix(in srgb, var(--primary) 18%, transparent),
-    color-mix(in srgb, var(--muted-foreground) 10%, transparent)
+    transparent 0%,
+    color-mix(in srgb, var(--primary) 54%, var(--foreground) 18%) 42%,
+    color-mix(in srgb, var(--primary) 78%, white 18%) 55%,
+    transparent 100%
   );
-  background-size: 180% 100%;
-  animation: flower-thread-loading-sheen 1.25s ease-in-out infinite;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 28%, transparent);
+  animation: flower-thread-loading-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite;
+  will-change: transform;
 }
 
-.flower-thread-loading-line-short {
-  width: 46%;
-  animation-delay: 0.12s;
+.flower-thread-loading-message {
+  color: color-mix(in srgb, var(--foreground) 55%, transparent);
+  font-size: 0.8125rem;
+  font-weight: 480;
+  line-height: 1.5;
 }
 
-@keyframes flower-thread-loading-sheen {
-  0% {
-    background-position: 100% 0;
-    opacity: 0.58;
+@keyframes flower-thread-loading-sweep {
+  from {
+    transform: translateX(-120%);
   }
-  50% {
-    opacity: 1;
+
+  to {
+    transform: translateX(260%);
   }
-  100% {
-    background-position: -80% 0;
-    opacity: 0.68;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flower-thread-loading-indicator-bar {
+    width: 100%;
+    animation: none;
+    background: color-mix(in srgb, var(--foreground) 15%, transparent);
+    box-shadow: none;
   }
 }
 
