@@ -20,7 +20,7 @@
     "@floegence/floe-webapp-boot": "^0.36.67",
     "@floegence/floe-webapp-core": "^0.36.67",
     "@floegence/floe-webapp-protocol": "^0.36.67",
-    "@floegence/floeterm-terminal-web": "^0.5.2",
+    "@floegence/floeterm-terminal-web": "^0.5.3",
     "@floegence/flowersec-core": "^0.19.9",
     "@fontsource/iosevka": "^5.2.5",
     "@solidjs/router": "^0.15.3",
