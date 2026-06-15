@@ -1773,11 +1773,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const threadLoadingState = () => (
     <div class="flower-thread-loading" role="status" aria-live="polite">
-      <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-10 w-10 redeven-flower-icon-breathe" iconClass="redeven-flower-icon-spin" />
-      <div class="flower-thread-loading-copy">
-        <div class="flower-thread-loading-title">{copy().chat.threadLoading}</div>
-        <div class="flower-thread-loading-line" />
-        <div class="flower-thread-loading-line flower-thread-loading-line-short" />
+      <div class="flower-thread-loading-panel">
+        <div class="flower-thread-loading-eyebrow" aria-hidden="true" data-label="Flower" />
+        <div class="flower-thread-loading-indicator" role="progressbar" aria-label={copy().chat.threadLoading}>
+          <div class="flower-thread-loading-indicator-bar" />
+        </div>
+        <div class="flower-thread-loading-message">{copy().chat.threadLoading}</div>
       </div>
     </div>
   );

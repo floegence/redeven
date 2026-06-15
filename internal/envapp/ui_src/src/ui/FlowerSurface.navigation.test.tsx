@@ -1413,12 +1413,12 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'true');
   });
 
-  it('updates sidebar-visible target labels through the stable sidebar list model', async () => {
+  it('keeps target labels searchable without rendering them as sidebar badges', async () => {
     const runningThread = thread({
       thread_id: 'thread-stable-wave-labels',
       title: 'Stable wave labels',
       status: 'running',
-      target_labels: ['Before target'],
+      target_labels: ['Hidden target'],
     });
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
     const runtime = renderSurfaceWithAdapter({
@@ -1426,16 +1426,21 @@ describe('FlowerSurface navigation', () => {
       listThreads: vi.fn(async () => listSnapshot),
     });
 
-    await waitFor(() => runtime.textContent?.includes('Before target') ?? false);
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stable-wave-labels"]')));
+    expect(runtime.textContent).not.toContain('Hidden target');
 
     listSnapshot = [{
       ...runningThread,
-      target_labels: ['After target'],
+      target_labels: ['Updated target'],
     }];
     (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await flush();
 
-    await waitFor(() => runtime.textContent?.includes('After target') ?? false);
-    expect(runtime.textContent).not.toContain('Before target');
+    expect(runtime.textContent).not.toContain('Updated target');
+    const search = runtime.querySelector('.flower-thread-search-input') as HTMLInputElement;
+    search.value = 'updated target';
+    search.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stable-wave-labels"]')));
   });
 
   it('restores the unread dot when mark-read persistence fails', async () => {
@@ -2196,6 +2201,9 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => loadStarted && Boolean(runtime.querySelector('.flower-thread-loading')));
 
     expect(runtime.querySelector('.flower-thread-loading')?.textContent).toContain('Loading conversation...');
+    expect(runtime.querySelector('.flower-thread-loading-panel')).toBeTruthy();
+    expect(runtime.querySelector('.flower-thread-loading-indicator')).toBeTruthy();
+    expect(runtime.querySelector('.flower-thread-loading-line')).toBeNull();
     expect(runtime.textContent).not.toContain('Flower can work from this runtime');
   });
 

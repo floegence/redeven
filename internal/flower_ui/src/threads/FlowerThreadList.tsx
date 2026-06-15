@@ -2,7 +2,7 @@ import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, Folder, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, X } from '@floegence/floe-webapp-core/icons';
-import { Input, Tag } from '@floegence/floe-webapp-core/ui';
+import { Input } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerThreadListCopy, FlowerThreadTimeGroup } from '../copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from '../copy';
@@ -124,13 +124,6 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           <div class="flex min-w-0 items-center gap-1">
             <span class="flower-thread-list-title flex-1 truncate text-xs font-medium">{title()}</span>
           </div>
-          <Show when={props.item.target_labels.length > 0}>
-            <div class="mt-1 flex min-w-0 flex-wrap gap-1">
-              <For each={props.item.target_labels}>
-                {(label) => <Tag variant="neutral" class="max-w-[9rem] truncate px-1.5 py-0 text-[10px]">{label}</Tag>}
-              </For>
-            </div>
-          </Show>
         </div>
       </button>
       <div class="pointer-events-none absolute right-2.5 top-2 flex h-5 min-w-7 items-center justify-end">

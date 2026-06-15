@@ -196,6 +196,8 @@ const ACTIVITY_PAYLOAD_KEYS_BY_RENDERER: Readonly<Record<FlowerActivityRenderer,
     'args',
     'expected_version',
     'explanation',
+    'version',
+    'updated_at_unix_ms',
     'truncated',
     'summary',
     'details',
@@ -901,6 +903,20 @@ function mapMessage(message: Message): FlowerChatMessage | null {
   };
 }
 
+function upsertFlowerMessage(messages: readonly FlowerChatMessage[], message: FlowerChatMessage | null): readonly FlowerChatMessage[] {
+  if (!message) return messages;
+  const index = messages.findIndex((item) => trim(item.id) === message.id);
+  if (index < 0) return [...messages, message];
+  const next = messages.slice();
+  next[index] = message;
+  return next;
+}
+
+function mapSnapshotMessage(raw: unknown): FlowerChatMessage | null {
+  if (!raw || typeof raw !== 'object') return null;
+  return mapMessage(raw as Message);
+}
+
 function mapWaitingPrompt(prompt: ThreadWaitingPrompt | undefined): FlowerInputRequest | null {
   if (!prompt) return null;
   const promptID = trim(prompt?.prompt_id);
@@ -1093,14 +1109,18 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     const copy = adapterCopy(options);
     const tid = trim(threadID);
     if (!tid) throw new Error(copy.missingThreadID);
-    const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'GET' });
-    const messagesResp = await options.rpc.ai.listMessages({ threadId: tid, tail: true, limit: 200 });
+    const [threadResp, messagesResp, activeSnapshotResp] = await Promise.all([
+      fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'GET' }),
+      options.rpc.ai.listMessages({ threadId: tid, tail: true, limit: 200 }),
+      options.rpc.ai.getActiveRunSnapshot({ threadId: tid }),
+    ]);
     const rawMessages = (messagesResp.messages ?? [])
       .map((item) => item.messageJson as Message)
       .filter((item): item is Message => Boolean(item && typeof item === 'object'));
-    const messages = rawMessages
+    const transcriptMessages = rawMessages
       .map(mapMessage)
       .filter((item): item is FlowerChatMessage => item !== null);
+    const messages = upsertFlowerMessage(transcriptMessages, mapSnapshotMessage(activeSnapshotResp.messageJson));
     if (!threadResp.thread) flowerContractError('thread is required.');
     return mapThread(threadResp.thread, messages, options);
   };

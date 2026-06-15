@@ -98,6 +98,7 @@ const mocks = vi.hoisted(() => {
 
   const sendUserTurnMock = vi.fn(async () => ({ runId: 'run-1', kind: 'start' }));
   const subscribeThreadMock = vi.fn(async () => ({ runId: 'run-subscribe' }));
+  const getActiveRunSnapshotMock = vi.fn(async (): Promise<any> => ({ ok: false }));
   const openFileBrowserAtPathMock = vi.fn(async () => undefined);
   const openFilePreviewMock = vi.fn(async () => undefined);
   const openFlowerFileBrowserMock = vi.fn(async () => undefined);
@@ -116,6 +117,7 @@ const mocks = vi.hoisted(() => {
 
   return {
     fetchGatewayJSONMock,
+    getActiveRunSnapshotMock,
     listMessagesMock,
     openFileBrowserAtPathMock,
     openFilePreviewMock,
@@ -196,6 +198,7 @@ vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     ai: {
       listMessages: mocks.listMessagesMock,
+      getActiveRunSnapshot: mocks.getActiveRunSnapshotMock,
       sendUserTurn: mocks.sendUserTurnMock,
       subscribeThread: mocks.subscribeThreadMock,
     },
@@ -309,6 +312,7 @@ export function registerEnvAIPageSendTests() {
       mocks.fetchGatewayJSONMock.mockClear();
       mocks.sendUserTurnMock.mockClear();
       mocks.subscribeThreadMock.mockClear();
+      mocks.getActiveRunSnapshotMock.mockClear();
       mocks.listMessagesMock.mockClear();
       mocks.openFileBrowserAtPathMock.mockClear();
       mocks.openFilePreviewMock.mockClear();
@@ -344,7 +348,35 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(mocks.listMessagesMock).toHaveBeenCalledWith({ threadId: 'thread-1', tail: true, limit: 200 });
+        expect(mocks.getActiveRunSnapshotMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
         expect(host.textContent).toContain('Transcript for thread-1');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('shows active-run snapshot output when transcript persistence has not caught up', async () => {
+      mocks.listMessagesMock.mockResolvedValueOnce({ messages: [] } as any);
+      mocks.getActiveRunSnapshotMock.mockResolvedValueOnce({
+        ok: true,
+        runId: 'run-live',
+        messageJson: {
+          id: 'msg-live',
+          role: 'assistant',
+          status: 'streaming',
+          timestamp: 12,
+          blocks: [
+            { type: 'markdown', content: 'Live answer recovered from the active run.' },
+          ],
+        },
+      });
+
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+        await flush();
+        expect(host.textContent).toContain('Live answer recovered from the active run.');
       } finally {
         dispose();
       }
@@ -443,6 +475,67 @@ export function registerEnvAIPageSendTests() {
 	        expect(host.querySelectorAll('.flower-activity-inline-row')).toHaveLength(2);
 	        expect(host.textContent).toContain('pwd');
 	        expect(host.textContent).toContain('Flower inline transcript');
+      } finally {
+        dispose();
+      }
+    });
+
+    it('accepts persisted todo activity payload metadata from runtime transcripts', async () => {
+      mocks.listMessagesMock.mockResolvedValueOnce({
+        messages: [{
+          rowId: 1,
+          messageJson: {
+            id: 'msg-todos',
+            role: 'assistant',
+            status: 'complete',
+            timestamp: 10,
+            blocks: [{
+              type: 'activity-timeline',
+              schema_version: 1,
+              run_id: 'run-todos',
+              summary: {
+                status: 'success',
+                severity: 'normal',
+                needs_attention: false,
+                total_items: 1,
+                counts: { success: 1 },
+              },
+              items: [{
+                item_id: 'tool-todos',
+                tool_id: 'tool-todos',
+                tool_name: 'write_todos',
+                kind: 'tool',
+                status: 'success',
+                severity: 'normal',
+                needs_attention: false,
+                requires_approval: false,
+                label: 'Update todos',
+                renderer: 'todos',
+                payload: {
+                  status: 'success',
+                  summary: 'todos.updated',
+                  details: 'tool execution completed',
+                  version: 2,
+                  updated_at_unix_ms: 1781519615687,
+                  todos: [{ id: '1', content: 'Review AI Agent progress', status: 'completed' }],
+                },
+              }],
+            }, {
+              type: 'markdown',
+              content: 'Todo-backed answer is visible.',
+            }],
+          } as any,
+        }],
+      } as any);
+
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+        await flush();
+        expect(host.textContent).not.toContain('Flower contract error');
+        expect(host.textContent).toContain('Update todos');
+        expect(host.textContent).toContain('Todo-backed answer is visible.');
       } finally {
         dispose();
       }
