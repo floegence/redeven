@@ -105,8 +105,14 @@ func TestFloretActivityForTerminalCallUsesCommandAsLabel(t *testing.T) {
 	if activity.Renderer != observation.ActivityRendererTerminal {
 		t.Fatalf("renderer=%q, want terminal", activity.Renderer)
 	}
-	if activity.Payload["command"] != "npm run build -- --mode production" || activity.Payload["cwd"] != "/workspace/app" {
-		t.Fatalf("payload=%#v, want command and cwd", activity.Payload)
+	if activity.Payload["command"] != "npm run build -- --mode production" {
+		t.Fatalf("payload=%#v, want command", activity.Payload)
+	}
+	if _, ok := activity.Payload["cwd"]; ok {
+		t.Fatalf("terminal activity payload must not include cwd: %#v", activity.Payload)
+	}
+	if _, ok := activity.Payload["workdir"]; ok {
+		t.Fatalf("terminal activity payload must not include workdir: %#v", activity.Payload)
 	}
 	if _, ok := activity.Payload["stdin"]; ok {
 		t.Fatalf("terminal activity payload must not include stdin: %#v", activity.Payload)
@@ -125,8 +131,11 @@ func TestFloretActivityForFileCallsOmitsSensitiveEditAndWriteBodies(t *testing.T
 	if edit == nil {
 		t.Fatal("edit activity is nil")
 	}
-	if edit.Payload["operation"] != "edit" || edit.Payload["file_path"] != "internal/ai/run.go" || edit.Payload["replace_all"] != true {
+	if edit.Payload["operation"] != "edit" || edit.Payload["display_name"] != "run.go" || edit.Payload["replace_all"] != true {
 		t.Fatalf("edit payload=%#v", edit.Payload)
+	}
+	if _, ok := edit.Payload["file_path"]; ok {
+		t.Fatalf("edit activity payload must not include file_path: %#v", edit.Payload)
 	}
 	if _, ok := edit.Payload["old_string"]; ok {
 		t.Fatalf("edit activity payload must not include old_string: %#v", edit.Payload)
@@ -142,8 +151,11 @@ func TestFloretActivityForFileCallsOmitsSensitiveEditAndWriteBodies(t *testing.T
 	if write == nil {
 		t.Fatal("write activity is nil")
 	}
-	if write.Payload["operation"] != "write" || write.Payload["file_path"] != "internal/ai/run.go" {
+	if write.Payload["operation"] != "write" || write.Payload["display_name"] != "run.go" {
 		t.Fatalf("write payload=%#v", write.Payload)
+	}
+	if _, ok := write.Payload["file_path"]; ok {
+		t.Fatalf("write activity payload must not include file_path: %#v", write.Payload)
 	}
 	if _, ok := write.Payload["content_utf8"]; ok {
 		t.Fatalf("write activity payload must not include content_utf8: %#v", write.Payload)
@@ -174,9 +186,14 @@ func TestFloretActivityForApplyPatchCallOmitsPatchBody(t *testing.T) {
 	if _, ok := activity.Payload["patch"]; ok {
 		t.Fatalf("apply_patch call payload must not include full patch: %#v", activity.Payload)
 	}
-	for _, key := range []string{"patch_sha256", "patch_bytes", "patch_lines", "files_changed", "hunks", "additions", "deletions"} {
+	for _, key := range []string{"files_changed", "hunks", "additions", "deletions"} {
 		if _, ok := activity.Payload[key]; !ok {
 			t.Fatalf("apply_patch call payload missing %s: %#v", key, activity.Payload)
+		}
+	}
+	for _, key := range []string{"patch_sha256", "patch_bytes", "patch_lines"} {
+		if _, ok := activity.Payload[key]; ok {
+			t.Fatalf("apply_patch call payload must not include %s: %#v", key, activity.Payload)
 		}
 	}
 }
@@ -184,7 +201,8 @@ func TestFloretActivityForApplyPatchCallOmitsPatchBody(t *testing.T) {
 func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnlyFields(t *testing.T) {
 	t.Parallel()
 
-	activity := floretActivityForToolResult(ToolResult{
+	r := newRun(runOptions{})
+	activity := floretActivityForToolResult(r, ToolResult{
 		ToolID:   "call_terminal_1",
 		ToolName: "terminal.exec",
 		Status:   toolResultStatusSuccess,
@@ -221,7 +239,8 @@ func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnly
 func TestFloretToolResultActivityCarriesApplyPatchMutations(t *testing.T) {
 	t.Parallel()
 
-	activity := floretActivityForToolResult(ToolResult{
+	r := newRun(runOptions{})
+	activity := floretActivityForToolResult(r, ToolResult{
 		ToolID:   "call_patch_1",
 		ToolName: "apply_patch",
 		Status:   toolResultStatusSuccess,
@@ -234,21 +253,13 @@ func TestFloretToolResultActivityCarriesApplyPatchMutations(t *testing.T) {
 			InputFormat:      "begin_patch",
 			NormalizedFormat: "begin_patch",
 			Mutations: []FileMutationResult{{
-				FilePath:   "/workspace/app.ts",
-				NewPath:    "/workspace/app.ts",
-				ChangeType: "update",
-				StructuredDiff: []DiffHunkView{{
-					OldStart:    1,
-					OldLines:    1,
-					NewStart:    1,
-					NewLines:    1,
-					Before:      []string{"old"},
-					After:       []string{"new"},
-					BeforeKinds: []string{"removed"},
-					AfterKinds:  []string{"added"},
-				}},
-				OriginalFile: "old\n",
-				UpdatedFile:  "new\n",
+				FilePath:    "/workspace/app.ts",
+				DisplayName: "app.ts",
+				NewPath:     "/workspace/app.ts",
+				ChangeType:  "update",
+				Additions:   1,
+				Deletions:   1,
+				UnifiedDiff: "--- a/workspace/app.ts\n+++ b/workspace/app.ts\n@@ -1,1 +1,1 @@\n-old\n+new",
 			}},
 		},
 	})
@@ -266,19 +277,34 @@ func TestFloretToolResultActivityCarriesApplyPatchMutations(t *testing.T) {
 	if !ok {
 		t.Fatalf("mutation=%#v, want map", mutations[0])
 	}
-	if anyToString(mutation["file_path"]) != "/workspace/app.ts" || anyToString(mutation["change_type"]) != "update" {
-		t.Fatalf("mutation=%#v, want path and change type", mutation)
+	if anyToString(mutation["change_type"]) != "update" || anyToString(mutation["display_name"]) != "app.ts" {
+		t.Fatalf("mutation=%#v, want display name and change type", mutation)
 	}
-	if len(toAnySlice(mutation["structured_diff"])) != 1 {
-		t.Fatalf("structured_diff=%#v, want one hunk", mutation["structured_diff"])
+	if _, ok := mutation["file_path"]; ok {
+		t.Fatalf("mutation activity payload must not include file_path: %#v", mutation)
 	}
-	hunks := toAnySlice(mutation["structured_diff"])
-	hunk, _ := hunks[0].(map[string]any)
-	if len(toAnySlice(hunk["before_kinds"])) != 1 || len(toAnySlice(hunk["after_kinds"])) != 1 {
-		t.Fatalf("structured diff must carry line kinds: %#v", hunk)
+	if _, ok := mutation["preview_path"]; ok {
+		t.Fatalf("mutation activity payload must not include preview_path: %#v", mutation)
 	}
-	if anyToString(mutation["original_file"]) != "old\n" || anyToString(mutation["updated_file"]) != "new\n" {
-		t.Fatalf("mutation file bodies=%#v", mutation)
+	if _, ok := mutation["directory_path"]; ok {
+		t.Fatalf("mutation activity payload must not include directory_path: %#v", mutation)
+	}
+	actionID := anyToString(mutation["file_action_id"])
+	if actionID == "" {
+		t.Fatalf("mutation file_action_id=%#v, want action id", mutation)
+	}
+	if strings.Contains(actionID, "workspace") || strings.Contains(actionID, "app") {
+		t.Fatalf("file_action_id=%q must be opaque", actionID)
+	}
+	action := r.activityFileActions[actionID]
+	if action.DisplayName != "app.ts" || action.PreviewPath != "/workspace/app.ts" || action.DirectoryPath != "/workspace" {
+		t.Fatalf("registered file action=%#v", action)
+	}
+	if diff := anyToString(mutation["unified_diff"]); !strings.Contains(diff, "@@ -1,1 +1,1 @@") || !strings.Contains(diff, "-old") || !strings.Contains(diff, "+new") {
+		t.Fatalf("unified_diff=%q", diff)
+	}
+	if _, ok := mutation["original_file"]; ok {
+		t.Fatalf("mutation must not carry old file body: %#v", mutation)
 	}
 }
 

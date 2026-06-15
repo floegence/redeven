@@ -66,11 +66,12 @@ import {
   loadFlowerHostSettingsViaBridge,
   markFlowerHostThreadReadViaBridge,
   renameFlowerHostThreadViaBridge,
+  resolveFlowerHostFileActionOpenTargetViaBridge,
+  resolveFlowerHostHandlerViaBridge,
   saveFlowerHostSettingsViaBridge,
   sendFlowerHostChatResultViaBridge,
   setFlowerHostThreadPinnedViaBridge,
   submitFlowerHostInputViaBridge,
-  resolveFlowerHostHandlerViaBridge,
   shutdownFlowerHostBridge,
   type DesktopFlowerHostTargetSessionGrant,
   type DesktopFlowerHostTargetSessionRequest,
@@ -311,6 +312,7 @@ import {
   LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
   MARK_DESKTOP_FLOWER_HOST_THREAD_READ_CHANNEL,
+  OPEN_DESKTOP_FLOWER_HOST_FILE_ACTION_CHANNEL,
   RENAME_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
   RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL,
   SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL,
@@ -318,6 +320,7 @@ import {
   SET_DESKTOP_FLOWER_HOST_THREAD_PINNED_CHANNEL,
   SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL,
   type DesktopFlowerHostError,
+  type DesktopFlowerHostFileActionOpenRequest,
   type DesktopFlowerHostForkThreadRequest,
   type DesktopFlowerHostMarkThreadReadRequest,
   type DesktopFlowerHostRenameThreadRequest,
@@ -331,6 +334,8 @@ import {
   type LoadDesktopFlowerHostThreadResult,
   type LoadDesktopFlowerHostSettingsResult,
   type MarkDesktopFlowerHostThreadReadResult,
+  normalizeDesktopFlowerHostFileActionOpenRequest,
+  type OpenDesktopFlowerHostFileActionResult,
   type RenameDesktopFlowerHostThreadResult,
   type ResolveDesktopFlowerHostHandlerResult,
   type SendDesktopFlowerHostChatResult,
@@ -925,6 +930,42 @@ function desktopFlowerHostErrorFromUnknown(error: unknown): DesktopFlowerHostErr
     compact(record?.code) || 'flower_host_error',
     error instanceof Error ? error.message : compact(record?.message) || String(error),
   );
+}
+
+async function openDesktopFlowerHostFileAction(request: DesktopFlowerHostFileActionOpenRequest): Promise<OpenDesktopFlowerHostFileActionResult> {
+  try {
+    const target = await resolveFlowerHostFileActionOpenTargetViaBridge({
+      ...flowerHostBridgeArgs(),
+      request,
+    });
+    const path = target.path;
+    if (request.action === 'preview') {
+      const message = await shell.openPath(path);
+      if (message) {
+        return { ok: false, error: desktopFlowerHostError('file_preview_failed', message) };
+      }
+      return { ok: true };
+    }
+
+    const info = await fs.stat(path).catch(() => null);
+    if (info?.isDirectory()) {
+      const message = await shell.openPath(path);
+      if (message) {
+        return { ok: false, error: desktopFlowerHostError('directory_open_failed', message) };
+      }
+      return { ok: true };
+    }
+    shell.showItemInFolder(path);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: desktopFlowerHostError(
+        request.action === 'preview' ? 'file_preview_failed' : 'directory_open_failed',
+        error instanceof Error ? error.message : 'Desktop could not open this file action.',
+      ),
+    };
+  }
 }
 
 function bundledRuntimeExecutablePath(): string {
@@ -16443,6 +16484,16 @@ if (!app.requestSingleInstanceLock()) {
         error: desktopFlowerHostErrorFromUnknown(error),
       };
     }
+  });
+  ipcMain.handle(OPEN_DESKTOP_FLOWER_HOST_FILE_ACTION_CHANNEL, async (_event, request): Promise<OpenDesktopFlowerHostFileActionResult> => {
+    const normalized = normalizeDesktopFlowerHostFileActionOpenRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        error: desktopFlowerHostError('invalid_file_action', 'Invalid Flower file action request.'),
+      };
+    }
+    return openDesktopFlowerHostFileAction(normalized);
   });
   ipcMain.handle(DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL, async (event) => (
     buildStampedDesktopWelcomeSnapshot(senderUtilityWindowKind(event.sender.id))

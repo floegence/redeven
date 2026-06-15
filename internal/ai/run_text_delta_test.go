@@ -55,7 +55,7 @@ func activityTimelinePlaceholder(runID string) ActivityTimelineBlock {
 			Counts:     observation.ActivityCounts{},
 		},
 		Items: []observation.ActivityItem{},
-	})
+	}, nil)
 }
 
 func TestAssistantMarkdownTextSnapshot_JoinsMarkdownBlocksOnly(t *testing.T) {

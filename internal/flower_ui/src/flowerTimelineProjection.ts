@@ -11,12 +11,14 @@ export type FlowerRenderableMessageBlock =
   | Readonly<{
     type: 'content';
     key: string;
+    block_index: number;
     block_type: 'markdown' | 'text' | 'thinking';
     content: string;
   }>
   | Readonly<{
     type: 'activity';
     key: string;
+    block_index: number;
     block: FlowerActivityTimelineBlock;
   }>;
 
@@ -49,6 +51,12 @@ export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock)
     timeline.summary.needs_attention ? 'attention' : '',
     timeline.summary.attention_reasons?.join(',') ?? '',
     Object.entries(timeline.summary.counts).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}:${value}`).join('|'),
+    timeline.file_actions
+      ? Object.entries(timeline.file_actions)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, action]) => [key, action.action_id, action.display_name, action.can_preview ? 'preview' : '', action.can_browse_directory ? 'browse' : ''].join(','))
+        .join('|')
+      : '',
     timeline.items.map((item) => [
       item.item_id,
       item.tool_id ?? '',
@@ -66,7 +74,7 @@ export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock)
       item.description ?? '',
       item.renderer ?? '',
       item.chips?.map((chip) => [chip.kind, chip.label, chip.value ?? '', chip.tone ?? ''].join(',')).join(';') ?? '',
-      item.target_refs?.map((ref) => [ref.kind, ref.label, ref.uri ?? '', ref.path ?? '', String(ref.line ?? '')].join(',')).join(';') ?? '',
+      item.target_refs?.map((ref) => [ref.kind, ref.label, ref.uri ?? '', String(ref.line ?? '')].join(',')).join(';') ?? '',
       item.payload ? JSON.stringify(item.payload) : '',
       item.metadata ? Object.entries(item.metadata).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}:${value}`).join(',') : '',
     ].join(':')).join('|'),
@@ -100,10 +108,10 @@ function contentBlocksFromMessage(message: FlowerChatMessage): readonly FlowerRe
     const key = `${message.id}:block:${index}`;
     if (block.type === 'activity-timeline') {
       if (block.items.length === 0) return [];
-      return [{ type: 'activity', key, block }];
+      return [{ type: 'activity', key, block_index: index, block }];
     }
     const content = trimString(block.content);
-    return content ? [{ type: 'content', key, block_type: block.type, content }] : [];
+    return content ? [{ type: 'content', key, block_index: index, block_type: block.type, content }] : [];
   });
 }
 

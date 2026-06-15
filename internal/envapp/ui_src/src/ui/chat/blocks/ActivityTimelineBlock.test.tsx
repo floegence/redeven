@@ -7,8 +7,6 @@ import { ActivityTimelineBlock } from './ActivityTimelineBlock';
 import type { ActivityItem, ActivityTimelineBlock as ActivityTimelineBlockType } from '../types';
 
 const approveToolCallMock = vi.hoisted(() => vi.fn());
-const fetchGatewayJSONMock = vi.hoisted(() => vi.fn());
-const writeTextToClipboardMock = vi.hoisted(() => vi.fn());
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
@@ -18,14 +16,6 @@ vi.mock('../ChatProvider', () => ({
   useChatContext: () => ({
     approveToolCall: approveToolCallMock,
   }),
-}));
-
-vi.mock('../../services/gatewayApi', () => ({
-  fetchGatewayJSON: (...args: unknown[]) => fetchGatewayJSONMock(...args),
-}));
-
-vi.mock('../../utils/clipboard', () => ({
-  writeTextToClipboard: (...args: unknown[]) => writeTextToClipboardMock(...args),
 }));
 
 const renderDisposers: Array<() => void> = [];
@@ -63,14 +53,14 @@ function baseItem(overrides: Partial<ActivityItem> = {}): ActivityItem {
     requires_approval: false,
     label: 'go test ./...',
     description: 'Run tests',
-    detail_refs: [{
-      ref_id: 'terminal:tool_1',
-      kind: 'terminal',
-      tool_id: 'tool_1',
-      fetch_mode: 'endpoint',
-      endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_1/output',
-      title: 'Command output',
-    }],
+    payload: {
+      command: 'go test ./...',
+      cwd: '/workspace/redeven',
+      stdout: 'ok\n',
+      stderr: '',
+      exit_code: 0,
+      duration_ms: 8,
+    },
     ...overrides,
   };
 }
@@ -96,6 +86,25 @@ function renderActivity(block: ActivityTimelineBlockType = baseBlock()) {
   return host;
 }
 
+function renderActivityWithFileActions(
+  block: ActivityTimelineBlockType,
+  handlers: Pick<Parameters<typeof ActivityTimelineBlock>[0], 'onPreviewFile' | 'onBrowseDirectory'>,
+) {
+  const host = document.createElement('div');
+  document.body.appendChild(host);
+  const dispose = render(() => (
+    <ActivityTimelineBlock
+      block={block}
+      messageId="msg_1"
+      blockIndex={0}
+      onPreviewFile={handlers.onPreviewFile}
+      onBrowseDirectory={handlers.onBrowseDirectory}
+    />
+  ), host);
+  renderDisposers.push(dispose);
+  return host;
+}
+
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
@@ -111,55 +120,31 @@ afterEach(() => {
     renderDisposers.pop()?.();
   }
   approveToolCallMock.mockReset();
-  fetchGatewayJSONMock.mockReset();
-  writeTextToClipboardMock.mockReset();
   document.body.innerHTML = '';
 });
 
 describe('ActivityTimelineBlock', () => {
-  it('keeps activity compact and opens terminal details from the item row', async () => {
-    fetchGatewayJSONMock.mockResolvedValue({
-      status: 'success',
-      stdout: 'ok\n',
-      stderr: '',
-      exit_code: 0,
-      duration_ms: 8,
-      cwd: '/tmp',
-    });
-    writeTextToClipboardMock.mockResolvedValue(undefined);
+  it('keeps activity compact and expands terminal details from the item row', async () => {
     const host = renderActivity();
 
     expect(host.textContent).toContain('go test ./...');
+    expect(host.textContent).not.toContain('/workspace/redeven');
+    expect(host.textContent).not.toContain('stdout');
 
     expandTimeline(host);
     await flushAsync();
-
-    expect(host.textContent).toContain('go test ./...');
-    expect(host.textContent).not.toContain('Details');
-    expect(host.querySelector('.chat-activity-item-label')).not.toBeNull();
 
     const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
     row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsync();
 
-    expect(fetchGatewayJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/runs/run_1/tools/tool_1/output', { method: 'GET' });
-    expect(host.textContent).toContain('Command output');
-    expect(host.textContent).toContain('Working directory');
-    expect(host.textContent).toContain('/tmp');
+    expect(row?.getAttribute('aria-expanded')).toBe('true');
     expect(host.textContent).toContain('stdout');
     expect(host.textContent).toContain('ok');
-
-    const copyButton = [...host.querySelectorAll('.chat-activity-detail-action')]
-      .find((button) => button.textContent === 'Copy stdout') as HTMLButtonElement | undefined;
-    copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flushAsync();
-
-    expect(writeTextToClipboardMock).toHaveBeenCalledWith('ok\n');
-    expect(copyButton?.textContent).toBe('Copied');
+    expect(host.textContent).toContain('exit');
   });
 
-  it('supports keyboard expansion and opens rows without explicit detail refs', async () => {
-    fetchGatewayJSONMock.mockResolvedValue({ stdout: 'ok\n', stderr: '' });
+  it('supports keyboard expansion without endpoint detail refs', async () => {
     const host = renderActivity();
     expandTimeline(host);
     await flushAsync();
@@ -169,87 +154,11 @@ describe('ActivityTimelineBlock', () => {
     await flushAsync();
 
     expect(row?.getAttribute('aria-expanded')).toBe('true');
-    expect(fetchGatewayJSONMock).toHaveBeenCalledTimes(1);
 
     row?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
     await flushAsync();
 
     expect(row?.getAttribute('aria-expanded')).toBe('false');
-
-    const noDetailHost = renderActivity(baseBlock({
-      summary: baseSummary('success'),
-      items: [baseItem({
-        item_id: 'tool_no_detail',
-        tool_id: 'tool_no_detail',
-        description: 'pwd',
-        detail_refs: undefined,
-      })],
-    }));
-    expandTimeline(noDetailHost);
-    const noDetailRow = noDetailHost.querySelector('.chat-activity-item') as HTMLDivElement | null;
-    noDetailRow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-
-    expect(noDetailRow?.getAttribute('role')).toBe('button');
-    expect(noDetailRow?.getAttribute('aria-expanded')).toBe('true');
-    expect(noDetailHost.querySelector('.chat-activity-detail-panel')).not.toBeNull();
-  });
-
-  it('opens structured activity payloads without detail refs', async () => {
-    const host = renderActivity(baseBlock({
-      items: [baseItem({
-        detail_refs: undefined,
-        renderer: 'terminal',
-        label: 'npm run build -- --mode production',
-        payload: {
-          command: 'npm run build -- --mode production',
-          cwd: '/workspace/redeven',
-          stdout: 'built\n',
-          stderr: '',
-          exit_code: 0,
-          duration_ms: 42,
-          truncated: false,
-        },
-      })],
-    }));
-    expandTimeline(host);
-    await flushAsync();
-
-    const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
-    expect(row).not.toBeNull();
-    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flushAsync();
-
-    expect(fetchGatewayJSONMock).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('npm run build -- --mode production');
-    expect(host.textContent).toContain('/workspace/redeven');
-    expect(host.textContent).toContain('built');
-  });
-
-  it('uses inline detail payloads without making an endpoint request', async () => {
-    const host = renderActivity(baseBlock({
-      items: [baseItem({
-        item_id: 'tool_inline',
-        tool_id: 'tool_inline',
-        description: 'pwd',
-        detail_refs: [{
-          ref_id: 'terminal:tool_inline',
-          kind: 'terminal',
-          tool_id: 'tool_inline',
-          fetch_mode: 'inline',
-          title: 'Command output',
-          payload: { stdout: '/workspace\n', exit_code: 0 },
-        }],
-      })],
-    }));
-    expandTimeline(host);
-
-    const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
-    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flushAsync();
-
-    expect(fetchGatewayJSONMock).not.toHaveBeenCalled();
-    expect(host.textContent).toContain('/workspace');
-    expect(host.textContent).toContain('Exit');
   });
 
   it('does not expand a detail row while text is selected', async () => {
@@ -266,7 +175,6 @@ describe('ActivityTimelineBlock', () => {
       row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flushAsync();
 
-      expect(fetchGatewayJSONMock).not.toHaveBeenCalled();
       expect(row?.getAttribute('aria-expanded')).toBe('false');
       expect(host.querySelector('.chat-activity-detail-panel')).toBeNull();
     } finally {
@@ -291,14 +199,14 @@ describe('ActivityTimelineBlock', () => {
         label: 'Applied patch',
         requires_approval: true,
         approval_state: 'requested',
-        detail_refs: [{
-          ref_id: 'tool_detail:tool_patch',
-          kind: 'tool_detail',
-          tool_id: 'tool_patch',
-          fetch_mode: 'endpoint',
-          endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_patch/detail',
-          title: 'Tool detail',
-        }],
+        payload: {
+          operation: 'apply_patch',
+          mutations: [{
+            display_name: 'src/app.ts',
+            change_type: 'update',
+            unified_diff: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
+          }],
+        },
       })],
     });
     const host = renderActivity(block);
@@ -307,21 +215,10 @@ describe('ActivityTimelineBlock', () => {
     allow?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     expect(approveToolCallMock).toHaveBeenCalledWith('msg_1', 'tool_patch', true);
-    expect(fetchGatewayJSONMock).not.toHaveBeenCalled();
-    expect(host.querySelector('.chat-activity-detail-panel')).toBeNull();
+    expect(host.textContent).toContain('-old');
   });
 
-  it('renders todo details as structured status rows', async () => {
-    fetchGatewayJSONMock.mockResolvedValue({
-      tool_name: 'write_todos',
-      status: 'success',
-      result: {
-        todos: [
-          { id: 't1', content: 'Inspect current implementation', status: 'completed' },
-          { id: 't2', content: 'Draft renderer contract', status: 'in_progress' },
-        ],
-      },
-    });
+  it('renders todo details as checklist rows without raw JSON', async () => {
     const host = renderActivity(baseBlock({
       items: [baseItem({
         item_id: 'tool_todos',
@@ -329,14 +226,12 @@ describe('ActivityTimelineBlock', () => {
         tool_name: 'write_todos',
         renderer: 'todos',
         label: 'Updated todos',
-        detail_refs: [{
-          ref_id: 'tool_detail:tool_todos',
-          kind: 'tool_detail',
-          tool_id: 'tool_todos',
-          fetch_mode: 'endpoint',
-          endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_todos/detail',
-          title: 'Tool detail',
-        }],
+        payload: {
+          todos: [
+            { id: 't1', content: 'Inspect current implementation', status: 'completed' },
+            { id: 't2', content: 'Draft renderer contract', status: 'in_progress' },
+          ],
+        },
       })],
     }));
     expandTimeline(host);
@@ -345,57 +240,22 @@ describe('ActivityTimelineBlock', () => {
     row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsync();
 
-    expect(host.textContent).toContain('Todo changes');
     expect(host.textContent).toContain('Inspect current implementation');
-    expect(host.textContent).toContain('In progress');
+    expect(host.textContent).toContain('in progress');
     expect(host.textContent).not.toContain('"todos"');
   });
 
-  it('copies localized fallback text for untitled todo summaries', async () => {
-    fetchGatewayJSONMock.mockResolvedValue({
-      tool_name: 'write_todos',
-      status: 'success',
-      result: {
-        todos: [
-          { id: 't1', status: 'pending' },
-        ],
-      },
-    });
-    const host = renderActivity(baseBlock({
-      items: [baseItem({
-        item_id: 'tool_todos',
-        tool_id: 'tool_todos',
-        tool_name: 'write_todos',
-        renderer: 'todos',
-        label: 'Updated todos',
-        detail_refs: [{
-          ref_id: 'tool_detail:tool_todos',
-          kind: 'tool_detail',
-          tool_id: 'tool_todos',
-          fetch_mode: 'endpoint',
-          endpoint: '/_redeven_proxy/api/ai/runs/run_1/tools/tool_todos/detail',
-          title: 'Tool detail',
-        }],
-      })],
-    }));
-    expandTimeline(host);
-
-    const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
-    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flushAsync();
-
-    const copyButton = [...host.querySelectorAll('.chat-activity-detail-action')]
-      .find((button) => button.textContent === 'Copy summary') as HTMLButtonElement | undefined;
-    copyButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flushAsync();
-
-    expect(host.textContent).toContain('Untitled todo');
-    expect(writeTextToClipboardMock).toHaveBeenCalledWith('pending: Untitled todo');
-  });
-
-  it('renders file, web, and generic tool details without exposing raw JSON', async () => {
+  it('renders file, web, and generic details without exposing raw JSON', async () => {
     const block = baseBlock({
       summary: baseSummary('success', 3),
+      file_actions: {
+        patch_app: {
+          action_id: 'patch_app',
+          display_name: 'ActivityTimelineBlock.tsx',
+          can_preview: true,
+          can_browse_directory: true,
+        },
+      },
       items: [
         baseItem({
           item_id: 'tool_patch',
@@ -403,14 +263,17 @@ describe('ActivityTimelineBlock', () => {
           tool_name: 'apply_patch',
           renderer: 'patch',
           label: 'Applied patch',
-          detail_refs: [{
-            ref_id: 'tool_detail:tool_patch',
-            kind: 'tool_detail',
-            tool_id: 'tool_patch',
-            fetch_mode: 'endpoint',
-            endpoint: '/patch',
-            title: 'Tool detail',
-          }],
+          payload: {
+            operation: 'apply_patch',
+            mutations: [{
+              display_name: 'ActivityTimelineBlock.tsx',
+              file_action_id: 'patch_app',
+              change_type: 'update',
+              additions: 1,
+              deletions: 0,
+              unified_diff: '--- a/ActivityTimelineBlock.tsx\n+++ b/ActivityTimelineBlock.tsx\n@@ -1,1 +1,1 @@\n+panel',
+            }],
+          },
         }),
         baseItem({
           item_id: 'tool_web',
@@ -418,14 +281,7 @@ describe('ActivityTimelineBlock', () => {
           tool_name: 'web.search',
           renderer: 'web_search',
           label: 'Searched the web',
-          detail_refs: [{
-            ref_id: 'tool_detail:tool_web',
-            kind: 'tool_detail',
-            tool_id: 'tool_web',
-            fetch_mode: 'endpoint',
-            endpoint: '/web',
-            title: 'Tool detail',
-          }],
+          payload: { query: 'active agent UI tool details', sources: [{ title: 'Agent UI', url: 'https://example.com' }] },
         }),
         baseItem({
           item_id: 'tool_skill',
@@ -433,39 +289,9 @@ describe('ActivityTimelineBlock', () => {
           tool_name: 'use_skill',
           renderer: 'structured',
           label: 'Loaded skill',
-          detail_refs: [{
-            ref_id: 'tool_detail:tool_skill',
-            kind: 'tool_detail',
-            tool_id: 'tool_skill',
-            fetch_mode: 'endpoint',
-            endpoint: '/skill',
-            title: 'Tool detail',
-          }],
+          payload: { summary: 'frontend-design', details: 'loaded locally', status: 'success' },
         }),
       ],
-    });
-    fetchGatewayJSONMock.mockImplementation((endpoint: string) => {
-      if (endpoint === '/patch') {
-        return Promise.resolve({
-          tool_name: 'apply_patch',
-          status: 'success',
-          args: { patch: '*** Begin Patch\n*** Update File: src/ui/chat/activity/ActivityDetailPanel.tsx\n@@\n+panel\n*** End Patch' },
-        });
-      }
-      if (endpoint === '/web') {
-        return Promise.resolve({
-          tool_name: 'web.search',
-          status: 'success',
-          args: { query: 'active agent UI tool details' },
-          result: { sources: [{ title: 'Agent UI', url: 'https://example.com/agent-ui', snippet: 'Expandable tool calls.' }] },
-        });
-      }
-      return Promise.resolve({
-        tool_name: 'use_skill',
-        status: 'success',
-        args: { name: 'frontend-design', api_key: 'sk-secret', value: 'inline-secret', contains_secret: true },
-        result: { loaded: true, metadata: { origin: 'local' } },
-      });
     });
     const host = renderActivity(block);
     expandTimeline(host);
@@ -476,54 +302,157 @@ describe('ActivityTimelineBlock', () => {
     rows[2]?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsync();
 
-    expect(host.textContent).toContain('ActivityDetailPanel.tsx');
+    expect(host.textContent).toContain('ActivityTimelineBlock.tsx');
+    expect(host.textContent).toContain('+panel');
     expect(host.textContent).toContain('active agent UI tool details');
     expect(host.textContent).toContain('Agent UI');
-    expect(host.textContent).toContain('Name');
     expect(host.textContent).toContain('frontend-design');
-    expect(host.textContent).toContain('Api Key');
-    expect(host.textContent).toContain('********');
-    expect(host.textContent).not.toContain('sk-secret');
-    expect(host.textContent).not.toContain('inline-secret');
-    expect(host.textContent).not.toContain('Contains Secret');
-    expect(host.textContent).not.toContain('"api_key"');
+    expect(host.textContent).not.toContain('"file_action_id"');
+    expect(host.textContent).not.toContain('"sources"');
   });
 
-  it('shows a product error state and retry action when detail loading fails', async () => {
-    fetchGatewayJSONMock.mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce({ stdout: 'ok\n' });
-    const host = renderActivity(baseBlock({
-      summary: baseSummary('error'),
+  it('shows icon-only file actions and routes them without toggling the row', async () => {
+    const preview = vi.fn();
+    const browse = vi.fn();
+    const block = baseBlock({
+      file_actions: {
+        read_app: {
+          action_id: 'read_app',
+          display_name: 'app.ts',
+          can_preview: true,
+          can_browse_directory: true,
+        },
+      },
       items: [baseItem({
-        status: 'error',
-        severity: 'error',
-        needs_attention: true,
-        label: 'npm test',
-        detail_refs: [{
-          ref_id: 'terminal:tool_1',
-          kind: 'terminal',
-          tool_id: 'tool_1',
-          fetch_mode: 'endpoint',
-          endpoint: '/output',
-          title: 'Command output',
-        }],
+        item_id: 'tool_read',
+        tool_id: 'tool_read',
+        tool_name: 'file.read',
+        renderer: 'file',
+        label: 'app.ts#dcbdf9b8c27f#e1703606242a',
+        payload: {
+          operation: 'read',
+          display_name: 'app.ts',
+          file_action_id: 'read_app',
+          content: 'export const value = 1;\n',
+          line_offset: 1,
+          line_count: 1,
+          total_lines: 1,
+        },
       })],
-    }));
+    });
+    const host = renderActivityWithFileActions(block, {
+      onPreviewFile: preview,
+      onBrowseDirectory: browse,
+    });
+    expandTimeline(host);
+    await flushAsync();
+
+    expect(host.textContent).toContain('Read');
+    expect(host.textContent).toContain('app.ts');
+    expect(host.textContent).not.toContain('#dcbdf9b8c27f');
+
+    const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
+    const previewButton = host.querySelector('button[aria-label="Preview app.ts"]') as HTMLButtonElement | null;
+    const browseButton = host.querySelector('button[aria-label="Browse folder for app.ts"]') as HTMLButtonElement | null;
+    expect(previewButton).not.toBeNull();
+    expect(browseButton).not.toBeNull();
+    expect(previewButton?.textContent).toBe('');
+    expect(browseButton?.textContent).toBe('');
+    expect(previewButton?.disabled).toBe(false);
+    expect(browseButton?.disabled).toBe(false);
+
+    previewButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    browseButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(preview).toHaveBeenCalledWith(expect.objectContaining({
+      action_id: 'read_app',
+      can_preview: true,
+    }), expect.objectContaining({ item_id: 'tool_read' }));
+    expect(browse).toHaveBeenCalledWith(expect.objectContaining({
+      action_id: 'read_app',
+      can_browse_directory: true,
+    }), expect.objectContaining({ item_id: 'tool_read' }));
+    expect(row?.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keeps multi-file row actions visible but disabled while per-file details can open files', async () => {
+    const preview = vi.fn();
+    const browse = vi.fn();
+    const block = baseBlock({
+      file_actions: {
+        edit_app: {
+          action_id: 'edit_app',
+          display_name: 'app.ts',
+          can_preview: true,
+          can_browse_directory: true,
+        },
+        delete_old: {
+          action_id: 'delete_old',
+          display_name: 'old.ts',
+          can_preview: false,
+          can_browse_directory: true,
+        },
+      },
+      items: [baseItem({
+        item_id: 'tool_patch',
+        tool_id: 'tool_patch',
+        tool_name: 'apply_patch',
+        renderer: 'patch',
+        label: 'Applied patch',
+        payload: {
+          operation: 'apply_patch',
+          mutations: [
+            {
+              display_name: 'app.ts',
+              file_action_id: 'edit_app',
+              change_type: 'update',
+              additions: 1,
+              deletions: 1,
+              unified_diff: '--- a/app.ts\n+++ b/app.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
+            },
+            {
+              display_name: 'old.ts',
+              file_action_id: 'delete_old',
+              change_type: 'delete',
+              deletions: 1,
+              unified_diff: '--- a/old.ts\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-remove',
+            },
+          ],
+        },
+      })],
+    });
+    const host = renderActivityWithFileActions(block, {
+      onPreviewFile: preview,
+      onBrowseDirectory: browse,
+    });
+    expandTimeline(host);
+    await flushAsync();
+
+    const rowPreview = host.querySelector('button[aria-label="Preview 2 files"]') as HTMLButtonElement | null;
+    const rowBrowse = host.querySelector('button[aria-label="Browse folder for 2 files"]') as HTMLButtonElement | null;
+    expect(rowPreview?.disabled).toBe(true);
+    expect(rowBrowse?.disabled).toBe(true);
 
     const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
     row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsync();
 
-    expect(host.textContent).toContain('Detail unavailable');
-    expect(host.textContent).toContain('network down');
+    const appPreview = host.querySelector('button[aria-label="Preview app.ts"]') as HTMLButtonElement | null;
+    const appBrowse = host.querySelector('button[aria-label="Browse folder for app.ts"]') as HTMLButtonElement | null;
+    const oldPreview = host.querySelector('button[aria-label="Preview old.ts"]') as HTMLButtonElement | null;
+    const oldBrowse = host.querySelector('button[aria-label="Browse folder for old.ts"]') as HTMLButtonElement | null;
+    expect(appPreview?.disabled).toBe(false);
+    expect(appBrowse?.disabled).toBe(false);
+    expect(oldPreview?.disabled).toBe(true);
+    expect(oldBrowse?.disabled).toBe(false);
 
-    const retry = [...host.querySelectorAll('.chat-activity-detail-action')]
-      .find((button) => button.textContent === 'Retry') as HTMLButtonElement | undefined;
-    retry?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    appPreview?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    oldBrowse?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushAsync();
 
-    expect(fetchGatewayJSONMock).toHaveBeenCalledTimes(2);
-    expect(host.textContent).toContain('stdout');
-    expect(host.textContent).toContain('ok');
+    expect(preview).toHaveBeenCalledWith(expect.objectContaining({ action_id: 'edit_app' }), expect.objectContaining({ item_id: 'tool_patch' }));
+    expect(browse).toHaveBeenCalledWith(expect.objectContaining({ action_id: 'delete_old' }), expect.objectContaining({ item_id: 'tool_patch' }));
   });
 
   it('renders waiting ask_user activity as readonly status without local controls', () => {
@@ -538,7 +467,6 @@ describe('ActivityTimelineBlock', () => {
         severity: 'blocking',
         needs_attention: true,
         label: 'Input requested',
-        detail_refs: undefined,
         payload: {
           questions: [{
             id: 'q1',

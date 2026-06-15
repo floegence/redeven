@@ -434,6 +434,24 @@ func (s *Service) ForkThread(ctx context.Context, threadID string, req ForkThrea
 	return s.threadSnapshot(ctx, view.ThreadID, view)
 }
 
+func (s *Service) ResolveChatFileActionOpenTarget(ctx context.Context, req ChatFileActionOpenRequest) (ChatFileActionOpenTarget, error) {
+	if s == nil {
+		return ChatFileActionOpenTarget{}, errors.New("nil Flower Host service")
+	}
+	target, err := s.ai.ResolveFlowerFileActionOpenTarget(ctx, s.Meta(), ai.FlowerFileActionOpenRequest(req))
+	if err != nil {
+		switch {
+		case errors.Is(err, ai.ErrFlowerFileActionInvalid):
+			return ChatFileActionOpenTarget{}, newServiceError(http.StatusBadRequest, "invalid_file_action", "Flower file action is invalid.")
+		case errors.Is(err, ai.ErrFlowerFileActionNotFound):
+			return ChatFileActionOpenTarget{}, newServiceError(http.StatusNotFound, "file_action_not_found", "Flower file action was not found.")
+		default:
+			return ChatFileActionOpenTarget{}, err
+		}
+	}
+	return ChatFileActionOpenTarget(target), nil
+}
+
 func (s *Service) SendChat(ctx context.Context, req ChatSendRequest) (SendChatResponse, error) {
 	if s == nil {
 		return SendChatResponse{}, errors.New("nil Flower Host service")
@@ -1553,6 +1571,14 @@ func decodeActivityTimelineBlock(raw json.RawMessage) (ChatMessageBlock, error) 
 	if err := observation.ValidateActivityTimeline(timeline.ActivityTimeline); err != nil {
 		return ChatMessageBlock{}, err
 	}
+	sanitized, err := ai.SanitizeActivityTimelineBlockJSON(raw)
+	if err != nil {
+		return ChatMessageBlock{}, err
+	}
+	var publicTimeline ai.ActivityTimelineBlock
+	if err := json.Unmarshal(sanitized, &publicTimeline); err != nil {
+		return ChatMessageBlock{}, err
+	}
 	summary := timeline.Summary
 	return ChatMessageBlock{
 		Type:          "activity-timeline",
@@ -1562,8 +1588,44 @@ func decodeActivityTimelineBlock(raw json.RawMessage) (ChatMessageBlock, error) 
 		TurnID:        strings.TrimSpace(timeline.TurnID),
 		TraceID:       strings.TrimSpace(timeline.TraceID),
 		Summary:       &summary,
-		Items:         append([]observation.ActivityItem(nil), timeline.Items...),
+		Items:         publicChatActivityItems(publicTimeline.Items),
+		FileActions:   mapChatActivityFileActions(timeline.FileActions),
 	}, nil
+}
+
+func publicChatActivityItems(items []observation.ActivityItem) []observation.ActivityItem {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]observation.ActivityItem, 0, len(items))
+	for _, item := range items {
+		out = append(out, item)
+	}
+	return out
+}
+
+func mapChatActivityFileActions(actions map[string]ai.FlowerActivityFileAction) map[string]ChatActivityFileAction {
+	if len(actions) == 0 {
+		return nil
+	}
+	out := make(map[string]ChatActivityFileAction, len(actions))
+	for key, action := range actions {
+		actionID := strings.TrimSpace(action.ActionID)
+		displayName := strings.TrimSpace(action.DisplayName)
+		if strings.TrimSpace(key) == "" || strings.TrimSpace(key) != actionID || actionID == "" || displayName == "" {
+			continue
+		}
+		out[actionID] = ChatActivityFileAction{
+			ActionID:           actionID,
+			DisplayName:        displayName,
+			CanPreview:         strings.TrimSpace(action.PreviewPath) != "",
+			CanBrowseDirectory: strings.TrimSpace(action.DirectoryPath) != "",
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func mapChatInputRequest(prompt *ai.RequestUserInputPrompt) (*ChatInputRequest, error) {

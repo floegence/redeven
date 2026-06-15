@@ -68,6 +68,7 @@ import { EnvFileBrowserPage } from './pages/EnvFileBrowserPage';
 import { EnvCodespacesPage } from './pages/EnvCodespacesPage';
 import { EnvPortForwardsPage } from './pages/EnvPortForwardsPage';
 import { EnvAIPage } from './pages/EnvAIPage';
+import type { ActivityFileActionOpenRequest } from './chat/types';
 import { CodexPage } from './codex/CodexPage';
 import { CodexProvider } from './codex/CodexProvider';
 import { CodexSidebar } from './codex/CodexSidebar';
@@ -110,6 +111,7 @@ import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';
 import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
 import { basenameFromAbsolutePath, normalizeAbsolutePath, resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
 import { createClientId } from './utils/clientId';
+import { fileItemFromPath } from './utils/filePreviewItem';
 import { reloadCurrentPage } from './utils/windowNavigation';
 import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar } from './envSidebarVisibilityMotion';
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
@@ -198,6 +200,10 @@ type CreateThreadResponse = Readonly<{
   thread: Readonly<{
     thread_id: string;
   }>;
+}>;
+
+type FlowerFileActionOpenTarget = Readonly<{
+  path?: string;
 }>;
 
 type AccessGatePhase = 'checking' | 'unlock_required' | 'resuming' | 'resume_blocked' | 'ready';
@@ -992,6 +998,46 @@ export function EnvAppShell() {
     }
 
     await filePreviewController.openPreview(normalizedItem);
+  };
+
+  const resolveFlowerFileActionPath = async (
+    request: ActivityFileActionOpenRequest,
+    action: 'preview' | 'browse_directory',
+  ): Promise<string> => {
+    const threadID = String(request.thread_id ?? '').trim();
+    if (!threadID) return '';
+    const target = await fetchGatewayJSON<FlowerFileActionOpenTarget>(
+      `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/file-action-open-target`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          message_id: String(request.message_id ?? '').trim(),
+          block_index: Math.floor(Number(request.block_index)),
+          item_id: String(request.item_id ?? '').trim(),
+          action_id: String(request.action_id ?? '').trim(),
+          action,
+        }),
+      },
+    );
+    return String(target.path ?? '').trim();
+  };
+
+  const openFlowerFileBrowser = async (request: ActivityFileActionOpenRequest): Promise<void> => {
+    const path = await resolveFlowerFileActionPath(request, 'browse_directory');
+    if (!path) return;
+    await openFileBrowserAtPath(path, {
+      title: 'Flower file context',
+      openStrategy: 'focus_latest_or_create',
+    });
+  };
+
+  const openFlowerFilePreview = async (request: ActivityFileActionOpenRequest): Promise<void> => {
+    const path = await resolveFlowerFileActionPath(request, 'preview');
+    if (!path) return;
+    await openFilePreview(fileItemFromPath(path), {
+      focus: true,
+      reusePolicy: 'same_file_or_create',
+    });
   };
 
   const closeAskFlowerComposer = () => {
@@ -3134,6 +3180,8 @@ export function EnvAppShell() {
         openTerminalInDirectory,
         openFileBrowserAtPath,
         openFilePreview,
+        openFlowerFileBrowser,
+        openFlowerFilePreview,
         consumeOpenTerminalInDirectoryRequest,
         aiThreadFocusSeq,
         aiThreadFocusId,

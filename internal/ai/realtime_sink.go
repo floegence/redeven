@@ -409,14 +409,18 @@ func (s *Service) broadcastThreadState(endpointID string, threadID string, runID
 }
 
 func (s *Service) broadcastStreamEvent(endpointID string, threadID string, runID string, streamEvent any) {
+	publicStreamEvent, ok := sanitizePublicStreamEvent(streamEvent)
+	if !ok {
+		return
+	}
 	ev := RealtimeEvent{
 		EventType:   RealtimeEventTypeStream,
 		EndpointID:  strings.TrimSpace(endpointID),
 		ThreadID:    strings.TrimSpace(threadID),
 		RunID:       strings.TrimSpace(runID),
 		AtUnixMs:    time.Now().UnixMilli(),
-		StreamKind:  classifyStreamKind(streamEvent),
-		StreamEvent: streamEvent,
+		StreamKind:  classifyStreamKind(publicStreamEvent),
+		StreamEvent: publicStreamEvent,
 	}
 	s.broadcastRealtimeEvent(ev)
 }
@@ -432,6 +436,10 @@ func (s *Service) broadcastTranscriptMessage(endpointID string, threadID string,
 	if raw == "" {
 		return
 	}
+	safeMessageJSON, err := SanitizeActivityTimelineMessageJSON(raw)
+	if err != nil || len(safeMessageJSON) == 0 {
+		return
+	}
 	if atUnixMs <= 0 {
 		atUnixMs = time.Now().UnixMilli()
 	}
@@ -442,7 +450,7 @@ func (s *Service) broadcastTranscriptMessage(endpointID string, threadID string,
 		RunID:        strings.TrimSpace(runID),
 		AtUnixMs:     atUnixMs,
 		MessageRowID: rowID,
-		MessageJSON:  json.RawMessage(raw),
+		MessageJSON:  safeMessageJSON,
 	}
 	s.broadcastRealtimeEvent(ev)
 }

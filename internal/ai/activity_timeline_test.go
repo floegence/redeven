@@ -318,9 +318,9 @@ func TestActivityTimelineFromAnyDecodesSnakeCaseBlock(t *testing.T) {
 					map[string]any{"kind": "lines", "label": "lines", "value": "42", "tone": "neutral"},
 				},
 				"target_refs": []any{
-					map[string]any{"kind": "file", "label": "package.json", "path": "package.json"},
+					map[string]any{"kind": "file", "label": "package.json"},
 				},
-				"payload": map[string]any{"operation": "read", "path": "package.json"},
+				"payload": map[string]any{"operation": "read", "display_name": "package.json"},
 			},
 		},
 	}
@@ -365,6 +365,13 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 			Chips:          []observation.ActivityChip{{Kind: "exit_code", Label: "exit", Value: "0", Tone: "neutral"}},
 			Payload:        map[string]any{"command": "npm test", "exit_code": 0},
 		}},
+	}, map[string]FlowerActivityFileAction{
+		"file_action_json": {
+			ActionID:      "file_action_json",
+			DisplayName:   "package.json",
+			PreviewPath:   "/workspace/package.json",
+			DirectoryPath: "/workspace",
+		},
 	})
 
 	raw, err := json.Marshal(block)
@@ -375,9 +382,16 @@ func TestActivityTimelineBlockJSONUsesSnakeCase(t *testing.T) {
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		t.Fatalf("Unmarshal: %v", err)
 	}
-	for _, key := range []string{"schema_version", "run_id", "thread_id", "turn_id", "trace_id", "summary", "items"} {
+	for _, key := range []string{"schema_version", "run_id", "thread_id", "turn_id", "trace_id", "summary", "items", "file_actions"} {
 		if _, ok := decoded[key]; !ok {
 			t.Fatalf("missing key %q in %s", key, raw)
+		}
+	}
+	fileActions := decoded["file_actions"].(map[string]any)
+	action := fileActions["file_action_json"].(map[string]any)
+	for _, key := range []string{"action_id", "display_name", "preview_path", "directory_path"} {
+		if _, ok := action[key]; !ok {
+			t.Fatalf("missing file action key %q in %s", key, raw)
 		}
 	}
 	item := decoded["items"].([]any)[0].(map[string]any)

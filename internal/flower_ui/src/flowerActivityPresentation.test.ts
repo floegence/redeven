@@ -17,6 +17,27 @@ function item(overrides: Partial<FlowerActivityItem>): FlowerActivityItem {
   };
 }
 
+const fileActions = {
+  read_app: {
+    action_id: 'read_app',
+    display_name: 'app.ts',
+    can_preview: true,
+    can_browse_directory: true,
+  },
+  edit_app: {
+    action_id: 'edit_app',
+    display_name: 'app.ts',
+    can_preview: true,
+    can_browse_directory: true,
+  },
+  delete_old: {
+    action_id: 'delete_old',
+    display_name: 'old.ts',
+    can_preview: false,
+    can_browse_directory: true,
+  },
+} as const;
+
 describe('presentFlowerActivityItem', () => {
   it('uses the terminal command as the compact row label', () => {
     const presentation = presentFlowerActivityItem(item({
@@ -25,9 +46,11 @@ describe('presentFlowerActivityItem', () => {
       payload: {
         command: 'npm run build -- --mode production',
         cwd: '/workspace/app',
+        workdir: '/workspace/private',
         exit_code: 0,
         stdout: 'built\n',
         stderr: '',
+        stdin: 'secret',
       },
       chips: [{ kind: 'exit_code', label: 'exit', value: '0', tone: 'neutral' }],
     }));
@@ -37,6 +60,9 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.meta).toContain('exit 0');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('command:npm run build -- --mode production');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('stdout:built');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('cwd');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('workdir');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('stdin');
   });
 
   it('prefers the terminal payload command over a stale generic label', () => {
@@ -44,11 +70,11 @@ describe('presentFlowerActivityItem', () => {
       renderer: 'terminal',
       label: 'terminal.exec',
       payload: {
-        command: 'pnpm test -- src/ui/chat/activity/activityDetailPresentation.test.ts',
+        command: 'pnpm test -- src/ui/chat/activity/ActivityTimelineBlock.test.tsx',
       },
     }));
 
-    expect(presentation.label).toBe('pnpm test -- src/ui/chat/activity/activityDetailPresentation.test.ts');
+    expect(presentation.label).toBe('pnpm test -- src/ui/chat/activity/ActivityTimelineBlock.test.tsx');
   });
 
   it('renders todo details from structured payload', () => {
@@ -132,26 +158,35 @@ describe('presentFlowerActivityItem', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'file.read',
       renderer: 'file',
-      label: '/workspace/src/app.ts',
-      target_refs: [{ kind: 'file', label: '/workspace/src/app.ts', path: '/workspace/src/app.ts' }],
+      label: 'app.ts#dcbdf9b8c27f#e1703606242a',
+      target_refs: [{ kind: 'file', label: 'app.ts#dcbdf9b8c27f' }],
       payload: {
         operation: 'read',
-        file_path: '/workspace/src/app.ts',
+        display_name: 'app.ts',
+        file_action_id: 'read_app',
         content: 'const value = 1;\n',
         line_offset: 7,
         line_count: 1,
         total_lines: 42,
         truncated: false,
       },
-    }));
+    }), fileActions);
 
-    expect(presentation.label).toBe('Read /workspace/src/app.ts');
-    expect(presentation.title).toEqual({ kind: 'file', verb: 'Read', path: '/workspace/src/app.ts' });
+    expect(presentation.label).toBe('Read app.ts');
+    expect(presentation.title).toEqual({ kind: 'file', verb: 'Read', display_name: 'app.ts' });
+    expect(presentation.meta).not.toContain('#dcbdf9b8c27f');
+    expect(presentation.primaryAction).toEqual({
+      action_id: 'read_app',
+      display_name: 'app.ts',
+      can_preview: true,
+      can_browse_directory: true,
+    });
     expect(presentation.detailLines.some((line) => ['content', 'file_path', 'operation'].includes(line.label))).toBe(false);
     expect(presentation.detailBlocks).toEqual([{
       kind: 'file_read',
       action: {
-        path: '/workspace/src/app.ts',
+        action_id: 'read_app',
+        display_name: 'app.ts',
         can_preview: true,
         can_browse_directory: true,
       },
@@ -163,53 +198,60 @@ describe('presentFlowerActivityItem', () => {
     }]);
   });
 
-  it('renders file writes as Edit with side-by-side diff data only', () => {
+  it('strips content-ref suffixes from file labels when display_name is absent', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'file.read',
+      renderer: 'file',
+      label: 'a.md#dcbdf9b8c27f#e1703606242a',
+      payload: {
+        operation: 'read',
+        content: 'hello\n',
+        line_offset: 1,
+        line_count: 1,
+        total_lines: 1,
+      },
+    }));
+
+    expect(presentation.label).toBe('Read a.md');
+    expect(presentation.title).toEqual({ kind: 'file', verb: 'Read', display_name: 'a.md' });
+  });
+
+  it('renders file writes as Edit with unified patch data only', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'file.write',
       renderer: 'file',
       payload: {
         operation: 'write',
-        file_path: '/workspace/src/app.ts',
+        display_name: 'app.ts',
+        file_action_id: 'edit_app',
         change_type: 'update',
-        original_file: 'const value = 1;\n',
-        updated_file: 'const value = 2;\n',
-        structured_diff: [{
-          old_start: 1,
-          old_lines: 1,
-          new_start: 1,
-          new_lines: 1,
-          before: ['const value = 1;'],
-          after: ['const value = 2;'],
-          before_kinds: ['removed'],
-          after_kinds: ['added'],
-        }],
+        additions: 1,
+        deletions: 1,
+        unified_diff: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,1 +1,1 @@\n-const value = 1;\n+const value = 2;',
       },
-    }));
+    }), fileActions);
 
-    expect(presentation.label).toBe('Edit /workspace/src/app.ts');
-    expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', path: '/workspace/src/app.ts' });
-    expect(presentation.detailLines.some((line) => line.value.includes('original_file') || line.value.includes('updated_file'))).toBe(false);
+    expect(presentation.label).toBe('Edit app.ts');
+    expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: 'app.ts' });
+    expect(presentation.detailLines.some((line) => line.value.includes('unified_diff') || line.value.includes('file_path'))).toBe(false);
     expect(presentation.detailBlocks).toEqual([{
       kind: 'file_diff',
       files: [{
-        path: '/workspace/src/app.ts',
+        display_name: 'app.ts',
+        old_path: '',
+        new_path: '',
         change_type: 'update',
         action: {
-          path: '/workspace/src/app.ts',
+          action_id: 'edit_app',
+          display_name: 'app.ts',
           can_preview: true,
           can_browse_directory: true,
         },
-        hunks: [{
-          old_start: 1,
-          old_lines: 1,
-          new_start: 1,
-          new_lines: 1,
-          before: ['const value = 1;'],
-          after: ['const value = 2;'],
-          before_kinds: ['removed'],
-          after_kinds: ['added'],
-        }],
+        additions: 1,
+        deletions: 1,
+        patch_text: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,1 +1,1 @@\n-const value = 1;\n+const value = 2;',
         truncated: false,
+        diff_unavailable_reason: '',
       }],
     }]);
   });
@@ -222,38 +264,40 @@ describe('presentFlowerActivityItem', () => {
         operation: 'apply_patch',
         mutations: [
           {
-            file_path: '/workspace/src/app.ts',
+            display_name: 'app.ts',
+            file_action_id: 'edit_app',
             change_type: 'update',
-            structured_diff: [{ old_start: 1, old_lines: 1, new_start: 1, new_lines: 1, before: ['old'], after: ['new'], before_kinds: ['removed'], after_kinds: ['added'] }],
-            original_file: 'old\n',
-            updated_file: 'new\n',
+            additions: 1,
+            deletions: 1,
+            unified_diff: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
           },
           {
-            file_path: '/workspace/src/old.ts',
+            display_name: 'old.ts',
+            file_action_id: 'delete_old',
             change_type: 'delete',
-            structured_diff: [{ old_start: 1, old_lines: 1, new_start: 1, new_lines: 0, before: ['remove'], after: [], before_kinds: ['removed'] }],
-            original_file: 'remove\n',
-            updated_file: '',
+            deletions: 1,
+            unified_diff: '--- a/src/old.ts\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-remove',
           },
         ],
       },
-    }));
+    }), fileActions);
 
     expect(presentation.label).toBe('Edit 2 files');
-    expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', path: '2 files' });
-    expect(presentation.detailLines.some((line) => line.value.includes('original_file') || line.value.includes('patch'))).toBe(false);
+    expect(presentation.title).toEqual({ kind: 'file', verb: 'Edit', display_name: '2 files' });
+    expect(presentation.primaryAction).toBeUndefined();
+    expect(presentation.detailLines.some((line) => line.value.includes('patch'))).toBe(false);
     expect(presentation.detailBlocks[0]).toMatchObject({
       kind: 'file_diff',
       files: [
         {
-          path: '/workspace/src/app.ts',
+          display_name: 'app.ts',
           change_type: 'update',
-          action: { path: '/workspace/src/app.ts', can_preview: true, can_browse_directory: true },
+          action: { action_id: 'edit_app', display_name: 'app.ts', can_preview: true, can_browse_directory: true },
         },
         {
-          path: '/workspace/src/old.ts',
+          display_name: 'old.ts',
           change_type: 'delete',
-          action: { path: '/workspace/src/old.ts', can_preview: false, can_browse_directory: true },
+          action: { action_id: 'delete_old', display_name: 'old.ts', can_preview: false, can_browse_directory: true },
         },
       ],
     });
@@ -266,49 +310,21 @@ describe('presentFlowerActivityItem', () => {
       payload: {
         operation: 'apply_patch',
         mutations: [{
-          file_path: '/workspace/src/old.ts',
+          display_name: 'old.ts',
+          file_action_id: 'delete_old',
           change_type: 'delete',
-          structured_diff: [{ old_start: 1, old_lines: 1, new_start: 1, new_lines: 0, before: ['remove'], after: [] }],
+          unified_diff: '--- a/src/old.ts\n+++ /dev/null\n@@ -1,1 +0,0 @@\n-remove',
         }],
       },
-    }));
+    }), fileActions);
 
-    expect(presentation.label).toBe('Delete /workspace/src/old.ts');
-    expect(presentation.title).toEqual({ kind: 'file', verb: 'Delete', path: '/workspace/src/old.ts' });
-  });
-
-  it('preserves apply_patch context line kinds for diff rendering', () => {
-    const presentation = presentFlowerActivityItem(item({
-      tool_name: 'apply_patch',
-      renderer: 'patch',
-      payload: {
-        operation: 'apply_patch',
-        mutations: [{
-          file_path: '/workspace/src/app.ts',
-          change_type: 'update',
-          structured_diff: [{
-            old_start: 10,
-            old_lines: 3,
-            new_start: 10,
-            new_lines: 3,
-            before: ['shared before', 'old value', 'shared after'],
-            after: ['shared before', 'new value', 'shared after'],
-            before_kinds: ['context', 'removed', 'context'],
-            after_kinds: ['context', 'added', 'context'],
-          }],
-        }],
-      },
-    }));
-
-    const diff = presentation.detailBlocks[0];
-    expect(diff).toMatchObject({
-      kind: 'file_diff',
-      files: [{
-        hunks: [{
-          before_kinds: ['context', 'removed', 'context'],
-          after_kinds: ['context', 'added', 'context'],
-        }],
-      }],
+    expect(presentation.label).toBe('Delete old.ts');
+    expect(presentation.title).toEqual({ kind: 'file', verb: 'Delete', display_name: 'old.ts' });
+    expect(presentation.primaryAction).toEqual({
+      action_id: 'delete_old',
+      display_name: 'old.ts',
+      can_preview: false,
+      can_browse_directory: true,
     });
   });
 
@@ -323,5 +339,29 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailLines.length).toBeGreaterThan(0);
     expect(presentation.detailLines.map((line) => line.label)).toContain('status');
     expect(presentation.detailBlocks.length).toBeGreaterThan(0);
+  });
+
+  it('renders structured use_skill payloads with their real result fields', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'use_skill',
+      renderer: 'structured',
+      label: 'frontend-design',
+      payload: {
+        operation: 'use_skill',
+        name: 'frontend-design',
+        content: 'Loaded frontend design guidance.',
+        content_ref: 'content_123',
+        activation_id: 'act_123',
+        already_active: false,
+      },
+    }));
+
+    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`);
+    expect(rows).toContain('operation:use_skill');
+    expect(rows).toContain('name:frontend-design');
+    expect(rows).toContain('content:Loaded frontend design guidance.');
+    expect(rows).toContain('content ref:content_123');
+    expect(rows).toContain('activation:act_123');
+    expect(rows).not.toContain('tool:use_skill');
   });
 });

@@ -34,6 +34,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Clock: Icon,
     Code: Icon,
     Copy: Icon,
+    FileText: Icon,
     Folder: Icon,
     FolderOpen: Icon,
     GitBranch: Icon,
@@ -249,6 +250,7 @@ function activityTimeline(args: {
   severity?: 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
   needs_attention?: boolean;
   items: readonly FlowerActivityItem[];
+  file_actions?: FlowerActivityTimelineBlock['file_actions'];
 }): FlowerActivityTimelineBlock {
   const status = args.status ?? 'success';
   const severity = args.severity ?? (status === 'success' ? 'quiet' : status === 'error' ? 'error' : 'normal');
@@ -283,6 +285,7 @@ function activityTimeline(args: {
       counts,
     },
     items: args.items,
+    ...(args.file_actions ? { file_actions: args.file_actions } : {}),
   };
 }
 
@@ -800,6 +803,109 @@ describe('FlowerSurface navigation', () => {
     }));
     expect(loadThread).toHaveBeenCalledWith('thread-new');
     expect(host.textContent).toContain('Flower verification is complete.');
+  });
+
+  it('renders file activity actions and unified patch lines inline', async () => {
+    const previewFile = vi.fn(async () => {});
+    const browseFolder = vi.fn(async () => {});
+    const activityThread = thread({
+      thread_id: 'thread-file-activity',
+      title: 'File activity',
+      messages: [
+        {
+          id: 'm-file',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 20,
+          blocks: [
+            {
+              type: 'markdown',
+              content: 'I will edit the file.',
+            },
+            activityTimeline({
+              file_actions: {
+                edit_app: {
+                  action_id: 'edit_app',
+                  display_name: 'app.ts',
+                  can_preview: true,
+                  can_browse_directory: true,
+                },
+              },
+              items: [activityItem({
+                item_id: 'tool-write',
+                tool_id: 'tool-write',
+                tool_name: 'file.write',
+                renderer: 'file',
+                label: 'app.ts#dcbdf9b8c27f',
+                payload: {
+                  operation: 'write',
+                  display_name: 'app.ts',
+                  file_action_id: 'edit_app',
+                  change_type: 'update',
+                  additions: 1,
+                  deletions: 1,
+                  unified_diff: [
+                    '--- a/src/app.ts',
+                    '+++ b/src/app.ts',
+                    '@@ -1,1 +1,1 @@',
+                    '-const value = 1;',
+                    '+const value = 2;',
+                  ].join('\n'),
+                },
+              })],
+            }),
+            {
+              type: 'markdown',
+              content: 'Done.',
+            },
+          ],
+        },
+      ],
+    });
+    const host = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [activityThread]),
+      loadThread: vi.fn(async () => activityThread),
+      openFilePreview: previewFile,
+      openFileBrowser: browseFolder,
+    });
+
+    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-file-activity"] button')));
+    (host.querySelector('[data-thread-id="thread-file-activity"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(host.querySelector('[data-flower-activity-item-id="tool-write"]')));
+
+    expect(host.textContent).toContain('I will edit the file.');
+    expect(host.textContent).toContain('Done.');
+    expect(host.textContent).not.toContain('#dcbdf9b8c27f');
+    expect(host.querySelectorAll('.flower-host-activity-inline-line > .flower-host-activity-file-actions button')).toHaveLength(2);
+    const preview = host.querySelector('button[aria-label="Preview app.ts"]') as HTMLButtonElement | null;
+    const browser = host.querySelector('button[aria-label="Browse folder for app.ts"]') as HTMLButtonElement | null;
+    expect(preview?.disabled).toBe(false);
+    expect(browser?.disabled).toBe(false);
+
+    const toggle = host.querySelector('[data-flower-activity-item-id="tool-write"] .flower-host-activity-inline-button') as HTMLButtonElement;
+    toggle.click();
+    await waitFor(() => Boolean(host.querySelector('.flower-host-activity-file-diff-line-del')));
+    expect(host.querySelector('.flower-host-activity-file-diff-line-del')?.textContent).toContain('-const value = 1;');
+    expect(host.querySelector('.flower-host-activity-file-diff-line-add')?.textContent).toContain('+const value = 2;');
+
+    preview?.click();
+    browser?.click();
+    expect(previewFile).toHaveBeenCalledWith(expect.objectContaining({
+      thread_id: 'thread-file-activity',
+      message_id: 'm-file',
+      block_index: 1,
+      item_id: 'tool-write',
+      action_id: 'edit_app',
+    }));
+    expect(browseFolder).toHaveBeenCalledWith(expect.objectContaining({
+      thread_id: 'thread-file-activity',
+      message_id: 'm-file',
+      block_index: 1,
+      item_id: 'tool-write',
+      action_id: 'edit_app',
+    }));
   });
 
   it('keeps the left thread list ordered by creation time when a selected thread refreshes', async () => {
@@ -2175,9 +2281,10 @@ describe('FlowerSurface navigation', () => {
     expect(host.textContent).not.toContain('3 / 3 completed');
     expect(host.textContent).not.toContain('Draft final answer');
     expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(tool_names.length);
-    for (const tool_name of tool_names) {
-      expect(host.textContent).toContain(tool_name);
-    }
+    expect(host.textContent).toContain('terminal.exec');
+    expect(host.textContent).toContain('Update todos');
+    expect(host.textContent).toContain('completed 1');
+    expect(host.textContent).toContain('task_complete');
     expect(host.querySelector('.flower-host-activity-inline-row')?.getAttribute('aria-label')).toContain('terminal.exec');
   });
 

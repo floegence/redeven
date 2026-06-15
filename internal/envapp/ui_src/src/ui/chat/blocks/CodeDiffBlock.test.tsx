@@ -17,16 +17,6 @@ const SMALL_DIFF_MODEL: CodeDiffRenderModel = {
     { type: 'removed', sign: '-', lineNumber: 1, content: 'const before = 1;' },
     { type: 'added', sign: '+', lineNumber: 1, content: 'const after = 2;' },
   ],
-  split: {
-    left: [
-      { type: 'removed', lineNumber: 1, content: 'const before = 1;' },
-      { type: 'empty', lineNumber: null, content: '' },
-    ],
-    right: [
-      { type: 'empty', lineNumber: null, content: '' },
-      { type: 'added', lineNumber: 1, content: 'const after = 2;' },
-    ],
-  },
   stats: {
     added: 1,
     removed: 1,
@@ -40,18 +30,6 @@ const LARGE_DIFF_MODEL: CodeDiffRenderModel = {
     lineNumber: index + 1,
     content: `line ${index + 1}`,
   })),
-  split: {
-    left: Array.from({ length: 24 }, (_, index) => ({
-      type: index % 2 === 0 ? 'context' : 'empty',
-      lineNumber: index % 2 === 0 ? index + 1 : null,
-      content: index % 2 === 0 ? `before ${index + 1}` : '',
-    })),
-    right: Array.from({ length: 24 }, (_, index) => ({
-      type: index % 2 === 0 ? 'context' : 'added',
-      lineNumber: index + 1,
-      content: `after ${index + 1}`,
-    })),
-  },
   stats: {
     added: 12,
     removed: 0,
@@ -153,12 +131,6 @@ describe('CodeDiffBlock', () => {
     expect(renderCodeDiffModelSyncMock).not.toHaveBeenCalled();
     expect(host.querySelector('.chat-code-diff-viewport')).toBeTruthy();
     expect(host.querySelectorAll('.chat-diff-line')).toHaveLength(4);
-
-    const splitButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Split');
-    splitButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    await flushAsync();
-
-    expect(host.querySelectorAll('.chat-code-diff-split-panel')).toHaveLength(2);
-    expect(host.querySelectorAll('.chat-diff-line')).toHaveLength(8);
+    expect(host.querySelector('.chat-code-diff-unified')).toBeTruthy();
   });
 });

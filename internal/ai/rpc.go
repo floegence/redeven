@@ -362,13 +362,16 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			HasMore:        hasMore,
 		}
 		for _, m := range msgs {
-			raw := strings.TrimSpace(m.MessageJSON)
-			if raw == "" {
+			raw, err := SanitizeActivityTimelineMessageJSON(m.MessageJSON)
+			if err != nil {
+				return nil, toAIRPCError(err)
+			}
+			if len(raw) == 0 {
 				continue
 			}
 			out.Messages = append(out.Messages, aiTranscriptMessageItem{
 				RowID:       m.ID,
-				MessageJSON: json.RawMessage(raw),
+				MessageJSON: raw,
 			})
 		}
 		return out, nil
@@ -407,10 +410,14 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		if strings.TrimSpace(runID) == "" || strings.TrimSpace(msgJSON) == "" {
 			return &aiGetActiveRunSnapshotResp{OK: false}, nil
 		}
+		safeMessageJSON, err := SanitizeActivityTimelineMessageJSON(msgJSON)
+		if err != nil {
+			return nil, toAIRPCError(err)
+		}
 		return &aiGetActiveRunSnapshotResp{
 			OK:          true,
 			RunID:       runID,
-			MessageJSON: json.RawMessage(strings.TrimSpace(msgJSON)),
+			MessageJSON: safeMessageJSON,
 		}, nil
 	})
 

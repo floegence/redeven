@@ -4,6 +4,7 @@ import { fetchGatewayJSON } from '../services/gatewayApi';
 import type { AgentSettingsResponse, AIConfig } from '../pages/settings/types';
 import type {
   FlowerActivityChip,
+  FlowerActivityFileAction,
   FlowerActivityTimelineBlock,
   FlowerActivityTargetRef,
   FlowerActivityRenderer,
@@ -130,6 +131,205 @@ const FLOWER_ACTIVITY_RENDERERS = new Set<FlowerActivityRenderer>([
   'completion',
 ]);
 
+const ACTIVITY_PAYLOAD_KEYS_BY_RENDERER: Readonly<Record<FlowerActivityRenderer, ReadonlySet<string>>> = {
+  terminal: new Set([
+    'command',
+    'timeout_ms',
+    'timeout_source',
+    'requested_timeout_ms',
+    'description',
+    'exit_code',
+    'duration_ms',
+    'timed_out',
+    'truncated',
+    'stdout',
+    'stderr',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  file: new Set([
+    'operation',
+    'display_name',
+    'file_action_id',
+    'content',
+    'line_offset',
+    'line_count',
+    'total_lines',
+    'change_type',
+    'additions',
+    'deletions',
+    'unified_diff',
+    'diff_unavailable_reason',
+    'truncated',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  patch: new Set([
+    'operation',
+    'files_changed',
+    'hunks',
+    'additions',
+    'deletions',
+    'input_format',
+    'normalized_format',
+    'mutations',
+    'truncated',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  todos: new Set([
+    'todos',
+    'counts',
+    'result',
+    'args',
+    'expected_version',
+    'explanation',
+    'truncated',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  web_search: new Set([
+    'query',
+    'provider',
+    'count',
+    'sources',
+    'results',
+    'truncated',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  question: new Set([
+    'reason_code',
+    'required_from_user',
+    'questions',
+    'contains_secret',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  completion: new Set([
+    'result',
+    'evidence_refs',
+    'remaining_risks',
+    'next_actions',
+    'truncated',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  structured: new Set([
+    'operation',
+    'query',
+    'count',
+    'provider',
+    'name',
+    'action',
+    'limit',
+    'data',
+    'result',
+    'content',
+    'content_ref',
+    'activation_id',
+    'already_active',
+    'mode_hints',
+    'dependencies',
+    'dependency_degraded',
+    'reason',
+    'id',
+    'status',
+    'message',
+    'agents',
+    'created',
+    'waiting',
+    'terminated',
+    'terminated_all',
+    'timed_out',
+    'targets',
+    'validation',
+    'stats',
+    'spec',
+    'output',
+    'structured',
+    'key_files',
+    'rows',
+    'cards',
+    'items',
+    'evidence_refs',
+    'remaining_risks',
+    'next_actions',
+    'truncated',
+    'summary',
+    'details',
+    'error',
+  ]),
+};
+
+const FILE_MUTATION_PAYLOAD_KEYS = new Set([
+  'display_name',
+  'file_action_id',
+  'change_type',
+  'additions',
+  'deletions',
+  'unified_diff',
+  'diff_unavailable_reason',
+  'truncated',
+]);
+
+const ACTIVITY_NESTED_PAYLOAD_FORBIDDEN_KEYS = new Set([
+  'action_path',
+  'directory_path',
+  'display_path',
+  'file_path',
+  'original_file',
+  'path',
+  'preview_path',
+  'root_dir',
+  'stdin',
+  'updated_file',
+  'workdir',
+  'cwd',
+]);
+
+const ACTIVITY_TARGET_REF_KEYS = new Set([
+  'kind',
+  'label',
+  'uri',
+  'line',
+]);
+
+const ACTIVITY_FILE_ACTION_KEYS = new Set([
+  'action_id',
+  'display_name',
+  'can_preview',
+  'can_browse_directory',
+]);
+
+function activityPayloadKeyPolicyToken(key: string): string {
+  return key
+    .replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)
+    .replace(/[-.:]/g, '_')
+    .toLowerCase();
+}
+
 function trim(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -180,6 +380,13 @@ function validateActivityPayloadKey(key: string, field: string) {
   }
 }
 
+function validateActivityNestedPayloadKey(key: string, field: string) {
+  validateActivityPayloadKey(key, field);
+  if (ACTIVITY_NESTED_PAYLOAD_FORBIDDEN_KEYS.has(activityPayloadKeyPolicyToken(key))) {
+    flowerContractError(`${field} is not part of the nested activity payload contract.`);
+  }
+}
+
 function normalizeActivityJSONValue(value: unknown, field: string, depth: number): unknown {
   if (depth > 8) {
     flowerContractError(`${field} exceeds maximum depth.`);
@@ -203,7 +410,7 @@ function normalizeActivityJSONValue(value: unknown, field: string, depth: number
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [key, item] of Object.entries(value)) {
-      validateActivityPayloadKey(key, `${field}.${key}`);
+      validateActivityNestedPayloadKey(key, `${field}.${key}`);
       out[key] = normalizeActivityJSONValue(item, `${field}.${key}`, depth + 1);
     }
     return out;
@@ -211,17 +418,50 @@ function normalizeActivityJSONValue(value: unknown, field: string, depth: number
   flowerContractError(`${field} must be JSON-compatible.`);
 }
 
-function normalizeActivityPayload(value: unknown, field: string): Readonly<Record<string, unknown>> | undefined {
+function normalizeActivityPayload(
+  value: unknown,
+  field: string,
+  renderer: FlowerActivityRenderer | undefined,
+): Readonly<Record<string, unknown>> | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     flowerContractError(`${field} must be an object.`);
   }
+  const rendererName = renderer ?? 'structured';
+  const allowedKeys = ACTIVITY_PAYLOAD_KEYS_BY_RENDERER[rendererName];
   const out: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(value)) {
     validateActivityPayloadKey(key, `${field}.${key}`);
+    if (!allowedKeys.has(key)) {
+      flowerContractError(`${field}.${key} is not part of the ${rendererName} payload contract.`);
+    }
+    if (rendererName === 'patch' && key === 'mutations') {
+      out[key] = normalizeActivityPatchMutations(item, `${field}.${key}`);
+      continue;
+    }
     out[key] = normalizeActivityJSONValue(item, `${field}.${key}`, 1);
   }
   return out;
+}
+
+function normalizeActivityPatchMutations(value: unknown, field: string): readonly Readonly<Record<string, unknown>>[] {
+  if (!Array.isArray(value)) {
+    flowerContractError(`${field} must be an array.`);
+  }
+  return value.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      flowerContractError(`${field}[${index}] must be an object.`);
+    }
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(item)) {
+      validateActivityPayloadKey(key, `${field}[${index}].${key}`);
+      if (!FILE_MUTATION_PAYLOAD_KEYS.has(key)) {
+        flowerContractError(`${field}[${index}].${key} is not part of the patch mutation payload contract.`);
+      }
+      out[key] = normalizeActivityJSONValue(entry, `${field}[${index}].${key}`, 1);
+    }
+    return out;
+  });
 }
 
 function normalizeActivityChips(value: unknown, field: string): readonly FlowerActivityChip[] | undefined {
@@ -257,6 +497,11 @@ function normalizeActivityTargetRefs(value: unknown, field: string): readonly Fl
       flowerContractError(`${field}[${index}] must be an object.`);
     }
     const record = item as Record<string, unknown>;
+    for (const refField of Object.keys(record)) {
+      if (!ACTIVITY_TARGET_REF_KEYS.has(refField)) {
+        flowerContractError(`${field}[${index}].${refField} is not part of the activity target ref contract.`);
+      }
+    }
     const uri = optionalActivityString(record.uri, `${field}[${index}].uri`, 1000);
     if (uri && !uri.startsWith('http://') && !uri.startsWith('https://') && !uri.startsWith('artifact://')) {
       flowerContractError(`${field}[${index}].uri must use http, https, or artifact scheme.`);
@@ -265,15 +510,51 @@ function normalizeActivityTargetRefs(value: unknown, field: string): readonly Fl
     if (line !== undefined && (typeof line !== 'number' || !Number.isInteger(line) || line < 0)) {
       flowerContractError(`${field}[${index}].line must be a non-negative integer.`);
     }
-    const targetPath = optionalActivityString(record.path, `${field}[${index}].path`, 500);
     return {
       kind: requireActivityToken(record.kind, `${field}[${index}].kind`, 64),
       label: requireActivityString(record.label, `${field}[${index}].label`, 240),
       ...(uri ? { uri } : {}),
-      ...(targetPath ? { path: targetPath } : {}),
       ...(typeof line === 'number' ? { line } : {}),
     };
   });
+}
+
+function normalizeActivityFileActions(value: unknown, field: string): Readonly<Record<string, FlowerActivityFileAction>> | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    flowerContractError(`${field} must be an object.`);
+  }
+  const out: Record<string, FlowerActivityFileAction> = {};
+  for (const [key, item] of Object.entries(value)) {
+    const actionField = `${field}.${key}`;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      flowerContractError(`${actionField} must be an object.`);
+    }
+    const record = item as Record<string, unknown>;
+    for (const fileActionField of Object.keys(record)) {
+      if (!ACTIVITY_FILE_ACTION_KEYS.has(fileActionField)) {
+        flowerContractError(`${actionField}.${fileActionField} is not part of the file action contract.`);
+      }
+    }
+    const actionID = requireActivityToken(record.action_id, `${actionField}.action_id`, 96);
+    if (trim(key) !== actionID) {
+      flowerContractError(`${actionField}.action_id must match its map key.`);
+    }
+    const displayName = requireActivityString(record.display_name, `${actionField}.display_name`, 240);
+    if (typeof record.can_preview !== 'boolean') {
+      flowerContractError(`${actionField}.can_preview must be a boolean.`);
+    }
+    if (typeof record.can_browse_directory !== 'boolean') {
+      flowerContractError(`${actionField}.can_browse_directory must be a boolean.`);
+    }
+    out[actionID] = {
+      action_id: actionID,
+      display_name: displayName,
+      can_preview: record.can_preview,
+      can_browse_directory: record.can_browse_directory,
+    };
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function readStatus(thread: ThreadView): ThreadReadStatus {
@@ -513,6 +794,7 @@ function blockText(block: MessageBlock): string {
 }
 
 function mapActivityTimelineBlock(block: Extract<MessageBlock, { type: 'activity-timeline' }>): FlowerActivityTimelineBlock {
+  const fileActions = normalizeActivityFileActions(block.file_actions, 'activity_timeline.file_actions');
   return {
     type: 'activity-timeline',
     schema_version: block.schema_version,
@@ -531,7 +813,7 @@ function mapActivityTimelineBlock(block: Extract<MessageBlock, { type: 'activity
     },
     items: block.items.map((item) => {
       const renderer = normalizeActivityRenderer(item.renderer, 'activity_item.renderer');
-      const payload = normalizeActivityPayload(item.payload, 'activity_item.payload');
+      const payload = normalizeActivityPayload(item.payload, 'activity_item.payload', renderer);
       const chips = normalizeActivityChips(item.chips, 'activity_item.chips');
       const targetRefs = normalizeActivityTargetRefs(item.target_refs, 'activity_item.target_refs');
       return {
@@ -556,6 +838,7 @@ function mapActivityTimelineBlock(block: Extract<MessageBlock, { type: 'activity
         ...(item.metadata ? { metadata: Object.fromEntries(Object.entries(item.metadata).map(([key, value]) => [trim(key), trim(value)]).filter(([key, value]) => key && value)) } : {}),
       };
     }).filter((item) => item.item_id),
+    ...(fileActions ? { file_actions: fileActions } : {}),
   };
 }
 
@@ -785,8 +1068,11 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     if (!tid) throw new Error(copy.missingThreadID);
     const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'GET' });
     const messagesResp = await options.rpc.ai.listMessages({ threadId: tid, tail: true, limit: 200 });
-    const messages = (messagesResp.messages ?? [])
-      .map((item) => mapMessage(item.messageJson as Message))
+    const rawMessages = (messagesResp.messages ?? [])
+      .map((item) => item.messageJson as Message)
+      .filter((item): item is Message => Boolean(item && typeof item === 'object'));
+    const messages = rawMessages
+      .map(mapMessage)
       .filter((item): item is FlowerChatMessage => item !== null);
     if (!threadResp.thread) flowerContractError('thread is required.');
     return mapThread(threadResp.thread, messages, options);

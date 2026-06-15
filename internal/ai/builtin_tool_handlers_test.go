@@ -48,8 +48,7 @@ func TestBuiltInToolDefinitions_AskUserDescriptionMentionsStructuredInput(t *tes
 func TestNormalizeTruncatedToolPayload_PreservesApplyPatchStructure(t *testing.T) {
 	t.Parallel()
 
-	longBefore := strings.Repeat("before\n", 1200)
-	longAfter := strings.Repeat("after\n", 1200)
+	longPatch := strings.Repeat("+after\n", 1200)
 	payload := ApplyPatchResult{
 		FilesChanged:     1,
 		Hunks:            1,
@@ -58,19 +57,12 @@ func TestNormalizeTruncatedToolPayload_PreservesApplyPatchStructure(t *testing.T
 		InputFormat:      "begin_patch",
 		NormalizedFormat: "begin_patch",
 		Mutations: []FileMutationResult{{
-			FilePath:   "/workspace/app.ts",
-			NewPath:    "/workspace/app.ts",
-			ChangeType: "update",
-			StructuredDiff: []DiffHunkView{{
-				OldStart: 1,
-				OldLines: 1,
-				NewStart: 1,
-				NewLines: 1,
-				Before:   []string{longBefore},
-				After:    []string{longAfter},
-			}},
-			OriginalFile: longBefore,
-			UpdatedFile:  longAfter,
+			FilePath:    "/workspace/app.ts",
+			DisplayName: "app.ts",
+			NewPath:     "/workspace/app.ts",
+			ChangeType:  "update",
+			Additions:   1200,
+			UnifiedDiff: "--- a/workspace/app.ts\n+++ b/workspace/app.ts\n@@ -1,0 +1,1200 @@\n" + longPatch,
 		}},
 	}
 
@@ -96,8 +88,17 @@ func TestNormalizeTruncatedToolPayload_PreservesApplyPatchStructure(t *testing.T
 	if anyToString(mutation["file_path"]) != "/workspace/app.ts" || anyToString(mutation["change_type"]) != "update" {
 		t.Fatalf("mutation=%#v, want path and change type", mutation)
 	}
-	if len(toAnySlice(mutation["structured_diff"])) != 1 {
-		t.Fatalf("structured_diff=%#v, want retained hunk", mutation["structured_diff"])
+	if anyToString(mutation["display_name"]) != "app.ts" {
+		t.Fatalf("mutation display metadata=%#v", mutation)
+	}
+	if _, ok := mutation["preview_path"]; ok {
+		t.Fatalf("normalized tool result must not include preview_path: %#v", mutation)
+	}
+	if _, ok := mutation["directory_path"]; ok {
+		t.Fatalf("normalized tool result must not include directory_path: %#v", mutation)
+	}
+	if diff := anyToString(mutation["unified_diff"]); !strings.Contains(diff, "--- a/workspace/app.ts") || !strings.Contains(diff, "+after") {
+		t.Fatalf("unified_diff=%q, want patch text", diff)
 	}
 	if _, ok := mutation["raw"]; ok {
 		t.Fatalf("mutation must not collapse to raw: %#v", mutation)
@@ -217,7 +218,7 @@ func TestBuiltInToolHandlerExecute_PreservesLargeApplyPatchActivityPayload(t *te
 	if result.Status != toolResultStatusSuccess {
 		t.Fatalf("status=%q, details=%q", result.Status, result.Details)
 	}
-	activity := floretActivityForToolResult(result)
+	activity := floretActivityForToolResult(r, result)
 	if activity == nil {
 		t.Fatal("activity is nil")
 	}
@@ -232,8 +233,28 @@ func TestBuiltInToolHandlerExecute_PreservesLargeApplyPatchActivityPayload(t *te
 	if !ok {
 		t.Fatalf("mutation type=%T", mutations[0])
 	}
-	hunks := toAnySlice(mutation["structured_diff"])
-	if len(hunks) != 2 {
-		t.Fatalf("hunks=%#v, want two patch hunks", mutation["structured_diff"])
+	diff := anyToString(mutation["unified_diff"])
+	if strings.Count(diff, "@@ -") != 2 {
+		t.Fatalf("unified_diff=%q, want two patch hunks", diff)
+	}
+	if anyToString(mutation["display_name"]) != "app.txt" {
+		t.Fatalf("mutation display metadata=%#v", mutation)
+	}
+	if _, ok := mutation["preview_path"]; ok {
+		t.Fatalf("mutation activity payload must not include preview_path: %#v", mutation)
+	}
+	if _, ok := mutation["directory_path"]; ok {
+		t.Fatalf("mutation activity payload must not include directory_path: %#v", mutation)
+	}
+	actionID := anyToString(mutation["file_action_id"])
+	if actionID == "" {
+		t.Fatalf("mutation file_action_id=%#v, want action id", mutation)
+	}
+	if strings.Contains(actionID, "workspace") || strings.Contains(actionID, "app") {
+		t.Fatalf("file_action_id=%q must be opaque", actionID)
+	}
+	action := r.activityFileActions[actionID]
+	if action.DisplayName != "app.txt" || canonicalPath(action.PreviewPath) != canonicalPath(filepath.Join(workingDir, "app.txt")) || canonicalPath(action.DirectoryPath) != canonicalPath(workingDir) {
+		t.Fatalf("registered file action=%#v", action)
 	}
 }

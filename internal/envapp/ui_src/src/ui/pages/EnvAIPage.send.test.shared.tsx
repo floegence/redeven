@@ -34,6 +34,14 @@ const mocks = vi.hoisted(() => {
     };
   };
   const fetchGatewayJSONMock = vi.fn(async (url: string, init?: RequestInit) => {
+    if (url.includes('/file-action-open-target')) {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
+      return {
+        path: body.action === 'browse_directory'
+          ? '/workspace/env-flower/src'
+          : '/workspace/env-flower/src/app.ts',
+      };
+    }
     if (url.includes('/_redeven_proxy/api/settings')) {
       return {
         ai: {
@@ -92,6 +100,8 @@ const mocks = vi.hoisted(() => {
   const subscribeThreadMock = vi.fn(async () => ({ runId: 'run-subscribe' }));
   const openFileBrowserAtPathMock = vi.fn(async () => undefined);
   const openFilePreviewMock = vi.fn(async () => undefined);
+  const openFlowerFileBrowserMock = vi.fn(async () => undefined);
+  const openFlowerFilePreviewMock = vi.fn(async () => undefined);
   const listMessagesMock = vi.fn(async ({ threadId }: { threadId: string }) => ({
     messages: [{
       messageJson: {
@@ -109,6 +119,8 @@ const mocks = vi.hoisted(() => {
     listMessagesMock,
     openFileBrowserAtPathMock,
     openFilePreviewMock,
+    openFlowerFileBrowserMock,
+    openFlowerFilePreviewMock,
     sendUserTurnMock,
     state,
     subscribeThreadMock,
@@ -196,6 +208,8 @@ vi.mock('./EnvContext', () => ({
     env: () => ({ name: 'Demo Env' }),
     openFileBrowserAtPath: mocks.openFileBrowserAtPathMock,
     openFilePreview: mocks.openFilePreviewMock,
+    openFlowerFileBrowser: mocks.openFlowerFileBrowserMock,
+    openFlowerFilePreview: mocks.openFlowerFilePreviewMock,
   }),
 }));
 
@@ -298,6 +312,8 @@ export function registerEnvAIPageSendTests() {
       mocks.listMessagesMock.mockClear();
       mocks.openFileBrowserAtPathMock.mockClear();
       mocks.openFilePreviewMock.mockClear();
+      mocks.openFlowerFileBrowserMock.mockClear();
+      mocks.openFlowerFilePreviewMock.mockClear();
       mocks.state.omitReadState = false;
       mocks.state.threadDetailWaitingPrompt = null;
     });
@@ -464,7 +480,7 @@ export function registerEnvAIPageSendTests() {
                   requires_approval: false,
                   label: 'pwd',
                   renderer: 'terminal',
-                  target_refs: [{ kind: 'file', label: 'app.ts', path: 'app.ts', line: '12' }],
+                  target_refs: [{ kind: 'file', label: 'app.ts', line: '12' }],
                   payload: { command: 'pwd' },
                 }],
               }],
@@ -478,6 +494,179 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(host.textContent).toContain('Flower contract error: activity_item.target_refs[0].line must be a non-negative integer.');
+      } finally {
+        dispose();
+      }
+    });
+
+    it.each([
+      ['path', { path: '/workspace/env-flower/src/app.ts' }],
+      ['file_path', { file_path: '/workspace/env-flower/src/app.ts' }],
+      ['preview_path', { preview_path: '/workspace/env-flower/src/app.ts' }],
+      ['root_dir', { root_dir: '/workspace/env-flower' }],
+    ])('rejects Env-local activity target ref %s fields that belong to host-only data', async (field, extra) => {
+      mocks.listMessagesMock.mockResolvedValueOnce({
+        messages: [
+          {
+            rowId: 1,
+            messageJson: {
+              id: `msg-invalid-target-ref-${field}`,
+              role: 'assistant',
+              status: 'complete',
+              timestamp: 10,
+              blocks: [{
+                type: 'activity-timeline',
+                schema_version: 1,
+                run_id: `run-invalid-target-ref-${field}`,
+                summary: {
+                  status: 'success',
+                  severity: 'quiet',
+                  needs_attention: false,
+                  total_items: 1,
+                  counts: { success: 1 },
+                },
+                items: [{
+                  item_id: 'tool-invalid-target-ref',
+                  tool_id: 'tool-invalid-target-ref',
+                  tool_name: 'terminal.exec',
+                  kind: 'tool',
+                  status: 'success',
+                  severity: 'quiet',
+                  needs_attention: false,
+                  requires_approval: false,
+                  label: 'pwd',
+                  renderer: 'terminal',
+                  target_refs: [{ kind: 'file', label: 'app.ts', ...extra }],
+                  payload: { command: 'pwd' },
+                }],
+              }],
+            } as any,
+          },
+        ],
+      } as any);
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+        await flush();
+        expect(host.textContent).toContain(`Flower contract error: activity_item.target_refs[0].${field} is not part of the activity target ref contract.`);
+      } finally {
+        dispose();
+      }
+    });
+
+    it.each([
+      ['cwd', { cwd: '/workspace/env-flower' }],
+      ['path', { path: '/workspace/env-flower/src/app.ts' }],
+      ['rootDir', { rootDir: '/Users/alice/.codex/skills/frontend-design' }],
+    ])('rejects nested Env-local activity payload %s fields that belong to host-only data', async (field, result) => {
+      mocks.listMessagesMock.mockResolvedValueOnce({
+        messages: [
+          {
+            rowId: 1,
+            messageJson: {
+              id: `msg-invalid-nested-activity-${field}`,
+              role: 'assistant',
+              status: 'complete',
+              timestamp: 10,
+              blocks: [{
+                type: 'activity-timeline',
+                schema_version: 1,
+                run_id: `run-invalid-nested-${field}`,
+                summary: {
+                  status: 'success',
+                  severity: 'quiet',
+                  needs_attention: false,
+                  total_items: 1,
+                  counts: { success: 1 },
+                },
+                items: [{
+                  item_id: 'tool-invalid-nested',
+                  tool_id: 'tool-invalid-nested',
+                  tool_name: 'task_complete',
+                  kind: 'tool',
+                  status: 'success',
+                  severity: 'quiet',
+                  needs_attention: false,
+                  requires_approval: false,
+                  label: 'Done',
+                  renderer: 'completion',
+                  payload: { result },
+                }],
+              }],
+            } as any,
+          },
+        ],
+      } as any);
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+        await flush();
+        expect(host.textContent).toContain(`Flower contract error: activity_item.payload.result.${field} is not part of the nested activity payload contract.`);
+      } finally {
+        dispose();
+      }
+    });
+
+    it.each([
+      ['path', { path: '/workspace/env-flower/src/app.ts' }],
+      ['file_path', { file_path: '/workspace/env-flower/src/app.ts' }],
+      ['root_dir', { root_dir: '/workspace/env-flower' }],
+    ])('rejects Env-local file action %s fields that belong to host-only data', async (field, extra) => {
+      mocks.listMessagesMock.mockResolvedValueOnce({
+        messages: [
+          {
+            rowId: 1,
+            messageJson: {
+              id: `msg-invalid-file-action-${field}`,
+              role: 'assistant',
+              status: 'complete',
+              timestamp: 10,
+              blocks: [{
+                type: 'activity-timeline',
+                schema_version: 1,
+                run_id: `run-invalid-file-action-${field}`,
+                summary: {
+                  status: 'success',
+                  severity: 'quiet',
+                  needs_attention: false,
+                  total_items: 1,
+                  counts: { success: 1 },
+                },
+                file_actions: {
+                  read_app: {
+                    action_id: 'read_app',
+                    display_name: 'app.ts',
+                    can_preview: true,
+                    can_browse_directory: true,
+                    ...extra,
+                  },
+                },
+                items: [{
+                  item_id: 'tool-invalid-file-action',
+                  tool_id: 'tool-invalid-file-action',
+                  tool_name: 'file.read',
+                  kind: 'tool',
+                  status: 'success',
+                  severity: 'quiet',
+                  needs_attention: false,
+                  requires_approval: false,
+                  label: 'app.ts',
+                  renderer: 'file',
+                  payload: { operation: 'read', display_name: 'app.ts', file_action_id: 'read_app' },
+                }],
+              }],
+            } as any,
+          },
+        ],
+      } as any);
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+        await flush();
+        expect(host.textContent).toContain(`Flower contract error: activity_timeline.file_actions.read_app.${field} is not part of the file action contract.`);
       } finally {
         dispose();
       }
@@ -503,6 +692,14 @@ export function registerEnvAIPageSendTests() {
                 total_items: 1,
                 counts: { success: 1 },
               },
+              file_actions: {
+                read_app: {
+	                  action_id: 'read_app',
+	                  display_name: 'app.ts',
+	                  can_preview: true,
+	                  can_browse_directory: true,
+	                },
+	              },
               items: [{
                 item_id: 'tool-file-read',
                 tool_id: 'tool-file-read',
@@ -512,12 +709,13 @@ export function registerEnvAIPageSendTests() {
                 severity: 'quiet',
                 needs_attention: false,
                 requires_approval: false,
-                label: '/workspace/env-flower/src/app.ts',
+                label: 'app.ts#dcbdf9b8c27f#e1703606242a',
                 renderer: 'file',
-                target_refs: [{ kind: 'file', label: '/workspace/env-flower/src/app.ts', path: '/workspace/env-flower/src/app.ts' }],
+                target_refs: [{ kind: 'file', label: 'app.ts#dcbdf9b8c27f' }],
                 payload: {
                   operation: 'read',
-                  file_path: '/workspace/env-flower/src/app.ts',
+                  display_name: 'app.ts',
+                  file_action_id: 'read_app',
                   content: 'export const app = true;\n',
                   line_offset: 1,
                   line_count: 1,
@@ -535,27 +733,86 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(host.textContent).toContain('Read');
-        expect(host.textContent).toContain('/workspace/env-flower/src/app.ts');
+        expect(host.textContent).toContain('app.ts');
+        expect(host.textContent).not.toContain('#dcbdf9b8c27f');
         (host.querySelector('[data-flower-activity-item-id="tool-file-read"] .flower-host-activity-inline-button') as HTMLButtonElement).click();
         await flush();
-        const browse = host.querySelector('button[aria-label="Browse folder for /workspace/env-flower/src/app.ts"]') as HTMLButtonElement | null;
-        const preview = host.querySelector('button[aria-label="Preview /workspace/env-flower/src/app.ts"]') as HTMLButtonElement | null;
+        const browse = host.querySelector('button[aria-label="Browse folder for app.ts"]') as HTMLButtonElement | null;
+        const preview = host.querySelector('button[aria-label="Preview app.ts"]') as HTMLButtonElement | null;
         expect(browse).toBeTruthy();
         expect(preview).toBeTruthy();
         browse?.click();
         preview?.click();
         await flush();
-        expect(mocks.openFileBrowserAtPathMock).toHaveBeenCalledWith('/workspace/env-flower/src', {
-          title: 'Flower file context',
-          openStrategy: 'focus_latest_or_create',
-        });
-        expect(mocks.openFilePreviewMock).toHaveBeenCalledWith(expect.objectContaining({
-          path: '/workspace/env-flower/src/app.ts',
-          type: 'file',
-        }), {
-          focus: true,
-          reusePolicy: 'same_file_or_create',
-        });
+        const request = {
+          thread_id: 'thread-1',
+          message_id: 'msg-file-read',
+          block_index: 0,
+          item_id: 'tool-file-read',
+          action_id: 'read_app',
+        };
+        expect(mocks.openFlowerFileBrowserMock).toHaveBeenCalledWith(request);
+        expect(mocks.openFlowerFilePreviewMock).toHaveBeenCalledWith(request);
+        expect(mocks.openFileBrowserAtPathMock).not.toHaveBeenCalled();
+        expect(mocks.openFilePreviewMock).not.toHaveBeenCalled();
+      } finally {
+        dispose();
+      }
+    });
+
+    it('renders sanitized use_skill activity payloads', async () => {
+      mocks.listMessagesMock.mockResolvedValueOnce({
+        messages: [{
+          rowId: 1,
+          messageJson: {
+            id: 'msg-use-skill',
+            role: 'assistant',
+            status: 'complete',
+            timestamp: 10,
+            blocks: [{
+              type: 'activity-timeline',
+              schema_version: 1,
+              run_id: 'run-use-skill',
+              summary: {
+                status: 'success',
+                severity: 'quiet',
+                needs_attention: false,
+                total_items: 1,
+                counts: { success: 1 },
+              },
+              items: [{
+                item_id: 'tool-use-skill',
+                tool_id: 'tool-use-skill',
+                tool_name: 'use_skill',
+                kind: 'tool',
+                status: 'success',
+                severity: 'quiet',
+                needs_attention: false,
+                requires_approval: false,
+                label: 'frontend-design',
+                renderer: 'structured',
+                payload: {
+                  operation: 'use_skill',
+                  name: 'frontend-design',
+                  content: 'Loaded frontend design guidance.',
+                  content_ref: 'content_123',
+                  activation_id: 'act_123',
+                },
+              }],
+            }],
+          } as any,
+        }],
+      } as any);
+
+      const { host, dispose } = await renderPage();
+      try {
+        (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+        await flush();
+        await flush();
+        expect(host.textContent).toContain('frontend-design');
+        (host.querySelector('[data-flower-activity-item-id="tool-use-skill"] .flower-host-activity-inline-button') as HTMLButtonElement).click();
+        await flush();
+        expect(host.textContent).toContain('Loaded frontend design guidance.');
       } finally {
         dispose();
       }
@@ -581,6 +838,14 @@ export function registerEnvAIPageSendTests() {
                 total_items: 1,
                 counts: { success: 1 },
               },
+              file_actions: {
+                patch_app: {
+	                  action_id: 'patch_app',
+	                  display_name: 'src/app.ts',
+	                  can_preview: true,
+	                  can_browse_directory: true,
+	                },
+	              },
               items: [{
                 item_id: 'tool-patch',
                 tool_id: 'tool-patch',
@@ -595,20 +860,19 @@ export function registerEnvAIPageSendTests() {
                 payload: {
                   operation: 'apply_patch',
                   mutations: [{
-                    file_path: 'src/app.ts',
+                    display_name: 'src/app.ts',
+                    file_action_id: 'patch_app',
                     change_type: 'update',
-                    structured_diff: [{
-                      old_start: 1,
-                      old_lines: 3,
-                      new_start: 1,
-                      new_lines: 3,
-                      before: ['export const oldValue = 1;', 'shared();'],
-                      after: ['export const newValue = 2;', 'shared();'],
-                      before_kinds: ['removed', 'context'],
-                      after_kinds: ['added', 'context'],
-                    }],
-                    original_file: 'export const oldValue = 1;\nshared();\n',
-                    updated_file: 'export const newValue = 2;\nshared();\n',
+                    additions: 1,
+                    deletions: 1,
+                    unified_diff: [
+                      '--- a/src/app.ts',
+                      '+++ b/src/app.ts',
+                      '@@ -1,2 +1,2 @@',
+                      '-export const oldValue = 1;',
+                      '+export const newValue = 2;',
+                      ' shared();',
+                    ].join('\n'),
                   }],
                 },
               }],
@@ -633,17 +897,17 @@ export function registerEnvAIPageSendTests() {
         browse?.click();
         preview?.click();
         await flush();
-        expect(mocks.openFileBrowserAtPathMock).toHaveBeenCalledWith('/workspace/env-flower/src', {
-          title: 'Flower file context',
-          openStrategy: 'focus_latest_or_create',
-        });
-        expect(mocks.openFilePreviewMock).toHaveBeenCalledWith(expect.objectContaining({
-          path: '/workspace/env-flower/src/app.ts',
-          type: 'file',
-        }), {
-          focus: true,
-          reusePolicy: 'same_file_or_create',
-        });
+        const request = {
+          thread_id: 'thread-1',
+          message_id: 'msg-patch',
+          block_index: 0,
+          item_id: 'tool-patch',
+          action_id: 'patch_app',
+        };
+        expect(mocks.openFlowerFileBrowserMock).toHaveBeenCalledWith(request);
+        expect(mocks.openFlowerFilePreviewMock).toHaveBeenCalledWith(request);
+        expect(mocks.openFileBrowserAtPathMock).not.toHaveBeenCalled();
+        expect(mocks.openFilePreviewMock).not.toHaveBeenCalled();
       } finally {
         dispose();
       }

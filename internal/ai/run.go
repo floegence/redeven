@@ -147,6 +147,8 @@ type run struct {
 	assistantAnswer           assistantAnswerState
 	activitySegmentEvents     []observation.Event
 	activityTimelineProjected bool
+	activityFileActions       map[string]FlowerActivityFileAction
+	activityFileActionSeq     int64
 	waitingPrompt             *RequestUserInputPrompt
 	providerContinuation      threadstore.ThreadProviderContinuation
 
@@ -233,6 +235,7 @@ func newRun(opts runOptions) *run {
 		activitySegmentActive:     false,
 		activitySegmentBlockIndex: -1,
 		activitySegmentEvents:     make([]observation.Event, 0, 8),
+		activityFileActions:       make(map[string]FlowerActivityFileAction),
 		subagentDepth:             opts.SubagentDepth,
 		forceReadonlyExec:         opts.ForceReadonlyExec,
 		toolTargetPolicy:          normalizeToolTargetPolicy(opts.ToolTargetPolicy),
@@ -517,10 +520,40 @@ func (r *run) sendStreamEvent(ev any) {
 	if r.stream == nil {
 		return
 	}
-	if err := r.stream.send(ev); err != nil {
+	publicEvent, ok := sanitizePublicStreamEvent(ev)
+	if !ok {
+		return
+	}
+	if err := r.stream.send(publicEvent); err != nil {
 		if r.log != nil {
 			r.log.Debug("ai stream sink write failed", "run_id", r.id, "error", err)
 		}
+	}
+}
+
+func sanitizePublicStreamEvent(ev any) (any, bool) {
+	blockSet, ok := ev.(streamEventBlockSet)
+	if !ok || !isActivityTimelineBlockValue(blockSet.Block) {
+		return ev, true
+	}
+	block, err := SanitizeActivityTimelineBlockValue(blockSet.Block)
+	if err != nil {
+		return nil, false
+	}
+	blockSet.Block = block
+	return blockSet, true
+}
+
+func isActivityTimelineBlockValue(value any) bool {
+	switch v := value.(type) {
+	case ActivityTimelineBlock:
+		return true
+	case *ActivityTimelineBlock:
+		return v != nil
+	case map[string]any:
+		return strings.TrimSpace(anyToString(v["type"])) == activityTimelineBlockType
+	default:
+		return false
 	}
 }
 

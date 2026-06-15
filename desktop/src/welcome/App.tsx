@@ -2631,6 +2631,7 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
     || typeof candidate.resolveFlowerHostHandler !== 'function'
     || typeof candidate.sendFlowerHostChat !== 'function'
     || typeof candidate.submitFlowerHostInput !== 'function'
+    || typeof candidate.openFlowerHostFileAction !== 'function'
   ) {
     return null;
   }

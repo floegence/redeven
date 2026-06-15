@@ -384,15 +384,38 @@ type ChatMessage struct {
 }
 
 type ChatMessageBlock struct {
-	Type          string                       `json:"type"`
-	Content       string                       `json:"content,omitempty"`
-	SchemaVersion int                          `json:"schema_version,omitempty"`
-	RunID         string                       `json:"run_id,omitempty"`
-	ThreadID      string                       `json:"thread_id,omitempty"`
-	TurnID        string                       `json:"turn_id,omitempty"`
-	TraceID       string                       `json:"trace_id,omitempty"`
-	Summary       *observation.ActivitySummary `json:"summary,omitempty"`
-	Items         []observation.ActivityItem   `json:"items,omitempty"`
+	Type          string                            `json:"type"`
+	Content       string                            `json:"content,omitempty"`
+	SchemaVersion int                               `json:"schema_version,omitempty"`
+	RunID         string                            `json:"run_id,omitempty"`
+	ThreadID      string                            `json:"thread_id,omitempty"`
+	TurnID        string                            `json:"turn_id,omitempty"`
+	TraceID       string                            `json:"trace_id,omitempty"`
+	Summary       *observation.ActivitySummary      `json:"summary,omitempty"`
+	Items         []observation.ActivityItem        `json:"items,omitempty"`
+	FileActions   map[string]ChatActivityFileAction `json:"file_actions,omitempty"`
+}
+
+type ChatActivityFileAction struct {
+	ActionID           string `json:"action_id"`
+	DisplayName        string `json:"display_name"`
+	CanPreview         bool   `json:"can_preview"`
+	CanBrowseDirectory bool   `json:"can_browse_directory"`
+}
+
+type ChatFileActionOpenRequest struct {
+	ThreadID   string `json:"thread_id,omitempty"`
+	MessageID  string `json:"message_id"`
+	BlockIndex int    `json:"block_index"`
+	ItemID     string `json:"item_id"`
+	ActionID   string `json:"action_id"`
+	Action     string `json:"action"`
+}
+
+type ChatFileActionOpenTarget struct {
+	ActionID string `json:"action_id"`
+	Action   string `json:"action"`
+	Path     string `json:"path"`
 }
 
 type ChatRunError struct {

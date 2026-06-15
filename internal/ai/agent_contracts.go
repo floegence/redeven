@@ -109,6 +109,13 @@ type ToolResult struct {
 	ContentRef string             `json:"content_ref,omitempty"`
 }
 
+type FlowerActivityFileAction struct {
+	ActionID      string `json:"action_id"`
+	DisplayName   string `json:"display_name"`
+	PreviewPath   string `json:"preview_path,omitempty"`
+	DirectoryPath string `json:"directory_path,omitempty"`
+}
+
 type SourceRef struct {
 	Title string `json:"title,omitempty"`
 	URL   string `json:"url"`

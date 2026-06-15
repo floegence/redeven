@@ -1,13 +1,9 @@
 import { diffLines, type Change } from 'diff';
 
-import type { CodeDiffRenderModel, SplitDiffLine, UnifiedDiffLine } from '../types';
+import type { CodeDiffRenderModel, UnifiedDiffLine } from '../types';
 
 export const EMPTY_CODE_DIFF_RENDER_MODEL: CodeDiffRenderModel = {
   unifiedLines: [],
-  split: {
-    left: [],
-    right: [],
-  },
   stats: {
     added: 0,
     removed: 0,
@@ -36,9 +32,6 @@ export function computeCodeDiffModel(oldCode: string, newCode: string): CodeDiff
   const changes = diffLines(oldCode, newCode);
 
   const unifiedLines: UnifiedDiffLine[] = [];
-  const splitLeft: SplitDiffLine[] = [];
-  const splitRight: SplitDiffLine[] = [];
-
   let oldLineNumber = 0;
   let newLineNumber = 0;
   let added = 0;
@@ -62,8 +55,6 @@ export function computeCodeDiffModel(oldCode: string, newCode: string): CodeDiff
           lineNumber: newLineNumber,
           content,
         });
-        splitLeft.push({ type: 'empty', lineNumber: null, content: '' });
-        splitRight.push({ type: 'added', lineNumber: newLineNumber, content });
         continue;
       }
 
@@ -75,8 +66,6 @@ export function computeCodeDiffModel(oldCode: string, newCode: string): CodeDiff
           lineNumber: oldLineNumber,
           content,
         });
-        splitLeft.push({ type: 'removed', lineNumber: oldLineNumber, content });
-        splitRight.push({ type: 'empty', lineNumber: null, content: '' });
         continue;
       }
 
@@ -88,17 +77,11 @@ export function computeCodeDiffModel(oldCode: string, newCode: string): CodeDiff
         lineNumber: oldLineNumber,
         content,
       });
-      splitLeft.push({ type: 'context', lineNumber: oldLineNumber, content });
-      splitRight.push({ type: 'context', lineNumber: newLineNumber, content });
     }
   }
 
   return {
     unifiedLines,
-    split: {
-      left: splitLeft,
-      right: splitRight,
-    },
     stats: {
       added,
       removed,

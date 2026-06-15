@@ -202,11 +202,10 @@ function validActivityTimeline(): Record<string, unknown> {
           { kind: 'duration', label: 'duration', value: '42 ms', tone: 'neutral' },
         ],
         target_refs: [
-          { kind: 'workspace', label: 'redeven', path: '/workspace/redeven' },
+          { kind: 'workspace', label: 'redeven' },
         ],
         payload: {
           command: 'npm run build -- --mode production',
-          cwd: '/workspace/redeven',
           exit_code: 0,
           duration_ms: 42,
           stdout: 'built\n',
@@ -546,11 +545,10 @@ describe('Flower Host bridge lifecycle', () => {
               { kind: 'duration', label: 'duration', value: '42 ms', tone: 'neutral' },
             ],
             target_refs: [
-              { kind: 'workspace', label: 'redeven', path: '/workspace/redeven' },
+              { kind: 'workspace', label: 'redeven' },
             ],
             payload: expect.objectContaining({
               command: 'npm run build -- --mode production',
-              cwd: '/workspace/redeven',
               exit_code: 0,
               stdout: 'built\n',
             }),
@@ -653,7 +651,7 @@ describe('Flower Host bridge lifecycle', () => {
           name: 'deep payload',
           mutate: (activity: Record<string, unknown>) => {
             activity.payload = {
-              a: {
+              error: {
                 b: {
                   c: {
                     d: {
@@ -666,7 +664,7 @@ describe('Flower Host bridge lifecycle', () => {
               },
             };
           },
-          message: 'thread.messages[0].blocks[0].items[0].payload.a.b.c.d.e.f exceeds maximum depth',
+          message: 'thread.messages[0].blocks[0].items[0].payload.error.b.c.d.e.f exceeds maximum depth',
         },
         {
           name: 'long payload string',
@@ -674,6 +672,83 @@ describe('Flower Host bridge lifecycle', () => {
             activity.payload = { command: 'x'.repeat(8001) };
           },
           message: 'thread.messages[0].blocks[0].items[0].payload.command must be at most 8000 characters',
+        },
+        {
+          name: 'terminal cwd payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.payload = { command: 'pwd', cwd: '/workspace/redeven' };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.cwd is not part of the terminal payload contract',
+        },
+        {
+          name: 'terminal workdir payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.payload = { command: 'pwd', workdir: '/workspace/redeven' };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.workdir is not part of the terminal payload contract',
+        },
+        {
+          name: 'terminal stdin payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.payload = { command: 'pwd', stdin: 'secret' };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.stdin is not part of the terminal payload contract',
+        },
+        {
+          name: 'file path payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.renderer = 'file';
+            activity.payload = { operation: 'read', display_name: 'app.ts', file_path: '/workspace/redeven/app.ts' };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.file_path is not part of the file payload contract',
+        },
+        {
+          name: 'file preview payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.renderer = 'file';
+            activity.payload = { operation: 'read', display_name: 'app.ts', preview_path: '/workspace/redeven/app.ts' };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.preview_path is not part of the file payload contract',
+        },
+        {
+          name: 'patch mutation directory payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.renderer = 'patch';
+            activity.payload = { operation: 'apply_patch', mutations: [{ display_name: 'app.ts', directory_path: '/workspace/redeven' }] };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.mutations[0].directory_path is not part of the patch mutation payload contract',
+        },
+        {
+          name: 'nested completion cwd payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.renderer = 'completion';
+            activity.payload = { result: { cwd: '/workspace/redeven' } };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.result.cwd is not part of the nested activity payload contract',
+        },
+        {
+          name: 'nested structured file path payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.renderer = 'structured';
+            activity.payload = { data: { file_path: '/workspace/redeven/app.ts' } };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.data.file_path is not part of the nested activity payload contract',
+        },
+        {
+          name: 'nested path payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.renderer = 'completion';
+            activity.payload = { result: { path: '/workspace/redeven/app.ts' } };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.result.path is not part of the nested activity payload contract',
+        },
+        {
+          name: 'nested rootDir payload',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.renderer = 'structured';
+            activity.payload = { result: { rootDir: '/Users/alice/.codex/skills/frontend-design' } };
+          },
+          message: 'thread.messages[0].blocks[0].items[0].payload.result.rootDir is not part of the nested activity payload contract',
         },
         {
           name: 'invalid chip kind',
@@ -697,30 +772,89 @@ describe('Flower Host bridge lifecycle', () => {
           message: 'thread.messages[0].blocks[0].items[0].target_refs[0].uri must use http, https, or artifact scheme',
         },
         {
+          name: 'target ref path',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.target_refs = [{ kind: 'file', label: 'app.ts', path: 'app.ts' }];
+          },
+          message: 'thread.messages[0].blocks[0].items[0].target_refs[0].path is not part of the activity target ref contract',
+        },
+        {
+          name: 'target ref file path',
+          mutate: (activity: Record<string, unknown>) => {
+            activity.target_refs = [{ kind: 'file', label: 'app.ts', file_path: 'app.ts' }];
+          },
+          message: 'thread.messages[0].blocks[0].items[0].target_refs[0].file_path is not part of the activity target ref contract',
+        },
+        {
+          name: 'file action preview path',
+          mutate: (_activity: Record<string, unknown>, timeline: Record<string, unknown>) => {
+            timeline.file_actions = {
+              file_action_app: {
+                action_id: 'file_action_app',
+                display_name: 'app.ts',
+                can_preview: true,
+                can_browse_directory: true,
+                preview_path: '/workspace/redeven/app.ts',
+              },
+            };
+          },
+          message: 'thread.messages[0].blocks[0].file_actions.file_action_app.preview_path is not part of the file action contract',
+        },
+        {
+          name: 'file action directory path',
+          mutate: (_activity: Record<string, unknown>, timeline: Record<string, unknown>) => {
+            timeline.file_actions = {
+              file_action_app: {
+                action_id: 'file_action_app',
+                display_name: 'app.ts',
+                can_preview: true,
+                can_browse_directory: true,
+                directory_path: '/workspace/redeven',
+              },
+            };
+          },
+          message: 'thread.messages[0].blocks[0].file_actions.file_action_app.directory_path is not part of the file action contract',
+        },
+        {
+          name: 'file action root dir',
+          mutate: (_activity: Record<string, unknown>, timeline: Record<string, unknown>) => {
+            timeline.file_actions = {
+              file_action_app: {
+                action_id: 'file_action_app',
+                display_name: 'app.ts',
+                can_preview: true,
+                can_browse_directory: true,
+                root_dir: '/workspace/redeven',
+              },
+            };
+          },
+          message: 'thread.messages[0].blocks[0].file_actions.file_action_app.root_dir is not part of the file action contract',
+        },
+        {
           name: 'negative target line',
           mutate: (activity: Record<string, unknown>) => {
-            activity.target_refs = [{ kind: 'file', label: 'app.ts', path: 'app.ts', line: -1 }];
+            activity.target_refs = [{ kind: 'file', label: 'app.ts', line: -1 }];
           },
           message: 'thread.messages[0].blocks[0].items[0].target_refs[0].line must be a non-negative integer',
         },
         {
           name: 'fractional target line',
           mutate: (activity: Record<string, unknown>) => {
-            activity.target_refs = [{ kind: 'file', label: 'app.ts', path: 'app.ts', line: 1.5 }];
+            activity.target_refs = [{ kind: 'file', label: 'app.ts', line: 1.5 }];
           },
           message: 'thread.messages[0].blocks[0].items[0].target_refs[0].line must be a non-negative integer',
         },
         {
           name: 'string target line',
           mutate: (activity: Record<string, unknown>) => {
-            activity.target_refs = [{ kind: 'file', label: 'app.ts', path: 'app.ts', line: '12' }];
+            activity.target_refs = [{ kind: 'file', label: 'app.ts', line: '12' }];
           },
           message: 'thread.messages[0].blocks[0].items[0].target_refs[0].line must be a number',
         },
       ]) {
         const timeline = validActivityTimeline();
         const items = timeline.items as Array<Record<string, unknown>>;
-        item.mutate(items[0]);
+        item.mutate(items[0], timeline);
         threadResponse = {
           ...validThreadResponse(),
           messages: [

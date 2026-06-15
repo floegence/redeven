@@ -101,18 +101,7 @@ export interface ActivityTargetRef {
   kind: string;
   label: string;
   uri?: string;
-  path?: string;
   line?: number;
-}
-
-export interface ActivityDetailRef {
-  ref_id: string;
-  kind: string;
-  tool_id?: string;
-  fetch_mode: 'inline' | 'endpoint';
-  endpoint?: string;
-  payload?: unknown;
-  title: string;
 }
 
 export type ActivityItemStatus = 'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled';
@@ -140,8 +129,14 @@ export interface ActivityItem {
   renderer?: string;
   chips?: ActivityChip[];
   target_refs?: ActivityTargetRef[];
-  detail_refs?: ActivityDetailRef[];
   payload?: unknown;
+}
+
+export interface ActivityFileAction {
+  action_id: string;
+  display_name: string;
+  can_preview: boolean;
+  can_browse_directory: boolean;
 }
 
 export interface ActivityTimelineBlock {
@@ -169,6 +164,15 @@ export interface ActivityTimelineBlock {
     duration_ms?: number;
   };
   items: ActivityItem[];
+  file_actions?: Record<string, ActivityFileAction>;
+}
+
+export interface ActivityFileActionOpenRequest {
+  thread_id?: string;
+  message_id: string;
+  block_index: number;
+  item_id: string;
+  action_id: string;
 }
 
 export interface TodosBlock {
@@ -355,6 +359,8 @@ export interface ChatConfig {
   userAvatar?: ChatAvatar;
   assistantAvatar?: ChatAvatar;
   renderMessageOrnament?: Component<MessageOrnamentRenderProps>;
+  onActivityFilePreview?: (request: ActivityFileActionOpenRequest) => void | Promise<void>;
+  onActivityDirectoryBrowse?: (request: ActivityFileActionOpenRequest) => void | Promise<void>;
   showListWorkingIndicator?: boolean;
   placeholder?: string;
   allowAttachments?: boolean;
@@ -462,18 +468,8 @@ export interface UnifiedDiffLine {
   content: string;
 }
 
-export interface SplitDiffLine {
-  type: 'context' | 'added' | 'removed' | 'empty';
-  lineNumber: number | null;
-  content: string;
-}
-
 export interface CodeDiffRenderModel {
   unifiedLines: UnifiedDiffLine[];
-  split: {
-    left: SplitDiffLine[];
-    right: SplitDiffLine[];
-  };
   stats: {
     added: number;
     removed: number;

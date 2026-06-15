@@ -3,6 +3,7 @@ import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { AskFlowerIntent } from './askFlowerIntent';
 import type { FilePreviewOpenOptions } from '../widgets/FilePreviewContext';
+import type { ActivityFileActionOpenRequest } from '../chat/types';
 import type {
   EnvFileBrowserSurfacePayload,
   EnvOpenSurfaceOptions,
@@ -159,6 +160,8 @@ export type EnvContextValue = {
     item: FileItem,
     options?: FilePreviewOpenOptions,
   ) => Promise<void>;
+  openFlowerFileBrowser: (request: ActivityFileActionOpenRequest) => Promise<void>;
+  openFlowerFilePreview: (request: ActivityFileActionOpenRequest) => Promise<void>;
   consumeOpenTerminalInDirectoryRequest: (requestId: string) => void;
 
   aiThreadFocusSeq: () => number;

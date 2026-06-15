@@ -298,8 +298,8 @@ func TestToolApplyPatch_CreatesFile(t *testing.T) {
 	if canonicalPath(result.Mutations[0].NewPath) != canonicalPath(filepath.Join(workingDir, "note.txt")) || result.Mutations[0].OldPath != "" {
 		t.Fatalf("mutation paths=%+v, want only new path", result.Mutations[0])
 	}
-	if strings.TrimSpace(result.Mutations[0].UpdatedFile) != "hello patch" || len(result.Mutations[0].StructuredDiff) != 1 {
-		t.Fatalf("mutation detail=%+v, want updated file and structured diff", result.Mutations[0])
+	if !strings.Contains(result.Mutations[0].UnifiedDiff, "+hello patch") || result.Mutations[0].DisplayName != "note.txt" {
+		t.Fatalf("mutation detail=%+v, want unified diff and display name", result.Mutations[0])
 	}
 	got, err := os.ReadFile(filepath.Join(workingDir, "note.txt"))
 	if err != nil {
@@ -339,8 +339,8 @@ func TestToolApplyPatch_ReportsDeletedFileMutation(t *testing.T) {
 	if canonicalPath(result.Mutations[0].FilePath) != canonicalPath(target) || canonicalPath(result.Mutations[0].OldPath) != canonicalPath(target) || result.Mutations[0].NewPath != "" {
 		t.Fatalf("mutation paths=%+v, want only old path", result.Mutations[0])
 	}
-	if strings.TrimSpace(result.Mutations[0].OriginalFile) != "remove me" || result.Mutations[0].UpdatedFile != "" {
-		t.Fatalf("mutation detail=%+v, want original content and empty updated content", result.Mutations[0])
+	if !strings.Contains(result.Mutations[0].UnifiedDiff, "-remove me") {
+		t.Fatalf("mutation detail=%+v, want delete diff", result.Mutations[0])
 	}
 	if _, err := os.Stat(target); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("target stat err=%v, want not exist", err)

@@ -39,10 +39,10 @@ import {
   type FlowerActivityDetailBlock,
   type FlowerActivityDiffFile,
   type FlowerActivityFileAction,
-  type FlowerActivityDiffLineKind,
   type FlowerActivityTitle,
   type FlowerActivityTodoStatus,
 } from './flowerActivityPresentation';
+import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRenderedLine } from './gitPatch';
 import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
@@ -1006,17 +1006,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
-  const chatCopyValue = (
-    key: 'inputRequestTitle'
-      | 'inputRequestDescription'
-      | 'inputRequestSubmit'
-      | 'inputRequestRetry'
-      | 'inputRequestAnswerRequired'
-      | 'inputRequestSubmitting'
-      | 'inputRequestComposerPlaceholder'
-      | 'inputRequestChoicePlaceholder',
-    fallback: string,
-  ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
+	  const chatCopyValue = (
+	    key: 'inputRequestTitle'
+	      | 'inputRequestDescription'
+	      | 'inputRequestSubmit'
+	      | 'inputRequestRetry'
+	      | 'inputRequestAnswerRequired'
+	      | 'inputRequestSubmitting'
+	      | 'inputRequestComposerPlaceholder'
+	      | 'inputRequestChoicePlaceholder',
+	    defaultValue: string,
+	  ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || defaultValue;
 
   const streamingCursor = () => <span class="flower-host-streaming-cursor" aria-hidden="true" />;
 
@@ -1320,9 +1320,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setOpenActivityRuns((current) => ({ ...current, [key]: !activityItemOpen(timeline, item, blockKey, index) }));
   };
 
-  const activityItemAriaLabel = (item: FlowerActivityItem): string => (
+  const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
     [
-      presentFlowerActivityItem(item).label,
+      presentFlowerActivityItem(item, timeline.file_actions).label,
       item.tool_name,
       copy().chat.toolStatuses[item.status],
       item.requires_approval ? copy().chat.toolApprovalState(trimString(item.approval_state) || 'requested') : '',
@@ -1334,61 +1334,76 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return (
         <>
           <strong class="flower-host-activity-inline-title-verb">{title.verb}</strong>
-          <span class="flower-host-activity-inline-title-target">{title.path}</span>
+          <span class="flower-host-activity-inline-title-target">{title.display_name}</span>
         </>
       );
     }
     return <span class="flower-host-activity-inline-title-target">{title.kind === 'command' ? title.command : title.text}</span>;
   };
 
-  const openActivityFileBrowser = (activityID: string, action: FlowerActivityFileAction) => {
-    const path = trimString(action.path);
-    if (!path || !props.adapter.openFileBrowser) return;
-    void props.adapter.openFileBrowser({ path, source_activity_id: activityID, working_dir: trimString(selectedThread()?.working_dir) || undefined }).catch((error) => {
+  const openActivityFileBrowser = (messageID: string, blockIndex: number, itemID: string, action: FlowerActivityFileAction) => {
+    if (!action.can_browse_directory || !trimString(action.action_id) || !props.adapter.openFileBrowser) return;
+    void props.adapter.openFileBrowser({
+      thread_id: trimString(selectedThreadID()) || undefined,
+      message_id: messageID,
+      block_index: blockIndex,
+      item_id: itemID,
+      action_id: action.action_id,
+    }).catch((error) => {
       setThreadActionError(getErrorMessage(error));
     });
   };
 
-  const openActivityFilePreview = (activityID: string, action: FlowerActivityFileAction) => {
-    const path = trimString(action.path);
-    if (!path || !props.adapter.openFilePreview) return;
-    void props.adapter.openFilePreview({ path, source_activity_id: activityID, working_dir: trimString(selectedThread()?.working_dir) || undefined }).catch((error) => {
+  const openActivityFilePreview = (messageID: string, blockIndex: number, itemID: string, action: FlowerActivityFileAction) => {
+    if (!action.can_preview || !trimString(action.action_id) || !props.adapter.openFilePreview) return;
+    void props.adapter.openFilePreview({
+      thread_id: trimString(selectedThreadID()) || undefined,
+      message_id: messageID,
+      block_index: blockIndex,
+      item_id: itemID,
+      action_id: action.action_id,
+    }).catch((error) => {
       setThreadActionError(getErrorMessage(error));
     });
   };
 
-  const fileActionButtons = (activityID: string, action: FlowerActivityFileAction) => (
+  const fileActionButtons = (messageID: string, blockIndex: number, itemID: string, action: FlowerActivityFileAction) => (
     <div class="flower-host-activity-file-actions" aria-label="File actions">
-      <Show when={action.can_browse_directory && trimString(action.path) && props.adapter.openFileBrowser}>
-        <button
-          type="button"
-          class="flower-host-activity-file-action-button"
-          title="Browse folder"
-          aria-label={`Browse folder for ${action.path}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            openActivityFileBrowser(activityID, action);
-          }}
-        >
-          <FolderOpen class="h-3.5 w-3.5" />
-        </button>
-      </Show>
-      <Show when={action.can_preview && trimString(action.path) && props.adapter.openFilePreview}>
-        <button
-          type="button"
-          class="flower-host-activity-file-action-button"
-          title="Preview file"
-          aria-label={`Preview ${action.path}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            openActivityFilePreview(activityID, action);
-          }}
-        >
-          <FileText class="h-3.5 w-3.5" />
-        </button>
-      </Show>
+      <button
+        type="button"
+        class="flower-host-activity-file-action-button"
+        title="Preview file"
+        aria-label={`Preview ${action.display_name || 'file'}`}
+        disabled={!action.can_preview || !trimString(action.action_id) || !props.adapter.openFilePreview}
+        onClick={(event) => {
+          event.stopPropagation();
+          openActivityFilePreview(messageID, blockIndex, itemID, action);
+        }}
+      >
+        <FileText class="h-3.5 w-3.5" />
+      </button>
+      <button
+        type="button"
+        class="flower-host-activity-file-action-button"
+        title="Browse folder"
+        aria-label={`Browse folder for ${action.display_name || 'file'}`}
+        disabled={!action.can_browse_directory || !trimString(action.action_id) || !props.adapter.openFileBrowser}
+        onClick={(event) => {
+          event.stopPropagation();
+          openActivityFileBrowser(messageID, blockIndex, itemID, action);
+        }}
+      >
+        <FolderOpen class="h-3.5 w-3.5" />
+      </button>
     </div>
   );
+
+  const disabledFileAction = (displayName: string): FlowerActivityFileAction => ({
+    action_id: '',
+    display_name: trimString(displayName) || 'file',
+    can_preview: false,
+    can_browse_directory: false,
+  });
 
   const detailLinesBlock = (block: Extract<FlowerActivityDetailBlock, { kind: 'structured' | 'terminal' }>) => (
     <>
@@ -1403,7 +1418,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </>
   );
 
-  const fileReadBlock = (activityID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_read' }>) => {
+  const fileReadBlock = (messageID: string, blockIndex: number, itemID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_read' }>) => {
     const lineSummary = (() => {
       const start = Math.max(1, Math.floor(Number(block.line_offset || 1)));
       const count = Math.max(0, Math.floor(Number(block.line_count || 0)));
@@ -1421,75 +1436,62 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <span class="flower-host-activity-file-truncated"> · truncated</span>
             </Show>
           </span>
-          {fileActionButtons(activityID, block.action)}
+          {fileActionButtons(messageID, blockIndex, itemID, block.action)}
         </div>
         <pre class="flower-host-activity-file-read-content"><code>{block.content}</code></pre>
       </div>
     );
   };
 
-  const diffLineCount = (start: number, index: number): number => Math.max(1, Math.floor(Number(start || 1))) + index;
-  const diffLineClass = (kind: FlowerActivityDiffLineKind | undefined) => cn(
-    'flower-host-activity-file-diff-line',
-    kind === 'removed' && 'flower-host-activity-file-diff-line-removed',
-    kind === 'added' && 'flower-host-activity-file-diff-line-added',
-  );
-
-  const fileDiffBlock = (activityID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_diff' }>) => (
+  const fileDiffBlock = (messageID: string, blockIndex: number, itemID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_diff' }>) => (
     <div class="flower-host-activity-file-diff-list">
       <For each={block.files}>
-        {(file) => fileDiffFile(activityID, file)}
+        {(file) => fileDiffFile(messageID, blockIndex, itemID, file)}
       </For>
     </div>
   );
 
-  const fileDiffFile = (activityID: string, file: FlowerActivityDiffFile) => (
+  const fileDiffFile = (messageID: string, blockIndex: number, itemID: string, file: FlowerActivityDiffFile) => (
     <section class="flower-host-activity-file-diff-file">
       <div class="flower-host-activity-file-toolbar">
-        <span class="flower-host-activity-file-path">{file.path}</span>
+        <span class="flower-host-activity-file-path">{file.display_name}</span>
         <span class="flower-host-activity-file-change">{file.change_type}</span>
+        <Show when={file.additions || file.deletions}>
+          <span class="flower-host-activity-file-change">
+            <span class="flower-host-activity-file-stat-add">+{file.additions}</span>
+            {' / '}
+            <span class="flower-host-activity-file-stat-del">-{file.deletions}</span>
+          </span>
+        </Show>
         <Show when={file.truncated}>
           <span class="flower-host-activity-file-truncated">Diff truncated</span>
         </Show>
-        {fileActionButtons(activityID, file.action)}
+        {fileActionButtons(messageID, blockIndex, itemID, file.action)}
       </div>
       <div class="flower-host-activity-file-diff-grid">
-        <For each={file.hunks}>
-          {(hunk) => (
-            <div class="flower-host-activity-file-diff-hunk">
-              <div class="flower-host-activity-file-diff-side flower-host-activity-file-diff-side-old">
-                <div class="flower-host-activity-file-diff-heading">old</div>
-                <For each={hunk.before.length > 0 ? hunk.before : ['']}>
-                  {(line, index) => (
-                    <div class={line === '' ? 'flower-host-activity-file-diff-line' : diffLineClass(hunk.before_kinds[index()])}>
-                      <span class="flower-host-activity-file-diff-line-number">{line === '' ? '' : diffLineCount(hunk.old_start, index())}</span>
-                      <code>{line}</code>
-                    </div>
-                  )}
-                </For>
-              </div>
-              <div class="flower-host-activity-file-diff-side flower-host-activity-file-diff-side-new">
-                <div class="flower-host-activity-file-diff-heading">new</div>
-                <For each={hunk.after.length > 0 ? hunk.after : ['']}>
-                  {(line, index) => (
-                    <div class={line === '' ? 'flower-host-activity-file-diff-line' : diffLineClass(hunk.after_kinds[index()])}>
-                      <span class="flower-host-activity-file-diff-line-number">{line === '' ? '' : diffLineCount(hunk.new_start, index())}</span>
-                      <code>{line}</code>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </div>
-          )}
-        </For>
-        <Show when={file.hunks.length === 0}>
-          <div class="flower-host-activity-file-diff-empty">No textual diff</div>
+        <Show
+          when={getGitPatchRenderSnapshot(file.patch_text).renderedLines.length > 0}
+          fallback={<div class="flower-host-activity-file-diff-empty">{file.diff_unavailable_reason || 'No textual diff'}</div>}
+        >
+          <div class="flower-host-activity-file-diff-unified">
+            <For each={getGitPatchRenderSnapshot(file.patch_text).renderedLines}>
+              {(line) => fileDiffLine(line)}
+            </For>
+          </div>
         </Show>
       </div>
     </section>
   );
 
-  const activityDetailBlock = (activityID: string, block: FlowerActivityDetailBlock) => {
+  const fileDiffLine = (line: GitPatchRenderedLine) => (
+    <div class={cn('flower-host-activity-file-diff-line', `flower-host-activity-file-diff-line-${line.kind}`)}>
+      <span class="flower-host-activity-file-diff-line-number">{formatGitPatchLineNumber(line.oldLine)}</span>
+      <span class="flower-host-activity-file-diff-line-number flower-host-activity-file-diff-line-number-new">{formatGitPatchLineNumber(line.newLine)}</span>
+      <code>{line.text}</code>
+    </div>
+  );
+
+  const activityDetailBlock = (messageID: string, blockIndex: number, itemID: string, block: FlowerActivityDetailBlock) => {
     if (block.kind === 'todos') {
       return (
         <div class="flower-host-activity-todo-list" role="list" aria-label="Todos">
@@ -1518,14 +1520,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       );
     }
-    if (block.kind === 'file_read') return fileReadBlock(activityID, block);
-    if (block.kind === 'file_diff') return fileDiffBlock(activityID, block);
+    if (block.kind === 'file_read') return fileReadBlock(messageID, blockIndex, itemID, block);
+    if (block.kind === 'file_diff') return fileDiffBlock(messageID, blockIndex, itemID, block);
     return detailLinesBlock(block);
   };
 
-  const activityRow = (timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem, blockKey: string, index: number) => {
+  const activityRow = (messageID: string, blockIndex: number, timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem, blockKey: string, index: number) => {
     const open = createMemo(() => activityItemOpen(timeline, item, blockKey, index));
-    const presentation = createMemo(() => presentFlowerActivityItem(item));
+    const presentation = createMemo(() => presentFlowerActivityItem(item, timeline.file_actions));
+    const rowFileAction = createMemo(() => {
+      const primary = presentation().primaryAction;
+      if (primary) return primary;
+      const title = presentation().title;
+      return title.kind === 'file' ? disabledFileAction(title.display_name) : null;
+    });
     const duration = createMemo(() => {
       const ownDuration = item.started_at_unix_ms && item.ended_at_unix_ms
         ? item.ended_at_unix_ms - item.started_at_unix_ms
@@ -1537,33 +1545,38 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         class={cn('flower-host-activity-inline-row', `flower-host-activity-inline-row-${item.status}`)}
         data-flower-activity-item-id={item.item_id}
         data-flower-activity-status={item.status}
-        aria-label={activityItemAriaLabel(item)}
+        aria-label={activityItemAriaLabel(item, timeline)}
       >
-        <button
-          type="button"
-          class="flower-host-activity-inline-button"
-          aria-expanded={open()}
-          onClick={() => toggleActivityItem(timeline, item, blockKey, index)}
-        >
-          <span class="flower-host-activity-inline-icon">{statusIcon(item.status)}</span>
-          <span class="flower-host-activity-inline-copy">
-            <span class="flower-host-activity-inline-title">{activityTitle(presentation().title)}</span>
-            <Show when={presentation().meta}>
-              {(meta) => <span class="flower-host-activity-inline-detail">{meta()}</span>}
+        <div class="flower-host-activity-inline-line">
+          <button
+            type="button"
+            class="flower-host-activity-inline-button"
+            aria-expanded={open()}
+            onClick={() => toggleActivityItem(timeline, item, blockKey, index)}
+          >
+            <span class="flower-host-activity-inline-icon">{statusIcon(item.status)}</span>
+            <span class="flower-host-activity-inline-copy">
+              <span class="flower-host-activity-inline-title">{activityTitle(presentation().title)}</span>
+              <Show when={presentation().meta}>
+                {(meta) => <span class="flower-host-activity-inline-detail">{meta()}</span>}
+              </Show>
+            </span>
+            <Show when={duration()}>
+              {(value) => <span class="flower-host-activity-inline-duration">{value()}</span>}
             </Show>
-          </span>
-          <Show when={duration()}>
-            {(value) => <span class="flower-host-activity-inline-duration">{value()}</span>}
+            <span class={cn('flower-host-activity-inline-status', `flower-host-activity-inline-status-${item.status}`)}>
+              {copy().chat.toolStatuses[item.status]}
+            </span>
+            <ChevronDown class={cn('flower-host-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-host-activity-inline-chevron-open')} />
+          </button>
+          <Show when={rowFileAction()}>
+            {(action) => fileActionButtons(messageID, blockIndex, item.item_id, action())}
           </Show>
-          <span class={cn('flower-host-activity-inline-status', `flower-host-activity-inline-status-${item.status}`)}>
-            {copy().chat.toolStatuses[item.status]}
-          </span>
-          <ChevronDown class={cn('flower-host-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-host-activity-inline-chevron-open')} />
-        </button>
+        </div>
         <Show when={open()}>
           <div class="flower-host-activity-inline-details">
             <For each={presentation().detailBlocks}>
-              {(block) => activityDetailBlock(item.item_id, block)}
+              {(block) => activityDetailBlock(messageID, blockIndex, item.item_id, block)}
             </For>
           </div>
         </Show>
@@ -1571,11 +1584,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const activityBlock = (block: FlowerActivityTimelineBlock, blockKey: string) => (
+  const activityBlock = (messageID: string, blockIndex: number, block: FlowerActivityTimelineBlock, blockKey: string) => (
     <Show when={block.items.length > 0}>
       <div class="flower-host-activity-inline" data-flower-activity-run-id={block.run_id}>
         <For each={block.items}>
-          {(item, index) => activityRow(block, item, blockKey, index())}
+          {(item, index) => activityRow(messageID, blockIndex, block, item, blockKey, index())}
         </For>
       </div>
     </Show>
@@ -1623,15 +1636,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (failed && !hasRenderableBlock && !streaming && selectedThreadRunErrorMessage()) {
       return null;
     }
-    const fallbackBlock: FlowerRenderableMessageBlock | null = !hasRenderableBlock && (streaming || failed)
-      ? {
-          type: 'content',
-          key: `${message.id}:fallback`,
-          block_type: 'text',
-          content: failed ? copy().chat.messageErrorFallback : ' ',
-        }
-      : null;
-    const blocks = fallbackBlock ? [fallbackBlock] : entry.blocks;
+	    const placeholderBlock: FlowerRenderableMessageBlock | null = !hasRenderableBlock && (streaming || failed)
+	      ? {
+	          type: 'content',
+	          key: `${message.id}:placeholder`,
+	          block_index: -1,
+	          block_type: 'text',
+	          content: failed ? copy().chat.messageErrorFallback : ' ',
+	        }
+	      : null;
+	    const blocks = placeholderBlock ? [placeholderBlock] : entry.blocks;
     const streamingBlockKey = streaming ? lastContentBlockKey(blocks) : '';
     return (
       <div
@@ -1647,7 +1661,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 when={block.type === 'activity' ? block : null}
                 fallback={messageContentBubble(message, block as Extract<FlowerRenderableMessageBlock, { type: 'content' }>, streamingBlockKey === block.key, failed)}
               >
-                {(activity) => activityBlock(activity().block, activity().key)}
+                {(activity) => activityBlock(message.id, activity().block_index, activity().block, activity().key)}
               </Show>
             )}
           </For>
