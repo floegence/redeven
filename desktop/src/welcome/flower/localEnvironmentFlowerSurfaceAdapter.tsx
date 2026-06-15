@@ -942,6 +942,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       return sendLocalEnvironmentFlowerPrompt(bridge, {
         threadID: input.thread_id,
         prompt: input.prompt,
+        ...(input.context_action ? { contextAction: input.context_action } : {}),
       });
     },
     submitInput: async (input) => {

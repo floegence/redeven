@@ -12,6 +12,7 @@ import type {
   FlowerRouterDecision,
   FlowerSettingsDraft,
   FlowerSurfaceAdapter,
+  FlowerSurfaceDraftIntent,
   FlowerSettingsSnapshot,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
@@ -461,6 +462,16 @@ describe('FlowerSurface navigation', () => {
     return mountFlowerSurface(surfaceAdapter);
   }
 
+  function renderSurfaceWithDraftIntent(
+    surfaceAdapter: FlowerSurfaceAdapter,
+    draftIntent: FlowerSurfaceDraftIntent,
+  ): HTMLDivElement {
+    const runtime = document.createElement('div');
+    document.body.appendChild(runtime);
+    disposers.push(render(() => <FlowerSurface adapter={surfaceAdapter} draftIntent={draftIntent} />, runtime));
+    return runtime;
+  }
+
   afterEach(() => {
     while (disposers.length > 0) {
       disposers.pop()?.();
@@ -503,6 +514,57 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-chat-shell')).toBeTruthy();
     expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Ask Flower');
     expect(runtime.querySelector('.flower-thread-card-active')).toBeNull();
+  });
+
+  it('prefills a shared Flower draft intent and sends its context action through the adapter', async () => {
+    const contextAction = {
+      schema_version: 2,
+      action_id: 'assistant.ask.flower',
+      target: { target_id: 'local-environment', locality: 'auto' },
+      source: { surface: 'monitoring' },
+      context: [],
+      presentation: { label: 'Local Environment', priority: 100 },
+    };
+    const sentThread = thread({
+      thread_id: 'thread-context-action',
+      title: 'Context action',
+      status: 'running',
+      messages: [
+        {
+          id: 'm-context-user',
+          role: 'user',
+          content: 'From Desktop Environment: Local Environment\n\nCheck readiness',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+      ],
+    });
+    const sendMessage = vi.fn(async () => sentThread);
+    const runtime = renderSurfaceWithDraftIntent({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      sendMessage,
+    }, {
+      id: 'desktop-local-environment',
+      prompt: 'From Desktop Environment: Local Environment\n\nCheck readiness',
+      context_action: contextAction,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    expect(textarea.value).toBe('From Desktop Environment: Local Environment\n\nCheck readiness');
+
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return Boolean(button && !button.disabled);
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => sendMessage.mock.calls.length > 0);
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'From Desktop Environment: Local Environment\n\nCheck readiness',
+      context_action: contextAction,
+    }));
   });
 
   it('selects a thread from settings and returns to chat', async () => {
@@ -842,6 +904,146 @@ describe('FlowerSurface navigation', () => {
     }));
     expect(loadThread).toHaveBeenCalledWith('thread-new');
     expect(runtime.textContent).toContain('Flower verification is complete.');
+  });
+
+  it('shows a streaming assistant placeholder immediately after send when the running thread has not streamed yet', async () => {
+    const sentThread = thread({
+      thread_id: 'thread-streaming-placeholder',
+      title: 'Flower placeholder',
+      status: 'running',
+      messages: [
+        {
+          id: 'm-user',
+          role: 'user',
+          content: 'show the placeholder',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+      ],
+    });
+    const loadThreadDeferred = deferred<FlowerThreadSnapshot>();
+    const loadThread = vi.fn(() => loadThreadDeferred.promise);
+    const sendMessage = vi.fn(async () => sentThread);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread,
+      sendMessage,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'show the placeholder';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return Boolean(button && !button.disabled);
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-role="user"]')));
+
+    expect(runtime.textContent).toContain('show the placeholder');
+    expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-plain')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-framed')).toBeNull();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(loadThread).toHaveBeenCalled();
+  });
+
+  it('shows the submitted user message and streaming cursor while send is still in flight', async () => {
+    const sendDeferred = deferred<FlowerThreadSnapshot>();
+    const sendMessage = vi.fn(() => sendDeferred.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      sendMessage,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'inspect the running turn';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return Boolean(button && !button.disabled);
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => sendMessage.mock.calls.length > 0);
+
+    expect(runtime.textContent).toContain('inspect the running turn');
+    expect(runtime.querySelector('[data-flower-message-role="user"][data-flower-message-status="sending"]')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"][data-flower-message-status="streaming"] .flower-streaming-cursor')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-framed')).toBeNull();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+  });
+
+  it('shows the submitted user message immediately while the handler is still resolving', async () => {
+    const handlerDeferred = deferred<FlowerRouterDecision>();
+    const sendDeferred = deferred<FlowerThreadSnapshot>();
+    const sendMessage = vi.fn(() => sendDeferred.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      resolveHandler: vi.fn(() => handlerDeferred.promise),
+      sendMessage,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'show before route settles';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return Boolean(button && !button.disabled);
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-role="user"][data-flower-message-status="sending"]')));
+    expect(runtime.textContent).toContain('show before route settles');
+    expect(runtime.querySelector('[data-flower-message-role="assistant"][data-flower-message-status="streaming"] .flower-streaming-cursor')).toBeTruthy();
+    expect(sendMessage).not.toHaveBeenCalled();
+
+    handlerDeferred.resolve(decision());
+    await waitFor(() => sendMessage.mock.calls.length > 0);
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      prompt: 'show before route settles',
+    }));
+  });
+
+  it('keeps the pending turn visible after a new thread is accepted before messages catch up', async () => {
+    const acceptedThread = thread({
+      thread_id: 'thread-accepted-without-messages',
+      title: 'Accepted pending',
+      status: 'running',
+      messages: [],
+    });
+    const loadThreadDeferred = deferred<FlowerThreadSnapshot>();
+    const sendMessage = vi.fn(async () => acceptedThread);
+    const loadThread = vi.fn(() => loadThreadDeferred.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread,
+      sendMessage,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'follow the accepted thread';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return Boolean(button && !button.disabled);
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => sendMessage.mock.calls.length > 0);
+    await waitFor(() => loadThread.mock.calls.length > 0);
+    await waitFor(() => runtime.textContent?.includes('follow the accepted thread') ?? false);
+    expect(runtime.textContent).toContain('follow the accepted thread');
+    expect(runtime.querySelector('[data-flower-message-role="user"][data-flower-message-status="complete"]')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"][data-flower-message-status="streaming"] .flower-streaming-cursor')).toBeTruthy();
+    expect(loadThread).toHaveBeenCalledWith('thread-accepted-without-messages');
   });
 
   it('renders file activity actions and unified patch lines inline', async () => {

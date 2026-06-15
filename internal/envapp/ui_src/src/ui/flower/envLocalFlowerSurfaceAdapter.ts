@@ -25,6 +25,7 @@ import type {
   FlowerThreadSnapshot,
   FlowerThreadStatus,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { ContextActionEnvelope } from '../contextActions/protocol';
 
 type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envPublicID: string;
@@ -1104,6 +1105,17 @@ function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse
   return trim(models.current_model);
 }
 
+function isContextActionEnvelope(value: unknown): value is ContextActionEnvelope {
+  if (!value || typeof value !== 'object') return false;
+  const action = value as Partial<ContextActionEnvelope>;
+  return action.schema_version === 2
+    && typeof action.action_id === 'string'
+    && Array.isArray(action.context)
+    && !!action.target
+    && !!action.source
+    && !!action.presentation;
+}
+
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
   const loadThread = async (threadID: string): Promise<FlowerThreadSnapshot> => {
     const copy = adapterCopy(options);
@@ -1251,6 +1263,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         input: {
           text: prompt,
           attachments: [],
+          ...(isContextActionEnvelope(input.context_action) ? { contextAction: input.context_action } : {}),
         },
         options: {
           maxSteps: 10,

@@ -521,39 +521,39 @@ html.dark .flower-component-shell {
 .flower-streaming-cursor {
   position: relative;
   display: inline-block;
-  width: 0.42rem;
+  width: 1.65rem;
   will-change: background-position;
-  height: 1.15em;
-  margin-left: 0.16rem;
-  vertical-align: -0.18em;
-  border-radius: 9999px;
+  height: 0.82rem;
+  margin-left: 0.18rem;
+  vertical-align: -0.08em;
+  border-radius: 0.25rem;
   background:
     linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--primary) 12%, transparent),
-      color-mix(in srgb, var(--primary) 90%, white 10%),
-      color-mix(in srgb, var(--primary) 12%, transparent)
+      90deg,
+      color-mix(in srgb, var(--primary) 14%, transparent) 0%,
+      color-mix(in srgb, var(--primary) 26%, var(--background)) 34%,
+      color-mix(in srgb, white 78%, var(--primary) 22%) 50%,
+      color-mix(in srgb, var(--primary) 26%, var(--background)) 66%,
+      color-mix(in srgb, var(--primary) 14%, transparent) 100%
     );
-  background-size: 100% 220%;
+  background-size: 220% 100%;
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent),
-    0 0 14px color-mix(in srgb, var(--primary) 46%, transparent);
-  animation: flower-cursor-flow 1.05s linear infinite;
+    0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
+    0 0 16px color-mix(in srgb, var(--primary) 30%, transparent);
+  animation: flower-cursor-flow 1.15s linear infinite;
 }
 
 @keyframes flower-cursor-flow {
   0% {
-    background-position: 0 100%;
-    opacity: 0.5;
-    transform: translateY(0);
+    background-position: 120% 0;
+    opacity: 0.58;
   }
-  45% {
+  50% {
     opacity: 1;
   }
   100% {
-    background-position: 0 -120%;
-    opacity: 0.68;
-    transform: translateY(-0.02em);
+    background-position: -120% 0;
+    opacity: 0.72;
   }
 }
 

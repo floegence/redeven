@@ -374,6 +374,7 @@ export type FlowerSendMessageInput = Readonly<{
   thread_id?: string;
   prompt: string;
   decision?: FlowerRouterDecision | null;
+  context_action?: unknown;
 }>;
 
 export type FlowerSendMessageFailure = Error & Readonly<{
@@ -411,4 +412,11 @@ export type FlowerSurfaceAdapter = Readonly<{
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerThreadSnapshot>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
+}>;
+
+export type FlowerSurfaceDraftIntent = Readonly<{
+  id: string;
+  thread_id?: string;
+  prompt: string;
+  context_action?: unknown;
 }>;
