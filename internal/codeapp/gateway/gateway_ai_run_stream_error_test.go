@@ -142,3 +142,106 @@ func TestGateway_AI_Run_InvalidModelStillStreamsError(t *testing.T) {
 		}
 	}
 }
+
+func TestGateway_AI_Run_JSONAcceptStartsDetached(t *testing.T) {
+	t.Parallel()
+
+	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	stateDir := t.TempDir()
+
+	cfg := &config.AIConfig{
+		Providers: []config.AIProvider{
+			{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: "https://api.openai.com/v1",
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+			},
+		},
+		CurrentModelID: "openai/gpt-5-mini",
+	}
+
+	channelID := "ch_test_ai_json_detached_1"
+	envOrigin := envOriginWithChannel(channelID)
+	meta := session.Meta{
+		EndpointID:        "env_json_detached",
+		NamespacePublicID: "ns_test",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+	aiSvc, err := ai.NewService(ai.Options{
+		Logger:         logger,
+		StateDir:       stateDir,
+		AgentHomeDir:   stateDir,
+		Shell:          "bash",
+		Config:         cfg,
+		RunMaxWallTime: 30 * time.Second,
+		RunIdleTimeout: 10 * time.Second,
+		ResolveProviderAPIKey: func(string) (string, bool, error) {
+			return "sk-test", true, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("ai.NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = aiSvc.Close() })
+
+	gw, err := New(Options{
+		Logger:  logger,
+		Backend: &stubBackend{},
+		DistFS: fstest.MapFS{
+			"env/index.html": {Data: []byte("<html>env</html>")},
+			"inject.js":      {Data: []byte("console.log('inject');")},
+		},
+		ListenAddr:         "127.0.0.1:0",
+		ConfigPath:         writeTestConfigWithAI(t),
+		ResolveSessionMeta: resolveMetaForTest(channelID, meta),
+		AI:                 aiSvc,
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	thread, err := aiSvc.CreateThread(t.Context(), &meta, "detached run", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	body := map[string]any{
+		"thread_id": thread.ThreadID,
+		"model":     "openai/gpt-5-mini",
+		"input":     map[string]any{"text": "hi", "attachments": []any{}},
+		"options":   map[string]any{"max_steps": 1},
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/runs", bytes.NewBuffer(b))
+	req.Header.Set("Origin", envOrigin)
+	req.Header.Set("Accept", "application/json")
+	rr := httptest.NewRecorder()
+	gw.serveHTTP(rr, req)
+
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("run status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	runID := strings.TrimSpace(rr.Header().Get("X-Redeven-AI-Run-ID"))
+	if runID == "" {
+		t.Fatalf("missing X-Redeven-AI-Run-ID header")
+	}
+	var resp struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			RunID    string `json:"run_id"`
+			ThreadID string `json:"thread_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal run response: %v", err)
+	}
+	if !resp.OK || resp.Data.RunID != runID || resp.Data.ThreadID != thread.ThreadID {
+		t.Fatalf("unexpected run response: %s", rr.Body.String())
+	}
+}

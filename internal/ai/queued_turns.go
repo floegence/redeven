@@ -374,7 +374,7 @@ func (s *Service) ListFollowups(ctx context.Context, meta *session.Meta, threadI
 		return nil, err
 	}
 	pausedReason := ""
-	runStatus, _ := normalizeThreadRunState(th.RunStatus, th.RunError)
+	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	if NormalizeRunState(runStatus) == RunStateWaitingUser || requestUserInputPromptFromThreadRecord(th, runStatus) != nil {
 		if len(queued) > 0 {
 			pausedReason = "waiting_user"

@@ -61,6 +61,8 @@ type ThreadView = Readonly<{
   title?: string;
   model_id?: string;
   run_status?: string;
+  run_error_code?: string;
+  run_error?: string;
   working_dir?: string;
   pinned_at_unix_ms?: number;
   created_at_unix_ms?: number;
@@ -117,6 +119,7 @@ type CreateThreadResponse = Readonly<{
 type MarkThreadReadResponse = Readonly<{
   read_status: ThreadReadStatus;
 }>;
+type FlowerSecretPatch = Readonly<{ provider_id: string; api_key: string | null }>;
 
 type FlowerInputResponseMode = NonNullable<FlowerInputRequestQuestion['response_mode']>;
 
@@ -639,7 +642,6 @@ function positiveInteger(raw: unknown): number | undefined {
 function defaultConfig(): FlowerSettingsSnapshot['config'] {
   return {
     schema_version: 1,
-    enabled: false,
     current_model_id: '',
     execution_policy: {
       require_user_approval: true,
@@ -674,12 +676,37 @@ function mapProvider(provider: AIConfig['providers'][number]): FlowerProvider {
   };
 }
 
-function mapSettings(settings: AgentSettingsResponse): FlowerSettingsSnapshot {
+function mapDesktopModelSource(settings: AgentSettingsResponse, models?: ModelsResponse): FlowerSettingsSnapshot['model_source'] {
+  const source = settings.ai_runtime?.desktop_model_source;
+  if (!source?.connected) return undefined;
+  const modelCount = Number(source.model_count ?? models?.models?.length ?? 0);
+  const currentModel = trim(models?.current_model);
+  return {
+    kind: 'desktop_model_source',
+    ready: Boolean(source.available && currentModel && modelCount > 0),
+    label: trim(source.model_source) || 'Local AI Profile',
+    model_count: Number.isFinite(modelCount) && modelCount > 0 ? Math.floor(modelCount) : 0,
+    missing_key_provider_ids: (source.missing_key_provider_ids ?? []).map(trim).filter(Boolean),
+    ...(trim(source.last_error) ? { last_error: trim(source.last_error) } : {}),
+  };
+}
+
+function mapSettings(settings: AgentSettingsResponse, models?: ModelsResponse): FlowerSettingsSnapshot {
   const ai = settings.ai;
+  const externalModelSource = mapDesktopModelSource(settings, models);
+  if (externalModelSource?.kind === 'desktop_model_source') {
+    return {
+      config: {
+        ...defaultConfig(),
+        current_model_id: trim(models?.current_model) || trim(ai?.current_model_id),
+      },
+      provider_secrets: [],
+      model_source: externalModelSource,
+    };
+  }
   const config = ai
     ? {
         schema_version: 1 as const,
-        enabled: true,
         current_model_id: trim(ai.current_model_id),
         execution_policy: {
           require_user_approval: ai.execution_policy?.require_user_approval ?? true,
@@ -701,10 +728,6 @@ function mapSettings(settings: AgentSettingsResponse): FlowerSettingsSnapshot {
       provider_api_key_configured: Boolean(providerSecrets[provider.id]),
       web_search_api_key_configured: Boolean(webSecrets[provider.id]),
     })),
-    target_cache: {
-      version: 1,
-      entries: [],
-    },
   };
 }
 
@@ -972,6 +995,8 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
   const envLabel = trim(options.envLabel) || copy.currentEnvironment;
   const status = runStatus(thread.run_status);
   const inputRequest = status === 'waiting_user' ? mapWaitingPrompt(thread.waiting_prompt) : null;
+  const errorMessage = trim(thread.run_error);
+  const errorCode = trim(thread.run_error_code);
   const currentReadStatus = readStatus(thread);
   return {
     thread_id: threadID,
@@ -979,8 +1004,8 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
     model_id: trim(thread.model_id),
     working_dir: trim(thread.working_dir),
     ...(Number(thread.pinned_at_unix_ms ?? 0) > 0 ? { pinned_at_ms: Math.floor(Number(thread.pinned_at_unix_ms)) } : {}),
-    home_host_id: `env:${trim(options.envPublicID) || 'current'}`,
-    home_host_kind: 'env_local',
+    home_runtime_id: `env:${trim(options.envPublicID) || 'current'}`,
+    home_runtime_kind: 'env_local',
     origin_env_public_id: trim(options.envPublicID) || undefined,
     created_at_ms: unixMs(thread.created_at_unix_ms, 'thread.created_at_unix_ms'),
     updated_at_ms: unixMs(thread.updated_at_unix_ms ?? thread.last_message_at_unix_ms, 'thread.updated_at_unix_ms'),
@@ -989,6 +1014,7 @@ function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], o
     target_labels: [envLabel],
     messages,
     ...(inputRequest ? { input_request: inputRequest } : {}),
+    ...(errorMessage ? { error: { message: errorMessage, ...(errorCode ? { code: errorCode } : {}) } } : {}),
     read_status: currentReadStatus,
   };
 }
@@ -1011,7 +1037,6 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
       state: 'online',
       selection_source: 'router_default',
       supports_thread_kinds: ['chat', 'task'],
-      allowed_target_ids: [`env:${envID}`],
     },
     available_handlers: [],
     unavailable_handlers: [],
@@ -1023,12 +1048,11 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
     decision_scope: {
       thread_kind: 'chat',
       client_surface: 'env_app_flower_surface',
-      primary_target_id: `env:${envID}`,
     },
-    host_presence: {
+    runtime_presence: {
       schema_version: 1,
-      host_id: `env:${envID}`,
-      host_kind: 'env_local',
+      runtime_id: `env:${envID}`,
+      runtime_kind: 'env_local',
       carrier_kind: 'runtime',
       display_name: envLabel,
       state: 'online',
@@ -1036,10 +1060,9 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
       capabilities: ['chat', 'task'],
       last_seen_at_unix_ms: now,
     },
-    current_target_id: `env:${envID}`,
     allowed_actions: ['start_thread'],
     ui_chips: [
-      { kind: 'host', label: copy.usingCurrentEnvironment, tone: 'normal' },
+      { kind: 'runtime', label: copy.usingCurrentEnvironment, tone: 'normal' },
       { kind: 'source', label: envLabel, tone: 'normal' },
     ],
     blocker: null,
@@ -1048,7 +1071,11 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
 }
 
 async function loadSettingsSnapshot(): Promise<FlowerSettingsSnapshot> {
-  return mapSettings(await fetchGatewayJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' }));
+  const [settings, models] = await Promise.all([
+    fetchGatewayJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' }),
+    loadModels().catch(() => undefined),
+  ]);
+  return mapSettings(settings, models);
 }
 
 async function loadModels(): Promise<ModelsResponse> {
@@ -1103,21 +1130,31 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
   };
 
   return {
-    host: {
-      host_id: `env:${trim(options.envPublicID) || 'current'}`,
-      host_kind: 'env_local',
+    runtime: {
+      runtime_id: `env:${trim(options.envPublicID) || 'current'}`,
+      runtime_kind: 'env_local',
       carrier_kind: 'runtime',
       display_name: trim(options.envLabel) || adapterCopy(options).currentEnvironment,
       subtitle: adapterCopy(options).environmentLocalSubtitle,
     },
     loadSettings: loadSettingsSnapshot,
     saveSettings: async (draft) => {
-      const providerAPIKeyPatches = draft.config.providers
-        .filter((provider) => trim(provider.provider_api_key) && (provider.provider_api_key_mode ?? 'replace') !== 'clear')
-        .map((provider) => ({ provider_id: trim(provider.id), api_key: trim(provider.provider_api_key) }));
-      const webSearchKeyPatches = draft.config.providers
-        .filter((provider) => trim(provider.web_search_api_key) && (provider.web_search_api_key_mode ?? 'replace') !== 'clear')
-        .map((provider) => ({ provider_id: trim(provider.id), api_key: trim(provider.web_search_api_key) }));
+      const providerAPIKeyPatches: FlowerSecretPatch[] = draft.config.providers.flatMap((provider): FlowerSecretPatch[] => {
+        if (provider.provider_api_key === undefined) return [];
+        const providerID = trim(provider.id);
+        if (!providerID) return [];
+        if (provider.provider_api_key === null) return [{ provider_id: providerID, api_key: null }];
+        const apiKey = trim(provider.provider_api_key);
+        return apiKey ? [{ provider_id: providerID, api_key: apiKey }] : [];
+      });
+      const webSearchKeyPatches: FlowerSecretPatch[] = draft.config.providers.flatMap((provider): FlowerSecretPatch[] => {
+        if (provider.web_search_api_key === undefined) return [];
+        const providerID = trim(provider.id);
+        if (!providerID) return [];
+        if (provider.web_search_api_key === null) return [{ provider_id: providerID, api_key: null }];
+        const apiKey = trim(provider.web_search_api_key);
+        return apiKey ? [{ provider_id: providerID, api_key: apiKey }] : [];
+      });
       await fetchGatewayJSON<unknown>('/_redeven_proxy/api/ai/provider_bundle', {
         method: 'PUT',
         body: JSON.stringify({

@@ -139,6 +139,7 @@ export type ThreadView = Readonly<{
   queued_turn_count?: number;
   run_status?: ThreadRunStatus;
   run_updated_at_unix_ms?: number;
+  run_error_code?: string;
   run_error?: string;
   waiting_prompt?: unknown;
   last_context_run_id?: string;
@@ -1384,7 +1385,7 @@ export function createAIChatContextValue(): AIChatContextValue {
         'AI not configured',
         missing.length > 0
           ? `Desktop has model providers without API keys: ${missing.join(', ')}. Open Local Environment Settings on this computer.`
-          : 'Open Runtime Settings or Local Environment Settings to configure a model.',
+          : 'Open Local Environment Settings on this computer to configure the Local AI Profile.',
       );
       return null;
     }

@@ -34,25 +34,26 @@ func newUserMessageID() (string, error) {
 	return "u_ai_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func normalizeThreadRunState(status string, runError string) (string, string) {
+func normalizeThreadRunState(status string, runErrorCode string, runError string) (string, string, string) {
 	s := NormalizeRunState(status)
+	runErrorCode = strings.TrimSpace(runErrorCode)
 	runError = strings.TrimSpace(runError)
 	switch s {
 	case RunStateFailed, RunStateTimedOut:
-		return string(s), runError
+		return string(s), runErrorCode, runError
 	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering, RunStateFinalizing, RunStateWaitingUser, RunStateSuccess, RunStateCanceled:
-		return string(s), ""
+		return string(s), "", ""
 	default:
-		return string(RunStateIdle), ""
+		return string(RunStateIdle), "", ""
 	}
 }
 
-func activeThreadEffectiveRunState(status string, runError string) (string, string) {
-	runStatus, _ := normalizeThreadRunState(status, runError)
+func activeThreadEffectiveRunState(status string, runErrorCode string, runError string) (string, string, string) {
+	runStatus, _, _ := normalizeThreadRunState(status, runErrorCode, runError)
 	if IsActiveRunState(runStatus) {
-		return runStatus, ""
+		return runStatus, "", ""
 	}
-	return string(RunStateRunning), ""
+	return string(RunStateRunning), "", ""
 }
 
 func (s *Service) activeThreadRunSet(endpointID string) map[string]struct{} {
@@ -117,9 +118,9 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		return nil, err
 	}
 
-	runStatus, runError := normalizeThreadRunState(th.RunStatus, th.RunError)
+	runStatus, runErrorCode, runError := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	if s.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(th.ThreadID)) {
-		runStatus, runError = activeThreadEffectiveRunState(th.RunStatus, th.RunError)
+		runStatus, runErrorCode, runError = activeThreadEffectiveRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	}
 
 	workingDir := strings.TrimSpace(th.WorkingDir)
@@ -137,6 +138,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		QueuedTurnCount:     queuedTurnCount,
 		RunStatus:           runStatus,
 		RunUpdatedAtUnixMs:  th.RunUpdatedAtUnixMs,
+		RunErrorCode:        runErrorCode,
 		RunError:            runError,
 		WaitingPrompt:       s.threadWaitingPrompt(ctx, th, runStatus),
 		LastContextRunID:    strings.TrimSpace(th.LastContextRunID),
@@ -188,9 +190,9 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	activeThreads := s.activeThreadRunSet(endpointID)
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
-		runStatus, runError := normalizeThreadRunState(t.RunStatus, t.RunError)
+		runStatus, runErrorCode, runError := normalizeThreadRunState(t.RunStatus, t.RunErrorCode, t.RunError)
 		if _, ok := activeThreads[strings.TrimSpace(t.ThreadID)]; ok {
-			runStatus, runError = activeThreadEffectiveRunState(t.RunStatus, t.RunError)
+			runStatus, runErrorCode, runError = activeThreadEffectiveRunState(t.RunStatus, t.RunErrorCode, t.RunError)
 		}
 		workingDir := strings.TrimSpace(t.WorkingDir)
 		if workingDir == "" {
@@ -206,6 +208,7 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 			QueuedTurnCount:     queuedTurnCounts[strings.TrimSpace(t.ThreadID)],
 			RunStatus:           runStatus,
 			RunUpdatedAtUnixMs:  t.RunUpdatedAtUnixMs,
+			RunErrorCode:        runErrorCode,
 			RunError:            runError,
 			WaitingPrompt:       s.threadWaitingPrompt(ctx, &t, runStatus),
 			LastContextRunID:    strings.TrimSpace(t.LastContextRunID),
@@ -632,7 +635,7 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	// allow the user to unblock the UI by marking it canceled.
 	if db != nil {
 		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", meta.UserPublicID, meta.UserEmail)
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", meta.UserPublicID, meta.UserEmail)
 		cancel()
 		s.broadcastThreadSummary(endpointID, threadID)
 	}

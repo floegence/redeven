@@ -422,6 +422,7 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
     diag: payload?.diag && typeof payload.diag === 'object' ? (payload.diag as Record<string, any>) : undefined,
     streamEvent: eventType === 'stream_event' ? (payload?.stream_event as any) : undefined,
     runStatus,
+    runErrorCode: typeof payload?.run_error_code === 'string' ? payload.run_error_code : undefined,
     runError: typeof payload?.run_error === 'string' ? payload.run_error : undefined,
     waitingPrompt: fromWireAIWaitingPrompt(payload?.waiting_prompt),
 

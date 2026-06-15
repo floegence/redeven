@@ -743,6 +743,11 @@ type settingsUpdateView struct {
 	AIUpdate *settingsAIUpdateView `json:"ai_update,omitempty"`
 }
 
+type aiRunStartView struct {
+	RunID    string `json:"run_id"`
+	ThreadID string `json:"thread_id"`
+}
+
 type settingsAISecretsView struct {
 	ProviderAPIKeySet          map[string]bool `json:"provider_api_key_set"`
 	WebSearchProviderAPIKeySet map[string]bool `json:"web_search_provider_api_key_set"`
@@ -783,6 +788,24 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func requestAcceptsJSONOnly(r *http.Request) bool {
+	accept := strings.TrimSpace(r.Header.Get("Accept"))
+	if accept == "" {
+		return false
+	}
+	sawJSON := false
+	for _, item := range strings.Split(accept, ",") {
+		mediaType := strings.TrimSpace(strings.SplitN(item, ";", 2)[0])
+		if strings.EqualFold(mediaType, "application/x-ndjson") {
+			return false
+		}
+		if strings.EqualFold(mediaType, "application/json") {
+			sawJSON = true
+		}
+	}
+	return sawJSON
 }
 
 func (g *Gateway) handleAPIWithDiagnostics(w http.ResponseWriter, r *http.Request, localUI bool) {
@@ -859,6 +882,258 @@ func writeCodexError(w http.ResponseWriter, err error) {
 		errorDetails = strings.TrimSpace(turnErr.AdditionalDetails)
 	}
 	writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode, ErrorDetails: errorDetails})
+}
+
+func aiThreadActionHTTPStatus(err error) int {
+	switch {
+	case err == nil:
+		return http.StatusOK
+	case errors.Is(err, sql.ErrNoRows):
+		return http.StatusNotFound
+	case errors.Is(err, ai.ErrThreadBusy),
+		errors.Is(err, ai.ErrRunChanged),
+		errors.Is(err, ai.ErrWaitingPromptChanged),
+		errors.Is(err, ai.ErrModelLockViolation),
+		errors.Is(err, ai.ErrModelSwitchRequiresExplicitRestart),
+		errors.Is(err, ai.ErrFollowupsRevisionChanged):
+		return http.StatusConflict
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if strings.Contains(msg, "thread not found") || strings.Contains(msg, "run not found") {
+		return http.StatusNotFound
+	}
+	if strings.Contains(msg, "permission denied") {
+		return http.StatusForbidden
+	}
+	return http.StatusBadRequest
+}
+
+type aiProviderBundleSecretSnapshot struct {
+	hasValue bool
+	value    string
+}
+
+type aiProviderBundleSaveError struct {
+	status int
+	err    error
+}
+
+func (e aiProviderBundleSaveError) Error() string {
+	if e.err == nil {
+		return "provider bundle save failed"
+	}
+	return e.err.Error()
+}
+
+func (e aiProviderBundleSaveError) Unwrap() error {
+	return e.err
+}
+
+func (g *Gateway) saveAIProviderBundle(
+	nextAI config.AIConfig,
+	aiKeyPatches []settings.AIProviderAPIKeyPatch,
+	webSearchKeyPatches []settings.WebSearchProviderAPIKeyPatch,
+) (*config.Config, error) {
+	prevConfig, err := g.loadConfigLocked()
+	if err != nil {
+		return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: err}
+	}
+	prevAIKeys, err := snapshotAIProviderAPIKeys(g.secrets, aiKeyPatches)
+	if err != nil {
+		return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: err}
+	}
+	prevWebSearchKeys, err := snapshotWebSearchProviderAPIKeys(g.secrets, webSearchKeyPatches)
+	if err != nil {
+		return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: err}
+	}
+
+	restore := func() error {
+		return errors.Join(
+			g.restoreAIProviderBundleConfig(prevConfig),
+			restoreAIProviderAPIKeys(g.secrets, prevAIKeys),
+			restoreWebSearchProviderAPIKeys(g.secrets, prevWebSearchKeys),
+		)
+	}
+
+	var updated *config.Config
+	persist := func() error {
+		cfg, err := g.updateConfigLocked(func(c *config.Config) error {
+			c.AI = &nextAI
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		updated = cfg
+		return nil
+	}
+	if err := g.ai.UpdateConfig(&nextAI, persist); err != nil {
+		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
+	}
+	if err := g.secrets.ApplyAIProviderAPIKeyPatches(aiKeyPatches); err != nil {
+		if restoreErr := restore(); restoreErr != nil {
+			return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: errors.Join(err, restoreErr)}
+		}
+		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
+	}
+	if err := g.secrets.ApplyWebSearchProviderAPIKeyPatches(webSearchKeyPatches); err != nil {
+		if restoreErr := restore(); restoreErr != nil {
+			return nil, aiProviderBundleSaveError{status: http.StatusInternalServerError, err: errors.Join(err, restoreErr)}
+		}
+		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
+	}
+	return updated, nil
+}
+
+func (g *Gateway) restoreAIProviderBundleConfig(prevConfig *config.Config) error {
+	if prevConfig == nil {
+		return nil
+	}
+	return g.ai.UpdateConfig(prevConfig.AI, func() error {
+		_, err := g.updateConfigLocked(func(c *config.Config) error {
+			*c = *prevConfig
+			return nil
+		})
+		return err
+	})
+}
+
+func snapshotAIProviderAPIKeys(store *settings.SecretsStore, patches []settings.AIProviderAPIKeyPatch) (map[string]aiProviderBundleSecretSnapshot, error) {
+	out := make(map[string]aiProviderBundleSecretSnapshot)
+	for _, patch := range patches {
+		id := strings.TrimSpace(patch.ProviderID)
+		if id == "" {
+			continue
+		}
+		if _, ok := out[id]; ok {
+			continue
+		}
+		value, ok, err := store.GetAIProviderAPIKey(id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = aiProviderBundleSecretSnapshot{hasValue: ok, value: value}
+	}
+	return out, nil
+}
+
+func snapshotWebSearchProviderAPIKeys(store *settings.SecretsStore, patches []settings.WebSearchProviderAPIKeyPatch) (map[string]aiProviderBundleSecretSnapshot, error) {
+	out := make(map[string]aiProviderBundleSecretSnapshot)
+	for _, patch := range patches {
+		id := strings.TrimSpace(patch.ProviderID)
+		if id == "" {
+			continue
+		}
+		if _, ok := out[id]; ok {
+			continue
+		}
+		value, ok, err := store.GetWebSearchProviderAPIKey(id)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = aiProviderBundleSecretSnapshot{hasValue: ok, value: value}
+	}
+	return out, nil
+}
+
+func restoreAIProviderAPIKeys(store *settings.SecretsStore, snapshots map[string]aiProviderBundleSecretSnapshot) error {
+	patches := make([]settings.AIProviderAPIKeyPatch, 0, len(snapshots))
+	for id, snap := range snapshots {
+		if snap.hasValue {
+			value := snap.value
+			patches = append(patches, settings.AIProviderAPIKeyPatch{ProviderID: id, APIKey: &value})
+			continue
+		}
+		patches = append(patches, settings.AIProviderAPIKeyPatch{ProviderID: id, APIKey: nil})
+	}
+	return store.ApplyAIProviderAPIKeyPatches(patches)
+}
+
+func restoreWebSearchProviderAPIKeys(store *settings.SecretsStore, snapshots map[string]aiProviderBundleSecretSnapshot) error {
+	patches := make([]settings.WebSearchProviderAPIKeyPatch, 0, len(snapshots))
+	for id, snap := range snapshots {
+		if snap.hasValue {
+			value := snap.value
+			patches = append(patches, settings.WebSearchProviderAPIKeyPatch{ProviderID: id, APIKey: &value})
+			continue
+		}
+		patches = append(patches, settings.WebSearchProviderAPIKeyPatch{ProviderID: id, APIKey: nil})
+	}
+	return store.ApplyWebSearchProviderAPIKeyPatches(patches)
+}
+
+func appendProviderSecretCleanupPatches(
+	store *settings.SecretsStore,
+	providerIDs map[string]struct{},
+	patches []settings.AIProviderAPIKeyPatch,
+) ([]settings.AIProviderAPIKeyPatch, error) {
+	keyIDs, err := store.ListAIProviderAPIKeyIDs()
+	if err != nil {
+		return nil, err
+	}
+	keySet, err := store.GetAIProviderAPIKeySet(keyIDs)
+	if err != nil {
+		return nil, err
+	}
+	patched := make(map[string]struct{}, len(patches))
+	for _, patch := range patches {
+		if id := strings.TrimSpace(patch.ProviderID); id != "" {
+			patched[id] = struct{}{}
+		}
+	}
+	for id, hasKey := range keySet {
+		if !hasKey {
+			continue
+		}
+		if _, ok := providerIDs[id]; ok {
+			continue
+		}
+		if _, ok := patched[id]; ok {
+			continue
+		}
+		patches = append(patches, settings.AIProviderAPIKeyPatch{ProviderID: id, APIKey: nil})
+	}
+	return patches, nil
+}
+
+func appendWebSearchSecretCleanupPatches(
+	store *settings.SecretsStore,
+	providers []config.AIProvider,
+	patches []settings.WebSearchProviderAPIKeyPatch,
+) ([]settings.WebSearchProviderAPIKeyPatch, error) {
+	keyIDs, err := store.ListWebSearchProviderAPIKeyIDs()
+	if err != nil {
+		return nil, err
+	}
+	keySet, err := store.GetWebSearchProviderAPIKeySet(keyIDs)
+	if err != nil {
+		return nil, err
+	}
+	braveProviders := make(map[string]struct{}, len(providers))
+	for _, provider := range providers {
+		if provider.WebSearch != nil && strings.TrimSpace(provider.WebSearch.Mode) == config.AIProviderWebSearchModeBrave {
+			braveProviders[strings.TrimSpace(provider.ID)] = struct{}{}
+		}
+	}
+	patched := make(map[string]struct{}, len(patches))
+	for _, patch := range patches {
+		if id := strings.TrimSpace(patch.ProviderID); id != "" {
+			patched[id] = struct{}{}
+		}
+	}
+	for id, hasKey := range keySet {
+		if !hasKey {
+			continue
+		}
+		if _, ok := braveProviders[id]; ok {
+			continue
+		}
+		if _, ok := patched[id]; ok {
+			continue
+		}
+		patches = append(patches, settings.WebSearchProviderAPIKeyPatch{ProviderID: id, APIKey: nil})
+	}
+	return patches, nil
 }
 
 type diagnosticsView struct {
@@ -2624,6 +2899,17 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			webSearchKeyPatches = append(webSearchKeyPatches, settings.WebSearchProviderAPIKeyPatch{ProviderID: id, APIKey: key})
 		}
+		var cleanupErr error
+		aiKeyPatches, cleanupErr = appendProviderSecretCleanupPatches(g.secrets, providerIDs, aiKeyPatches)
+		if cleanupErr != nil {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: cleanupErr.Error()})
+			return
+		}
+		webSearchKeyPatches, cleanupErr = appendWebSearchSecretCleanupPatches(g.secrets, nextAI.Providers, webSearchKeyPatches)
+		if cleanupErr != nil {
+			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: cleanupErr.Error()})
+			return
+		}
 
 		activeRunCount := g.ai.ActiveRunCount(strings.TrimSpace(meta.EndpointID))
 		aiUpdate := &settingsAIUpdateView{
@@ -2638,131 +2924,15 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			"ai_active_run_count":  activeRunCount,
 		}
 
-		prevConfig, err := g.loadConfigLocked()
-		if err != nil {
-			g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
-			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
-			return
-		}
-		type secretSnapshot struct {
-			hasValue bool
-			value    string
-		}
-		prevAIKeys := map[string]secretSnapshot{}
-		prevWebSearchKeys := map[string]secretSnapshot{}
-		seenAIKeyIDs := map[string]struct{}{}
-		seenWebSearchKeyIDs := map[string]struct{}{}
-		for _, patch := range aiKeyPatches {
-			if _, ok := seenAIKeyIDs[patch.ProviderID]; ok {
-				continue
+		updated, saveErr := g.saveAIProviderBundle(nextAI, aiKeyPatches, webSearchKeyPatches)
+		if saveErr != nil {
+			status := http.StatusBadRequest
+			var bundleErr aiProviderBundleSaveError
+			if errors.As(saveErr, &bundleErr) && bundleErr.status != 0 {
+				status = bundleErr.status
 			}
-			seenAIKeyIDs[patch.ProviderID] = struct{}{}
-			value, ok, snapErr := g.secrets.GetAIProviderAPIKey(patch.ProviderID)
-			if snapErr != nil {
-				g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, snapErr)
-				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: snapErr.Error()})
-				return
-			}
-			prevAIKeys[patch.ProviderID] = secretSnapshot{hasValue: ok, value: value}
-		}
-		for _, patch := range webSearchKeyPatches {
-			if _, ok := seenWebSearchKeyIDs[patch.ProviderID]; ok {
-				continue
-			}
-			seenWebSearchKeyIDs[patch.ProviderID] = struct{}{}
-			value, ok, snapErr := g.secrets.GetWebSearchProviderAPIKey(patch.ProviderID)
-			if snapErr != nil {
-				g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, snapErr)
-				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: snapErr.Error()})
-				return
-			}
-			prevWebSearchKeys[patch.ProviderID] = secretSnapshot{hasValue: ok, value: value}
-		}
-
-		restoreSecrets := func() error {
-			aiRestore := make([]settings.AIProviderAPIKeyPatch, 0, len(prevAIKeys))
-			for id, snap := range prevAIKeys {
-				if snap.hasValue {
-					value := snap.value
-					aiRestore = append(aiRestore, settings.AIProviderAPIKeyPatch{ProviderID: id, APIKey: &value})
-				} else {
-					aiRestore = append(aiRestore, settings.AIProviderAPIKeyPatch{ProviderID: id, APIKey: nil})
-				}
-			}
-			webRestore := make([]settings.WebSearchProviderAPIKeyPatch, 0, len(prevWebSearchKeys))
-			for id, snap := range prevWebSearchKeys {
-				if snap.hasValue {
-					value := snap.value
-					webRestore = append(webRestore, settings.WebSearchProviderAPIKeyPatch{ProviderID: id, APIKey: &value})
-				} else {
-					webRestore = append(webRestore, settings.WebSearchProviderAPIKeyPatch{ProviderID: id, APIKey: nil})
-				}
-			}
-			var errs []error
-			if err := g.secrets.ApplyAIProviderAPIKeyPatches(aiRestore); err != nil {
-				errs = append(errs, err)
-			}
-			if err := g.secrets.ApplyWebSearchProviderAPIKeyPatches(webRestore); err != nil {
-				errs = append(errs, err)
-			}
-			return errors.Join(errs...)
-		}
-
-		var updated *config.Config
-		restoreConfig := func() error {
-			if prevConfig == nil {
-				return nil
-			}
-			return g.ai.UpdateConfig(prevConfig.AI, func() error {
-				_, err := g.updateConfigLocked(func(c *config.Config) error {
-					*c = *prevConfig
-					return nil
-				})
-				return err
-			})
-		}
-		rollbackProviderBundle := func() error {
-			return errors.Join(restoreConfig(), restoreSecrets())
-		}
-
-		persist := func() error {
-			cfg, err := g.updateConfigLocked(func(c *config.Config) error {
-				c.AI = &nextAI
-				return nil
-			})
-			if err != nil {
-				return err
-			}
-			updated = cfg
-			return nil
-		}
-		if err := g.ai.UpdateConfig(&nextAI, persist); err != nil {
-			g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-			return
-		}
-		if err := g.secrets.ApplyAIProviderAPIKeyPatches(aiKeyPatches); err != nil {
-			rollbackErr := rollbackProviderBundle()
-			if rollbackErr != nil {
-				err = errors.Join(err, rollbackErr)
-				g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
-				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-			return
-		}
-		if err := g.secrets.ApplyWebSearchProviderAPIKeyPatches(webSearchKeyPatches); err != nil {
-			rollbackErr := rollbackProviderBundle()
-			if rollbackErr != nil {
-				err = errors.Join(err, rollbackErr)
-				g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
-				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, err)
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			g.appendAudit(meta, "ai_provider_bundle_update", "failure", auditDetail, saveErr)
+			writeJSON(w, status, apiResp{OK: false, Error: saveErr.Error()})
 			return
 		}
 		g.appendAudit(meta, "ai_provider_bundle_update", "success", auditDetail, nil)
@@ -3685,6 +3855,40 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: target})
 			return
 
+		case action == "input_response" && r.Method == http.MethodPost && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.SubmitRequestUserInputResponseRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			bodyThreadID := strings.TrimSpace(body.ThreadID)
+			if bodyThreadID != "" && bodyThreadID != threadID {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "thread id mismatch"})
+				return
+			}
+			body.ThreadID = threadID
+			resp, err := g.ai.SubmitRequestUserInputResponse(r.Context(), meta, body)
+			if err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
+			return
+
 		case action == "cancel" && r.Method == http.MethodPost:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
@@ -3998,6 +4202,26 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		runID, err := ai.NewRunID()
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to allocate run id"})
+			return
+		}
+
+		if requestAcceptsJSONOnly(r) {
+			if err := g.ai.StartRunDetached(meta, runID, req); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			auditDetail := map[string]any{
+				"run_id":    runID,
+				"thread_id": strings.TrimSpace(req.ThreadID),
+				"model":     strings.TrimSpace(req.Model),
+				"detached":  true,
+			}
+			g.appendAudit(meta, "ai_run", "accepted", auditDetail, nil)
+			w.Header().Set("X-Redeven-AI-Run-ID", runID)
+			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: aiRunStartView{
+				RunID:    runID,
+				ThreadID: strings.TrimSpace(req.ThreadID),
+			}})
 			return
 		}
 

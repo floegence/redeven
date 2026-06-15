@@ -29,7 +29,7 @@ type ContextActionSource struct {
 type ContextActionExecutionHint struct {
 	CurrentTargetID   string `json:"current_target_id,omitempty"`
 	SourceEnvPublicID string `json:"source_env_public_id,omitempty"`
-	HostHint          string `json:"host_hint,omitempty"`
+	RuntimeHint       string `json:"runtime_hint,omitempty"`
 	SessionSource     string `json:"session_source,omitempty"`
 }
 
@@ -80,7 +80,7 @@ func normalizeContextActionEnvelope(in *ContextActionEnvelope) *ContextActionEnv
 		hint := *out.ExecutionContext
 		hint.CurrentTargetID = strings.TrimSpace(hint.CurrentTargetID)
 		hint.SourceEnvPublicID = strings.TrimSpace(hint.SourceEnvPublicID)
-		hint.HostHint = strings.TrimSpace(hint.HostHint)
+		hint.RuntimeHint = strings.TrimSpace(hint.RuntimeHint)
 		hint.SessionSource = strings.TrimSpace(hint.SessionSource)
 		out.ExecutionContext = &hint
 	}
@@ -154,7 +154,7 @@ func contextActionRunEventPayload(action *ContextActionEnvelope) map[string]any 
 		payload["execution_context"] = map[string]any{
 			"current_target_id":    action.ExecutionContext.CurrentTargetID,
 			"source_env_public_id": action.ExecutionContext.SourceEnvPublicID,
-			"host_hint":            action.ExecutionContext.HostHint,
+			"runtime_hint":         action.ExecutionContext.RuntimeHint,
 			"session_source":       action.ExecutionContext.SessionSource,
 		}
 	}

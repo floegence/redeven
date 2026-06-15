@@ -376,7 +376,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	if th == nil {
 		return nil
 	}
-	runStatus, _ := normalizeThreadRunState(th.RunStatus, th.RunError)
+	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	if NormalizeRunState(runStatus) == RunStateWaitingUser || requestUserInputPromptFromThreadRecord(th, runStatus) != nil {
 		return nil
 	}
@@ -476,7 +476,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		modeFallback = cfg.EffectiveMode()
 	}
 	resolvedExecutionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
-	runStatus, _ := normalizeThreadRunState(th.RunStatus, th.RunError)
+	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	consumeSourceFollowup := func() {
 		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
 			a.mgr.svc.log.Warn("failed to consume source followup", "thread_id", threadID, "followup_id", strings.TrimSpace(req.SourceFollowupID), "error", err)
@@ -619,7 +619,7 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		modeFallback = cfg.EffectiveMode()
 	}
 	resolvedExecutionMode := normalizeRunMode(strings.TrimSpace(th.ExecutionMode), modeFallback)
-	runStatus, _ := normalizeThreadRunState(th.RunStatus, th.RunError)
+	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	consumeSourceFollowup := func() {
 		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
 			a.mgr.svc.log.Warn("failed to consume source followup", "thread_id", threadID, "followup_id", strings.TrimSpace(req.SourceFollowupID), "error", err)

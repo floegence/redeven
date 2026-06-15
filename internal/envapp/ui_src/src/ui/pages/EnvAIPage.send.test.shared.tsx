@@ -327,10 +327,10 @@ export function registerEnvAIPageSendTests() {
       try {
         expect(host.querySelector('.flower-component-thread-rail')).toBeTruthy();
         expect(host.querySelector('button[aria-label="New chat"]')?.textContent).toContain('New chat');
-        const chatHeader = host.querySelector('.flower-host-chat-header');
-        expect(chatHeader?.querySelector('.flower-host-chat-header-title')?.textContent).toContain('Describe what you need');
+        const chatHeader = host.querySelector('.flower-chat-header');
+        expect(chatHeader?.querySelector('.flower-chat-header-title')?.textContent).toContain('Describe what you need');
         expect(chatHeader?.textContent).not.toContain('Ready');
-        expect(chatHeader?.textContent).not.toContain('Using Flower Host');
+        expect(host.querySelector('.flower-handler-selection')?.textContent).toContain('Using this environment');
         expect(host.querySelector('button[aria-label="Settings"]')).toBeTruthy();
       } finally {
         dispose();
@@ -440,7 +440,7 @@ export function registerEnvAIPageSendTests() {
 	        const transcriptText = host.textContent ?? '';
 	        expect(transcriptText.indexOf('I will inspect the Env workspace.')).toBeLessThan(transcriptText.indexOf('pwd'));
 	        expect(transcriptText.indexOf('pwd')).toBeLessThan(transcriptText.indexOf('Env workspace inspection is complete.'));
-	        expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(2);
+	        expect(host.querySelectorAll('.flower-activity-inline-row')).toHaveLength(2);
 	        expect(host.textContent).toContain('pwd');
 	        expect(host.textContent).toContain('Flower inline transcript');
       } finally {
@@ -735,7 +735,7 @@ export function registerEnvAIPageSendTests() {
         expect(host.textContent).toContain('Read');
         expect(host.textContent).toContain('app.ts');
         expect(host.textContent).not.toContain('#dcbdf9b8c27f');
-        (host.querySelector('[data-flower-activity-item-id="tool-file-read"] .flower-host-activity-inline-button') as HTMLButtonElement).click();
+        (host.querySelector('[data-flower-activity-item-id="tool-file-read"] .flower-activity-inline-button') as HTMLButtonElement).click();
         await flush();
         const browse = host.querySelector('button[aria-label="Browse folder for app.ts"]') as HTMLButtonElement | null;
         const preview = host.querySelector('button[aria-label="Preview app.ts"]') as HTMLButtonElement | null;
@@ -810,7 +810,7 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(host.textContent).toContain('frontend-design');
-        (host.querySelector('[data-flower-activity-item-id="tool-use-skill"] .flower-host-activity-inline-button') as HTMLButtonElement).click();
+        (host.querySelector('[data-flower-activity-item-id="tool-use-skill"] .flower-activity-inline-button') as HTMLButtonElement).click();
         await flush();
         expect(host.textContent).toContain('Loaded frontend design guidance.');
       } finally {
@@ -888,7 +888,7 @@ export function registerEnvAIPageSendTests() {
         await flush();
         expect(host.textContent).toContain('Edit');
         expect(host.textContent).toContain('src/app.ts');
-        (host.querySelector('[data-flower-activity-item-id="tool-patch"] .flower-host-activity-inline-button') as HTMLButtonElement).click();
+        (host.querySelector('[data-flower-activity-item-id="tool-patch"] .flower-activity-inline-button') as HTMLButtonElement).click();
         await flush();
         const browse = host.querySelector('button[aria-label="Browse folder for src/app.ts"]') as HTMLButtonElement | null;
         const preview = host.querySelector('button[aria-label="Preview src/app.ts"]') as HTMLButtonElement | null;
@@ -981,7 +981,7 @@ export function registerEnvAIPageSendTests() {
         textarea.value = '你好，Flower';
         textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
         await flush();
-        const sendButton = host.querySelector('button.flower-host-composer-submit[aria-label="Send message"]') as HTMLButtonElement | null;
+        const sendButton = host.querySelector('button.flower-composer-submit[aria-label="Send message"]') as HTMLButtonElement | null;
         expect(sendButton).toBeTruthy();
         expect(sendButton?.disabled).toBe(false);
         sendButton?.click();

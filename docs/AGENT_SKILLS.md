@@ -17,7 +17,7 @@ The current checked-in contract supports:
 - target discovery through `redeven targets list`;
 - target resolution through `redeven targets resolve`;
 - a Context Action Protocol for Env App assistant and handoff actions;
-- compatibility mapping from existing Ask Flower intents into Context Action envelopes.
+- direct mapping from Ask Flower intents into Context Action envelopes.
 
 The CLI only reports capabilities that are discoverable from local runtime state and local configuration. Remote mutation must go through runtime-authorized commands and is not implied by target discovery metadata.
 
@@ -201,7 +201,7 @@ Assistant locality values:
 - `local_model_remote_target`: use a local model source while binding tools to a remote target. In Redeven Desktop-managed SSH Host and container sessions this is implemented by Desktop Model Source RPC: model calls use the Desktop Local Environment's provider config and secrets, while file, terminal, Git, monitor, and port tools still execute inside the target runtime.
 - `remote_runtime`: execute in the target runtime.
 
-The current UI maps existing Ask Flower entries into `assistant.ask.flower` envelopes. This keeps compatibility while giving additional assistant providers the same context structure.
+The current UI maps Ask Flower entries into `assistant.ask.flower` envelopes so additional assistant providers can use the same context structure.
 
 Ask Flower composer presentation keeps linked context actions explicit: live file references open the shared File Preview surface, directories open the floating file browser, and only materialized selections or snapshots render inside the composer-owned preview window. Attachment snapshots attached to a live file appear as secondary paperclip actions instead of changing the file chip into an inline live-file preview.
 
@@ -223,7 +223,7 @@ Assistant and handoff actions share one priority order:
 +-----------------------------+
 ```
 
-Surface components should provide context, not assistant-specific prompt logic. The shared action layer owns action identity, ordering, provider selection, and fallback labels.
+Surface components should provide context, not assistant-specific prompt logic. The shared action layer owns action identity, ordering, provider selection, and default labels.
 
 ## External Agent Flow
 

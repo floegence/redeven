@@ -115,13 +115,13 @@ func insertForkedThreadTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest
 INSERT INTO ai_threads(
   thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
-  run_status, run_updated_at_unix_ms, run_error,
+  run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms,
   last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 		req.DestinationThreadID,
 		req.EndpointID,
@@ -138,6 +138,7 @@ INSERT INTO ai_threads(
 		"",
 		"idle",
 		int64(0),
+		"",
 		"",
 		"",
 		"",
@@ -462,11 +463,11 @@ func copyForkFlowerMetadataTx(ctx context.Context, tx *sql.Tx, req ForkThreadReq
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO ai_flower_thread_metadata(
   endpoint_id, thread_id, owner_kind, owner_id, parent_thread_id, parent_run_id,
-  context_json, action_json, updated_at_unix_ms, home_host_id, home_host_kind,
+  context_json, action_json, updated_at_unix_ms, home_runtime_id, home_runtime_kind,
   origin_env_public_id, primary_target_id, active_target_ids_json
 )
 SELECT endpoint_id, ?, owner_kind, owner_id, ?, '',
-       context_json, action_json, ?, home_host_id, home_host_kind,
+       context_json, action_json, ?, home_runtime_id, home_runtime_kind,
        origin_env_public_id, primary_target_id, active_target_ids_json
 FROM ai_flower_thread_metadata
 WHERE endpoint_id = ? AND thread_id = ?

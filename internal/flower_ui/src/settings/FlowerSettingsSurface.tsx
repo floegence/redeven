@@ -61,10 +61,6 @@ function newProviderID(): string {
 function cloneProviderForForm(provider: FlowerSettingsSnapshot['config']['providers'][number]): FlowerProviderDraft {
   return {
     ...provider,
-    provider_api_key: '',
-    provider_api_key_mode: 'keep',
-    web_search_api_key: '',
-    web_search_api_key_mode: 'keep',
     models: provider.models.map((model) => ({
       ...model,
       input_modalities: model.input_modalities ? [...model.input_modalities] : undefined,
@@ -81,10 +77,6 @@ function newProviderDraft(): FlowerProviderDraft {
     name: flowerProviderUsesCustomName(type) ? preset.name : flowerProviderTypeLabel(type),
     type,
     base_url: defaultBaseURLForFlowerProviderType(type),
-    provider_api_key: '',
-    provider_api_key_mode: 'keep',
-    web_search_api_key: '',
-    web_search_api_key_mode: 'keep',
     models: firstModel ? [{ ...firstModel }] : [],
   };
 }
@@ -122,10 +114,15 @@ function providerWebSearchSecretConfigured(snapshot: FlowerSettingsSnapshot | nu
   return snapshot?.provider_secrets.some((secret) => secret.provider_id === providerID && secret.web_search_api_key_configured) ?? false;
 }
 
-function normalizeCurrentModelID(currentModelID: string, providers: readonly FlowerProviderDraft[]): string {
+function currentModelExists(currentModelID: string, providers: readonly FlowerProviderDraft[]): boolean {
   const options = collectModelOptions(providers);
-  if (options.some((option) => option.id === currentModelID)) return currentModelID;
-  return options[0]?.id ?? '';
+  return options.some((option) => option.id === currentModelID);
+}
+
+function normalizeSecretPatch(value: string | null | undefined): string | null | undefined {
+  if (value === null) return null;
+  const text = trim(value);
+  return text ? text : undefined;
 }
 
 function providerWebSearchLabel(
@@ -153,19 +150,18 @@ function providerWebSearchLabel(
 
 function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProviderDraft {
   const webSearchMode = (provider.web_search?.mode ?? 'disabled') as FlowerWebSearchMode;
-  const webSearchKey = trim(provider.web_search_api_key);
+  const providerKey = normalizeSecretPatch(provider.provider_api_key);
+  const webSearchKey = webSearchMode === 'brave'
+    ? normalizeSecretPatch(provider.web_search_api_key)
+    : null;
   return {
     id: trim(provider.id),
     name: flowerProviderUsesCustomName(provider.type) ? trim(provider.name) : flowerProviderTypeLabel(provider.type),
     type: provider.type,
     base_url: trim(provider.base_url),
     web_search: flowerProviderNeedsWebSearchConfig(provider.type) ? { mode: webSearchMode } : undefined,
-    provider_api_key: trim(provider.provider_api_key),
-    provider_api_key_mode: trim(provider.provider_api_key) ? 'replace' : 'keep',
-    web_search_api_key: webSearchMode === 'brave' ? webSearchKey : '',
-    web_search_api_key_mode: webSearchMode === 'brave'
-      ? (webSearchKey ? 'replace' : 'keep')
-      : 'clear',
+    ...(providerKey !== undefined ? { provider_api_key: providerKey } : {}),
+    ...(webSearchKey !== undefined ? { web_search_api_key: webSearchKey } : {}),
     models: provider.models.map((model) => ({
       model_name: trim(model.model_name),
       ...(normalizeFlowerPositiveInteger(model.context_window) ?? defaultFlowerContextWindowForProviderType(provider.type) ? { context_window: normalizeFlowerPositiveInteger(model.context_window) ?? defaultFlowerContextWindowForProviderType(provider.type) } : {}),
@@ -188,7 +184,6 @@ export type FlowerSettingsSurfaceProps = Readonly<{
 
 export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.settings;
-  const [enabled, setEnabled] = createSignal(false);
   const [providers, setProviders] = createSignal<readonly FlowerProviderDraft[]>([]);
   const [currentModelID, setCurrentModelID] = createSignal('');
   const [requireUserApproval, setRequireUserApproval] = createSignal(true);
@@ -207,9 +202,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     const snapshot = props.snapshot;
     if (!snapshot) return;
     const rows = snapshot.config.providers.map(cloneProviderForForm);
-    setEnabled(snapshot.config.enabled);
     setProviders(rows);
-    setCurrentModelID(normalizeCurrentModelID(snapshot.config.current_model_id, rows));
+    setCurrentModelID(trim(snapshot.config.current_model_id));
     setRequireUserApproval(snapshot.config.execution_policy.require_user_approval);
     setBlockDangerousCommands(snapshot.config.execution_policy.block_dangerous_commands);
     setDefaultTimeoutMS(String(snapshot.config.terminal_exec_policy.default_timeout_ms));
@@ -220,13 +214,16 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
 
   const modelOptions = createMemo(() => collectModelOptions(providers(), copy().providerTypeLabels));
   const activeModelOption = createMemo(() => modelOptions().find((option) => option.id === currentModelID()) ?? null);
-  const hasUsableModelConfig = createMemo(() => Boolean(activeModelOption()));
   const normalizedProviders = createMemo(() => providers().map(normalizeProviderForSave));
+  const externalModelSource = createMemo(() => {
+    const source = props.snapshot?.model_source ?? null;
+    return source?.kind === 'desktop_model_source' ? source : null;
+  });
+  const managedByLocalAIProfile = createMemo(() => externalModelSource() !== null);
   const markDirty = () => setDirty(true);
 
   const updateProviders = (next: readonly FlowerProviderDraft[]) => {
     setProviders(next);
-    setCurrentModelID((current) => normalizeCurrentModelID(current, next));
     setDirty(true);
   };
 
@@ -245,8 +242,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     setProviderDialogIndex(index);
     setProviderDialogProvider({
       ...provider,
-      web_search_api_key: '',
-      web_search_api_key_mode: 'keep',
       models: provider.models.map((model) => ({ ...model, input_modalities: model.input_modalities ? [...model.input_modalities] : undefined })),
     });
     setProviderDialogError('');
@@ -307,8 +302,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
         availableModelIDs.add(flowerModelID(provider.id, modelName));
       }
     }
-    const current = normalizeCurrentModelID(sourceCurrentModelID, cleanProviders);
-    if ((enabled() || cleanProviders.length > 0) && !current) {
+    const current = trim(sourceCurrentModelID);
+    if (cleanProviders.length > 0 && !current) {
       return { ok: false, error: copy().validation.selectCurrentModel };
     }
     if (current && !availableModelIDs.has(current)) {
@@ -330,7 +325,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       draft: {
         config: {
           schema_version: 1,
-          enabled: enabled(),
           current_model_id: current,
           execution_policy: {
             require_user_approval: requireUserApproval(),
@@ -366,7 +360,10 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     const next = index == null
       ? [...providers(), normalized]
       : providers().map((provider, itemIndex) => (itemIndex === index ? normalized : provider));
-    const nextCurrent = normalizeCurrentModelID(currentModelID(), next) || flowerModelID(normalized.id, normalized.models[0]?.model_name ?? '');
+    const current = trim(currentModelID());
+    const nextCurrent = currentModelExists(current, next)
+      ? current
+      : (!current && index == null ? flowerModelID(normalized.id, normalized.models[0]?.model_name ?? '') : current);
     const result = buildSettingsDraft(next, nextCurrent);
     if (!result.ok) {
       setLocalError(result.error);
@@ -377,9 +374,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       const saved = await saveBuiltDraft(result);
       if (!saved) return;
       const savedProviders = saved.config.providers.map(cloneProviderForForm);
-      setEnabled(saved.config.enabled);
       setProviders(savedProviders);
-      setCurrentModelID(normalizeCurrentModelID(saved.config.current_model_id, savedProviders));
+      setCurrentModelID(trim(saved.config.current_model_id));
       setProviderDialogOpen(false);
       setProviderDialogProvider(null);
       setProviderDialogIndex(null);
@@ -395,7 +391,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   };
 
   const autosaveFingerprint = createMemo(() => JSON.stringify({
-    enabled: enabled(),
     current_model_id: currentModelID(),
     require_user_approval: requireUserApproval(),
     block_dangerous_commands: blockDangerousCommands(),
@@ -411,7 +406,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   };
   createEffect(() => {
     autosaveFingerprint();
-    if (!dirty() || props.saving || providerDialogOpen()) {
+    if (managedByLocalAIProfile() || !dirty() || props.saving || providerDialogOpen()) {
       clearAutosaveTimer();
       return;
     }
@@ -427,14 +422,14 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
 
   return (
     <>
-      <div class="flower-host-panel flower-host-scroll flower-settings-surface">
+      <div class="flower-panel flower-scroll flower-settings-surface">
         <div class="flower-settings-frame">
           <header class="flower-settings-title-row">
             <div class="flex min-w-0 items-start gap-2.5">
               <Show when={props.onBackToChat}>
                 <button
                   type="button"
-                  class="flower-host-header-icon-button flower-settings-back-button mt-0.5"
+                  class="flower-header-icon-button flower-settings-back-button mt-0.5"
                   aria-label={copy().backToChat}
                   title={copy().backToChat}
                   onClick={() => props.onBackToChat?.()}
@@ -447,53 +442,44 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   <Zap class="h-4 w-4 text-primary" />
                   <h2 class="truncate text-base font-semibold text-foreground">{copy().title}</h2>
                 </div>
-                <p class="mt-1 text-xs text-muted-foreground">{copy().description}</p>
+                <p class="mt-1 text-xs text-muted-foreground">
+                  {managedByLocalAIProfile() ? copy().managedByLocalAIProfileOpenLocal : copy().description}
+                </p>
               </div>
             </div>
             <div class="flower-settings-title-feedback" aria-live="polite">
-              <Show when={enabled()}>
-                <button
-                  type="button"
-                  class="flower-settings-inline-action"
-                  disabled={props.saving}
-                  onClick={() => {
-                    setEnabled(false);
-                    markDirty();
-                  }}
-                >
-                  {copy().disable}
-                </button>
-              </Show>
               <FlowerAutoSaveIndicator dirty={dirty()} copy={copy().autoSave} saving={props.saving} error={localError() || props.saveError} savedAt={props.savedAt} />
             </div>
           </header>
 
-          <Show when={!enabled()}>
-            <section class="flower-settings-disabled-guide" aria-labelledby="flower-settings-disabled-title">
-              <div class="flower-settings-disabled-icon">
-                <AlertTriangle class="h-5 w-5" />
+          <Show when={managedByLocalAIProfile()}>
+            <section class="flower-settings-section flower-settings-managed-source">
+              <div class="flower-settings-managed-source-header">
+                <div>
+                  <div class="text-sm font-semibold text-foreground">{copy().managedByLocalAIProfileTitle}</div>
+                  <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{copy().managedByLocalAIProfileDescription}</p>
+                </div>
+                <span class={cn('flower-settings-dot-pill', externalModelSource()?.ready && 'flower-settings-dot-pill-active')}>
+                  {externalModelSource()?.ready ? copy().managedByLocalAIProfileReady : copy().managedByLocalAIProfileNeedsKey}
+                </span>
               </div>
-              <div class="flower-settings-disabled-copy">
-                <h3 id="flower-settings-disabled-title">{copy().disabled}</h3>
-                <p>{copy().disabledNotice}</p>
+              <div class="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <Show when={externalModelSource()?.model_count != null}>
+                  <span class="flower-settings-dot-pill flower-settings-dot-pill-active">
+                    {copy().managedByLocalAIProfileModelCount(externalModelSource()?.model_count ?? 0)}
+                  </span>
+                </Show>
+                <Show when={(externalModelSource()?.missing_key_provider_ids ?? []).length > 0}>
+                  <span class="flower-settings-dot-pill">
+                    {copy().managedByLocalAIProfileMissingKeys((externalModelSource()?.missing_key_provider_ids ?? []).join(', '))}
+                  </span>
+                </Show>
               </div>
-              <Button
-                variant="primary"
-                disabled={props.saving}
-                onClick={() => {
-                  if (!hasUsableModelConfig()) {
-                    openAddProviderDialog();
-                    return;
-                  }
-                  setEnabled(true);
-                  markDirty();
-                }}
-              >
-                {hasUsableModelConfig() ? copy().enable : copy().setup}
-              </Button>
+              <p class="mt-3 text-xs leading-relaxed text-muted-foreground">{copy().managedByLocalAIProfileOpenLocal}</p>
             </section>
           </Show>
-          <Show when={enabled()}>
+
+          <Show when={!managedByLocalAIProfile()}>
             <section class="flower-settings-current-model">
               <div class="flower-settings-current-model-icon">
                 <Show when={activeModelOption()} fallback={<Bot class="h-6 w-6 text-muted-foreground" />}>
@@ -502,12 +488,11 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               </div>
               <div class="flower-settings-current-model-body">
                 <div class="text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground">{copy().currentModel}</div>
-                <Show when={activeModelOption()} fallback={<div class="mt-1 text-base font-semibold text-muted-foreground">{copy().noModelSelected}</div>}>
-                  {(option) => (
-                    <>
+                <Show when={modelOptions().length > 0} fallback={<div class="mt-1 text-base font-semibold text-muted-foreground">{copy().noModelSelected}</div>}>
+                  <div>
                       <label class="flower-settings-model-picker">
                         <span class="sr-only">{copy().selectModelPlaceholder}</span>
-                        <span class="flower-settings-model-picker-label">{option().label}</span>
+                        <span class="flower-settings-model-picker-label">{activeModelOption()?.label ?? copy().noModelSelected}</span>
                         <ChevronDown class="flower-settings-model-picker-icon" />
                         <select
                           value={currentModelID()}
@@ -525,12 +510,11 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                       </label>
                       <div class="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
                         <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().text}</span>
-                        <Show when={option().supportsImageInput}>
+                        <Show when={activeModelOption()?.supportsImageInput}>
                           <span class="flower-settings-dot-pill flower-settings-dot-pill-active">{copy().imageInput}</span>
                         </Show>
                       </div>
-                    </>
-                  )}
+                  </div>
                 </Show>
               </div>
             </section>

@@ -1,0 +1,302 @@
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+  createLocalEnvironmentFlowerSurfaceAdapter,
+  mapFlowerSettingsDraftToRuntimeBundle,
+  mapRuntimeFlowerSettings,
+  mapRuntimeFlowerThread,
+  sendLocalEnvironmentFlowerPrompt,
+  type DesktopSettingsBridge,
+} from './localEnvironmentFlowerSurfaceAdapter';
+import type { RuntimeFlowerRequest } from '../../shared/runtimeFlowerIPC';
+
+function readStatus(isUnread = false, revision = 2, status = 'idle') {
+  const signature = `status:${status}\u001factivity:${revision}`;
+  return {
+    is_unread: isUnread,
+    snapshot: {
+      activity_revision: revision,
+      last_message_at_unix_ms: revision,
+      activity_signature: signature,
+    },
+    read_state: {
+      last_seen_activity_revision: isUnread ? Math.max(0, revision - 1) : revision,
+      last_read_message_at_unix_ms: isUnread ? Math.max(0, revision - 1) : revision,
+      last_seen_activity_signature: isUnread ? `status:${status}\u001factivity:${Math.max(0, revision - 1)}` : signature,
+    },
+  };
+}
+
+function settingsResponse() {
+  return {
+    config_path: '/Users/me/.redeven/local-environment/config.json',
+    connection: {
+      controlplane_base_url: '',
+      environment_id: 'local-environment',
+      agent_instance_id: 'agent-local',
+      direct: {
+        ws_url: '',
+        channel_id: '',
+        channel_init_expire_at_unix_s: 0,
+        default_suite: 0,
+        e2ee_psk_set: false,
+      },
+    },
+    runtime: { agent_home_dir: '/Users/me/.redeven/local-environment', shell: '/bin/zsh' },
+    logging: { log_format: 'plain', log_level: 'info' },
+    codespaces: { code_server_port_min: 0, code_server_port_max: 0 },
+    permission_policy: null,
+    ai: {
+      current_model_id: 'default/gpt-4.1',
+      providers: [{
+        id: 'default',
+        type: 'openai_compatible' as const,
+        base_url: 'https://api.example.test/v1',
+        web_search: { mode: 'brave' as const },
+        models: [{
+          model_name: 'gpt-4.1',
+          context_window: 128000,
+          max_output_tokens: 16384,
+          effective_context_window_percent: 70,
+          input_modalities: ['text', 'image'] as const,
+        }],
+      }],
+      execution_policy: {
+        require_user_approval: true,
+        block_dangerous_commands: true,
+      },
+      terminal_exec_policy: {
+        default_timeout_ms: 120000,
+        max_timeout_ms: 600000,
+      },
+    },
+    ai_secrets: {
+      provider_api_key_set: { default: true },
+      web_search_provider_api_key_set: { default: true },
+    },
+  };
+}
+
+function threadView(overrides: Record<string, unknown> = {}) {
+  return {
+    thread_id: 'thread-1',
+    title: 'Conversation',
+    model_id: 'default/gpt-4.1',
+    run_status: 'idle',
+    working_dir: '/workspace/redeven',
+    pinned_at_unix_ms: 123,
+    created_at_unix_ms: 1,
+    updated_at_unix_ms: 2,
+    last_message_at_unix_ms: 2,
+    last_message_preview: 'hi',
+    read_status: readStatus(false),
+    ...overrides,
+  };
+}
+
+function bridgeFor(handler: (request: RuntimeFlowerRequest) => unknown | Promise<unknown>): DesktopSettingsBridge {
+  return {
+    save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+    requestRuntimeFlower: vi.fn(async (request: RuntimeFlowerRequest) => ({
+      ok: true as const,
+      data: await handler(request),
+    })),
+    cancel: vi.fn(),
+  };
+}
+
+describe('Local Environment Flower surface adapter', () => {
+  it('maps runtime settings to the shared Flower snapshot without dropping model metadata', () => {
+    const snapshot = mapRuntimeFlowerSettings(settingsResponse());
+
+    expect(snapshot.config.providers[0].models[0]).toEqual({
+      model_name: 'gpt-4.1',
+      context_window: 128000,
+      max_output_tokens: 16384,
+      effective_context_window_percent: 70,
+      input_modalities: ['text', 'image'],
+    });
+    expect(snapshot.provider_secrets).toEqual([{
+      provider_id: 'default',
+      provider_api_key_configured: true,
+      web_search_api_key_configured: true,
+    }]);
+  });
+
+  it('builds provider bundle updates for the runtime gateway', () => {
+    const draft = {
+      config: {
+        ...mapRuntimeFlowerSettings(settingsResponse()).config,
+        providers: [{
+          ...mapRuntimeFlowerSettings(settingsResponse()).config.providers[0],
+          provider_api_key: 'sk-test',
+          web_search_api_key: 'brave-test',
+        }],
+      },
+    };
+
+    expect(mapFlowerSettingsDraftToRuntimeBundle(draft)).toMatchObject({
+      ai: {
+        current_model_id: 'default/gpt-4.1',
+        providers: [{ id: 'default', models: [{ model_name: 'gpt-4.1' }] }],
+      },
+      provider_api_key_patches: [{ provider_id: 'default', api_key: 'sk-test' }],
+      web_search_provider_key_patches: [{ provider_id: 'default', api_key: 'brave-test' }],
+    });
+  });
+
+  it('sends null secret patches when the settings draft clears provider keys', () => {
+    const draft = {
+      config: {
+        ...mapRuntimeFlowerSettings(settingsResponse()).config,
+        providers: [{
+          ...mapRuntimeFlowerSettings(settingsResponse()).config.providers[0],
+          provider_api_key: null,
+          web_search_api_key: null,
+        }],
+      },
+    };
+
+    expect(mapFlowerSettingsDraftToRuntimeBundle(draft)).toMatchObject({
+      provider_api_key_patches: [{ provider_id: 'default', api_key: null }],
+      web_search_provider_key_patches: [{ provider_id: 'default', api_key: null }],
+    });
+  });
+
+  it('maps runtime threads to runtime ownership metadata', () => {
+    const mapped = mapRuntimeFlowerThread(threadView());
+
+    expect(mapped).toMatchObject({
+      thread_id: 'thread-1',
+      home_runtime_id: 'env:local-environment',
+      home_runtime_kind: 'local_environment',
+      source_label: 'Local Environment',
+      target_labels: ['Local Environment'],
+    });
+    expect(mapped.read_status.is_unread).toBe(false);
+  });
+
+  it('maps runtime run_error_code into shared thread error metadata', () => {
+    const mapped = mapRuntimeFlowerThread(threadView({
+      run_status: 'failed',
+      run_error_code: 'provider_auth_failed',
+      run_error: 'The selected AI provider rejected the saved credentials.',
+    }));
+
+    expect(mapped.status).toBe('failed');
+    expect(mapped.error).toEqual({
+      code: 'provider_auth_failed',
+      message: 'The selected AI provider rejected the saved credentials.',
+    });
+  });
+
+  it('loads settings, models, threads, messages, and sends runs through runtime Flower IPC', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1', models: [{ id: 'default/gpt-4.1' }] };
+      if (request.path === '/_redeven_proxy/api/ai/threads?limit=200') return { threads: [threadView()] };
+      if (request.path === '/_redeven_proxy/api/ai/threads') return { thread: threadView({ thread_id: 'thread-new' }) };
+      if (request.path === '/_redeven_proxy/api/ai/runs') return '';
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-new') return { thread: threadView({ thread_id: 'thread-new' }) };
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-new/messages?limit=200') {
+        return {
+          messages: [{
+            id: 'm1',
+            role: 'user',
+            status: 'complete',
+            timestamp: 1,
+            blocks: [{ type: 'text', content: 'hello' }],
+          }],
+        };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    await adapter.loadSettings();
+    await adapter.listThreads();
+    const thread = await adapter.sendMessage({ prompt: 'hello' });
+
+    expect(thread.thread_id).toBe('thread-new');
+    expect(thread.messages[0].content).toBe('hello');
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      'GET /_redeven_proxy/api/settings',
+      'GET /_redeven_proxy/api/ai/threads?limit=200',
+      'GET /_redeven_proxy/api/settings',
+      'GET /_redeven_proxy/api/ai/models',
+      'POST /_redeven_proxy/api/ai/threads',
+      'POST /_redeven_proxy/api/ai/runs',
+      'GET /_redeven_proxy/api/ai/threads/thread-new',
+      'GET /_redeven_proxy/api/ai/threads/thread-new/messages?limit=200',
+    ]);
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/runs')?.body).toMatchObject({
+      thread_id: 'thread-new',
+      model: 'default/gpt-4.1',
+      input: { text: 'hello', attachments: [] },
+      options: { max_steps: 10, mode: 'act' },
+    });
+  });
+
+  it('submits input responses through the runtime thread endpoint', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/input_response') return { run_id: 'run-1', kind: 'started' };
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1') return { thread: threadView() };
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/messages?limit=200') return { messages: [] };
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    await adapter.submitInput({
+      thread_id: 'thread-1',
+      prompt_id: 'prompt-1',
+      answers: {
+        target: { choice_id: 'staging', text: 'Staging' },
+      },
+    });
+
+    expect(calls[0]).toMatchObject({
+      method: 'POST',
+      path: '/_redeven_proxy/api/ai/threads/thread-1/input_response',
+      body: {
+        thread_id: 'thread-1',
+        response: {
+          prompt_id: 'prompt-1',
+          answers: {
+            target: { choice_id: 'staging', text: 'Staging' },
+          },
+        },
+      },
+    });
+  });
+
+  it('reuses the same runtime sender for environment card prompts', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/threads') return { thread: threadView({ thread_id: 'thread-card' }) };
+      if (request.path === '/_redeven_proxy/api/ai/runs') return '';
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-card') return { thread: threadView({ thread_id: 'thread-card' }) };
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-card/messages?limit=200') return { messages: [] };
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+
+    await sendLocalEnvironmentFlowerPrompt(bridge, {
+      prompt: 'inspect env',
+      contextAction: { schema_version: 2, action_id: 'assistant.ask.flower' },
+    });
+
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/runs')?.body).toMatchObject({
+      input: {
+        text: 'inspect env',
+        attachments: [],
+        context_action: { schema_version: 2, action_id: 'assistant.ask.flower' },
+      },
+    });
+  });
+});

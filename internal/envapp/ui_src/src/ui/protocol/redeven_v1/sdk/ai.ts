@@ -214,6 +214,7 @@ export type AIRealtimeEvent = {
   diag?: Record<string, any>;
   streamEvent?: StreamEvent;
   runStatus?: AIThreadRunStatus;
+  runErrorCode?: string;
   runError?: string;
   waitingPrompt?: AIRequestUserInputPrompt;
 

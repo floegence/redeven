@@ -37,8 +37,8 @@ func TestStore_FlowerThreadMetadataTransferAndHandoffRoundTrip(t *testing.T) {
 		ParentRunID:         "run_src",
 		ContextJSON:         `{"source":"files"}`,
 		ActionJSON:          `{"action_id":"assistant.ask.flower"}`,
-		HomeHostID:          "flower-host:test",
-		HomeHostKind:        "global",
+		HomeRuntimeID:       "local-environment:test",
+		HomeRuntimeKind:     "local_environment",
 		OriginEnvPublicID:   "env_a",
 		PrimaryTargetID:     "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		ActiveTargetIDsJSON: `["provider:https%3A%2F%2Fredeven.test:env:env_a"]`,
@@ -53,7 +53,7 @@ func TestStore_FlowerThreadMetadataTransferAndHandoffRoundTrip(t *testing.T) {
 	if meta == nil || meta.OwnerKind != "handoff" || meta.ParentThreadID != "th_src" || meta.ContextJSON == "" {
 		t.Fatalf("unexpected metadata: %#v", meta)
 	}
-	if meta.HomeHostID != "flower-host:test" || meta.HomeHostKind != "global" || meta.PrimaryTargetID != "provider:https%3A%2F%2Fredeven.test:env:env_a" {
+	if meta.HomeRuntimeID != "local-environment:test" || meta.HomeRuntimeKind != "local_environment" || meta.PrimaryTargetID != "provider:https%3A%2F%2Fredeven.test:env:env_a" {
 		t.Fatalf("unexpected ownership metadata: %#v", meta)
 	}
 

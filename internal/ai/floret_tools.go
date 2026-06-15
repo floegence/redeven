@@ -71,7 +71,6 @@ func (s *floretToolRuntimeState) updateFromToolResult(call ToolCall, result Tool
 
 func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRuntimeState) (*fltools.Registry, error) {
 	registry := fltools.NewRegistry()
-	hostContext := floretHostLabelsForRun(r)
 	for _, def := range activeTools {
 		name := strings.TrimSpace(def.Name)
 		if name == "" || isFlowerControlTool(name) {
@@ -95,7 +94,6 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				if call.Name == "" {
 					call.Name = strings.TrimSpace(def.Name)
 				}
-				call.Args = applyFloretHostContextToToolArgs(call.Name, call.Args, hostContext)
 				handler := &builtInToolHandler{r: r, toolName: call.Name}
 				result, err := handler.Execute(ctx, call)
 				if err != nil {
@@ -114,35 +112,17 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 	return registry, nil
 }
 
+// Redeven owns tool authorization in builtInToolHandler; Floret ask-mode only
+// keeps its registry contract explicit without becoming the policy authority.
+func redevenFloretToolApprover(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
+	return fltools.PermissionDecisionAllow, nil
+}
+
 func floretHostLabelsForRun(r *run) map[string]string {
-	host := map[string]string{
+	return map[string]string{
 		"endpoint_id": strings.TrimSpace(r.endpointID),
 		"engine":      "redeven",
 	}
-	if policy := normalizeToolTargetPolicy(r.toolTargetPolicy); policy.requiresExplicitTarget() {
-		if targetID := strings.TrimSpace(policy.DefaultTargetID); targetID != "" {
-			host["target_id"] = targetID
-			host["current_target_id"] = targetID
-			host["primary_target_id"] = targetID
-		}
-	}
-	return host
-}
-
-func applyFloretHostContextToToolArgs(toolName string, args map[string]any, hostContext map[string]string) map[string]any {
-	if !toolRequiresTarget(toolName) {
-		return args
-	}
-	if strings.TrimSpace(targetIDFromToolArgs(args)) != "" {
-		return args
-	}
-	targetID := firstNonEmptyString(hostContext["target_id"], hostContext["current_target_id"], hostContext["primary_target_id"])
-	if targetID == "" {
-		return args
-	}
-	out := cloneAnyMap(args)
-	out["target_id"] = targetID
-	return out
 }
 
 func firstNonEmptyString(values ...string) string {
@@ -161,7 +141,7 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 		if err := json.Unmarshal(def.InputSchema, &parsed); err != nil || parsed == nil {
 			return fltools.Definition{}, fmt.Errorf("invalid input schema for Floret tool %s", strings.TrimSpace(def.Name))
 		}
-		inputSchema = parsed
+		inputSchema = stripRedevenTargetFieldsFromFloretToolSchema(strings.TrimSpace(def.Name), parsed)
 	}
 	effects := floretToolEffects(def)
 	readOnly := !def.Mutating && def.Name != "terminal.exec"
@@ -175,7 +155,7 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 		Destructive:  def.Mutating,
 		OpenWorld:    false,
 		ParallelSafe: floretToolParallelSafe(def, effects),
-		Permission:   fltools.PermissionSpec{Mode: fltools.PermissionAllow},
+		Permission:   fltools.PermissionSpec{Mode: fltools.PermissionAsk},
 		Activity: func(inv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
 			args, _ := inv.Args.(map[string]any)
 			return floretActivityForToolCall(strings.TrimSpace(def.Name), args), nil
@@ -186,6 +166,30 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 			"flower_policy_owner": "internal/ai.run.handleToolCall",
 		},
 	}, nil
+}
+
+func stripRedevenTargetFieldsFromFloretToolSchema(toolName string, inputSchema map[string]any) map[string]any {
+	if !toolRequiresTarget(toolName) || inputSchema == nil {
+		return inputSchema
+	}
+	if properties, ok := inputSchema["properties"].(map[string]any); ok {
+		delete(properties, "target_id")
+		delete(properties, "targetId")
+	}
+	required, ok := inputSchema["required"].([]any)
+	if !ok || len(required) == 0 {
+		return inputSchema
+	}
+	nextRequired := make([]any, 0, len(required))
+	for _, item := range required {
+		name := strings.TrimSpace(anyToString(item))
+		if name == "target_id" || name == "targetId" {
+			continue
+		}
+		nextRequired = append(nextRequired, item)
+	}
+	inputSchema["required"] = nextRequired
+	return inputSchema
 }
 
 func floretToolParallelSafe(def ToolDef, effects []fltools.Effect) bool {

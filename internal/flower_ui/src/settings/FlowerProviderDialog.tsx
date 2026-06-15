@@ -57,7 +57,7 @@ function cloneModel(model: FlowerProviderModel): FlowerProviderModel {
   };
 }
 
-function modelEnabled(provider: FlowerProviderDraft, modelName: string): boolean {
+function modelSelected(provider: FlowerProviderDraft, modelName: string): boolean {
   return provider.models.some((model) => cleanModelName(model.model_name) === cleanModelName(modelName));
 }
 
@@ -94,8 +94,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       name: providerTypeLabel(type),
       base_url: defaultBaseURLForFlowerProviderType(type),
       web_search: flowerProviderNeedsWebSearchConfig(type) ? { mode: 'disabled' } : undefined,
-      web_search_api_key: '',
-      web_search_api_key_mode: 'keep',
+      web_search_api_key: null,
       models: nextModels,
     });
   };
@@ -111,7 +110,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
 
   const addPreset = (model: FlowerProviderModel) => {
     const current = provider();
-    if (!current || modelEnabled(current, model.model_name)) return;
+    if (!current || modelSelected(current, model.model_name)) return;
     setModels([...current.models, cloneModel(model)]);
   };
 
@@ -135,7 +134,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
   const addCustomModel = () => {
     const current = provider();
     const name = cleanModelName(customModelName());
-    if (!current || !name || modelEnabled(current, name)) return;
+    if (!current || !name || modelSelected(current, name)) return;
     setModels([
       ...current.models,
       {
@@ -255,7 +254,6 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                         value={current().provider_api_key ?? ''}
                                         onInput={(event) => updateProvider({
                                           provider_api_key: event.currentTarget.value,
-                                          provider_api_key_mode: event.currentTarget.value.trim() ? 'replace' : 'keep',
                                         })}
                                         placeholder={props.keyConfigured ? copy().storedKeyKept : copy().pasteAPIKey}
                                         size="sm"
@@ -282,7 +280,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                           value={current().web_search?.mode ?? 'disabled'}
                                           onChange={(value) => updateProvider({
                                             web_search: { mode: value as FlowerWebSearchMode },
-                                            ...(value === 'brave' ? {} : { web_search_api_key: '', web_search_api_key_mode: 'clear' as const }),
+                                            ...(value === 'brave' ? {} : { web_search_api_key: null }),
                                           })}
                                           options={[
                                             { value: 'disabled', label: copy().disabled },
@@ -303,7 +301,6 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                           value={current().web_search_api_key ?? ''}
                                           onInput={(event) => updateProvider({
                                             web_search_api_key: event.currentTarget.value,
-                                            web_search_api_key_mode: event.currentTarget.value.trim() ? 'replace' : 'keep',
                                           })}
                                           placeholder={props.webSearchKeyConfigured ? copy().storedBraveKeyKept : copy().pasteBraveAPIKey}
                                           size="sm"
@@ -335,7 +332,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                     description={copy().recommendedModelsDescription}
                                     actions={(
                                       <Show when={recommended().length > 0}>
-                                        <Button size="sm" variant="outline" onClick={addAllPresets}>{copy().enableAll}</Button>
+                                        <Button size="sm" variant="outline" onClick={addAllPresets}>{copy().addAllPresets}</Button>
                                       </Show>
                                     )}
                                   />
@@ -346,9 +343,9 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                     <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                                       <For each={recommended()}>
                                         {(model) => {
-                                          const enabled = () => modelEnabled(current(), model.model_name);
+                                          const selected = () => modelSelected(current(), model.model_name);
                                           return (
-                                            <div class={cn('rounded-lg border p-3 transition', enabled() ? 'border-primary/50 bg-primary/5' : 'border-border bg-background')}>
+                                            <div class={cn('rounded-lg border p-3 transition', selected() ? 'border-primary/50 bg-primary/5' : 'border-border bg-background')}>
                                               <div class="flex items-start justify-between gap-3">
                                                 <div class="min-w-0">
                                                   <div class="break-all font-mono text-sm font-semibold text-foreground">{model.model_name}</div>
@@ -359,17 +356,17 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                                 </div>
                                                 <Button
                                                   size="sm"
-                                                  variant={enabled() ? 'ghost' : 'outline'}
-                                                  class={enabled() ? 'text-muted-foreground hover:text-destructive' : ''}
-                                                  onClick={() => (enabled() ? removePreset(model.model_name) : addPreset(model))}
+                                                  variant={selected() ? 'ghost' : 'outline'}
+                                                  class={selected() ? 'text-muted-foreground hover:text-destructive' : ''}
+                                                  onClick={() => (selected() ? removePreset(model.model_name) : addPreset(model))}
                                                 >
-                                                  {enabled() ? copy().remove : copy().add}
+                                                  {selected() ? copy().remove : copy().add}
                                                 </Button>
                                               </div>
                                               <div class="mt-2 flex flex-wrap gap-1.5">
                                                 <FlowerCapabilityTag active>{copy().text}</FlowerCapabilityTag>
                                                 <FlowerCapabilityTag active={flowerModelSupportsImage(model.input_modalities)}>{copy().imageInput}</FlowerCapabilityTag>
-                                                <Show when={enabled()}><FlowerCapabilityTag active>{copy().enabled}</FlowerCapabilityTag></Show>
+                                                <Show when={selected()}><FlowerCapabilityTag active>{copy().selected}</FlowerCapabilityTag></Show>
                                               </div>
                                               <Show when={copy().modelNote(model.note_key)}>
                                                 {(note) => <div class="mt-2 text-[11px] text-muted-foreground">{note()}</div>}
@@ -402,10 +399,10 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
                                 </section>
 
                                 <section class="space-y-3">
-                                  <FlowerSubSectionHeader title={copy().enabledModelsTitle} description={copy().enabledModelsDescription} />
+                                  <FlowerSubSectionHeader title={copy().selectedModelsTitle} description={copy().selectedModelsDescription} />
                                   <Show
                                     when={current().models.length > 0}
-                                    fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{copy().noEnabledModels}</div>}
+                                    fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{copy().noSelectedModels}</div>}
                                   >
                                     <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                                       <For each={current().models}>

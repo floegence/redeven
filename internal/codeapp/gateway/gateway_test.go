@@ -1647,6 +1647,122 @@ func TestGateway_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	}
 }
 
+func TestGateway_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+
+	cfgPath := writeTestConfigWithAI(t)
+	channelID := "ch_test_provider_bundle_cleanup"
+	envOrigin := envOriginWithChannel(channelID)
+	aiSvc, err := ai.NewService(ai.Options{
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "/bin/sh",
+		Config: &config.AIConfig{
+			CurrentModelID: "openai/gpt-5-mini",
+			Providers: []config.AIProvider{{
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: "https://api.openai.com/v1",
+				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = aiSvc.Close()
+	})
+
+	gw, err := New(Options{
+		Backend:            &stubBackend{},
+		DistFS:             dist,
+		ListenAddr:         "127.0.0.1:0",
+		AI:                 aiSvc,
+		ConfigPath:         cfgPath,
+		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true}),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	for _, req := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodPut, "/_redeven_proxy/api/ai/provider_keys", `{"patches":[{"provider_id":"openai","api_key":"sk-openai"},{"provider_id":"unused","api_key":"sk-unused"}]}`},
+		{http.MethodPut, "/_redeven_proxy/api/ai/web_search_provider_keys", `{"patches":[{"provider_id":"openai","api_key":"brave-openai"},{"provider_id":"unused","api_key":"brave-unused"}]}`},
+	} {
+		rr := performGatewayRequest(gw, req.method, req.path, envOrigin, req.body)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s %s code = %d, want %d body=%s", req.method, req.path, rr.Code, http.StatusOK, rr.Body.String())
+		}
+	}
+
+	body := `{
+	  "ai": {
+	    "current_model_id": "openai/gpt-5-mini",
+	    "providers": [
+	      {
+	        "id": "openai",
+	        "name": "OpenAI",
+	        "type": "openai",
+	        "base_url": "https://api.openai.com/v1",
+	        "web_search": { "mode": "disabled" },
+	        "models": [
+	          { "model_name": "gpt-5-mini" }
+	        ]
+	      }
+	    ]
+	  }
+	}`
+	rr := performGatewayRequest(gw, http.MethodPut, "/_redeven_proxy/api/ai/provider_bundle", envOrigin, body)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("provider bundle code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+
+	rr = performGatewayRequest(gw, http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", envOrigin, `{"provider_ids":["openai","unused"]}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("provider key status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal provider key status: %v", err)
+	}
+	data, _ := resp["data"].(map[string]any)
+	set, _ := data["provider_api_key_set"].(map[string]any)
+	if set["openai"] != true {
+		t.Fatalf("openai provider key set=%v, want=true", set["openai"])
+	}
+	if set["unused"] != false {
+		t.Fatalf("unused provider key set=%v, want=false", set["unused"])
+	}
+
+	rr = performGatewayRequest(gw, http.MethodPost, "/_redeven_proxy/api/ai/web_search_provider_keys/status", envOrigin, `{"provider_ids":["openai","unused"]}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("web search key status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	resp = map[string]any{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal web search key status: %v", err)
+	}
+	data, _ = resp["data"].(map[string]any)
+	webSet, _ := data["web_search_provider_api_key_set"].(map[string]any)
+	if webSet["openai"] != false {
+		t.Fatalf("openai web search key set=%v, want=false", webSet["openai"])
+	}
+	if webSet["unused"] != false {
+		t.Fatalf("unused web search key set=%v, want=false", webSet["unused"])
+	}
+}
+
 func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 	t.Parallel()
 

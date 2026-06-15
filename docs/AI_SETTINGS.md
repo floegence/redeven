@@ -11,7 +11,7 @@ Codex is documented separately in [`docs/CODEX_UI.md`](CODEX_UI.md). It does not
 - Provider and model selection stay deterministic on the wire.
 - The runtime uses native Go SDK adapters.
 
-Backward compatibility for older AI settings layouts is intentionally out of scope.
+Older AI settings layouts are intentionally out of scope.
 
 ## 1. Config vs secrets
 
@@ -136,25 +136,20 @@ For each run the Go runtime:
 3. never writes the key back into `config.json` or API responses
 4. resolves a Brave API key only when the selected OpenAI-compatible provider uses `web_search.mode = "brave"`
 
-## 6. AI model sources for SSH Host Environments
+## 6. Local AI Profile in SSH environments
 
-When Redeven Desktop opens an SSH Host Environment, Flower may have two independent model sources:
+Redeven uses one Local AI Profile for Desktop-managed Flower. The same provider, model, and secret configuration that powers the Local Environment also powers Welcome Flower. Users do not configure a second Desktop-only Flower profile.
 
-- `Runtime config`: the current runtime's own persisted Flower settings.
-- `Desktop`: the user's Desktop Local Environment model settings, exposed through a short-lived Desktop Model Source RPC session.
+When Desktop opens an SSH environment, it can expose this Local AI Profile through a short-lived Desktop Model Source RPC session. That session is not another persisted model configuration:
 
-The user can choose any usable model returned by the runtime. Env App does not expose model-source labels as persistent chat-header copy; it only marks models backed by Desktop Model Source RPC with a lightweight `REMOTE` tag.
+- Provider settings and API keys stay on the user's Mac in the Local Environment profile.
+- The SSH runtime receives opaque `desktop:model_...` model ids plus a live runtime-control RPC session initiated by Desktop.
+- Desktop connects through the runtime-control route after the final running runtime reports support for `desktop_model_source`.
+- The remote runtime stores only in-memory session state for the active Desktop connection.
+- The SSH runtime's `config.json` does not gain copied provider settings, provider keys, or an `enabled` boolean.
+- Remote tools, file reads, terminal commands, Git operations, and permission checks still execute in the SSH runtime.
 
-This is deliberately different from copying settings to the SSH host:
-
-- The Desktop Local Environment keeps provider API keys in its own `secrets.json`.
-- The SSH host receives only opaque `desktop:model_...` model ids plus a live runtime-control RPC session initiated by Desktop.
-- Desktop connects through the runtime-control route after the final running runtime has reported support for `desktop_model_source`.
-- The remote runtime stores only the in-memory Desktop model source session state.
-- The SSH host's `config.json` does not gain an `ai` section, provider keys, or an `enabled` boolean.
-- Remote tools, file reads, terminal commands, Git operations, and permission checks still execute in the SSH-hosted runtime.
-
-The API response field `ai_runtime.desktop_model_source` reports the `Desktop` source status separately from the persisted `ai` config. Env App also reads `runtime_service.bindings.desktop_model_source` so the Flower card can distinguish `bound`, `connecting`, `unbound`, `unsupported`, `error`, and `expired` instead of collapsing every remote mismatch into `ai not configured`.
+The API response field `ai_runtime.desktop_model_source` reports whether the Local AI Profile session is available to the SSH runtime. Env App also reads `runtime_service.bindings.desktop_model_source` so the Flower card can distinguish `bound`, `connecting`, `unbound`, `unsupported`, `error`, and `expired` instead of asking the user to configure the same provider information again.
 
 ## 7. UI behavior
 
@@ -163,10 +158,9 @@ Current Runtime Settings UI behavior is:
 - Flower lives under Runtime Settings -> `AI & Extensions` as its own card, while permission policy and diagnostics stay in separate top-level groups.
 - The Flower card is organized around provider cards and a dedicated current-model selector instead of a wide editable table.
 - Each provider editor starts with provider type selection. Clicking a provider type expands its inline connection and model details, with `Advanced` reserved for low-frequency fields.
-- On SSH Host sessions, the Flower card separates persisted remote runtime provider settings from the Desktop source session capability.
+- In SSH environments, the Flower card presents Desktop Model Source RPC as access to the same Local AI Profile, not as a second provider configuration surface.
 - The chat header shows a single `MODEL` control plus lightweight capability tags. It does not show model-source or tools-location summary badges.
-- When the selected model is served through Desktop Model Source RPC, the chat header shows a `REMOTE` tag. Its tooltip explains that AI requests are handled by Desktop while files, terminal, Git, and workspace actions still run in the current environment.
-- When the selected model uses the current environment runtime's own AI config, the chat header shows no source tag.
+- When the selected model is served through Desktop Model Source RPC, the chat header shows a lightweight tag. Its tooltip explains that AI requests use the Local AI Profile while files, terminal, Git, and workspace actions still run in the current environment.
 - Add Provider generates a provider id automatically.
 - Provider id is shown as read-only.
 - API keys are stored locally and shown only as status (`Key set` / `Key not set`).

@@ -410,7 +410,7 @@ export function surfaceTitle(surface: DesktopLauncherSurface): string {
   if (surface === 'environment_settings') {
     return 'Environment Settings';
   }
-  if (surface === 'flower_host') {
+  if (surface === 'flower') {
     return 'Flower';
   }
   return 'Connect Environment';

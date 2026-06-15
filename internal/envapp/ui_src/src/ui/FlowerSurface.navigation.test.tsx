@@ -148,7 +148,6 @@ function settingsSnapshot(configured = true): FlowerSettingsSnapshot {
   return {
     config: {
       schema_version: 1,
-      enabled: configured,
       current_model_id: 'openai/gpt-5.2',
       execution_policy: {
         require_user_approval: true,
@@ -180,10 +179,6 @@ function settingsSnapshot(configured = true): FlowerSettingsSnapshot {
         web_search_api_key_configured: false,
       },
     ],
-    target_cache: {
-      version: 1,
-      entries: [],
-    },
   };
 }
 
@@ -213,7 +208,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     created_at_ms: 1,
     updated_at_ms: 2,
     status: 'idle',
-    source_label: 'This host',
+    source_label: 'Local Environment',
     target_labels: [],
     read_status: readStatus(false),
     messages: [
@@ -327,17 +322,16 @@ function decision(): FlowerRouterDecision {
   return {
     decision_id: 'decision-1',
     decision_revision: 1,
-    route: 'flower_host',
-    reason_code: 'host_available',
+    route: 'env_local',
+    reason_code: 'runtime_available',
     selected_handler: {
-      handler_id: 'host',
-      handler_kind: 'global',
-      display_name: 'This host',
-      carrier_kind: 'desktop',
+      handler_id: 'local-environment',
+      handler_kind: 'env_local',
+      display_name: 'Local Environment',
+      carrier_kind: 'runtime',
       state: 'online',
       selection_source: 'router_default',
       supports_thread_kinds: ['chat'],
-      allowed_target_ids: [],
     },
     available_handlers: [],
     unavailable_handlers: [],
@@ -349,19 +343,19 @@ function decision(): FlowerRouterDecision {
       thread_kind: 'chat',
       client_surface: 'flower_surface',
     },
-    host_presence: {
+    runtime_presence: {
       schema_version: 1,
-      host_id: 'host',
-      host_kind: 'global',
-      carrier_kind: 'desktop',
-      display_name: 'This host',
+      runtime_id: 'local-environment',
+      runtime_kind: 'env_local',
+      carrier_kind: 'runtime',
+      display_name: 'Local Environment',
       state: 'online',
       endpoint: { visibility: 'local' },
       capabilities: ['chat'],
       last_seen_at_unix_ms: 1,
     },
     allowed_actions: ['start_thread'],
-    ui_chips: [{ kind: 'host', label: 'Using Flower Host', tone: 'normal' }],
+    ui_chips: [{ kind: 'runtime', label: 'Using Local AI Profile', tone: 'normal' }],
     blocker: null,
     created_at_unix_ms: 1,
   };
@@ -372,12 +366,12 @@ function blockedDecision(): FlowerRouterDecision {
     ...decision(),
     decision_id: 'decision-blocked',
     route: 'blocked',
-    reason_code: 'host_not_configured',
+    reason_code: 'runtime_not_configured',
     selected_handler: null,
     available_handlers: [],
-    ui_chips: [{ kind: 'host', label: 'Flower needs setup', tone: 'warning' }],
+    ui_chips: [{ kind: 'runtime', label: 'Flower needs setup', tone: 'warning' }],
     blocker: {
-      code: 'host_not_configured',
+      code: 'runtime_not_configured',
       message: 'Configure Flower before chatting.',
     },
   };
@@ -385,12 +379,12 @@ function blockedDecision(): FlowerRouterDecision {
 
 function adapter(configured = true): FlowerSurfaceAdapter {
   return {
-    host: {
-      host_id: 'host',
-      host_kind: 'global',
-      carrier_kind: 'desktop',
-      display_name: 'This host',
-      subtitle: 'Global host',
+    runtime: {
+      runtime_id: 'runtime',
+      runtime_kind: 'env_local',
+      carrier_kind: 'runtime',
+      display_name: 'Local Environment',
+      subtitle: 'Global runtime',
     },
     loadSettings: vi.fn(async () => settingsSnapshot(configured)),
     saveSettings: vi.fn(async () => settingsSnapshot(configured)),
@@ -444,8 +438,8 @@ function mutableSettingsAdapter(configured = true): FlowerSurfaceAdapter & Reado
   };
 }
 
-function threadOrder(host: HTMLElement): string[] {
-  return Array.from(host.querySelectorAll('[data-thread-id]'))
+function threadOrder(runtime: HTMLElement): string[] {
+  return Array.from(runtime.querySelectorAll('[data-thread-id]'))
     .map((node) => node.getAttribute('data-thread-id') ?? '');
 }
 
@@ -453,10 +447,10 @@ describe('FlowerSurface navigation', () => {
   const disposers: Array<() => void> = [];
 
   const mountFlowerSurface = (surfaceAdapter: FlowerSurfaceAdapter): HTMLDivElement => {
-    const host = document.createElement('div');
-    document.body.appendChild(host);
-    disposers.push(render(() => <FlowerSurface adapter={surfaceAdapter} />, host));
-    return host;
+    const runtime = document.createElement('div');
+    document.body.appendChild(runtime);
+    disposers.push(render(() => <FlowerSurface adapter={surfaceAdapter} />, runtime));
+    return runtime;
   };
 
   function renderSurface(configured = true): HTMLDivElement {
@@ -475,89 +469,79 @@ describe('FlowerSurface navigation', () => {
   });
 
   it('returns from settings to the chat panel with an icon-only control', async () => {
-    const host = renderSurface();
+    const runtime = renderSurface();
     await flush();
 
-    (host.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
+    (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
-    expect(host.querySelector('.flower-host-chat-shell')).toBeNull();
+    expect(runtime.querySelector('.flower-chat-shell')).toBeNull();
 
-    const back = host.querySelector('button[aria-label="Back to chat"]') as HTMLButtonElement | null;
+    const back = runtime.querySelector('button[aria-label="Back to chat"]') as HTMLButtonElement | null;
     expect(back).toBeTruthy();
     expect(back?.textContent?.trim()).toBe('');
 
     back?.click();
     await flush();
 
-    expect(host.querySelector('.flower-host-chat-shell')).toBeTruthy();
+    expect(runtime.querySelector('.flower-chat-shell')).toBeTruthy();
   });
 
   it('lets the single flower entry start a new chat from settings', async () => {
-    const host = renderSurface();
+    const runtime = renderSurface();
     await flush();
 
-    (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+    (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
     await flush();
-    (host.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
+    (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    const newChat = host.querySelector('button[aria-label="New chat"]') as HTMLButtonElement | null;
+    const newChat = runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement | null;
     expect(newChat?.textContent).toContain('New chat');
     newChat?.click();
     await flush();
 
-    expect(host.querySelector('.flower-host-chat-shell')).toBeTruthy();
-    expect(host.querySelector('.flower-host-chat-header-title')?.textContent).toBe('Ask Flower');
-    expect(host.querySelector('.flower-host-thread-card-active')).toBeNull();
+    expect(runtime.querySelector('.flower-chat-shell')).toBeTruthy();
+    expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Ask Flower');
+    expect(runtime.querySelector('.flower-thread-card-active')).toBeNull();
   });
 
   it('selects a thread from settings and returns to chat', async () => {
-    const host = renderSurface();
+    const runtime = renderSurface();
     await flush();
 
-    (host.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
+    (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+    (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
     await flush();
 
-    expect(host.querySelector('.flower-host-chat-shell')).toBeTruthy();
-    expect(host.querySelector('.flower-host-chat-header-title')?.textContent).toBe('Deploy plan');
+    expect(runtime.querySelector('.flower-chat-shell')).toBeTruthy();
+    expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Deploy plan');
   });
 
-  it('keeps enable guidance beside the disabled notice and only shows saved feedback briefly', async () => {
+  it('shows the Local AI Profile editor without a separate Flower enable switch', async () => {
     const surfaceAdapter = mutableSettingsAdapter(false);
-    const host = renderSurfaceWithAdapter(surfaceAdapter);
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
     await flush();
 
-    (host.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
+    (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    expect(host.querySelector('.flower-settings-title-feedback')?.textContent).toBe('');
-    expect(host.querySelector('.flower-settings-disabled-guide')?.textContent).toContain('Flower is disabled on this host.');
-    expect(host.querySelector('.flower-settings-disabled-guide')?.textContent).toContain('Enable');
-    expect(host.textContent).not.toContain('Flower is enabled on this host');
-    expect(host.querySelector('.flower-settings-current-model')).toBeNull();
+    expect(runtime.querySelector('.flower-settings-title-feedback')?.textContent).toBe('');
+    expect(runtime.querySelector('.flower-settings-current-model')).toBeTruthy();
+    expect(runtime.textContent).toContain('Configure models and execution policy for the Local AI Profile.');
 
-    const enableButton = Array.from(host.querySelectorAll('.flower-settings-disabled-guide button'))
-      .find((button) => button.textContent?.includes('Enable')) as HTMLButtonElement | undefined;
-    enableButton?.click();
+    const approvalButton = Array.from(runtime.querySelectorAll('.flower-settings-policy-card'))
+      .find((button) => button.textContent?.includes('User approval')) as HTMLButtonElement | undefined;
+    approvalButton?.click();
     await wait(850);
     await flush();
 
     expect(surfaceAdapter.saveSettings).toHaveBeenCalledTimes(1);
-    expect(host.querySelector('.flower-settings-disabled-guide')).toBeNull();
-    expect(host.textContent).not.toContain('Flower is enabled on this host');
-    expect(host.querySelector('.flower-settings-title-feedback')?.textContent).toContain('Disable Flower');
-    expect(host.querySelector('.flower-settings-title-feedback')?.textContent).toContain('Saved');
-
-    await wait(1850);
-    await flush();
-
-    expect(host.querySelector('.flower-settings-title-feedback')?.textContent).toBe('Disable Flower');
+    expect(runtime.querySelector('.flower-settings-title-feedback')?.textContent).toContain('Saved');
   }, 5000);
 
-  it('opens provider setup instead of enabling a disabled Flower with no model', async () => {
+  it('opens provider setup from settings when no model is configured', async () => {
     const surfaceAdapter = mutableSettingsAdapter(false);
     const emptySnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(false),
@@ -568,116 +552,171 @@ describe('FlowerSurface navigation', () => {
       },
       provider_secrets: [],
     };
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...surfaceAdapter,
       loadSettings: vi.fn(async () => emptySnapshot),
       saveSettings: vi.fn(async () => emptySnapshot),
     });
     await flush();
 
-    (host.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
+    (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    expect(host.querySelector('.flower-settings-disabled-guide')?.textContent).toContain('Set up Flower');
-    (Array.from(host.querySelectorAll('.flower-settings-disabled-guide button'))
-      .find((button) => button.textContent?.includes('Set up Flower')) as HTMLButtonElement).click();
+    expect(runtime.querySelector('.flower-settings-current-model')?.textContent).toContain('No model selected');
+    (Array.from(runtime.querySelectorAll('button'))
+      .find((button) => button.textContent?.includes('Add provider')) as HTMLButtonElement).click();
     await flush();
 
-    expect(host.querySelector('[role="dialog"]')?.textContent).toContain('Provider type');
+    expect(runtime.querySelector('[role="dialog"]')?.textContent).toContain('Provider type');
+  });
+
+  it('uses Desktop Model Source readiness without exposing a second provider editor', async () => {
+    const sendMessage = vi.fn(async () => thread());
+    const desktopSourceSnapshot: FlowerSettingsSnapshot = {
+      ...settingsSnapshot(false),
+      config: {
+        ...settingsSnapshot(false).config,
+        current_model_id: 'desktop:gpt-5.2',
+      },
+      provider_secrets: [],
+      model_source: {
+        kind: 'desktop_model_source',
+        ready: true,
+        label: 'Local AI Profile',
+        model_count: 1,
+      },
+    };
+    const saveSettings = vi.fn(async () => desktopSourceSnapshot);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(false),
+      loadSettings: vi.fn(async () => desktopSourceSnapshot),
+      saveSettings,
+      sendMessage,
+    });
+    await flush();
+
+    (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
+    await flush();
+
+    expect(runtime.textContent).toContain('Local AI Profile on this Mac');
+    expect(runtime.textContent).toContain('Open Local Environment Settings on this Mac to change providers, models, or keys.');
+    expect(runtime.querySelector('.flower-settings-current-model')).toBeNull();
+    expect(runtime.querySelector('.flower-settings-policy-card')).toBeNull();
+    expect(runtime.querySelector('.flower-settings-providers-section')).toBeNull();
+    expect(runtime.querySelector('.flower-settings-terminal-section')).toBeNull();
+    expect(runtime.textContent).not.toContain('Add provider');
+    expect(runtime.textContent).not.toContain('OpenAI');
+    expect(runtime.textContent).not.toContain('gpt-5.2');
+    expect(runtime.textContent).not.toContain('User approval');
+    expect(runtime.textContent).not.toContain('Terminal execution limits');
+    await wait(850);
+    await flush();
+    expect(saveSettings).not.toHaveBeenCalled();
+
+    (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+    await flush();
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement | null;
+    textarea!.value = 'hello from desktop source';
+    textarea!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    textarea!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    await flush();
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
   });
 
   it('guides setup from new chat when the provider is not ready', async () => {
-    const host = renderSurface(false);
+    const runtime = renderSurface(false);
     await flush();
 
-    (host.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
+    (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
-    const newChat = host.querySelector('button[aria-label="New chat"]') as HTMLButtonElement | null;
+    const newChat = runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement | null;
     expect(newChat?.textContent).toContain('New chat');
     newChat?.click();
     await flush();
 
-    expect(host.querySelector('.flower-host-chat-shell')).toBeTruthy();
-    expect(host.querySelector('.flower-host-chat-header-title')?.textContent).toBe('Ask Flower');
-    expect(host.querySelector('.flower-host-setup-guide')?.textContent).toContain('Set up Flower');
-    expect(host.querySelector('.flower-host-setup-guide')?.textContent).toContain('Choose a provider, model, and API key once.');
-    expect(host.querySelector('.flower-host-handler-error')).toBeNull();
-    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
+    expect(runtime.querySelector('.flower-chat-shell')).toBeTruthy();
+    expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Ask Flower');
+    expect(runtime.querySelector('.flower-setup-guide')?.textContent).toContain('Set up Flower');
+    expect(runtime.querySelector('.flower-setup-guide')?.textContent).toContain('Choose a provider, model, and API key once.');
+    expect(runtime.querySelector('.flower-handler-error')).toBeNull();
+    expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
 
-    const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement | null;
     textarea!.value = 'hello';
     textarea!.dispatchEvent(new InputEvent('input', { bubbles: true }));
     textarea!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await flush();
 
-    expect(host.querySelector('.flower-host-chat-shell')).toBeNull();
-    expect(host.querySelector('button[aria-label="Back to chat"]')).toBeTruthy();
+    expect(runtime.querySelector('.flower-chat-shell')).toBeNull();
+    expect(runtime.querySelector('button[aria-label="Back to chat"]')).toBeTruthy();
   });
 
   it('shows a starting handler state before settings finish loading', async () => {
     const settings = deferred<FlowerSettingsSnapshot>();
     const resolveHandler = vi.fn(async () => decision());
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       loadSettings: vi.fn(() => settings.promise),
       resolveHandler,
     });
     await flush();
 
-    expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Starting Flower...');
-    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
+    expect(runtime.querySelector('.flower-handler-chip')?.textContent).toContain('Starting Flower...');
+    expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
     expect(resolveHandler).not.toHaveBeenCalled();
 
     settings.resolve(settingsSnapshot(true));
     await waitFor(() => resolveHandler.mock.calls.length === 1);
-    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
+    expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
   });
 
   it('keeps handler resolution pending without showing an unavailable error', async () => {
     const handler = deferred<FlowerRouterDecision>();
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       resolveHandler: vi.fn(() => handler.promise),
     });
-    await waitFor(() => Boolean(host.querySelector('.flower-host-handler-chip')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-handler-chip')));
 
-    expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Choosing Flower...');
-    expect(host.querySelector('.flower-host-handler-error-card')).toBeNull();
-    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
+    expect(runtime.querySelector('.flower-handler-chip')?.textContent).toContain('Choosing Flower...');
+    expect(runtime.querySelector('.flower-handler-error-card')).toBeNull();
+    expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
 
     handler.resolve(decision());
-    await waitFor(() => host.querySelector('.flower-host-handler-chip') === null);
+    await waitFor(() => runtime.querySelector('.flower-handler-chip')?.textContent?.includes('Using Local AI Profile') ?? false);
   });
 
-  it('shows handler blockers near the composer without pretending a host is selected', async () => {
+  it('shows handler blockers near the composer without pretending a runtime is selected', async () => {
     const failingAdapter = {
       ...adapter(true),
       resolveHandler: vi.fn(async () => blockedDecision()),
     };
-    const host = renderSurfaceWithAdapter(failingAdapter);
+    const runtime = renderSurfaceWithAdapter(failingAdapter);
     await flush();
 
-    expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Flower needs attention');
-    expect(host.querySelector('.flower-host-handler-error-card')?.textContent).toContain('Configure Flower before chatting.');
-    expect(host.querySelector('.flower-host-handler-retry')?.textContent).toContain('Retry');
-    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
-    const sendButton = host.querySelector('.flower-host-composer-submit') as HTMLButtonElement | null;
+    expect(runtime.querySelector('.flower-handler-chip')?.textContent).toContain('Flower needs attention');
+    expect(runtime.querySelector('.flower-handler-error-card')?.textContent).toContain('Configure Flower before chatting.');
+    expect(runtime.querySelector('.flower-handler-retry')?.textContent).toContain('Retry');
+    expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
+    const sendButton = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
     expect(sendButton?.getAttribute('aria-label')).toBe('Send');
     expect(sendButton?.disabled).toBe(true);
   });
 
   it('shows startup failures as recoverable Flower start errors', async () => {
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       resolveHandler: vi.fn(async () => {
-        throw new Error('Timed out waiting for Flower Host readiness.');
+        throw new Error('Timed out waiting for Flower readiness.');
       }),
     });
     await flush();
 
-    expect(host.querySelector('.flower-host-handler-chip')?.textContent).toContain('Flower could not start');
-    expect(host.querySelector('.flower-host-handler-error-card')?.textContent).toContain('Timed out waiting for Flower Host readiness.');
-    expect(host.textContent).not.toContain(retiredHandlerUnavailableCopy());
+    expect(runtime.querySelector('.flower-handler-chip')?.textContent).toContain('Flower could not start');
+    expect(runtime.querySelector('.flower-handler-error-card')?.textContent).toContain('Timed out waiting for Flower readiness.');
+    expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
   });
 
   it('switches handlers before the first message and keeps the selected thread decision-free', async () => {
@@ -686,7 +725,7 @@ describe('FlowerSurface navigation', () => {
       decision_id: 'decision-2',
       selected_handler: {
         ...decision().selected_handler!,
-        handler_id: 'host-2',
+        handler_id: 'runtime-2',
         display_name: 'Lab Flower',
         selection_source: 'user_selected',
       },
@@ -694,7 +733,7 @@ describe('FlowerSurface navigation', () => {
         decision().selected_handler!,
         {
           ...decision().selected_handler!,
-          handler_id: 'host-2',
+          handler_id: 'runtime-2',
           display_name: 'Lab Flower',
         },
       ],
@@ -703,29 +742,29 @@ describe('FlowerSurface navigation', () => {
         requires_user_visible_confirmation: true,
       },
     };
-    const resolveHandler = vi.fn(async (input?: any) => (input?.requested_handler_id === 'host-2' ? secondDecision : {
+    const resolveHandler = vi.fn(async (input?: any) => (input?.requested_handler_id === 'runtime-2' ? secondDecision : {
       ...decision(),
       available_handlers: secondDecision.available_handlers,
       handler_selection: secondDecision.handler_selection,
     }));
     const sendMessage = vi.fn(async () => thread());
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       resolveHandler,
       sendMessage,
     });
     await flush();
 
-    const selector = host.querySelector('.flower-host-handler-picker select') as HTMLSelectElement;
-    selector.value = 'host-2';
+    const selector = runtime.querySelector('.flower-handler-picker select') as HTMLSelectElement;
+    selector.value = 'runtime-2';
     selector.dispatchEvent(new Event('change', { bubbles: true }));
     await flush();
 
-    expect(resolveHandler).toHaveBeenCalledWith(expect.objectContaining({ requested_handler_id: 'host-2' }));
+    expect(resolveHandler).toHaveBeenCalledWith(expect.objectContaining({ requested_handler_id: 'runtime-2' }));
 
-    (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+    (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
     await flush();
-    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'continue';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
@@ -776,33 +815,33 @@ describe('FlowerSurface navigation', () => {
     });
     const sendMessage = vi.fn(async () => sentThread);
     const loadThread = vi.fn(async () => completeThread);
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
       loadThread,
       sendMessage,
     });
-    await waitFor(() => Boolean(host.querySelector('textarea')));
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
 
-    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'verify Flower';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     await waitFor(() => {
-      const button = host.querySelector('.flower-host-composer-submit') as HTMLButtonElement | null;
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
       return Boolean(button && !button.disabled);
     });
-    const send = host.querySelector('.flower-host-composer-submit') as HTMLButtonElement;
+    const send = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement;
     send.click();
     await waitFor(() => sendMessage.mock.calls.length > 0);
     await waitFor(() => loadThread.mock.calls.length > 0);
-    await waitFor(() => host.textContent?.includes('Flower verification is complete.') ?? false);
+    await waitFor(() => runtime.textContent?.includes('Flower verification is complete.') ?? false);
 
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       thread_id: undefined,
       prompt: 'verify Flower',
     }));
     expect(loadThread).toHaveBeenCalledWith('thread-new');
-    expect(host.textContent).toContain('Flower verification is complete.');
+    expect(runtime.textContent).toContain('Flower verification is complete.');
   });
 
   it('renders file activity actions and unified patch lines inline', async () => {
@@ -878,17 +917,17 @@ describe('FlowerSurface navigation', () => {
     expect(host.textContent).toContain('I will edit the file.');
     expect(host.textContent).toContain('Done.');
     expect(host.textContent).not.toContain('#dcbdf9b8c27f');
-    expect(host.querySelectorAll('.flower-host-activity-inline-line > .flower-host-activity-file-actions button')).toHaveLength(2);
+    expect(host.querySelectorAll('.flower-activity-inline-line > .flower-activity-file-actions button')).toHaveLength(2);
     const preview = host.querySelector('button[aria-label="Preview app.ts"]') as HTMLButtonElement | null;
     const browser = host.querySelector('button[aria-label="Browse folder for app.ts"]') as HTMLButtonElement | null;
     expect(preview?.disabled).toBe(false);
     expect(browser?.disabled).toBe(false);
 
-    const toggle = host.querySelector('[data-flower-activity-item-id="tool-write"] .flower-host-activity-inline-button') as HTMLButtonElement;
+    const toggle = host.querySelector('[data-flower-activity-item-id="tool-write"] .flower-activity-inline-button') as HTMLButtonElement;
     toggle.click();
-    await waitFor(() => Boolean(host.querySelector('.flower-host-activity-file-diff-line-del')));
-    expect(host.querySelector('.flower-host-activity-file-diff-line-del')?.textContent).toContain('-const value = 1;');
-    expect(host.querySelector('.flower-host-activity-file-diff-line-add')?.textContent).toContain('+const value = 2;');
+    await waitFor(() => Boolean(host.querySelector('.flower-activity-file-diff-line-del')));
+    expect(host.querySelector('.flower-activity-file-diff-line-del')?.textContent).toContain('-const value = 1;');
+    expect(host.querySelector('.flower-activity-file-diff-line-add')?.textContent).toContain('+const value = 2;');
 
     preview?.click();
     browser?.click();
@@ -935,24 +974,24 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     }));
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [olderThread, newerThread]),
       loadThread,
     });
 
-    await waitFor(() => threadOrder(host).length === 2);
-    expect(threadOrder(host)).toEqual(['thread-newer', 'thread-older']);
+    await waitFor(() => threadOrder(runtime).length === 2);
+    expect(threadOrder(runtime)).toEqual(['thread-newer', 'thread-older']);
 
-    (host.querySelector('[data-thread-id="thread-older"] button') as HTMLButtonElement).click();
+    (runtime.querySelector('[data-thread-id="thread-older"] button') as HTMLButtonElement).click();
     await waitFor(() => loadThread.mock.calls.length > 0);
-    await waitFor(() => host.textContent?.includes('Still in the older thread.') ?? false);
+    await waitFor(() => runtime.textContent?.includes('Still in the older thread.') ?? false);
 
-    expect(threadOrder(host)).toEqual(['thread-newer', 'thread-older']);
-    expect(host.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-older');
-    expect(host.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('idle');
-    expect(host.querySelector('[data-thread-id="thread-older"]')?.getAttribute('data-flower-thread-active')).toBe('true');
-    expect(host.querySelector('[data-thread-id="thread-older"]')?.getAttribute('data-flower-thread-status')).toBe('idle');
+    expect(threadOrder(runtime)).toEqual(['thread-newer', 'thread-older']);
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-older');
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('idle');
+    expect(runtime.querySelector('[data-thread-id="thread-older"]')?.getAttribute('data-flower-thread-active')).toBe('true');
+    expect(runtime.querySelector('[data-thread-id="thread-older"]')?.getAttribute('data-flower-thread-status')).toBe('idle');
   });
 
   it('clears the unread sidebar dot immediately when a thread is selected', async () => {
@@ -987,24 +1026,24 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     }));
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [unreadThread]),
       loadThread,
       markThreadRead,
     });
 
-    await waitFor(() => host.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread') === 'true');
-    expect(host.querySelector('[data-thread-id="thread-unread"] .flower-host-thread-status-dot')).toBeTruthy();
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    expect(runtime.querySelector('[data-thread-id="thread-unread"] .flower-thread-status-dot')).toBeTruthy();
 
-    (host.querySelector('[data-thread-id="thread-unread"] button') as HTMLButtonElement).click();
-    await waitFor(() => host.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread') === 'false');
+    (runtime.querySelector('[data-thread-id="thread-unread"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread') === 'false');
     await waitFor(() => markThreadRead.mock.calls.length > 0);
 
     expect(markThreadRead.mock.calls[0]?.[0]).toBe('thread-unread');
     expect(markThreadRead.mock.calls[0]?.[1]).toMatchObject(unreadThread.read_status.snapshot);
     expect(loadThread).toHaveBeenCalledWith('thread-unread');
-    expect(host.textContent).toContain('Fresh result.');
+    expect(runtime.textContent).toContain('Fresh result.');
   });
 
   it('keeps the running wave indicator stable across selected thread detail refreshes', async () => {
@@ -1043,30 +1082,30 @@ describe('FlowerSurface navigation', () => {
     };
     const listThreads = vi.fn(async () => [runningThread]);
     const loadThread = vi.fn(async () => (loadThread.mock.calls.length === 1 ? firstDetail : refreshedDetail));
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads,
       loadThread,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-wave"] button')));
-    const cardBeforeClick = host.querySelector('[data-thread-id="thread-running-wave"]') as HTMLElement;
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-wave"] button')));
+    const cardBeforeClick = runtime.querySelector('[data-thread-id="thread-running-wave"]') as HTMLElement;
     expect(cardBeforeClick.getAttribute('data-flower-thread-status')).toBe('running');
     expect(cardBeforeClick.getAttribute('data-flower-thread-unread')).toBe('false');
     expect(cardBeforeClick.getAttribute('data-flower-thread-indicator')).toBe('wave');
-    const waveBeforeClick = cardBeforeClick.querySelector('.flower-host-thread-wave');
+    const waveBeforeClick = cardBeforeClick.querySelector('.flower-thread-wave');
     expect(waveBeforeClick).toBeTruthy();
 
     (cardBeforeClick.querySelector('button') as HTMLButtonElement).click();
     await waitFor(() => loadThread.mock.calls.length > 0);
-    const waveAfterSelect = host.querySelector('[data-thread-id="thread-running-wave"] .flower-host-thread-wave');
+    const waveAfterSelect = runtime.querySelector('[data-thread-id="thread-running-wave"] .flower-thread-wave');
     expect(waveAfterSelect).toBeTruthy();
     expect(waveAfterSelect).toBe(waveBeforeClick);
-    expect(host.querySelector('[data-thread-id="thread-running-wave"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-running-wave"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
 
     await waitFor(() => loadThread.mock.calls.length > 1);
-    expect(host.querySelector('[data-thread-id="thread-running-wave"] .flower-host-thread-wave')).toBe(waveAfterSelect);
-    expect(host.textContent).toContain('Working... still flowing');
+    expect(runtime.querySelector('[data-thread-id="thread-running-wave"] .flower-thread-wave')).toBe(waveAfterSelect);
+    expect(runtime.textContent).toContain('Working... still flowing');
   });
 
   it('persists read state when a selected running thread receives unread detail refreshes', async () => {
@@ -1115,23 +1154,23 @@ describe('FlowerSurface navigation', () => {
     }));
     const loadThread = vi.fn(async () => (detailHasFreshUnread ? unreadDetail : runningThread));
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
       loadThread,
       markThreadRead,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-read"] button')));
-    (host.querySelector('[data-thread-id="thread-running-read"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-read"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-read"] button') as HTMLButtonElement).click();
 
     detailHasFreshUnread = true;
     listSnapshot = [unreadDetail];
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length >= 1, 2500);
 
-    expect(host.querySelector('[data-thread-id="thread-running-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
-    expect(host.textContent).toContain('Fresh selected update');
+    expect(runtime.querySelector('[data-thread-id="thread-running-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.textContent).toContain('Fresh selected update');
   });
 
   it('keeps the selected running wave node stable when a fresh unread snapshot arrives', async () => {
@@ -1172,26 +1211,26 @@ describe('FlowerSurface navigation', () => {
       ...freshUnreadDetail,
       read_status: readStatus(false, snapshot.activity_revision, 'running'),
     }));
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
       loadThread,
       markThreadRead,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-selected-live-snapshot"] button')));
-    (host.querySelector('[data-thread-id="thread-selected-live-snapshot"] button') as HTMLButtonElement).click();
-    await waitFor(() => host.querySelector('[data-thread-id="thread-selected-live-snapshot"]')?.getAttribute('data-flower-thread-indicator') === 'wave');
-    const waveBeforeFreshSnapshot = host.querySelector('[data-thread-id="thread-selected-live-snapshot"] .flower-host-thread-wave');
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-selected-live-snapshot"] button')));
+    (runtime.querySelector('[data-thread-id="thread-selected-live-snapshot"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-selected-live-snapshot"]')?.getAttribute('data-flower-thread-indicator') === 'wave');
+    const waveBeforeFreshSnapshot = runtime.querySelector('[data-thread-id="thread-selected-live-snapshot"] .flower-thread-wave');
 
     detailIsFresh = true;
     listSnapshot = [freshUnreadDetail];
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
 
-    await waitFor(() => host.textContent?.includes('Working with fresh output') ?? false);
+    await waitFor(() => runtime.textContent?.includes('Working with fresh output') ?? false);
     await waitFor(() => markThreadRead.mock.calls.length > 0);
-    expect(host.querySelector('[data-thread-id="thread-selected-live-snapshot"] .flower-host-thread-wave')).toBe(waveBeforeFreshSnapshot);
-    expect(host.querySelector('[data-thread-id="thread-selected-live-snapshot"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-selected-live-snapshot"] .flower-thread-wave')).toBe(waveBeforeFreshSnapshot);
+    expect(runtime.querySelector('[data-thread-id="thread-selected-live-snapshot"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
   });
 
   it('queues a final read persistence when unread detail arrives before an in-flight mark-read completes', async () => {
@@ -1239,23 +1278,23 @@ describe('FlowerSurface navigation', () => {
     let detailHasFinalUnread = false;
     const loadThread = vi.fn(async () => (detailHasFinalUnread ? finalUnreadDetail : runningThread));
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
       loadThread,
       markThreadRead,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-final-read"] button')));
-    (host.querySelector('[data-thread-id="thread-running-final-read"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-final-read"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-final-read"] button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length === 1);
     detailHasFinalUnread = true;
     listSnapshot = [finalUnreadDetail];
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
-    await waitFor(() => host.textContent?.includes('Final selected update') ?? false, 2500);
-    expect(host.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('success');
-    expect(host.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-indicator')).toBe('none');
-    expect(host.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Final selected update') ?? false, 2500);
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status')).toBe('success');
+    expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-indicator')).toBe('none');
+    expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
     expect(markThreadRead).toHaveBeenCalledTimes(1);
 
     firstRead.resolve({
@@ -1264,7 +1303,7 @@ describe('FlowerSurface navigation', () => {
     });
     await waitFor(() => markThreadRead.mock.calls.length >= 2);
 
-    expect(host.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
   });
 
   it('persists a queued final read even after the user leaves the thread', async () => {
@@ -1311,23 +1350,23 @@ describe('FlowerSurface navigation', () => {
     });
     let detailHasFinalUnread = false;
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
       loadThread: vi.fn(async () => (detailHasFinalUnread ? finalUnreadDetail : runningThread)),
       markThreadRead,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running-final-after-leave"] button')));
-    (host.querySelector('[data-thread-id="thread-running-final-after-leave"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-final-after-leave"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-final-after-leave"] button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length === 1);
 
     detailHasFinalUnread = true;
     listSnapshot = [finalUnreadDetail];
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
-    await waitFor(() => host.textContent?.includes('Final before leaving') ?? false);
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Final before leaving') ?? false);
 
-    (host.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+    (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
     firstRead.resolve({
       ...runningThread,
       read_status: readStatus(false, 11_000, 'running'),
@@ -1352,26 +1391,26 @@ describe('FlowerSurface navigation', () => {
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [unreadThread];
     const markThreadRead = vi.fn(() => new Promise<FlowerThreadSnapshot>(() => undefined));
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
       loadThread: vi.fn(async () => ({ ...unreadThread, read_status: readStatus(false, 7_000, 'success') })),
       markThreadRead,
     });
 
-    await waitFor(() => host.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'true');
-    (host.querySelector('[data-thread-id="thread-refresh-race"] button') as HTMLButtonElement).click();
-    await waitFor(() => host.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'false');
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    (runtime.querySelector('[data-thread-id="thread-refresh-race"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'false');
 
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await flush();
-    expect(host.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
 
-    (host.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+    (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
     await flush();
     listSnapshot = [newerUnreadThread];
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
-    await waitFor(() => host.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-refresh-race"]')?.getAttribute('data-flower-thread-unread') === 'true');
   });
 
   it('updates sidebar-visible target labels through the stable sidebar list model', async () => {
@@ -1382,21 +1421,21 @@ describe('FlowerSurface navigation', () => {
       target_labels: ['Before target'],
     });
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
     });
 
-    await waitFor(() => host.textContent?.includes('Before target') ?? false);
+    await waitFor(() => runtime.textContent?.includes('Before target') ?? false);
 
     listSnapshot = [{
       ...runningThread,
       target_labels: ['After target'],
     }];
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
 
-    await waitFor(() => host.textContent?.includes('After target') ?? false);
-    expect(host.textContent).not.toContain('Before target');
+    await waitFor(() => runtime.textContent?.includes('After target') ?? false);
+    expect(runtime.textContent).not.toContain('Before target');
   });
 
   it('restores the unread dot when mark-read persistence fails', async () => {
@@ -1408,23 +1447,23 @@ describe('FlowerSurface navigation', () => {
     const markThreadRead = vi.fn(async () => {
       throw new Error('read state unavailable');
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [unreadThread]),
       loadThread: vi.fn(async () => unreadThread),
       markThreadRead,
     });
 
-    await waitFor(() => host.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread') === 'true');
-    (host.querySelector('[data-thread-id="thread-mark-read-error"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread') === 'true');
+    (runtime.querySelector('[data-thread-id="thread-mark-read-error"] button') as HTMLButtonElement).click();
     await waitFor(() => markThreadRead.mock.calls.length > 0);
 
-    expect(host.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
-    expect(host.querySelector('.flower-host-thread-action-error')?.textContent).toContain('read state unavailable');
+    expect(runtime.querySelector('[data-thread-id="thread-mark-read-error"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
+    expect(runtime.querySelector('.flower-thread-action-error')?.textContent).toContain('read state unavailable');
   });
 
   it('uses thread id as a stable tie breaker when conversations share a creation time', async () => {
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [
         thread({ thread_id: 'thread-c', title: 'C', created_at_ms: 4_000 }),
@@ -1433,28 +1472,28 @@ describe('FlowerSurface navigation', () => {
       ]),
     });
 
-    await waitFor(() => threadOrder(host).length === 3);
+    await waitFor(() => threadOrder(runtime).length === 3);
 
-    expect(threadOrder(host)).toEqual(['thread-a', 'thread-b', 'thread-c']);
+    expect(threadOrder(runtime)).toEqual(['thread-a', 'thread-b', 'thread-c']);
   });
 
   it('opens thread actions from the keyboard and supports menu roving focus', async () => {
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       forkThread: vi.fn(async () => thread({ thread_id: 'thread-fork' })),
       renameThread: vi.fn(async () => thread()),
       setThreadPinned: vi.fn(async () => thread({ pinned_at_ms: 10 })),
     });
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-1"] button')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-1"] button')));
 
-    const rowButton = host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement;
+    const rowButton = runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement;
     rowButton.focus();
     rowButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, cancelable: true }));
     await flush();
 
-    const menu = host.querySelector('[role="menu"]') as HTMLElement | null;
+    const menu = runtime.querySelector('[role="menu"]') as HTMLElement | null;
     expect(menu).toBeTruthy();
-    const items = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    const items = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
     expect(items.map((item) => item.textContent?.trim())).toContain('Copy thread id');
     expect(document.activeElement).toBe(items[0]);
 
@@ -1466,13 +1505,13 @@ describe('FlowerSurface navigation', () => {
     expect(document.activeElement).toBe(items[items.length - 1]);
     items[items.length - 1].dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     await flush();
-    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(runtime.querySelector('[role="menu"]')).toBeNull();
     expect(document.activeElement).toBe(rowButton);
   });
 
   it('disables fork for threads that are still running or waiting', async () => {
     const forkThread = vi.fn(async () => thread({ thread_id: 'thread-fork' }));
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [
         thread({ thread_id: 'thread-running', title: 'Running', status: 'running' }),
@@ -1480,21 +1519,21 @@ describe('FlowerSurface navigation', () => {
       ]),
       forkThread,
     });
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-running"]')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running"]')));
 
-    (host.querySelector('[data-thread-id="thread-running"]') as HTMLElement)
+    (runtime.querySelector('[data-thread-id="thread-running"]') as HTMLElement)
       .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
     await flush();
-    const runningFork = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+    const runningFork = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
       .find((item) => item.textContent?.includes('Fork')) as HTMLButtonElement;
     expect(runningFork.disabled).toBe(true);
 
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     await flush();
-    (host.querySelector('[data-thread-id="thread-waiting"]') as HTMLElement)
+    (runtime.querySelector('[data-thread-id="thread-waiting"]') as HTMLElement)
       .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
     await flush();
-    const waitingFork = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+    const waitingFork = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
       .find((item) => item.textContent?.includes('Fork')) as HTMLButtonElement;
     expect(waitingFork.disabled).toBe(true);
     expect(forkThread).not.toHaveBeenCalled();
@@ -1511,22 +1550,22 @@ describe('FlowerSurface navigation', () => {
       configurable: true,
       value: undefined,
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [thread({ working_dir: '/workspace/redeven' })]),
     });
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-1"]')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-1"]')));
 
-    (host.querySelector('[data-thread-id="thread-1"]') as HTMLElement)
+    (runtime.querySelector('[data-thread-id="thread-1"]') as HTMLElement)
       .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
     await flush();
-    (Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+    (Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
       .find((item) => item.textContent?.includes('Copy thread id')) as HTMLButtonElement).click();
     await flush();
 
     expect(execCommand).toHaveBeenCalledWith('copy');
-    expect(host.textContent).toContain('Copied thread id.');
-    expect(document.activeElement).toBe(host.querySelector('[data-thread-id="thread-1"] button'));
+    expect(runtime.textContent).toContain('Copied thread id.');
+    expect(document.activeElement).toBe(runtime.querySelector('[data-thread-id="thread-1"] button'));
     Object.defineProperty(navigator, 'clipboard', {
       configurable: true,
       value: clipboard,
@@ -1538,19 +1577,19 @@ describe('FlowerSurface navigation', () => {
     const renameThread = vi.fn(async () => {
       throw new Error('title too long');
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       renameThread,
     });
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-1"]')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-1"]')));
 
-    (host.querySelector('[data-thread-id="thread-1"]') as HTMLElement)
+    (runtime.querySelector('[data-thread-id="thread-1"]') as HTMLElement)
       .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
     await flush();
-    (Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+    (Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
       .find((item) => item.textContent?.includes('Rename')) as HTMLButtonElement).click();
     await flush();
-    const dialog = host.querySelector('[role="dialog"]') as HTMLElement;
+    const dialog = runtime.querySelector('[role="dialog"]') as HTMLElement;
     expect(dialog.textContent).toContain('Rename conversation');
     const input = dialog.querySelector('input') as HTMLInputElement;
     input.value = 'A title that fails';
@@ -1562,7 +1601,7 @@ describe('FlowerSurface navigation', () => {
 
     expect(renameThread).toHaveBeenCalled();
     expect(dialog.textContent).toContain('title too long');
-    expect(host.querySelector('.flower-host-thread-action-error')).toBeNull();
+    expect(runtime.querySelector('.flower-thread-action-error')).toBeNull();
   });
 
   it('disables all thread actions while a fork action is pending', async () => {
@@ -1570,17 +1609,17 @@ describe('FlowerSurface navigation', () => {
     const forkThread = vi.fn(() => new Promise<FlowerThreadSnapshot>((resolve) => {
       forkControl.resolve = resolve;
     }));
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       forkThread,
     });
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-1"]')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-1"]')));
 
     const openForkMenu = async () => {
-      (host.querySelector('[data-thread-id="thread-1"]') as HTMLElement)
+      (runtime.querySelector('[data-thread-id="thread-1"]') as HTMLElement)
         .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 20, clientY: 20 }));
       await flush();
-      return Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      return Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
         .find((item) => item.textContent?.includes('Fork') || item.textContent?.includes('Working')) as HTMLButtonElement;
     };
     (await openForkMenu()).click();
@@ -1591,10 +1630,10 @@ describe('FlowerSurface navigation', () => {
     expect(pendingFork.disabled).toBe(true);
     expect(pendingFork.textContent).toContain('Working');
 
-    (host.querySelector('[data-thread-id="thread-2"]') as HTMLElement)
+    (runtime.querySelector('[data-thread-id="thread-2"]') as HTMLElement)
       .dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 40 }));
     await flush();
-    const secondThreadItems = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    const secondThreadItems = Array.from(runtime.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
     expect(secondThreadItems.length).toBeGreaterThan(0);
     expect(secondThreadItems.every((item) => item.disabled)).toBe(true);
     secondThreadItems.find((item) => item.textContent?.includes('Fork'))?.click();
@@ -1660,24 +1699,24 @@ describe('FlowerSurface navigation', () => {
       delayedDetailReloadStarted = true;
       return new Promise<FlowerThreadSnapshot>(() => undefined);
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
       loadThread,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-detail"] button')));
-    (host.querySelector('[data-thread-id="thread-detail"] button') as HTMLButtonElement).click();
-    await waitFor(() => host.textContent?.includes('Loaded detail stays visible.') ?? false);
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-detail"] button')));
+    (runtime.querySelector('[data-thread-id="thread-detail"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Loaded detail stays visible.') ?? false);
 
     listSnapshot = [summaryOnlyThread];
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await waitFor(() => delayedDetailReloadStarted);
 
-    expect(host.textContent).toContain('Loaded detail stays visible.');
-    expect(host.textContent).toContain('file.read');
-    expect(host.querySelector('.flower-host-activity-inline')).toBeTruthy();
-    expect(host.querySelector('.flower-host-error-card')?.textContent).toContain('Provider returned a structured failure.');
+    expect(runtime.textContent).toContain('Loaded detail stays visible.');
+    expect(runtime.textContent).toContain('file.read');
+    expect(runtime.querySelector('.flower-activity-inline')).toBeTruthy();
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Provider returned a structured failure.');
   });
 
   it('keeps background terminal refreshes when selected detail polling mutates the list', async () => {
@@ -1731,23 +1770,23 @@ describe('FlowerSurface navigation', () => {
         ? { ...selectedDetail, updated_at_ms: selectedDetail.updated_at_ms + loadCalls }
         : backgroundRunning;
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads,
       loadThread,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-selected-live"] button')));
-    (host.querySelector('[data-thread-id="thread-selected-live"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-selected-live"] button')));
+    (runtime.querySelector('[data-thread-id="thread-selected-live"] button') as HTMLButtonElement).click();
     await waitFor(() => loadThread.mock.calls.length >= 1);
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await waitFor(() => listCalls >= 2);
 
     await wait(1250);
     await flush();
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
-    await waitFor(() => host.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-indicator') === 'dot');
-    expect(host.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-indicator') === 'dot');
+    expect(runtime.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
   });
 
   it('renders structured input requests in the composer while Flower waits', async () => {
@@ -1799,27 +1838,27 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
       loadThread: vi.fn(async () => waitingThread),
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-waiting-input"] button')));
-    (host.querySelector('[data-thread-id="thread-waiting-input"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-prompt]')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-input"] button')));
+    (runtime.querySelector('[data-thread-id="thread-waiting-input"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-request-prompt]')));
 
-    expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Waiting for your reply');
-    expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Choose the deployment target before Flower continues.');
-    expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Where should Flower deploy this change?');
-    expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Staging');
-    expect(host.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Production');
-    expect(host.querySelector('.flower-host-activity-inline')?.textContent).toContain('Requested input');
-    expect(host.querySelector('.flower-host-streaming-cursor')).toBeNull();
-    expect(host.querySelectorAll('textarea')).toHaveLength(1);
-    expect((host.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
-    expect((host.querySelector('textarea') as HTMLTextAreaElement).placeholder).toBe('Choose an option to continue.');
-    expect((Array.from(host.querySelectorAll('.flower-host-composer button')) as HTMLButtonElement[])
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Waiting for your reply');
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Choose the deployment target before Flower continues.');
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Where should Flower deploy this change?');
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Staging');
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Production');
+    expect(runtime.querySelector('.flower-activity-inline')?.textContent).toContain('Requested input');
+    expect(runtime.querySelector('.flower-streaming-cursor')).toBeNull();
+    expect(runtime.querySelectorAll('textarea')).toHaveLength(1);
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).placeholder).toBe('Choose an option to continue.');
+    expect((Array.from(runtime.querySelectorAll('.flower-composer button')) as HTMLButtonElement[])
       .some((button) => button.textContent?.includes('Continue') && button.disabled)).toBe(true);
   });
 
@@ -1855,26 +1894,26 @@ describe('FlowerSurface navigation', () => {
       input_request: null,
     });
     const submitInput = vi.fn(async () => continuedThread);
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
       loadThread: vi.fn(async () => waitingThread),
       submitInput,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-secret-input"] button')));
-    (host.querySelector('[data-thread-id="thread-secret-input"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('.flower-host-composer input[type="password"]')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-secret-input"] button')));
+    (runtime.querySelector('[data-thread-id="thread-secret-input"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer input[type="password"]')));
 
-    expect(host.querySelectorAll('.flower-host-composer input[type="password"]')).toHaveLength(1);
-    expect(host.querySelector('.flower-host-composer textarea')).toBeNull();
+    expect(runtime.querySelectorAll('.flower-composer input[type="password"]')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
 
-    const password = host.querySelector('.flower-host-composer input[type="password"]') as HTMLInputElement;
+    const password = runtime.querySelector('.flower-composer input[type="password"]') as HTMLInputElement;
     expect(password.placeholder).toBe('Deployment token');
     password.value = 'secret-token';
     password.dispatchEvent(new InputEvent('input', { bubbles: true }));
     await flush();
-    (host.querySelector('.flower-host-composer-submit') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => submitInput.mock.calls.length > 0);
 
     expect(submitInput).toHaveBeenCalledWith({
@@ -1926,23 +1965,23 @@ describe('FlowerSurface navigation', () => {
     });
     const submitInput = vi.fn(async () => continuedThread);
     const loadThread = vi.fn(async () => (loadThread.mock.calls.length === 1 ? waitingThread : continuedThread));
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
       loadThread,
       submitInput,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-submit-input"] button')));
-    (host.querySelector('[data-thread-id="thread-submit-input"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-prompt]')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-submit-input"] button')));
+    (runtime.querySelector('[data-thread-id="thread-submit-input"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-request-prompt]')));
 
-    (Array.from(host.querySelectorAll('.flower-host-input-request-choice')) as HTMLButtonElement[])
+    (Array.from(runtime.querySelectorAll('.flower-input-request-choice')) as HTMLButtonElement[])
       .find((button) => button.textContent?.includes('Staging'))?.click();
     await flush();
-    (host.querySelector('.flower-host-composer-submit') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => submitInput.mock.calls.length > 0);
-    await waitFor(() => host.textContent?.includes('Continuing with staging.') ?? false);
+    await waitFor(() => runtime.textContent?.includes('Continuing with staging.') ?? false);
 
     expect(submitInput).toHaveBeenCalledWith({
       thread_id: 'thread-submit-input',
@@ -1953,8 +1992,8 @@ describe('FlowerSurface navigation', () => {
         },
       },
     });
-    expect(host.querySelector('[data-flower-input-request-prompt]')).toBeNull();
-    expect(host.textContent).toContain('Continuing with staging.');
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')).toBeNull();
+    expect(runtime.textContent).toContain('Continuing with staging.');
   });
 
   it('shows structured input submission failures in the composer without losing the answer', async () => {
@@ -1969,26 +2008,26 @@ describe('FlowerSurface navigation', () => {
     const submitInput = vi.fn(async () => {
       throw new Error('Flower is no longer waiting for that input.');
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
       loadThread: vi.fn(async () => waitingThread),
       submitInput,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-input-error"] button')));
-    (host.querySelector('[data-thread-id="thread-input-error"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-prompt]')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-input-error"] button')));
+    (runtime.querySelector('[data-thread-id="thread-input-error"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-request-prompt]')));
 
-    (Array.from(host.querySelectorAll('.flower-host-input-request-choice')) as HTMLButtonElement[])
+    (Array.from(runtime.querySelectorAll('.flower-input-request-choice')) as HTMLButtonElement[])
       .find((button) => button.textContent?.includes('Production'))?.click();
     await flush();
-    (host.querySelector('.flower-host-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('.flower-host-composer-error')));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-error')));
 
-    expect(host.querySelector('.flower-host-composer-error')?.textContent).toContain('Flower is no longer waiting for that input.');
-    expect(host.querySelector('.flower-host-composer-submit')?.textContent).toContain('Retry');
-    expect(host.querySelector('.flower-host-input-request-choice-selected')?.textContent).toContain('Production');
+    expect(runtime.querySelector('.flower-composer-error')?.textContent).toContain('Flower is no longer waiting for that input.');
+    expect(runtime.querySelector('.flower-composer-submit')?.textContent).toContain('Retry');
+    expect(runtime.querySelector('.flower-input-request-choice-selected')?.textContent).toContain('Production');
   });
 
   it('clears waiting prompts when a summary-only refresh reports a terminal thread', async () => {
@@ -2017,21 +2056,21 @@ describe('FlowerSurface navigation', () => {
       delayedDetailReloadStarted = true;
       return new Promise<FlowerThreadSnapshot>(() => undefined);
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
       loadThread,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-waiting-summary-refresh"] button')));
-    (host.querySelector('[data-thread-id="thread-waiting-summary-refresh"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('[data-flower-input-request-prompt]')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-summary-refresh"] button')));
+    (runtime.querySelector('[data-thread-id="thread-waiting-summary-refresh"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-input-request-prompt]')));
 
     listSnapshot = [summaryOnlyThread];
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await waitFor(() => delayedDetailReloadStarted);
 
-    expect(host.querySelector('[data-flower-input-request-prompt]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')).toBeNull();
   });
 
   it('ignores stale input requests when the thread is no longer waiting for user input', async () => {
@@ -2054,7 +2093,7 @@ describe('FlowerSurface navigation', () => {
     });
     const sendMessage = vi.fn(async () => staleThread);
     const submitInput = vi.fn(async () => staleThread);
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [staleThread]),
       loadThread: vi.fn(async () => staleThread),
@@ -2062,17 +2101,17 @@ describe('FlowerSurface navigation', () => {
       submitInput,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-stale-input"] button')));
-    (host.querySelector('[data-thread-id="thread-stale-input"] button') as HTMLButtonElement).click();
-    await waitFor(() => host.textContent?.includes('This should behave like a normal thread.') ?? false);
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stale-input"] button')));
+    (runtime.querySelector('[data-thread-id="thread-stale-input"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('This should behave like a normal thread.') ?? false);
 
-    expect(host.querySelector('[data-flower-input-request-prompt]')).toBeNull();
-    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    expect(runtime.querySelector('[data-flower-input-request-prompt]')).toBeNull();
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     expect(textarea.disabled).toBe(false);
     textarea.value = 'Hello';
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
     await flush();
-    (host.querySelector('.flower-host-composer-submit') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => sendMessage.mock.calls.length > 0);
     expect(submitInput).not.toHaveBeenCalled();
   });
@@ -2114,23 +2153,23 @@ describe('FlowerSurface navigation', () => {
       }
       return Promise.resolve(selectedThread);
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
       loadThread,
     });
 
-    await waitFor(() => threadOrder(host).includes('thread-background'));
+    await waitFor(() => threadOrder(runtime).includes('thread-background'));
 
-    (host.querySelector('[data-thread-id="thread-selected"] button') as HTMLButtonElement).click();
-    await waitFor(() => host.querySelector('.flower-host-thread-card-active')?.getAttribute('data-thread-id') === 'thread-selected');
+    (runtime.querySelector('[data-thread-id="thread-selected"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-thread-card-active')?.getAttribute('data-thread-id') === 'thread-selected');
     listSnapshot = [selectedThread, summaryOnlyBackground];
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
     await flush();
-    (host.querySelector('[data-thread-id="thread-background"] button') as HTMLButtonElement).click();
+    (runtime.querySelector('[data-thread-id="thread-background"] button') as HTMLButtonElement).click();
     await waitFor(() => backgroundReloadStarted);
 
-    expect(host.textContent).toContain('Background preview remains available.');
+    expect(runtime.textContent).toContain('Background preview remains available.');
   });
 
   it('shows a loading state instead of the empty state while first-loading a summary-only thread', async () => {
@@ -2143,7 +2182,7 @@ describe('FlowerSurface navigation', () => {
       error: undefined,
     });
     let loadStarted = false;
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [summaryThread]),
       loadThread: vi.fn(() => {
@@ -2152,12 +2191,12 @@ describe('FlowerSurface navigation', () => {
       }),
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-summary-only"] button')));
-    (host.querySelector('[data-thread-id="thread-summary-only"] button') as HTMLButtonElement).click();
-    await waitFor(() => loadStarted && Boolean(host.querySelector('.flower-host-thread-loading')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-summary-only"] button')));
+    (runtime.querySelector('[data-thread-id="thread-summary-only"] button') as HTMLButtonElement).click();
+    await waitFor(() => loadStarted && Boolean(runtime.querySelector('.flower-thread-loading')));
 
-    expect(host.querySelector('.flower-host-thread-loading')?.textContent).toContain('Loading conversation...');
-    expect(host.textContent).not.toContain('Flower can work from this host');
+    expect(runtime.querySelector('.flower-thread-loading')?.textContent).toContain('Loading conversation...');
+    expect(runtime.textContent).not.toContain('Flower can work from this runtime');
   });
 
   it('renders streaming assistant output with a flowing cursor and a wide transcript stack', async () => {
@@ -2188,20 +2227,20 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [streamingThread]),
       loadThread: vi.fn(async () => streamingThread),
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-streaming"] button')));
-    (host.querySelector('[data-thread-id="thread-streaming"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('.flower-host-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-streaming"] button')));
+    (runtime.querySelector('[data-thread-id="thread-streaming"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
 
-    expect(host.querySelector('.flower-host-transcript-stack')).toBeTruthy();
-    expect(host.querySelector('.flower-host-message-bubble-streaming')?.textContent).toContain('Streaming partial answer');
-    expect(host.querySelector('.flower-host-streaming-cursor')).toBeTruthy();
-    expect(host.textContent).toContain('Streaming partial answer');
+    expect(runtime.querySelector('.flower-transcript-stack')).toBeTruthy();
+    expect(runtime.querySelector('.flower-message-bubble-streaming')?.textContent).toContain('Streaming partial answer');
+    expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
+    expect(runtime.textContent).toContain('Streaming partial answer');
   });
 
   it('shows completed Flower activity inline between assistant text blocks', async () => {
@@ -2263,29 +2302,29 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [toolsThread]),
       loadThread: vi.fn(async () => toolsThread),
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-tools"] button')));
-    (host.querySelector('[data-thread-id="thread-tools"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('.flower-host-activity-inline')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-tools"] button')));
+    (runtime.querySelector('[data-thread-id="thread-tools"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-activity-inline')));
 
-    const transcriptText = host.textContent ?? '';
+    const transcriptText = runtime.textContent ?? '';
     expect(transcriptText.indexOf('I will check the workspace.')).toBeLessThan(transcriptText.indexOf('npm run check:0'));
     expect(transcriptText.indexOf('npm run check:0')).toBeLessThan(transcriptText.indexOf('I finished the answer after the audit trail.'));
-    expect(host.querySelector('.flower-host-tool-activity')).toBeNull();
-    expect(host.querySelector('.flower-host-todo-snapshot')).toBeNull();
-    expect(host.textContent).not.toContain('3 / 3 completed');
-    expect(host.textContent).not.toContain('Draft final answer');
-    expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(tool_names.length);
-    expect(host.textContent).toContain('terminal.exec');
-    expect(host.textContent).toContain('Update todos');
-    expect(host.textContent).toContain('completed 1');
-    expect(host.textContent).toContain('task_complete');
-    expect(host.querySelector('.flower-host-activity-inline-row')?.getAttribute('aria-label')).toContain('terminal.exec');
+    expect(runtime.querySelector('.flower-tool-activity')).toBeNull();
+    expect(runtime.querySelector('.flower-todo-snapshot')).toBeNull();
+    expect(runtime.textContent).not.toContain('3 / 3 completed');
+    expect(runtime.textContent).not.toContain('Draft final answer');
+    expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(tool_names.length);
+    expect(runtime.textContent).toContain('terminal.exec');
+    expect(runtime.textContent).toContain('Update todos');
+    expect(runtime.textContent).toContain('completed 1');
+    expect(runtime.textContent).toContain('task_complete');
+    expect(runtime.querySelector('.flower-activity-inline-row')?.getAttribute('aria-label')).toContain('terminal.exec');
   });
 
   it('refreshes inline activity when message block fields change in place', async () => {
@@ -2369,23 +2408,23 @@ describe('FlowerSurface navigation', () => {
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
     const loadThread = vi.fn(async () => (loadThread.mock.calls.length === 1 ? runningThread : completeThread));
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
       loadThread,
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-refresh-block"] button')));
-    (host.querySelector('[data-thread-id="thread-refresh-block"] button') as HTMLButtonElement).click();
-    await waitFor(() => host.querySelector('.flower-host-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'running');
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-refresh-block"] button')));
+    (runtime.querySelector('[data-thread-id="thread-refresh-block"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'running');
 
     listSnapshot = [completeThread];
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
 
-    await waitFor(() => host.querySelector('.flower-host-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'success');
-    expect(host.textContent).toContain('Done');
-    expect(host.textContent).toContain('1s');
-    expect(host.textContent).toContain('Tests passed.');
+    await waitFor(() => runtime.querySelector('.flower-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'success');
+    expect(runtime.textContent).toContain('Done');
+    expect(runtime.textContent).toContain('1s');
+    expect(runtime.textContent).toContain('Tests passed.');
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -2439,18 +2478,18 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
       loadThread: vi.fn(async () => waitingThread),
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-waiting-activity"] button')));
-    (host.querySelector('[data-thread-id="thread-waiting-activity"] button') as HTMLButtonElement).click();
-    await waitFor(() => host.textContent?.includes('Requested input') ?? false);
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-activity"] button')));
+    (runtime.querySelector('[data-thread-id="thread-waiting-activity"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Requested input') ?? false);
 
-    expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(1);
-    expect(host.querySelector('.flower-host-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
+    expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
   });
 
   it.each([
@@ -2517,18 +2556,18 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [attentionThread]),
       loadThread: vi.fn(async () => attentionThread),
     });
 
-    await waitFor(() => Boolean(host.querySelector(`[data-thread-id="thread-${scenario.name}-activity"] button`)));
-    (host.querySelector(`[data-thread-id="thread-${scenario.name}-activity"] button`) as HTMLButtonElement).click();
-    await waitFor(() => host.querySelectorAll('.flower-host-activity-inline-row').length === 1);
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="thread-${scenario.name}-activity"] button`)));
+    (runtime.querySelector(`[data-thread-id="thread-${scenario.name}-activity"] button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('.flower-activity-inline-row').length === 1);
 
-    expect(host.querySelectorAll('.flower-host-activity-inline-row')).toHaveLength(1);
-    expect(host.querySelector('.flower-host-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
+    expect(runtime.querySelectorAll('.flower-activity-inline-row')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-activity-inline-button')?.getAttribute('aria-expanded')).toBe('true');
   });
 
   it('renders run and message errors as structured error cards', async () => {
@@ -2552,20 +2591,20 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [failedThread]),
       loadThread: vi.fn(async () => failedThread),
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-failed"] button')));
-    (host.querySelector('[data-thread-id="thread-failed"] button') as HTMLButtonElement).click();
-    await waitFor(() => host.querySelectorAll('.flower-host-error-card').length > 0);
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-failed"] button')));
+    (runtime.querySelector('[data-thread-id="thread-failed"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('.flower-error-card').length > 0);
 
-    expect(host.querySelector('.flower-host-message-bubble-error')?.textContent).toContain('Message failed');
-    expect(host.querySelectorAll('.flower-host-error-card')).toHaveLength(1);
-    expect(host.querySelector('.flower-host-error-card')?.textContent).toContain('Flower could not finish this reply.');
-    expect(host.querySelector('.flower-host-error-card')?.textContent).toContain('Run failed: provider rejected request.');
+    expect(runtime.querySelector('.flower-message-bubble-error')?.textContent).toContain('Message failed');
+    expect(runtime.querySelectorAll('.flower-error-card')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Flower could not finish this reply.');
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Run failed: provider rejected request.');
   });
 
   it('clears global load errors after the thread list recovers', async () => {
@@ -2578,20 +2617,20 @@ describe('FlowerSurface navigation', () => {
     const listThreads = vi.fn()
       .mockRejectedValueOnce(new Error('Flower waiting input request is incomplete.'))
       .mockResolvedValueOnce([visibleThread]);
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads,
       loadThread: vi.fn(async () => visibleThread),
     });
 
-    await waitFor(() => host.textContent?.includes('Flower waiting input request is incomplete.') ?? false);
+    await waitFor(() => runtime.textContent?.includes('Flower waiting input request is incomplete.') ?? false);
 
-    (host.querySelector('.flower-host-thread-refresh-button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-after-list-recovery"] button')));
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-after-list-recovery"] button')));
 
-    expect(host.textContent).not.toContain('Flower could not load.');
-    expect(host.textContent).not.toContain('Flower waiting input request is incomplete.');
-    expect(host.querySelectorAll('.flower-host-error-card')).toHaveLength(0);
+    expect(runtime.textContent).not.toContain('Flower could not load.');
+    expect(runtime.textContent).not.toContain('Flower waiting input request is incomplete.');
+    expect(runtime.querySelectorAll('.flower-error-card')).toHaveLength(0);
   });
 
   it('does not render an empty failed message bubble when the run error already explains the failure', async () => {
@@ -2615,19 +2654,19 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [failedThread]),
       loadThread: vi.fn(async () => failedThread),
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-empty-failure"] button')));
-    (host.querySelector('[data-thread-id="thread-empty-failure"] button') as HTMLButtonElement).click();
-    await waitFor(() => host.querySelectorAll('.flower-host-error-card').length > 0);
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-empty-failure"] button')));
+    (runtime.querySelector('[data-thread-id="thread-empty-failure"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('.flower-error-card').length > 0);
 
-    expect(host.querySelector('.flower-host-message-bubble-error')).toBeNull();
-    expect(host.querySelectorAll('.flower-host-error-card')).toHaveLength(1);
-    expect(host.querySelector('.flower-host-error-card')?.textContent).toContain('Run failed before any assistant text was produced.');
+    expect(runtime.querySelector('.flower-message-bubble-error')).toBeNull();
+    expect(runtime.querySelectorAll('.flower-error-card')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Run failed before any assistant text was produced.');
   });
 
   it('renders an empty failed message bubble when there is no run-level error', async () => {
@@ -2648,18 +2687,18 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const host = renderSurfaceWithAdapter({
+    const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [failedThread]),
       loadThread: vi.fn(async () => failedThread),
     });
 
-    await waitFor(() => Boolean(host.querySelector('[data-thread-id="thread-message-only-failure"] button')));
-    (host.querySelector('[data-thread-id="thread-message-only-failure"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(host.querySelector('.flower-host-message-bubble-error')));
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-message-only-failure"] button')));
+    (runtime.querySelector('[data-thread-id="thread-message-only-failure"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-message-bubble-error')));
 
-    expect(host.querySelector('.flower-host-message-bubble-error')?.textContent).toContain('Message failed');
-    expect(host.querySelector('.flower-host-message-bubble-error')?.textContent).toContain('This message failed before Flower produced visible text.');
-    expect(host.querySelectorAll('.flower-host-error-card')).toHaveLength(0);
+    expect(runtime.querySelector('.flower-message-bubble-error')?.textContent).toContain('Message failed');
+    expect(runtime.querySelector('.flower-message-bubble-error')?.textContent).toContain('This message failed before Flower produced visible text.');
+    expect(runtime.querySelectorAll('.flower-error-card')).toHaveLength(0);
   });
 });

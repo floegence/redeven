@@ -83,7 +83,7 @@ html.dark .flower-component-shell {
   transform: scale(1.04);
 }
 
-.flower-host-sidebar-actions {
+.flower-sidebar-actions {
   display: flex;
   min-width: 0;
   flex: 0 0 auto;
@@ -92,7 +92,7 @@ html.dark .flower-component-shell {
   padding: 0.75rem 0.75rem 0.5rem;
 }
 
-.flower-host-new-chat-button {
+.flower-new-chat-button {
   display: inline-flex;
   width: 100%;
   min-width: 0;
@@ -115,8 +115,8 @@ html.dark .flower-component-shell {
     filter 150ms ease;
 }
 
-.flower-host-new-chat-button:hover,
-.flower-host-new-chat-button:focus-visible {
+.flower-new-chat-button:hover,
+.flower-new-chat-button:focus-visible {
   border-color: color-mix(in srgb, var(--primary) 34%, var(--flower-thread-rail-control-border));
   background: color-mix(in srgb, var(--primary) 12%, var(--flower-thread-rail-control));
   box-shadow: 0 10px 24px -20px color-mix(in srgb, var(--primary) 55%, transparent);
@@ -125,7 +125,7 @@ html.dark .flower-component-shell {
   transform: translateY(-1px);
 }
 
-.flower-host-new-chat-label {
+.flower-new-chat-label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -135,7 +135,7 @@ html.dark .flower-component-shell {
   letter-spacing: 0;
 }
 
-.flower-host-thread-list {
+.flower-thread-list {
   flex: 1 1 auto;
   overflow: hidden;
   background: transparent;
@@ -147,7 +147,7 @@ html.dark .flower-component-shell {
   overflow: hidden;
 }
 
-.flower-host-chat-shell {
+.flower-chat-shell {
   --flower-chat-surface: var(--redeven-surface-main, var(--background));
   --flower-chat-surface-soft: var(--redeven-surface-panel-soft, var(--card));
   --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated, var(--card));
@@ -161,7 +161,7 @@ html.dark .flower-component-shell {
   background: var(--flower-chat-surface);
 }
 
-.flower-host-chat-header {
+.flower-chat-header {
   display: flex;
   min-width: 0;
   align-items: center;
@@ -172,14 +172,14 @@ html.dark .flower-component-shell {
   padding: 0.5rem 0.75rem;
 }
 
-.flower-host-chat-header-title {
+.flower-chat-header-title {
   min-width: 0;
   font-size: 0.875rem;
   font-weight: 600;
   color: var(--foreground);
 }
 
-.flower-host-chat-header-actions {
+.flower-chat-header-actions {
   display: flex;
   min-width: 0;
   flex: 0 1 auto;
@@ -189,7 +189,7 @@ html.dark .flower-component-shell {
   overflow: hidden;
 }
 
-.flower-host-header-icon-button {
+.flower-header-icon-button {
   display: inline-flex;
   width: 1.875rem;
   height: 1.875rem;
@@ -204,14 +204,14 @@ html.dark .flower-component-shell {
     color 150ms ease;
 }
 
-.flower-host-header-icon-button:hover,
-.flower-host-header-icon-button:focus-visible {
+.flower-header-icon-button:hover,
+.flower-header-icon-button:focus-visible {
   background: color-mix(in srgb, var(--muted) 58%, transparent);
   color: var(--foreground);
   outline: none;
 }
 
-.flower-host-composer-footer {
+.flower-composer-footer {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
@@ -219,7 +219,7 @@ html.dark .flower-component-shell {
   margin-top: 0.5rem;
 }
 
-.flower-host-handler-stack {
+.flower-handler-stack {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
@@ -227,7 +227,7 @@ html.dark .flower-component-shell {
   gap: 0.375rem;
 }
 
-.flower-host-handler-selection {
+.flower-handler-selection {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
@@ -236,7 +236,7 @@ html.dark .flower-component-shell {
   gap: 0.375rem;
 }
 
-.flower-host-handler-picker {
+.flower-handler-picker {
   position: relative;
   display: inline-grid;
   max-width: min(24rem, 100%);
@@ -255,13 +255,13 @@ html.dark .flower-component-shell {
     color 150ms ease;
 }
 
-.flower-host-handler-picker:hover,
-.flower-host-handler-picker:focus-within {
+.flower-handler-picker:hover,
+.flower-handler-picker:focus-within {
   background: color-mix(in srgb, var(--primary) 8%, var(--muted) 32%);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
-.flower-host-handler-picker-value {
+.flower-handler-picker-value {
   min-width: 0;
   overflow: hidden;
   color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
@@ -271,30 +271,30 @@ html.dark .flower-component-shell {
   font-weight: 700;
 }
 
-.flower-host-handler-picker-icon {
+.flower-handler-picker-icon {
   width: 1rem;
   height: 1rem;
   color: color-mix(in srgb, var(--muted-foreground) 76%, var(--foreground) 24%);
 }
 
-.flower-host-handler-picker select {
+.flower-handler-picker select {
   position: absolute;
   inset: 0;
   cursor: pointer;
   opacity: 0;
 }
 
-.flower-host-handler-picker select:disabled {
+.flower-handler-picker select:disabled {
   cursor: not-allowed;
 }
 
-.flower-host-handler-selection-label {
+.flower-handler-selection-label {
   color: var(--muted-foreground);
   font-size: 0.75rem;
   font-weight: 600;
 }
 
-.flower-host-handler-chip {
+.flower-handler-chip {
   max-width: 14rem;
   min-width: 0;
   overflow: hidden;
@@ -302,7 +302,7 @@ html.dark .flower-component-shell {
   white-space: nowrap;
 }
 
-.flower-host-handler-error-card {
+.flower-handler-error-card {
   display: grid;
   min-width: 0;
   max-width: min(34rem, 100%);
@@ -315,7 +315,7 @@ html.dark .flower-component-shell {
   padding: 0.5rem;
 }
 
-.flower-host-handler-error-icon {
+.flower-handler-error-icon {
   display: flex;
   width: 1.5rem;
   height: 1.5rem;
@@ -326,18 +326,18 @@ html.dark .flower-component-shell {
   color: var(--warning, #f59e0b);
 }
 
-.flower-host-handler-error-copy {
+.flower-handler-error-copy {
   min-width: 0;
 }
 
-.flower-host-handler-error-title {
+.flower-handler-error-title {
   color: color-mix(in srgb, var(--foreground) 86%, var(--warning, #f59e0b) 14%);
   font-size: 0.75rem;
   font-weight: 750;
   line-height: 1.3;
 }
 
-.flower-host-handler-error-message {
+.flower-handler-error-message {
   margin-top: 0.125rem;
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
   font-size: 0.75rem;
@@ -347,7 +347,7 @@ html.dark .flower-component-shell {
   word-break: break-word;
 }
 
-.flower-host-handler-retry {
+.flower-handler-retry {
   flex: 0 0 auto;
   justify-self: end;
   cursor: pointer;
@@ -362,33 +362,33 @@ html.dark .flower-component-shell {
 }
 
 @media (max-width: 640px) {
-  .flower-host-composer-footer {
+  .flower-composer-footer {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .flower-host-composer-footer > .button,
-  .flower-host-composer-footer > button {
+  .flower-composer-footer > .button,
+  .flower-composer-footer > button {
     width: 100%;
     justify-content: center;
   }
 
-  .flower-host-handler-error-card {
+  .flower-handler-error-card {
     grid-template-columns: 1.5rem minmax(0, 1fr);
   }
 
-  .flower-host-handler-retry {
+  .flower-handler-retry {
     grid-column: 2;
     justify-self: start;
   }
 }
 
-.flower-host-handler-retry:hover {
+.flower-handler-retry:hover {
   background: color-mix(in srgb, var(--primary) 15%, var(--muted) 26%);
   color: color-mix(in srgb, var(--primary) 86%, var(--foreground) 14%);
 }
 
-.flower-host-setup-inline {
+.flower-setup-inline {
   display: flex;
   min-width: 0;
   flex: 1 1 auto;
@@ -399,14 +399,14 @@ html.dark .flower-component-shell {
   line-height: 1.35;
 }
 
-.flower-host-setup-inline span {
+.flower-setup-inline span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.flower-host-decision-chip {
+.flower-decision-chip {
   display: inline-flex;
   min-width: 0;
   max-width: 14rem;
@@ -423,7 +423,7 @@ html.dark .flower-component-shell {
   font-weight: 600;
 }
 
-.flower-host-chat-main {
+.flower-chat-main {
   display: flex;
   min-width: 0;
   min-height: 0;
@@ -432,7 +432,7 @@ html.dark .flower-component-shell {
   overflow: hidden;
 }
 
-.flower-host-chat-transcript {
+.flower-chat-transcript {
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto;
@@ -441,7 +441,7 @@ html.dark .flower-component-shell {
   scrollbar-gutter: stable;
 }
 
-.flower-host-transcript-stack {
+.flower-transcript-stack {
   display: flex;
   width: min(100%, var(--flower-chat-dock-track-max-width));
   min-width: 0;
@@ -450,7 +450,7 @@ html.dark .flower-component-shell {
   margin: 0 auto;
 }
 
-.flower-host-chat-bottom-dock {
+.flower-chat-bottom-dock {
   position: relative;
   z-index: 1;
   flex: 0 0 auto;
@@ -458,7 +458,7 @@ html.dark .flower-component-shell {
   padding: 0 clamp(0.625rem, 1.2vw, 1rem) calc(0.75rem + env(safe-area-inset-bottom, 0px));
 }
 
-.flower-host-chat-bottom-dock::before {
+.flower-chat-bottom-dock::before {
   content: '';
   position: absolute;
   inset: 0 0 auto;
@@ -467,27 +467,27 @@ html.dark .flower-component-shell {
   box-shadow: 0 -20px 32px -28px color-mix(in srgb, var(--foreground) 30%, transparent);
 }
 
-.flower-host-chat-bottom-dock-track {
+.flower-chat-bottom-dock-track {
   position: relative;
   width: min(100%, var(--flower-chat-dock-track-max-width));
   margin: 0 auto;
 }
 
-.flower-host-message-row {
+.flower-message-row {
   display: flex;
   width: 100%;
   min-width: 0;
 }
 
-.flower-host-message-row-user {
+.flower-message-row-user {
   justify-content: flex-end;
 }
 
-.flower-host-message-row-assistant {
+.flower-message-row-assistant {
   justify-content: flex-start;
 }
 
-.flower-host-message-bubble {
+.flower-message-bubble {
   max-width: min(100%, 78rem);
   min-width: 0;
   border: 1px solid transparent;
@@ -502,30 +502,30 @@ html.dark .flower-component-shell {
   user-select: text;
 }
 
-.flower-host-message-bubble-user {
+.flower-message-bubble-user {
   max-width: min(78%, 44rem);
   background: color-mix(in srgb, var(--primary) 15%, var(--flower-chat-surface-elevated));
   border-color: color-mix(in srgb, var(--primary) 22%, transparent);
   color: color-mix(in srgb, var(--foreground) 95%, var(--primary) 5%);
 }
 
-.flower-host-message-bubble-assistant {
+.flower-message-bubble-assistant {
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 64%, transparent);
   border-color: color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent);
   color: var(--foreground);
 }
 
-.flower-host-message-bubble-streaming {
+.flower-message-bubble-streaming {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 6%, transparent);
 }
 
-.flower-host-message-bubble-error {
+.flower-message-bubble-error {
   border-color: color-mix(in srgb, var(--destructive) 30%, var(--flower-chat-surface-border));
   background: color-mix(in srgb, var(--destructive) 7%, var(--flower-chat-surface-elevated));
 }
 
-.flower-host-message-error-kicker {
+.flower-message-error-kicker {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
@@ -537,12 +537,12 @@ html.dark .flower-component-shell {
   text-transform: uppercase;
 }
 
-.flower-host-message-placeholder {
+.flower-message-placeholder {
   display: inline-block;
   width: 0.25rem;
 }
 
-.flower-host-streaming-cursor {
+.flower-streaming-cursor {
   position: relative;
   display: inline-block;
   width: 0.42rem;
@@ -562,10 +562,10 @@ html.dark .flower-component-shell {
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--primary) 22%, transparent),
     0 0 14px color-mix(in srgb, var(--primary) 46%, transparent);
-  animation: flower-host-cursor-flow 1.05s linear infinite;
+  animation: flower-cursor-flow 1.05s linear infinite;
 }
 
-@keyframes flower-host-cursor-flow {
+@keyframes flower-cursor-flow {
   0% {
     background-position: 0 100%;
     opacity: 0.5;
@@ -581,7 +581,7 @@ html.dark .flower-component-shell {
   }
 }
 
-.flower-host-error-card {
+.flower-error-card {
   display: grid;
   width: 100%;
   min-width: 0;
@@ -596,7 +596,7 @@ html.dark .flower-component-shell {
   padding: 0.75rem;
 }
 
-.flower-host-error-icon {
+.flower-error-icon {
   display: flex;
   width: 1.75rem;
   height: 1.75rem;
@@ -607,18 +607,18 @@ html.dark .flower-component-shell {
   color: var(--destructive);
 }
 
-.flower-host-error-copy {
+.flower-error-copy {
   min-width: 0;
 }
 
-.flower-host-error-title {
+.flower-error-title {
   color: color-mix(in srgb, var(--foreground) 88%, var(--destructive) 12%);
   font-size: 0.8125rem;
   font-weight: 750;
   line-height: 1.35;
 }
 
-.flower-host-error-message {
+.flower-error-message {
   margin-top: 0.2rem;
   color: color-mix(in srgb, var(--muted-foreground) 80%, var(--foreground) 20%);
   font-size: 0.8125rem;
@@ -628,11 +628,19 @@ html.dark .flower-component-shell {
   overflow-wrap: anywhere;
 }
 
-.flower-host-composer-error {
+.flower-error-actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.5rem;
   margin-top: 0.625rem;
 }
 
-.flower-host-thread-loading {
+.flower-composer-error {
+  margin-top: 0.625rem;
+}
+
+.flower-thread-loading {
   display: grid;
   width: min(100%, 34rem);
   grid-template-columns: 2.5rem minmax(0, 1fr);
@@ -644,18 +652,18 @@ html.dark .flower-component-shell {
   padding: 0.875rem;
 }
 
-.flower-host-thread-loading-copy {
+.flower-thread-loading-copy {
   min-width: 0;
 }
 
-.flower-host-thread-loading-title {
+.flower-thread-loading-title {
   color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground) 16%);
   font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.35;
 }
 
-.flower-host-thread-loading-line {
+.flower-thread-loading-line {
   width: 72%;
   height: 0.45rem;
   margin-top: 0.45rem;
@@ -667,15 +675,15 @@ html.dark .flower-component-shell {
     color-mix(in srgb, var(--muted-foreground) 10%, transparent)
   );
   background-size: 180% 100%;
-  animation: flower-host-thread-loading-sheen 1.25s ease-in-out infinite;
+  animation: flower-thread-loading-sheen 1.25s ease-in-out infinite;
 }
 
-.flower-host-thread-loading-line-short {
+.flower-thread-loading-line-short {
   width: 46%;
   animation-delay: 0.12s;
 }
 
-@keyframes flower-host-thread-loading-sheen {
+@keyframes flower-thread-loading-sheen {
   0% {
     background-position: 100% 0;
     opacity: 0.58;
@@ -689,7 +697,7 @@ html.dark .flower-component-shell {
   }
 }
 
-.flower-host-message-block-stack {
+.flower-message-block-stack {
   display: flex;
   width: min(100%, 46rem);
   min-width: 0;
@@ -697,21 +705,21 @@ html.dark .flower-component-shell {
   gap: 0.375rem;
 }
 
-.flower-host-message-row-user .flower-host-message-block-stack {
+.flower-message-row-user .flower-message-block-stack {
   align-items: flex-end;
 }
 
-.flower-host-message-row-assistant .flower-host-message-block-stack {
+.flower-message-row-assistant .flower-message-block-stack {
   align-items: flex-start;
 }
 
-.flower-host-message-bubble-thinking {
+.flower-message-bubble-thinking {
   border-color: color-mix(in srgb, var(--flower-chat-surface-border) 30%, transparent);
   background: transparent;
   color: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
 }
 
-.flower-host-activity-inline {
+.flower-activity-inline {
   display: grid;
   width: min(100%, 42rem);
   min-width: 0;
@@ -721,11 +729,11 @@ html.dark .flower-component-shell {
   padding-left: 0.625rem;
 }
 
-.flower-host-activity-inline-row {
+.flower-activity-inline-row {
   min-width: 0;
 }
 
-.flower-host-activity-inline-line {
+.flower-activity-inline-line {
   display: grid;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -733,7 +741,7 @@ html.dark .flower-component-shell {
   gap: 0.25rem;
 }
 
-.flower-host-activity-inline-button {
+.flower-activity-inline-button {
   appearance: none;
   display: grid;
   width: 100%;
@@ -751,51 +759,51 @@ html.dark .flower-component-shell {
   text-align: left;
 }
 
-.flower-host-activity-inline-button:disabled,
-.flower-host-activity-inline-button-static {
+.flower-activity-inline-button:disabled,
+.flower-activity-inline-button-static {
   cursor: default;
 }
 
-.flower-host-activity-inline-button:not(:disabled):hover,
-.flower-host-activity-inline-button:not(:disabled):focus-visible {
+.flower-activity-inline-button:not(:disabled):hover,
+.flower-activity-inline-button:not(:disabled):focus-visible {
   background: color-mix(in srgb, var(--muted) 24%, transparent);
   color: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground) 18%);
   outline: none;
 }
 
-.flower-host-activity-inline-icon {
+.flower-activity-inline-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
 }
 
-.flower-host-activity-inline-row-running .flower-host-activity-inline-icon {
+.flower-activity-inline-row-running .flower-activity-inline-icon {
   color: color-mix(in srgb, var(--primary) 74%, var(--foreground) 26%);
 }
 
-.flower-host-activity-inline-row-waiting .flower-host-activity-inline-icon,
-.flower-host-activity-inline-row-pending .flower-host-activity-inline-icon {
+.flower-activity-inline-row-waiting .flower-activity-inline-icon,
+.flower-activity-inline-row-pending .flower-activity-inline-icon {
   color: color-mix(in srgb, var(--warning, #f59e0b) 74%, var(--foreground) 26%);
 }
 
-.flower-host-activity-inline-row-success .flower-host-activity-inline-icon {
+.flower-activity-inline-row-success .flower-activity-inline-icon {
   color: color-mix(in srgb, #10b981 70%, var(--foreground) 30%);
 }
 
-.flower-host-activity-inline-row-error .flower-host-activity-inline-icon,
-.flower-host-activity-inline-row-canceled .flower-host-activity-inline-icon {
+.flower-activity-inline-row-error .flower-activity-inline-icon,
+.flower-activity-inline-row-canceled .flower-activity-inline-icon {
   color: var(--destructive);
 }
 
-.flower-host-activity-inline-copy {
+.flower-activity-inline-copy {
   display: inline-flex;
   min-width: 0;
   align-items: baseline;
   gap: 0.45rem;
 }
 
-.flower-host-activity-inline-title {
+.flower-activity-inline-title {
   display: inline-flex;
   min-width: 0;
   max-width: 100%;
@@ -810,20 +818,20 @@ html.dark .flower-component-shell {
   white-space: nowrap;
 }
 
-.flower-host-activity-inline-title-verb {
+.flower-activity-inline-title-verb {
   flex: 0 0 auto;
   color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground) 12%);
   font-weight: 800;
 }
 
-.flower-host-activity-inline-title-target {
+.flower-activity-inline-title-target {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.flower-host-activity-inline-detail {
+.flower-activity-inline-detail {
   min-width: 0;
   overflow: hidden;
   color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
@@ -834,8 +842,8 @@ html.dark .flower-component-shell {
   line-height: 1.25;
 }
 
-.flower-host-activity-inline-duration,
-.flower-host-activity-inline-status {
+.flower-activity-inline-duration,
+.flower-activity-inline-status {
   color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
   font-size: 0.6875rem;
   font-weight: 650;
@@ -843,30 +851,30 @@ html.dark .flower-component-shell {
   white-space: nowrap;
 }
 
-.flower-host-activity-inline-status-error,
-.flower-host-activity-inline-status-canceled {
+.flower-activity-inline-status-error,
+.flower-activity-inline-status-canceled {
   color: var(--destructive);
 }
 
-.flower-host-activity-inline-status-running {
+.flower-activity-inline-status-running {
   color: color-mix(in srgb, var(--primary) 74%, var(--foreground) 26%);
 }
 
-.flower-host-activity-inline-status-waiting,
-.flower-host-activity-inline-status-pending {
+.flower-activity-inline-status-waiting,
+.flower-activity-inline-status-pending {
   color: color-mix(in srgb, var(--warning, #f59e0b) 74%, var(--foreground) 26%);
 }
 
-.flower-host-activity-inline-chevron {
+.flower-activity-inline-chevron {
   color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
   transition: transform 140ms ease;
 }
 
-.flower-host-activity-inline-chevron-open {
+.flower-activity-inline-chevron-open {
   transform: rotate(180deg);
 }
 
-.flower-host-activity-inline-details {
+.flower-activity-inline-details {
   max-height: 20rem;
   margin: 0.125rem 0 0.25rem 1.375rem;
   overflow: auto;
@@ -879,44 +887,44 @@ html.dark .flower-component-shell {
   overflow-wrap: anywhere;
 }
 
-.flower-host-activity-inline-detail-line + .flower-host-activity-inline-detail-line {
+.flower-activity-inline-detail-line + .flower-activity-inline-detail-line {
   margin-top: 0.125rem;
 }
 
-.flower-host-activity-inline-detail-line {
+.flower-activity-inline-detail-line {
   display: grid;
   min-width: 0;
   grid-template-columns: 6.25rem minmax(0, 1fr);
   gap: 0.5rem;
 }
 
-.flower-host-activity-inline-detail-key {
+.flower-activity-inline-detail-key {
   color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
   font-family: var(--font-sans, inherit);
   font-weight: 700;
   text-transform: uppercase;
 }
 
-.flower-host-activity-inline-detail-value {
+.flower-activity-inline-detail-value {
   min-width: 0;
 }
 
-.flower-host-activity-inline-detail-value-code {
+.flower-activity-inline-detail-value-code {
   color: color-mix(in srgb, var(--foreground) 76%, var(--muted-foreground) 24%);
 }
 
-.flower-host-activity-todo-list {
+.flower-activity-todo-list {
   display: grid;
   min-width: 0;
   gap: 0.1875rem;
   font-family: var(--font-sans, inherit);
 }
 
-.flower-host-activity-todo-list + .flower-host-activity-inline-detail-line {
+.flower-activity-todo-list + .flower-activity-inline-detail-line {
   margin-top: 0.375rem;
 }
 
-.flower-host-activity-todo-item {
+.flower-activity-todo-item {
   display: grid;
   min-width: 0;
   grid-template-columns: 1rem minmax(0, 1fr);
@@ -925,7 +933,7 @@ html.dark .flower-component-shell {
   padding: 0.125rem 0 0.125rem 0.125rem;
 }
 
-.flower-host-activity-todo-marker {
+.flower-activity-todo-marker {
   display: inline-flex;
   width: 1rem;
   height: 1rem;
@@ -935,25 +943,25 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
 }
 
-.flower-host-activity-todo-item-in_progress .flower-host-activity-todo-marker {
+.flower-activity-todo-item-in_progress .flower-activity-todo-marker {
   color: color-mix(in srgb, var(--primary) 74%, var(--foreground) 26%);
 }
 
-.flower-host-activity-todo-item-completed .flower-host-activity-todo-marker {
+.flower-activity-todo-item-completed .flower-activity-todo-marker {
   color: color-mix(in srgb, #10b981 70%, var(--foreground) 30%);
 }
 
-.flower-host-activity-todo-item-cancelled .flower-host-activity-todo-marker {
+.flower-activity-todo-item-cancelled .flower-activity-todo-marker {
   color: var(--destructive);
 }
 
-.flower-host-activity-todo-copy {
+.flower-activity-todo-copy {
   display: grid;
   min-width: 0;
   gap: 0.125rem;
 }
 
-.flower-host-activity-todo-content {
+.flower-activity-todo-content {
   min-width: 0;
   color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
   font-size: 0.75rem;
@@ -962,13 +970,13 @@ html.dark .flower-component-shell {
   overflow-wrap: anywhere;
 }
 
-.flower-host-activity-todo-content-completed {
+.flower-activity-todo-content-completed {
   color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
   text-decoration: line-through;
   text-decoration-color: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
 }
 
-.flower-host-activity-todo-meta {
+.flower-activity-todo-meta {
   min-width: 0;
   color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
   font-size: 0.6875rem;
@@ -977,32 +985,32 @@ html.dark .flower-component-shell {
   overflow-wrap: anywhere;
 }
 
-.flower-host-activity-todo-note {
+.flower-activity-todo-note {
   color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   font-weight: 560;
 }
 
-.flower-host-activity-file-read,
-.flower-host-activity-file-diff-list,
-.flower-host-activity-file-diff-file {
+.flower-activity-file-read,
+.flower-activity-file-diff-list,
+.flower-activity-file-diff-file {
   display: grid;
   min-width: 0;
   gap: 0.375rem;
 }
 
-.flower-host-activity-file-diff-file + .flower-host-activity-file-diff-file {
+.flower-activity-file-diff-file + .flower-activity-file-diff-file {
   margin-top: 0.5rem;
 }
 
-.flower-host-activity-file-toolbar {
+.flower-activity-file-toolbar {
   display: flex;
   min-width: 0;
   align-items: center;
   gap: 0.375rem;
 }
 
-.flower-host-activity-file-meta,
-.flower-host-activity-file-path {
+.flower-activity-file-meta,
+.flower-activity-file-path {
   min-width: 0;
   overflow: hidden;
   color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
@@ -1013,12 +1021,12 @@ html.dark .flower-component-shell {
   white-space: nowrap;
 }
 
-.flower-host-activity-file-path {
+.flower-activity-file-path {
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
 }
 
-.flower-host-activity-file-change,
-.flower-host-activity-file-truncated {
+.flower-activity-file-change,
+.flower-activity-file-truncated {
   flex: 0 0 auto;
   color: color-mix(in srgb, var(--muted-foreground) 76%, transparent);
   font-size: 0.65625rem;
@@ -1027,11 +1035,11 @@ html.dark .flower-component-shell {
   text-transform: uppercase;
 }
 
-.flower-host-activity-file-truncated {
+.flower-activity-file-truncated {
   color: color-mix(in srgb, var(--warning, #f59e0b) 76%, var(--foreground) 24%);
 }
 
-.flower-host-activity-file-actions {
+.flower-activity-file-actions {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
@@ -1039,7 +1047,7 @@ html.dark .flower-component-shell {
   margin-left: auto;
 }
 
-.flower-host-activity-file-action-button {
+.flower-activity-file-action-button {
   appearance: none;
   display: inline-flex;
   width: 1.375rem;
@@ -1054,27 +1062,27 @@ html.dark .flower-component-shell {
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 
-.flower-host-activity-file-action-button:hover,
-.flower-host-activity-file-action-button:focus-visible {
+.flower-activity-file-action-button:hover,
+.flower-activity-file-action-button:focus-visible {
   border-color: color-mix(in srgb, var(--flower-chat-surface-border) 80%, transparent);
   background: color-mix(in srgb, var(--muted) 34%, transparent);
   color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground) 16%);
   outline: none;
 }
 
-.flower-host-activity-file-action-button:disabled {
+.flower-activity-file-action-button:disabled {
   cursor: not-allowed;
   opacity: 0.38;
 }
 
-.flower-host-activity-file-action-button:disabled:hover,
-.flower-host-activity-file-action-button:disabled:focus-visible {
+.flower-activity-file-action-button:disabled:hover,
+.flower-activity-file-action-button:disabled:focus-visible {
   border-color: transparent;
   background: transparent;
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
 }
 
-.flower-host-activity-file-read-content {
+.flower-activity-file-read-content {
   max-height: 12rem;
   margin: 0;
   overflow: auto;
@@ -1089,7 +1097,7 @@ html.dark .flower-component-shell {
   white-space: pre;
 }
 
-.flower-host-activity-file-diff-grid {
+.flower-activity-file-diff-grid {
   display: grid;
   min-width: 0;
   overflow: hidden;
@@ -1098,14 +1106,14 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--muted) 10%, transparent);
 }
 
-.flower-host-activity-file-diff-unified {
+.flower-activity-file-diff-unified {
   min-width: 0;
   max-height: 16rem;
   overflow: auto;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
 }
 
-.flower-host-activity-file-diff-line {
+.flower-activity-file-diff-line {
   display: grid;
   min-width: max-content;
   grid-template-columns: 2.25rem 2.25rem minmax(12rem, 1fr);
@@ -1116,43 +1124,43 @@ html.dark .flower-component-shell {
   white-space: pre;
 }
 
-.flower-host-activity-file-diff-line-number {
+.flower-activity-file-diff-line-number {
   padding: 0.125rem 0.375rem;
   color: color-mix(in srgb, var(--muted-foreground) 66%, transparent);
   text-align: right;
   user-select: none;
 }
 
-.flower-host-activity-file-diff-line-number-new {
+.flower-activity-file-diff-line-number-new {
   border-right: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 64%, transparent);
 }
 
-.flower-host-activity-file-diff-line code {
+.flower-activity-file-diff-line code {
   padding: 0.125rem 0.625rem;
   color: inherit;
   font-family: inherit;
 }
 
-.flower-host-activity-file-diff-line-del {
+.flower-activity-file-diff-line-del {
   background: color-mix(in srgb, var(--destructive) 13%, transparent);
   color: color-mix(in srgb, #f87171 70%, var(--foreground) 30%);
 }
 
-.flower-host-activity-file-diff-line-add {
+.flower-activity-file-diff-line-add {
   background: color-mix(in srgb, #10b981 13%, transparent);
   color: color-mix(in srgb, #34d399 70%, var(--foreground) 30%);
 }
 
-.flower-host-activity-file-diff-line-meta {
+.flower-activity-file-diff-line-meta {
   background: color-mix(in srgb, var(--muted) 34%, transparent);
   color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
 }
 
-.flower-host-activity-file-diff-line-context {
+.flower-activity-file-diff-line-context {
   background: color-mix(in srgb, var(--background) 92%, var(--muted) 8%);
 }
 
-.flower-host-activity-file-diff-empty {
+.flower-activity-file-diff-empty {
   grid-column: 1 / -1;
   padding: 0.5rem;
   color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
@@ -1160,15 +1168,15 @@ html.dark .flower-component-shell {
   font-weight: 650;
 }
 
-.flower-host-activity-file-stat-add {
+.flower-activity-file-stat-add {
   color: color-mix(in srgb, #10b981 82%, var(--foreground) 18%);
 }
 
-.flower-host-activity-file-stat-del {
+.flower-activity-file-stat-del {
   color: color-mix(in srgb, var(--destructive) 82%, var(--foreground) 18%);
 }
 
-.flower-host-input-request-panel {
+.flower-input-request-panel {
   display: flex;
   width: 100%;
   min-width: 0;
@@ -1182,7 +1190,7 @@ html.dark .flower-component-shell {
   padding: 0.75rem;
 }
 
-.flower-host-input-request-heading {
+.flower-input-request-heading {
   display: grid;
   min-width: 0;
   grid-template-columns: 1.75rem minmax(0, 1fr);
@@ -1190,7 +1198,7 @@ html.dark .flower-component-shell {
   gap: 0.625rem;
 }
 
-.flower-host-input-request-icon {
+.flower-input-request-icon {
   display: flex;
   width: 1.75rem;
   height: 1.75rem;
@@ -1201,18 +1209,18 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--warning, #f59e0b) 78%, var(--foreground) 22%);
 }
 
-.flower-host-input-request-copy {
+.flower-input-request-copy {
   min-width: 0;
 }
 
-.flower-host-input-request-title {
+.flower-input-request-title {
   color: color-mix(in srgb, var(--foreground) 88%, var(--warning, #f59e0b) 12%);
   font-size: 0.875rem;
   font-weight: 780;
   line-height: 1.35;
 }
 
-.flower-host-input-request-description {
+.flower-input-request-description {
   margin-top: 0.15rem;
   color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
   font-size: 0.8125rem;
@@ -1220,13 +1228,13 @@ html.dark .flower-component-shell {
   overflow-wrap: anywhere;
 }
 
-.flower-host-input-request-questions {
+.flower-input-request-questions {
   display: grid;
   min-width: 0;
   gap: 0.625rem;
 }
 
-.flower-host-input-request-question {
+.flower-input-request-question {
   display: grid;
   min-width: 0;
   gap: 0.5rem;
@@ -1234,15 +1242,15 @@ html.dark .flower-component-shell {
   padding-top: 0.625rem;
 }
 
-.flower-host-input-request-question-active {
+.flower-input-request-question-active {
   border-top-color: color-mix(in srgb, var(--primary) 24%, var(--flower-chat-surface-border));
 }
 
-.flower-host-input-request-question-copy {
+.flower-input-request-question-copy {
   min-width: 0;
 }
 
-.flower-host-input-request-question-header {
+.flower-input-request-question-header {
   color: color-mix(in srgb, var(--foreground) 86%, var(--primary) 14%);
   font-size: 0.75rem;
   font-weight: 760;
@@ -1250,7 +1258,7 @@ html.dark .flower-component-shell {
   line-height: 1.35;
 }
 
-.flower-host-input-request-question-text {
+.flower-input-request-question-text {
   margin-top: 0.12rem;
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
   font-size: 0.8125rem;
@@ -1259,13 +1267,13 @@ html.dark .flower-component-shell {
   overflow-wrap: anywhere;
 }
 
-.flower-host-input-request-choice-grid {
+.flower-input-request-choice-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(16rem, 100%), 1fr));
   gap: 0.5rem;
 }
 
-.flower-host-input-request-choice {
+.flower-input-request-choice {
   display: flex;
   min-width: 0;
   min-height: 3.125rem;
@@ -1287,8 +1295,8 @@ html.dark .flower-component-shell {
     transform 150ms ease;
 }
 
-.flower-host-input-request-choice:hover,
-.flower-host-input-request-choice:focus-visible {
+.flower-input-request-choice:hover,
+.flower-input-request-choice:focus-visible {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border));
   background: color-mix(in srgb, var(--primary) 7%, var(--flower-chat-surface-elevated));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 8%, transparent);
@@ -1296,15 +1304,15 @@ html.dark .flower-component-shell {
   transform: translateY(-1px);
 }
 
-.flower-host-input-request-choice:disabled {
+.flower-input-request-choice:disabled {
   cursor: not-allowed;
   opacity: 0.62;
   transform: none;
 }
 
-.flower-host-input-request-choice-selected,
-.flower-host-input-request-choice-selected:hover,
-.flower-host-input-request-choice-selected:focus-visible {
+.flower-input-request-choice-selected,
+.flower-input-request-choice-selected:hover,
+.flower-input-request-choice-selected:focus-visible {
   border-color: color-mix(in srgb, var(--primary) 46%, var(--flower-chat-surface-border));
   background: color-mix(in srgb, var(--primary) 13%, var(--flower-chat-surface-elevated));
   box-shadow:
@@ -1312,7 +1320,7 @@ html.dark .flower-component-shell {
     0 0 0 3px color-mix(in srgb, var(--primary) 9%, transparent);
 }
 
-.flower-host-input-request-choice-label {
+.flower-input-request-choice-label {
   min-width: 0;
   color: color-mix(in srgb, var(--foreground) 92%, var(--primary) 8%);
   font-size: 0.8125rem;
@@ -1321,7 +1329,7 @@ html.dark .flower-component-shell {
   overflow-wrap: anywhere;
 }
 
-.flower-host-input-request-choice-description {
+.flower-input-request-choice-description {
   min-width: 0;
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
   font-size: 0.75rem;
@@ -1329,7 +1337,7 @@ html.dark .flower-component-shell {
   overflow-wrap: anywhere;
 }
 
-.flower-host-input-request-text-targets {
+.flower-input-request-text-targets {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
@@ -1338,7 +1346,7 @@ html.dark .flower-component-shell {
   padding-top: 0.625rem;
 }
 
-.flower-host-input-request-text-target {
+.flower-input-request-text-target {
   display: inline-flex;
   min-width: 0;
   cursor: pointer;
@@ -1359,77 +1367,77 @@ html.dark .flower-component-shell {
     transform 150ms ease;
 }
 
-.flower-host-input-request-text-target:hover,
-.flower-host-input-request-text-target:focus-visible {
+.flower-input-request-text-target:hover,
+.flower-input-request-text-target:focus-visible {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border));
   background: color-mix(in srgb, var(--primary) 7%, var(--flower-chat-surface-elevated));
   outline: none;
   transform: translateY(-1px);
 }
 
-.flower-host-input-request-text-target-active,
-.flower-host-input-request-text-target-active:hover,
-.flower-host-input-request-text-target-active:focus-visible {
+.flower-input-request-text-target-active,
+.flower-input-request-text-target-active:hover,
+.flower-input-request-text-target-active:focus-visible {
   border-color: color-mix(in srgb, var(--primary) 46%, var(--flower-chat-surface-border));
   background: color-mix(in srgb, var(--primary) 12%, var(--flower-chat-surface-elevated));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 9%, transparent);
 }
 
-.flower-host-input-request-text-target:disabled {
+.flower-input-request-text-target:disabled {
   cursor: not-allowed;
   opacity: 0.62;
   transform: none;
 }
 
 @media (max-width: 780px) {
-  .flower-host-message-bubble,
-  .flower-host-message-bubble-user {
+  .flower-message-bubble,
+  .flower-message-bubble-user {
     max-width: 100%;
   }
 
-  .flower-host-message-block-stack,
-  .flower-host-activity-inline {
+  .flower-message-block-stack,
+  .flower-activity-inline {
     width: 100%;
   }
 
-  .flower-host-activity-inline-button {
+  .flower-activity-inline-button {
     grid-template-columns: 1rem minmax(0, 1fr) auto 1rem;
   }
 
-  .flower-host-activity-inline-duration {
+  .flower-activity-inline-duration {
     display: none;
   }
 
-  .flower-host-activity-inline-copy {
+  .flower-activity-inline-copy {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.08rem;
   }
 
-  .flower-host-activity-inline-title {
+  .flower-activity-inline-title {
     width: 100%;
   }
 
-  .flower-host-activity-inline-detail-line {
+  .flower-activity-inline-detail-line {
     grid-template-columns: 1fr;
     gap: 0.125rem;
   }
 
-  .flower-host-activity-file-toolbar {
+  .flower-activity-file-toolbar {
     align-items: flex-start;
     flex-wrap: wrap;
   }
 
-  .flower-host-activity-inline-line {
+  .flower-activity-inline-line {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .flower-host-activity-inline-line > .flower-host-activity-file-actions {
+  .flower-activity-inline-line > .flower-activity-file-actions {
     justify-self: end;
   }
 }
 
-.flower-host-surface {
+.flower-surface {
   --flower-chat-surface: var(--redeven-surface-main, var(--background));
   --flower-chat-surface-soft: var(--redeven-surface-panel-soft, var(--card));
   --flower-chat-surface-elevated: var(--redeven-surface-panel-elevated, var(--card));
@@ -1437,64 +1445,64 @@ html.dark .flower-component-shell {
   color: var(--foreground);
 }
 
-.flower-host-panel {
+.flower-panel {
   height: 100%;
   min-height: 0;
   overflow: hidden;
   background: var(--flower-chat-surface, var(--background));
 }
 
-.flower-host-scroll {
+.flower-scroll {
   min-height: 0;
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
 
-.flower-host-thread-card {
+.flower-thread-card {
   border-color: transparent;
   background: transparent;
   color: var(--flower-thread-rail-foreground);
 }
 
-.flower-host-thread-card:hover {
+.flower-thread-card:hover {
   transition: background-color 150ms ease, border-color 150ms ease;
   border-color: color-mix(in srgb, var(--primary) 15%, var(--flower-thread-rail-control-border));
   background: color-mix(in srgb, var(--flower-thread-rail-accent) 72%, transparent);
 }
 
-.flower-host-thread-card-active {
+.flower-thread-card-active {
   border-color: color-mix(in srgb, var(--primary) 26%, var(--flower-thread-rail-control-border));
   background: var(--flower-thread-rail-accent-strong);
 }
 
-.flower-host-thread-list-title {
+.flower-thread-list-title {
   color: var(--flower-thread-rail-foreground);
 }
 
-.flower-host-thread-list-description,
-.flower-host-thread-card-preview,
-.flower-host-thread-card-meta,
-.flower-host-thread-card-time,
-.flower-host-thread-group-label {
+.flower-thread-list-description,
+.flower-thread-card-preview,
+.flower-thread-card-meta,
+.flower-thread-card-time,
+.flower-thread-group-label {
   color: var(--flower-thread-rail-muted);
 }
 
-.flower-host-thread-search-input {
+.flower-thread-search-input {
   border-color: var(--flower-thread-rail-control-border);
   background: var(--flower-thread-rail-control);
   color: var(--flower-thread-rail-foreground);
 }
 
-.flower-host-thread-search-input::placeholder {
+.flower-thread-search-input::placeholder {
   color: var(--flower-thread-rail-subtle);
 }
 
-.flower-host-thread-empty {
+.flower-thread-empty {
   border-color: var(--flower-thread-rail-control-border);
   color: var(--flower-thread-rail-muted);
 }
 
-.flower-host-thread-refresh-button {
+.flower-thread-refresh-button {
   width: 1.625rem;
   height: 1.625rem;
   border: 1px solid transparent;
@@ -1508,18 +1516,18 @@ html.dark .flower-component-shell {
     color 150ms ease;
 }
 
-.flower-component-thread-rail:not(:hover):not(:focus-within) .flower-host-thread-refresh-button:not(:disabled) {
+.flower-component-thread-rail:not(:hover):not(:focus-within) .flower-thread-refresh-button:not(:disabled) {
   opacity: 0.42;
 }
 
-.flower-host-thread-refresh-button:hover,
-.flower-host-thread-refresh-button:focus-visible {
+.flower-thread-refresh-button:hover,
+.flower-thread-refresh-button:focus-visible {
   border-color: color-mix(in srgb, var(--primary) 12%, var(--flower-thread-rail-control-border));
   background: color-mix(in srgb, var(--flower-thread-rail-accent) 82%, transparent);
   color: var(--flower-thread-rail-foreground);
 }
 
-.flower-host-thread-card-menu-button {
+.flower-thread-card-menu-button {
   position: absolute;
   right: 0.25rem;
   top: 0.25rem;
@@ -1538,11 +1546,11 @@ html.dark .flower-component-shell {
     color 150ms ease;
 }
 
-.flower-host-thread-card:hover .flower-host-thread-card-menu-button {
+.flower-thread-card:hover .flower-thread-card-menu-button {
   opacity: 1;
 }
 
-.flower-host-thread-card-pin-button {
+.flower-thread-card-pin-button {
   position: absolute;
   right: 1.8125rem;
   top: 0.25rem;
@@ -1558,39 +1566,39 @@ html.dark .flower-component-shell {
   transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
 }
 
-.flower-host-thread-card:hover .flower-host-thread-card-pin-button {
+.flower-thread-card:hover .flower-thread-card-pin-button {
   opacity: 1;
 }
 
-.flower-host-thread-card-pin-button:hover,
-.flower-host-thread-card-pin-button:focus-visible {
+.flower-thread-card-pin-button:hover,
+.flower-thread-card-pin-button:focus-visible {
   background: color-mix(in srgb, var(--flower-thread-rail-accent) 88%, transparent);
   color: var(--flower-thread-rail-foreground);
   outline: none;
 }
 
-.flower-host-thread-card-pin-button[data-pinned="true"] {
+.flower-thread-card-pin-button[data-pinned="true"] {
   color: var(--primary);
 }
 
-.flower-host-thread-card-pin-button[data-pinned="true"] svg path {
+.flower-thread-card-pin-button[data-pinned="true"] svg path {
   fill: currentColor;
   stroke: none;
 }
 
-.flower-host-thread-card-dot-indicator {
+.flower-thread-card-dot-indicator {
   width: 0.5rem;
   height: 0.5rem;
 }
 
-.flower-host-thread-card-menu-button:hover,
-.flower-host-thread-card-menu-button:focus-visible {
+.flower-thread-card-menu-button:hover,
+.flower-thread-card-menu-button:focus-visible {
   background: color-mix(in srgb, var(--flower-thread-rail-accent) 88%, transparent);
   color: var(--flower-thread-rail-foreground);
   outline: none;
 }
 
-.flower-host-thread-context-menu {
+.flower-thread-context-menu {
   position: fixed;
   z-index: 80;
   width: 13.25rem;
@@ -1604,7 +1612,7 @@ html.dark .flower-component-shell {
     0 8px 22px -18px color-mix(in srgb, black 44%, transparent);
 }
 
-.flower-host-thread-menu-item {
+.flower-thread-menu-item {
   display: flex;
   width: 100%;
   min-height: 1.875rem;
@@ -1618,29 +1626,29 @@ html.dark .flower-component-shell {
   cursor: pointer;
 }
 
-.flower-host-thread-menu-item:hover,
-.flower-host-thread-menu-item:focus-visible {
+.flower-thread-menu-item:hover,
+.flower-thread-menu-item:focus-visible {
   background: color-mix(in srgb, var(--primary) 9%, transparent);
   outline: none;
 }
 
-.flower-host-thread-menu-item:disabled {
+.flower-thread-menu-item:disabled {
   color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
   cursor: not-allowed;
 }
 
-.flower-host-thread-menu-item[aria-busy="true"] {
+.flower-thread-menu-item[aria-busy="true"] {
   color: var(--foreground);
   background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
-.flower-host-thread-menu-separator {
+.flower-thread-menu-separator {
   height: 1px;
   margin: 0.25rem 0.375rem;
   background: color-mix(in srgb, var(--border) 72%, transparent);
 }
 
-.flower-host-thread-action-error {
+.flower-thread-action-error {
   margin: 0 0.75rem 0.75rem;
   border: 1px solid color-mix(in srgb, var(--error, #ef4444) 28%, transparent);
   border-radius: 0.5rem;
@@ -1650,7 +1658,7 @@ html.dark .flower-component-shell {
   font-size: 0.75rem;
 }
 
-.flower-host-thread-action-success {
+.flower-thread-action-success {
   margin: 0 0.75rem 0.75rem;
   border: 1px solid color-mix(in srgb, #10b981 26%, transparent);
   border-radius: 0.5rem;
@@ -1660,7 +1668,7 @@ html.dark .flower-component-shell {
   font-size: 0.75rem;
 }
 
-.flower-host-rename-backdrop {
+.flower-rename-backdrop {
   position: fixed;
   inset: 0;
   z-index: 90;
@@ -1671,7 +1679,7 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, black 28%, transparent);
 }
 
-.flower-host-rename-dialog {
+.flower-rename-dialog {
   width: min(100%, 22rem);
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: 0.5rem;
@@ -1680,20 +1688,20 @@ html.dark .flower-component-shell {
   box-shadow: 0 24px 52px -34px color-mix(in srgb, black 58%, transparent);
 }
 
-.flower-host-rename-dialog h2 {
+.flower-rename-dialog h2 {
   margin: 0 0 0.875rem;
   font-size: 0.9375rem;
   font-weight: 650;
 }
 
-.flower-host-rename-dialog label {
+.flower-rename-dialog label {
   display: grid;
   gap: 0.375rem;
   font-size: 0.75rem;
   color: var(--muted-foreground);
 }
 
-.flower-host-rename-input {
+.flower-rename-input {
   width: 100%;
   border: 1px solid color-mix(in srgb, var(--border) 76%, transparent);
   border-radius: 0.375rem;
@@ -1702,30 +1710,30 @@ html.dark .flower-component-shell {
   background: var(--background);
 }
 
-.flower-host-rename-input:focus {
+.flower-rename-input:focus {
   outline: 1.5px solid color-mix(in srgb, var(--primary) 20%, transparent);
   outline-offset: 1px;
 }
 
-.flower-host-rename-input[aria-invalid="true"] {
+.flower-rename-input[aria-invalid="true"] {
   border-color: color-mix(in srgb, var(--error, #ef4444) 48%, var(--border));
 }
 
-.flower-host-rename-error {
+.flower-rename-error {
   margin: 0.625rem 0 0;
   color: color-mix(in srgb, var(--error, #ef4444) 86%, var(--foreground));
   font-size: 0.75rem;
 }
 
-.flower-host-rename-actions {
+.flower-rename-actions {
   display: flex;
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 1rem;
 }
 
-.flower-host-rename-secondary,
-.flower-host-rename-primary {
+.flower-rename-secondary,
+.flower-rename-primary {
   min-width: 4.25rem;
   border-radius: 0.375rem;
   padding: 0.5rem 0.75rem;
@@ -1733,23 +1741,23 @@ html.dark .flower-component-shell {
   cursor: pointer;
 }
 
-.flower-host-rename-secondary {
+.flower-rename-secondary {
   color: var(--foreground);
   background: transparent;
 }
 
-.flower-host-rename-primary {
+.flower-rename-primary {
   color: var(--primary-foreground);
   background: var(--primary);
 }
 
-.flower-host-rename-secondary:disabled,
-.flower-host-rename-primary:disabled {
+.flower-rename-secondary:disabled,
+.flower-rename-primary:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
 
-.flower-host-composer {
+.flower-composer {
   border: 1px solid color-mix(in srgb, var(--border) 62%, transparent);
   border-radius: 1rem;
   border-color: color-mix(in srgb, var(--redeven-stroke-overlay, var(--border)) 72%, transparent);
@@ -1760,28 +1768,28 @@ html.dark .flower-component-shell {
   backdrop-filter: blur(14px);
 }
 
-.flower-host-composer textarea,
-.flower-host-composer textarea:focus,
-.flower-host-composer textarea:focus-visible,
-.flower-host-composer input[type='password'],
-.flower-host-composer input[type='password']:focus,
-.flower-host-composer input[type='password']:focus-visible {
+.flower-composer textarea,
+.flower-composer textarea:focus,
+.flower-composer textarea:focus-visible,
+.flower-composer input[type='password'],
+.flower-composer input[type='password']:focus,
+.flower-composer input[type='password']:focus-visible {
   outline: none;
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.flower-host-composer textarea {
+.flower-composer textarea {
   min-height: 5rem;
   resize: none;
 }
 
-.flower-host-composer input[type='password'] {
+.flower-composer input[type='password'] {
   min-height: 2.75rem;
 }
 
-.flower-host-composer:focus-within {
+.flower-composer:focus-within {
   border-color: color-mix(in srgb, var(--primary) 48%, transparent);
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent),
@@ -1790,13 +1798,13 @@ html.dark .flower-component-shell {
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }
 
-.flower-host-composer-submit {
+.flower-composer-submit {
   width: 2.25rem;
   height: 2.25rem;
   padding: 0;
 }
 
-.flower-host-provider-card {
+.flower-provider-card {
   border-color: color-mix(in srgb, var(--border) 72%, transparent);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, transparent), color-mix(in srgb, var(--background) 94%, transparent));
@@ -1836,55 +1844,6 @@ html.dark .flower-component-shell {
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
-}
-
-.flower-settings-disabled-guide {
-  display: grid;
-  width: min(100%, 36rem);
-  min-width: 0;
-  grid-template-columns: 2.75rem minmax(0, 1fr);
-  align-items: center;
-  gap: 0.875rem 1rem;
-  margin: clamp(2rem, 12vh, 5rem) auto 0;
-  padding: 0.25rem;
-}
-
-.flower-settings-disabled-icon {
-  display: flex;
-  width: 2.75rem;
-  height: 2.75rem;
-  flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--warning, #f59e0b) 13%, var(--flower-chat-surface, var(--background)));
-  color: var(--warning, #f59e0b);
-}
-
-.flower-settings-disabled-copy {
-  min-width: 0;
-}
-
-.flower-settings-disabled-copy h3 {
-  margin: 0;
-  color: var(--foreground);
-  font-size: 1.0625rem;
-  font-weight: 750;
-  letter-spacing: 0;
-}
-
-.flower-settings-disabled-copy p {
-  margin: 0.35rem 0 0;
-  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
-  font-size: 0.8125rem;
-  line-height: 1.6;
-}
-
-.flower-settings-disabled-guide > .button,
-.flower-settings-disabled-guide > button {
-  grid-column: 2;
-  justify-self: start;
-  margin-top: 0.125rem;
 }
 
 .flower-settings-inline-action {
@@ -2353,7 +2312,7 @@ html.dark .flower-component-shell {
   font-size: 0.875rem;
 }
 
-.flower-host-empty-state {
+.flower-empty-state {
   display: flex;
   min-height: 100%;
   flex-direction: column;
@@ -2362,13 +2321,13 @@ html.dark .flower-component-shell {
   padding: 2rem;
 }
 
-.flower-host-empty-hero {
+.flower-empty-hero {
   max-width: 32rem;
   margin-bottom: 2rem;
   text-align: center;
 }
 
-.flower-host-empty-suggestions {
+.flower-empty-suggestions {
   display: grid;
   width: 100%;
   max-width: 42rem;
@@ -2376,7 +2335,7 @@ html.dark .flower-component-shell {
   gap: 0.75rem;
 }
 
-.flower-host-empty-hint {
+.flower-empty-hint {
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -2385,7 +2344,7 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
 
-.flower-host-setup-guide {
+.flower-setup-guide {
   width: min(100%, 32rem);
   margin: min(13vh, 6.5rem) auto 0;
   display: flex;
@@ -2398,13 +2357,13 @@ html.dark .flower-component-shell {
   text-align: center;
 }
 
-.flower-host-setup-copy {
+.flower-setup-copy {
   display: grid;
   max-width: 28rem;
   gap: 0.45rem;
 }
 
-.flower-host-setup-copy h2 {
+.flower-setup-copy h2 {
   margin: 0;
   color: var(--foreground);
   font-size: 1.0625rem;
@@ -2412,14 +2371,14 @@ html.dark .flower-component-shell {
   letter-spacing: 0;
 }
 
-.flower-host-setup-copy p {
+.flower-setup-copy p {
   margin: 0;
   color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
   font-size: 0.8125rem;
   line-height: 1.65;
 }
 
-.flower-host-setup-primary {
+.flower-setup-primary {
   display: inline-flex;
   height: 2.15rem;
   cursor: pointer;
@@ -2441,8 +2400,8 @@ html.dark .flower-component-shell {
     transform 150ms ease;
 }
 
-.flower-host-setup-primary:hover,
-.flower-host-setup-primary:focus-visible {
+.flower-setup-primary:hover,
+.flower-setup-primary:focus-visible {
   background: color-mix(in srgb, var(--foreground) 84%, var(--primary) 16%);
   box-shadow: 0 14px 28px -20px color-mix(in srgb, var(--foreground) 64%, transparent);
   outline: none;
@@ -2554,7 +2513,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     border-bottom: 1px solid var(--flower-thread-rail-border);
   }
 
-  .flower-host-chat-header {
+  .flower-chat-header {
     min-height: 3rem;
     padding: 0.5rem 0.625rem;
     gap: 0.625rem;
@@ -2562,7 +2521,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     align-items: center;
   }
 
-  .flower-host-chat-header-actions {
+  .flower-chat-header-actions {
     gap: 0.25rem;
     flex: 0 0 auto;
     flex-wrap: nowrap;
@@ -2581,19 +2540,6 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-settings-title-feedback {
     min-height: 0;
     justify-content: flex-start;
-  }
-
-  .flower-settings-disabled-guide {
-    grid-template-columns: minmax(0, 1fr);
-    margin-top: 1.5rem;
-    text-align: center;
-  }
-
-  .flower-settings-disabled-icon,
-  .flower-settings-disabled-guide > .button,
-  .flower-settings-disabled-guide > button {
-    grid-column: 1;
-    justify-self: center;
   }
 
   .flower-settings-current-model {
@@ -2640,17 +2586,17 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     flex-direction: column;
   }
 
-  .flower-host-empty-state {
+  .flower-empty-state {
     justify-content: flex-start;
     padding: 1rem;
     padding-top: 1.25rem;
   }
 
-  .flower-host-empty-suggestions {
+  .flower-empty-suggestions {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .flower-host-empty-hint {
+  .flower-empty-hint {
     width: 100%;
     justify-content: center;
     flex-wrap: wrap;
@@ -2658,12 +2604,12 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     margin-top: 1.25rem;
   }
 
-  .flower-host-setup-guide {
+  .flower-setup-guide {
     margin-top: 1rem;
     padding: 1.25rem;
   }
 
-  .flower-host-setup-inline span {
+  .flower-setup-inline span {
     white-space: normal;
   }
 }
@@ -2747,11 +2693,11 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 }
 
 /* ---- thread card live/read indicator ---- */
-.flower-host-thread-indicator {
+.flower-thread-indicator {
   width: 16px;
 }
 
-.flower-host-thread-wave-bar {
+.flower-thread-wave-bar {
   width: 2px;
   border-radius: 9999px;
   background: var(--primary);
@@ -2774,35 +2720,35 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   }
 }
 
-.flower-host-thread-wave {
+.flower-thread-wave {
   display: none;
 }
 
-.flower-host-thread-status-dot {
+.flower-thread-status-dot {
   position: relative;
   display: none;
   background: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
 }
 
-[data-flower-thread-indicator='wave'] .flower-host-thread-wave {
+[data-flower-thread-indicator='wave'] .flower-thread-wave {
   display: flex;
 }
 
-[data-flower-thread-indicator='dot'] .flower-host-thread-status-dot {
+[data-flower-thread-indicator='dot'] .flower-thread-status-dot {
   display: block;
   background: var(--primary);
 }
 
-[data-flower-thread-action-required='true'] .flower-host-thread-status-dot {
+[data-flower-thread-action-required='true'] .flower-thread-status-dot {
   background: var(--warning, #f59e0b);
 }
 
-[data-flower-thread-unread='true'] .flower-host-thread-status-dot,
-[data-flower-thread-unread='true'] .flower-host-thread-wave {
+[data-flower-thread-unread='true'] .flower-thread-status-dot,
+[data-flower-thread-unread='true'] .flower-thread-wave {
   filter: drop-shadow(0 0 0.28rem color-mix(in srgb, var(--primary) 46%, transparent));
 }
 
-[data-flower-thread-unread='true'] .flower-host-thread-status-dot::after {
+[data-flower-thread-unread='true'] .flower-thread-status-dot::after {
   content: '';
   position: absolute;
   inset: -4px;
@@ -2811,10 +2757,10 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .flower-host-streaming-cursor,
+  .flower-streaming-cursor,
   .redeven-flower-icon-spin,
   .redeven-flower-icon-breathe,
-  .flower-host-thread-wave-bar {
+  .flower-thread-wave-bar {
     animation: none !important;
     transform: none !important;
   }

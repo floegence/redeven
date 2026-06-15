@@ -787,31 +787,7 @@ describe('main routing', () => {
     expect(connectSrc).not.toContain('launcherActionFailureForRemoteRouteState');
     expect(connectSrc).not.toContain('openProviderEnvironmentFromLauncher');
 
-    const flowerTargetStart = mainSrc.indexOf('async function openFlowerHostTargetSession(');
-    const flowerTargetEnd = mainSrc.indexOf('function desktopStateStore()', flowerTargetStart);
-    expect(flowerTargetStart).toBeGreaterThanOrEqual(0);
-    expect(flowerTargetEnd).toBeGreaterThan(flowerTargetStart);
-    const flowerTargetSrc = mainSrc.slice(flowerTargetStart, flowerTargetEnd);
-    expect(flowerTargetSrc).toContain('requestProviderDesktopSessionMaterial(preferences, environment, {\n    requireRemoteRouteReady: true,\n  })');
-    expect(flowerTargetSrc).toContain('stripSensitiveURLPayload(material.remoteSessionURL)');
-    expect(flowerTargetSrc).not.toContain('targetURL: latest.environment.environment_url || material.remoteSessionURL');
-    expect(flowerTargetSrc).toContain("const bootTicket = compact(bootPayload.boot_ticket);");
-    expect(flowerTargetSrc).toContain('bearerToken: bootTicket');
-    expect(flowerTargetSrc).toContain('bearerToken: entryTicket');
-    expect(flowerTargetSrc).toContain('const requiredCapabilities = normalizeFlowerHostRequiredCapabilities(request.required_capabilities);');
-    expect(flowerTargetSrc).toContain('capabilities: targetSessionCapabilitiesFor(requiredCapabilities)');
-    expect(flowerTargetSrc).toContain('const entryExpiresAtUnixMS = entryTicketExpiresAtUnixMS(entry);');
-    expect(flowerTargetSrc).toContain('expires_at_unix_ms: Math.min(grantExpiresAtUnixMS(grantClient), entryExpiresAtUnixMS)');
-    expect(mainSrc).toContain('function targetSessionCapabilitiesFor(requiredCapabilities: readonly string[])');
-    expect(mainSrc).toContain("throw new Error('Provider returned a target grant without a valid expiration.');");
-    expect(mainSrc).toContain("throw new Error('Provider returned an expired target entry ticket.');");
-    expect(mainSrc).not.toContain('return Date.now() + 60_000;');
-    expect(mainSrc).not.toContain('Number(entry.expires_at_unix_ms) || Number.MAX_SAFE_INTEGER');
-    expect(flowerTargetSrc).not.toContain('bootstrap_ticket: bootTicket');
-    expect(flowerTargetSrc).not.toContain('entry_ticket: entryTicket');
-    expect(flowerTargetSrc).not.toContain('control_plane_access_token');
-    expect(flowerTargetSrc).not.toContain('provider_access_token');
-    expect(flowerTargetSrc).not.toContain('e2ee_psk');
+    expect(mainSrc).not.toContain('targetURL: latest.environment.environment_url || material.remoteSessionURL');
 
     const disconnectStart = mainSrc.indexOf('async function disconnectProviderRuntimeFromLauncher(');
     const disconnectEnd = mainSrc.indexOf('async function cancelLauncherOperationFromLauncher(', disconnectStart);
@@ -851,6 +827,64 @@ describe('main routing', () => {
     expect(openSrc).not.toContain('runEnvironmentRuntimeLifecycleFromLauncher');
     expect(openSrc).not.toContain('startRuntimePlacementBridgeSession');
     expect(openSrc).not.toContain('resolveProviderRuntimeLinkTarget');
+  });
+
+  it('routes Welcome Flower through the Local Environment runtime API only', () => {
+    const mainSrc = readMainSource();
+
+    const pathStart = mainSrc.indexOf('function runtimeFlowerPath(');
+    const pathEnd = mainSrc.indexOf('function runtimeFlowerMethod(', pathStart);
+    expect(pathStart).toBeGreaterThanOrEqual(0);
+    expect(pathEnd).toBeGreaterThan(pathStart);
+    const pathSrc = mainSrc.slice(pathStart, pathEnd);
+    expect(pathSrc).toContain("new URL(raw, 'http://runtime-flower.local')");
+    expect(pathSrc).toContain('const pathname = parsed.pathname;');
+    expect(pathSrc).toContain("'/_redeven_proxy/api/settings'");
+    expect(pathSrc).toContain("'/_redeven_proxy/api/ai/provider_bundle'");
+    expect(pathSrc).toContain("'/_redeven_proxy/api/ai/models'");
+    expect(pathSrc).toContain("'/_redeven_proxy/api/ai/runs'");
+    expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/messages$/u");
+    expect(pathSrc).toContain("throw new Error('Flower runtime request path is not allowed.');");
+    expect(pathSrc).not.toContain("startsWith('/_redeven_proxy/api/ai/threads')");
+
+    const requestStart = mainSrc.indexOf('async function requestRuntimeFlower(');
+    const requestEnd = mainSrc.indexOf('async function assertLocalEnvironmentRuntimeStopped(', requestStart);
+    expect(requestStart).toBeGreaterThanOrEqual(0);
+    expect(requestEnd).toBeGreaterThan(requestStart);
+    const requestSrc = mainSrc.slice(requestStart, requestEnd);
+    expect(requestSrc).toContain('const record = await ensureRuntimeFlowerRecord();');
+    expect(requestSrc).toContain('const url = new URL(path, record.startup.local_ui_url);');
+    expect(requestSrc).toContain('runtimeFlowerMethodAllowed(path, method)');
+    expect(requestSrc).toContain('let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);');
+    expect(requestSrc).toContain('Cookie: runtimeFlowerAccessCookieHeader(cookie)');
+    expect(requestSrc).toContain('runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders })');
+    expect(requestSrc).not.toContain('requestProviderDesktopSessionMaterial');
+    expect(requestSrc).not.toContain('requestDesktopOpenSession');
+
+    const httpStart = mainSrc.indexOf('function runtimeFlowerRequestHTTP(');
+    const httpEnd = mainSrc.indexOf('function parseRuntimeFlowerJSON(', httpStart);
+    expect(httpStart).toBeGreaterThanOrEqual(0);
+    expect(httpEnd).toBeGreaterThan(httpStart);
+    const httpSrc = mainSrc.slice(httpStart, httpEnd);
+    expect(httpSrc).toContain("Accept: 'application/json'");
+    expect(httpSrc).not.toContain('application/x-ndjson');
+
+    const errorStart = mainSrc.indexOf('function runtimeFlowerEnvelopeError(');
+    const errorEnd = mainSrc.indexOf('async function unlockRuntimeFlowerAccess(', errorStart);
+    expect(errorStart).toBeGreaterThanOrEqual(0);
+    expect(errorEnd).toBeGreaterThan(errorStart);
+    const errorSrc = mainSrc.slice(errorStart, errorEnd);
+    expect(errorSrc).toContain('runtimeFlowerRetryAfterMs(error.retry_after_ms)');
+    expect(errorSrc).toContain('runtimeFlowerRetryAfterMs(record.retry_after_ms)');
+
+    const unlockStart = mainSrc.indexOf('async function unlockRuntimeFlowerAccess(');
+    const unlockEnd = mainSrc.indexOf('async function runtimeFlowerAccessHeaders(', unlockStart);
+    expect(unlockStart).toBeGreaterThanOrEqual(0);
+    expect(unlockEnd).toBeGreaterThan(unlockStart);
+    const unlockSrc = mainSrc.slice(unlockStart, unlockEnd);
+    expect(unlockSrc).toContain("new URL('/api/local/access/unlock', baseURL)");
+    expect(unlockSrc).toContain('throw (error ?? runtimeFlowerError(');
+    expect(unlockSrc).not.toContain('throw new Error(error?.message');
   });
 
   it('syncs linked provider health after runtime lifecycle changes', () => {

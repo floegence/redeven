@@ -7,7 +7,7 @@ High-level design:
 - The browser UI calls the runtime via the existing `/_redeven_proxy/api/ai/*` gateway routes (still over Flowersec E2EE proxy).
 - The **Go runtime is the security boundary** and executes tools after validating authoritative session metadata.
 - External AI-agent integrations use Agent Skills plus the `redeven` CLI target-discovery contract; Redeven does not require or expose an MCP server for that integration path. See [`AGENT_SKILLS.md`](AGENT_SKILLS.md).
-- Tooling now uses a structured file-operation surface by default: `file.read` for direct inspection, `file.edit` / `file.write` for deterministic mutations, `terminal.exec` for investigation and verification, and `apply_patch` as a compatibility fallback.
+- Tooling now uses a structured file-operation surface by default: `file.read` for direct inspection, `file.edit` / `file.write` for deterministic mutations, `terminal.exec` for investigation and verification, and `apply_patch` for patch-format edits.
 - LLM orchestration runs in the **Go runtime** via native provider SDK adapters:
   - OpenAI: `openai-go` (Responses API)
   - Moonshot: `openai-go` (Chat Completions API on Moonshot base URL)
@@ -29,7 +29,7 @@ Flower task prompts are built through a section-oriented runtime prompt builder 
 - Workspace context is collected at prompt-build time and exposes:
   - environment facts such as shell, runtime home, authorized filesystem roots, approval policy, dangerous-command blocking, and whether subagent delegation is available;
   - repository state such as git repository detection, worktree root, branch/upstream, ahead-behind, linked-worktree status, and a staged/unstaged/untracked summary;
-  - durable repository rule files discovered from the current worktree path (for example `AGENTS.md`, `CLAUDE.md`, `.introduce.md`, and legacy `.develop.md`) under an explicit prompt budget;
+  - durable repository rule files discovered from the current worktree path (for example `AGENTS.md`, `CLAUDE.md`, and `.introduce.md`) under an explicit prompt budget;
   - active subagent/delegation state so the parent agent can see ongoing parallel work instead of redoing it.
 - Runtime gates remain authoritative for `ask_user` and `task_complete`; prompt structure guides model behavior but does not replace deterministic runtime validation.
 - `prompt_profile` is a real behavior switch, not metadata only:
@@ -84,8 +84,8 @@ Structured file-tool notes:
 Patch execution notes:
 
 - The model-facing `apply_patch` contract is a single canonical format: one document from `*** Begin Patch` to `*** End Patch` with relative paths plus `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks.
-- `apply_patch` remains supported during migration, but it is a compatibility path rather than the primary edit surface for new runs.
-- `diff --git` unified diff parsing remains available as a compatibility path for older payloads, but it is not the recommended format for normal Flower-authored edits.
+- `apply_patch` remains available for patch-format edits, while structured file tools are the preferred edit surface for new runs.
+- `diff --git` unified diff parsing is not the recommended format for normal Flower-authored edits.
 - Hunk matching is intentionally controlled and explainable: Flower tries exact line matching first, then trailing-whitespace-tolerant matching, then Unicode punctuation normalization.
 - If `apply_patch` fails for a normal file edit, Flower should re-read the file and regenerate a fresh canonical patch instead of switching to shell overwrite/redirection commands.
 
@@ -95,7 +95,7 @@ Terminal execution notes:
 - `terminal.exec` uses a bounded execution policy by default: when `timeout_ms` is omitted, Flower applies a 2-minute default timeout; any requested timeout is capped at 10 minutes.
 - `terminal.exec` timeout decisions are explicit and observable: the persisted terminal result records the effective timeout plus whether it came from the default policy, an explicit request, or a capped request.
 - `terminal.exec` timeout/cancel handling now terminates the full shell process tree/group rather than only the direct shell process.
-- Flower does not create new checkpoints during normal runs. Legacy checkpoint rows and `workspace_json` artifacts are retained only for backward-compatible cleanup and best-effort restore handling of pre-existing data.
+- Flower does not create new checkpoints during normal runs. Thread cleanup owns checkpoint rows and `workspace_json` artifacts when a thread is deleted.
 
 Online research notes:
 
@@ -145,7 +145,7 @@ Installer note:
 
 - Flower thread persistence is thread-scoped by default. Deleting a thread removes its transcript rows, queued followups, run records, tool-call records, run events, checkpoints, structured waiting-input rows, todos, thread state, and derived context planes.
 - Upload blobs are persisted as first-class threadstore resources (`ai_uploads`) with explicit message/followup references (`ai_upload_refs`) instead of relying on transcript JSON scraping as the steady-state ownership source.
-- Fresh uploads start as staged runtime-local blobs. Once a message or queued followup claims them, they become thread-owned resources; deleting that thread or deleting an unconsumed followup removes the corresponding refs, deletes any newly unreferenced upload blobs/metadata, and then runs best-effort SQLite compaction so on-disk usage converges after cleanup.
+- Fresh uploads start as staged runtime-local blobs. Once a message or queued followup claims them, they become thread-owned resources; deleting that thread or deleting an unconsumed followup removes the corresponding refs, deletes any newly unreferenced upload blobs/metadata, and then runs SQLite compaction so on-disk usage converges after cleanup.
 - Checkpoint restore follows the same ownership boundary: thread-scoped run/tool/activity/event artifacts that were created after the checkpoint are pruned during restore instead of being left behind as residual history.
 - Assistant transcript blocks use `markdown`, `text`, `thinking`, and `activity-timeline`. Raw `tool-call` blocks are not a Flower chat contract.
 - Checkpoints are thread-state-only and do not persist a separate workspace payload.
@@ -167,7 +167,7 @@ The eval harness runs real Flower tasks and asserts:
 - activity timeline events such as `activity.timeline.persisted`, plus compactness checks that forbid raw tool JSON in visible assistant text
 - structured filesystem-scope enforcement for `file.read`, `file.edit`, `file.write`, `apply_patch`, and `terminal.exec`
 - todo discipline, including final closeout and single `in_progress` execution
-- assistant-visible output, evidence paths, and fallback-free closeout
+- assistant-visible output, evidence paths, and deterministic closeout
 
 Each eval task now declares a workspace mode instead of always cloning the full repository:
 

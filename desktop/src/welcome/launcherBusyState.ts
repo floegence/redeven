@@ -24,7 +24,7 @@ export type BusyAction =
   | 'refresh_environment_runtime'
   | 'refresh_all_environment_runtimes'
   | 'start_control_plane_connect'
-  | 'open_flower_host'
+  | 'open_flower'
   | 'open_environment_center'
   | 'focus_environment_window'
   | 'open_environment_settings'

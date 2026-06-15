@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	flconfig "github.com/floegence/floret/config"
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/config"
@@ -27,6 +28,21 @@ func TestFloretEventSinkDoesNotProjectSanitizedProviderText(t *testing.T) {
 
 	if len(r.assistantBlocks) != 0 || len(events) != 0 {
 		t.Fatalf("provider event sink wrote assistant output: blocks=%#v events=%#v", r.assistantBlocks, events)
+	}
+}
+
+func TestRedevenFloretGatewayConfigDoesNotCarryProviderConfiguration(t *testing.T) {
+	t.Parallel()
+
+	cfg := redevenFloretGatewayConfig("system", floretContextPolicy(1000, 800, 200))
+	if cfg.Provider != flconfig.ProviderFake {
+		t.Fatalf("provider=%q, want fake gateway identity", cfg.Provider)
+	}
+	if cfg.Model != "redeven-model-gateway" {
+		t.Fatalf("model=%q, want gateway placeholder", cfg.Model)
+	}
+	if cfg.BaseURL != "" || cfg.APIKey != "" {
+		t.Fatalf("Floret config must not carry Redeven provider endpoint or secret: base_url=%q api_key=%q", cfg.BaseURL, cfg.APIKey)
 	}
 }
 

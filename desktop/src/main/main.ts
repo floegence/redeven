@@ -1,6 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import http from 'node:http';
+import https from 'node:https';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -53,29 +55,6 @@ import {
   type DesktopSavedRuntimeTarget,
   type DesktopSavedSSHEnvironment,
 } from './desktopPreferences';
-import {
-  createDesktopFlowerHostSafeStorageSecretCodec,
-  defaultDesktopFlowerHostPaths,
-  loadDesktopFlowerHostTargetCache,
-  saveDesktopFlowerHostTargetCache,
-} from './desktopFlowerHostState';
-import {
-  forkFlowerHostThreadViaBridge,
-  listFlowerHostThreadsViaBridge,
-  loadFlowerHostThreadViaBridge,
-  loadFlowerHostSettingsViaBridge,
-  markFlowerHostThreadReadViaBridge,
-  renameFlowerHostThreadViaBridge,
-  resolveFlowerHostFileActionOpenTargetViaBridge,
-  resolveFlowerHostHandlerViaBridge,
-  saveFlowerHostSettingsViaBridge,
-  sendFlowerHostChatResultViaBridge,
-  setFlowerHostThreadPinnedViaBridge,
-  submitFlowerHostInputViaBridge,
-  shutdownFlowerHostBridge,
-  type DesktopFlowerHostTargetSessionGrant,
-  type DesktopFlowerHostTargetSessionRequest,
-} from './flowerHostBridge';
 import {
   buildLocalEnvironmentDesktopTarget,
   buildGatewayDesktopTarget,
@@ -265,7 +244,6 @@ import {
   refreshProviderDesktopAccessToken,
   revokeProviderDesktopAuthorization,
   requestDesktopOpenSession,
-  fetchProviderJSON,
 } from './controlPlaneProviderClient';
 import {
   buildControlPlaneAuthorizationBrowserURL,
@@ -307,42 +285,11 @@ import {
   type SaveDesktopSettingsResult,
 } from '../shared/settingsIPC';
 import {
-  FORK_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
-  LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL,
-  LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
-  LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
-  MARK_DESKTOP_FLOWER_HOST_THREAD_READ_CHANNEL,
-  OPEN_DESKTOP_FLOWER_HOST_FILE_ACTION_CHANNEL,
-  RENAME_DESKTOP_FLOWER_HOST_THREAD_CHANNEL,
-  RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL,
-  SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL,
-  SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL,
-  SET_DESKTOP_FLOWER_HOST_THREAD_PINNED_CHANNEL,
-  SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL,
-  type DesktopFlowerHostError,
-  type DesktopFlowerHostFileActionOpenRequest,
-  type DesktopFlowerHostForkThreadRequest,
-  type DesktopFlowerHostMarkThreadReadRequest,
-  type DesktopFlowerHostRenameThreadRequest,
-  type DesktopFlowerHostResolveHandlerRequest,
-  type DesktopFlowerHostSendChatRequest,
-  type DesktopFlowerHostSetThreadPinnedRequest,
-  type DesktopFlowerHostSettingsDraft,
-  type DesktopFlowerHostSubmitInputRequest,
-  type ForkDesktopFlowerHostThreadResult,
-  type ListDesktopFlowerHostThreadsResult,
-  type LoadDesktopFlowerHostThreadResult,
-  type LoadDesktopFlowerHostSettingsResult,
-  type MarkDesktopFlowerHostThreadReadResult,
-  normalizeDesktopFlowerHostFileActionOpenRequest,
-  type OpenDesktopFlowerHostFileActionResult,
-  type RenameDesktopFlowerHostThreadResult,
-  type ResolveDesktopFlowerHostHandlerResult,
-  type SendDesktopFlowerHostChatResult,
-  type SaveDesktopFlowerHostSettingsResult,
-  type SetDesktopFlowerHostThreadPinnedResult,
-  type SubmitDesktopFlowerHostInputResult,
-} from '../shared/flowerHostSettingsIPC';
+  REQUEST_RUNTIME_FLOWER_CHANNEL,
+  type RuntimeFlowerError,
+  type RuntimeFlowerRequest,
+  type RuntimeFlowerRequestResult,
+} from '../shared/runtimeFlowerIPC';
 import {
   DESKTOP_STATE_GET_CHANNEL,
   DESKTOP_STATE_KEYS_CHANNEL,
@@ -917,55 +864,56 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function desktopFlowerHostError(code: string, message: string): DesktopFlowerHostError {
+function runtimeFlowerRetryAfterMs(value: unknown): number | undefined {
+  const retryAfterMs = Number(value);
+  return Number.isFinite(retryAfterMs) && retryAfterMs >= 0 ? Math.floor(retryAfterMs) : undefined;
+}
+
+function runtimeFlowerError(code: string, message: string, status?: number, retryAfterMs?: number): RuntimeFlowerError {
   return {
-    code: compact(code) || 'flower_host_error',
-    message: compact(message) || 'Flower Host request failed.',
+    code: compact(code) || 'runtime_flower_error',
+    message: compact(message) || 'Flower request failed.',
+    ...(Number.isInteger(status) ? { status } : {}),
+    ...(typeof retryAfterMs === 'number' ? { retryAfterMs } : {}),
   };
 }
 
-function desktopFlowerHostErrorFromUnknown(error: unknown): DesktopFlowerHostError {
-  const record = error as { code?: unknown; message?: unknown };
-  return desktopFlowerHostError(
-    compact(record?.code) || 'flower_host_error',
+function runtimeFlowerErrorFromUnknown(error: unknown): RuntimeFlowerError {
+  const record = error as { code?: unknown; message?: unknown; status?: unknown; statusCode?: unknown; retryAfterMs?: unknown };
+  const status = Number(record?.status ?? record?.statusCode);
+  return runtimeFlowerError(
+    compact(record?.code) || 'runtime_flower_error',
     error instanceof Error ? error.message : compact(record?.message) || String(error),
+    Number.isInteger(status) ? status : undefined,
+    runtimeFlowerRetryAfterMs(record?.retryAfterMs),
   );
 }
 
-async function openDesktopFlowerHostFileAction(request: DesktopFlowerHostFileActionOpenRequest): Promise<OpenDesktopFlowerHostFileActionResult> {
-  try {
-    const target = await resolveFlowerHostFileActionOpenTargetViaBridge({
-      ...flowerHostBridgeArgs(),
-      request,
-    });
-    const path = target.path;
-    if (request.action === 'preview') {
-      const message = await shell.openPath(path);
-      if (message) {
-        return { ok: false, error: desktopFlowerHostError('file_preview_failed', message) };
-      }
-      return { ok: true };
-    }
+const LOCAL_UI_ACCESS_COOKIE_NAME = 'redeven_local_access';
+const runtimeFlowerAccessCookies = new Map<string, string>();
 
-    const info = await fs.stat(path).catch(() => null);
-    if (info?.isDirectory()) {
-      const message = await shell.openPath(path);
-      if (message) {
-        return { ok: false, error: desktopFlowerHostError('directory_open_failed', message) };
-      }
-      return { ok: true };
+function runtimeFlowerBaseURL(record: LocalEnvironmentRuntimeRecord): string {
+  return new URL('/', record.startup.local_ui_url).toString();
+}
+
+function runtimeFlowerAccessCookieHeader(cookieValue: string): string {
+  return `${LOCAL_UI_ACCESS_COOKIE_NAME}=${cookieValue}`;
+}
+
+function runtimeFlowerAccessCookieFromHeaders(headers: http.IncomingHttpHeaders): string {
+  const setCookie = headers['set-cookie'];
+  const values = Array.isArray(setCookie)
+    ? setCookie
+    : typeof setCookie === 'string'
+      ? [setCookie]
+      : [];
+  for (const value of values) {
+    const match = value.match(new RegExp(`^${LOCAL_UI_ACCESS_COOKIE_NAME}=([^;,]+)`, 'iu'));
+    if (match?.[1]) {
+      return compact(match[1]);
     }
-    shell.showItemInFolder(path);
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      error: desktopFlowerHostError(
-        request.action === 'preview' ? 'file_preview_failed' : 'directory_open_failed',
-        error instanceof Error ? error.message : 'Desktop could not open this file action.',
-      ),
-    };
   }
+  return '';
 }
 
 function bundledRuntimeExecutablePath(): string {
@@ -1365,28 +1313,6 @@ type ProviderDesktopSessionMaterial = Readonly<{
 
 type ProviderDesktopSessionMaterialOptions = Readonly<{
   requireRemoteRouteReady?: boolean;
-}>;
-
-type FlowerHostBootPayload = Readonly<{
-  v?: unknown;
-  env_public_id?: unknown;
-  floe_app?: unknown;
-  code_space_id?: unknown;
-  boot_ticket?: unknown;
-}>;
-
-type FlowerHostParsedBootPayload = Readonly<{
-  sandboxOrigin: string;
-  payload: FlowerHostBootPayload;
-}>;
-
-type ProviderEnvAppEntryTicketResponse = Readonly<{
-  entry_ticket?: unknown;
-  expires_at_unix_ms?: unknown;
-}>;
-
-type ProviderTargetGrantResponse = Readonly<{
-  grant_client?: unknown;
 }>;
 
 function launcherActionFailureForMissingProviderEnvironment(
@@ -2578,63 +2504,6 @@ function gatewayLifecycleManager(): GatewayLifecycleManager {
   return gatewayLifecycleManagerCache;
 }
 
-function flowerHostPaths() {
-  return defaultDesktopFlowerHostPaths();
-}
-
-function flowerHostCodec() {
-  return createDesktopFlowerHostSafeStorageSecretCodec(safeStorage);
-}
-
-function flowerHostBridgeArgs() {
-  return {
-    executablePath: bundledRuntimeExecutablePath(),
-    paths: flowerHostPaths(),
-    codec: flowerHostCodec(),
-    openTargetSession: openFlowerHostTargetSession,
-    tempRoot: app.getPath('temp'),
-    onLog: (stream: 'stdout' | 'stderr', chunk: string) => {
-      const text = compact(chunk);
-      if (text) console.log(`[redeven:flower-host:${stream}] ${text}`);
-    },
-  };
-}
-
-function normalizeFlowerHostRequiredCapabilities(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const item of value) {
-    const capability = compact(item).toLowerCase();
-    if (capability !== 'read' && capability !== 'write' && capability !== 'execute') {
-      throw new Error('Target capability request is invalid.');
-    }
-    if (!seen.has(capability)) {
-      seen.add(capability);
-      out.push(capability);
-    }
-  }
-  return out;
-}
-
-function targetSessionCapabilitiesFor(requiredCapabilities: readonly string[]): DesktopFlowerHostTargetSessionGrant['capabilities'] {
-  const required = new Set(requiredCapabilities);
-  return {
-    can_read: required.size === 0 || required.has('read'),
-    can_write: required.has('write'),
-    can_execute: required.has('execute'),
-  };
-}
-
-function providerNeutralSessionURL(origin: string, pathname: string, search = ''): string {
-  const url = new URL(pathname, normalizeControlPlaneOrigin(origin));
-  url.search = search;
-  url.hash = '';
-  return url.toString();
-}
-
 function stripSensitiveURLPayload(rawURL: string): string {
   const cleanURL = compact(rawURL);
   if (!cleanURL) {
@@ -2668,46 +2537,6 @@ function rendererSafeSessionURL(session: DesktopSessionRecord): string {
   return stripSensitiveURLPayload(session.entry_url) || stripSensitiveURLPayload(session.startup.local_ui_url);
 }
 
-function parseFlowerHostBootPayload(remoteSessionURL: string): FlowerHostParsedBootPayload {
-  const parsed = new URL(remoteSessionURL);
-  const sandboxOrigin = normalizeControlPlaneOrigin(parsed.origin);
-  const hash = parsed.hash.startsWith('#') ? parsed.hash.slice(1) : parsed.hash;
-  const params = new URLSearchParams(hash);
-  const encoded = params.get('redeven') ?? '';
-  if (!encoded) {
-    throw new Error('Provider remote session URL is missing its boot payload.');
-  }
-  const normalized = encoded.replace(/-/gu, '+').replace(/_/gu, '/');
-  const padded = `${normalized}${'='.repeat((4 - normalized.length % 4) % 4)}`;
-  const payload = JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as unknown;
-  if (!payload || typeof payload !== 'object') {
-    throw new Error('Provider remote session boot payload is invalid.');
-  }
-  return {
-    sandboxOrigin,
-    payload: payload as FlowerHostBootPayload,
-  };
-}
-
-function providerSandboxHeaders(sandboxOrigin: string): Readonly<Record<string, string>> {
-  const origin = normalizeControlPlaneOrigin(sandboxOrigin);
-  const { protocol, host } = new URL(origin);
-  return {
-    Origin: origin,
-    'X-Forwarded-Proto': protocol.replace(':', ''),
-    Host: host,
-  };
-}
-
-function cookieHeaderFromSetCookie(headers: Readonly<Record<string, string>>): string {
-  const raw = Object.entries(headers)
-    .filter(([name]) => name.toLowerCase() === 'set-cookie')
-    .map(([, value]) => value)
-    .join(',');
-  const match = raw.match(/__Host-redeven_env_session=([^;,]+)/u);
-  return match ? `__Host-redeven_env_session=${match[1]}` : '';
-}
-
 async function installGatewaySessionCookies(
   targetURL: string,
   setCookieHeaders: readonly string[] | undefined,
@@ -2733,206 +2562,6 @@ async function installGatewaySessionCookies(
       secure: parsed.protocol === 'https:',
     });
   }
-}
-
-function normalizeProviderEnvelopeData<T>(body: unknown, label: string): T {
-  if (!body || typeof body !== 'object') {
-    throw new Error(`Provider returned an invalid ${label}.`);
-  }
-  const record = body as { success?: unknown; data?: unknown };
-  if (record.success === false) {
-    throw new Error(`Provider rejected ${label}.`);
-  }
-  return (record.success === true ? record.data : body) as T;
-}
-
-async function rememberFlowerHostProviderTarget(input: Readonly<{
-  targetID: string;
-  providerOrigin: string;
-  providerID: string;
-  envPublicID: string;
-  label: string;
-  targetURL: string;
-}>): Promise<void> {
-  const paths = flowerHostPaths();
-  const targetID = compact(input.targetID);
-  if (!targetID) {
-    return;
-  }
-  const cache = await loadDesktopFlowerHostTargetCache(paths);
-  const nextEntry = {
-    target_id: targetID,
-    label: compact(input.label) || compact(input.envPublicID) || targetID,
-    target_url: compact(input.targetURL),
-    last_seen_at_unix_ms: Date.now(),
-    metadata: {
-      target_kind: 'provider_environment',
-      provider_origin: normalizeControlPlaneOrigin(input.providerOrigin),
-      provider_id: compact(input.providerID),
-      env_public_id: compact(input.envPublicID),
-      connect_state: 'connectable',
-    },
-  };
-  await saveDesktopFlowerHostTargetCache(paths, {
-    version: 1,
-    entries: [
-      nextEntry,
-      ...cache.entries.filter((entry) => compact(entry.target_id) !== targetID),
-    ],
-  });
-}
-
-function grantExpiresAtUnixMS(grant: unknown): number {
-  if (!grant || typeof grant !== 'object') {
-    throw new Error('Provider returned an incomplete target grant.');
-  }
-  const raw = Number((grant as Record<string, unknown>).channel_init_expire_at_unix_s);
-  if (!Number.isFinite(raw) || raw <= 0) {
-    throw new Error('Provider returned a target grant without a valid expiration.');
-  }
-  const expiresAtUnixMS = Math.floor(raw * 1000);
-  if (expiresAtUnixMS <= Date.now()) {
-    throw new Error('Provider returned an expired target grant.');
-  }
-  return expiresAtUnixMS;
-}
-
-function entryTicketExpiresAtUnixMS(entry: ProviderEnvAppEntryTicketResponse): number {
-  const expiresAtUnixMS = Number(entry.expires_at_unix_ms);
-  if (!Number.isFinite(expiresAtUnixMS) || expiresAtUnixMS <= Date.now()) {
-    throw new Error('Provider returned an expired target entry ticket.');
-  }
-  return expiresAtUnixMS;
-}
-
-async function openFlowerHostTargetSession(
-  request: DesktopFlowerHostTargetSessionRequest,
-): Promise<DesktopFlowerHostTargetSessionGrant> {
-  const targetID = compact(request.target_id);
-  const providerOrigin = normalizeControlPlaneOrigin(compact(request.provider_origin));
-  const providerID = compact(request.provider_id);
-  const envPublicID = compact(request.env_public_id);
-  if (!targetID || !providerOrigin || !providerID || !envPublicID) {
-    throw new Error('Target session request is incomplete.');
-  }
-  const requiredCapabilities = normalizeFlowerHostRequiredCapabilities(request.required_capabilities);
-  const preferences = await loadDesktopPreferencesCached();
-  const environment = findProviderEnvironmentByID(
-    preferences,
-    desktopProviderEnvironmentID(providerOrigin, envPublicID),
-  );
-  if (!environment) {
-    throw new Error('Target environment is not available in this Desktop provider catalog.');
-  }
-  if (environment.provider_id !== providerID) {
-    throw new Error('Target provider identity does not match the saved environment.');
-  }
-  const material = await requestProviderDesktopSessionMaterial(preferences, environment, {
-    requireRemoteRouteReady: true,
-  });
-  if (material.controlPlane.provider.provider_id !== providerID) {
-    throw new Error('Target provider identity does not match the saved authorization.');
-  }
-  const latest = controlPlaneRouteSnapshot(
-    material.preferences,
-    providerOrigin,
-    providerID,
-    envPublicID,
-  );
-  if (!latest.environment) {
-    throw new Error('Target environment is no longer visible to this Desktop authorization.');
-  }
-  if (latest.remoteRouteState !== 'ready') {
-    throw new Error('Target environment is not currently reachable through this Desktop authorization.');
-  }
-  if (!material.remoteSessionURL) {
-    throw new Error('Provider did not return remote session material for target access.');
-  }
-  await rememberFlowerHostProviderTarget({
-    targetID,
-    providerOrigin,
-    providerID,
-    envPublicID,
-    label: latest.environment.label || environment.label,
-    targetURL: latest.environment.environment_url || stripSensitiveURLPayload(material.remoteSessionURL),
-  });
-  const parsedBoot = parseFlowerHostBootPayload(material.remoteSessionURL);
-  const bootPayload = parsedBoot.payload;
-  const bootTicket = compact(bootPayload.boot_ticket);
-  if (
-    Number(bootPayload.v) !== 2
-    || compact(bootPayload.env_public_id) !== envPublicID
-    || compact(bootPayload.floe_app) !== 'com.floegence.redeven.agent'
-    || compact(bootPayload.code_space_id) !== 'env-ui'
-    || bootTicket === ''
-  ) {
-    throw new Error('Provider remote session boot payload is invalid for Flower target access.');
-  }
-  const sandboxOrigin = parsedBoot.sandboxOrigin;
-  const sandboxHeaders = providerSandboxHeaders(sandboxOrigin);
-  const bootExchange = await fetchProviderJSON(providerNeutralSessionURL(sandboxOrigin, '/api/srv/v1/floeproxy/boot/exchange'), {
-    method: 'POST',
-    bearerToken: bootTicket,
-    operationLabel: 'the provider environment boot exchange',
-    extraHeaders: sandboxHeaders,
-  });
-  const sessionCookie = cookieHeaderFromSetCookie(bootExchange.headers);
-  if (!sessionCookie) {
-    throw new Error('Provider did not return a target environment session cookie.');
-  }
-  const entryResponse = await fetchProviderJSON(providerNeutralSessionURL(sandboxOrigin, '/api/srv/v1/floeproxy/entry'), {
-    method: 'POST',
-    body: {
-      endpoint_id: envPublicID,
-      floe_app: 'com.floegence.redeven.agent',
-      code_space_id: 'env-ui',
-      session_kind: 'envapp_rpc',
-    },
-    operationLabel: 'the provider environment entry ticket',
-    extraHeaders: {
-      ...sandboxHeaders,
-      Cookie: sessionCookie,
-    },
-  });
-  const entry = normalizeProviderEnvelopeData<ProviderEnvAppEntryTicketResponse>(
-    entryResponse.body,
-    'target entry ticket response',
-  );
-  const entryTicket = compact(entry.entry_ticket);
-  if (!entryTicket) {
-    throw new Error('Provider returned an incomplete target entry ticket.');
-  }
-  const entryExpiresAtUnixMS = entryTicketExpiresAtUnixMS(entry);
-  const grantResponse = await fetchProviderJSON(providerNeutralSessionURL(
-    sandboxOrigin,
-    '/v1/channel/init/entry',
-    `?endpoint_id=${encodeURIComponent(envPublicID)}`,
-  ), {
-    method: 'POST',
-    bearerToken: entryTicket,
-    body: {
-      endpoint_id: envPublicID,
-      floe_app: 'com.floegence.redeven.agent',
-    },
-    operationLabel: 'the provider target grant',
-    extraHeaders: sandboxHeaders,
-  });
-  const grantBody = normalizeProviderEnvelopeData<ProviderTargetGrantResponse>(
-    grantResponse.body,
-    'target grant response',
-  );
-  const grantClient = grantBody.grant_client;
-  if (!grantClient || typeof grantClient !== 'object' || !compact((grantClient as Record<string, unknown>).channel_id)) {
-    throw new Error('Provider returned an incomplete target grant.');
-  }
-  return {
-    target_id: targetID,
-    provider_origin: providerOrigin,
-    env_public_id: envPublicID,
-    grant_client: grantClient,
-    capabilities: targetSessionCapabilitiesFor(requiredCapabilities),
-    expires_at_unix_ms: Math.min(grantExpiresAtUnixMS(grantClient), entryExpiresAtUnixMS),
-  };
 }
 
 function desktopStateStore(): DesktopStateStore {
@@ -7788,6 +7417,272 @@ async function attachLocalEnvironmentRuntime(
       desktopOwnerID: await desktopRuntimeOwnerID(),
     }),
   );
+}
+
+function runtimeFlowerPath(rawPath: unknown): string {
+  const raw = compact(rawPath);
+  if (!raw.startsWith('/')) {
+    throw new Error('Flower runtime request path must be absolute.');
+  }
+  const parsed = new URL(raw, 'http://runtime-flower.local');
+  const pathname = parsed.pathname;
+  if (parsed.hash) {
+    throw new Error('Flower runtime request path is not allowed.');
+  }
+  const query = parsed.search;
+  const pathWithQuery = `${pathname}${query}`;
+  const allowsLimitQuery = (value: string) => value === '' || /^\?limit=\d{1,4}$/u.test(value);
+  if (pathname === '/_redeven_proxy/api/settings' && query === '') return pathWithQuery;
+  if (pathname === '/_redeven_proxy/api/ai/provider_bundle' && query === '') return pathWithQuery;
+  if (pathname === '/_redeven_proxy/api/ai/models' && query === '') return pathWithQuery;
+  if (pathname === '/_redeven_proxy/api/ai/runs' && query === '') return pathWithQuery;
+  if (pathname === '/_redeven_proxy/api/ai/uploads' && query === '') return pathWithQuery;
+  if (pathname === '/_redeven_proxy/api/ai/threads' && allowsLimitQuery(query)) return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname) && query === '') return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/messages$/u.test(pathname) && allowsLimitQuery(query)) return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname) && query === '') return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u.test(pathname) && query === '') return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u.test(pathname) && query === '') return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/events$/u.test(pathname) && /^\?after_seq=\d+$/u.test(query)) return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/cancel$/u.test(pathname) && query === '') return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/tool_approvals$/u.test(pathname) && query === '') return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname) && query === '') return pathWithQuery;
+  throw new Error('Flower runtime request path is not allowed.');
+}
+
+function runtimeFlowerMethodAllowed(path: string, method: RuntimeFlowerRequest['method']): boolean {
+  const pathname = new URL(path, 'http://runtime-flower.local').pathname;
+  switch (method) {
+    case 'GET':
+      return pathname === '/_redeven_proxy/api/settings'
+        || pathname === '/_redeven_proxy/api/ai/models'
+        || pathname === '/_redeven_proxy/api/ai/threads'
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/messages$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/events$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname);
+    case 'POST':
+      return pathname === '/_redeven_proxy/api/ai/runs'
+        || pathname === '/_redeven_proxy/api/ai/uploads'
+        || pathname === '/_redeven_proxy/api/ai/threads'
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/cancel$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/tool_approvals$/u.test(pathname);
+    case 'PUT':
+      return pathname === '/_redeven_proxy/api/ai/provider_bundle';
+    case 'PATCH':
+      return /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname);
+    case 'DELETE':
+      return /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname);
+    default:
+      return false;
+  }
+}
+
+function runtimeFlowerMethod(rawMethod: unknown): RuntimeFlowerRequest['method'] {
+  const method = compact(rawMethod).toUpperCase();
+  switch (method) {
+    case 'GET':
+    case 'POST':
+    case 'PUT':
+    case 'PATCH':
+    case 'DELETE':
+      return method;
+    default:
+      throw new Error('Flower runtime request method is not allowed.');
+  }
+}
+
+async function ensureRuntimeFlowerRecord(): Promise<LocalEnvironmentRuntimeRecord> {
+  const preferences = await loadDesktopPreferencesCached();
+  const environment = preferences.local_environment;
+  const attached = await attachLocalEnvironmentRuntime(environment);
+  if (attached) {
+    if (!runtimeServiceIsOpenable(attached.startup.runtime_service)) {
+      throw new Error(runtimeServiceOpenReadinessLabel(attached.startup.runtime_service) || 'Local Environment is not ready to open Flower.');
+    }
+    return attached;
+  }
+  const prepared = await prepareManagedTarget({ environment });
+  if (!prepared.ok) {
+    throw new Error(prepared.issue.message || 'Desktop could not start Local Environment.');
+  }
+  if (prepared.launch.kind !== 'ready') {
+    throw new Error('Desktop could not start Local Environment.');
+  }
+  const record = updateLocalEnvironmentRuntimeRecord(
+    environment,
+    prepared.launch.managedRuntime.startup,
+    desktopSessionRuntimeHandleFromManagedRuntime(prepared.launch.managedRuntime, {
+      persistedOwner: environment.local_hosting?.owner,
+      desktopOwnerID: await desktopRuntimeOwnerID(),
+    }),
+  );
+  if (!runtimeServiceIsOpenable(record.startup.runtime_service)) {
+    throw new Error(runtimeServiceOpenReadinessLabel(record.startup.runtime_service) || 'Local Environment is not ready to open Flower.');
+  }
+  broadcastDesktopWelcomeSnapshots();
+  return record;
+}
+
+type RuntimeFlowerHTTPResponse = Readonly<{
+  status: number;
+  body: string;
+  headers: http.IncomingHttpHeaders;
+}>;
+
+function runtimeFlowerRequestHTTP(
+  url: URL,
+  request: RuntimeFlowerRequest,
+  options: Readonly<{ headers?: Readonly<Record<string, string>> }> = {},
+): Promise<RuntimeFlowerHTTPResponse> {
+  return new Promise((resolve, reject) => {
+    const body = request.body === undefined ? '' : JSON.stringify(request.body);
+    const client = url.protocol === 'https:' ? https : http;
+    const req = client.request(url, {
+      method: request.method,
+      timeout: 120_000,
+      headers: {
+        Accept: 'application/json',
+        ...(options.headers ?? {}),
+        ...(body ? {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        } : {}),
+      },
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on('data', (chunk: Buffer | string) => {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      });
+      res.on('end', () => {
+        resolve({
+          status: res.statusCode ?? 0,
+          body: Buffer.concat(chunks).toString('utf8'),
+          headers: res.headers,
+        });
+      });
+    });
+    req.on('timeout', () => {
+      req.destroy(new Error('Flower runtime request timed out.'));
+    });
+    req.on('error', reject);
+    if (body) {
+      req.write(body);
+    }
+    req.end();
+  });
+}
+
+function parseRuntimeFlowerJSON(body: string): unknown {
+  if (!compact(body)) {
+    return null;
+  }
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    return body;
+  }
+}
+
+function runtimeFlowerEnvelopeError(parsed: unknown, status: number): RuntimeFlowerError | null {
+  const record = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  if (!record || record.ok !== false) {
+    return status >= 400 ? runtimeFlowerError('runtime_flower_http_error', `Flower request failed with HTTP ${status}.`, status) : null;
+  }
+  const rawError = record.error;
+  if (rawError && typeof rawError === 'object') {
+    const error = rawError as Record<string, unknown>;
+    return runtimeFlowerError(
+      compact(error.code) || 'runtime_flower_request_failed',
+      compact(error.message) || compact(error.redacted_detail) || `Flower request failed with HTTP ${status}.`,
+      status,
+      runtimeFlowerRetryAfterMs(error.retry_after_ms),
+    );
+  }
+  return runtimeFlowerError(
+    'runtime_flower_request_failed',
+    compact(rawError) || `Flower request failed with HTTP ${status}.`,
+    status,
+    runtimeFlowerRetryAfterMs(record.retry_after_ms),
+  );
+}
+
+async function unlockRuntimeFlowerAccess(
+  record: LocalEnvironmentRuntimeRecord,
+  environment: DesktopLocalEnvironmentState,
+): Promise<string> {
+  const baseURL = runtimeFlowerBaseURL(record);
+  const access = localEnvironmentAccess(environment);
+  if (!access.local_ui_password_configured || !compact(access.local_ui_password)) {
+    throw new Error('Local Environment requires the configured Local UI password before Flower can open.');
+  }
+  const response = await runtimeFlowerRequestHTTP(new URL('/api/local/access/unlock', baseURL), {
+    method: 'POST',
+    path: '/api/local/access/unlock',
+    body: { password: access.local_ui_password },
+  });
+  const parsed = parseRuntimeFlowerJSON(response.body);
+  const error = runtimeFlowerEnvelopeError(parsed, response.status);
+  if (error || response.status < 200 || response.status >= 300) {
+    throw (error ?? runtimeFlowerError(
+      'runtime_flower_unlock_failed',
+      `Local Environment access unlock failed with HTTP ${response.status}.`,
+      response.status,
+    ));
+  }
+  const cookie = runtimeFlowerAccessCookieFromHeaders(response.headers);
+  if (!cookie) {
+    throw new Error('Local Environment did not return an access session for Flower.');
+  }
+  runtimeFlowerAccessCookies.set(baseURL, cookie);
+  return cookie;
+}
+
+async function runtimeFlowerAccessHeaders(
+  record: LocalEnvironmentRuntimeRecord,
+  environment: DesktopLocalEnvironmentState,
+): Promise<Record<string, string>> {
+  if (record.startup.password_required !== true) {
+    return {};
+  }
+  const baseURL = runtimeFlowerBaseURL(record);
+  const cookie = runtimeFlowerAccessCookies.get(baseURL) || await unlockRuntimeFlowerAccess(record, environment);
+  return {
+    Cookie: runtimeFlowerAccessCookieHeader(cookie),
+  };
+}
+
+async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> {
+  const method = runtimeFlowerMethod(request.method);
+  const path = runtimeFlowerPath(request.path);
+  if (!runtimeFlowerMethodAllowed(path, method)) {
+    throw new Error('Flower runtime request method is not allowed for this path.');
+  }
+  const preferences = await loadDesktopPreferencesCached();
+  const record = await ensureRuntimeFlowerRecord();
+  const url = new URL(path, record.startup.local_ui_url);
+  const environment = preferences.local_environment;
+  let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);
+  let response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
+  if (response.status === 423) {
+    runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
+    const cookie = await unlockRuntimeFlowerAccess(record, environment);
+    accessHeaders = { Cookie: runtimeFlowerAccessCookieHeader(cookie) };
+    response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
+  }
+  const parsed = parseRuntimeFlowerJSON(response.body);
+  const error = runtimeFlowerEnvelopeError(parsed, response.status);
+  if (error) {
+    return { ok: false, error };
+  }
+  const dataRecord = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+  return {
+    ok: true,
+    data: dataRecord && Object.prototype.hasOwnProperty.call(dataRecord, 'data') ? dataRecord.data : parsed,
+  };
 }
 
 async function assertLocalEnvironmentRuntimeStopped(
@@ -15579,13 +15474,13 @@ async function performDesktopLauncherAction(request: DesktopLauncherActionReques
         selectedEnvironmentID: request.environment_id,
         stealAppFocus: true,
       });
-    case 'open_flower_host':
+    case 'open_flower':
       return openUtilityWindow('launcher', {
-        surface: 'flower_host',
+        surface: 'flower',
         issue: null,
         stealAppFocus: true,
       }).then((result) => (
-        result.ok ? launcherActionSuccess('opened_flower_host', { utilityWindowKind: 'launcher' }) : result
+        result.ok ? launcherActionSuccess('opened_flower', { utilityWindowKind: 'launcher' }) : result
       ));
     case 'open_environment_center':
       return openUtilityWindow('launcher', {
@@ -15826,9 +15721,6 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   await Promise.allSettled([...sessionCloseTasks.values()]);
   await Promise.allSettled(sshDisconnectPromises);
   await Promise.allSettled(runtimePlacementDisconnectPromises);
-  await shutdownFlowerHostBridge().catch((error) => {
-    console.warn('[redeven:flower-host] failed to shut down cleanly:', error);
-  });
   await Promise.race([
     Promise.allSettled([
       ...pendingSSHStartPromises,
@@ -16301,199 +16193,15 @@ if (!app.requestSingleInstanceLock()) {
       };
     }
   });
-  ipcMain.handle(LOAD_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL, async (): Promise<LoadDesktopFlowerHostSettingsResult> => {
+  ipcMain.handle(REQUEST_RUNTIME_FLOWER_CHANNEL, async (_event, request: RuntimeFlowerRequest): Promise<RuntimeFlowerRequestResult> => {
     try {
-      return {
-        ok: true,
-        snapshot: await loadFlowerHostSettingsViaBridge(flowerHostBridgeArgs()),
-      };
+      return await requestRuntimeFlower(request);
     } catch (error) {
       return {
         ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
+        error: runtimeFlowerErrorFromUnknown(error),
       };
     }
-  });
-  ipcMain.handle(SAVE_DESKTOP_FLOWER_HOST_SETTINGS_CHANNEL, async (_event, draft: DesktopFlowerHostSettingsDraft): Promise<SaveDesktopFlowerHostSettingsResult> => {
-    try {
-      return {
-        ok: true,
-        snapshot: await saveFlowerHostSettingsViaBridge({
-          ...flowerHostBridgeArgs(),
-          draft,
-        }),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
-      };
-    }
-  });
-  ipcMain.handle(LIST_DESKTOP_FLOWER_HOST_THREADS_CHANNEL, async (): Promise<ListDesktopFlowerHostThreadsResult> => {
-    try {
-      return {
-        ok: true,
-        threads: await listFlowerHostThreadsViaBridge(flowerHostBridgeArgs()),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
-      };
-    }
-  });
-  ipcMain.handle(LOAD_DESKTOP_FLOWER_HOST_THREAD_CHANNEL, async (_event, threadID: string): Promise<LoadDesktopFlowerHostThreadResult> => {
-    try {
-      return {
-        ok: true,
-        thread: await loadFlowerHostThreadViaBridge({
-          ...flowerHostBridgeArgs(),
-          threadID,
-        }),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
-      };
-    }
-  });
-  ipcMain.handle(MARK_DESKTOP_FLOWER_HOST_THREAD_READ_CHANNEL, async (_event, request: DesktopFlowerHostMarkThreadReadRequest): Promise<MarkDesktopFlowerHostThreadReadResult> => {
-    try {
-      return {
-        ok: true,
-        thread: await markFlowerHostThreadReadViaBridge({
-          ...flowerHostBridgeArgs(),
-          request,
-        }),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
-      };
-    }
-  });
-  ipcMain.handle(RENAME_DESKTOP_FLOWER_HOST_THREAD_CHANNEL, async (_event, request: DesktopFlowerHostRenameThreadRequest): Promise<RenameDesktopFlowerHostThreadResult> => {
-    try {
-      return {
-        ok: true,
-        thread: await renameFlowerHostThreadViaBridge({
-          ...flowerHostBridgeArgs(),
-          request,
-        }),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
-      };
-    }
-  });
-  ipcMain.handle(SET_DESKTOP_FLOWER_HOST_THREAD_PINNED_CHANNEL, async (_event, request: DesktopFlowerHostSetThreadPinnedRequest): Promise<SetDesktopFlowerHostThreadPinnedResult> => {
-    try {
-      return {
-        ok: true,
-        thread: await setFlowerHostThreadPinnedViaBridge({
-          ...flowerHostBridgeArgs(),
-          request,
-        }),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
-      };
-    }
-  });
-  ipcMain.handle(FORK_DESKTOP_FLOWER_HOST_THREAD_CHANNEL, async (_event, request: DesktopFlowerHostForkThreadRequest): Promise<ForkDesktopFlowerHostThreadResult> => {
-    try {
-      return {
-        ok: true,
-        thread: await forkFlowerHostThreadViaBridge({
-          ...flowerHostBridgeArgs(),
-          request,
-        }),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
-      };
-    }
-  });
-  ipcMain.handle(RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL, async (_event, request?: DesktopFlowerHostResolveHandlerRequest): Promise<ResolveDesktopFlowerHostHandlerResult> => {
-    try {
-      return {
-        ok: true,
-        decision: await resolveFlowerHostHandlerViaBridge({
-          ...flowerHostBridgeArgs(),
-          request,
-        }),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
-      };
-    }
-  });
-  ipcMain.handle(SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL, async (_event, request: DesktopFlowerHostSendChatRequest): Promise<SendDesktopFlowerHostChatResult> => {
-    try {
-      const result = await sendFlowerHostChatResultViaBridge({
-        ...flowerHostBridgeArgs(),
-        request,
-      });
-      if ('create_failure' in result) {
-        if (result.create_failure.fresh_decision) {
-          return {
-            ok: false,
-            error: result.create_failure.error,
-            fresh_decision: result.create_failure.fresh_decision,
-          };
-        }
-        return {
-          ok: false,
-          error: result.create_failure.error,
-        };
-      }
-      return {
-        ok: true,
-        thread: result.thread,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
-      };
-    }
-  });
-  ipcMain.handle(SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL, async (_event, request: DesktopFlowerHostSubmitInputRequest): Promise<SubmitDesktopFlowerHostInputResult> => {
-    try {
-      return {
-        ok: true,
-        thread: await submitFlowerHostInputViaBridge({
-          ...flowerHostBridgeArgs(),
-          request,
-        }),
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        error: desktopFlowerHostErrorFromUnknown(error),
-      };
-    }
-  });
-  ipcMain.handle(OPEN_DESKTOP_FLOWER_HOST_FILE_ACTION_CHANNEL, async (_event, request): Promise<OpenDesktopFlowerHostFileActionResult> => {
-    const normalized = normalizeDesktopFlowerHostFileActionOpenRequest(request);
-    if (!normalized) {
-      return {
-        ok: false,
-        error: desktopFlowerHostError('invalid_file_action', 'Invalid Flower file action request.'),
-      };
-    }
-    return openDesktopFlowerHostFileAction(normalized);
   });
   ipcMain.handle(DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL, async (event) => (
     buildStampedDesktopWelcomeSnapshot(senderUtilityWindowKind(event.sender.id))

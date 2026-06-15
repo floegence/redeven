@@ -776,7 +776,7 @@ export function EnvAppShell() {
     return {
       current_target_id: sourceEnvPublicID || 'current',
       source_env_public_id: sourceEnvPublicID || undefined,
-      host_hint: 'auto',
+      runtime_hint: 'auto',
       session_source: normalizedSessionSource,
     };
   };

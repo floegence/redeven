@@ -28,7 +28,7 @@ describe('navigation', () => {
 
   it('rejects unsupported sandbox navigation outside the remote session family', () => {
     expect(isAllowedAppNavigation(
-      'https://fh-flower-host.us.redeven-sandbox.test/',
+      'https://files-workbench.us.redeven-sandbox.test/',
       'https://env-0123456789abcdef0123456789abcdef.us.redeven-sandbox.test/',
     )).toBe(false);
     expect(isAllowedAppNavigation(
