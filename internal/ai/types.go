@@ -143,6 +143,7 @@ type ThreadView struct {
 	QueuedTurnCount     int                     `json:"queued_turn_count"`
 	RunStatus           string                  `json:"run_status"`
 	RunUpdatedAtUnixMs  int64                   `json:"run_updated_at_unix_ms"`
+	RunErrorCode        string                  `json:"run_error_code,omitempty"`
 	RunError            string                  `json:"run_error,omitempty"`
 	WaitingPrompt       *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
 	LastContextRunID    string                  `json:"last_context_run_id,omitempty"`
@@ -484,6 +485,7 @@ type RealtimeEvent struct {
 	Diag          map[string]any          `json:"diag,omitempty"`
 	StreamEvent   any                     `json:"stream_event,omitempty"`
 	RunStatus     string                  `json:"run_status,omitempty"`
+	RunErrorCode  string                  `json:"run_error_code,omitempty"`
 	RunError      string                  `json:"run_error,omitempty"`
 	WaitingPrompt *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
 

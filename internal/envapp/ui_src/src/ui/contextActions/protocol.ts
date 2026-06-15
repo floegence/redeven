@@ -35,7 +35,7 @@ export type ContextActionSource = Readonly<{
 export type ContextActionExecutionContext = Readonly<{
   current_target_id?: string;
   source_env_public_id?: string;
-  host_hint?: 'auto' | 'flower_host' | 'env_local';
+  runtime_hint?: 'auto' | 'local_environment' | 'env_local';
   session_source?: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui' | 'region_sandbox';
 }>;
 

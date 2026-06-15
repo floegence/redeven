@@ -46,7 +46,7 @@ describe('Ask Flower context actions', () => {
       executionContext: {
         current_target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
         source_env_public_id: 'env_a',
-        host_hint: 'auto',
+        runtime_hint: 'auto',
         session_source: 'provider_environment',
       },
       contextItems: [
@@ -62,7 +62,7 @@ describe('Ask Flower context actions', () => {
     expect(action.execution_context).toEqual({
       current_target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
       source_env_public_id: 'env_a',
-      host_hint: 'auto',
+      runtime_hint: 'auto',
       session_source: 'provider_environment',
     });
     expect(JSON.stringify(action)).not.toContain('can_write');

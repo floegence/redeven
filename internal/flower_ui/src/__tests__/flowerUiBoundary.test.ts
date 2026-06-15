@@ -44,6 +44,28 @@ describe('shared Flower UI boundary', () => {
     }
   });
 
+  it('keeps Redeven target routing fields out of the shared Flower surface contract', () => {
+    const forbidden = [
+      'current_target_id',
+      'primary_target_id',
+      'allowed_target_ids',
+      'active_target_ids',
+    ];
+    const files = [
+      path.join(flowerRoot, 'contracts', 'flowerSurfaceContracts.ts'),
+      path.join(flowerRoot, 'FlowerSurface.tsx'),
+      path.join(repoRoot, 'desktop', 'src', 'welcome', 'flower', 'localEnvironmentFlowerSurfaceAdapter.tsx'),
+      path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'src', 'ui', 'flower', 'envLocalFlowerSurfaceAdapter.ts'),
+    ];
+
+    for (const file of files) {
+      const src = readText(file);
+      for (const token of forbidden) {
+        expect(src, `${path.relative(repoRoot, file)} must not expose ${token}`).not.toContain(token);
+      }
+    }
+  });
+
   it('keeps Desktop and Env App on the shared Flower surface styles and source scan', () => {
     const desktopCss = readText(path.join(repoRoot, 'desktop', 'src', 'welcome', 'index.css'));
     const envCss = readText(path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'src', 'index.css'));
@@ -58,22 +80,22 @@ describe('shared Flower UI boundary', () => {
     const appSrc = readText(path.join(repoRoot, 'desktop', 'src', 'welcome', 'App.tsx'));
 
     expect(appSrc).toContain('copy={createDesktopFlowerSurfaceCopy(i18n())}');
-    expect(appSrc).toContain("hostDisplayName: i18n().t('flowerSurface.host.thisHost')");
+    expect(appSrc).toContain("runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment')");
     expect(appSrc).toContain('<FlowerIcon class="h-5 w-5" />');
+    expect(appSrc).toContain('createLocalEnvironmentFlowerSurfaceAdapter(');
     expect(appSrc).not.toContain('<FlowerNavigationIcon class="h-5 w-5" />');
-    expect(appSrc).not.toContain('function FlowerHostSurface');
     expect(appSrc).not.toContain('aria-label="Compose with Flower"');
     expect(appSrc).not.toContain('✿');
     expect(appSrc).not.toContain('placeholder="Ask Flower anything..."');
   });
 
-  it('keeps the shared Flower host sidebar as New chat plus thread list, not a section nav rail', () => {
+  it('keeps the shared Flower sidebar as New chat plus thread list, not a section nav rail', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
 
     expect(surfaceSrc).toContain('flower-component-thread-rail');
-    expect(surfaceSrc).toContain('flower-host-new-chat-button');
-    expect(surfaceSrc).toContain('flower-host-new-chat-label');
+    expect(surfaceSrc).toContain('flower-new-chat-button');
+    expect(surfaceSrc).toContain('flower-new-chat-label');
     expect(surfaceSrc).toContain('copy().chat.newChat');
     expect(surfaceSrc).toContain('<FlowerSoftAuraIcon');
     expect(surfaceSrc).toContain('<FlowerThreadList');
@@ -130,13 +152,11 @@ describe('shared Flower UI boundary', () => {
     expect(settingsSrc).toContain('flower-settings-current-model');
     expect(settingsSrc).toContain('flower-settings-policy-section');
     expect(settingsSrc).toContain('flower-settings-provider-gallery');
-    expect(settingsSrc).toContain('flower-settings-disabled-guide');
     expect(settingsSrc).toContain('FlowerProviderBrandIcon');
     expect(settingsSrc).toContain('FlowerAutoSaveIndicator');
     expect(settingsSrc).toContain('aria-label={copy().backToChat}');
     expect(settingsSrc).toContain('onBackToChat');
     expect(settingsSrc).not.toContain('Available target cache');
-    expect(settingsSrc).not.toContain('target_cache.entries');
     expect(settingsSrc).not.toContain('role="button"');
     expect(settingsSrc).not.toContain('Save changes');
     expect(cssSrc).toContain('--flower-chat-surface: var(--redeven-surface-main, var(--background));');

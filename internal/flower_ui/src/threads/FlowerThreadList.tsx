@@ -91,8 +91,8 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       data-flower-thread-action-required={indicator().actionRequired ? 'true' : 'false'}
       onContextMenu={(event) => props.onContextMenu?.(event, props.item)}
       class={cn(
-        'flower-host-thread-card group relative w-full cursor-pointer rounded-lg border',
-        props.active && 'flower-host-thread-card-active',
+        'flower-thread-card group relative w-full cursor-pointer rounded-lg border',
+        props.active && 'flower-thread-card-active',
       )}
     >
       <button
@@ -111,18 +111,18 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
           }
         }}
       >
-        <div class="flower-host-thread-indicator relative mt-1.5 flex h-2 shrink-0 items-center justify-center" aria-hidden="true" title={indicator().title}>
-          <div class="flower-host-thread-wave h-2 items-center gap-0.5">
-            <div class="flower-host-thread-wave-bar" style="animation-delay: 0ms" />
-            <div class="flower-host-thread-wave-bar" style="animation-delay: 180ms" />
-            <div class="flower-host-thread-wave-bar" style="animation-delay: 360ms" />
-            <div class="flower-host-thread-wave-bar" style="animation-delay: 540ms" />
+        <div class="flower-thread-indicator relative mt-1.5 flex h-2 shrink-0 items-center justify-center" aria-hidden="true" title={indicator().title}>
+          <div class="flower-thread-wave h-2 items-center gap-0.5">
+            <div class="flower-thread-wave-bar" style="animation-delay: 0ms" />
+            <div class="flower-thread-wave-bar" style="animation-delay: 180ms" />
+            <div class="flower-thread-wave-bar" style="animation-delay: 360ms" />
+            <div class="flower-thread-wave-bar" style="animation-delay: 540ms" />
           </div>
-          <div class="flower-host-thread-status-dot h-2 w-2 rounded-full" />
+          <div class="flower-thread-status-dot h-2 w-2 rounded-full" />
         </div>
         <div class="flex min-w-0 flex-1 flex-col gap-0.5">
           <div class="flex min-w-0 items-center gap-1">
-            <span class="flower-host-thread-list-title flex-1 truncate text-xs font-medium">{title()}</span>
+            <span class="flower-thread-list-title flex-1 truncate text-xs font-medium">{title()}</span>
           </div>
           <Show when={props.item.target_labels.length > 0}>
             <div class="mt-1 flex min-w-0 flex-wrap gap-1">
@@ -136,9 +136,9 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       <div class="pointer-events-none absolute right-2.5 top-2 flex h-5 min-w-7 items-center justify-end">
         <Show
           when={props.canDelete && props.onDelete}
-          fallback={<span class="flower-host-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">{fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>}
+          fallback={<span class="flower-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">{fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>}
         >
-          <span class="flower-host-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">
+          <span class="flower-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">
             {fmtFlowerShortTime(props.item.created_at_ms, copy())}
           </span>
           <button
@@ -157,7 +157,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       <Show when={props.onPin}>
         <button
           type="button"
-          class="flower-host-thread-card-pin-button"
+          class="flower-thread-card-pin-button"
           data-pinned={props.item.pinned ? 'true' : 'false'}
           aria-label={props.item.pinned ? copy().unpin : copy().pin}
           title={props.item.pinned ? copy().unpin : copy().pin}
@@ -171,7 +171,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
       </Show>
       <button
         type="button"
-        class="flower-host-thread-card-menu-button"
+        class="flower-thread-card-menu-button"
         aria-label={copy().contextMenuLabel(title())}
         title={copy().contextMenuLabel(title())}
         onClick={(event) => {
@@ -286,7 +286,7 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
     <button
       type="button"
       role="menuitem"
-      class="flower-host-thread-menu-item"
+      class="flower-thread-menu-item"
       disabled={disabled || props.actionsBusy}
       aria-busy={props.busyAction === kind ? 'true' : undefined}
       onClick={() => action(kind)}
@@ -300,14 +300,14 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
       ref={menuRef}
       role="menu"
       tabIndex={-1}
-      class="flower-host-thread-context-menu"
+      class="flower-thread-context-menu"
       style={{ left: left(), top: top() }}
       aria-label={props.copy.contextMenuLabel(props.item.title || props.copy.untitled)}
     >
       {itemButton('copy_thread_id', props.copy.copyThreadID, <Copy class="h-3.5 w-3.5" />)}
       {itemButton('fork', props.copy.fork, <GitBranch class="h-3.5 w-3.5" />, !props.canFork || !canForkThreadItem(props.item))}
       {itemButton('copy_workdir', props.copy.copyWorkingDirectory, <Folder class="h-3.5 w-3.5" />, workdir() === '')}
-      <div class="flower-host-thread-menu-separator" />
+      <div class="flower-thread-menu-separator" />
       {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin)}
       {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename)}
     </div>
@@ -382,15 +382,15 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   });
 
   return (
-    <div class="flower-host-thread-list flex min-h-0 flex-col gap-3 p-3">
+    <div class="flower-thread-list flex min-h-0 flex-col gap-3 p-3">
       <div class="flex items-center gap-2">
         <div class="min-w-0 flex-1">
-          <h2 class="flower-host-thread-list-title truncate text-sm font-semibold">{copy().title}</h2>
-          <p class="flower-host-thread-list-description truncate text-xs">{copy().description}</p>
+          <h2 class="flower-thread-list-title truncate text-sm font-semibold">{copy().title}</h2>
+          <p class="flower-thread-list-description truncate text-xs">{copy().description}</p>
         </div>
         <button
           type="button"
-          class="flower-host-thread-refresh-button flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45"
+          class="flower-thread-refresh-button flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45"
           aria-label={copy().refreshLabel}
           title={copy().refreshLabel}
           disabled={props.refreshing}
@@ -400,20 +400,20 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
         </button>
       </div>
       <label class="relative block">
-        <Search class="flower-host-thread-list-description pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
-        <Input class="flower-host-thread-search-input pl-9" value={props.query} placeholder={copy().searchPlaceholder} onInput={(event) => props.onQueryChange(event.currentTarget.value)} />
+        <Search class="flower-thread-list-description pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
+        <Input class="flower-thread-search-input pl-9" value={props.query} placeholder={copy().searchPlaceholder} onInput={(event) => props.onQueryChange(event.currentTarget.value)} />
       </label>
-      <div class="flower-host-scroll flex-1 space-y-2">
+      <div class="flower-scroll flex-1 space-y-2">
         <Show
           when={filtered().length > 0}
-          fallback={<div class="flower-host-thread-empty rounded-lg border border-dashed p-6 text-sm">{copy().empty}</div>}
+          fallback={<div class="flower-thread-empty rounded-lg border border-dashed p-6 text-sm">{copy().empty}</div>}
         >
           <For each={groupKeys()}>
             {(groupKey) => {
               const group = () => groupByKey().get(groupKey);
               return (
               <section class="space-y-1">
-                <h3 class="flower-host-thread-group-label px-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
+                <h3 class="flower-thread-group-label px-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
                   {group()?.kind === 'pinned' ? copy().pinnedGroup : timeGroupLabel(group()?.group ?? 'older', copy())}
                 </h3>
                 <For each={group()?.threadIDs ?? []}>

@@ -21,8 +21,8 @@ type FlowerThreadMetadata struct {
 	ContextJSON         string `json:"context_json"`
 	ActionJSON          string `json:"action_json"`
 	UpdatedAtUnixMs     int64  `json:"updated_at_unix_ms"`
-	HomeHostID          string `json:"home_host_id"`
-	HomeHostKind        string `json:"home_host_kind"`
+	HomeRuntimeID       string `json:"home_runtime_id"`
+	HomeRuntimeKind     string `json:"home_runtime_kind"`
 	OriginEnvPublicID   string `json:"origin_env_public_id"`
 	PrimaryTargetID     string `json:"primary_target_id"`
 	ActiveTargetIDsJSON string `json:"active_target_ids_json"`
@@ -115,8 +115,8 @@ func (s *Store) UpsertFlowerThreadMetadata(ctx context.Context, rec FlowerThread
 	rec.ParentRunID = strings.TrimSpace(rec.ParentRunID)
 	rec.ContextJSON = normalizeFlowerJSON(rec.ContextJSON)
 	rec.ActionJSON = normalizeFlowerJSON(rec.ActionJSON)
-	rec.HomeHostID = strings.TrimSpace(rec.HomeHostID)
-	rec.HomeHostKind = strings.TrimSpace(strings.ToLower(rec.HomeHostKind))
+	rec.HomeRuntimeID = strings.TrimSpace(rec.HomeRuntimeID)
+	rec.HomeRuntimeKind = strings.TrimSpace(strings.ToLower(rec.HomeRuntimeKind))
 	rec.OriginEnvPublicID = strings.TrimSpace(rec.OriginEnvPublicID)
 	rec.PrimaryTargetID = strings.TrimSpace(rec.PrimaryTargetID)
 	rec.ActiveTargetIDsJSON = normalizeFlowerStringArrayJSON(rec.ActiveTargetIDsJSON)
@@ -130,7 +130,7 @@ func (s *Store) UpsertFlowerThreadMetadata(ctx context.Context, rec FlowerThread
 	_, err := s.db.ExecContext(ctx, `
 INSERT INTO ai_flower_thread_metadata(
   endpoint_id, thread_id, owner_kind, owner_id, parent_thread_id, parent_run_id,
-  context_json, action_json, updated_at_unix_ms, home_host_id, home_host_kind,
+  context_json, action_json, updated_at_unix_ms, home_runtime_id, home_runtime_kind,
   origin_env_public_id, primary_target_id, active_target_ids_json
 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
@@ -141,12 +141,12 @@ ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
   context_json = excluded.context_json,
   action_json = excluded.action_json,
   updated_at_unix_ms = excluded.updated_at_unix_ms,
-  home_host_id = excluded.home_host_id,
-  home_host_kind = excluded.home_host_kind,
+  home_runtime_id = excluded.home_runtime_id,
+  home_runtime_kind = excluded.home_runtime_kind,
   origin_env_public_id = excluded.origin_env_public_id,
   primary_target_id = excluded.primary_target_id,
   active_target_ids_json = excluded.active_target_ids_json
-`, rec.EndpointID, rec.ThreadID, rec.OwnerKind, rec.OwnerID, rec.ParentThreadID, rec.ParentRunID, rec.ContextJSON, rec.ActionJSON, rec.UpdatedAtUnixMs, rec.HomeHostID, rec.HomeHostKind, rec.OriginEnvPublicID, rec.PrimaryTargetID, rec.ActiveTargetIDsJSON)
+`, rec.EndpointID, rec.ThreadID, rec.OwnerKind, rec.OwnerID, rec.ParentThreadID, rec.ParentRunID, rec.ContextJSON, rec.ActionJSON, rec.UpdatedAtUnixMs, rec.HomeRuntimeID, rec.HomeRuntimeKind, rec.OriginEnvPublicID, rec.PrimaryTargetID, rec.ActiveTargetIDsJSON)
 	return err
 }
 
@@ -166,7 +166,7 @@ func (s *Store) GetFlowerThreadMetadata(ctx context.Context, endpointID string, 
 	var rec FlowerThreadMetadata
 	err := s.db.QueryRowContext(ctx, `
 SELECT endpoint_id, thread_id, owner_kind, owner_id, parent_thread_id, parent_run_id,
-       context_json, action_json, updated_at_unix_ms, home_host_id, home_host_kind,
+       context_json, action_json, updated_at_unix_ms, home_runtime_id, home_runtime_kind,
        origin_env_public_id, primary_target_id, active_target_ids_json
 FROM ai_flower_thread_metadata
 WHERE endpoint_id = ? AND thread_id = ?
@@ -180,8 +180,8 @@ WHERE endpoint_id = ? AND thread_id = ?
 		&rec.ContextJSON,
 		&rec.ActionJSON,
 		&rec.UpdatedAtUnixMs,
-		&rec.HomeHostID,
-		&rec.HomeHostKind,
+		&rec.HomeRuntimeID,
+		&rec.HomeRuntimeKind,
 		&rec.OriginEnvPublicID,
 		&rec.PrimaryTargetID,
 		&rec.ActiveTargetIDsJSON,

@@ -116,6 +116,7 @@ type Thread struct {
 	TitlePromptVersion     string `json:"title_prompt_version"`
 	RunStatus              string `json:"run_status"`
 	RunUpdatedAtUnixMs     int64  `json:"run_updated_at_unix_ms"`
+	RunErrorCode           string `json:"run_error_code"`
 	RunError               string `json:"run_error"`
 	WaitingUserInputJSON   string `json:"waiting_user_input_json"`
 	LastContextRunID       string `json:"last_context_run_id"`
@@ -191,7 +192,7 @@ type ThreadsCursor struct {
 const threadSelectColumnsSQL = `
   thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
-  run_status, run_updated_at_unix_ms, run_error,
+  run_status, run_updated_at_unix_ms, run_error_code, run_error,
   waiting_user_input_json, last_context_run_id, pinned_at_unix_ms,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
@@ -223,6 +224,7 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 		&t.TitlePromptVersion,
 		&t.RunStatus,
 		&t.RunUpdatedAtUnixMs,
+		&t.RunErrorCode,
 		&t.RunError,
 		&t.WaitingUserInputJSON,
 		&t.LastContextRunID,
@@ -519,6 +521,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		return err
 	}
 	t.RunStatus = runStatus
+	t.RunErrorCode = strings.TrimSpace(t.RunErrorCode)
 	t.RunError = strings.TrimSpace(t.RunError)
 	t.WaitingUserInputJSON = strings.TrimSpace(t.WaitingUserInputJSON)
 	t.CreatedByUserPublicID = strings.TrimSpace(t.CreatedByUserPublicID)
@@ -545,13 +548,13 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	INSERT INTO ai_threads(
 	  thread_id, endpoint_id, namespace_public_id, model_id, model_locked, execution_mode, working_dir, title,
 	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
-	  run_status, run_updated_at_unix_ms, run_error,
+	  run_status, run_updated_at_unix_ms, run_error_code, run_error,
 	  waiting_user_input_json, last_context_run_id,
 	  created_by_user_public_id, created_by_user_email,
 	  updated_by_user_public_id, updated_by_user_email,
 	  created_at_unix_ms, updated_at_unix_ms,
 	  last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
 		t.EndpointID,
@@ -568,6 +571,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.TitlePromptVersion,
 		t.RunStatus,
 		t.RunUpdatedAtUnixMs,
+		t.RunErrorCode,
 		t.RunError,
 		t.WaitingUserInputJSON,
 		t.LastContextRunID,
@@ -865,6 +869,7 @@ func (s *Store) ResetStaleActiveThreadRunStates(ctx context.Context) (int64, err
 	UPDATE ai_threads
 	SET run_status = 'canceled',
 	    run_updated_at_unix_ms = ?,
+	    run_error_code = '',
 	    run_error = '',
 	    waiting_user_input_json = '',
 	    updated_at_unix_ms = ?
@@ -882,6 +887,7 @@ func (s *Store) UpdateThreadRunState(
 	endpointID string,
 	threadID string,
 	runStatus string,
+	runErrorCode string,
 	runError string,
 	waitingUserInputJSON string,
 	updatedByID string,
@@ -903,8 +909,10 @@ func (s *Store) UpdateThreadRunState(
 	if err != nil {
 		return err
 	}
+	runErrorCode = strings.TrimSpace(runErrorCode)
 	runError = strings.TrimSpace(runError)
 	if runStatus != "failed" && runStatus != "timed_out" {
+		runErrorCode = ""
 		runError = ""
 	}
 	waitingUserInputJSON = normalizeWaitingUserInputJSONForStatus(runStatus, waitingUserInputJSON)
@@ -917,13 +925,14 @@ func (s *Store) UpdateThreadRunState(
 	UPDATE ai_threads
 	SET run_status = ?,
 	    run_updated_at_unix_ms = ?,
+	    run_error_code = ?,
 	    run_error = ?,
 	    waiting_user_input_json = ?,
 	    updated_at_unix_ms = ?,
 	    updated_by_user_public_id = ?,
 	    updated_by_user_email = ?
 	WHERE endpoint_id = ? AND thread_id = ?
-	`, runStatus, now, runError, strings.TrimSpace(waitingUserInputJSON), now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
+	`, runStatus, now, runErrorCode, runError, strings.TrimSpace(waitingUserInputJSON), now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
 	if err != nil {
 		return err
 	}

@@ -24,7 +24,7 @@ describe('Redeven v1 AI codec', () => {
           execution_context: {
             current_target_id: 'env_a',
             source_env_public_id: 'env_a',
-            host_hint: 'auto',
+            runtime_hint: 'auto',
             session_source: 'provider_environment',
           },
           context: [
@@ -86,5 +86,22 @@ describe('Redeven v1 AI codec', () => {
       toolId: 'tool-1',
       toolName: 'ask_user',
     }));
+  });
+
+  it('decodes thread run error codes from realtime events', () => {
+    const event = fromWireAIEventNotify({
+      event_type: 'thread_state',
+      endpoint_id: 'env-1',
+      thread_id: 'thread-1',
+      run_id: 'run-1',
+      at_unix_ms: 1000,
+      run_status: 'failed',
+      run_error_code: 'provider_auth_failed',
+      run_error: 'The selected AI provider rejected the saved credentials.',
+    });
+
+    expect(event?.runStatus).toBe('failed');
+    expect(event?.runErrorCode).toBe('provider_auth_failed');
+    expect(event?.runError).toBe('The selected AI provider rejected the saved credentials.');
   });
 });

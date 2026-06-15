@@ -83,7 +83,7 @@ const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
 }));
 
 const desktopSessionContextMocks = vi.hoisted(() => ({
-  readSnapshot: vi.fn(() => null),
+  readSnapshot: vi.fn<() => any>(() => null),
 }));
 
 let settingsResponse: any = null;
@@ -642,8 +642,15 @@ describe('EnvSettingsPage', () => {
     expect(runtimeStatus?.textContent).toContain('Bound');
   });
 
-  it('shows the Flower settings section when remote AI config is missing', async () => {
+  it('shows Local AI Profile status instead of remote provider settings for Desktop model source sessions', async () => {
     protocolMocks.status.mockReturnValue('connected');
+    desktopSessionContextMocks.readSnapshot.mockReturnValue({
+      local_environment_id: 'local-env',
+      renderer_storage_scope_id: 'scope',
+      target_kind: 'ssh_environment',
+      target_route: 'remote_desktop',
+      session_source: 'ssh_environment',
+    });
     settingsResponse = {
       ai: null,
       ai_runtime: {
@@ -652,6 +659,7 @@ describe('EnvSettingsPage', () => {
           connected: true,
           available: true,
           model_source: 'desktop_local_environment',
+          model_count: 2,
           missing_key_provider_ids: [],
         },
       },
@@ -664,7 +672,9 @@ describe('EnvSettingsPage', () => {
     });
 
     const flowerCard = host.querySelector('[data-settings-card="Flower"]');
-    expect(flowerCard?.textContent).toContain('The Desktop model source is available for this SSH environment.');
+    expect(flowerCard?.textContent).toContain('Local AI Profile on this Mac');
+    expect(flowerCard?.textContent).toContain('Desktop model source ready');
+    expect(flowerCard?.textContent).not.toContain('Add Provider');
   });
 
   it('notifies the app settings revision after saving a Flower provider bundle', async () => {
@@ -766,6 +776,52 @@ describe('EnvSettingsPage', () => {
       );
       expect(envContextMocks.bumpSettingsSeq).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('does not silently replace an invalid Flower current model while saving providers', async () => {
+    protocolMocks.status.mockReturnValue('connected');
+    settingsResponse = {
+      config_path: '/tmp/config.json',
+      runtime: { agent_home_dir: '/workspace', shell: '/bin/zsh' },
+      logging: { log_format: 'plain', log_level: 'info' },
+      codespaces: { code_server_port_min: 0, code_server_port_max: 0 },
+      permission_policy: null,
+      ai: {
+        current_model_id: 'missing/provider-model',
+        providers: [
+          {
+            id: 'openai',
+            name: 'OpenAI',
+            type: 'openai',
+            base_url: 'https://api.openai.com/v1',
+            models: [{ model_name: 'gpt-5.2-mini', context_window: 400000, input_modalities: ['text'] }],
+          },
+        ],
+      },
+      ai_secrets: {
+        provider_api_key_set: { openai: true },
+        web_search_provider_api_key_set: { openai: false },
+      },
+    };
+
+    render(() => <EnvSettingsPage />, host);
+    await openSettingsSection(host, 'ai');
+    await vi.waitFor(() => {
+      expect(host.querySelector('button[aria-label="Edit provider"]')).toBeTruthy();
+    });
+
+    (host.querySelector('button[aria-label="Edit provider"]') as HTMLButtonElement).click();
+    await flushPage();
+    const confirmButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Confirm provider'));
+    confirmButton?.click();
+
+    await vi.waitFor(() => {
+      expect(notificationMocks.error).toHaveBeenCalledWith('Save failed', 'current_model_id is not in providers[].models[]: missing/provider-model');
+    });
+    expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith(
+      '/_redeven_proxy/api/ai/provider_bundle',
+      expect.objectContaining({ method: 'PUT' }),
+    );
   });
 
   it('updates the Browser Editor from the settings page through Desktop', async () => {

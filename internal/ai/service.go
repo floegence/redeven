@@ -1047,7 +1047,7 @@ type preparedRun struct {
 	db                   *threadstore.Store
 	messageID            string
 	r                    *run
-	updateThreadRunState func(status string, runErr string, waitingPrompt *RequestUserInputPrompt)
+	updateThreadRunState func(status string, runErrorCode string, runErr string, waitingPrompt *RequestUserInputPrompt)
 }
 
 func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) error {
@@ -1230,11 +1230,12 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 					string(RunStateFinalizing),
 					"",
 					"",
+					"",
 					metaRef.UserPublicID,
 					metaRef.UserEmail,
 				)
 				cancel()
-				s.broadcastThreadState(endpointID, threadID, runID, string(RunStateFinalizing), "")
+				s.broadcastThreadState(endpointID, threadID, runID, string(RunStateFinalizing), "", "")
 				s.broadcastThreadSummary(endpointID, threadID)
 			}
 			s.broadcastStreamEvent(endpointID, threadID, runID, ev)
@@ -1245,7 +1246,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	s.runs[runID] = r
 	s.mu.Unlock()
 
-	updateThreadRunState := func(status string, runErr string, waitingPrompt *RequestUserInputPrompt) {
+	updateThreadRunState := func(status string, runErrorCode string, runErr string, waitingPrompt *RequestUserInputPrompt) {
 		if db == nil {
 			return
 		}
@@ -1261,6 +1262,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 			endpointID,
 			threadID,
 			status,
+			runErrorCode,
 			runErr,
 			waitingUserInputJSON,
 			metaRef.UserPublicID,
@@ -1268,8 +1270,8 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		)
 	}
 
-	updateThreadRunState("running", "", nil)
-	s.broadcastThreadState(endpointID, threadID, runID, "running", "")
+	updateThreadRunState("running", "", "", nil)
+	s.broadcastThreadState(endpointID, threadID, runID, "running", "", "")
 	s.broadcastThreadSummary(endpointID, threadID)
 	r.ensureAssistantMessageStarted()
 
@@ -1363,12 +1365,12 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		if r.isDetached() {
 			return
 		}
-		runStatus, runStatusErr := deriveThreadRunState(r.getEndReason(), r.getFinalizationReason(), retErr)
+		runStatus, runStatusErrCode, runStatusErr := deriveThreadRunState(r.getEndReason(), r.getFinalizationReason(), r.getRunErrorCode(), retErr)
 		waitingPrompt := waitingPromptForRunState(runStatus, r.snapshotWaitingPrompt())
 		if prepared.updateThreadRunState != nil {
-			prepared.updateThreadRunState(runStatus, runStatusErr, waitingPrompt)
+			prepared.updateThreadRunState(runStatus, runStatusErrCode, runStatusErr, waitingPrompt)
 		}
-		s.broadcastThreadState(endpointID, threadID, runID, runStatus, runStatusErr)
+		s.broadcastThreadState(endpointID, threadID, runID, runStatus, runStatusErrCode, runStatusErr)
 		s.broadcastThreadSummary(endpointID, threadID)
 		if s.threadMgr != nil {
 			s.threadMgr.Wake(endpointID, threadID)
@@ -1939,55 +1941,56 @@ func defaultModelCapability(providerID string, modelName string) contextmodel.Mo
 	return contextmodel.NormalizeCapability(cap)
 }
 
-func deriveThreadRunState(endReason string, finalizationReason string, runErr error) (string, string) {
+func deriveThreadRunState(endReason string, finalizationReason string, runErrorCode string, runErr error) (string, string, string) {
 	endReason = strings.TrimSpace(endReason)
+	runErrorCode = strings.TrimSpace(runErrorCode)
 	switch endReason {
 	case "complete":
 		switch classifyFinalizationReason(finalizationReason) {
 		case finalizationClassSuccess:
-			return "success", ""
+			return "success", "", ""
 		case finalizationClassWaitingUser:
-			return "waiting_user", ""
+			return "waiting_user", "", ""
 		}
 		msg := ""
 		if runErr != nil {
 			if errors.Is(runErr, context.DeadlineExceeded) {
-				return "timed_out", "Timed out."
+				return "timed_out", runErrorCodeProviderUnreachable, userFacingRunError(runErrorCodeProviderUnreachable, "Timed out.")
 			}
 			msg = strings.TrimSpace(runErr.Error())
 		}
 		if msg == "" {
 			msg = "Run ended without explicit completion."
 		}
-		return "failed", msg
+		return "failed", runErrorCode, userFacingRunError(runErrorCode, msg)
 	case "canceled":
-		return "canceled", ""
+		return "canceled", "", ""
 	case "timed_out":
-		return "timed_out", "Timed out."
+		return "timed_out", runErrorCodeProviderUnreachable, userFacingRunError(runErrorCodeProviderUnreachable, "Timed out.")
 	case "disconnected":
-		return "failed", "Disconnected."
+		return "failed", runErrorCode, userFacingRunError(runErrorCode, "Disconnected.")
 	case "error":
 		if runErr != nil {
 			msg := strings.TrimSpace(runErr.Error())
 			if msg != "" {
-				return "failed", msg
+				return "failed", runErrorCode, userFacingRunError(runErrorCode, msg)
 			}
 		}
-		return "failed", "AI failed."
+		return "failed", runErrorCode, userFacingRunError(runErrorCode, "AI failed.")
 	default:
 		if runErr != nil {
 			if errors.Is(runErr, context.DeadlineExceeded) {
-				return "timed_out", "Timed out."
+				return "timed_out", runErrorCodeProviderUnreachable, userFacingRunError(runErrorCodeProviderUnreachable, "Timed out.")
 			}
 			if errors.Is(runErr, context.Canceled) {
-				return "failed", "Disconnected."
+				return "failed", runErrorCode, userFacingRunError(runErrorCode, "Disconnected.")
 			}
 			msg := strings.TrimSpace(runErr.Error())
 			if msg != "" {
-				return "failed", msg
+				return "failed", runErrorCode, userFacingRunError(runErrorCode, msg)
 			}
 		}
-		return "failed", "AI run ended unexpectedly."
+		return "failed", runErrorCode, userFacingRunError(runErrorCode, "AI run ended unexpectedly.")
 	}
 }
 
@@ -2058,9 +2061,9 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 
 	if db != nil && threadID != "" {
 		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", meta.UserPublicID, meta.UserEmail)
+		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", meta.UserPublicID, meta.UserEmail)
 		cancel()
-		s.broadcastThreadState(endpointID, threadID, runID, "canceled", "")
+		s.broadcastThreadState(endpointID, threadID, runID, "canceled", "", "")
 		s.broadcastThreadSummary(endpointID, threadID)
 		if s.threadMgr != nil {
 			s.threadMgr.Wake(endpointID, threadID)

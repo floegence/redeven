@@ -74,10 +74,6 @@ import {
   type DesktopGatewaySource,
 } from '../shared/desktopGateway';
 import type {
-  DesktopFlowerHostError,
-  DesktopFlowerHostRouterDecision,
-} from '../shared/flowerHostSettingsIPC';
-import type {
   DesktopEnvironmentEntry,
   DesktopEnvironmentOpenAction,
   DesktopLauncherActionProgress,
@@ -327,10 +323,12 @@ import {
 import { runGatewaySourceAction } from './gatewaySourceActionRunner';
 import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnimation';
 import {
-  createDesktopFlowerSurfaceAdapter,
+  createLocalEnvironmentFlowerSurfaceAdapter,
+  sendLocalEnvironmentFlowerPrompt,
   type DesktopSettingsBridge,
-} from './flower/desktopFlowerSurfaceAdapter';
+} from './flower/localEnvironmentFlowerSurfaceAdapter';
 import { createDesktopFlowerSurfaceCopy } from './flower/desktopFlowerSurfaceCopy';
+import type { FlowerRouterDecision } from '../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
 
 type DesktopLauncherBridge = Readonly<{
   getSnapshot: () => Promise<DesktopWelcomeSnapshot>;
@@ -731,12 +729,6 @@ function getErrorMessage(error: unknown): string {
     }
   }
   return '';
-}
-
-function flowerHostError(error: DesktopFlowerHostError): Error & { code?: string } {
-  const out = new Error(getErrorMessage(error) || 'Flower Host request failed.') as Error & { code?: string };
-  out.code = trimString(error.code);
-  return out;
 }
 
 function localizedStringByValue(
@@ -1537,7 +1529,7 @@ function buildEnvironmentFlowerContextEnvelope(environment: DesktopEnvironmentEn
       execution_context: {
         current_target_id: targetID,
         source_env_public_id: trimString(environment.env_public_id),
-        host_hint: 'auto',
+        runtime_hint: 'auto',
         session_source: 'desktop_welcome',
       },
       context: [
@@ -2620,18 +2612,7 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
     !candidate
     || typeof candidate.save !== 'function'
     || typeof candidate.cancel !== 'function'
-    || typeof candidate.loadFlowerHostSettings !== 'function'
-    || typeof candidate.saveFlowerHostSettings !== 'function'
-    || typeof candidate.listFlowerHostThreads !== 'function'
-    || typeof candidate.loadFlowerHostThread !== 'function'
-    || typeof candidate.markFlowerHostThreadRead !== 'function'
-    || typeof candidate.renameFlowerHostThread !== 'function'
-    || typeof candidate.setFlowerHostThreadPinned !== 'function'
-    || typeof candidate.forkFlowerHostThread !== 'function'
-    || typeof candidate.resolveFlowerHostHandler !== 'function'
-    || typeof candidate.sendFlowerHostChat !== 'function'
-    || typeof candidate.submitFlowerHostInput !== 'function'
-    || typeof candidate.openFlowerHostFileAction !== 'function'
+    || typeof candidate.requestRuntimeFlower !== 'function'
   ) {
     return null;
   }
@@ -5980,58 +5961,36 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }
   }
 
-  async function openFlowerHostSurface(): Promise<void> {
+  async function openFlowerSurface(): Promise<void> {
     await performLauncherAction({
-      kind: 'open_flower_host',
+      kind: 'open_flower',
     });
   }
 
-  async function resolveEnvironmentFlowerHandler(environment: DesktopEnvironmentEntry): Promise<DesktopFlowerHostRouterDecision> {
-    const envelope = buildEnvironmentFlowerContextEnvelope(environment);
-    const result = await props.runtime.settings.resolveFlowerHostHandler({
+  async function resolveEnvironmentFlowerHandler(_environment: DesktopEnvironmentEntry): Promise<FlowerRouterDecision> {
+    return createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings).resolveHandler({
       thread_kind: 'task',
-      context_envelope_id: envelope.id,
       client_surface: 'welcome_ask_flower',
-      primary_target_id: environmentFlowerPrimaryTargetID(environment),
     });
-    if (!result.ok) {
-      throw flowerHostError(result.error);
-    }
-    return result.decision;
   }
 
   async function sendEnvironmentFlowerPrompt(
     environment: DesktopEnvironmentEntry,
     prompt: string,
-    decision: DesktopFlowerHostRouterDecision,
+    _decision: FlowerRouterDecision,
   ): Promise<string> {
     const cleanPrompt = trimString(prompt);
     if (!cleanPrompt) {
       return '';
     }
     const envelope = buildEnvironmentFlowerContextEnvelope(environment);
-    const result = await props.runtime.settings.sendFlowerHostChat({
+    const thread = await sendLocalEnvironmentFlowerPrompt(props.runtime.settings, {
       prompt: buildEnvironmentFlowerPrompt(i18n(), environment, cleanPrompt),
-      reply_mode: 'background',
-      decision_id: decision.decision_id,
-      decision_revision: decision.decision_revision,
-      selected_handler_id: decision.selected_handler?.handler_id,
-      thread_kind: decision.decision_scope.thread_kind,
-      primary_target_id: decision.decision_scope.primary_target_id,
-      context_envelope: envelope,
-      client_surface: decision.decision_scope.client_surface,
-      context_action: envelope.raw,
+      contextAction: envelope.raw,
     });
-    if (!result.ok) {
-      if ('fresh_decision' in result) {
-        // Surface stale routing state through the existing composer validation path.
-        throw Object.assign(flowerHostError(result.error), { fresh_decision: result.fresh_decision });
-      }
-      throw flowerHostError(result.error);
-    }
-    setFocusedFlowerThreadID(result.thread.thread_id);
+    setFocusedFlowerThreadID(thread.thread_id);
     showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
-    return result.thread.thread_id;
+    return thread.thread_id;
   }
 
   function openEnvironmentFlowerComposer(environment: DesktopEnvironmentEntry, anchor?: { x: number; y: number }): void {
@@ -6049,13 +6008,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   const topBarLogoLabel = () => (
-    snapshot().surface === 'flower_host'
+    snapshot().surface === 'flower'
       ? i18n().t('shell.backToEnvironments')
       : i18n().t('shell.openRedevenDashboard')
   );
   const deleteTargetIsGatewayEnvironment = createMemo(() => deleteTarget()?.kind === 'gateway_environment');
   const activateTopBarLogo = () => {
-    if (snapshot().surface === 'flower_host') {
+    if (snapshot().surface === 'flower') {
       void openEnvironmentCenterSurface();
       return;
     }
@@ -6091,7 +6050,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
         trailingActions={(
           <div class="flex items-center gap-1">
-            <Show when={snapshot().surface === 'flower_host'}>
+            <Show when={snapshot().surface === 'flower'}>
               <button
                 type="button"
                 class="redeven-flower-back-button"
@@ -6103,13 +6062,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
                 <span>{i18n().t('shell.backToEnvironments')}</span>
               </button>
             </Show>
-            <Show when={snapshot().surface !== 'flower_host'}>
+            <Show when={snapshot().surface !== 'flower'}>
               <button
                 type="button"
                 class="redeven-flower-topbar-button"
                 aria-label={i18n().t('flowerSurface.chat.entryLabel')}
                 title={i18n().t('flowerSurface.chat.entryLabel')}
-                onClick={() => void openFlowerHostSurface()}
+                onClick={() => void openFlowerSurface()}
               >
                 <FlowerIcon class="h-5 w-5" />
               </button>
@@ -6175,7 +6134,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         )}
       >
         <Show
-          when={snapshot().surface === 'flower_host'}
+          when={snapshot().surface === 'flower'}
           fallback={(
             <ConnectEnvironmentSurface
               i18n={i18n()}
@@ -6265,9 +6224,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           )}
         >
           <FlowerSurface
-            adapter={createDesktopFlowerSurfaceAdapter(props.runtime.settings, {
-              hostDisplayName: i18n().t('flowerSurface.host.thisHost'),
-              hostSubtitle: i18n().t('flowerSurface.host.subtitle'),
+            adapter={createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
+              runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment'),
+              runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
             })}
             copy={createDesktopFlowerSurfaceCopy(i18n())}
             focusThreadID={focusedFlowerThreadID()}
@@ -6281,9 +6240,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onClose={closeEnvironmentFlowerComposer}
         resolveFlowerHandler={resolveEnvironmentFlowerHandler}
         sendFlowerPrompt={sendEnvironmentFlowerPrompt}
-        openFlowerHostSurface={async () => {
+        openFlowerSurface={async () => {
           closeEnvironmentFlowerComposer();
-          await openFlowerHostSurface();
+          await openFlowerSurface();
         }}
       />
 
@@ -7540,13 +7499,13 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
   i18n: DesktopI18n;
   state: EnvironmentFlowerComposerState | null;
   onClose: () => void;
-  resolveFlowerHandler: (environment: DesktopEnvironmentEntry) => Promise<DesktopFlowerHostRouterDecision>;
-  sendFlowerPrompt: (environment: DesktopEnvironmentEntry, prompt: string, decision: DesktopFlowerHostRouterDecision) => Promise<string>;
-  openFlowerHostSurface: () => Promise<void>;
+  resolveFlowerHandler: (environment: DesktopEnvironmentEntry) => Promise<FlowerRouterDecision>;
+  sendFlowerPrompt: (environment: DesktopEnvironmentEntry, prompt: string, decision: FlowerRouterDecision) => Promise<string>;
+  openFlowerSurface: () => Promise<void>;
 }>) {
   const [prompt, setPrompt] = createSignal('');
   const [validationError, setValidationError] = createSignal('');
-  const [handlerDecision, setHandlerDecision] = createSignal<DesktopFlowerHostRouterDecision | null>(null);
+  const [handlerDecision, setHandlerDecision] = createSignal<FlowerRouterDecision | null>(null);
   const [handlerStatus, setHandlerStatus] = createSignal<'starting' | 'resolving' | 'ready' | 'blocked' | 'failed'>('starting');
   const [handlerError, setHandlerError] = createSignal('');
   const [isComposing, setIsComposing] = createSignal(false);
@@ -7565,7 +7524,7 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
   });
   const handlerNeedsSetup = createMemo(() => {
     const decision = handlerDecision();
-    return decision?.reason_code === 'host_not_configured' || decision?.blocker?.code === 'host_not_configured';
+    return decision?.reason_code === 'runtime_not_configured' || decision?.blocker?.code === 'runtime_not_configured';
   });
   const handlerChipLabel = createMemo(() => {
     switch (handlerStatus()) {
@@ -7685,13 +7644,13 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
     setSending(true);
     try {
       await props.sendFlowerPrompt(current, message, decision);
-      await props.openFlowerHostSurface();
+      await props.openFlowerSurface();
       setPrompt('');
       props.onClose();
     } catch (error) {
       let displayError = getErrorMessage(error);
       if (typeof error === 'object' && error && 'fresh_decision' in error) {
-        const freshDecision = (error as { fresh_decision?: DesktopFlowerHostRouterDecision }).fresh_decision ?? null;
+        const freshDecision = (error as { fresh_decision?: FlowerRouterDecision }).fresh_decision ?? null;
         setHandlerDecision(freshDecision);
         displayError = freshDecision?.blocker?.message ?? displayError;
         setHandlerError(displayError);
@@ -7772,7 +7731,7 @@ function EnvironmentFlowerComposerWindow(props: Readonly<{
                       type="button"
                       class="redeven-environment-flower-window__setup-button"
                       disabled={sending()}
-                      onClick={() => void props.openFlowerHostSurface()}
+                      onClick={() => void props.openFlowerSurface()}
                     >
                       <Settings class="h-3.5 w-3.5" />
                       <span>{props.i18n.t('flowerSurface.chat.openSettings')}</span>

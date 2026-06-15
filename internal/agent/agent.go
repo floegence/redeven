@@ -33,7 +33,6 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/filesystemscope"
-	"github.com/floegence/redeven/internal/flowerhostrpc"
 	"github.com/floegence/redeven/internal/fs"
 	"github.com/floegence/redeven/internal/gitrepo"
 	"github.com/floegence/redeven/internal/monitor"
@@ -1265,16 +1264,6 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 			aiSvc.RegisterRPCWithAccessGate(router, meta, srv, a.accessGate)
 		}
 	}
-
-	flowerhostrpc.NewService(flowerhostrpc.Options{
-		Logger:          a.log,
-		StateDir:        a.stateDir,
-		AgentHomeDir:    a.agentHomeAbs,
-		WorkingDir:      a.agentHomeAbs,
-		FilesystemScope: a.filesystemScope,
-		Shell:           a.shell,
-		AIConfig:        a.cfg.AI,
-	}).RegisterWithAccessGate(router, meta, a.accessGate)
 
 	// Sessions domain (active Flowersec channel sessions).
 	a.registerSessionsRPCWithAccessGate(router, meta, a.accessGate)

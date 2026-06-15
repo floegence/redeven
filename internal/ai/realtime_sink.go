@@ -207,6 +207,7 @@ func (s *Service) persistRealtimeEvent(ev RealtimeEvent) {
 		"phase":          ev.Phase,
 		"diag":           ev.Diag,
 		"run_status":     ev.RunStatus,
+		"run_error_code": ev.RunErrorCode,
 		"run_error":      ev.RunError,
 		"waiting_prompt": ev.WaitingPrompt,
 		"stream_event":   ev.StreamEvent,
@@ -369,8 +370,9 @@ func classifyStreamKind(streamEvent any) RealtimeStreamKind {
 	}
 }
 
-func (s *Service) broadcastThreadState(endpointID string, threadID string, runID string, runStatus string, runErr string) {
+func (s *Service) broadcastThreadState(endpointID string, threadID string, runID string, runStatus string, runErrCode string, runErr string) {
 	runStatus = strings.TrimSpace(runStatus)
+	runErrCode = strings.TrimSpace(runErrCode)
 	runErr = strings.TrimSpace(runErr)
 	var waitingPrompt *RequestUserInputPrompt
 	if s != nil {
@@ -399,9 +401,11 @@ func (s *Service) broadcastThreadState(endpointID string, threadID string, runID
 		StreamKind: RealtimeStreamKindLifecycle,
 		Phase:      lifecyclePhaseForStatus(runStatus, runErr),
 		Diag: map[string]any{
-			"run_status": runStatus,
+			"run_status":     runStatus,
+			"run_error_code": runErrCode,
 		},
 		RunStatus:     runStatus,
+		RunErrorCode:  runErrCode,
 		RunError:      runErr,
 		WaitingPrompt: waitingPrompt,
 	}
@@ -490,9 +494,9 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		return
 	}
 
-	runStatus, runError := normalizeThreadRunState(th.RunStatus, th.RunError)
+	runStatus, runErrorCode, runError := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	if activeRunID != "" {
-		runStatus, runError = activeThreadEffectiveRunState(th.RunStatus, th.RunError)
+		runStatus, runErrorCode, runError = activeThreadEffectiveRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	}
 	modeFallback := "act"
 	if cfg != nil {
@@ -509,6 +513,7 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		RunID:               "",
 		AtUnixMs:            time.Now().UnixMilli(),
 		RunStatus:           runStatus,
+		RunErrorCode:        runErrorCode,
 		RunError:            runError,
 		Title:               strings.TrimSpace(th.Title),
 		UpdatedAtUnixMs:     th.UpdatedAtUnixMs,

@@ -84,6 +84,35 @@ func TestFloretProviderAdapter_DisableReasoningControlsProviderRequest(t *testin
 	}
 }
 
+func TestFloretProviderAdapter_UsesRedevenModelNameInsteadOfFloretPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingFlowerProvider{}
+	adapter := newFloretProviderAdapter(
+		recorder,
+		"openai",
+		"gpt-5.2",
+		"act",
+		ProviderControls{},
+		TurnBudgets{MaxSteps: 1},
+		"",
+		nil,
+		nil,
+	)
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		Model:    "redeven-model-gateway",
+		Messages: []flruntime.ModelMessage{{Role: "user", Content: "hello"}},
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	for range stream {
+	}
+	if recorder.req.Model != "gpt-5.2" {
+		t.Fatalf("model=%q, want Redeven-owned model name", recorder.req.Model)
+	}
+}
+
 func TestFloretProviderAdapter_UsesProjectedPreviousState(t *testing.T) {
 	t.Parallel()
 

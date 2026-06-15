@@ -226,12 +226,8 @@ func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (TurnReq
 	if req.MaxOutputTokens > 0 {
 		budgets.MaxOutputToken = int(req.MaxOutputTokens)
 	}
-	model := strings.TrimSpace(req.Model)
-	if model == "" {
-		model = p.modelName
-	}
 	return TurnRequest{
-		Model:            model,
+		Model:            p.modelName,
 		Messages:         messages,
 		Tools:            tools,
 		Budgets:          budgets,

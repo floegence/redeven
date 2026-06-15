@@ -63,6 +63,7 @@ func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, meta
 		threadID,
 		"waiting_user",
 		"",
+		"",
 		mustTestWaitingUserInputJSON(t, prompt),
 		meta.UserPublicID,
 		meta.UserEmail,

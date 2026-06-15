@@ -74,8 +74,7 @@ describe('desktop persistence wiring', () => {
     expect(mainSrc).toContain('DESKTOP_DOWNLOAD_PREPARE_CHANNEL');
     expect(mainSrc).toContain('DESKTOP_DOWNLOAD_COMPLETE_CHANNEL');
     expect(mainSrc).toContain('normalizeDesktopDownloadPrepareRequest');
-    expect(mainSrc).toContain('OPEN_DESKTOP_FLOWER_HOST_FILE_ACTION_CHANNEL');
-    expect(mainSrc).toContain('normalizeDesktopFlowerHostFileActionOpenRequest');
+    expect(mainSrc).toContain('REQUEST_RUNTIME_FLOWER_CHANNEL');
     expect(mainSrc).toContain('const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKind>();');
     expect(mainSrc).toContain("from './windowRecord';");
     expect(mainSrc).toContain('DesktopTrackedWindow');

@@ -127,6 +127,54 @@ func (s *SecretsStore) GetWebSearchProviderAPIKey(providerID string) (string, bo
 	return s.getWebSearchProviderKey(providerID)
 }
 
+func (s *SecretsStore) ListAIProviderAPIKeyIDs() ([]string, error) {
+	if s == nil {
+		return nil, errors.New("nil secrets store")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sf, err := s.loadLocked()
+	if err != nil {
+		return nil, err
+	}
+	var keys map[string]string
+	if sf != nil && sf.AI != nil {
+		keys = sf.AI.ProviderAPIKeys
+	}
+	out := make([]string, 0, len(keys))
+	for id, value := range keys {
+		id = strings.TrimSpace(id)
+		if id != "" && strings.TrimSpace(value) != "" {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
+func (s *SecretsStore) ListWebSearchProviderAPIKeyIDs() ([]string, error) {
+	if s == nil {
+		return nil, errors.New("nil secrets store")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sf, err := s.loadLocked()
+	if err != nil {
+		return nil, err
+	}
+	var keys map[string]string
+	if sf != nil && sf.WebSearch != nil {
+		keys = sf.WebSearch.ProviderAPIKeys
+	}
+	out := make([]string, 0, len(keys))
+	for id, value := range keys {
+		id = strings.TrimSpace(id)
+		if id != "" && strings.TrimSpace(value) != "" {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
 func (s *SecretsStore) SetAIProviderAPIKey(providerID string, apiKey string) error {
 	if s == nil {
 		return errors.New("nil secrets store")

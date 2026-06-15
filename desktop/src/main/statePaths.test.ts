@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  flowerHostStateLayout,
   defaultLocalEnvironmentStateLayout,
   localEnvironmentStateLayout,
 } from './statePaths';
@@ -34,13 +33,8 @@ describe('statePaths', () => {
     expect(() => defaultLocalEnvironmentStateLayout({}, () => '')).toThrow('user home directory is unavailable');
   });
 
-  it('resolves the independent Flower Host state layout under ~/.redeven/flower', () => {
-    expect(flowerHostStateLayout({ HOME: '/Users/tester' }, () => '/ignored')).toEqual({
-      stateRoot: '/Users/tester/.redeven',
-      stateDir: '/Users/tester/.redeven/flower',
-      configPath: '/Users/tester/.redeven/flower/config.json',
-      secretsFile: '/Users/tester/.redeven/flower/secrets.json',
-      targetCacheFile: '/Users/tester/.redeven/flower/target-cache.json',
-    });
+  it('does not expose a second local Flower state layout', async () => {
+    const paths = await import('./statePaths');
+    expect(Object.keys(paths).filter((key) => key.toLowerCase().includes('flower'))).toEqual([]);
   });
 });

@@ -7,7 +7,6 @@ export type FlowerProviderType =
   | 'qwen'
   | 'openai_compatible';
 
-export type FlowerProviderSecretMode = 'keep' | 'replace' | 'clear';
 export type FlowerWebSearchMode = 'disabled' | 'openai_builtin' | 'brave';
 
 export type FlowerProviderModel = Readonly<{
@@ -28,10 +27,8 @@ export type FlowerProvider = Readonly<{
 }>;
 
 export type FlowerProviderDraft = FlowerProvider & Readonly<{
-  provider_api_key?: string;
-  provider_api_key_mode?: FlowerProviderSecretMode;
-  web_search_api_key?: string;
-  web_search_api_key_mode?: FlowerProviderSecretMode;
+  provider_api_key?: string | null;
+  web_search_api_key?: string | null;
 }>;
 
 export type FlowerExecutionPolicy = Readonly<{
@@ -44,9 +41,8 @@ export type FlowerTerminalExecPolicy = Readonly<{
   max_timeout_ms: number;
 }>;
 
-export type FlowerHostConfig = Readonly<{
+export type FlowerConfig = Readonly<{
   schema_version: 1;
-  enabled: boolean;
   current_model_id: string;
   execution_policy: FlowerExecutionPolicy;
   terminal_exec_policy: FlowerTerminalExecPolicy;
@@ -54,7 +50,7 @@ export type FlowerHostConfig = Readonly<{
 }>;
 
 export type FlowerSettingsDraft = Readonly<{
-  config: Omit<FlowerHostConfig, 'providers'> & Readonly<{
+  config: Omit<FlowerConfig, 'providers'> & Readonly<{
     providers: readonly FlowerProviderDraft[];
   }>;
 }>;
@@ -65,23 +61,19 @@ export type FlowerProviderSecretState = Readonly<{
   web_search_api_key_configured: boolean;
 }>;
 
-export type FlowerTargetView = Readonly<{
-  target_id: string;
-  label: string;
-  target_url: string;
-  last_seen_at_unix_ms: number;
-  metadata?: Readonly<Record<string, unknown>>;
-}>;
-
-export type FlowerTargetCache = Readonly<{
-  version: 1;
-  entries: readonly FlowerTargetView[];
+export type FlowerModelSourceStatus = Readonly<{
+  kind: 'desktop_model_source';
+  ready: boolean;
+  label?: string;
+  model_count?: number;
+  missing_key_provider_ids?: readonly string[];
+  last_error?: string;
 }>;
 
 export type FlowerSettingsSnapshot = Readonly<{
-  config: FlowerHostConfig;
+  config: FlowerConfig;
   provider_secrets: readonly FlowerProviderSecretState[];
-  target_cache: FlowerTargetCache;
+  model_source?: FlowerModelSourceStatus;
 }>;
 
 export type FlowerChatMessageRole = 'user' | 'assistant' | 'system';
@@ -280,11 +272,9 @@ export type FlowerThreadSnapshot = Readonly<{
   model_id: string;
   working_dir: string;
   pinned_at_ms?: number;
-  home_host_id?: string;
-  home_host_kind?: 'global' | 'env_local';
+  home_runtime_id?: string;
+  home_runtime_kind?: 'local_environment' | 'env_local';
   origin_env_public_id?: string;
-  primary_target_id?: string;
-  active_target_ids?: readonly string[];
   created_at_ms: number;
   updated_at_ms: number;
   status: FlowerThreadStatus;
@@ -315,28 +305,27 @@ export type FlowerThreadListItem = Readonly<{
 
 export type FlowerHandlerRef = Readonly<{
   handler_id: string;
-  handler_kind: 'global' | 'env_local';
+  handler_kind: 'local_environment' | 'env_local';
   display_name: string;
   carrier_kind?: 'desktop' | 'server' | 'runtime';
   state: 'online' | 'unreachable';
   selection_source?: 'router_default' | 'user_selected';
   supports_thread_kinds: readonly string[];
-  allowed_target_ids: readonly string[];
 }>;
 
 export type FlowerUnavailableHandler = Readonly<{
   handler_id: string;
-  handler_kind: 'global' | 'env_local';
+  handler_kind: 'local_environment' | 'env_local';
   display_name: string;
   carrier_kind?: 'desktop' | 'server' | 'runtime';
   state: 'online' | 'unreachable';
   disabled_reason: string;
 }>;
 
-export type FlowerHostPresence = Readonly<{
+export type FlowerRuntimePresence = Readonly<{
   schema_version: 1;
-  host_id: string;
-  host_kind: 'global' | 'env_local';
+  runtime_id: string;
+  runtime_kind: 'local_environment' | 'env_local';
   carrier_kind: 'desktop' | 'server' | 'runtime';
   display_name: string;
   state: 'online' | 'unreachable';
@@ -351,7 +340,7 @@ export type FlowerHostPresence = Readonly<{
 export type FlowerRouterDecision = Readonly<{
   decision_id: string;
   decision_revision: number;
-  route: 'flower_host' | 'env_local' | 'blocked' | 'needs_clarification';
+  route: 'flower' | 'env_local' | 'blocked' | 'needs_clarification';
   reason_code: string;
   selected_handler: FlowerHandlerRef | null;
   available_handlers: readonly FlowerHandlerRef[];
@@ -365,10 +354,8 @@ export type FlowerRouterDecision = Readonly<{
     thread_kind: 'chat' | 'task';
     context_envelope_id?: string | null;
     client_surface: string;
-    primary_target_id?: string | null;
   }>;
-  host_presence: FlowerHostPresence;
-  current_target_id?: string;
+  runtime_presence: FlowerRuntimePresence;
   allowed_actions: readonly string[];
   ui_chips: readonly Readonly<{ kind: string; label: string; tone: string }>[];
   primary_message?: string;
@@ -380,7 +367,6 @@ export type FlowerResolveHandlerInput = Readonly<{
   thread_kind?: 'chat' | 'task';
   context_envelope_id?: string | null;
   client_surface?: string;
-  primary_target_id?: string | null;
   requested_handler_id?: string;
 }>;
 
@@ -402,16 +388,16 @@ export type FlowerFileOpenRequest = Readonly<{
   action_id: string;
 }>;
 
-export type FlowerSurfaceHostDescriptor = Readonly<{
-  host_id: string;
-  host_kind: 'global' | 'env_local';
+export type FlowerSurfaceRuntimeDescriptor = Readonly<{
+  runtime_id: string;
+  runtime_kind: 'local_environment' | 'env_local';
   carrier_kind: 'desktop' | 'server' | 'runtime';
   display_name: string;
   subtitle: string;
 }>;
 
 export type FlowerSurfaceAdapter = Readonly<{
-  host: FlowerSurfaceHostDescriptor;
+  runtime: FlowerSurfaceRuntimeDescriptor;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;

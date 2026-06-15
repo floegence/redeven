@@ -195,7 +195,7 @@ function snapshotBridgeState() {
     hasDesktopSettingsBridge: typeof window.redevenDesktopSettings === 'object'
       && typeof window.redevenDesktopSettings?.save === 'function'
       && typeof window.redevenDesktopSettings?.cancel === 'function'
-      && typeof window.redevenDesktopSettings?.openFlowerHostFileAction === 'function',
+      && typeof window.redevenDesktopSettings?.requestRuntimeFlower === 'function',
     hasDesktopSessionContextBridge: typeof window.redevenDesktopSessionContext === 'object'
       && typeof window.redevenDesktopSessionContext?.getSnapshot === 'function'
       && typeof window.redevenDesktopSessionContext?.notifyAppReady === 'function',

@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 30
+	threadstoreCurrentSchemaVersion = 31
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -58,6 +58,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 27, ToVersion: 28, Apply: migrateThreadstoreToV28},
 			{FromVersion: 28, ToVersion: 29, Apply: migrateThreadstoreToV29},
 			{FromVersion: 29, ToVersion: 30, Apply: migrateThreadstoreToV30},
+			{FromVersion: 30, ToVersion: 31, Apply: migrateThreadstoreToV31},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -255,6 +256,13 @@ func migrateThreadstoreToV30(tx *sql.Tx) error {
 	return ensureAIThreadsPinnedAtTx(tx)
 }
 
+func migrateThreadstoreToV31(tx *sql.Tx) error {
+	if err := ensureAIThreadsRunErrorCodeTx(tx); err != nil {
+		return err
+	}
+	return ensureFlowerThreadMetadataOwnershipColumnsTx(tx)
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
@@ -290,6 +298,7 @@ func ensureAIThreadsRunStateColumnsTx(tx *sql.Tx) error {
 	}{
 		{column: "run_status", sql: `ALTER TABLE ai_threads ADD COLUMN run_status TEXT NOT NULL DEFAULT 'idle'`},
 		{column: "run_updated_at_unix_ms", sql: `ALTER TABLE ai_threads ADD COLUMN run_updated_at_unix_ms INTEGER NOT NULL DEFAULT 0`},
+		{column: "run_error_code", sql: `ALTER TABLE ai_threads ADD COLUMN run_error_code TEXT NOT NULL DEFAULT ''`},
 		{column: "run_error", sql: `ALTER TABLE ai_threads ADD COLUMN run_error TEXT NOT NULL DEFAULT ''`},
 	}
 	for _, stmt := range stmts {
@@ -298,6 +307,10 @@ func ensureAIThreadsRunStateColumnsTx(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func ensureAIThreadsRunErrorCodeTx(tx *sql.Tx) error {
+	return ensureColumnTx(tx, "ai_threads", "run_error_code", `ALTER TABLE ai_threads ADD COLUMN run_error_code TEXT NOT NULL DEFAULT ''`)
 }
 
 func ensureAIThreadsWaitingPromptColumnsTx(tx *sql.Tx) error {
@@ -776,8 +789,8 @@ CREATE TABLE IF NOT EXISTS ai_flower_thread_metadata (
   context_json TEXT NOT NULL DEFAULT '{}',
   action_json TEXT NOT NULL DEFAULT '{}',
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  home_host_id TEXT NOT NULL DEFAULT '',
-  home_host_kind TEXT NOT NULL DEFAULT '',
+  home_runtime_id TEXT NOT NULL DEFAULT '',
+  home_runtime_kind TEXT NOT NULL DEFAULT '',
   origin_env_public_id TEXT NOT NULL DEFAULT '',
   primary_target_id TEXT NOT NULL DEFAULT '',
   active_target_ids_json TEXT NOT NULL DEFAULT '[]',
@@ -829,8 +842,8 @@ func ensureFlowerThreadMetadataOwnershipColumnsTx(tx *sql.Tx) error {
 		name string
 		def  string
 	}{
-		{name: "home_host_id", def: "TEXT NOT NULL DEFAULT ''"},
-		{name: "home_host_kind", def: "TEXT NOT NULL DEFAULT ''"},
+		{name: "home_runtime_id", def: "TEXT NOT NULL DEFAULT ''"},
+		{name: "home_runtime_kind", def: "TEXT NOT NULL DEFAULT ''"},
 		{name: "origin_env_public_id", def: "TEXT NOT NULL DEFAULT ''"},
 		{name: "primary_target_id", def: "TEXT NOT NULL DEFAULT ''"},
 		{name: "active_target_ids_json", def: "TEXT NOT NULL DEFAULT '[]'"},
@@ -912,7 +925,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"execution_mode", "working_dir", "title", "title_source", "title_generated_at_unix_ms",
 			"title_input_message_id", "title_model_id", "title_prompt_version", "followups_revision",
 			"pinned_at_unix_ms",
-			"run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "last_context_run_id",
+			"run_status", "run_updated_at_unix_ms", "run_error_code", "run_error", "waiting_user_input_json", "last_context_run_id",
 			"created_by_user_public_id", "created_by_user_email", "updated_by_user_public_id",
 			"updated_by_user_email", "created_at_unix_ms", "updated_at_unix_ms",
 			"last_message_at_unix_ms", "last_message_preview",
@@ -1002,7 +1015,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_flower_thread_metadata": {
 			"endpoint_id", "thread_id", "owner_kind", "owner_id", "parent_thread_id",
 			"parent_run_id", "context_json", "action_json", "updated_at_unix_ms",
-			"home_host_id", "home_host_kind", "origin_env_public_id", "primary_target_id",
+			"home_runtime_id", "home_runtime_kind", "origin_env_public_id", "primary_target_id",
 			"active_target_ids_json",
 		},
 		"ai_flower_transfers": {

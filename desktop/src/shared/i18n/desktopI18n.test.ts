@@ -23,6 +23,7 @@ const DESKTOP_TRANSLATION_ROOTS = new Set(
 );
 
 const FLOWER_SURFACE_ENGLISH_COPY_ALLOWLIST = new Set([
+  'runtime.localEnvironment',
   'chat.entryLabel',
   'settings.apiKey',
   'settings.dialogAPIKey',

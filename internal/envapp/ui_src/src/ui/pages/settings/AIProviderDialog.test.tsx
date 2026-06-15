@@ -82,7 +82,6 @@ function makeProps(overrides: Partial<AIProviderDialogProps> = {}): AIProviderDi
     canInteract: true,
     canAdmin: true,
     aiSaving: false,
-    disableAISaving: false,
     keySet: true,
     keyDraft: '',
     keySaving: false,

@@ -1,4 +1,4 @@
-import type { Component } from 'solid-js';
+import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, FileText, FolderOpen, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
@@ -157,7 +157,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const selectedThreadLoading = createMemo(() => trimString(loadingThreadID()) !== '' && loadingThreadID() === selectedThreadID());
 
-  const selectedThreadRunErrorMessage = createMemo(() => trimString(selectedThread()?.error?.message));
+  const presentRunError = (error: FlowerThreadSnapshot['error']): string => {
+    const code = trimString(error?.code);
+    switch (code) {
+      case 'provider_auth_failed':
+        return copy().chat.runErrors.providerAuthFailed;
+      case 'provider_missing_key':
+        return copy().chat.runErrors.providerMissingKey;
+      case 'provider_rate_limited':
+        return copy().chat.runErrors.providerRateLimited;
+      case 'provider_unreachable':
+        return copy().chat.runErrors.providerUnreachable;
+      case 'provider_model_unavailable':
+        return copy().chat.runErrors.providerModelUnavailable;
+      case 'floret_engine_failed':
+        return copy().chat.runErrors.floretEngineFailed;
+      default:
+        return trimString(error?.message);
+    }
+  };
+  const selectedThreadRunErrorMessage = createMemo(() => presentRunError(selectedThread()?.error));
   const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
   const readSnapshotKey = (snapshot: FlowerThreadActivitySnapshot | null | undefined): string => [
     String(Math.max(0, Math.floor(Number(snapshot?.activity_revision ?? 0)))),
@@ -298,10 +317,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!provider) return null;
     return snapshot()?.provider_secrets.find((secret) => secret.provider_id === provider.id) ?? null;
   });
+  const modelSource = createMemo(() => snapshot()?.model_source ?? null);
+  const externalModelSourceReady = createMemo(() => {
+    const source = modelSource();
+    return source?.kind === 'desktop_model_source' && source.ready && !!currentModelID();
+  });
   const readyForChat = createMemo(() => {
+    if (externalModelSourceReady()) return true;
     const provider = activeProvider();
     const secrets = activeProviderSecrets();
-    if (!snapshot()?.config.enabled || !currentModelID() || !provider || !secrets?.provider_api_key_configured) return false;
+    if (!currentModelID() || !provider || !secrets?.provider_api_key_configured) return false;
     return provider.web_search?.mode !== 'brave' || Boolean(secrets.web_search_api_key_configured);
   });
   const currentHandlerDecision = createMemo(() => {
@@ -347,6 +372,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return copy().chat.handlerStarting;
     }
   });
+  const handlerStatusLabels = createMemo(() => {
+    const decision = currentHandlerDecision();
+    const chips = (decision?.ui_chips ?? [])
+      .map((chip) => trimString(chip.label))
+      .filter(Boolean);
+    if (chips.length > 0) return chips;
+    const selectedLabel = trimString(selectedHandler()?.display_name);
+    return selectedLabel ? [selectedLabel] : [];
+  });
   const handlerNotice = createMemo(() => {
     const state = handlerState();
     if (state.status === 'blocked' && readyForChat()) {
@@ -378,7 +412,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         thread_kind: 'chat',
         client_surface: baseDecision?.decision_scope.client_surface || 'flower_surface',
         ...(baseDecision?.decision_scope.context_envelope_id ? { context_envelope_id: baseDecision.decision_scope.context_envelope_id } : {}),
-        ...(baseDecision?.decision_scope.primary_target_id ? { primary_target_id: baseDecision.decision_scope.primary_target_id } : {}),
         ...(trimString(requestedHandlerID) ? { requested_handler_id: trimString(requestedHandlerID) } : {}),
       });
       setHandlerState(handlerStateFromDecision(next));
@@ -836,6 +869,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSidePanel('chat');
   };
 
+  const settingsReadOnly = createMemo(() => modelSource()?.kind === 'desktop_model_source');
+
   const openSettings = () => {
     setSidePanel('settings');
   };
@@ -851,8 +886,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setChatSubmitError(copy().chat.loadingSettings);
       return;
     }
-    if (!readyForChat()) {
+    if (!readyForChat() && !settingsReadOnly()) {
       openSettings();
+      return;
+    }
+    if (!readyForChat()) {
+      setChatSubmitError(copy().chat.configureProviderBeforeChat);
       return;
     }
     if (!prompt) {
@@ -996,29 +1035,64 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return event.key === 'Enter' && !event.shiftKey;
   };
 
-  const errorNotice = (title: string, message: string) => (
-    <div role="alert" class="flower-host-error-card">
-      <div class="flower-host-error-icon"><AlertTriangle class="h-4 w-4" /></div>
-      <div class="flower-host-error-copy">
-        <div class="flower-host-error-title">{title}</div>
-        <div class="flower-host-error-message">{message}</div>
+  const runErrorActionLabel = (code: string): string => {
+    switch (code) {
+      case 'provider_auth_failed':
+        return copy().chat.runErrorActions.updateAPIKey;
+      case 'provider_missing_key':
+        return copy().chat.runErrorActions.addAPIKey;
+      case 'provider_model_unavailable':
+        return copy().chat.runErrorActions.switchModel;
+      default:
+        return copy().chat.runErrorActions.openSettings;
+    }
+  };
+
+  const errorNotice = (title: string, message: string, action?: JSX.Element) => (
+    <div role="alert" class="flower-error-card">
+      <div class="flower-error-icon"><AlertTriangle class="h-4 w-4" /></div>
+      <div class="flower-error-copy">
+        <div class="flower-error-title">{title}</div>
+        <div class="flower-error-message">{message}</div>
+        <Show when={action}>
+          {(item) => <div class="flower-error-actions">{item()}</div>}
+        </Show>
       </div>
     </div>
   );
 
-	  const chatCopyValue = (
-	    key: 'inputRequestTitle'
-	      | 'inputRequestDescription'
-	      | 'inputRequestSubmit'
-	      | 'inputRequestRetry'
-	      | 'inputRequestAnswerRequired'
-	      | 'inputRequestSubmitting'
-	      | 'inputRequestComposerPlaceholder'
-	      | 'inputRequestChoicePlaceholder',
-	    defaultValue: string,
-	  ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || defaultValue;
+  const runErrorNotice = (error: FlowerThreadSnapshot['error']) => {
+    const code = trimString(error?.code);
+    const actionable = code === 'provider_auth_failed'
+      || code === 'provider_missing_key'
+      || code === 'provider_model_unavailable'
+      || code === 'provider_unreachable';
+    return errorNotice(
+      copy().chat.runErrorTitle,
+      presentRunError(error),
+      actionable
+        ? (
+          <Button size="sm" variant="outline" icon={Settings} onClick={openSettings}>
+            {runErrorActionLabel(code)}
+          </Button>
+        )
+        : undefined,
+    );
+  };
 
-  const streamingCursor = () => <span class="flower-host-streaming-cursor" aria-hidden="true" />;
+  const chatCopyValue = (
+    key: 'inputRequestTitle'
+      | 'inputRequestDescription'
+      | 'inputRequestSubmit'
+      | 'inputRequestRetry'
+      | 'inputRequestAnswerRequired'
+      | 'inputRequestSubmitting'
+      | 'inputRequestComposerPlaceholder'
+      | 'inputRequestChoicePlaceholder',
+    fallback: string,
+  ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
+
+  const streamingCursor = () => <span class="flower-streaming-cursor" aria-hidden="true" />;
 
   const questionMode = (question: FlowerInputRequestQuestion): NonNullable<FlowerInputRequestQuestion['response_mode']> => {
     return question.response_mode;
@@ -1164,48 +1238,48 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const inputRequestPrompt = (request: FlowerInputRequest | null | undefined) => (
     <Show when={request}>
       {(inputRequest) => (
-        <section class="flower-host-input-request-panel" data-flower-input-request-prompt aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}>
-          <div class="flower-host-input-request-heading">
-            <div class="flower-host-input-request-icon"><Clock class="h-4 w-4" /></div>
-            <div class="flower-host-input-request-copy">
-              <div class="flower-host-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
-              <div class="flower-host-input-request-description">
+        <section class="flower-input-request-panel" data-flower-input-request-prompt aria-label={chatCopyValue('inputRequestTitle', 'Waiting for your reply')}>
+          <div class="flower-input-request-heading">
+            <div class="flower-input-request-icon"><Clock class="h-4 w-4" /></div>
+            <div class="flower-input-request-copy">
+              <div class="flower-input-request-title">{chatCopyValue('inputRequestTitle', 'Waiting for your reply')}</div>
+              <div class="flower-input-request-description">
                 {inputRequest().public_summary || chatCopyValue('inputRequestDescription', 'Reply in the composer to continue this conversation.')}
               </div>
             </div>
           </div>
-          <div class="flower-host-input-request-questions">
+          <div class="flower-input-request-questions">
             <For each={inputRequest().questions}>
               {(question) => {
                 const selectedChoiceID = () => trimString(questionDraft(question.id).choice_id);
                 return (
                   <div
                     class={cn(
-                      'flower-host-input-request-question',
-                      activeInputQuestion()?.id === question.id && 'flower-host-input-request-question-active',
+                      'flower-input-request-question',
+                      activeInputQuestion()?.id === question.id && 'flower-input-request-question-active',
                     )}
                   >
-                    <div class="flower-host-input-request-question-copy">
-                      <div class="flower-host-input-request-question-header">{question.header}</div>
-                      <div class="flower-host-input-request-question-text">{question.question}</div>
+                    <div class="flower-input-request-question-copy">
+                      <div class="flower-input-request-question-header">{question.header}</div>
+                      <div class="flower-input-request-question-text">{question.question}</div>
                     </div>
                     <Show when={(question.choices?.length ?? 0) > 0}>
-                      <div class="flower-host-input-request-choice-grid">
+                      <div class="flower-input-request-choice-grid">
                         <For each={question.choices ?? []}>
                           {(choice) => (
                             <button
                               type="button"
                               class={cn(
-                                'flower-host-input-request-choice',
-                                selectedChoiceID() === choice.choice_id && 'flower-host-input-request-choice-selected',
+                                'flower-input-request-choice',
+                                selectedChoiceID() === choice.choice_id && 'flower-input-request-choice-selected',
                               )}
                               aria-pressed={selectedChoiceID() === choice.choice_id}
                               disabled={inputSubmitting()}
                               onClick={() => selectInputChoice(question, choice)}
                             >
-                              <span class="flower-host-input-request-choice-label">{choice.label}</span>
+                              <span class="flower-input-request-choice-label">{choice.label}</span>
                               <Show when={choice.description}>
-                                {(description) => <span class="flower-host-input-request-choice-description">{description()}</span>}
+                                {(description) => <span class="flower-input-request-choice-description">{description()}</span>}
                               </Show>
                             </button>
                           )}
@@ -1218,14 +1292,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </For>
           </div>
           <Show when={inputTextQuestions().length > 1}>
-            <div class="flower-host-input-request-text-targets" role="tablist" aria-label={chatCopyValue('inputRequestComposerPlaceholder', 'Reply to continue this conversation.')}>
+            <div class="flower-input-request-text-targets" role="tablist" aria-label={chatCopyValue('inputRequestComposerPlaceholder', 'Reply to continue this conversation.')}>
               <For each={inputTextQuestions()}>
                 {(question) => (
                   <button
                     type="button"
                     class={cn(
-                      'flower-host-input-request-text-target',
-                      activeInputQuestion()?.id === question.id && 'flower-host-input-request-text-target-active',
+                      'flower-input-request-text-target',
+                      activeInputQuestion()?.id === question.id && 'flower-input-request-text-target-active',
                     )}
                     aria-selected={activeInputQuestion()?.id === question.id}
                     disabled={inputSubmitting()}
@@ -1333,12 +1407,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (title.kind === 'file') {
       return (
         <>
-          <strong class="flower-host-activity-inline-title-verb">{title.verb}</strong>
-          <span class="flower-host-activity-inline-title-target">{title.display_name}</span>
+          <strong class="flower-activity-inline-title-verb">{title.verb}</strong>
+          <span class="flower-activity-inline-title-target">{title.display_name}</span>
         </>
       );
     }
-    return <span class="flower-host-activity-inline-title-target">{title.kind === 'command' ? title.command : title.text}</span>;
+    return <span class="flower-activity-inline-title-target">{title.kind === 'command' ? title.command : title.text}</span>;
   };
 
   const openActivityFileBrowser = (messageID: string, blockIndex: number, itemID: string, action: FlowerActivityFileAction) => {
@@ -1368,10 +1442,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const fileActionButtons = (messageID: string, blockIndex: number, itemID: string, action: FlowerActivityFileAction) => (
-    <div class="flower-host-activity-file-actions" aria-label="File actions">
+    <div class="flower-activity-file-actions" aria-label="File actions">
       <button
         type="button"
-        class="flower-host-activity-file-action-button"
+        class="flower-activity-file-action-button"
         title="Preview file"
         aria-label={`Preview ${action.display_name || 'file'}`}
         disabled={!action.can_preview || !trimString(action.action_id) || !props.adapter.openFilePreview}
@@ -1384,7 +1458,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       </button>
       <button
         type="button"
-        class="flower-host-activity-file-action-button"
+        class="flower-activity-file-action-button"
         title="Browse folder"
         aria-label={`Browse folder for ${action.display_name || 'file'}`}
         disabled={!action.can_browse_directory || !trimString(action.action_id) || !props.adapter.openFileBrowser}
@@ -1409,9 +1483,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     <>
       <For each={block.lines}>
         {(line) => (
-          <div class="flower-host-activity-inline-detail-line">
-            <span class="flower-host-activity-inline-detail-key">{line.label}</span>
-            <span class={cn('flower-host-activity-inline-detail-value', line.tone === 'code' && 'flower-host-activity-inline-detail-value-code')}>{line.value}</span>
+          <div class="flower-activity-inline-detail-line">
+            <span class="flower-activity-inline-detail-key">{line.label}</span>
+            <span class={cn('flower-activity-inline-detail-value', line.tone === 'code' && 'flower-activity-inline-detail-value-code')}>{line.value}</span>
           </div>
         )}
       </For>
@@ -1428,23 +1502,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return total > 0 ? `lines ${start}-${end} of ${total}` : `lines ${start}-${end}`;
     })();
     return (
-      <div class="flower-host-activity-file-read">
-        <div class="flower-host-activity-file-toolbar">
-          <span class="flower-host-activity-file-meta">
+      <div class="flower-activity-file-read">
+        <div class="flower-activity-file-toolbar">
+          <span class="flower-activity-file-meta">
             {lineSummary}
             <Show when={block.truncated}>
-              <span class="flower-host-activity-file-truncated"> · truncated</span>
+              <span class="flower-activity-file-truncated"> · truncated</span>
             </Show>
           </span>
           {fileActionButtons(messageID, blockIndex, itemID, block.action)}
         </div>
-        <pre class="flower-host-activity-file-read-content"><code>{block.content}</code></pre>
+        <pre class="flower-activity-file-read-content"><code>{block.content}</code></pre>
       </div>
     );
   };
 
   const fileDiffBlock = (messageID: string, blockIndex: number, itemID: string, block: Extract<FlowerActivityDetailBlock, { kind: 'file_diff' }>) => (
-    <div class="flower-host-activity-file-diff-list">
+    <div class="flower-activity-file-diff-list">
       <For each={block.files}>
         {(file) => fileDiffFile(messageID, blockIndex, itemID, file)}
       </For>
@@ -1452,28 +1526,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const fileDiffFile = (messageID: string, blockIndex: number, itemID: string, file: FlowerActivityDiffFile) => (
-    <section class="flower-host-activity-file-diff-file">
-      <div class="flower-host-activity-file-toolbar">
-        <span class="flower-host-activity-file-path">{file.display_name}</span>
-        <span class="flower-host-activity-file-change">{file.change_type}</span>
+    <section class="flower-activity-file-diff-file">
+      <div class="flower-activity-file-toolbar">
+        <span class="flower-activity-file-path">{file.display_name}</span>
+        <span class="flower-activity-file-change">{file.change_type}</span>
         <Show when={file.additions || file.deletions}>
-          <span class="flower-host-activity-file-change">
-            <span class="flower-host-activity-file-stat-add">+{file.additions}</span>
+          <span class="flower-activity-file-change">
+            <span class="flower-activity-file-stat-add">+{file.additions}</span>
             {' / '}
-            <span class="flower-host-activity-file-stat-del">-{file.deletions}</span>
+            <span class="flower-activity-file-stat-del">-{file.deletions}</span>
           </span>
         </Show>
         <Show when={file.truncated}>
-          <span class="flower-host-activity-file-truncated">Diff truncated</span>
+          <span class="flower-activity-file-truncated">Diff truncated</span>
         </Show>
         {fileActionButtons(messageID, blockIndex, itemID, file.action)}
       </div>
-      <div class="flower-host-activity-file-diff-grid">
+      <div class="flower-activity-file-diff-grid">
         <Show
           when={getGitPatchRenderSnapshot(file.patch_text).renderedLines.length > 0}
-          fallback={<div class="flower-host-activity-file-diff-empty">{file.diff_unavailable_reason || 'No textual diff'}</div>}
+          fallback={<div class="flower-activity-file-diff-empty">{file.diff_unavailable_reason || 'No textual diff'}</div>}
         >
-          <div class="flower-host-activity-file-diff-unified">
+          <div class="flower-activity-file-diff-unified">
             <For each={getGitPatchRenderSnapshot(file.patch_text).renderedLines}>
               {(line) => fileDiffLine(line)}
             </For>
@@ -1484,9 +1558,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const fileDiffLine = (line: GitPatchRenderedLine) => (
-    <div class={cn('flower-host-activity-file-diff-line', `flower-host-activity-file-diff-line-${line.kind}`)}>
-      <span class="flower-host-activity-file-diff-line-number">{formatGitPatchLineNumber(line.oldLine)}</span>
-      <span class="flower-host-activity-file-diff-line-number flower-host-activity-file-diff-line-number-new">{formatGitPatchLineNumber(line.newLine)}</span>
+    <div class={cn('flower-activity-file-diff-line', `flower-activity-file-diff-line-${line.kind}`)}>
+      <span class="flower-activity-file-diff-line-number">{formatGitPatchLineNumber(line.oldLine)}</span>
+      <span class="flower-activity-file-diff-line-number flower-activity-file-diff-line-number-new">{formatGitPatchLineNumber(line.newLine)}</span>
       <code>{line.text}</code>
     </div>
   );
@@ -1494,23 +1568,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const activityDetailBlock = (messageID: string, blockIndex: number, itemID: string, block: FlowerActivityDetailBlock) => {
     if (block.kind === 'todos') {
       return (
-        <div class="flower-host-activity-todo-list" role="list" aria-label="Todos">
+        <div class="flower-activity-todo-list" role="list" aria-label="Todos">
           <For each={block.items}>
             {(todo) => (
               <div
-                class={cn('flower-host-activity-todo-item', `flower-host-activity-todo-item-${todo.status}`)}
+                class={cn('flower-activity-todo-item', `flower-activity-todo-item-${todo.status}`)}
                 role="listitem"
                 data-status={todo.status}
               >
-                <span class="flower-host-activity-todo-marker" aria-hidden="true">{todoStatusIcon(todo.status)}</span>
-                <span class="flower-host-activity-todo-copy">
-                  <span class={cn('flower-host-activity-todo-content', todo.status === 'completed' && 'flower-host-activity-todo-content-completed')}>
+                <span class="flower-activity-todo-marker" aria-hidden="true">{todoStatusIcon(todo.status)}</span>
+                <span class="flower-activity-todo-copy">
+                  <span class={cn('flower-activity-todo-content', todo.status === 'completed' && 'flower-activity-todo-content-completed')}>
                     {todo.content}
                   </span>
-                  <span class="flower-host-activity-todo-meta">
+                  <span class="flower-activity-todo-meta">
                     {todoStatusLabel(todo.status)}
                     <Show when={todo.note}>
-                      {(note) => <span class="flower-host-activity-todo-note"> · {note()}</span>}
+                      {(note) => <span class="flower-activity-todo-note"> · {note()}</span>}
                     </Show>
                   </span>
                 </span>
@@ -1542,39 +1616,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     return (
       <div
-        class={cn('flower-host-activity-inline-row', `flower-host-activity-inline-row-${item.status}`)}
+        class={cn('flower-activity-inline-row', `flower-activity-inline-row-${item.status}`)}
         data-flower-activity-item-id={item.item_id}
         data-flower-activity-status={item.status}
         aria-label={activityItemAriaLabel(item, timeline)}
       >
-        <div class="flower-host-activity-inline-line">
+        <div class="flower-activity-inline-line">
           <button
             type="button"
-            class="flower-host-activity-inline-button"
+            class="flower-activity-inline-button"
             aria-expanded={open()}
             onClick={() => toggleActivityItem(timeline, item, blockKey, index)}
           >
-            <span class="flower-host-activity-inline-icon">{statusIcon(item.status)}</span>
-            <span class="flower-host-activity-inline-copy">
-              <span class="flower-host-activity-inline-title">{activityTitle(presentation().title)}</span>
+            <span class="flower-activity-inline-icon">{statusIcon(item.status)}</span>
+            <span class="flower-activity-inline-copy">
+              <span class="flower-activity-inline-title">{activityTitle(presentation().title)}</span>
               <Show when={presentation().meta}>
-                {(meta) => <span class="flower-host-activity-inline-detail">{meta()}</span>}
+                {(meta) => <span class="flower-activity-inline-detail">{meta()}</span>}
               </Show>
             </span>
             <Show when={duration()}>
-              {(value) => <span class="flower-host-activity-inline-duration">{value()}</span>}
+              {(value) => <span class="flower-activity-inline-duration">{value()}</span>}
             </Show>
-            <span class={cn('flower-host-activity-inline-status', `flower-host-activity-inline-status-${item.status}`)}>
+            <span class={cn('flower-activity-inline-status', `flower-activity-inline-status-${item.status}`)}>
               {copy().chat.toolStatuses[item.status]}
             </span>
-            <ChevronDown class={cn('flower-host-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-host-activity-inline-chevron-open')} />
+            <ChevronDown class={cn('flower-activity-inline-chevron h-3.5 w-3.5', open() && 'flower-activity-inline-chevron-open')} />
           </button>
           <Show when={rowFileAction()}>
             {(action) => fileActionButtons(messageID, blockIndex, item.item_id, action())}
           </Show>
         </div>
         <Show when={open()}>
-          <div class="flower-host-activity-inline-details">
+          <div class="flower-activity-inline-details">
             <For each={presentation().detailBlocks}>
               {(block) => activityDetailBlock(messageID, blockIndex, item.item_id, block)}
             </For>
@@ -1586,7 +1660,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const activityBlock = (messageID: string, blockIndex: number, block: FlowerActivityTimelineBlock, blockKey: string) => (
     <Show when={block.items.length > 0}>
-      <div class="flower-host-activity-inline" data-flower-activity-run-id={block.run_id}>
+      <div class="flower-activity-inline" data-flower-activity-run-id={block.run_id}>
         <For each={block.items}>
           {(item, index) => activityRow(messageID, blockIndex, block, item, blockKey, index())}
         </For>
@@ -1601,16 +1675,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     failed: boolean,
   ) => (
     <div class={cn(
-      'flower-host-message-bubble',
+      'flower-message-bubble',
       message.role === 'user'
-        ? 'flower-host-message-bubble-user'
-        : 'flower-host-message-bubble-assistant',
-      streaming && 'flower-host-message-bubble-streaming',
-      failed && 'flower-host-message-bubble-error',
-      block.block_type === 'thinking' && 'flower-host-message-bubble-thinking',
+        ? 'flower-message-bubble-user'
+        : 'flower-message-bubble-assistant',
+      streaming && 'flower-message-bubble-streaming',
+      failed && 'flower-message-bubble-error',
+      block.block_type === 'thinking' && 'flower-message-bubble-thinking',
     )}>
       <Show when={failed}>
-        <div class="flower-host-message-error-kicker">
+        <div class="flower-message-error-kicker">
           <AlertTriangle class="h-3.5 w-3.5" />
           <span>{copy().chat.messageErrorTitle}</span>
         </div>
@@ -1649,12 +1723,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const streamingBlockKey = streaming ? lastContentBlockKey(blocks) : '';
     return (
       <div
-        class={cn('flower-host-message-row', message.role === 'user' ? 'flower-host-message-row-user' : 'flower-host-message-row-assistant')}
+        class={cn('flower-message-row', message.role === 'user' ? 'flower-message-row-user' : 'flower-message-row-assistant')}
         data-flower-message-id={message.id}
         data-flower-message-role={message.role}
         data-flower-message-status={message.status}
       >
-        <div class="flower-host-message-block-stack">
+        <div class="flower-message-block-stack">
           <For each={blocks}>
             {(block) => (
               <Show
@@ -1677,48 +1751,50 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'input_request':
         return inputRequestPrompt(entry.request);
       case 'error':
-        return errorNotice(copy().chat.runErrorTitle, entry.error.message);
+        return runErrorNotice(entry.error);
     }
   };
 
   const setupGuide = () => (
-    <div class="flower-host-setup-guide" role="status">
+    <div class="flower-setup-guide" role="status">
       <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14 redeven-flower-icon-breathe" iconClass="redeven-flower-icon-spin" />
-      <div class="flower-host-setup-copy">
+      <div class="flower-setup-copy">
         <h2>{copy().chat.setupNeeded}</h2>
-        <p>{copy().chat.needsProviderNotice}</p>
+        <p>{settingsReadOnly() ? copy().settings.managedByLocalAIProfileOpenLocal : copy().chat.needsProviderNotice}</p>
       </div>
-      <button type="button" class="flower-host-setup-primary" onClick={openSettings}>
-        <Settings class="h-4 w-4" />
-        <span>{copy().chat.openSettings}</span>
-      </button>
+      <Show when={!settingsReadOnly()}>
+        <button type="button" class="flower-setup-primary" onClick={openSettings}>
+          <Settings class="h-4 w-4" />
+          <span>{copy().chat.openSettings}</span>
+        </button>
+      </Show>
     </div>
   );
 
   const threadLoadingState = () => (
-    <div class="flower-host-thread-loading" role="status" aria-live="polite">
+    <div class="flower-thread-loading" role="status" aria-live="polite">
       <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-10 w-10 redeven-flower-icon-breathe" iconClass="redeven-flower-icon-spin" />
-      <div class="flower-host-thread-loading-copy">
-        <div class="flower-host-thread-loading-title">{copy().chat.threadLoading}</div>
-        <div class="flower-host-thread-loading-line" />
-        <div class="flower-host-thread-loading-line flower-host-thread-loading-line-short" />
+      <div class="flower-thread-loading-copy">
+        <div class="flower-thread-loading-title">{copy().chat.threadLoading}</div>
+        <div class="flower-thread-loading-line" />
+        <div class="flower-thread-loading-line flower-thread-loading-line-short" />
       </div>
     </div>
   );
 
   const chatPanel = () => (
-    <div class="flower-host-chat-shell flower-chat-shell">
-      <div class="flower-host-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md">
+    <div class="flower-chat-shell flower-chat-shell">
+      <div class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md">
         <div class="flex min-w-0 items-center gap-3">
           <FlowerIcon class="h-5 w-5 text-primary" />
           <div class="min-w-0 flex items-center gap-2">
-            <div class="flower-host-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
+            <div class="flower-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
           </div>
         </div>
-        <div class="flower-host-chat-header-actions">
+        <div class="flower-chat-header-actions">
           <button
             type="button"
-            class="flower-host-header-icon-button"
+            class="flower-header-icon-button"
             aria-label={copy().chat.settingsLabel}
             title={copy().chat.settingsLabel}
             onClick={openSettings}
@@ -1727,9 +1803,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </button>
         </div>
       </div>
-      <div class="flower-host-chat-main flower-chat-main">
-        <div ref={transcriptRef} class="flower-host-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom}>
-          <div class="flower-host-transcript-stack">
+      <div class="flower-chat-main flower-chat-main">
+        <div ref={transcriptRef} class="flower-chat-transcript flower-chat-transcript" onScroll={updateTranscriptNearBottom}>
+          <div class="flower-transcript-stack">
             <Show when={loadError()}>
               {(message) => errorNotice(copy().chat.loadErrorTitle, message())}
             </Show>
@@ -1748,9 +1824,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </Show>
           </div>
         </div>
-        <div class="flower-host-chat-bottom-dock flower-chat-bottom-dock">
-          <div class="flower-host-chat-bottom-dock-track flower-chat-bottom-dock-track">
-            <div class="flower-host-composer flower-chat-input-floating chat-input-container p-3">
+        <div class="flower-chat-bottom-dock flower-chat-bottom-dock">
+          <div class="flower-chat-bottom-dock-track flower-chat-bottom-dock-track">
+            <div class="flower-composer flower-chat-input-floating chat-input-container p-3">
               {inputRequestPrompt(selectedInputRequest())}
               <Show
                 when={activeInputQuestionIsSecret()}
@@ -1801,12 +1877,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   }}
                 />
               </Show>
-              <div class="flower-host-composer-footer">
+              <div class="flower-composer-footer">
                 <Show
                   when={!needsSetup()}
                   fallback={(
                     <>
-                      <div class="flower-host-setup-inline">
+                      <div class="flower-setup-inline">
                         <span>{copy().chat.configureProviderBeforeChat}</span>
                       </div>
                       <Button variant="primary" icon={Settings} onClick={openSettings}>
@@ -1815,17 +1891,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </>
                   )}
                 >
-                  <Show when={!selectedInputRequest()} fallback={<div class="flower-host-handler-stack" aria-live="polite" />}>
-                    <div class="flower-host-handler-stack" aria-live="polite">
+                  <Show when={!selectedInputRequest()} fallback={<div class="flower-handler-stack" aria-live="polite" />}>
+                    <div class="flower-handler-stack" aria-live="polite">
                       <Show when={canSwitchHandler()}>
-                        <label class="flower-host-handler-picker">
-                          <span class="flower-host-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
-                          <span class="flower-host-handler-picker-value">
+                        <label class="flower-handler-picker">
+                          <span class="flower-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
+                          <span class="flower-handler-picker-value">
                             {handlerBusy()
                               ? handlerChipLabel()
                               : selectedHandler()?.display_name || handlerChipLabel()}
                           </span>
-                          <ChevronDown class="flower-host-handler-picker-icon" />
+                          <ChevronDown class="flower-handler-picker-icon" />
                           <select
                             aria-label={copy().chat.handlerSelectionLabel}
                             value={selectedHandler()?.handler_id ?? ''}
@@ -1838,24 +1914,36 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           </select>
                         </label>
                       </Show>
-                      <Show when={!canSwitchHandler() && !readyHandlerDecision()}>
-                        <div class="flower-host-handler-selection">
-                          <span class="flower-host-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
-                          <Tag variant="warning" class="flower-host-handler-chip">
-                            {handlerChipLabel()}
-                          </Tag>
-                        </div>
+                      <Show when={!canSwitchHandler()}>
+                        <Show
+                          when={readyHandlerDecision()}
+                          fallback={(
+                            <div class="flower-handler-selection">
+                              <span class="flower-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
+                              <Tag variant="warning" class="flower-handler-chip">
+                                {handlerChipLabel()}
+                              </Tag>
+                            </div>
+                          )}
+                        >
+                          <div class="flower-handler-selection">
+                            <span class="flower-handler-selection-label">{copy().chat.handlerSelectionLabel}</span>
+                            <For each={handlerStatusLabels()}>
+                              {(label) => <Tag variant="neutral" class="flower-handler-chip">{label}</Tag>}
+                            </For>
+                          </div>
+                        </Show>
                       </Show>
                       <Show when={handlerNotice()}>
-                        {(notice) => <div role="alert" class="flower-host-handler-error-card">
-                          <div class="flower-host-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
-                          <div class="flower-host-handler-error-copy">
-                            <div class="flower-host-handler-error-title">{notice().title}</div>
-                            <div class="flower-host-handler-error-message">{notice().message}</div>
+                        {(notice) => <div role="alert" class="flower-handler-error-card">
+                          <div class="flower-handler-error-icon"><AlertTriangle class="h-3.5 w-3.5" /></div>
+                          <div class="flower-handler-error-copy">
+                            <div class="flower-handler-error-title">{notice().title}</div>
+                            <div class="flower-handler-error-message">{notice().message}</div>
                           </div>
                           <button
                             type="button"
-                            class="flower-host-handler-retry"
+                            class="flower-handler-retry"
                             onClick={() => void resolveHandlerDecision().catch(() => undefined)}
                           >
                             {copy().chat.handlerRetry}
@@ -1871,7 +1959,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         variant="primary"
                         icon={ArrowUp}
                         size="icon"
-                        class="flower-host-composer-submit rounded-full"
+                        class="flower-composer-submit rounded-full"
                         aria-label={copy().chat.send}
                         title={copy().chat.send}
                         disabled={chatRunning() || !readyForChat() || !readyHandlerDecision() || !trimString(chatDraft())}
@@ -1883,7 +1971,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     <Button
                       variant="primary"
                       icon={ArrowUp}
-                      class="flower-host-composer-submit"
+                      class="flower-composer-submit"
                       disabled={inputSubmitting() || !inputRequestReadyToSubmit()}
                       loading={inputSubmitting()}
                       onClick={() => void submitChat()}
@@ -1899,7 +1987,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </div>
             </div>
             <Show when={composerErrorMessage()}>
-              {(message) => <div class="flower-host-composer-error">{errorNotice(copy().chat.composerErrorTitle, message())}</div>}
+              {(message) => <div class="flower-composer-error">{errorNotice(copy().chat.composerErrorTitle, message())}</div>}
             </Show>
           </div>
         </div>
@@ -1910,7 +1998,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   return (
     <main
       id="redeven-flower-surface"
-      class={cn('flower-component-shell flower-host-surface', threadRailResizing() && 'flower-component-shell-resizing', props.class)}
+      class={cn('flower-component-shell flower-surface', threadRailResizing() && 'flower-component-shell-resizing', props.class)}
       data-flower-selected-thread-id={selectedThreadID()}
       data-flower-selected-thread-status={selectedThread()?.status ?? 'idle'}
       data-flower-selected-thread-loading={selectedThreadLoading() ? 'true' : 'false'}
@@ -1918,16 +2006,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       style={{ '--flower-thread-rail-width': `${threadRailWidth()}px` }}
     >
       <aside class="flower-component-thread-rail" aria-label={copy().chat.conversationsAria}>
-        <div class="flower-host-sidebar-actions">
+        <div class="flower-sidebar-actions">
           <button
             type="button"
-            class="flower-host-new-chat-button"
+            class="flower-new-chat-button"
             aria-label={copy().chat.newChat}
             title={copy().chat.newChat}
             onClick={startCompose}
           >
             <Plus class="h-4 w-4 shrink-0" />
-            <span class="flower-host-new-chat-label">{copy().chat.newChat}</span>
+            <span class="flower-new-chat-label">{copy().chat.newChat}</span>
           </button>
         </div>
         <FlowerThreadList
@@ -1948,17 +2036,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           onMenuAction={(action, item, restore) => void handleThreadMenuAction(action, item, restore)}
         />
         <Show when={threadActionError()}>
-          {(message) => <div class="flower-host-thread-action-error" role="alert">{message()}</div>}
+          {(message) => <div class="flower-thread-action-error" role="alert">{message()}</div>}
         </Show>
         <Show when={threadActionSuccess()}>
-          {(message) => <div class="flower-host-thread-action-success" role="status" aria-live="polite">{message()}</div>}
+          {(message) => <div class="flower-thread-action-success" role="status" aria-live="polite">{message()}</div>}
         </Show>
       </aside>
       <Show when={renameThreadID()}>
-        <div class="flower-host-rename-backdrop" role="presentation" onMouseDown={closeRenameDialog}>
+        <div class="flower-rename-backdrop" role="presentation" onMouseDown={closeRenameDialog}>
           <div
             ref={renameDialogRef}
-            class="flower-host-rename-dialog"
+            class="flower-rename-dialog"
             role="dialog"
             aria-modal="true"
             aria-labelledby="flower-thread-rename-title"
@@ -1991,7 +2079,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <span>{copy().threadList.renameNameLabel}</span>
               <input
                 ref={renameInputRef}
-                class="flower-host-rename-input"
+                class="flower-rename-input"
                 value={renameDraft()}
                 disabled={renameSaving()}
                 aria-invalid={renameError() ? 'true' : undefined}
@@ -2009,13 +2097,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               />
             </label>
             <Show when={renameError()}>
-              {(message) => <p id="flower-thread-rename-error" class="flower-host-rename-error" role="alert">{message()}</p>}
+              {(message) => <p id="flower-thread-rename-error" class="flower-rename-error" role="alert">{message()}</p>}
             </Show>
-            <div class="flower-host-rename-actions">
-              <button type="button" class="flower-host-rename-secondary" disabled={renameSaving()} onClick={closeRenameDialog}>{copy().threadList.cancel}</button>
+            <div class="flower-rename-actions">
+              <button type="button" class="flower-rename-secondary" disabled={renameSaving()} onClick={closeRenameDialog}>{copy().threadList.cancel}</button>
               <button
                 type="button"
-                class="flower-host-rename-primary"
+                class="flower-rename-primary"
                 disabled={renameSaving() || renameUnchanged()}
                 onClick={() => void submitRename()}
               >

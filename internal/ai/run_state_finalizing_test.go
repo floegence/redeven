@@ -20,7 +20,7 @@ func TestActiveThreadEffectiveRunState(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			gotStatus, gotErr := activeThreadEffectiveRunState(tc.status, tc.runErr)
+			gotStatus, _, gotErr := activeThreadEffectiveRunState(tc.status, "", tc.runErr)
 			if gotStatus != tc.wantStatus || gotErr != tc.wantErr {
 				t.Fatalf("activeThreadEffectiveRunState(%q, %q) = (%q, %q), want (%q, %q)", tc.status, tc.runErr, gotStatus, gotErr, tc.wantStatus, tc.wantErr)
 			}

@@ -35,7 +35,6 @@ export type AIProviderDialogProps = {
   canInteract: boolean;
   canAdmin: boolean;
   aiSaving: boolean;
-  disableAISaving: boolean;
   keySet: boolean;
   keyDraft: string;
   keySaving: boolean;
@@ -71,7 +70,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
   const [customModelName, setCustomModelName] = createSignal('');
   const [expandedProviderType, setExpandedProviderType] = createSignal<AIProviderType | null>(null);
   const saving = createMemo(() => props.aiSaving || props.keySaving || props.webSearchKeySaving);
-  const providerHasEnabledModels = createMemo(() => Array.isArray(props.provider?.models) && (props.provider?.models.length ?? 0) > 0);
+  const providerHasModels = createMemo(() => Array.isArray(props.provider?.models) && (props.provider?.models.length ?? 0) > 0);
   createEffect(() => {
     if (!props.open) {
       setAdvancedOpen(false);
@@ -133,7 +132,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
             variant="default"
             onClick={props.onConfirm}
             loading={saving()}
-            disabled={!props.canInteract || saving() || props.disableAISaving || !providerHasEnabledModels()}
+            disabled={!props.canInteract || saving() || !providerHasModels()}
           >
             {i18n.t('flowerProviderDialog.saveProvider')}
           </Button>
@@ -145,10 +144,10 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
           const provider = () => providerAccessor();
           const providerID = () => String(provider().id ?? '').trim();
           const models = () => (Array.isArray(provider().models) ? provider().models : []);
-          const enabledModelNames = createMemo(() => new Set(models().map((model) => normalizeModelName(model.model_name)).filter(Boolean)));
-          const recommendedModelEnabled = (modelName: string) => enabledModelNames().has(normalizeModelName(modelName));
+          const selectedModelNames = createMemo(() => new Set(models().map((model) => normalizeModelName(model.model_name)).filter(Boolean)));
+          const recommendedModelSelected = (modelName: string) => selectedModelNames().has(normalizeModelName(modelName));
           const supportedCustomModelNames = () => providerSupportsCustomModelNames(provider().type);
-          const hasEnabledModels = () => models().length > 0;
+          const hasSelectedModels = () => models().length > 0;
 
           return (
             <div class="space-y-5">
@@ -294,7 +293,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                     actions={
                                       <Show when={props.recommendedModels.length > 0}>
                                         <Button size="sm" variant="outline" onClick={props.onApplyAllPresets} disabled={!props.canInteract}>
-                                          {i18n.t('flowerProviderDialog.enableAll')}
+                                          {i18n.t('flowerProviderDialog.addAllPresets')}
                                         </Button>
                                       </Show>
                                     }
@@ -306,9 +305,9 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                     <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                                       <For each={props.recommendedModels}>
                                         {(preset) => {
-                                          const enabled = () => recommendedModelEnabled(preset.model_name);
+                                          const selected = () => recommendedModelSelected(preset.model_name);
                                           return (
-                                            <div class={cn('rounded-lg border p-3 transition', enabled() ? 'border-primary/50 bg-primary/5' : 'border-border bg-background')}>
+                                            <div class={cn('rounded-lg border p-3 transition', selected() ? 'border-primary/50 bg-primary/5' : 'border-border bg-background')}>
                                               <div class="flex items-start justify-between gap-3">
                                                 <div class="min-w-0">
                                                   <div class="break-all font-mono text-sm font-semibold text-foreground">{preset.model_name}</div>
@@ -319,19 +318,19 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                                                 </div>
                                                 <Button
                                                   size="sm"
-                                                  variant={enabled() ? 'ghost' : 'outline'}
-                                                  class={enabled() ? 'text-muted-foreground hover:text-destructive' : ''}
-                                                  onClick={() => (enabled() ? props.onRemoveRecommendedPreset(preset.model_name) : props.onAddSelectedPreset(preset.model_name))}
+                                                  variant={selected() ? 'ghost' : 'outline'}
+                                                  class={selected() ? 'text-muted-foreground hover:text-destructive' : ''}
+                                                  onClick={() => (selected() ? props.onRemoveRecommendedPreset(preset.model_name) : props.onAddSelectedPreset(preset.model_name))}
                                                   disabled={!props.canInteract}
                                                 >
-                                                  {enabled() ? i18n.t('flowerProviderDialog.removeModel') : i18n.t('flowerProviderDialog.addPreset')}
+                                                  {selected() ? i18n.t('flowerProviderDialog.removeModel') : i18n.t('flowerProviderDialog.addPreset')}
                                                 </Button>
                                               </div>
                                               <div class="mt-2 flex flex-wrap gap-1.5">
                                                 <CapabilityTag active>{i18n.t('flowerSettings.textCapability')}</CapabilityTag>
                                                 <CapabilityTag active={modelSupportsImageInput(preset.input_modalities)}>{i18n.t('flowerSettings.imageInputCapability')}</CapabilityTag>
-                                                <Show when={enabled()}>
-                                                  <CapabilityTag active>{i18n.t('flowerProviderDialog.enabledCapability')}</CapabilityTag>
+                                                <Show when={selected()}>
+                                                  <CapabilityTag active>{i18n.t('flowerProviderDialog.selectedCapability')}</CapabilityTag>
                                                 </Show>
                                               </div>
                                               <Show when={localizedFlowerProviderModelNote(i18n.locale(), preset.note_key)}>
@@ -361,12 +360,12 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
 
                                 <section class="space-y-3">
                                   <SubSectionHeader
-                                    title={i18n.t('flowerProviderDialog.enabledModelsTitle')}
-                                    description={i18n.t('flowerProviderDialog.enabledModelsDescription')}
+                                    title={i18n.t('flowerProviderDialog.selectedModelsTitle')}
+                                    description={i18n.t('flowerProviderDialog.selectedModelsDescription')}
                                   />
                                   <Show
-                                    when={hasEnabledModels()}
-                                    fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{i18n.t('flowerProviderDialog.noEnabledModels')}</div>}
+                                    when={hasSelectedModels()}
+                                    fallback={<div class="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">{i18n.t('flowerProviderDialog.noSelectedModels')}</div>}
                                   >
                                     <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                                       <For each={models()}>

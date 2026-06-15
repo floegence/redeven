@@ -153,6 +153,7 @@ export type wire_ai_event_notify = {
   diag?: Record<string, any>;
   stream_event?: any;
   run_status?: string;
+  run_error_code?: string;
   run_error?: string;
   waiting_prompt?: wire_ai_waiting_prompt;
 

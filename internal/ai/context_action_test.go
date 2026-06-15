@@ -19,7 +19,7 @@ func TestBuildUserMessageJSONPersistsContextActionWithoutPermissionHints(t *test
 			"execution_context": {
 				"current_target_id": "env_a",
 				"source_env_public_id": "env_a",
-				"host_hint": "auto",
+				"runtime_hint": "auto",
 				"session_source": "provider_environment",
 				"grant": "secret"
 			},
@@ -70,7 +70,7 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 		ExecutionContext: &ContextActionExecutionHint{
 			CurrentTargetID:   "env_a",
 			SourceEnvPublicID: "env_a",
-			HostHint:          "auto",
+			RuntimeHint:       "auto",
 			SessionSource:     "provider_environment",
 		},
 		Context: []ContextActionContextItem{
@@ -122,7 +122,7 @@ func TestQueuedTurnContextActionRoundTrip(t *testing.T) {
 		ExecutionContext: &ContextActionExecutionHint{
 			CurrentTargetID:   "env_a",
 			SourceEnvPublicID: "env_a",
-			HostHint:          "auto",
+			RuntimeHint:       "auto",
 			SessionSource:     "provider_environment",
 		},
 		Context: []ContextActionContextItem{

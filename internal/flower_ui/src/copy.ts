@@ -67,12 +67,6 @@ export type FlowerSettingsCopy = Readonly<{
   title: string;
   backToChat: string;
   description: string;
-  active: string;
-  disabled: string;
-  enable: string;
-  setup: string;
-  disable: string;
-  disabledNotice: string;
   currentModel: string;
   noModelSelected: string;
   text: string;
@@ -88,6 +82,13 @@ export type FlowerSettingsCopy = Readonly<{
   allowed: string;
   providersTitle: string;
   providersDescription: string;
+  managedByLocalAIProfileTitle: string;
+  managedByLocalAIProfileDescription: string;
+  managedByLocalAIProfileReady: string;
+  managedByLocalAIProfileNeedsKey: string;
+  managedByLocalAIProfileModelCount: (count: number) => string;
+  managedByLocalAIProfileMissingKeys: (providers: string) => string;
+  managedByLocalAIProfileOpenLocal: string;
   addProvider: string;
   noProviders: string;
   defaultProvider: string;
@@ -170,7 +171,7 @@ export type FlowerProviderDialogCopy = Readonly<{
   recommendedModelsTitle: string;
   recommendedModelsDescription: string;
   modelNote: (noteKey: FlowerProviderModelNoteKey | undefined) => string;
-  enableAll: string;
+  addAllPresets: string;
   customModelProvider: string;
   contextSuffix: string;
   outputSuffix: string;
@@ -178,13 +179,13 @@ export type FlowerProviderDialogCopy = Readonly<{
   remove: string;
   text: string;
   imageInput: string;
-  enabled: string;
+  selected: string;
   customModelPlaceholder: string;
   curatedPresetsOnly: string;
   addCustomModel: string;
-  enabledModelsTitle: string;
-  enabledModelsDescription: string;
-  noEnabledModels: string;
+  selectedModelsTitle: string;
+  selectedModelsDescription: string;
+  noSelectedModels: string;
   unnamedModel: string;
   textAndImage: string;
   textOnly: string;
@@ -212,7 +213,7 @@ export type FlowerSurfaceCopy = Readonly<{
     needsProviderNotice: string;
     openSettings: string;
     placeholder: string;
-    fromHost: (host: string) => string;
+    fromSource: (source: string) => string;
     handlerSelectionLabel: string;
     handlerStarting: string;
     handlerResolving: string;
@@ -222,6 +223,20 @@ export type FlowerSurfaceCopy = Readonly<{
     handlerRetry: string;
     send: string;
     runErrorTitle: string;
+    runErrorActions: Readonly<{
+      updateAPIKey: string;
+      addAPIKey: string;
+      switchModel: string;
+      openSettings: string;
+    }>;
+    runErrors: Readonly<{
+      providerAuthFailed: string;
+      providerMissingKey: string;
+      providerRateLimited: string;
+      providerUnreachable: string;
+      providerModelUnavailable: string;
+      floretEngineFailed: string;
+    }>;
     messageErrorTitle: string;
     messageErrorFallback: string;
     loadErrorTitle: string;
@@ -258,10 +273,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     ready: 'Ready',
     setupNeeded: 'Set up Flower',
     settingsLabel: 'Flower settings',
-    needsProviderNotice: 'Choose a provider, model, and API key once. Flower will use that setup for new chats from this host.',
+    needsProviderNotice: 'Choose a provider, model, and API key once. Flower uses the same Local AI Profile from Welcome and Local Environment.',
     openSettings: 'Open Settings',
     placeholder: 'Ask Flower anything...',
-    fromHost: (host) => `From ${host}`,
+    fromSource: (source) => `From ${source}`,
     handlerSelectionLabel: 'Handled by',
     handlerStarting: 'Starting Flower...',
     handlerResolving: 'Choosing Flower...',
@@ -271,6 +286,20 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     handlerRetry: 'Retry',
     send: 'Send',
     runErrorTitle: 'Flower could not finish this reply.',
+    runErrorActions: {
+      updateAPIKey: 'Update API key',
+      addAPIKey: 'Add API key',
+      switchModel: 'Switch model',
+      openSettings: 'Open settings',
+    },
+    runErrors: {
+      providerAuthFailed: 'The selected AI provider rejected the saved credentials. Open Settings and update the Local AI Profile key.',
+      providerMissingKey: 'The selected AI provider is missing an API key. Open Settings and complete the Local AI Profile.',
+      providerRateLimited: 'The selected AI provider is rate limiting this request. Try again after the provider limit resets.',
+      providerUnreachable: 'The selected AI provider could not be reached. Check the provider endpoint and network connection.',
+      providerModelUnavailable: 'The selected model is not available from this provider. Choose another model in the Local AI Profile.',
+      floretEngineFailed: 'Flower could not finish this turn because the orchestration engine failed.',
+    },
     messageErrorTitle: 'Message failed',
     messageErrorFallback: 'This message failed before Flower produced visible text.',
     loadErrorTitle: 'Flower could not load.',
@@ -350,7 +379,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   },
   emptyState: {
     title: 'Ask Flower',
-    description: 'Flower can work from this host, inspect remembered environments, and prepare actions before runtimes do any read or write.',
+    description: 'Flower uses your Local AI Profile, inspects remembered environments, and prepares actions before runtimes do any read or write.',
     suggestions: [
       {
         title: 'Review a workspace',
@@ -379,13 +408,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   settings: {
     title: 'Flower Settings',
     backToChat: 'Back to chat',
-    description: 'Configure models and execution policy for this Flower Host.',
-    active: 'Flower is enabled on this host',
-    disabled: 'Disabled',
-    enable: 'Enable',
-    setup: 'Set up Flower',
-    disable: 'Disable Flower',
-    disabledNotice: 'Flower is disabled on this host. Provider settings are kept, but chat stays unavailable until Flower is enabled.',
+    description: 'Configure models and execution policy for the Local AI Profile.',
     currentModel: 'Current model',
     noModelSelected: 'No model selected',
     text: 'Text',
@@ -400,7 +423,14 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     blocked: 'Blocked',
     allowed: 'Allowed',
     providersTitle: 'Providers',
-    providersDescription: 'Provider cards mirror the original Flower AI settings page and keep model capability details visible.',
+    providersDescription: 'Provider cards show the Local AI Profile model sources and capability details.',
+    managedByLocalAIProfileTitle: 'Local AI Profile on this Mac',
+    managedByLocalAIProfileDescription: 'Model calls are handled by Desktop from the Local AI Profile. Files, terminal, Git, and workspace actions still run in the selected runtime.',
+    managedByLocalAIProfileReady: 'Ready',
+    managedByLocalAIProfileNeedsKey: 'Needs local key',
+    managedByLocalAIProfileModelCount: (count) => `${count} model${count === 1 ? '' : 's'}`,
+    managedByLocalAIProfileMissingKeys: (providers) => `Missing local keys: ${providers}`,
+    managedByLocalAIProfileOpenLocal: 'Open Local Environment Settings on this Mac to change providers, models, or keys.',
     addProvider: 'Add provider',
     noProviders: 'No providers yet. Add OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen, or a compatible gateway.',
     defaultProvider: 'Default',
@@ -476,7 +506,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
         openai_compatible: 'Custom gateway',
       },
       connectionTitle: 'Connection',
-      connectionDescription: 'Credentials and endpoints are stored with Flower Host configuration.',
+      connectionDescription: 'Credentials and endpoints are stored with the Local AI Profile.',
       connectionName: 'Connection name',
       apiKey: 'API key',
       storedKeyKept: 'Stored key will be kept',
@@ -506,7 +536,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       recommendedModelsTitle: 'Recommended models',
       recommendedModelsDescription: 'Start from maintained presets, then fine tune limits in Advanced.',
       modelNote: (noteKey) => localizedFlowerProviderModelNote('en-US', noteKey),
-      enableAll: 'Enable all',
+      addAllPresets: 'Add all',
       customModelProvider: 'This provider uses custom model names.',
       contextSuffix: 'context',
       outputSuffix: 'output',
@@ -514,13 +544,13 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       remove: 'Remove',
       text: 'Text',
       imageInput: 'Image input',
-      enabled: 'Enabled',
+      selected: 'Selected',
       customModelPlaceholder: 'Custom model name',
       curatedPresetsOnly: 'Curated presets only',
       addCustomModel: 'Add custom model',
-      enabledModelsTitle: 'Enabled models',
-      enabledModelsDescription: 'These models can be selected as the current Flower model.',
-      noEnabledModels: 'No enabled models.',
+      selectedModelsTitle: 'Selected models',
+      selectedModelsDescription: 'These models can be selected as the current Flower model.',
+      noSelectedModels: 'No selected models.',
       unnamedModel: 'Unnamed model',
       textAndImage: 'Text + Image',
       textOnly: 'Text only',

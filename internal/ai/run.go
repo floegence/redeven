@@ -108,6 +108,7 @@ type run struct {
 	muCancel           sync.Mutex
 	cancelReason       string // "canceled"|"timed_out"|""
 	endReason          string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
+	runErrorCode       string
 	cancelRequested    bool
 	cancelFn           context.CancelFunc
 	detached           atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
@@ -398,6 +399,25 @@ func (r *run) setEndReason(reason string) {
 	r.muCancel.Lock()
 	r.endReason = strings.TrimSpace(reason)
 	r.muCancel.Unlock()
+}
+
+func (r *run) setRunErrorCode(code string) {
+	if r == nil {
+		return
+	}
+	r.muCancel.Lock()
+	r.runErrorCode = strings.TrimSpace(code)
+	r.muCancel.Unlock()
+}
+
+func (r *run) getRunErrorCode() string {
+	if r == nil {
+		return ""
+	}
+	r.muCancel.Lock()
+	v := strings.TrimSpace(r.runErrorCode)
+	r.muCancel.Unlock()
+	return v
 }
 
 func (r *run) getEndReason() string {
@@ -997,7 +1017,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 			}
 		}
 		state := RunStateFailed
-		errCode := string(aitools.ErrorCodeUnknown)
+		errCode := strings.TrimSpace(r.getRunErrorCode())
+		if errCode == "" {
+			errCode = string(aitools.ErrorCodeUnknown)
+		}
 		errMsg := strings.TrimSpace(errorString(retErr))
 		eventType := "run.error"
 		finalizationReason := strings.TrimSpace(r.getFinalizationReason())
@@ -1017,7 +1040,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 				eventType = "run.end"
 			default:
 				state = RunStateFailed
-				errCode = string(aitools.ErrorCodeUnknown)
 				if errMsg == "" {
 					errMsg = "Run ended without a recognized finalization reason."
 				}
@@ -1030,19 +1052,19 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 			eventType = "run.end"
 		case "timed_out":
 			state = RunStateTimedOut
-			errCode = string(aitools.ErrorCodeTimeout)
+			if errCode == string(aitools.ErrorCodeUnknown) {
+				errCode = string(aitools.ErrorCodeTimeout)
+			}
 			if errMsg == "" {
 				errMsg = "Timed out"
 			}
 		case "disconnected":
 			state = RunStateFailed
-			errCode = string(aitools.ErrorCodeUnknown)
 			if errMsg == "" {
 				errMsg = "Disconnected"
 			}
 		case "error":
 			state = RunStateFailed
-			errCode = string(aitools.ErrorCodeUnknown)
 		}
 		r.persistRunRecord(state, errCode, errMsg, startedAt.UnixMilli(), time.Now().UnixMilli())
 		r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, map[string]any{
@@ -1112,7 +1134,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	)
 	if isDesktopModelSourceModelID(modelID) {
 		if r.desktopModelSource == nil || !r.desktopModelSource.isConnected() {
-			return r.failRun("Desktop model source is not connected", ErrNotConfigured)
+			return r.failRunWithCode(runErrorCodeProviderUnreachable, "", ErrNotConfigured)
 		}
 		providerCfg := config.AIProvider{
 			ID:   DesktopModelSourceProviderType,
@@ -1122,10 +1144,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		return r.runNative(execCtx, req, providerCfg, "", strings.TrimSpace(taskObjective), r.desktopModelSource.Provider(modelID))
 	}
 	if !ok || providerID == "" {
-		return r.failRun("Invalid model id", fmt.Errorf("invalid model id %q", modelID))
+		return r.failRunWithCode(runErrorCodeProviderModelUnavailable, "", fmt.Errorf("invalid model id %q", modelID))
 	}
 	if r.cfg == nil {
-		return r.failRun("AI not configured", errors.New("ai not configured"))
+		return r.failRunWithCode(runErrorCodeProviderMissingKey, "", errors.New("ai not configured"))
 	}
 	var providerCfg *config.AIProvider
 	for i := range r.cfg.Providers {
@@ -1137,7 +1159,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		break
 	}
 	if providerCfg == nil {
-		return r.failRun("Unknown AI provider", fmt.Errorf("unknown provider %q", providerID))
+		return r.failRunWithCode(runErrorCodeProviderModelUnavailable, "", fmt.Errorf("unknown provider %q", providerID))
 	}
 
 	providerDisplay := providerID
@@ -1146,21 +1168,22 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	}
 
 	if r.resolveProviderKey == nil {
-		return r.failRun("AI provider key resolver not configured", errors.New("missing provider key resolver"))
+		return r.failRunWithCode(runErrorCodeProviderMissingKey, "", errors.New("missing provider key resolver"))
 	}
 	apiKey, ok, err := r.resolveProviderKey(providerID)
 	if err != nil {
-		return r.failRun("Failed to load AI provider key", err)
+		return r.failRunWithCode(runErrorCodeProviderMissingKey, "", err)
 	}
 	if !ok || strings.TrimSpace(apiKey) == "" {
-		return r.failRun(
+		return r.failRunWithCode(
+			runErrorCodeProviderMissingKey,
 			fmt.Sprintf("AI provider %q is missing API key. Open Settings to configure it.", providerDisplay),
 			fmt.Errorf("missing api key for provider %q", providerID),
 		)
 	}
 
 	if !r.shouldUseNativeRuntime(providerCfg) {
-		return r.failRun("Unsupported AI provider type", fmt.Errorf("unsupported provider type %q", strings.TrimSpace(providerCfg.Type)))
+		return r.failRunWithCode(runErrorCodeProviderModelUnavailable, "", fmt.Errorf("unsupported provider type %q", strings.TrimSpace(providerCfg.Type)))
 	}
 	return r.runNative(execCtx, req, *providerCfg, strings.TrimSpace(apiKey), strings.TrimSpace(taskObjective))
 }
@@ -1549,6 +1572,10 @@ func (r *run) ensureAssistantErrorMessage(errMsg string) {
 }
 
 func (r *run) failRun(errMsg string, cause error) error {
+	return r.failRunWithCode("", errMsg, cause)
+}
+
+func (r *run) failRunWithCode(code string, errMsg string, cause error) error {
 	if r == nil {
 		if cause != nil {
 			return cause
@@ -1560,10 +1587,18 @@ func (r *run) failRun(errMsg string, cause error) error {
 		return errors.New(msg)
 	}
 
+	code = strings.TrimSpace(code)
+	if code == "" {
+		code = classifyRunFailureCode(cause, "")
+	}
+	if code != "" {
+		r.setRunErrorCode(code)
+	}
 	msg := strings.TrimSpace(errMsg)
 	if msg == "" && cause != nil {
 		msg = strings.TrimSpace(cause.Error())
 	}
+	msg = userFacingRunError(code, msg)
 	if msg == "" {
 		msg = "AI error"
 	}
@@ -2886,6 +2921,9 @@ func (r *run) shouldRouteTargetTool(toolName string) bool {
 func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string, args map[string]any) (any, error) {
 	policy := normalizeToolTargetPolicy(r.toolTargetPolicy)
 	targetID := targetIDFromToolArgs(args)
+	if strings.TrimSpace(targetID) == "" {
+		targetID = strings.TrimSpace(policy.DefaultTargetID)
+	}
 	if strings.TrimSpace(targetID) == "" {
 		return nil, &targetToolPolicyError{
 			code:   "missing_target_id",

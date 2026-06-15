@@ -43,14 +43,14 @@ export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.emptyState;
 
   return (
-    <div class="flower-host-empty-state">
-      <div class="flower-host-empty-hero">
+    <div class="flower-empty-state">
+      <div class="flower-empty-hero">
         <FlowerHeroBadge />
         <h2 class="mb-3 text-xl font-semibold text-foreground">{copy().title}</h2>
         <p class="text-sm leading-relaxed text-muted-foreground">{copy().description}</p>
       </div>
 
-      <div class="flower-host-empty-suggestions">
+      <div class="flower-empty-suggestions">
         <For each={suggestionRows(copy())}>
           {(item) => {
             const Icon = item.icon;
@@ -78,7 +78,7 @@ export const FlowerEmptyState: Component<FlowerEmptyStateProps> = (props) => {
         </For>
       </div>
 
-      <div class="flower-host-empty-hint">
+      <div class="flower-empty-hint">
         <span class="flex items-center gap-1.5">
           <kbd class="rounded border border-border/50 bg-muted/50 px-1.5 py-0.5 font-mono text-[10px]">Enter</kbd>
           <span>{copy().sendKeyLabel}</span>

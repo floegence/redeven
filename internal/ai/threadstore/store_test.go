@@ -41,7 +41,7 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 		t.Fatalf("RunStatus=%q, want idle", th.RunStatus)
 	}
 
-	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "running", "", "", "u1", "u1@example.com"); err != nil {
+	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "running", "", "", "", "u1", "u1@example.com"); err != nil {
 		t.Fatalf("UpdateThreadRunState running: %v", err)
 	}
 	th, err = s.GetThread(ctx, "env_1", "th_1")
@@ -55,7 +55,7 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 		t.Fatalf("RunUpdatedAtUnixMs=%d, want > 0", th.RunUpdatedAtUnixMs)
 	}
 
-	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "failed", strings.Repeat("x", 900), "", "u1", "u1@example.com"); err != nil {
+	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "failed", "PROVIDER_UNREACHABLE", strings.Repeat("x", 900), "", "u1", "u1@example.com"); err != nil {
 		t.Fatalf("UpdateThreadRunState failed: %v", err)
 	}
 	th, err = s.GetThread(ctx, "env_1", "th_1")
@@ -64,6 +64,9 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	}
 	if th.RunStatus != "failed" {
 		t.Fatalf("RunStatus=%q, want failed", th.RunStatus)
+	}
+	if th.RunErrorCode != "PROVIDER_UNREACHABLE" {
+		t.Fatalf("RunErrorCode=%q, want PROVIDER_UNREACHABLE", th.RunErrorCode)
 	}
 	if got := len([]rune(th.RunError)); got != 600 {
 		t.Fatalf("RunError rune len=%d, want 600", got)
@@ -91,7 +94,7 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 		t.Fatalf("json.Marshal waiting prompt: %v", err)
 	}
 	waitingPromptJSON := string(waitingPromptJSONBytes)
-	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "waiting_user", "", waitingPromptJSON, "u1", "u1@example.com"); err != nil {
+	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "waiting_user", "", "", waitingPromptJSON, "u1", "u1@example.com"); err != nil {
 		t.Fatalf("UpdateThreadRunState waiting_user: %v", err)
 	}
 	th, err = s.GetThread(ctx, "env_1", "th_1")
@@ -105,7 +108,7 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 		t.Fatalf("waiting prompt mismatch: %+v", th)
 	}
 
-	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "success", "should be cleared", "", "u1", "u1@example.com"); err != nil {
+	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "success", "", "should be cleared", "", "u1", "u1@example.com"); err != nil {
 		t.Fatalf("UpdateThreadRunState success: %v", err)
 	}
 	th, err = s.GetThread(ctx, "env_1", "th_1")
@@ -117,6 +120,9 @@ func TestStore_UpdateThreadRunState(t *testing.T) {
 	}
 	if th.RunError != "" {
 		t.Fatalf("RunError=%q, want empty", th.RunError)
+	}
+	if th.RunErrorCode != "" {
+		t.Fatalf("RunErrorCode=%q, want empty", th.RunErrorCode)
 	}
 	if th.WaitingUserInputJSON != "" {
 		t.Fatalf("waiting prompt should be cleared, got %+v", th)
@@ -137,7 +143,7 @@ func TestStore_UpdateThreadRunStateRejectsUnsupportedStatus(t *testing.T) {
 	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "mystery", "", "", "u1", "u1@example.com"); err == nil {
+	if err := s.UpdateThreadRunState(ctx, "env_1", "th_1", "mystery", "", "", "", "u1", "u1@example.com"); err == nil {
 		t.Fatalf("UpdateThreadRunState unsupported status error=nil, want error")
 	}
 	if err := s.UpsertRun(ctx, RunRecord{RunID: "run_1", EndpointID: "env_1", ThreadID: "th_1", State: "mystery"}); err == nil {
@@ -474,7 +480,7 @@ func TestStore_ListThreadsUsesStableCreatedAtOrder(t *testing.T) {
 			t.Fatalf("CreateThread(%s): %v", th.ThreadID, err)
 		}
 	}
-	if err := s.UpdateThreadRunState(ctx, "env_1", "older", "running", "", "", "u1", "u1@example.com"); err != nil {
+	if err := s.UpdateThreadRunState(ctx, "env_1", "older", "running", "", "", "", "u1", "u1@example.com"); err != nil {
 		t.Fatalf("UpdateThreadRunState: %v", err)
 	}
 
@@ -784,7 +790,7 @@ func TestStore_ResetStaleActiveThreadRunStates(t *testing.T) {
 		if err := s.CreateThread(ctx, Thread{ThreadID: tc.threadID, EndpointID: "env_1", Title: tc.threadID}); err != nil {
 			t.Fatalf("CreateThread(%s): %v", tc.threadID, err)
 		}
-		if err := s.UpdateThreadRunState(ctx, "env_1", tc.threadID, tc.status, tc.runError, "", "u1", "u1@example.com"); err != nil {
+		if err := s.UpdateThreadRunState(ctx, "env_1", tc.threadID, tc.status, "", tc.runError, "", "u1", "u1@example.com"); err != nil {
 			t.Fatalf("UpdateThreadRunState(%s): %v", tc.threadID, err)
 		}
 	}
@@ -893,7 +899,7 @@ PRAGMA user_version=1;
 		t.Fatalf("rows err: %v", err)
 	}
 
-	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error", "waiting_user_input_json", "last_context_run_id", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version", "pinned_at_unix_ms"} {
+	for _, col := range []string{"model_id", "model_locked", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error_code", "run_error", "waiting_user_input_json", "last_context_run_id", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version", "pinned_at_unix_ms"} {
 		if !cols[col] {
 			t.Fatalf("missing migrated column %q", col)
 		}
@@ -997,6 +1003,97 @@ func TestStore_MigrateFromV27AddsFlowerTables(t *testing.T) {
 	}
 	if version != CurrentSchemaVersion() {
 		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
+	}
+}
+
+func TestStore_MigrateFromV30EnsuresFlowerMetadataOwnershipColumns(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	schema := threadstoreSchemaSpec()
+	tx, err := raw.Begin()
+	if err != nil {
+		_ = raw.Close()
+		t.Fatalf("begin v30 migration setup: %v", err)
+	}
+	for _, migration := range schema.Migrations {
+		if migration.ToVersion > 30 {
+			break
+		}
+		if err := migration.Apply(tx); err != nil {
+			_ = tx.Rollback()
+			_ = raw.Close()
+			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
+		}
+	}
+	if _, err := tx.Exec(`CREATE TABLE ai_flower_thread_metadata_reduced (
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  owner_kind TEXT NOT NULL DEFAULT '',
+  owner_id TEXT NOT NULL DEFAULT '',
+  parent_thread_id TEXT NOT NULL DEFAULT '',
+  parent_run_id TEXT NOT NULL DEFAULT '',
+  context_json TEXT NOT NULL DEFAULT '{}',
+  action_json TEXT NOT NULL DEFAULT '{}',
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(endpoint_id, thread_id)
+);`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("create reduced metadata table: %v", err)
+	}
+	if _, err := tx.Exec(`INSERT INTO ai_flower_thread_metadata_reduced(endpoint_id, thread_id, owner_kind, owner_id, updated_at_unix_ms)
+SELECT endpoint_id, thread_id, owner_kind, owner_id, updated_at_unix_ms
+FROM ai_flower_thread_metadata;`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("copy reduced metadata table: %v", err)
+	}
+	if _, err := tx.Exec(`DROP TABLE ai_flower_thread_metadata;`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("drop metadata table: %v", err)
+	}
+	if _, err := tx.Exec(`ALTER TABLE ai_flower_thread_metadata_reduced RENAME TO ai_flower_thread_metadata;`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("rename metadata table: %v", err)
+	}
+	if _, err := tx.Exec(`
+CREATE INDEX IF NOT EXISTS idx_ai_flower_thread_metadata_owner ON ai_flower_thread_metadata(endpoint_id, owner_kind, owner_id);
+CREATE INDEX IF NOT EXISTS idx_ai_flower_thread_metadata_parent ON ai_flower_thread_metadata(endpoint_id, parent_thread_id, parent_run_id);
+`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("create metadata indexes: %v", err)
+	}
+	if _, err := tx.Exec(`PRAGMA user_version=30;`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("set user_version v30: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = raw.Close()
+		t.Fatalf("commit v30 migration setup: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open with v31 migration: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	for _, column := range []string{"home_runtime_id", "home_runtime_kind", "origin_env_public_id", "primary_target_id", "active_target_ids_json"} {
+		if !tableHasColumnForTest(t, s.db, "ai_flower_thread_metadata", column) {
+			t.Fatalf("missing migrated metadata column %q", column)
+		}
 	}
 }
 
@@ -1924,12 +2021,12 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 		EndpointID:          "env_1",
 		ThreadID:            "th_src",
 		OwnerKind:           "thread_home",
-		OwnerID:             "flower-host",
+		OwnerID:             "local-environment",
 		ParentRunID:         "run_parent",
 		ContextJSON:         `{"ok":true}`,
 		ActionJSON:          `{"action":"ask"}`,
-		HomeHostID:          "flower-host",
-		HomeHostKind:        "global",
+		HomeRuntimeID:       "local-environment",
+		HomeRuntimeKind:     "local_environment",
 		OriginEnvPublicID:   "env_origin",
 		PrimaryTargetID:     "target_1",
 		ActiveTargetIDsJSON: `["target_1"]`,
@@ -2054,7 +2151,7 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFlowerThreadMetadata fork: %v", err)
 	}
-	if meta == nil || meta.ParentThreadID != "th_src" || meta.ParentRunID != "" || meta.HomeHostID != "flower-host" {
+	if meta == nil || meta.ParentThreadID != "th_src" || meta.ParentRunID != "" || meta.HomeRuntimeID != "local-environment" {
 		t.Fatalf("fork flower metadata mismatch: %+v", meta)
 	}
 }

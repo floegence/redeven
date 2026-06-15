@@ -161,6 +161,7 @@ func TestDeriveThreadRunState(t *testing.T) {
 		finalReason string
 		err         error
 		wantState   string
+		wantCode    string
 		wantMsg     string
 	}{
 		{name: "task complete success", endReason: "complete", finalReason: "task_complete", err: nil, wantState: "success", wantMsg: ""},
@@ -168,21 +169,39 @@ func TestDeriveThreadRunState(t *testing.T) {
 		{name: "ask user waiting", endReason: "complete", finalReason: "ask_user_waiting_model", err: nil, wantState: "waiting_user", wantMsg: ""},
 		{name: "unknown final reason rejected", endReason: "complete", finalReason: "unknown_final_reason", err: nil, wantState: "failed", wantMsg: "Run ended without explicit completion."},
 		{name: "canceled", endReason: "canceled", finalReason: "", err: nil, wantState: "canceled", wantMsg: ""},
-		{name: "timed out", endReason: "timed_out", finalReason: "", err: nil, wantState: "timed_out", wantMsg: "Timed out."},
+		{name: "timed out", endReason: "timed_out", finalReason: "", err: nil, wantState: "timed_out", wantCode: runErrorCodeProviderUnreachable, wantMsg: "The selected AI provider could not be reached. Check the provider endpoint and network connection."},
 		{name: "disconnected", endReason: "disconnected", finalReason: "", err: nil, wantState: "failed", wantMsg: "Disconnected."},
 		{name: "explicit error", endReason: "error", finalReason: "", err: errors.New("boom"), wantState: "failed", wantMsg: "boom"},
 		{name: "context canceled", endReason: "", finalReason: "", err: context.Canceled, wantState: "failed", wantMsg: "Disconnected."},
-		{name: "context deadline", endReason: "", finalReason: "", err: context.DeadlineExceeded, wantState: "timed_out", wantMsg: "Timed out."},
+		{name: "context deadline", endReason: "", finalReason: "", err: context.DeadlineExceeded, wantState: "timed_out", wantCode: runErrorCodeProviderUnreachable, wantMsg: "The selected AI provider could not be reached. Check the provider endpoint and network connection."},
 	}
 
 	for _, tc := range cases {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			state, msg := deriveThreadRunState(tc.endReason, tc.finalReason, tc.err)
-			if state != tc.wantState || msg != tc.wantMsg {
-				t.Fatalf("deriveThreadRunState(%q, %q, %v)=(%q,%q), want (%q,%q)", tc.endReason, tc.finalReason, tc.err, state, msg, tc.wantState, tc.wantMsg)
+			state, code, msg := deriveThreadRunState(tc.endReason, tc.finalReason, "", tc.err)
+			if state != tc.wantState || code != tc.wantCode || msg != tc.wantMsg {
+				t.Fatalf("deriveThreadRunState(%q, %q, %v)=(%q,%q,%q), want (%q,%q,%q)", tc.endReason, tc.finalReason, tc.err, state, code, msg, tc.wantState, tc.wantCode, tc.wantMsg)
 			}
 		})
+	}
+}
+
+func TestDeriveThreadRunStateUsesRunErrorCodePresentation(t *testing.T) {
+	t.Parallel()
+
+	state, code, msg := deriveThreadRunState("error", "", runErrorCodeProviderAuthFailed, errors.New("Floret projected turn failed"))
+	if state != "failed" {
+		t.Fatalf("state=%q, want failed", state)
+	}
+	if code != runErrorCodeProviderAuthFailed {
+		t.Fatalf("code=%q, want %q", code, runErrorCodeProviderAuthFailed)
+	}
+	if strings.Contains(msg, "Floret projected turn failed") {
+		t.Fatalf("msg=%q should not expose internal Floret wrapper", msg)
+	}
+	if !strings.Contains(msg, "provider") {
+		t.Fatalf("msg=%q, want provider-oriented presentation", msg)
 	}
 }

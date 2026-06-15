@@ -182,30 +182,14 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if maxTotalTokens <= 0 {
 		maxTotalTokens = 0
 	}
-	floretProvider, err := floretProviderName(providerType)
-	if err != nil {
-		return r.failRun("Unsupported Floret provider type", err)
-	}
-	floretCfg := flconfig.Config{
-		Provider:      floretProvider,
-		Model:         modelName,
-		BaseURL:       strings.TrimSpace(providerCfg.BaseURL),
-		APIKey:        strings.TrimSpace(apiKey),
-		SystemPrompt:  systemPrompt,
-		ContextPolicy: floretContextPolicy(contextWindow, inputContextLimit, req.Options.MaxOutputTokens),
-	}
-	if floretCfg.Provider == flconfig.ProviderOpenAICompatible && floretCfg.BaseURL == "" {
-		floretCfg.BaseURL = "http://model-gateway.invalid"
-	}
-	if floretProviderRequiresAPIKey(floretCfg.Provider) && floretCfg.APIKey == "" {
-		floretCfg.APIKey = "model-gateway"
-	}
+	floretCfg := redevenFloretGatewayConfig(systemPrompt, floretContextPolicy(contextWindow, inputContextLimit, req.Options.MaxOutputTokens))
 
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
 	result, err := flruntime.RunProjectedTurn(ctx, flruntime.ProjectedTurnOptions{
 		Config:       floretCfg,
 		ModelGateway: flProvider,
 		Tools:        flTools,
+		Approver:     redevenFloretToolApprover,
 		Sink:         floretEventSink{run: r},
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
@@ -230,7 +214,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		},
 	})
 	if err != nil && result.Status == "" {
-		return r.failRun("Failed to run Floret projected turn", err)
+		return r.failRunWithCode(classifyRunFailureCode(err, runErrorCodeFloretEngineFailed), "", err)
 	}
 	r.publishFinalActivityTimeline(result.ActivityTimeline)
 	r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), estimateFloretHistoryTokens(systemPrompt, history, activeTools))
@@ -364,9 +348,9 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.Projecte
 			r.persistFloretNativeTurnResult(step, result, finishReason)
 			return r.failReplyFinish(step, finishReason, floretFailureFinalizationReason(finishReason), floretFailureMessage(finishReason))
 		}
-		return r.failRun("Floret projected turn failed", resultErr)
+		return r.failRunWithCode(classifyRunFailureCode(resultErr, runErrorCodeFloretEngineFailed), "", resultErr)
 	default:
-		return r.failRun("Floret engine returned unknown status", fmt.Errorf("unknown floret status %q", result.Status))
+		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", fmt.Errorf("unknown floret status %q", result.Status))
 	}
 }
 
@@ -380,25 +364,12 @@ func enableFlowerWebSearchTool(providerCfg config.AIProvider, capability provide
 	return strings.EqualFold(strings.TrimSpace(providerCfg.Type), "openai_compatible")
 }
 
-func floretProviderName(providerType string) (string, error) {
-	providerType = strings.ToLower(strings.TrimSpace(providerType))
-	providerType = strings.ReplaceAll(providerType, "_", "-")
-	switch providerType {
-	case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen":
-		return providerType, nil
-	case "openai-compatible", "desktop-model-source":
-		return flconfig.ProviderOpenAICompatible, nil
-	default:
-		return "", fmt.Errorf("unsupported provider type %q", providerType)
-	}
-}
-
-func floretProviderRequiresAPIKey(providerName string) bool {
-	switch strings.TrimSpace(providerName) {
-	case flconfig.ProviderFake:
-		return false
-	default:
-		return true
+func redevenFloretGatewayConfig(systemPrompt string, contextPolicy flconfig.ContextPolicy) flconfig.Config {
+	return flconfig.Config{
+		Provider:      flconfig.ProviderFake,
+		Model:         "redeven-model-gateway",
+		SystemPrompt:  systemPrompt,
+		ContextPolicy: contextPolicy,
 	}
 }
 
