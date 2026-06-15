@@ -801,9 +801,9 @@ func TestDecodeRawMessagePreservesStreamingBlocksAndActivityTimeline(t *testing.
 			{"type":"thinking","content":"Checking the workspace."},
 			{"type":"markdown","content":"Partial reply"},
 			{"type":"activity-timeline","schema_version":1,"run_id":"run_1","thread_id":"thread_1","turn_id":"msg_streaming","trace_id":"trace_1","summary":{"status":"running","severity":"normal","needs_attention":true,"attention_reasons":["running"],"total_items":2,"counts":{"running":1,"success":1}},"items":[
-				{"item_id":"tool_read","tool_id":"tool_read","tool_name":"file.read","kind":"tool","status":"running","severity":"normal","needs_attention":true,"attention_reasons":["running"],"requires_approval":false,"started_at_unix_ms":1700000000001},
+					{"item_id":"tool_read","tool_id":"tool_read","tool_name":"file.read","kind":"tool","status":"running","severity":"normal","needs_attention":true,"attention_reasons":["running"],"requires_approval":false,"started_at_unix_ms":1700000000001,"label":"app.ts","renderer":"file","target_refs":[{"kind":"file","label":"app.ts","path":"/workspace/redeven/app.ts","line":12}],"payload":{"operation":"read","display_name":"app.ts","file_action_id":"file_action_read","preview_path":"/workspace/redeven/app.ts","mutations":[{"file_action_id":"file_action_read","directory_path":"/workspace/redeven"}]}},
 				{"item_id":"tool_terminal","tool_id":"tool_terminal","tool_name":"terminal.exec","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"ended_at_unix_ms":1700000000002}
-			]}
+			],"file_actions":{"file_action_read":{"action_id":"file_action_read","display_name":"app.ts","preview_path":"/workspace/redeven/app.ts","directory_path":"/workspace/redeven"}}}
 		]
 	}`)
 
@@ -825,6 +825,24 @@ func TestDecodeRawMessagePreservesStreamingBlocksAndActivityTimeline(t *testing.
 	}
 	if msg.Blocks[2].RunID != "run_1" || msg.Blocks[2].Summary == nil || !msg.Blocks[2].Summary.NeedsAttention || len(msg.Blocks[2].Items) != 2 {
 		t.Fatalf("activity block=%#v, want preserved timeline summary", msg.Blocks[2])
+	}
+	fileAction := msg.Blocks[2].FileActions["file_action_read"]
+	if fileAction.DisplayName != "app.ts" || !fileAction.CanPreview || !fileAction.CanBrowseDirectory {
+		t.Fatalf("file action=%#v, want sanitized host file action capabilities", fileAction)
+	}
+	if got := msg.Blocks[2].Items[0].TargetRefs[0].Path; got != "" {
+		t.Fatalf("public target ref path=%q, want sanitized empty path", got)
+	}
+	payload := msg.Blocks[2].Items[0].Payload
+	if _, ok := payload["preview_path"]; ok {
+		t.Fatalf("public payload leaked preview_path: %#v", payload)
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	if strings.Contains(string(payloadJSON), "directory_path") {
+		t.Fatalf("public payload leaked directory_path: %s", payloadJSON)
 	}
 }
 
@@ -891,7 +909,8 @@ func TestDecodeActivityTimelineBlockRequiresFloretObservationContract(t *testing
 		"turn_id":"msg_minimal",
 		"trace_id":"trace_minimal",
 		"summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},
-		"items":[{"item_id":"tool_terminal","tool_id":"tool_terminal","tool_name":"terminal.exec","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false}]
+		"items":[{"item_id":"tool_terminal","tool_id":"tool_terminal","tool_name":"terminal.exec","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false}],
+		"file_actions":{"file_action_app":{"action_id":"file_action_app","display_name":"app.ts","preview_path":"/workspace/app.ts","directory_path":"/workspace"}}
 	}`))
 	if err != nil {
 		t.Fatalf("decodeActivityTimelineBlock() error = %v", err)
@@ -899,8 +918,50 @@ func TestDecodeActivityTimelineBlockRequiresFloretObservationContract(t *testing
 	if timeline.RunID != "run_minimal" || len(timeline.Items) != 1 || timeline.Items[0].ToolName != "terminal.exec" {
 		t.Fatalf("timeline=%#v, want decoded Floret observation timeline", timeline)
 	}
+	if action := timeline.FileActions["file_action_app"]; !action.CanPreview || !action.CanBrowseDirectory {
+		t.Fatalf("file_actions=%#v, want sanitized host sidecar capabilities", timeline.FileActions)
+	}
 	if _, err := decodeActivityTimelineBlock(json.RawMessage(`{"type":"activity-timeline","runId":"run_old","groups":[]}`)); err == nil || !strings.Contains(err.Error(), "activity timeline schema version") {
 		t.Fatalf("decodeActivityTimelineBlock old payload err=%v, want schema contract error", err)
+	}
+}
+
+func TestResolveChatFileActionOpenTargetFromMessagesUsesHostSidecar(t *testing.T) {
+	messages := []any{json.RawMessage(`{
+		"id":"msg_1",
+		"role":"assistant",
+		"status":"complete",
+		"timestamp":1700000000000,
+		"blocks":[
+			{"type":"markdown","content":"Done"},
+			{"type":"activity-timeline","schema_version":1,"run_id":"run_1","thread_id":"thread_1","turn_id":"msg_1","trace_id":"trace_1","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[
+				{"item_id":"tool_read","tool_id":"tool_read","tool_name":"file.read","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"app.ts","renderer":"file","payload":{"operation":"read","display_name":"app.ts","file_action_id":"file_action_read"}}
+			],"file_actions":{"file_action_read":{"action_id":"file_action_read","display_name":"app.ts","preview_path":"/workspace/redeven/app.ts","directory_path":"/workspace/redeven"}}}
+		]
+	}`)}
+
+	target, ok, err := ai.ResolveFlowerFileActionOpenTargetFromMessages(messages, ai.FlowerFileActionOpenRequest{
+		MessageID:  "msg_1",
+		BlockIndex: 1,
+		ItemID:     "tool_read",
+		ActionID:   "file_action_read",
+		Action:     "preview",
+	})
+	if err != nil {
+		t.Fatalf("resolve target error = %v", err)
+	}
+	if !ok || target.Path != "/workspace/redeven/app.ts" {
+		t.Fatalf("target=%#v ok=%v, want preview path", target, ok)
+	}
+
+	if _, ok, err := ai.ResolveFlowerFileActionOpenTargetFromMessages(messages, ai.FlowerFileActionOpenRequest{
+		MessageID:  "msg_1",
+		BlockIndex: 1,
+		ItemID:     "tool_read",
+		ActionID:   "forged_action",
+		Action:     "preview",
+	}); err != nil || ok {
+		t.Fatalf("forged action ok=%v err=%v, want rejected", ok, err)
 	}
 }
 

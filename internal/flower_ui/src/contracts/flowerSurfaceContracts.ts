@@ -137,7 +137,6 @@ export type FlowerActivityTargetRef = Readonly<{
   kind: string;
   label: string;
   uri?: string;
-  path?: string;
   line?: number;
 }>;
 
@@ -161,6 +160,13 @@ export type FlowerActivityItem = Readonly<{
   target_refs?: readonly FlowerActivityTargetRef[];
   payload?: Readonly<Record<string, unknown>>;
   metadata?: Readonly<Record<string, string>>;
+}>;
+
+export type FlowerActivityFileAction = Readonly<{
+  action_id: string;
+  display_name: string;
+  can_preview: boolean;
+  can_browse_directory: boolean;
 }>;
 
 export type FlowerActivityTimelineBlock = Readonly<{
@@ -188,6 +194,7 @@ export type FlowerActivityTimelineBlock = Readonly<{
     duration_ms?: number;
   }>;
   items: readonly FlowerActivityItem[];
+  file_actions?: Readonly<Record<string, FlowerActivityFileAction>>;
 }>;
 
 export type FlowerChatMessageBlock =
@@ -388,9 +395,11 @@ export type FlowerSendMessageFailure = Error & Readonly<{
 }>;
 
 export type FlowerFileOpenRequest = Readonly<{
-  path: string;
-  source_activity_id: string;
-  working_dir?: string;
+  thread_id?: string;
+  message_id: string;
+  block_index: number;
+  item_id: string;
+  action_id: string;
 }>;
 
 export type FlowerSurfaceHostDescriptor = Readonly<{

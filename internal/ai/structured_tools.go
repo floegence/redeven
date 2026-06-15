@@ -12,20 +12,10 @@ import (
 )
 
 const (
-	defaultFileReadLimit = 200
-	maxFileReadLimit     = 400
+	defaultFileReadLimit  = 200
+	maxFileReadLimit      = 400
+	maxMutationPatchRunes = 8000
 )
-
-type DiffHunkView struct {
-	OldStart    int      `json:"old_start"`
-	OldLines    int      `json:"old_lines"`
-	NewStart    int      `json:"new_start"`
-	NewLines    int      `json:"new_lines"`
-	Before      []string `json:"before,omitempty"`
-	After       []string `json:"after,omitempty"`
-	BeforeKinds []string `json:"before_kinds,omitempty"`
-	AfterKinds  []string `json:"after_kinds,omitempty"`
-}
 
 type FileReadArgs struct {
 	FilePath string `json:"file_path"`
@@ -34,12 +24,13 @@ type FileReadArgs struct {
 }
 
 type FileReadResult struct {
-	FilePath   string `json:"file_path"`
-	Content    string `json:"content"`
-	LineOffset int    `json:"line_offset,omitempty"`
-	LineCount  int    `json:"line_count,omitempty"`
-	TotalLines int    `json:"total_lines,omitempty"`
-	Truncated  bool   `json:"truncated,omitempty"`
+	FilePath    string `json:"file_path"`
+	DisplayName string `json:"display_name"`
+	Content     string `json:"content"`
+	LineOffset  int    `json:"line_offset,omitempty"`
+	LineCount   int    `json:"line_count,omitempty"`
+	TotalLines  int    `json:"total_lines,omitempty"`
+	Truncated   bool   `json:"truncated,omitempty"`
 }
 
 type FileEditArgs struct {
@@ -55,14 +46,16 @@ type FileWriteArgs struct {
 }
 
 type FileMutationResult struct {
-	FilePath       string         `json:"file_path"`
-	OldPath        string         `json:"old_path,omitempty"`
-	NewPath        string         `json:"new_path,omitempty"`
-	ChangeType     string         `json:"change_type"`
-	StructuredDiff []DiffHunkView `json:"structured_diff,omitempty"`
-	OriginalFile   string         `json:"original_file,omitempty"`
-	UpdatedFile    string         `json:"updated_file,omitempty"`
-	Truncated      bool           `json:"truncated,omitempty"`
+	FilePath              string `json:"file_path"`
+	DisplayName           string `json:"display_name"`
+	OldPath               string `json:"old_path,omitempty"`
+	NewPath               string `json:"new_path,omitempty"`
+	ChangeType            string `json:"change_type"`
+	Additions             int    `json:"additions,omitempty"`
+	Deletions             int    `json:"deletions,omitempty"`
+	UnifiedDiff           string `json:"unified_diff,omitempty"`
+	DiffUnavailableReason string `json:"diff_unavailable_reason,omitempty"`
+	Truncated             bool   `json:"truncated,omitempty"`
 }
 
 type ApplyPatchResult struct {
@@ -134,7 +127,7 @@ func splitFileReadLines(content string) []string {
 	return lines
 }
 
-func splitStructuredDiffLines(content string) []string {
+func splitMutationDiffLines(content string) []string {
 	if content == "" {
 		return nil
 	}
@@ -145,9 +138,24 @@ func splitStructuredDiffLines(content string) []string {
 	return lines
 }
 
-func buildStructuredDiff(before string, after string) []DiffHunkView {
-	beforeLines := splitStructuredDiffLines(before)
-	afterLines := splitStructuredDiffLines(after)
+type mutationDiffLine struct {
+	oldLine int
+	newLine int
+	prefix  byte
+	text    string
+}
+
+type mutationDiffHunk struct {
+	oldStart int
+	oldCount int
+	newStart int
+	newCount int
+	lines    []mutationDiffLine
+}
+
+func buildMutationDiffHunks(before string, after string) []mutationDiffHunk {
+	beforeLines := splitMutationDiffLines(before)
+	afterLines := splitMutationDiffLines(after)
 	prefix := 0
 	for prefix < len(beforeLines) && prefix < len(afterLines) && beforeLines[prefix] == afterLines[prefix] {
 		prefix++
@@ -172,27 +180,20 @@ func buildStructuredDiff(before string, after string) []DiffHunkView {
 	if afterEnd < prefix {
 		afterEnd = prefix
 	}
-	return []DiffHunkView{{
-		OldStart:    prefix + 1,
-		OldLines:    beforeEnd - prefix,
-		NewStart:    prefix + 1,
-		NewLines:    afterEnd - prefix,
-		Before:      append([]string(nil), beforeLines[prefix:beforeEnd]...),
-		After:       append([]string(nil), afterLines[prefix:afterEnd]...),
-		BeforeKinds: repeatedDiffLineKind("removed", beforeEnd-prefix),
-		AfterKinds:  repeatedDiffLineKind("added", afterEnd-prefix),
+	lines := make([]mutationDiffLine, 0, beforeEnd-prefix+afterEnd-prefix)
+	for idx := prefix; idx < beforeEnd; idx++ {
+		lines = append(lines, mutationDiffLine{oldLine: idx + 1, prefix: '-', text: beforeLines[idx]})
+	}
+	for idx := prefix; idx < afterEnd; idx++ {
+		lines = append(lines, mutationDiffLine{newLine: idx + 1, prefix: '+', text: afterLines[idx]})
+	}
+	return []mutationDiffHunk{{
+		oldStart: prefix + 1,
+		oldCount: beforeEnd - prefix,
+		newStart: prefix + 1,
+		newCount: afterEnd - prefix,
+		lines:    lines,
 	}}
-}
-
-func repeatedDiffLineKind(kind string, count int) []string {
-	if count <= 0 {
-		return nil
-	}
-	out := make([]string, count)
-	for i := range out {
-		out[i] = kind
-	}
-	return out
 }
 
 func newFileMutationResult(filePath string, changeType string, before string, after string) FileMutationResult {
@@ -200,43 +201,186 @@ func newFileMutationResult(filePath string, changeType string, before string, af
 }
 
 func newFileMutationResultWithPaths(filePath string, oldPath string, newPath string, changeType string, before string, after string) FileMutationResult {
-	result := newFileMutationResultWithStructuredDiff(filePath, oldPath, newPath, changeType, buildStructuredDiff(before, after))
-	if before != after {
-		result.OriginalFile = before
-		result.UpdatedFile = after
-	}
-	return result
+	return newFileMutationResultWithPatch(filePath, oldPath, newPath, changeType, mutationUnifiedDiff(filePath, oldPath, newPath, changeType, before, after))
 }
 
-func newFileMutationResultWithStructuredDiff(filePath string, oldPath string, newPath string, changeType string, structuredDiff []DiffHunkView) FileMutationResult {
+func newFileMutationResultWithPatch(filePath string, oldPath string, newPath string, changeType string, patch mutationPatchText) FileMutationResult {
+	cleanFilePath := strings.TrimSpace(filePath)
+	cleanOldPath := strings.TrimSpace(oldPath)
+	cleanNewPath := strings.TrimSpace(newPath)
 	result := FileMutationResult{
-		FilePath:       strings.TrimSpace(filePath),
-		OldPath:        strings.TrimSpace(oldPath),
-		NewPath:        strings.TrimSpace(newPath),
-		ChangeType:     strings.TrimSpace(changeType),
-		StructuredDiff: cloneDiffHunkViews(structuredDiff),
+		FilePath:    cleanFilePath,
+		DisplayName: displayNameForFilePath(firstNonEmptyString(cleanNewPath, cleanFilePath, cleanOldPath)),
+		OldPath:     cleanOldPath,
+		NewPath:     cleanNewPath,
+		ChangeType:  strings.TrimSpace(changeType),
+		Additions:   patch.additions,
+		Deletions:   patch.deletions,
+		UnifiedDiff: patch.text,
+		Truncated:   patch.truncated,
+	}
+	if result.DisplayName == "" {
+		result.DisplayName = displayNameForFilePath(cleanFilePath)
+	}
+	if result.UnifiedDiff == "" && strings.TrimSpace(changeType) != "noop" {
+		result.DiffUnavailableReason = "No textual diff is available."
 	}
 	return result
 }
 
-func cloneDiffHunkViews(in []DiffHunkView) []DiffHunkView {
-	if len(in) == 0 {
-		return nil
+type mutationPatchText struct {
+	text      string
+	additions int
+	deletions int
+	truncated bool
+}
+
+func displayNameForFilePath(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" || path == "/dev/null" {
+		return ""
 	}
-	out := make([]DiffHunkView, 0, len(in))
-	for _, hunk := range in {
-		out = append(out, DiffHunkView{
-			OldStart:    hunk.OldStart,
-			OldLines:    hunk.OldLines,
-			NewStart:    hunk.NewStart,
-			NewLines:    hunk.NewLines,
-			Before:      append([]string(nil), hunk.Before...),
-			After:       append([]string(nil), hunk.After...),
-			BeforeKinds: append([]string(nil), hunk.BeforeKinds...),
-			AfterKinds:  append([]string(nil), hunk.AfterKinds...),
-		})
+	clean := filepath.Clean(path)
+	if clean == "." {
+		return stripDisplayNameContentRef(path)
 	}
-	return out
+	return stripDisplayNameContentRef(filepath.Base(clean))
+}
+
+func isDisplayNameContentRefSuffix(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return false
+	}
+	if strings.HasPrefix(value, "L") && len(value) > 1 {
+		for _, r := range value[1:] {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+		return true
+	}
+	if len(value) < 8 {
+		return false
+	}
+	for _, r := range value {
+		if (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func stripDisplayNameContentRef(value string) string {
+	out := strings.TrimSpace(value)
+	for {
+		idx := strings.LastIndex(out, "#")
+		if idx < 0 {
+			return out
+		}
+		if !isDisplayNameContentRefSuffix(out[idx+1:]) {
+			return out
+		}
+		out = strings.TrimSpace(out[:idx])
+	}
+}
+
+func mutationActionPath(filePath string, oldPath string, newPath string, changeType string) string {
+	changeType = strings.ToLower(strings.TrimSpace(changeType))
+	if changeType == "delete" {
+		return ""
+	}
+	return firstNonEmptyString(newPath, filePath, oldPath)
+}
+
+func mutationDirectoryPath(actionPath string, oldPath string, newPath string) string {
+	path := firstNonEmptyString(actionPath, newPath, oldPath)
+	if path == "" || path == "/dev/null" {
+		return ""
+	}
+	return filepath.Dir(path)
+}
+
+func mutationPatchPaths(filePath string, oldPath string, newPath string, changeType string) (string, string) {
+	changeType = strings.ToLower(strings.TrimSpace(changeType))
+	cleanFilePath := strings.TrimSpace(filePath)
+	cleanOldPath := firstNonEmptyString(oldPath, cleanFilePath)
+	cleanNewPath := firstNonEmptyString(newPath, cleanFilePath)
+	if changeType == "create" {
+		cleanOldPath = "/dev/null"
+	}
+	if changeType == "delete" {
+		cleanNewPath = "/dev/null"
+	}
+	return cleanOldPath, cleanNewPath
+}
+
+func mutationUnifiedDiff(filePath string, oldPath string, newPath string, changeType string, before string, after string) mutationPatchText {
+	if before == after {
+		return mutationPatchText{}
+	}
+	hunks := buildMutationDiffHunks(before, after)
+	oldPatchPath, newPatchPath := mutationPatchPaths(filePath, oldPath, newPath, changeType)
+	oldDisplayPath, newDisplayPath := mutationPatchPaths(displayNameForFilePath(oldPatchPath), "", displayNameForFilePath(newPatchPath), changeType)
+	return renderMutationPatch(oldDisplayPath, newDisplayPath, hunks)
+}
+
+func renderMutationPatch(oldPath string, newPath string, hunks []mutationDiffHunk) mutationPatchText {
+	if len(hunks) == 0 {
+		return mutationPatchText{}
+	}
+	var builder strings.Builder
+	builder.WriteString("--- ")
+	builder.WriteString(patchMarkerPath(oldPath, "a/"))
+	builder.WriteByte('\n')
+	builder.WriteString("+++ ")
+	builder.WriteString(patchMarkerPath(newPath, "b/"))
+	builder.WriteByte('\n')
+	additions := 0
+	deletions := 0
+	for _, hunk := range hunks {
+		builder.WriteString(fmt.Sprintf("@@ -%d,%d +%d,%d @@\n", hunk.oldStart, hunk.oldCount, hunk.newStart, hunk.newCount))
+		for _, line := range hunk.lines {
+			if line.prefix == '+' {
+				additions++
+			}
+			if line.prefix == '-' {
+				deletions++
+			}
+			builder.WriteByte(line.prefix)
+			builder.WriteString(line.text)
+			builder.WriteByte('\n')
+		}
+	}
+	text, truncated := truncateMutationPatchText(builder.String())
+	return mutationPatchText{text: text, additions: additions, deletions: deletions, truncated: truncated}
+}
+
+func patchMarkerPath(path string, prefix string) string {
+	path = filepath.ToSlash(strings.TrimSpace(path))
+	if path == "" {
+		path = "/dev/null"
+	}
+	if path == "/dev/null" {
+		return path
+	}
+	if strings.HasPrefix(path, prefix) {
+		return path
+	}
+	return prefix + strings.TrimPrefix(path, "/")
+}
+
+func truncateMutationPatchText(text string) (string, bool) {
+	text = strings.TrimRight(text, "\n")
+	if text == "" {
+		return "", false
+	}
+	runes := []rune(text)
+	if len(runes) <= maxMutationPatchRunes {
+		return text, false
+	}
+	return string(runes[:maxMutationPatchRunes]), true
 }
 
 func normalizeFileReadWindow(offset int, limit int) (startLine int, lineLimit int) {
@@ -271,12 +415,13 @@ func (r *run) toolFileRead(ctx context.Context, args FileReadArgs) (FileReadResu
 	startLine, lineLimit := normalizeFileReadWindow(args.Offset, args.Limit)
 	if totalLines == 0 {
 		return FileReadResult{
-			FilePath:   path,
-			Content:    "",
-			LineOffset: 1,
-			LineCount:  0,
-			TotalLines: 0,
-			Truncated:  false,
+			FilePath:    path,
+			DisplayName: displayNameForFilePath(path),
+			Content:     "",
+			LineOffset:  1,
+			LineCount:   0,
+			TotalLines:  0,
+			Truncated:   false,
 		}, nil
 	}
 	if startLine > totalLines {
@@ -292,12 +437,13 @@ func (r *run) toolFileRead(ctx context.Context, args FileReadArgs) (FileReadResu
 	}
 	window := strings.Join(lines[startIdx:endIdx], "")
 	return FileReadResult{
-		FilePath:   path,
-		Content:    window,
-		LineOffset: startLine,
-		LineCount:  endIdx - startIdx,
-		TotalLines: totalLines,
-		Truncated:  endIdx < totalLines,
+		FilePath:    path,
+		DisplayName: displayNameForFilePath(path),
+		Content:     window,
+		LineOffset:  startLine,
+		LineCount:   endIdx - startIdx,
+		TotalLines:  totalLines,
+		Truncated:   endIdx < totalLines,
 	}, nil
 }
 

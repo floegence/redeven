@@ -22,6 +22,8 @@ import {
   type DesktopFlowerHostThread,
   type DesktopFlowerHostRouterDecision,
   type DesktopFlowerHostError,
+  type DesktopFlowerHostFileActionOpenRequest,
+  type DesktopFlowerHostFileActionOpenTarget,
   type DesktopFlowerHostPresence,
   type DesktopFlowerHostUnavailableHandler,
 } from '../shared/flowerHostSettingsIPC';
@@ -665,6 +667,31 @@ export async function submitFlowerHostInputViaBridge(args: FlowerHostBridgeArgs 
   return normalizeBridgeThread(thread);
 }
 
+export async function resolveFlowerHostFileActionOpenTargetViaBridge(args: FlowerHostBridgeArgs & Readonly<{
+  request: DesktopFlowerHostFileActionOpenRequest;
+}>): Promise<DesktopFlowerHostFileActionOpenTarget> {
+  const client = await ensureFlowerHostBridge(args);
+  const threadID = compact(args.request.thread_id);
+  if (!threadID) {
+    throw new Error('Flower thread id is required.');
+  }
+  const result = await requestJSON<DesktopFlowerHostFileActionOpenTarget>(
+    client,
+    `/v1/thread/${encodeURIComponent(threadID)}/file-action-open-target`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        message_id: compact(args.request.message_id),
+        block_index: Math.floor(Number(args.request.block_index)),
+        item_id: compact(args.request.item_id),
+        action_id: compact(args.request.action_id),
+        action: args.request.action,
+      }),
+    },
+  );
+  return normalizeBridgeFileActionOpenTarget(result, 'file_action_open_target');
+}
+
 export async function resolveFlowerHostHandlerViaBridge(args: FlowerHostBridgeArgs & Readonly<{
   request?: Readonly<Record<string, unknown>>;
 }>): Promise<DesktopFlowerHostRouterDecision> {
@@ -1022,6 +1049,7 @@ function normalizeBridgeActivityTimelineBlock(value: unknown, field: string): De
     ? undefined
     : normalizeBridgeActivityAttentionReasons(summary.attention_reasons, `${field}.summary.attention_reasons`);
   const durationMS = optionalBridgeNumber(summary.duration_ms, `${field}.summary.duration_ms`);
+  const fileActions = normalizeBridgeActivityFileActions(record.file_actions, `${field}.file_actions`);
   return {
     type: 'activity-timeline',
     schema_version: requireBridgeNumber(record.schema_version, `${field}.schema_version`),
@@ -1039,6 +1067,52 @@ function normalizeBridgeActivityTimelineBlock(value: unknown, field: string): De
       ...(durationMS !== undefined ? { duration_ms: durationMS } : {}),
     },
     items: record.items.map((item, index) => normalizeBridgeActivityItem(item, `${field}.items[${index}]`)),
+    ...(fileActions ? { file_actions: fileActions } : {}),
+  };
+}
+
+function normalizeBridgeActivityFileActions(
+  value: unknown,
+  field: string,
+): NonNullable<DesktopFlowerHostActivityTimelineBlock['file_actions']> | undefined {
+  if (value === undefined || value === null) return undefined;
+  const record = requireBridgeObject(value, field);
+  const out: Record<string, NonNullable<DesktopFlowerHostActivityTimelineBlock['file_actions']>[string]> = {};
+  for (const [key, rawAction] of Object.entries(record)) {
+    const action = requireBridgeObject(rawAction, `${field}.${key}`);
+    for (const actionField of Object.keys(action)) {
+      if (!BRIDGE_FILE_ACTION_KEYS.has(actionField)) {
+        bridgeContractError(`${field}.${key}.${actionField}`, 'is not part of the file action contract');
+      }
+    }
+    const actionID = requireBridgeString(action.action_id, `${field}.${key}.action_id`);
+    const displayName = requireBridgeString(action.display_name, `${field}.${key}.display_name`);
+    const canPreview = requireBridgeBoolean(action.can_preview, `${field}.${key}.can_preview`);
+    const canBrowseDirectory = requireBridgeBoolean(action.can_browse_directory, `${field}.${key}.can_browse_directory`);
+    const normalizedKey = compact(key);
+    if (!normalizedKey || normalizedKey !== actionID) {
+      bridgeContractError(`${field}.${key}.action_id`, 'must match the file action map key');
+    }
+    out[actionID] = {
+      action_id: actionID,
+      display_name: displayName,
+      can_preview: canPreview,
+      can_browse_directory: canBrowseDirectory,
+    };
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function normalizeBridgeFileActionOpenTarget(value: unknown, field: string): DesktopFlowerHostFileActionOpenTarget {
+  const record = requireBridgeObject(value, field);
+  const action = compact(record.action);
+  if (action !== 'preview' && action !== 'browse_directory') {
+    bridgeContractError(`${field}.action`, 'must be preview or browse_directory');
+  }
+  return {
+    action_id: requireBridgeString(record.action_id, `${field}.action_id`),
+    action,
+    path: requireBridgeString(record.path, `${field}.path`),
   };
 }
 
@@ -1159,6 +1233,205 @@ function normalizeBridgeActivityRenderer(value: unknown, field: string): Desktop
   bridgeContractError(field, `has unsupported value ${JSON.stringify(renderer)}`);
 }
 
+const BRIDGE_ACTIVITY_PAYLOAD_KEYS_BY_RENDERER: Readonly<Record<NonNullable<DesktopFlowerHostActivityItem['renderer']>, ReadonlySet<string>>> = {
+  terminal: new Set([
+    'command',
+    'timeout_ms',
+    'timeout_source',
+    'requested_timeout_ms',
+    'description',
+    'exit_code',
+    'duration_ms',
+    'timed_out',
+    'truncated',
+    'stdout',
+    'stderr',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  file: new Set([
+    'operation',
+    'display_name',
+    'file_action_id',
+    'content',
+    'line_offset',
+    'line_count',
+    'total_lines',
+    'change_type',
+    'additions',
+    'deletions',
+    'unified_diff',
+    'diff_unavailable_reason',
+    'truncated',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  patch: new Set([
+    'operation',
+    'files_changed',
+    'hunks',
+    'additions',
+    'deletions',
+    'input_format',
+    'normalized_format',
+    'mutations',
+    'truncated',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  todos: new Set([
+    'todos',
+    'counts',
+    'result',
+    'args',
+    'expected_version',
+    'explanation',
+    'truncated',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  web_search: new Set([
+    'query',
+    'provider',
+    'count',
+    'sources',
+    'results',
+    'truncated',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  question: new Set([
+    'reason_code',
+    'required_from_user',
+    'questions',
+    'contains_secret',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  completion: new Set([
+    'result',
+    'evidence_refs',
+    'remaining_risks',
+    'next_actions',
+    'truncated',
+    'summary',
+    'details',
+    'status',
+    'error',
+    'content_ref',
+  ]),
+  structured: new Set([
+    'operation',
+    'query',
+    'count',
+    'provider',
+    'name',
+    'action',
+    'limit',
+    'data',
+    'result',
+    'content',
+    'content_ref',
+    'activation_id',
+    'already_active',
+    'mode_hints',
+    'dependencies',
+    'dependency_degraded',
+    'reason',
+    'id',
+    'status',
+    'message',
+    'agents',
+    'created',
+    'waiting',
+    'terminated',
+    'terminated_all',
+    'timed_out',
+    'targets',
+    'validation',
+    'stats',
+    'spec',
+    'output',
+    'structured',
+    'key_files',
+    'rows',
+    'cards',
+    'items',
+    'evidence_refs',
+    'remaining_risks',
+    'next_actions',
+    'truncated',
+    'summary',
+    'details',
+    'error',
+  ]),
+};
+
+const BRIDGE_FILE_MUTATION_PAYLOAD_KEYS = new Set([
+  'display_name',
+  'file_action_id',
+  'change_type',
+  'additions',
+  'deletions',
+  'unified_diff',
+  'diff_unavailable_reason',
+  'truncated',
+]);
+
+const BRIDGE_FILE_ACTION_KEYS = new Set([
+  'action_id',
+  'display_name',
+  'can_preview',
+  'can_browse_directory',
+]);
+
+const BRIDGE_ACTIVITY_TARGET_REF_KEYS = new Set([
+  'kind',
+  'label',
+  'uri',
+  'line',
+]);
+
+const BRIDGE_ACTIVITY_NESTED_PAYLOAD_FORBIDDEN_KEYS = new Set([
+  'action_path',
+  'directory_path',
+  'display_path',
+  'file_path',
+  'original_file',
+  'path',
+  'preview_path',
+  'root_dir',
+  'stdin',
+  'updated_file',
+  'workdir',
+  'cwd',
+]);
+
+function bridgeActivityPayloadKeyPolicyToken(key: string): string {
+  return key
+    .replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)
+    .replace(/[-.:]/g, '_')
+    .toLowerCase();
+}
+
 function normalizeBridgeActivityCounts(value: unknown, field: string): DesktopFlowerHostActivityTimelineBlock['summary']['counts'] {
   const record = requireBridgeObject(value, field);
   const keys = ['pending', 'running', 'waiting', 'success', 'error', 'canceled', 'approval'] as const;
@@ -1222,6 +1495,9 @@ function normalizeBridgeJSONValue(value: unknown, field: string, depth = 0): unk
       if (key.length > 80 || !/^[A-Za-z0-9_.:-]+$/.test(key)) {
         bridgeContractError(`${field}.${key}`, 'must use token keys up to 80 characters');
       }
+      if (BRIDGE_ACTIVITY_NESTED_PAYLOAD_FORBIDDEN_KEYS.has(bridgeActivityPayloadKeyPolicyToken(key))) {
+        bridgeContractError(`${field}.${key}`, 'is not part of the nested activity payload contract');
+      }
       out[key] = normalizeBridgeJSONValue(item, `${field}.${key}`, depth + 1);
     }
     return out;
@@ -1229,7 +1505,11 @@ function normalizeBridgeJSONValue(value: unknown, field: string, depth = 0): unk
   bridgeContractError(field, 'must be JSON-compatible');
 }
 
-function normalizeBridgeActivityPayload(value: unknown, field: string): Readonly<Record<string, unknown>> | undefined {
+function normalizeBridgeActivityPayload(
+  value: unknown,
+  field: string,
+  renderer: DesktopFlowerHostActivityItem['renderer'],
+): Readonly<Record<string, unknown>> | undefined {
   if (value === undefined || value === null) {
     return undefined;
   }
@@ -1237,14 +1517,43 @@ function normalizeBridgeActivityPayload(value: unknown, field: string): Readonly
     bridgeContractError(field, 'must be an object');
   }
   const record = requireBridgeObject(value, field);
+  const rendererName = renderer ?? 'structured';
+  const allowedKeys = BRIDGE_ACTIVITY_PAYLOAD_KEYS_BY_RENDERER[rendererName];
   const out: Record<string, unknown> = {};
   for (const [key, item] of Object.entries(record)) {
     if (key.length > 80 || !/^[A-Za-z0-9_.:-]+$/.test(key)) {
       bridgeContractError(`${field}.${key}`, 'must use token keys up to 80 characters');
     }
+    if (!allowedKeys.has(key)) {
+      bridgeContractError(`${field}.${key}`, `is not part of the ${rendererName} payload contract`);
+    }
+    if (rendererName === 'patch' && key === 'mutations') {
+      out[key] = normalizeBridgeActivityPatchMutations(item, `${field}.${key}`);
+      continue;
+    }
     out[key] = normalizeBridgeJSONValue(item, `${field}.${key}`, 1);
   }
   return out;
+}
+
+function normalizeBridgeActivityPatchMutations(value: unknown, field: string): readonly Readonly<Record<string, unknown>>[] {
+  if (!Array.isArray(value)) {
+    bridgeContractError(field, 'must be an array');
+  }
+  return value.map((item, index) => {
+    const record = requireBridgeObject(item, `${field}[${index}]`);
+    const out: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(record)) {
+      if (key.length > 80 || !/^[A-Za-z0-9_.:-]+$/.test(key)) {
+        bridgeContractError(`${field}[${index}].${key}`, 'must use token keys up to 80 characters');
+      }
+      if (!BRIDGE_FILE_MUTATION_PAYLOAD_KEYS.has(key)) {
+        bridgeContractError(`${field}[${index}].${key}`, 'is not part of the patch mutation payload contract');
+      }
+      out[key] = normalizeBridgeJSONValue(entry, `${field}[${index}].${key}`, 1);
+    }
+    return out;
+  });
 }
 
 function normalizeBridgeActivityChips(value: unknown, field: string): NonNullable<DesktopFlowerHostActivityItem['chips']> | undefined {
@@ -1278,11 +1587,15 @@ function normalizeBridgeActivityTargetRefs(value: unknown, field: string): NonNu
   }
   return value.map((item, index) => {
     const record = requireBridgeObject(item, `${field}[${index}]`);
+    for (const refField of Object.keys(record)) {
+      if (!BRIDGE_ACTIVITY_TARGET_REF_KEYS.has(refField)) {
+        bridgeContractError(`${field}[${index}].${refField}`, 'is not part of the activity target ref contract');
+      }
+    }
     const uri = optionalBridgeBoundedString(record.uri, `${field}[${index}].uri`, 1000);
     if (uri && !uri.startsWith('http://') && !uri.startsWith('https://') && !uri.startsWith('artifact://')) {
       bridgeContractError(`${field}[${index}].uri`, 'must use http, https, or artifact scheme');
     }
-    const targetPath = optionalBridgeBoundedString(record.path, `${field}[${index}].path`, 500);
     const line = optionalBridgeNumber(record.line, `${field}[${index}].line`);
     if (line !== undefined && (!Number.isInteger(line) || line < 0)) {
       bridgeContractError(`${field}[${index}].line`, 'must be a non-negative integer');
@@ -1291,7 +1604,6 @@ function normalizeBridgeActivityTargetRefs(value: unknown, field: string): NonNu
       kind: requireBridgeActivityToken(record.kind, `${field}[${index}].kind`, 64),
       label: requireBridgeBoundedString(record.label, `${field}[${index}].label`, 240),
       ...(uri ? { uri } : {}),
-      ...(targetPath ? { path: targetPath } : {}),
       ...(line !== undefined ? { line } : {}),
     };
   });
@@ -1324,7 +1636,7 @@ function normalizeBridgeActivityItem(value: unknown, field: string): DesktopFlow
   const renderer = normalizeBridgeActivityRenderer(record.renderer, `${field}.renderer`);
   const chips = normalizeBridgeActivityChips(record.chips, `${field}.chips`);
   const targetRefs = normalizeBridgeActivityTargetRefs(record.target_refs, `${field}.target_refs`);
-  const payload = normalizeBridgeActivityPayload(record.payload, `${field}.payload`);
+  const payload = normalizeBridgeActivityPayload(record.payload, `${field}.payload`, renderer);
   const metadata = normalizeBridgeActivityMetadata(record.metadata, `${field}.metadata`);
   return {
     item_id: requireBridgeString(record.item_id, `${field}.item_id`),

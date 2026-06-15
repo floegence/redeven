@@ -12,18 +12,98 @@ import (
 const activityTimelineBlockType = "activity-timeline"
 
 type ActivityTimelineBlock struct {
-	Type string `json:"type"`
+	Type        string                              `json:"type"`
+	FileActions map[string]FlowerActivityFileAction `json:"file_actions,omitempty"`
 	observation.ActivityTimeline
 }
 
-func newActivityTimelineBlock(timeline observation.ActivityTimeline) ActivityTimelineBlock {
+func newActivityTimelineBlock(timeline observation.ActivityTimeline, fileActions map[string]FlowerActivityFileAction) ActivityTimelineBlock {
 	if timeline.SchemaVersion <= 0 {
 		timeline.SchemaVersion = observation.ActivityTimelineSchemaVersion
 	}
 	return ActivityTimelineBlock{
 		Type:             activityTimelineBlockType,
+		FileActions:      cloneFlowerActivityFileActions(fileActions),
 		ActivityTimeline: timeline,
 	}
+}
+
+func cloneFlowerActivityFileActions(in map[string]FlowerActivityFileAction) map[string]FlowerActivityFileAction {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]FlowerActivityFileAction, len(in))
+	for key, value := range in {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		value.ActionID = strings.TrimSpace(value.ActionID)
+		value.DisplayName = strings.TrimSpace(value.DisplayName)
+		value.PreviewPath = strings.TrimSpace(value.PreviewPath)
+		value.DirectoryPath = strings.TrimSpace(value.DirectoryPath)
+		if value.ActionID == "" || value.DisplayName == "" {
+			continue
+		}
+		out[key] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func activityPayloadString(payload map[string]any, key string) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(anyToString(payload[key]))
+}
+
+func activityPayloadRecords(payload map[string]any, key string) []map[string]any {
+	if len(payload) == 0 {
+		return nil
+	}
+	items, _ := payload[key].([]any)
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		record, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		out = append(out, record)
+	}
+	return out
+}
+
+func (r *run) activityTimelineFileActions(timeline observation.ActivityTimeline) map[string]FlowerActivityFileAction {
+	if r == nil || len(timeline.Items) == 0 {
+		return nil
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	if len(r.activityFileActions) == 0 {
+		return nil
+	}
+	out := map[string]FlowerActivityFileAction{}
+	addAction := func(actionID string) {
+		actionID = strings.TrimSpace(actionID)
+		if actionID == "" {
+			return
+		}
+		action, ok := r.activityFileActions[actionID]
+		if !ok {
+			return
+		}
+		out[actionID] = action
+	}
+	for _, item := range timeline.Items {
+		addAction(activityPayloadString(item.Payload, "file_action_id"))
+		for _, mutation := range activityPayloadRecords(item.Payload, "mutations") {
+			addAction(activityPayloadString(mutation, "file_action_id"))
+		}
+	}
+	return cloneFlowerActivityFileActions(out)
 }
 
 func (r *run) finishActivitySegment() {
@@ -155,7 +235,8 @@ func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
 	if idx < 0 {
 		return
 	}
-	block := newActivityTimelineBlock(timeline)
+	fileActions := r.activityTimelineFileActions(timeline)
+	block := newActivityTimelineBlock(timeline, fileActions)
 	r.muAssistant.Lock()
 	r.persistEnsureIndex(idx)
 	r.assistantBlocks[idx] = block

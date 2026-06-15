@@ -3652,6 +3652,39 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
+		case action == "file-action-open-target" && r.Method == http.MethodPost && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.FlowerFileActionOpenRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			body.ThreadID = threadID
+			target, err := g.ai.ResolveFlowerFileActionOpenTarget(r.Context(), meta, body)
+			if err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, ai.ErrFlowerFileActionNotFound) {
+					status = http.StatusNotFound
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: target})
+			return
+
 		case action == "cancel" && r.Method == http.MethodPost:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {

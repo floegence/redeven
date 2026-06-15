@@ -1,4 +1,4 @@
-// CodeDiffBlock — code diff viewer with unified/split toggle.
+// CodeDiffBlock — unified code diff viewer.
 
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import type { Component } from 'solid-js';
@@ -10,7 +10,7 @@ import {
   isLargeCodeDiff,
   resolveDiffViewportHeight,
 } from '../responsiveness';
-import type { CodeDiffRenderModel, SplitDiffLine, UnifiedDiffLine } from '../types';
+import type { CodeDiffRenderModel, UnifiedDiffLine } from '../types';
 import {
   hasDiffWorkerSupport,
   renderCodeDiffModel,
@@ -70,20 +70,8 @@ function UnifiedDiffRow(props: { line: UnifiedDiffLine; virtualized: boolean }) 
   );
 }
 
-function SplitDiffRow(props: { line: SplitDiffLine; virtualized: boolean }) {
-  return (
-    <div class={lineClass(props.line.type)} style={lineStyle(props.virtualized)}>
-      <span class="chat-diff-line-number">{props.line.lineNumber ?? ''}</span>
-      <span class="chat-diff-line-content">{props.line.content}</span>
-    </div>
-  );
-}
-
-/**
- * Renders a side-by-side or unified diff view of code changes.
- */
+/** Renders a unified diff view of code changes. */
 export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
-  const [viewMode, setViewMode] = createSignal<'unified' | 'split'>('unified');
   const [diffModel, setDiffModel] = createSignal<CodeDiffRenderModel | null>(null);
   const [error, setError] = createSignal('');
   const [virtualized, setVirtualized] = createSignal(false);
@@ -133,10 +121,7 @@ export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
 
   const currentLineCount = createMemo(() => {
     const model = diffModel();
-    if (!model) return 0;
-    return viewMode() === 'unified'
-      ? model.unifiedLines.length
-      : model.split.left.length;
+    return model ? model.unifiedLines.length : 0;
   });
 
   const virtualWindow = useVirtualWindow({
@@ -152,20 +137,6 @@ export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
     return model.unifiedLines.slice(start, end);
   });
 
-  const visibleSplitLeftLines = createMemo(() => {
-    const model = diffModel();
-    if (!model) return [];
-    const { start, end } = virtualWindow.range();
-    return model.split.left.slice(start, end);
-  });
-
-  const visibleSplitRightLines = createMemo(() => {
-    const model = diffModel();
-    if (!model) return [];
-    const { start, end } = virtualWindow.range();
-    return model.split.right.slice(start, end);
-  });
-
   const viewportHeight = createMemo(() => resolveDiffViewportHeight(currentLineCount()));
 
   return (
@@ -178,26 +149,6 @@ export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
           <Show when={statsText()}>
             <span class="chat-code-diff-stats">{statsText()}</span>
           </Show>
-        </div>
-        <div class="chat-code-diff-actions">
-          <button
-            class={cn(
-              'chat-code-diff-toggle-btn chat-code-diff-view-btn',
-              viewMode() === 'unified' && 'chat-code-diff-toggle-btn-active active',
-            )}
-            onClick={() => setViewMode('unified')}
-          >
-            Unified
-          </button>
-          <button
-            class={cn(
-              'chat-code-diff-toggle-btn chat-code-diff-view-btn',
-              viewMode() === 'split' && 'chat-code-diff-toggle-btn-active active',
-            )}
-            onClick={() => setViewMode('split')}
-          >
-            Split
-          </button>
         </div>
       </div>
 
@@ -216,29 +167,11 @@ export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
             <Show
               when={virtualized()}
               fallback={(
-                <Show
-                  when={viewMode() === 'unified'}
-                  fallback={(
-                    <div class="chat-code-diff-split">
-                      <div class="chat-code-diff-split-panel chat-code-diff-split-left">
-                        <For each={model().split.left}>
-                          {(line) => <SplitDiffRow line={line} virtualized={false} />}
-                        </For>
-                      </div>
-                      <div class="chat-code-diff-split-panel chat-code-diff-split-right">
-                        <For each={model().split.right}>
-                          {(line) => <SplitDiffRow line={line} virtualized={false} />}
-                        </For>
-                      </div>
-                    </div>
-                  )}
-                >
-                  <div class="chat-code-diff-unified">
-                    <For each={model().unifiedLines}>
-                      {(line) => <UnifiedDiffRow line={line} virtualized={false} />}
-                    </For>
-                  </div>
-                </Show>
+                <div class="chat-code-diff-unified">
+                  <For each={model().unifiedLines}>
+                    {(line) => <UnifiedDiffRow line={line} virtualized={false} />}
+                  </For>
+                </div>
               )}
             >
               <div
@@ -247,35 +180,13 @@ export const CodeDiffBlock: Component<CodeDiffBlockProps> = (props) => {
                 onScroll={virtualWindow.onScroll}
                 style={{ height: `${viewportHeight()}px` }}
               >
-                <Show
-                  when={viewMode() === 'unified'}
-                  fallback={(
-                    <div class="chat-code-diff-split">
-                      <div class="chat-code-diff-split-panel chat-code-diff-split-left">
-                        <div style={{ height: `${virtualWindow.paddingTop()}px` }} />
-                        <For each={visibleSplitLeftLines()}>
-                          {(line) => <SplitDiffRow line={line} virtualized />}
-                        </For>
-                        <div style={{ height: `${virtualWindow.paddingBottom()}px` }} />
-                      </div>
-                      <div class="chat-code-diff-split-panel chat-code-diff-split-right">
-                        <div style={{ height: `${virtualWindow.paddingTop()}px` }} />
-                        <For each={visibleSplitRightLines()}>
-                          {(line) => <SplitDiffRow line={line} virtualized />}
-                        </For>
-                        <div style={{ height: `${virtualWindow.paddingBottom()}px` }} />
-                      </div>
-                    </div>
-                  )}
-                >
-                  <div class="chat-code-diff-unified">
-                    <div style={{ height: `${virtualWindow.paddingTop()}px` }} />
-                    <For each={visibleUnifiedLines()}>
-                      {(line) => <UnifiedDiffRow line={line} virtualized />}
-                    </For>
-                    <div style={{ height: `${virtualWindow.paddingBottom()}px` }} />
-                  </div>
-                </Show>
+                <div class="chat-code-diff-unified">
+                  <div style={{ height: `${virtualWindow.paddingTop()}px` }} />
+                  <For each={visibleUnifiedLines()}>
+                    {(line) => <UnifiedDiffRow line={line} virtualized />}
+                  </For>
+                  <div style={{ height: `${virtualWindow.paddingBottom()}px` }} />
+                </div>
               </div>
             </Show>
           </div>

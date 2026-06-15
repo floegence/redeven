@@ -336,60 +336,13 @@ func normalizeApplyPatchPayload(payload any) (any, bool) {
 
 func truncateFileMutationRecord(record map[string]any) bool {
 	truncated := false
-	if original, ok := record["original_file"].(string); ok {
-		trimmed, hit := truncateByRunes(original, 2000)
-		record["original_file"] = trimmed
+	if diff, ok := record["unified_diff"].(string); ok {
+		trimmed, hit := truncateByRunes(diff, maxMutationPatchRunes)
+		record["unified_diff"] = trimmed
 		truncated = truncated || hit
-	}
-	if updated, ok := record["updated_file"].(string); ok {
-		trimmed, hit := truncateByRunes(updated, 2000)
-		record["updated_file"] = trimmed
-		truncated = truncated || hit
-	}
-	if hunks, ok := record["structured_diff"].([]any); ok {
-		for _, raw := range hunks {
-			hunk, ok := raw.(map[string]any)
-			if !ok || hunk == nil {
-				continue
-			}
-			truncated = truncateDiffHunkLines(hunk, "before", 4000) || truncated
-			truncated = truncateDiffHunkLines(hunk, "after", 4000) || truncated
-		}
 	}
 	if truncated {
 		record["truncated"] = true
-	}
-	return truncated
-}
-
-func truncateDiffHunkLines(hunk map[string]any, key string, maxRunes int) bool {
-	lines, ok := hunk[key].([]any)
-	if !ok || len(lines) == 0 {
-		return false
-	}
-	remaining := maxRunes
-	truncated := false
-	out := make([]any, 0, len(lines))
-	for _, raw := range lines {
-		line, ok := raw.(string)
-		if !ok {
-			out = append(out, raw)
-			continue
-		}
-		if remaining <= 0 {
-			truncated = true
-			continue
-		}
-		trimmed, hit := truncateByRunes(line, remaining)
-		out = append(out, trimmed)
-		remaining -= len([]rune(trimmed))
-		if hit {
-			truncated = true
-			remaining = 0
-		}
-	}
-	if truncated {
-		hunk[key] = out
 	}
 	return truncated
 }

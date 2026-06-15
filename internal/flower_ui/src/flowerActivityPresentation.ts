@@ -1,4 +1,5 @@
 import type {
+  FlowerActivityFileAction as FlowerActivityFileActionRecord,
   FlowerActivityItem,
   FlowerActivityRenderer,
 } from './contracts/flowerSurfaceContracts';
@@ -23,7 +24,7 @@ export type FlowerActivityTitle =
   | Readonly<{
     kind: 'file';
     verb: 'Read' | 'Edit' | 'Delete';
-    path: string;
+    display_name: string;
   }>
   | Readonly<{
     kind: 'command';
@@ -35,30 +36,25 @@ export type FlowerActivityTitle =
   }>;
 
 export type FlowerActivityFileAction = Readonly<{
-  path: string;
+  action_id: string;
+  display_name: string;
   can_preview: boolean;
   can_browse_directory: boolean;
 }>;
 
-export type FlowerActivityDiffHunk = Readonly<{
-  old_start: number;
-  old_lines: number;
-  new_start: number;
-  new_lines: number;
-  before: readonly string[];
-  after: readonly string[];
-  before_kinds: readonly FlowerActivityDiffLineKind[];
-  after_kinds: readonly FlowerActivityDiffLineKind[];
-}>;
-
-export type FlowerActivityDiffLineKind = 'context' | 'removed' | 'added';
+export type FlowerActivityFileActions = Readonly<Record<string, FlowerActivityFileActionRecord>>;
 
 export type FlowerActivityDiffFile = Readonly<{
-  path: string;
+  display_name: string;
+  old_path: string;
+  new_path: string;
   change_type: string;
   action: FlowerActivityFileAction;
-  hunks: readonly FlowerActivityDiffHunk[];
+  additions: number;
+  deletions: number;
+  patch_text: string;
   truncated: boolean;
+  diff_unavailable_reason: string;
 }>;
 
 export type FlowerActivityDetailBlock =
@@ -92,16 +88,43 @@ export type FlowerActivityPresentation = Readonly<{
   label: string;
   title: FlowerActivityTitle;
   meta: string;
+  primaryAction?: FlowerActivityFileAction;
   detailLines: readonly FlowerActivityDetailLine[];
   detailBlocks: readonly FlowerActivityDetailBlock[];
 }>;
 
 const DETAIL_LABELS: Readonly<Record<string, string>> = {
   command: 'command',
-  cwd: 'cwd',
-  workdir: 'workdir',
+  operation: 'operation',
+  name: 'name',
+  action: 'action',
+  content: 'content',
+  activation_id: 'activation',
+  already_active: 'already active',
+  mode_hints: 'mode hints',
+  dependencies: 'dependencies',
+  dependency_degraded: 'dependency degraded',
+  reason: 'reason',
+  id: 'id',
+  message: 'message',
+  agents: 'agents',
+  created: 'created',
+  waiting: 'waiting',
+  terminated: 'terminated',
+  terminated_all: 'terminated all',
+  targets: 'targets',
+  validation: 'validation',
+  stats: 'stats',
+  spec: 'spec',
+  output: 'output',
+  structured: 'structured',
+  key_files: 'key files',
+  rows: 'rows',
+  cards: 'cards',
+  items: 'items',
   timeout_ms: 'timeout',
   timeout_source: 'timeout source',
+  requested_timeout_ms: 'requested timeout',
   exit_code: 'exit',
   duration_ms: 'duration',
   stdout: 'stdout',
@@ -129,30 +152,31 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
 };
 
 const RENDERER_DETAIL_KEYS: Readonly<Record<Exclude<FlowerActivityRenderer, 'file' | 'patch' | 'todos'>, readonly string[]>> = {
-  terminal: ['command', 'cwd', 'workdir', 'timeout_ms', 'timeout_source', 'exit_code', 'duration_ms', 'timed_out', 'truncated', 'stdout', 'stderr', 'summary', 'details', 'error'],
+  terminal: ['command', 'timeout_ms', 'timeout_source', 'requested_timeout_ms', 'exit_code', 'duration_ms', 'timed_out', 'truncated', 'stdout', 'stderr', 'summary', 'details', 'error'],
   web_search: ['query', 'provider', 'count', 'sources', 'results', 'summary', 'details', 'error'],
   question: ['reason_code', 'required_from_user', 'questions', 'contains_secret', 'summary', 'details', 'error'],
   completion: ['result', 'evidence_refs', 'remaining_risks', 'next_actions', 'summary', 'details', 'error'],
-  structured: ['summary', 'details', 'status', 'error', 'content_ref'],
+  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'mode_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'status', 'message', 'agents', 'created', 'waiting', 'terminated', 'terminated_all', 'timed_out', 'targets', 'validation', 'stats', 'spec', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated', 'summary', 'details', 'error'],
 };
 
 const FILE_RAW_DETAIL_KEYS = new Set([
   'args',
+  'additions',
   'content',
-  'file_path',
+  'deletions',
+  'diff_unavailable_reason',
+  'display_name',
+  'file_action_id',
   'files',
   'line_count',
   'line_offset',
   'mutations',
-  'old_path',
   'operation',
-  'original_file',
-  'path',
   'patch',
+  'patch_text',
   'result',
-  'structured_diff',
   'total_lines',
-  'updated_file',
+  'unified_diff',
 ]);
 
 function scalarText(value: unknown): string {
@@ -199,6 +223,21 @@ function boolValue(value: unknown): boolean {
   if (typeof value === 'boolean') return value;
   const normalized = String(value ?? '').trim().toLowerCase();
   return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
+function isContentRefSuffix(value: string): boolean {
+  return /^(?:[a-f0-9]{8,}|L\d+)$/i.test(value);
+}
+
+function displayFileName(value: string): string {
+  let out = trimString(value);
+  while (out.includes('#')) {
+    const hashIndex = out.lastIndexOf('#');
+    const suffix = out.slice(hashIndex + 1);
+    if (!isContentRefSuffix(suffix)) break;
+    out = trimString(out.slice(0, hashIndex));
+  }
+  return out;
 }
 
 function contentText(value: unknown): string {
@@ -248,18 +287,6 @@ function defaultLabelForItem(item: FlowerActivityItem): string {
   return toolName || kind || 'Activity';
 }
 
-function pathFromRefs(item: FlowerActivityItem): string {
-  for (const ref of item.target_refs ?? []) {
-    const path = trimString(ref.path) || trimString(ref.label) || trimString(ref.uri);
-    if (path) return path;
-  }
-  return '';
-}
-
-function payloadPath(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>> | undefined): string {
-  return payloadValue(payload, 'file_path', 'path', 'new_path', 'old_path') || pathFromRefs(item);
-}
-
 function operationFromPayload(payload: Readonly<Record<string, unknown>> | undefined): string {
   return payloadValue(payload, 'operation', 'change_type').toLowerCase();
 }
@@ -275,19 +302,33 @@ function fileVerbForOperation(operation: string): 'Read' | 'Edit' | 'Delete' {
   return 'Edit';
 }
 
-function fileAction(path: string, verb: 'Read' | 'Edit' | 'Delete'): FlowerActivityFileAction {
-  const cleanPath = trimString(path);
+function displayNameFromPayload(payload: Readonly<Record<string, unknown>> | undefined, label = ''): string {
+  const explicit = displayFileName(payloadValue(payload, 'display_name'));
+  if (explicit) return explicit;
+  return displayFileName(label);
+}
+
+function actionFromPayload(
+  payload: Readonly<Record<string, unknown>> | undefined,
+  verb: 'Read' | 'Edit' | 'Delete',
+  label: string,
+  fileActions?: FlowerActivityFileActions,
+): FlowerActivityFileAction {
+  const actionID = payloadValue(payload, 'file_action_id');
+  const registered = actionID ? fileActions?.[actionID] : undefined;
+  const displayName = displayFileName(registered?.display_name ?? '') || displayNameFromPayload(payload, label);
   return {
-    path: cleanPath,
-    can_browse_directory: cleanPath !== '',
-    can_preview: cleanPath !== '' && verb !== 'Delete',
+    action_id: actionID,
+    display_name: displayName,
+    can_browse_directory: registered?.can_browse_directory === true,
+    can_preview: registered?.can_preview === true && verb !== 'Delete',
   };
 }
 
 function titleText(title: FlowerActivityTitle): string {
   switch (title.kind) {
     case 'file':
-      return [title.verb, title.path].filter(Boolean).join(' ');
+      return [title.verb, title.display_name].filter(Boolean).join(' ');
     case 'command':
       return title.command;
     case 'plain':
@@ -303,21 +344,10 @@ function chipText(item: FlowerActivityItem): readonly string[] {
   }).filter(Boolean);
 }
 
-function refText(item: FlowerActivityItem): readonly string[] {
-  return (item.target_refs ?? []).map((ref) => {
-    const label = trimString(ref.label);
-    const path = trimString(ref.path);
-    const uri = trimString(ref.uri);
-    const target = label || path || uri;
-    return ref.line ? `${target}:${ref.line}` : target;
-  }).filter(Boolean);
-}
-
 function metaForItem(item: FlowerActivityItem): string {
   const parts = [
     trimString(item.description),
     ...chipText(item),
-    ...refText(item),
     trimString(item.tool_name),
   ].filter(Boolean);
   return Array.from(new Set(parts)).join(' · ');
@@ -353,9 +383,6 @@ function uniqueDetailLines(lines: readonly FlowerActivityDetailLine[]): readonly
 function genericDetailLinesForItem(item: FlowerActivityItem, renderer: Exclude<FlowerActivityRenderer, 'file' | 'patch' | 'todos'>): readonly FlowerActivityDetailLine[] {
   const payload = item.payload ?? {};
   const orderedKeys = new Set<string>(RENDERER_DETAIL_KEYS[renderer] ?? RENDERER_DETAIL_KEYS.structured);
-  for (const key of Object.keys(payload).sort()) {
-    orderedKeys.add(key);
-  }
   const lines = Array.from(orderedKeys)
     .map((key) => detailLineFromPayload(payload, key))
     .filter((line): line is FlowerActivityDetailLine => line !== null);
@@ -366,13 +393,13 @@ function genericDetailLinesForItem(item: FlowerActivityItem, renderer: Exclude<F
     });
   }
   if (lines.length === 0) {
-    const fallbackLines = [
+    const defaultLines = [
       { label: 'status', value: item.status },
       { label: 'kind', value: item.kind },
       { label: 'tool', value: trimString(item.tool_name) },
       { label: 'item', value: trimString(item.item_id) },
     ].filter((line) => trimString(line.value));
-    lines.push(...fallbackLines);
+    lines.push(...defaultLines);
   }
   return uniqueDetailLines(lines);
 }
@@ -390,81 +417,61 @@ function fileStatusLines(item: FlowerActivityItem, payload: Readonly<Record<stri
   return uniqueDetailLines(lines);
 }
 
-function normalizeDiffHunks(value: unknown): readonly FlowerActivityDiffHunk[] {
-  return asArray(value).map((entry): FlowerActivityDiffHunk | null => {
-    const record = asRecord(entry);
-    const before = asArray(record.before).map((line) => String(line ?? ''));
-    const after = asArray(record.after).map((line) => String(line ?? ''));
-    if (before.length === 0 && after.length === 0) return null;
-    return {
-      old_start: numericValue(record.old_start) || 1,
-      old_lines: numericValue(record.old_lines) || before.length,
-      new_start: numericValue(record.new_start) || 1,
-      new_lines: numericValue(record.new_lines) || after.length,
-      before,
-      after,
-      before_kinds: normalizeDiffLineKinds(record.before_kinds, before.length, 'removed'),
-      after_kinds: normalizeDiffLineKinds(record.after_kinds, after.length, 'added'),
-    };
-  }).filter((hunk): hunk is FlowerActivityDiffHunk => hunk !== null);
-}
-
-function normalizeDiffLineKinds(value: unknown, count: number, fallback: FlowerActivityDiffLineKind): readonly FlowerActivityDiffLineKind[] {
-  const source = asArray(value).map((item) => normalizeDiffLineKind(item, fallback));
-  if (source.length >= count) return source.slice(0, count);
-  return [...source, ...Array.from({ length: count - source.length }, () => fallback)];
-}
-
-function normalizeDiffLineKind(value: unknown, fallback: FlowerActivityDiffLineKind): FlowerActivityDiffLineKind {
-  const normalized = String(value ?? '').trim().toLowerCase();
-  if (normalized === 'context' || normalized === 'removed' || normalized === 'added') return normalized;
-  return fallback;
-}
-
-function diffFileFromMutation(item: FlowerActivityItem, mutation: Readonly<Record<string, unknown>>, defaultPath: string): FlowerActivityDiffFile | null {
+function diffFileFromMutation(
+  item: FlowerActivityItem,
+  mutation: Readonly<Record<string, unknown>>,
+  defaultDisplayName: string,
+  fileActions?: FlowerActivityFileActions,
+): FlowerActivityDiffFile | null {
   const changeType = payloadValue(mutation, 'change_type') || operationFromPayload(item.payload) || 'update';
-  const path = payloadValue(mutation, 'file_path', 'new_path', 'old_path', 'path') || defaultPath;
   const verb = fileVerbForOperation(changeType);
-  const hunks = normalizeDiffHunks(mutation.structured_diff);
+  const action = actionFromPayload(mutation, verb, displayNameFromPayload(mutation, defaultDisplayName), fileActions);
+  const displayName = trimString(action.display_name) || defaultDisplayName;
   return {
-    path,
+    display_name: displayName,
+    old_path: '',
+    new_path: '',
     change_type: changeType,
-    action: fileAction(path, verb),
-    hunks,
+    action,
+    additions: numericValue(mutation.additions),
+    deletions: numericValue(mutation.deletions),
+    patch_text: contentText(mutation.unified_diff ?? mutation.patch_text),
     truncated: boolValue(mutation.truncated),
+    diff_unavailable_reason: payloadValue(mutation, 'diff_unavailable_reason'),
   };
 }
 
-function diffFilesFromPayload(item: FlowerActivityItem): readonly FlowerActivityDiffFile[] {
+function diffFilesFromPayload(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions): readonly FlowerActivityDiffFile[] {
   const payload = item.payload ?? {};
-  const defaultPath = payloadPath(item, payload);
+  const defaultDisplayName = payloadValue(payload, 'display_name') || trimString(item.label);
   const mutationSource = asArray(payload.mutations).length > 0 ? asArray(payload.mutations) : [payload];
-  return mutationSource.map((entry) => diffFileFromMutation(item, asRecord(entry), defaultPath))
-    .filter((file): file is FlowerActivityDiffFile => file !== null && trimString(file.path) !== '');
+  return mutationSource.map((entry) => diffFileFromMutation(item, asRecord(entry), defaultDisplayName, fileActions))
+    .filter((file): file is FlowerActivityDiffFile => file !== null && trimString(file.display_name) !== '');
 }
 
 function titleForPatchItem(item: FlowerActivityItem, files: readonly FlowerActivityDiffFile[]): FlowerActivityTitle {
   if (files.length === 1) {
     const file = files[0];
-    return { kind: 'file', verb: fileVerbForOperation(file.change_type), path: file.path };
+    return { kind: 'file', verb: fileVerbForOperation(file.change_type), display_name: file.display_name };
   }
   if (files.length > 1) {
-    return { kind: 'file', verb: 'Edit', path: `${files.length} files` };
+    return { kind: 'file', verb: 'Edit', display_name: `${files.length} files` };
   }
-  return { kind: 'file', verb: 'Edit', path: trimString(item.label) || 'files' };
+  return { kind: 'file', verb: 'Edit', display_name: trimString(item.label) || 'files' };
 }
 
-function presentationForFile(item: FlowerActivityItem): FlowerActivityPresentation {
+function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions): FlowerActivityPresentation {
   const payload = item.payload ?? {};
   const operation = operationFromPayload(payload) || (trimString(item.tool_name) === 'file.read' ? 'read' : 'edit');
   const verb = fileVerbForOperation(operation);
-  const path = payloadPath(item, payload) || trimString(item.label) || defaultLabelForItem(item);
-  const title: FlowerActivityTitle = { kind: 'file', verb, path };
+  const action = actionFromPayload(payload, verb, trimString(item.label), fileActions);
+  const displayName = action.display_name || trimString(item.label) || defaultLabelForItem(item);
+  const title: FlowerActivityTitle = { kind: 'file', verb, display_name: displayName };
   const detailBlocks: FlowerActivityDetailBlock[] = [];
   if (verb === 'Read') {
     detailBlocks.push({
       kind: 'file_read',
-      action: fileAction(path, verb),
+      action,
       content: contentText(payload.content),
       line_offset: numericValue(payload.line_offset) || 1,
       line_count: numericValue(payload.line_count),
@@ -472,7 +479,7 @@ function presentationForFile(item: FlowerActivityItem): FlowerActivityPresentati
       truncated: boolValue(payload.truncated),
     });
   } else {
-    const files = diffFilesFromPayload(item);
+    const files = diffFilesFromPayload(item, fileActions);
     if (files.length > 0) {
       detailBlocks.push({ kind: 'file_diff', files });
     }
@@ -485,13 +492,14 @@ function presentationForFile(item: FlowerActivityItem): FlowerActivityPresentati
     label: titleText(title),
     title,
     meta: metaForItem(item),
+    primaryAction: action,
     detailLines: statusLines,
     detailBlocks,
   };
 }
 
-function presentationForPatch(item: FlowerActivityItem): FlowerActivityPresentation {
-  const files = diffFilesFromPayload(item);
+function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions): FlowerActivityPresentation {
+  const files = diffFilesFromPayload(item, fileActions);
   const title = titleForPatchItem(item, files);
   const payload = item.payload ?? {};
   const detailBlocks: FlowerActivityDetailBlock[] = [];
@@ -506,6 +514,7 @@ function presentationForPatch(item: FlowerActivityItem): FlowerActivityPresentat
     label: titleText(title),
     title,
     meta: metaForItem(item),
+    ...(files.length === 1 ? { primaryAction: files[0].action } : {}),
     detailLines: statusLines,
     detailBlocks,
   };
@@ -514,10 +523,20 @@ function presentationForPatch(item: FlowerActivityItem): FlowerActivityPresentat
 function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentation {
   const title: FlowerActivityTitle = { kind: 'plain', text: trimString(item.label) || 'Update todos' };
   const items = todoItemsFromPayload(item.payload);
+  const counts = items.reduce<Record<FlowerActivityTodoStatus, number>>((acc, todo) => {
+    acc[todo.status] += 1;
+    return acc;
+  }, { pending: 0, in_progress: 0, completed: 0, cancelled: 0 });
+  const meta = ([
+    counts.completed > 0 ? `completed ${counts.completed}` : '',
+    counts.in_progress > 0 ? `in progress ${counts.in_progress}` : '',
+    counts.pending > 0 ? `pending ${counts.pending}` : '',
+    counts.cancelled > 0 ? `cancelled ${counts.cancelled}` : '',
+  ]).filter(Boolean).join(' · ');
   return {
     label: title.text,
     title,
-    meta: metaForItem(item),
+    meta,
     detailLines: [],
     detailBlocks: items.length > 0 ? [{ kind: 'todos', items }] : [],
   };
@@ -541,10 +560,10 @@ function titleForGenericItem(item: FlowerActivityItem, renderer: FlowerActivityR
   }
 }
 
-export function presentFlowerActivityItem(item: FlowerActivityItem): FlowerActivityPresentation {
+export function presentFlowerActivityItem(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions): FlowerActivityPresentation {
   const renderer = rendererForItem(item);
-  if (renderer === 'file') return presentationForFile(item);
-  if (renderer === 'patch') return presentationForPatch(item);
+  if (renderer === 'file') return presentationForFile(item, fileActions);
+  if (renderer === 'patch') return presentationForPatch(item, fileActions);
   if (renderer === 'todos') return presentationForTodos(item);
   const title = titleForGenericItem(item, renderer);
   const detailLines = genericDetailLinesForItem(item, renderer);

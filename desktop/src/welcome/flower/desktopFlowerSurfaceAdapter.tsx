@@ -18,11 +18,13 @@ import type {
   DesktopFlowerHostTargetCacheEntry,
   DesktopFlowerHostThread,
   DesktopFlowerHostError,
+  DesktopFlowerHostFileActionOpenRequest,
   ForkDesktopFlowerHostThreadResult,
   ListDesktopFlowerHostThreadsResult,
   LoadDesktopFlowerHostSettingsResult,
   LoadDesktopFlowerHostThreadResult,
   MarkDesktopFlowerHostThreadReadResult,
+  OpenDesktopFlowerHostFileActionResult,
   RenameDesktopFlowerHostThreadResult,
   ResolveDesktopFlowerHostHandlerResult,
   SaveDesktopFlowerHostSettingsResult,
@@ -60,6 +62,7 @@ export type DesktopSettingsBridge = Readonly<{
   resolveFlowerHostHandler: (request?: DesktopFlowerHostResolveHandlerRequest) => Promise<ResolveDesktopFlowerHostHandlerResult>;
   sendFlowerHostChat: (request: DesktopFlowerHostSendChatRequest) => Promise<SendDesktopFlowerHostChatResult>;
   submitFlowerHostInput: (request: DesktopFlowerHostSubmitInputRequest) => Promise<SubmitDesktopFlowerHostInputResult>;
+  openFlowerHostFileAction: (request: DesktopFlowerHostFileActionOpenRequest) => Promise<OpenDesktopFlowerHostFileActionResult>;
   cancel: () => void;
 }>;
 
@@ -224,6 +227,16 @@ function mapInputRequest(request: DesktopFlowerHostInputRequest): FlowerInputReq
   };
 }
 
+async function openDesktopFlowerFileAction(
+  bridge: DesktopSettingsBridge,
+  request: DesktopFlowerHostFileActionOpenRequest,
+): Promise<void> {
+  const result = await bridge.openFlowerHostFileAction(request);
+  if (!result.ok) {
+    throw flowerHostError(result.error);
+  }
+}
+
 export function mapDesktopFlowerThread(thread: DesktopFlowerHostThread): FlowerThreadSnapshot {
   return {
     thread_id: thread.thread_id,
@@ -335,5 +348,21 @@ export function createDesktopFlowerSurfaceAdapter(
       if (!result.ok) throw flowerHostError(result.error);
       return mapDesktopFlowerThread(result.thread);
     },
+    openFileBrowser: async (request) => openDesktopFlowerFileAction(bridge, {
+      action: 'browse_directory',
+      thread_id: request.thread_id,
+      message_id: request.message_id,
+      block_index: request.block_index,
+      item_id: request.item_id,
+      action_id: request.action_id,
+    }),
+    openFilePreview: async (request) => openDesktopFlowerFileAction(bridge, {
+      action: 'preview',
+      thread_id: request.thread_id,
+      message_id: request.message_id,
+      block_index: request.block_index,
+      item_id: request.item_id,
+      action_id: request.action_id,
+    }),
   };
 }

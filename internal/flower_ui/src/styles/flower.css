@@ -725,6 +725,14 @@ html.dark .flower-component-shell {
   min-width: 0;
 }
 
+.flower-host-activity-inline-line {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .flower-host-activity-inline-button {
   appearance: none;
   display: grid;
@@ -1032,6 +1040,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-host-activity-file-action-button {
+  appearance: none;
   display: inline-flex;
   width: 1.375rem;
   height: 1.375rem;
@@ -1039,6 +1048,7 @@ html.dark .flower-component-shell {
   justify-content: center;
   border: 1px solid transparent;
   border-radius: 0.375rem;
+  background: transparent;
   color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
   cursor: pointer;
   transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
@@ -1050,6 +1060,18 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--muted) 34%, transparent);
   color: color-mix(in srgb, var(--foreground) 84%, var(--muted-foreground) 16%);
   outline: none;
+}
+
+.flower-host-activity-file-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.flower-host-activity-file-action-button:disabled:hover,
+.flower-host-activity-file-action-button:disabled:focus-visible {
+  border-color: transparent;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
 }
 
 .flower-host-activity-file-read-content {
@@ -1076,34 +1098,9 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--muted) 10%, transparent);
 }
 
-.flower-host-activity-file-diff-hunk {
-  display: grid;
+.flower-host-activity-file-diff-unified {
   min-width: 0;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-}
-
-.flower-host-activity-file-diff-hunk + .flower-host-activity-file-diff-hunk {
-  border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 68%, transparent);
-}
-
-.flower-host-activity-file-diff-heading {
-  min-width: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 68%, transparent);
-  background: color-mix(in srgb, var(--muted) 22%, transparent);
-  padding: 0.25rem 0.5rem;
-  color: color-mix(in srgb, var(--muted-foreground) 80%, var(--foreground) 20%);
-  font-size: 0.65625rem;
-  font-weight: 800;
-  line-height: 1.1;
-  text-transform: uppercase;
-}
-
-.flower-host-activity-file-diff-side-new {
-  border-left: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 68%, transparent);
-}
-
-.flower-host-activity-file-diff-side {
-  min-width: 0;
+  max-height: 16rem;
   overflow: auto;
   font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
 }
@@ -1111,9 +1108,8 @@ html.dark .flower-component-shell {
 .flower-host-activity-file-diff-line {
   display: grid;
   min-width: max-content;
-  grid-template-columns: 2.5rem minmax(10rem, 1fr);
-  gap: 0.5rem;
-  padding: 0.125rem 0.5rem;
+  grid-template-columns: 2.25rem 2.25rem minmax(12rem, 1fr);
+  align-items: stretch;
   color: color-mix(in srgb, var(--foreground) 74%, var(--muted-foreground) 26%);
   font-size: 0.6875rem;
   line-height: 1.45;
@@ -1121,17 +1117,39 @@ html.dark .flower-component-shell {
 }
 
 .flower-host-activity-file-diff-line-number {
+  padding: 0.125rem 0.375rem;
   color: color-mix(in srgb, var(--muted-foreground) 66%, transparent);
   text-align: right;
   user-select: none;
 }
 
-.flower-host-activity-file-diff-line-removed {
-  background: color-mix(in srgb, var(--destructive) 9%, transparent);
+.flower-host-activity-file-diff-line-number-new {
+  border-right: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 64%, transparent);
 }
 
-.flower-host-activity-file-diff-line-added {
-  background: color-mix(in srgb, #10b981 10%, transparent);
+.flower-host-activity-file-diff-line code {
+  padding: 0.125rem 0.625rem;
+  color: inherit;
+  font-family: inherit;
+}
+
+.flower-host-activity-file-diff-line-del {
+  background: color-mix(in srgb, var(--destructive) 13%, transparent);
+  color: color-mix(in srgb, #f87171 70%, var(--foreground) 30%);
+}
+
+.flower-host-activity-file-diff-line-add {
+  background: color-mix(in srgb, #10b981 13%, transparent);
+  color: color-mix(in srgb, #34d399 70%, var(--foreground) 30%);
+}
+
+.flower-host-activity-file-diff-line-meta {
+  background: color-mix(in srgb, var(--muted) 34%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+}
+
+.flower-host-activity-file-diff-line-context {
+  background: color-mix(in srgb, var(--background) 92%, var(--muted) 8%);
 }
 
 .flower-host-activity-file-diff-empty {
@@ -1140,6 +1158,14 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
   font-size: 0.71875rem;
   font-weight: 650;
+}
+
+.flower-host-activity-file-stat-add {
+  color: color-mix(in srgb, #10b981 82%, var(--foreground) 18%);
+}
+
+.flower-host-activity-file-stat-del {
+  color: color-mix(in srgb, var(--destructive) 82%, var(--foreground) 18%);
 }
 
 .flower-host-input-request-panel {
@@ -1394,20 +1420,12 @@ html.dark .flower-component-shell {
     flex-wrap: wrap;
   }
 
-  .flower-host-activity-file-diff-grid {
+  .flower-host-activity-inline-line {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .flower-host-activity-file-diff-hunk {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .flower-host-activity-file-diff-side-new {
-    border-left: 0;
-  }
-
-  .flower-host-activity-file-diff-side-new {
-    border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 68%, transparent);
+  .flower-host-activity-inline-line > .flower-host-activity-file-actions {
+    justify-self: end;
   }
 }
 

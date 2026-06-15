@@ -228,6 +228,15 @@ func (s *Server) handleThreadDetail(w http.ResponseWriter, r *http.Request) {
 		}
 		thread, err := s.service.ForkThread(r.Context(), threadID, req)
 		writeResult(w, ForkThreadResponse{Thread: thread}, err)
+	case action == "file-action-open-target" && r.Method == http.MethodPost:
+		var req ChatFileActionOpenRequest
+		if err := decodeStrictJSON(r.Body, &req); err != nil {
+			writeErrorResponse(w, http.StatusBadRequest, "invalid_request", err.Error())
+			return
+		}
+		req.ThreadID = threadID
+		target, err := s.service.ResolveChatFileActionOpenTarget(r.Context(), req)
+		writeResult(w, target, err)
 	case action == "":
 		writeErrorResponse(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	default:

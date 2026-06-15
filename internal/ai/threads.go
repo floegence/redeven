@@ -730,11 +730,14 @@ func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, th
 		TotalReturned: len(msgs),
 	}
 	for _, m := range msgs {
-		raw := strings.TrimSpace(m.MessageJSON)
-		if raw == "" {
+		raw, err := SanitizeActivityTimelineMessageJSON(m.MessageJSON)
+		if err != nil {
+			return nil, err
+		}
+		if len(raw) == 0 {
 			continue
 		}
-		out.Messages = append(out.Messages, json.RawMessage(raw))
+		out.Messages = append(out.Messages, raw)
 	}
 	return out, nil
 }

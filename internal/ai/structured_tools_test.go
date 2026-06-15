@@ -67,8 +67,11 @@ func TestToolFileEdit_ReplacesExactMatchAndRejectsAmbiguousMatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("toolFileEdit replace_all: %v", err)
 	}
-	if out.ChangeType != "update" || len(out.StructuredDiff) != 1 {
+	if out.ChangeType != "update" || !strings.Contains(out.UnifiedDiff, "-alpha") || !strings.Contains(out.UnifiedDiff, "+omega") {
 		t.Fatalf("unexpected mutation result=%+v", out)
+	}
+	if out.DisplayName != "edit.txt" || canonicalPath(out.FilePath) != canonicalPath(target) {
+		t.Fatalf("mutation path metadata=%+v", out)
 	}
 	got, err := os.ReadFile(target)
 	if err != nil {
@@ -76,6 +79,22 @@ func TestToolFileEdit_ReplacesExactMatchAndRejectsAmbiguousMatch(t *testing.T) {
 	}
 	if strings.Count(string(got), "omega") != 2 {
 		t.Fatalf("edited content=%q, want both replacements", string(got))
+	}
+}
+
+func TestDisplayNameForFilePathStripsContentRefSuffixes(t *testing.T) {
+	t.Parallel()
+
+	cases := map[string]string{
+		"/workspace/a.md#dcbdf9b8c27f#e1703606242a": "a.md",
+		"a.md#L47":                  "a.md",
+		"notes#literal":             "notes#literal",
+		"/workspace/docs/readme.md": "readme.md",
+	}
+	for in, want := range cases {
+		if got := displayNameForFilePath(in); got != want {
+			t.Fatalf("displayNameForFilePath(%q)=%q, want %q", in, got, want)
+		}
 	}
 }
 

@@ -2,9 +2,9 @@ package ai
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -104,7 +104,7 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				if state != nil {
 					state.updateFromToolResult(call, result, inv.Step)
 				}
-				return floretToolResultFromFlower(result), nil
+				return floretToolResultFromFlower(r, result), nil
 			},
 		)
 		if err := registry.Register(tool); err != nil {
@@ -217,7 +217,7 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 	}
 }
 
-func floretToolResultFromFlower(result ToolResult) fltools.Result {
+func floretToolResultFromFlower(r *run, result ToolResult) fltools.Result {
 	structured := map[string]any{
 		"status":      strings.TrimSpace(result.Status),
 		"summary":     strings.TrimSpace(result.Summary),
@@ -238,7 +238,7 @@ func floretToolResultFromFlower(result ToolResult) fltools.Result {
 		Name:       strings.TrimSpace(result.ToolName),
 		Text:       string(text),
 		Structured: structured,
-		Activity:   floretActivityForToolResult(result),
+		Activity:   floretActivityForToolResult(r, result),
 		IsError:    strings.TrimSpace(result.Status) != "" && strings.TrimSpace(result.Status) != toolResultStatusSuccess,
 	}
 }
@@ -252,10 +252,6 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 		if command == "" {
 			command = "terminal.exec"
 		}
-		cwd := firstNonEmptyString(anyToString(args["cwd"]), anyToString(args["workdir"]))
-		if cwd != "" {
-			payload["cwd"] = cwd
-		}
 		return &observation.ActivityPresentation{
 			Label:       command,
 			Description: strings.TrimSpace(anyToString(args["description"])),
@@ -265,27 +261,36 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 		}
 	case "file.read":
 		path := strings.TrimSpace(anyToString(args["file_path"]))
+		displayName := displayNameForFilePath(path)
+		if displayName != "" {
+			payload["display_name"] = displayName
+		}
 		return &observation.ActivityPresentation{
-			Label:      firstNonEmptyString(path, "file.read"),
-			Renderer:   observation.ActivityRendererFile,
-			TargetRefs: activityTargetRefsForPath(path),
-			Payload:    mapWithOperation(payload, "read"),
+			Label:    firstNonEmptyString(displayName, "file.read"),
+			Renderer: observation.ActivityRendererFile,
+			Payload:  mapWithOperation(payload, "read"),
 		}
 	case "file.edit":
 		path := strings.TrimSpace(anyToString(args["file_path"]))
+		displayName := displayNameForFilePath(path)
+		if displayName != "" {
+			payload["display_name"] = displayName
+		}
 		return &observation.ActivityPresentation{
-			Label:      firstNonEmptyString(path, "file.edit"),
-			Renderer:   observation.ActivityRendererFile,
-			TargetRefs: activityTargetRefsForPath(path),
-			Payload:    mapWithOperation(payload, "edit"),
+			Label:    firstNonEmptyString(displayName, "file.edit"),
+			Renderer: observation.ActivityRendererFile,
+			Payload:  mapWithOperation(payload, "edit"),
 		}
 	case "file.write":
 		path := strings.TrimSpace(anyToString(args["file_path"]))
+		displayName := displayNameForFilePath(path)
+		if displayName != "" {
+			payload["display_name"] = displayName
+		}
 		return &observation.ActivityPresentation{
-			Label:      firstNonEmptyString(path, "file.write"),
-			Renderer:   observation.ActivityRendererFile,
-			TargetRefs: activityTargetRefsForPath(path),
-			Payload:    mapWithOperation(payload, "write"),
+			Label:    firstNonEmptyString(displayName, "file.write"),
+			Renderer: observation.ActivityRendererFile,
+			Payload:  mapWithOperation(payload, "write"),
 		}
 	case "apply_patch":
 		return &observation.ActivityPresentation{
@@ -361,29 +366,17 @@ func activityCallPayloadForTool(toolName string, args map[string]any) map[string
 	switch strings.TrimSpace(toolName) {
 	case "terminal.exec":
 		addString("command")
-		if cwd := firstNonEmptyString(anyToString(args["cwd"]), anyToString(args["workdir"])); cwd != "" {
-			out["cwd"] = cwd
-		}
 		addScalar("timeout_ms")
 		addString("description")
 	case "file.read":
-		addString("file_path")
-		addString("path")
 		addScalar("offset")
 		addScalar("limit")
 	case "file.edit":
-		addString("file_path")
-		addString("path")
 		addScalar("replace_all")
 	case "file.write":
-		addString("file_path")
-		addString("path")
 	case "apply_patch":
 		if patch := strings.TrimSpace(anyToString(args["patch"])); patch != "" {
 			filesChanged, hunks, additions, deletions := summarizeUnifiedDiff(patch)
-			out["patch_sha256"] = fmt.Sprintf("%x", sha256.Sum256([]byte(patch)))
-			out["patch_bytes"] = len([]byte(patch))
-			out["patch_lines"] = len(strings.Split(patch, "\n"))
 			out["files_changed"] = filesChanged
 			out["hunks"] = hunks
 			out["additions"] = additions
@@ -428,9 +421,9 @@ func sanitizedTodoActivityItems(items []any) []any {
 	return out
 }
 
-func floretActivityForToolResult(result ToolResult) *observation.ActivityPresentation {
+func floretActivityForToolResult(r *run, result ToolResult) *observation.ActivityPresentation {
 	toolName := strings.TrimSpace(result.ToolName)
-	payload := activityPayloadFromResultData(result.Data)
+	payload := activityPresentationPayloadFromToolResultData(r, toolName, result.Data)
 	payload["status"] = strings.TrimSpace(result.Status)
 	payload["summary"] = strings.TrimSpace(result.Summary)
 	payload["details"] = strings.TrimSpace(result.Details)
@@ -452,26 +445,24 @@ func floretActivityForToolResult(result ToolResult) *observation.ActivityPresent
 			Payload:  payload,
 		}
 	case "file.read":
-		path := firstNonEmptyString(anyToString(payload["file_path"]), anyToString(payload["path"]))
+		displayName := firstNonEmptyString(anyToString(payload["display_name"]), "file.read")
 		return &observation.ActivityPresentation{
-			Label:      path,
-			Renderer:   observation.ActivityRendererFile,
-			TargetRefs: activityTargetRefsForPath(path),
-			Chips:      fileActivityChips(payload),
-			Payload:    mapWithOperation(payload, "read"),
+			Label:    displayName,
+			Renderer: observation.ActivityRendererFile,
+			Chips:    fileActivityChips(payload),
+			Payload:  mapWithOperation(payload, "read"),
 		}
 	case "file.edit", "file.write":
-		path := firstNonEmptyString(anyToString(payload["file_path"]), anyToString(payload["path"]))
 		operation := "edit"
 		if toolName == "file.write" {
 			operation = "write"
 		}
+		displayName := firstNonEmptyString(anyToString(payload["display_name"]), toolName)
 		return &observation.ActivityPresentation{
-			Label:      path,
-			Renderer:   observation.ActivityRendererFile,
-			TargetRefs: activityTargetRefsForPath(path),
-			Chips:      fileActivityChips(payload),
-			Payload:    mapWithOperation(payload, operation),
+			Label:    displayName,
+			Renderer: observation.ActivityRendererFile,
+			Chips:    fileActivityChips(payload),
+			Payload:  mapWithOperation(payload, operation),
 		}
 	case "apply_patch":
 		return &observation.ActivityPresentation{
@@ -528,20 +519,131 @@ func activityPayloadFromResultData(data any) map[string]any {
 	return map[string]any{"value": value}
 }
 
+func activityPresentationPayloadFromToolResultData(r *run, toolName string, data any) map[string]any {
+	payload := activityPayloadFromResultData(data)
+	switch strings.TrimSpace(toolName) {
+	case "file.read":
+		return fileReadActivityPayload(r, payload)
+	case "file.edit", "file.write":
+		return fileMutationActivityPayload(r, payload)
+	case "apply_patch":
+		return applyPatchActivityPayload(r, payload)
+	default:
+		return payload
+	}
+}
+
+func fileReadActivityPayload(r *run, payload map[string]any) map[string]any {
+	out := map[string]any{}
+	displayName := firstNonEmptyString(anyToString(payload["display_name"]), displayNameForFilePath(anyToString(payload["file_path"])))
+	if displayName != "" {
+		out["display_name"] = displayName
+	}
+	actionID := registerFlowerActivityFileAction(r, displayName, anyToString(payload["file_path"]), activityDirectoryPath(anyToString(payload["file_path"])))
+	if actionID != "" {
+		out["file_action_id"] = actionID
+	}
+	for _, key := range []string{"content", "line_offset", "line_count", "total_lines", "truncated"} {
+		if value, ok := payload[key]; ok {
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func fileMutationActivityPayload(r *run, payload map[string]any) map[string]any {
+	return fileMutationActivityPayloadFromRecord(r, payload)
+}
+
+func applyPatchActivityPayload(r *run, payload map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, key := range []string{"files_changed", "hunks", "additions", "deletions", "input_format", "normalized_format"} {
+		if value, ok := payload[key]; ok {
+			out[key] = value
+		}
+	}
+	mutations := toAnySlice(payload["mutations"])
+	if len(mutations) == 0 {
+		return out
+	}
+	outMutations := make([]any, 0, len(mutations))
+	for _, mutation := range mutations {
+		record, ok := mutation.(map[string]any)
+		if !ok {
+			continue
+		}
+		outMutations = append(outMutations, fileMutationActivityPayloadFromRecord(r, record))
+	}
+	if len(outMutations) > 0 {
+		out["mutations"] = outMutations
+	}
+	return out
+}
+
+func fileMutationActivityPayloadFromRecord(r *run, payload map[string]any) map[string]any {
+	out := map[string]any{}
+	filePath := anyToString(payload["file_path"])
+	oldPath := anyToString(payload["old_path"])
+	newPath := anyToString(payload["new_path"])
+	changeType := anyToString(payload["change_type"])
+	displayName := firstNonEmptyString(anyToString(payload["display_name"]), displayNameForFilePath(firstNonEmptyString(newPath, filePath, oldPath)))
+	if displayName != "" {
+		out["display_name"] = displayName
+	}
+	previewPath := mutationActionPath(filePath, oldPath, newPath, changeType)
+	actionID := registerFlowerActivityFileAction(r, displayName, previewPath, mutationDirectoryPath(previewPath, oldPath, newPath))
+	if actionID != "" {
+		out["file_action_id"] = actionID
+	}
+	for _, key := range []string{"change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated"} {
+		if value, ok := payload[key]; ok {
+			out[key] = value
+		}
+	}
+	return out
+}
+
+func activityDirectoryPath(filePath string) string {
+	filePath = strings.TrimSpace(filePath)
+	if filePath == "" || filePath == "/dev/null" {
+		return ""
+	}
+	return filepath.Dir(filePath)
+}
+
+func registerFlowerActivityFileAction(r *run, displayName string, previewPath string, directoryPath string) string {
+	if r == nil {
+		return ""
+	}
+	displayName = strings.TrimSpace(displayName)
+	previewPath = strings.TrimSpace(previewPath)
+	directoryPath = strings.TrimSpace(directoryPath)
+	if displayName == "" || (previewPath == "" && directoryPath == "") {
+		return ""
+	}
+	r.muAssistant.Lock()
+	defer r.muAssistant.Unlock()
+	if r.activityFileActions == nil {
+		r.activityFileActions = map[string]FlowerActivityFileAction{}
+	}
+	r.activityFileActionSeq++
+	actionID := fmt.Sprintf("file_action_%d", r.activityFileActionSeq)
+	action := FlowerActivityFileAction{
+		ActionID:      actionID,
+		DisplayName:   displayName,
+		PreviewPath:   previewPath,
+		DirectoryPath: directoryPath,
+	}
+	r.activityFileActions[actionID] = action
+	return actionID
+}
+
 func mapWithOperation(in map[string]any, operation string) map[string]any {
 	out := cloneAnyMap(in)
 	if operation != "" {
 		out["operation"] = operation
 	}
 	return out
-}
-
-func activityTargetRefsForPath(path string) []observation.ActivityTargetRef {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil
-	}
-	return []observation.ActivityTargetRef{{Kind: "file", Label: path, Path: path}}
 }
 
 func terminalActivityChips(payload map[string]any) []observation.ActivityChip {

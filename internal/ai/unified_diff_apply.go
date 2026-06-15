@@ -631,11 +631,7 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 			return patchFilePlan{}, applyErr
 		}
 	}
-	mutation := newFileMutationResultWithStructuredDiff(newAbs, oldAbs, newAbs, patchMutationChangeType(fd), structuredDiffFromPatchFile(fd))
-	if string(fileBytes) != string(next) {
-		mutation.OriginalFile = string(fileBytes)
-		mutation.UpdatedFile = string(next)
-	}
+	mutation := newFileMutationResultWithPatch(newAbs, oldAbs, newAbs, patchMutationChangeType(fd), mutationPatchFromUnifiedDiffFile(fd))
 	return patchFilePlan{
 		oldAbs:   oldAbs,
 		newAbs:   newAbs,
@@ -647,14 +643,14 @@ func buildPatchFilePlan(workingDirAbs string, fd unifiedDiffFile) (patchFilePlan
 	}, nil
 }
 
-func structuredDiffFromPatchFile(fd unifiedDiffFile) []DiffHunkView {
-	out := make([]DiffHunkView, 0, len(fd.hunks))
+func mutationPatchFromUnifiedDiffFile(fd unifiedDiffFile) mutationPatchText {
+	hunks := make([]mutationDiffHunk, 0, len(fd.hunks))
 	for _, hunk := range fd.hunks {
-		view := DiffHunkView{
-			OldStart: hunk.oldStart,
-			OldLines: hunk.oldCount,
-			NewStart: hunk.newStart,
-			NewLines: hunk.newCount,
+		renderHunk := mutationDiffHunk{
+			oldStart: hunk.oldStart,
+			oldCount: hunk.oldCount,
+			newStart: hunk.newStart,
+			newCount: hunk.newCount,
 		}
 		for _, line := range hunk.lines {
 			if line == "" {
@@ -665,28 +661,17 @@ func structuredDiffFromPatchFile(fd unifiedDiffFile) []DiffHunkView {
 				text = line[1:]
 			}
 			switch line[0] {
-			case ' ':
-				view.Before = append(view.Before, text)
-				view.BeforeKinds = append(view.BeforeKinds, "context")
-			case '-':
-				view.Before = append(view.Before, text)
-				view.BeforeKinds = append(view.BeforeKinds, "removed")
-			}
-			switch line[0] {
-			case ' ':
-				view.After = append(view.After, text)
-				view.AfterKinds = append(view.AfterKinds, "context")
-			case '+':
-				view.After = append(view.After, text)
-				view.AfterKinds = append(view.AfterKinds, "added")
+			case ' ', '-', '+':
+				renderHunk.lines = append(renderHunk.lines, mutationDiffLine{prefix: line[0], text: text})
 			}
 		}
-		if len(view.Before) == 0 && len(view.After) == 0 {
+		if len(renderHunk.lines) == 0 {
 			continue
 		}
-		out = append(out, view)
+		hunks = append(hunks, renderHunk)
 	}
-	return out
+	oldPath, newPath := mutationPatchPaths("", fd.oldPath, fd.newPath, patchMutationChangeType(fd))
+	return renderMutationPatch(oldPath, newPath, hunks)
 }
 
 func patchMutationChangeType(fd unifiedDiffFile) string {

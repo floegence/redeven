@@ -41,6 +41,7 @@ describe('bootstrapDesktopSettingsBridge', () => {
     expect(typeof bridge.resolveFlowerHostHandler).toBe('function');
     expect(typeof bridge.sendFlowerHostChat).toBe('function');
     expect(typeof bridge.submitFlowerHostInput).toBe('function');
+    expect(typeof bridge.openFlowerHostFileAction).toBe('function');
     expect(typeof bridge.cancel).toBe('function');
 
     await bridge.save({
@@ -86,6 +87,14 @@ describe('bootstrapDesktopSettingsBridge', () => {
         target: { choice_id: 'staging' },
       },
     });
+    await bridge.openFlowerHostFileAction({
+      action: 'preview',
+      thread_id: 'thread-1',
+      message_id: 'msg-1',
+      block_index: 0,
+      item_id: 'tool-read',
+      action_id: 'read-app',
+    });
     bridge.cancel();
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:save-settings', {
@@ -116,6 +125,15 @@ describe('bootstrapDesktopSettingsBridge', () => {
         target: { choice_id: 'staging' },
       },
     });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(13, 'redeven-desktop:flower-host-file-action-open', {
+      action: 'preview',
+      thread_id: 'thread-1',
+      message_id: 'msg-1',
+      block_index: 0,
+      item_id: 'tool-read',
+      action_id: 'read-app',
+    });
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(13);
     expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:cancel-settings');
   });
 });

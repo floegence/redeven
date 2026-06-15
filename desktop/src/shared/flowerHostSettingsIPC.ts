@@ -9,6 +9,7 @@ export const FORK_DESKTOP_FLOWER_HOST_THREAD_CHANNEL = 'redeven-desktop:flower-h
 export const SEND_DESKTOP_FLOWER_HOST_CHAT_CHANNEL = 'redeven-desktop:flower-host-chat-send';
 export const SUBMIT_DESKTOP_FLOWER_HOST_INPUT_CHANNEL = 'redeven-desktop:flower-host-input-submit';
 export const RESOLVE_DESKTOP_FLOWER_HOST_HANDLER_CHANNEL = 'redeven-desktop:flower-host-handler-resolve';
+export const OPEN_DESKTOP_FLOWER_HOST_FILE_ACTION_CHANNEL = 'redeven-desktop:flower-host-file-action-open';
 
 export type DesktopFlowerHostProviderType =
   | 'openai'
@@ -242,7 +243,6 @@ export type DesktopFlowerHostActivityTargetRef = Readonly<{
   kind: string;
   label: string;
   uri?: string;
-  path?: string;
   line?: number;
 }>;
 
@@ -266,6 +266,13 @@ export type DesktopFlowerHostActivityItem = Readonly<{
   target_refs?: readonly DesktopFlowerHostActivityTargetRef[];
   payload?: Readonly<Record<string, unknown>>;
   metadata?: Readonly<Record<string, string>>;
+}>;
+
+export type DesktopFlowerHostActivityFileAction = Readonly<{
+  action_id: string;
+  display_name: string;
+  can_preview: boolean;
+  can_browse_directory: boolean;
 }>;
 
 export type DesktopFlowerHostActivityTimelineBlock = Readonly<{
@@ -293,6 +300,7 @@ export type DesktopFlowerHostActivityTimelineBlock = Readonly<{
     duration_ms?: number;
   }>;
   items: readonly DesktopFlowerHostActivityItem[];
+  file_actions?: Readonly<Record<string, DesktopFlowerHostActivityFileAction>>;
 }>;
 
 export type DesktopFlowerHostChatMessageBlock = DesktopFlowerHostChatTextBlock | DesktopFlowerHostActivityTimelineBlock;
@@ -429,6 +437,28 @@ export type DesktopFlowerHostFailure = Readonly<{
   error: DesktopFlowerHostError;
 }>;
 
+export type DesktopFlowerHostFileActionOpenRequest = Readonly<{
+  action: 'preview' | 'browse_directory';
+  thread_id?: string;
+  message_id: string;
+  block_index: number;
+  item_id: string;
+  action_id: string;
+}>;
+
+export type DesktopFlowerHostFileActionOpenTarget = Readonly<{
+  action_id: string;
+  action: 'preview' | 'browse_directory';
+  path: string;
+}>;
+
+export type OpenDesktopFlowerHostFileActionResult = Readonly<
+  | {
+      ok: true;
+    }
+  | DesktopFlowerHostFailure
+>;
+
 export type ListDesktopFlowerHostThreadsResult = Readonly<
   | {
       ok: true;
@@ -521,6 +551,36 @@ export type SaveDesktopFlowerHostSettingsResult = Readonly<
     }
   | DesktopFlowerHostFailure
 >;
+
+function compact(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+export function normalizeDesktopFlowerHostFileActionOpenRequest(value: unknown): DesktopFlowerHostFileActionOpenRequest | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const candidate = value as Partial<DesktopFlowerHostFileActionOpenRequest>;
+  const action = candidate.action === 'preview' || candidate.action === 'browse_directory'
+    ? candidate.action
+    : '';
+  const threadID = compact(candidate.thread_id);
+  const messageID = compact(candidate.message_id);
+  const itemID = compact(candidate.item_id);
+  const actionID = compact(candidate.action_id);
+  const blockIndex = Math.floor(Number(candidate.block_index));
+  if (!action || !messageID || !itemID || !actionID || !Number.isInteger(blockIndex) || blockIndex < 0) {
+    return null;
+  }
+  return {
+    action,
+    ...(threadID ? { thread_id: threadID } : {}),
+    message_id: messageID,
+    block_index: blockIndex,
+    item_id: itemID,
+    action_id: actionID,
+  };
+}
 
 export function normalizeDesktopFlowerHostSecretMode(
   value: unknown,
