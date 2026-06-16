@@ -39,7 +39,7 @@ REDEVEN_CONSOLE_URL="${REDEVEN_CONSOLE_URL:-https://console.example.invalid}"
 REDEVEN_DOCS_URL="${REDEVEN_DOCS_URL:-https://docs.example.invalid}"
 
 # Shell-first tooling: pinned ripgrep distribution.
-RG_VERSION="14.1.1"
+RG_VERSION="15.1.0"
 RG_GITHUB_RELEASES_URL="https://github.com/BurntSushi/ripgrep/releases"
 
 # Redeven home directory - default runtime state lives under ~/.redeven/local-environment/
@@ -286,22 +286,22 @@ sha256_file() {
 resolve_rg_sha256() {
     case "$1" in
         x86_64-unknown-linux-musl)
-            printf '%s\n' '4cf9f2741e6c465ffdb7c26f38056a59e2a2544b51f7cc128ef28337eeae4d8e'
+            printf '%s\n' '1c9297be4a084eea7ecaedf93eb03d058d6faae29bbc57ecdaf5063921491599'
             ;;
         aarch64-unknown-linux-gnu)
-            printf '%s\n' 'c827481c4ff4ea10c9dc7a4022c8de5db34a5737cb74484d62eb94a95841ab2f'
+            printf '%s\n' '2b661c6ef508e902f388e9098d9c4c5aca72c87b55922d94abdba830b4dc885e'
             ;;
         armv7-unknown-linux-musleabihf)
-            printf '%s\n' 'ec568e3c82054933cf22eced8eaffc1c93d38efcd505cb04df905f95e85d03a6'
+            printf '%s\n' '89c0230b8ad3c280460e0391f2ecb92f4a7c498b10f4a912540fc0f916336b08'
             ;;
         i686-unknown-linux-gnu)
-            printf '%s\n' '2ce1beccb27ce9ad8e26593be52b15e8da0ee7bf3e0e59d5553ab3333a087a4e'
+            printf '%s\n' '0300c58864b1de49da08f714d56ce10328dcbf6de37a404486fe2696e95692f1'
             ;;
         x86_64-apple-darwin)
-            printf '%s\n' 'fc87e78f7cb3fea12d69072e7ef3b21509754717b746368fd40d88963630e2b3'
+            printf '%s\n' '64811cb24e77cac3057d6c40b63ac9becf9082eedd54ca411b475b755d334882'
             ;;
         aarch64-apple-darwin)
-            printf '%s\n' '24ad76777745fbff131c8fbc466742b011f925bfa4fffa2ded6def23b5b937be'
+            printf '%s\n' '378e973289176ca0c6054054ee7f631a065874a352bf43f0fa60ef079b6ba715'
             ;;
         *)
             return 1
