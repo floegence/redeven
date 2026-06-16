@@ -1216,6 +1216,117 @@ describe('DesktopWelcomeShell', () => {
     expect(listboxSrc).toContain('IMPORTANT: Dialog form listboxes must live outside dialog scroll containers.');
   });
 
+  it('renders the Desktop settings language control as an anchored rich listbox', () => {
+    const appSrc = readWelcomeSource();
+    const panelStart = appSrc.indexOf('function DesktopLanguageSettingsPanel');
+    const panelEnd = appSrc.indexOf('function DesktopInterfaceSettingsDialog', panelStart);
+    const panelSrc = appSrc.slice(panelStart, panelEnd);
+
+    expect(panelSrc).toContain('const languageSelectID = createUniqueId();');
+    expect(panelSrc).toContain('const languageListboxID = createUniqueId();');
+    expect(panelSrc).not.toContain('<select');
+    expect(panelSrc).not.toContain('<option');
+    expect(panelSrc).toContain('<DesktopAnchoredListbox');
+    expect(panelSrc).toContain('anchorRef={buttonRef}');
+    expect(panelSrc).toContain('role="listbox"');
+    expect(panelSrc).toContain('role="option"');
+    expect(panelSrc).toContain('tabIndex={-1}');
+    expect(panelSrc).toContain('scrollListboxOptionIntoView');
+    expect(panelSrc).toContain('aria-haspopup="listbox"');
+    expect(panelSrc).toContain("aria-expanded={open() ? 'true' : 'false'}");
+    expect(panelSrc).toContain('aria-controls={languageListboxID}');
+    expect(panelSrc).toContain("aria-activedescendant={open() ? `${languageListboxID}-option-${highlightedIndex()}` : undefined}");
+    expect(panelSrc).toContain("props.i18n.t('settings.languageSelectLabel')");
+    expect(panelSrc).toContain("props.i18n.t('language.usingLanguage'");
+    expect(panelSrc).toContain('REDEVEN_LOCALE_META[preference].english_name');
+    expect(panelSrc).toContain('<ChevronDown');
+    expect(panelSrc).toContain('<Check');
+  });
+
+  it('does not use native browser selects in the Desktop welcome surface', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).not.toContain('<select');
+    expect(appSrc).not.toContain('<option');
+  });
+
+  it('renders the Gateway profile source control as an anchored rich listbox', () => {
+    const appSrc = readWelcomeSource();
+    const pickerStart = appSrc.indexOf('function GatewayProfileSourcePicker');
+    const pickerEnd = appSrc.indexOf('function ConnectionDialog', pickerStart);
+    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
+
+    expect(pickerSrc).toContain('function GatewayProfileSourcePicker');
+    expect(pickerSrc).not.toContain('<select');
+    expect(pickerSrc).not.toContain('<option');
+    expect(pickerSrc).toContain('<DesktopAnchoredListbox');
+    expect(pickerSrc).toContain('anchorRef={buttonRef}');
+    expect(pickerSrc).toContain('role="listbox"');
+    expect(pickerSrc).toContain('role="option"');
+    expect(pickerSrc).toContain('tabIndex={-1}');
+    expect(pickerSrc).toContain('scrollListboxOptionIntoView');
+    expect(pickerSrc).toContain('aria-haspopup="listbox"');
+    expect(pickerSrc).toContain("aria-expanded={open() ? 'true' : 'false'}");
+    expect(pickerSrc).toContain('aria-controls={listboxID}');
+    expect(pickerSrc).toContain('buildGatewaySourceRowModel(gateway)');
+    expect(pickerSrc).toContain("props.i18n.t('environmentCenter.gatewaySearchPlaceholder')");
+    expect(pickerSrc).toContain("props.i18n.t('environmentCenter.noMatchingGatewaysDescription')");
+    expect(pickerSrc).toContain('localizedGatewaySourceStatusLabel');
+    expect(pickerSrc).toContain('localizedGatewaySourceCountText');
+    expect(pickerSrc).toContain('gatewaySourceToneTagVariant(row().status_tone)');
+    expect(pickerSrc).toContain('selectedGatewayProfileSource(props.gateways, props.selectedGatewayID)');
+    expect(pickerSrc).not.toContain('sources[0]');
+    expect(pickerSrc).toContain('connectionDialog.validationGatewayRequired');
+    expect(pickerSrc).toContain('<ShieldCheck');
+    expect(pickerSrc).toContain('<ChevronDown');
+    expect(pickerSrc).toContain('<Check');
+  });
+
+  it('keeps Gateway profile source selection searchable and keyboard reachable', () => {
+    const appSrc = readWelcomeSource();
+    const pickerStart = appSrc.indexOf('function GatewayProfileSourcePicker');
+    const pickerEnd = appSrc.indexOf('function ConnectionDialog', pickerStart);
+    const pickerSrc = appSrc.slice(pickerStart, pickerEnd);
+    const dialogStart = appSrc.indexOf('function ConnectionDialog');
+    const dialogEnd = appSrc.indexOf('function officialProviderOptionForOrigin', dialogStart);
+    const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
+
+    expect(pickerSrc).toContain('const [query, setQuery] = createSignal');
+    expect(pickerSrc).toContain('gatewayProfileSourceSearchText(gateway)');
+    expect(pickerSrc).toContain("event.key === 'ArrowDown'");
+    expect(pickerSrc).toContain("event.key === 'ArrowUp'");
+    expect(pickerSrc).toContain("event.key === 'Enter' || event.key === ' '");
+    expect(pickerSrc).toContain("event.key === 'Escape'");
+    expect(pickerSrc).toContain('buttonRef?.focus();');
+    expect(pickerSrc).toContain('props.onSelect(gateway.gateway_id);');
+    expect(pickerSrc).toContain('props.clearFieldErrors();');
+    expect(dialogSrc).toContain('<GatewayProfileSourcePicker');
+    expect(dialogSrc).toContain('gateways={props.gatewayProfileSources}');
+    expect(dialogSrc).toContain("selectedGatewayID={props.state?.connection_kind === 'gateway_url_profile' ? props.state.gateway_id : ''}");
+    expect(dialogSrc).toContain("onSelect={(gatewayID) => props.updateField('gateway_id', gatewayID)}");
+  });
+
+  it('preserves keyboard and focus behavior for the Desktop settings language listbox', () => {
+    const appSrc = readWelcomeSource();
+    const panelStart = appSrc.indexOf('function DesktopLanguageSettingsPanel');
+    const panelEnd = appSrc.indexOf('function DesktopInterfaceSettingsDialog', panelStart);
+    const panelSrc = appSrc.slice(panelStart, panelEnd);
+
+    expect(panelSrc).toContain("event.key === 'ArrowDown'");
+    expect(panelSrc).toContain("event.key === 'ArrowUp'");
+    expect(panelSrc).toContain("event.key === 'Enter' || event.key === ' '");
+    expect(panelSrc).toContain("event.key === 'Escape'");
+    expect(panelSrc).toContain('createEffect(on(');
+    expect(panelSrc).toContain('setHighlightedIndex(selectedIndex());');
+    expect(panelSrc).toContain('setHighlightedIndex((current) => (current + delta + count) % count);');
+    expect(panelSrc).toContain('document.addEventListener(\'mousedown\', handlePointerDown);');
+    expect(panelSrc).toContain('document.addEventListener(\'keydown\', handleKeyDown);');
+    expect(panelSrc).toContain('buttonRef?.focus();');
+    expect(panelSrc).toContain('props.updateLanguagePreference(preference);');
+    expect(panelSrc).toContain('onMouseDown={(event) => {');
+    expect(panelSrc).toContain('event.preventDefault();');
+  });
+
   it('routes Desktop language and command chrome through i18n dictionaries', () => {
     const appSrc = readWelcomeSource();
 

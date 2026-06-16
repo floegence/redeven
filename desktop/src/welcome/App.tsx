@@ -1,4 +1,4 @@
-import { For, Index, Show, createEffect, createMemo, createSignal, on, onCleanup, type JSX } from 'solid-js';
+import { For, Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
 import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-core';
@@ -194,6 +194,7 @@ import {
   type EnvironmentCardFactActionModel,
   type EnvironmentCardFactModel,
   type EnvironmentActionOverlayTone,
+  type EnvironmentCardTone,
   type EnvironmentActionPresentation,
   type EnvironmentCenterTab,
   type EnvironmentPrimaryActionOverlayModel,
@@ -2511,6 +2512,24 @@ async function copyToClipboard(text: string): Promise<void> {
   document.body.removeChild(textarea);
 }
 
+function scrollListboxOptionIntoView(
+  listbox: HTMLElement | undefined,
+  optionID: string,
+): void {
+  if (!listbox) {
+    return;
+  }
+  const option = listbox.querySelector<HTMLElement>(`#${CSS.escape(optionID)}`);
+  if (!option) {
+    return;
+  }
+  const listboxRect = listbox.getBoundingClientRect();
+  const optionRect = option.getBoundingClientRect();
+  if (optionRect.top < listboxRect.top || optionRect.bottom > listboxRect.bottom) {
+    option.scrollIntoView({ block: 'nearest' });
+  }
+}
+
 function desktopLauncherBridge(): DesktopLauncherBridge | null {
   const candidate = window.redevenDesktopLauncher;
   if (
@@ -2573,9 +2592,18 @@ function DesktopLanguagePicker(props: Readonly<{
     { defer: true },
   ));
 
+  createEffect(on(
+    [open, () => props.snapshot.preference],
+    ([isOpen]) => {
+      if (isOpen) {
+        setHighlightedIndex(selectedIndex());
+      }
+    },
+  ));
+
   createEffect(() => {
     if (open()) {
-      setHighlightedIndex(selectedIndex());
+      scrollListboxOptionIntoView(listboxRef, `redeven-desktop-language-option-${highlightedIndex()}`);
     }
   });
 
@@ -2630,6 +2658,7 @@ function DesktopLanguagePicker(props: Readonly<{
         aria-haspopup="listbox"
         aria-expanded={open() ? 'true' : 'false'}
         aria-controls="redeven-desktop-language-options"
+        aria-activedescendant={open() ? `redeven-desktop-language-option-${highlightedIndex()}` : undefined}
         onClick={() => setOpen((current) => !current)}
         onKeyDown={(event) => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -2669,7 +2698,9 @@ function DesktopLanguagePicker(props: Readonly<{
                 return (
                   <button
                     type="button"
+                    id={`redeven-desktop-language-option-${index()}`}
                     role="option"
+                    tabIndex={-1}
                     aria-selected={selected() ? 'true' : 'false'}
                     class={cn(
                       'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
@@ -12402,14 +12433,81 @@ function DesktopLanguageSettingsPanel(props: Readonly<{
   i18n: DesktopI18n;
   updateLanguagePreference: (preference: RedevenLocalePreference) => void;
 }>) {
+  const [open, setOpen] = createSignal(false);
+  const [highlightedIndex, setHighlightedIndex] = createSignal(0);
+  const languageSelectID = createUniqueId();
+  const languageListboxID = createUniqueId();
+  let buttonRef: HTMLButtonElement | undefined;
+  let listboxRef: HTMLDivElement | undefined;
+
   const languagePreferenceOptions = createMemo(() => (
     REDEVEN_LOCALE_PREFERENCES.map((preference) => ({
       value: preference,
       label: preference === SYSTEM_LOCALE_PREFERENCE
         ? props.i18n.t('language.systemDefault')
         : localePreferenceDisplayName(preference),
+      secondary: preference === SYSTEM_LOCALE_PREFERENCE
+        ? props.i18n.t('language.usingLanguage', { language: localePreferenceDisplayName(props.languageSnapshot.resolved_locale) })
+        : REDEVEN_LOCALE_META[preference].english_name,
     }))
   ));
+  const selectedIndex = createMemo(() => Math.max(0, languagePreferenceOptions().findIndex((option) => option.value === props.languageSnapshot.preference)));
+  const selectedOption = createMemo(() => languagePreferenceOptions()[selectedIndex()]);
+
+  createEffect(on(
+    [open, () => props.languageSnapshot.preference],
+    ([isOpen]) => {
+      if (isOpen) {
+        setHighlightedIndex(selectedIndex());
+      }
+    },
+  ));
+
+  createEffect(() => {
+    if (open()) {
+      scrollListboxOptionIntoView(listboxRef, `${languageListboxID}-option-${highlightedIndex()}`);
+    }
+  });
+
+  createEffect(() => {
+    if (!open()) {
+      return;
+    }
+    const containsTarget = (target: EventTarget | null): boolean => (
+      target instanceof Node && (buttonRef?.contains(target) === true || listboxRef?.contains(target) === true)
+    );
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containsTarget(event.target)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        buttonRef?.focus();
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    });
+  });
+
+  const moveHighlight = (delta: number) => {
+    const count = languagePreferenceOptions().length;
+    if (count <= 0) {
+      return;
+    }
+    setHighlightedIndex((current) => (current + delta + count) % count);
+  };
+  const selectPreference = (preference: RedevenLocalePreference) => {
+    props.updateLanguagePreference(preference);
+    setOpen(false);
+    buttonRef?.focus();
+  };
 
   return (
     <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
@@ -12420,21 +12518,109 @@ function DesktopLanguageSettingsPanel(props: Readonly<{
             help={props.i18n.t('settings.languageDescription')}
             i18n={props.i18n}
           />
-          <label class="block">
-            <span class="sr-only">{props.i18n.t('settings.languageSelectLabel')}</span>
-            <select
-              class="mt-2 h-9 w-full cursor-pointer rounded-md border border-input bg-background px-3 text-sm text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
-              value={props.languageSnapshot.preference}
-              aria-label={props.i18n.t('settings.languageSelectLabel')}
-              onChange={(event) => props.updateLanguagePreference(event.currentTarget.value as RedevenLocalePreference)}
+          <div class="mt-2">
+            <label id={languageSelectID} class="sr-only">{props.i18n.t('settings.languageSelectLabel')}</label>
+            <button
+              ref={buttonRef}
+              type="button"
+              class="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-left text-sm text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20"
+              aria-labelledby={languageSelectID}
+              aria-haspopup="listbox"
+              aria-expanded={open() ? 'true' : 'false'}
+              aria-controls={languageListboxID}
+              aria-activedescendant={open() ? `${languageListboxID}-option-${highlightedIndex()}` : undefined}
+              onClick={() => setOpen((current) => !current)}
+              onKeyDown={(event) => {
+                if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault();
+                  setOpen(true);
+                  if (event.key === 'ArrowDown') {
+                    moveHighlight(1);
+                  } else if (event.key === 'ArrowUp') {
+                    moveHighlight(-1);
+                  }
+                  return;
+                }
+                if (!open()) {
+                  return;
+                }
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  moveHighlight(1);
+                } else if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  moveHighlight(-1);
+                } else if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  const option = languagePreferenceOptions()[highlightedIndex()];
+                  if (option) {
+                    selectPreference(option.value);
+                  }
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  setOpen(false);
+                }
+              }}
             >
-              <For each={languagePreferenceOptions()}>
-                {(option) => (
-                  <option value={option.value}>{option.label}</option>
-                )}
-              </For>
-            </select>
-          </label>
+              <span class="min-w-0">
+                <span class="block truncate font-medium">{selectedOption()?.label}</span>
+                <span class="block truncate text-[11px] text-muted-foreground">{selectedOption()?.secondary}</span>
+              </span>
+              <ChevronDown class={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', open() && 'rotate-180')} />
+            </button>
+            <Show when={open()}>
+              <DesktopAnchoredListbox
+                id={languageListboxID}
+                anchorRef={buttonRef}
+                class="p-1"
+                maxHeight={320}
+                role="listbox"
+                open={open()}
+                onOverlayRef={(element) => {
+                  listboxRef = element;
+                }}
+              >
+                <div class="min-h-0 flex-1 overflow-auto">
+                  <For each={languagePreferenceOptions()}>
+                    {(option, index) => {
+                      const selected = createMemo(() => props.languageSnapshot.preference === option.value);
+                      const highlighted = createMemo(() => highlightedIndex() === index());
+                      return (
+                        <button
+                          type="button"
+                          id={`${languageListboxID}-option-${index()}`}
+                          role="option"
+                          tabIndex={-1}
+                          aria-selected={selected() ? 'true' : 'false'}
+                          class={cn(
+                            'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
+                            highlighted()
+                              ? 'bg-accent text-accent-foreground'
+                              : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                          )}
+                          title={`${option.label} - ${option.secondary}`}
+                          onClick={() => selectPreference(option.value)}
+                          onMouseEnter={() => setHighlightedIndex(index())}
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            selectPreference(option.value);
+                          }}
+                        >
+                          <span class="min-w-0">
+                            <span class="block whitespace-normal text-xs font-medium leading-snug">{option.label}</span>
+                            <span class="block whitespace-normal text-[11px] leading-snug text-muted-foreground">{option.secondary}</span>
+                          </span>
+                          <Show when={selected()}>
+                            <Check class="h-3.5 w-3.5 shrink-0" />
+                          </Show>
+                        </button>
+                      );
+                    }}
+                  </For>
+                </div>
+              </DesktopAnchoredListbox>
+            </Show>
+          </div>
           <p class="text-[11px] leading-relaxed text-muted-foreground">
             {props.i18n.t('language.appliesToDesktopAndEnvApp')}
           </p>
@@ -12454,7 +12640,6 @@ function DesktopLanguageSettingsPanel(props: Readonly<{
     </div>
   );
 }
-
 function DesktopInterfaceSettingsDialog(props: Readonly<{
   open: boolean;
   languageSnapshot: RedevenLanguageSnapshot;
@@ -12889,6 +13074,12 @@ function SSHDestinationCombobox(props: Readonly<{
     }
   });
 
+  createEffect(() => {
+    if (open() && filteredHosts().length > 0) {
+      scrollListboxOptionIntoView(listboxRef, `environment-ssh-host-option-${highlightedIndex()}`);
+    }
+  });
+
   onCleanup(() => {
     if (closeTimer !== undefined) {
       window.clearTimeout(closeTimer);
@@ -12975,6 +13166,7 @@ function SSHDestinationCombobox(props: Readonly<{
         role="combobox"
         aria-expanded={open() && filteredHosts().length > 0 ? 'true' : 'false'}
         aria-controls="environment-ssh-destination-options"
+        aria-activedescendant={open() && filteredHosts().length > 0 ? `environment-ssh-host-option-${highlightedIndex()}` : undefined}
         aria-autocomplete="list"
       />
       <Show when={open() && filteredHosts().length > 0}>
@@ -13011,7 +13203,9 @@ function SSHDestinationCombobox(props: Readonly<{
                       : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
                   )}
                   role="option"
+                  tabIndex={-1}
                   aria-selected={highlightedIndex() === index() ? 'true' : 'false'}
+                  onClick={() => selectHost(host)}
                   onMouseEnter={() => setHighlightedIndex(index())}
                   onMouseDown={(event) => {
                     event.preventDefault();
@@ -13082,6 +13276,9 @@ function ContainerPicker(props: Readonly<{
       ? source
       : source.filter((container) => runtimeContainerSearchText(container).includes(cleanQuery));
   });
+  const selectedIndex = createMemo(() => Math.max(0, filteredContainers().findIndex((container) => (
+    container.container_id === props.selectedContainerID
+  ))));
 
   createEffect(() => {
     const count = filteredContainers().length;
@@ -13091,6 +13288,21 @@ function ContainerPicker(props: Readonly<{
     }
     if (highlightedIndex() >= count) {
       setHighlightedIndex(count - 1);
+    }
+  });
+
+  createEffect(on(
+    [open, () => props.selectedContainerID, () => props.containers],
+    ([isOpen]) => {
+      if (isOpen) {
+        setHighlightedIndex(selectedIndex());
+      }
+    },
+  ));
+
+  createEffect(() => {
+    if (open() && filteredContainers().length > 0) {
+      scrollListboxOptionIntoView(listboxRef, `environment-container-option-${highlightedIndex()}`);
     }
   });
 
@@ -13183,9 +13395,14 @@ function ContainerPicker(props: Readonly<{
             if (props.disabled) {
               return;
             }
-            if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter')) {
+            if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ')) {
               event.preventDefault();
               setOpen(true);
+              if (event.key === 'ArrowDown') {
+                moveHighlight(1);
+              } else if (event.key === 'ArrowUp') {
+                moveHighlight(-1);
+              }
               return;
             }
             if (!open()) {
@@ -13197,7 +13414,7 @@ function ContainerPicker(props: Readonly<{
             } else if (event.key === 'ArrowUp') {
               event.preventDefault();
               moveHighlight(-1);
-            } else if (event.key === 'Enter') {
+            } else if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault();
               const container = filteredContainers()[highlightedIndex()];
               if (container) {
@@ -13211,6 +13428,7 @@ function ContainerPicker(props: Readonly<{
           aria-haspopup="listbox"
           aria-expanded={open() ? 'true' : 'false'}
           aria-controls="environment-container-picker-options"
+          aria-activedescendant={open() && filteredContainers().length > 0 ? `environment-container-option-${highlightedIndex()}` : undefined}
         >
           <span class={cn('min-w-0 truncate', selectedLabel() ? 'text-foreground' : 'text-muted-foreground')}>
             {selectedLabel() || (props.loading ? props.i18n.t('connectionDialog.loadingContainers') : props.i18n.t('connectionDialog.chooseRunningContainer'))}
@@ -13280,7 +13498,9 @@ function ContainerPicker(props: Readonly<{
                           : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
                       )}
                       role="option"
+                      tabIndex={-1}
                       aria-selected={props.selectedContainerID === container.container_id ? 'true' : 'false'}
+                      onClick={() => selectContainer(container)}
                       onMouseEnter={() => setHighlightedIndex(index())}
                       onMouseDown={(event) => {
                         event.preventDefault();
@@ -13322,6 +13542,345 @@ function ContainerPicker(props: Readonly<{
   );
 }
 
+function selectedGatewayProfileSource(
+  sources: readonly DesktopGatewaySource[],
+  selectedGatewayID: string,
+): DesktopGatewaySource | undefined {
+  const cleanGatewayID = trimString(selectedGatewayID);
+  return sources.find((gateway) => gateway.gateway_id === cleanGatewayID);
+}
+
+function gatewayProfileSourceSearchText(gateway: DesktopGatewaySource): string {
+  const row = buildGatewaySourceRowModel(gateway);
+  return [
+    row.label,
+    row.gateway_id,
+    row.transport_label,
+    row.status_label,
+    row.endpoint_label,
+    row.environment_summary_label,
+    gateway.status_message,
+    gateway.gateway_url,
+    gateway.container_label,
+    gateway.container_ref,
+    gateway.ssh_details?.ssh_destination,
+  ].map(trimString).join(' ').toLowerCase();
+}
+
+function gatewaySourceToneTagVariant(tone: EnvironmentCardTone): 'neutral' | 'primary' | 'success' | 'warning' {
+  return tone;
+}
+
+function GatewayProfileSourcePicker(props: Readonly<{
+  i18n: DesktopI18n;
+  gateways: readonly DesktopGatewaySource[];
+  selectedGatewayID: string;
+  fieldError?: string;
+  onSelect: (gatewayID: string) => void;
+  clearFieldErrors: () => void;
+}>) {
+  const [open, setOpen] = createSignal(false);
+  const [query, setQuery] = createSignal('');
+  const [highlightedIndex, setHighlightedIndex] = createSignal(0);
+  const labelID = createUniqueId();
+  const listboxID = createUniqueId();
+  let rootRef: HTMLDivElement | undefined;
+  let buttonRef: HTMLButtonElement | undefined;
+  let listboxRef: HTMLDivElement | undefined;
+
+  const selectedGateway = createMemo(() => selectedGatewayProfileSource(props.gateways, props.selectedGatewayID));
+  const selectedRow = createMemo(() => {
+    const gateway = selectedGateway();
+    return gateway ? buildGatewaySourceRowModel(gateway) : null;
+  });
+  const selectedGatewayExists = createMemo(() => selectedGateway() !== undefined);
+  const filteredGateways = createMemo(() => {
+    const normalizedQuery = trimString(query()).toLowerCase();
+    if (!normalizedQuery) {
+      return props.gateways;
+    }
+    return props.gateways.filter((gateway) => gatewayProfileSourceSearchText(gateway).includes(normalizedQuery));
+  });
+  const selectedIndex = createMemo(() => Math.max(0, filteredGateways().findIndex((gateway) => gateway.gateway_id === selectedGateway()?.gateway_id)));
+
+  createEffect(() => {
+    const count = filteredGateways().length;
+    if (count <= 0) {
+      setHighlightedIndex(0);
+      return;
+    }
+    if (highlightedIndex() >= count) {
+      setHighlightedIndex(count - 1);
+    }
+  });
+
+  createEffect(on(
+    [open, () => props.selectedGatewayID, () => props.gateways],
+    ([isOpen]) => {
+      if (isOpen) {
+        setHighlightedIndex(selectedIndex());
+      } else {
+        setQuery('');
+      }
+    },
+  ));
+
+  createEffect(() => {
+    if (open()) {
+      scrollListboxOptionIntoView(listboxRef, `${listboxID}-option-${highlightedIndex()}`);
+    }
+  });
+
+  createEffect(() => {
+    if (!open()) {
+      return;
+    }
+    const containsTarget = (target: EventTarget | null): boolean => (
+      target instanceof Node && (rootRef?.contains(target) === true || listboxRef?.contains(target) === true)
+    );
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!containsTarget(event.target)) {
+        setOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        buttonRef?.focus();
+      }
+    };
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    onCleanup(() => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    });
+  });
+
+  const moveHighlight = (delta: number) => {
+    const count = filteredGateways().length;
+    if (count <= 0) {
+      return;
+    }
+    setHighlightedIndex((current) => (current + delta + count) % count);
+  };
+  const selectGateway = (gateway: DesktopGatewaySource) => {
+    props.onSelect(gateway.gateway_id);
+    props.clearFieldErrors();
+    setOpen(false);
+    buttonRef?.focus();
+  };
+
+  return (
+    <div ref={rootRef} class="space-y-1.5">
+      <label id={labelID} for="gateway-environment-gateway" class="block text-xs font-medium text-foreground">
+        {props.i18n.t('connectionDialog.gatewayEnvironmentGateway')} <span class="text-destructive">*</span>
+      </label>
+      <button
+        ref={buttonRef}
+        id="gateway-environment-gateway"
+        type="button"
+        class={cn(
+          'group flex min-h-[4.25rem] w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2.5 text-left outline-none transition-[border-color,background-color,box-shadow] hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20',
+          props.fieldError && 'border-destructive ring-1 ring-destructive/20',
+        )}
+        aria-labelledby={labelID}
+        aria-haspopup="listbox"
+        aria-expanded={open() ? 'true' : 'false'}
+        aria-controls={listboxID}
+        aria-activedescendant={open() && filteredGateways().length > 0 ? `${listboxID}-option-${highlightedIndex()}` : undefined}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            setOpen(true);
+            if (event.key === 'ArrowDown') {
+              moveHighlight(1);
+            } else if (event.key === 'ArrowUp') {
+              moveHighlight(-1);
+            }
+            return;
+          }
+          if (!open()) {
+            return;
+          }
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            moveHighlight(1);
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            moveHighlight(-1);
+          } else if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            const gateway = filteredGateways()[highlightedIndex()];
+            if (gateway) {
+              selectGateway(gateway);
+            }
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            setOpen(false);
+          }
+        }}
+      >
+        <span class="flex min-w-0 items-start gap-3">
+          <span class="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/70 bg-muted/30 text-muted-foreground transition-colors group-hover:border-primary/30 group-hover:text-foreground">
+            <ShieldCheck class="h-4 w-4" />
+          </span>
+          <span class="min-w-0">
+            <Show
+              when={selectedRow()}
+              fallback={(
+                <>
+                  <span class="block truncate text-sm font-semibold text-foreground">{props.i18n.t('connectionDialog.gatewayEnvironmentGateway')}</span>
+                  <span class="mt-0.5 block truncate text-[11px] text-muted-foreground">{props.i18n.t('connectionDialog.validationGatewayRequired')}</span>
+                </>
+              )}
+            >
+              {(row) => (
+                <>
+                  <span class="block truncate text-sm font-semibold text-foreground">{row().label}</span>
+                  <span class="mt-0.5 block truncate text-[11px] text-muted-foreground">
+                    {[row().transport_label, row().endpoint_label].filter(Boolean).join(' · ')}
+                  </span>
+                  <span class="mt-1 flex flex-wrap items-center gap-1.5">
+                    <Tag variant={gatewaySourceToneTagVariant(row().status_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                      {localizedGatewaySourceStatusLabel(props.i18n, row().status_label)}
+                    </Tag>
+                    <Tag variant="neutral" tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                      {localizedGatewaySourceCountText(props.i18n, row().environment_summary_label)}
+                    </Tag>
+                  </span>
+                </>
+              )}
+            </Show>
+          </span>
+        </span>
+        <ChevronDown class={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', open() && 'rotate-180')} />
+      </button>
+      <Show when={open()}>
+        <DesktopAnchoredListbox
+          id={listboxID}
+          anchorRef={buttonRef}
+          class="shadow-xl"
+          maxHeight={360}
+          role="listbox"
+          open={open()}
+          onOverlayRef={(element) => {
+            listboxRef = element;
+          }}
+        >
+          <div class="border-b border-border/70 p-2">
+            <Show when={selectedGatewayExists()} fallback={(
+              <div class="mb-2 rounded-md border border-dashed border-border/50 bg-background/70 px-2.5 py-2 text-[11px] leading-5 text-muted-foreground">
+                {props.i18n.t('connectionDialog.validationGatewayRequired')}
+              </div>
+            )}>
+              <div class="mb-2 rounded-md border border-border/60 bg-muted/15 px-2.5 py-2 text-[11px] leading-5 text-muted-foreground">
+                {selectedRow()?.label}
+              </div>
+            </Show>
+            <Input
+              value={query()}
+              onInput={(event) => {
+                setQuery(event.currentTarget.value);
+                setHighlightedIndex(0);
+              }}
+              placeholder={props.i18n.t('environmentCenter.gatewaySearchPlaceholder')}
+              size="sm"
+              class="w-full"
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  moveHighlight(1);
+                } else if (event.key === 'ArrowUp') {
+                  event.preventDefault();
+                  moveHighlight(-1);
+                } else if (event.key === 'Enter') {
+                  event.preventDefault();
+                  const gateway = filteredGateways()[highlightedIndex()];
+                  if (gateway) {
+                    selectGateway(gateway);
+                  }
+                }
+              }}
+            />
+          </div>
+          <div
+            class="min-h-0 flex-1 overflow-auto p-1"
+            onWheel={(event) => {
+              const el = event.currentTarget as HTMLElement;
+              event.stopPropagation();
+              if (el.scrollHeight > el.clientHeight) {
+                el.scrollTop += event.deltaY;
+              }
+            }}
+          >
+            <Show
+              when={filteredGateways().length > 0}
+              fallback={(
+                <div class="px-3 py-3 text-xs leading-5 text-muted-foreground">
+                  {props.i18n.t('environmentCenter.noMatchingGatewaysDescription')}
+                </div>
+              )}
+            >
+              <For each={filteredGateways()}>
+                {(gateway, index) => {
+                  const row = createMemo(() => buildGatewaySourceRowModel(gateway));
+                  const selected = createMemo(() => selectedGateway()?.gateway_id === gateway.gateway_id);
+                  const highlighted = createMemo(() => highlightedIndex() === index());
+                  return (
+                    <button
+                      type="button"
+                      id={`${listboxID}-option-${index()}`}
+                      class={cn(
+                        'flex w-full cursor-pointer items-start justify-between gap-3 rounded-md px-2.5 py-2.5 text-left transition-colors',
+                        highlighted()
+                          ? 'bg-accent text-accent-foreground'
+                          : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
+                      )}
+                      role="option"
+                      tabIndex={-1}
+                      aria-selected={selected() ? 'true' : 'false'}
+                      onClick={() => selectGateway(gateway)}
+                      onMouseEnter={() => setHighlightedIndex(index())}
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        selectGateway(gateway);
+                      }}
+                    >
+                      <span class="min-w-0">
+                        <span class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                          <span class="truncate text-sm font-semibold">{row().label}</span>
+                          <Tag variant={gatewaySourceToneTagVariant(row().status_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                            {localizedGatewaySourceStatusLabel(props.i18n, row().status_label)}
+                          </Tag>
+                        </span>
+                        <span class="mt-1 block truncate text-[11px] text-muted-foreground">
+                          {[row().transport_label, row().endpoint_label].filter(Boolean).join(' · ')}
+                        </span>
+                        <span class="mt-1 block truncate font-mono text-[11px] text-muted-foreground">{row().gateway_id}</span>
+                        <span class="mt-1 block text-[11px] leading-5 text-muted-foreground">
+                          {localizedGatewaySourceCountText(props.i18n, row().environment_summary_label)}
+                        </span>
+                      </span>
+                      <Show when={selected()}>
+                        <Check class="mt-1 h-3.5 w-3.5 shrink-0" />
+                      </Show>
+                    </button>
+                  );
+                }}
+              </For>
+            </Show>
+          </div>
+        </DesktopAnchoredListbox>
+      </Show>
+      <Show when={props.fieldError}>
+        <div class="text-[11px] text-destructive">{props.fieldError}</div>
+      </Show>
+    </div>
+  );
+}
 function ConnectionDialog(props: Readonly<{
   i18n: DesktopI18n;
   state: ConnectionDialogState;
@@ -13503,35 +14062,14 @@ function ConnectionDialog(props: Readonly<{
                 )}
               >
                 <div class="space-y-3">
-                  <div class="space-y-1.5">
-                    <label for="gateway-environment-gateway" class="block text-xs font-medium text-foreground">
-                      {props.i18n.t('connectionDialog.gatewayEnvironmentGateway')} <span class="text-destructive">*</span>
-                    </label>
-                    <select
-                      id="gateway-environment-gateway"
-                      class={cn(
-                        'h-8 w-full cursor-pointer rounded-md border border-input bg-background px-2.5 text-xs text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary focus:ring-2 focus:ring-primary/20',
-                        props.fieldErrors.gateway_id && 'border-destructive ring-1 ring-destructive/20',
-                      )}
-                      value={props.state?.connection_kind === 'gateway_url_profile' ? props.state.gateway_id : ''}
-                      onChange={(event) => {
-                        props.updateField('gateway_id', event.currentTarget.value);
-                        props.clearFieldErrors();
-                      }}
-                    >
-                      <For each={props.gatewayProfileSources}>
-                        {(gateway) => (
-                          <option value={gateway.gateway_id}>
-                            {gateway.display_name}
-                            {gateway.endpoint_label ? ` - ${gateway.endpoint_label}` : ''}
-                          </option>
-                        )}
-                      </For>
-                    </select>
-                    <Show when={props.fieldErrors.gateway_id}>
-                      <div class="text-[11px] text-destructive">{props.fieldErrors.gateway_id}</div>
-                    </Show>
-                  </div>
+                  <GatewayProfileSourcePicker
+                    i18n={props.i18n}
+                    gateways={props.gatewayProfileSources}
+                    selectedGatewayID={props.state?.connection_kind === 'gateway_url_profile' ? props.state.gateway_id : ''}
+                    fieldError={props.fieldErrors.gateway_id}
+                    onSelect={(gatewayID) => props.updateField('gateway_id', gatewayID)}
+                    clearFieldErrors={props.clearFieldErrors}
+                  />
                   <div class="space-y-1.5">
                     <label class="block text-xs font-medium text-foreground">{props.i18n.t('connectionDialog.gatewayEnvironmentRouteType')}</label>
                     <SegmentedControl
@@ -14499,6 +15037,24 @@ function OfficialProviderPicker(props: Readonly<{
   let listboxRef: HTMLDivElement | undefined;
 
   const selectedProvider = createMemo(() => officialProviderOptionForOrigin(props.providerOrigin));
+  const selectedIndex = createMemo(() => Math.max(0, CONTROL_PLANE_PROVIDER_PRESET_OPTIONS.findIndex((option) => (
+    option.provider_origin === selectedProvider().provider_origin
+  ))));
+
+  createEffect(on(
+    [open, () => props.providerOrigin],
+    ([isOpen]) => {
+      if (isOpen) {
+        setHighlightedIndex(selectedIndex());
+      }
+    },
+  ));
+
+  createEffect(() => {
+    if (open()) {
+      scrollListboxOptionIntoView(listboxRef, `control-plane-provider-option-${highlightedIndex()}`);
+    }
+  });
 
   onCleanup(() => {
     if (closeTimer !== undefined) {
@@ -14558,6 +15114,7 @@ function OfficialProviderPicker(props: Readonly<{
         aria-haspopup="listbox"
         aria-expanded={open() ? 'true' : 'false'}
         aria-controls="control-plane-provider-options"
+        aria-activedescendant={open() ? `control-plane-provider-option-${highlightedIndex()}` : undefined}
         autofocus={props.autofocus}
         onClick={() => {
           if (open()) {
@@ -14630,7 +15187,9 @@ function OfficialProviderPicker(props: Readonly<{
                 return (
                   <button
                     type="button"
+                    id={`control-plane-provider-option-${index()}`}
                     role="option"
+                    tabIndex={-1}
                     aria-selected={selected() ? 'true' : 'false'}
                     class={cn(
                       'flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-3 text-left transition-all',
@@ -14638,6 +15197,7 @@ function OfficialProviderPicker(props: Readonly<{
                         ? 'bg-accent text-accent-foreground shadow-sm'
                         : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
                     )}
+                    onClick={() => selectProvider(option)}
                     onMouseEnter={() => setHighlightedIndex(index())}
                     onMouseDown={(event) => {
                       event.preventDefault();
