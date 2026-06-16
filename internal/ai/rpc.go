@@ -19,9 +19,7 @@ const (
 	TypeID_AI_RUN_CANCEL                         uint32 = 6002
 	TypeID_AI_SUBSCRIBE_SUMMARY                  uint32 = 6003
 	TypeID_AI_EVENT_NOTIFY                       uint32 = 6004 // notify (agent -> client)
-	TypeID_AI_TOOL_APPROVAL                      uint32 = 6005
 	TypeID_AI_MESSAGES_LIST                      uint32 = 6006
-	TypeID_AI_ACTIVE_RUN_SNAPSHOT                uint32 = 6007
 	TypeID_AI_SUBSCRIBE_THREAD                   uint32 = 6009
 	TypeID_AI_STOP_THREAD                        uint32 = 6011
 	TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE uint32 = 6012
@@ -112,26 +110,6 @@ type aiListMessagesResp struct {
 type aiTranscriptMessageItem struct {
 	RowID       int64           `json:"row_id"`
 	MessageJSON json.RawMessage `json:"message_json"`
-}
-
-type aiToolApprovalReq struct {
-	RunID    string `json:"run_id"`
-	ToolID   string `json:"tool_id"`
-	Approved bool   `json:"approved"`
-}
-
-type aiToolApprovalResp struct {
-	OK bool `json:"ok"`
-}
-
-type aiGetActiveRunSnapshotReq struct {
-	ThreadID string `json:"thread_id"`
-}
-
-type aiGetActiveRunSnapshotResp struct {
-	OK          bool            `json:"ok"`
-	RunID       string          `json:"run_id,omitempty"`
-	MessageJSON json.RawMessage `json:"message_json,omitempty"`
 }
 
 func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server) {
@@ -228,19 +206,6 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			return nil, &rpc.Error{Code: 400, Message: "run_id or thread_id is required"}
 		}
 		return &aiRunCancelResp{OK: true}, nil
-	})
-
-	accessgate.RegisterTyped[aiToolApprovalReq, aiToolApprovalResp](r, TypeID_AI_TOOL_APPROVAL, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *aiToolApprovalReq) (*aiToolApprovalResp, error) {
-		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
-		}
-		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
-		}
-		if err := s.ApproveTool(meta, strings.TrimSpace(req.RunID), strings.TrimSpace(req.ToolID), req.Approved); err != nil {
-			return nil, toAIRPCError(err)
-		}
-		return &aiToolApprovalResp{OK: true}, nil
 	})
 
 	accessgate.RegisterTyped[aiSubscribeSummaryReq, aiSubscribeSummaryResp](r, TypeID_AI_SUBSCRIBE_SUMMARY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, _ *aiSubscribeSummaryReq) (*aiSubscribeSummaryResp, error) {
@@ -375,50 +340,6 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			})
 		}
 		return out, nil
-	})
-
-	accessgate.RegisterTyped[aiGetActiveRunSnapshotReq, aiGetActiveRunSnapshotResp](r, TypeID_AI_ACTIVE_RUN_SNAPSHOT, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiGetActiveRunSnapshotReq) (*aiGetActiveRunSnapshotResp, error) {
-		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
-		}
-		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
-		}
-		threadID := strings.TrimSpace(req.ThreadID)
-		if threadID == "" {
-			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
-		}
-
-		s.mu.Lock()
-		db := s.threadsDB
-		s.mu.Unlock()
-		if db == nil {
-			return nil, &rpc.Error{Code: 503, Message: "threads store not ready"}
-		}
-
-		// Ensure thread exists (consistent with other endpoints).
-		if th, err := db.GetThread(ctx, strings.TrimSpace(meta.EndpointID), threadID); err != nil {
-			return nil, &rpc.Error{Code: 400, Message: err.Error()}
-		} else if th == nil {
-			return nil, &rpc.Error{Code: 404, Message: "thread not found"}
-		}
-
-		runID, msgJSON, err := s.GetActiveRunSnapshot(meta, threadID)
-		if err != nil {
-			return nil, toAIRPCError(err)
-		}
-		if strings.TrimSpace(runID) == "" || strings.TrimSpace(msgJSON) == "" {
-			return &aiGetActiveRunSnapshotResp{OK: false}, nil
-		}
-		safeMessageJSON, err := SanitizeActivityTimelineMessageJSON(msgJSON)
-		if err != nil {
-			return nil, toAIRPCError(err)
-		}
-		return &aiGetActiveRunSnapshotResp{
-			OK:          true,
-			RunID:       runID,
-			MessageJSON: safeMessageJSON,
-		}, nil
 	})
 
 }

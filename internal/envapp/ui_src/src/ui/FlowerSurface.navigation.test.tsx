@@ -15,6 +15,7 @@ import type {
   FlowerSurfaceDraftIntent,
   FlowerSettingsSnapshot,
   FlowerThreadReadStatus,
+  FlowerThreadLiveSnapshot,
   FlowerThreadSnapshot,
   FlowerActivityStatus,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -225,6 +226,14 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
   };
 }
 
+function liveSnapshot(threadValue: FlowerThreadSnapshot, eventCursor = 0): FlowerThreadLiveSnapshot {
+  return {
+    thread: threadValue,
+    event_cursor: eventCursor,
+    generated_at_ms: Math.max(Date.now(), threadValue.updated_at_ms),
+  };
+}
+
 function activityItem(overrides: Partial<FlowerActivityItem> = {}): FlowerActivityItem {
   return {
     item_id: 'tool-terminal',
@@ -393,7 +402,9 @@ function adapter(configured = true): FlowerSurfaceAdapter {
       thread(),
       thread({ thread_id: 'thread-2', title: 'Review branch', updated_at_ms: 3 }),
     ]),
-    markThreadRead: vi.fn(async (threadID: string, snapshot) => thread({
+    loadThread: vi.fn(async (threadID: string) => liveSnapshot(thread({ thread_id: threadID }))),
+    listThreadLiveUpdates: vi.fn(async () => ({ updates: [], next_cursor: 0 })),
+    markThreadRead: vi.fn(async (threadID: string, snapshot) => liveSnapshot(thread({
       thread_id: threadID,
       read_status: {
         is_unread: false,
@@ -405,10 +416,11 @@ function adapter(configured = true): FlowerSurfaceAdapter {
           ...(snapshot.waiting_prompt_id ? { last_seen_waiting_prompt_id: snapshot.waiting_prompt_id } : {}),
         },
       },
-    })),
+    }))),
     resolveHandler: vi.fn(async () => decision()),
-    sendMessage: vi.fn(async () => thread()),
-    submitInput: vi.fn(async () => thread({ status: 'running' })),
+    sendMessage: vi.fn(async () => liveSnapshot(thread())),
+    submitInput: vi.fn(async () => liveSnapshot(thread({ status: 'running' }))),
+    submitApproval: vi.fn(async () => undefined),
   };
 }
 
@@ -539,7 +551,7 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const sendMessage = vi.fn(async () => sentThread);
+    const sendMessage = vi.fn(async () => liveSnapshot(sentThread));
     const runtime = renderSurfaceWithDraftIntent({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
@@ -633,7 +645,7 @@ describe('FlowerSurface navigation', () => {
   });
 
   it('uses Desktop Model Source readiness without exposing a second provider editor', async () => {
-    const sendMessage = vi.fn(async () => thread());
+    const sendMessage = vi.fn(async () => liveSnapshot(thread()));
     const desktopSourceSnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(false),
       config: {
@@ -754,6 +766,39 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.2');
   });
 
+  it('shows the selected thread model in the composer footer', async () => {
+    const selectedModelThread = thread({
+      thread_id: 'thread-selected-model',
+      title: 'Selected model',
+      model_id: 'openai/gpt-5.4-mini',
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      loadSettings: vi.fn(async () => ({
+        ...settingsSnapshot(true),
+        config: {
+          ...settingsSnapshot(true).config,
+          providers: [{
+            ...settingsSnapshot(true).config.providers[0],
+            models: [
+              ...settingsSnapshot(true).config.providers[0].models,
+              { model_name: 'gpt-5.4-mini', context_window: 400000, input_modalities: ['text'] },
+            ],
+          }],
+        },
+      })),
+      listThreads: vi.fn(async () => [selectedModelThread]),
+      loadThread: vi.fn(async () => liveSnapshot(selectedModelThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-selected-model"] button')));
+    (runtime.querySelector('[data-thread-id="thread-selected-model"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-model-chip')?.textContent?.includes('gpt-5.4-mini') ?? false);
+
+    expect(runtime.querySelector('.flower-model-chip')?.textContent).toContain('OpenAI / gpt-5.4-mini');
+    expect(runtime.querySelector('.flower-model-chip')?.textContent).not.toContain('gpt-5.2');
+  });
+
   it('shows handler blockers near the composer without pretending a runtime is selected', async () => {
     const failingAdapter = {
       ...adapter(true),
@@ -813,7 +858,7 @@ describe('FlowerSurface navigation', () => {
       available_handlers: secondDecision.available_handlers,
       handler_selection: secondDecision.handler_selection,
     }));
-    const sendMessage = vi.fn(async () => thread());
+    const sendMessage = vi.fn(async () => liveSnapshot(thread()));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       resolveHandler,
@@ -875,8 +920,8 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const sendMessage = vi.fn(async () => sentThread);
-    const loadThread = vi.fn(async () => completeThread);
+    const sendMessage = vi.fn(async () => liveSnapshot(sentThread));
+    const loadThread = vi.fn(async () => liveSnapshot(completeThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
@@ -921,9 +966,9 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const loadThreadDeferred = deferred<FlowerThreadSnapshot>();
+    const loadThreadDeferred = deferred<FlowerThreadLiveSnapshot>();
     const loadThread = vi.fn(() => loadThreadDeferred.promise);
-    const sendMessage = vi.fn(async () => sentThread);
+    const sendMessage = vi.fn(async () => liveSnapshot(sentThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
@@ -951,7 +996,7 @@ describe('FlowerSurface navigation', () => {
   });
 
   it('shows the submitted user message and streaming cursor while send is still in flight', async () => {
-    const sendDeferred = deferred<FlowerThreadSnapshot>();
+    const sendDeferred = deferred<FlowerThreadLiveSnapshot>();
     const sendMessage = vi.fn(() => sendDeferred.promise);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -979,7 +1024,7 @@ describe('FlowerSurface navigation', () => {
 
   it('shows the submitted user message immediately while the handler is still resolving', async () => {
     const handlerDeferred = deferred<FlowerRouterDecision>();
-    const sendDeferred = deferred<FlowerThreadSnapshot>();
+    const sendDeferred = deferred<FlowerThreadLiveSnapshot>();
     const sendMessage = vi.fn(() => sendDeferred.promise);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -1017,8 +1062,8 @@ describe('FlowerSurface navigation', () => {
       status: 'running',
       messages: [],
     });
-    const loadThreadDeferred = deferred<FlowerThreadSnapshot>();
-    const sendMessage = vi.fn(async () => acceptedThread);
+    const loadThreadDeferred = deferred<FlowerThreadLiveSnapshot>();
+    const sendMessage = vi.fn(async () => liveSnapshot(acceptedThread));
     const loadThread = vi.fn(() => loadThreadDeferred.promise);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -1107,7 +1152,7 @@ describe('FlowerSurface navigation', () => {
     const host = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [activityThread]),
-      loadThread: vi.fn(async () => activityThread),
+      loadThread: vi.fn(async () => liveSnapshot(activityThread)),
       openFilePreview: previewFile,
       openFileBrowser: browseFolder,
     });
@@ -1162,7 +1207,7 @@ describe('FlowerSurface navigation', () => {
       created_at_ms: 2_000,
       updated_at_ms: 3_000,
     });
-    const loadThread = vi.fn(async () => ({
+    const loadThread = vi.fn(async () => liveSnapshot({
       ...olderThread,
       updated_at_ms: 90_000,
       messages: [
@@ -1202,7 +1247,7 @@ describe('FlowerSurface navigation', () => {
       title: 'Unread thread',
       read_status: readStatus(true, 3, 'success'),
     });
-    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => ({
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => liveSnapshot({
       ...unreadThread,
       read_status: {
         is_unread: false,
@@ -1214,7 +1259,7 @@ describe('FlowerSurface navigation', () => {
         },
       },
     }));
-    const loadThread = vi.fn(async () => ({
+    const loadThread = vi.fn(async () => liveSnapshot({
       ...unreadThread,
       read_status: readStatus(false, 3, 'success'),
       messages: [
@@ -1282,12 +1327,33 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     };
+    let liveUpdateReady = false;
     const listThreads = vi.fn(async () => [runningThread]);
-    const loadThread = vi.fn(async () => (loadThread.mock.calls.length === 1 ? firstDetail : refreshedDetail));
+    const loadThread = vi.fn(async () => liveSnapshot(firstDetail, 1));
+    const listThreadLiveUpdates = vi.fn(async () => {
+      if (!liveUpdateReady) return { updates: [], next_cursor: 1 };
+      return {
+        updates: [{
+          seq: 2,
+          thread_id: 'thread-running-wave',
+          kind: 'active_run.patched' as const,
+          at_ms: 5_800,
+          active_run: {
+            run_id: 'run-running-wave',
+            status: 'running' as const,
+            message: refreshedDetail.messages[0] ?? null,
+            approval_actions: [],
+            last_event_seq: 2,
+          },
+        }],
+        next_cursor: 2,
+      };
+    });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads,
       loadThread,
+      listThreadLiveUpdates,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-wave"] button')));
@@ -1305,7 +1371,8 @@ describe('FlowerSurface navigation', () => {
     expect(waveAfterSelect).toBe(waveBeforeClick);
     expect(runtime.querySelector('[data-thread-id="thread-running-wave"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
 
-    await waitFor(() => loadThread.mock.calls.length > 1);
+    liveUpdateReady = true;
+    await waitFor(() => runtime.textContent?.includes('Working... still flowing') ?? false);
     expect(runtime.querySelector('[data-thread-id="thread-running-wave"] .flower-thread-wave')).toBe(waveAfterSelect);
     expect(runtime.textContent).toContain('Working... still flowing');
   });
@@ -1342,7 +1409,7 @@ describe('FlowerSurface navigation', () => {
       ],
     };
     let detailHasFreshUnread = false;
-    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => ({
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => liveSnapshot({
       ...(detailHasFreshUnread ? unreadDetail : runningThread),
       read_status: {
         is_unread: false,
@@ -1354,7 +1421,7 @@ describe('FlowerSurface navigation', () => {
         },
       },
     }));
-    const loadThread = vi.fn(async () => (detailHasFreshUnread ? unreadDetail : runningThread));
+    const loadThread = vi.fn(async () => liveSnapshot(detailHasFreshUnread ? unreadDetail : runningThread));
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -1408,8 +1475,8 @@ describe('FlowerSurface navigation', () => {
     };
     let detailIsFresh = false;
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
-    const loadThread = vi.fn(async () => (detailIsFresh ? freshUnreadDetail : runningThread));
-    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => ({
+    const loadThread = vi.fn(async () => liveSnapshot(detailIsFresh ? freshUnreadDetail : runningThread));
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => liveSnapshot({
       ...freshUnreadDetail,
       read_status: readStatus(false, snapshot.activity_revision, 'running'),
     }));
@@ -1467,18 +1534,18 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     };
-    const firstRead = deferred<FlowerThreadSnapshot>();
+    const firstRead = deferred<FlowerThreadLiveSnapshot>();
     const markThreadRead = vi.fn(async () => {
       if (markThreadRead.mock.calls.length === 1) {
         return firstRead.promise;
       }
-      return {
+      return liveSnapshot({
         ...finalUnreadDetail,
         read_status: readStatus(false, 8_500, 'success'),
-      };
+      });
     });
     let detailHasFinalUnread = false;
-    const loadThread = vi.fn(async () => (detailHasFinalUnread ? finalUnreadDetail : runningThread));
+    const loadThread = vi.fn(async () => liveSnapshot(detailHasFinalUnread ? finalUnreadDetail : runningThread));
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -1499,10 +1566,10 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
     expect(markThreadRead).toHaveBeenCalledTimes(1);
 
-    firstRead.resolve({
+    firstRead.resolve(liveSnapshot({
       ...runningThread,
       read_status: readStatus(false, 8_000, 'running'),
-    });
+    }));
     await waitFor(() => markThreadRead.mock.calls.length >= 2);
 
     expect(runtime.querySelector('[data-thread-id="thread-running-final-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
@@ -1540,22 +1607,22 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     };
-    const firstRead = deferred<FlowerThreadSnapshot>();
+    const firstRead = deferred<FlowerThreadLiveSnapshot>();
     const markThreadRead = vi.fn(async (_threadID: string, snapshot) => {
       if (markThreadRead.mock.calls.length === 1) {
         return firstRead.promise;
       }
-      return {
+      return liveSnapshot({
         ...finalUnreadDetail,
         read_status: readStatus(false, snapshot.activity_revision, 'success'),
-      };
+      });
     });
     let detailHasFinalUnread = false;
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
-      loadThread: vi.fn(async () => (detailHasFinalUnread ? finalUnreadDetail : runningThread)),
+      loadThread: vi.fn(async () => liveSnapshot(detailHasFinalUnread ? finalUnreadDetail : runningThread)),
       markThreadRead,
     });
 
@@ -1569,10 +1636,10 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => runtime.textContent?.includes('Final before leaving') ?? false);
 
     (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
-    firstRead.resolve({
+    firstRead.resolve(liveSnapshot({
       ...runningThread,
       read_status: readStatus(false, 11_000, 'running'),
-    });
+    }));
     await waitFor(() => markThreadRead.mock.calls.length >= 2);
 
     expect(markThreadRead.mock.calls[1]?.[0]).toBe('thread-running-final-after-leave');
@@ -1592,11 +1659,11 @@ describe('FlowerSurface navigation', () => {
       read_status: readStatus(true, 7_500, 'success'),
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [unreadThread];
-    const markThreadRead = vi.fn(() => new Promise<FlowerThreadSnapshot>(() => undefined));
+    const markThreadRead = vi.fn(() => new Promise<FlowerThreadLiveSnapshot>(() => undefined));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
-      loadThread: vi.fn(async () => ({ ...unreadThread, read_status: readStatus(false, 7_000, 'success') })),
+      loadThread: vi.fn(async () => liveSnapshot({ ...unreadThread, read_status: readStatus(false, 7_000, 'success') })),
       markThreadRead,
     });
 
@@ -1657,7 +1724,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [unreadThread]),
-      loadThread: vi.fn(async () => unreadThread),
+      loadThread: vi.fn(async () => liveSnapshot(unreadThread)),
       markThreadRead,
     });
 
@@ -1687,9 +1754,9 @@ describe('FlowerSurface navigation', () => {
   it('opens thread actions from the keyboard and supports menu roving focus', async () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
-      forkThread: vi.fn(async () => thread({ thread_id: 'thread-fork' })),
-      renameThread: vi.fn(async () => thread()),
-      setThreadPinned: vi.fn(async () => thread({ pinned_at_ms: 10 })),
+      forkThread: vi.fn(async () => liveSnapshot(thread({ thread_id: 'thread-fork' }))),
+      renameThread: vi.fn(async () => liveSnapshot(thread())),
+      setThreadPinned: vi.fn(async () => liveSnapshot(thread({ pinned_at_ms: 10 }))),
     });
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-1"] button')));
 
@@ -1717,7 +1784,7 @@ describe('FlowerSurface navigation', () => {
   });
 
   it('disables fork for threads that are still running or waiting', async () => {
-    const forkThread = vi.fn(async () => thread({ thread_id: 'thread-fork' }));
+    const forkThread = vi.fn(async () => liveSnapshot(thread({ thread_id: 'thread-fork' })));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [
@@ -1812,8 +1879,8 @@ describe('FlowerSurface navigation', () => {
   });
 
   it('disables all thread actions while a fork action is pending', async () => {
-    const forkControl: { resolve?: (thread: FlowerThreadSnapshot) => void } = {};
-    const forkThread = vi.fn(() => new Promise<FlowerThreadSnapshot>((resolve) => {
+    const forkControl: { resolve?: (thread: FlowerThreadLiveSnapshot) => void } = {};
+    const forkThread = vi.fn(() => new Promise<FlowerThreadLiveSnapshot>((resolve) => {
       forkControl.resolve = resolve;
     }));
     const runtime = renderSurfaceWithAdapter({
@@ -1849,7 +1916,7 @@ describe('FlowerSurface navigation', () => {
 
     const completeFork = forkControl.resolve;
     if (!completeFork) throw new Error('fork promise did not start');
-    completeFork(thread({ thread_id: 'thread-fork' }));
+    completeFork(liveSnapshot(thread({ thread_id: 'thread-fork' })));
     await waitFor(() => forkThread.mock.calls.length === 1);
   });
 
@@ -1901,10 +1968,10 @@ describe('FlowerSurface navigation', () => {
     let delayedDetailReloadStarted = false;
     const loadThread = vi.fn(() => {
       if (loadThread.mock.calls.length === 1) {
-        return Promise.resolve(detailedThread);
+        return Promise.resolve(liveSnapshot(detailedThread));
       }
       delayedDetailReloadStarted = true;
-      return new Promise<FlowerThreadSnapshot>(() => undefined);
+      return new Promise<FlowerThreadLiveSnapshot>(() => undefined);
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -1973,9 +2040,10 @@ describe('FlowerSurface navigation', () => {
     let loadCalls = 0;
     const loadThread = vi.fn(async (threadID: string) => {
       loadCalls += 1;
-      return threadID === 'thread-selected-live'
+      const detail = threadID === 'thread-selected-live'
         ? { ...selectedDetail, updated_at_ms: selectedDetail.updated_at_ms + loadCalls }
         : backgroundRunning;
+      return liveSnapshot(detail);
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -2048,7 +2116,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
-      loadThread: vi.fn(async () => waitingThread),
+      loadThread: vi.fn(async () => liveSnapshot(waitingThread)),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-input"] button')));
@@ -2100,11 +2168,11 @@ describe('FlowerSurface navigation', () => {
       status: 'running',
       input_request: null,
     });
-    const submitInput = vi.fn(async () => continuedThread);
+    const submitInput = vi.fn(async () => liveSnapshot(continuedThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
-      loadThread: vi.fn(async () => waitingThread),
+      loadThread: vi.fn(async () => liveSnapshot(waitingThread)),
       submitInput,
     });
 
@@ -2170,8 +2238,8 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const submitInput = vi.fn(async () => continuedThread);
-    const loadThread = vi.fn(async () => (loadThread.mock.calls.length === 1 ? waitingThread : continuedThread));
+    const submitInput = vi.fn(async () => liveSnapshot(continuedThread));
+    const loadThread = vi.fn(async () => liveSnapshot(loadThread.mock.calls.length === 1 ? waitingThread : continuedThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
@@ -2218,7 +2286,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
-      loadThread: vi.fn(async () => waitingThread),
+      loadThread: vi.fn(async () => liveSnapshot(waitingThread)),
       submitInput,
     });
 
@@ -2258,10 +2326,10 @@ describe('FlowerSurface navigation', () => {
     let delayedDetailReloadStarted = false;
     const loadThread = vi.fn(() => {
       if (loadThread.mock.calls.length === 1) {
-        return Promise.resolve(detailedThread);
+        return Promise.resolve(liveSnapshot(detailedThread));
       }
       delayedDetailReloadStarted = true;
-      return new Promise<FlowerThreadSnapshot>(() => undefined);
+      return new Promise<FlowerThreadLiveSnapshot>(() => undefined);
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -2298,12 +2366,12 @@ describe('FlowerSurface navigation', () => {
         },
       ],
     });
-    const sendMessage = vi.fn(async () => staleThread);
-    const submitInput = vi.fn(async () => staleThread);
+    const sendMessage = vi.fn(async () => liveSnapshot(staleThread));
+    const submitInput = vi.fn(async () => liveSnapshot(staleThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [staleThread]),
-      loadThread: vi.fn(async () => staleThread),
+      loadThread: vi.fn(async () => liveSnapshot(staleThread)),
       sendMessage,
       submitInput,
     });
@@ -2356,9 +2424,9 @@ describe('FlowerSurface navigation', () => {
     const loadThread = vi.fn((threadID: string) => {
       if (threadID === 'thread-background') {
         backgroundReloadStarted = true;
-        return new Promise<FlowerThreadSnapshot>(() => undefined);
+        return new Promise<FlowerThreadLiveSnapshot>(() => undefined);
       }
-      return Promise.resolve(selectedThread);
+      return Promise.resolve(liveSnapshot(selectedThread));
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -2394,7 +2462,7 @@ describe('FlowerSurface navigation', () => {
       listThreads: vi.fn(async () => [summaryThread]),
       loadThread: vi.fn(() => {
         loadStarted = true;
-        return new Promise<FlowerThreadSnapshot>(() => undefined);
+        return new Promise<FlowerThreadLiveSnapshot>(() => undefined);
       }),
     });
 
@@ -2440,7 +2508,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [streamingThread]),
-      loadThread: vi.fn(async () => streamingThread),
+      loadThread: vi.fn(async () => liveSnapshot(streamingThread)),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-streaming"] button')));
@@ -2519,7 +2587,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [toolsThread]),
-      loadThread: vi.fn(async () => toolsThread),
+      loadThread: vi.fn(async () => liveSnapshot(toolsThread)),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-tools"] button')));
@@ -2539,6 +2607,186 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.textContent).toContain('completed 1');
     expect(runtime.textContent).toContain('task_complete');
     expect(runtime.querySelector('.flower-activity-inline-row')?.getAttribute('aria-label')).toContain('terminal.exec');
+  });
+
+  it('renders approval controls inside the matching tool activity row', async () => {
+    const approveThread = thread({
+      thread_id: 'thread-inline-approval',
+      title: 'Inline approval',
+      created_at_ms: 6_800,
+      updated_at_ms: 6_900,
+      status: 'waiting_approval',
+      approval_actions: [{
+        action_id: 'appr-terminal',
+        run_id: 'run-inline-approval',
+        tool_id: 'tool-needs-approval',
+        tool_name: 'terminal.exec',
+        state: 'requested',
+        status: 'pending',
+        revision: 1,
+        requested_at_ms: 6_850,
+        can_approve: true,
+        expected_seq: 12,
+        summary: {
+          label: 'terminal.exec',
+          description: 'Review this command before it runs.',
+          effects: ['shell'],
+        },
+      }],
+      messages: [
+        {
+          id: 'm-inline-approval',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 6_900,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-inline-approval',
+              turn_id: 'm-inline-approval',
+              status: 'waiting',
+              severity: 'blocking',
+              needs_attention: true,
+              items: [activityItem({
+                item_id: 'approval-item',
+                tool_id: 'tool-needs-approval',
+                tool_name: 'terminal.exec',
+                kind: 'approval',
+                status: 'waiting',
+                severity: 'blocking',
+                needs_attention: true,
+                requires_approval: true,
+                approval_state: 'requested',
+                label: 'pwd; sleep 15; date',
+                renderer: 'terminal',
+                payload: { command: 'pwd; sleep 15; date' },
+              })],
+            }),
+          ],
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [approveThread]),
+      loadThread: vi.fn(async () => liveSnapshot(approveThread, 12)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-inline-approval"] button')));
+    (runtime.querySelector('[data-thread-id="thread-inline-approval"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="approval-item"] .flower-approval-card')));
+
+    const row = runtime.querySelector('[data-flower-activity-item-id="approval-item"]') as HTMLElement | null;
+    expect(row?.textContent).toContain('pwd; sleep 15; date');
+    expect(row?.querySelector('[data-flower-approval-action-id="appr-terminal"]')).toBeTruthy();
+    expect(row?.textContent).toContain('Approve');
+    expect(runtime.querySelector('.flower-transcript-stack > .flower-approval-stack')).toBeNull();
+  });
+
+  it('refreshes canonical thread state when an approval decision is stale', async () => {
+    const pendingThread = thread({
+      thread_id: 'thread-stale-approval',
+      title: 'Stale approval',
+      status: 'waiting_approval',
+      approval_actions: [{
+        action_id: 'appr-stale',
+        run_id: 'run-stale-approval',
+        tool_id: 'tool-stale-approval',
+        tool_name: 'terminal.exec',
+        state: 'requested',
+        status: 'pending',
+        revision: 1,
+        requested_at_ms: 7_100,
+        can_approve: true,
+        expected_seq: 12,
+        summary: {
+          label: 'terminal.exec',
+          description: 'Review this command before it runs.',
+          effects: ['shell'],
+        },
+      }],
+      messages: [
+        {
+          id: 'm-stale-approval',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 7_100,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-stale-approval',
+              turn_id: 'm-stale-approval',
+              status: 'waiting',
+              severity: 'blocking',
+              needs_attention: true,
+              items: [activityItem({
+                item_id: 'stale-approval-item',
+                tool_id: 'tool-stale-approval',
+                tool_name: 'terminal.exec',
+                kind: 'approval',
+                status: 'waiting',
+                severity: 'blocking',
+                needs_attention: true,
+                requires_approval: true,
+                approval_state: 'requested',
+                label: 'npm test',
+                renderer: 'terminal',
+                payload: { command: 'npm test' },
+              })],
+            }),
+          ],
+        },
+      ],
+    });
+    const resolvedThread = {
+      ...pendingThread,
+      status: 'running' as const,
+      approval_actions: [],
+      messages: pendingThread.messages.map((message) => ({
+        ...message,
+        blocks: message.blocks?.map((block) => block.type === 'activity-timeline'
+          ? {
+              ...block,
+              summary: {
+                ...block.summary,
+                status: 'running' as const,
+                needs_attention: false,
+                attention_reasons: [],
+                counts: { running: 1, approval: 1 },
+              },
+              items: block.items.map((item) => ({
+                ...item,
+                status: 'running' as const,
+                needs_attention: false,
+                approval_state: 'approved' as const,
+              })),
+            }
+          : block),
+      })),
+    };
+    const loadThread = vi.fn(async () => liveSnapshot(loadThread.mock.calls.length <= 1 ? pendingThread : resolvedThread, 13));
+    const submitApproval = vi.fn(async () => {
+      throw new Error('approval no longer pending');
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [pendingThread]),
+      loadThread,
+      submitApproval,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stale-approval"] button')));
+    (runtime.querySelector('[data-thread-id="thread-stale-approval"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-approval-action-id="appr-stale"]')));
+    const approve = Array.from(runtime.querySelectorAll<HTMLButtonElement>('button'))
+      .find((button) => button.textContent?.trim() === 'Approve');
+    expect(approve).toBeTruthy();
+    approve?.click();
+
+    await waitFor(() => submitApproval.mock.calls.length === 1);
+    await waitFor(() => loadThread.mock.calls.length >= 2);
+    expect(runtime.textContent).toContain('approval no longer pending');
+    await waitFor(() => runtime.querySelector('[data-flower-approval-action-id="appr-stale"]') === null);
   });
 
   it('hides approval-only terminal noise while keeping command and output details visible', async () => {
@@ -2590,7 +2838,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [terminalThread]),
-      loadThread: vi.fn(async () => terminalThread),
+      loadThread: vi.fn(async () => liveSnapshot(terminalThread)),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-terminal-output"] button')));
@@ -2686,7 +2934,7 @@ describe('FlowerSurface navigation', () => {
       ],
     };
     let listSnapshot: readonly FlowerThreadSnapshot[] = [runningThread];
-    const loadThread = vi.fn(async () => (loadThread.mock.calls.length === 1 ? runningThread : completeThread));
+    const loadThread = vi.fn(async () => liveSnapshot(loadThread.mock.calls.length === 1 ? runningThread : completeThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => listSnapshot),
@@ -2760,7 +3008,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingThread]),
-      loadThread: vi.fn(async () => waitingThread),
+      loadThread: vi.fn(async () => liveSnapshot(waitingThread)),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-activity"] button')));
@@ -2838,7 +3086,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [attentionThread]),
-      loadThread: vi.fn(async () => attentionThread),
+      loadThread: vi.fn(async () => liveSnapshot(attentionThread)),
     });
 
     await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="thread-${scenario.name}-activity"] button`)));
@@ -2873,7 +3121,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [failedThread]),
-      loadThread: vi.fn(async () => failedThread),
+      loadThread: vi.fn(async () => liveSnapshot(failedThread)),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-failed"] button')));
@@ -2899,7 +3147,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads,
-      loadThread: vi.fn(async () => visibleThread),
+      loadThread: vi.fn(async () => liveSnapshot(visibleThread)),
     });
 
     await waitFor(() => runtime.textContent?.includes('Flower waiting input request is incomplete.') ?? false);
@@ -2936,7 +3184,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [failedThread]),
-      loadThread: vi.fn(async () => failedThread),
+      loadThread: vi.fn(async () => liveSnapshot(failedThread)),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-empty-failure"] button')));
@@ -2969,7 +3217,7 @@ describe('FlowerSurface navigation', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [failedThread]),
-      loadThread: vi.fn(async () => failedThread),
+      loadThread: vi.fn(async () => liveSnapshot(failedThread)),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-message-only-failure"] button')));

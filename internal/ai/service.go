@@ -134,6 +134,7 @@ type Service struct {
 
 	realtimeByThread    map[string]map[*rpc.Server]struct{} // <endpoint_id>:<thread_id> -> set(stream)
 	realtimeThreadBySRV map[*rpc.Server]string
+	flowerLiveByThread  map[string]*flowerLiveThreadBuffer
 
 	uploadsDir string
 	threadsDB  *threadstore.Store
@@ -291,6 +292,7 @@ func NewService(opts Options) (*Service, error) {
 		realtimeSummaryEndpointBySRV: make(map[*rpc.Server]string),
 		realtimeByThread:             make(map[string]map[*rpc.Server]struct{}),
 		realtimeThreadBySRV:          make(map[*rpc.Server]string),
+		flowerLiveByThread:           make(map[string]*flowerLiveThreadBuffer),
 		suppressQueuedDrainByTh:      make(map[string]bool),
 		uploadsDir:                   uploadsDir,
 		threadsDB:                    ts,
@@ -340,6 +342,7 @@ func (s *Service) Close() error {
 	s.realtimeSummaryEndpointBySRV = make(map[*rpc.Server]string)
 	s.realtimeByThread = make(map[string]map[*rpc.Server]struct{})
 	s.realtimeThreadBySRV = make(map[*rpc.Server]string)
+	s.flowerLiveByThread = make(map[string]*flowerLiveThreadBuffer)
 	maintenanceStopCh := s.maintenanceStopCh
 	maintenanceDoneCh := s.maintenanceDoneCh
 	s.maintenanceStopCh = nil
@@ -2068,37 +2071,6 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 		if s.threadMgr != nil {
 			s.threadMgr.Wake(endpointID, threadID)
 		}
-	}
-	return nil
-}
-
-func (s *Service) ApproveTool(meta *session.Meta, runID string, toolID string, approved bool) error {
-	if s == nil {
-		return errors.New("nil service")
-	}
-	if err := requireRWX(meta); err != nil {
-		return err
-	}
-	runID = strings.TrimSpace(runID)
-	toolID = strings.TrimSpace(toolID)
-	endpointID := strings.TrimSpace(meta.EndpointID)
-	userID := strings.TrimSpace(meta.UserPublicID)
-	if endpointID == "" || userID == "" || runID == "" || toolID == "" {
-		return errors.New("invalid request")
-	}
-
-	s.mu.Lock()
-	r := s.runs[runID]
-	s.mu.Unlock()
-	if r == nil || strings.TrimSpace(r.endpointID) != endpointID || r.isDetached() {
-		return errors.New("run not found")
-	}
-	// Approvals are restricted to the run starter to avoid cross-user privilege confusion.
-	if strings.TrimSpace(r.userPublicID) != userID {
-		return errors.New("run not found")
-	}
-	if err := r.approveTool(toolID, approved); err != nil {
-		return fmt.Errorf("approve tool: %w", err)
 	}
 	return nil
 }

@@ -183,26 +183,6 @@ export type AIListMessagesResponse = {
   hasMore?: boolean;
 };
 
-export type AIGetActiveRunSnapshotRequest = {
-  threadId: string;
-};
-
-export type AIGetActiveRunSnapshotResponse = {
-  ok: boolean;
-  runId?: string;
-  messageJson?: any;
-};
-
-export type AIToolApprovalRequest = {
-  runId: string;
-  toolId: string;
-  approved: boolean;
-};
-
-export type AIToolApprovalResponse = {
-  ok: boolean;
-};
-
 export type AIRealtimeEvent = {
   eventType: AIRealtimeEventType;
   endpointId: string;

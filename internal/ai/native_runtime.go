@@ -3424,7 +3424,11 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 
 	ch := make(chan bool, 1)
 	r.mu.Lock()
-	r.toolApprovals[toolID] = ch
+	r.toolApprovals[toolID] = &toolApprovalRequest{
+		decision:      ch,
+		toolName:      "task_complete",
+		requestedAtMs: time.Now().UnixMilli(),
+	}
 	r.waitingApproval = true
 	r.mu.Unlock()
 	defer func() {

@@ -281,9 +281,93 @@ export type FlowerThreadSnapshot = Readonly<{
   source_label: string;
   target_labels: readonly string[];
   messages: readonly FlowerChatMessage[];
+  approval_actions?: readonly FlowerApprovalAction[];
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
   read_status: FlowerThreadReadStatus;
+}>;
+
+export type FlowerSafeTarget = Readonly<{
+  kind: string;
+  label: string;
+  uri?: string;
+}>;
+
+export type FlowerApprovalAction = Readonly<{
+  action_id: string;
+  run_id: string;
+  turn_id?: string;
+  tool_id: string;
+  tool_name: string;
+  state: 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';
+  status: 'pending' | 'resolved' | 'unavailable';
+  revision: number;
+  requested_at_ms: number;
+  resolved_at_ms?: number;
+  expires_at_ms?: number;
+  can_approve: boolean;
+  expected_seq?: number;
+  read_only_reason?: string;
+  summary: Readonly<{
+    label: string;
+    description?: string;
+    effects?: readonly string[];
+    flags?: readonly string[];
+    targets?: readonly FlowerSafeTarget[];
+  }>;
+}>;
+
+export type FlowerLiveActiveRun = Readonly<{
+  run_id: string;
+  status: FlowerThreadStatus;
+  message: FlowerChatMessage | null;
+  input_request?: FlowerInputRequest | null;
+  approval_actions: readonly FlowerApprovalAction[];
+  last_event_seq: number;
+}>;
+
+export type FlowerThreadLiveSnapshot = Readonly<{
+  thread: FlowerThreadSnapshot;
+  active_run?: FlowerLiveActiveRun | null;
+  read_status?: FlowerThreadReadStatus;
+  event_cursor: number;
+  generated_at_ms: number;
+}>;
+
+export type FlowerThreadLiveUpdateKind =
+  | 'thread.patched'
+  | 'message.appended'
+  | 'active_run.patched'
+  | 'read_state.patched'
+  | 'resync.required';
+
+export type FlowerThreadLiveUpdate = Readonly<{
+  seq: number;
+  thread_id: string;
+  kind: FlowerThreadLiveUpdateKind;
+  at_ms: number;
+  thread?: FlowerThreadSnapshot;
+  message?: FlowerChatMessage;
+  active_run?: FlowerLiveActiveRun | null;
+  clear_active_run?: boolean;
+  read_status?: FlowerThreadReadStatus;
+  resync_reason?: string;
+}>;
+
+export type FlowerThreadLiveUpdatesResponse = Readonly<{
+  updates: readonly FlowerThreadLiveUpdate[];
+  next_cursor: number;
+  has_more?: boolean;
+}>;
+
+export type FlowerSubmitApprovalRequest = Readonly<{
+  thread_id: string;
+  run_id: string;
+  action_id: string;
+  tool_id: string;
+  approved: boolean;
+  expected_seq?: number;
+  revision?: number;
 }>;
 
 export type FlowerThreadListItem = Readonly<{
@@ -402,14 +486,16 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
-  loadThread?: (threadID: string) => Promise<FlowerThreadSnapshot>;
-  markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadSnapshot>;
-  renameThread?: (threadID: string, title: string) => Promise<FlowerThreadSnapshot>;
-  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadSnapshot>;
-  forkThread?: (threadID: string) => Promise<FlowerThreadSnapshot>;
+  loadThread: (threadID: string) => Promise<FlowerThreadLiveSnapshot>;
+  listThreadLiveUpdates: (threadID: string, afterSeq: number, limit?: number) => Promise<FlowerThreadLiveUpdatesResponse>;
+  markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadLiveSnapshot>;
+  renameThread?: (threadID: string, title: string) => Promise<FlowerThreadLiveSnapshot>;
+  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadLiveSnapshot>;
+  forkThread?: (threadID: string) => Promise<FlowerThreadLiveSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
-  sendMessage: (input: FlowerSendMessageInput) => Promise<FlowerThreadSnapshot>;
-  submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerThreadSnapshot>;
+  sendMessage: (input: FlowerSendMessageInput) => Promise<FlowerThreadLiveSnapshot>;
+  submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerThreadLiveSnapshot>;
+  submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<void>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
 }>;

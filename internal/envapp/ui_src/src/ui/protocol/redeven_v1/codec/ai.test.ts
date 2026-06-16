@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { fromWireAIEventNotify, toWireAISendUserTurnRequest } from './ai';
+import {
+  fromWireAIEventNotify,
+  toWireAISendUserTurnRequest,
+} from './ai';
 
 describe('Redeven v1 AI codec', () => {
   it('passes Ask Flower context actions through sendUserTurn without permission material', () => {
@@ -104,4 +107,5 @@ describe('Redeven v1 AI codec', () => {
     expect(event?.runErrorCode).toBe('provider_auth_failed');
     expect(event?.runError).toBe('The selected AI provider rejected the saved credentials.');
   });
+
 });

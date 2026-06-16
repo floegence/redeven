@@ -91,12 +91,15 @@ func TestPrepareRun_InitializesActiveRunSnapshotImmediately(t *testing.T) {
 		prepared.r.markDone()
 	})
 
-	gotRunID, rawJSON, err := svc.GetActiveRunSnapshot(meta, thread.ThreadID)
+	snapshot, err := svc.GetFlowerThreadLiveSnapshot(ctx, meta, thread.ThreadID)
 	if err != nil {
-		t.Fatalf("GetActiveRunSnapshot: %v", err)
+		t.Fatalf("GetFlowerThreadLiveSnapshot: %v", err)
 	}
-	if strings.TrimSpace(gotRunID) != runID {
-		t.Fatalf("runID=%q, want %q", gotRunID, runID)
+	if snapshot == nil || snapshot.ActiveRun == nil {
+		t.Fatalf("active run snapshot missing: %#v", snapshot)
+	}
+	if strings.TrimSpace(snapshot.ActiveRun.RunID) != runID {
+		t.Fatalf("runID=%q, want %q", snapshot.ActiveRun.RunID, runID)
 	}
 
 	var parsed struct {
@@ -109,7 +112,7 @@ func TestPrepareRun_InitializesActiveRunSnapshotImmediately(t *testing.T) {
 			Content string `json:"content"`
 		} `json:"blocks"`
 	}
-	if err := json.Unmarshal([]byte(rawJSON), &parsed); err != nil {
+	if err := json.Unmarshal(snapshot.ActiveRun.Message, &parsed); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 

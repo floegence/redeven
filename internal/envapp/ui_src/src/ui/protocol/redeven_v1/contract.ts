@@ -5,8 +5,6 @@ import type {
   AIRealtimeEvent,
   AICancelRunRequest,
   AICancelRunResponse,
-  AIGetActiveRunSnapshotRequest,
-  AIGetActiveRunSnapshotResponse,
   AIListMessagesRequest,
   AIListMessagesResponse,
   AISendUserTurnRequest,
@@ -18,8 +16,6 @@ import type {
   AISubscribeSummaryResponse,
   AISubscribeThreadRequest,
   AISubscribeThreadResponse,
-  AIToolApprovalRequest,
-  AIToolApprovalResponse,
 } from './sdk/ai';
 import type { AccessResumeRequest, AccessResumeResponse, AccessStatusResponse } from './sdk/access';
 import type { FsCopyRequest, FsCopyResponse, FsDeleteRequest, FsDeleteResponse, FsListRequest, FsListResponse, FsMkdirRequest, FsMkdirResponse, FsPathContextResponse, FsReadFileRequest, FsReadFileResponse, FsRenameRequest, FsRenameResponse, FsWriteFileRequest, FsWriteFileResponse } from './sdk/fs';
@@ -95,22 +91,18 @@ import type { TerminalClearRequest, TerminalClearResponse, TerminalHistoryReques
 import {
   fromWireAIEventNotify,
   fromWireAICancelRunResponse,
-  fromWireAIGetActiveRunSnapshotResponse,
   fromWireAIListMessagesResponse,
   fromWireAISendUserTurnResponse,
   fromWireAISubmitRequestUserInputResponseResponse,
   fromWireAISubscribeSummaryResponse,
   fromWireAISubscribeThreadResponse,
   fromWireAIStopThreadResponse,
-  fromWireAIToolApprovalResponse,
   toWireAICancelRunRequest,
-  toWireAIGetActiveRunSnapshotRequest,
   toWireAIListMessagesRequest,
   toWireAISendUserTurnRequest,
   toWireAISubmitRequestUserInputResponseRequest,
   toWireAISubscribeThreadRequest,
   toWireAIStopThreadRequest,
-  toWireAIToolApprovalRequest,
 } from './codec/ai';
 import { fromWireAccessResumeResponse, fromWireAccessStatusResponse, toWireAccessResumeRequest } from './codec/access';
 import { fromWireFsCopyResponse, fromWireFsDeleteResponse, fromWireFsListResponse, fromWireFsMkdirResponse, fromWireFsPathContextResponse, fromWireFsReadFileResponse, fromWireFsRenameResponse, fromWireFsWriteFileResponse, toWireFsCopyRequest, toWireFsDeleteRequest, toWireFsListRequest, toWireFsMkdirRequest, toWireFsReadFileRequest, toWireFsRenameRequest, toWireFsWriteFileRequest } from './codec/fs';
@@ -188,8 +180,6 @@ import type {
   wire_ai_cancel_run_req,
   wire_ai_cancel_run_resp,
   wire_ai_event_notify,
-  wire_ai_get_active_run_snapshot_req,
-  wire_ai_get_active_run_snapshot_resp,
   wire_ai_list_messages_req,
   wire_ai_list_messages_resp,
   wire_ai_send_user_turn_req,
@@ -201,8 +191,6 @@ import type {
   wire_ai_subscribe_summary_resp,
   wire_ai_subscribe_thread_req,
   wire_ai_subscribe_thread_resp,
-  wire_ai_tool_approval_req,
-  wire_ai_tool_approval_resp,
 } from './wire/ai';
 import type { wire_fs_copy_req, wire_fs_copy_resp, wire_fs_delete_req, wire_fs_delete_resp, wire_fs_get_path_context_resp, wire_fs_list_req, wire_fs_list_resp, wire_fs_mkdir_req, wire_fs_mkdir_resp, wire_fs_read_file_req, wire_fs_read_file_resp, wire_fs_rename_req, wire_fs_rename_resp, wire_fs_write_file_req, wire_fs_write_file_resp } from './wire/fs';
 import type {
@@ -340,8 +328,6 @@ export type RedevenV1Rpc = {
     subscribeThread: (req: AISubscribeThreadRequest) => Promise<AISubscribeThreadResponse>;
     stopThread: (req: AIStopThreadRequest) => Promise<AIStopThreadResponse>;
     listMessages: (req: AIListMessagesRequest) => Promise<AIListMessagesResponse>;
-    getActiveRunSnapshot: (req: AIGetActiveRunSnapshotRequest) => Promise<AIGetActiveRunSnapshotResponse>;
-    approveTool: (req: AIToolApprovalRequest) => Promise<AIToolApprovalResponse>;
     onEvent: (handler: (event: AIRealtimeEvent) => void) => () => void;
   };
   monitor: {
@@ -672,16 +658,6 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireAIListMessagesRequest(req);
         const resp = await call<wire_ai_list_messages_req, wire_ai_list_messages_resp>(redevenV1TypeIds.ai.listMessages, payload);
         return fromWireAIListMessagesResponse(resp);
-      },
-      getActiveRunSnapshot: async (req) => {
-        const payload = toWireAIGetActiveRunSnapshotRequest(req);
-        const resp = await call<wire_ai_get_active_run_snapshot_req, wire_ai_get_active_run_snapshot_resp>(redevenV1TypeIds.ai.getActiveRunSnapshot, payload);
-        return fromWireAIGetActiveRunSnapshotResponse(resp);
-      },
-      approveTool: async (req) => {
-        const payload = toWireAIToolApprovalRequest(req);
-        const resp = await call<wire_ai_tool_approval_req, wire_ai_tool_approval_resp>(redevenV1TypeIds.ai.toolApproval, payload);
-        return fromWireAIToolApprovalResponse(resp);
       },
       onEvent: (handler) =>
         onNotify<wire_ai_event_notify>(redevenV1TypeIds.ai.event, (payload) => {

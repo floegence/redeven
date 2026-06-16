@@ -4,9 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const state: {
     omitReadState: boolean;
+    activeRun: Record<string, unknown> | null;
     threadDetailWaitingPrompt: Record<string, unknown> | null;
   } = {
     omitReadState: false,
+    activeRun: null,
     threadDetailWaitingPrompt: null,
   };
   const readStatus = (lastMessageAtUnixMs: number, waitingPromptID = '') => {
@@ -33,6 +35,13 @@ const mocks = vi.hoisted(() => {
       } : {}),
     };
   };
+  const liveMessagesMock = vi.fn(async ({ threadId }: { threadId: string }): Promise<unknown[]> => [{
+    id: `msg-${threadId}`,
+    role: 'assistant',
+    status: 'complete',
+    timestamp: 10,
+    blocks: [{ type: 'markdown', content: `Transcript for ${threadId}` }],
+  }]);
   const fetchGatewayJSONMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.includes('/file-action-open-target')) {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
@@ -64,21 +73,32 @@ const mocks = vi.hoisted(() => {
     if (url.includes('/_redeven_proxy/api/ai/models')) {
       return { current_model: 'openai/gpt-5.2', models: [{ id: 'openai/gpt-5.2', label: 'GPT 5.2' }] };
     }
-    if (url.includes('/_redeven_proxy/api/ai/threads/') && (!init || init.method === 'GET')) {
-      const threadID = decodeURIComponent(url.split('/').pop() ?? 'thread-1');
+    if (url.includes('/_redeven_proxy/api/ai/threads/') && url.includes('/live/updates') && (!init || init.method === 'GET')) {
+      return { updates: [], next_cursor: 0 };
+    }
+    if (url.includes('/_redeven_proxy/api/ai/threads/') && url.endsWith('/live') && (!init || init.method === 'GET')) {
+      const match = /\/_redeven_proxy\/api\/ai\/threads\/([^/]+)\/live$/u.exec(url);
+      const threadID = decodeURIComponent(match?.[1] ?? 'thread-1');
       const waitingPromptID = String(state.threadDetailWaitingPrompt?.prompt_id ?? '').trim();
+      const thread = {
+        thread_id: threadID,
+        title: 'Loaded Env Flower thread',
+        model_id: 'openai/gpt-5.2',
+        run_status: state.threadDetailWaitingPrompt || state.activeRun ? 'running' : 'success',
+        working_dir: '/workspace/env-flower',
+        created_at_unix_ms: 1,
+        updated_at_unix_ms: 2,
+        read_status: readStatus(2_000, waitingPromptID),
+        ...(state.threadDetailWaitingPrompt ? { waiting_prompt: state.threadDetailWaitingPrompt } : {}),
+      };
       return {
-        thread: {
-          thread_id: threadID,
-          title: 'Loaded Env Flower thread',
-          model_id: 'openai/gpt-5.2',
-          run_status: state.threadDetailWaitingPrompt ? 'waiting_user' : 'success',
-          working_dir: '/workspace/env-flower',
-          created_at_unix_ms: 1,
-          updated_at_unix_ms: 2,
-          read_status: readStatus(2_000, waitingPromptID),
-          ...(state.threadDetailWaitingPrompt ? { waiting_prompt: state.threadDetailWaitingPrompt } : {}),
-        },
+        schema_version: 1,
+        thread,
+        messages: await liveMessagesMock({ threadId: threadID }),
+        ...(state.activeRun ? { active_run: state.activeRun } : {}),
+        read_status: thread.read_status,
+        event_cursor: 0,
+        generated_at_unix_ms: 12,
       };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads?')) {
@@ -98,27 +118,14 @@ const mocks = vi.hoisted(() => {
 
   const sendUserTurnMock = vi.fn(async () => ({ runId: 'run-1', kind: 'start' }));
   const subscribeThreadMock = vi.fn(async () => ({ runId: 'run-subscribe' }));
-  const getActiveRunSnapshotMock = vi.fn(async (): Promise<any> => ({ ok: false }));
   const openFileBrowserAtPathMock = vi.fn(async () => undefined);
   const openFilePreviewMock = vi.fn(async () => undefined);
   const openFlowerFileBrowserMock = vi.fn(async () => undefined);
   const openFlowerFilePreviewMock = vi.fn(async () => undefined);
-  const listMessagesMock = vi.fn(async ({ threadId }: { threadId: string }) => ({
-    messages: [{
-      messageJson: {
-        id: `msg-${threadId}`,
-        role: 'assistant',
-        status: 'complete',
-        timestamp: 10,
-        blocks: [{ type: 'markdown', content: `Transcript for ${threadId}` }],
-      },
-    }],
-  }));
 
   return {
     fetchGatewayJSONMock,
-    getActiveRunSnapshotMock,
-    listMessagesMock,
+    liveMessagesMock,
     openFileBrowserAtPathMock,
     openFilePreviewMock,
     openFlowerFileBrowserMock,
@@ -197,8 +204,6 @@ vi.mock('../services/gatewayApi', () => ({
 vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({
     ai: {
-      listMessages: mocks.listMessagesMock,
-      getActiveRunSnapshot: mocks.getActiveRunSnapshotMock,
       sendUserTurn: mocks.sendUserTurnMock,
       subscribeThread: mocks.subscribeThreadMock,
     },
@@ -304,18 +309,22 @@ async function renderPage() {
   return { host, dispose };
 }
 
+function mockLiveMessages(payload: { messages: Array<{ messageJson: unknown }> }) {
+  mocks.liveMessagesMock.mockResolvedValueOnce(payload.messages.map((row) => row.messageJson));
+}
+
 export function registerEnvAIPageSendTests() {
   describe('EnvAIPage FlowerSurface integration', () => {
     beforeEach(() => {
       mocks.fetchGatewayJSONMock.mockClear();
       mocks.sendUserTurnMock.mockClear();
       mocks.subscribeThreadMock.mockClear();
-      mocks.getActiveRunSnapshotMock.mockClear();
-      mocks.listMessagesMock.mockClear();
+      mocks.liveMessagesMock.mockClear();
       mocks.openFileBrowserAtPathMock.mockClear();
       mocks.openFilePreviewMock.mockClear();
       mocks.openFlowerFileBrowserMock.mockClear();
       mocks.openFlowerFilePreviewMock.mockClear();
+      mocks.state.activeRun = null;
       mocks.state.omitReadState = false;
       mocks.state.threadDetailWaitingPrompt = null;
     });
@@ -340,26 +349,27 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('loads full messages when a history thread is selected', async () => {
+    it('loads live snapshot when a history thread is selected', async () => {
       const { host, dispose } = await renderPage();
       try {
         (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
         await flush();
         await flush();
-        expect(mocks.listMessagesMock).toHaveBeenCalledWith({ threadId: 'thread-1', tail: true, limit: 200 });
-        expect(mocks.getActiveRunSnapshotMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
+        expect(mocks.fetchGatewayJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1/live', { method: 'GET' });
+        expect(mocks.liveMessagesMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
         expect(host.textContent).toContain('Transcript for thread-1');
       } finally {
         dispose();
       }
     });
 
-    it('shows active-run snapshot output when transcript persistence has not caught up', async () => {
-      mocks.listMessagesMock.mockResolvedValueOnce({ messages: [] } as any);
-      mocks.getActiveRunSnapshotMock.mockResolvedValueOnce({
-        ok: true,
-        runId: 'run-live',
-        messageJson: {
+    it('shows active run output when transcript persistence has not caught up', async () => {
+      mocks.liveMessagesMock.mockResolvedValueOnce([]);
+      mocks.state.activeRun = {
+        run_id: 'run-live',
+        status: 'running',
+        last_event_seq: 12,
+        message: {
           id: 'msg-live',
           role: 'assistant',
           status: 'streaming',
@@ -368,7 +378,8 @@ export function registerEnvAIPageSendTests() {
             { type: 'markdown', content: 'Live answer recovered from the active run.' },
           ],
         },
-      });
+        approval_actions: [],
+      };
 
       const { host, dispose } = await renderPage();
       try {
@@ -382,7 +393,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('maps Env-local message blocks into the shared Flower inline transcript', async () => {
-      mocks.listMessagesMock.mockResolvedValueOnce({
+      mockLiveMessages({
         messages: [
           {
             rowId: 1,
@@ -480,7 +491,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('accepts persisted todo activity payload metadata from runtime transcripts', async () => {
-      mocks.listMessagesMock.mockResolvedValueOnce({
+      mockLiveMessages({
         messages: [{
           rowId: 1,
           messageJson: {
@@ -541,7 +552,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('rejects malformed Env-local activity target line fields', async () => {
-      mocks.listMessagesMock.mockResolvedValueOnce({
+      mockLiveMessages({
         messages: [
           {
             rowId: 1,
@@ -597,7 +608,7 @@ export function registerEnvAIPageSendTests() {
       ['preview_path', { preview_path: '/workspace/env-flower/src/app.ts' }],
       ['root_dir', { root_dir: '/workspace/env-flower' }],
     ])('rejects Env-local activity target ref %s fields that belong to host-only data', async (field, extra) => {
-      mocks.listMessagesMock.mockResolvedValueOnce({
+      mockLiveMessages({
         messages: [
           {
             rowId: 1,
@@ -652,7 +663,7 @@ export function registerEnvAIPageSendTests() {
       ['path', { path: '/workspace/env-flower/src/app.ts' }],
       ['rootDir', { rootDir: '/Users/alice/.codex/skills/frontend-design' }],
     ])('rejects nested Env-local activity payload %s fields that belong to host-only data', async (field, result) => {
-      mocks.listMessagesMock.mockResolvedValueOnce({
+      mockLiveMessages({
         messages: [
           {
             rowId: 1,
@@ -706,7 +717,7 @@ export function registerEnvAIPageSendTests() {
       ['file_path', { file_path: '/workspace/env-flower/src/app.ts' }],
       ['root_dir', { root_dir: '/workspace/env-flower' }],
     ])('rejects Env-local file action %s fields that belong to host-only data', async (field, extra) => {
-      mocks.listMessagesMock.mockResolvedValueOnce({
+      mockLiveMessages({
         messages: [
           {
             rowId: 1,
@@ -765,7 +776,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('opens Env file browser and preview from Flower file activity details', async () => {
-      mocks.listMessagesMock.mockResolvedValueOnce({
+      mockLiveMessages({
         messages: [{
           rowId: 1,
           messageJson: {
@@ -853,7 +864,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('renders sanitized use_skill activity payloads', async () => {
-      mocks.listMessagesMock.mockResolvedValueOnce({
+      mockLiveMessages({
         messages: [{
           rowId: 1,
           messageJson: {
@@ -911,7 +922,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('opens Env file browser and preview from relative apply_patch diff details', async () => {
-      mocks.listMessagesMock.mockResolvedValueOnce({
+      mockLiveMessages({
         messages: [{
           rowId: 1,
           messageJson: {

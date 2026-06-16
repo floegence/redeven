@@ -1,17 +1,7 @@
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
-import type { Message, MessageBlock } from '../chat/types';
 import { fetchGatewayJSON } from '../services/gatewayApi';
 import type { AgentSettingsResponse, AIConfig } from '../pages/settings/types';
 import type {
-  FlowerActivityChip,
-  FlowerActivityFileAction,
-  FlowerActivityTimelineBlock,
-  FlowerActivityTargetRef,
-  FlowerActivityRenderer,
-  FlowerChatMessage,
-  FlowerChatMessageBlock,
-  FlowerInputRequest,
-  FlowerInputRequestQuestion,
   FlowerProvider,
   FlowerProviderDraft,
   FlowerProviderModel,
@@ -20,12 +10,12 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
-  FlowerThreadActivitySnapshot,
   FlowerThreadReadStatus,
-  FlowerThreadSnapshot,
-  FlowerThreadStatus,
+  FlowerThreadLiveSnapshot,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { ContextActionEnvelope } from '../contextActions/protocol';
+import { mapFlowerLiveSnapshot } from '../../../../../flower_ui/src/flowerLiveMapper';
+import { createRuntimeFlowerSurfaceAdapter } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
 
 type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envPublicID: string;
@@ -59,61 +49,16 @@ type ModelsResponse = Readonly<{
 
 type ThreadView = Readonly<{
   thread_id?: string;
-  title?: string;
-  model_id?: string;
-  run_status?: string;
-  run_error_code?: string;
-  run_error?: string;
-  working_dir?: string;
-  pinned_at_unix_ms?: number;
-  created_at_unix_ms?: number;
-  updated_at_unix_ms?: number;
-  last_message_at_unix_ms?: number;
-  last_message_preview?: string;
-  waiting_prompt?: ThreadWaitingPrompt;
   read_status: ThreadReadStatus;
-}>;
+} & Record<string, unknown>>;
 
 type ThreadReadStatus = FlowerThreadReadStatus;
 
-type ThreadWaitingPrompt = Readonly<{
-  prompt_id?: string;
-  message_id?: string;
-  tool_id?: string;
-  tool_name?: string;
-  reason_code?: string;
-  required_from_user?: readonly string[];
-  evidence_refs?: readonly string[];
-  public_summary?: string;
-  contains_secret?: boolean;
-  questions?: readonly Readonly<{
-    id?: string;
-    header?: string;
-    question?: string;
-    is_secret?: boolean;
-    response_mode?: string;
-    choices_exhaustive?: boolean;
-    write_label?: string;
-    write_placeholder?: string;
-    choices?: readonly Readonly<{
-      choice_id?: string;
-      label?: string;
-      description?: string;
-      kind?: string;
-      input_placeholder?: string;
-      actions?: readonly Readonly<{
-        type?: string;
-        mode?: string;
-      }>[];
-    }>[];
-  }>[];
-}>;
-
-type ListThreadsResponse = Readonly<{
-  threads?: readonly ThreadView[];
-}>;
-
 type CreateThreadResponse = Readonly<{
+  thread?: ThreadView;
+}>;
+
+type LoadThreadResponse = Readonly<{
   thread?: ThreadView;
 }>;
 
@@ -122,499 +67,8 @@ type MarkThreadReadResponse = Readonly<{
 }>;
 type FlowerSecretPatch = Readonly<{ provider_id: string; api_key: string | null }>;
 
-type FlowerInputResponseMode = NonNullable<FlowerInputRequestQuestion['response_mode']>;
-
-const FLOWER_ACTIVITY_RENDERERS = new Set<FlowerActivityRenderer>([
-  'structured',
-  'terminal',
-  'file',
-  'patch',
-  'web_search',
-  'todos',
-  'question',
-  'completion',
-]);
-
-const ACTIVITY_PAYLOAD_KEYS_BY_RENDERER: Readonly<Record<FlowerActivityRenderer, ReadonlySet<string>>> = {
-  terminal: new Set([
-    'command',
-    'timeout_ms',
-    'timeout_source',
-    'requested_timeout_ms',
-    'description',
-    'exit_code',
-    'duration_ms',
-    'timed_out',
-    'truncated',
-    'stdout',
-    'stderr',
-    'summary',
-    'details',
-    'status',
-    'error',
-    'content_ref',
-  ]),
-  file: new Set([
-    'operation',
-    'display_name',
-    'file_action_id',
-    'content',
-    'line_offset',
-    'line_count',
-    'total_lines',
-    'change_type',
-    'additions',
-    'deletions',
-    'unified_diff',
-    'diff_unavailable_reason',
-    'truncated',
-    'summary',
-    'details',
-    'status',
-    'error',
-    'content_ref',
-  ]),
-  patch: new Set([
-    'operation',
-    'files_changed',
-    'hunks',
-    'additions',
-    'deletions',
-    'input_format',
-    'normalized_format',
-    'mutations',
-    'truncated',
-    'summary',
-    'details',
-    'status',
-    'error',
-    'content_ref',
-  ]),
-  todos: new Set([
-    'todos',
-    'counts',
-    'result',
-    'args',
-    'expected_version',
-    'explanation',
-    'version',
-    'updated_at_unix_ms',
-    'truncated',
-    'summary',
-    'details',
-    'status',
-    'error',
-    'content_ref',
-  ]),
-  web_search: new Set([
-    'query',
-    'provider',
-    'count',
-    'sources',
-    'results',
-    'truncated',
-    'summary',
-    'details',
-    'status',
-    'error',
-    'content_ref',
-  ]),
-  question: new Set([
-    'reason_code',
-    'required_from_user',
-    'questions',
-    'contains_secret',
-    'summary',
-    'details',
-    'status',
-    'error',
-    'content_ref',
-  ]),
-  completion: new Set([
-    'result',
-    'evidence_refs',
-    'remaining_risks',
-    'next_actions',
-    'truncated',
-    'summary',
-    'details',
-    'status',
-    'error',
-    'content_ref',
-  ]),
-  structured: new Set([
-    'operation',
-    'query',
-    'count',
-    'provider',
-    'name',
-    'action',
-    'limit',
-    'data',
-    'result',
-    'content',
-    'content_ref',
-    'activation_id',
-    'already_active',
-    'mode_hints',
-    'dependencies',
-    'dependency_degraded',
-    'reason',
-    'id',
-    'status',
-    'message',
-    'agents',
-    'created',
-    'waiting',
-    'terminated',
-    'terminated_all',
-    'timed_out',
-    'targets',
-    'validation',
-    'stats',
-    'spec',
-    'output',
-    'structured',
-    'key_files',
-    'rows',
-    'cards',
-    'items',
-    'evidence_refs',
-    'remaining_risks',
-    'next_actions',
-    'truncated',
-    'summary',
-    'details',
-    'error',
-  ]),
-};
-
-const FILE_MUTATION_PAYLOAD_KEYS = new Set([
-  'display_name',
-  'file_action_id',
-  'change_type',
-  'additions',
-  'deletions',
-  'unified_diff',
-  'diff_unavailable_reason',
-  'truncated',
-]);
-
-const ACTIVITY_NESTED_PAYLOAD_FORBIDDEN_KEYS = new Set([
-  'action_path',
-  'directory_path',
-  'display_path',
-  'file_path',
-  'original_file',
-  'path',
-  'preview_path',
-  'root_dir',
-  'stdin',
-  'updated_file',
-  'workdir',
-  'cwd',
-]);
-
-const ACTIVITY_TARGET_REF_KEYS = new Set([
-  'kind',
-  'label',
-  'uri',
-  'line',
-]);
-
-const ACTIVITY_FILE_ACTION_KEYS = new Set([
-  'action_id',
-  'display_name',
-  'can_preview',
-  'can_browse_directory',
-]);
-
-function activityPayloadKeyPolicyToken(key: string): string {
-  return key
-    .replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`)
-    .replace(/[-.:]/g, '_')
-    .toLowerCase();
-}
-
 function trim(value: unknown): string {
   return String(value ?? '').trim();
-}
-
-function flowerContractError(message: string): never {
-  throw new Error(`Flower contract error: ${message}`);
-}
-
-function normalizeActivityRenderer(value: unknown, field: string): FlowerActivityRenderer | undefined {
-  const renderer = trim(value);
-  if (!renderer) return undefined;
-  if (FLOWER_ACTIVITY_RENDERERS.has(renderer as FlowerActivityRenderer)) {
-    return renderer as FlowerActivityRenderer;
-  }
-  flowerContractError(`${field} is unsupported: ${renderer}.`);
-}
-
-function requireActivityString(value: unknown, field: string, maxLength: number, allowEmpty = false): string {
-  if (typeof value !== 'string') {
-    flowerContractError(`${field} must be a string.`);
-  }
-  const text = value.trim();
-  if (!allowEmpty && !text) {
-    flowerContractError(`${field} is required.`);
-  }
-  if (text.length > maxLength) {
-    flowerContractError(`${field} must be at most ${maxLength} characters.`);
-  }
-  return text;
-}
-
-function optionalActivityString(value: unknown, field: string, maxLength: number): string | undefined {
-  if (value === undefined || value === null) return undefined;
-  return requireActivityString(value, field, maxLength, true);
-}
-
-function requireActivityToken(value: unknown, field: string, maxLength: number): string {
-  const token = requireActivityString(value, field, maxLength);
-  if (!/^[A-Za-z0-9_.:-]+$/.test(token)) {
-    flowerContractError(`${field} must be a token up to ${maxLength} characters.`);
-  }
-  return token;
-}
-
-function validateActivityPayloadKey(key: string, field: string) {
-  if (key.length > 80 || !/^[A-Za-z0-9_.:-]+$/.test(key)) {
-    flowerContractError(`${field} must use token keys up to 80 characters.`);
-  }
-}
-
-function validateActivityNestedPayloadKey(key: string, field: string) {
-  validateActivityPayloadKey(key, field);
-  if (ACTIVITY_NESTED_PAYLOAD_FORBIDDEN_KEYS.has(activityPayloadKeyPolicyToken(key))) {
-    flowerContractError(`${field} is not part of the nested activity payload contract.`);
-  }
-}
-
-function normalizeActivityJSONValue(value: unknown, field: string, depth: number): unknown {
-  if (depth > 8) {
-    flowerContractError(`${field} exceeds maximum depth.`);
-  }
-  if (value === null || typeof value === 'boolean') return value;
-  if (typeof value === 'string') {
-    if (value.length > 8000) {
-      flowerContractError(`${field} must be at most 8000 characters.`);
-    }
-    return value;
-  }
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      flowerContractError(`${field} must be a finite number.`);
-    }
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.map((item, index) => normalizeActivityJSONValue(item, `${field}[${index}]`, depth + 1));
-  }
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [key, item] of Object.entries(value)) {
-      validateActivityNestedPayloadKey(key, `${field}.${key}`);
-      out[key] = normalizeActivityJSONValue(item, `${field}.${key}`, depth + 1);
-    }
-    return out;
-  }
-  flowerContractError(`${field} must be JSON-compatible.`);
-}
-
-function normalizeActivityPayload(
-  value: unknown,
-  field: string,
-  renderer: FlowerActivityRenderer | undefined,
-): Readonly<Record<string, unknown>> | undefined {
-  if (value === undefined) return undefined;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    flowerContractError(`${field} must be an object.`);
-  }
-  const rendererName = renderer ?? 'structured';
-  const allowedKeys = ACTIVITY_PAYLOAD_KEYS_BY_RENDERER[rendererName];
-  const out: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value)) {
-    validateActivityPayloadKey(key, `${field}.${key}`);
-    if (!allowedKeys.has(key)) {
-      flowerContractError(`${field}.${key} is not part of the ${rendererName} payload contract.`);
-    }
-    if (rendererName === 'patch' && key === 'mutations') {
-      out[key] = normalizeActivityPatchMutations(item, `${field}.${key}`);
-      continue;
-    }
-    out[key] = normalizeActivityJSONValue(item, `${field}.${key}`, 1);
-  }
-  return out;
-}
-
-function normalizeActivityPatchMutations(value: unknown, field: string): readonly Readonly<Record<string, unknown>>[] {
-  if (!Array.isArray(value)) {
-    flowerContractError(`${field} must be an array.`);
-  }
-  return value.map((item, index) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      flowerContractError(`${field}[${index}] must be an object.`);
-    }
-    const out: Record<string, unknown> = {};
-    for (const [key, entry] of Object.entries(item)) {
-      validateActivityPayloadKey(key, `${field}[${index}].${key}`);
-      if (!FILE_MUTATION_PAYLOAD_KEYS.has(key)) {
-        flowerContractError(`${field}[${index}].${key} is not part of the patch mutation payload contract.`);
-      }
-      out[key] = normalizeActivityJSONValue(entry, `${field}[${index}].${key}`, 1);
-    }
-    return out;
-  });
-}
-
-function normalizeActivityChips(value: unknown, field: string): readonly FlowerActivityChip[] | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (!Array.isArray(value)) {
-    flowerContractError(`${field} must be an array.`);
-  }
-  return value.map((item, index) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      flowerContractError(`${field}[${index}] must be an object.`);
-    }
-    const record = item as Record<string, unknown>;
-    const chipValue = optionalActivityString(record.value, `${field}[${index}].value`, 120);
-    const tone = record.tone === undefined || record.tone === null
-      ? undefined
-      : requireActivityToken(record.tone, `${field}[${index}].tone`, 32);
-    return {
-      kind: requireActivityToken(record.kind, `${field}[${index}].kind`, 64),
-      label: requireActivityString(record.label, `${field}[${index}].label`, 120),
-      ...(chipValue ? { value: chipValue } : {}),
-      ...(tone ? { tone } : {}),
-    };
-  });
-}
-
-function normalizeActivityTargetRefs(value: unknown, field: string): readonly FlowerActivityTargetRef[] | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (!Array.isArray(value)) {
-    flowerContractError(`${field} must be an array.`);
-  }
-  return value.map((item, index) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      flowerContractError(`${field}[${index}] must be an object.`);
-    }
-    const record = item as Record<string, unknown>;
-    for (const refField of Object.keys(record)) {
-      if (!ACTIVITY_TARGET_REF_KEYS.has(refField)) {
-        flowerContractError(`${field}[${index}].${refField} is not part of the activity target ref contract.`);
-      }
-    }
-    const uri = optionalActivityString(record.uri, `${field}[${index}].uri`, 1000);
-    if (uri && !uri.startsWith('http://') && !uri.startsWith('https://') && !uri.startsWith('artifact://')) {
-      flowerContractError(`${field}[${index}].uri must use http, https, or artifact scheme.`);
-    }
-    const line = record.line === undefined || record.line === null ? undefined : record.line;
-    if (line !== undefined && (typeof line !== 'number' || !Number.isInteger(line) || line < 0)) {
-      flowerContractError(`${field}[${index}].line must be a non-negative integer.`);
-    }
-    return {
-      kind: requireActivityToken(record.kind, `${field}[${index}].kind`, 64),
-      label: requireActivityString(record.label, `${field}[${index}].label`, 240),
-      ...(uri ? { uri } : {}),
-      ...(typeof line === 'number' ? { line } : {}),
-    };
-  });
-}
-
-function normalizeActivityFileActions(value: unknown, field: string): Readonly<Record<string, FlowerActivityFileAction>> | undefined {
-  if (value === undefined || value === null) return undefined;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    flowerContractError(`${field} must be an object.`);
-  }
-  const out: Record<string, FlowerActivityFileAction> = {};
-  for (const [key, item] of Object.entries(value)) {
-    const actionField = `${field}.${key}`;
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-      flowerContractError(`${actionField} must be an object.`);
-    }
-    const record = item as Record<string, unknown>;
-    for (const fileActionField of Object.keys(record)) {
-      if (!ACTIVITY_FILE_ACTION_KEYS.has(fileActionField)) {
-        flowerContractError(`${actionField}.${fileActionField} is not part of the file action contract.`);
-      }
-    }
-    const actionID = requireActivityToken(record.action_id, `${actionField}.action_id`, 96);
-    if (trim(key) !== actionID) {
-      flowerContractError(`${actionField}.action_id must match its map key.`);
-    }
-    const displayName = requireActivityString(record.display_name, `${actionField}.display_name`, 240);
-    if (typeof record.can_preview !== 'boolean') {
-      flowerContractError(`${actionField}.can_preview must be a boolean.`);
-    }
-    if (typeof record.can_browse_directory !== 'boolean') {
-      flowerContractError(`${actionField}.can_browse_directory must be a boolean.`);
-    }
-    out[actionID] = {
-      action_id: actionID,
-      display_name: displayName,
-      can_preview: record.can_preview,
-      can_browse_directory: record.can_browse_directory,
-    };
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
-}
-
-function readStatus(thread: ThreadView): ThreadReadStatus {
-  if (!thread.read_status || typeof thread.read_status !== 'object') {
-    flowerContractError('thread.read_status is required.');
-  }
-  if (typeof thread.read_status.is_unread !== 'boolean') {
-    flowerContractError('thread.read_status.is_unread must be a boolean.');
-  }
-  if (!thread.read_status.snapshot || typeof thread.read_status.snapshot !== 'object') {
-    flowerContractError('thread.read_status.snapshot is required.');
-  }
-  const lastMessageAtUnixMs = Number(thread.read_status.snapshot.last_message_at_unix_ms ?? 0);
-  if (!Number.isFinite(lastMessageAtUnixMs) || lastMessageAtUnixMs < 0) {
-    flowerContractError('thread.read_status.snapshot.last_message_at_unix_ms must be a non-negative number.');
-  }
-  const activityRevision = Number(thread.read_status.snapshot.activity_revision);
-  if (!Number.isFinite(activityRevision) || activityRevision < 0) {
-    flowerContractError('thread.read_status.snapshot.activity_revision must be a non-negative number.');
-  }
-  const activitySignature = trim(thread.read_status.snapshot.activity_signature);
-  if (!activitySignature) {
-    flowerContractError('thread.read_status.snapshot.activity_signature is required.');
-  }
-  if (!thread.read_status.read_state || typeof thread.read_status.read_state !== 'object') {
-    flowerContractError('thread.read_status.read_state is required.');
-  }
-  const lastReadMessageAtUnixMs = Number(thread.read_status.read_state.last_read_message_at_unix_ms ?? -1);
-  if (!Number.isFinite(lastReadMessageAtUnixMs) || lastReadMessageAtUnixMs < 0) {
-    flowerContractError('thread.read_status.read_state.last_read_message_at_unix_ms must be a non-negative number.');
-  }
-  const lastSeenActivityRevision = Number(thread.read_status.read_state.last_seen_activity_revision);
-  if (!Number.isFinite(lastSeenActivityRevision) || lastSeenActivityRevision < 0) {
-    flowerContractError('thread.read_status.read_state.last_seen_activity_revision must be a non-negative number.');
-  }
-  const lastSeenActivitySignature = trim(thread.read_status.read_state.last_seen_activity_signature);
-  if (typeof thread.read_status.read_state.last_seen_activity_signature !== 'string') {
-    flowerContractError('thread.read_status.read_state.last_seen_activity_signature must be a string.');
-  }
-  return {
-    is_unread: thread.read_status.is_unread,
-    snapshot: {
-      activity_revision: Math.floor(activityRevision),
-      last_message_at_unix_ms: Math.floor(lastMessageAtUnixMs),
-      activity_signature: activitySignature,
-      ...(trim(thread.read_status.snapshot.waiting_prompt_id) ? { waiting_prompt_id: trim(thread.read_status.snapshot.waiting_prompt_id) } : {}),
-    },
-    read_state: {
-      last_seen_activity_revision: Math.floor(lastSeenActivityRevision),
-      last_read_message_at_unix_ms: Math.floor(lastReadMessageAtUnixMs),
-      last_seen_activity_signature: lastSeenActivitySignature,
-      ...(trim(thread.read_status.read_state.last_seen_waiting_prompt_id) ? { last_seen_waiting_prompt_id: trim(thread.read_status.read_state.last_seen_waiting_prompt_id) } : {}),
-    },
-  };
 }
 
 function adapterCopy(options: EnvLocalFlowerSurfaceAdapterOptions): EnvLocalFlowerSurfaceAdapterCopy {
@@ -627,14 +81,6 @@ function adapterCopy(options: EnvLocalFlowerSurfaceAdapterOptions): EnvLocalFlow
     selectModelBeforeChat: options.copy?.selectModelBeforeChat ?? 'Select a Flower model before starting a chat.',
     failedToCreateChat: options.copy?.failedToCreateChat ?? 'Failed to create Flower chat.',
   };
-}
-
-function unixMs(raw: unknown, field: string): number {
-  const value = Number(raw ?? 0);
-  if (!Number.isFinite(value) || value <= 0) {
-    flowerContractError(`${field} must be a positive unix timestamp.`);
-  }
-  return value > 10_000_000_000 ? Math.floor(value) : Math.floor(value * 1000);
 }
 
 function positiveInteger(raw: unknown): number | undefined {
@@ -766,274 +212,21 @@ function draftToAIConfig(draft: FlowerSettingsDraft): AIConfig {
   };
 }
 
-function runStatus(raw: unknown): FlowerThreadStatus {
-  switch (trim(raw).toLowerCase()) {
-    case '':
-    case 'idle':
-      return 'idle';
-    case 'accepted':
-    case 'running':
-    case 'recovering':
-    case 'finalizing':
-      return 'running';
-    case 'waiting_approval':
-      return 'waiting_approval';
-    case 'waiting_user':
-      return 'waiting_user';
-    case 'failed':
-    case 'timed_out':
-      return 'failed';
-    case 'canceled':
-      return 'canceled';
-    case 'success':
-      return 'success';
-    default:
-      flowerContractError(`thread.run_status is unsupported: ${trim(raw) || '<empty>'}.`);
-  }
-}
-
-function blockText(block: MessageBlock): string {
-  switch (block.type) {
-    case 'text':
-    case 'markdown':
-    case 'code':
-    case 'svg':
-    case 'mermaid':
-      return trim(block.content);
-    case 'code-diff':
-      return [block.oldCode, block.newCode].map(trim).filter(Boolean).join('\n\n');
-    case 'shell':
-      return [block.command, block.output].map(trim).filter(Boolean).join('\n');
-    case 'file':
-      return trim(block.name);
-    case 'checklist':
-      return block.items.map((item) => item.text).map(trim).filter(Boolean).join('\n');
-    case 'todos':
-      return block.todos.map((item) => item.content).map(trim).filter(Boolean).join('\n');
-    case 'sources':
-      return block.sources.map((item) => item.title || item.url).map(trim).filter(Boolean).join('\n');
-    case 'thinking':
-      return '';
-    default:
-      return '';
-  }
-}
-
-function mapActivityTimelineBlock(block: Extract<MessageBlock, { type: 'activity-timeline' }>): FlowerActivityTimelineBlock {
-  const fileActions = normalizeActivityFileActions(block.file_actions, 'activity_timeline.file_actions');
-  return {
-    type: 'activity-timeline',
-    schema_version: block.schema_version,
-    ...(trim(block.run_id) ? { run_id: trim(block.run_id) } : {}),
-    ...(trim(block.thread_id) ? { thread_id: trim(block.thread_id) } : {}),
-    ...(trim(block.turn_id) ? { turn_id: trim(block.turn_id) } : {}),
-    ...(trim(block.trace_id) ? { trace_id: trim(block.trace_id) } : {}),
-    summary: {
-      status: block.summary.status,
-      severity: block.summary.severity,
-      needs_attention: Boolean(block.summary.needs_attention),
-      ...(Array.isArray(block.summary.attention_reasons) && block.summary.attention_reasons.length > 0 ? { attention_reasons: block.summary.attention_reasons } : {}),
-      total_items: Math.max(0, Math.floor(Number(block.summary.total_items ?? block.items.length))),
-      counts: { ...block.summary.counts },
-      ...(positiveInteger(block.summary.duration_ms) ? { duration_ms: positiveInteger(block.summary.duration_ms) } : {}),
-    },
-    items: block.items.map((item) => {
-      const renderer = normalizeActivityRenderer(item.renderer, 'activity_item.renderer');
-      const payload = normalizeActivityPayload(item.payload, 'activity_item.payload', renderer);
-      const chips = normalizeActivityChips(item.chips, 'activity_item.chips');
-      const targetRefs = normalizeActivityTargetRefs(item.target_refs, 'activity_item.target_refs');
-      return {
-        item_id: trim(item.item_id),
-        ...(trim(item.tool_id) ? { tool_id: trim(item.tool_id) } : {}),
-        ...(trim(item.tool_name) ? { tool_name: trim(item.tool_name) } : {}),
-        kind: item.kind,
-        status: item.status,
-        severity: item.severity ?? 'normal',
-        needs_attention: Boolean(item.needs_attention),
-        ...(Array.isArray(item.attention_reasons) && item.attention_reasons.length > 0 ? { attention_reasons: item.attention_reasons } : {}),
-        requires_approval: Boolean(item.requires_approval),
-        ...(item.approval_state ? { approval_state: item.approval_state } : {}),
-        ...(positiveInteger(item.started_at_unix_ms) ? { started_at_unix_ms: positiveInteger(item.started_at_unix_ms) } : {}),
-        ...(positiveInteger(item.ended_at_unix_ms) ? { ended_at_unix_ms: positiveInteger(item.ended_at_unix_ms) } : {}),
-        ...(trim(item.label) ? { label: trim(item.label) } : {}),
-        ...(trim(item.description) ? { description: trim(item.description) } : {}),
-        ...(renderer ? { renderer } : {}),
-        ...(chips && chips.length > 0 ? { chips } : {}),
-        ...(targetRefs && targetRefs.length > 0 ? { target_refs: targetRefs } : {}),
-        ...(payload ? { payload } : {}),
-        ...(item.metadata ? { metadata: Object.fromEntries(Object.entries(item.metadata).map(([key, value]) => [trim(key), trim(value)]).filter(([key, value]) => key && value)) } : {}),
-      };
-    }).filter((item) => item.item_id),
-    ...(fileActions ? { file_actions: fileActions } : {}),
-  };
-}
-
-function mapMessageBlock(block: MessageBlock): FlowerChatMessageBlock | null {
-  switch (block.type) {
-    case 'markdown':
-    case 'text':
-    case 'thinking':
-      return trim(block.content) ? { type: block.type, content: trim(block.content) } : null;
-    case 'activity-timeline':
-      return mapActivityTimelineBlock(block);
-    default: {
-      const content = blockText(block);
-      return content ? { type: 'text', content } : null;
-    }
-  }
-}
-
-function messageText(message: Message): string {
-  return message.blocks.map(blockText).filter(Boolean).join('\n\n');
-}
-
-function mapMessage(message: Message): FlowerChatMessage | null {
-  const id = trim(message.id);
-  const role = trim(message.role).toLowerCase();
-  if (!id || (role !== 'user' && role !== 'assistant' && role !== 'system')) return null;
-  const blocks = message.blocks
-    .map(mapMessageBlock)
-    .filter((block): block is FlowerChatMessageBlock => block !== null);
-  return {
-    id,
-    role,
-    content: messageText(message),
-    status: message.status,
-    created_at_ms: unixMs(message.timestamp, 'message.timestamp'),
-    ...(blocks.length > 0 ? { blocks } : {}),
-  };
-}
-
-function upsertFlowerMessage(messages: readonly FlowerChatMessage[], message: FlowerChatMessage | null): readonly FlowerChatMessage[] {
-  if (!message) return messages;
-  const index = messages.findIndex((item) => trim(item.id) === message.id);
-  if (index < 0) return [...messages, message];
-  const next = messages.slice();
-  next[index] = message;
-  return next;
-}
-
-function mapSnapshotMessage(raw: unknown): FlowerChatMessage | null {
-  if (!raw || typeof raw !== 'object') return null;
-  return mapMessage(raw as Message);
-}
-
-function mapWaitingPrompt(prompt: ThreadWaitingPrompt | undefined): FlowerInputRequest | null {
-  if (!prompt) return null;
-  const promptID = trim(prompt?.prompt_id);
-  const messageID = trim(prompt?.message_id);
-  const toolID = trim(prompt?.tool_id);
-  const toolName = trim(prompt?.tool_name);
-  if (!promptID || !messageID || !toolID || !toolName) {
-    flowerContractError('waiting_prompt requires prompt_id, message_id, tool_id, and tool_name.');
-  }
-  const rawQuestions = prompt.questions ?? [];
-  if (rawQuestions.length === 0) {
-    flowerContractError('waiting_prompt.questions must be a non-empty array.');
-  }
-  const questions = rawQuestions
-    .map((question, questionIndex) => {
-      const id = trim(question.id);
-      const header = trim(question.header);
-      const text = trim(question.question);
-      if (!id || !header || !text) {
-        flowerContractError(`waiting_prompt.questions[${questionIndex}] requires id, header, and question.`);
-      }
-      const responseMode = trim(question.response_mode);
-      if (responseMode !== 'select' && responseMode !== 'write' && responseMode !== 'select_or_write') {
-        flowerContractError(`waiting_prompt.questions[${questionIndex}].response_mode is invalid.`);
-      }
-      const normalizedResponseMode: FlowerInputResponseMode = responseMode;
-      const choices = (question.choices ?? [])
-        .map((choice, choiceIndex) => {
-          const choiceID = trim(choice.choice_id);
-          const label = trim(choice.label);
-          const kind = trim(choice.kind);
-          if (!choiceID || !label || kind !== 'select') {
-            flowerContractError(`waiting_prompt.questions[${questionIndex}].choices[${choiceIndex}] is incomplete.`);
-          }
-          const normalizedKind: 'select' = kind;
-          const actions = (choice.actions ?? [])
-            .map((action, actionIndex) => {
-              const type = trim(action.type);
-              if (!type) {
-                flowerContractError(`waiting_prompt.questions[${questionIndex}].choices[${choiceIndex}].actions[${actionIndex}].type is required.`);
-              }
-              return {
-                type,
-                ...(trim(action.mode) ? { mode: trim(action.mode) } : {}),
-              };
-            })
-            .filter((action): action is NonNullable<typeof action> => action !== null);
-          return {
-            choice_id: choiceID,
-            label,
-            ...(trim(choice.description) ? { description: trim(choice.description) } : {}),
-            kind: normalizedKind,
-            ...(trim(choice.input_placeholder) ? { input_placeholder: trim(choice.input_placeholder) } : {}),
-            ...(actions.length > 0 ? { actions } : {}),
-          };
-        })
-        .filter((choice): choice is NonNullable<typeof choice> => choice !== null);
-      if ((normalizedResponseMode === 'select' || normalizedResponseMode === 'select_or_write') && choices.length === 0) {
-        flowerContractError(`waiting_prompt.questions[${questionIndex}] requires choices for ${normalizedResponseMode}.`);
-      }
-      return {
-        id,
-        header,
-        question: text,
-        ...(question.is_secret !== undefined ? { is_secret: Boolean(question.is_secret) } : {}),
-        response_mode: normalizedResponseMode,
-        ...(question.choices_exhaustive !== undefined ? { choices_exhaustive: Boolean(question.choices_exhaustive) } : {}),
-        ...(trim(question.write_label) ? { write_label: trim(question.write_label) } : {}),
-        ...(trim(question.write_placeholder) ? { write_placeholder: trim(question.write_placeholder) } : {}),
-        ...(choices.length > 0 ? { choices } : {}),
-      };
-    })
-    .filter((question): question is NonNullable<typeof question> => question !== null);
-  return {
-    prompt_id: promptID,
-    message_id: messageID,
-    tool_id: toolID,
-    tool_name: toolName,
-    ...(trim(prompt?.reason_code) ? { reason_code: trim(prompt?.reason_code) } : {}),
-    ...(Array.isArray(prompt?.required_from_user) ? { required_from_user: prompt.required_from_user.map(trim).filter(Boolean) } : {}),
-    ...(Array.isArray(prompt?.evidence_refs) ? { evidence_refs: prompt.evidence_refs.map(trim).filter(Boolean) } : {}),
-    questions,
-    ...(trim(prompt?.public_summary) ? { public_summary: trim(prompt?.public_summary) } : {}),
-    ...(prompt?.contains_secret !== undefined ? { contains_secret: Boolean(prompt.contains_secret) } : {}),
-  };
-}
-
-function mapThread(thread: ThreadView, messages: readonly FlowerChatMessage[], options: EnvLocalFlowerSurfaceAdapterOptions): FlowerThreadSnapshot {
+function envLiveMapperOptions(options: EnvLocalFlowerSurfaceAdapterOptions) {
   const copy = adapterCopy(options);
-  const threadID = trim(thread.thread_id);
-  const title = trim(thread.title) || trim(thread.last_message_preview) || 'Ask Flower';
+  const envID = trim(options.envPublicID) || 'current';
   const envLabel = trim(options.envLabel) || copy.currentEnvironment;
-  const status = runStatus(thread.run_status);
-  const inputRequest = status === 'waiting_user' ? mapWaitingPrompt(thread.waiting_prompt) : null;
-  const errorMessage = trim(thread.run_error);
-  const errorCode = trim(thread.run_error_code);
-  const currentReadStatus = readStatus(thread);
   return {
-    thread_id: threadID,
-    title,
-    model_id: trim(thread.model_id),
-    working_dir: trim(thread.working_dir),
-    ...(Number(thread.pinned_at_unix_ms ?? 0) > 0 ? { pinned_at_ms: Math.floor(Number(thread.pinned_at_unix_ms)) } : {}),
-    home_runtime_id: `env:${trim(options.envPublicID) || 'current'}`,
-    home_runtime_kind: 'env_local',
-    origin_env_public_id: trim(options.envPublicID) || undefined,
-    created_at_ms: unixMs(thread.created_at_unix_ms, 'thread.created_at_unix_ms'),
-    updated_at_ms: unixMs(thread.updated_at_unix_ms ?? thread.last_message_at_unix_ms, 'thread.updated_at_unix_ms'),
-    status,
-    source_label: envLabel,
-    target_labels: [envLabel],
-    messages,
-    ...(inputRequest ? { input_request: inputRequest } : {}),
-    ...(errorMessage ? { error: { message: errorMessage, ...(errorCode ? { code: errorCode } : {}) } } : {}),
-    read_status: currentReadStatus,
+    runtimeID: `env:${envID}`,
+    runtimeKind: 'env_local' as const,
+    sourceLabel: envLabel,
+    targetLabels: [envLabel],
+    originEnvPublicID: envID,
   };
+}
+
+function mapEnvFlowerLiveSnapshot(raw: unknown, options: EnvLocalFlowerSurfaceAdapterOptions): FlowerThreadLiveSnapshot {
+  return mapFlowerLiveSnapshot(raw, envLiveMapperOptions(options));
 }
 
 function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDecision {
@@ -1117,58 +310,45 @@ function isContextActionEnvelope(value: unknown): value is ContextActionEnvelope
 }
 
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
-  const loadThread = async (threadID: string): Promise<FlowerThreadSnapshot> => {
-    const copy = adapterCopy(options);
-    const tid = trim(threadID);
-    if (!tid) throw new Error(copy.missingThreadID);
-    const [threadResp, messagesResp, activeSnapshotResp] = await Promise.all([
-      fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'GET' }),
-      options.rpc.ai.listMessages({ threadId: tid, tail: true, limit: 200 }),
-      options.rpc.ai.getActiveRunSnapshot({ threadId: tid }),
-    ]);
-    const rawMessages = (messagesResp.messages ?? [])
-      .map((item) => item.messageJson as Message)
-      .filter((item): item is Message => Boolean(item && typeof item === 'object'));
-    const transcriptMessages = rawMessages
-      .map(mapMessage)
-      .filter((item): item is FlowerChatMessage => item !== null);
-    const messages = upsertFlowerMessage(transcriptMessages, mapSnapshotMessage(activeSnapshotResp.messageJson));
-    if (!threadResp.thread) flowerContractError('thread is required.');
-    return mapThread(threadResp.thread, messages, options);
-  };
+  const copy = adapterCopy(options);
+  const loadThread = async (threadID: string) => mapEnvFlowerLiveSnapshot(
+    await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(trim(threadID))}/live`, { method: 'GET' }),
+    options,
+  );
 
-  const markThreadRead = async (threadID: string, snapshot: FlowerThreadActivitySnapshot): Promise<FlowerThreadSnapshot> => {
-    const copy = adapterCopy(options);
-    const tid = trim(threadID);
-    if (!tid) throw new Error(copy.missingThreadID);
-    const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, { method: 'GET' });
-    const thread = threadResp.thread;
-    if (!thread) flowerContractError('thread is required.');
-    readStatus(thread);
-    const out = await fetchGatewayJSON<MarkThreadReadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/read`, {
-      method: 'POST',
-      body: JSON.stringify({
-        snapshot: {
-          activity_revision: Math.floor(Number(snapshot.activity_revision)),
-          last_message_at_unix_ms: Math.floor(Number(snapshot.last_message_at_unix_ms)),
-          activity_signature: trim(snapshot.activity_signature),
-          waiting_prompt_id: trim(snapshot.waiting_prompt_id) || undefined,
-        },
-      }),
-    });
-    const nextReadStatus = out.read_status;
-    readStatus({ ...thread, read_status: nextReadStatus });
-    return loadThread(tid);
-  };
-
-  return {
+  return createRuntimeFlowerSurfaceAdapter({
     runtime: {
       runtime_id: `env:${trim(options.envPublicID) || 'current'}`,
       runtime_kind: 'env_local',
       carrier_kind: 'runtime',
-      display_name: trim(options.envLabel) || adapterCopy(options).currentEnvironment,
-      subtitle: adapterCopy(options).environmentLocalSubtitle,
+      display_name: trim(options.envLabel) || copy.currentEnvironment,
+      subtitle: copy.environmentLocalSubtitle,
     },
+    transport: {
+      listThreads: () => fetchGatewayJSON('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' }),
+      loadThread: (threadID) => fetchGatewayJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live`, { method: 'GET' }),
+      listThreadLiveUpdates: (threadID, afterSeq, limit) => fetchGatewayJSON(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/updates?after_seq=${afterSeq}&limit=${limit}`,
+        { method: 'GET' },
+      ),
+      markThreadRead: (threadID, body) => fetchGatewayJSON<MarkThreadReadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/read`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+      patchThread: (threadID, body) => fetchGatewayJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(body),
+      }),
+      forkThread: (threadID) => fetchGatewayJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }),
+      submitApproval: (body) => fetchGatewayJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+    },
+    mapperOptions: envLiveMapperOptions(options),
     loadSettings: loadSettingsSnapshot,
     saveSettings: async (draft) => {
       const providerAPIKeyPatches: FlowerSecretPatch[] = draft.config.providers.flatMap((provider): FlowerSecretPatch[] => {
@@ -1196,43 +376,6 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         }),
       });
       return loadSettingsSnapshot();
-    },
-    listThreads: async () => {
-      const result = await fetchGatewayJSON<ListThreadsResponse>('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' });
-      return (result.threads ?? []).map((thread) => mapThread(thread, [], options));
-    },
-    loadThread,
-    markThreadRead,
-    renameThread: async (threadID, title) => {
-      const tid = trim(threadID);
-      if (!tid) throw new Error(adapterCopy(options).missingThreadID);
-      const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ title }),
-      });
-      const current = await loadThread(trim(threadResp.thread?.thread_id) || tid);
-      return current;
-    },
-    setThreadPinned: async (threadID, pinned) => {
-      const tid = trim(threadID);
-      if (!tid) throw new Error(adapterCopy(options).missingThreadID);
-      const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ pinned }),
-      });
-      const current = await loadThread(trim(threadResp.thread?.thread_id) || tid);
-      return current;
-    },
-    forkThread: async (threadID) => {
-      const tid = trim(threadID);
-      if (!tid) throw new Error(adapterCopy(options).missingThreadID);
-      const threadResp = await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/fork`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-      const nextID = trim(threadResp.thread?.thread_id);
-      if (!nextID) throw new Error(adapterCopy(options).failedToCreateChat);
-      return loadThread(nextID);
     },
     resolveHandler: async () => decision(options),
     sendMessage: async (input: FlowerSendMessageInput) => {
@@ -1300,7 +443,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       });
       return loadThread(tid);
     },
+    missingThreadID: copy.missingThreadID,
+    failedToCreateThread: copy.failedToCreateChat,
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
-  };
+  });
 }

@@ -189,7 +189,6 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		Config:       floretCfg,
 		ModelGateway: flProvider,
 		Tools:        flTools,
-		Approver:     redevenFloretToolApprover,
 		Sink:         floretEventSink{run: r},
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,

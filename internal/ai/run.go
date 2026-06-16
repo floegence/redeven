@@ -126,7 +126,7 @@ type run struct {
 	stream        *ndjsonStream
 
 	mu              sync.Mutex
-	toolApprovals   map[string]chan bool // tool_id -> decision channel
+	toolApprovals   map[string]*toolApprovalRequest
 	waitingApproval bool
 
 	muLifecycle         sync.Mutex
@@ -181,6 +181,14 @@ type assistantAnswerState struct {
 	CanonicalMarkdown string
 }
 
+type toolApprovalRequest struct {
+	decision      chan bool
+	toolName      string
+	requestedAtMs int64
+	expiresAtMs   int64
+	resolved      bool
+}
+
 func newRun(opts runOptions) *run {
 	var runMeta *session.Meta
 	if opts.SessionMeta != nil {
@@ -224,7 +232,7 @@ func newRun(opts runOptions) *run {
 		persistOpTimeout:          opts.PersistOpTimeout,
 		onStreamEvent:             opts.OnStreamEvent,
 		w:                         opts.Writer,
-		toolApprovals:             make(map[string]chan bool),
+		toolApprovals:             make(map[string]*toolApprovalRequest),
 		maxWallTime:               opts.MaxWallTime,
 		idleTimeout:               opts.IdleTimeout,
 		toolApprovalTO:            opts.ToolApprovalTimeout,
@@ -976,18 +984,23 @@ func (r *run) approveTool(toolID string, approved bool) error {
 	}
 
 	r.mu.Lock()
-	ch := r.toolApprovals[toolID]
-	r.mu.Unlock()
-	if ch == nil {
+	approval := r.toolApprovals[toolID]
+	if approval == nil || approval.decision == nil {
+		r.mu.Unlock()
 		return errors.New("tool not pending approval")
 	}
-
+	if approval.resolved {
+		r.mu.Unlock()
+		return ErrRunChanged
+	}
 	select {
-	case ch <- approved:
+	case approval.decision <- approved:
+		approval.resolved = true
+		r.mu.Unlock()
 		return nil
 	default:
-		// already decided
-		return nil
+		r.mu.Unlock()
+		return ErrRunChanged
 	}
 }
 
@@ -1744,6 +1757,99 @@ func (r *run) persistToolCallSnapshot(toolID string, toolName string, status str
 	r.persistToolCall(rec)
 }
 
+func toolStartActivityPresentation(toolName string, args map[string]any, timeout terminalExecTimeoutDecision) *observation.ActivityPresentation {
+	toolName = strings.TrimSpace(toolName)
+	switch toolName {
+	case "terminal.exec":
+		command := strings.TrimSpace(anyToString(args["command"]))
+		if command == "" {
+			command = "terminal.exec"
+		}
+		payload := map[string]any{
+			"command": command,
+			"status":  toolCallStatusRunning,
+		}
+		if timeout.EffectiveMS > 0 {
+			payload["timeout_ms"] = timeout.EffectiveMS
+		}
+		if timeout.RequestedMS > 0 {
+			payload["requested_timeout_ms"] = timeout.RequestedMS
+		}
+		if source := strings.TrimSpace(timeout.Source); source != "" {
+			payload["timeout_source"] = source
+		}
+		return &observation.ActivityPresentation{
+			Label:       truncateRunes(command, 200),
+			Description: "Running command",
+			Renderer:    observation.ActivityRendererTerminal,
+			Payload:     payload,
+		}
+	default:
+		if toolName == "" {
+			toolName = "tool"
+		}
+		return &observation.ActivityPresentation{
+			Label:       truncateRunes(toolName, 200),
+			Description: "Running tool",
+			Renderer:    observation.ActivityRendererStructured,
+			Payload: map[string]any{
+				"status": toolCallStatusRunning,
+			},
+		}
+	}
+}
+
+func toolResultStatusForError(toolErr *aitools.ToolError) string {
+	if toolErr == nil {
+		return toolResultStatusError
+	}
+	toolErr.Normalize()
+	switch toolErr.Code {
+	case aitools.ErrorCodeTimeout:
+		return toolResultStatusTimeout
+	case aitools.ErrorCodeCanceled:
+		return toolResultStatusAborted
+	default:
+		return toolResultStatusError
+	}
+}
+
+func (r *run) recordToolResultActivity(toolID string, toolName string, status string, result any, toolErr *aitools.ToolError, observedAt time.Time) {
+	if r == nil {
+		return
+	}
+	if observedAt.IsZero() {
+		observedAt = time.Now()
+	}
+	toolResult := ToolResult{
+		ToolID:   strings.TrimSpace(toolID),
+		ToolName: strings.TrimSpace(toolName),
+		Status:   strings.TrimSpace(status),
+		Data:     result,
+		Error:    toolErr,
+	}
+	if toolResult.Status == "" {
+		toolResult.Status = toolResultStatusSuccess
+	}
+	if toolErr != nil {
+		toolErr.Normalize()
+		if toolResult.Status == toolResultStatusSuccess {
+			toolResult.Status = toolResultStatusForError(toolErr)
+		}
+		toolResult.Summary = string(toolErr.Code)
+		toolResult.Details = toolErr.Message
+	}
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolResult,
+		ToolID:     toolResult.ToolID,
+		ToolName:   toolResult.ToolName,
+		ToolKind:   "local",
+		Error:      strings.TrimSpace(toolResult.Details),
+		Activity:   floretActivityForToolResult(r, toolResult),
+		ObservedAt: observedAt,
+	})
+}
+
 func (r *run) persistSyntheticToolSuccess(toolID string, toolName string, args map[string]any, result any) string {
 	if r == nil {
 		return strings.TrimSpace(toolID)
@@ -1985,12 +2091,14 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		if toolName == "terminal.exec" && errorResult == nil {
 			errorResult = terminalExecResultMeta
 		}
-		r.persistToolCallSnapshot(toolID, toolName, toolCallStatusError, argsForPersist, errorResult, toolErr, recoveryAction, toolStartedAt, time.Now())
+		errorAt := time.Now()
+		r.persistToolCallSnapshot(toolID, toolName, toolCallStatusError, argsForPersist, errorResult, toolErr, recoveryAction, toolStartedAt, errorAt)
 		r.persistRunEvent("tool.error", RealtimeStreamKindTool, map[string]any{
 			"tool_id":   toolID,
 			"tool_name": toolName,
 			"error":     toolErr,
 		})
+		r.recordToolResultActivity(toolID, toolName, toolResultStatusForError(toolErr), errorResult, toolErr, errorAt)
 		errPayload := map[string]any{
 			"tool_id":         toolID,
 			"tool_name":       toolName,
@@ -2089,8 +2197,18 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 
 	if requireApprovalForInvocation {
 		ch := make(chan bool, 1)
+		requestedAt := time.Now().UnixMilli()
+		expiresAt := int64(0)
+		if r.toolApprovalTO > 0 {
+			expiresAt = requestedAt + r.toolApprovalTO.Milliseconds()
+		}
 		r.mu.Lock()
-		r.toolApprovals[toolID] = ch
+		r.toolApprovals[toolID] = &toolApprovalRequest{
+			decision:      ch,
+			toolName:      toolName,
+			requestedAtMs: requestedAt,
+			expiresAtMs:   expiresAt,
+		}
 		r.waitingApproval = true
 		r.mu.Unlock()
 		r.recordObservationActivityEvent(observation.Event{
@@ -2197,6 +2315,20 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		persistResult = terminalExecResultMeta
 	}
 	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusRunning, argsForPersist, persistResult, nil, "", toolStartedAt, time.Now())
+	toolExecutionStartedAt := time.Now()
+	argsHashBytes := sha256.Sum256([]byte(marshalPersistJSON(argsForPersist, 0)))
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolCall,
+		ToolID:     toolID,
+		ToolName:   toolName,
+		ToolKind:   "local",
+		ArgsHash:   hex.EncodeToString(argsHashBytes[:]),
+		Activity:   toolStartActivityPresentation(toolName, argsForPersist, terminalTimeoutDecision),
+		ObservedAt: toolExecutionStartedAt,
+		Metadata: map[string]any{
+			"effects": commandEffects,
+		},
+	})
 
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
@@ -2229,12 +2361,14 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			r.recordWebSearchSources(parsed)
 		}
 	}
-	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusSuccess, argsForPersist, result, nil, "", toolStartedAt, time.Now())
+	resultAt := time.Now()
+	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusSuccess, argsForPersist, result, nil, "", toolStartedAt, resultAt)
 	r.persistRunEvent("tool.result", RealtimeStreamKindTool, map[string]any{
 		"tool_id":   toolID,
 		"tool_name": toolName,
 		"status":    "success",
 	})
+	r.recordToolResultActivity(toolID, toolName, toolResultStatusSuccess, result, nil, resultAt)
 	successPayload := map[string]any{
 		"tool_id":   toolID,
 		"tool_name": toolName,

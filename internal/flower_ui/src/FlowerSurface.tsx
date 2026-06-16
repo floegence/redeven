@@ -9,6 +9,7 @@ import { FlowerEmptyState } from './chat/FlowerEmptyState';
 import type { FlowerSurfaceCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
 import type {
+  FlowerApprovalAction,
   FlowerActivityItem,
   FlowerActivityTimelineBlock,
   FlowerInputAnswer,
@@ -27,6 +28,8 @@ import type {
   FlowerThreadSnapshot,
   FlowerChatMessage,
   FlowerActivityStatus,
+  FlowerThreadLiveSnapshot,
+  FlowerActivityApprovalState,
 } from './contracts/flowerSurfaceContracts';
 import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import {
@@ -49,6 +52,7 @@ import { FlowerIcon } from './icons/FlowerIcon';
 import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
+import { applyFlowerLiveUpdate, projectFlowerLiveSnapshot } from './flowerLiveReducer';
 
 type FlowerSurfacePanel = 'chat' | 'settings';
 type FlowerInputDraft = Readonly<{
@@ -68,6 +72,7 @@ type FlowerHandlerResolutionState =
   | Readonly<{ status: 'ready'; decision: FlowerRouterDecision }>
   | Readonly<{ status: 'blocked'; decision: FlowerRouterDecision; message: string }>
   | Readonly<{ status: 'failed'; decision: FlowerRouterDecision | null; message: string }>;
+type FlowerApprovalSubmittingState = 'approve' | 'reject';
 
 const THREAD_RAIL_WIDTH_STORAGE_KEY = 'redeven.flower.threadRailWidth';
 const THREAD_RAIL_WIDTH_DEFAULT = 272;
@@ -82,6 +87,10 @@ export {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function approvalStateLabel(state: FlowerActivityApprovalState | undefined, surfaceCopy: FlowerSurfaceCopy): string {
+  return surfaceCopy.chat.toolApprovalStates[state ?? 'requested'] ?? surfaceCopy.chat.toolApprovalStates.requested;
 }
 
 function clampThreadRailWidth(width: number): number {
@@ -138,6 +147,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
   const [threadRailResizing, setThreadRailResizing] = createSignal(false);
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
+  const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
   let threadLoadSequence = 0;
   let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
@@ -151,13 +161,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let renameRestoreRef: HTMLElement | undefined;
   let transcriptNearBottom = true;
   let backgroundThreadsRefreshInFlight = false;
-  let selectedThreadRefreshInFlight = false;
+  let selectedThreadLiveUpdateInFlight: Readonly<{ threadID: string; token: number }> | null = null;
+  let selectedThreadLiveUpdateToken = 0;
   const locallyReadSnapshots = new Map<string, string>();
   const persistingReadThreadIDs = new Set<string>();
   const pendingReadPersistenceSnapshots = new Map<string, FlowerThreadActivitySnapshot>();
+  const liveCursors = new Map<string, number>();
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
-  const selectedThreadRunning = createMemo(() => selectedThread()?.status === 'running');
   const visibleInputRequest = (thread: FlowerThreadSnapshot | null | undefined): FlowerInputRequest | null => (
     thread?.status === 'waiting_user' ? thread.input_request ?? null : null
   );
@@ -167,7 +178,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!thread) return false;
     return thread.messages.length > 0
       || !!visibleInputRequest(thread)
+      || (thread.approval_actions?.length ?? 0) > 0
       || trimString(thread.error?.message) !== '';
+  });
+  const selectedApprovalActions = createMemo(() => (
+    selectedThread()?.approval_actions?.filter((action) => action.status === 'pending' && action.state === 'requested') ?? []
+  ));
+  const selectedApprovalActionsByToolID = createMemo(() => {
+    const out = new Map<string, readonly FlowerApprovalAction[]>();
+    for (const action of selectedApprovalActions()) {
+      const toolID = trimString(action.tool_id);
+      if (!toolID) continue;
+      out.set(toolID, [...(out.get(toolID) ?? []), action]);
+    }
+    return out;
   });
   const pendingTurnForSelectedThread = createMemo(() => {
     const pending = pendingTurn();
@@ -254,6 +278,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     thread.read_status.read_state.last_seen_activity_signature,
     trimString(thread.read_status.read_state.last_seen_waiting_prompt_id),
     thread.messages.map(flowerMessageSignature).join('\x1d'),
+    thread.approval_actions?.map((action) => [
+      action.action_id,
+      action.run_id,
+      action.tool_id,
+      action.state,
+      action.status,
+      action.can_approve ? 'approve' : '',
+      action.expected_seq ?? '',
+      action.summary.label,
+      action.summary.description ?? '',
+      action.summary.effects?.join(',') ?? '',
+      action.summary.flags?.join(',') ?? '',
+      action.summary.targets?.map((target) => `${target.kind}:${target.label}:${target.uri ?? ''}`).join(',') ?? '',
+    ].join('\x1e')).join('\x1d') ?? '',
     thread.input_request
       ? [
           thread.input_request.prompt_id,
@@ -368,6 +406,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const current = snapshot();
     return current ? formatFlowerCurrentModelLabel(current.config, copy().chat.noModelSelected) : copy().chat.noModelSelected;
   });
+  const selectedThreadModelLabel = createMemo(() => {
+    const threadModelID = trimString(selectedThread()?.model_id);
+    if (!threadModelID) return currentModelLabel();
+    const current = snapshot();
+    if (!current) return threadModelID;
+    return formatFlowerCurrentModelLabel({ ...current.config, current_model_id: threadModelID }, copy().chat.noModelSelected);
+  });
   const activeProviderSecrets = createMemo(() => {
     const provider = activeProvider();
     if (!provider) return null;
@@ -454,6 +499,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return next;
     });
   };
+  const applyLiveSnapshot = (live: FlowerThreadLiveSnapshot): FlowerThreadSnapshot => {
+    const thread = projectFlowerLiveSnapshot(live);
+    liveCursors.set(thread.thread_id, Math.max(0, Math.floor(Number(live.event_cursor ?? 0))));
+    upsertThread(thread);
+    return thread;
+  };
+  const reloadSelectedThread = async (threadID: string, sequence = threadLoadSequence): Promise<FlowerThreadSnapshot | null> => {
+    const tid = trimString(threadID);
+    if (!tid) return null;
+    const live = await props.adapter.loadThread(tid);
+    const thread = applyLiveSnapshot(live);
+    if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return thread;
+    clearPendingTurnIfThreadCaughtUp(thread);
+    if (thread.read_status.is_unread) {
+      persistThreadRead(tid, thread.read_status.snapshot, sequence);
+    }
+    setThreadLoadError('');
+    return thread;
+  };
 
   const markThreadReadLocally = (threadID: string, snapshot: FlowerThreadActivitySnapshot) => {
     const tid = trimString(threadID);
@@ -482,8 +546,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     persistingReadThreadIDs.add(tid);
     void props.adapter.markThreadRead(tid, snapshot)
-      .then((thread) => {
+      .then((live) => {
         if (sequence === threadLoadSequence && selectedThreadID() === tid) {
+          const thread = projectFlowerLiveSnapshot(live);
+          liveCursors.set(thread.thread_id, Math.max(0, Math.floor(Number(live.event_cursor ?? 0))));
           upsertThread(thread);
         }
         clearLocalReadVisibility(tid);
@@ -537,8 +603,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setThreadActionError('');
     setRenameError('');
     try {
-      const thread = await props.adapter.renameThread(threadID, renameDraft());
-      upsertThread(thread);
+      applyLiveSnapshot(await props.adapter.renameThread(threadID, renameDraft()));
       setRenameThreadID('');
       setRenameDraft('');
       renameRestoreRef?.focus();
@@ -588,14 +653,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         case 'pin':
           if (!props.adapter.setThreadPinned) return;
           setThreadActionBusy({ threadID: item.thread_id, action });
-          upsertThread(await props.adapter.setThreadPinned(item.thread_id, !item.pinned));
+          applyLiveSnapshot(await props.adapter.setThreadPinned(item.thread_id, !item.pinned));
           return;
         case 'fork':
           if (!props.adapter.forkThread) return;
           setThreadActionBusy({ threadID: item.thread_id, action });
           {
-            const forked = await props.adapter.forkThread(item.thread_id);
-            upsertThread(forked);
+            const forked = applyLiveSnapshot(await props.adapter.forkThread(item.thread_id));
             await loadAndSelectThread(forked.thread_id);
           }
           return;
@@ -690,14 +754,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (existing?.read_status.is_unread) {
       persistThreadRead(tid, existing.read_status.snapshot, sequence);
     }
-    if (!props.adapter.loadThread) {
-      return;
-    }
     setLoadingThreadID(tid);
     try {
-      const thread = await props.adapter.loadThread(tid);
+      const thread = applyLiveSnapshot(await props.adapter.loadThread(tid));
       if (sequence !== threadLoadSequence) return;
-      upsertThread(thread);
       clearPendingTurnIfThreadCaughtUp(thread);
       if (thread.read_status.is_unread) {
         persistThreadRead(tid, thread.read_status.snapshot, sequence);
@@ -713,20 +773,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const refreshSelectedThread = async (threadID: string) => {
     const tid = trimString(threadID);
-    if (!tid || !props.adapter.loadThread) return;
-    const sequence = threadLoadSequence;
     try {
-      const thread = await props.adapter.loadThread(tid);
-      if (selectedThreadID() !== thread.thread_id) return;
-      if (thread.read_status.is_unread) {
-        markThreadReadLocally(tid, thread.read_status.snapshot);
-      }
-      upsertThread(thread);
-      clearPendingTurnIfThreadCaughtUp(thread);
-      if (thread.read_status.is_unread) {
-        persistThreadRead(tid, thread.read_status.snapshot, sequence);
-      }
-      setThreadLoadError('');
+      await reloadSelectedThread(tid);
     } catch (error) {
       setThreadLoadError(getErrorMessage(error));
     }
@@ -762,7 +810,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
       if (
         selectedID
-        && props.adapter.loadThread
         && previousSelected
         && selectedSummary
         && (previousSelected.updated_at_ms !== selectedSummary.updated_at_ms || previousSelected.status !== selectedSummary.status)
@@ -849,23 +896,84 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   });
 
+  const applySelectedThreadLiveUpdates = async (threadID: string, sequence: number) => {
+    const tid = trimString(threadID);
+    if (!tid || selectedThreadLiveUpdateInFlight) return;
+    const token = selectedThreadLiveUpdateToken + 1;
+    selectedThreadLiveUpdateToken = token;
+    selectedThreadLiveUpdateInFlight = { threadID: tid, token };
+    try {
+      let cursor = Math.max(0, Math.floor(Number(liveCursors.get(tid) ?? 0)));
+      let keepGoing = true;
+      while (keepGoing && sequence === threadLoadSequence && selectedThreadID() === tid) {
+        keepGoing = false;
+        const response = await props.adapter.listThreadLiveUpdates(tid, cursor, 100);
+        let resyncRequired = false;
+        for (const update of response.updates) {
+          if (update.thread_id !== tid) continue;
+          if (update.kind === 'resync.required') {
+            cursor = Math.max(cursor, update.seq);
+            resyncRequired = true;
+            continue;
+          }
+          const current = threads().find((thread) => thread.thread_id === tid);
+          if (!current) {
+            resyncRequired = true;
+            continue;
+          }
+          const result = applyFlowerLiveUpdate(current, cursor, update);
+          cursor = result.cursor;
+          if (result.resyncRequired) {
+            resyncRequired = true;
+            continue;
+          }
+          upsertThread(result.thread);
+          clearPendingTurnIfThreadCaughtUp(result.thread);
+          if (result.thread.read_status.is_unread) {
+            markThreadReadLocally(tid, result.thread.read_status.snapshot);
+            persistThreadRead(tid, result.thread.read_status.snapshot, sequence);
+          }
+        }
+        cursor = Math.max(cursor, Math.floor(Number(response.next_cursor ?? 0)));
+        liveCursors.set(tid, cursor);
+        if (resyncRequired) {
+          await reloadSelectedThread(tid, sequence);
+          return;
+        }
+        keepGoing = response.has_more === true;
+      }
+      setThreadLoadError('');
+    } catch (error) {
+      if (sequence === threadLoadSequence && selectedThreadID() === tid) {
+        setThreadLoadError(getErrorMessage(error));
+      }
+    } finally {
+      const active = selectedThreadLiveUpdateInFlight;
+      if (active?.threadID === tid && active.token === token) {
+        selectedThreadLiveUpdateInFlight = null;
+      }
+    }
+  };
+
   createEffect(() => {
     const threadID = selectedThreadID();
-    if (!threadID || !selectedThreadRunning()) {
+    const thread = selectedThread();
+    if (!threadID || !thread || (thread.status !== 'running' && thread.status !== 'waiting_approval' && thread.status !== 'waiting_user')) {
       return;
     }
+    const sequence = threadLoadSequence;
     const tick = () => {
-      if (selectedThreadRefreshInFlight) return;
-      selectedThreadRefreshInFlight = true;
-      void refreshSelectedThread(threadID).finally(() => {
-        selectedThreadRefreshInFlight = false;
-      });
+      void applySelectedThreadLiveUpdates(threadID, sequence);
     };
-    const timer = window.setInterval(() => {
-      tick();
-    }, 1200);
+    const timer = window.setInterval(tick, 350);
     tick();
-    onCleanup(() => window.clearInterval(timer));
+    onCleanup(() => {
+      window.clearInterval(timer);
+      const active = selectedThreadLiveUpdateInFlight;
+      if (active?.threadID === threadID) {
+        selectedThreadLiveUpdateInFlight = null;
+      }
+    });
   });
 
   createEffect(() => {
@@ -994,13 +1102,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ? { context_action: activeDraftIntent()?.context_action }
           : {}),
       });
-      upsertThread(thread);
-      setSelectedThreadID(thread.thread_id);
-      settlePendingTurnForAcceptedThread(thread, pending);
+      const acceptedThread = applyLiveSnapshot(thread);
+      setSelectedThreadID(acceptedThread.thread_id);
+      settlePendingTurnForAcceptedThread(acceptedThread, pending);
       setLoadError('');
       setActiveDraftIntent(null);
       returnToChat();
-      await refreshSelectedThread(thread.thread_id);
+      await refreshSelectedThread(acceptedThread.thread_id);
     } catch (error) {
       const failure = error as FlowerSendMessageFailure;
       if (failure.fresh_decision) {
@@ -1370,16 +1478,44 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         prompt_id: request.prompt_id,
         answers,
       });
-      upsertThread(next);
-      setSelectedThreadID(next.thread_id);
+      const nextThread = applyLiveSnapshot(next);
+      setSelectedThreadID(nextThread.thread_id);
       setInputDrafts({});
       setActiveInputQuestionID('');
       setInputSubmitError('');
-      await refreshSelectedThread(next.thread_id);
+      await refreshSelectedThread(nextThread.thread_id);
     } catch (error) {
       setInputSubmitError(getErrorMessage(error));
     } finally {
       setInputSubmitting(false);
+    }
+  };
+
+  const submitApprovalAction = async (action: FlowerApprovalAction, approved: boolean) => {
+    const thread = selectedThread();
+    if (!thread || approvalSubmitting()[action.action_id]) return;
+    setThreadActionError('');
+    setApprovalSubmitting((current) => ({ ...current, [action.action_id]: approved ? 'approve' : 'reject' }));
+    try {
+      await props.adapter.submitApproval({
+        thread_id: thread.thread_id,
+        run_id: action.run_id,
+        action_id: action.action_id,
+        tool_id: action.tool_id,
+        approved,
+        ...(action.expected_seq ? { expected_seq: action.expected_seq } : {}),
+        ...(action.revision ? { revision: action.revision } : {}),
+      });
+      await reloadSelectedThread(thread.thread_id);
+    } catch (error) {
+      setThreadActionError(getErrorMessage(error));
+      await reloadSelectedThread(thread.thread_id);
+    } finally {
+      setApprovalSubmitting((current) => {
+        const next = { ...current };
+        delete next[action.action_id];
+        return next;
+      });
     }
   };
 
@@ -1463,6 +1599,60 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       )}
     </Show>
   );
+
+  const approvalActionCard = (action: FlowerApprovalAction) => {
+    const busy = createMemo<FlowerApprovalSubmittingState | undefined>(() => approvalSubmitting()[action.action_id]);
+    const disabled = createMemo(() => busy() !== undefined || !action.can_approve);
+    return (
+      <section class="flower-approval-card" data-flower-approval-action-id={action.action_id}>
+        <div class="flower-approval-heading">
+          <div class="flower-approval-icon"><Terminal class="h-4 w-4" /></div>
+          <div class="flower-approval-copy">
+            <div class="flower-approval-kicker">{copy().chat.toolApprovalRequired}</div>
+            <div class="flower-approval-title">{action.summary.label || action.tool_name}</div>
+            <Show when={action.summary.description || action.read_only_reason}>
+              {(description) => <div class="flower-approval-description">{description()}</div>}
+            </Show>
+          </div>
+        </div>
+        <Show when={(action.summary.effects?.length ?? 0) > 0 || (action.summary.targets?.length ?? 0) > 0 || (action.summary.flags?.length ?? 0) > 0}>
+          <div class="flower-approval-meta">
+            <For each={action.summary.effects ?? []}>
+              {(effect) => <span class="flower-approval-chip">{effect}</span>}
+            </For>
+            <For each={action.summary.targets ?? []}>
+              {(target) => <span class="flower-approval-chip">{target.label}</span>}
+            </For>
+            <For each={action.summary.flags ?? []}>
+              {(flag) => <span class="flower-approval-chip flower-approval-chip-warning">{flag}</span>}
+            </For>
+          </div>
+        </Show>
+        <div class="flower-approval-actions">
+          <Show when={action.can_approve} fallback={<div class="flower-approval-unavailable">{action.read_only_reason || copy().chat.toolApprovalUnavailable}</div>}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={disabled()}
+              loading={busy() === 'reject'}
+              onClick={() => void submitApprovalAction(action, false)}
+            >
+              {busy() === 'reject' ? copy().chat.toolApprovalSubmitting : copy().chat.toolApprovalReject}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={disabled()}
+              loading={busy() === 'approve'}
+              onClick={() => void submitApprovalAction(action, true)}
+            >
+              {busy() === 'approve' ? copy().chat.toolApprovalSubmitting : copy().chat.toolApprovalApprove}
+            </Button>
+          </Show>
+        </div>
+      </section>
+    );
+  };
 
   const statusIcon = (status: FlowerActivityStatus) => {
     switch (status) {
@@ -1561,7 +1751,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       presentFlowerActivityItem(item, timeline.file_actions).label,
       item.tool_name,
       copy().chat.toolStatuses[item.status],
-      item.requires_approval ? copy().chat.toolApprovalState(trimString(item.approval_state) || 'requested') : '',
+      item.requires_approval ? copy().chat.toolApprovalState(approvalStateLabel(item.approval_state, copy())) : '',
     ].filter(Boolean).join('. ')
   );
 
@@ -1770,6 +1960,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const title = presentation().title;
       return title.kind === 'file' ? disabledFileAction(title.display_name) : null;
     });
+    const matchingApprovals = createMemo(() => selectedApprovalActionsByToolID().get(trimString(item.tool_id)) ?? []);
     const duration = createMemo(() => {
       const ownDuration = item.started_at_unix_ms && item.ended_at_unix_ms
         ? item.ended_at_unix_ms - item.started_at_unix_ms
@@ -1813,6 +2004,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-activity-inline-details">
             <For each={presentation().detailBlocks}>
               {(block) => activityDetailBlock(messageID, blockIndex, item.item_id, block)}
+            </For>
+            <For each={matchingApprovals()}>
+              {(action) => approvalActionCard(action)}
+            </For>
+          </div>
+        </Show>
+        <Show when={!open() && matchingApprovals().length > 0}>
+          <div class="flower-activity-inline-approval">
+            <For each={matchingApprovals()}>
+              {(action) => approvalActionCard(action)}
             </For>
           </div>
         </Show>
@@ -2061,7 +2262,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     <div class="flower-model-stack" aria-live="polite">
                       <div class="flower-model-selection">
                         <span class="flower-model-selection-label">{copy().chat.modelLabel}</span>
-                        <span class="flower-model-chip">{currentModelLabel()}</span>
+                        <span class="flower-model-chip">{selectedThreadModelLabel()}</span>
                       </div>
                       <Show when={handlerNotice()}>
                         {(notice) => <div role="alert" class="flower-handler-error-card">

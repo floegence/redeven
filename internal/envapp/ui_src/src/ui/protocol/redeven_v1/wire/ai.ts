@@ -132,16 +132,6 @@ export type wire_ai_subscribe_thread_resp = {
   run_id?: string;
 };
 
-export type wire_ai_tool_approval_req = {
-  run_id: string;
-  tool_id: string;
-  approved: boolean;
-};
-
-export type wire_ai_tool_approval_resp = {
-  ok: boolean;
-};
-
 export type wire_ai_event_notify = {
   event_type: 'stream_event' | 'thread_state' | 'transcript_message' | 'transcript_reset' | 'thread_summary';
   endpoint_id: string;
@@ -218,14 +208,4 @@ export type wire_ai_list_messages_resp = {
   messages: wire_ai_transcript_message_item[];
   next_after_row_id?: number;
   has_more?: boolean;
-};
-
-export type wire_ai_get_active_run_snapshot_req = {
-  thread_id: string;
-};
-
-export type wire_ai_get_active_run_snapshot_resp = {
-  ok: boolean;
-  run_id?: string;
-  message_json?: any;
 };

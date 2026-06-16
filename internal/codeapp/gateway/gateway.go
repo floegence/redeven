@@ -3669,6 +3669,69 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 
+		case action == "live" && r.Method == http.MethodGet && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			snapshot, err := g.ai.GetFlowerThreadLiveSnapshot(r.Context(), meta, threadID)
+			if err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, sql.ErrNoRows) {
+					status = http.StatusNotFound
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			view, err := g.buildAIFlowerLiveSnapshotView(r.Context(), meta, snapshot)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+			return
+
+		case action == "live" && r.Method == http.MethodGet && len(parts) == 3 && strings.TrimSpace(parts[2]) == "updates":
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			afterSeq := int64(0)
+			if raw := strings.TrimSpace(r.URL.Query().Get("after_seq")); raw != "" {
+				v, err := strconv.ParseInt(raw, 10, 64)
+				if err != nil || v < 0 {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_seq"})
+					return
+				}
+				afterSeq = v
+			}
+			limit := 100
+			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
+				if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+					limit = v
+				}
+			}
+			resp, err := g.ai.ListFlowerThreadLiveUpdates(r.Context(), meta, threadID, afterSeq, limit)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			view, err := g.buildAIFlowerLiveUpdatesView(r.Context(), meta, resp)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+			return
+
 		case action == "" && r.Method == http.MethodPatch:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
@@ -3819,6 +3882,60 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
+			return
+
+		case action == "approvals" && r.Method == http.MethodPost && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.SubmitFlowerApprovalRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			bodyThreadID := strings.TrimSpace(body.ThreadID)
+			if bodyThreadID != "" && bodyThreadID != threadID {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "thread id mismatch"})
+				return
+			}
+			body.ThreadID = threadID
+			resp, err := g.ai.SubmitFlowerApproval(meta, body)
+			if err != nil {
+				status := http.StatusBadRequest
+				if errors.Is(err, ai.ErrRunChanged) {
+					status = http.StatusConflict
+				}
+				g.appendAudit(meta, "ai_tool_approval", "failure", map[string]any{
+					"thread_id":    threadID,
+					"run_id":       strings.TrimSpace(body.RunID),
+					"action_id":    strings.TrimSpace(body.ActionID),
+					"tool_id":      strings.TrimSpace(body.ToolID),
+					"approved":     body.Approved,
+					"expected_seq": body.ExpectedSeq,
+				}, err)
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "ai_tool_approval", "success", map[string]any{
+				"thread_id":    threadID,
+				"run_id":       strings.TrimSpace(body.RunID),
+				"action_id":    strings.TrimSpace(body.ActionID),
+				"tool_id":      strings.TrimSpace(body.ToolID),
+				"approved":     body.Approved,
+				"expected_seq": body.ExpectedSeq,
+			}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
@@ -4399,38 +4516,6 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
-			return
-		}
-
-		if r.Method == http.MethodPost && action == "tool_approvals" {
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			var body ai.ToolApprovalRequest
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if strings.TrimSpace(body.ToolID) == "" {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing tool_id"})
-				return
-			}
-			if err := g.ai.ApproveTool(meta, runID, body.ToolID, body.Approved); err != nil {
-				g.appendAudit(meta, "ai_tool_approval", "failure", map[string]any{
-					"run_id":   runID,
-					"tool_id":  strings.TrimSpace(body.ToolID),
-					"approved": body.Approved,
-				}, err)
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			g.appendAudit(meta, "ai_tool_approval", "success", map[string]any{
-				"run_id":   runID,
-				"tool_id":  strings.TrimSpace(body.ToolID),
-				"approved": body.Approved,
-			}, nil)
-			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 		}
 

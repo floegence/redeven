@@ -112,12 +112,6 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 	return registry, nil
 }
 
-// Redeven owns tool authorization in builtInToolHandler; Floret ask-mode only
-// keeps its registry contract explicit without becoming the policy authority.
-func redevenFloretToolApprover(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
-	return fltools.PermissionDecisionAllow, nil
-}
-
 func floretHostLabelsForRun(r *run) map[string]string {
 	return map[string]string{
 		"endpoint_id": strings.TrimSpace(r.endpointID),
@@ -155,15 +149,14 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 		Destructive:  def.Mutating,
 		OpenWorld:    false,
 		ParallelSafe: floretToolParallelSafe(def, effects),
-		Permission:   fltools.PermissionSpec{Mode: fltools.PermissionAsk},
+		Permission:   fltools.PermissionSpec{Mode: fltools.PermissionAllow},
 		Activity: func(inv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
 			args, _ := inv.Args.(map[string]any)
 			return floretActivityForToolCall(strings.TrimSpace(def.Name), args), nil
 		},
 		Annotations: map[string]any{
-			"source":              strings.TrimSpace(def.Source),
-			"namespace":           strings.TrimSpace(def.Namespace),
-			"flower_policy_owner": "internal/ai.run.handleToolCall",
+			"source":    strings.TrimSpace(def.Source),
+			"namespace": strings.TrimSpace(def.Namespace),
 		},
 	}, nil
 }
