@@ -1838,7 +1838,7 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 	}
 }
 
-func TestGateway_AIThreadReadState_ListDetailAndReadAreRuntimeScoped(t *testing.T) {
+func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -2097,8 +2097,8 @@ func TestGateway_AIThreadReadState_ListDetailAndReadAreRuntimeScoped(t *testing.
 	}
 
 	userTwoAfterRead := readList(originUser2)
-	if userTwoAfterRead.Data.Threads[0].ReadStatus.IsUnread {
-		t.Fatalf("user2 list is_unread=true after user1 mark-read, want shared runtime read-state")
+	if !userTwoAfterRead.Data.Threads[0].ReadStatus.IsUnread {
+		t.Fatalf("user2 list is_unread=false after user1 mark-read, want per-user read-state")
 	}
 }
 
@@ -2238,7 +2238,7 @@ func TestGateway_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, map[string]threadreadstate.FlowerSnapshot{
+	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, creatorMeta.UserPublicID, map[string]threadreadstate.FlowerSnapshot{
 		thread.ThreadID: {
 			ActivityRevision:    100,
 			LastMessageAtUnixMs: 100,
@@ -2246,9 +2246,9 @@ func TestGateway_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 			WaitingPromptID:     "prompt_1",
 		},
 	}); err != nil {
-		t.Fatalf("EnsureFlower(runtime first): %v", err)
+		t.Fatalf("EnsureFlower(user first): %v", err)
 	}
-	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, map[string]threadreadstate.FlowerSnapshot{
+	if _, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, metaByChannel["ch_test_ai_delete_cleanup_user_2"].UserPublicID, map[string]threadreadstate.FlowerSnapshot{
 		thread.ThreadID: {
 			ActivityRevision:    110,
 			LastMessageAtUnixMs: 110,
@@ -2256,7 +2256,7 @@ func TestGateway_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 			WaitingPromptID:     "prompt_2",
 		},
 	}); err != nil {
-		t.Fatalf("EnsureFlower(runtime second): %v", err)
+		t.Fatalf("EnsureFlower(other user): %v", err)
 	}
 
 	gw, err := New(Options{
@@ -2331,7 +2331,7 @@ func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimary
 	}
 
 	threadID := "th_missing_restore"
-	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", map[string]threadreadstate.FlowerSnapshot{
+	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", "user_1", map[string]threadreadstate.FlowerSnapshot{
 		threadID: {
 			ActivityRevision:    200,
 			LastMessageAtUnixMs: 200,
@@ -2339,9 +2339,9 @@ func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimary
 			WaitingPromptID:     "prompt_1",
 		},
 	}); err != nil {
-		t.Fatalf("EnsureFlower(runtime first): %v", err)
+		t.Fatalf("EnsureFlower(user_1): %v", err)
 	}
-	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", map[string]threadreadstate.FlowerSnapshot{
+	if _, err := store.EnsureFlower(context.Background(), "env_delete_restore", "user_2", map[string]threadreadstate.FlowerSnapshot{
 		threadID: {
 			ActivityRevision:    210,
 			LastMessageAtUnixMs: 210,
@@ -2349,7 +2349,7 @@ func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimary
 			WaitingPromptID:     "prompt_2",
 		},
 	}); err != nil {
-		t.Fatalf("EnsureFlower(runtime second): %v", err)
+		t.Fatalf("EnsureFlower(user_2): %v", err)
 	}
 
 	gw, err := New(Options{
@@ -2388,11 +2388,11 @@ func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimary
 	if err != nil {
 		t.Fatalf("DeleteThread(restored verify): %v", err)
 	}
-	if len(restored) != 1 {
-		t.Fatalf("len(restored)=%d, want 1", len(restored))
+	if len(restored) != 2 {
+		t.Fatalf("len(restored)=%d, want 2", len(restored))
 	}
-	if restored[0].ScopeID != threadreadstate.FlowerRuntimeScopeID {
-		t.Fatalf("restored scope=%q, want %q", restored[0].ScopeID, threadreadstate.FlowerRuntimeScopeID)
+	if restored[0].ScopeID != "user_1" || restored[1].ScopeID != "user_2" {
+		t.Fatalf("restored scopes=%+v, want user_1 and user_2", restored)
 	}
 }
 

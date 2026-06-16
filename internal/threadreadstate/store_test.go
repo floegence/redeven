@@ -30,7 +30,7 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 	ctx := context.Background()
 	store := openTestStore(t)
 
-	records, err := store.EnsureFlower(ctx, "env_1", map[string]FlowerSnapshot{
+	records, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
 		"th_1": {
 			ActivityRevision:    130,
 			LastMessageAtUnixMs: 120,
@@ -43,8 +43,8 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 	}
 
 	record := records["th_1"]
-	if record.ScopeID != FlowerRuntimeScopeID {
-		t.Fatalf("ScopeID=%q, want=%q", record.ScopeID, FlowerRuntimeScopeID)
+	if record.ScopeID != "user_1" {
+		t.Fatalf("ScopeID=%q, want user_1", record.ScopeID)
 	}
 	if record.LastReadMessageAtUnixMs != 120 {
 		t.Fatalf("LastReadMessageAtUnixMs=%d, want=120", record.LastReadMessageAtUnixMs)
@@ -59,7 +59,7 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 		t.Fatalf("LastSeenWaitingPromptID=%q, want=prompt_1", record.LastSeenWaitingPromptID)
 	}
 
-	record, err = store.AdvanceFlower(ctx, "env_1", "th_1", FlowerSnapshot{
+	record, err = store.AdvanceFlower(ctx, "env_1", "user_1", "th_1", FlowerSnapshot{
 		ActivityRevision:    125,
 		LastMessageAtUnixMs: 100,
 	})
@@ -79,7 +79,7 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 		t.Fatalf("LastSeenWaitingPromptID=%q after regress, want=prompt_1", record.LastSeenWaitingPromptID)
 	}
 
-	record, err = store.AdvanceFlower(ctx, "env_1", "th_1", FlowerSnapshot{
+	record, err = store.AdvanceFlower(ctx, "env_1", "user_1", "th_1", FlowerSnapshot{
 		ActivityRevision:    130,
 		LastMessageAtUnixMs: 120,
 		ActivitySignature:   "status:waiting_user\u001factivity:130\u001fprompt:prompt_2",
@@ -95,7 +95,7 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 		t.Fatalf("LastSeenWaitingPromptID=%q after same revision, want=prompt_2", record.LastSeenWaitingPromptID)
 	}
 
-	record, err = store.AdvanceFlower(ctx, "env_1", "th_1", FlowerSnapshot{
+	record, err = store.AdvanceFlower(ctx, "env_1", "user_1", "th_1", FlowerSnapshot{
 		ActivityRevision:    200,
 		LastMessageAtUnixMs: 180,
 		ActivitySignature:   "status:success\u001factivity:200",
@@ -117,7 +117,7 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 		t.Fatalf("LastSeenWaitingPromptID=%q after progress, want=prompt_2", record.LastSeenWaitingPromptID)
 	}
 
-	runtimeRecords, err := store.EnsureFlower(ctx, "env_1", map[string]FlowerSnapshot{
+	userRecords, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
 		"th_1": {
 			ActivityRevision:    200,
 			LastMessageAtUnixMs: 180,
@@ -126,10 +126,10 @@ func TestStore_EnsureFlowerSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.
 		},
 	})
 	if err != nil {
-		t.Fatalf("EnsureFlower(runtime): %v", err)
+		t.Fatalf("EnsureFlower(user_1): %v", err)
 	}
-	if got := runtimeRecords["th_1"].LastReadMessageAtUnixMs; got != 180 {
-		t.Fatalf("runtime LastReadMessageAtUnixMs=%d, want=180", got)
+	if got := userRecords["th_1"].LastReadMessageAtUnixMs; got != 180 {
+		t.Fatalf("user_1 LastReadMessageAtUnixMs=%d, want=180", got)
 	}
 }
 
@@ -192,7 +192,7 @@ func TestStore_DeleteThreadRemovesSurfaceRecordsAndRestoreRecords(t *testing.T) 
 	ctx := context.Background()
 	store := openTestStore(t)
 
-	if _, err := store.EnsureFlower(ctx, "env_1", map[string]FlowerSnapshot{
+	if _, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
 		"th_1": {
 			LastMessageAtUnixMs: 120,
 			WaitingPromptID:     "prompt_1",
@@ -202,15 +202,23 @@ func TestStore_DeleteThreadRemovesSurfaceRecordsAndRestoreRecords(t *testing.T) 
 			WaitingPromptID:     "prompt_other",
 		},
 	}); err != nil {
-		t.Fatalf("EnsureFlower(runtime first): %v", err)
+		t.Fatalf("EnsureFlower(user_1 first): %v", err)
 	}
-	if _, err := store.EnsureFlower(ctx, "env_1", map[string]FlowerSnapshot{
+	if _, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
 		"th_1": {
 			LastMessageAtUnixMs: 130,
 			WaitingPromptID:     "prompt_2",
 		},
 	}); err != nil {
-		t.Fatalf("EnsureFlower(runtime second): %v", err)
+		t.Fatalf("EnsureFlower(user_1 second): %v", err)
+	}
+	if _, err := store.EnsureFlower(ctx, "env_1", "user_2", map[string]FlowerSnapshot{
+		"th_1": {
+			LastMessageAtUnixMs: 140,
+			WaitingPromptID:     "prompt_user_2",
+		},
+	}); err != nil {
+		t.Fatalf("EnsureFlower(user_2): %v", err)
 	}
 	if _, err := store.EnsureCodex(ctx, "env_1", "user_1", map[string]CodexSnapshot{
 		"th_1": {
@@ -225,11 +233,11 @@ func TestStore_DeleteThreadRemovesSurfaceRecordsAndRestoreRecords(t *testing.T) 
 	if err != nil {
 		t.Fatalf("DeleteThread(flower): %v", err)
 	}
-	if len(deleted) != 1 {
-		t.Fatalf("len(deleted)=%d, want 1", len(deleted))
+	if len(deleted) != 2 {
+		t.Fatalf("len(deleted)=%d, want 2", len(deleted))
 	}
-	if deleted[0].ScopeID != FlowerRuntimeScopeID {
-		t.Fatalf("deleted scope=%q, want %q", deleted[0].ScopeID, FlowerRuntimeScopeID)
+	if deleted[0].ScopeID != "user_1" || deleted[1].ScopeID != "user_2" {
+		t.Fatalf("deleted scopes=%+v, want user_1 and user_2", deleted)
 	}
 
 	redeleted, err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_1")
@@ -263,8 +271,8 @@ func TestStore_DeleteThreadRemovesSurfaceRecordsAndRestoreRecords(t *testing.T) 
 	if err != nil {
 		t.Fatalf("DeleteThread(flower other): %v", err)
 	}
-	if len(otherDeleted) != 1 || otherDeleted[0].ScopeID != FlowerRuntimeScopeID {
-		t.Fatalf("otherDeleted=%+v, want one runtime scope record", otherDeleted)
+	if len(otherDeleted) != 1 || otherDeleted[0].ScopeID != "user_1" {
+		t.Fatalf("otherDeleted=%+v, want one user_1 scope record", otherDeleted)
 	}
 }
 
@@ -276,7 +284,7 @@ func TestStore_OpenResettingInvalidSchemaRebuildsCurrentDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	if _, err := store.EnsureFlower(context.Background(), "env_1", map[string]FlowerSnapshot{
+	if _, err := store.EnsureFlower(context.Background(), "env_1", "user_1", map[string]FlowerSnapshot{
 		"th_old": {LastMessageAtUnixMs: 120},
 	}); err != nil {
 		_ = store.Close()
@@ -328,7 +336,7 @@ CREATE TABLE thread_read_state (
 	t.Cleanup(func() {
 		_ = store.Close()
 	})
-	if _, err := store.EnsureFlower(context.Background(), "env_1", map[string]FlowerSnapshot{
+	if _, err := store.EnsureFlower(context.Background(), "env_1", "user_1", map[string]FlowerSnapshot{
 		"th_new": {LastMessageAtUnixMs: 200},
 	}); err != nil {
 		t.Fatalf("EnsureFlower after rebuild: %v", err)

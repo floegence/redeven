@@ -317,47 +317,210 @@ export type FlowerApprovalAction = Readonly<{
   }>;
 }>;
 
-export type FlowerLiveActiveRun = Readonly<{
-  run_id: string;
-  status: FlowerThreadStatus;
-  message: FlowerChatMessage | null;
-  input_request?: FlowerInputRequest | null;
-  approval_actions: readonly FlowerApprovalAction[];
-  last_event_seq: number;
+export type FlowerLiveKind =
+  | 'run.started'
+  | 'run.status_changed'
+  | 'thread.patched'
+  | 'message.started'
+  | 'message.block_started'
+  | 'message.block_delta'
+  | 'message.block_set'
+  | 'message.committed'
+  | 'message.failed'
+  | 'activity.updated'
+  | 'approval.requested'
+  | 'approval.resolved'
+  | 'input.requested'
+  | 'input.resolved'
+  | 'usage.updated'
+  | 'stream.resync_required';
+
+export type FlowerLiveBlock = Readonly<{
+  type: string;
+  content?: string;
+  block?: unknown;
 }>;
 
-export type FlowerThreadLiveSnapshot = Readonly<{
+export type FlowerLiveMessageDraft = Readonly<{
+  message_id: string;
+  role: string;
+  status: string;
+  created_at_ms: number;
+  blocks: readonly FlowerLiveBlock[];
+}>;
+
+export type FlowerLiveRunState = Readonly<{
+  run_id: string;
+  status: string;
+  message_id?: string;
+  waiting_prompt?: FlowerInputRequest | null;
+  error_code?: string;
+  error?: string;
+}>;
+
+export type FlowerLiveThreadPatch = Readonly<{
+  thread_id?: string;
+  title?: string;
+  model_id?: string;
+  model_locked?: boolean;
+  execution_mode?: string;
+  working_dir?: string;
+  queued_turn_count?: number;
+  run_status?: string;
+  run_updated_at_ms?: number;
+  run_error_code?: string;
+  run_error?: string;
+  waiting_prompt?: FlowerInputRequest | null;
+  last_context_run_id?: string;
+  pinned_at_ms?: number;
+  created_at_ms?: number;
+  updated_at_ms?: number;
+  last_message_at_ms?: number;
+  last_message_preview?: string;
+}>;
+
+export type FlowerLiveMaterializedState = Readonly<{
+  thread_patch: FlowerLiveThreadPatch;
+  message_order: readonly string[];
+  messages: Readonly<Record<string, FlowerLiveMessageDraft>>;
+  runs: Readonly<Record<string, FlowerLiveRunState>>;
+  approval_actions: Readonly<Record<string, FlowerApprovalAction>>;
+  input_requests: Readonly<Record<string, FlowerInputRequest>>;
+}>;
+
+export type FlowerLiveBootstrap = Readonly<{
+  schema_version: number;
+  endpoint_id: string;
+  thread_id: string;
+  cursor: number;
+  retained_from_seq: number;
   thread: FlowerThreadSnapshot;
-  active_run?: FlowerLiveActiveRun | null;
-  read_status?: FlowerThreadReadStatus;
-  event_cursor: number;
+  transcript_messages: readonly FlowerChatMessage[];
+  live_state: FlowerLiveMaterializedState;
+  read_status: FlowerThreadReadStatus;
   generated_at_ms: number;
 }>;
 
-export type FlowerThreadLiveUpdateKind =
-  | 'thread.patched'
-  | 'message.appended'
-  | 'active_run.patched'
-  | 'read_state.patched'
-  | 'resync.required';
-
-export type FlowerThreadLiveUpdate = Readonly<{
-  seq: number;
-  thread_id: string;
-  kind: FlowerThreadLiveUpdateKind;
-  at_ms: number;
-  thread?: FlowerThreadSnapshot;
-  message?: FlowerChatMessage;
-  active_run?: FlowerLiveActiveRun | null;
-  clear_active_run?: boolean;
-  read_status?: FlowerThreadReadStatus;
-  resync_reason?: string;
+export type FlowerLiveMessageStartedPayload = Readonly<{
+  message_id: string;
+  role: 'assistant';
+  status: 'streaming';
+  created_at_ms: number;
 }>;
 
-export type FlowerThreadLiveUpdatesResponse = Readonly<{
-  updates: readonly FlowerThreadLiveUpdate[];
+export type FlowerLiveMessageBlockStartedPayload = Readonly<{
+  message_id: string;
+  block_index: number;
+  block_type: string;
+}>;
+
+export type FlowerLiveMessageBlockDeltaPayload = Readonly<{
+  message_id: string;
+  block_index: number;
+  delta: string;
+}>;
+
+export type FlowerLiveMessageBlockSetPayload = Readonly<{
+  message_id: string;
+  block_index: number;
+  block: FlowerLiveBlock;
+}>;
+
+export type FlowerLiveMessageCommittedPayload = Readonly<{
+  message_id: string;
+  message: FlowerChatMessage;
+}>;
+
+export type FlowerLiveMessageFailedPayload = Readonly<{
+  message_id: string;
+  error: string;
+}>;
+
+export type FlowerLiveActivityUpdatedPayload = Readonly<{
+  run_id: string;
+  message_id: string;
+  block_index: number;
+  activity: FlowerActivityTimelineBlock;
+}>;
+
+export type FlowerLiveApprovalPayload = Readonly<{
+  action: FlowerApprovalAction;
+}>;
+
+export type FlowerLiveInputRequestedPayload = Readonly<{
+  request: FlowerInputRequest;
+}>;
+
+export type FlowerLiveInputResolvedPayload = Readonly<{
+  prompt_id: string;
+}>;
+
+export type FlowerLiveUsageUpdatedPayload = Readonly<{
+  usage: Readonly<Record<string, unknown>>;
+}>;
+
+export type FlowerLiveResyncRequiredPayload = Readonly<{
+  reason: string;
+}>;
+
+export type FlowerLiveRunStartedPayload = Readonly<{
+  run_id: string;
+  turn_id?: string;
+  message_id?: string;
+  status: string;
+  model_id?: string;
+}>;
+
+export type FlowerLiveRunStatusChangedPayload = Readonly<{
+  run_id: string;
+  status: string;
+  error_code?: string;
+  error?: string;
+  waiting_prompt?: FlowerInputRequest | null;
+}>;
+
+export type FlowerLiveThreadPatchedPayload = Readonly<{
+  patch: FlowerLiveThreadPatch;
+}>;
+
+export type FlowerLiveEventPayloadByKind = Readonly<{
+  'run.started': FlowerLiveRunStartedPayload;
+  'run.status_changed': FlowerLiveRunStatusChangedPayload;
+  'thread.patched': FlowerLiveThreadPatchedPayload;
+  'message.started': FlowerLiveMessageStartedPayload;
+  'message.block_started': FlowerLiveMessageBlockStartedPayload;
+  'message.block_delta': FlowerLiveMessageBlockDeltaPayload;
+  'message.block_set': FlowerLiveMessageBlockSetPayload;
+  'message.committed': FlowerLiveMessageCommittedPayload;
+  'message.failed': FlowerLiveMessageFailedPayload;
+  'activity.updated': FlowerLiveActivityUpdatedPayload;
+  'approval.requested': FlowerLiveApprovalPayload;
+  'approval.resolved': FlowerLiveApprovalPayload;
+  'input.requested': FlowerLiveInputRequestedPayload;
+  'input.resolved': FlowerLiveInputResolvedPayload;
+  'usage.updated': FlowerLiveUsageUpdatedPayload;
+  'stream.resync_required': FlowerLiveResyncRequiredPayload;
+}>;
+
+export type FlowerLiveEvent<K extends FlowerLiveKind = FlowerLiveKind> = K extends FlowerLiveKind ? Readonly<{
+  schema_version: number;
+  seq: number;
+  endpoint_id: string;
+  thread_id: string;
+  run_id?: string;
+  turn_id?: string;
+  trace_id?: string;
+  step?: string;
+  at_unix_ms: number;
+  kind: K;
+  payload: FlowerLiveEventPayloadByKind[K];
+}> : never;
+
+export type FlowerLiveEventsResponse = Readonly<{
+  events: readonly FlowerLiveEvent[];
   next_cursor: number;
   has_more?: boolean;
+  retained_from_seq: number;
 }>;
 
 export type FlowerSubmitApprovalRequest = Readonly<{
@@ -486,15 +649,15 @@ export type FlowerSurfaceAdapter = Readonly<{
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
-  loadThread: (threadID: string) => Promise<FlowerThreadLiveSnapshot>;
-  listThreadLiveUpdates: (threadID: string, afterSeq: number, limit?: number) => Promise<FlowerThreadLiveUpdatesResponse>;
-  markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerThreadLiveSnapshot>;
-  renameThread?: (threadID: string, title: string) => Promise<FlowerThreadLiveSnapshot>;
-  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerThreadLiveSnapshot>;
-  forkThread?: (threadID: string) => Promise<FlowerThreadLiveSnapshot>;
+  loadThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
+  listThreadLiveEvents: (threadID: string, afterSeq: number, limit?: number) => Promise<FlowerLiveEventsResponse>;
+  markThreadRead: (threadID: string, snapshot: FlowerThreadActivitySnapshot) => Promise<FlowerLiveBootstrap>;
+  renameThread?: (threadID: string, title: string) => Promise<FlowerLiveBootstrap>;
+  setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerLiveBootstrap>;
+  forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
-  sendMessage: (input: FlowerSendMessageInput) => Promise<FlowerThreadLiveSnapshot>;
-  submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerThreadLiveSnapshot>;
+  sendMessage: (input: FlowerSendMessageInput) => Promise<FlowerLiveBootstrap>;
+  submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<void>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;

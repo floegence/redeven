@@ -45,7 +45,7 @@ func TestRenderTaskTurns_ReplacesWorkspacePlaceholder(t *testing.T) {
 func TestStreamMonitorConsumesSnakeCaseActivityTimelineItems(t *testing.T) {
 	t.Parallel()
 
-	monitor := newStreamMonitor(nil, nil, "run_1", nil, func() {})
+	monitor := newStreamMonitor(nil, nil, "thread_1", "run_1", nil, func() {})
 	monitor.consumeBlock(map[string]any{
 		"type": "activity-timeline",
 		"items": []any{

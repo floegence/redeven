@@ -48,12 +48,6 @@ type aiThreadEnvelope struct {
 	Thread aiThreadView `json:"thread"`
 }
 
-type aiFlowerLiveUpdatesView struct {
-	Updates    []ai.FlowerThreadLiveUpdate `json:"updates"`
-	NextCursor int64                       `json:"next_cursor"`
-	HasMore    bool                        `json:"has_more,omitempty"`
-}
-
 type aiMarkThreadReadRequest struct {
 	Snapshot flowerThreadUnreadSnapshotView `json:"snapshot"`
 }
@@ -140,20 +134,20 @@ func (g *Gateway) buildAIThreadEnvelope(
 	return &aiThreadEnvelope{Thread: view}, nil
 }
 
-func (g *Gateway) buildAIFlowerLiveSnapshotView(
+func (g *Gateway) buildAIFlowerLiveBootstrapView(
 	ctx context.Context,
 	meta *session.Meta,
-	snapshot *ai.FlowerThreadLiveSnapshot,
-) (*ai.FlowerThreadLiveSnapshot, error) {
-	if snapshot == nil {
+	bootstrap *ai.FlowerLiveBootstrapResponse,
+) (*ai.FlowerLiveBootstrapResponse, error) {
+	if bootstrap == nil {
 		return nil, nil
 	}
-	records, err := g.ensureFlowerReadRecords(ctx, meta, []ai.ThreadView{snapshot.Thread})
+	records, err := g.ensureFlowerReadRecords(ctx, meta, []ai.ThreadView{bootstrap.Thread})
 	if err != nil {
 		return nil, err
 	}
-	readStatus := flowerReadStatusView(flowerSnapshotFromThread(snapshot.Thread), records[strings.TrimSpace(snapshot.Thread.ThreadID)])
-	out := *snapshot
+	readStatus := flowerReadStatusView(flowerSnapshotFromThread(bootstrap.Thread), records[strings.TrimSpace(bootstrap.Thread.ThreadID)])
+	out := *bootstrap
 	out.ReadStatus = ai.FlowerThreadReadView{
 		IsUnread: readStatus.IsUnread,
 		Snapshot: ai.FlowerThreadReadSnapshot{
@@ -170,58 +164,6 @@ func (g *Gateway) buildAIFlowerLiveSnapshotView(
 		},
 	}
 	return &out, nil
-}
-
-func (g *Gateway) buildAIFlowerLiveUpdatesView(
-	ctx context.Context,
-	meta *session.Meta,
-	resp *ai.FlowerThreadLiveUpdatesResponse,
-) (*aiFlowerLiveUpdatesView, error) {
-	if resp == nil {
-		return &aiFlowerLiveUpdatesView{Updates: []ai.FlowerThreadLiveUpdate{}}, nil
-	}
-	threads := make([]ai.ThreadView, 0, len(resp.Updates))
-	for _, update := range resp.Updates {
-		if update.Thread != nil {
-			threads = append(threads, *update.Thread)
-		}
-	}
-	records := map[string]threadreadstate.Record{}
-	var err error
-	if len(threads) > 0 {
-		records, err = g.ensureFlowerReadRecords(ctx, meta, threads)
-		if err != nil {
-			return nil, err
-		}
-	}
-	out := &aiFlowerLiveUpdatesView{
-		Updates:    make([]ai.FlowerThreadLiveUpdate, 0, len(resp.Updates)),
-		NextCursor: resp.NextCursor,
-		HasMore:    resp.HasMore,
-	}
-	for _, update := range resp.Updates {
-		item := update
-		if update.Thread != nil {
-			status := flowerReadStatusView(flowerSnapshotFromThread(*update.Thread), records[strings.TrimSpace(update.Thread.ThreadID)])
-			item.ReadStatus = &ai.FlowerThreadReadView{
-				IsUnread: status.IsUnread,
-				Snapshot: ai.FlowerThreadReadSnapshot{
-					ActivityRevision:    status.Snapshot.ActivityRevision,
-					LastMessageAtUnixMs: status.Snapshot.LastMessageAtUnixMs,
-					ActivitySignature:   status.Snapshot.ActivitySignature,
-					WaitingPromptID:     status.Snapshot.WaitingPromptID,
-				},
-				ReadState: ai.FlowerThreadReadRecord{
-					LastSeenActivityRevision:  status.ReadState.LastSeenActivityRevision,
-					LastReadMessageAtUnixMs:   status.ReadState.LastReadMessageAtUnixMs,
-					LastSeenActivitySignature: status.ReadState.LastSeenActivitySignature,
-					LastSeenWaitingPromptID:   status.ReadState.LastSeenWaitingPromptID,
-				},
-			}
-		}
-		out.Updates = append(out.Updates, item)
-	}
-	return out, nil
 }
 
 func (g *Gateway) buildCodexThreadListView(
@@ -341,9 +283,13 @@ func (g *Gateway) ensureFlowerReadRecords(
 		return map[string]threadreadstate.Record{}, nil
 	}
 	if g == nil || g.threadReadState == nil || meta == nil {
-		return seedFlowerRecords(snapshots), nil
+		userPublicID := ""
+		if meta != nil {
+			userPublicID = meta.UserPublicID
+		}
+		return seedFlowerRecords(userPublicID, snapshots), nil
 	}
-	return g.threadReadState.EnsureFlower(ctx, meta.EndpointID, snapshots)
+	return g.threadReadState.EnsureFlower(ctx, meta.EndpointID, meta.UserPublicID, snapshots)
 }
 
 func (g *Gateway) ensureCodexReadRecords(
@@ -442,10 +388,16 @@ func (g *Gateway) advanceFlowerReadRecord(
 	snapshot threadreadstate.FlowerSnapshot,
 ) (threadreadstate.Record, error) {
 	if g == nil || g.threadReadState == nil || meta == nil {
+		scopeID := ""
+		endpointID := ""
+		if meta != nil {
+			scopeID = strings.TrimSpace(meta.UserPublicID)
+			endpointID = strings.TrimSpace(meta.EndpointID)
+		}
 		if meta == nil {
 			return threadreadstate.Record{
 				Surface:                   threadreadstate.SurfaceFlower,
-				ScopeID:                   threadreadstate.FlowerRuntimeScopeID,
+				ScopeID:                   scopeID,
 				ThreadID:                  strings.TrimSpace(threadID),
 				LastSeenActivityRevision:  snapshot.ActivityRevision,
 				LastReadMessageAtUnixMs:   snapshot.LastMessageAtUnixMs,
@@ -454,8 +406,8 @@ func (g *Gateway) advanceFlowerReadRecord(
 			}, nil
 		}
 		return threadreadstate.Record{
-			EndpointID:                strings.TrimSpace(meta.EndpointID),
-			ScopeID:                   threadreadstate.FlowerRuntimeScopeID,
+			EndpointID:                endpointID,
+			ScopeID:                   scopeID,
 			Surface:                   threadreadstate.SurfaceFlower,
 			ThreadID:                  strings.TrimSpace(threadID),
 			LastSeenActivityRevision:  snapshot.ActivityRevision,
@@ -464,7 +416,7 @@ func (g *Gateway) advanceFlowerReadRecord(
 			LastSeenWaitingPromptID:   strings.TrimSpace(snapshot.WaitingPromptID),
 		}, nil
 	}
-	return g.threadReadState.AdvanceFlower(ctx, meta.EndpointID, threadID, snapshot)
+	return g.threadReadState.AdvanceFlower(ctx, meta.EndpointID, meta.UserPublicID, threadID, snapshot)
 }
 
 func (g *Gateway) advanceCodexReadRecord(
@@ -604,14 +556,15 @@ func flowerReadStatusView(snapshot threadreadstate.FlowerSnapshot, record thread
 	}
 }
 
-func seedFlowerRecords(snapshots map[string]threadreadstate.FlowerSnapshot) map[string]threadreadstate.Record {
+func seedFlowerRecords(userPublicID string, snapshots map[string]threadreadstate.FlowerSnapshot) map[string]threadreadstate.Record {
 	out := make(map[string]threadreadstate.Record, len(snapshots))
+	scopeID := strings.TrimSpace(userPublicID)
 	for threadID, snapshot := range snapshots {
 		snapshot = normalizeFlowerSnapshot(snapshot)
 		out[threadID] = threadreadstate.Record{
 			ThreadID:                  strings.TrimSpace(threadID),
 			Surface:                   threadreadstate.SurfaceFlower,
-			ScopeID:                   threadreadstate.FlowerRuntimeScopeID,
+			ScopeID:                   scopeID,
 			LastSeenActivityRevision:  snapshot.ActivityRevision,
 			LastReadMessageAtUnixMs:   snapshot.LastMessageAtUnixMs,
 			LastSeenActivitySignature: snapshot.ActivitySignature,

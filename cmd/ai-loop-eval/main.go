@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -141,30 +142,34 @@ func (w *monitoredResponseWriter) Write(p []byte) (int, error) {
 }
 
 type streamMonitor struct {
-	svc    *ai.Service
-	meta   *session.Meta
-	runID  string
-	ctx    context.Context
-	cancel context.CancelFunc
+	svc      *ai.Service
+	meta     *session.Meta
+	threadID string
+	runID    string
+	ctx      context.Context
+	cancel   context.CancelFunc
 
-	mu             sync.Mutex
-	partial        string
-	lastDelta      string
-	repeatDelta    int
-	toolSigCounter map[string]int
-	approvalSeen   map[string]struct{}
-	abortReason    string
+	mu              sync.Mutex
+	partial         string
+	lastDelta       string
+	repeatDelta     int
+	toolSigCounter  map[string]int
+	approvalActions map[string]ai.FlowerApprovalAction
+	approvalSeen    map[string]struct{}
+	abortReason     string
 }
 
-func newStreamMonitor(svc *ai.Service, meta *session.Meta, runID string, ctx context.Context, cancel context.CancelFunc) *streamMonitor {
+func newStreamMonitor(svc *ai.Service, meta *session.Meta, threadID string, runID string, ctx context.Context, cancel context.CancelFunc) *streamMonitor {
 	return &streamMonitor{
-		svc:            svc,
-		meta:           meta,
-		runID:          runID,
-		ctx:            ctx,
-		cancel:         cancel,
-		toolSigCounter: make(map[string]int),
-		approvalSeen:   make(map[string]struct{}),
+		svc:             svc,
+		meta:            meta,
+		threadID:        strings.TrimSpace(threadID),
+		runID:           runID,
+		ctx:             ctx,
+		cancel:          cancel,
+		toolSigCounter:  make(map[string]int),
+		approvalActions: make(map[string]ai.FlowerApprovalAction),
+		approvalSeen:    make(map[string]struct{}),
 	}
 }
 
@@ -199,6 +204,8 @@ func (m *streamMonitor) consume(line string) {
 	case "block-set":
 		blk, _ := payload["block"].(map[string]any)
 		m.consumeBlock(blk)
+	case "approval.requested":
+		m.consumeApprovalPayload(payload)
 	}
 }
 
@@ -233,9 +240,80 @@ func (m *streamMonitor) consumeBlock(block map[string]any) {
 			if len(item) == 0 {
 				continue
 			}
+			m.consumeActivityApprovalItem(item)
 			m.consumeToolActivity(anyToString(item["tool_name"]), anyToString(item["tool_id"]), nil, anyToBool(item["requires_approval"]), anyToString(item["approval_state"]))
 		}
 	}
+}
+
+func (m *streamMonitor) consumeActivityApprovalItem(item map[string]any) {
+	if m == nil || m.svc == nil || m.meta == nil || m.ctx == nil {
+		return
+	}
+	if len(item) == 0 || !anyToBool(item["requires_approval"]) {
+		return
+	}
+	approvalState := strings.TrimSpace(strings.ToLower(anyToString(item["approval_state"])))
+	if approvalState != "requested" {
+		return
+	}
+	runID := strings.TrimSpace(anyToString(item["run_id"]))
+	if runID == "" {
+		runID = strings.TrimSpace(m.runID)
+	}
+	toolID := strings.TrimSpace(anyToString(item["tool_id"]))
+	if runID == "" || toolID == "" {
+		return
+	}
+	bootstrap, err := m.svc.GetFlowerThreadLiveBootstrap(m.ctx, m.meta, m.threadID)
+	if err != nil || bootstrap == nil || bootstrap.LiveState.ApprovalActions == nil {
+		return
+	}
+	action := ai.FlowerApprovalAction{}
+	for _, candidate := range bootstrap.LiveState.ApprovalActions {
+		if candidate.RunID == runID && candidate.ToolID == toolID {
+			action = candidate
+			break
+		}
+	}
+	m.rememberApprovalAction(action)
+}
+
+func (m *streamMonitor) consumeApprovalPayload(payload map[string]any) {
+	record, _ := payload["payload"].(map[string]any)
+	actionRecord, _ := record["action"].(map[string]any)
+	if len(actionRecord) == 0 {
+		return
+	}
+	action := ai.FlowerApprovalAction{
+		ActionID:    strings.TrimSpace(anyToString(actionRecord["action_id"])),
+		RunID:       strings.TrimSpace(anyToString(actionRecord["run_id"])),
+		ToolID:      strings.TrimSpace(anyToString(actionRecord["tool_id"])),
+		ToolName:    strings.TrimSpace(anyToString(actionRecord["tool_name"])),
+		State:       ai.FlowerApprovalState(strings.TrimSpace(anyToString(actionRecord["state"]))),
+		Status:      ai.FlowerApprovalStatus(strings.TrimSpace(anyToString(actionRecord["status"]))),
+		Revision:    anyToInt64(actionRecord["revision"]),
+		ExpectedSeq: anyToInt64(actionRecord["expected_seq"]),
+		CanApprove:  anyToBool(actionRecord["can_approve"]),
+	}
+	if action.ActionID == "" || action.RunID == "" || action.ToolID == "" || action.Revision <= 0 || action.ExpectedSeq <= 0 {
+		return
+	}
+	m.rememberApprovalAction(action)
+}
+
+func (m *streamMonitor) rememberApprovalAction(action ai.FlowerApprovalAction) {
+	if action.ActionID == "" || action.RunID == "" || action.ToolID == "" || action.Revision <= 0 || action.ExpectedSeq <= 0 {
+		return
+	}
+	m.mu.Lock()
+	m.approvalActions[action.ToolID] = action
+	_, approvalHandled := m.approvalSeen[action.ToolID]
+	if action.State == ai.FlowerApprovalStateRequested && action.Status == ai.FlowerApprovalStatusPending && action.CanApprove && !approvalHandled {
+		m.approvalSeen[action.ToolID] = struct{}{}
+		go m.rejectTool(action.ToolID)
+	}
+	m.mu.Unlock()
 }
 
 func (m *streamMonitor) consumeToolActivity(toolName string, toolID string, rawArgs any, requiresApproval bool, approvalStateRaw string) {
@@ -254,10 +332,11 @@ func (m *streamMonitor) consumeToolActivity(toolName string, toolID string, rawA
 	m.toolSigCounter[signature] = m.toolSigCounter[signature] + 1
 	count := m.toolSigCounter[signature]
 	approvalState := strings.TrimSpace(strings.ToLower(approvalStateRaw))
+	action, hasAction := m.approvalActions[toolID]
 	_, approvalHandled := m.approvalSeen[toolID]
-	if requiresApproval && approvalState == "requested" && toolID != "" && !approvalHandled {
+	if requiresApproval && approvalState == "requested" && toolID != "" && hasAction && !approvalHandled {
 		m.approvalSeen[toolID] = struct{}{}
-		go m.rejectTool(toolID)
+		go m.rejectTool(action.ToolID)
 	}
 	m.mu.Unlock()
 
@@ -272,7 +351,18 @@ func (m *streamMonitor) rejectTool(toolID string) {
 	}
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		err := m.svc.ApproveTool(m.meta, m.runID, toolID, false)
+		m.mu.Lock()
+		action := m.approvalActions[strings.TrimSpace(toolID)]
+		m.mu.Unlock()
+		_, err := m.svc.SubmitFlowerApproval(m.meta, ai.SubmitFlowerApprovalRequest{
+			ThreadID:    m.threadID,
+			RunID:       action.RunID,
+			ActionID:    action.ActionID,
+			ToolID:      action.ToolID,
+			Approved:    false,
+			ExpectedSeq: action.ExpectedSeq,
+			Revision:    action.Revision,
+		})
 		if err == nil {
 			return
 		}
@@ -541,7 +631,7 @@ func runTask(
 			timeout = 90 * time.Second
 		}
 		runCtx, cancel := context.WithTimeout(ctx, timeout)
-		monitor := newStreamMonitor(svc, meta, runID, runCtx, cancel)
+		monitor := newStreamMonitor(svc, meta, thread.ThreadID, runID, runCtx, cancel)
 		writer := &monitoredResponseWriter{monitor: monitor}
 
 		oneStart := time.Now()
@@ -1094,6 +1184,28 @@ func anyToBool(v any) bool {
 		return x != 0
 	default:
 		return false
+	}
+}
+
+func anyToInt64(v any) int64 {
+	switch x := v.(type) {
+	case int:
+		return int64(x)
+	case int64:
+		return x
+	case float64:
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			return 0
+		}
+		return int64(x)
+	case json.Number:
+		value, _ := x.Int64()
+		return value
+	case string:
+		value, _ := strconv.ParseInt(strings.TrimSpace(x), 10, 64)
+		return value
+	default:
+		return 0
 	}
 }
 

@@ -141,7 +141,7 @@ func TestSanitizeActivityTimelineMessageJSONFiltersPublicPayloadContract(t *test
 	}
 }
 
-func TestPublicActiveRunMessageSnapshotSanitizesActivityTimeline(t *testing.T) {
+func TestSanitizeActivityTimelineMessageJSONFiltersRunningActivitySidecar(t *testing.T) {
 	t.Parallel()
 
 	raw := rawActivityMessageWithPrivateFileActionSidecar("msg_active_live")
@@ -163,25 +163,31 @@ func TestPublicActiveRunMessageSnapshotSanitizesActivityTimeline(t *testing.T) {
 		assistantBlocks:          []any{rawBlock},
 	}
 
-	publicSnapshot := r.publicActiveRunMessageSnapshot()
-	if len(publicSnapshot.MessageJSON) == 0 {
-		t.Fatalf("missing public active snapshot")
+	publicMessage, err := SanitizeActivityTimelineMessageJSON(raw)
+	if err != nil {
+		t.Fatalf("SanitizeActivityTimelineMessageJSON: %v", err)
 	}
-	body := string(publicSnapshot.MessageJSON)
+	if len(publicMessage) == 0 {
+		t.Fatalf("missing public message")
+	}
+	body := string(publicMessage)
 	for _, forbidden := range []string{"preview_path", "directory_path", "root_dir", `\"path\"`, `"cwd"`, `"stdin"`} {
 		if strings.Contains(body, forbidden) {
-			t.Fatalf("public active snapshot contains %q: %s", forbidden, body)
+			t.Fatalf("public activity payload contains %q: %s", forbidden, body)
 		}
 	}
 	for _, required := range []string{`"can_preview":true`, `"can_browse_directory":true`} {
 		if !strings.Contains(body, required) {
-			t.Fatalf("public active snapshot missing %q: %s", required, body)
+			t.Fatalf("public activity payload missing %q: %s", required, body)
 		}
 	}
 
-	rawSnapshot := r.activeRunMessageSnapshot()
-	if !strings.Contains(string(rawSnapshot.MessageJSON), "preview_path") {
-		t.Fatalf("raw active snapshot should retain private file action data for privileged resolver: %s", string(rawSnapshot.MessageJSON))
+	rawSnapshot, _, _, err := r.snapshotAssistantMessageJSONWithStatus("streaming")
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSONWithStatus: %v", err)
+	}
+	if !strings.Contains(rawSnapshot, "preview_path") {
+		t.Fatalf("private resolver snapshot should retain private file action data: %s", rawSnapshot)
 	}
 }
 

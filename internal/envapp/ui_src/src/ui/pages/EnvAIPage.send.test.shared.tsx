@@ -4,11 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const state: {
     omitReadState: boolean;
-    activeRun: Record<string, unknown> | null;
+    liveState: Record<string, unknown> | null;
     threadDetailWaitingPrompt: Record<string, unknown> | null;
   } = {
     omitReadState: false,
-    activeRun: null,
+    liveState: null,
     threadDetailWaitingPrompt: null,
   };
   const readStatus = (lastMessageAtUnixMs: number, waitingPromptID = '') => {
@@ -73,18 +73,18 @@ const mocks = vi.hoisted(() => {
     if (url.includes('/_redeven_proxy/api/ai/models')) {
       return { current_model: 'openai/gpt-5.2', models: [{ id: 'openai/gpt-5.2', label: 'GPT 5.2' }] };
     }
-    if (url.includes('/_redeven_proxy/api/ai/threads/') && url.includes('/live/updates') && (!init || init.method === 'GET')) {
-      return { updates: [], next_cursor: 0 };
+    if (url.includes('/_redeven_proxy/api/ai/threads/') && url.includes('/live/events') && (!init || init.method === 'GET')) {
+      return { events: [], next_cursor: 0, retained_from_seq: 1 };
     }
-    if (url.includes('/_redeven_proxy/api/ai/threads/') && url.endsWith('/live') && (!init || init.method === 'GET')) {
-      const match = /\/_redeven_proxy\/api\/ai\/threads\/([^/]+)\/live$/u.exec(url);
+    if (url.includes('/_redeven_proxy/api/ai/threads/') && url.endsWith('/live/bootstrap') && (!init || init.method === 'GET')) {
+      const match = /\/_redeven_proxy\/api\/ai\/threads\/([^/]+)\/live\/bootstrap$/u.exec(url);
       const threadID = decodeURIComponent(match?.[1] ?? 'thread-1');
       const waitingPromptID = String(state.threadDetailWaitingPrompt?.prompt_id ?? '').trim();
       const thread = {
         thread_id: threadID,
         title: 'Loaded Env Flower thread',
         model_id: 'openai/gpt-5.2',
-        run_status: state.threadDetailWaitingPrompt || state.activeRun ? 'running' : 'success',
+        run_status: state.threadDetailWaitingPrompt || state.liveState ? 'running' : 'success',
         working_dir: '/workspace/env-flower',
         created_at_unix_ms: 1,
         updated_at_unix_ms: 2,
@@ -93,12 +93,22 @@ const mocks = vi.hoisted(() => {
       };
       return {
         schema_version: 1,
+        endpoint_id: 'env-app',
+        thread_id: threadID,
+        cursor: 0,
+        retained_from_seq: 1,
         thread,
-        messages: await liveMessagesMock({ threadId: threadID }),
-        ...(state.activeRun ? { active_run: state.activeRun } : {}),
+        transcript_messages: await liveMessagesMock({ threadId: threadID }),
+        live_state: state.liveState ?? {
+          thread_patch: {},
+          message_order: [],
+          messages: {},
+          runs: {},
+          approval_actions: {},
+          input_requests: {},
+        },
         read_status: thread.read_status,
-        event_cursor: 0,
-        generated_at_unix_ms: 12,
+        generated_at_ms: 12_000,
       };
     }
     if (url.includes('/_redeven_proxy/api/ai/threads?')) {
@@ -324,7 +334,7 @@ export function registerEnvAIPageSendTests() {
       mocks.openFilePreviewMock.mockClear();
       mocks.openFlowerFileBrowserMock.mockClear();
       mocks.openFlowerFilePreviewMock.mockClear();
-      mocks.state.activeRun = null;
+      mocks.state.liveState = null;
       mocks.state.omitReadState = false;
       mocks.state.threadDetailWaitingPrompt = null;
     });
@@ -349,13 +359,13 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('loads live snapshot when a history thread is selected', async () => {
+    it('loads live bootstrap when a history thread is selected', async () => {
       const { host, dispose } = await renderPage();
       try {
         (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
         await flush();
         await flush();
-        expect(mocks.fetchGatewayJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1/live', { method: 'GET' });
+        expect(mocks.fetchGatewayJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap', { method: 'GET' });
         expect(mocks.liveMessagesMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
         expect(host.textContent).toContain('Transcript for thread-1');
       } finally {
@@ -363,22 +373,27 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('shows active run output when transcript persistence has not caught up', async () => {
+    it('shows live streaming output when transcript persistence has not caught up', async () => {
       mocks.liveMessagesMock.mockResolvedValueOnce([]);
-      mocks.state.activeRun = {
-        run_id: 'run-live',
-        status: 'running',
-        last_event_seq: 12,
-        message: {
-          id: 'msg-live',
-          role: 'assistant',
-          status: 'streaming',
-          timestamp: 12,
-          blocks: [
-            { type: 'markdown', content: 'Live answer recovered from the active run.' },
-          ],
+      mocks.state.liveState = {
+        thread_patch: { run_status: 'running' },
+        message_order: ['msg-live'],
+        messages: {
+          'msg-live': {
+            message_id: 'msg-live',
+            role: 'assistant',
+            status: 'streaming',
+            created_at_ms: 12_000,
+            blocks: [
+              { type: 'markdown', content: 'Live answer recovered from the event stream.' },
+            ],
+          },
         },
-        approval_actions: [],
+        runs: {
+          'run-live': { run_id: 'run-live', status: 'running', message_id: 'msg-live' },
+        },
+        approval_actions: {},
+        input_requests: {},
       };
 
       const { host, dispose } = await renderPage();
@@ -386,7 +401,7 @@ export function registerEnvAIPageSendTests() {
         (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
         await flush();
         await flush();
-        expect(host.textContent).toContain('Live answer recovered from the active run.');
+        expect(host.textContent).toContain('Live answer recovered from the event stream.');
       } finally {
         dispose();
       }

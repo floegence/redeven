@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestActiveRunMessageSnapshot_UsesStreamingStatus(t *testing.T) {
+func TestSnapshotAssistantMessageJSONWithStatus_UsesStreamingStatus(t *testing.T) {
 	t.Parallel()
 
 	r := &run{
@@ -18,10 +18,13 @@ func TestActiveRunMessageSnapshot_UsesStreamingStatus(t *testing.T) {
 		},
 	}
 
-	snapshot := r.activeRunMessageSnapshot()
+	msgJSON, _, _, err := r.snapshotAssistantMessageJSONWithStatus("streaming")
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSONWithStatus: %v", err)
+	}
 
 	var parsed map[string]any
-	if err := json.Unmarshal(snapshot.MessageJSON, &parsed); err != nil {
+	if err := json.Unmarshal([]byte(msgJSON), &parsed); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	gotStatus, _ := parsed["status"].(string)
@@ -30,7 +33,7 @@ func TestActiveRunMessageSnapshot_UsesStreamingStatus(t *testing.T) {
 	}
 }
 
-func TestActiveRunMessageSnapshot_SuppressesSnapshotsAfterAssistantPersisted(t *testing.T) {
+func TestSnapshotAssistantMessageJSONWithStatus_RemainsFinalizationOnly(t *testing.T) {
 	t.Parallel()
 
 	r := &run{
@@ -43,8 +46,11 @@ func TestActiveRunMessageSnapshot_SuppressesSnapshotsAfterAssistantPersisted(t *
 	}
 	r.markAssistantPersisted()
 
-	snapshot := r.activeRunMessageSnapshot()
-	if len(snapshot.MessageJSON) != 0 {
-		t.Fatalf("messageJSON=%q, want empty", string(snapshot.MessageJSON))
+	msgJSON, _, _, err := r.snapshotAssistantMessageJSONWithStatus("streaming")
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSONWithStatus: %v", err)
+	}
+	if !strings.Contains(msgJSON, "persisted already") {
+		t.Fatalf("messageJSON=%q, want finalization snapshot content", msgJSON)
 	}
 }

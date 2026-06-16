@@ -150,7 +150,7 @@ describe('flowerLiveRunState', () => {
     expect(clearLiveRunMessageIfTranscriptCaughtUp(current, transcript)).toBeNull();
   });
 
-  it('treats transcript catch-up as the authoritative render gate for late live snapshots', () => {
+  it('treats transcript catch-up as the authoritative render gate for late live bootstrap data', () => {
     const current = makeAssistantMessage({
       id: 'm_live_6',
       blocks: [{ type: 'markdown', content: 'Late snapshot' }],

@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -51,16 +50,16 @@ func TestEnsureAssistantMessageStarted_IsIdempotent(t *testing.T) {
 	}
 }
 
-func TestPrepareRun_InitializesActiveRunSnapshotImmediately(t *testing.T) {
+func TestPrepareRun_InitializesLiveAssistantDraftImmediately(t *testing.T) {
 	t.Parallel()
 
 	svc := newRealtimeTestService(t, 2*time.Second)
 	ctx := context.Background()
 	meta := &session.Meta{
-		EndpointID:        "env_prepare_snapshot",
-		NamespacePublicID: "ns_prepare_snapshot",
-		ChannelID:         "ch_prepare_snapshot",
-		UserPublicID:      "user_prepare_snapshot",
+		EndpointID:        "env_prepare_live_draft",
+		NamespacePublicID: "ns_prepare_live_draft",
+		ChannelID:         "ch_prepare_live_draft",
+		UserPublicID:      "user_prepare_live_draft",
 		UserEmail:         "prepare@example.com",
 		CanRead:           true,
 		CanWrite:          true,
@@ -68,12 +67,12 @@ func TestPrepareRun_InitializesActiveRunSnapshotImmediately(t *testing.T) {
 		CanAdmin:          true,
 	}
 
-	thread, err := svc.CreateThread(ctx, meta, "prepare snapshot", "", "", "")
+	thread, err := svc.CreateThread(ctx, meta, "prepare live draft", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_prepare_immediate_snapshot"
+	runID := "run_prepare_immediate_live_draft"
 	prepared, err := svc.prepareRun(meta, runID, RunStartRequest{
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
@@ -91,51 +90,44 @@ func TestPrepareRun_InitializesActiveRunSnapshotImmediately(t *testing.T) {
 		prepared.r.markDone()
 	})
 
-	snapshot, err := svc.GetFlowerThreadLiveSnapshot(ctx, meta, thread.ThreadID)
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
 	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveSnapshot: %v", err)
+		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
 	}
-	if snapshot == nil || snapshot.ActiveRun == nil {
-		t.Fatalf("active run snapshot missing: %#v", snapshot)
+	if bootstrap == nil {
+		t.Fatalf("bootstrap missing")
 	}
-	if strings.TrimSpace(snapshot.ActiveRun.RunID) != runID {
-		t.Fatalf("runID=%q, want %q", snapshot.ActiveRun.RunID, runID)
+	if bootstrap.Cursor <= 0 {
+		t.Fatalf("cursor=%d, want > 0", bootstrap.Cursor)
 	}
-
-	var parsed struct {
-		ID        string `json:"id"`
-		Role      string `json:"role"`
-		Status    string `json:"status"`
-		Timestamp int64  `json:"timestamp"`
-		Blocks    []struct {
-			Type    string `json:"type"`
-			Content string `json:"content"`
-		} `json:"blocks"`
+	runState := bootstrap.LiveState.Runs[runID]
+	if strings.TrimSpace(runState.RunID) != runID {
+		t.Fatalf("runID=%q, want %q", runState.RunID, runID)
 	}
-	if err := json.Unmarshal(snapshot.ActiveRun.Message, &parsed); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
+	if strings.TrimSpace(runState.MessageID) != strings.TrimSpace(prepared.messageID) {
+		t.Fatalf("run messageID=%q, want %q", runState.MessageID, prepared.messageID)
 	}
-
-	if strings.TrimSpace(parsed.ID) != strings.TrimSpace(prepared.messageID) {
-		t.Fatalf("assistant message id=%q, want %q", parsed.ID, prepared.messageID)
+	msg := bootstrap.LiveState.Messages[prepared.messageID]
+	if strings.TrimSpace(msg.MessageID) != strings.TrimSpace(prepared.messageID) {
+		t.Fatalf("assistant message id=%q, want %q", msg.MessageID, prepared.messageID)
 	}
-	if strings.TrimSpace(parsed.Role) != "assistant" {
-		t.Fatalf("role=%q, want assistant", parsed.Role)
+	if strings.TrimSpace(msg.Role) != "assistant" {
+		t.Fatalf("role=%q, want assistant", msg.Role)
 	}
-	if strings.TrimSpace(parsed.Status) != "streaming" {
-		t.Fatalf("status=%q, want streaming", parsed.Status)
+	if strings.TrimSpace(msg.Status) != "streaming" {
+		t.Fatalf("status=%q, want streaming", msg.Status)
 	}
-	if parsed.Timestamp <= 0 {
-		t.Fatalf("timestamp=%d, want > 0", parsed.Timestamp)
+	if msg.CreatedAtMs <= 0 {
+		t.Fatalf("created_at_ms=%d, want > 0", msg.CreatedAtMs)
 	}
-	if len(parsed.Blocks) != 1 {
-		t.Fatalf("block count=%d, want 1", len(parsed.Blocks))
+	if len(msg.Blocks) != 1 {
+		t.Fatalf("block count=%d, want 1", len(msg.Blocks))
 	}
-	if strings.TrimSpace(parsed.Blocks[0].Type) != "markdown" {
-		t.Fatalf("block type=%q, want markdown", parsed.Blocks[0].Type)
+	if strings.TrimSpace(msg.Blocks[0].Type) != "markdown" {
+		t.Fatalf("block type=%q, want markdown", msg.Blocks[0].Type)
 	}
-	if parsed.Blocks[0].Content != "" {
-		t.Fatalf("block content=%q, want empty string", parsed.Blocks[0].Content)
+	if msg.Blocks[0].Content != "" {
+		t.Fatalf("block content=%q, want empty string", msg.Blocks[0].Content)
 	}
 }
 

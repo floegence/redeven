@@ -3669,7 +3669,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 
-		case action == "live" && r.Method == http.MethodGet && len(parts) == 2:
+		case action == "live" && r.Method == http.MethodGet && len(parts) == 3 && strings.TrimSpace(parts[2]) == "bootstrap":
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
@@ -3678,7 +3678,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
 				return
 			}
-			snapshot, err := g.ai.GetFlowerThreadLiveSnapshot(r.Context(), meta, threadID)
+			snapshot, err := g.ai.GetFlowerThreadLiveBootstrap(r.Context(), meta, threadID)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
@@ -3687,7 +3687,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
 				return
 			}
-			view, err := g.buildAIFlowerLiveSnapshotView(r.Context(), meta, snapshot)
+			view, err := g.buildAIFlowerLiveBootstrapView(r.Context(), meta, snapshot)
 			if err != nil {
 				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
 				return
@@ -3695,7 +3695,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 
-		case action == "live" && r.Method == http.MethodGet && len(parts) == 3 && strings.TrimSpace(parts[2]) == "updates":
+		case action == "live" && r.Method == http.MethodGet && len(parts) == 3 && strings.TrimSpace(parts[2]) == "events":
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
 				return
@@ -3719,17 +3719,12 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 					limit = v
 				}
 			}
-			resp, err := g.ai.ListFlowerThreadLiveUpdates(r.Context(), meta, threadID, afterSeq, limit)
+			resp, err := g.ai.ListFlowerThreadLiveEvents(r.Context(), meta, threadID, afterSeq, limit)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
-			view, err := g.buildAIFlowerLiveUpdatesView(r.Context(), meta, resp)
-			if err != nil {
-				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
 		case action == "" && r.Method == http.MethodPatch:

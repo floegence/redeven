@@ -7432,7 +7432,7 @@ function runtimeFlowerPath(rawPath: unknown): string {
   const query = parsed.search;
   const pathWithQuery = `${pathname}${query}`;
   const allowsLimitQuery = (value: string) => value === '' || /^\?limit=\d{1,4}$/u.test(value);
-  const allowsLiveUpdatesQuery = (value: string) => value === ''
+  const allowsLiveEventsQuery = (value: string) => value === ''
     || /^\?after_seq=\d+$/u.test(value)
     || /^\?after_seq=\d+&limit=\d{1,3}$/u.test(value)
     || /^\?limit=\d{1,3}&after_seq=\d+$/u.test(value);
@@ -7443,8 +7443,8 @@ function runtimeFlowerPath(rawPath: unknown): string {
   if (pathname === '/_redeven_proxy/api/ai/uploads' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/threads' && allowsLimitQuery(query)) return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/updates$/u.test(pathname) && allowsLiveUpdatesQuery(query)) return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u.test(pathname) && query === '') return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u.test(pathname) && allowsLiveEventsQuery(query)) return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u.test(pathname) && query === '') return pathWithQuery;
@@ -7462,8 +7462,8 @@ function runtimeFlowerMethodAllowed(path: string, method: RuntimeFlowerRequest['
         || pathname === '/_redeven_proxy/api/ai/models'
         || pathname === '/_redeven_proxy/api/ai/threads'
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/updates$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname);
     case 'POST':
       return pathname === '/_redeven_proxy/api/ai/runs'

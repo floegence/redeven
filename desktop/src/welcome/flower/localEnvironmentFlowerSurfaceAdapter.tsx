@@ -16,7 +16,7 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
-  FlowerThreadLiveSnapshot,
+  FlowerLiveBootstrap,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
 } from '../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
@@ -26,7 +26,7 @@ import type {
 } from '../../../../internal/envapp/ui_src/src/ui/pages/settings/types';
 import {
   mapFlowerThread,
-  mapFlowerLiveSnapshot,
+  mapFlowerLiveBootstrap,
 } from '../../../../internal/flower_ui/src/flowerLiveMapper';
 import { createRuntimeFlowerSurfaceAdapter } from '../../../../internal/flower_ui/src/runtimeFlowerSurfaceAdapter';
 
@@ -298,10 +298,10 @@ async function loadModels(bridge: DesktopSettingsBridge): Promise<ModelsResponse
   return runtimeJSON<ModelsResponse>(bridge, 'GET', '/_redeven_proxy/api/ai/models');
 }
 
-async function loadRuntimeFlowerThread(bridge: DesktopSettingsBridge, threadID: string): Promise<FlowerThreadLiveSnapshot> {
+async function loadRuntimeFlowerThread(bridge: DesktopSettingsBridge, threadID: string): Promise<FlowerLiveBootstrap> {
   const tid = trim(threadID);
   if (!tid) throw new Error('Missing thread id.');
-  return mapRuntimeFlowerLiveSnapshot(await runtimeJSON<unknown>(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/live`));
+  return mapRuntimeFlowerLiveBootstrap(await runtimeJSON<unknown>(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/live/bootstrap`));
 }
 
 function localEnvironmentLiveMapperOptions() {
@@ -314,8 +314,8 @@ function localEnvironmentLiveMapperOptions() {
   };
 }
 
-function mapRuntimeFlowerLiveSnapshot(raw: unknown): FlowerThreadLiveSnapshot {
-  return mapFlowerLiveSnapshot(raw, localEnvironmentLiveMapperOptions());
+function mapRuntimeFlowerLiveBootstrap(raw: unknown): FlowerLiveBootstrap {
+  return mapFlowerLiveBootstrap(raw, localEnvironmentLiveMapperOptions());
 }
 
 export async function sendLocalEnvironmentFlowerPrompt(
@@ -325,7 +325,7 @@ export async function sendLocalEnvironmentFlowerPrompt(
     prompt: string;
     contextAction?: unknown;
   }>,
-): Promise<FlowerThreadLiveSnapshot> {
+): Promise<FlowerLiveBootstrap> {
   const prompt = trim(input.prompt);
   if (!prompt) throw new Error('Enter a message before sending.');
   const snapshot = await loadSettingsSnapshot(bridge);
@@ -372,11 +372,11 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     transport: {
       listThreads: () => runtimeJSON(bridge, 'GET', '/_redeven_proxy/api/ai/threads?limit=200'),
-      loadThread: (threadID) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live`),
-      listThreadLiveUpdates: (threadID, afterSeq, limit) => runtimeJSON(
+      loadThread: (threadID) => runtimeJSON(bridge, 'GET', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/bootstrap`),
+      listThreadLiveEvents: (threadID, afterSeq, limit) => runtimeJSON(
         bridge,
         'GET',
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/updates?after_seq=${afterSeq}&limit=${limit}`,
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/events?after_seq=${afterSeq}&limit=${limit}`,
       ),
       markThreadRead: (threadID, body) => runtimeJSON<MarkThreadReadResponse>(
         bridge,

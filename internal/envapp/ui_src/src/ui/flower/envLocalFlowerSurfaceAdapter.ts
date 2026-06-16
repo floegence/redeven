@@ -11,10 +11,10 @@ import type {
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
   FlowerThreadReadStatus,
-  FlowerThreadLiveSnapshot,
+  FlowerLiveBootstrap,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import type { ContextActionEnvelope } from '../contextActions/protocol';
-import { mapFlowerLiveSnapshot } from '../../../../../flower_ui/src/flowerLiveMapper';
+import { mapFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveMapper';
 import { createRuntimeFlowerSurfaceAdapter } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
 
 type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
@@ -225,8 +225,8 @@ function envLiveMapperOptions(options: EnvLocalFlowerSurfaceAdapterOptions) {
   };
 }
 
-function mapEnvFlowerLiveSnapshot(raw: unknown, options: EnvLocalFlowerSurfaceAdapterOptions): FlowerThreadLiveSnapshot {
-  return mapFlowerLiveSnapshot(raw, envLiveMapperOptions(options));
+function mapEnvFlowerLiveBootstrap(raw: unknown, options: EnvLocalFlowerSurfaceAdapterOptions): FlowerLiveBootstrap {
+  return mapFlowerLiveBootstrap(raw, envLiveMapperOptions(options));
 }
 
 function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDecision {
@@ -311,8 +311,8 @@ function isContextActionEnvelope(value: unknown): value is ContextActionEnvelope
 
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
   const copy = adapterCopy(options);
-  const loadThread = async (threadID: string) => mapEnvFlowerLiveSnapshot(
-    await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(trim(threadID))}/live`, { method: 'GET' }),
+  const loadThread = async (threadID: string) => mapEnvFlowerLiveBootstrap(
+    await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(trim(threadID))}/live/bootstrap`, { method: 'GET' }),
     options,
   );
 
@@ -326,9 +326,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     },
     transport: {
       listThreads: () => fetchGatewayJSON('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' }),
-      loadThread: (threadID) => fetchGatewayJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live`, { method: 'GET' }),
-      listThreadLiveUpdates: (threadID, afterSeq, limit) => fetchGatewayJSON(
-        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/updates?after_seq=${afterSeq}&limit=${limit}`,
+      loadThread: (threadID) => fetchGatewayJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/bootstrap`, { method: 'GET' }),
+      listThreadLiveEvents: (threadID, afterSeq, limit) => fetchGatewayJSON(
+        `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/events?after_seq=${afterSeq}&limit=${limit}`,
         { method: 'GET' },
       ),
       markThreadRead: (threadID, body) => fetchGatewayJSON<MarkThreadReadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/read`, {
