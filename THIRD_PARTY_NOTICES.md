@@ -754,8 +754,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | jiti | 2.6.1 | MIT | Desktop shell | https://www.npmjs.com/package/jiti/v/2.6.1 |  |
 | jiti | 2.7.0 | MIT | Env App UI | https://www.npmjs.com/package/jiti/v/2.7.0 |  |
 | js-tokens | 4.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/js-tokens/v/4.0.0 |  |
-| js-yaml | 4.1.1 | MIT | Code App UI | https://www.npmjs.com/package/js-yaml/v/4.1.1 |  |
-| js-yaml | 4.2.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/js-yaml/v/4.2.0 |  |
+| js-yaml | 4.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/js-yaml/v/4.2.0 |  |
 | jsdom | 26.1.0 | MIT | Env App UI | https://www.npmjs.com/package/jsdom/v/26.1.0 |  |
 | jsdom | 29.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/jsdom/v/29.0.1 |  |
 | jsesc | 3.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/jsesc/v/3.1.0 |  |
