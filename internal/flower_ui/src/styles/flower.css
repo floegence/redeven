@@ -718,6 +718,103 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
 }
 
+.flower-approval-card {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 28%, var(--flower-chat-surface-border));
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 6%, var(--flower-chat-surface-elevated));
+  padding: 0.75rem;
+}
+
+.flower-approval-heading {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 1.75rem minmax(0, 1fr);
+  align-items: start;
+  gap: 0.625rem;
+}
+
+.flower-approval-icon {
+  display: flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
+  color: color-mix(in srgb, var(--warning, #f59e0b) 82%, var(--foreground) 18%);
+}
+
+.flower-approval-copy {
+  min-width: 0;
+}
+
+.flower-approval-kicker {
+  color: color-mix(in srgb, var(--warning, #f59e0b) 82%, var(--foreground) 18%);
+  font-size: 0.6875rem;
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.flower-approval-title {
+  margin-top: 0.125rem;
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.flower-approval-description,
+.flower-approval-unavailable {
+  margin-top: 0.25rem;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.flower-approval-meta {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.flower-approval-chip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 86%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-approval-chip-warning {
+  border-color: color-mix(in srgb, var(--warning, #f59e0b) 24%, var(--flower-chat-surface-border));
+  color: color-mix(in srgb, var(--warning, #f59e0b) 78%, var(--foreground) 22%);
+}
+
+.flower-approval-actions {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .flower-activity-inline {
   display: grid;
   width: 100%;
@@ -730,6 +827,14 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline-row {
   min-width: 0;
+}
+
+.flower-activity-inline-approval {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 0.5rem;
+  margin-top: 0.375rem;
 }
 
 .flower-activity-inline-line {

@@ -843,7 +843,9 @@ describe('main routing', () => {
     expect(pathSrc).toContain("'/_redeven_proxy/api/ai/provider_bundle'");
     expect(pathSrc).toContain("'/_redeven_proxy/api/ai/models'");
     expect(pathSrc).toContain("'/_redeven_proxy/api/ai/runs'");
-    expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/messages$/u");
+    expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live$/u");
+    expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live\\/updates$/u");
+    expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/approvals$/u");
     expect(pathSrc).toContain("throw new Error('Flower runtime request path is not allowed.');");
     expect(pathSrc).not.toContain("startsWith('/_redeven_proxy/api/ai/threads')");
 

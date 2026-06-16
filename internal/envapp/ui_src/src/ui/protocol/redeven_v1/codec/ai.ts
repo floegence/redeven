@@ -4,8 +4,6 @@ import type {
   AICancelRunResponse,
   AIFollowupAttachment,
   AIFollowupItem,
-  AIGetActiveRunSnapshotRequest,
-  AIGetActiveRunSnapshotResponse,
   AIListMessagesRequest,
   AIListMessagesResponse,
   AIRealtimeEvent,
@@ -23,8 +21,6 @@ import type {
   AISubscribeSummaryResponse,
   AISubscribeThreadRequest,
   AISubscribeThreadResponse,
-  AIToolApprovalRequest,
-  AIToolApprovalResponse,
   AITranscriptMessageItem,
   AIThreadRunStatus,
 } from '../sdk/ai';
@@ -35,8 +31,6 @@ import type {
   wire_ai_event_notify,
   wire_ai_followup_attachment,
   wire_ai_followup_item,
-  wire_ai_get_active_run_snapshot_req,
-  wire_ai_get_active_run_snapshot_resp,
   wire_ai_list_messages_req,
   wire_ai_list_messages_resp,
   wire_ai_send_user_turn_req,
@@ -49,8 +43,6 @@ import type {
   wire_ai_subscribe_thread_req,
   wire_ai_subscribe_thread_resp,
   wire_ai_transcript_message_item,
-  wire_ai_tool_approval_req,
-  wire_ai_tool_approval_resp,
   wire_ai_request_user_input_action,
   wire_ai_request_user_input_answer,
   wire_ai_request_user_input_choice,
@@ -335,34 +327,6 @@ export function fromWireAIStopThreadResponse(resp: wire_ai_stop_thread_resp): AI
   return {
     ok: Boolean(resp?.ok ?? false),
     recoveredFollowups: recoveredFollowups.length > 0 ? recoveredFollowups : undefined,
-  };
-}
-
-export function toWireAIToolApprovalRequest(req: AIToolApprovalRequest): wire_ai_tool_approval_req {
-  return {
-    run_id: String(req.runId ?? '').trim(),
-    tool_id: String(req.toolId ?? '').trim(),
-    approved: Boolean(req.approved),
-  };
-}
-
-export function fromWireAIToolApprovalResponse(resp: wire_ai_tool_approval_resp): AIToolApprovalResponse {
-  return { ok: Boolean(resp?.ok ?? false) };
-}
-
-export function toWireAIGetActiveRunSnapshotRequest(req: AIGetActiveRunSnapshotRequest): wire_ai_get_active_run_snapshot_req {
-  return {
-    thread_id: String(req.threadId ?? '').trim(),
-  };
-}
-
-export function fromWireAIGetActiveRunSnapshotResponse(resp: wire_ai_get_active_run_snapshot_resp): AIGetActiveRunSnapshotResponse {
-  const ok = Boolean(resp?.ok ?? false);
-  const runId = String(resp?.run_id ?? '').trim();
-  return {
-    ok,
-    runId: ok && runId ? runId : undefined,
-    messageJson: ok ? resp?.message_json : undefined,
   };
 }
 

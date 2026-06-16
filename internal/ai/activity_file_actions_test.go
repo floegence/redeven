@@ -141,6 +141,50 @@ func TestSanitizeActivityTimelineMessageJSONFiltersPublicPayloadContract(t *test
 	}
 }
 
+func TestPublicActiveRunMessageSnapshotSanitizesActivityTimeline(t *testing.T) {
+	t.Parallel()
+
+	raw := rawActivityMessageWithPrivateFileActionSidecar("msg_active_live")
+	var message struct {
+		Blocks []json.RawMessage `json:"blocks"`
+	}
+	if err := json.Unmarshal([]byte(raw), &message); err != nil {
+		t.Fatalf("Unmarshal raw message: %v", err)
+	}
+	var rawBlock ActivityTimelineBlock
+	if err := json.Unmarshal(message.Blocks[0], &rawBlock); err != nil {
+		t.Fatalf("Unmarshal activity block: %v", err)
+	}
+	r := &run{
+		id:                       "run_active_live",
+		threadID:                 "thread_active_live",
+		messageID:                "msg_active_live",
+		assistantCreatedAtUnixMs: 1700000000000,
+		assistantBlocks:          []any{rawBlock},
+	}
+
+	publicSnapshot := r.publicActiveRunMessageSnapshot()
+	if len(publicSnapshot.MessageJSON) == 0 {
+		t.Fatalf("missing public active snapshot")
+	}
+	body := string(publicSnapshot.MessageJSON)
+	for _, forbidden := range []string{"preview_path", "directory_path", "root_dir", `\"path\"`, `"cwd"`, `"stdin"`} {
+		if strings.Contains(body, forbidden) {
+			t.Fatalf("public active snapshot contains %q: %s", forbidden, body)
+		}
+	}
+	for _, required := range []string{`"can_preview":true`, `"can_browse_directory":true`} {
+		if !strings.Contains(body, required) {
+			t.Fatalf("public active snapshot missing %q: %s", required, body)
+		}
+	}
+
+	rawSnapshot := r.activeRunMessageSnapshot()
+	if !strings.Contains(string(rawSnapshot.MessageJSON), "preview_path") {
+		t.Fatalf("raw active snapshot should retain private file action data for privileged resolver: %s", string(rawSnapshot.MessageJSON))
+	}
+}
+
 func TestResolveFlowerFileActionOpenTargetRejectsIncompleteIdentity(t *testing.T) {
 	svc := newTestService(t, nil)
 	meta := &session.Meta{EndpointID: "env_invalid_action", CanRead: true, CanWrite: true, CanExecute: true}

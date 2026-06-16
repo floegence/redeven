@@ -52,8 +52,8 @@ func TestFloretToolDefinitionStripsRedevenTargetSchema(t *testing.T) {
 	if containsAnyString(required, "target_id") || !containsAnyString(required, "command") {
 		t.Fatalf("schema required fields changed: %#v", required)
 	}
-	if def.Permission.Mode == fltools.PermissionAllow {
-		t.Fatalf("Floret tool definition must not declare Redeven tools as Floret-allowed")
+	if def.Permission.Mode != fltools.PermissionAllow {
+		t.Fatalf("permission=%q, want allow because Redeven owns tool authorization", def.Permission.Mode)
 	}
 }
 
@@ -330,7 +330,7 @@ func TestFloretToolRegistryDoesNotInjectRunTargetContext(t *testing.T) {
 		ID:   "call_1",
 		Name: "terminal.exec",
 		Args: `{"command":"pwd"}`,
-	}, redevenFloretToolApprover)
+	}, nil)
 	if result.IsError {
 		t.Fatalf("registry result error text=%q structured=%#v", result.Text, result.Structured)
 	}

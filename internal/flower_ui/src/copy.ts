@@ -1,4 +1,4 @@
-import type { FlowerProviderType, FlowerThreadStatus } from './contracts/flowerSurfaceContracts';
+import type { FlowerActivityApprovalState, FlowerProviderType, FlowerThreadStatus } from './contracts/flowerSurfaceContracts';
 import type { FlowerProviderModelNoteKey } from './settings/providerModelNotes';
 import { localizedFlowerProviderModelNote } from './settings/providerModelNotes';
 import type { FlowerProviderTypeLabels } from './settings/providerTypeLabels';
@@ -244,7 +244,12 @@ export type FlowerSurfaceCopy = Readonly<{
     composerErrorTitle: string;
     toolStatuses: Readonly<Record<'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled', string>>;
     toolApprovalRequired: string;
+    toolApprovalStates: Readonly<Record<FlowerActivityApprovalState, string>>;
     toolApprovalState: (state: string) => string;
+    toolApprovalApprove: string;
+    toolApprovalReject: string;
+    toolApprovalSubmitting: string;
+    toolApprovalUnavailable: string;
     inputRequestTitle?: string;
     inputRequestDescription?: string;
     inputRequestSubmit?: string;
@@ -313,7 +318,18 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       canceled: 'Canceled',
     },
     toolApprovalRequired: 'Approval required',
+    toolApprovalStates: {
+      requested: 'Requested',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      timed_out: 'Timed out',
+      canceled: 'Canceled',
+    },
     toolApprovalState: (state) => `Approval: ${state}`,
+    toolApprovalApprove: 'Approve',
+    toolApprovalReject: 'Reject',
+    toolApprovalSubmitting: 'Submitting...',
+    toolApprovalUnavailable: 'Approval is no longer available.',
     inputRequestTitle: 'Waiting for your reply',
     inputRequestDescription: 'Reply in the composer to continue this conversation.',
     inputRequestSubmit: 'Continue',

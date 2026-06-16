@@ -4,43 +4,24 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-
-	"github.com/floegence/redeven/internal/session"
 )
 
-func TestGetActiveRunSnapshot_UsesStreamingStatus(t *testing.T) {
+func TestActiveRunMessageSnapshot_UsesStreamingStatus(t *testing.T) {
 	t.Parallel()
 
 	r := &run{
+		id:                       "run_test",
 		messageID:                "msg_snapshot_streaming",
 		assistantCreatedAtUnixMs: 1700000000003,
 		assistantBlocks: []any{
 			&persistedMarkdownBlock{Type: "markdown", Content: "still running"},
 		},
 	}
-	svc := &Service{
-		activeRunByTh: map[string]string{
-			runThreadKey("env_test", "th_test"): "run_test",
-		},
-		runs: map[string]*run{
-			"run_test": r,
-		},
-	}
-	meta := &session.Meta{
-		EndpointID: "env_test",
-		CanRead:    true,
-	}
 
-	runID, rawJSON, err := svc.GetActiveRunSnapshot(meta, "th_test")
-	if err != nil {
-		t.Fatalf("GetActiveRunSnapshot: %v", err)
-	}
-	if strings.TrimSpace(runID) != "run_test" {
-		t.Fatalf("runID=%q, want run_test", runID)
-	}
+	snapshot := r.activeRunMessageSnapshot()
 
 	var parsed map[string]any
-	if err := json.Unmarshal([]byte(rawJSON), &parsed); err != nil {
+	if err := json.Unmarshal(snapshot.MessageJSON, &parsed); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
 	gotStatus, _ := parsed["status"].(string)
@@ -49,10 +30,11 @@ func TestGetActiveRunSnapshot_UsesStreamingStatus(t *testing.T) {
 	}
 }
 
-func TestGetActiveRunSnapshot_SuppressesSnapshotsAfterAssistantPersisted(t *testing.T) {
+func TestActiveRunMessageSnapshot_SuppressesSnapshotsAfterAssistantPersisted(t *testing.T) {
 	t.Parallel()
 
 	r := &run{
+		id:                       "run_test",
 		messageID:                "msg_snapshot_persisted",
 		assistantCreatedAtUnixMs: 1700000000004,
 		assistantBlocks: []any{
@@ -61,27 +43,8 @@ func TestGetActiveRunSnapshot_SuppressesSnapshotsAfterAssistantPersisted(t *test
 	}
 	r.markAssistantPersisted()
 
-	svc := &Service{
-		activeRunByTh: map[string]string{
-			runThreadKey("env_test", "th_test"): "run_test",
-		},
-		runs: map[string]*run{
-			"run_test": r,
-		},
-	}
-	meta := &session.Meta{
-		EndpointID: "env_test",
-		CanRead:    true,
-	}
-
-	runID, rawJSON, err := svc.GetActiveRunSnapshot(meta, "th_test")
-	if err != nil {
-		t.Fatalf("GetActiveRunSnapshot: %v", err)
-	}
-	if runID != "" {
-		t.Fatalf("runID=%q, want empty", runID)
-	}
-	if rawJSON != "" {
-		t.Fatalf("rawJSON=%q, want empty", rawJSON)
+	snapshot := r.activeRunMessageSnapshot()
+	if len(snapshot.MessageJSON) != 0 {
+		t.Fatalf("messageJSON=%q, want empty", string(snapshot.MessageJSON))
 	}
 }

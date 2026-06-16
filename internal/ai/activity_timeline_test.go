@@ -66,6 +66,157 @@ func TestRecordObservationActivityEventPublishesFloretTimelineBlock(t *testing.T
 	}
 }
 
+func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) {
+	t.Parallel()
+
+	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{
+		"command": "pwd; sleep 5; ls -1",
+	}, terminalExecTimeoutDecision{
+		RequestedMS: 2000,
+		EffectiveMS: 5000,
+		Source:      "max",
+	})
+	if presentation == nil {
+		t.Fatal("presentation is nil")
+	}
+	if presentation.Label != "pwd; sleep 5; ls -1" || presentation.Description != "Running command" || presentation.Renderer != observation.ActivityRendererTerminal {
+		t.Fatalf("presentation=%+v", presentation)
+	}
+	if presentation.Payload["command"] != "pwd; sleep 5; ls -1" {
+		t.Fatalf("command payload=%v", presentation.Payload["command"])
+	}
+	if presentation.Payload["status"] != toolCallStatusRunning {
+		t.Fatalf("status payload=%v", presentation.Payload["status"])
+	}
+	if presentation.Payload["timeout_ms"] != int64(5000) {
+		t.Fatalf("timeout_ms payload=%v", presentation.Payload["timeout_ms"])
+	}
+	if presentation.Payload["requested_timeout_ms"] != int64(2000) {
+		t.Fatalf("requested_timeout_ms payload=%v", presentation.Payload["requested_timeout_ms"])
+	}
+	if presentation.Payload["timeout_source"] != "max" {
+		t.Fatalf("timeout_source payload=%v", presentation.Payload["timeout_source"])
+	}
+}
+
+func TestRecordObservationActivityEventPublishesRunningToolFirstFrame(t *testing.T) {
+	t.Parallel()
+
+	var frames []ActivityTimelineBlock
+	r := &run{
+		id:                        "run_running",
+		threadID:                  "thread_running",
+		messageID:                 "msg_running",
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 2),
+		nextBlockIndex:            0,
+		onStreamEvent: func(ev any) {
+			bs, ok := ev.(streamEventBlockSet)
+			if !ok {
+				return
+			}
+			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
+				frames = append(frames, block)
+			}
+		},
+	}
+
+	activity := toolStartActivityPresentation("terminal.exec", map[string]any{
+		"command": "pwd; sleep 5; ls -1",
+	}, terminalExecTimeoutDecision{
+		EffectiveMS: 5000,
+		Source:      "configured",
+	})
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolCall,
+		ToolID:     "tool_running_terminal",
+		ToolName:   "terminal.exec",
+		ToolKind:   "local",
+		Activity:   activity,
+		ObservedAt: time.UnixMilli(1000),
+	})
+
+	if len(frames) != 1 {
+		t.Fatalf("timeline frames=%d, want 1", len(frames))
+	}
+	latest := frames[0]
+	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusRunning {
+		t.Fatalf("summary=%+v, want running one-item timeline", latest.Summary)
+	}
+	item := latest.Items[0]
+	if item.ToolID != "tool_running_terminal" || item.ToolName != "terminal.exec" || item.Status != observation.ActivityStatusRunning {
+		t.Fatalf("item=%+v, want running terminal item", item)
+	}
+	if item.Label != "pwd; sleep 5; ls -1" || item.Renderer != observation.ActivityRendererTerminal {
+		t.Fatalf("item presentation label=%q renderer=%q", item.Label, item.Renderer)
+	}
+	if item.Payload["command"] != "pwd; sleep 5; ls -1" || item.Payload["status"] != toolCallStatusRunning {
+		t.Fatalf("item payload=%+v", item.Payload)
+	}
+	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 0 {
+		t.Fatalf("item timing=%+v, want open running item", item)
+	}
+}
+
+func TestRecordToolResultActivityClosesRunningTerminalItem(t *testing.T) {
+	t.Parallel()
+
+	var frames []ActivityTimelineBlock
+	r := &run{
+		id:                        "run_terminal_result",
+		threadID:                  "thread_terminal_result",
+		messageID:                 "msg_terminal_result",
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 2),
+		nextBlockIndex:            0,
+		onStreamEvent: func(ev any) {
+			bs, ok := ev.(streamEventBlockSet)
+			if !ok {
+				return
+			}
+			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
+				frames = append(frames, block)
+			}
+		},
+	}
+
+	activity := toolStartActivityPresentation("terminal.exec", map[string]any{
+		"command": "printf start; sleep 5; printf end",
+	}, terminalExecTimeoutDecision{EffectiveMS: 6000})
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolCall,
+		ToolID:     "tool_terminal_result",
+		ToolName:   "terminal.exec",
+		ToolKind:   "local",
+		Activity:   activity,
+		ObservedAt: time.UnixMilli(1000),
+	})
+	r.recordToolResultActivity("tool_terminal_result", "terminal.exec", toolResultStatusSuccess, map[string]any{
+		"command":     "printf start; sleep 5; printf end",
+		"stdout":      "startend",
+		"exit_code":   0,
+		"duration_ms": int64(5000),
+	}, nil, time.UnixMilli(6000))
+
+	if len(frames) != 2 {
+		t.Fatalf("timeline frames=%d, want 2", len(frames))
+	}
+	latest := frames[len(frames)-1]
+	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusSuccess {
+		t.Fatalf("summary=%+v, want successful one-item timeline", latest.Summary)
+	}
+	item := latest.Items[0]
+	if item.ToolID != "tool_terminal_result" || item.ToolName != "terminal.exec" || item.Status != observation.ActivityStatusSuccess {
+		t.Fatalf("item=%+v, want successful terminal item", item)
+	}
+	if item.Renderer != observation.ActivityRendererTerminal || item.Payload["stdout"] != "startend" || item.Payload["exit_code"] != 0 {
+		t.Fatalf("item renderer=%q payload=%+v", item.Renderer, item.Payload)
+	}
+	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 6000 {
+		t.Fatalf("item timing=%+v, want closed terminal item", item)
+	}
+}
+
 func TestRecordObservationActivityEventSkipsEmptyTimeline(t *testing.T) {
 	t.Parallel()
 

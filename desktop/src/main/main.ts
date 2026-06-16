@@ -7432,6 +7432,10 @@ function runtimeFlowerPath(rawPath: unknown): string {
   const query = parsed.search;
   const pathWithQuery = `${pathname}${query}`;
   const allowsLimitQuery = (value: string) => value === '' || /^\?limit=\d{1,4}$/u.test(value);
+  const allowsLiveUpdatesQuery = (value: string) => value === ''
+    || /^\?after_seq=\d+$/u.test(value)
+    || /^\?after_seq=\d+&limit=\d{1,3}$/u.test(value)
+    || /^\?limit=\d{1,3}&after_seq=\d+$/u.test(value);
   if (pathname === '/_redeven_proxy/api/settings' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/provider_bundle' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/models' && query === '') return pathWithQuery;
@@ -7439,13 +7443,13 @@ function runtimeFlowerPath(rawPath: unknown): string {
   if (pathname === '/_redeven_proxy/api/ai/uploads' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/threads' && allowsLimitQuery(query)) return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/messages$/u.test(pathname) && allowsLimitQuery(query)) return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live$/u.test(pathname) && query === '') return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/updates$/u.test(pathname) && allowsLiveUpdatesQuery(query)) return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/events$/u.test(pathname) && /^\?after_seq=\d+$/u.test(query)) return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/approvals$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/cancel$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/tool_approvals$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname) && query === '') return pathWithQuery;
   throw new Error('Flower runtime request path is not allowed.');
 }
@@ -7458,8 +7462,8 @@ function runtimeFlowerMethodAllowed(path: string, method: RuntimeFlowerRequest['
         || pathname === '/_redeven_proxy/api/ai/models'
         || pathname === '/_redeven_proxy/api/ai/threads'
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/messages$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/events$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/updates$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname);
     case 'POST':
       return pathname === '/_redeven_proxy/api/ai/runs'
@@ -7468,8 +7472,8 @@ function runtimeFlowerMethodAllowed(path: string, method: RuntimeFlowerRequest['
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/cancel$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/tool_approvals$/u.test(pathname);
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/approvals$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/cancel$/u.test(pathname);
     case 'PUT':
       return pathname === '/_redeven_proxy/api/ai/provider_bundle';
     case 'PATCH':

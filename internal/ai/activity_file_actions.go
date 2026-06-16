@@ -49,29 +49,12 @@ func (s *Service) ResolveFlowerFileActionOpenTarget(ctx context.Context, meta *s
 	if threadID == "" || messageID == "" || req.BlockIndex < 0 || itemID == "" || actionID == "" {
 		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionInvalid
 	}
-	s.mu.Lock()
-	db := s.threadsDB
-	s.mu.Unlock()
-	if db == nil {
-		return FlowerFileActionOpenTarget{}, errors.New("threads store not ready")
-	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	if endpointID == "" {
 		return FlowerFileActionOpenTarget{}, errors.New("missing endpoint_id")
 	}
-	msgs, _, _, err := db.ListMessages(ctx, endpointID, threadID, 200, 0)
+	values, err := s.rawFlowerActionMessageValues(ctx, endpointID, threadID)
 	if err != nil {
-		return FlowerFileActionOpenTarget{}, err
-	}
-	values := make([]any, 0, len(msgs)+1)
-	for _, msg := range msgs {
-		if raw := strings.TrimSpace(msg.MessageJSON); raw != "" {
-			values = append(values, json.RawMessage(raw))
-		}
-	}
-	if _, raw, err := s.GetActiveRunSnapshot(meta, threadID); err == nil && strings.TrimSpace(raw) != "" {
-		values = append(values, json.RawMessage(raw))
-	} else if err != nil {
 		return FlowerFileActionOpenTarget{}, err
 	}
 	target, ok, err := ResolveFlowerFileActionOpenTargetFromMessages(values, req)
@@ -82,6 +65,45 @@ func (s *Service) ResolveFlowerFileActionOpenTarget(ctx context.Context, meta *s
 		return FlowerFileActionOpenTarget{}, ErrFlowerFileActionNotFound
 	}
 	return target, nil
+}
+
+func (s *Service) rawFlowerActionMessageValues(ctx context.Context, endpointID string, threadID string) ([]any, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return nil, errors.New("invalid request")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	runID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
+	r := s.runs[runID]
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	msgs, _, _, err := db.ListMessages(ctx, endpointID, threadID, 200, 0)
+	if err != nil {
+		return nil, err
+	}
+	values := make([]any, 0, len(msgs)+1)
+	for _, msg := range msgs {
+		if strings.TrimSpace(msg.MessageJSON) != "" {
+			values = append(values, msg.MessageJSON)
+		}
+	}
+	if r != nil && !r.assistantAlreadyPersisted() {
+		msg := r.activeRunMessageSnapshot()
+		if len(msg.MessageJSON) > 0 {
+			values = append(values, msg.MessageJSON)
+		}
+	}
+	return values, nil
 }
 
 func SanitizeActivityTimelineMessageJSON(raw string) (json.RawMessage, error) {
