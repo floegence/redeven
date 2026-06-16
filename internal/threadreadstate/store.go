@@ -18,8 +18,6 @@ type Surface string
 const (
 	SurfaceFlower Surface = "flower"
 	SurfaceCodex  Surface = "codex"
-
-	FlowerRuntimeScopeID = "runtime"
 )
 
 type Store struct {
@@ -97,9 +95,10 @@ func (s *Store) Close() error {
 func (s *Store) EnsureFlower(
 	ctx context.Context,
 	endpointID string,
+	userPublicID string,
 	snapshots map[string]FlowerSnapshot,
 ) (map[string]Record, error) {
-	return s.ensure(ctx, endpointID, FlowerRuntimeScopeID, SurfaceFlower, snapshots, nil)
+	return s.ensure(ctx, endpointID, userPublicID, SurfaceFlower, snapshots, nil)
 }
 
 func (s *Store) EnsureCodex(
@@ -114,12 +113,13 @@ func (s *Store) EnsureCodex(
 func (s *Store) AdvanceFlower(
 	ctx context.Context,
 	endpointID string,
+	userPublicID string,
 	threadID string,
 	snapshot FlowerSnapshot,
 ) (Record, error) {
 	record, err := s.advance(ctx, recordKey{
 		EndpointID: endpointID,
-		ScopeID:    FlowerRuntimeScopeID,
+		ScopeID:    userPublicID,
 		Surface:    SurfaceFlower,
 		ThreadID:   threadID,
 	}, snapshot, CodexSnapshot{})

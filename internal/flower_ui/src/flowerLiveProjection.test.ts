@@ -2,11 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   FlowerChatMessage,
-  FlowerThreadLiveSnapshot,
+  FlowerLiveBootstrap,
+  FlowerLiveEvent,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
-import { mapFlowerLiveSnapshot } from './flowerLiveMapper';
-import { applyFlowerLiveUpdate, projectFlowerLiveSnapshot } from './flowerLiveReducer';
+import { mapFlowerLiveBootstrap, mapFlowerLiveEvents } from './flowerLiveMapper';
+import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
 
 function readStatus(overrides: Record<string, unknown> = {}) {
   return {
@@ -54,9 +55,68 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
   };
 }
 
+function bootstrap(overrides: Partial<FlowerLiveBootstrap> = {}): FlowerLiveBootstrap {
+  const baseThread = thread();
+  return {
+    schema_version: 1,
+    endpoint_id: 'runtime',
+    thread_id: baseThread.thread_id,
+    cursor: 0,
+    retained_from_seq: 1,
+    thread: baseThread,
+    transcript_messages: baseThread.messages,
+    live_state: {
+      thread_patch: {},
+      message_order: [],
+      messages: {},
+      runs: {},
+      approval_actions: {},
+      input_requests: {},
+    },
+    read_status: baseThread.read_status,
+    generated_at_ms: 3000,
+    ...overrides,
+  };
+}
+
+function event<K extends FlowerLiveEvent['kind']>(
+  seq: number,
+  kind: K,
+  payload: FlowerLiveEvent<K>['payload'],
+): FlowerLiveEvent<K> {
+  const result = {
+    schema_version: 1,
+    seq,
+    endpoint_id: 'runtime',
+    thread_id: 'th-live',
+    run_id: 'run-1',
+    turn_id: 'turn-1',
+    at_unix_ms: 3000 + seq,
+    kind,
+    payload,
+  } as FlowerLiveEvent<K>;
+  return result;
+}
+
+function applyEvents(initial: FlowerThreadSnapshot, cursor: number, events: readonly FlowerLiveEvent[]) {
+  let next = initial;
+  let nextCursor = cursor;
+  for (const item of events) {
+    const result = applyFlowerLiveEvent(next, nextCursor, item);
+    next = result.thread;
+    nextCursor = result.cursor;
+  }
+  return { thread: next, cursor: nextCursor };
+}
+
 describe('Flower live projection', () => {
-  it('maps top-level read_status from live snapshots', () => {
-    const snapshot = mapFlowerLiveSnapshot({
+  it('maps top-level read_status from live bootstrap responses', () => {
+    const mapped = mapFlowerLiveBootstrap({
+      schema_version: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-live',
+      cursor: 42,
+      retained_from_seq: 1,
       thread: {
         thread_id: 'th-live',
         title: 'Live thread',
@@ -66,13 +126,21 @@ describe('Flower live projection', () => {
         updated_at_unix_ms: 1000,
         run_status: 'running',
       },
-      messages: [{
+      transcript_messages: [{
         id: 'msg-user',
         role: 'user',
         timestamp: 1000,
         status: 'complete',
         blocks: [{ type: 'markdown', content: 'Hello' }],
       }],
+      live_state: {
+        thread_patch: {},
+        message_order: [],
+        messages: {},
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      },
       read_status: readStatus({
         is_unread: true,
         snapshot: {
@@ -87,8 +155,7 @@ describe('Flower live projection', () => {
           last_seen_activity_signature: 'sig-3',
         },
       }),
-      event_cursor: 42,
-      generated_at_unix_ms: 3000,
+      generated_at_ms: 3000,
     }, {
       runtimeID: 'local',
       runtimeKind: 'local_environment',
@@ -96,111 +163,288 @@ describe('Flower live projection', () => {
       targetLabels: [],
     });
 
-    expect(snapshot.event_cursor).toBe(42);
-    expect(snapshot.thread.read_status.is_unread).toBe(true);
-    expect(snapshot.thread.read_status.snapshot.activity_revision).toBe(7);
-    expect(snapshot.thread.read_status.snapshot.waiting_prompt_id).toBe('prompt-1');
+    expect(mapped.cursor).toBe(42);
+    expect(mapped.thread.read_status.is_unread).toBe(true);
+    expect(mapped.thread.read_status.snapshot.activity_revision).toBe(7);
+    expect(mapped.thread.read_status.snapshot.waiting_prompt_id).toBe('prompt-1');
   });
 
-  it('projects active run messages and pending approval actions into the thread', () => {
-    const snapshot: FlowerThreadLiveSnapshot = {
-      thread: thread({ status: 'running' }),
-      active_run: {
-        run_id: 'run-1',
-        status: 'waiting_approval',
-        message: message({
-          id: 'assistant-active',
-          role: 'assistant',
-          status: 'streaming',
-          content: 'Inspecting files',
-          blocks: [{ type: 'markdown', content: 'Inspecting files' }],
-        }),
-        approval_actions: [{
-          action_id: 'appr-1',
-          run_id: 'run-1',
-          tool_id: 'tool-1',
-          tool_name: 'terminal.exec',
-          state: 'requested',
-          status: 'pending',
-          revision: 1,
-          requested_at_ms: 2000,
-          can_approve: true,
-          expected_seq: 5,
-          summary: { label: 'terminal.exec', effects: ['shell'] },
-        }],
-        last_event_seq: 5,
+  it('projects bootstrap live state into streaming assistant messages and approvals', () => {
+    const projected = projectFlowerLiveBootstrap(bootstrap({
+      cursor: 5,
+      live_state: {
+        thread_patch: { run_status: 'waiting_approval' },
+        message_order: ['assistant-live'],
+        messages: {
+          'assistant-live': {
+            message_id: 'assistant-live',
+            role: 'assistant',
+            status: 'streaming',
+            created_at_ms: 2000,
+            blocks: [{ type: 'markdown', content: 'Inspecting files' }],
+          },
+        },
+        runs: {
+          'run-1': { run_id: 'run-1', status: 'waiting_approval', message_id: 'assistant-live' },
+        },
+        approval_actions: {
+          'appr-1': {
+            action_id: 'appr-1',
+            run_id: 'run-1',
+            tool_id: 'tool-1',
+            tool_name: 'terminal.exec',
+            state: 'requested',
+            status: 'pending',
+            revision: 1,
+            requested_at_ms: 2000,
+            can_approve: true,
+            expected_seq: 5,
+            summary: { label: 'terminal.exec', effects: ['shell'] },
+          },
+        },
+        input_requests: {},
       },
-      event_cursor: 5,
-      generated_at_ms: 2000,
-    };
-
-    const projected = projectFlowerLiveSnapshot(snapshot);
+    }));
 
     expect(projected.status).toBe('waiting_approval');
-    expect(projected.messages.map((item) => item.id)).toEqual(['msg-user', 'assistant-active']);
+    expect(projected.messages.map((item) => item.id)).toEqual(['msg-user', 'assistant-live']);
+    expect(projected.messages[1]?.content).toBe('Inspecting files');
     expect(projected.approval_actions?.map((action) => action.action_id)).toEqual(['appr-1']);
-    expect(projected.approval_actions?.[0]?.revision).toBe(1);
-    expect(projected.approval_actions?.[0]?.expected_seq).toBe(5);
   });
 
-  it('replaces active run drafts when the final transcript message arrives', () => {
-    const current = thread({
+  it('preserves bootstrap live state whitespace before later deltas', () => {
+    const mapped = mapFlowerLiveBootstrap({
+      schema_version: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-live',
+      cursor: 5,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'th-live',
+        title: 'Live thread',
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 1000,
+        run_status: 'running',
+      },
+      transcript_messages: [{
+        id: 'msg-user',
+        role: 'user',
+        timestamp: 1000,
+        status: 'complete',
+        blocks: [{ type: 'markdown', content: 'Hello' }],
+      }],
+      live_state: {
+        thread_patch: { run_status: 'running' },
+        message_order: ['assistant-live'],
+        messages: {
+          'assistant-live': {
+            message_id: 'assistant-live',
+            role: 'assistant',
+            status: 'streaming',
+            created_at_ms: 2000,
+            blocks: [{ type: 'markdown', content: 'hello ' }],
+          },
+        },
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      },
+      read_status: readStatus(),
+      generated_at_ms: 3000,
+    }, {
+      runtimeID: 'local',
+      runtimeKind: 'local_environment',
+      sourceLabel: 'This host',
+      targetLabels: [],
+    });
+    const initial = projectFlowerLiveBootstrap(mapped);
+    const appended = applyFlowerLiveEvent(initial, mapped.cursor, event(6, 'message.block_delta', {
+      message_id: 'assistant-live',
+      block_index: 0,
+      delta: 'world',
+    }));
+
+    expect(initial.messages[1]?.blocks?.[0]).toMatchObject({
+      type: 'markdown',
+      content: 'hello ',
+    });
+    expect(appended.thread.messages[1]?.content).toBe('hello world');
+  });
+
+  it('applies message deltas incrementally without dropping whitespace', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const events = [
+      event(1, 'message.started', {
+        message_id: 'assistant-live',
+        role: 'assistant',
+        status: 'streaming',
+        created_at_ms: 2000,
+      }),
+      event(2, 'message.block_started', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        block_type: 'markdown',
+      }),
+      event(3, 'message.block_delta', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        delta: 'hello ',
+      }),
+      event(4, 'message.block_delta', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        delta: 'world\n',
+      }),
+    ];
+
+    const projected = applyEvents(initial, 0, events);
+
+    expect(projected.cursor).toBe(4);
+    expect(projected.thread.messages[1]?.content).toBe('hello world');
+    expect(projected.thread.messages[1]?.blocks?.[0]).toMatchObject({
+      type: 'markdown',
+      content: 'hello world\n',
+    });
+  });
+
+  it('appends live deltas to content-only streaming messages without replacing existing text', () => {
+    const initial = thread({
       messages: [
         message(),
-        message({
-          id: 'assistant-active',
+        {
+          id: 'assistant-live',
           role: 'assistant',
+          content: 'already visible',
           status: 'streaming',
-          content: 'Running terminal',
-        }),
+          created_at_ms: 2000,
+        },
       ],
-      approval_actions: [{
-        action_id: 'appr-1',
-        run_id: 'run-1',
-        tool_id: 'tool-1',
-        tool_name: 'terminal.exec',
-        state: 'requested',
-        status: 'pending',
-        revision: 1,
-        requested_at_ms: 2000,
-        can_approve: true,
-        summary: { label: 'terminal.exec' },
-      }],
     });
+    const result = applyFlowerLiveEvent(initial, 1, event(2, 'message.block_delta', {
+      message_id: 'assistant-live',
+      block_index: 0,
+      delta: ' plus delta',
+    }));
 
-    const result = applyFlowerLiveUpdate(current, 5, {
-      seq: 6,
-      thread_id: 'th-live',
-      kind: 'message.appended',
-      at_ms: 2500,
-      clear_active_run: true,
-      message: message({
-        id: 'assistant-final',
-        role: 'assistant',
-        status: 'complete',
-        content: 'Done',
-      }),
+    expect(result.thread.messages[1]?.content).toBe('already visible plus delta');
+    expect(result.thread.messages[1]?.blocks?.[0]).toMatchObject({
+      type: 'markdown',
+      content: 'already visible plus delta',
     });
-
-    expect(result.resyncRequired).toBe(false);
-    expect(result.cursor).toBe(6);
-    expect(result.thread.messages.map((item) => item.id)).toEqual(['msg-user', 'assistant-final']);
-    expect(result.thread.approval_actions).toEqual([]);
   });
 
-  it('marks stale update cursors as requiring a snapshot resync', () => {
-    const current = thread();
+  it('keeps whole-batch and split replay projections equivalent', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const events = [
+      event(1, 'message.started', {
+        message_id: 'assistant-live',
+        role: 'assistant',
+        status: 'streaming',
+        created_at_ms: 2000,
+      }),
+      event(2, 'message.block_started', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        block_type: 'markdown',
+      }),
+      event(3, 'message.block_delta', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        delta: 'one',
+      }),
+      event(4, 'message.block_delta', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        delta: ' two',
+      }),
+    ];
 
-    const result = applyFlowerLiveUpdate(current, 5, {
-      seq: 8,
-      thread_id: 'th-live',
-      kind: 'resync.required',
-      at_ms: 3000,
-      resync_reason: 'cursor_expired',
+    const whole = applyEvents(initial, 0, events);
+    const firstHalf = applyEvents(initial, 0, events.slice(0, 2));
+    const split = applyEvents(firstHalf.thread, firstHalf.cursor, events.slice(2));
+
+    expect(split).toEqual(whole);
+  });
+
+  it('ignores duplicate and stale event sequences', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const first = applyFlowerLiveEvent(initial, 5, event(5, 'message.block_delta', {
+      message_id: 'assistant-live',
+      block_index: 0,
+      delta: 'ignored',
+    }));
+    const second = applyFlowerLiveEvent(initial, 5, event(3, 'message.block_delta', {
+      message_id: 'assistant-live',
+      block_index: 0,
+      delta: 'ignored',
+    }));
+
+    expect(first.thread).toBe(initial);
+    expect(first.cursor).toBe(5);
+    expect(second.thread).toBe(initial);
+    expect(second.cursor).toBe(5);
+  });
+
+  it('commits a streaming draft under the same message id', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const withDraft = applyEvents(initial, 0, [
+      event(1, 'message.started', {
+        message_id: 'assistant-live',
+        role: 'assistant',
+        status: 'streaming',
+        created_at_ms: 2000,
+      }),
+      event(2, 'message.block_delta', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        delta: 'draft',
+      }),
+    ]);
+    const committed = applyFlowerLiveEvent(withDraft.thread, withDraft.cursor, event(3, 'message.committed', {
+      message_id: 'assistant-live',
+      message: message({
+        id: 'assistant-live',
+        role: 'assistant',
+        status: 'complete',
+        content: 'final',
+        blocks: [{ type: 'markdown', content: 'final' }],
+      }),
+    }));
+
+    expect(committed.thread.messages.map((item) => item.id)).toEqual(['msg-user', 'assistant-live']);
+    expect(committed.thread.messages[1]).toMatchObject({
+      id: 'assistant-live',
+      content: 'final',
+      status: 'complete',
     });
+  });
+
+  it('marks stream resync events as requiring bootstrap reload', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const result = applyFlowerLiveEvent(initial, 5, event(8, 'stream.resync_required', {
+      reason: 'cursor_expired',
+    }));
 
     expect(result.resyncRequired).toBe(true);
-    expect(result.cursor).toBe(8);
-    expect(result.thread).toBe(current);
+    expect(result.cursor).toBe(5);
+    expect(result.thread).toBe(initial);
+  });
+
+  it('rejects committed message events without a valid message payload', () => {
+    expect(() => mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        at_unix_ms: 3000,
+        kind: 'message.committed',
+        payload: { message_id: 'assistant-live' },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    })).toThrow(/message\.committed/);
   });
 });

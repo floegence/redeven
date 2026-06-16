@@ -9,6 +9,7 @@ import {
   type DesktopSettingsBridge,
 } from './localEnvironmentFlowerSurfaceAdapter';
 import type { RuntimeFlowerRequest } from '../../shared/runtimeFlowerIPC';
+import { projectFlowerLiveBootstrap } from '../../../../internal/flower_ui/src/flowerLiveReducer';
 
 function readStatus(isUnread = false, revision = 2, status = 'idle') {
   const signature = `status:${status}\u001factivity:${revision}`;
@@ -94,15 +95,27 @@ function threadView(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function liveSnapshot(overrides: Record<string, unknown> = {}, messages: unknown[] = []) {
+function liveBootstrap(overrides: Record<string, unknown> = {}, messages: unknown[] = []) {
   const thread = threadView(overrides);
+  const cursor = Number(overrides.cursor ?? 0);
   return {
     schema_version: 1,
+    endpoint_id: 'local-environment',
+    thread_id: thread.thread_id,
+    cursor,
+    retained_from_seq: 1,
     thread,
-    messages,
+    transcript_messages: messages,
+    live_state: {
+      thread_patch: {},
+      message_order: [],
+      messages: {},
+      runs: {},
+      approval_actions: {},
+      input_requests: {},
+    },
     read_status: thread.read_status,
-    event_cursor: 0,
-    generated_at_unix_ms: 10,
+    generated_at_ms: 10_000,
   };
 }
 
@@ -202,7 +215,7 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
-  it('loads settings, models, threads, live snapshot, and sends runs through runtime Flower IPC', async () => {
+  it('loads settings, models, threads, live bootstrap, and sends runs through runtime Flower IPC', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {
       calls.push(request);
@@ -211,8 +224,8 @@ describe('Local Environment Flower surface adapter', () => {
       if (request.path === '/_redeven_proxy/api/ai/threads?limit=200') return { threads: [threadView()] };
       if (request.path === '/_redeven_proxy/api/ai/threads') return { thread: threadView({ thread_id: 'thread-new' }) };
       if (request.path === '/_redeven_proxy/api/ai/runs') return '';
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-new/live') {
-        return liveSnapshot({ thread_id: 'thread-new' }, [{
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-new/live/bootstrap') {
+        return liveBootstrap({ thread_id: 'thread-new' }, [{
             id: 'm1',
             role: 'user',
             status: 'complete',
@@ -237,7 +250,7 @@ describe('Local Environment Flower surface adapter', () => {
       'GET /_redeven_proxy/api/ai/models',
       'POST /_redeven_proxy/api/ai/threads',
       'POST /_redeven_proxy/api/ai/runs',
-      'GET /_redeven_proxy/api/ai/threads/thread-new/live',
+      'GET /_redeven_proxy/api/ai/threads/thread-new/live/bootstrap',
     ]);
     expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/runs')?.body).toMatchObject({
       thread_id: 'thread-new',
@@ -252,7 +265,7 @@ describe('Local Environment Flower surface adapter', () => {
     const bridge = bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/input_response') return { run_id: 'run-1', kind: 'started' };
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live') return liveSnapshot();
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') return liveBootstrap();
       throw new Error(`unexpected path: ${request.path}`);
     });
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
@@ -280,25 +293,30 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
-  it('loads active run projection from the canonical live thread endpoint', async () => {
+  it('loads streaming live state from the canonical live bootstrap endpoint', async () => {
     const bridge = bridgeFor((request) => {
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live') {
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') {
         return {
-          ...liveSnapshot({ run_status: 'running' }),
-          active_run: {
-            run_id: 'run-1',
-            status: 'running',
-            last_event_seq: 9,
-            message: {
-              id: 'assistant-live',
-              role: 'assistant',
-              status: 'streaming',
-              timestamp: 42,
-              blocks: [{ type: 'text', content: 'working live' }],
+          ...liveBootstrap({ run_status: 'running', cursor: 9 }),
+          cursor: 9,
+          live_state: {
+            thread_patch: { run_status: 'running' },
+            message_order: ['assistant-live'],
+            messages: {
+              'assistant-live': {
+                message_id: 'assistant-live',
+                role: 'assistant',
+                status: 'streaming',
+                created_at_ms: 42_000,
+                blocks: [{ type: 'markdown', content: 'working live' }],
+              },
             },
-            approval_actions: [],
+            runs: {
+              'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
+            },
+            approval_actions: {},
+            input_requests: {},
           },
-          event_cursor: 9,
         };
       }
       throw new Error(`unexpected path: ${request.path}`);
@@ -308,13 +326,18 @@ describe('Local Environment Flower surface adapter', () => {
     const snapshot = await adapter.loadThread('thread-1');
 
     expect(snapshot.thread.status).toBe('running');
-    expect(snapshot.active_run?.message).toMatchObject({
+    expect(snapshot.live_state.messages['assistant-live']).toMatchObject({
+      message_id: 'assistant-live',
+      status: 'streaming',
+    });
+    const projected = projectFlowerLiveBootstrap(snapshot);
+    expect(projected.messages[0]).toMatchObject({
       id: 'assistant-live',
       role: 'assistant',
       content: 'working live',
       status: 'streaming',
     });
-    expect(snapshot.event_cursor).toBe(9);
+    expect(snapshot.cursor).toBe(9);
   });
 
   it('submits approval decisions with live sequence and revision through the runtime thread endpoint', async () => {
@@ -359,7 +382,7 @@ describe('Local Environment Flower surface adapter', () => {
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/threads') return { thread: threadView({ thread_id: 'thread-card' }) };
       if (request.path === '/_redeven_proxy/api/ai/runs') return '';
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-card/live') return liveSnapshot({ thread_id: 'thread-card' });
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-card/live/bootstrap') return liveBootstrap({ thread_id: 'thread-card' });
       throw new Error(`unexpected path: ${request.path}`);
     });
 

@@ -247,7 +247,7 @@ func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {
 		ev.AtUnixMs = time.Now().UnixMilli()
 	}
 	s.persistRealtimeEvent(ev)
-	s.publishFlowerLiveUpdateFromRealtime(ev)
+	s.publishFlowerLiveEventFromRealtime(ev)
 
 	payload, err := json.Marshal(ev)
 	if err != nil || len(payload) == 0 {

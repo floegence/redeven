@@ -1,11 +1,39 @@
 import type {
   FlowerApprovalAction,
+  FlowerActivityAttentionReason,
+  FlowerActivityApprovalState,
+  FlowerActivityChip,
+  FlowerActivityFileAction,
+  FlowerActivityItem,
+  FlowerActivityKind,
+  FlowerActivityRenderer,
+  FlowerActivitySeverity,
+  FlowerActivityStatus,
+  FlowerActivityTargetRef,
+  FlowerActivityTimelineBlock,
   FlowerChatMessage,
-  FlowerLiveActiveRun,
   FlowerInputRequest,
-  FlowerThreadLiveSnapshot,
-  FlowerThreadLiveUpdate,
-  FlowerThreadLiveUpdatesResponse,
+  FlowerLiveBootstrap,
+  FlowerLiveEvent,
+  FlowerLiveEventsResponse,
+  FlowerLiveMaterializedState,
+  FlowerLiveMessageDraft,
+  FlowerLiveMessageCommittedPayload,
+  FlowerLiveMessageStartedPayload,
+  FlowerLiveMessageBlockDeltaPayload,
+  FlowerLiveMessageBlockSetPayload,
+  FlowerLiveMessageBlockStartedPayload,
+  FlowerLiveMessageFailedPayload,
+  FlowerLiveThreadPatch,
+  FlowerLiveKind,
+  FlowerLiveRunState,
+  FlowerLiveRunStartedPayload,
+  FlowerLiveRunStatusChangedPayload,
+  FlowerLiveApprovalPayload,
+  FlowerLiveInputRequestedPayload,
+  FlowerLiveInputResolvedPayload,
+  FlowerLiveUsageUpdatedPayload,
+  FlowerLiveResyncRequiredPayload,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerThreadStatus,
@@ -26,6 +54,10 @@ type JsonRecord = Record<string, unknown>;
 
 function recordValue(value: unknown): JsonRecord | null {
   return value && typeof value === 'object' ? value as JsonRecord : null;
+}
+
+function plainRecordValue(value: unknown): JsonRecord | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as JsonRecord : null;
 }
 
 function isPresent<T>(value: T | null | undefined): value is T {
@@ -83,15 +115,307 @@ function inputResponseMode(raw: unknown): FlowerInputQuestion['response_mode'] {
   return mode;
 }
 
+function nonNegativeInteger(raw: unknown, field: string): number {
+  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < 0) {
+    throw new Error(`Flower contract error: ${field} must be a non-negative integer.`);
+  }
+  return raw;
+}
+
+function integerOrZero(raw: unknown): number {
+  const value = Number(raw ?? 0);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+function stringRecord(raw: unknown): Readonly<Record<string, string>> | undefined {
+  const record = plainRecordValue(raw);
+  if (!record) return undefined;
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const safeKey = trim(key);
+    const safeValue = trim(value);
+    if (safeKey && safeValue) out[safeKey] = safeValue;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+const activityStatuses = new Set<FlowerActivityStatus>(['pending', 'running', 'waiting', 'success', 'error', 'canceled']);
+const activitySeverities = new Set<FlowerActivitySeverity>(['quiet', 'normal', 'warning', 'error', 'blocking']);
+const activityKinds = new Set<FlowerActivityKind>(['tool', 'hosted_tool', 'approval', 'control', 'budget']);
+const activityRenderers = new Set<FlowerActivityRenderer>(['structured', 'terminal', 'file', 'patch', 'web_search', 'todos', 'question', 'completion']);
+const activityAttentionReasons = new Set<FlowerActivityAttentionReason>(['running', 'waiting', 'approval', 'error']);
+const activityApprovalStates = new Set<FlowerActivityApprovalState>(['requested', 'approved', 'rejected', 'timed_out', 'canceled']);
+
+function activityStatus(raw: unknown, fallback: FlowerActivityStatus): FlowerActivityStatus {
+  const value = trim(raw) as FlowerActivityStatus;
+  return activityStatuses.has(value) ? value : fallback;
+}
+
+function activitySeverity(raw: unknown, fallback: FlowerActivitySeverity): FlowerActivitySeverity {
+  const value = trim(raw) as FlowerActivitySeverity;
+  return activitySeverities.has(value) ? value : fallback;
+}
+
+function activityKind(raw: unknown): FlowerActivityKind {
+  const value = trim(raw) as FlowerActivityKind;
+  return activityKinds.has(value) ? value : 'tool';
+}
+
+function activityRenderer(raw: unknown): FlowerActivityRenderer | undefined {
+  const value = trim(raw) as FlowerActivityRenderer;
+  return activityRenderers.has(value) ? value : undefined;
+}
+
+function activityAttentionReasonArray(raw: unknown): readonly FlowerActivityAttentionReason[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const values = raw
+    .map((value) => trim(value) as FlowerActivityAttentionReason)
+    .filter((value) => activityAttentionReasons.has(value));
+  return values.length > 0 ? values : undefined;
+}
+
+function activityApprovalState(raw: unknown): FlowerActivityApprovalState | undefined {
+  const value = trim(raw) as FlowerActivityApprovalState;
+  return activityApprovalStates.has(value) ? value : undefined;
+}
+
+function activityPolicyToken(key: string): string {
+  const source = trim(key);
+  let out = '';
+  let previousUnderscore = false;
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index] ?? '';
+    if (char >= 'A' && char <= 'Z') {
+      if (index > 0 && !previousUnderscore) {
+        out += '_';
+      }
+      out += char.toLowerCase();
+      previousUnderscore = false;
+      continue;
+    }
+    if (char === '-' || char === '.' || char === ':') {
+      if (!previousUnderscore) {
+        out += '_';
+        previousUnderscore = true;
+      }
+      continue;
+    }
+    out += char;
+    previousUnderscore = char === '_';
+  }
+  return out.replace(/^_+|_+$/g, '');
+}
+
+const activityForbiddenPayloadTokens = new Set([
+  'action_path',
+  'cwd',
+  'directory_path',
+  'display_path',
+  'file_path',
+  'original_file',
+  'path',
+  'preview_path',
+  'root_dir',
+  'stdin',
+  'updated_file',
+  'workdir',
+]);
+
+function assertPublicActivityPayloadKey(path: string, key: string): void {
+  if (activityForbiddenPayloadTokens.has(activityPolicyToken(key))) {
+    throw new Error(`Flower contract error: ${path}.${key} is not part of the nested activity payload contract.`);
+  }
+}
+
+function sanitizeActivityPublicValue(value: unknown, path: string): unknown {
+  const record = plainRecordValue(value);
+  if (record) {
+    const out: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(record)) {
+      const safeKey = trim(key);
+      if (!safeKey) continue;
+      assertPublicActivityPayloadKey(path, safeKey);
+      out[safeKey] = sanitizeActivityPublicValue(item, `${path}.${safeKey}`);
+    }
+    return out;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item, index) => sanitizeActivityPublicValue(item, `${path}[${index}]`));
+  }
+  return value;
+}
+
+function mapActivityPayload(raw: unknown): Readonly<Record<string, unknown>> | undefined {
+  const payload = plainRecordValue(raw);
+  if (!payload) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    const safeKey = trim(key);
+    if (!safeKey) continue;
+    assertPublicActivityPayloadKey('activity_item.payload', safeKey);
+    out[safeKey] = sanitizeActivityPublicValue(value, `activity_item.payload.${safeKey}`);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function mapActivityChip(raw: unknown): FlowerActivityChip | null {
+  const record = plainRecordValue(raw);
+  if (!record) return null;
+  const kind = trim(record.kind);
+  const label = trim(record.label);
+  if (!kind || !label) return null;
+  return {
+    kind,
+    label,
+    ...(trim(record.value) ? { value: trim(record.value) } : {}),
+    ...(trim(record.tone) ? { tone: trim(record.tone) } : {}),
+  };
+}
+
+function mapActivityTargetRef(raw: unknown, index: number): FlowerActivityTargetRef | null {
+  const record = plainRecordValue(raw);
+  if (!record) return null;
+  const allowed = new Set(['kind', 'label', 'uri', 'line']);
+  for (const key of Object.keys(record)) {
+    if (!allowed.has(key)) {
+      throw new Error(`Flower contract error: activity_item.target_refs[${index}].${key} is not part of the activity target ref contract.`);
+    }
+  }
+  const kind = trim(record.kind);
+  const label = trim(record.label);
+  if (!kind || !label) return null;
+  return {
+    kind,
+    label,
+    ...(trim(record.uri) ? { uri: trim(record.uri) } : {}),
+    ...(record.line !== undefined ? { line: nonNegativeInteger(record.line, `activity_item.target_refs[${index}].line`) } : {}),
+  };
+}
+
+function mapActivityTargetRefs(raw: unknown): readonly FlowerActivityTargetRef[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const refs = raw.map(mapActivityTargetRef).filter(isPresent);
+  return refs.length > 0 ? refs : undefined;
+}
+
+function mapActivityItem(raw: unknown): FlowerActivityItem | null {
+  const record = plainRecordValue(raw);
+  if (!record) return null;
+  const itemID = trim(record.item_id);
+  if (!itemID) return null;
+  const chips = Array.isArray(record.chips) ? record.chips.map(mapActivityChip).filter(isPresent) : [];
+  const renderer = activityRenderer(record.renderer);
+  const targetRefs = mapActivityTargetRefs(record.target_refs);
+  const payload = mapActivityPayload(record.payload);
+  const metadata = stringRecord(record.metadata);
+  const approval = activityApprovalState(record.approval_state);
+  const attention = activityAttentionReasonArray(record.attention_reasons);
+  return {
+    item_id: itemID,
+    ...(trim(record.tool_id) ? { tool_id: trim(record.tool_id) } : {}),
+    ...(trim(record.tool_name) ? { tool_name: trim(record.tool_name) } : {}),
+    kind: activityKind(record.kind),
+    status: activityStatus(record.status, 'pending'),
+    severity: activitySeverity(record.severity, 'normal'),
+    needs_attention: Boolean(record.needs_attention),
+    ...(attention ? { attention_reasons: attention } : {}),
+    requires_approval: Boolean(record.requires_approval),
+    ...(approval ? { approval_state: approval } : {}),
+    ...(positiveInteger(record.started_at_unix_ms) ? { started_at_unix_ms: positiveInteger(record.started_at_unix_ms) } : {}),
+    ...(positiveInteger(record.ended_at_unix_ms) ? { ended_at_unix_ms: positiveInteger(record.ended_at_unix_ms) } : {}),
+    ...(trim(record.label) ? { label: trim(record.label) } : {}),
+    ...(trim(record.description) ? { description: trim(record.description) } : {}),
+    ...(renderer ? { renderer } : {}),
+    ...(chips.length > 0 ? { chips } : {}),
+    ...(targetRefs ? { target_refs: targetRefs } : {}),
+    ...(payload ? { payload } : {}),
+    ...(metadata ? { metadata } : {}),
+  };
+}
+
+function mapActivityCounts(raw: unknown): FlowerActivityTimelineBlock['summary']['counts'] {
+  const record = plainRecordValue(raw) ?? {};
+  const out: Record<string, number> = {};
+  for (const key of ['pending', 'running', 'waiting', 'success', 'error', 'canceled', 'approval']) {
+    const value = integerOrZero(record[key]);
+    if (value > 0) out[key] = value;
+  }
+  return out;
+}
+
+function mapActivityFileAction(raw: unknown, actionKey: string): FlowerActivityFileAction | null {
+  const record = plainRecordValue(raw);
+  if (!record) return null;
+  const allowed = new Set(['action_id', 'display_name', 'can_preview', 'can_browse_directory']);
+  for (const key of Object.keys(record)) {
+    if (!allowed.has(key)) {
+      throw new Error(`Flower contract error: activity_timeline.file_actions.${actionKey}.${key} is not part of the file action contract.`);
+    }
+  }
+  const actionID = trim(record.action_id);
+  const displayName = trim(record.display_name);
+  if (!actionID || !displayName) return null;
+  return {
+    action_id: actionID,
+    display_name: displayName,
+    can_preview: Boolean(record.can_preview),
+    can_browse_directory: Boolean(record.can_browse_directory),
+  };
+}
+
+function mapActivityFileActions(raw: unknown): Readonly<Record<string, FlowerActivityFileAction>> | undefined {
+  const record = plainRecordValue(raw);
+  if (!record) return undefined;
+  const out: Record<string, FlowerActivityFileAction> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const actionKey = trim(key);
+    if (!actionKey) continue;
+    const action = mapActivityFileAction(value, actionKey);
+    if (action) out[actionKey] = action;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | null {
+  const record = plainRecordValue(raw);
+  if (!record || trim(record.type) !== 'activity-timeline') return null;
+  const items = Array.isArray(record.items) ? record.items.map(mapActivityItem).filter(isPresent) : [];
+  const summary = plainRecordValue(record.summary) ?? {};
+  const attention = activityAttentionReasonArray(summary.attention_reasons);
+  const fileActions = mapActivityFileActions(record.file_actions);
+  return {
+    type: 'activity-timeline',
+    schema_version: positiveInteger(record.schema_version) ?? 1,
+    ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
+    ...(trim(record.thread_id) ? { thread_id: trim(record.thread_id) } : {}),
+    ...(trim(record.turn_id) ? { turn_id: trim(record.turn_id) } : {}),
+    ...(trim(record.trace_id) ? { trace_id: trim(record.trace_id) } : {}),
+    summary: {
+      status: activityStatus(summary.status, 'success'),
+      severity: activitySeverity(summary.severity, 'quiet'),
+      needs_attention: Boolean(summary.needs_attention),
+      ...(attention ? { attention_reasons: attention } : {}),
+      total_items: integerOrZero(summary.total_items) || items.length,
+      counts: mapActivityCounts(summary.counts),
+      ...(positiveInteger(summary.duration_ms) ? { duration_ms: positiveInteger(summary.duration_ms) } : {}),
+    },
+    items,
+    ...(fileActions ? { file_actions: fileActions } : {}),
+  };
+}
+
 export function mapFlowerReadStatus(raw: unknown): FlowerThreadReadStatus {
   const record = recordValue(raw);
   if (!record) {
-    throw new Error('Flower contract error: read_status is required.');
+    throw new Error('Flower contract error: thread.read_status is required.');
   }
   const snapshot = recordValue(record.snapshot);
   const readState = recordValue(record.read_state);
-  if (!snapshot || !readState) {
-    throw new Error('Flower contract error: read_status snapshot/read_state are required.');
+  if (!snapshot) {
+    throw new Error('Flower contract error: thread.read_status.snapshot is required.');
+  }
+  if (!readState) {
+    throw new Error('Flower contract error: thread.read_status.read_state is required.');
   }
   return {
     is_unread: Boolean(record.is_unread),
@@ -118,7 +442,12 @@ function mapInputRequest(prompt: unknown): FlowerInputRequest | null {
   const toolID = trim(record.tool_id);
   const toolName = trim(record.tool_name);
   const questionsRaw = Array.isArray(record.questions) ? record.questions : [];
-  if (!promptID || !messageID || !toolID || !toolName || questionsRaw.length === 0) return null;
+  if (!promptID || !messageID || !toolID || !toolName) {
+    throw new Error('Flower contract error: waiting_prompt requires prompt_id, message_id, tool_id, and tool_name.');
+  }
+  if (questionsRaw.length === 0) {
+    throw new Error('Flower contract error: waiting_prompt requires at least one question.');
+  }
   return {
     prompt_id: promptID,
     message_id: messageID,
@@ -197,7 +526,7 @@ function mapMessageBlock(blockValue: unknown): FlowerMessageBlock | null {
     return trim(block.content) ? { type, content: trim(block.content) } : null;
   }
   if (type === 'activity-timeline') {
-    return blockValue as FlowerMessageBlock;
+    return mapActivityTimelineBlock(blockValue);
   }
   const content = blockText(blockValue);
   return content ? { type: 'text', content } : null;
@@ -216,7 +545,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage | null {
     role,
     content: blocksRaw.map(blockText).filter(Boolean).join('\n\n'),
     status: trim(message.status) as FlowerChatMessage['status'] || 'complete',
-    created_at_ms: unixMs(message.timestamp ?? message.created_at_ms, 'message.timestamp'),
+    created_at_ms: unixMs(message.timestamp ?? message.created_at_ms ?? message.created_at_unix_ms, 'message.timestamp'),
     ...(blocks.length > 0 ? { blocks } : {}),
   };
 }
@@ -263,11 +592,113 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
   };
 }
 
+function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
+  const record = recordValue(raw);
+  if (!record) return null;
+  const patch = recordValue(record.patch) ?? record;
+  const queuedTurnCount = positiveInteger(patch.queued_turn_count);
+  return {
+    ...(trim(patch.thread_id) ? { thread_id: trim(patch.thread_id) } : {}),
+    ...(trim(patch.title) ? { title: trim(patch.title) } : {}),
+    ...(trim(patch.model_id) ? { model_id: trim(patch.model_id) } : {}),
+    ...(patch.model_locked !== undefined ? { model_locked: Boolean(patch.model_locked) } : {}),
+    ...(trim(patch.execution_mode) ? { execution_mode: trim(patch.execution_mode) } : {}),
+    ...(trim(patch.working_dir) ? { working_dir: trim(patch.working_dir) } : {}),
+    ...(queuedTurnCount !== undefined ? { queued_turn_count: queuedTurnCount } : {}),
+    ...(trim(patch.run_status) ? { run_status: trim(patch.run_status) } : {}),
+    ...(positiveInteger(patch.run_updated_at_unix_ms) ? { run_updated_at_ms: positiveInteger(patch.run_updated_at_unix_ms) } : {}),
+    ...(trim(patch.run_error_code) ? { run_error_code: trim(patch.run_error_code) } : {}),
+    ...(trim(patch.run_error) ? { run_error: trim(patch.run_error) } : {}),
+    ...(patch.waiting_prompt !== undefined ? { waiting_prompt: mapInputRequest(patch.waiting_prompt) } : {}),
+    ...(trim(patch.last_context_run_id) ? { last_context_run_id: trim(patch.last_context_run_id) } : {}),
+    ...(positiveInteger(patch.pinned_at_unix_ms) ? { pinned_at_ms: positiveInteger(patch.pinned_at_unix_ms) } : {}),
+    ...(positiveInteger(patch.created_at_unix_ms) ? { created_at_ms: positiveInteger(patch.created_at_unix_ms) } : {}),
+    ...(positiveInteger(patch.updated_at_unix_ms) ? { updated_at_ms: positiveInteger(patch.updated_at_unix_ms) } : {}),
+    ...(positiveInteger(patch.last_message_at_unix_ms) ? { last_message_at_ms: positiveInteger(patch.last_message_at_unix_ms) } : {}),
+    ...(trim(patch.last_message_preview) ? { last_message_preview: trim(patch.last_message_preview) } : {}),
+  };
+}
+
+function mapLiveMessageDraft(raw: unknown): FlowerLiveMessageDraft | null {
+  const record = recordValue(raw);
+  if (!record) return null;
+  const messageID = trim(record.message_id);
+  if (!messageID) return null;
+  return {
+    message_id: messageID,
+    role: trim(record.role) || 'assistant',
+    status: trim(record.status) || 'streaming',
+    created_at_ms: Math.max(0, Math.floor(Number(record.created_at_ms ?? 0))),
+    blocks: Array.isArray(record.blocks)
+      ? record.blocks.map((blockValue) => {
+          const block = recordValue(blockValue) ?? {};
+          const type = trim(block.type);
+          if (type === 'activity-timeline') {
+            const activity = mapActivityTimelineBlock(block.block ?? block);
+            return activity ? { type: 'activity-timeline', block: activity } : null;
+          }
+          return {
+            type,
+            ...(typeof block.content === 'string' ? { content: block.content } : {}),
+            ...(block.block !== undefined ? { block: block.block } : {}),
+          };
+        }).filter((block): block is FlowerLiveMessageDraft['blocks'][number] => block != null && block.type !== '')
+      : [],
+  };
+}
+
+function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
+  const record = recordValue(raw) ?? {};
+  const messages: Record<string, FlowerLiveMessageDraft> = {};
+  const runs: Record<string, FlowerLiveRunState> = {};
+  const approvals: Record<string, FlowerApprovalAction> = {};
+  const inputRequests: Record<string, FlowerInputRequest> = {};
+
+  const messageOrder = Array.isArray(record.message_order) ? record.message_order.map(trim).filter(Boolean) : [];
+  const messagesRecord = recordValue(record.messages) ?? {};
+  for (const [messageID, value] of Object.entries(messagesRecord)) {
+    const mapped = mapLiveMessageDraft({ message_id: messageID, ...(recordValue(value) ?? {}) });
+    if (mapped) messages[messageID] = mapped;
+  }
+  const runsRecord = recordValue(record.runs) ?? {};
+  for (const [runID, value] of Object.entries(runsRecord)) {
+    const run = recordValue(value) ?? {};
+    runs[runID] = {
+      run_id: trim(run.run_id) || runID,
+      status: trim(run.status) || 'running',
+      ...(trim(run.message_id) ? { message_id: trim(run.message_id) } : {}),
+      ...(run.waiting_prompt !== undefined ? { waiting_prompt: mapInputRequest(run.waiting_prompt) } : {}),
+      ...(trim(run.error_code) ? { error_code: trim(run.error_code) } : {}),
+      ...(trim(run.error) ? { error: trim(run.error) } : {}),
+    };
+  }
+  const approvalsRecord = recordValue(record.approval_actions) ?? {};
+  for (const [actionID, value] of Object.entries(approvalsRecord)) {
+    const action = mapApprovalAction({ action_id: actionID, ...(recordValue(value) ?? {}) });
+    if (action) approvals[actionID] = action;
+  }
+  const inputsRecord = recordValue(record.input_requests) ?? {};
+  for (const [promptID, value] of Object.entries(inputsRecord)) {
+    const input = mapInputRequest(value);
+    if (input) inputRequests[promptID] = input;
+  }
+
+  return {
+    thread_patch: mapThreadPatch(record.thread_patch) ?? {},
+    message_order: messageOrder,
+    messages,
+    runs,
+    approval_actions: approvals,
+    input_requests: inputRequests,
+  };
+}
+
 export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessage[], options: FlowerLiveThreadMapperOptions, readStatusRaw?: unknown): FlowerThreadSnapshot {
   const record = recordValue(raw) ?? {};
   const threadID = trim(record.thread_id);
   const status = runStatus(record.run_status);
-  const inputRequest = status === 'waiting_user' ? mapInputRequest(record.waiting_prompt) : null;
+  const waitingPrompt = record.waiting_prompt !== undefined ? mapInputRequest(record.waiting_prompt) : null;
+  const inputRequest = status === 'waiting_user' ? waitingPrompt : null;
   const errorMessage = trim(record.run_error);
   const errorCode = trim(record.run_error_code);
   return {
@@ -291,52 +722,172 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   };
 }
 
-function mapActiveRun(raw: unknown): FlowerLiveActiveRun | null {
-  const record = recordValue(raw);
-  if (!record) return null;
-  return {
-    run_id: trim(record.run_id),
-    status: runStatus(record.status),
-    message: mapFlowerMessage(record.message),
-    ...(record.waiting_prompt !== undefined ? { input_request: mapInputRequest(record.waiting_prompt) } : {}),
-    approval_actions: Array.isArray(record.approval_actions) ? record.approval_actions.map(mapApprovalAction).filter(isPresent) : [],
-    last_event_seq: Math.max(0, Math.floor(Number(record.last_event_seq ?? 0))),
-  };
-}
-
-export function mapFlowerLiveSnapshot(raw: unknown, options: FlowerLiveThreadMapperOptions): FlowerThreadLiveSnapshot {
-  const record = recordValue(raw) ?? {};
-  const thread = recordValue(record.thread);
-  const messages = Array.isArray(record.messages) ? record.messages.map(mapFlowerMessage).filter(isPresent) : [];
-  return {
-    thread: mapFlowerThread(record.thread, messages, options, record.read_status ?? thread?.read_status),
-    ...(record.active_run ? { active_run: mapActiveRun(record.active_run) } : {}),
-    ...(record.read_status ? { read_status: mapFlowerReadStatus(record.read_status) } : {}),
-    event_cursor: Math.max(0, Math.floor(Number(record.event_cursor ?? 0))),
-    generated_at_ms: Math.max(0, Math.floor(Number(record.generated_at_unix_ms ?? Date.now()))),
-  };
-}
-
-export function mapFlowerLiveUpdates(raw: unknown, options: FlowerLiveThreadMapperOptions): FlowerThreadLiveUpdatesResponse {
-  const record = recordValue(raw) ?? {};
-  return {
-    updates: (Array.isArray(record.updates) ? record.updates : []).map((updateValue): FlowerThreadLiveUpdate => {
-      const update = recordValue(updateValue) ?? {};
-      const thread = recordValue(update.thread);
+function mapLiveEventPayload(kind: string, payload: unknown): unknown {
+  const record = recordValue(payload) ?? {};
+  switch (kind) {
+    case 'run.started':
+      return record as FlowerLiveRunStartedPayload;
+    case 'run.status_changed':
       return {
-        seq: Math.max(0, Math.floor(Number(update.seq ?? 0))),
-        thread_id: trim(update.thread_id),
-        kind: trim(update.kind) as FlowerThreadLiveUpdate['kind'],
-        at_ms: Math.max(0, Math.floor(Number(update.at_unix_ms ?? 0))),
-        ...(update.thread ? { thread: mapFlowerThread(update.thread, [], options, update.read_status ?? thread?.read_status) } : {}),
-        ...(update.message ? { message: mapFlowerMessage(update.message) ?? undefined } : {}),
-        ...(update.active_run ? { active_run: mapActiveRun(update.active_run) } : {}),
-        ...(update.clear_active_run ? { clear_active_run: true } : {}),
-        ...(update.read_status ? { read_status: mapFlowerReadStatus(update.read_status) } : {}),
-        ...(trim(update.resync_reason) ? { resync_reason: trim(update.resync_reason) } : {}),
+        run_id: trim(record.run_id),
+        status: trim(record.status),
+        ...(trim(record.error_code) ? { error_code: trim(record.error_code) } : {}),
+        ...(trim(record.error) ? { error: trim(record.error) } : {}),
+        ...(record.waiting_prompt !== undefined ? { waiting_prompt: mapInputRequest(record.waiting_prompt) } : {}),
+      } as FlowerLiveRunStatusChangedPayload;
+    case 'thread.patched':
+      return mapThreadPatch(record) ? { patch: mapThreadPatch(record) } : { patch: {} };
+    case 'message.started':
+      return {
+        message_id: trim(record.message_id),
+        role: 'assistant',
+        status: 'streaming',
+        created_at_ms: Math.max(0, Math.floor(Number(record.created_at_ms ?? 0))),
+      } as FlowerLiveMessageStartedPayload;
+    case 'message.block_started':
+      return {
+        message_id: trim(record.message_id),
+        block_index: Math.max(0, Math.floor(Number(record.block_index ?? 0))),
+        block_type: trim(record.block_type),
+      } as FlowerLiveMessageBlockStartedPayload;
+    case 'message.block_delta':
+      return {
+        message_id: trim(record.message_id),
+        block_index: Math.max(0, Math.floor(Number(record.block_index ?? 0))),
+        delta: typeof record.delta === 'string' ? record.delta : String(record.delta ?? ''),
+      } as FlowerLiveMessageBlockDeltaPayload;
+    case 'message.block_set':
+      {
+        const block = recordValue(record.block);
+        const blockType = trim(block?.type);
+        const mappedBlock = blockType === 'activity-timeline'
+          ? { type: 'activity-timeline', block: mapActivityTimelineBlock(record.block) }
+          : record.block;
+        return {
+        message_id: trim(record.message_id),
+        block_index: Math.max(0, Math.floor(Number(record.block_index ?? 0))),
+        block: mappedBlock,
+        } as FlowerLiveMessageBlockSetPayload;
+      }
+    case 'message.committed':
+      {
+        const message = mapFlowerMessage(record.message);
+        if (!message) {
+          throw new Error('Flower contract error: message.committed requires a valid message.');
+        }
+        return {
+          message_id: trim(record.message_id) || message.id,
+          message,
+        } as FlowerLiveMessageCommittedPayload;
+      }
+    case 'message.failed':
+      return {
+        message_id: trim(record.message_id),
+        error: trim(record.error),
+      } as FlowerLiveMessageFailedPayload;
+    case 'activity.updated':
+      {
+        const activity = mapActivityTimelineBlock(record.activity);
+        if (!activity) {
+          throw new Error('Flower contract error: activity.updated requires a valid activity timeline block.');
+        }
+        return {
+        run_id: trim(record.run_id),
+        message_id: trim(record.message_id),
+        block_index: Math.max(0, Math.floor(Number(record.block_index ?? 0))),
+          activity,
+        };
+      }
+    case 'approval.requested':
+    case 'approval.resolved':
+      return { action: mapApprovalAction(record.action) ?? undefined } as FlowerLiveApprovalPayload;
+    case 'input.requested':
+      return { request: mapInputRequest(record.request) ?? undefined } as FlowerLiveInputRequestedPayload;
+    case 'input.resolved':
+      return { prompt_id: trim(record.prompt_id) } as FlowerLiveInputResolvedPayload;
+    case 'usage.updated':
+      return { usage: record.usage && typeof record.usage === 'object' ? record.usage as Record<string, unknown> : {} } as FlowerLiveUsageUpdatedPayload;
+    case 'stream.resync_required':
+      return { reason: trim(record.reason) } as FlowerLiveResyncRequiredPayload;
+    default:
+      return record;
+  }
+}
+
+const liveKinds = new Set<FlowerLiveKind>([
+  'run.started',
+  'run.status_changed',
+  'thread.patched',
+  'message.started',
+  'message.block_started',
+  'message.block_delta',
+  'message.block_set',
+  'message.committed',
+  'message.failed',
+  'activity.updated',
+  'approval.requested',
+  'approval.resolved',
+  'input.requested',
+  'input.resolved',
+  'usage.updated',
+  'stream.resync_required',
+]);
+
+function mapLiveKind(raw: unknown): FlowerLiveKind | null {
+  const kind = trim(raw) as FlowerLiveKind;
+  return liveKinds.has(kind) ? kind : null;
+}
+
+function makeLiveEvent<K extends FlowerLiveKind>(
+  kind: K,
+  base: Omit<FlowerLiveEvent<K>, 'kind' | 'payload'>,
+  payload: unknown,
+): FlowerLiveEvent<K> {
+  return {
+    ...base,
+    kind,
+    payload: mapLiveEventPayload(kind, payload) as FlowerLiveEvent<K>['payload'],
+  } as FlowerLiveEvent<K>;
+}
+
+export function mapFlowerLiveBootstrap(raw: unknown, options: FlowerLiveThreadMapperOptions): FlowerLiveBootstrap {
+  const record = recordValue(raw) ?? {};
+  const thread = mapFlowerThread(record.thread, Array.isArray(record.transcript_messages) ? record.transcript_messages.map(mapFlowerMessage).filter(isPresent) : [], options, record.read_status);
+  return {
+    schema_version: Math.max(0, Math.floor(Number(record.schema_version ?? 0))),
+    endpoint_id: trim(record.endpoint_id),
+    thread_id: trim(record.thread_id) || thread.thread_id,
+    cursor: Math.max(0, Math.floor(Number(record.cursor ?? 0))),
+    retained_from_seq: Math.max(0, Math.floor(Number(record.retained_from_seq ?? 0))),
+    thread,
+    transcript_messages: Array.isArray(record.transcript_messages) ? record.transcript_messages.map(mapFlowerMessage).filter(isPresent) : [],
+    live_state: mapLiveState(record.live_state),
+    read_status: mapFlowerReadStatus(record.read_status ?? thread.read_status),
+    generated_at_ms: Math.max(0, Math.floor(Number(record.generated_at_ms ?? record.generated_at_unix_ms ?? Date.now()))),
+  };
+}
+
+export function mapFlowerLiveEvents(raw: unknown): FlowerLiveEventsResponse {
+  const record = recordValue(raw) ?? {};
+  return {
+    events: (Array.isArray(record.events) ? record.events : []).map((eventValue): FlowerLiveEvent | null => {
+      const event = recordValue(eventValue) ?? {};
+      const kind = mapLiveKind(event.kind);
+      const base = {
+        schema_version: Math.max(0, Math.floor(Number(event.schema_version ?? 0))),
+        seq: Math.max(0, Math.floor(Number(event.seq ?? 0))),
+        endpoint_id: trim(event.endpoint_id),
+        thread_id: trim(event.thread_id),
+        ...(trim(event.run_id) ? { run_id: trim(event.run_id) } : {}),
+        ...(trim(event.turn_id) ? { turn_id: trim(event.turn_id) } : {}),
+        ...(trim(event.trace_id) ? { trace_id: trim(event.trace_id) } : {}),
+        ...(trim(event.step) ? { step: trim(event.step) } : {}),
+        at_unix_ms: Math.max(0, Math.floor(Number(event.at_unix_ms ?? 0))),
       };
-    }).filter((update: FlowerThreadLiveUpdate) => update.seq > 0 && update.thread_id && update.kind),
+      return kind ? makeLiveEvent(kind, base, event.payload) : null;
+    }).filter((event): event is FlowerLiveEvent => event != null && event.seq > 0 && event.thread_id !== ''),
     next_cursor: Math.max(0, Math.floor(Number(record.next_cursor ?? 0))),
     ...(record.has_more ? { has_more: true } : {}),
+    retained_from_seq: Math.max(0, Math.floor(Number(record.retained_from_seq ?? 0))),
   };
 }

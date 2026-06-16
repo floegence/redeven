@@ -10,14 +10,14 @@ import type {
   FlowerSurfaceAdapter,
   FlowerSurfaceRuntimeDescriptor,
   FlowerThreadActivitySnapshot,
-  FlowerThreadLiveSnapshot,
-  FlowerThreadLiveUpdatesResponse,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
+  FlowerLiveBootstrap,
+  FlowerLiveEventsResponse,
 } from './contracts/flowerSurfaceContracts';
 import {
-  mapFlowerLiveSnapshot,
-  mapFlowerLiveUpdates,
+  mapFlowerLiveBootstrap,
+  mapFlowerLiveEvents,
   mapFlowerThread,
   type FlowerLiveThreadMapperOptions,
 } from './flowerLiveMapper';
@@ -66,7 +66,7 @@ type RuntimeApprovalSubmitInput = Readonly<{
 export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
   loadThread(threadID: string): Promise<unknown>;
-  listThreadLiveUpdates(threadID: string, afterSeq: number, limit: number): Promise<unknown>;
+  listThreadLiveEvents(threadID: string, afterSeq: number, limit: number): Promise<unknown>;
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
   forkThread(threadID: string): Promise<LoadThreadResponse>;
@@ -80,8 +80,8 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
-  sendMessage: (input: FlowerSendMessageInput) => Promise<FlowerThreadLiveSnapshot>;
-  submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerThreadLiveSnapshot>;
+  sendMessage: (input: FlowerSendMessageInput) => Promise<FlowerLiveBootstrap>;
+  submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
   missingThreadID?: string;
@@ -100,25 +100,25 @@ function mapRuntimeThread(thread: ThreadView, options: RuntimeFlowerSurfaceAdapt
   return mapFlowerThread(thread, [], options.mapperOptions, thread.read_status);
 }
 
-function mapRuntimeLiveSnapshot(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadLiveSnapshot {
-  return mapFlowerLiveSnapshot(raw, options.mapperOptions);
+function mapRuntimeBootstrap(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerLiveBootstrap {
+  return mapFlowerLiveBootstrap(raw, options.mapperOptions);
 }
 
-function mapRuntimeLiveUpdates(raw: unknown, options: RuntimeFlowerSurfaceAdapterOptions): FlowerThreadLiveUpdatesResponse {
-  return mapFlowerLiveUpdates(raw, options.mapperOptions);
+function mapRuntimeEvents(raw: unknown): FlowerLiveEventsResponse {
+  return mapFlowerLiveEvents(raw);
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
-  const loadThread = async (threadID: string): Promise<FlowerThreadLiveSnapshot> => {
+  const loadThread = async (threadID: string): Promise<FlowerLiveBootstrap> => {
     const tid = trim(threadID);
     if (!tid) throw new Error(missingThreadIDMessage(options));
-    return mapRuntimeLiveSnapshot(
+    return mapRuntimeBootstrap(
       await options.transport.loadThread(tid),
       options,
     );
   };
 
-  const markThreadRead = async (threadID: string, snapshot: FlowerThreadActivitySnapshot): Promise<FlowerThreadLiveSnapshot> => {
+  const markThreadRead = async (threadID: string, snapshot: FlowerThreadActivitySnapshot): Promise<FlowerLiveBootstrap> => {
     const tid = trim(threadID);
     if (!tid) throw new Error(missingThreadIDMessage(options));
     await options.transport.markThreadRead(tid, {
@@ -141,14 +141,13 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       return (result.threads ?? []).map((thread) => mapRuntimeThread(thread, options));
     },
     loadThread,
-    listThreadLiveUpdates: async (threadID, afterSeq, limit = 100) => {
+    listThreadLiveEvents: async (threadID, afterSeq, limit = 100) => {
       const tid = trim(threadID);
       if (!tid) throw new Error(missingThreadIDMessage(options));
       const cursor = Math.max(0, Math.floor(Number(afterSeq) || 0));
       const pageLimit = Math.max(1, Math.min(200, Math.floor(Number(limit) || 100)));
-      return mapRuntimeLiveUpdates(
-        await options.transport.listThreadLiveUpdates(tid, cursor, pageLimit),
-        options,
+      return mapRuntimeEvents(
+        await options.transport.listThreadLiveEvents(tid, cursor, pageLimit),
       );
     },
     markThreadRead,

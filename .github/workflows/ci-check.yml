@@ -63,6 +63,7 @@ jobs:
           bash -n scripts/build_desktop_bundled_agent.sh
           bash -n scripts/check_desktop.sh
           bash -n scripts/check_docker_runtime_e2e.sh
+          bash -n scripts/check_flower_live_protocol.sh
           bash -n scripts/ui_package_common.sh
           bash -n scripts/open_source_hygiene_check.sh
           bash -n scripts/install_git_hooks.sh
@@ -95,6 +96,9 @@ jobs:
 
       - name: Runtime compatibility contract check
         run: ./scripts/check_runtime_compatibility_contract.sh --source-only
+
+      - name: Flower live protocol guard
+        run: ./scripts/check_flower_live_protocol.sh
 
       - name: UI lint
         run: ./scripts/lint_ui.sh
