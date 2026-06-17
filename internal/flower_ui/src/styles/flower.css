@@ -548,6 +548,47 @@ html.dark .flower-component-shell {
   padding: 0 0.16rem;
 }
 
+.flower-message-context-action {
+  display: flex;
+  max-width: min(78%, var(--flower-chat-user-bubble-width));
+  min-width: 0;
+  align-self: flex-end;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border));
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--primary) 7%, transparent);
+  padding: 0.2rem 0.42rem;
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+  font-size: 0.6875rem;
+  line-height: 1.2;
+}
+
+.flower-message-context-action-label {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--foreground) 70%, var(--primary) 30%);
+  font-weight: 650;
+}
+
+.flower-message-context-action-title,
+.flower-message-context-action-detail,
+.flower-message-context-action-meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-message-context-action-title {
+  font-weight: 560;
+  color: color-mix(in srgb, var(--foreground) 82%, transparent);
+}
+
+.flower-message-context-action-detail,
+.flower-message-context-action-meta {
+  color: currentColor;
+}
+
 .flower-message-time {
   color: currentColor;
   font-size: 0.6875rem;

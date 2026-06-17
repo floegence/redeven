@@ -1,5 +1,5 @@
 import type { Component, JSX } from 'solid-js';
-import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, Copy, FileText, FolderOpen, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
@@ -72,6 +72,16 @@ type FlowerHandlerResolutionState =
   | Readonly<{ status: 'blocked'; decision: FlowerRouterDecision; message: string }>
   | Readonly<{ status: 'failed'; decision: FlowerRouterDecision | null; message: string }>;
 type FlowerApprovalSubmittingState = 'approve' | 'reject';
+type MessageContextActionSummary = Readonly<{
+  surface: string;
+  target: string;
+  title: string;
+  detail: string;
+}>;
+type OptionalRecordString = Readonly<{
+  ok: boolean;
+  value: string;
+}>;
 
 const THREAD_RAIL_WIDTH_STORAGE_KEY = 'redeven.flower.threadRailWidth';
 const THREAD_RAIL_WIDTH_DEFAULT = 272;
@@ -81,6 +91,26 @@ const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const LIVE_EVENT_RENDER_YIELD_SIZE = 8;
 const MESSAGE_COPY_RESET_MS = 1600;
+const ASK_FLOWER_CONTEXT_TARGET_LOCALITIES = new Set(['auto', 'current_runtime', 'remote_runtime', 'local_model_remote_target']);
+const ASK_FLOWER_CONTEXT_SOURCE_SURFACES = new Set([
+  'desktop_welcome_environment_card',
+  'file_browser',
+  'terminal',
+  'file_preview',
+  'monitoring',
+  'git_browser',
+  'editor_preview',
+]);
+const ASK_FLOWER_CONTEXT_RUNTIME_HINTS = new Set(['', 'auto', 'local_environment', 'env_local']);
+const ASK_FLOWER_CONTEXT_SESSION_SOURCES = new Set([
+  '',
+  'local_runtime',
+  'provider_environment',
+  'ssh_environment',
+  'external_local_ui',
+  'runtime_gateway',
+  'region_sandbox',
+]);
 
 export {
   projectFlowerThreadListItem,
@@ -88,6 +118,28 @@ export {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function recordValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function recordString(record: Record<string, unknown> | null | undefined, key: string): string {
+  const value = record?.[key];
+  return typeof value === 'string' ? trimString(value) : '';
+}
+
+function optionalRecordString(record: Record<string, unknown> | null | undefined, key: string): OptionalRecordString {
+  if (!record || !Object.prototype.hasOwnProperty.call(record, key)) return { ok: true, value: '' };
+  const value = record[key];
+  if (value === null || value === undefined) return { ok: true, value: '' };
+  if (typeof value !== 'string') return { ok: false, value: '' };
+  return { ok: true, value: trimString(value) };
+}
+
+function recordNumber(record: Record<string, unknown> | null | undefined, key: string): number {
+  const value = record?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 function approvalStateLabel(state: FlowerActivityApprovalState | undefined, surfaceCopy: FlowerSurfaceCopy): string {
@@ -104,10 +156,16 @@ function loadThreadRailWidth(): number {
   return Number.isFinite(stored) ? clampThreadRailWidth(stored) : THREAD_RAIL_WIDTH_DEFAULT;
 }
 
+export type FlowerThreadFocusRequest = Readonly<{
+  request_id: string;
+  thread_id: string;
+}>;
+
 export type FlowerSurfaceProps = Readonly<{
   adapter: FlowerSurfaceAdapter;
   copy?: FlowerSurfaceCopy;
-  focusThreadID?: string;
+  focusThreadRequest?: FlowerThreadFocusRequest | null;
+  onFocusThreadRequestConsumed?: (requestID: string) => void;
   class?: string;
 }>;
 
@@ -151,7 +209,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadLoadSequence = 0;
   let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
-  let lastFocusedThreadID = '';
+  let startedFocusThreadRequestID = '';
   let lastInputPromptSignature = '';
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
   let transcriptRef: HTMLDivElement | undefined;
@@ -760,6 +818,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
+  const focusThreadFromRequest = async (requestID: string, threadID: string) => {
+    const tid = trimString(threadID);
+    if (!tid) {
+      props.onFocusThreadRequestConsumed?.(requestID);
+      return;
+    }
+    props.onFocusThreadRequestConsumed?.(requestID);
+    await loadAndSelectThread(tid);
+  };
+
   const refreshSelectedThread = async (threadID: string) => {
     const tid = trimString(threadID);
     try {
@@ -790,11 +858,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         mergedThreads = mergeThreadListRefresh(current, next, startedMutationRevision !== threadLocalMutationRevision);
         return mergedThreads;
       });
-      const focusedThreadID = trimString(props.focusThreadID);
       setSelectedThreadID((current) => {
-        if (focusedThreadID && mergedThreads.some((thread) => thread.thread_id === focusedThreadID)) {
-          return focusedThreadID;
-        }
         return current && !mergedThreads.some((thread) => thread.thread_id === current) ? '' : current;
       });
       if (
@@ -840,19 +904,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   createEffect(() => {
-    const focusedThreadID = trimString(props.focusThreadID);
-    if (!focusedThreadID || focusedThreadID === lastFocusedThreadID) {
+    const request = props.focusThreadRequest;
+    const requestID = trimString(request?.request_id);
+    const focusedThreadID = trimString(request?.thread_id);
+    if (!requestID || requestID === startedFocusThreadRequestID) {
       return;
     }
-    lastFocusedThreadID = focusedThreadID;
-    if (threads().some((thread) => thread.thread_id === focusedThreadID)) {
-      void loadAndSelectThread(focusedThreadID);
+    startedFocusThreadRequestID = requestID;
+    if (!focusedThreadID) {
+      props.onFocusThreadRequestConsumed?.(requestID);
       return;
     }
-    void refreshThreads().then(() => {
-      if (threads().some((thread) => thread.thread_id === focusedThreadID)) {
-        void loadAndSelectThread(focusedThreadID);
-      }
+    untrack(() => {
+      void focusThreadFromRequest(requestID, focusedThreadID);
     });
   });
 
@@ -1102,6 +1166,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const startCompose = () => {
+    const requestID = trimString(props.focusThreadRequest?.request_id);
+    if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     threadLoadSequence += 1;
     transcriptNearBottom = true;
     setSelectedThreadID('');
@@ -1141,6 +1207,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const selectThread = (threadID: string) => {
+    const requestID = trimString(props.focusThreadRequest?.request_id);
+    if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     transcriptNearBottom = true;
     void loadAndSelectThread(threadID);
   };
@@ -1313,6 +1381,72 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   };
 
+  const contextActionSummary = (message: FlowerChatMessage): MessageContextActionSummary | null => {
+    const action = recordValue(message.context_action);
+    if (!action) return null;
+    if (
+      recordNumber(action, 'schema_version') !== 2
+      || recordString(action, 'action_id') !== 'assistant.ask.flower'
+      || recordString(action, 'provider') !== 'flower'
+    ) {
+      return null;
+    }
+    const source = recordValue(action.source);
+    const target = recordValue(action.target);
+    const rawExecutionContext = action.execution_context;
+    if (rawExecutionContext !== null && rawExecutionContext !== undefined && !recordValue(rawExecutionContext)) {
+      return null;
+    }
+    const rawContext = action.context;
+    if (rawContext !== null && rawContext !== undefined && !Array.isArray(rawContext)) {
+      return null;
+    }
+    const executionContext = recordValue(rawExecutionContext);
+    const surface = recordString(source, 'surface');
+    const targetID = recordString(target, 'target_id');
+    const locality = recordString(target, 'locality');
+    const runtimeHint = optionalRecordString(executionContext, 'runtime_hint');
+    const sessionSource = optionalRecordString(executionContext, 'session_source');
+    if (!targetID || !runtimeHint.ok || !sessionSource.ok) {
+      return null;
+    }
+    if (
+      !ASK_FLOWER_CONTEXT_TARGET_LOCALITIES.has(locality)
+      || !ASK_FLOWER_CONTEXT_SOURCE_SURFACES.has(surface)
+      || !ASK_FLOWER_CONTEXT_RUNTIME_HINTS.has(runtimeHint.value)
+      || !ASK_FLOWER_CONTEXT_SESSION_SOURCES.has(sessionSource.value)
+    ) {
+      return null;
+    }
+    const contextItems = Array.isArray(rawContext) ? rawContext.map(recordValue) : [];
+    if (contextItems.some((item) => item == null)) {
+      return null;
+    }
+    const firstItem = contextItems[0] ?? null;
+    const titleFields = [
+      optionalRecordString(firstItem, 'title'),
+      optionalRecordString(firstItem, 'path'),
+      optionalRecordString(firstItem, 'name'),
+    ];
+    const detailField = optionalRecordString(firstItem, 'detail');
+    const contentField = optionalRecordString(firstItem, 'content');
+    if (
+      titleFields.some((field) => !field.ok)
+      || !detailField.ok
+      || !contentField.ok
+    ) {
+      return null;
+    }
+    const title = titleFields.map((field) => field.value).find(Boolean) ?? '';
+    const detail = detailField.value || contentField.value.split('\n').map(trimString).find(Boolean) || '';
+    return {
+      surface,
+      target: targetID,
+      title,
+      detail,
+    };
+  };
+
   const messageCopyText = (message: FlowerChatMessage, blocks: readonly FlowerRenderableMessageBlock[]): string => {
     const blockText = blocks
       .flatMap((block) => (
@@ -1326,6 +1460,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const messageCopyActionKey = (message: FlowerChatMessage): string => `message:${message.id}:copy`;
+
+  const messageContextActionLine = (message: FlowerChatMessage) => {
+    const summary = contextActionSummary(message);
+    if (!summary) return null;
+    const meta = [summary.surface, summary.target].filter(Boolean).join(' -> ');
+    return (
+      <div
+        class="flower-message-context-action"
+        data-flower-message-context-action="true"
+        data-flower-context-surface={summary.surface}
+        data-flower-context-target={summary.target}
+      >
+        <FileText class="h-3 w-3 shrink-0" />
+        <span class="flower-message-context-action-label">{copy().chat.linkedContextLabel}</span>
+        <Show when={summary.title}>
+          {(value) => <span class="flower-message-context-action-title">{value()}</span>}
+        </Show>
+        <Show when={summary.detail}>
+          {(value) => <span class="flower-message-context-action-detail">{value()}</span>}
+        </Show>
+        <Show when={meta}>
+          {(value) => <span class="flower-message-context-action-meta">{value()}</span>}
+        </Show>
+      </div>
+    );
+  };
 
   const copyMessageText = async (message: FlowerChatMessage, text: string) => {
     const value = trimString(text);
@@ -2192,6 +2352,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </Show>
               {messageCopyButton(message, copyText, 'user')}
             </div>
+          </Show>
+          <Show when={message.role === 'user'}>
+            {messageContextActionLine(message)}
           </Show>
           <Show when={streaming}>
             <div class={cn('flower-message-streaming-tail', message.role === 'user' ? 'flower-message-streaming-tail-user' : 'flower-message-streaming-tail-assistant')}>

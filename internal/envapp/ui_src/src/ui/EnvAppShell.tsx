@@ -58,7 +58,12 @@ import {
   type EnvWorkbenchSurfaceActivationRequest,
   type OpenTerminalInDirectoryRequest,
 } from './pages/EnvContext';
-import type { FlowerTurnLauncherAnchor, FlowerTurnLauncherIntent, FlowerTurnLauncherSubmitInput } from '../../../../flower_ui/src';
+import type {
+  FlowerThreadFocusRequest,
+  FlowerTurnLauncherAnchor,
+  FlowerTurnLauncherIntent,
+  FlowerTurnLauncherSubmitInput,
+} from '../../../../flower_ui/src';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { EnvDeckPage } from './pages/EnvDeckPage';
 import { EnvTerminalPage } from './pages/EnvTerminalPage';
@@ -646,8 +651,8 @@ export function EnvAppShell() {
   const [settingsFocusSection, setSettingsFocusSection] = createSignal<EnvSettingsSection | null>(null);
   const [settingsOrigin, setSettingsOrigin] = createSignal<EnvSettingsOrigin>(null);
   const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
-  const [aiThreadFocusSeq, setAIThreadFocusSeq] = createSignal(0);
-  const [aiThreadFocusId, setAIThreadFocusId] = createSignal<string | null>(null);
+  const [aiThreadFocusRequest, setAIThreadFocusRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
+  let aiThreadFocusRequestSequence = 0;
   let lastWorkbenchPointerAnchor: (EnvWorkbenchHandoffAnchor & { observedAtMs: number }) | null = null;
 
   const recordWorkbenchPointerAnchor = (event: MouseEvent | PointerEvent) => {
@@ -835,8 +840,19 @@ export function EnvAppShell() {
   const focusAIThread = (threadId: string) => {
     const tid = String(threadId ?? '').trim();
     if (!tid) return;
-    setAIThreadFocusId(tid);
-    setAIThreadFocusSeq((n) => n + 1);
+    aiThreadFocusRequestSequence += 1;
+    setAIThreadFocusRequest({
+      request_id: `env-ai-focus-${aiThreadFocusRequestSequence}`,
+      thread_id: tid,
+    });
+  };
+
+  const consumeAIThreadFocusRequest = (requestId: string) => {
+    const normalizedRequestId = String(requestId ?? '').trim();
+    if (!normalizedRequestId) return;
+    setAIThreadFocusRequest((current) => (
+      current?.request_id === normalizedRequestId ? null : current
+    ));
   };
 
   const openFlowerTurnLauncher = (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => {
@@ -3141,9 +3157,9 @@ export function EnvAppShell() {
         openFlowerFileBrowser,
         openFlowerFilePreview,
         consumeOpenTerminalInDirectoryRequest,
-        aiThreadFocusSeq,
-        aiThreadFocusId,
+        aiThreadFocusRequest,
         focusAIThread,
+        consumeAIThreadFocusRequest,
       }}
     >
       <DownloadContext.Provider value={downloadManager}>

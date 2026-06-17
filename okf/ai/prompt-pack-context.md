@@ -14,11 +14,11 @@ Clients send a standard `assistant.ask.flower` context action with the turn inpu
 
 # Boundaries
 
-User-provided context is not a permission grant, not a working-directory mutation, and not long-term memory. `suggested_working_dir_abs` is model-visible context only; runtime authority still comes from session metadata and existing thread/runtime execution policy. Persisted transcript `contextAction` remains an observable record, but it is not the model-context source of truth. Direct API callers, queued turns, and persisted user messages must use the same strict Flower context-action validator; malformed or non-Flower actions fail instead of being dropped into a context-free turn.
+User-provided context is not a permission grant, not a working-directory mutation, and not long-term memory. `suggested_working_dir_abs` is model-visible context only; runtime authority still comes from session metadata and existing thread/runtime execution policy. Persisted transcript `contextAction` remains an observable record, but it is not the model-context source of truth. Flower UI may project a compact linked-context badge from that record only when the persisted action still matches the standard Ask Flower schema and its target, source, locality, runtime hint, and session source values remain valid; malformed or non-Flower action records must not appear as legitimate linked context. Direct API callers, queued turns, and persisted user messages must use the same strict Flower context-action validator; malformed or non-Flower actions fail instead of being dropped into a context-free turn.
 
 # Citations
 
-[1] redeven:internal/ai/context_action.go:126 - Runtime validates and normalizes standard Ask Flower context actions.
+[1] redeven:internal/ai/context_action.go:133 - Runtime validates and normalizes standard Ask Flower context actions.
 [2] redeven:internal/ai/context/model/types.go:89 - `UserProvidedContext` and its item shape live in the prompt-pack model layer.
 [3] redeven:internal/ai/context/model/types.go:150 - `PromptPack` carries `UserProvidedContext` as a first-class field.
 [4] redeven:internal/ai/context/packer/builder.go:24 - Prompt-pack build input accepts user-provided context.
@@ -26,3 +26,4 @@ User-provided context is not a permission grant, not a working-directory mutatio
 [6] redeven:internal/ai/context/packer/builder.go:148 - Prompt-pack budgets include a dedicated `user_context` section.
 [7] redeven:internal/ai/service.go:1504 - Run preparation converts the effective input context action before building the prompt pack.
 [8] redeven:internal/ai/native_runtime.go:2141 - Provider messages render user-provided context before recent dialogue and current input.
+[9] redeven:internal/flower_ui/src/FlowerSurface.tsx:1384 - Flower UI renders linked-context transcript badges only for valid Ask Flower context actions.

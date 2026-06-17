@@ -87,6 +87,7 @@ export type FlowerChatMessage = Readonly<{
   status: FlowerChatMessageStatus;
   created_at_ms: number;
   blocks?: readonly FlowerChatMessageBlock[];
+  context_action?: unknown;
 }>;
 
 export type FlowerThreadStatus =

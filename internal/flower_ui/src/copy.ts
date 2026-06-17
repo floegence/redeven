@@ -216,6 +216,7 @@ export type FlowerSurfaceCopy = Readonly<{
     fromSource: (source: string) => string;
     modelLabel: string;
     noModelSelected: string;
+    linkedContextLabel: string;
     handlerBlockedTitle: string;
     handlerStartFailedTitle: string;
     handlerStillStarting: string;
@@ -287,6 +288,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     fromSource: (source) => `From ${source}`,
     modelLabel: 'Model',
     noModelSelected: 'No model selected',
+    linkedContextLabel: 'Linked context',
     handlerBlockedTitle: 'Flower needs attention',
     handlerStartFailedTitle: 'Flower could not start',
     handlerStillStarting: 'Flower is still starting.',

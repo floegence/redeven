@@ -542,6 +542,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage | null {
   if (!id || (role !== 'user' && role !== 'assistant' && role !== 'system')) return null;
   const blocksRaw = Array.isArray(message.blocks) ? message.blocks : [];
   const blocks = blocksRaw.map(mapMessageBlock).filter(isPresent);
+  const contextAction = recordValue(message.context_action) ?? recordValue(message.contextAction);
   return {
     id,
     role,
@@ -549,6 +550,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage | null {
     status: trim(message.status) as FlowerChatMessage['status'] || 'complete',
     created_at_ms: unixMs(message.timestamp ?? message.created_at_ms ?? message.created_at_unix_ms, 'message.timestamp'),
     ...(blocks.length > 0 ? { blocks } : {}),
+    ...(contextAction ? { context_action: contextAction } : {}),
   };
 }
 

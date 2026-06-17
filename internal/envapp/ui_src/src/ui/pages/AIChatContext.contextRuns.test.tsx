@@ -32,8 +32,8 @@ const hoisted = vi.hoisted(() => {
       env_id: () => 'env-1',
       env: envResource,
       settingsSeq: () => 0,
-      aiThreadFocusSeq: () => 0,
-      aiThreadFocusId: () => null,
+      aiThreadFocusRequest: () => null,
+      consumeAIThreadFocusRequest: () => undefined,
     },
   };
 });

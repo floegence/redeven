@@ -313,7 +313,7 @@ vi.mock('./pages/EnvDeckPage', () => ({
             env.deckSurfaceActivation?.()?.surfaceId ?? '',
             String(env.deckSurfaceActivation?.()?.focus ?? ''),
             String(env.deckSurfaceActivation?.()?.ensureVisible ?? ''),
-            env.aiThreadFocusId?.() ?? '',
+            env.aiThreadFocusRequest?.()?.thread_id ?? '',
           ].join('|')}
         </div>
       </div>
@@ -379,7 +379,7 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
             String(env.workbenchSurfaceActivation?.()?.focus ?? ''),
             String(env.workbenchSurfaceActivation?.()?.ensureVisible ?? ''),
             String(env.workbenchSurfaceActivation?.()?.centerViewport ?? ''),
-            env.aiThreadFocusId?.() ?? '',
+            env.aiThreadFocusRequest?.()?.thread_id ?? '',
           ].join('|')}
         </div>
         <div data-testid="workbench-browser-activation">
@@ -413,8 +413,8 @@ vi.mock('./pages/EnvAIPage', () => ({
     const env = useContext(EnvContextMock);
     return (
       <div data-testid="env-ai-page">
-        <div data-testid="env-ai-focused-thread">{env.aiThreadFocusId?.() ?? ''}</div>
-        <div data-testid="env-ai-focus-seq">{env.aiThreadFocusSeq?.() ?? 0}</div>
+        <div data-testid="env-ai-focused-thread">{env.aiThreadFocusRequest?.()?.thread_id ?? ''}</div>
+        <div data-testid="env-ai-focus-request">{env.aiThreadFocusRequest?.()?.request_id ?? ''}</div>
       </div>
     );
   },

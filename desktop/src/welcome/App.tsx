@@ -118,6 +118,7 @@ import {
   type FlowerTurnLauncherAnchor,
   type FlowerTurnLauncherIntent,
   type FlowerTurnLauncherSubmitInput,
+  type FlowerThreadFocusRequest,
 } from '../../../internal/flower_ui/src';
 import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
@@ -2856,7 +2857,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
   const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
   const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
-  const [flowerFocusThreadID, setFlowerFocusThreadID] = createSignal('');
+  const [flowerFocusThreadRequest, setFlowerFocusThreadRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
+  let flowerFocusThreadRequestSequence = 0;
   const deleteTargetOperation = createMemo(() => {
     const target = deleteTarget();
     if (!target) {
@@ -5917,7 +5919,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       if (!threadID) {
         throw new Error('Missing thread id.');
       }
-      setFlowerFocusThreadID(threadID);
+      flowerFocusThreadRequestSequence += 1;
+      setFlowerFocusThreadRequest({
+        request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`,
+        thread_id: threadID,
+      });
       closeFlowerTurnLauncher();
       await openFlowerSurface();
       showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
@@ -6155,7 +6161,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
             })}
             copy={createDesktopFlowerSurfaceCopy(i18n())}
-            focusThreadID={flowerFocusThreadID()}
+            focusThreadRequest={flowerFocusThreadRequest()}
+            onFocusThreadRequestConsumed={(requestID) => {
+              setFlowerFocusThreadRequest((current) => (
+                current?.request_id === requestID ? null : current
+              ));
+            }}
           />
         </Show>
       </DesktopLauncherShell>

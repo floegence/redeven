@@ -169,6 +169,65 @@ describe('Flower live projection', () => {
     expect(mapped.thread.read_status.snapshot.waiting_prompt_id).toBe('prompt-1');
   });
 
+  it('maps persisted user message context actions into transcript messages', () => {
+    const contextAction = {
+      schema_version: 2,
+      action_id: 'assistant.ask.flower',
+      provider: 'flower',
+      target: { target_id: 'local:local', locality: 'auto' },
+      source: { surface: 'desktop_welcome_environment_card', surface_id: 'local' },
+      context: [{
+        kind: 'text_snapshot',
+        title: 'Local Environment',
+        detail: 'Local · Ready',
+        content: 'Environment: Local Environment\nKind: local_environment',
+      }],
+      presentation: { label: 'Ask Flower', priority: 100 },
+    };
+    const mapped = mapFlowerLiveBootstrap({
+      schema_version: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-live',
+      cursor: 1,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'th-live',
+        title: 'Live thread',
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 1000,
+        run_status: 'idle',
+      },
+      transcript_messages: [{
+        id: 'msg-context',
+        role: 'user',
+        timestamp: 1000,
+        status: 'complete',
+        blocks: [{ type: 'text', content: 'Inspect this env' }],
+        contextAction,
+      }],
+      live_state: {
+        thread_patch: {},
+        message_order: [],
+        messages: {},
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      },
+      read_status: readStatus(),
+      generated_at_ms: 3000,
+    }, {
+      runtimeID: 'local',
+      runtimeKind: 'local_environment',
+      sourceLabel: 'This host',
+      targetLabels: [],
+    });
+
+    expect(mapped.transcript_messages[0]?.context_action).toEqual(contextAction);
+    expect(mapped.thread.messages[0]?.context_action).toEqual(contextAction);
+  });
+
   it('projects bootstrap live state into streaming assistant messages and approvals', () => {
     const projected = projectFlowerLiveBootstrap(bootstrap({
       cursor: 5,

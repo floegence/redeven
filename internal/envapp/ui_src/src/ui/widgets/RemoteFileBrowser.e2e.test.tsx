@@ -1008,8 +1008,8 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canExec
     openFlowerFileBrowser: async () => {},
     openFlowerFilePreview: async () => {},
     consumeOpenTerminalInDirectoryRequest: () => {},
-    aiThreadFocusSeq: () => 0,
-    aiThreadFocusId: () => null,
+    aiThreadFocusRequest: () => null,
+    consumeAIThreadFocusRequest: () => undefined,
     focusAIThread: () => {},
   };
 }

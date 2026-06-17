@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal } from 'solid-js';
+import { createMemo } from 'solid-js';
 
 import { FlowerSurface } from '../../../../../flower_ui/src';
 import { DEFAULT_FLOWER_SURFACE_COPY, type FlowerSurfaceCopy } from '../../../../../flower_ui/src/copy';
@@ -22,6 +22,7 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers): FlowerSurfaceCopy {
       placeholder: i18n.t('flowerChat.composer.typeMessagePlaceholder'),
       modelLabel: i18n.t('flowerChat.model.label'),
       noModelSelected: i18n.t('flowerSettings.noModelSelected'),
+      linkedContextLabel: i18n.t('flowerTurnLauncher.linkedContextLabel'),
       send: i18n.t('flowerChat.composer.launchTurn'),
       handlerBlockedTitle: i18n.t('flowerChat.router.handlerBlockedTitle'),
       handlerStartFailedTitle: i18n.t('flowerChat.router.handlerStartFailedTitle'),
@@ -94,7 +95,6 @@ export function EnvAIPage() {
   const env = useEnvContext();
   const rpc = useRedevenRpc();
   const i18n = useI18n();
-  const [focusedThreadID, setFocusedThreadID] = createSignal('');
   const adapter = createMemo(() => createEnvLocalFlowerSurfaceAdapter({
     envPublicID: trim(env.env_id()),
     envLabel: trim(env.env()?.name) || trim(env.env_id()) || 'This environment',
@@ -116,16 +116,12 @@ export function EnvAIPage() {
     openFilePreview: env.openFlowerFilePreview,
   }));
 
-  createEffect(() => {
-    env.aiThreadFocusSeq();
-    setFocusedThreadID(trim(env.aiThreadFocusId()));
-  });
-
   return (
     <FlowerSurface
       adapter={adapter()}
       copy={createEnvFlowerSurfaceCopy(i18n)}
-      focusThreadID={focusedThreadID()}
+      focusThreadRequest={env.aiThreadFocusRequest()}
+      onFocusThreadRequestConsumed={env.consumeAIThreadFocusRequest}
       class="h-full min-h-0"
     />
   );

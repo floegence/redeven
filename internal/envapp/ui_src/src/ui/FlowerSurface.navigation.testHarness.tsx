@@ -1,8 +1,8 @@
-import { Show } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, vi } from 'vitest';
 
-import { FlowerSurface } from '../../../../flower_ui/src';
+import { FlowerSurface, type FlowerThreadFocusRequest } from '../../../../flower_ui/src';
 import type {
   FlowerActivityItem,
   FlowerActivityTimelineBlock,
@@ -469,10 +469,22 @@ export function threadOrder(runtime: HTMLElement): string[] {
 
 const disposers: Array<() => void> = [];
 
-const mountFlowerSurface = (surfaceAdapter: FlowerSurfaceAdapter): HTMLDivElement => {
+const mountFlowerSurface = (
+  surfaceAdapter: FlowerSurfaceAdapter,
+  props: Readonly<{
+    focusThreadRequest?: FlowerThreadFocusRequest | null;
+    onFocusThreadRequestConsumed?: (requestID: string) => void;
+  }> = {},
+): HTMLDivElement => {
   const runtime = document.createElement('div');
   document.body.appendChild(runtime);
-  disposers.push(render(() => <FlowerSurface adapter={surfaceAdapter} />, runtime));
+  disposers.push(render(() => (
+    <FlowerSurface
+      adapter={surfaceAdapter}
+      focusThreadRequest={props.focusThreadRequest}
+      onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
+    />
+  ), runtime));
   return runtime;
 };
 
@@ -482,6 +494,49 @@ export function renderSurface(configured = true): HTMLDivElement {
 
 export function renderSurfaceWithAdapter(surfaceAdapter: FlowerSurfaceAdapter): HTMLDivElement {
   return mountFlowerSurface(surfaceAdapter);
+}
+
+export function renderSurfaceWithAdapterProps(
+  surfaceAdapter: FlowerSurfaceAdapter,
+  props: Readonly<{
+    focusThreadRequest?: FlowerThreadFocusRequest | null;
+    onFocusThreadRequestConsumed?: (requestID: string) => void;
+  }>,
+): HTMLDivElement {
+  return mountFlowerSurface(surfaceAdapter, props);
+}
+
+export function renderSurfaceWithFocusController(
+  surfaceAdapter: FlowerSurfaceAdapter,
+  initialFocusThreadRequest: FlowerThreadFocusRequest | null,
+): Readonly<{
+  runtime: HTMLDivElement;
+  focusThreadRequest: () => FlowerThreadFocusRequest | null;
+  setFocusThreadRequest: (request: FlowerThreadFocusRequest | null) => void;
+  consumedRequests: () => readonly string[];
+}> {
+  const runtime = document.createElement('div');
+  document.body.appendChild(runtime);
+  const [focusThreadRequest, setFocusThreadRequest] = createSignal<FlowerThreadFocusRequest | null>(initialFocusThreadRequest);
+  const consumed: string[] = [];
+  disposers.push(render(() => (
+    <FlowerSurface
+      adapter={surfaceAdapter}
+      focusThreadRequest={focusThreadRequest()}
+      onFocusThreadRequestConsumed={(requestID) => {
+        consumed.push(requestID);
+        setFocusThreadRequest((current) => (
+          current?.request_id === requestID ? null : current
+        ));
+      }}
+    />
+  ), runtime));
+  return {
+    runtime,
+    focusThreadRequest,
+    setFocusThreadRequest,
+    consumedRequests: () => consumed,
+  };
 }
 
 afterEach(() => {

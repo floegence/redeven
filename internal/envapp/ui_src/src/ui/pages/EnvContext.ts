@@ -1,6 +1,6 @@
 import { createContext, useContext, type Resource } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import type { FlowerTurnLauncherAnchor, FlowerTurnLauncherIntent } from '../../../../../flower_ui/src';
+import type { FlowerThreadFocusRequest, FlowerTurnLauncherAnchor, FlowerTurnLauncherIntent } from '../../../../../flower_ui/src';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { FilePreviewOpenOptions } from '../widgets/FilePreviewContext';
 import type { ActivityFileActionOpenRequest } from '../chat/types';
@@ -156,9 +156,9 @@ export type EnvContextValue = {
   openFlowerFilePreview: (request: ActivityFileActionOpenRequest) => Promise<void>;
   consumeOpenTerminalInDirectoryRequest: (requestId: string) => void;
 
-  aiThreadFocusSeq: () => number;
-  aiThreadFocusId: () => string | null;
+  aiThreadFocusRequest: () => FlowerThreadFocusRequest | null;
   focusAIThread: (threadId: string) => void;
+  consumeAIThreadFocusRequest: (requestId: string) => void;
 };
 
 export const EnvContext = createContext<EnvContextValue>();

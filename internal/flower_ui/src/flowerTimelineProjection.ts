@@ -95,6 +95,7 @@ export function flowerMessageSignature(message: FlowerChatMessage): string {
     message.status,
     String(message.created_at_ms),
     message.blocks?.map(messageBlockSignature).join('\x1d') ?? '',
+    message.context_action ? JSON.stringify(message.context_action) : '',
   ].join('\x1e');
 }
 
