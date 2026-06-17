@@ -1074,18 +1074,6 @@ export function createAIChatContextValue(): AIChatContextValue {
     setDraftWorkingDir('');
   };
 
-  // Allow external send flows (e.g., Ask Flower composer) to force-focus the newly created thread.
-  createEffect(() => {
-    const seq = env.aiThreadFocusSeq();
-    if (seq <= 0) return;
-
-    const tid = String(env.aiThreadFocusId() ?? '').trim();
-    if (!tid) return;
-
-    selectThreadId(tid);
-    bumpThreadsSeq();
-  });
-
   createEffect(() => {
     const tid = String(activeThreadId() ?? '').trim();
     if (!tid) return;

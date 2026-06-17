@@ -26,6 +26,7 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
       fromSource: (source) => t(i18n, k('chat.fromSource'), { source }),
       modelLabel: t(i18n, k('chat.modelLabel')),
       noModelSelected: t(i18n, k('chat.noModelSelected')),
+      linkedContextLabel: t(i18n, 'environmentCenter.askFlowerCardContextLabel'),
       handlerBlockedTitle: t(i18n, k('chat.handlerBlockedTitle')),
       handlerStartFailedTitle: t(i18n, k('chat.handlerStartFailedTitle')),
       handlerStillStarting: t(i18n, k('chat.handlerStillStarting')),

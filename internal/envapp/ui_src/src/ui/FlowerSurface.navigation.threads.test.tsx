@@ -16,13 +16,293 @@ import {
   liveBootstrap,
   readStatus,
   renderSurfaceWithAdapter,
+  renderSurfaceWithFocusController,
+  renderSurfaceWithAdapterProps,
   thread,
   threadOrder,
   wait,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
 
+const askFlowerContextAction = (overrides: Record<string, unknown> = {}): Record<string, unknown> => ({
+  schema_version: 2,
+  action_id: 'assistant.ask.flower',
+  provider: 'flower',
+  target: { target_id: 'local:local', locality: 'auto' },
+  source: { surface: 'desktop_welcome_environment_card', surface_id: 'local' },
+  execution_context: { runtime_hint: 'local_environment', session_source: 'local_runtime' },
+  context: [{
+    kind: 'text_snapshot',
+    title: 'Local Environment',
+    detail: 'Local · Ready',
+    content: 'Environment: Local Environment\nKind: local_environment',
+  }],
+  presentation: { label: 'Ask Flower', priority: 100 },
+  ...overrides,
+});
+
+const withoutContextActionKey = (
+  action: Record<string, unknown>,
+  key: string,
+): Record<string, unknown> => {
+  const next = { ...action };
+  delete next[key];
+  return next;
+};
+
 describe('FlowerSurface navigation threads', () => {
+  it('consumes external focus requests once without stealing later manual thread selection', async () => {
+    const focusedThread = thread({
+      thread_id: 'thread-focused',
+      title: 'Focused handoff',
+      created_at_ms: 2_000,
+      updated_at_ms: 2_000,
+    });
+    const manualThread = thread({
+      thread_id: 'thread-manual',
+      title: 'Manual thread',
+      created_at_ms: 1_000,
+      updated_at_ms: 1_000,
+      messages: [{
+        id: 'manual-message',
+        role: 'user',
+        content: 'Manual selection',
+        status: 'complete',
+        created_at_ms: 1_000,
+      }],
+    });
+    const listThreads = vi.fn(async () => [focusedThread, manualThread]);
+    const loadThread = vi.fn(async (threadID: string) => liveBootstrap(threadID === 'thread-focused' ? focusedThread : manualThread));
+    const runtime = renderSurfaceWithAdapterProps({
+      ...adapter(true),
+      listThreads,
+      loadThread,
+    }, {
+      focusThreadRequest: {
+        request_id: 'focus-request-1',
+        thread_id: 'thread-focused',
+      },
+    });
+
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-focused');
+    const initialRefreshCount = listThreads.mock.calls.length;
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => listThreads.mock.calls.length > initialRefreshCount);
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-manual"] button')));
+
+    (runtime.querySelector('[data-thread-id="thread-manual"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-manual');
+
+    const refreshCount = listThreads.mock.calls.length;
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => listThreads.mock.calls.length > refreshCount);
+    await flush();
+
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-manual');
+    expect(loadThread.mock.calls.map((call) => call[0])).toContain('thread-focused');
+    expect(loadThread.mock.calls.map((call) => call[0])).toContain('thread-manual');
+  });
+
+  it('does not replay a consumed focus request after the surface remounts', async () => {
+    const focusedThread = thread({
+      thread_id: 'thread-focused',
+      title: 'Focused handoff',
+      created_at_ms: 2_000,
+      updated_at_ms: 2_000,
+    });
+    const manualThread = thread({
+      thread_id: 'thread-manual',
+      title: 'Manual thread',
+      created_at_ms: 1_000,
+      updated_at_ms: 1_000,
+    });
+    const listThreads = vi.fn(async () => [focusedThread, manualThread]);
+    const loadThread = vi.fn(async (threadID: string) => liveBootstrap(threadID === 'thread-focused' ? focusedThread : manualThread));
+    const focusController = renderSurfaceWithFocusController({
+      ...adapter(true),
+      listThreads,
+      loadThread,
+    }, {
+      request_id: 'focus-request-remount',
+      thread_id: 'thread-focused',
+    });
+
+    await waitFor(() => focusController.runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-focused');
+    await waitFor(() => focusController.consumedRequests().includes('focus-request-remount'));
+    expect(focusController.focusThreadRequest()).toBeNull();
+
+    focusController.runtime.remove();
+    const remounted = renderSurfaceWithAdapterProps({
+      ...adapter(true),
+      listThreads,
+      loadThread,
+    }, {
+      focusThreadRequest: focusController.focusThreadRequest(),
+    });
+
+    await waitFor(() => Boolean(remounted.querySelector('#redeven-flower-surface')));
+    await flush();
+
+    expect(remounted.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('');
+    expect(loadThread.mock.calls.map((call) => call[0])).toEqual(['thread-focused']);
+  });
+
+  it('does not replay a slow consumed focus request when the surface remounts before loading finishes', async () => {
+    const focusedThread = thread({
+      thread_id: 'thread-pending-focus',
+      title: 'Pending focused handoff',
+      created_at_ms: 2_000,
+      updated_at_ms: 2_000,
+    });
+    const slowFocusLoad = deferred<FlowerLiveBootstrap>();
+    const loadThread = vi.fn((threadID: string) => {
+      if (threadID === 'thread-pending-focus') return slowFocusLoad.promise;
+      return Promise.resolve(liveBootstrap(focusedThread));
+    });
+    const focusController = renderSurfaceWithFocusController({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [focusedThread]),
+      loadThread,
+    }, {
+      request_id: 'focus-request-pending-remount',
+      thread_id: 'thread-pending-focus',
+    });
+
+    await waitFor(() => focusController.consumedRequests().includes('focus-request-pending-remount'));
+    expect(focusController.focusThreadRequest()).toBeNull();
+    expect(loadThread.mock.calls.map((call) => call[0])).toEqual(['thread-pending-focus']);
+
+    focusController.runtime.remove();
+    const remounted = renderSurfaceWithAdapterProps({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [focusedThread]),
+      loadThread,
+    }, {
+      focusThreadRequest: focusController.focusThreadRequest(),
+    });
+
+    await waitFor(() => Boolean(remounted.querySelector('#redeven-flower-surface')));
+    await flush();
+    expect(loadThread.mock.calls.map((call) => call[0])).toEqual(['thread-pending-focus']);
+
+    slowFocusLoad.resolve(liveBootstrap(focusedThread));
+    await flush();
+    expect(loadThread.mock.calls.map((call) => call[0])).toEqual(['thread-pending-focus']);
+  });
+
+  it('does not let a slow focus request override a later manual selection', async () => {
+    const slowFocusedThread = thread({
+      thread_id: 'thread-slow-focus',
+      title: 'Slow focused handoff',
+      created_at_ms: 2_000,
+      updated_at_ms: 2_000,
+    });
+    const manualThread = thread({
+      thread_id: 'thread-manual',
+      title: 'Manual thread',
+      created_at_ms: 1_000,
+      updated_at_ms: 1_000,
+    });
+    const slowFocusLoad = deferred<FlowerLiveBootstrap>();
+    const loadThread = vi.fn((threadID: string) => {
+      if (threadID === 'thread-slow-focus') return slowFocusLoad.promise;
+      return Promise.resolve(liveBootstrap(manualThread));
+    });
+    const focusController = renderSurfaceWithFocusController({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [slowFocusedThread, manualThread]),
+      loadThread,
+    }, {
+      request_id: 'focus-request-slow',
+      thread_id: 'thread-slow-focus',
+    });
+
+    await waitFor(() => Boolean(focusController.runtime.querySelector('[data-thread-id="thread-manual"] button')));
+    (focusController.runtime.querySelector('[data-thread-id="thread-manual"] button') as HTMLButtonElement).click();
+    await waitFor(() => focusController.runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-manual');
+
+    slowFocusLoad.resolve(liveBootstrap(slowFocusedThread));
+    await flush();
+
+    expect(focusController.runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('thread-manual');
+    expect(focusController.consumedRequests()).toContain('focus-request-slow');
+    expect(focusController.focusThreadRequest()).toBeNull();
+  });
+
+  it('shows linked context metadata for context action user messages', async () => {
+    const contextThread = thread({
+      thread_id: 'thread-context',
+      title: 'Environment context',
+      messages: [{
+        id: 'message-with-context',
+        role: 'user',
+        content: 'Inspect this environment',
+        status: 'complete',
+        created_at_ms: 1_000,
+        blocks: [{ type: 'text', content: 'Inspect this environment' }],
+        context_action: askFlowerContextAction(),
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [contextThread]),
+      loadThread: vi.fn(async () => liveBootstrap(contextThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context"] button')));
+    (runtime.querySelector('[data-thread-id="thread-context"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-context-action="true"]')));
+
+    const linkedContext = runtime.querySelector('[data-flower-message-context-action="true"]') as HTMLElement;
+    expect(linkedContext.textContent).toContain('Linked context');
+    expect(linkedContext.textContent).toContain('Local Environment');
+    expect(linkedContext.textContent).toContain('Local · Ready');
+    expect(linkedContext.getAttribute('data-flower-context-surface')).toBe('desktop_welcome_environment_card');
+    expect(linkedContext.getAttribute('data-flower-context-target')).toBe('local:local');
+  });
+
+  it.each([
+    ['non-Flower action id', askFlowerContextAction({ action_id: 'assistant.ask.other' })],
+    ['non-Flower provider', askFlowerContextAction({ provider: 'other' })],
+    ['missing target', withoutContextActionKey(askFlowerContextAction(), 'target')],
+    ['invalid target locality', askFlowerContextAction({ target: { target_id: 'local:local', locality: 'legacy' } })],
+    ['missing source', withoutContextActionKey(askFlowerContextAction(), 'source')],
+    ['invalid source surface', askFlowerContextAction({ source: { surface: 'legacy_panel', surface_id: 'local' } })],
+    ['invalid execution context shape', askFlowerContextAction({ execution_context: 'legacy' })],
+    ['invalid runtime hint', askFlowerContextAction({ execution_context: { runtime_hint: 'legacy', session_source: 'local_runtime' } })],
+    ['invalid runtime hint type', askFlowerContextAction({ execution_context: { runtime_hint: 1, session_source: 'local_runtime' } })],
+    ['invalid session source', askFlowerContextAction({ execution_context: { runtime_hint: 'local_environment', session_source: 'legacy' } })],
+    ['invalid context shape', askFlowerContextAction({ context: { kind: 'text_snapshot' } })],
+    ['invalid context item shape', askFlowerContextAction({ context: ['legacy'] })],
+    ['invalid context title type', askFlowerContextAction({ context: [{ kind: 'text_snapshot', title: 1 }] })],
+  ])('does not show linked context metadata for malformed context action: %s', async (_caseName, contextAction) => {
+    const contextThread = thread({
+      thread_id: 'thread-context-malformed',
+      title: 'Malformed environment context',
+      messages: [{
+        id: 'message-with-malformed-context',
+        role: 'user',
+        content: 'Inspect this environment',
+        status: 'complete',
+        created_at_ms: 1_000,
+        blocks: [{ type: 'text', content: 'Inspect this environment' }],
+        context_action: contextAction,
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [contextThread]),
+      loadThread: vi.fn(async () => liveBootstrap(contextThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context-malformed"] button')));
+    (runtime.querySelector('[data-thread-id="thread-context-malformed"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-context-malformed');
+    await flush();
+
+    expect(runtime.querySelector('[data-flower-message-context-action="true"]')).toBeNull();
+  });
+
   it('keeps the left thread list ordered by creation time when a selected thread refreshes', async () => {
     const olderThread = thread({
       thread_id: 'thread-older',

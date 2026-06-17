@@ -555,8 +555,8 @@ function renderPage(host: HTMLDivElement) {
         openFlowerFileBrowser: async () => undefined,
         openFlowerFilePreview: async () => undefined,
         consumeOpenTerminalInDirectoryRequest: () => undefined,
-        aiThreadFocusSeq: () => 0,
-        aiThreadFocusId: () => null,
+        aiThreadFocusRequest: () => null,
+        consumeAIThreadFocusRequest: () => undefined,
         focusAIThread: () => undefined,
       }}
     >
@@ -646,8 +646,8 @@ function renderProviderHarness(
         openFlowerFileBrowser: async () => undefined,
         openFlowerFilePreview: async () => undefined,
         consumeOpenTerminalInDirectoryRequest: () => undefined,
-        aiThreadFocusSeq: () => 0,
-        aiThreadFocusId: () => null,
+        aiThreadFocusRequest: () => null,
+        consumeAIThreadFocusRequest: () => undefined,
         focusAIThread: () => undefined,
       }}
     >
@@ -713,8 +713,8 @@ function renderPageWithHarness(
         openFlowerFileBrowser: async () => undefined,
         openFlowerFilePreview: async () => undefined,
         consumeOpenTerminalInDirectoryRequest: () => undefined,
-        aiThreadFocusSeq: () => 0,
-        aiThreadFocusId: () => null,
+        aiThreadFocusRequest: () => null,
+        consumeAIThreadFocusRequest: () => undefined,
         focusAIThread: () => undefined,
       }}
     >

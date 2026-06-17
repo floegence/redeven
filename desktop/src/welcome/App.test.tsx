@@ -1135,20 +1135,24 @@ describe('DesktopWelcomeShell', () => {
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent]');
-    expect(appSrc).toContain('const [flowerFocusThreadID, setFlowerFocusThreadID]');
+    expect(appSrc).toContain('const [flowerFocusThreadRequest, setFlowerFocusThreadRequest] = createSignal<FlowerThreadFocusRequest | null>(null)');
+    expect(appSrc).toContain('let flowerFocusThreadRequestSequence = 0;');
     expect(appSrc).toContain('function openEnvironmentFlowerSurface(');
     expect(appSrc).toContain('environment: DesktopEnvironmentEntry,');
     expect(appSrc).toContain('openEnvironmentFlowerSurface(props.environment');
     expect(appSrc).toContain("props.i18n.t('environmentCenter.askFlowerForLabel', { label: props.environment.label })");
     expect(appSrc).toContain('<FlowerTurnLauncherWindow');
     expect(appSrc).toContain('intent={flowerTurnLauncherIntent()}');
-    expect(appSrc).toContain('focusThreadID={flowerFocusThreadID()}');
+    expect(appSrc).toContain('focusThreadRequest={flowerFocusThreadRequest()}');
     expect(appSrc).toContain('source_surface:');
     expect(appSrc).toContain("'desktop_welcome_environment_card'");
     expect(appSrc).toContain('launchLocalEnvironmentFlowerTurn(props.runtime.settings');
     expect(appSrc).toContain('const bootstrap = await launchLocalEnvironmentFlowerTurn(props.runtime.settings');
     expect(appSrc).toContain('const threadID = trimString(bootstrap.thread.thread_id || bootstrap.thread_id);');
-    expect(appSrc).toContain("if (!threadID) {\n        throw new Error('Missing thread id.');\n      }\n      setFlowerFocusThreadID(threadID);");
+    expect(appSrc).toContain('flowerFocusThreadRequestSequence += 1;');
+    expect(appSrc).toContain('request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`');
+    expect(appSrc).toContain('onFocusThreadRequestConsumed={(requestID) => {');
+    expect(appSrc).toContain('current?.request_id === requestID ? null : current');
     expect(appSrc).toContain('closeFlowerTurnLauncher();\n      await openFlowerSurface();');
     expect(appSrc).toContain('context_action: buildEnvironmentFlowerContextAction(environment, contextSummary)');
     expect(appSrc).not.toContain('context_action: buildEnvironmentFlowerContextEnvelope(environment).raw');
