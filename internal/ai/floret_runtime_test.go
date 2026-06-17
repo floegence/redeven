@@ -47,7 +47,7 @@ func TestRedevenFloretGatewayConfigDoesNotCarryProviderConfiguration(t *testing.
 	}
 }
 
-func TestProjectFloretTaskCompleteDoesNotDuplicateProjectedControlActivity(t *testing.T) {
+func TestProjectFloretTaskCompleteCreatesMarkdownWhenNoVisibleTextExists(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
@@ -122,6 +122,78 @@ func TestProjectFloretTaskCompleteDoesNotDuplicateProjectedControlActivity(t *te
 	}
 }
 
+func TestProjectFloretTaskCompletePreservesStreamedMarkdownAfterActivity(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 4)
+	r := newRun(runOptions{})
+	r.id = "run_floret_task_complete_streamed"
+	r.threadID = "thread_floret_task_complete_streamed"
+	r.messageID = "msg_floret_task_complete_streamed"
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+	r.ensureAssistantMessageStarted()
+	if err := r.appendTextDelta("Detailed analysis report."); err != nil {
+		t.Fatalf("appendTextDelta: %v", err)
+	}
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolResult,
+		ToolID:     "tool_lookup",
+		ToolName:   "terminal.exec",
+		ToolKind:   "tool",
+		Result:     "lookup complete",
+		ObservedAt: time.Now(),
+	})
+	beforeProjectEventCount := len(events)
+
+	err := r.projectFloretResult(
+		t.Context(),
+		flruntime.ProjectedTurnResult{
+			Status: flruntime.TurnStatusCompleted,
+			Metrics: flruntime.RunMetrics{
+				Steps: 1,
+			},
+			Signal: &flruntime.TurnSignal{
+				Name:       "task_complete",
+				CallID:     "call_task_complete",
+				Payload:    map[string]any{"result": "Execution summary."},
+				OutputText: "Execution summary.",
+			},
+		},
+		RunRequest{},
+		newRuntimeState(""),
+		TaskComplexityStandard,
+		config.AIModeAct,
+	)
+	if err != nil {
+		t.Fatalf("projectFloretResult: %v", err)
+	}
+
+	for _, ev := range events[beforeProjectEventCount:] {
+		if bs, ok := ev.(streamEventBlockSet); ok {
+			if block, ok := bs.Block.(persistedMarkdownBlock); ok {
+				t.Fatalf("unexpected markdown block-set after task_complete: index=%d block=%#v", bs.BlockIndex, block)
+			}
+		}
+	}
+	if len(r.assistantBlocks) != 2 {
+		t.Fatalf("assistantBlocks len=%d, want streamed markdown plus activity timeline: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	text, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || text.Content != "Detailed analysis report." {
+		t.Fatalf("assistantBlocks[0]=%T %+v, want preserved streamed markdown", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	if _, ok := r.assistantBlocks[1].(ActivityTimelineBlock); !ok {
+		t.Fatalf("assistantBlocks[1]=%T, want activity timeline", r.assistantBlocks[1])
+	}
+	_, assistantText, _, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != "Detailed analysis report." {
+		t.Fatalf("assistantText=%q, want streamed markdown report", assistantText)
+	}
+}
+
 func TestProjectFloretNaturalStopCreatesCanonicalMarkdownWithoutTextDelta(t *testing.T) {
 	t.Parallel()
 
@@ -172,6 +244,73 @@ func TestProjectFloretNaturalStopCreatesCanonicalMarkdownWithoutTextDelta(t *tes
 	text, ok := r.assistantBlocks[1].(*persistedMarkdownBlock)
 	if !ok || text.Content != "Canonical answer." {
 		t.Fatalf("assistantBlocks[1]=%T %+v, want canonical markdown", r.assistantBlocks[1], r.assistantBlocks[1])
+	}
+}
+
+func TestProjectFloretNaturalStopPreservesStreamedMarkdownAfterActivity(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 4)
+	r := newRun(runOptions{})
+	r.id = "run_floret_natural_stop_streamed"
+	r.threadID = "thread_floret_natural_stop_streamed"
+	r.messageID = "msg_floret_natural_stop_streamed"
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+	r.ensureAssistantMessageStarted()
+	if err := r.appendTextDelta("Streamed analysis report."); err != nil {
+		t.Fatalf("appendTextDelta: %v", err)
+	}
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolResult,
+		ToolID:     "tool_lookup",
+		ToolName:   "terminal.exec",
+		ToolKind:   "tool",
+		Result:     "lookup complete",
+		ObservedAt: time.Now(),
+	})
+	beforeProjectEventCount := len(events)
+
+	err := r.projectFloretResult(
+		t.Context(),
+		flruntime.ProjectedTurnResult{
+			Status: flruntime.TurnStatusCompleted,
+			Output: "Canonical answer.",
+			Metrics: flruntime.RunMetrics{
+				Steps: 1,
+			},
+		},
+		RunRequest{},
+		newRuntimeState(""),
+		TaskComplexityStandard,
+		config.AIModeAct,
+	)
+	if err != nil {
+		t.Fatalf("projectFloretResult: %v", err)
+	}
+
+	for _, ev := range events[beforeProjectEventCount:] {
+		if bs, ok := ev.(streamEventBlockSet); ok {
+			if block, ok := bs.Block.(persistedMarkdownBlock); ok {
+				t.Fatalf("unexpected markdown block-set after natural stop: index=%d block=%#v", bs.BlockIndex, block)
+			}
+		}
+	}
+	if len(r.assistantBlocks) != 2 {
+		t.Fatalf("assistantBlocks len=%d, want streamed markdown plus activity timeline: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	text, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || text.Content != "Streamed analysis report." {
+		t.Fatalf("assistantBlocks[0]=%T %+v, want preserved streamed markdown", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	if _, ok := r.assistantBlocks[1].(ActivityTimelineBlock); !ok {
+		t.Fatalf("assistantBlocks[1]=%T, want activity timeline", r.assistantBlocks[1])
+	}
+	_, assistantText, _, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != "Streamed analysis report." {
+		t.Fatalf("assistantText=%q, want streamed markdown report", assistantText)
 	}
 }
 

@@ -301,7 +301,7 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.Projecte
 				return r.failRun("Task completion rejected by completion gate", fmt.Errorf("task_complete rejected: %s", gateReason))
 			}
 			r.setCanonicalMarkdownCandidate(resultText)
-			r.reconcileCanonicalMarkdownMessage(resultText)
+			r.reconcileCanonicalMarkdownMessage(canonicalMarkdownSourceTaskComplete, resultText)
 			r.persistTaskCompleteSignal(strings.TrimSpace(signal.CallID), resultText, evidenceRefs)
 			r.recordSourcesActivity("task_complete")
 			r.setFinalizationReason("task_complete")
@@ -311,7 +311,7 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.Projecte
 			return nil
 		}
 		r.setCanonicalMarkdownCandidate(result.Output)
-		r.reconcileCanonicalMarkdownMessage(result.Output)
+		r.reconcileCanonicalMarkdownMessage(canonicalMarkdownSourceNaturalStop, result.Output)
 		r.setFinalizationReason("natural_stop")
 		r.setEndReason("complete")
 		r.emitLifecyclePhase("ended", map[string]any{"reason": "natural_stop", "step_index": step})
