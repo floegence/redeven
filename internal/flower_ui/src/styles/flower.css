@@ -542,23 +542,23 @@ html.dark .flower-component-shell {
     0 0 0.72rem color-mix(in srgb, var(--primary) 24%, transparent);
   transform-origin: 50% 50%;
   will-change: opacity, transform, box-shadow;
-  animation: flower-cursor-breathe 2.8s ease-in-out infinite;
+  animation: flower-cursor-breathe 3.8s ease-in-out infinite;
 }
 
 .flower-streaming-cursor::before {
   content: '';
   position: absolute;
-  inset: -45% 0;
+  inset: 0 -130%;
   background:
     linear-gradient(
-      180deg,
-      transparent 4%,
-      color-mix(in srgb, white 82%, var(--primary) 18%) 48%,
-      transparent 92%
+      90deg,
+      transparent 16%,
+      color-mix(in srgb, white 72%, var(--primary) 28%) 48%,
+      transparent 84%
     );
   opacity: 0;
-  transform: translateY(-72%);
-  animation: flower-cursor-shimmer 2.8s ease-in-out infinite;
+  transform: translateX(-54%);
+  animation: flower-cursor-shimmer 3.8s cubic-bezier(0.42, 0, 0.2, 1) infinite;
 }
 
 @keyframes flower-cursor-breathe {
@@ -587,18 +587,20 @@ html.dark .flower-component-shell {
 
 @keyframes flower-cursor-shimmer {
   0%,
-  24% {
+  28% {
     opacity: 0;
-    transform: translateY(-72%);
+    transform: translateX(-54%);
   }
-  48%,
-  58% {
-    opacity: 0.68;
+  46% {
+    opacity: 0.58;
   }
-  82%,
+  62% {
+    opacity: 0.5;
+    transform: translateX(54%);
+  }
   100% {
     opacity: 0;
-    transform: translateY(72%);
+    transform: translateX(54%);
   }
 }
 
