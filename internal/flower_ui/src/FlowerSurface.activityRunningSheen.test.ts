@@ -33,6 +33,7 @@ describe('Flower activity running sheen', () => {
     const detailRule = cssRule(css, '.flower-activity-inline-detail');
     const statusRule = cssRule(css, '.flower-activity-inline-duration,\n.flower-activity-inline-status');
     const runningTitleRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-title');
+    const runningButtonRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-button');
     const successButtonRule = cssRule(css, '.flower-activity-inline-row-success .flower-activity-inline-button');
     const failedIconRule = cssRule(css, '.flower-activity-inline-row-error .flower-activity-inline-icon');
     const canceledIconRule = cssRule(css, '.flower-activity-inline-row-canceled .flower-activity-inline-icon');
@@ -40,7 +41,7 @@ describe('Flower activity running sheen', () => {
     const canceledStatusRule = cssRule(css, '.flower-activity-inline-status-canceled');
 
     expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground: #8f99a6');
-    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-strong: #6f7a89');
+    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-strong: #566475');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-complete: #9ba5b1');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-soft: rgba(126, 138, 153, 0.11)');
     expect(buttonRule).toContain('position: relative');
@@ -67,9 +68,9 @@ describe('Flower activity running sheen', () => {
     expect(statusRule).toContain('color: currentColor');
     expect(statusRule).toContain('font-size: 0.6875rem');
     expect(statusRule).toContain('font-weight: 620');
-    expect(runningTitleRule).toContain('color: var(--flower-activity-tool-row-foreground-strong)');
     expect(runningTitleRule).toContain('font-weight: 600');
-    expect(runningTitleRule).toContain('text-shadow: 0 0 0.7rem rgba(127, 137, 151, 0.10)');
+    expect(runningTitleRule).toContain('text-shadow: 0 0 0.65rem rgba(86, 100, 117, 0.12)');
+    expect(runningButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-strong)');
     expect(successButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-complete)');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-error: color-mix(in srgb, #f97316 78%, var(--foreground) 22%)');
     expect(failedIconRule).toContain('color: var(--flower-activity-tool-row-error)');
