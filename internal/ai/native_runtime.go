@@ -2138,6 +2138,10 @@ func buildMessagesFromPromptPackWithOptions(pack contextmodel.PromptPack, curren
 		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: strings.Join(contextParts, "\n")}}})
 	}
 
+	if txt := renderUserProvidedContext(pack.UserProvidedContext); txt != "" {
+		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
+	}
+
 	if opts.IncludeRecentDialogue {
 		for _, turn := range pack.RecentDialogue {
 			if txt := strings.TrimSpace(turn.UserText); txt != "" {
@@ -2250,6 +2254,113 @@ func buildMessagesFromPromptPackWithOptions(pack contextmodel.PromptPack, curren
 		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
 	}
 	return messages
+}
+
+func renderUserProvidedContext(ctx *contextmodel.UserProvidedContext) string {
+	if ctx == nil {
+		return ""
+	}
+	parts := []string{"User-provided context:"}
+	meta := make([]string, 0, 6)
+	if txt := strings.TrimSpace(ctx.ActionID); txt != "" {
+		meta = append(meta, "action="+txt)
+	}
+	if txt := strings.TrimSpace(ctx.Provider); txt != "" {
+		meta = append(meta, "provider="+txt)
+	}
+	if txt := strings.TrimSpace(ctx.SourceSurface); txt != "" {
+		meta = append(meta, "surface="+txt)
+	}
+	if txt := strings.TrimSpace(ctx.SourceSurfaceID); txt != "" {
+		meta = append(meta, "surface_id="+txt)
+	}
+	if txt := strings.TrimSpace(ctx.TargetID); txt != "" {
+		meta = append(meta, "target="+txt)
+	}
+	if txt := strings.TrimSpace(ctx.Locality); txt != "" {
+		meta = append(meta, "locality="+txt)
+	}
+	if len(meta) > 0 {
+		parts = append(parts, "- "+strings.Join(meta, ", "))
+	}
+	if txt := strings.TrimSpace(ctx.SuggestedWorkingDir); txt != "" {
+		parts = append(parts, "- suggested_working_dir="+txt)
+	}
+	for _, item := range ctx.Items {
+		if txt := renderUserProvidedContextItem(item); txt != "" {
+			parts = append(parts, txt)
+		}
+	}
+	if len(parts) == 1 {
+		return ""
+	}
+	return strings.Join(parts, "\n")
+}
+
+func renderUserProvidedContextItem(item contextmodel.UserProvidedContextItem) string {
+	kind := strings.TrimSpace(item.Kind)
+	if kind == "" {
+		return ""
+	}
+	lines := []string{"- item kind=" + kind}
+	if txt := strings.TrimSpace(item.Title); txt != "" {
+		lines = append(lines, "  title: "+txt)
+	}
+	if txt := strings.TrimSpace(item.Detail); txt != "" {
+		lines = append(lines, "  detail: "+txt)
+	}
+	if txt := strings.TrimSpace(item.Path); txt != "" {
+		pathLine := "  path: " + txt
+		if item.IsDirectory {
+			pathLine += " (directory)"
+		}
+		lines = append(lines, pathLine)
+	}
+	if txt := strings.TrimSpace(item.RootLabel); txt != "" {
+		lines = append(lines, "  root: "+txt)
+	}
+	if txt := strings.TrimSpace(item.WorkingDir); txt != "" {
+		lines = append(lines, "  working_dir: "+txt)
+	}
+	if txt := strings.TrimSpace(item.Selection); txt != "" {
+		lines = append(lines, "  selection: "+txt)
+	}
+	if item.SelectionChars > 0 {
+		lines = append(lines, fmt.Sprintf("  selection_chars: %d", item.SelectionChars))
+	}
+	if item.PID > 0 {
+		lines = append(lines, fmt.Sprintf("  pid: %d", item.PID))
+	}
+	if txt := strings.TrimSpace(item.Name); txt != "" {
+		lines = append(lines, "  name: "+txt)
+	}
+	if txt := strings.TrimSpace(item.Username); txt != "" {
+		lines = append(lines, "  username: "+txt)
+	}
+	if item.CPUPercent != 0 {
+		lines = append(lines, fmt.Sprintf("  cpu_percent: %.2f", item.CPUPercent))
+	}
+	if item.MemoryBytes > 0 {
+		lines = append(lines, fmt.Sprintf("  memory_bytes: %d", item.MemoryBytes))
+	}
+	if txt := strings.TrimSpace(item.Platform); txt != "" {
+		lines = append(lines, "  platform: "+txt)
+	}
+	if item.CapturedAtMs > 0 {
+		lines = append(lines, fmt.Sprintf("  captured_at_ms: %d", item.CapturedAtMs))
+	}
+	if txt := strings.TrimSpace(item.Content); txt != "" {
+		lines = append(lines, "  content:\n"+indentText(txt, "    "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func indentText(text string, prefix string) string {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	for i, line := range lines {
+		lines[i] = prefix + line
+	}
+	return strings.Join(lines, "\n")
 }
 
 type providerTurnResumeState struct {

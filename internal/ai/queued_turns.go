@@ -33,16 +33,17 @@ func marshalQueuedTurnAttachments(items []RunAttachmentIn) string {
 	return string(b)
 }
 
-func marshalQueuedTurnContextAction(action *ContextActionEnvelope) string {
-	action = normalizeContextActionEnvelope(action)
-	if action == nil {
-		return ""
+func marshalQueuedTurnContextAction(action *ContextActionEnvelope) (string, error) {
+	var err error
+	action, err = normalizeAskFlowerContextActionEnvelope(action)
+	if err != nil || action == nil {
+		return "", err
 	}
 	b, err := json.Marshal(action)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return string(b)
+	return string(b), nil
 }
 
 func marshalQueuedTurnOptions(opts RunOptions) string {
@@ -118,16 +119,20 @@ func unmarshalQueuedTurnAttachments(raw string) []RunAttachmentIn {
 	return cleaned
 }
 
-func unmarshalQueuedTurnContextAction(raw string) *ContextActionEnvelope {
+func unmarshalQueuedTurnContextAction(raw string) (*ContextActionEnvelope, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return nil
+		return nil, nil
 	}
 	var out ContextActionEnvelope
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return nil
+		return nil, err
 	}
-	return normalizeContextActionEnvelope(&out)
+	action, err := normalizeAskFlowerContextActionEnvelope(&out)
+	if err != nil {
+		return nil, err
+	}
+	return action, nil
 }
 
 func unmarshalQueuedTurnOptions(raw string) RunOptions {
@@ -172,9 +177,13 @@ func followupRecordToView(rec threadstore.QueuedTurn, position int) FollowupItem
 	return view
 }
 
-func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadExecutionMode string) RunStartRequest {
+func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadExecutionMode string) (RunStartRequest, error) {
 	options := unmarshalQueuedTurnOptions(rec.OptionsJSON)
 	options.Mode = normalizeRunMode(options.Mode, normalizeRunMode(threadExecutionMode, "act"))
+	contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON)
+	if err != nil {
+		return RunStartRequest{}, err
+	}
 	return RunStartRequest{
 		ThreadID: strings.TrimSpace(rec.ThreadID),
 		Model:    strings.TrimSpace(rec.ModelID),
@@ -182,10 +191,10 @@ func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadExecuti
 			MessageID:     strings.TrimSpace(rec.MessageID),
 			Text:          strings.TrimSpace(rec.TextContent),
 			Attachments:   unmarshalQueuedTurnAttachments(rec.AttachmentsJSON),
-			ContextAction: unmarshalQueuedTurnContextAction(rec.ContextActionJSON),
+			ContextAction: contextAction,
 		},
 		Options: options,
-	}
+	}, nil
 }
 
 func queuedTurnRecordToSessionMeta(rec threadstore.QueuedTurn, namespacePublicID string) *session.Meta {
@@ -244,6 +253,10 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
 	}
+	contextActionJSON, err := marshalQueuedTurnContextAction(normalizedInput.ContextAction)
+	if err != nil {
+		return threadstore.QueuedTurn{}, 0, err
+	}
 	queueID, err := NewQueuedTurnID()
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
@@ -260,7 +273,7 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		ModelID:               strings.TrimSpace(req.Model),
 		TextContent:           strings.TrimSpace(normalizedInput.Text),
 		AttachmentsJSON:       marshalQueuedTurnAttachments(normalizedInput.Attachments),
-		ContextActionJSON:     marshalQueuedTurnContextAction(normalizedInput.ContextAction),
+		ContextActionJSON:     contextActionJSON,
 		OptionsJSON:           marshalQueuedTurnOptions(req.Options),
 		SessionMetaJSON:       marshalQueuedTurnSessionMeta(meta),
 		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),

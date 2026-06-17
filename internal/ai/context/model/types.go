@@ -86,6 +86,37 @@ type AttachmentManifest struct {
 	Mode     string `json:"mode"`
 }
 
+type UserProvidedContextItem struct {
+	Kind           string  `json:"kind"`
+	Title          string  `json:"title,omitempty"`
+	Detail         string  `json:"detail,omitempty"`
+	Content        string  `json:"content,omitempty"`
+	Path           string  `json:"path,omitempty"`
+	IsDirectory    bool    `json:"is_directory,omitempty"`
+	RootLabel      string  `json:"root_label,omitempty"`
+	WorkingDir     string  `json:"working_dir,omitempty"`
+	Selection      string  `json:"selection,omitempty"`
+	SelectionChars int     `json:"selection_chars,omitempty"`
+	PID            int     `json:"pid,omitempty"`
+	Name           string  `json:"name,omitempty"`
+	Username       string  `json:"username,omitempty"`
+	CPUPercent     float64 `json:"cpu_percent,omitempty"`
+	MemoryBytes    int64   `json:"memory_bytes,omitempty"`
+	Platform       string  `json:"platform,omitempty"`
+	CapturedAtMs   int64   `json:"captured_at_ms,omitempty"`
+}
+
+type UserProvidedContext struct {
+	ActionID            string                    `json:"action_id"`
+	Provider            string                    `json:"provider,omitempty"`
+	SourceSurface       string                    `json:"source_surface"`
+	SourceSurfaceID     string                    `json:"source_surface_id,omitempty"`
+	TargetID            string                    `json:"target_id"`
+	Locality            string                    `json:"locality"`
+	SuggestedWorkingDir string                    `json:"suggested_working_dir_abs,omitempty"`
+	Items               []UserProvidedContextItem `json:"items"`
+}
+
 type StructuredUserInput struct {
 	ResponseMessageID   string `json:"response_message_id"`
 	PromptID            string `json:"prompt_id"`
@@ -116,6 +147,7 @@ type PromptPack struct {
 	Blockers                   []MemoryItem          `json:"blockers"`
 	RetrievedLongTermMemory    []MemoryItem          `json:"retrieved_long_term_memory"`
 	AttachmentsManifest        []AttachmentManifest  `json:"attachments_manifest"`
+	UserProvidedContext        *UserProvidedContext  `json:"user_provided_context,omitempty"`
 	ThreadSnapshot             string                `json:"thread_snapshot"`
 	EstimatedInputTokens       int                   `json:"estimated_input_tokens"`
 	CompressionSavingRatio     float64               `json:"compression_saving_ratio"`
@@ -137,6 +169,32 @@ func (p PromptPack) ApproxText() string {
 	for _, item := range p.RecentStructuredUserInputs {
 		if txt := strings.TrimSpace(item.PublicSummary); txt != "" {
 			parts = append(parts, txt)
+		}
+	}
+	if p.UserProvidedContext != nil {
+		parts = append(parts,
+			strings.TrimSpace(p.UserProvidedContext.ActionID),
+			strings.TrimSpace(p.UserProvidedContext.Provider),
+			strings.TrimSpace(p.UserProvidedContext.SourceSurface),
+			strings.TrimSpace(p.UserProvidedContext.SourceSurfaceID),
+			strings.TrimSpace(p.UserProvidedContext.TargetID),
+			strings.TrimSpace(p.UserProvidedContext.Locality),
+			strings.TrimSpace(p.UserProvidedContext.SuggestedWorkingDir),
+		)
+		for _, item := range p.UserProvidedContext.Items {
+			parts = append(parts,
+				strings.TrimSpace(item.Kind),
+				strings.TrimSpace(item.Title),
+				strings.TrimSpace(item.Detail),
+				strings.TrimSpace(item.Content),
+				strings.TrimSpace(item.Path),
+				strings.TrimSpace(item.RootLabel),
+				strings.TrimSpace(item.WorkingDir),
+				strings.TrimSpace(item.Selection),
+				strings.TrimSpace(item.Name),
+				strings.TrimSpace(item.Username),
+				strings.TrimSpace(item.Platform),
+			)
 		}
 	}
 	for _, ev := range p.ExecutionEvidence {

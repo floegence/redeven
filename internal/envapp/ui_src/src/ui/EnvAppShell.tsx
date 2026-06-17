@@ -185,6 +185,7 @@ type EnvSessionSource =
   | 'provider_environment'
   | 'ssh_environment'
   | 'external_local_ui'
+  | 'runtime_gateway'
   | 'region_sandbox';
 
 type EnvSessionIdentity = Readonly<{
@@ -740,7 +741,8 @@ export function EnvAppShell() {
       sessionSource === 'local_runtime' ||
       sessionSource === 'provider_environment' ||
       sessionSource === 'ssh_environment' ||
-      sessionSource === 'external_local_ui'
+      sessionSource === 'external_local_ui' ||
+      sessionSource === 'runtime_gateway'
         ? sessionSource
         : isLocalMode()
           ? 'local_runtime'
@@ -2294,7 +2296,8 @@ export function EnvAppShell() {
       contextSource === 'local_runtime' ||
       contextSource === 'provider_environment' ||
       contextSource === 'ssh_environment' ||
-      contextSource === 'external_local_ui'
+      contextSource === 'external_local_ui' ||
+      contextSource === 'runtime_gateway'
         ? contextSource
         : isLocalMode()
           ? 'local_runtime'
@@ -2328,6 +2331,7 @@ export function EnvAppShell() {
       case 'ssh_environment': return i18n.t('shell.status.envTypeSSH');
       case 'provider_environment': return i18n.t('shell.status.envTypeProvider');
       case 'external_local_ui':
+      case 'runtime_gateway':
       case 'region_sandbox': return i18n.t('shell.status.envTypeRemote');
       default: return i18n.t('shell.status.envTypeLocal');
     }

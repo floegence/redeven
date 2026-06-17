@@ -60,7 +60,8 @@ function testFlowerTurnIntent(sourceSurface: string) {
       },
       context: [],
       presentation: {
-        title: 'Ask Flower',
+        label: 'Ask Flower',
+        priority: 100,
       },
     },
   };
@@ -698,6 +699,16 @@ describe('EnvAppShell desktop floating surfaces', () => {
         prompt: 'inspect from launcher',
         working_dir: '/workspace/app',
         mode: 'act',
+        context_action: expect.objectContaining({
+          action_id: 'assistant.ask.flower',
+          provider: 'flower',
+          execution_context: expect.objectContaining({
+            current_target_id: 'env_local',
+            source_env_public_id: 'env_local',
+            runtime_hint: 'auto',
+            session_source: 'local_runtime',
+          }),
+        }),
       }));
       expect(setSidebarActiveTabMock).toHaveBeenLastCalledWith('ai', expect.objectContaining({ openSidebar: false }));
       expect(windowOpenMock).not.toHaveBeenCalled();

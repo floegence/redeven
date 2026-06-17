@@ -310,7 +310,9 @@ func (a *threadActor) loop() {
 				resp, err := a.handleStopThread(cmd.ctx, cmd.meta, cmd.req)
 				cmd.resp <- stopThreadResult{resp: resp, err: err}
 			case cmdMaybeStartQueuedTurn:
-				_ = a.handleMaybeStartQueuedTurn(context.Background())
+				if err := a.handleMaybeStartQueuedTurn(context.Background()); err != nil && a.mgr != nil && a.mgr.svc != nil && a.mgr.svc.log != nil {
+					a.mgr.svc.log.Warn("failed to start queued turn", "thread_id", strings.TrimSpace(a.threadID), "error", err)
+				}
 			}
 		}
 	}
@@ -396,7 +398,13 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 		return err
 	}
 	meta := queuedTurnRecordToSessionMeta(rec, th.NamespacePublicID)
-	startReq := queuedTurnRecordToRunStartRequest(rec, th.ExecutionMode)
+	startReq, err := queuedTurnRecordToRunStartRequest(rec, th.ExecutionMode)
+	if err != nil {
+		if consumeErr := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, rec.QueueID); consumeErr != nil && !errors.Is(consumeErr, sql.ErrNoRows) {
+			return errors.Join(err, consumeErr)
+		}
+		return err
+	}
 	persisted, normalizedInput, err := a.mgr.svc.persistUserMessage(ctx, meta, endpointID, threadID, startReq.Input)
 	if err != nil {
 		return err

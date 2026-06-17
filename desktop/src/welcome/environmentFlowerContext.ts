@@ -1,20 +1,24 @@
 import type { DesktopEnvironmentEntry } from '../shared/desktopLauncherIPC';
 
-type EnvironmentFlowerContextTarget = Readonly<{
+function trimString(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+type EnvironmentFlowerContextActionTarget = Readonly<{
   target_id: string;
   locality: 'auto';
 }>;
 
-type EnvironmentFlowerContextSource = Readonly<{
+type EnvironmentFlowerContextActionSource = Readonly<{
   surface: 'desktop_welcome_environment_card';
-  surface_id: string;
+  surface_id?: string;
 }>;
 
-type EnvironmentFlowerExecutionContext = Readonly<{
-  current_target_id: string;
-  source_env_public_id: string;
+type EnvironmentFlowerContextExecutionContext = Readonly<{
+  current_target_id?: string;
+  source_env_public_id?: string;
   runtime_hint: 'auto';
-  session_source: 'desktop_welcome';
+  session_source: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui' | 'runtime_gateway';
 }>;
 
 type EnvironmentFlowerContextItem = Readonly<{
@@ -24,36 +28,25 @@ type EnvironmentFlowerContextItem = Readonly<{
   content: string;
 }>;
 
-type EnvironmentFlowerPresentation = Readonly<{
-  label: string;
-  priority: number;
-  status_label: 'Ready';
-}>;
-
 export type EnvironmentFlowerContextActionEnvelope = Readonly<{
   schema_version: 2;
-  action_id: string;
-  provider: 'desktop_welcome';
-  target: EnvironmentFlowerContextTarget;
-  source: EnvironmentFlowerContextSource;
-  execution_context: EnvironmentFlowerExecutionContext;
+  action_id: 'assistant.ask.flower';
+  provider: 'flower';
+  target: EnvironmentFlowerContextActionTarget;
+  source: EnvironmentFlowerContextActionSource;
+  execution_context: EnvironmentFlowerContextExecutionContext;
   context: readonly EnvironmentFlowerContextItem[];
-  presentation: EnvironmentFlowerPresentation;
+  presentation: Readonly<{
+    label: string;
+    priority: number;
+  }>;
+  suggested_working_dir_abs?: string;
 }>;
-
-export type EnvironmentFlowerContextEnvelope = Readonly<{
-  id: string;
-  provider: 'desktop_welcome';
-  raw: EnvironmentFlowerContextActionEnvelope;
-}>;
-
-function trimString(value: unknown): string {
-  return String(value ?? '').trim();
-}
 
 function environmentMetadataContent(environment: DesktopEnvironmentEntry): string {
   return [
     `Environment: ${environment.label}`,
+    `Kind: ${environment.kind}`,
     `Environment ID: ${environment.id}`,
     trimString(environment.local_ui_url) ? `Local UI URL: ${trimString(environment.local_ui_url)}` : '',
     trimString(environment.provider_origin) ? `Provider origin: ${trimString(environment.provider_origin)}` : '',
@@ -75,48 +68,67 @@ export function environmentFlowerPrimaryTargetID(environment: DesktopEnvironment
     || trimString(environment.id);
 }
 
-export function buildEnvironmentFlowerContextEnvelope(
+function environmentSessionSource(environment: DesktopEnvironmentEntry): EnvironmentFlowerContextExecutionContext['session_source'] {
+  switch (environment.kind) {
+    case 'local_environment':
+      return 'local_runtime';
+    case 'provider_environment':
+      return 'provider_environment';
+    case 'ssh_environment':
+      return 'ssh_environment';
+    case 'gateway_environment':
+      return 'runtime_gateway';
+    case 'external_local_ui':
+      return 'external_local_ui';
+  }
+}
+
+function environmentExecutionContext(
+  environment: DesktopEnvironmentEntry,
+  targetID: string,
+): EnvironmentFlowerContextExecutionContext {
+  const envPublicID = trimString(environment.env_public_id);
+  return {
+    current_target_id: targetID,
+    ...(envPublicID ? { source_env_public_id: envPublicID } : {}),
+    runtime_hint: 'auto',
+    session_source: environmentSessionSource(environment),
+  };
+}
+
+function environmentContextItem(environment: DesktopEnvironmentEntry, detail: string): EnvironmentFlowerContextItem {
+  return {
+    kind: 'text_snapshot',
+    title: environment.label,
+    detail,
+    content: environmentMetadataContent(environment),
+  };
+}
+
+export function buildEnvironmentFlowerContextAction(
   environment: DesktopEnvironmentEntry,
   detail: string,
-): EnvironmentFlowerContextEnvelope {
+): EnvironmentFlowerContextActionEnvelope {
   const targetID = environmentFlowerPrimaryTargetID(environment);
-  const actionID = `desktop-env-${targetID}`;
-  const raw = {
+  const target: EnvironmentFlowerContextActionTarget = {
+    target_id: targetID,
+    locality: 'auto',
+  };
+  const contextItems = [environmentContextItem(environment, detail)];
+  return {
     schema_version: 2,
-    action_id: actionID,
-    provider: 'desktop_welcome',
-    target: {
-      target_id: targetID,
-      locality: 'auto',
-    },
+    action_id: 'assistant.ask.flower',
+    provider: 'flower',
+    target,
     source: {
       surface: 'desktop_welcome_environment_card',
-      surface_id: trimString(environment.id),
+      surface_id: trimString(environment.id) || undefined,
     },
-    execution_context: {
-      current_target_id: targetID,
-      source_env_public_id: trimString(environment.env_public_id),
-      runtime_hint: 'auto',
-      session_source: 'desktop_welcome',
-    },
-    context: [
-      {
-        kind: 'text_snapshot',
-        title: environment.label,
-        detail,
-        content: environmentMetadataContent(environment),
-      },
-    ],
+    execution_context: environmentExecutionContext(environment, targetID),
+    context: contextItems,
     presentation: {
-      label: environment.label,
+      label: 'Ask Flower',
       priority: 100,
-      status_label: 'Ready',
     },
-  } satisfies EnvironmentFlowerContextActionEnvelope;
-
-  return {
-    id: actionID,
-    provider: 'desktop_welcome',
-    raw,
   };
 }

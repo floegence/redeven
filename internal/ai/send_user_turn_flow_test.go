@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -890,6 +891,102 @@ func TestThreadActor_MaybeStartQueuedTurn_StartsQueuedMessageWithOriginalMessage
 	t.Fatalf("queued follow-up message was not persisted with original message id")
 }
 
+func TestThreadActor_MaybeStartQueuedTurn_DropsInvalidQueuedTurnAndLogsIt(t *testing.T) {
+	t.Parallel()
+
+	var logBuf bytes.Buffer
+	svc, err := NewService(Options{
+		Logger:           slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		StateDir:         t.TempDir(),
+		AgentHomeDir:     t.TempDir(),
+		Shell:            "/bin/bash",
+		Config:           &config.AIConfig{Providers: []config.AIProvider{{ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "gpt-5-mini"}}}}},
+		PersistOpTimeout: 2 * time.Second,
+		RunMaxWallTime:   2 * time.Second,
+		RunIdleTimeout:   1 * time.Second,
+		ResolveProviderAPIKey: func(string) (string, bool, error) {
+			return "", false, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, meta, "invalid queued turn", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if _, _, err := svc.enqueueQueuedTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: th.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			Text: "bad queued turn",
+			ContextAction: &ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      "assistant.ask.flower",
+				Provider:      "flower",
+				Target:        ContextActionTarget{TargetID: "current", Locality: "auto"},
+				Source:        ContextActionSource{Surface: "desktop_welcome_environment_card"},
+				ExecutionContext: &ContextActionExecutionHint{
+					RuntimeHint: "legacy",
+				},
+				Context:      []ContextActionContextItem{{Kind: "text_snapshot", Title: "Local", Content: "Environment: Local"}},
+				Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
+		},
+		Options: RunOptions{MaxSteps: 1},
+	}); !errors.Is(err, ErrInvalidContextAction) {
+		t.Fatalf("enqueueQueuedTurn err=%v, want %v", err, ErrInvalidContextAction)
+	}
+
+	invalidContextActionJSON := `{"schema_version":2,"action_id":"assistant.ask.flower","provider":"flower","target":{"target_id":"current","locality":"auto"},"source":{"surface":"desktop_welcome_environment_card"},"execution_context":{"runtime_hint":"legacy"},"context":[{"kind":"text_snapshot","title":"Local","content":"Environment: Local"}],"presentation":{"label":"Ask Flower","priority":100}}`
+
+	if raw, _, _, err := svc.threadsDB.CreateFollowup(ctx, threadstore.QueuedTurn{
+		QueueID:           "q_invalid_queued_turn",
+		EndpointID:        meta.EndpointID,
+		ThreadID:          th.ThreadID,
+		ChannelID:         meta.ChannelID,
+		Lane:              threadstore.FollowupLaneQueued,
+		MessageID:         "m_invalid_queued_turn",
+		ModelID:           "openai/gpt-5-mini",
+		TextContent:       "bad queued turn",
+		ContextActionJSON: invalidContextActionJSON,
+	}); err != nil {
+		t.Fatalf("CreateFollowup invalid queued turn: %v", err)
+	} else if raw.QueueID == "" {
+		t.Fatalf("CreateFollowup returned empty queue id")
+	}
+
+	actor := svc.threadMgr.Get(meta.EndpointID, th.ThreadID)
+	if actor == nil {
+		t.Fatalf("thread actor missing")
+	}
+	actor.wakeMaybeStartQueuedTurn()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		queued, listErr := svc.threadsDB.ListQueuedTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+		if listErr != nil {
+			t.Fatalf("ListQueuedTurns: %v", listErr)
+		}
+		if len(queued) == 0 && strings.Contains(logBuf.String(), "failed to start queued turn") {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	queued, listErr := svc.threadsDB.ListQueuedTurns(ctx, meta.EndpointID, th.ThreadID, 10)
+	if listErr != nil {
+		t.Fatalf("ListQueuedTurns: %v", listErr)
+	}
+	if len(queued) != 0 {
+		t.Fatalf("queued turns len=%d, want 0 after dropping invalid record", len(queued))
+	}
+	t.Fatalf("queued turn failure not logged: %s", logBuf.String())
+}
+
 func TestSendUserTurn_ModelLockConflict_DoesNotPersistMessage(t *testing.T) {
 	t.Parallel()
 
@@ -1102,5 +1199,167 @@ func TestPromptPackToHistory_DeduplicatesPendingTailInput(t *testing.T) {
 	}
 	if history[0].Role != "user" || history[0].Text != "same text" {
 		t.Fatalf("history[0]=%+v, want single user entry", history[0])
+	}
+}
+
+func TestPromptPackToHistory_DoesNotIncludeUserProvidedContext(t *testing.T) {
+	t.Parallel()
+
+	pack := contextmodel.PromptPack{
+		UserProvidedContext: &contextmodel.UserProvidedContext{
+			ActionID:            "assistant.ask.flower",
+			Provider:            "flower",
+			SourceSurface:       "desktop_welcome_environment_card",
+			TargetID:            "local:local",
+			Locality:            "auto",
+			SuggestedWorkingDir: "/workspace/redeven",
+			Items: []contextmodel.UserProvidedContextItem{{
+				Kind:    "text_snapshot",
+				Title:   "Local Environment",
+				Content: "Environment: Local Environment",
+			}},
+		},
+	}
+
+	history := promptPackToHistory(pack, "inspect env")
+	if len(history) != 1 {
+		t.Fatalf("history len=%d, want 1", len(history))
+	}
+	if history[0].Role != "user" || history[0].Text != "inspect env" {
+		t.Fatalf("history[0]=%+v, want current user input only", history[0])
+	}
+}
+
+func TestSendUserTurnRejectsNonStandardContextActions(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	thread, err := svc.CreateThread(ctx, meta, "legacy context action rejection", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			Text: "inspect env",
+			ContextAction: &ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      "assistant.ask.unlisted",
+				Provider:      "not_flower",
+				Target:        ContextActionTarget{TargetID: "current", Locality: "auto"},
+				Source:        ContextActionSource{Surface: "desktop_welcome_environment_card"},
+				Context:       []ContextActionContextItem{{Kind: "text_snapshot", Title: "Local", Content: "Environment: Local"}},
+				Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
+		},
+		Options: RunOptions{MaxSteps: 1},
+	})
+	if !errors.Is(err, ErrInvalidContextAction) {
+		t.Fatalf("SendUserTurn err=%v, want %v", err, ErrInvalidContextAction)
+	}
+}
+
+func TestSendUserTurnRejectsNonStandardContextActionsWhileWaitingUser(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	thread, err := svc.CreateThread(ctx, meta, "legacy context action waiting-user rejection", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	seedWaitingUserPrompt(t, svc, ctx, meta, thread.ThreadID, testSingleQuestionPrompt(
+		"msg_waiting_legacy_context_action",
+		"tool_waiting_legacy_context_action",
+		"question_1",
+		"Choose a direction.",
+		nil,
+	))
+
+	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID:              thread.ThreadID,
+		Model:                 "openai/gpt-5-mini",
+		QueueAfterWaitingUser: true,
+		Input: RunInput{
+			Text: "queue with invalid context action",
+			ContextAction: &ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      "assistant.ask.unlisted",
+				Provider:      "flower",
+				Target:        ContextActionTarget{TargetID: "current", Locality: "auto"},
+				Source:        ContextActionSource{Surface: "desktop_welcome_environment_card"},
+				Context:       []ContextActionContextItem{{Kind: "text_snapshot", Title: "Local", Content: "Environment: Local"}},
+				Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
+		},
+		Options: RunOptions{MaxSteps: 1},
+	})
+	if !errors.Is(err, ErrInvalidContextAction) {
+		t.Fatalf("SendUserTurn queue-after-waiting-user err=%v, want %v", err, ErrInvalidContextAction)
+	}
+}
+
+func TestSendUserTurnRejectsNonStandardContextActionsWhileActiveRunWouldQueue(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+
+	thread, err := svc.CreateThread(ctx, meta, "legacy context action active-run queue rejection", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	activeRunID := "run_active_invalid_context_queue"
+	thKey := runThreadKey(meta.EndpointID, thread.ThreadID)
+	if thKey == "" {
+		t.Fatalf("invalid thread key")
+	}
+	svc.mu.Lock()
+	svc.activeRunByTh[thKey] = activeRunID
+	svc.runs[activeRunID] = &run{
+		id:         activeRunID,
+		channelID:  meta.ChannelID,
+		endpointID: meta.EndpointID,
+		threadID:   thread.ThreadID,
+		doneCh:     make(chan struct{}),
+	}
+	svc.mu.Unlock()
+
+	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			Text: "queue with invalid locality",
+			ContextAction: &ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      "assistant.ask.flower",
+				Provider:      "flower",
+				Target:        ContextActionTarget{TargetID: "current", Locality: "legacy"},
+				Source:        ContextActionSource{Surface: "desktop_welcome_environment_card"},
+				Context:       []ContextActionContextItem{{Kind: "text_snapshot", Title: "Local", Content: "Environment: Local"}},
+				Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
+		},
+		Options: RunOptions{MaxSteps: 1},
+	})
+	if !errors.Is(err, ErrInvalidContextAction) {
+		t.Fatalf("SendUserTurn active-run queue err=%v, want %v", err, ErrInvalidContextAction)
+	}
+
+	queued, listErr := svc.threadsDB.ListFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued, 10)
+	if listErr != nil {
+		t.Fatalf("ListFollowupsByLane: %v", listErr)
+	}
+	if len(queued) != 0 {
+		t.Fatalf("queued followups len=%d, want none", len(queued))
 	}
 }

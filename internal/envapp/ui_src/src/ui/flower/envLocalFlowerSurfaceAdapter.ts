@@ -13,7 +13,7 @@ import type {
   FlowerThreadReadStatus,
   FlowerLiveBootstrap,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
-import type { ContextActionEnvelope } from '../contextActions/protocol';
+import { requireAskFlowerContextActionEnvelope } from '../contextActions/protocol';
 import { mapFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveMapper';
 import { createRuntimeFlowerSurfaceAdapter } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
 
@@ -299,17 +299,6 @@ function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse
   return trim(models.current_model);
 }
 
-function isContextActionEnvelope(value: unknown): value is ContextActionEnvelope {
-  if (!value || typeof value !== 'object') return false;
-  const action = value as Partial<ContextActionEnvelope>;
-  return action.schema_version === 2
-    && typeof action.action_id === 'string'
-    && Array.isArray(action.context)
-    && !!action.target
-    && !!action.source
-    && !!action.presentation;
-}
-
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
   const copy = adapterCopy(options);
   const loadThread = async (threadID: string) => mapEnvFlowerLiveBootstrap(
@@ -387,6 +376,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const models = await loadModels();
       const modelID = currentModelID(snapshot, models);
       if (!modelID) throw new Error(copy.selectModelBeforeChat);
+      const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
       let threadID = trim(input.thread_id);
       if (!threadID) {
         const createBody: Record<string, unknown> = {
@@ -426,7 +416,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         input: {
           text: prompt,
           attachments,
-          ...(isContextActionEnvelope(input.context_action) ? { contextAction: input.context_action } : {}),
+          ...(contextAction ? { contextAction } : {}),
         },
         options: {
           maxSteps: 10,

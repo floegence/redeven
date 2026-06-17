@@ -1,8 +1,40 @@
 package ai
 
-import "strings"
+import (
+	"errors"
+	"strings"
+
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
+)
 
 const ContextActionSchemaVersion = 2
+
+var ErrInvalidContextAction = errors.New("invalid context action")
+
+const (
+	contextActionAskFlowerID       = "assistant.ask.flower"
+	contextActionFlowerProvider    = "flower"
+	contextActionLocalityAuto      = "auto"
+	contextActionLocalityCurrent   = "current_runtime"
+	contextActionLocalityRemote    = "remote_runtime"
+	contextActionLocalityLocal     = "local_model_remote_target"
+	contextActionRuntimeHintAuto   = "auto"
+	contextActionRuntimeHintLocal  = "local_environment"
+	contextActionRuntimeHintEnv    = "env_local"
+	contextActionSessionLocal      = "local_runtime"
+	contextActionSessionProvider   = "provider_environment"
+	contextActionSessionSSH        = "ssh_environment"
+	contextActionSessionExternal   = "external_local_ui"
+	contextActionSessionGateway    = "runtime_gateway"
+	contextActionSessionSandbox    = "region_sandbox"
+	contextActionSurfaceWelcomeEnv = "desktop_welcome_environment_card"
+	contextActionSurfaceFile       = "file_browser"
+	contextActionSurfaceTerminal   = "terminal"
+	contextActionSurfacePreview    = "file_preview"
+	contextActionSurfaceMonitoring = "monitoring"
+	contextActionSurfaceGit        = "git_browser"
+	contextActionSurfaceEditor     = "editor_preview"
+)
 
 type ContextActionEnvelope struct {
 	SchemaVersion       int                         `json:"schema_version"`
@@ -98,6 +130,52 @@ func normalizeContextActionEnvelope(in *ContextActionEnvelope) *ContextActionEnv
 	return &out
 }
 
+func normalizeAskFlowerContextActionEnvelope(in *ContextActionEnvelope) (*ContextActionEnvelope, error) {
+	if in != nil && in.SchemaVersion != ContextActionSchemaVersion {
+		return nil, ErrInvalidContextAction
+	}
+	out := normalizeContextActionEnvelope(in)
+	if in == nil {
+		return nil, nil
+	}
+	if out == nil {
+		return nil, ErrInvalidContextAction
+	}
+	if out.ActionID != contextActionAskFlowerID ||
+		out.Provider != contextActionFlowerProvider {
+		return nil, ErrInvalidContextAction
+	}
+	switch out.Target.Locality {
+	case contextActionLocalityAuto, contextActionLocalityCurrent, contextActionLocalityRemote, contextActionLocalityLocal:
+	default:
+		return nil, ErrInvalidContextAction
+	}
+	switch out.Source.Surface {
+	case contextActionSurfaceWelcomeEnv,
+		contextActionSurfaceFile,
+		contextActionSurfaceTerminal,
+		contextActionSurfacePreview,
+		contextActionSurfaceMonitoring,
+		contextActionSurfaceGit,
+		contextActionSurfaceEditor:
+	default:
+		return nil, ErrInvalidContextAction
+	}
+	if out.ExecutionContext != nil {
+		switch out.ExecutionContext.RuntimeHint {
+		case "", contextActionRuntimeHintAuto, contextActionRuntimeHintLocal, contextActionRuntimeHintEnv:
+		default:
+			return nil, ErrInvalidContextAction
+		}
+		switch out.ExecutionContext.SessionSource {
+		case "", contextActionSessionLocal, contextActionSessionProvider, contextActionSessionSSH, contextActionSessionExternal, contextActionSessionGateway, contextActionSessionSandbox:
+		default:
+			return nil, ErrInvalidContextAction
+		}
+	}
+	return out, nil
+}
+
 func normalizeContextActionItems(items []ContextActionContextItem) []ContextActionContextItem {
 	if len(items) == 0 {
 		return nil
@@ -135,8 +213,9 @@ func normalizeContextActionItems(items []ContextActionContextItem) []ContextActi
 }
 
 func contextActionRunEventPayload(action *ContextActionEnvelope) map[string]any {
-	action = normalizeContextActionEnvelope(action)
-	if action == nil {
+	var err error
+	action, err = normalizeAskFlowerContextActionEnvelope(action)
+	if err != nil || action == nil {
 		return nil
 	}
 	payload := map[string]any{
@@ -159,4 +238,44 @@ func contextActionRunEventPayload(action *ContextActionEnvelope) map[string]any 
 		}
 	}
 	return payload
+}
+
+func contextActionToUserProvidedContext(action *ContextActionEnvelope) *contextmodel.UserProvidedContext {
+	var err error
+	action, err = normalizeAskFlowerContextActionEnvelope(action)
+	if err != nil || action == nil {
+		return nil
+	}
+	items := make([]contextmodel.UserProvidedContextItem, 0, len(action.Context))
+	for _, item := range action.Context {
+		items = append(items, contextmodel.UserProvidedContextItem{
+			Kind:           item.Kind,
+			Title:          item.Title,
+			Detail:         item.Detail,
+			Content:        item.Content,
+			Path:           item.Path,
+			IsDirectory:    item.IsDirectory,
+			RootLabel:      item.RootLabel,
+			WorkingDir:     item.WorkingDir,
+			Selection:      item.Selection,
+			SelectionChars: item.SelectionChars,
+			PID:            item.PID,
+			Name:           item.Name,
+			Username:       item.Username,
+			CPUPercent:     item.CPUPercent,
+			MemoryBytes:    item.MemoryBytes,
+			Platform:       item.Platform,
+			CapturedAtMs:   item.CapturedAtMs,
+		})
+	}
+	return &contextmodel.UserProvidedContext{
+		ActionID:            action.ActionID,
+		Provider:            action.Provider,
+		SourceSurface:       action.Source.Surface,
+		SourceSurfaceID:     action.Source.SurfaceID,
+		TargetID:            action.Target.TargetID,
+		Locality:            action.Target.Locality,
+		SuggestedWorkingDir: action.SuggestedWorkingDir,
+		Items:               items,
+	}
 }

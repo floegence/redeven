@@ -178,6 +178,11 @@ func clonePromptPack(in model.PromptPack) model.PromptPack {
 	out.Blockers = append([]model.MemoryItem(nil), in.Blockers...)
 	out.RetrievedLongTermMemory = append([]model.MemoryItem(nil), in.RetrievedLongTermMemory...)
 	out.AttachmentsManifest = append([]model.AttachmentManifest(nil), in.AttachmentsManifest...)
+	if in.UserProvidedContext != nil {
+		userContext := *in.UserProvidedContext
+		userContext.Items = append([]model.UserProvidedContextItem(nil), in.UserProvidedContext.Items...)
+		out.UserProvidedContext = &userContext
+	}
 	if in.ContextSectionsTokenUsage != nil {
 		out.ContextSectionsTokenUsage = make(map[string]int, len(in.ContextSectionsTokenUsage))
 		for k, v := range in.ContextSectionsTokenUsage {
