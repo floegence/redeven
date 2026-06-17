@@ -670,15 +670,21 @@ body {
 /* ── Endpoints popover ── */
 
 .redeven-endpoints-popover {
-  min-width: 13rem;
-  max-width: 19rem;
+  min-width: 14rem;
+  width: min(22rem, calc(100vw - 1rem));
+  max-width: calc(100vw - 1rem);
   padding: 0.6rem;
+}
+
+.redeven-endpoints-popover--expanded {
+  width: min(29.5rem, calc(100vw - 1rem));
 }
 
 .redeven-endpoints-popover-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-width: 0;
   margin-bottom: 0.45rem;
   padding: 0 0.25rem;
 }
@@ -713,6 +719,25 @@ body {
   background: color-mix(in srgb, var(--muted) 40%, transparent);
 }
 
+.redeven-endpoints-popover-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.redeven-endpoints-popover-list {
+  display: grid;
+  gap: 0.15rem;
+  align-content: start;
+  min-width: 0;
+}
+
+.redeven-endpoints-popover-body--expanded {
+  grid-template-columns: minmax(0, 1fr) 8.35rem;
+  align-items: start;
+}
+
 /* ── Card body: endpoints section ── */
 
 .redeven-endpoints-section {
@@ -738,15 +763,34 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
   padding: 0.32rem 0.4rem;
+  border: 0;
   border-radius: 0.25rem;
+  background: transparent;
+  text-align: left;
+  color: inherit;
   cursor: pointer;
   transition:
+    color 150ms ease,
     background-color 150ms ease;
 }
 
 .redeven-card-endpoint-row:hover {
   background: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+
+.redeven-card-endpoint-row:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.redeven-card-endpoint-row[data-selected] {
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 .redeven-card-endpoint-row:hover .redeven-card-endpoint-copy {
@@ -755,8 +799,11 @@ body {
 
 .redeven-card-endpoint-label {
   display: inline-flex;
+  flex: 0 0 auto;
   min-width: 2.6rem;
+  max-width: 5.4rem;
   justify-content: center;
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
   border-radius: 0.2rem;
   background: color-mix(in srgb, var(--foreground) 4%, transparent);
@@ -765,6 +812,8 @@ body {
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--muted-foreground);
 }
 
@@ -776,6 +825,10 @@ body {
   white-space: nowrap;
   font-size: 0.78rem;
   color: var(--foreground);
+}
+
+.redeven-card-endpoint-row[data-selected] .redeven-card-endpoint-value {
+  color: var(--primary);
 }
 
 .redeven-card-endpoint-copy {
@@ -799,6 +852,123 @@ body {
 .redeven-card-endpoint-copy--active {
   opacity: 1;
   color: var(--success);
+}
+
+.redeven-card-endpoint-row[data-selected] .redeven-card-endpoint-copy {
+  opacity: 1;
+  color: var(--primary);
+}
+
+.redeven-endpoint-qr-panel {
+  display: grid;
+  gap: 0.45rem;
+  justify-items: center;
+  min-width: 0;
+  width: 100%;
+  max-width: 8.35rem;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--card) 82%, var(--muted) 18%);
+  padding: 0.55rem;
+}
+
+.redeven-endpoint-qr-card {
+  display: grid;
+  place-items: center;
+  width: min(7.1rem, 100%);
+  aspect-ratio: 1;
+  border-radius: 0.32rem;
+  background: #fff;
+  padding: 0.35rem;
+  box-shadow:
+    0 0 0 1px rgb(15 23 42 / 0.08),
+    0 12px 30px -24px rgb(15 23 42 / 0.55);
+}
+
+.redeven-endpoint-qr-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.redeven-endpoint-qr-meta {
+  display: grid;
+  justify-items: center;
+  gap: 0.18rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.redeven-endpoint-qr-label {
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  border-radius: 0.2rem;
+  background: color-mix(in srgb, var(--foreground) 4%, transparent);
+  padding: 0.12rem 0.32rem;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+
+.redeven-endpoint-qr-value {
+  width: 100%;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.redeven-endpoint-qr-copy-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-width: 0;
+  width: 100%;
+  min-height: 1.8rem;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 0.3rem;
+  background: var(--background);
+  padding: 0.28rem 0.45rem;
+  color: var(--foreground);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease,
+    color 150ms ease;
+}
+
+.redeven-endpoint-qr-copy-button > svg {
+  flex: 0 0 auto;
+}
+
+.redeven-endpoint-qr-copy-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.redeven-endpoint-qr-copy-button:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+  background: color-mix(in srgb, var(--primary) 10%, var(--background));
+  color: var(--primary);
+}
+
+.redeven-endpoint-qr-copy-button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--ring) 70%, transparent);
+  outline-offset: 2px;
 }
 
 /* ── Tabs ── */

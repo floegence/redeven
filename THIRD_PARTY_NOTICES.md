@@ -923,6 +923,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | property-information | 7.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/property-information/v/7.1.0 |  |
 | pump | 3.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/pump/v/3.0.4 |  |
 | punycode | 2.3.1 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/punycode/v/2.3.1 |  |
+| qrcode-generator | 2.0.4 | MIT | Desktop shell | https://www.npmjs.com/package/qrcode-generator/v/2.0.4 |  |
 | quick-lru | 5.1.1 | MIT | Desktop shell | https://www.npmjs.com/package/quick-lru/v/5.1.1 |  |
 | react-dom | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react-dom/v/18.3.1 |  |
 | react | 18.3.1 | MIT | Env App UI | https://www.npmjs.com/package/react/v/18.3.1 |  |
