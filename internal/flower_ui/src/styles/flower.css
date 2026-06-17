@@ -458,10 +458,13 @@ html.dark .flower-component-shell {
   font-size: 0.875rem;
   line-height: 1.65;
   letter-spacing: 0;
-  white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
   user-select: text;
+}
+
+.flower-message-plain-text {
+  white-space: pre-wrap;
 }
 
 .flower-message-bubble-framed {
@@ -716,6 +719,236 @@ html.dark .flower-component-shell {
   border-color: color-mix(in srgb, var(--flower-chat-surface-border) 30%, transparent);
   background: transparent;
   color: color-mix(in srgb, var(--muted-foreground) 90%, var(--foreground) 10%);
+}
+
+.flower-chat-md-block {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  user-select: text;
+}
+
+.flower-chat-md-committed-segment,
+.flower-chat-md-tail,
+.flower-chat-md-tail-frame {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.flower-chat-md-block :is(p, ul, ol, blockquote, pre, table, hr) {
+  margin: 0.58rem 0 0;
+}
+
+.flower-chat-md-block :first-child,
+.flower-chat-md-committed-segment:first-child > :first-child,
+.flower-chat-md-tail:first-child > :first-child {
+  margin-top: 0;
+}
+
+.flower-chat-md-block :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0.9rem 0 0.38rem;
+  color: inherit;
+  font-weight: 720;
+  line-height: 1.25;
+  letter-spacing: 0;
+}
+
+.flower-chat-md-block h1 {
+  font-size: 1.15rem;
+}
+
+.flower-chat-md-block h2 {
+  font-size: 1.05rem;
+}
+
+.flower-chat-md-block :is(h3, h4, h5, h6) {
+  font-size: 0.95rem;
+}
+
+.flower-chat-md-block :is(ul, ol) {
+  padding-left: 1.2rem;
+}
+
+.flower-chat-md-block li {
+  margin-top: 0.22rem;
+  padding-left: 0.1rem;
+}
+
+.flower-chat-md-block li:first-child {
+  margin-top: 0;
+}
+
+.flower-chat-md-link {
+  cursor: pointer;
+  color: color-mix(in srgb, var(--primary) 82%, var(--foreground) 18%);
+  font-weight: 560;
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.18em;
+}
+
+.flower-message-bubble-user .flower-chat-md-link {
+  color: color-mix(in srgb, var(--primary) 66%, var(--foreground) 34%);
+}
+
+.flower-chat-md-link:hover,
+.flower-chat-md-link:focus-visible {
+  color: color-mix(in srgb, var(--primary) 92%, var(--foreground) 8%);
+  outline: none;
+}
+
+.flower-chat-md-inline-code {
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 68%, transparent);
+  border-radius: 0.28rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 88%, var(--foreground) 6%);
+  padding: 0.08rem 0.28rem;
+  color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.84em;
+  white-space: break-spaces;
+}
+
+.flower-message-bubble-user .flower-chat-md-inline-code {
+  border-color: color-mix(in srgb, var(--primary) 24%, transparent);
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 74%, var(--primary) 10%);
+}
+
+.flower-chat-md-blockquote {
+  border-left: 3px solid color-mix(in srgb, var(--primary) 40%, var(--flower-chat-surface-border));
+  color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
+  padding: 0.1rem 0 0.1rem 0.75rem;
+}
+
+.flower-chat-md-block table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.flower-chat-md-block :is(th, td) {
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, transparent);
+  padding: 0.32rem 0.48rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+.flower-chat-md-block th {
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 82%, var(--foreground) 5%);
+  font-weight: 680;
+}
+
+.flower-chat-md-code-frame {
+  position: relative;
+  max-width: 100%;
+  margin-top: 0.65rem;
+}
+
+.flower-chat-md-code-block {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 74%, transparent);
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 84%, var(--foreground) 7%);
+  padding: 0.78rem 2.45rem 0.78rem 0.82rem;
+  color: color-mix(in srgb, var(--foreground) 90%, var(--primary) 10%);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+.flower-message-bubble-user .flower-chat-md-code-block {
+  border-color: color-mix(in srgb, var(--primary) 24%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 78%, var(--primary) 9%);
+}
+
+.flower-chat-md-code-copy {
+  position: absolute;
+  top: 0.38rem;
+  right: 0.38rem;
+  display: inline-flex;
+  width: 1.65rem;
+  height: 1.65rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 70%, transparent);
+  border-radius: 0.38rem;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 90%, var(--background) 10%);
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
+  opacity: 0.78;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.flower-chat-md-code-copy:hover,
+.flower-chat-md-code-copy:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 36%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--primary) 9%, var(--flower-chat-surface-elevated));
+  color: var(--foreground);
+  opacity: 1;
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.flower-chat-md-code-copy:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.flower-chat-md-copy-svg {
+  position: absolute;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.flower-chat-md-copy-svg-copied,
+.flower-chat-md-code-copy[data-copied='true'] .flower-chat-md-copy-svg-idle {
+  opacity: 0;
+  transform: scale(0.82);
+}
+
+.flower-chat-md-code-copy[data-copied='true'] .flower-chat-md-copy-svg-copied {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.flower-chat-md-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.45rem;
+  margin-top: 0.58rem;
+}
+
+.flower-chat-md-raw-tail {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.flower-chat-md-streaming-fade-in {
+  animation: flower-chat-md-fade-in 160ms ease-out;
+}
+
+@keyframes flower-chat-md-fade-in {
+  from {
+    opacity: 0.38;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .flower-approval-card {

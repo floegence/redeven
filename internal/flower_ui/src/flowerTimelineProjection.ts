@@ -99,12 +99,7 @@ export function flowerMessageSignature(message: FlowerChatMessage): string {
 }
 
 function contentBlocksFromMessage(message: FlowerChatMessage): readonly FlowerRenderableMessageBlock[] {
-  const sourceBlocks = message.blocks?.length
-    ? message.blocks
-    : trimString(message.content)
-      ? [{ type: 'markdown' as const, content: message.content }]
-      : [];
-  return sourceBlocks.flatMap((block, index): readonly FlowerRenderableMessageBlock[] => {
+  return (message.blocks ?? []).flatMap((block, index): readonly FlowerRenderableMessageBlock[] => {
     const key = `${message.id}:block:${index}`;
     if (block.type === 'activity-timeline') {
       if (block.items.length === 0) return [];

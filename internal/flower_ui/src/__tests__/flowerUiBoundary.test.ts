@@ -181,4 +181,38 @@ describe('shared Flower UI boundary', () => {
     expect(localizedFlowerProviderModelNote('zh-TW', 'openai_gpt_55_frontier')).toContain('複雜推理');
     expect(localizedFlowerProviderModelNote('zh-Hant', 'moonshot_kimi_k26')).toContain('內建 web search');
   });
+
+  it('keeps Flower chat markdown separate from file preview markdown renderers', () => {
+    const forbidden = [
+      'FileMarkdown',
+      'file-markdown',
+      'MarkdownPreviewPane',
+      'FilePreviewContext',
+      'filePreviewItem',
+      'buildRedevenFileResourceUrl',
+      'markdownFileReference',
+      'parseMarkdownLocalFileHref',
+      'rendererVariant',
+      'chat-md-file-ref',
+      'frontmatter',
+      'tableOfContents',
+      'markdown-toc',
+      'toc-',
+      'katex',
+      'mathPlugin',
+      'marked-footnote',
+      'marked-gfm-heading-id',
+      '.fm-',
+      '.file-markdown',
+      '.chat-md-',
+      '.codex-chat-markdown',
+    ];
+
+    for (const file of listSourceFiles(flowerRoot)) {
+      const src = readText(file);
+      for (const token of forbidden) {
+        expect(src, `${path.relative(repoRoot, file)} must not contain ${token}`).not.toContain(token);
+      }
+    }
+  });
 });

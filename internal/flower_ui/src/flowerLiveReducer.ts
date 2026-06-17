@@ -70,7 +70,10 @@ function blockFromLiveBlock(block: FlowerLiveBlock): FlowerChatMessageBlock | nu
   if (type === 'thinking') {
     return { type: 'thinking', content: text(block.content) };
   }
-  return { type: 'markdown', content: text(block.content) };
+  if (type === 'markdown' || type === 'text') {
+    return { type, content: text(block.content) };
+  }
+  return null;
 }
 
 function contentFromBlocks(blocks: readonly FlowerChatMessageBlock[]): string {
@@ -149,32 +152,23 @@ export type FlowerLiveEventResult = Readonly<{
   tailLength: number;
 }>;
 
-function upsertBlock(message: FlowerChatMessage, blockIndex: number, block: FlowerChatMessageBlock): FlowerChatMessage {
+function upsertBlock(message: FlowerChatMessage, blockIndex: number, block: FlowerChatMessageBlock): FlowerChatMessage | null {
+  if (blockIndex < 0) return null;
   const blocks = [...(message.blocks ?? [])];
-  while (blocks.length <= blockIndex) {
-    blocks.push({ type: 'markdown', content: '' });
-  }
+  if (blockIndex > blocks.length) return null;
   blocks[blockIndex] = block;
   return { ...message, blocks, content: contentFromBlocks(blocks) };
 }
 
-function appendBlockDelta(message: FlowerChatMessage, blockIndex: number, delta: string): FlowerChatMessage {
+function appendBlockDelta(message: FlowerChatMessage, blockIndex: number, delta: string): FlowerChatMessage | null {
   const blocks = [...(message.blocks ?? [])];
-  while (blocks.length <= blockIndex) {
-    blocks.push({
-      type: 'markdown',
-      content: blockIndex === 0 && blocks.length === 0 ? text(message.content) : '',
-    });
-  }
+  if (blockIndex < 0 || blockIndex >= blocks.length) return null;
   const current = blocks[blockIndex];
-  if (current?.type === 'activity-timeline') {
-    blocks[blockIndex] = { type: 'markdown', content: delta };
-  } else {
-    blocks[blockIndex] = {
-      type: current?.type === 'thinking' ? 'thinking' : 'markdown',
-      content: `${current?.content ?? ''}${delta}`,
-    };
-  }
+  if (!current || current.type === 'activity-timeline') return null;
+  blocks[blockIndex] = {
+    type: current.type,
+    content: `${current.content ?? ''}${delta}`,
+  };
   return { ...message, blocks, content: contentFromBlocks(blocks) };
 }
 
@@ -207,6 +201,18 @@ function updateMessage(thread: FlowerThreadSnapshot, messageID: string, update: 
   return replaceMessage(thread, update(current));
 }
 
+function updateMessageStrict(
+  thread: FlowerThreadSnapshot,
+  messageID: string,
+  update: (message: FlowerChatMessage) => FlowerChatMessage | null,
+): { thread: FlowerThreadSnapshot; ok: boolean } {
+  const current = findMessage(thread, messageID);
+  if (!current) return { thread, ok: false };
+  const updated = update(current);
+  if (!updated) return { thread, ok: false };
+  return { thread: replaceMessage(thread, updated), ok: true };
+}
+
 function withApprovalAction(thread: FlowerThreadSnapshot, action: FlowerApprovalAction): FlowerThreadSnapshot {
   const current = thread.approval_actions ?? [];
   const next = current.filter((item) => item.action_id !== action.action_id);
@@ -235,6 +241,7 @@ export function applyFlowerLiveEvent(
   let next = current;
   let tailKey = '';
   let tailLength = 0;
+  let resyncRequired = false;
 
   switch (event.kind) {
     case 'run.started':
@@ -259,27 +266,43 @@ export function applyFlowerLiveEvent(
       break;
     case 'message.block_started':
       next = ensureStreamingAssistantMessage(next, event.payload.message_id, event.at_unix_ms);
-      next = updateMessage(next, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, {
-        type: event.payload.block_type === 'thinking' ? 'thinking' : 'markdown',
-        content: '',
-      }));
+      {
+        const block = blockFromLiveBlock({ type: event.payload.block_type, content: '' });
+        if (!block || block.type === 'activity-timeline') {
+          resyncRequired = true;
+          break;
+        }
+        const result = updateMessageStrict(next, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, block));
+        next = result.thread;
+        resyncRequired = !result.ok;
+      }
       break;
     case 'message.block_delta':
       next = ensureStreamingAssistantMessage(next, event.payload.message_id, event.at_unix_ms);
-      next = updateMessage(next, event.payload.message_id, (message) => appendBlockDelta(message, event.payload.block_index, event.payload.delta));
+      {
+        const result = updateMessageStrict(next, event.payload.message_id, (message) => appendBlockDelta(message, event.payload.block_index, event.payload.delta));
+        next = result.thread;
+        resyncRequired = !result.ok;
+      }
       tailKey = `message:${event.payload.message_id}:block:${event.payload.block_index}`;
       tailLength = event.payload.delta.length;
       break;
     case 'message.block_set':
       next = ensureStreamingAssistantMessage(next, event.payload.message_id, event.at_unix_ms);
-      next = updateMessage(next, event.payload.message_id, (message) => {
+      {
         const block = blockFromLiveBlock({
           type: trim(event.payload.block?.type),
           content: text(event.payload.block?.content),
           block: event.payload.block?.block ?? event.payload.block,
-        }) ?? { type: 'markdown', content: '' };
-        return upsertBlock(message, event.payload.block_index, block);
-      });
+        });
+        if (!block) {
+          resyncRequired = true;
+          break;
+        }
+        const result = updateMessageStrict(next, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, block));
+        next = result.thread;
+        resyncRequired = !result.ok;
+      }
       break;
     case 'message.committed':
       next = {
@@ -307,11 +330,15 @@ export function applyFlowerLiveEvent(
       break;
     case 'activity.updated':
       next = ensureStreamingAssistantMessage(next, event.payload.message_id, event.at_unix_ms);
-      next = updateMessage(next, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, event.payload.activity));
+      {
+        const result = updateMessageStrict(next, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, event.payload.activity));
+        next = result.thread;
+        resyncRequired = !result.ok;
+      }
       break;
     case 'usage.updated':
       break;
   }
 
-  return { thread: next, cursor: event.seq, resyncRequired: false, tailKey, tailLength };
+  return { thread: next, cursor: event.seq, resyncRequired, tailKey, tailLength };
 }

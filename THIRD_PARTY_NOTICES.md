@@ -822,7 +822,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | marked | 14.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked/v/14.0.0 |  |
 | marked | 16.4.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/marked/v/16.4.2 |  |
 | marked | 17.0.3 | MIT | Env App UI | https://www.npmjs.com/package/marked/v/17.0.3 |  |
-| marked | 17.0.5 | MIT | Desktop shell | https://www.npmjs.com/package/marked/v/17.0.5 |  |
+| marked | 17.0.6 | MIT | Desktop shell | https://www.npmjs.com/package/marked/v/17.0.6 |  |
 | matcher | 3.0.0 | MIT | Desktop shell | https://www.npmjs.com/package/matcher/v/3.0.0 |  |
 | math-intrinsics | 1.1.0 | MIT | Desktop shell | https://www.npmjs.com/package/math-intrinsics/v/1.1.0 |  |
 | mdast-util-to-hast | 13.2.1 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/mdast-util-to-hast/v/13.2.1 |  |

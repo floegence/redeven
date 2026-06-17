@@ -6,6 +6,7 @@ import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
+import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';
 import type { FlowerSurfaceCopy } from './copy';
 import { DEFAULT_FLOWER_SURFACE_COPY } from './copy';
 import type {
@@ -2016,29 +2017,45 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     block: Extract<FlowerRenderableMessageBlock, { type: 'content' }>,
     streaming: boolean,
     failed: boolean,
-  ) => (
-    <div class={cn(
-      'flower-message-bubble',
-      message.role === 'user'
-        ? 'flower-message-bubble-framed'
-        : 'flower-message-bubble-plain',
-      message.role === 'user'
-        ? 'flower-message-bubble-user'
-        : 'flower-message-bubble-assistant',
-      streaming && 'flower-message-bubble-streaming',
-      failed && 'flower-message-bubble-error',
-      block.block_type === 'thinking' && 'flower-message-bubble-thinking',
-    )}>
-      <Show when={failed}>
-        <div class="flower-message-error-kicker">
-          <AlertTriangle class="h-3.5 w-3.5" />
-          <span>{copy().chat.messageErrorTitle}</span>
-        </div>
-      </Show>
-      <span>{block.content}</span>
-      <Show when={streaming}>{streamingCursor()}</Show>
-    </div>
-  );
+  ) => {
+    const body = () => {
+      if (block.block_type === 'markdown') {
+        return (
+          <FlowerMarkdownBlock
+            content={block.content}
+            streaming={streaming}
+            copyCodeLabel={copy().chat.copyCode}
+            codeCopiedLabel={copy().chat.codeCopied}
+          />
+        );
+      }
+      return <span class="flower-message-plain-text">{block.content}</span>;
+    };
+
+    return (
+      <div class={cn(
+        'flower-message-bubble',
+        message.role === 'user'
+          ? 'flower-message-bubble-framed'
+          : 'flower-message-bubble-plain',
+        message.role === 'user'
+          ? 'flower-message-bubble-user'
+          : 'flower-message-bubble-assistant',
+        streaming && 'flower-message-bubble-streaming',
+        failed && 'flower-message-bubble-error',
+        block.block_type === 'thinking' && 'flower-message-bubble-thinking',
+      )}>
+        <Show when={failed}>
+          <div class="flower-message-error-kicker">
+            <AlertTriangle class="h-3.5 w-3.5" />
+            <span>{copy().chat.messageErrorTitle}</span>
+          </div>
+        </Show>
+        {body()}
+        <Show when={streaming}>{streamingCursor()}</Show>
+      </div>
+    );
+  };
 
   const lastContentBlockKey = (blocks: readonly FlowerRenderableMessageBlock[]): string => {
     for (let index = blocks.length - 1; index >= 0; index -= 1) {

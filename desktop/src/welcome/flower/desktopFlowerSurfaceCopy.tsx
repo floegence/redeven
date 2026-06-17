@@ -48,6 +48,8 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
       },
       messageErrorTitle: t(i18n, k('chat.messageErrorTitle')),
       messageErrorFallback: t(i18n, k('chat.messageErrorFallback')),
+      copyCode: t(i18n, k('chat.copyCode')),
+      codeCopied: t(i18n, k('chat.codeCopied')),
       loadErrorTitle: t(i18n, k('chat.loadErrorTitle')),
       threadLoadErrorTitle: t(i18n, k('chat.threadLoadErrorTitle')),
       threadLoading: t(i18n, k('chat.threadLoading')),

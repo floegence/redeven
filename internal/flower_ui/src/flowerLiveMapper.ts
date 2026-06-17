@@ -496,26 +496,26 @@ function mapInputRequest(prompt: unknown): FlowerInputRequest | null {
   };
 }
 
-function blockText(blockValue: unknown): string {
+function messageBlockPreviewText(block: FlowerMessageBlock): string {
+  if (block.type === 'markdown' || block.type === 'text') return trim(block.content);
+  return '';
+}
+
+function mapLiveDraftBlock(blockValue: unknown): FlowerLiveMessageDraft['blocks'][number] | null {
   const block = recordValue(blockValue);
-  if (!block) return '';
-  switch (trim(block?.type)) {
-    case 'text':
-    case 'markdown':
-    case 'code':
-    case 'svg':
-    case 'mermaid':
-      return trim(block.content);
-    case 'shell':
-      return [block.command, block.output].map(trim).filter(Boolean).join('\n');
-    case 'file':
-      return trim(block.name);
-    case 'activity-timeline':
-    case 'thinking':
-      return '';
-    default:
-      return trim(block?.content);
+  if (!block) return null;
+  const type = trim(block.type);
+  if (type === 'markdown' || type === 'text' || type === 'thinking') {
+    return {
+      type,
+      ...(typeof block.content === 'string' ? { content: block.content } : {}),
+    };
   }
+  if (type === 'activity-timeline') {
+    const activity = mapActivityTimelineBlock(block.block ?? block);
+    return activity ? { type: 'activity-timeline', block: activity } : null;
+  }
+  return null;
 }
 
 function mapMessageBlock(blockValue: unknown): FlowerMessageBlock | null {
@@ -528,8 +528,7 @@ function mapMessageBlock(blockValue: unknown): FlowerMessageBlock | null {
   if (type === 'activity-timeline') {
     return mapActivityTimelineBlock(blockValue);
   }
-  const content = blockText(blockValue);
-  return content ? { type: 'text', content } : null;
+  return null;
 }
 
 export function mapFlowerMessage(raw: unknown): FlowerChatMessage | null {
@@ -543,7 +542,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage | null {
   return {
     id,
     role,
-    content: blocksRaw.map(blockText).filter(Boolean).join('\n\n'),
+    content: blocks.map(messageBlockPreviewText).filter(Boolean).join('\n\n'),
     status: trim(message.status) as FlowerChatMessage['status'] || 'complete',
     created_at_ms: unixMs(message.timestamp ?? message.created_at_ms ?? message.created_at_unix_ms, 'message.timestamp'),
     ...(blocks.length > 0 ? { blocks } : {}),
@@ -630,19 +629,7 @@ function mapLiveMessageDraft(raw: unknown): FlowerLiveMessageDraft | null {
     status: trim(record.status) || 'streaming',
     created_at_ms: Math.max(0, Math.floor(Number(record.created_at_ms ?? 0))),
     blocks: Array.isArray(record.blocks)
-      ? record.blocks.map((blockValue) => {
-          const block = recordValue(blockValue) ?? {};
-          const type = trim(block.type);
-          if (type === 'activity-timeline') {
-            const activity = mapActivityTimelineBlock(block.block ?? block);
-            return activity ? { type: 'activity-timeline', block: activity } : null;
-          }
-          return {
-            type,
-            ...(typeof block.content === 'string' ? { content: block.content } : {}),
-            ...(block.block !== undefined ? { block: block.block } : {}),
-          };
-        }).filter((block): block is FlowerLiveMessageDraft['blocks'][number] => block != null && block.type !== '')
+      ? record.blocks.map(mapLiveDraftBlock).filter(isPresent)
       : [],
   };
 }
@@ -760,13 +747,14 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
       {
         const block = recordValue(record.block);
         const blockType = trim(block?.type);
-        const mappedBlock = blockType === 'activity-timeline'
-          ? { type: 'activity-timeline', block: mapActivityTimelineBlock(record.block) }
-          : record.block;
+        const activityBlock = blockType === 'activity-timeline' ? mapActivityTimelineBlock(record.block) : null;
+        const mappedBlock = activityBlock
+          ? { type: 'activity-timeline', block: activityBlock }
+          : mapLiveDraftBlock(record.block);
         return {
         message_id: trim(record.message_id),
         block_index: Math.max(0, Math.floor(Number(record.block_index ?? 0))),
-        block: mappedBlock,
+        block: mappedBlock ?? { type: '' },
         } as FlowerLiveMessageBlockSetPayload;
       }
     case 'message.committed':
