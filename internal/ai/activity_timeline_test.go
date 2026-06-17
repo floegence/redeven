@@ -147,6 +147,20 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 			renderer: observation.ActivityRendererWebSearch,
 		},
 		{
+			name:     "okf search query",
+			toolName: "okf.search",
+			args:     map[string]any{"query": "Workbench wheel ownership"},
+			label:    "Workbench wheel ownership",
+			renderer: observation.ActivityRendererStructured,
+		},
+		{
+			name:     "okf search fallback",
+			toolName: "okf.search",
+			args:     map[string]any{},
+			label:    okfKnowledgeActivityLabel,
+			renderer: observation.ActivityRendererStructured,
+		},
+		{
 			name:     "todos",
 			toolName: "write_todos",
 			args:     map[string]any{},

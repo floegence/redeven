@@ -31,7 +31,7 @@ func toolSuccessSummary(toolName string) string {
 	case "web.search":
 		return "web.search"
 	case "okf.search":
-		return "okf.search"
+		return "okf.knowledge.lookup"
 	case "use_skill":
 		return "skill.activated"
 	case "subagents":
@@ -647,7 +647,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "okf.search",
-			Description:      "Search the embedded Redeven OKF bundle and return scoped concept summaries.",
+			Description:      "Look up embedded Redeven repository knowledge from the OKF bundle and return scoped concept summaries. Use only for Redeven-internal architecture, protocol, runtime, Desktop, gateway, Workbench, release, and maintained OKF concepts. OKF does not access the internet and must not be used for current, recent, news, market/prices, third-party documentation, external, or general web facts.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 8}, "tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"query"}, "additionalProperties": false}),
 			ParallelSafe:     true,
 			Mutating:         false,

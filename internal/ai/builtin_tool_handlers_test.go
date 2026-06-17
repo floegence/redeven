@@ -45,6 +45,53 @@ func TestBuiltInToolDefinitions_AskUserDescriptionMentionsStructuredInput(t *tes
 	t.Fatalf("ask_user tool definition not found")
 }
 
+func TestBuiltInToolDefinitions_OKFSearchDescriptionDeclaresKnowledgeBoundary(t *testing.T) {
+	t.Parallel()
+
+	for _, def := range builtInToolDefinitions() {
+		if strings.TrimSpace(def.Name) != "okf.search" {
+			continue
+		}
+		for _, want := range []string{
+			"embedded Redeven repository knowledge",
+			"Redeven-internal",
+			"does not access the internet",
+			"current",
+			"recent",
+			"news",
+			"market/prices",
+			"third-party documentation",
+			"external",
+			"general web facts",
+		} {
+			if !strings.Contains(def.Description, want) {
+				t.Fatalf("okf.search description missing %q: %q", want, def.Description)
+			}
+		}
+		if strings.TrimSpace(def.Description) == "Search the embedded Redeven OKF bundle and return scoped concept summaries." {
+			t.Fatalf("okf.search description kept old generic wording: %q", def.Description)
+		}
+		if strings.Contains(def.Description, "domain background") {
+			t.Fatalf("okf.search description should not keep domain background wording: %q", def.Description)
+		}
+		return
+	}
+
+	t.Fatalf("okf.search tool definition not found")
+}
+
+func TestToolSuccessSummary_OKFSearchUsesKnowledgeLookupWording(t *testing.T) {
+	t.Parallel()
+
+	got := toolSuccessSummary("okf.search")
+	if got != "okf.knowledge.lookup" {
+		t.Fatalf("toolSuccessSummary(okf.search)=%q, want okf.knowledge.lookup", got)
+	}
+	if got == "okf.search" || got == "Search OKF" {
+		t.Fatalf("OKF success summary kept search-engine wording: %q", got)
+	}
+}
+
 func TestNormalizeTruncatedToolPayload_PreservesApplyPatchStructure(t *testing.T) {
 	t.Parallel()
 

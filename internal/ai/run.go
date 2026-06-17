@@ -1784,7 +1784,7 @@ func toolStartActivityPresentation(toolName string, args map[string]any, timeout
 				Payload:  payload,
 			}
 		case "okf.search":
-			label := firstNonEmptyString(anyToString(args["query"]), "Search OKF")
+			label := firstNonEmptyString(anyToString(args["query"]), okfKnowledgeActivityLabel)
 			return &observation.ActivityPresentation{
 				Label:    activityPresentationLabel(label),
 				Renderer: observation.ActivityRendererStructured,
