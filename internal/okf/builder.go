@@ -114,6 +114,12 @@ func hashTree(root string) (string, error) {
 			return walkErr
 		}
 		if d.IsDir() {
+			if d.Name() == "dist" && path != root {
+				return filepath.SkipDir
+			}
+			if strings.HasPrefix(d.Name(), ".") && path != root {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		rel, err := filepath.Rel(root, path)

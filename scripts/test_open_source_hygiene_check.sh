@@ -36,7 +36,7 @@ write_allowed_contract_files() {
 The public installer endpoint is https://redeven.com/install.sh.
 EOF
 
-  cat >"${root}/RELEASE.md" <<'EOF'
+  cat >"${root}/PUBLIC_ENDPOINTS.txt" <<'EOF'
 The public manifest endpoint is https://version.agent.redeven.com/v1/manifest.json.
 The public Browser Editor catalog endpoint is https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json.
 Solid <Portal>, body-level portal, overlay portal, and npm portal: are technical terms.
@@ -62,7 +62,7 @@ run_check() {
 
 track_fixture_files() {
   local root="$1"
-  git -C "$root" add README.md RELEASE.md internal/agent/upgrade.go scripts/open_source_hygiene_check.sh .gitleaks.toml
+  git -C "$root" add README.md PUBLIC_ENDPOINTS.txt internal/agent/upgrade.go scripts/open_source_hygiene_check.sh .gitleaks.toml
 }
 
 allowed_repo="$(mktemp -d)"
@@ -89,7 +89,7 @@ write_allowed_contract_files "$bad_path_repo"
 cat >"${bad_path_repo}/reference/bad.md" <<'EOF'
 Do not use https://redeven.com/upgrade here.
 EOF
-git -C "$bad_path_repo" add README.md RELEASE.md reference/bad.md internal/agent/upgrade.go scripts/open_source_hygiene_check.sh .gitleaks.toml
+git -C "$bad_path_repo" add README.md PUBLIC_ENDPOINTS.txt reference/bad.md internal/agent/upgrade.go scripts/open_source_hygiene_check.sh .gitleaks.toml
 bad_path_out="${bad_path_repo}/bad-path.out"
 bad_path_err="${bad_path_repo}/bad-path.err"
 if run_check "$bad_path_repo" "$bad_path_out" "$bad_path_err"; then
@@ -103,7 +103,7 @@ write_allowed_contract_files "$bad_domain_repo"
 cat >"${bad_domain_repo}/reference/bad.md" <<'EOF'
 Do not use https://agent.package.redeven.com/v1/runtime.tgz here.
 EOF
-git -C "$bad_domain_repo" add README.md RELEASE.md reference/bad.md internal/agent/upgrade.go scripts/open_source_hygiene_check.sh .gitleaks.toml
+git -C "$bad_domain_repo" add README.md PUBLIC_ENDPOINTS.txt reference/bad.md internal/agent/upgrade.go scripts/open_source_hygiene_check.sh .gitleaks.toml
 bad_domain_out="${bad_domain_repo}/bad-domain.out"
 bad_domain_err="${bad_domain_repo}/bad-domain.err"
 if run_check "$bad_domain_repo" "$bad_domain_out" "$bad_domain_err"; then
@@ -114,7 +114,7 @@ assert_contains "$bad_domain_err" "Only the public endpoint literals https://red
 
 create_fixture_repo "$bad_product_repo"
 write_allowed_contract_files "$bad_product_repo"
-git -C "$bad_product_repo" add README.md RELEASE.md internal/agent/upgrade.go scripts/open_source_hygiene_check.sh .gitleaks.toml
+git -C "$bad_product_repo" add README.md PUBLIC_ENDPOINTS.txt internal/agent/upgrade.go scripts/open_source_hygiene_check.sh .gitleaks.toml
 blocked_product_terms=(
   "redeven""-portal"
   "redeven""_portal"

@@ -27,7 +27,7 @@ func TestRunCLIHelp(t *testing.T) {
 		assertContainsAll(t, stdout,
 			"Redeven runtime and Local UI launcher.",
 			"Quick start:",
-			"targets     Inspect Redeven targets for Agent Skills and local automation.",
+			"targets     Inspect Redeven targets for local automation.",
 			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
 			"redeven run --mode local",
 		)
@@ -88,7 +88,7 @@ func TestRunCLIHelp(t *testing.T) {
 		)
 	})
 
-	t.Run("targets help includes agent skills contract", func(t *testing.T) {
+	t.Run("targets help includes local automation contract", func(t *testing.T) {
 		code, stdout, stderr := runCLITest(t, "help", "targets")
 		if code != 0 {
 			t.Fatalf("exit code = %d, want 0", code)
@@ -98,7 +98,7 @@ func TestRunCLIHelp(t *testing.T) {
 		}
 		assertContainsAll(t, stdout,
 			"redeven targets",
-			"Agent Skills",
+			"local automation",
 			"redeven targets list --json",
 			"redeven targets resolve --target local --json",
 		)

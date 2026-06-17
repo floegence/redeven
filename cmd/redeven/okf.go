@@ -36,8 +36,8 @@ func (c *cli) okfCmd(args []string) int {
 
 func (c *cli) okfBundleCmd(args []string) int {
 	fs := newCLIFlagSet("okf bundle")
-	sourceRoot := fs.String("source-root", cleanAbs(filepath.Join("internal", "okf", "source")), "OKF source root")
-	distRoot := fs.String("dist-root", cleanAbs(filepath.Join("internal", "okf", "dist")), "Dist output root")
+	sourceRoot := fs.String("source-root", cleanAbs("okf"), "OKF source root")
+	distRoot := fs.String("dist-root", cleanAbs(filepath.Join("okf", "dist")), "Dist output root")
 	verifyOnly := fs.Bool("verify-only", false, "Verify dist files without rewriting")
 	validateSourceOnly := fs.Bool("validate-source-only", false, "Validate source files only without reading dist")
 

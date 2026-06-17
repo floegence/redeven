@@ -1,15 +1,13 @@
 package okf
 
 import (
-	"embed"
 	"fmt"
+
+	okfdist "github.com/floegence/redeven/okf/dist"
 )
 
-//go:embed dist/okf_bundle.json dist/okf_bundle.manifest.json
-var embeddedBundle embed.FS
-
 func embeddedBundleBytes() ([]byte, error) {
-	payload, err := embeddedBundle.ReadFile("dist/okf_bundle.json")
+	payload, err := okfdist.BundleJSON()
 	if err != nil {
 		return nil, fmt.Errorf("read embedded bundle failed: %w", err)
 	}

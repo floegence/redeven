@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." &> /dev/null && pwd)
-SOURCE_ROOT="$ROOT_DIR/internal/okf/source"
+SOURCE_ROOT="$ROOT_DIR/okf"
 
 [ -f "$SOURCE_ROOT/index.md" ] || { echo "missing OKF root index.md" >&2; exit 1; }
 

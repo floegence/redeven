@@ -38,7 +38,7 @@ Commands:
               Stop an already-running Desktop-managed runtime daemon.
   desktop-model-source
               Connect Desktop Local Environment models to runtime-control.
-  targets     Inspect Redeven targets for Agent Skills and local automation.
+  targets     Inspect Redeven targets for local automation.
   search      Run web search using configured provider credentials.
   okf         Build or verify embedded OKF bundle assets.
   version     Print build information.
@@ -312,7 +312,7 @@ func targetsHelpText() string {
 	return strings.TrimLeft(`
 redeven targets
 
-Inspect Redeven targets for Agent Skills and local automation.
+Inspect Redeven targets for local automation.
 
 Usage:
   redeven targets <command> [flags]
