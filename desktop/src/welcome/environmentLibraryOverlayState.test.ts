@@ -11,9 +11,11 @@ import {
 import {
   closeEnvironmentLibraryOverlayState,
   closedEnvironmentLibraryOverlayState,
+  environmentEndpointOverlaySelectedValueFor,
   environmentLibraryOverlayOpenFor,
   openEnvironmentLibraryOverlayState,
   reconcileEnvironmentLibraryOverlayState,
+  selectEnvironmentEndpointOverlayState,
 } from './environmentLibraryOverlayState';
 
 describe('environmentLibraryOverlayState', () => {
@@ -59,6 +61,76 @@ describe('environmentLibraryOverlayState', () => {
     const state = openEnvironmentLibraryOverlayState('lifecycle_progress', local.id);
 
     expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(state);
+  });
+
+  it('keeps an endpoints popover open across refresh while endpoints remain available', () => {
+    const local = testLocalEnvironment({
+      label: 'Local Environment',
+      currentRuntime: {
+        local_ui_url: 'http://127.0.0.1:24001/',
+        desktop_managed: true,
+      },
+    });
+    const initialSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+    });
+    const refreshedSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+      openSessions: [
+        testLocalEnvironmentSession(local, 'http://127.0.0.1:24001/'),
+      ],
+    });
+    const state = selectEnvironmentEndpointOverlayState(local.id, 'http://127.0.0.1:24001/');
+
+    expect(environmentEndpointOverlaySelectedValueFor(state, local.id)).toBe('http://127.0.0.1:24001/');
+    expect(reconcileEnvironmentLibraryOverlayState(state, refreshedSnapshot.environments)).toEqual(state);
+    expect(reconcileEnvironmentLibraryOverlayState(state, initialSnapshot.environments)).toEqual(state);
+  });
+
+  it('keeps an endpoints popover open but clears QR selection when the selected endpoint changes', () => {
+    const local = testLocalEnvironment({
+      label: 'Local Environment',
+      currentRuntime: {
+        local_ui_url: 'http://127.0.0.1:24001/',
+        desktop_managed: true,
+      },
+    });
+    const refreshedSnapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+      openSessions: [
+        testLocalEnvironmentSession(local, 'http://127.0.0.1:24002/'),
+      ],
+    });
+    const state = selectEnvironmentEndpointOverlayState(local.id, 'http://127.0.0.1:24001/');
+
+    expect(reconcileEnvironmentLibraryOverlayState(state, refreshedSnapshot.environments)).toEqual({
+      kind: 'endpoints',
+      environment_id: local.id,
+    });
+  });
+
+  it('closes an endpoints popover when the environment no longer exposes endpoints', () => {
+    const local = testLocalEnvironment({
+      label: 'Local Environment',
+      currentRuntime: null,
+      access: {
+        local_ui_bind: '',
+      },
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+    });
+    const state = openEnvironmentLibraryOverlayState('endpoints', local.id);
+
+    expect(reconcileEnvironmentLibraryOverlayState(state, snapshot.environments)).toEqual(closedEnvironmentLibraryOverlayState());
   });
 
   it('keeps a guidance overlay open across refresh while the same environment still exposes popover guidance', () => {

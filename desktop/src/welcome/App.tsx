@@ -1,6 +1,7 @@
 import { For, Index, Show, createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from 'solid-js';
 import { Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
+import qrcode from 'qrcode-generator';
 import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-core';
 import {
   AlertCircle,
@@ -108,6 +109,7 @@ import {
   type RuntimeServiceSnapshot,
   type RuntimeServiceWorkload,
 } from '../shared/runtimeService';
+import { endpointDisplayValue } from './endpointDisplay';
 import {
   FlowerIcon,
   FlowerSoftAuraIcon,
@@ -255,9 +257,11 @@ import { DesktopAnchoredOverlaySurface } from './DesktopAnchoredOverlaySurface';
 import {
   closeEnvironmentLibraryOverlayState,
   closedEnvironmentLibraryOverlayState,
+  environmentEndpointOverlaySelectedValueFor,
   environmentLibraryOverlayOpenFor,
   openEnvironmentLibraryOverlayState,
   reconcileEnvironmentLibraryOverlayState,
+  selectEnvironmentEndpointOverlayState,
 } from './environmentLibraryOverlayState';
 import {
   closeGatewaySourceOverlayState,
@@ -7223,6 +7227,21 @@ function EnvironmentCardsPanel(props: Readonly<{
     setActiveEnvironmentOverlayState(openEnvironmentLibraryOverlayState('lifecycle_progress', environmentID));
   };
 
+  const setEndpointPopoverOpen = (environmentID: string, open: boolean) => {
+    if (open) {
+      setLifecycleDisclosureState((current) => closeEnvironmentLifecycleDisclosure(current, environmentID));
+    }
+    setActiveEnvironmentOverlayState((current) => (
+      open
+        ? openEnvironmentLibraryOverlayState('endpoints', environmentID)
+        : closeEnvironmentLibraryOverlayState(current, 'endpoints', environmentID)
+    ));
+  };
+
+  const selectEndpointForQRCode = (environmentID: string, endpointValue: string) => {
+    setActiveEnvironmentOverlayState(selectEnvironmentEndpointOverlayState(environmentID, endpointValue));
+  };
+
   const projectedEnvironment = (environmentID: string): DesktopEnvironmentEntry => projectedEntriesByID()[environmentID]!;
   const guidanceSessionForEnvironment = (environmentID: string): EnvironmentGuidanceSessionState => (
     guidanceSessionState()?.environment_id === environmentID ? guidanceSessionState() : null
@@ -7303,6 +7322,10 @@ function EnvironmentCardsPanel(props: Readonly<{
                     onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
                     lifecycleProgressOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'lifecycle_progress', environmentID)}
                     onLifecycleProgressOpenChange={(open) => setLifecycleProgressOpen(environmentID, open)}
+                    endpointPopoverOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'endpoints', environmentID)}
+                    onEndpointPopoverOpenChange={(open) => setEndpointPopoverOpen(environmentID, open)}
+                    selectedEndpointValue={environmentEndpointOverlaySelectedValueFor(activeEnvironmentOverlayState(), environmentID)}
+                    selectEndpointForQRCode={(endpointValue) => selectEndpointForQRCode(environmentID, endpointValue)}
                     lifecycleDisclosure={lifecycleDisclosureForEnvironment(environmentID)}
                     guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
@@ -7345,6 +7368,10 @@ function EnvironmentCardsPanel(props: Readonly<{
                     onPrimaryActionGuidanceOpenChange={(open) => setPrimaryActionGuidanceOpen(environmentID, open)}
                     lifecycleProgressOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'lifecycle_progress', environmentID)}
                     onLifecycleProgressOpenChange={(open) => setLifecycleProgressOpen(environmentID, open)}
+                    endpointPopoverOpen={environmentLibraryOverlayOpenFor(activeEnvironmentOverlayState(), 'endpoints', environmentID)}
+                    onEndpointPopoverOpenChange={(open) => setEndpointPopoverOpen(environmentID, open)}
+                    selectedEndpointValue={environmentEndpointOverlaySelectedValueFor(activeEnvironmentOverlayState(), environmentID)}
+                    selectEndpointForQRCode={(endpointValue) => selectEndpointForQRCode(environmentID, endpointValue)}
                     lifecycleDisclosure={lifecycleDisclosureForEnvironment(environmentID)}
                     guidanceSession={guidanceSessionForEnvironment(environmentID)}
                     openEnvironment={props.openEnvironment}
@@ -7527,12 +7554,29 @@ function cardFactIconMaskStyle(icon: string): JSX.CSSProperties {
   return { '--redeven-card-fact-icon-mask': `url("${icon}")` } as JSX.CSSProperties;
 }
 
+function qrCodeSvgDataUrl(value: string): string {
+  const qr = qrcode(0, 'M');
+  qr.addData(value);
+  qr.make();
+  const cellSize = 5;
+  const margin = 2;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(qr.createSvgTag({ cellSize, margin, scalable: true }))}`;
+}
+
+function qrCodeDataUrl(value: string): string {
+  return qrCodeSvgDataUrl(value);
+}
+
 function EnvironmentCardFactsBlock(props: Readonly<{
   i18n: DesktopI18n;
   facts: readonly EnvironmentCardFactModel[];
   minRows?: number;
   onFactAction: (action: EnvironmentCardFactActionModel) => void;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
+  endpointPopoverOpen: boolean;
+  onEndpointPopoverOpenChange: (open: boolean) => void;
+  selectedEndpointValue?: string;
+  selectEndpointForQRCode: (endpointValue: string) => void;
 }>) {
   return (
     <div
@@ -7609,6 +7653,10 @@ function EnvironmentCardFactsBlock(props: Readonly<{
                       i18n={props.i18n}
                       endpoints={fact.endpoints!}
                       copyEnvironmentValue={props.copyEnvironmentValue}
+                      open={props.endpointPopoverOpen}
+                      onOpenChange={props.onEndpointPopoverOpenChange}
+                      selectedEndpointValue={props.selectedEndpointValue}
+                      selectEndpointForQRCode={props.selectEndpointForQRCode}
                     />
                   </Show>
                   <Show when={fact.copy_value}>
@@ -7660,27 +7708,34 @@ function EndpointsPopover(props: Readonly<{
   i18n: DesktopI18n;
   endpoints: readonly EnvironmentCardEndpointModel[];
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  selectedEndpointValue?: string;
+  selectEndpointForQRCode: (endpointValue: string) => void;
 }>) {
-  const [open, setOpen] = createSignal(false);
   let anchorRef: HTMLSpanElement | undefined;
   let popoverRef: HTMLDivElement | undefined;
+
+  const selectedEndpoint = createMemo(() => (
+    props.endpoints.find((endpoint) => endpoint.value === props.selectedEndpointValue) ?? null
+  ));
 
   const handlePointerDown = (event: MouseEvent) => {
     if (popoverRef?.contains(event.target as Node) || anchorRef?.contains(event.target as Node)) {
       return;
     }
-    setOpen(false);
+    props.onOpenChange(false);
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
-      setOpen(false);
+      props.onOpenChange(false);
       anchorRef?.focus();
     }
   };
 
   createEffect(() => {
-    if (open()) {
+    if (props.open) {
       document.addEventListener('mousedown', handlePointerDown);
       document.addEventListener('keydown', handleKeyDown);
       onCleanup(() => {
@@ -7699,23 +7754,23 @@ function EndpointsPopover(props: Readonly<{
         tabIndex={0}
         aria-label={props.i18n.t('environmentCenter.showEndpoints')}
         aria-haspopup="dialog"
-        aria-expanded={open()}
+        aria-expanded={props.open}
         onClick={(e) => {
           e.stopPropagation();
-          setOpen(!open());
+          props.onOpenChange(!props.open);
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            setOpen(true);
+            props.onOpenChange(true);
           }
         }}
       >
         <img src={ICON_ENDPOINTS} class="redeven-endpoint-trigger-icon" aria-hidden="true" />
       </span>
-      <Show when={open()}>
+      <Show when={props.open}>
         <DesktopAnchoredOverlaySurface
-          open={open()}
+          open={props.open}
           anchorRef={anchorRef}
           placement="bottom"
           role="dialog"
@@ -7727,27 +7782,45 @@ function EndpointsPopover(props: Readonly<{
             popoverRef = element;
           }}
         >
-          <div class="redeven-endpoints-popover">
+          <div
+            class="redeven-endpoints-popover"
+            classList={{ 'redeven-endpoints-popover--expanded': selectedEndpoint() !== null }}
+          >
             <div class="redeven-endpoints-popover-header">
               <span class="redeven-endpoints-popover-title">{props.i18n.t('environmentCenter.endpoints')}</span>
               <button
                 type="button"
                 class="redeven-endpoints-popover-close"
                 aria-label={props.i18n.t('environmentCenter.closeEndpoints')}
-                onClick={() => setOpen(false)}
+                onClick={() => props.onOpenChange(false)}
               >
                 <X class="h-3 w-3" />
               </button>
             </div>
-            <div class="space-y-0.5">
-              <For each={props.endpoints}>
+            <div
+              class="redeven-endpoints-popover-body"
+              classList={{ 'redeven-endpoints-popover-body--expanded': selectedEndpoint() !== null }}
+            >
+              <div class="redeven-endpoints-popover-list">
+                <For each={props.endpoints}>
+                  {(endpoint) => (
+                    <EndpointCopyRow
+                      endpoint={endpoint}
+                      selected={endpoint.value === selectedEndpoint()?.value}
+                      selectEndpointForQRCode={props.selectEndpointForQRCode}
+                    />
+                  )}
+                </For>
+              </div>
+              <Show when={selectedEndpoint()}>
                 {(endpoint) => (
-                  <EndpointCopyRow
-                    endpoint={endpoint}
+                  <EndpointQRCodePanel
+                    i18n={props.i18n}
+                    endpoint={endpoint()}
                     copyEnvironmentValue={props.copyEnvironmentValue}
                   />
                 )}
-              </For>
+              </Show>
             </div>
           </div>
         </DesktopAnchoredOverlaySurface>
@@ -7758,9 +7831,39 @@ function EndpointsPopover(props: Readonly<{
 
 function EndpointCopyRow(props: Readonly<{
   endpoint: EnvironmentCardEndpointModel;
+  selected: boolean;
+  selectEndpointForQRCode: (endpointValue: string) => void;
+}>) {
+  return (
+    <button
+      type="button"
+      class="redeven-card-endpoint-row"
+      data-selected={props.selected ? '' : undefined}
+      onClick={() => props.selectEndpointForQRCode(props.endpoint.value)}
+      title={props.endpoint.value}
+      aria-pressed={props.selected}
+    >
+      <span class="redeven-card-endpoint-label">{props.endpoint.label}</span>
+      <span class={cn(
+        'redeven-card-endpoint-value',
+        props.endpoint.monospace && 'font-mono text-[11.5px]',
+      )}>
+        {endpointDisplayValue(props.endpoint.value)}
+      </span>
+      <span class={cn('redeven-card-endpoint-copy', props.selected && 'redeven-card-endpoint-copy--active')} aria-hidden="true">
+        {props.selected ? <Check class="h-3 w-3" /> : <ChevronRight class="h-3 w-3" />}
+      </span>
+    </button>
+  );
+}
+
+function EndpointQRCodePanel(props: Readonly<{
+  i18n: DesktopI18n;
+  endpoint: EnvironmentCardEndpointModel;
   copyEnvironmentValue: (value: string, copyLabel: string) => Promise<void>;
 }>) {
   const [copied, setCopied] = createSignal(false);
+  const qrSrc = createMemo(() => qrCodeDataUrl(props.endpoint.value));
   let resetTimer: ReturnType<typeof setTimeout> | undefined;
 
   const handleCopy = () => {
@@ -7773,21 +7876,30 @@ function EndpointCopyRow(props: Readonly<{
   onCleanup(() => clearTimeout(resetTimer));
 
   return (
-    <div
-      class="redeven-card-endpoint-row"
-      onClick={handleCopy}
-      title={props.endpoint.copy_label}
-    >
-      <span class="redeven-card-endpoint-label">{props.endpoint.label}</span>
-      <span class={cn(
-        'redeven-card-endpoint-value',
-        props.endpoint.monospace && 'font-mono text-[11.5px]',
-      )}>
-        {props.endpoint.value}
-      </span>
-      <span class={cn('redeven-card-endpoint-copy', copied() && 'redeven-card-endpoint-copy--active')} aria-hidden="true">
-        {copied() ? <Check class="h-3 w-3" /> : <Copy class="h-3 w-3" />}
-      </span>
+    <div class="redeven-endpoint-qr-panel">
+      <div class="redeven-endpoint-qr-card">
+        <img
+          class="redeven-endpoint-qr-image"
+          src={qrSrc()}
+          alt={props.endpoint.copy_label}
+        />
+      </div>
+      <div class="redeven-endpoint-qr-meta">
+        <span class="redeven-endpoint-qr-label">{props.endpoint.label}</span>
+        <span class="redeven-endpoint-qr-value" title={props.endpoint.value}>{endpointDisplayValue(props.endpoint.value)}</span>
+      </div>
+      <button
+        type="button"
+        class="redeven-endpoint-qr-copy-button"
+        aria-label={props.endpoint.copy_label}
+        title={props.endpoint.copy_label}
+        onClick={handleCopy}
+      >
+        <Show when={copied()} fallback={<Copy class="h-3 w-3" />}>
+          <Check class="h-3 w-3" />
+        </Show>
+        <span class="redeven-endpoint-qr-copy-label">{copied() ? props.i18n.t('environmentCenter.copied') : props.i18n.t('common.copy')}</span>
+      </button>
     </div>
   );
 }
@@ -9284,6 +9396,10 @@ function EnvironmentConnectionCard(props: Readonly<{
   onPrimaryActionGuidanceOpenChange: (open: boolean) => void;
   lifecycleProgressOpen: boolean;
   onLifecycleProgressOpenChange: (open: boolean) => void;
+  endpointPopoverOpen: boolean;
+  onEndpointPopoverOpenChange: (open: boolean) => void;
+  selectedEndpointValue?: string;
+  selectEndpointForQRCode: (endpointValue: string) => void;
   lifecycleDisclosure: EnvironmentLifecycleDisclosureState;
   guidanceSession: EnvironmentGuidanceSessionState;
   setGuidanceSession: (state: EnvironmentGuidanceSessionState) => void;
@@ -9597,6 +9713,10 @@ function EnvironmentConnectionCard(props: Readonly<{
           minRows={3}
           onFactAction={props.runEnvironmentCardFactAction}
           copyEnvironmentValue={props.copyEnvironmentValue}
+          endpointPopoverOpen={props.endpointPopoverOpen}
+          onEndpointPopoverOpenChange={props.onEndpointPopoverOpenChange}
+          selectedEndpointValue={props.selectedEndpointValue}
+          selectEndpointForQRCode={props.selectEndpointForQRCode}
         />
       </CardContent>
       <CardFooter class="mt-auto flex items-center gap-2 border-t border-border/60 px-4 pt-3 pb-2.5">
