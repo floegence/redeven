@@ -346,7 +346,7 @@ export async function launchLocalEnvironmentFlowerTurn(
   const attachments = [
     ...(input.attachments ?? []).map((attachment) => ({
       name: trim(attachment.name) || 'attachment',
-      mimeType: trim(attachment.mime_type) || 'application/octet-stream',
+      mime_type: trim(attachment.mime_type) || 'application/octet-stream',
       url: trim(attachment.url),
     })),
   ].filter((attachment) => !!attachment.url);
