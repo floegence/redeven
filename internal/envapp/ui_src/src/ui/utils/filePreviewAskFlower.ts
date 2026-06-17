@@ -1,20 +1,20 @@
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
-import type { AskFlowerIntent } from '../pages/askFlowerIntent';
-import { attachAskFlowerContextAction } from '../contextActions/askFlower';
+import type { FlowerTurnLauncherIntent } from '../../../../../flower_ui/src';
+import { attachAskFlowerContextAction, type EnvFlowerTurnLauncherContextItem, type EnvFlowerTurnLauncherIntent } from '../contextActions/askFlower';
 import { dirnameAbsolute, normalizeAbsolutePath } from './askFlowerPath';
 import { createClientId } from './clientId';
 
 const MAX_INLINE_SELECTION_CHARS = 10_000;
 
-export type BuildFilePreviewAskFlowerIntentResult = Readonly<{
-  intent: AskFlowerIntent | null;
+export type BuildFilePreviewFlowerTurnLauncherIntentResult = Readonly<{
+  intent: FlowerTurnLauncherIntent | null;
   error?: string;
 }>;
 
-export function buildFilePreviewAskFlowerIntent(params: {
+export function buildFilePreviewFlowerTurnLauncherIntent(params: {
   item?: FileItem | null;
   selectionText?: string;
-}): BuildFilePreviewAskFlowerIntentResult {
+}): BuildFilePreviewFlowerTurnLauncherIntentResult {
   const item = params.item;
   if (!item || item.type !== 'file') {
     return { intent: null };
@@ -31,28 +31,27 @@ export function buildFilePreviewAskFlowerIntent(params: {
   const selection = String(params.selectionText ?? '').trim();
   const notes: string[] = [];
   const pendingAttachments: File[] = [];
-  let contextItems: AskFlowerIntent['contextItems'];
+  let contextItems: EnvFlowerTurnLauncherContextItem[];
 
   if (selection) {
     if (selection.length > MAX_INLINE_SELECTION_CHARS) {
       const attachmentName = `${item.name || 'file'}-selection-${Date.now()}.txt`;
       pendingAttachments.push(new File([selection], attachmentName, { type: 'text/plain' }));
       notes.push(`Large selection was attached as "${attachmentName}".`);
-      contextItems = [{ kind: 'file_path', path: absolutePath, isDirectory: false }];
+      contextItems = [{ kind: 'file_path', path: absolutePath, is_directory: false }];
     } else {
-      contextItems = [{ kind: 'file_selection', path: absolutePath, selection, selectionChars: selection.length }];
+      contextItems = [{ kind: 'file_selection', path: absolutePath, selection, selection_chars: selection.length }];
     }
   } else {
-    contextItems = [{ kind: 'file_path', path: absolutePath, isDirectory: false }];
+    contextItems = [{ kind: 'file_path', path: absolutePath, is_directory: false }];
   }
 
-  const intent: AskFlowerIntent = {
+  const intent: EnvFlowerTurnLauncherIntent = {
     id: createClientId('ask-flower'),
-    source: 'file_preview',
-    mode: 'append',
-    suggestedWorkingDirAbs: dirnameAbsolute(absolutePath),
-    contextItems,
-    pendingAttachments,
+    source_surface: 'file_preview',
+    suggested_working_dir: dirnameAbsolute(absolutePath),
+    context_items: contextItems,
+    pending_attachments: pendingAttachments,
     notes,
   };
 

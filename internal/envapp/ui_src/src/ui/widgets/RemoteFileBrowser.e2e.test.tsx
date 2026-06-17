@@ -120,7 +120,7 @@ const fileBrowserSurfaceStore = vi.hoisted(() => ({
 const envActionSpies = vi.hoisted(() => ({
   openTerminalInDirectory: vi.fn(),
   openFileBrowserAtPath: vi.fn(async () => undefined),
-  openAskFlowerComposer: vi.fn(),
+  openFlowerTurnLauncher: vi.fn(),
 }));
 
 const mockRpc = vi.hoisted(() => ({
@@ -999,10 +999,7 @@ function createEnvContextWithIdAccessor(envId: () => string, options?: { canExec
     openDebugConsole: () => {},
     settingsFocusSeq: () => 0,
     settingsFocusSection: () => null,
-    askFlowerIntentSeq: () => 0,
-    askFlowerIntent: () => null,
-    injectAskFlowerIntent: () => {},
-    openAskFlowerComposer: envActionSpies.openAskFlowerComposer,
+    openFlowerTurnLauncher: envActionSpies.openFlowerTurnLauncher,
     openTerminalInDirectoryRequestSeq: () => 0,
     openTerminalInDirectoryRequest: () => null,
     openTerminalInDirectory: envActionSpies.openTerminalInDirectory,
@@ -1070,7 +1067,7 @@ beforeEach(() => {
   fileBrowserSurfaceStore.openBrowser.mockResolvedValue(undefined);
   fileBrowserSurfaceStore.closeBrowser.mockReset();
   downloadManagerStore.enqueue.mockReset();
-  envActionSpies.openAskFlowerComposer.mockReset();
+  envActionSpies.openFlowerTurnLauncher.mockReset();
 
   Object.defineProperty(window.navigator, 'clipboard', {
     configurable: true,
@@ -2923,12 +2920,11 @@ describe('RemoteFileBrowser persistence', () => {
       browseFilesButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(envActionSpies.openAskFlowerComposer).toHaveBeenCalledTimes(1);
-      expect(envActionSpies.openAskFlowerComposer.mock.calls[0]?.[0]).toMatchObject({
-        source: 'git_browser',
-        mode: 'append',
-        suggestedWorkingDirAbs: '/workspace/repo',
-        contextItems: [
+      expect(envActionSpies.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
+      expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0]).toMatchObject({
+        source_surface: 'git_browser',
+        suggested_working_dir: '/workspace/repo',
+        context_items: [
           {
             kind: 'text_snapshot',
             title: 'Workspace changes',
@@ -2936,8 +2932,8 @@ describe('RemoteFileBrowser persistence', () => {
           },
         ],
       });
-      const intent = envActionSpies.openAskFlowerComposer.mock.calls[0]?.[0];
-      expect(intent?.contextItems?.[0]?.content ?? '').toContain('Context: Git workspace changes');
+      const intent = envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0];
+      expect(intent?.context_items?.[0]?.content ?? '').toContain('Context: Git workspace changes');
       expect(envActionSpies.openTerminalInDirectory).toHaveBeenCalledWith('/workspace/repo', { preferredName: 'repo' });
       expect(envActionSpies.openFileBrowserAtPath).toHaveBeenCalledWith('/workspace/repo', {
         homePath: '/workspace',
@@ -3264,21 +3260,20 @@ describe('RemoteFileBrowser persistence', () => {
       askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(envActionSpies.openAskFlowerComposer).toHaveBeenCalledTimes(1);
-      expect(envActionSpies.openAskFlowerComposer.mock.calls[0]?.[0]).toMatchObject({
-        source: 'file_browser',
-        mode: 'append',
-        suggestedWorkingDirAbs: '/workspace/repo/src',
-        contextItems: [
+      expect(envActionSpies.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
+      expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0]).toMatchObject({
+        source_surface: 'file_browser',
+        suggested_working_dir: '/workspace/repo/src',
+        context_items: [
           {
             kind: 'file_path',
             path: '/workspace/repo/src',
-            isDirectory: true,
+            is_directory: true,
           },
           {
             kind: 'file_path',
             path: '/workspace/repo/src/.env',
-            isDirectory: false,
+            is_directory: false,
           },
         ],
       });
@@ -3412,16 +3407,15 @@ describe('RemoteFileBrowser persistence', () => {
       askFlowerButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       await flush();
 
-      expect(envActionSpies.openAskFlowerComposer).toHaveBeenCalledTimes(1);
-      expect(envActionSpies.openAskFlowerComposer.mock.calls[0]?.[0]).toMatchObject({
-        source: 'file_browser',
-        mode: 'append',
-        suggestedWorkingDirAbs: '/workspace/repo/src',
-        contextItems: [
+      expect(envActionSpies.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
+      expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0]).toMatchObject({
+        source_surface: 'file_browser',
+        suggested_working_dir: '/workspace/repo/src',
+        context_items: [
           {
             kind: 'file_path',
             path: '/workspace/repo/src',
-            isDirectory: true,
+            is_directory: true,
           },
         ],
       });

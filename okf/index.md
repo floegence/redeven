@@ -34,6 +34,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## UI
 
 - [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.
+- [Flower turn launcher](ui/flower-turn-launcher.md) - Contextual first-turn Ask Flower launchers and host handoff responsibilities.
 
 ## AI
 

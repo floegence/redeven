@@ -41,7 +41,7 @@ const clipboardMocks = vi.hoisted(() => ({
 }));
 
 const envContextMocks = vi.hoisted(() => ({
-  openAskFlowerComposer: vi.fn(),
+  openFlowerTurnLauncher: vi.fn(),
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -100,7 +100,7 @@ vi.mock('../pages/EnvContext', () => {
   return {
     useEnvContext: () => ({
       env: envAccessor,
-      openAskFlowerComposer: envContextMocks.openAskFlowerComposer,
+      openFlowerTurnLauncher: envContextMocks.openFlowerTurnLauncher,
     }),
   };
 });
@@ -147,7 +147,7 @@ describe('RuntimeMonitorPanel', () => {
     notificationMocks.error.mockReset();
     clipboardMocks.writeText.mockReset();
     clipboardMocks.writeText.mockResolvedValue(undefined);
-    envContextMocks.openAskFlowerComposer.mockReset();
+    envContextMocks.openFlowerTurnLauncher.mockReset();
 
     Object.defineProperty(window.navigator, 'clipboard', {
       configurable: true,
@@ -523,20 +523,20 @@ describe('RuntimeMonitorPanel', () => {
     askFlowerButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushPanel();
 
-    expect(envContextMocks.openAskFlowerComposer).toHaveBeenCalledTimes(1);
-    expect(envContextMocks.openAskFlowerComposer).toHaveBeenCalledWith(
+    expect(envContextMocks.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
+    expect(envContextMocks.openFlowerTurnLauncher).toHaveBeenCalledWith(
       expect.objectContaining({
-        source: 'monitoring',
-        contextItems: [
+        source_surface: 'monitoring',
+        context_items: [
           expect.objectContaining({
             kind: 'process_snapshot',
             pid: 313,
             name: 'python',
             username: 'bob',
-            cpuPercent: 42.5,
-            memoryBytes: 134_217_728,
+            cpu_percent: 42.5,
+            memory_bytes: 134_217_728,
             platform: 'darwin',
-            capturedAtMs: 1_710_000_000_000,
+            captured_at_ms: 1_710_000_000_000,
           }),
         ],
       }),

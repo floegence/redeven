@@ -1,5 +1,5 @@
-import type { AskFlowerIntent } from '../pages/askFlowerIntent';
-import { attachAskFlowerContextAction } from '../contextActions/askFlower';
+import type { FlowerTurnLauncherIntent } from '../../../../../flower_ui/src';
+import { attachAskFlowerContextAction, type EnvFlowerTurnLauncherIntent } from '../contextActions/askFlower';
 import { deriveAbsoluteWorkingDirFromItems, normalizeAbsolutePath } from './askFlowerPath';
 import { createClientId } from './clientId';
 
@@ -9,8 +9,8 @@ export type AskFlowerPathContextTarget = Readonly<{
   rootLabel?: string;
 }>;
 
-export type BuildFilePathAskFlowerIntentResult = Readonly<{
-  intent: AskFlowerIntent | null;
+export type BuildFilePathFlowerTurnLauncherIntentResult = Readonly<{
+  intent: FlowerTurnLauncherIntent | null;
   error?: string;
 }>;
 
@@ -29,12 +29,12 @@ function normalizePathTargets(items: AskFlowerPathContextTarget[]): AskFlowerPat
     .filter((item): item is AskFlowerPathContextTarget => item !== null);
 }
 
-export function buildFilePathAskFlowerIntent(params: {
+export function buildFilePathFlowerTurnLauncherIntent(params: {
   items: AskFlowerPathContextTarget[];
   fallbackWorkingDirAbs?: string;
   pendingAttachments?: File[];
   notes?: string[];
-}): BuildFilePathAskFlowerIntentResult {
+}): BuildFilePathFlowerTurnLauncherIntentResult {
   const normalizedItems = normalizePathTargets(params.items);
   if (normalizedItems.length <= 0) {
     return {
@@ -45,18 +45,17 @@ export function buildFilePathAskFlowerIntent(params: {
 
   const suggestedWorkingDirAbs = deriveAbsoluteWorkingDirFromItems(normalizedItems, params.fallbackWorkingDirAbs ?? '/');
 
-  const intent: AskFlowerIntent = {
+  const intent: EnvFlowerTurnLauncherIntent = {
     id: createClientId('ask-flower'),
-    source: 'file_browser',
-    mode: 'append',
-    suggestedWorkingDirAbs: suggestedWorkingDirAbs || undefined,
-    contextItems: normalizedItems.map((item) => ({
+    source_surface: 'file_browser',
+    suggested_working_dir: suggestedWorkingDirAbs || undefined,
+    context_items: normalizedItems.map((item) => ({
       kind: 'file_path' as const,
       path: item.path,
-      isDirectory: item.isDirectory,
-      rootLabel: item.rootLabel,
+      is_directory: item.isDirectory,
+      root_label: item.rootLabel,
     })),
-    pendingAttachments: [...(params.pendingAttachments ?? [])],
+    pending_attachments: [...(params.pendingAttachments ?? [])],
     notes: [...(params.notes ?? [])],
   };
 

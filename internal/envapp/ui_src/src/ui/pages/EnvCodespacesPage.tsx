@@ -48,7 +48,7 @@ import { desktopShellExternalURLOpenAvailable, openExternalURLInDesktopShell } f
 import { desktopCodeWorkspacePrepareAvailable, prepareWorkspaceEngineWithDesktop } from "../services/desktopCodeWorkspaceBridge";
 import { readDesktopSessionContextSnapshot } from "../services/desktopSessionContext";
 import { RedevenLoadingCurtain } from "../primitives/RedevenLoadingCurtain";
-import { buildFilePathAskFlowerIntent } from "../utils/filePathAskFlower";
+import { buildFilePathFlowerTurnLauncherIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPickerTreeAbsolutePath } from "../utils/directoryPickerTree";
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
@@ -1057,7 +1057,7 @@ export function EnvCodespacesPage() {
     const anchor = { x: menu.x, y: menu.y };
     setCodespaceContextMenu(null);
 
-    const result = buildFilePathAskFlowerIntent({
+    const result = buildFilePathFlowerTurnLauncherIntent({
       items: [
         {
           path: menu.space.workspace_path,
@@ -1074,7 +1074,7 @@ export function EnvCodespacesPage() {
       return;
     }
 
-    env.openAskFlowerComposer(result.intent, anchor);
+    env.openFlowerTurnLauncher(result.intent, anchor);
   };
 
   const canOpenCodespaceInTerminal = (space: SpaceStatus): boolean => (

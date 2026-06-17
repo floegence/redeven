@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { FilePreviewHost } from './FilePreviewHost';
 
-const openAskFlowerComposerMock = vi.fn();
+const openFlowerTurnLauncherMock = vi.fn();
 const notificationErrorMock = vi.fn();
 const enqueueDownloadMock = vi.fn();
 
@@ -57,7 +57,7 @@ vi.mock('@floegence/floe-webapp-core', () => ({
 
 vi.mock('../pages/EnvContext', () => ({
   useEnvContext: () => ({
-    openAskFlowerComposer: openAskFlowerComposerMock,
+    openFlowerTurnLauncher: openFlowerTurnLauncherMock,
   }),
 }));
 
@@ -113,16 +113,16 @@ describe('FilePreviewHost', () => {
 
     (host.querySelector('[data-testid="ask-flower"]') as HTMLButtonElement).click();
 
-    expect(openAskFlowerComposerMock).toHaveBeenCalledTimes(1);
-    expect(openAskFlowerComposerMock).toHaveBeenCalledWith(expect.objectContaining({
-      source: 'file_preview',
-      suggestedWorkingDirAbs: '/workspace',
-      contextItems: [
+    expect(openFlowerTurnLauncherMock).toHaveBeenCalledTimes(1);
+    expect(openFlowerTurnLauncherMock).toHaveBeenCalledWith(expect.objectContaining({
+      source_surface: 'file_preview',
+      suggested_working_dir: '/workspace',
+      context_items: [
         {
           kind: 'file_selection',
           path: '/workspace/demo.txt',
           selection: 'selected line',
-          selectionChars: 'selected line'.length,
+          selection_chars: 'selected line'.length,
         },
       ],
     }));

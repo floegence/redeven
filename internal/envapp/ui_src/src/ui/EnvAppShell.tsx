@@ -50,7 +50,6 @@ import { useProtocol } from '@floegence/floe-webapp-protocol';
 
 import {
   EnvContext,
-  type AskFlowerComposerAnchor,
   type EnvDeckSurfaceActivationRequest,
   type EnvSettingsOrigin,
   type EnvSettingsSection,
@@ -59,7 +58,7 @@ import {
   type EnvWorkbenchSurfaceActivationRequest,
   type OpenTerminalInDirectoryRequest,
 } from './pages/EnvContext';
-import type { AskFlowerIntent } from './pages/askFlowerIntent';
+import type { FlowerTurnLauncherAnchor, FlowerTurnLauncherIntent, FlowerTurnLauncherSubmitInput } from '../../../../flower_ui/src';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { EnvDeckPage } from './pages/EnvDeckPage';
 import { EnvTerminalPage } from './pages/EnvTerminalPage';
@@ -72,11 +71,12 @@ import type { ActivityFileActionOpenRequest } from './chat/types';
 import { CodexPage } from './codex/CodexPage';
 import { CodexProvider } from './codex/CodexProvider';
 import { CodexSidebar } from './codex/CodexSidebar';
-import { AIChatContext, createAIChatContextValue, normalizeModelsResponse } from './pages/AIChatContext';
+import { AIChatContext, createAIChatContextValue } from './pages/AIChatContext';
 import { EnvSettingsPage } from './pages/EnvSettingsPage';
 import { hasRWXPermissions } from './pages/aiPermissions';
 import { localizedRedevenDeckWidgets } from './deck/redevenDeckWidgets';
 import { useRedevenRpc } from './protocol/redeven_v1';
+import { createEnvLocalFlowerSurfaceAdapter } from './flower/envLocalFlowerSurfaceAdapter';
 import { RuntimeUpdateContext } from './maintenance/RuntimeUpdateContext';
 import { createAgentMaintenanceController } from './maintenance/createAgentMaintenanceController';
 import { createRuntimeUpdatePromptCoordinator } from './maintenance/createRuntimeUpdatePromptCoordinator';
@@ -96,7 +96,7 @@ import {
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
 import { DebugConsoleWindow } from './debugConsole/DebugConsoleWindow';
 import { AuditLogDialog } from './widgets/AuditLogDialog';
-import { AskFlowerComposerWindow } from './widgets/AskFlowerComposerWindow';
+import { FlowerTurnLauncherWindow } from './widgets/FlowerTurnLauncherWindow';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
@@ -108,8 +108,7 @@ import { FileBrowserSurfaceHost } from './widgets/FileBrowserSurfaceHost';
 import { FilePreviewContext, type FilePreviewOpenOptions } from './widgets/FilePreviewContext';
 import { FilePreviewHost } from './widgets/FilePreviewHost';
 import { openFileBrowserSurface } from './widgets/openFileBrowserSurface';
-import { buildAskFlowerDraftMarkdown } from './utils/askFlowerContextTemplate';
-import { basenameFromAbsolutePath, normalizeAbsolutePath, resolveSuggestedWorkingDirAbsolute } from './utils/askFlowerPath';
+import { basenameFromAbsolutePath, normalizeAbsolutePath } from './utils/askFlowerPath';
 import { createClientId } from './utils/clientId';
 import { fileItemFromPath } from './utils/filePreviewItem';
 import { reloadCurrentPage } from './utils/windowNavigation';
@@ -160,7 +159,7 @@ import {
 import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
 import { notifyDesktopSessionAppReady, readDesktopSessionContextSnapshot } from './services/desktopSessionContext';
 import { controlPlaneOriginFromSandboxLocation } from './services/sandboxOrigins';
-import { readUIStorageItem, writeRendererScopedUIStorageItem, writeUIStorageItem } from './services/uiStorage';
+import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
 import {
   ENV_DEFAULT_SURFACE_ID,
@@ -177,8 +176,6 @@ import { LanguagePreferenceMenu, useI18n } from './i18n';
 
 const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
 const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
-const ACTIVE_THREAD_STORAGE_KEY = 'redeven_ai_active_thread_id';
-const EXECUTION_MODE_STORAGE_KEY = 'redeven_ai_execution_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
@@ -194,12 +191,6 @@ type EnvSessionIdentity = Readonly<{
   source: EnvSessionSource;
   displayName: string;
   displayID: string;
-}>;
-
-type CreateThreadResponse = Readonly<{
-  thread: Readonly<{
-    thread_id: string;
-  }>;
 }>;
 
 type FlowerFileActionOpenTarget = Readonly<{
@@ -315,29 +306,9 @@ function isAccessResumeAuthFailure(error: unknown): boolean {
   );
 }
 
-function readPersistedExecutionMode(): 'act' | 'plan' {
-  const value = String(readUIStorageItem(EXECUTION_MODE_STORAGE_KEY) ?? '').trim().toLowerCase();
-  return value === 'plan' ? 'plan' : 'act';
-}
-
-function persistActiveThreadId(threadId: string): void {
-  const value = String(threadId ?? '').trim();
-  if (!value) return;
-  writeRendererScopedUIStorageItem(ACTIVE_THREAD_STORAGE_KEY, value);
-}
-
 function readPersistedDesktopViewMode(): EnvViewMode | null {
   const explicit = String(readUIStorageItem(DESKTOP_VIEW_MODE_STORAGE_KEY) ?? '').trim();
-  const migrated = normalizePersistedEnvViewMode(explicit);
-  if (migrated) {
-    return migrated;
-  }
-
-  const legacySurface = String(readUIStorageItem(ACTIVE_SURFACE_STORAGE_KEY) ?? '').trim();
-  if (legacySurface === 'deck') {
-    return 'deck';
-  }
-  return null;
+  return normalizePersistedEnvViewMode(explicit);
 }
 
 function persistDesktopViewMode(mode: EnvViewMode): void {
@@ -346,8 +317,6 @@ function persistDesktopViewMode(mode: EnvViewMode): void {
 
 function readPersistedActiveSurface(): EnvSurfaceId | null {
   const v = String(readUIStorageItem(ACTIVE_SURFACE_STORAGE_KEY) ?? '').trim();
-  // Backward compat: the "market" tab was removed; redirect old preferences.
-  if (v === 'market') return 'codespaces';
   if (isEnvSurfaceId(v)) return v;
   return null;
 }
@@ -639,11 +608,16 @@ export function EnvAppShell() {
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
   let initialActivitySurface: EnvSurfaceId | null = null;
 
-  const [askFlowerIntentSeq, setAskFlowerIntentSeq] = createSignal(0);
-  const [askFlowerIntent, setAskFlowerIntent] = createSignal<AskFlowerIntent | null>(null);
-  const [askFlowerComposerOpen, setAskFlowerComposerOpen] = createSignal(false);
-  const [askFlowerComposerIntent, setAskFlowerComposerIntent] = createSignal<AskFlowerIntent | null>(null);
-  const [askFlowerComposerAnchor, setAskFlowerComposerAnchor] = createSignal<AskFlowerComposerAnchor | null>(null);
+  type EnvFlowerTurnHandoffContext = Readonly<{
+    mode: EnvViewMode;
+    activeSurface: EnvSurfaceId;
+    workbenchAnchor?: EnvWorkbenchHandoffAnchor;
+  }>;
+
+  const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
+  const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
+  const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
+  const [flowerTurnLauncherHandoff, setFlowerTurnLauncherHandoff] = createSignal<EnvFlowerTurnHandoffContext | null>(null);
   const [notesOverlayOpen, setNotesOverlayOpen] = createSignal(false);
   const [notesViewportAnchor, setNotesViewportAnchor] = createSignal<HTMLElement | null>(null);
   const [notesViewportHosts, setNotesViewportHosts] = createSignal<readonly HTMLElement[]>([]);
@@ -759,7 +733,7 @@ export function EnvAppShell() {
     void debugConsole.closeConsole();
   };
 
-  const askFlowerExecutionContext = (): ContextActionExecutionContext => {
+  const flowerTurnExecutionContext = (): ContextActionExecutionContext => {
     const desktopCtx = readDesktopSessionContextSnapshot();
     const sessionSource = desktopCtx?.session_source;
     const normalizedSessionSource =
@@ -781,25 +755,21 @@ export function EnvAppShell() {
     };
   };
 
-  const withAskFlowerExecutionContext = (intent: AskFlowerIntent): AskFlowerIntent => {
-    if (!intent.contextAction) {
+  const withFlowerTurnExecutionContext = (intent: FlowerTurnLauncherIntent): FlowerTurnLauncherIntent => {
+    if (!intent.context_action || typeof intent.context_action !== 'object') {
       return intent;
     }
+    const contextAction = intent.context_action as { execution_context?: ContextActionExecutionContext } & Record<string, unknown>;
     return {
       ...intent,
-      contextAction: {
-        ...intent.contextAction,
+      context_action: {
+        ...contextAction,
         execution_context: {
-          ...intent.contextAction.execution_context,
-          ...askFlowerExecutionContext(),
+          ...contextAction.execution_context,
+          ...flowerTurnExecutionContext(),
         },
       },
     };
-  };
-
-  const injectAskFlowerIntent = (intent: AskFlowerIntent) => {
-    setAskFlowerIntent(withAskFlowerExecutionContext(intent));
-    setAskFlowerIntentSeq((n) => n + 1);
   };
 
   const consumeOpenTerminalInDirectoryRequest = (requestId: string) => {
@@ -867,14 +837,20 @@ export function EnvAppShell() {
     setAIThreadFocusSeq((n) => n + 1);
   };
 
-  const openAskFlowerComposer = (intent: AskFlowerIntent, anchor?: AskFlowerComposerAnchor) => {
+  const openFlowerTurnLauncher = (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => {
     if (!canUseFlower()) {
       notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
-    setAskFlowerComposerIntent(withAskFlowerExecutionContext(intent));
-    setAskFlowerComposerAnchor(anchor ?? null);
-    setAskFlowerComposerOpen(true);
+    const capturedMode = viewMode();
+    setFlowerTurnLauncherIntent(withFlowerTurnExecutionContext(intent));
+    setFlowerTurnLauncherAnchor(anchor ?? null);
+    setFlowerTurnLauncherHandoff({
+      mode: capturedMode,
+      activeSurface: activeSurface(),
+      ...(capturedMode === 'workbench' ? { workbenchAnchor: resolveWorkbenchHandoffAnchor() } : {}),
+    });
+    setFlowerTurnLauncherOpen(true);
   };
 
   const openTerminalInDirectory = (
@@ -1040,138 +1016,119 @@ export function EnvAppShell() {
     });
   };
 
-  const closeAskFlowerComposer = () => {
-    setAskFlowerComposerOpen(false);
-    setAskFlowerComposerIntent(null);
-    setAskFlowerComposerAnchor(null);
+  const closeFlowerTurnLauncher = () => {
+    setFlowerTurnLauncherOpen(false);
+    setFlowerTurnLauncherIntent(null);
+    setFlowerTurnLauncherAnchor(null);
+    setFlowerTurnLauncherHandoff(null);
   };
 
-  const uploadAskFlowerAttachment = async (file: File): Promise<string> => {
-    return uploadGatewayFile(file);
-  };
-
-  const resolveAskFlowerModel = async (): Promise<string> => {
-    const models = normalizeModelsResponse(
-      await fetchGatewayJSON<unknown>('/_redeven_proxy/api/ai/models', { method: 'GET' }),
-    );
-    const allowed = new Set<string>();
-    for (const item of models.models) {
-      const id = String(item?.id ?? '').trim();
-      if (id) allowed.add(id);
+  const handoffFlowerTurn = (context: EnvFlowerTurnHandoffContext, threadId: string) => {
+    const tid = trimString(threadId);
+    if (!tid) {
+      throw new Error(i18n.t('flowerChat.router.missingThreadID'));
     }
+    focusAIThread(tid);
+    const target = context;
 
-    const currentModel = String(models?.current_model ?? '').trim();
-    if (currentModel && allowed.has(currentModel)) return currentModel;
-
-    throw new Error('No current Flower model is selected. Choose a model in Flower settings first.');
-  };
-
-  const validateAskFlowerWorkingDir = async (workingDir: string): Promise<string> => {
-    const normalizedWorkingDir = String(workingDir ?? '').trim();
-    if (!normalizedWorkingDir) return '';
-
-    const resp = await fetchGatewayJSON<Readonly<{ working_dir: string }>>('/_redeven_proxy/api/ai/validate_working_dir', {
-      method: 'POST',
-      body: JSON.stringify({ working_dir: normalizedWorkingDir }),
-    });
-    const cleaned = String(resp?.working_dir ?? '').trim();
-    if (!cleaned) {
-      throw new Error('Invalid working directory.');
-    }
-    return cleaned;
-  };
-
-  const createAskFlowerThread = async (params: { modelId: string; workingDir: string; executionMode: 'act' | 'plan' }): Promise<string> => {
-    const body: Record<string, unknown> = { title: '' };
-    if (params.modelId) body.model_id = params.modelId;
-    body.execution_mode = params.executionMode;
-    if (params.workingDir) body.working_dir = params.workingDir;
-
-    const resp = await fetchGatewayJSON<CreateThreadResponse>('/_redeven_proxy/api/ai/threads', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
-    const threadId = String(resp?.thread?.thread_id ?? '').trim();
-    if (!threadId) {
-      throw new Error('Failed to create chat thread.');
-    }
-    return threadId;
-  };
-
-  const submitAskFlowerComposer = async (userPrompt: string): Promise<void> => {
-    const intent = askFlowerComposerIntent();
-    if (!intent) return;
-
-    if (protocol.status() !== 'connected') {
-      notify.error(i18n.t('shell.notifications.notConnectedTitle'), i18n.t('shell.notifications.connectingToRuntime'));
+    if (target.mode === 'activity' || layout.isMobile()) {
+      setViewMode('activity', { surfaceId: 'ai', focusSurface: true });
+      openSurface('ai', { reason: 'handoff_ask_flower', focus: true, ensureVisible: true });
       return;
+    }
+
+    if (target.mode === 'deck') {
+      if (viewMode() !== 'deck') {
+        setViewMode('deck', { surfaceId: 'ai', focusSurface: true });
+        return;
+      }
+      openSurface('ai', { reason: 'handoff_ask_flower', focus: true, ensureVisible: true });
+      return;
+    }
+
+    if (viewMode() !== 'workbench') {
+      setViewMode('workbench', { surfaceId: 'ai', focusSurface: false, requestWorkbenchOverview: false });
+      queueMicrotask(() => {
+        openSurface('ai', {
+          reason: 'handoff_ask_flower',
+          focus: true,
+          ensureVisible: !target.workbenchAnchor,
+          centerViewport: !target.workbenchAnchor,
+          openStrategy: 'focus_latest_or_create',
+          workbenchAnchor: target.workbenchAnchor,
+        });
+      });
+      return;
+    }
+
+    openSurface('ai', {
+      reason: 'handoff_ask_flower',
+      focus: true,
+      ensureVisible: !target.workbenchAnchor,
+      centerViewport: !target.workbenchAnchor,
+      openStrategy: 'focus_latest_or_create',
+      workbenchAnchor: target.workbenchAnchor,
+    });
+  };
+
+  const submitFlowerTurnLauncher = async (input: FlowerTurnLauncherSubmitInput): Promise<void> => {
+    if (protocol.status() !== 'connected') {
+      const message = i18n.t('shell.notifications.connectingToRuntime');
+      notify.error(i18n.t('shell.notifications.notConnectedTitle'), message);
+      throw new Error(message);
     }
     if (!canUseFlower()) {
-      notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
-      return;
+      const message = i18n.t('shell.notifications.rwxPermissionRequired');
+      notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), message);
+      throw new Error(message);
     }
 
-    const trimmedPrompt = String(userPrompt ?? '').trim();
+    const trimmedPrompt = trimString(input.prompt);
     if (!trimmedPrompt) {
-      notify.error(i18n.t('shell.notifications.missingMessageTitle'), i18n.t('shell.notifications.enterQuestionBeforeSending'));
-      return;
+      const message = i18n.t('shell.notifications.enterQuestionBeforeSending');
+      notify.error(i18n.t('shell.notifications.missingMessageTitle'), message);
+      throw new Error(message);
     }
 
     try {
-      const modelId = await resolveAskFlowerModel();
-      const executionMode = readPersistedExecutionMode();
-      const suggestedWorkingDir = resolveSuggestedWorkingDirAbsolute({
-        suggestedWorkingDirAbs: intent.suggestedWorkingDirAbs,
-      });
-      const validatedWorkingDir = await validateAskFlowerWorkingDir(suggestedWorkingDir);
-      const threadId = await createAskFlowerThread({ modelId, workingDir: validatedWorkingDir, executionMode });
-
-      const uploadedAttachments: Array<{ name: string; mimeType: string; url: string }> = [];
-      for (const file of intent.pendingAttachments) {
-        const url = await uploadAskFlowerAttachment(file);
-        uploadedAttachments.push({
-          name: String(file.name ?? '').trim() || 'attachment',
-          mimeType: String(file.type ?? '').trim() || 'application/octet-stream',
-          url,
-        });
-      }
-
-      try {
-        await rpc.ai.subscribeThread({ threadId });
-      } catch {
-        // Best-effort: send still persists and AI page can self-heal via transcript loading.
-      }
-
-      const finalPrompt =
-        buildAskFlowerDraftMarkdown({
-          intent: {
-            ...intent,
-            userPrompt: trimmedPrompt,
-          },
-          includeSuggestedWorkingDir: false,
-        }) || trimmedPrompt;
-
-      await rpc.ai.sendUserTurn({
-        threadId,
-        model: modelId,
-        input: {
-          text: finalPrompt,
-          attachments: uploadedAttachments,
-          contextAction: intent.contextAction,
+      const adapter = createEnvLocalFlowerSurfaceAdapter({
+        envPublicID: trimString(envId()),
+        envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',
+        rpc,
+        copy: {
+          currentEnvironment: i18n.t('flowerChat.router.currentEnvSource'),
+          usingCurrentEnvironment: i18n.t('flowerChat.router.currentEnvHandler'),
+          environmentLocalSubtitle: i18n.t('flowerChat.router.envLocalSubtitle'),
+          missingThreadID: i18n.t('flowerChat.router.missingThreadID'),
+          enterMessageBeforeSending: i18n.t('flowerChat.router.enterMessageBeforeSending'),
+          selectModelBeforeChat: i18n.t('flowerChat.router.selectModelBeforeChat'),
+          failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
         },
-        options: {
-          maxSteps: 10,
-          mode: executionMode,
-        },
+        uploadAttachment: uploadGatewayFile,
+        openFileBrowser: openFlowerFileBrowser,
+        openFilePreview: openFlowerFilePreview,
       });
-
-      persistActiveThreadId(threadId);
-      focusAIThread(threadId);
-      closeAskFlowerComposer();
-      openSurface('ai', { reason: 'handoff_ask_flower', focus: true, ensureVisible: true });
+      const bootstrap = await adapter.launchTurn({
+        prompt: trimmedPrompt,
+        context_action: input.intent.context_action,
+        working_dir: input.intent.suggested_working_dir,
+        pending_files: input.intent.pending_attachments,
+        mode: 'act',
+      });
+      const threadId = trimString(bootstrap.thread.thread_id || bootstrap.thread_id);
+      const handoffContext = flowerTurnLauncherHandoff();
+      if (!threadId) {
+        throw new Error(i18n.t('flowerChat.router.missingThreadID'));
+      }
+      if (!handoffContext) {
+        throw new Error(i18n.t('shell.notifications.failedToSendToFlowerTitle'));
+      }
+      closeFlowerTurnLauncher();
+      handoffFlowerTurn(handoffContext, threadId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error(i18n.t('shell.notifications.failedToSendToFlowerTitle'), msg || i18n.t('shell.notifications.requestFailed'));
+      throw e;
     }
   };
 
@@ -1929,7 +1886,7 @@ export function EnvAppShell() {
       const preferredDesktopViewMode = readPersistedDesktopViewMode() ?? 'deck';
       if (rt && preferredSurface === 'ports') preferredSurface = 'codespaces';
       if (preferredSurface === 'ai') {
-        // Defer opening Flower until permissions are loaded (and only if RWX is granted).
+        // Defer opening Flower until access state is loaded.
         preferredSurface = null;
         setPendingAutoOpenAI(true);
       }
@@ -3171,10 +3128,7 @@ export function EnvAppShell() {
         openDebugConsole,
         settingsFocusSeq,
         settingsFocusSection,
-        askFlowerIntentSeq,
-        askFlowerIntent,
-        injectAskFlowerIntent,
-        openAskFlowerComposer,
+        openFlowerTurnLauncher,
         openTerminalInDirectoryRequestSeq,
         openTerminalInDirectoryRequest,
         openTerminalInDirectory,
@@ -3205,12 +3159,12 @@ export function EnvAppShell() {
                   <Show when={viewMode() !== 'workbench'}>
                     <FilePreviewHost />
                   </Show>
-                  <AskFlowerComposerWindow
-                    open={askFlowerComposerOpen()}
-                    intent={askFlowerComposerIntent()}
-                    anchor={askFlowerComposerAnchor()}
-                    onClose={closeAskFlowerComposer}
-                    onSend={submitAskFlowerComposer}
+                  <FlowerTurnLauncherWindow
+                    open={flowerTurnLauncherOpen()}
+                    intent={flowerTurnLauncherIntent()}
+                    anchor={flowerTurnLauncherAnchor()}
+                    onClose={closeFlowerTurnLauncher}
+                    onSubmit={submitFlowerTurnLauncher}
                   />
                 </AIChatProviderBridge>
               </FloeRegistryRuntime>

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildFilePathAskFlowerIntent } from './filePathAskFlower';
+import { buildFilePathFlowerTurnLauncherIntent } from './filePathAskFlower';
 
 describe('filePathAskFlower', () => {
   it('builds a file-browser Ask Flower intent for a single directory path', () => {
-    const result = buildFilePathAskFlowerIntent({
+    const result = buildFilePathFlowerTurnLauncherIntent({
       items: [
         {
           path: '/workspace/demo',
@@ -16,20 +16,19 @@ describe('filePathAskFlower', () => {
 
     expect(result.error).toBeUndefined();
     expect(result.intent).toMatchObject({
-      source: 'file_browser',
-      mode: 'append',
-      suggestedWorkingDirAbs: '/workspace/demo',
-      contextItems: [
+      source_surface: 'file_browser',
+      suggested_working_dir: '/workspace/demo',
+      context_items: [
         {
           kind: 'file_path',
           path: '/workspace/demo',
-          isDirectory: true,
-          rootLabel: 'Workspace',
+          is_directory: true,
+          root_label: 'Workspace',
         },
       ],
-      pendingAttachments: [],
+      pending_attachments: [],
       notes: [],
-      contextAction: {
+      context_action: {
         schema_version: 2,
         action_id: 'assistant.ask.flower',
         provider: 'flower',
@@ -58,7 +57,7 @@ describe('filePathAskFlower', () => {
   });
 
   it('derives a common working directory for mixed file and directory paths', () => {
-    const result = buildFilePathAskFlowerIntent({
+    const result = buildFilePathFlowerTurnLauncherIntent({
       items: [
         {
           path: '/workspace/demo/src/index.ts',
@@ -72,23 +71,23 @@ describe('filePathAskFlower', () => {
       fallbackWorkingDirAbs: '/workspace',
     });
 
-    expect(result.intent?.suggestedWorkingDirAbs).toBe('/workspace/demo');
-    expect(result.intent?.contextItems).toMatchObject([
+    expect(result.intent?.suggested_working_dir).toBe('/workspace/demo');
+    expect(result.intent?.context_items).toMatchObject([
       {
         kind: 'file_path',
         path: '/workspace/demo/src/index.ts',
-        isDirectory: false,
+        is_directory: false,
       },
       {
         kind: 'file_path',
         path: '/workspace/demo/docs',
-        isDirectory: true,
+        is_directory: true,
       },
     ]);
   });
 
   it('returns a readable error when all input paths are invalid', () => {
-    const result = buildFilePathAskFlowerIntent({
+    const result = buildFilePathFlowerTurnLauncherIntent({
       items: [
         {
           path: 'workspace/demo',

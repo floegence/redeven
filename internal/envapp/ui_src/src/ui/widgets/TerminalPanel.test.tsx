@@ -666,7 +666,7 @@ vi.mock('../pages/EnvContext', () => {
     useEnvContext: () => ({
       env: envAccessor,
       viewMode: () => envContextState.viewMode,
-      openAskFlowerComposer: vi.fn(),
+      openFlowerTurnLauncher: vi.fn(),
       openTerminalInDirectoryRequestSeq: () => 0,
       openTerminalInDirectoryRequest: () => null,
       openTerminalInDirectory: vi.fn(),

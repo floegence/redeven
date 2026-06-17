@@ -63,8 +63,7 @@ import { isPermissionDeniedError } from '../utils/permission';
 import { createClientId } from '../utils/clientId';
 import { sortContextActionMenuItems } from '../contextActions/menu';
 import { PermissionEmptyState } from './PermissionEmptyState';
-import type { AskFlowerIntent } from '../pages/askFlowerIntent';
-import { attachAskFlowerContextAction } from '../contextActions/askFlower';
+import { attachAskFlowerContextAction, type EnvFlowerTurnLauncherContextItem } from '../contextActions/askFlower';
 import { normalizeAbsolutePath as normalizeAskFlowerAbsolutePath } from '../utils/askFlowerPath';
 import { resolveTerminalSurfaceTouchAction } from '../mobileViewportPolicy';
 import { resolveTerminalFontFamily, TerminalSettingsDialog } from './TerminalSettingsDialog';
@@ -3258,7 +3257,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const trimmedSelection = selection.trim();
     const pendingAttachments: File[] = [];
     const notes: string[] = [];
-    let contextItems: AskFlowerIntent['contextItems'] = [];
+    let contextItems: EnvFlowerTurnLauncherContextItem[] = [];
 
     if (trimmedSelection) {
       if (trimmedSelection.length > MAX_INLINE_TERMINAL_SELECTION_CHARS) {
@@ -3273,18 +3272,18 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         contextItems = [
           {
             kind: 'terminal_selection',
-            workingDir: menu.workingDir,
+            working_dir: menu.workingDir,
             selection: '',
-            selectionChars: trimmedSelection.length,
+            selection_chars: trimmedSelection.length,
           },
         ];
       } else {
         contextItems = [
           {
             kind: 'terminal_selection',
-            workingDir: menu.workingDir,
+            working_dir: menu.workingDir,
             selection: trimmedSelection,
-            selectionChars: trimmedSelection.length,
+            selection_chars: trimmedSelection.length,
           },
         ];
       }
@@ -3293,20 +3292,19 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       contextItems = [
         {
           kind: 'terminal_selection',
-          workingDir: menu.workingDir,
+          working_dir: menu.workingDir,
           selection: '',
-          selectionChars: 0,
+          selection_chars: 0,
         },
       ];
     }
 
-    env.openAskFlowerComposer(attachAskFlowerContextAction({
+    env.openFlowerTurnLauncher(attachAskFlowerContextAction({
       id: createClientId('ask-flower'),
-      source: 'terminal',
-      mode: 'append',
-      suggestedWorkingDirAbs: menu.workingDir,
-      contextItems,
-      pendingAttachments,
+      source_surface: 'terminal',
+      suggested_working_dir: menu.workingDir,
+      context_items: contextItems,
+      pending_attachments: pendingAttachments,
       notes,
     }), { x: menu.x, y: menu.y });
   };

@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildMonitorProcessAskFlowerIntent,
+  buildMonitorProcessFlowerTurnLauncherIntent,
   buildMonitorProcessSnapshotText,
   formatMonitorProcessBytes,
 } from './monitorProcessAskFlower';
 
 describe('monitorProcessAskFlower', () => {
   it('builds a monitoring intent with process snapshot context', () => {
-    const intent = buildMonitorProcessAskFlowerIntent({
+    const intent = buildMonitorProcessFlowerTurnLauncherIntent({
       process: {
         pid: 512,
         name: 'node',
@@ -22,18 +22,17 @@ describe('monitorProcessAskFlower', () => {
     });
 
     expect(intent).toMatchObject({
-      source: 'monitoring',
-      mode: 'append',
-      contextItems: [
+      source_surface: 'monitoring',
+      context_items: [
         {
           kind: 'process_snapshot',
           pid: 512,
           name: 'node',
           username: 'alice',
-          cpuPercent: 63.4,
-          memoryBytes: 805_306_368,
+          cpu_percent: 63.4,
+          memory_bytes: 805_306_368,
           platform: 'linux',
-          capturedAtMs: 1_710_000_000_000,
+          captured_at_ms: 1_710_000_000_000,
         },
       ],
     });
@@ -45,10 +44,10 @@ describe('monitorProcessAskFlower', () => {
       pid: 512,
       name: 'node',
       username: 'alice',
-      cpuPercent: 63.4,
-      memoryBytes: 805_306_368,
+      cpu_percent: 63.4,
+      memory_bytes: 805_306_368,
       platform: 'linux',
-      capturedAtMs: 1_710_000_000_000,
+      captured_at_ms: 1_710_000_000_000,
     });
 
     expect(text).toContain('PID: 512');

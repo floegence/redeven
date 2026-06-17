@@ -20,7 +20,7 @@ describe('file preview wiring', () => {
     const surfaceSrc = read('./FilePreviewSurface.tsx');
     const envAppLayersSrc = read('../utils/envAppLayers.ts');
     const previewWindowSrc = read('./PreviewWindow.tsx');
-    const askFlowerComposerSrc = read('./AskFlowerComposerWindow.tsx');
+    const flowerTurnLauncherSrc = read('./FlowerTurnLauncherWindow.tsx');
     const codePreviewPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), './CodePreviewPane.tsx');
 
     expect(contentSrc).toContain("import { renderRedevenFilePreviewBody } from '../file-preview/rendererRegistry';");
@@ -124,7 +124,7 @@ describe('file preview wiring', () => {
 
     expect(envAppLayersSrc).toContain('fileBrowserSurface: 144');
     expect(envAppLayersSrc).toContain('previewWindow: 150');
-    expect(envAppLayersSrc).toContain('askFlowerComposer: 160');
+    expect(envAppLayersSrc).toContain('flowerTurnLauncher: 160');
     expect(envAppLayersSrc).toContain("previewWindow: 'z-[150]'");
 
     expect(previewWindowSrc).toContain("import { Dialog } from '@floegence/floe-webapp-core/ui';");
@@ -137,12 +137,12 @@ describe('file preview wiring', () => {
     expect(previewWindowSrc).toContain("h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none");
     expect(previewWindowSrc).toContain('file-preview-floating-window');
     expect(previewWindowSrc).toContain('PREVIEW_WINDOW_Z_INDEX = ENV_APP_FLOATING_LAYER.previewWindow');
-    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_COMPOSER_Z_INDEX = ENV_APP_FLOATING_LAYER.askFlowerComposer;');
-    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX = ENV_APP_FLOATING_LAYER.askFlowerContextBrowser;');
-    expect(askFlowerComposerSrc).toContain('const ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX = ENV_APP_FLOATING_LAYER.askFlowerContextPreview;');
-    expect(askFlowerComposerSrc).toContain('zIndex={ASK_FLOWER_COMPOSER_Z_INDEX}');
-    expect(askFlowerComposerSrc).toContain('zIndex={ASK_FLOWER_CONTEXT_BROWSER_Z_INDEX}');
-    expect(askFlowerComposerSrc).toContain('zIndex={ASK_FLOWER_CONTEXT_PREVIEW_Z_INDEX}');
+    expect(flowerTurnLauncherSrc).toContain('const FLOWER_TURN_LAUNCHER_Z_INDEX = ENV_APP_FLOATING_LAYER.flowerTurnLauncher;');
+    expect(flowerTurnLauncherSrc).toContain('const FLOWER_TURN_CONTEXT_BROWSER_Z_INDEX = ENV_APP_FLOATING_LAYER.flowerTurnContextBrowser;');
+    expect(flowerTurnLauncherSrc).toContain('const FLOWER_TURN_CONTEXT_PREVIEW_Z_INDEX = ENV_APP_FLOATING_LAYER.flowerTurnContextPreview;');
+    expect(flowerTurnLauncherSrc).toContain('zIndex={FLOWER_TURN_LAUNCHER_Z_INDEX}');
+    expect(flowerTurnLauncherSrc).toContain('zIndex={FLOWER_TURN_CONTEXT_BROWSER_Z_INDEX}');
+    expect(flowerTurnLauncherSrc).toContain('zIndex={FLOWER_TURN_CONTEXT_PREVIEW_Z_INDEX}');
   });
 
   it('routes remote previews through the shared controller and browser entry points through the app-level browser host', () => {
@@ -170,7 +170,7 @@ describe('file preview wiring', () => {
     expect(hostSrc).toContain('descriptor={filePreview.controller.descriptor()}');
     expect(hostSrc).toContain('draftText={filePreview.controller.draftText()}');
     expect(hostSrc).toContain('closeConfirmOpen={filePreview.controller.closeConfirmOpen()}');
-    expect(hostSrc).toContain('buildFilePreviewAskFlowerIntent');
+    expect(hostSrc).toContain('buildFilePreviewFlowerTurnLauncherIntent');
     expect(hostSrc).toContain('writeTextToClipboard');
 
     expect(shellSrc).toContain("import { createFilePreviewController } from './widgets/createFilePreviewController';");

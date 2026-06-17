@@ -3,9 +3,9 @@ export const ENV_APP_FLOATING_LAYER = {
   debugConsole: 145,
   previewWindow: 150,
   floatingWindowModal: 160,
-  askFlowerComposer: 160,
-  askFlowerContextBrowser: 161,
-  askFlowerContextPreview: 162,
+  flowerTurnLauncher: 160,
+  flowerTurnContextBrowser: 161,
+  flowerTurnContextPreview: 162,
 } as const;
 
 export const ENV_APP_FLOATING_LAYER_CLASS = {

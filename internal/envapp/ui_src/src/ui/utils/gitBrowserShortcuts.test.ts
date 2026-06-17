@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildGitAskFlowerIntent,
+  buildGitFlowerTurnLauncherIntent,
   buildGitDirectoryShortcutRequest,
 } from './gitBrowserShortcuts';
 
 describe('gitBrowserShortcuts', () => {
   it('builds a git-browser intent for workspace sections', () => {
-    const result = buildGitAskFlowerIntent({
+    const result = buildGitFlowerTurnLauncherIntent({
       kind: 'workspace_section',
       repoRootPath: '/workspace/repo',
       headRef: 'main',
@@ -30,10 +30,9 @@ describe('gitBrowserShortcuts', () => {
     });
 
     expect(result.intent).toMatchObject({
-      source: 'git_browser',
-      mode: 'append',
-      suggestedWorkingDirAbs: '/workspace/repo',
-      contextItems: [
+      source_surface: 'git_browser',
+      suggested_working_dir: '/workspace/repo',
+      context_items: [
         {
           kind: 'text_snapshot',
           title: 'Workspace changes',
@@ -41,8 +40,8 @@ describe('gitBrowserShortcuts', () => {
         },
       ],
     });
-    expect(result.intent?.contextItems[0]?.kind).toBe('text_snapshot');
-    const snapshot = result.intent?.contextItems[0];
+    expect(result.intent?.context_items[0]?.kind).toBe('text_snapshot');
+    const snapshot = result.intent?.context_items[0];
     expect(snapshot && 'content' in snapshot ? snapshot.content : '').toContain('Context: Git workspace changes');
     expect(snapshot && 'content' in snapshot ? snapshot.content : '').toContain('Section: Changes');
     expect(snapshot && 'content' in snapshot ? snapshot.content : '').toContain('modified src/app.ts (+3 -1)');
@@ -50,7 +49,7 @@ describe('gitBrowserShortcuts', () => {
   });
 
   it('builds a git-browser intent for commit context', () => {
-    const result = buildGitAskFlowerIntent({
+    const result = buildGitFlowerTurnLauncherIntent({
       kind: 'commit',
       repoRootPath: '/workspace/repo',
       location: 'graph',
@@ -75,10 +74,9 @@ describe('gitBrowserShortcuts', () => {
     });
 
     expect(result.intent).toMatchObject({
-      source: 'git_browser',
-      mode: 'append',
-      suggestedWorkingDirAbs: '/workspace/repo',
-      contextItems: [
+      source_surface: 'git_browser',
+      suggested_working_dir: '/workspace/repo',
+      context_items: [
         {
           kind: 'text_snapshot',
           title: 'Commit summary',
@@ -86,7 +84,7 @@ describe('gitBrowserShortcuts', () => {
         },
       ],
     });
-    const snapshot = result.intent?.contextItems[0];
+    const snapshot = result.intent?.context_items[0];
     expect(snapshot && 'content' in snapshot ? snapshot.content : '').toContain('Context: Git commit detail');
     expect(snapshot && 'content' in snapshot ? snapshot.content : '').toContain('Commit: 3a47b67b (3a47b67b1234567890)');
     expect(snapshot && 'content' in snapshot ? snapshot.content : '').toContain('Subject: Refine bootstrap');
@@ -96,7 +94,7 @@ describe('gitBrowserShortcuts', () => {
   });
 
   it('returns a helpful error when the repository root is missing', () => {
-    const result = buildGitAskFlowerIntent({
+    const result = buildGitFlowerTurnLauncherIntent({
       kind: 'workspace_section',
       repoRootPath: '',
       section: 'changes',

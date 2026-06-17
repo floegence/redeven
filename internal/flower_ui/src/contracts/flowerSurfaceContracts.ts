@@ -617,15 +617,93 @@ export type FlowerResolveHandlerInput = Readonly<{
   requested_handler_id?: string;
 }>;
 
-export type FlowerSendMessageInput = Readonly<{
+export type FlowerTurnLaunchInput = Readonly<{
   thread_id?: string;
   prompt: string;
   decision?: FlowerRouterDecision | null;
   context_action?: unknown;
+  attachments?: readonly FlowerTurnAttachment[];
+  pending_files?: readonly File[];
+  working_dir?: string;
+  mode?: 'act' | 'plan';
 }>;
 
-export type FlowerSendMessageFailure = Error & Readonly<{
+export type FlowerTurnLaunchFailure = Error & Readonly<{
   fresh_decision?: FlowerRouterDecision;
+}>;
+
+export type FlowerTurnAttachment = Readonly<{
+  name: string;
+  mime_type: string;
+  url: string;
+}>;
+
+export type FlowerTurnLauncherSourceSurface =
+  | 'desktop_welcome_environment_card'
+  | 'file_browser'
+  | 'terminal'
+  | 'file_preview'
+  | 'monitoring'
+  | 'git_browser'
+  | 'editor_preview';
+
+export type FlowerTurnLauncherContextItem =
+  | Readonly<{
+      kind: 'environment';
+      label: string;
+      detail?: string;
+      target_id: string;
+    }>
+  | Readonly<{
+      kind: 'file_path';
+      path: string;
+      is_directory: boolean;
+      root_label?: string;
+    }>
+  | Readonly<{
+      kind: 'file_selection';
+      path: string;
+      selection: string;
+      selection_chars: number;
+    }>
+  | Readonly<{
+      kind: 'terminal_selection';
+      working_dir: string;
+      selection: string;
+      selection_chars: number;
+    }>
+  | Readonly<{
+      kind: 'process_snapshot';
+      pid: number;
+      name: string;
+      username: string;
+      cpu_percent: number;
+      memory_bytes: number;
+      platform?: string;
+      captured_at_ms?: number;
+    }>
+  | Readonly<{
+      kind: 'text_snapshot';
+      title: string;
+      detail?: string;
+      content: string;
+    }>
+  | Readonly<{
+      kind: 'attachment';
+      name: string;
+      mime_type: string;
+      source_path?: string;
+    }>;
+
+export type FlowerTurnLauncherIntent = Readonly<{
+  id: string;
+  source_surface: FlowerTurnLauncherSourceSurface;
+  initial_prompt?: string;
+  suggested_working_dir?: string;
+  context_items: readonly FlowerTurnLauncherContextItem[];
+  pending_attachments?: readonly File[];
+  notes?: readonly string[];
+  context_action?: unknown;
 }>;
 
 export type FlowerFileOpenRequest = Readonly<{
@@ -656,16 +734,9 @@ export type FlowerSurfaceAdapter = Readonly<{
   setThreadPinned?: (threadID: string, pinned: boolean) => Promise<FlowerLiveBootstrap>;
   forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
-  sendMessage: (input: FlowerSendMessageInput) => Promise<FlowerLiveBootstrap>;
+  launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<void>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
-}>;
-
-export type FlowerSurfaceDraftIntent = Readonly<{
-  id: string;
-  thread_id?: string;
-  prompt: string;
-  context_action?: unknown;
 }>;

@@ -438,10 +438,9 @@ vi.mock('./deck/redevenDeckWidgets', () => ({
   redevenDeckWidgets: [],
 }));
 vi.mock('./widgets/AuditLogDialog', () => ({ AuditLogDialog: () => <div /> }));
-vi.mock('./widgets/AskFlowerComposerWindow', () => ({ AskFlowerComposerWindow: () => <div /> }));
+vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({ FlowerTurnLauncherWindow: () => <div /> }));
 vi.mock('./widgets/FileBrowserSurfaceHost', () => ({ FileBrowserSurfaceHost: () => <div /> }));
 vi.mock('./widgets/FilePreviewHost', () => ({ FilePreviewHost: () => <div /> }));
-vi.mock('./utils/askFlowerContextTemplate', () => ({ buildAskFlowerDraftMarkdown: () => '' }));
 vi.mock('./utils/askFlowerPath', () => ({
   basenameFromAbsolutePath: (value: string) => {
     const normalized = String(value ?? '').trim().replace(/\/+$/, '');

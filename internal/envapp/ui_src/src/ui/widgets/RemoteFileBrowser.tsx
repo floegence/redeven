@@ -31,7 +31,7 @@ import {
 import { useEnvContext } from '../pages/EnvContext';
 import { useDownloadManager } from '../downloads/DownloadContext';
 import { buildRuntimeFileDownloadCommand } from '../downloads/downloadCommands';
-import type { AskFlowerIntent } from '../pages/askFlowerIntent';
+import type { FlowerTurnLauncherIntent } from '../../../../../flower_ui/src';
 import { sortContextActionMenuItems } from '../contextActions/menu';
 import { resolveRendererStorageScopeID } from '../services/desktopSessionContext';
 import {
@@ -52,8 +52,8 @@ import {
   copyFileBrowserItemPaths,
 } from '../utils/fileBrowserClipboard';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
-import { buildFilePathAskFlowerIntent } from '../utils/filePathAskFlower';
-import { buildGitAskFlowerIntent, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
+import { buildFilePathFlowerTurnLauncherIntent } from '../utils/filePathAskFlower';
+import { buildGitFlowerTurnLauncherIntent, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from '../utils/openDirectoryInTerminal';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { InputDialog } from './InputDialog';
@@ -3835,7 +3835,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    const result = buildFilePathAskFlowerIntent({
+    const result = buildFilePathFlowerTurnLauncherIntent({
       items: [{
         path: directory.path,
         isDirectory: true,
@@ -3848,7 +3848,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    dispatchAskFlowerIntent(result.intent);
+    dispatchFlowerTurnLauncherIntent(result.intent);
   };
 
   const handleRename = async (item: FileItem, newName: string) => {
@@ -4277,17 +4277,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     clearStashReview({ cancelInFlight: true });
   });
 
-  const dispatchAskFlowerIntent = (intent: AskFlowerIntent) => {
-    ctx.openAskFlowerComposer(intent);
+  const dispatchFlowerTurnLauncherIntent = (intent: FlowerTurnLauncherIntent) => {
+    ctx.openFlowerTurnLauncher(intent);
   };
 
   const handleGitAskFlower = (request: GitAskFlowerRequest) => {
-    const result = buildGitAskFlowerIntent(request);
+    const result = buildGitFlowerTurnLauncherIntent(request);
     if (!result.intent) {
       notification.error(i18n.t('git.notifications.askFlowerUnavailableTitle'), result.error ?? i18n.t('git.notifications.failedToBuildGitContext'));
       return;
     }
-    dispatchAskFlowerIntent(result.intent);
+    dispatchFlowerTurnLauncherIntent(result.intent);
   };
 
   const handleGitOpenInTerminal = (request: GitDirectoryShortcutRequest) => {
@@ -4320,7 +4320,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const normalizedItems = items.filter((item) => String(item.path ?? '').trim());
     if (normalizedItems.length <= 0) return;
 
-    const result = buildFilePathAskFlowerIntent({
+    const result = buildFilePathFlowerTurnLauncherIntent({
       items: normalizedItems.map((item) => ({
         path: item.path,
         isDirectory: item.type === 'folder',
@@ -4333,7 +4333,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       return;
     }
 
-    dispatchAskFlowerIntent(result.intent);
+    dispatchFlowerTurnLauncherIntent(result.intent);
   };
 
   const handleCopyName = (items: FileItem[]) => {

@@ -112,6 +112,28 @@ describe('shared Flower UI boundary', () => {
     expect(cssSrc).not.toContain('flower-component-nav-item');
   });
 
+  it('keeps turn launching separate from the chat surface and removes draft injection contracts', () => {
+    const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
+    const contractsSrc = readText(path.join(flowerRoot, 'contracts', 'flowerSurfaceContracts.ts'));
+    const launcherSrc = readText(path.join(flowerRoot, 'FlowerTurnLauncherWindow.tsx'));
+
+    for (const token of ['draftIntent', 'FlowerSurfaceDraftIntent', 'activeDraftIntent', 'lastDraftIntentID']) {
+      expect(surfaceSrc, `FlowerSurface must not contain ${token}`).not.toContain(token);
+      expect(contractsSrc, `Flower contracts must not contain ${token}`).not.toContain(token);
+    }
+    for (const token of ['FlowerSendMessageInput', 'FlowerSendMessageFailure', 'sendMessage']) {
+      expect(contractsSrc, `Flower contracts must not contain ${token}`).not.toContain(token);
+    }
+    expect(surfaceSrc).toContain('props.adapter.launchTurn');
+    expect(contractsSrc).toContain('export type FlowerTurnLaunchInput');
+    expect(contractsSrc).toContain('export type FlowerTurnLauncherIntent');
+    expect(contractsSrc).toContain('source_surface');
+    expect(contractsSrc).toContain('context_items');
+    expect(contractsSrc).toContain('pending_attachments');
+    expect(launcherSrc).toContain('onSubmit: (input: FlowerTurnLauncherSubmitInput) => Promise<void>');
+    expect(launcherSrc).not.toContain('onSend');
+  });
+
   it('keeps thread sidebar indicators as visual primitives instead of lifecycle color dots', () => {
     const modelSrc = readText(path.join(flowerRoot, 'threads', 'threadListModel.ts'));
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
