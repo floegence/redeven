@@ -168,9 +168,6 @@ func (p *floretProviderAdapter) emitReasoningDelta(text string) {
 	}
 	p.streamRun.touchActivity()
 	_ = p.streamRun.appendThinkingDelta(text)
-	p.streamRun.persistRunEvent("thinking.delta", RealtimeStreamKindLifecycle, map[string]any{
-		"delta": truncateRunes(text, 2000),
-	})
 }
 
 func (p *floretProviderAdapter) setCurrentProviderState(state *flruntime.ModelState) {

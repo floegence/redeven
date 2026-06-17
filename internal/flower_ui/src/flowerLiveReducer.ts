@@ -80,6 +80,7 @@ function contentFromBlocks(blocks: readonly FlowerChatMessageBlock[]): string {
   return blocks
     .map((block) => {
       if (block.type === 'activity-timeline') return '';
+      if (block.type === 'thinking') return '';
       return trim(block.content);
     })
     .filter(Boolean)

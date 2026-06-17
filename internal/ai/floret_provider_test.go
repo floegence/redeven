@@ -3,12 +3,15 @@ package ai
 import (
 	"context"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
 	openai "github.com/openai/openai-go"
+
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 type recordingFlowerProvider struct {
@@ -82,6 +85,72 @@ func TestFloretProviderAdapter_DisableReasoningControlsProviderRequest(t *testin
 	if recorder.req.Budgets.MaxOutputToken != 64 {
 		t.Fatalf("MaxOutputToken=%d, want 64", recorder.req.Budgets.MaxOutputToken)
 	}
+}
+
+type reasoningFlowerProvider struct {
+	streamReasoning string
+	resultReasoning string
+	resultText      string
+	omitResultText  bool
+}
+
+func (p reasoningFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
+	if p.streamReasoning != "" {
+		onEvent(StreamEvent{Type: StreamEventThinkingDelta, Text: p.streamReasoning})
+	}
+	text := p.resultText
+	if text == "" && !p.omitResultText {
+		text = "final answer"
+	}
+	return TurnResult{
+		FinishReason: "stop",
+		Text:         text,
+		Reasoning:    p.resultReasoning,
+	}, nil
+}
+
+func newFloretProviderAdapterRunTest(t *testing.T, provider Provider) (*floretProviderAdapter, *run, *threadstore.Store, *[]any) {
+	t.Helper()
+	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	if err := store.CreateThread(context.Background(), threadstore.Thread{
+		EndpointID: "env_floret_reasoning",
+		ThreadID:   "thread_floret_reasoning",
+		Title:      "Floret reasoning",
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	events := make([]any, 0, 4)
+	r := &run{
+		id:                        "run_floret_reasoning",
+		endpointID:                "env_floret_reasoning",
+		threadID:                  "thread_floret_reasoning",
+		messageID:                 "msg_floret_reasoning",
+		threadsDB:                 store,
+		onStreamEvent:             func(ev any) { events = append(events, ev) },
+		nextBlockIndex:            0,
+		currentTextBlockIndex:     -1,
+		currentThinkingBlockIndex: -1,
+		needNewTextBlock:          true,
+		needNewThinkingBlock:      true,
+	}
+	adapter := newFloretProviderAdapter(
+		provider,
+		"openai",
+		"gpt-5-mini",
+		"act",
+		ProviderControls{},
+		TurnBudgets{MaxSteps: 1},
+		"",
+		nil,
+		nil,
+	)
+	adapter.bindStreamRun(r)
+	return adapter, r, store, &events
 }
 
 func TestFloretProviderAdapter_UsesRedevenModelNameInsteadOfFloretPlaceholder(t *testing.T) {
@@ -216,6 +285,168 @@ func TestFloretProviderAdapter_KeepsLastNonNilProviderState(t *testing.T) {
 	got := adapter.currentProviderState()
 	if got == nil || got.ID != "resp_keep" {
 		t.Fatalf("currentProviderState=%#v, want last non-nil state", got)
+	}
+}
+
+func TestFloretProviderAdapter_StreamsReasoningWithoutRunEvent(t *testing.T) {
+	t.Parallel()
+
+	adapter, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+		streamReasoning: "Inspecting sources.",
+		resultText:      "Final answer.",
+	})
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		Model:    "gpt-5-mini",
+		Messages: []flruntime.ModelMessage{{Role: "user", Content: "inspect"}},
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	var reasoningEventSeen bool
+	for event := range stream {
+		if event.Type == flruntime.ModelEventReasoning && event.Text == "Inspecting sources." {
+			reasoningEventSeen = true
+		}
+	}
+	if !reasoningEventSeen {
+		t.Fatalf("missing ModelEventReasoning for streamed reasoning")
+	}
+
+	if len(r.assistantBlocks) != 2 {
+		t.Fatalf("assistantBlocks len=%d, want thinking and markdown blocks: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	thinking, ok := r.assistantBlocks[0].(*persistedThinkingBlock)
+	if !ok || thinking == nil || thinking.Content != "Inspecting sources." {
+		t.Fatalf("assistantBlocks[0]=%T %+v, want streamed thinking block", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	markdown, ok := r.assistantBlocks[1].(*persistedMarkdownBlock)
+	if !ok || markdown == nil || markdown.Content != "Final answer." {
+		t.Fatalf("assistantBlocks[1]=%T %+v, want final markdown block", r.assistantBlocks[1], r.assistantBlocks[1])
+	}
+	if len(*events) != 4 {
+		t.Fatalf("stream events=%d, want thinking start/delta and markdown start/delta: %#v", len(*events), *events)
+	}
+	if ev, ok := (*events)[0].(streamEventBlockStart); !ok || ev.BlockType != "thinking" || ev.BlockIndex != 0 {
+		t.Fatalf("event[0]=%T %+v, want thinking block-start", (*events)[0], (*events)[0])
+	}
+	if ev, ok := (*events)[1].(streamEventBlockDelta); !ok || ev.BlockIndex != 0 || ev.Delta != "Inspecting sources." {
+		t.Fatalf("event[1]=%T %+v, want thinking block-delta", (*events)[1], (*events)[1])
+	}
+
+	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 20)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	if len(runEvents) != 0 {
+		t.Fatalf("run events=%#v, want none for streamed reasoning", runEvents)
+	}
+}
+
+func TestFloretProviderAdapter_ResultReasoningFallbackWithoutRunEvent(t *testing.T) {
+	t.Parallel()
+
+	adapter, r, store, _ := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+		resultReasoning: "Fallback reasoning.",
+		omitResultText:  true,
+	})
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		Model:    "gpt-5-mini",
+		Messages: []flruntime.ModelMessage{{Role: "user", Content: "answer"}},
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	var reasoningEventSeen bool
+	for event := range stream {
+		if event.Type == flruntime.ModelEventReasoning && event.Text == "Fallback reasoning." {
+			reasoningEventSeen = true
+		}
+	}
+	if !reasoningEventSeen {
+		t.Fatalf("missing ModelEventReasoning for result reasoning fallback")
+	}
+
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks len=%d, want thinking block: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	thinking, ok := r.assistantBlocks[0].(*persistedThinkingBlock)
+	if !ok || thinking == nil || thinking.Content != "Fallback reasoning." {
+		t.Fatalf("assistantBlocks[0]=%T %+v, want fallback thinking block", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+
+	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 20)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	if len(runEvents) != 0 {
+		t.Fatalf("run events=%#v, want none for fallback reasoning", runEvents)
+	}
+}
+
+func TestFloretProviderAdapter_PersistsThinkingInTranscriptOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	adapter, r, store, _ := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+		streamReasoning: "Inspecting transcript contract.",
+		resultText:      "Final transcript answer.",
+	})
+	stream, err := adapter.StreamModel(ctx, flruntime.ModelRequest{
+		Model:    "gpt-5-mini",
+		Messages: []flruntime.ModelMessage{{Role: "user", Content: "answer"}},
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	for range stream {
+	}
+
+	r.assistantCreatedAtUnixMs = 1700000000000
+	assistantJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
+	}
+	if assistantText != "Final transcript answer." {
+		t.Fatalf("assistantText=%q, want visible answer only", assistantText)
+	}
+	if !strings.Contains(assistantJSON, `"type":"thinking"`) || !strings.Contains(assistantJSON, "Inspecting transcript contract.") {
+		t.Fatalf("assistant JSON missing thinking block: %s", assistantJSON)
+	}
+
+	if _, err := store.AppendMessage(ctx, "env_floret_reasoning", "thread_floret_reasoning", threadstore.Message{
+		ThreadID:        "thread_floret_reasoning",
+		EndpointID:      "env_floret_reasoning",
+		MessageID:       "msg_floret_reasoning",
+		Role:            "assistant",
+		Status:          "complete",
+		CreatedAtUnixMs: assistantAt,
+		UpdatedAtUnixMs: assistantAt,
+		TextContent:     assistantText,
+		MessageJSON:     assistantJSON,
+	}, "", ""); err != nil {
+		t.Fatalf("AppendMessage: %v", err)
+	}
+
+	messages, _, _, err := store.ListMessages(ctx, "env_floret_reasoning", "thread_floret_reasoning", 10, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	if len(messages) != 1 {
+		t.Fatalf("messages=%d, want 1", len(messages))
+	}
+	if messages[0].TextContent != "Final transcript answer." {
+		t.Fatalf("TextContent=%q, want visible answer only", messages[0].TextContent)
+	}
+	if !strings.Contains(messages[0].MessageJSON, `"type":"thinking"`) || !strings.Contains(messages[0].MessageJSON, "Inspecting transcript contract.") {
+		t.Fatalf("persisted message JSON missing thinking block: %s", messages[0].MessageJSON)
+	}
+
+	runEvents, err := store.ListRunEvents(ctx, "env_floret_reasoning", "run_floret_reasoning", 20)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	if len(runEvents) != 0 {
+		t.Fatalf("run events=%#v, want none for transcript reasoning", runEvents)
 	}
 }
 
