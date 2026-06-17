@@ -1,7 +1,7 @@
 import type { Component, JSX } from 'solid-js';
 import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, FileText, FolderOpen, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, Copy, FileText, FolderOpen, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -80,6 +80,7 @@ const THREAD_RAIL_WIDTH_MAX = 380;
 const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const LIVE_EVENT_RENDER_YIELD_SIZE = 8;
+const MESSAGE_COPY_RESET_MS = 1600;
 
 export {
   projectFlowerThreadListItem,
@@ -146,6 +147,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadRailResizing, setThreadRailResizing] = createSignal(false);
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
   const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
+  const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
   let threadLoadSequence = 0;
   let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
@@ -164,6 +166,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const persistingReadThreadIDs = new Set<string>();
   const pendingReadPersistenceSnapshots = new Map<string, FlowerThreadActivitySnapshot>();
   const liveCursors = new Map<string, number>();
+  let copiedMessageResetTimer: number | undefined;
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
   const selectedThreadLiveStatus = createMemo(() => selectedThread()?.status ?? 'idle');
@@ -1172,6 +1175,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       window.cancelAnimationFrame(transcriptScrollFrame);
       transcriptScrollFrame = 0;
     }
+    if (copiedMessageResetTimer !== undefined) {
+      window.clearTimeout(copiedMessageResetTimer);
+      copiedMessageResetTimer = undefined;
+    }
   });
 
   const yieldLiveEventRender = async () => {
@@ -1297,6 +1304,73 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
 
   const streamingCursor = () => <span class="flower-streaming-cursor" aria-hidden="true" />;
+
+  const formatMessageTime = (createdAtMs: number): string => {
+    const value = Math.floor(Number(createdAtMs ?? 0));
+    if (!Number.isFinite(value) || value <= 0) return '';
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '';
+    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const messageCopyText = (message: FlowerChatMessage, blocks: readonly FlowerRenderableMessageBlock[]): string => {
+    const blockText = blocks
+      .flatMap((block) => (
+        block.type === 'content' && block.block_type !== 'thinking'
+          ? [trimString(block.content)]
+          : []
+      ))
+      .filter(Boolean)
+      .join('\n\n');
+    return trimString(blockText || message.content);
+  };
+
+  const messageCopyActionKey = (message: FlowerChatMessage): string => `message:${message.id}:copy`;
+
+  const copyMessageText = async (message: FlowerChatMessage, text: string) => {
+    const value = trimString(text);
+    if (!value) return;
+    const key = messageCopyActionKey(message);
+    try {
+      await writeTextToClipboard(value);
+      if (copiedMessageResetTimer !== undefined) {
+        window.clearTimeout(copiedMessageResetTimer);
+      }
+      setCopiedMessageAction(key);
+      copiedMessageResetTimer = window.setTimeout(() => {
+        if (copiedMessageAction() === key) {
+          setCopiedMessageAction('');
+        }
+        copiedMessageResetTimer = undefined;
+      }, MESSAGE_COPY_RESET_MS);
+    } catch (error) {
+      setThreadActionError(getErrorMessage(error));
+    }
+  };
+
+  const messageCopyButton = (message: FlowerChatMessage, text: string, placement: 'assistant' | 'user'): JSX.Element | null => {
+    const value = trimString(text);
+    if (!value) return null;
+    const copied = () => copiedMessageAction() === messageCopyActionKey(message);
+    const label = () => copied() ? copy().chat.messageCopied : copy().chat.copyMessage;
+    return (
+      <button
+        type="button"
+        class={cn('flower-message-copy-button', `flower-message-copy-button-${placement}`)}
+        data-copied={copied() ? 'true' : 'false'}
+        aria-label={label()}
+        title={label()}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          void copyMessageText(message, value);
+        }}
+      >
+        <Copy class="flower-message-copy-icon flower-message-copy-icon-idle h-3.5 w-3.5" />
+        <Check class="flower-message-copy-icon flower-message-copy-icon-copied h-3.5 w-3.5" />
+      </button>
+    );
+  };
 
   const questionMode = (question: FlowerInputRequestQuestion): NonNullable<FlowerInputRequestQuestion['response_mode']> => {
     return question.response_mode;
@@ -1982,6 +2056,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     block: Extract<FlowerRenderableMessageBlock, { type: 'content' }>,
     streaming: boolean,
     failed: boolean,
+    copyAction: JSX.Element | null = null,
   ) => {
     const body = () => {
       if (block.block_type === 'markdown') {
@@ -1996,6 +2071,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       return <span class="flower-message-plain-text">{block.content}</span>;
     };
+    const contentBody = () => (
+      message.role === 'assistant' && copyAction && block.block_type !== 'thinking'
+        ? (
+          <div class="flower-message-assistant-copy-line">
+            <div class="flower-message-assistant-copy-body">{body()}</div>
+            {copyAction}
+          </div>
+        )
+        : body()
+    );
 
     return (
       <div class={cn(
@@ -2016,8 +2101,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <span>{copy().chat.messageErrorTitle}</span>
           </div>
         </Show>
-        {body()}
-        <Show when={streaming}>{streamingCursor()}</Show>
+        {contentBody()}
       </div>
     );
   };
@@ -2028,6 +2112,44 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (block?.type === 'content') return block.key;
     }
     return '';
+  };
+
+  const lastCopyableContentBlockKey = (blocks: readonly FlowerRenderableMessageBlock[]): string => {
+    for (let index = blocks.length - 1; index >= 0; index -= 1) {
+      const block = blocks[index];
+      if (block?.type === 'content' && block.block_type !== 'thinking' && trimString(block.content)) return block.key;
+    }
+    return '';
+  };
+
+  const messageBlockView = (
+    message: FlowerChatMessage,
+    block: () => FlowerRenderableMessageBlock,
+    streamingBlockKey: string,
+    failed: boolean,
+    copyText: string,
+    assistantCopyBlockKey: string,
+  ) => {
+    const activity = () => block().type === 'activity' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'activity' }> : null;
+    const content = () => block().type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null;
+    return (
+      <Show
+        when={activity()}
+        fallback={(
+          <Show when={content()}>
+            {(contentBlock) => {
+              const value = contentBlock();
+              const copyAction = message.role === 'assistant' && value.key === assistantCopyBlockKey
+                ? messageCopyButton(message, copyText, 'assistant')
+                : null;
+              return messageContentBubble(message, value, streamingBlockKey === value.key, failed, copyAction);
+            }}
+          </Show>
+        )}
+      >
+        {(activityBlockValue) => activityBlock(message.id, activityBlockValue().block_index, activityBlockValue().block, activityBlockValue().key)}
+      </Show>
+    );
   };
 
   const messageEntry = (entry: Extract<FlowerTimelineEntry, { type: 'message' }>) => {
@@ -2049,6 +2171,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       : null;
     const blocks = placeholderBlock ? [placeholderBlock] : entry.blocks;
     const streamingBlockKey = streaming ? lastContentBlockKey(blocks) : '';
+    const copyText = messageCopyText(message, blocks);
+    const messageTime = formatMessageTime(message.created_at_ms);
+    const assistantCopyBlockKey = message.role === 'assistant' ? lastCopyableContentBlockKey(blocks) : '';
     return (
       <div
         class={cn('flower-message-row', message.role === 'user' ? 'flower-message-row-user' : 'flower-message-row-assistant')}
@@ -2058,15 +2183,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       >
         <div class={cn('flower-message-block-stack', message.role === 'user' ? 'flower-message-block-stack-user' : 'flower-message-block-stack-assistant')}>
           <Index each={blocks}>
-            {(block) => (
-              <Show
-                when={block().type === 'activity' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'activity' }> : null}
-                fallback={messageContentBubble(message, block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }>, streamingBlockKey === block().key, failed)}
-              >
-                {(activity) => activityBlock(message.id, activity().block_index, activity().block, activity().key)}
-              </Show>
-            )}
+            {(block) => messageBlockView(message, block, streamingBlockKey, failed, copyText, assistantCopyBlockKey)}
           </Index>
+          <Show when={message.role === 'user' && (copyText || messageTime)}>
+            <div class="flower-message-action-row flower-message-action-row-user">
+              <Show when={messageTime}>
+                {(value) => <time class="flower-message-time" datetime={new Date(message.created_at_ms).toISOString()}>{value()}</time>}
+              </Show>
+              {messageCopyButton(message, copyText, 'user')}
+            </div>
+          </Show>
+          <Show when={streaming}>
+            <div class={cn('flower-message-streaming-tail', message.role === 'user' ? 'flower-message-streaming-tail-user' : 'flower-message-streaming-tail-assistant')}>
+              {streamingCursor()}
+            </div>
+          </Show>
         </div>
       </div>
     );

@@ -491,6 +491,19 @@ html.dark .flower-component-shell {
   color: var(--foreground);
 }
 
+.flower-message-assistant-copy-line {
+  display: flex;
+  max-width: min(100%, 58rem);
+  min-width: 0;
+  align-items: flex-end;
+  gap: 0.32rem;
+}
+
+.flower-message-assistant-copy-body {
+  min-width: 0;
+  max-width: 100%;
+}
+
 .flower-message-bubble-framed.flower-message-bubble-streaming {
   border-color: color-mix(in srgb, var(--primary) 28%, var(--flower-chat-surface-border));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 6%, transparent);
@@ -519,6 +532,105 @@ html.dark .flower-component-shell {
 .flower-message-placeholder {
   display: inline-block;
   width: 0.25rem;
+}
+
+.flower-message-action-row {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.3rem;
+  color: color-mix(in srgb, var(--muted-foreground) 66%, transparent);
+}
+
+.flower-message-action-row-user {
+  max-width: min(78%, var(--flower-chat-user-bubble-width));
+  align-self: flex-end;
+  padding: 0 0.16rem;
+}
+
+.flower-message-time {
+  color: currentColor;
+  font-size: 0.6875rem;
+  font-weight: 450;
+  line-height: 1;
+  user-select: text;
+}
+
+.flower-message-copy-button {
+  position: relative;
+  display: inline-flex;
+  width: 1.35rem;
+  height: 1.35rem;
+  flex: 0 0 auto;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.35rem;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted-foreground) 66%, transparent);
+  opacity: 0.72;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.flower-message-copy-button:hover,
+.flower-message-copy-button:focus-visible {
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+  color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
+  opacity: 1;
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.flower-message-copy-button[data-copied='true'] {
+  color: color-mix(in srgb, var(--primary) 72%, var(--foreground) 18%);
+  opacity: 1;
+}
+
+.flower-message-copy-button-user {
+  color: color-mix(in srgb, var(--foreground) 46%, transparent);
+}
+
+.flower-message-copy-button-assistant {
+  margin-bottom: 0.12rem;
+}
+
+.flower-message-copy-icon {
+  position: absolute;
+  transition:
+    opacity 120ms ease,
+    transform 120ms ease;
+}
+
+.flower-message-copy-icon-copied,
+.flower-message-copy-button[data-copied='true'] .flower-message-copy-icon-idle {
+  opacity: 0;
+  transform: scale(0.82);
+}
+
+.flower-message-copy-button[data-copied='true'] .flower-message-copy-icon-copied {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.flower-message-streaming-tail {
+  display: inline-flex;
+  min-height: 1.2rem;
+  align-items: center;
+  line-height: 1;
+}
+
+.flower-message-streaming-tail-user {
+  align-self: flex-end;
+  padding-right: 0.22rem;
+}
+
+.flower-message-streaming-tail-assistant {
+  align-self: flex-start;
 }
 
 .flower-streaming-cursor {
