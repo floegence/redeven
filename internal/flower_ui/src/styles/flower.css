@@ -1144,6 +1144,8 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline-button {
   appearance: none;
+  position: relative;
+  isolation: isolate;
   display: grid;
   width: 100%;
   min-width: 0;
@@ -1156,8 +1158,14 @@ html.dark .flower-component-shell {
   background: transparent;
   color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
   cursor: pointer;
+  overflow: hidden;
   padding: 0.125rem 0.25rem;
   text-align: left;
+}
+
+.flower-activity-inline-button > * {
+  position: relative;
+  z-index: 1;
 }
 
 .flower-activity-inline-button:disabled,
@@ -1181,6 +1189,30 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline-row-running .flower-activity-inline-icon {
   color: color-mix(in srgb, var(--primary) 74%, var(--foreground) 26%);
+}
+
+.flower-activity-inline-row-running .flower-activity-inline-button::before {
+  content: '';
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      100deg,
+      transparent 0%,
+      transparent 24%,
+      color-mix(in srgb, var(--primary) 7%, transparent) 36%,
+      color-mix(in srgb, white 38%, var(--primary) 20%) 48%,
+      color-mix(in srgb, var(--primary) 9%, transparent) 60%,
+      transparent 74%,
+      transparent 100%
+    );
+  opacity: 0;
+  transform: translateX(-112%);
+  animation: flower-activity-running-sheen 4.6s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+  will-change: transform, opacity;
 }
 
 .flower-activity-inline-row-waiting .flower-activity-inline-icon,
@@ -1273,6 +1305,24 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline-chevron-open {
   transform: rotate(180deg);
+}
+
+@keyframes flower-activity-running-sheen {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translateX(-112%);
+  }
+
+  34%,
+  68% {
+    opacity: 0.34;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(112%);
+  }
 }
 
 .flower-activity-inline-details {
@@ -3160,6 +3210,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 @media (prefers-reduced-motion: reduce) {
   .flower-streaming-cursor,
   .flower-streaming-cursor::before,
+  .flower-activity-inline-row-running .flower-activity-inline-button::before,
   .redeven-flower-icon-spin,
   .redeven-flower-icon-breathe,
   .flower-thread-wave-bar {
