@@ -376,6 +376,36 @@ describe('Local Environment Flower surface adapter', () => {
 
   it('launches environment card turns through the shared runtime launch contract', async () => {
     const calls: RuntimeFlowerRequest[] = [];
+    const contextAction = {
+      schema_version: 2,
+      action_id: 'assistant.ask.flower',
+      provider: 'desktop_welcome',
+      target: {
+        target_id: 'local:local',
+        locality: 'auto',
+      },
+      source: {
+        surface: 'desktop_welcome_environment_card',
+        surface_id: 'local',
+      },
+      execution_context: {
+        current_target_id: 'local:local',
+        source_env_public_id: '',
+        runtime_hint: 'auto',
+        session_source: 'desktop_welcome',
+      },
+      context: [{
+        kind: 'text_snapshot',
+        title: 'Local Environment',
+        detail: 'Local · Ready',
+        content: 'Environment: Local Environment\nEnvironment ID: local',
+      }],
+      presentation: {
+        label: 'Local Environment',
+        priority: 100,
+        status_label: 'Ready',
+      },
+    };
     const bridge = bridgeFor((request) => {
       calls.push(request);
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
@@ -388,7 +418,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     await launchLocalEnvironmentFlowerTurn(bridge, {
       prompt: 'inspect env',
-      context_action: { schema_version: 2, action_id: 'assistant.ask.flower' },
+      context_action: contextAction,
       working_dir: '/workspace/redeven',
       attachments: [{
         name: 'notes.txt',
@@ -402,17 +432,22 @@ describe('Local Environment Flower surface adapter', () => {
       working_dir: '/workspace/redeven',
       execution_mode: 'plan',
     });
-    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/runs')?.body).toMatchObject({
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/runs')?.body).toEqual({
+      thread_id: 'thread-card',
+      model: 'default/gpt-4.1',
       input: {
         text: 'inspect env',
         attachments: [{
           name: 'notes.txt',
-          mimeType: 'text/plain',
+          mime_type: 'text/plain',
           url: 'redeven://uploaded/notes',
         }],
-        context_action: { schema_version: 2, action_id: 'assistant.ask.flower' },
+        context_action: contextAction,
       },
-      options: { mode: 'plan' },
+      options: {
+        max_steps: 10,
+        mode: 'plan',
+      },
     });
   });
 });
