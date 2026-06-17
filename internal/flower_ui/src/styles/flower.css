@@ -765,6 +765,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-chat-md-block {
+  --flower-chat-md-code-font: SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', ui-monospace, monospace;
   display: block;
   min-width: 0;
   max-width: 100%;
@@ -788,9 +789,9 @@ html.dark .flower-component-shell {
 }
 
 .flower-chat-md-block hr {
-  margin: 1.1rem 0;
+  margin: 1.7rem 0 1.05rem;
   border: 0;
-  border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 72%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent);
 }
 
 .flower-chat-md-block :first-child,
@@ -856,19 +857,21 @@ html.dark .flower-component-shell {
 }
 
 .flower-chat-md-inline-code {
-  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 68%, transparent);
+  border: 1px solid color-mix(in srgb, var(--flower-chat-surface-border) 76%, var(--foreground) 24%);
   border-radius: 0.28rem;
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 88%, var(--foreground) 6%);
-  padding: 0.08rem 0.28rem;
-  color: color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.84em;
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 66%, var(--foreground) 24%);
+  padding: 0.07rem 0.3rem;
+  color: color-mix(in srgb, var(--foreground) 92%, var(--primary) 8%);
+  font-family: var(--flower-chat-md-code-font);
+  font-size: 0.86em;
+  font-weight: 560;
+  line-height: 1.25;
   white-space: break-spaces;
 }
 
 .flower-message-bubble-user .flower-chat-md-inline-code {
-  border-color: color-mix(in srgb, var(--primary) 24%, transparent);
-  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 74%, var(--primary) 10%);
+  border-color: color-mix(in srgb, var(--primary) 32%, var(--foreground) 18%);
+  background: color-mix(in srgb, var(--flower-chat-surface-elevated) 54%, var(--primary) 22%, var(--foreground) 10%);
 }
 
 .flower-chat-md-blockquote {
@@ -912,9 +915,10 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 84%, var(--foreground) 7%);
   padding: 0.78rem 2.45rem 0.78rem 0.82rem;
   color: color-mix(in srgb, var(--foreground) 90%, var(--primary) 10%);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8rem;
-  line-height: 1.6;
+  font-family: var(--flower-chat-md-code-font);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.68;
   white-space: pre;
   word-break: normal;
   overflow-wrap: normal;
