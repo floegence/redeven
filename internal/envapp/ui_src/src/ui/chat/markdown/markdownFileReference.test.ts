@@ -27,18 +27,18 @@ describe('parseMarkdownFileReference', () => {
 
   it('parses hash-style line labels from local file links', () => {
     const reference = parseMarkdownFileReference(
-      '/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md#L121',
+      '/Users/tangjianyin/Downloads/code/redeven/CODEX_UI.md#L121',
       'CODEX_UI.md#L121',
     );
 
     expect(reference).toEqual({
-      href: '/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md#L121',
-      path: '/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md',
+      href: '/Users/tangjianyin/Downloads/code/redeven/CODEX_UI.md#L121',
+      path: '/Users/tangjianyin/Downloads/code/redeven/CODEX_UI.md',
       displayName: 'CODEX_UI.md',
       lineLabel: 'L121',
       lineNumber: 121,
       columnNumber: null,
-      title: '/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md#L121',
+      title: '/Users/tangjianyin/Downloads/code/redeven/CODEX_UI.md#L121',
     });
   });
 

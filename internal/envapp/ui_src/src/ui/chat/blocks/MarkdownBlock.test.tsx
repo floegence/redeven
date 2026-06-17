@@ -365,7 +365,7 @@ describe('MarkdownBlock', () => {
   it('renders codex file links with hash-style line labels without splitting them into headings', async () => {
     const content = [
       'Evidence in',
-      '[CODEX_UI.md#L121](/Users/tangjianyin/Downloads/code/redeven/docs/CODEX_UI.md#L121)',
+      '[CODEX_UI.md#L121](/Users/tangjianyin/Downloads/code/redeven/CODEX_UI.md#L121)',
       'stays a file reference.',
     ].join(' ');
     const normalized = normalizeMarkdownForDisplay(content);

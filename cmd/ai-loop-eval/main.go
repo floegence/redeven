@@ -753,7 +753,7 @@ func evalReadonlyToolAllowlist() []string {
 		"ask_user",
 		"exit_plan_mode",
 		"file.read",
-		"knowledge.search",
+		"okf.search",
 		"task_complete",
 		"terminal.exec",
 		"web.search",

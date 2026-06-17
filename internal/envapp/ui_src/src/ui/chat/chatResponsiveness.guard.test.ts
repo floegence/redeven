@@ -15,7 +15,7 @@ function readText(relPath: string): string {
 
 describe('chat responsiveness guardrails', () => {
   it('documents the local responsiveness contract for heavy chat blocks', () => {
-    const contract = readText('docs/chat-responsiveness-contract.md');
+    const contract = readText('reference/chat-responsiveness-contract.md');
 
     expect(contract).toContain('Large diffs must prefer a worker-backed diff model.');
     expect(contract).toContain('Large code blocks should prefer worker-backed highlighting when available.');

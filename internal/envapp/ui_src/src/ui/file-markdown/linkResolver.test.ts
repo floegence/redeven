@@ -3,9 +3,9 @@ import { resolveFileMarkdownLink, resolveFileMarkdownLocalPath } from './linkRes
 
 describe('file markdown link resolver', () => {
   it('resolves relative document links against the current markdown file directory', () => {
-    expect(resolveFileMarkdownLocalPath('docs/CAPABILITY_PERMISSIONS.md', '/workspace/README.md'))
-      .toBe('/workspace/docs/CAPABILITY_PERMISSIONS.md');
-    expect(resolveFileMarkdownLocalPath('../PERMISSION_POLICY.md#trust', '/workspace/docs/README.md'))
+    expect(resolveFileMarkdownLocalPath('CAPABILITY_PERMISSIONS.md', '/workspace/README.md'))
+      .toBe('/workspace/CAPABILITY_PERMISSIONS.md');
+    expect(resolveFileMarkdownLocalPath('../PERMISSION_POLICY.md#trust', '/workspace/reference/README.md'))
       .toBe('/workspace/PERMISSION_POLICY.md');
   });
 
@@ -16,29 +16,29 @@ describe('file markdown link resolver', () => {
       targetId: 'target-heading',
     });
 
-    expect(resolveFileMarkdownLink('https://example.com/docs', '/workspace/README.md')).toEqual({
+    expect(resolveFileMarkdownLink('https://example.com/help', '/workspace/README.md')).toEqual({
       kind: 'external',
-      href: 'https://example.com/docs',
+      href: 'https://example.com/help',
     });
 
-    expect(resolveFileMarkdownLink('/workspace/docs/PERMISSION_POLICY.md#trust', '/workspace/README.md')).toEqual({
+    expect(resolveFileMarkdownLink('/workspace/PERMISSION_POLICY.md#trust', '/workspace/README.md')).toEqual({
       kind: 'file',
-      href: '/workspace/docs/PERMISSION_POLICY.md#trust',
-      path: '/workspace/docs/PERMISSION_POLICY.md',
+      href: '/workspace/PERMISSION_POLICY.md#trust',
+      path: '/workspace/PERMISSION_POLICY.md',
       fragment: 'trust',
     });
 
-    expect(resolveFileMarkdownLink('docs/PERMISSION_POLICY.md')).toEqual({
+    expect(resolveFileMarkdownLink('PERMISSION_POLICY.md')).toEqual({
       kind: 'unresolved-local',
-      href: 'docs/PERMISSION_POLICY.md',
+      href: 'PERMISSION_POLICY.md',
       reason: 'missing_current_file_path',
     });
   });
 
   it('normalizes dot segments without escaping the filesystem root', () => {
-    expect(resolveFileMarkdownLocalPath('../../README.md', '/workspace/docs/security/INDEX.md'))
+    expect(resolveFileMarkdownLocalPath('../../README.md', '/workspace/reference/security/INDEX.md'))
       .toBe('/workspace/README.md');
-    expect(resolveFileMarkdownLocalPath('../../../README.md', '/workspace/docs/security/INDEX.md'))
+    expect(resolveFileMarkdownLocalPath('../../../README.md', '/workspace/reference/security/INDEX.md'))
       .toBe('/README.md');
   });
 });

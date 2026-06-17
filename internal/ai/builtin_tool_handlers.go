@@ -30,8 +30,8 @@ func toolSuccessSummary(toolName string) string {
 		return "plan.exit.requested"
 	case "web.search":
 		return "web.search"
-	case "knowledge.search":
-		return "knowledge.search"
+	case "okf.search":
+		return "okf.search"
 	case "use_skill":
 		return "skill.activated"
 	case "subagents":
@@ -646,14 +646,14 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:         100,
 		},
 		{
-			Name:             "knowledge.search",
-			Description:      "Search the embedded Redeven knowledge bundle and return scoped card summaries without internal file-level evidence details.",
+			Name:             "okf.search",
+			Description:      "Search the embedded Redeven OKF bundle and return scoped concept summaries.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}, "max_results": map[string]any{"type": "integer", "minimum": 1, "maximum": 8}, "tags": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"query"}, "additionalProperties": false}),
 			ParallelSafe:     true,
 			Mutating:         false,
 			RequiresApproval: false,
 			Source:           "builtin",
-			Namespace:        "builtin.knowledge",
+			Namespace:        "builtin.okf",
 			Priority:         100,
 		},
 		{

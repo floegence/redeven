@@ -64,8 +64,8 @@ var builtinDefinitions = map[string]Definition{
 		RequiresApproval: false,
 		Presentation:     presentation(ToolPresentationResearch, "readonly", "web_search", "research", "web_search"),
 	},
-	"knowledge.search": {
-		Name:             "knowledge.search",
+	"okf.search": {
+		Name:             "okf.search",
 		Mutating:         false,
 		RequiresApproval: false,
 		Presentation:     presentation(ToolPresentationResearch, "readonly", "structured", "research", "result", "args"),

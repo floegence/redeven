@@ -167,19 +167,19 @@ func TestPathScope_ResolveTargetPath_AllowsRelativeProjectPath(t *testing.T) {
 
 	home := t.TempDir()
 	project := filepath.Join(home, "workspace")
-	if err := os.MkdirAll(filepath.Join(project, "docs"), 0o755); err != nil {
-		t.Fatalf("MkdirAll docs: %v", err)
+	if err := os.MkdirAll(filepath.Join(project, "reference"), 0o755); err != nil {
+		t.Fatalf("MkdirAll reference: %v", err)
 	}
 
 	scope, err := NewPathScope(home, project)
 	if err != nil {
 		t.Fatalf("NewPathScope: %v", err)
 	}
-	got, err := scope.ResolveTargetPath("docs/readme.md")
+	got, err := scope.ResolveTargetPath("reference/readme.md")
 	if err != nil {
 		t.Fatalf("ResolveTargetPath: %v", err)
 	}
-	wantDir := canonicalTestPath(t, filepath.Join(project, "docs"))
+	wantDir := canonicalTestPath(t, filepath.Join(project, "reference"))
 	want := filepath.Join(wantDir, "readme.md")
 	if filepath.Clean(got) != filepath.Clean(want) {
 		t.Fatalf("got=%q, want %q", got, want)

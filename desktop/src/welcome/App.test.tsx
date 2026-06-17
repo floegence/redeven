@@ -133,7 +133,7 @@ function testControlPlaneSummary(input: Readonly<{
       provider_id: 'example_control_plane',
       display_name: 'Example Control Plane',
       provider_origin: providerOrigin,
-      documentation_url: `${providerOrigin}/docs/control-plane-providers`,
+      documentation_url: `${providerOrigin}/help/control-plane-providers`,
       access_points: [accessPoint],
     },
     account: {

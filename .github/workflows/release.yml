@@ -51,12 +51,12 @@ jobs:
       - name: Build embedded assets
         run: ./scripts/build_assets.sh
 
-      - name: Collect knowledge bundle assets
+      - name: Collect OKF bundle assets
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp internal/knowledge/dist/knowledge_bundle.manifest.json dist/
-          cp internal/knowledge/dist/knowledge_bundle.sha256 dist/
+          cp internal/okf/dist/okf_bundle.manifest.json dist/
+          cp internal/okf/dist/okf_bundle.sha256 dist/
           cp LICENSE dist/LICENSE
           cp THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
 
@@ -94,8 +94,8 @@ jobs:
           path: |
             dist/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
             dist/redeven-gateway_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
-            dist/knowledge_bundle.manifest.json
-            dist/knowledge_bundle.sha256
+            dist/okf_bundle.manifest.json
+            dist/okf_bundle.sha256
             dist/LICENSE
             dist/THIRD_PARTY_NOTICES.md
           if-no-files-found: error
@@ -276,14 +276,14 @@ jobs:
           find dist/downloads -type f -name 'redeven-gateway_*.tar.gz' -exec cp {} dist/ \;
           find dist/downloads -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.dmg' \) -exec cp {} dist/ \;
 
-          manifest_src="$(find dist/downloads -type f -name 'knowledge_bundle.manifest.json' -print -quit)"
-          checksum_src="$(find dist/downloads -type f -name 'knowledge_bundle.sha256' -print -quit)"
+          manifest_src="$(find dist/downloads -type f -name 'okf_bundle.manifest.json' -print -quit)"
+          checksum_src="$(find dist/downloads -type f -name 'okf_bundle.sha256' -print -quit)"
 
           test -n "${manifest_src}"
           test -n "${checksum_src}"
 
-          cp "${manifest_src}" dist/knowledge_bundle.manifest.json
-          cp "${checksum_src}" dist/knowledge_bundle.sha256
+          cp "${manifest_src}" dist/okf_bundle.manifest.json
+          cp "${checksum_src}" dist/okf_bundle.sha256
           cp LICENSE dist/LICENSE
           cp THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
 
@@ -291,7 +291,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          sha256sum redeven_*.tar.gz redeven-gateway_*.tar.gz Redeven-Desktop-* LICENSE THIRD_PARTY_NOTICES.md knowledge_bundle.manifest.json knowledge_bundle.sha256 > SHA256SUMS
+          sha256sum redeven_*.tar.gz redeven-gateway_*.tar.gz Redeven-Desktop-* LICENSE THIRD_PARTY_NOTICES.md okf_bundle.manifest.json okf_bundle.sha256 > SHA256SUMS
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -375,5 +375,5 @@ jobs:
             dist/SHA256SUMS.pem \
             dist/LICENSE \
             dist/THIRD_PARTY_NOTICES.md \
-            dist/knowledge_bundle.manifest.json \
-            dist/knowledge_bundle.sha256
+            dist/okf_bundle.manifest.json \
+            dist/okf_bundle.sha256

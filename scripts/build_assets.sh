@@ -50,16 +50,16 @@ build_codeapp_ui() {
   ui_pkg_log "Code App UI: done."
 }
 
-build_knowledge_bundle() {
-  local script="$ROOT_DIR/scripts/build_knowledge_bundle.sh"
+build_okf_bundle() {
+  local script="$ROOT_DIR/scripts/build_okf_bundle.sh"
   if [ ! -x "$script" ]; then
-    ui_pkg_die "missing executable knowledge bundle builder: $script"
+    ui_pkg_die "missing executable OKF bundle builder: $script"
   fi
 
   ui_pkg_log ""
-  ui_pkg_log "Knowledge bundle: building..."
+  ui_pkg_log "OKF bundle: building..."
   "$script"
-  ui_pkg_log "Knowledge bundle: done."
+  ui_pkg_log "OKF bundle: done."
 }
 
 verify_third_party_notices() {
@@ -86,7 +86,7 @@ main() {
 
   build_envapp_ui
   build_codeapp_ui
-  build_knowledge_bundle
+  build_okf_bundle
   verify_third_party_notices
 
   ui_pkg_log ""

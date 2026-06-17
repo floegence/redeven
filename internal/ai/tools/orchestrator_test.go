@@ -26,8 +26,8 @@ func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 
 	home := t.TempDir()
 	workspace := filepath.Join(home, "workspace")
-	if err := os.MkdirAll(filepath.Join(workspace, "docs"), 0o755); err != nil {
-		t.Fatalf("MkdirAll docs: %v", err)
+	if err := os.MkdirAll(filepath.Join(workspace, "reference"), 0o755); err != nil {
+		t.Fatalf("MkdirAll reference: %v", err)
 	}
 
 	inv := Invocation{
@@ -35,7 +35,7 @@ func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 		WorkingDir:   workspace,
 		AgentHomeDir: home,
 		Args: map[string]any{
-			"cwd": filepath.Join(workspace, "..", "workspace", "docs") + string(os.PathSeparator),
+			"cwd": filepath.Join(workspace, "..", "workspace", "reference") + string(os.PathSeparator),
 		},
 	}
 	toolErr := ClassifyError(inv, errors.New("invalid path"))
@@ -48,9 +48,9 @@ func TestClassifyError_InvalidPathProducesNormalizedArgs(t *testing.T) {
 	if !toolErr.Retryable {
 		t.Fatalf("retryable=false, want true")
 	}
-	wantDir, err := filepath.EvalSymlinks(filepath.Join(workspace, "docs"))
+	wantDir, err := filepath.EvalSymlinks(filepath.Join(workspace, "reference"))
 	if err != nil {
-		t.Fatalf("EvalSymlinks(docs): %v", err)
+		t.Fatalf("EvalSymlinks(reference): %v", err)
 	}
 	if got := toolErr.NormalizedArgs["cwd"]; got != wantDir {
 		t.Fatalf("normalized cwd=%v, want=%v", got, wantDir)
@@ -66,7 +66,7 @@ func TestClassifyError_InvalidPathNormalizesRelativePath(t *testing.T) {
 		WorkingDir:   root,
 		AgentHomeDir: root,
 		Args: map[string]any{
-			"workdir": "docs/readme.md",
+			"workdir": "reference/readme.md",
 		},
 	}
 	toolErr := ClassifyError(inv, errors.New("path must be absolute"))
@@ -80,7 +80,7 @@ func TestClassifyError_InvalidPathNormalizesRelativePath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EvalSymlinks(root): %v", err)
 	}
-	want := filepath.Join(resolvedRoot, "docs", "readme.md")
+	want := filepath.Join(resolvedRoot, "reference", "readme.md")
 	if got := toolErr.NormalizedArgs["workdir"]; got != want {
 		t.Fatalf("normalized workdir=%v, want=%v", got, want)
 	}
@@ -98,8 +98,8 @@ func TestClassifyError_InvalidPathNormalizesAbsolutePathOutsideWorkingDir(t *tes
 	if err := os.MkdirAll(other, 0o755); err != nil {
 		t.Fatalf("MkdirAll other: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(other, "docs"), 0o755); err != nil {
-		t.Fatalf("MkdirAll other/docs: %v", err)
+	if err := os.MkdirAll(filepath.Join(other, "reference"), 0o755); err != nil {
+		t.Fatalf("MkdirAll other/reference: %v", err)
 	}
 
 	inv := Invocation{
@@ -107,16 +107,16 @@ func TestClassifyError_InvalidPathNormalizesAbsolutePathOutsideWorkingDir(t *tes
 		WorkingDir:   project,
 		AgentHomeDir: home,
 		Args: map[string]any{
-			"cwd": filepath.Join(other, "..", "other", "docs") + string(os.PathSeparator),
+			"cwd": filepath.Join(other, "..", "other", "reference") + string(os.PathSeparator),
 		},
 	}
 	toolErr := ClassifyError(inv, errors.New("invalid cwd"))
 	if toolErr == nil {
 		t.Fatalf("expected tool error")
 	}
-	want, err := filepath.EvalSymlinks(filepath.Join(other, "docs"))
+	want, err := filepath.EvalSymlinks(filepath.Join(other, "reference"))
 	if err != nil {
-		t.Fatalf("EvalSymlinks(other/docs): %v", err)
+		t.Fatalf("EvalSymlinks(other/reference): %v", err)
 	}
 	if got := toolErr.NormalizedArgs["cwd"]; got != want {
 		t.Fatalf("normalized cwd=%v, want=%v", got, want)

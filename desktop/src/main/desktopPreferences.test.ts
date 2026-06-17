@@ -83,7 +83,7 @@ function buildTestControlPlaneProvider(providerOrigin = 'https://redeven.test') 
     provider_id: 'example_control_plane',
     display_name: 'Example Control Plane',
     provider_origin: providerOrigin,
-    documentation_url: `${providerOrigin}/docs/control-plane-providers`,
+    documentation_url: `${providerOrigin}/help/control-plane-providers`,
     access_points: [testAccessPoint(providerOrigin)],
   });
   if (!provider) {
@@ -1539,7 +1539,7 @@ describe('desktopPreferences', () => {
       provider_id: 'example_control_plane',
       display_name: 'Example Control Plane',
       provider_origin: 'https://redeven.test',
-      documentation_url: 'https://redeven.test/docs/control-plane-providers',
+      documentation_url: 'https://redeven.test/help/control-plane-providers',
       access_points: [
         devAccessPoint,
         {

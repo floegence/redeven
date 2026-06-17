@@ -21,10 +21,10 @@
 <p align="center">
   <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.26.3-00ADD8?style=flat-square&logo=go"></a>
   <a href="https://nodejs.org/"><img alt="Node Version" src="https://img.shields.io/badge/Node.js-24-339933?style=flat-square&logo=node.js"></a>
-  <a href="docs/ENV_APP.md"><img alt="Redeven Workspace" src="https://img.shields.io/badge/Redeven-Workspace-6C3BFF?style=flat-square"></a>
-  <a href="docs/CODE_APP.md"><img alt="Browser Editor" src="https://img.shields.io/badge/Browser-Editor-007ACC?style=flat-square"></a>
-  <a href="docs/DESKTOP.md"><img alt="Desktop App" src="https://img.shields.io/badge/Desktop-App-47848F?style=flat-square&logo=electron"></a>
-  <a href="docs/AI_AGENT.md"><img alt="AI Assistance" src="https://img.shields.io/badge/AI-Assistance-FF4FA3?style=flat-square"></a>
+  <a href="ENV_APP.md"><img alt="Redeven Workspace" src="https://img.shields.io/badge/Redeven-Workspace-6C3BFF?style=flat-square"></a>
+  <a href="CODE_APP.md"><img alt="Browser Editor" src="https://img.shields.io/badge/Browser-Editor-007ACC?style=flat-square"></a>
+  <a href="DESKTOP.md"><img alt="Desktop App" src="https://img.shields.io/badge/Desktop-App-47848F?style=flat-square&logo=electron"></a>
+  <a href="AI_AGENT.md"><img alt="AI Assistance" src="https://img.shields.io/badge/AI-Assistance-FF4FA3?style=flat-square"></a>
   <a href="https://github.com/floegence/redeven/releases"><img alt="Releases" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
 </p>
 
@@ -38,7 +38,7 @@ It runs on your machine, your remote servers, or any reachable SSH host. Your fi
 - **The runtime is the trust boundary** — a single Go binary owns files, terminals, monitoring, Git, web-service forwarding, Workbench layout, notes, Browser Editor setup, Flower, and Codex gateway access.
 - **Transport and policy stay explicit** — Flowersec carries encrypted RPC and stream traffic, while session grants, local permission policy, filesystem scope, and local secrets constrain what each session can do.
 
-![Redeven architecture overview](docs/images/readme-architecture-overview.png)
+![Redeven architecture overview](assets/readme/architecture-overview.png)
 
 ## Quick start
 
@@ -50,7 +50,7 @@ Two paths to get started: Desktop (recommended for most users) or CLI.
 2. Open the app. Choose your environment: Local, Provider, SSH Host, or a saved URL.
 3. Start working — the workspace opens in your browser automatically.
 
-For remote machines: Desktop can auto-install the matching Redeven release over SSH, then explicitly connect that managed SSH runtime to a provider Environment when you choose to. No manual setup on the remote host. See [`docs/DESKTOP.md`](docs/DESKTOP.md) for details.
+For remote machines: Desktop can auto-install the matching Redeven release over SSH, then explicitly connect that managed SSH runtime to a provider Environment when you choose to. No manual setup on the remote host. See [`DESKTOP.md`](DESKTOP.md) for details.
 
 ### CLI
 
@@ -87,13 +87,13 @@ Interactive terminals use Redeven's rich runtime presentation by default: a comp
 
 | Surface | What it gives you | Read |
 |---|---|---|
-| Files and Git | File upload/download, inline preview/edit, folder-scoped Git changes, diffs, and stash workflows. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
-| Terminal | Multi-tab terminals rooted in the directories you are working with, under the same runtime permission model. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
-| Monitor | CPU, memory, disk, network, and process views from the endpoint runtime. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
-| Browser Editor | Browser editor sessions set up explicitly by Desktop, isolated per workspace. | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
-| Web Services | Runtime-managed service registration and port-forward access without hand-written SSH tunnels. | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
-| Flower and Codex | Optional AI surfaces that use runtime-validated tools and local model/host configuration. | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md), [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
-| Desktop | Native launcher for local, provider-hosted, SSH-bootstrapped, and saved Local UI environments. | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
+| Files and Git | File upload/download, inline preview/edit, folder-scoped Git changes, diffs, and stash workflows. | [`ENV_APP.md`](ENV_APP.md) |
+| Terminal | Multi-tab terminals rooted in the directories you are working with, under the same runtime permission model. | [`ENV_APP.md`](ENV_APP.md) |
+| Monitor | CPU, memory, disk, network, and process views from the endpoint runtime. | [`ENV_APP.md`](ENV_APP.md) |
+| Browser Editor | Browser editor sessions set up explicitly by Desktop, isolated per workspace. | [`CODE_APP.md`](CODE_APP.md) |
+| Web Services | Runtime-managed service registration and port-forward access without hand-written SSH tunnels. | [`ENV_APP.md`](ENV_APP.md) |
+| Flower and Codex | Optional AI surfaces that use runtime-validated tools and local model/host configuration. | [`AI_AGENT.md`](AI_AGENT.md), [`AI_SETTINGS.md`](AI_SETTINGS.md), [`CODEX_UI.md`](CODEX_UI.md) |
+| Desktop | Native launcher for local, provider-hosted, SSH-bootstrapped, and saved Local UI environments. | [`DESKTOP.md`](DESKTOP.md) |
 
 ## Security, without stealing the spotlight
 
@@ -106,7 +106,7 @@ Redeven leads with capability, but the runtime is still the trust boundary becau
 - Local config, E2EE material, audit logs, and diagnostics stay in the endpoint state directory.
 - GitHub Releases remain the public source of truth for binaries, checksums, and signatures.
 
-Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md), [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md), and [`docs/RELEASE.md`](docs/RELEASE.md).
+Read the full contract in [`CAPABILITY_PERMISSIONS.md`](CAPABILITY_PERMISSIONS.md), [`PERMISSION_POLICY.md`](PERMISSION_POLICY.md), and [`RELEASE.md`](RELEASE.md).
 
 ## Documentation
 
@@ -114,15 +114,15 @@ Read the full contract in [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PER
 
 | I want to... | Read |
 |---|---|
-| Work with files, terminals, monitoring, notes, ports, and settings | [`docs/ENV_APP.md`](docs/ENV_APP.md) |
-| Run the browser editor through Redeven | [`docs/CODE_APP.md`](docs/CODE_APP.md) |
-| Package, operate, or debug Redeven Desktop | [`docs/DESKTOP.md`](docs/DESKTOP.md) |
-| Configure optional AI assistance | [`docs/AI_AGENT.md`](docs/AI_AGENT.md), [`docs/AI_SETTINGS.md`](docs/AI_SETTINGS.md) |
-| Connect Codex to the same workspace | [`docs/CODEX_UI.md`](docs/CODEX_UI.md) |
-| Review permissions and trust boundaries | [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md), [`docs/PERMISSION_POLICY.md`](docs/PERMISSION_POLICY.md) |
-| Integrate a compatible Redeven provider | [`RCPP v2 spec`](docs/protocol/rcpp-v2.md), [`RCPP v2 OpenAPI`](docs/openapi/rcpp-v2.yaml) |
-| Refresh or audit the embedded knowledge bundle | [`docs/KNOWLEDGE.md`](docs/KNOWLEDGE.md) |
-| Verify releases and artifacts | [`docs/RELEASE.md`](docs/RELEASE.md) |
+| Work with files, terminals, monitoring, notes, ports, and settings | [`ENV_APP.md`](ENV_APP.md) |
+| Run the browser editor through Redeven | [`CODE_APP.md`](CODE_APP.md) |
+| Package, operate, or debug Redeven Desktop | [`DESKTOP.md`](DESKTOP.md) |
+| Configure optional AI assistance | [`AI_AGENT.md`](AI_AGENT.md), [`AI_SETTINGS.md`](AI_SETTINGS.md) |
+| Connect Codex to the same workspace | [`CODEX_UI.md`](CODEX_UI.md) |
+| Review permissions and trust boundaries | [`CAPABILITY_PERMISSIONS.md`](CAPABILITY_PERMISSIONS.md), [`PERMISSION_POLICY.md`](PERMISSION_POLICY.md) |
+| Integrate a compatible Redeven provider | [`RCPP v2 spec`](spec/protocol/rcpp-v2.md), [`RCPP v2 OpenAPI`](spec/openapi/rcpp-v2.yaml) |
+| Refresh or audit the embedded OKF bundle | [`OKF.md`](OKF.md) |
+| Verify releases and artifacts | [`RELEASE.md`](RELEASE.md) |
 
 ## For developers
 
@@ -157,7 +157,7 @@ node scripts/generate_third_party_notices.mjs --check
 Notes:
 
 - `internal/**/dist/` assets are generated and embedded via Go `embed`.
-- Frontend `dist` assets are not checked into git. The tracked exception is `internal/knowledge/dist/*`, which stays committed as verifiable knowledge bundle release metadata.
+- Frontend `dist` assets are not checked into git. The tracked exception is `internal/okf/dist/*`, which stays committed as verifiable OKF bundle release metadata.
 - `THIRD_PARTY_NOTICES.md` is generated from Go modules and JavaScript lockfiles. Run `node scripts/generate_third_party_notices.mjs` after dependency changes, then keep `--check` green.
 - `./scripts/lint_ui.sh`, `./scripts/check_desktop.sh`, `./scripts/build_assets.sh`, and `go test ./...` are the main source-level checks.
 - `./scripts/dev_desktop.sh` starts Desktop from the current checkout or worktree with a freshly bundled runtime.
@@ -169,8 +169,8 @@ Notes:
 <summary>Local state, release paths, and troubleshooting</summary>
 
 - Local Environment state defaults to `~/.redeven/local-environment/`; Desktop and standalone runtime mode also share the profile catalog under `~/.redeven/catalog/`.
-- GitHub Releases are the public source of truth for versioned CLI tarballs, Desktop installers, checksums, and signatures. See [`docs/RELEASE.md`](docs/RELEASE.md).
-- For feature-specific troubleshooting, start with [`docs/ENV_APP.md`](docs/ENV_APP.md), [`docs/CODE_APP.md`](docs/CODE_APP.md), and [`docs/DESKTOP.md`](docs/DESKTOP.md).
+- GitHub Releases are the public source of truth for versioned CLI tarballs, Desktop installers, checksums, and signatures. See [`RELEASE.md`](RELEASE.md).
+- For feature-specific troubleshooting, start with [`ENV_APP.md`](ENV_APP.md), [`CODE_APP.md`](CODE_APP.md), and [`DESKTOP.md`](DESKTOP.md).
 
 </details>
 

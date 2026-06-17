@@ -89,7 +89,7 @@ func TestDisplayNameForFilePathStripsContentRefSuffixes(t *testing.T) {
 		"/workspace/a.md#dcbdf9b8c27f#e1703606242a": "a.md",
 		"a.md#L47":                  "a.md",
 		"notes#literal":             "notes#literal",
-		"/workspace/docs/readme.md": "readme.md",
+		"/workspace/reference/readme.md": "readme.md",
 	}
 	for in, want := range cases {
 		if got := displayNameForFilePath(in); got != want {

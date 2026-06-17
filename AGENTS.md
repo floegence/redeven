@@ -293,8 +293,8 @@ Run the CI-aligned local checks before integration:
 - `./scripts/check_docker_runtime_e2e.sh`
 - `./scripts/open_source_hygiene_check.sh --staged`
 - `./scripts/open_source_hygiene_check.sh --all`
-- `./scripts/knowledge/check_source_integrity.sh`
-- `./scripts/build_knowledge_bundle.sh --verify-only`
+- `./scripts/okf/check_source_integrity.sh`
+- `./scripts/build_okf_bundle.sh --verify-only`
 - `./scripts/build_assets.sh`
 - `go test ./...`
 - `golangci-lint run ./...`

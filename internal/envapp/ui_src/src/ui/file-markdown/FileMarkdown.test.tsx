@@ -542,7 +542,7 @@ describe('FileMarkdown', () => {
     const dispose = render(() => (
       <FileMarkdown
         filePath="/workspace/README.md"
-        content={'| Item | Link |\n| --- | --- |\n| Review | [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md) |'}
+        content={'| Item | Link |\n| --- | --- |\n| Review | [`CAPABILITY_PERMISSIONS.md`](CAPABILITY_PERMISSIONS.md) |'}
         onOpenFileLink={openFileLink}
       />
     ), host);
@@ -550,15 +550,15 @@ describe('FileMarkdown', () => {
     try {
       await flushAsync();
 
-      const link = host.querySelector<HTMLAnchorElement>('a[href="docs/CAPABILITY_PERMISSIONS.md"]');
+      const link = host.querySelector<HTMLAnchorElement>('a[href="CAPABILITY_PERMISSIONS.md"]');
       expect(link).toBeTruthy();
 
       link!.click();
 
       expect(openFileLink).toHaveBeenCalledWith({
-        path: '/workspace/docs/CAPABILITY_PERMISSIONS.md',
+        path: '/workspace/CAPABILITY_PERMISSIONS.md',
         fragment: '',
-        href: 'docs/CAPABILITY_PERMISSIONS.md',
+        href: 'CAPABILITY_PERMISSIONS.md',
       });
       expect(window.location.pathname).toBe('/_redeven_proxy/env/');
     } finally {
@@ -574,7 +574,7 @@ describe('FileMarkdown', () => {
 
     const dispose = render(() => (
       <FileMarkdown
-        filePath="/workspace/docs/README.md"
+        filePath="/workspace/reference/README.md"
         content={'<a href="../PERMISSION_POLICY.md#trust">Policy</a>'}
         onOpenFileLink={openFileLink}
       />
@@ -604,7 +604,7 @@ describe('FileMarkdown', () => {
 
     const dispose = render(() => (
       <FileMarkdown
-        content={'[Policy](docs/PERMISSION_POLICY.md)'}
+        content={'[Policy](PERMISSION_POLICY.md)'}
         onUnresolvedLocalLink={unresolved}
       />
     ), host);
@@ -612,9 +612,9 @@ describe('FileMarkdown', () => {
     try {
       await flushAsync();
 
-      host.querySelector<HTMLAnchorElement>('a[href="docs/PERMISSION_POLICY.md"]')?.click();
+      host.querySelector<HTMLAnchorElement>('a[href="PERMISSION_POLICY.md"]')?.click();
 
-      expect(unresolved).toHaveBeenCalledWith('docs/PERMISSION_POLICY.md', 'missing_current_file_path');
+      expect(unresolved).toHaveBeenCalledWith('PERMISSION_POLICY.md', 'missing_current_file_path');
       expect(window.location.pathname).toBe('/_redeven_proxy/env/');
     } finally {
       dispose();
@@ -629,7 +629,7 @@ describe('FileMarkdown', () => {
     const dispose = render(() => (
       <FileMarkdown
         filePath="/workspace/README.md"
-        content={'[External](https://example.com/docs)'}
+        content={'[External](https://example.com/help)'}
         onOpenFileLink={openFileLink}
       />
     ), host);
@@ -637,7 +637,7 @@ describe('FileMarkdown', () => {
     try {
       await flushAsync();
 
-      const link = host.querySelector<HTMLAnchorElement>('a[href="https://example.com/docs"]');
+      const link = host.querySelector<HTMLAnchorElement>('a[href="https://example.com/help"]');
       const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
       link?.dispatchEvent(clickEvent);
 
