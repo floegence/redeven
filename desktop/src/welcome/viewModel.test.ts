@@ -85,7 +85,7 @@ function buildProvider(providerOrigin = 'https://redeven.test') {
     provider_id: 'example_control_plane',
     display_name: 'Example Control Plane',
     provider_origin: providerOrigin,
-    documentation_url: `${providerOrigin}/docs/control-plane-providers`,
+    documentation_url: `${providerOrigin}/help/control-plane-providers`,
     access_points: [{
       access_point_id: 'dev',
       region: 'dev',

@@ -42,7 +42,7 @@ const testProvider = normalizeDesktopControlPlaneProvider({
   provider_id: 'example_control_plane',
   display_name: 'Example Control Plane',
   provider_origin: 'https://provider.example.invalid',
-  documentation_url: 'https://provider.example.invalid/docs/control-plane-providers',
+  documentation_url: 'https://provider.example.invalid/help/control-plane-providers',
   access_points: [testAccessPoint],
 });
 

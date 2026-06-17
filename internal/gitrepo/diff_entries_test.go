@@ -51,10 +51,10 @@ func TestParseGitDiffEntries_HandlesQuotedAndBinaryEntries(t *testing.T) {
 	t.Parallel()
 
 	raw := strings.Join([]string{
-		"diff --git \"a/docs/My File (draft).md\" \"b/docs/My File (draft).md\"",
+		"diff --git \"a/reference/My File (draft).md\" \"b/reference/My File (draft).md\"",
 		"index 1111111..2222222 100644",
-		"--- \"a/docs/My File (draft).md\"",
-		"+++ \"b/docs/My File (draft).md\"",
+		"--- \"a/reference/My File (draft).md\"",
+		"+++ \"b/reference/My File (draft).md\"",
 		"@@ -1 +1 @@",
 		"-old",
 		"+new",
@@ -70,7 +70,7 @@ func TestParseGitDiffEntries_HandlesQuotedAndBinaryEntries(t *testing.T) {
 	}
 
 	quoted := entries[0]
-	if quoted.Path != "docs/My File (draft).md" || quoted.DisplayPath != "docs/My File (draft).md" {
+	if quoted.Path != "reference/My File (draft).md" || quoted.DisplayPath != "reference/My File (draft).md" {
 		t.Fatalf("unexpected quoted-path entry: %+v", quoted)
 	}
 	if !strings.Contains(quoted.PatchText, "@@ -1 +1 @@") || quoted.Additions != 1 || quoted.Deletions != 1 {

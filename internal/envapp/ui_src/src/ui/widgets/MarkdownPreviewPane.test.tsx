@@ -88,7 +88,7 @@ describe('MarkdownPreviewPane', () => {
         <MarkdownPreviewPane
           path="/workspace/README.md"
           descriptor={{ mode: 'markdown' }}
-          text={'| Item | Link |\n| --- | --- |\n| Review | [`docs/CAPABILITY_PERMISSIONS.md`](docs/CAPABILITY_PERMISSIONS.md) |'}
+          text={'| Item | Link |\n| --- | --- |\n| Review | [`CAPABILITY_PERMISSIONS.md`](CAPABILITY_PERMISSIONS.md) |'}
         />
       </FilePreviewContext.Provider>
     ), host);
@@ -96,12 +96,12 @@ describe('MarkdownPreviewPane', () => {
     try {
       await flushAsync();
 
-      host.querySelector<HTMLAnchorElement>('a[href="docs/CAPABILITY_PERMISSIONS.md"]')?.click();
+      host.querySelector<HTMLAnchorElement>('a[href="CAPABILITY_PERMISSIONS.md"]')?.click();
 
       expect(openPreview).toHaveBeenCalledWith({
-        id: '/workspace/docs/CAPABILITY_PERMISSIONS.md',
+        id: '/workspace/CAPABILITY_PERMISSIONS.md',
         name: 'CAPABILITY_PERMISSIONS.md',
-        path: '/workspace/docs/CAPABILITY_PERMISSIONS.md',
+        path: '/workspace/CAPABILITY_PERMISSIONS.md',
         type: 'file',
       }, {
         reusePolicy: 'same_file_or_create',

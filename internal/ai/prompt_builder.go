@@ -389,7 +389,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		"- Use tools when they are needed for reliable evidence or actions.",
 		"- If you cannot complete safely, use the allowed completion path for this run. Do not stop silently.",
 		"- You MUST use tools to investigate before answering questions about files, code, or the workspace.",
-		"- When knowledge.search is available, query it first for domain background, then verify with terminal.exec before final conclusions.",
+		"- When okf.search is available, query it first for domain background, then verify with terminal.exec before final conclusions.",
 		"- Do NOT expose internal evidence path:line details to end users unless they explicitly ask for repository-level traceability.",
 	}
 	lines = append(lines,
@@ -404,7 +404,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		"- Use workdir/cwd fields on terminal.exec instead of running cd in the command string.",
 		"- For long-running commands (tests/build/lint), increase terminal.exec timeout_ms when justified, up to 10 minutes.",
 		"- Do NOT wrap terminal.exec commands with an extra `bash -lc` (terminal.exec already runs a shell with -lc).",
-		"- For multi-line scripts, pass content via terminal.exec `stdin` and use a stdin-reading command (e.g. `python -`, `bash`, `cat`). Avoid heredocs/here-strings.",
+		"- For multi-line scripts, pass content via terminal.exec `stdin` and use a stdin-reading command (e.g. `python -`, `bash`, `cat`). Avoid here documents and here-strings.",
 		"- Do NOT fabricate file contents, command outputs, or tool results. Always use tools to get real data.",
 		"- Do NOT ask the user to run commands, gather logs, or paste outputs that tools can obtain directly.",
 		"- Prefer autonomous continuation whenever available tools can make progress.",

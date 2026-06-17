@@ -5,7 +5,7 @@ This folder contains the source for the runtime-bundled Env App UI.
 - Source root: `internal/envapp/ui_src/`
 - Generated output: `internal/envapp/ui/dist/env/*`
 - Runtime route: `/_redeven_proxy/env/*`
-- Full product contract: [`docs/ENV_APP.md`](../../../docs/ENV_APP.md)
+- Full product contract: [`ENV_APP.md`](../../../ENV_APP.md)
 
 The Env App is built into the `redeven` binary and served by the local runtime gateway. Browser traffic reaches it through either the Flowersec runtime proxy or Local UI direct transport; authorization and isolation are enforced by runtime session metadata plus local policy, not by visible hostnames.
 

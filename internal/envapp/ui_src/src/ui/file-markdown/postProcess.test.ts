@@ -36,7 +36,7 @@ describe('file markdown postProcess', () => {
     const root = createRoot(`
       <p align="center">
         <a href="https://go.dev/"><img alt="Go Version" src="https://img.shields.io/badge/Go-1.26.3-00ADD8?style=flat-square&logo=go"></a>
-        <a href="docs/ENV_APP.md"><img alt="Local Environment Workspace" src="https://img.shields.io/badge/Local%20Environment-Workspace-6C3BFF?style=flat-square"></a>
+        <a href="ENV_APP.md"><img alt="Local Environment Workspace" src="https://img.shields.io/badge/Local%20Environment-Workspace-6C3BFF?style=flat-square"></a>
       </p>
     `);
 
@@ -44,7 +44,7 @@ describe('file markdown postProcess', () => {
 
     const paragraph = root.querySelector('p');
     const externalLink = root.querySelector<HTMLAnchorElement>('a[href="https://go.dev/"]');
-    const localLink = root.querySelector<HTMLAnchorElement>('a[href="docs/ENV_APP.md"]');
+    const localLink = root.querySelector<HTMLAnchorElement>('a[href="ENV_APP.md"]');
     const images = root.querySelectorAll<HTMLImageElement>('img.fm-image');
 
     expect(paragraph?.classList.contains('fm-align-center')).toBe(true);

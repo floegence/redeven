@@ -40,7 +40,7 @@ Commands:
               Connect Desktop Local Environment models to runtime-control.
   targets     Inspect Redeven targets for Agent Skills and local automation.
   search      Run web search using configured provider credentials.
-  knowledge   Build or verify embedded knowledge bundle assets.
+  okf         Build or verify embedded OKF bundle assets.
   version     Print build information.
   help        Show detailed help and startup examples.
 
@@ -369,44 +369,44 @@ Examples:
 `, "\n")
 }
 
-func knowledgeHelpText() string {
+func okfHelpText() string {
 	return strings.TrimLeft(`
-redeven knowledge
+redeven okf
 
-Build or verify embedded knowledge bundle assets.
+Build or verify embedded OKF bundle assets.
 
 Usage:
-  redeven knowledge <command> [flags]
-  redeven help knowledge bundle
+  redeven okf <command> [flags]
+  redeven help okf bundle
 
 Commands:
-  bundle      Build or verify dist knowledge bundle assets from source files.
+  bundle      Build or verify dist OKF bundle assets from source files.
 
 Examples:
-  redeven knowledge bundle
-  redeven knowledge bundle --verify-only
+  redeven okf bundle
+  redeven okf bundle --verify-only
 `, "\n")
 }
 
-func knowledgeBundleHelpText() string {
+func okfBundleHelpText() string {
 	return strings.TrimLeft(`
-redeven knowledge bundle
+redeven okf bundle
 
-Build or verify dist knowledge bundle assets from source files.
+Build or verify dist OKF bundle assets from source files.
 
 Usage:
-  redeven knowledge bundle [flags]
+  redeven okf bundle [flags]
 
 Flags:
-  --source-root <path>              Knowledge source root.
+  --source-root <path>              OKF source root.
   --dist-root <path>                Dist output root.
   --verify-only                     Verify dist files without rewriting.
   --validate-source-only            Validate source files without reading dist.
 
 Examples:
-  redeven knowledge bundle
-  redeven knowledge bundle --verify-only
-  redeven knowledge bundle --validate-source-only
+  redeven okf bundle
+  redeven okf bundle --verify-only
+  redeven okf bundle --validate-source-only
 `, "\n")
 }
 
@@ -468,10 +468,10 @@ func lookupHelpText(args []string) (string, bool) {
 		return targetsResolveHelpText(), true
 	case "search":
 		return searchHelpText(), true
-	case "knowledge":
-		return knowledgeHelpText(), true
-	case "knowledge bundle":
-		return knowledgeBundleHelpText(), true
+	case "okf":
+		return okfHelpText(), true
+	case "okf bundle":
+		return okfBundleHelpText(), true
 	case "version":
 		return versionHelpText(), true
 	default:

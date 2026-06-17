@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 jobs:
-  knowledge-bundle-check:
-    name: knowledge bundle check
+  okf-bundle-check:
+    name: OKF bundle check
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,11 +23,11 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Check knowledge source integrity
-        run: ./scripts/knowledge/check_source_integrity.sh
+      - name: Check OKF source integrity
+        run: ./scripts/okf/check_source_integrity.sh
 
-      - name: Verify knowledge dist bundle
-        run: ./scripts/build_knowledge_bundle.sh --verify-only
+      - name: Verify OKF dist bundle
+        run: ./scripts/build_okf_bundle.sh --verify-only
 
   go-check:
     name: go check

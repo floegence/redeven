@@ -82,7 +82,7 @@ describe('describeFilePreview', () => {
       mode: 'markdown',
       language: 'markdown',
     });
-    expect(describeFilePreview('docs/guide.markdown')).toEqual({
+    expect(describeFilePreview('reference/guide.markdown')).toEqual({
       mode: 'markdown',
       language: 'markdown',
     });

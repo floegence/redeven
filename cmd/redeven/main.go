@@ -74,8 +74,8 @@ func (c *cli) run(args []string) int {
 		return c.desktopModelSourceCmd(args[1:])
 	case "search":
 		return c.searchCmd(args[1:])
-	case "knowledge":
-		return c.knowledgeCmd(args[1:])
+	case "okf":
+		return c.okfCmd(args[1:])
 	case "targets":
 		return c.targetsCmd(args[1:])
 	case "version":

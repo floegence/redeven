@@ -30,7 +30,7 @@ function provider(overrides: Record<string, unknown> = {}) {
     provider_id: 'example_control_plane',
     display_name: 'Example Control Plane',
     provider_origin: 'https://redeven.test',
-    documentation_url: 'https://redeven.test/docs/control-plane-providers',
+    documentation_url: 'https://redeven.test/help/control-plane-providers',
     access_points: [accessPoint()],
     ...overrides,
   };
@@ -76,7 +76,7 @@ describe('controlPlaneProvider', () => {
       provider_id: 'example_control_plane',
       display_name: 'Example Control Plane',
       provider_origin: 'https://redeven.test',
-      documentation_url: 'https://redeven.test/docs/control-plane-providers',
+      documentation_url: 'https://redeven.test/help/control-plane-providers',
       access_points: [{
         access_point_id: 'dev',
         region: 'dev',

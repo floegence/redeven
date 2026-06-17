@@ -302,12 +302,12 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 			Renderer: observation.ActivityRendererWebSearch,
 			Payload:  payload,
 		}
-	case "knowledge.search":
+	case "okf.search":
 		query := strings.TrimSpace(anyToString(args["query"]))
 		return &observation.ActivityPresentation{
-			Label:    firstNonEmptyString(query, "knowledge.search"),
+			Label:    firstNonEmptyString(query, "okf.search"),
 			Renderer: observation.ActivityRendererStructured,
-			Payload:  mapWithOperation(payload, "knowledge.search"),
+			Payload:  mapWithOperation(payload, "okf.search"),
 		}
 	case "write_todos":
 		return &observation.ActivityPresentation{
@@ -379,7 +379,7 @@ func activityCallPayloadForTool(toolName string, args map[string]any) map[string
 			out["additions"] = additions
 			out["deletions"] = deletions
 		}
-	case "web.search", "knowledge.search":
+	case "web.search", "okf.search":
 		addString("query")
 		addScalar("count")
 		addString("provider")

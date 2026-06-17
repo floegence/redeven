@@ -73,8 +73,8 @@ func TestRunCLIHelp(t *testing.T) {
 		)
 	})
 
-	t.Run("knowledge bundle help is available through help command", func(t *testing.T) {
-		code, stdout, stderr := runCLITest(t, "help", "knowledge", "bundle")
+	t.Run("okf bundle help is available through help command", func(t *testing.T) {
+		code, stdout, stderr := runCLITest(t, "help", "okf", "bundle")
 		if code != 0 {
 			t.Fatalf("exit code = %d, want 0", code)
 		}
@@ -82,7 +82,7 @@ func TestRunCLIHelp(t *testing.T) {
 			t.Fatalf("stderr = %q, want empty", stderr)
 		}
 		assertContainsAll(t, stdout,
-			"redeven knowledge bundle",
+			"redeven okf bundle",
 			"--verify-only",
 			"--validate-source-only",
 		)

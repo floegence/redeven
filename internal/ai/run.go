@@ -24,7 +24,7 @@ import (
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/filesystemscope"
-	"github.com/floegence/redeven/internal/knowledge"
+	"github.com/floegence/redeven/internal/okf"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/websearch"
 )
@@ -2946,7 +2946,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 
 		return websearch.Search(ctx, provider, key, websearch.SearchRequest{Query: query, Count: p.Count})
 
-	case "knowledge.search":
+	case "okf.search":
 		if meta == nil || !meta.CanRead {
 			return nil, errors.New("read permission denied")
 		}
@@ -2963,7 +2963,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		if query == "" {
 			return nil, errors.New("missing query")
 		}
-		return knowledge.Search(knowledge.SearchRequest{
+		return okf.Search(okf.SearchRequest{
 			Query:      query,
 			MaxResults: p.MaxResults,
 			Tags:       p.Tags,

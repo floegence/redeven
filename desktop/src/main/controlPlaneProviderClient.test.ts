@@ -34,7 +34,7 @@ function providerPayload(overrides: Record<string, unknown> = {}) {
     provider_id: 'redeven',
     display_name: 'Redeven',
     provider_origin: 'https://redeven.test',
-    documentation_url: 'https://redeven.test/docs/control-plane-providers',
+    documentation_url: 'https://redeven.test/help/control-plane-providers',
     access_points: [accessPoint()],
     ...overrides,
   };
