@@ -1346,7 +1346,7 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline {
   --flower-activity-tool-row-foreground: #8f99a6;
-  --flower-activity-tool-row-foreground-strong: #6f7a89;
+  --flower-activity-tool-row-foreground-strong: #566475;
   --flower-activity-tool-row-foreground-complete: #9ba5b1;
   --flower-activity-tool-row-soft: rgba(126, 138, 153, 0.11);
   --flower-activity-tool-row-ok: #4c9a72;
@@ -1570,9 +1570,12 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline-row-running .flower-activity-inline-title {
-  color: var(--flower-activity-tool-row-foreground-strong);
   font-weight: 600;
-  text-shadow: 0 0 0.7rem rgba(127, 137, 151, 0.10);
+  text-shadow: 0 0 0.65rem rgba(86, 100, 117, 0.12);
+}
+
+.flower-activity-inline-row-running .flower-activity-inline-button {
+  color: var(--flower-activity-tool-row-foreground-strong);
 }
 
 .flower-activity-inline-row-success .flower-activity-inline-button {
