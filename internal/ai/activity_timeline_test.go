@@ -82,7 +82,7 @@ func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) 
 	if presentation == nil {
 		t.Fatal("presentation is nil")
 	}
-	if presentation.Label != "pwd; sleep 5; ls -1" || presentation.Description != "Running command" || presentation.Renderer != observation.ActivityRendererTerminal {
+	if presentation.Label != "pwd; sleep 5; ls -1" || presentation.Description != "" || presentation.Renderer != observation.ActivityRendererTerminal {
 		t.Fatalf("presentation=%+v", presentation)
 	}
 	if presentation.Payload["command"] != "pwd; sleep 5; ls -1" {
@@ -99,6 +99,98 @@ func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) 
 	}
 	if presentation.Payload["timeout_source"] != "max" {
 		t.Fatalf("timeout_source payload=%v", presentation.Payload["timeout_source"])
+	}
+}
+
+func TestToolStartActivityPresentationUsesNeutralLabelWithoutCommand(t *testing.T) {
+	t.Parallel()
+
+	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{}, terminalExecTimeoutDecision{})
+	if presentation == nil {
+		t.Fatal("presentation is nil")
+	}
+	if presentation.Label != "Activity" || presentation.Description != "" || presentation.Renderer != observation.ActivityRendererTerminal {
+		t.Fatalf("presentation=%+v", presentation)
+	}
+	if _, ok := presentation.Payload["command"]; ok {
+		t.Fatalf("command payload=%v, want omitted for missing command", presentation.Payload["command"])
+	}
+	if presentation.Payload["status"] != toolCallStatusRunning {
+		t.Fatalf("status payload=%v", presentation.Payload["status"])
+	}
+}
+
+func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		toolName  string
+		args      map[string]any
+		label     string
+		renderer  observation.ActivityRenderer
+		operation string
+	}{
+		{
+			name:      "file read",
+			toolName:  "file.read",
+			args:      map[string]any{"file_path": "/workspace/app.ts"},
+			label:     "app.ts",
+			renderer:  observation.ActivityRendererFile,
+			operation: "read",
+		},
+		{
+			name:     "web search",
+			toolName: "web.search",
+			args:     map[string]any{"query": "latest release"},
+			label:    "latest release",
+			renderer: observation.ActivityRendererWebSearch,
+		},
+		{
+			name:     "todos",
+			toolName: "write_todos",
+			args:     map[string]any{},
+			label:    "Update todos",
+			renderer: observation.ActivityRendererTodos,
+		},
+		{
+			name:     "skill",
+			toolName: "use_skill",
+			args:     map[string]any{"name": "frontend-design"},
+			label:    "frontend-design",
+			renderer: observation.ActivityRendererStructured,
+		},
+		{
+			name:     "unknown",
+			toolName: "custom.tool",
+			args:     map[string]any{},
+			label:    "Activity",
+			renderer: observation.ActivityRendererStructured,
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			presentation := toolStartActivityPresentation(tc.toolName, tc.args, terminalExecTimeoutDecision{})
+			if presentation == nil {
+				t.Fatal("presentation is nil")
+			}
+			if presentation.Label != tc.label || presentation.Description != "" || presentation.Renderer != tc.renderer {
+				t.Fatalf("presentation=%+v", presentation)
+			}
+			if presentation.Payload["status"] != toolCallStatusRunning {
+				t.Fatalf("status payload=%v", presentation.Payload["status"])
+			}
+			if tc.operation != "" && presentation.Payload["operation"] != tc.operation {
+				t.Fatalf("operation payload=%v, want %q", presentation.Payload["operation"], tc.operation)
+			}
+			if presentation.Label == tc.toolName {
+				t.Fatalf("label=%q, want friendly label", presentation.Label)
+			}
+		})
 	}
 }
 
@@ -486,7 +578,7 @@ func TestRecordFloretActivityEventDoesNotCloseRunningToolOnRunEnd(t *testing.T) 
 	}
 	item := latest.Items[0]
 	if item.ToolID != "tool_running" || item.Status != observation.ActivityStatusRunning {
-		t.Fatalf("item=%+v, want running tool to remain open without tool result", item)
+		t.Fatalf("item=%+v, want item to remain open without tool result", item)
 	}
 	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 0 {
 		t.Fatalf("item timing=%+v, want no synthetic run_end close", item)
