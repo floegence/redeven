@@ -2,10 +2,13 @@ package ai
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/floegence/floret/observation"
+	flruntime "github.com/floegence/floret/runtime"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 func TestRecordObservationActivityEventPublishesFloretTimelineBlock(t *testing.T) {
@@ -96,6 +99,33 @@ func TestToolStartActivityPresentationShowsRunningTerminalCommand(t *testing.T) 
 	}
 	if presentation.Payload["timeout_source"] != "max" {
 		t.Fatalf("timeout_source payload=%v", presentation.Payload["timeout_source"])
+	}
+}
+
+func TestToolStartActivityPresentationTrimsLabelToContract(t *testing.T) {
+	t.Parallel()
+
+	command := "printf " + strings.Repeat("x", 260)
+	presentation := toolStartActivityPresentation("terminal.exec", map[string]any{
+		"command": command,
+	}, terminalExecTimeoutDecision{})
+	if presentation == nil {
+		t.Fatal("presentation is nil")
+	}
+	if len([]rune(presentation.Label)) > activityPresentationLabelLimit {
+		t.Fatalf("label length=%d, want <= %d", len([]rune(presentation.Label)), activityPresentationLabelLimit)
+	}
+	if !strings.HasSuffix(presentation.Label, "...") {
+		t.Fatalf("label=%q, want truncated suffix", presentation.Label)
+	}
+	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_start_label"}, []observation.Event{{
+		Type:     observation.EventTypeToolCall,
+		ToolID:   "tool_start_label",
+		ToolName: "terminal.exec",
+		Activity: presentation,
+	}}, 1000)
+	if err := observation.ValidateActivityTimeline(timeline); err != nil {
+		t.Fatalf("ValidateActivityTimeline: %v", err)
 	}
 }
 
@@ -217,6 +247,167 @@ func TestRecordToolResultActivityClosesRunningTerminalItem(t *testing.T) {
 	}
 }
 
+func TestRecordToolResultActivityClosesRunningTerminalItemOnTimeout(t *testing.T) {
+	t.Parallel()
+
+	var frames []ActivityTimelineBlock
+	r := &run{
+		id:                        "run_terminal_timeout",
+		threadID:                  "thread_terminal_timeout",
+		messageID:                 "msg_terminal_timeout",
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 2),
+		nextBlockIndex:            0,
+		onStreamEvent: func(ev any) {
+			bs, ok := ev.(streamEventBlockSet)
+			if !ok {
+				return
+			}
+			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
+				frames = append(frames, block)
+			}
+		},
+	}
+
+	activity := toolStartActivityPresentation("terminal.exec", map[string]any{
+		"command": "curl -sL https://example.test/slow",
+	}, terminalExecTimeoutDecision{EffectiveMS: 30000})
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolCall,
+		ToolID:     "tool_terminal_timeout",
+		ToolName:   "terminal.exec",
+		ToolKind:   "local",
+		Activity:   activity,
+		ObservedAt: time.UnixMilli(1000),
+	})
+	r.recordToolResultActivity("tool_terminal_timeout", "terminal.exec", toolResultStatusTimeout, map[string]any{
+		"command":     "curl -sL https://example.test/slow",
+		"exit_code":   124,
+		"duration_ms": int64(30000),
+		"timed_out":   true,
+	}, &aitools.ToolError{
+		Code:      aitools.ErrorCodeTimeout,
+		Message:   "Tool execution timed out after 30000 ms",
+		Retryable: true,
+	}, time.UnixMilli(31000))
+
+	if len(frames) != 2 {
+		t.Fatalf("timeline frames=%d, want 2", len(frames))
+	}
+	latest := frames[len(frames)-1]
+	if err := observation.ValidateActivityTimeline(latest.ActivityTimeline); err != nil {
+		t.Fatalf("ValidateActivityTimeline: %v", err)
+	}
+	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusError {
+		t.Fatalf("summary=%+v, want error one-item timeline", latest.Summary)
+	}
+	item := latest.Items[0]
+	if item.ToolID != "tool_terminal_timeout" || item.ToolName != "terminal.exec" || item.Status != observation.ActivityStatusError {
+		t.Fatalf("item=%+v, want error terminal item", item)
+	}
+	if item.EndedAtUnixMS != 31000 {
+		t.Fatalf("item timing=%+v, want timeout result to close item", item)
+	}
+	errorPayload, ok := item.Payload["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error payload=%#v, want map", item.Payload["error"])
+	}
+	if errorPayload["code"] != "TIMEOUT" || errorPayload["retryable"] != true {
+		t.Fatalf("error payload=%#v", errorPayload)
+	}
+}
+
+func TestRecordToolResultActivityClosesRunningItemOnGenericError(t *testing.T) {
+	t.Parallel()
+
+	var frames []ActivityTimelineBlock
+	r := &run{
+		id:                        "run_terminal_error",
+		threadID:                  "thread_terminal_error",
+		messageID:                 "msg_terminal_error",
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 2),
+		nextBlockIndex:            0,
+		onStreamEvent: func(ev any) {
+			bs, ok := ev.(streamEventBlockSet)
+			if !ok {
+				return
+			}
+			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
+				frames = append(frames, block)
+			}
+		},
+	}
+
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolCall,
+		ToolID:     "tool_terminal_error",
+		ToolName:   "terminal.exec",
+		ToolKind:   "local",
+		Activity:   toolStartActivityPresentation("terminal.exec", map[string]any{"command": "cat /root/secret"}, terminalExecTimeoutDecision{}),
+		ObservedAt: time.UnixMilli(1000),
+	})
+	r.recordToolResultActivity("tool_terminal_error", "terminal.exec", toolResultStatusError, map[string]any{
+		"command":     "cat /root/secret",
+		"exit_code":   1,
+		"duration_ms": int64(12),
+		"stderr":      "permission denied",
+	}, &aitools.ToolError{
+		Code:      aitools.ErrorCodePermissionDenied,
+		Message:   "permission denied",
+		Retryable: false,
+	}, time.UnixMilli(1012))
+
+	if len(frames) != 2 {
+		t.Fatalf("timeline frames=%d, want 2", len(frames))
+	}
+	latest := frames[len(frames)-1]
+	if err := observation.ValidateActivityTimeline(latest.ActivityTimeline); err != nil {
+		t.Fatalf("ValidateActivityTimeline: %v", err)
+	}
+	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusError {
+		t.Fatalf("summary=%+v, want error one-item timeline", latest.Summary)
+	}
+	item := latest.Items[0]
+	if item.ToolID != "tool_terminal_error" || item.Status != observation.ActivityStatusError || item.EndedAtUnixMS != 1012 {
+		t.Fatalf("item=%+v, want closed error item", item)
+	}
+	errorPayload, ok := item.Payload["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error payload=%#v, want map", item.Payload["error"])
+	}
+	if errorPayload["code"] != "PERMISSION_DENIED" || errorPayload["message"] != "permission denied" || errorPayload["retryable"] != false {
+		t.Fatalf("error payload=%#v", errorPayload)
+	}
+}
+
+func TestRecordToolResultActivityRejectsMissingStatus(t *testing.T) {
+	t.Parallel()
+
+	var frames []ActivityTimelineBlock
+	r := &run{
+		id:                        "run_invalid_status",
+		threadID:                  "thread_invalid_status",
+		messageID:                 "msg_invalid_status",
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 2),
+		nextBlockIndex:            0,
+		onStreamEvent: func(ev any) {
+			if bs, ok := ev.(streamEventBlockSet); ok {
+				if block, ok := bs.Block.(ActivityTimelineBlock); ok {
+					frames = append(frames, block)
+				}
+			}
+		},
+	}
+
+	r.recordToolResultActivity("tool_invalid", "terminal.exec", "", map[string]any{"stdout": "ok"}, nil, time.UnixMilli(1000))
+
+	if len(frames) != 0 {
+		t.Fatalf("timeline frames=%d, want none for invalid status", len(frames))
+	}
+}
+
 func TestRecordObservationActivityEventSkipsEmptyTimeline(t *testing.T) {
 	t.Parallel()
 
@@ -252,7 +443,7 @@ func TestRecordObservationActivityEventSkipsEmptyTimeline(t *testing.T) {
 	}
 }
 
-func TestRecordObservationActivityEventClosesRunningItemOnRunEnd(t *testing.T) {
+func TestRecordFloretActivityEventDoesNotCloseRunningToolOnRunEnd(t *testing.T) {
 	t.Parallel()
 
 	var frames []ActivityTimelineBlock
@@ -280,28 +471,114 @@ func TestRecordObservationActivityEventClosesRunningItemOnRunEnd(t *testing.T) {
 		ToolName:   "terminal.exec",
 		ObservedAt: time.UnixMilli(1000),
 	})
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeRunEnd,
-		Message:    string(observation.ActivityStatusSuccess),
-		ObservedAt: time.UnixMilli(1300),
+	r.recordFloretActivityEvent(flruntime.Event{
+		Type:      observation.EventTypeRunEnd,
+		Message:   string(observation.ActivityStatusSuccess),
+		Timestamp: time.UnixMilli(1300),
 	})
 
-	if len(frames) != 2 {
-		t.Fatalf("timeline frames=%d, want 2", len(frames))
+	if len(frames) != 1 {
+		t.Fatalf("timeline frames=%d, want only explicit tool call frame", len(frames))
 	}
 	latest := frames[len(frames)-1]
-	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusSuccess {
-		t.Fatalf("summary=%+v, want successful one-item timeline", latest.Summary)
+	if latest.Summary.TotalItems != 1 || latest.Summary.Status != observation.ActivityStatusRunning {
+		t.Fatalf("summary=%+v, want running one-item timeline", latest.Summary)
 	}
 	item := latest.Items[0]
-	if item.ToolID != "tool_running" || item.Status != observation.ActivityStatusSuccess {
-		t.Fatalf("item=%+v, want running tool closed as success", item)
+	if item.ToolID != "tool_running" || item.Status != observation.ActivityStatusRunning {
+		t.Fatalf("item=%+v, want running tool to remain open without tool result", item)
 	}
-	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 1300 {
-		t.Fatalf("item timing=%+v, want run_end to close timing", item)
+	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 0 {
+		t.Fatalf("item timing=%+v, want no synthetic run_end close", item)
 	}
 	if len(r.assistantBlocks) != 1 {
 		t.Fatalf("assistantBlocks len=%d, want one activity block", len(r.assistantBlocks))
+	}
+}
+
+func TestPublishFinalActivityTimelineDropsSyntheticRunEndSuccessToolItem(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		id:                        "run_final_synthetic",
+		threadID:                  "thread_final_synthetic",
+		messageID:                 "msg_final_synthetic",
+		activitySegmentBlockIndex: -1,
+		nextBlockIndex:            0,
+	}
+	r.publishFinalActivityTimeline(observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         "run_final_synthetic",
+		ThreadID:      "thread_final_synthetic",
+		TurnID:        "msg_final_synthetic",
+		TraceID:       "run_final_synthetic",
+		Summary: observation.ActivitySummary{
+			Status:     observation.ActivityStatusSuccess,
+			Severity:   observation.ActivitySeverityNormal,
+			TotalItems: 1,
+			Counts:     observation.ActivityCounts{Success: 1},
+		},
+		Items: []observation.ActivityItem{{
+			ItemID:          "tool:tool_running",
+			ToolID:          "tool_running",
+			ToolName:        "terminal.exec",
+			Kind:            observation.ActivityKindTool,
+			Status:          observation.ActivityStatusSuccess,
+			Severity:        observation.ActivitySeverityNormal,
+			NeedsAttention:  false,
+			StartedAtUnixMS: 1000,
+			EndedAtUnixMS:   1300,
+			Payload:         map[string]any{"command": "sleep 30", "status": toolCallStatusRunning},
+		}},
+	})
+
+	if len(r.assistantBlocks) != 0 {
+		t.Fatalf("assistantBlocks=%#v, want no final synthetic tool block", r.assistantBlocks)
+	}
+}
+
+func TestPublishFinalActivityTimelineKeepsExplicitSuccessfulToolResult(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		id:                        "run_final_result",
+		threadID:                  "thread_final_result",
+		messageID:                 "msg_final_result",
+		activitySegmentBlockIndex: -1,
+		nextBlockIndex:            0,
+	}
+	r.publishFinalActivityTimeline(observation.ActivityTimeline{
+		SchemaVersion: observation.ActivityTimelineSchemaVersion,
+		RunID:         "run_final_result",
+		ThreadID:      "thread_final_result",
+		TurnID:        "msg_final_result",
+		TraceID:       "run_final_result",
+		Summary: observation.ActivitySummary{
+			Status:     observation.ActivityStatusSuccess,
+			Severity:   observation.ActivitySeverityNormal,
+			TotalItems: 1,
+			Counts:     observation.ActivityCounts{Success: 1},
+		},
+		Items: []observation.ActivityItem{{
+			ItemID:          "tool:tool_success",
+			ToolID:          "tool_success",
+			ToolName:        "terminal.exec",
+			Kind:            observation.ActivityKindTool,
+			Status:          observation.ActivityStatusSuccess,
+			Severity:        observation.ActivitySeverityNormal,
+			NeedsAttention:  false,
+			StartedAtUnixMS: 1000,
+			EndedAtUnixMS:   1300,
+			Payload:         map[string]any{"command": "pwd", "status": toolResultStatusSuccess, "exit_code": 0},
+		}},
+	})
+
+	if len(r.assistantBlocks) != 1 {
+		t.Fatalf("assistantBlocks=%#v, want explicit successful tool result block", r.assistantBlocks)
+	}
+	block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
+	if !ok || len(block.Items) != 1 || block.Items[0].Payload["status"] != toolResultStatusSuccess {
+		t.Fatalf("activity block=%T %#v", r.assistantBlocks[0], r.assistantBlocks[0])
 	}
 }
 

@@ -1779,7 +1779,7 @@ func toolStartActivityPresentation(toolName string, args map[string]any, timeout
 			payload["timeout_source"] = source
 		}
 		return &observation.ActivityPresentation{
-			Label:       truncateRunes(command, 200),
+			Label:       activityPresentationLabel(command),
 			Description: "Running command",
 			Renderer:    observation.ActivityRendererTerminal,
 			Payload:     payload,
@@ -1789,7 +1789,7 @@ func toolStartActivityPresentation(toolName string, args map[string]any, timeout
 			toolName = "tool"
 		}
 		return &observation.ActivityPresentation{
-			Label:       truncateRunes(toolName, 200),
+			Label:       activityPresentationLabel(toolName),
 			Description: "Running tool",
 			Renderer:    observation.ActivityRendererStructured,
 			Payload: map[string]any{
@@ -1828,16 +1828,27 @@ func (r *run) recordToolResultActivity(toolID string, toolName string, status st
 		Data:     result,
 		Error:    toolErr,
 	}
-	if toolResult.Status == "" {
-		toolResult.Status = toolResultStatusSuccess
+	if _, err := validateToolResultStatus(toolResult.Status); err != nil {
+		r.persistRunEvent("activity.tool_result.invalid", RealtimeStreamKindTool, map[string]any{
+			"tool_id":   toolResult.ToolID,
+			"tool_name": toolResult.ToolName,
+			"error":     sanitizeLogText(err.Error(), 240),
+		})
+		return
 	}
 	if toolErr != nil {
 		toolErr.Normalize()
-		if toolResult.Status == toolResultStatusSuccess {
-			toolResult.Status = toolResultStatusForError(toolErr)
-		}
 		toolResult.Summary = string(toolErr.Code)
 		toolResult.Details = toolErr.Message
+	}
+	activity, err := floretActivityForToolResult(r, toolResult)
+	if err != nil {
+		r.persistRunEvent("activity.tool_result.invalid", RealtimeStreamKindTool, map[string]any{
+			"tool_id":   toolResult.ToolID,
+			"tool_name": toolResult.ToolName,
+			"error":     sanitizeLogText(err.Error(), 240),
+		})
+		return
 	}
 	r.recordObservationActivityEvent(observation.Event{
 		Type:       observation.EventTypeToolResult,
@@ -1845,7 +1856,7 @@ func (r *run) recordToolResultActivity(toolID string, toolName string, status st
 		ToolName:   toolResult.ToolName,
 		ToolKind:   "local",
 		Error:      strings.TrimSpace(toolResult.Details),
-		Activity:   floretActivityForToolResult(r, toolResult),
+		Activity:   activity,
 		ObservedAt: observedAt,
 	})
 }

@@ -146,9 +146,12 @@ const activityRenderers = new Set<FlowerActivityRenderer>(['structured', 'termin
 const activityAttentionReasons = new Set<FlowerActivityAttentionReason>(['running', 'waiting', 'approval', 'error']);
 const activityApprovalStates = new Set<FlowerActivityApprovalState>(['requested', 'approved', 'rejected', 'timed_out', 'canceled']);
 
-function activityStatus(raw: unknown, fallback: FlowerActivityStatus): FlowerActivityStatus {
+function activityStatus(raw: unknown, field: string): FlowerActivityStatus {
   const value = trim(raw) as FlowerActivityStatus;
-  return activityStatuses.has(value) ? value : fallback;
+  if (!activityStatuses.has(value)) {
+    throw new Error(`Flower contract error: ${field} is unsupported: ${trim(raw) || '<empty>'}.`);
+  }
+  return value;
 }
 
 function activitySeverity(raw: unknown, fallback: FlowerActivitySeverity): FlowerActivitySeverity {
@@ -315,7 +318,7 @@ function mapActivityItem(raw: unknown): FlowerActivityItem | null {
     ...(trim(record.tool_id) ? { tool_id: trim(record.tool_id) } : {}),
     ...(trim(record.tool_name) ? { tool_name: trim(record.tool_name) } : {}),
     kind: activityKind(record.kind),
-    status: activityStatus(record.status, 'pending'),
+    status: activityStatus(record.status, 'activity item status'),
     severity: activitySeverity(record.severity, 'normal'),
     needs_attention: Boolean(record.needs_attention),
     ...(attention ? { attention_reasons: attention } : {}),
@@ -391,7 +394,7 @@ function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | n
     ...(trim(record.turn_id) ? { turn_id: trim(record.turn_id) } : {}),
     ...(trim(record.trace_id) ? { trace_id: trim(record.trace_id) } : {}),
     summary: {
-      status: activityStatus(summary.status, 'success'),
+      status: activityStatus(summary.status, 'activity summary status'),
       severity: activitySeverity(summary.severity, 'quiet'),
       needs_attention: Boolean(summary.needs_attention),
       ...(attention ? { attention_reasons: attention } : {}),

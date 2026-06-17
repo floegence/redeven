@@ -218,7 +218,10 @@ func TestBuiltInToolHandlerExecute_PreservesLargeApplyPatchActivityPayload(t *te
 	if result.Status != toolResultStatusSuccess {
 		t.Fatalf("status=%q, details=%q", result.Status, result.Details)
 	}
-	activity := floretActivityForToolResult(r, result)
+	activity, err := floretActivityForToolResult(r, result)
+	if err != nil {
+		t.Fatalf("floretActivityForToolResult: %v", err)
+	}
 	if activity == nil {
 		t.Fatal("activity is nil")
 	}

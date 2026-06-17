@@ -28,4 +28,16 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('flower-message-plain-text');
     expect(src).not.toContain('<span>{block.content}</span>');
   });
+
+  it('binds activity row status to the timeline item status, not payload status', () => {
+    const src = surfaceSource();
+
+    expect(src).toContain("`flower-activity-inline-row-${item.status}`");
+    expect(src).toContain('data-flower-activity-status={item.status}');
+    expect(src).toContain('statusIcon(item.status)');
+    expect(src).toContain("`flower-activity-inline-status-${item.status}`");
+    expect(src).toContain('copy().chat.toolStatuses[item.status]');
+    expect(src).not.toContain('payload.status');
+    expect(src).not.toContain("payload['status']");
+  });
 });
