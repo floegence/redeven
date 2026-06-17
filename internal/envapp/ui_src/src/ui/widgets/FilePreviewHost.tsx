@@ -3,7 +3,7 @@ import { useEnvContext } from '../pages/EnvContext';
 import { useDownloadManager } from '../downloads/DownloadContext';
 import { buildFilePreviewDownloadCommand } from '../downloads/downloadCommands';
 import { writeTextToClipboard } from '../utils/clipboard';
-import { buildFilePreviewAskFlowerIntent } from '../utils/filePreviewAskFlower';
+import { buildFilePreviewFlowerTurnLauncherIntent } from '../utils/filePreviewAskFlower';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { FilePreviewSurface } from './FilePreviewSurface';
 import { useI18n } from '../i18n';
@@ -35,7 +35,7 @@ export function FilePreviewHost() {
   };
 
   const handleAskFlower = (selectionText: string) => {
-    const result = buildFilePreviewAskFlowerIntent({
+    const result = buildFilePreviewFlowerTurnLauncherIntent({
       item: filePreview.controller.item(),
       selectionText,
     });
@@ -44,7 +44,7 @@ export function FilePreviewHost() {
       return;
     }
     if (!result.intent) return;
-    env.openAskFlowerComposer(result.intent);
+    env.openFlowerTurnLauncher(result.intent);
   };
 
   const handleDownload = () => {

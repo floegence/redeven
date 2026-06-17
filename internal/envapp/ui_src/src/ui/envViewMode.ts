@@ -1,7 +1,6 @@
 import type { DisplayMode } from '@floegence/floe-webapp-core/layout';
 
 export type EnvViewMode = DisplayMode;
-export type LegacyEnvViewMode = 'tab' | 'deck' | 'infinite_map';
 
 export type EnvSurfaceId =
   | 'terminal'
@@ -98,17 +97,7 @@ export function isEnvViewMode(value: unknown): value is EnvViewMode {
   return typeof value === 'string' && VALID_ENV_VIEW_MODES.has(value as EnvViewMode);
 }
 
-export function isLegacyEnvViewMode(value: unknown): value is LegacyEnvViewMode {
-  return value === 'tab' || value === 'deck' || value === 'infinite_map';
-}
-
 export function normalizePersistedEnvViewMode(value: unknown): EnvViewMode | null {
-  if (value === 'tab') {
-    return 'activity';
-  }
-  if (value === 'infinite_map') {
-    return 'workbench';
-  }
   return isEnvViewMode(value) ? value : null;
 }
 

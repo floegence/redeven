@@ -230,7 +230,7 @@ describe('buildFlowerTimelineEntries', () => {
     expect(entries.map((entry) => entry.type)).toEqual(['message', 'input_request', 'error']);
   });
 
-  it('does not create renderable markdown blocks from message content', () => {
+  it('uses message content as the transcript fallback when structured blocks are absent', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [
         {
@@ -243,7 +243,37 @@ describe('buildFlowerTimelineEntries', () => {
       ],
     }));
 
-    expect(entries).toHaveLength(0);
+    expect(entries).toHaveLength(1);
+    const first = entries[0];
+    expect(first?.type).toBe('message');
+    if (first?.type !== 'message') throw new Error('expected message entry');
+    expect(first.blocks).toEqual([{
+      type: 'content',
+      key: 'assistant-content-only:content',
+      block_index: 0,
+      block_type: 'markdown',
+      content: '**content-only markdown**',
+    }]);
+  });
+
+  it('prefers structured message blocks over message content fallback', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-with-blocks',
+          role: 'assistant',
+          content: 'Older content fallback',
+          status: 'complete',
+          created_at_ms: 2,
+          blocks: [{ type: 'markdown', content: 'Structured answer.' }],
+        },
+      ],
+    }));
+
+    const first = entries[0];
+    expect(first?.type).toBe('message');
+    if (first?.type !== 'message') throw new Error('expected message entry');
+    expect(first.blocks.map((block) => (block.type === 'content' ? block.content : 'activity'))).toEqual(['Structured answer.']);
   });
 
   it('keeps host-only file action paths out of activity signatures', () => {

@@ -5,7 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvCodespacesPage } from './EnvCodespacesPage';
-import { buildAskFlowerComposerCopy } from '../utils/askFlowerComposerCopy';
+import { buildFlowerTurnLauncherCopy } from '../../../../../flower_ui/src';
 
 const notificationMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -17,7 +17,7 @@ const envContextMocks = vi.hoisted(() => ({
     () => ({ permissions: { can_execute: true } }),
     { state: 'ready', loading: false, error: null },
   ),
-  openAskFlowerComposer: vi.fn(),
+  openFlowerTurnLauncher: vi.fn(),
   openTerminalInDirectory: vi.fn(),
 }));
 
@@ -137,7 +137,7 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
     env: envContextMocks.env,
-    openAskFlowerComposer: envContextMocks.openAskFlowerComposer,
+    openFlowerTurnLauncher: envContextMocks.openFlowerTurnLauncher,
     openTerminalInDirectory: envContextMocks.openTerminalInDirectory,
   }),
 }));
@@ -257,7 +257,7 @@ describe('EnvCodespacesPage', () => {
       () => ({ permissions: { can_execute: true } }),
       { state: 'ready', loading: false, error: null },
     );
-    envContextMocks.openAskFlowerComposer.mockReset();
+    envContextMocks.openFlowerTurnLauncher.mockReset();
     envContextMocks.openTerminalInDirectory.mockReset();
     protocolMocks.client.mockReset();
     protocolMocks.client.mockReturnValue(null);
@@ -429,24 +429,23 @@ describe('EnvCodespacesPage', () => {
     askFlowerButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushPage();
 
-    expect(envContextMocks.openAskFlowerComposer).toHaveBeenCalledTimes(1);
-    const [intent, anchor] = envContextMocks.openAskFlowerComposer.mock.calls[0];
+    expect(envContextMocks.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
+    const [intent, anchor] = envContextMocks.openFlowerTurnLauncher.mock.calls[0];
     expect(anchor).toEqual({ x: 40, y: 56 });
     expect(intent).toMatchObject({
-      source: 'file_browser',
-      mode: 'append',
-      suggestedWorkingDirAbs: '/workspace/demo',
-      contextItems: [
+      source_surface: 'file_browser',
+      suggested_working_dir: '/workspace/demo',
+      context_items: [
         {
           kind: 'file_path',
           path: '/workspace/demo',
-          isDirectory: true,
+          is_directory: true,
         },
       ],
-      pendingAttachments: [],
+      pending_attachments: [],
       notes: [],
     });
-    expect(buildAskFlowerComposerCopy(intent).question).toBe('What would you like to explore inside it?');
+    expect(buildFlowerTurnLauncherCopy(intent).question).toBe('What should Flower do with this folder?');
   });
 
   it('shows Browser Editor setup guidance when the runtime is missing', async () => {

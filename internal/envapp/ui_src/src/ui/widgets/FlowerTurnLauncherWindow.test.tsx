@@ -3,11 +3,11 @@
 import { Show } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setFlowerTurnLauncherAttachmentSourcePath } from '../../../../../flower_ui/src/flowerTurnLauncherCopy';
 
-import { AskFlowerComposerWindow } from './AskFlowerComposerWindow';
+import { FlowerTurnLauncherWindow } from './FlowerTurnLauncherWindow';
 import { I18nProvider } from '../i18n';
 import { REDEVEN_LANGUAGE_PREFERENCE_STORAGE_KEY } from '../i18n/storageKey';
-import { setAskFlowerAttachmentSourcePath } from '../utils/askFlowerAttachmentMetadata';
 import {
   REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR,
   REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR,
@@ -30,7 +30,13 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ),
   FloatingWindow: (props: any) => (
     props.open ? (
-      <div data-testid="floating-window" class={props.class}>
+      <div
+        data-testid="floating-window"
+        data-z-index={String(props.zIndex ?? '')}
+        data-default-width={String(props.defaultSize?.width ?? '')}
+        data-default-height={String(props.defaultSize?.height ?? '')}
+        class={props.class}
+      >
         <div>{props.title}</div>
         <div>{props.children}</div>
         <div>{props.footer}</div>
@@ -56,6 +62,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     FileText: Icon,
     Paperclip: Icon,
     Activity: Icon,
+    AlertTriangle: Icon,
     Terminal: Icon,
     Send: Icon,
   };
@@ -136,17 +143,11 @@ vi.mock('./PersistentFloatingWindow', () => ({
   ),
 }));
 
-vi.mock('../utils/askFlowerPath', () => ({
-  resolveSuggestedWorkingDirAbsolute: ({ suggestedWorkingDirAbs }: { suggestedWorkingDirAbs?: string }) =>
-    String(suggestedWorkingDirAbs ?? '').trim(),
-}));
-
 const baseIntent = {
   id: 'intent-1',
-  source: 'terminal' as const,
-  mode: 'append' as const,
-  contextItems: [],
-  pendingAttachments: [],
+  source_surface: 'terminal' as const,
+  context_items: [],
+  pending_attachments: [],
   notes: [],
 };
 
@@ -181,17 +182,17 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-describe('AskFlowerComposerWindow', () => {
+describe('FlowerTurnLauncherWindow', () => {
   it('stays above the standard file preview surface', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
+      <FlowerTurnLauncherWindow
         open
         intent={baseIntent}
         onClose={() => undefined}
-        onSend={async () => undefined}
+        onSubmit={async () => undefined}
       />
     ), host);
 
@@ -207,23 +208,23 @@ describe('AskFlowerComposerWindow', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
+      <FlowerTurnLauncherWindow
         open
         intent={baseIntent}
         onClose={() => undefined}
-        onSend={async () => undefined}
+        onSubmit={async () => undefined}
       />
     ), host);
 
-    const scrollRegion = host.querySelector('[data-testid="ask-flower-scroll-region"]');
-    const composerDock = host.querySelector('[data-testid="ask-flower-composer-dock"]');
-    const assistantAvatar = host.querySelector('[data-testid="ask-flower-avatar"]');
-    const assistantSurface = host.querySelector('.ask-flower-composer-message-surface');
-    const assistantRow = host.querySelector('.ask-flower-composer-message-row');
+    const scrollRegion = host.querySelector('[data-testid="flower-turn-launcher-scroll-region"]');
+    const composerDock = host.querySelector('[data-testid="flower-turn-launcher-dock"]');
+    const assistantAvatar = host.querySelector('[data-testid="flower-turn-launcher-avatar"]');
+    const assistantSurface = host.querySelector('.flower-turn-launcher-message-surface');
+    const assistantRow = host.querySelector('.flower-turn-launcher-message-row');
     const textarea = host.querySelector('textarea');
 
     expect(scrollRegion).toBeTruthy();
-    expect(scrollRegion?.className).toContain('ask-flower-scroll-region');
+    expect(scrollRegion?.className).toContain('flower-turn-launcher-scroll-region');
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
     expect(composerDock).toBeTruthy();
@@ -242,19 +243,19 @@ describe('AskFlowerComposerWindow', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
+      <FlowerTurnLauncherWindow
         open
         intent={baseIntent}
         onClose={() => undefined}
-        onSend={async () => undefined}
+        onSubmit={async () => undefined}
       />
     ), host);
 
-    const composerDock = host.querySelector('[data-testid="ask-flower-composer-dock"]');
+    const composerDock = host.querySelector('[data-testid="flower-turn-launcher-dock"]');
 
-    expect(composerDock?.querySelector('.ask-flower-flat-input')).toBeTruthy();
+    expect(composerDock?.querySelector('.flower-turn-launcher-input')).toBeTruthy();
     expect(composerDock?.querySelector('.chat-input-container')).toBeNull();
-    expect(composerDock?.querySelector('.ask-flower-composer-toolbar')).toBeNull();
+    expect(composerDock?.querySelector('.flower-turn-launcher-toolbar')).toBeNull();
   });
 
   it('localizes product chrome while preserving prompt and context content', async () => {
@@ -264,24 +265,24 @@ describe('AskFlowerComposerWindow', () => {
 
     render(() => (
       <I18nProvider>
-        <AskFlowerComposerWindow
+        <FlowerTurnLauncherWindow
           open
           intent={{
             ...baseIntent,
-            source: 'file_preview',
-            suggestedWorkingDirAbs: '/Users/demo/project',
-            contextItems: [
+            source_surface: 'file_preview',
+            suggested_working_dir: '/Users/demo/project',
+            context_items: [
               {
                 kind: 'file_selection',
                 path: '/Users/demo/project/src/main.ts',
                 selection: 'const answer = 42;',
-                selectionChars: 18,
+                selection_chars: 18,
               },
             ],
-            userPrompt: 'Please keep this user prompt in English.',
+            initial_prompt: 'Please keep this user prompt in English.',
           }}
           onClose={() => undefined}
-          onSend={async () => undefined}
+          onSubmit={async () => undefined}
         />
       </I18nProvider>
     ), host);
@@ -299,7 +300,7 @@ describe('AskFlowerComposerWindow', () => {
     expect(selectionButton?.getAttribute('title')).toBe('预览来自 /Users/demo/project/src/main.ts 的已选内容');
 
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement | null;
-    const sendButton = host.querySelector('[data-testid="ask-flower-inline-send"]') as HTMLButtonElement | null;
+    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement | null;
     expect(textarea?.value).toBe('Please keep this user prompt in English.');
     expect(textarea?.getAttribute('placeholder')).toBe('询问这段选择内容、请求修改，或描述你的需求');
     expect(sendButton?.getAttribute('aria-label')).toBe('发送消息');
@@ -310,16 +311,16 @@ describe('AskFlowerComposerWindow', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
+      <FlowerTurnLauncherWindow
         open
         intent={baseIntent}
         onClose={() => undefined}
-        onSend={async () => undefined}
+        onSubmit={async () => undefined}
       />
     ), host);
 
-    const editorShell = host.querySelector('[data-testid="ask-flower-composer-editor-shell"]');
-    const inlineSend = host.querySelector('[data-testid="ask-flower-inline-send"]');
+    const editorShell = host.querySelector('[data-testid="flower-turn-launcher-editor-shell"]');
+    const inlineSend = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]');
 
     expect(editorShell).toBeTruthy();
     expect(inlineSend).toBeTruthy();
@@ -327,40 +328,40 @@ describe('AskFlowerComposerWindow', () => {
   });
 
   it('submits the visible composed prompt through the send button', async () => {
-    const onSend = vi.fn(async () => undefined);
+    const onSubmit = vi.fn(async () => undefined);
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
+      <FlowerTurnLauncherWindow
         open
         intent={baseIntent}
         onClose={() => undefined}
-        onSend={onSend}
+        onSubmit={onSubmit}
       />
     ), host);
 
     composePrompt(host, '你好，Flower');
-    const sendButton = host.querySelector('[data-testid="ask-flower-inline-send"]') as HTMLButtonElement | null;
+    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement | null;
     expect(sendButton).toBeTruthy();
     sendButton?.click();
     await flushAsync();
 
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith('你好，Flower');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledWith({ prompt: '你好，Flower', intent: baseIntent });
   });
 
   it('submits the composed prompt with Enter after composition ends', async () => {
-    const onSend = vi.fn(async () => undefined);
+    const onSubmit = vi.fn(async () => undefined);
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
+      <FlowerTurnLauncherWindow
         open
         intent={baseIntent}
         onClose={() => undefined}
-        onSend={onSend}
+        onSubmit={onSubmit}
       />
     ), host);
 
@@ -373,21 +374,21 @@ describe('AskFlowerComposerWindow', () => {
     }));
     await flushAsync();
 
-    expect(onSend).toHaveBeenCalledTimes(1);
-    expect(onSend).toHaveBeenCalledWith('deploy this change');
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledWith({ prompt: 'deploy this change', intent: baseIntent });
   });
 
   it('keeps Shift+Enter available for a newline instead of sending', async () => {
-    const onSend = vi.fn(async () => undefined);
+    const onSubmit = vi.fn(async () => undefined);
     const host = document.createElement('div');
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
+      <FlowerTurnLauncherWindow
         open
         intent={baseIntent}
         onClose={() => undefined}
-        onSend={onSend}
+        onSubmit={onSubmit}
       />
     ), host);
 
@@ -401,7 +402,7 @@ describe('AskFlowerComposerWindow', () => {
     }));
     await flushAsync();
 
-    expect(onSend).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it('shows a selection preview when the highlighted context is clicked', async () => {
@@ -409,23 +410,23 @@ describe('AskFlowerComposerWindow', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
-        open
-        intent={{
-          ...baseIntent,
-          source: 'file_preview',
-          contextItems: [
-            {
-              kind: 'file_selection',
-              path: '/Users/demo/notes.md',
-              selection: 'const answer = 42;',
-              selectionChars: 18,
-            },
-          ],
-        }}
-        onClose={() => undefined}
-        onSend={async () => undefined}
-      />
+      <FlowerTurnLauncherWindow
+          open
+          intent={{
+            ...baseIntent,
+            source_surface: 'file_preview',
+            context_items: [
+              {
+                kind: 'file_selection',
+                path: '/Users/demo/notes.md',
+                selection: 'const answer = 42;',
+                selection_chars: 18,
+              },
+            ],
+          }}
+          onClose={() => undefined}
+          onSubmit={async () => undefined}
+        />
     ), host);
 
     const selectionButton = Array.from(host.querySelectorAll('button')).find((button) =>
@@ -444,23 +445,23 @@ describe('AskFlowerComposerWindow', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
-        open
-        intent={{
-          ...baseIntent,
-          source: 'file_preview',
-          contextItems: [
-            {
-              kind: 'file_selection',
-              path: '/Users/demo/notes.md',
-              selection: 'const answer = 42;',
-              selectionChars: 18,
-            },
-          ],
-        }}
-        onClose={() => undefined}
-        onSend={async () => undefined}
-      />
+      <FlowerTurnLauncherWindow
+          open
+          intent={{
+            ...baseIntent,
+            source_surface: 'file_preview',
+            context_items: [
+              {
+                kind: 'file_selection',
+                path: '/Users/demo/notes.md',
+                selection: 'const answer = 42;',
+                selection_chars: 18,
+              },
+            ],
+          }}
+          onClose={() => undefined}
+          onSubmit={async () => undefined}
+        />
     ), host);
 
     const liveFileButton = host.querySelector('button[aria-label="Open live file preview for notes.md"]') as HTMLButtonElement | null;
@@ -481,22 +482,22 @@ describe('AskFlowerComposerWindow', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
-        open
-        intent={{
-          ...baseIntent,
-          source: 'file_browser',
-          contextItems: [
-            {
-              kind: 'file_path',
-              path: '/Users/demo/project',
-              isDirectory: true,
-            },
-          ],
-        }}
-        onClose={() => undefined}
-        onSend={async () => undefined}
-      />
+      <FlowerTurnLauncherWindow
+          open
+          intent={{
+            ...baseIntent,
+            source_surface: 'file_browser',
+            context_items: [
+              {
+                kind: 'file_path',
+                path: '/Users/demo/project',
+                is_directory: true,
+              },
+            ],
+          }}
+          onClose={() => undefined}
+          onSubmit={async () => undefined}
+        />
     ), host);
 
     expect(host.textContent).toContain('What would you like to explore inside it?');
@@ -510,22 +511,22 @@ describe('AskFlowerComposerWindow', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
-        open
-        intent={{
-          ...baseIntent,
-          source: 'file_browser',
-          contextItems: [
-            {
-              kind: 'file_path',
-              path: '/Users/demo/project',
-              isDirectory: true,
-            },
-          ],
-        }}
-        onClose={() => undefined}
-        onSend={async () => undefined}
-      />
+      <FlowerTurnLauncherWindow
+          open
+          intent={{
+            ...baseIntent,
+            source_surface: 'file_browser',
+            context_items: [
+              {
+                kind: 'file_path',
+                path: '/Users/demo/project',
+                is_directory: true,
+              },
+            ],
+          }}
+          onClose={() => undefined}
+          onSubmit={async () => undefined}
+        />
     ), host);
 
     const directoryButton = Array.from(host.querySelectorAll('button')).find((button) =>
@@ -544,22 +545,22 @@ describe('AskFlowerComposerWindow', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
-        open
-        intent={{
-          ...baseIntent,
-          source: 'file_browser',
-          contextItems: [
-            {
-              kind: 'file_path',
-              path: '/Users/demo/app.ts',
-              isDirectory: false,
-            },
-          ],
-        }}
-        onClose={() => undefined}
-        onSend={async () => undefined}
-      />
+      <FlowerTurnLauncherWindow
+          open
+          intent={{
+            ...baseIntent,
+            source_surface: 'file_browser',
+            context_items: [
+              {
+                kind: 'file_path',
+                path: '/Users/demo/app.ts',
+                is_directory: false,
+              },
+            ],
+          }}
+          onClose={() => undefined}
+          onSubmit={async () => undefined}
+        />
     ), host);
 
     const fileButton = Array.from(host.querySelectorAll('button')).find((button) =>
@@ -582,22 +583,22 @@ describe('AskFlowerComposerWindow', () => {
     document.body.appendChild(host);
 
     render(() => (
-      <AskFlowerComposerWindow
-        open
-        intent={{
-          ...baseIntent,
-          source: 'file_preview',
-          contextItems: [
-            {
-              kind: 'file_path',
-              path: '/Users/demo/current.md',
-              isDirectory: false,
-            },
-          ],
-        }}
-        onClose={() => undefined}
-        onSend={async () => undefined}
-      />
+      <FlowerTurnLauncherWindow
+          open
+          intent={{
+            ...baseIntent,
+            source_surface: 'file_preview',
+            context_items: [
+              {
+                kind: 'file_path',
+                path: '/Users/demo/current.md',
+                is_directory: false,
+              },
+            ],
+          }}
+          onClose={() => undefined}
+          onSubmit={async () => undefined}
+        />
     ), host);
 
     const fileButton = Array.from(host.querySelectorAll('button')).find((button) =>
@@ -620,29 +621,29 @@ describe('AskFlowerComposerWindow', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    const attachment = setAskFlowerAttachmentSourcePath(
+    const attachment = setFlowerTurnLauncherAttachmentSourcePath(
       new File(['export default [];'], 'eslint.config.mjs', { type: 'text/plain' }),
       '/Users/demo/eslint.config.mjs',
     );
 
     render(() => (
-      <AskFlowerComposerWindow
-        open
-        intent={{
-          ...baseIntent,
-          source: 'file_browser',
-          contextItems: [
-            {
-              kind: 'file_path',
-              path: '/Users/demo/eslint.config.mjs',
-              isDirectory: false,
-            },
-          ],
-          pendingAttachments: [attachment],
-        }}
-        onClose={() => undefined}
-        onSend={async () => undefined}
-      />
+      <FlowerTurnLauncherWindow
+          open
+          intent={{
+            ...baseIntent,
+            source_surface: 'file_browser',
+            context_items: [
+              {
+                kind: 'file_path',
+                path: '/Users/demo/eslint.config.mjs',
+                is_directory: false,
+              },
+            ],
+            pending_attachments: [attachment],
+          }}
+          onClose={() => undefined}
+          onSubmit={async () => undefined}
+        />
     ), host);
 
     expect(host.textContent).not.toContain('1 linked');
@@ -679,29 +680,29 @@ describe('AskFlowerComposerWindow', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
-    const attachment = setAskFlowerAttachmentSourcePath(
+    const attachment = setFlowerTurnLauncherAttachmentSourcePath(
       new File([new Uint8Array([1, 2, 3])], 'report.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
       '/Users/demo/report.xlsx',
     );
 
     render(() => (
-      <AskFlowerComposerWindow
-        open
-        intent={{
-          ...baseIntent,
-          source: 'file_browser',
-          contextItems: [
-            {
-              kind: 'file_path',
-              path: '/Users/demo/report.xlsx',
-              isDirectory: false,
-            },
-          ],
-          pendingAttachments: [attachment],
-        }}
-        onClose={() => undefined}
-        onSend={async () => undefined}
-      />
+      <FlowerTurnLauncherWindow
+          open
+          intent={{
+            ...baseIntent,
+            source_surface: 'file_browser',
+            context_items: [
+              {
+                kind: 'file_path',
+                path: '/Users/demo/report.xlsx',
+                is_directory: false,
+              },
+            ],
+            pending_attachments: [attachment],
+          }}
+          onClose={() => undefined}
+          onSubmit={async () => undefined}
+        />
     ), host);
 
     const snapshotButton = host.querySelector('button[aria-label="Preview attached snapshot for report.xlsx"]') as HTMLButtonElement | null;
@@ -729,16 +730,16 @@ describe('AskFlowerComposerWindow', () => {
     });
 
     render(() => (
-      <AskFlowerComposerWindow
-        open
-        intent={{
-          ...baseIntent,
-          source: 'file_browser',
-          pendingAttachments: [brokenAttachment],
-        }}
-        onClose={() => undefined}
-        onSend={async () => undefined}
-      />
+      <FlowerTurnLauncherWindow
+          open
+          intent={{
+            ...baseIntent,
+            source_surface: 'file_browser',
+            pending_attachments: [brokenAttachment],
+          }}
+          onClose={() => undefined}
+          onSubmit={async () => undefined}
+        />
     ), host);
 
     const attachmentButton = Array.from(host.querySelectorAll('button')).find((button) =>

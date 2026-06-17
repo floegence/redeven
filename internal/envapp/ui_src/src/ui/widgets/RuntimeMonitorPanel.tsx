@@ -9,7 +9,7 @@ import { sortContextActionMenuItems } from '../contextActions/menu';
 import { useRedevenRpc, type ActiveSession, type SysMonitorProcessInfo, type SysMonitorSnapshot, type SysMonitorSortBy } from '../protocol/redeven_v1';
 import { useEnvContext } from '../pages/EnvContext';
 import {
-  buildMonitorProcessAskFlowerIntent,
+  buildMonitorProcessFlowerTurnLauncherIntent,
   formatMonitorProcessBytes,
   monitorProcessDisplayLabel,
 } from '../utils/monitorProcessAskFlower';
@@ -482,8 +482,8 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
 
     const anchor = { x: menu.x, y: menu.y };
     setProcessContextMenu(null);
-    ctx.openAskFlowerComposer(
-      buildMonitorProcessAskFlowerIntent({
+    ctx.openFlowerTurnLauncher(
+      buildMonitorProcessFlowerTurnLauncherIntent({
         process: menu.process,
         snapshot: menu.snapshot,
       }),

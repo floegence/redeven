@@ -1,5 +1,5 @@
-import type { AskFlowerContextItem, AskFlowerIntent } from '../pages/askFlowerIntent';
-import { attachAskFlowerContextAction } from '../contextActions/askFlower';
+import type { FlowerTurnLauncherContextItem, FlowerTurnLauncherIntent } from '../../../../../flower_ui/src';
+import { attachAskFlowerContextAction, type EnvFlowerTurnLauncherIntent } from '../contextActions/askFlower';
 import type {
   GitBranchSummary,
   GitCommitDetail,
@@ -21,7 +21,7 @@ import {
 
 const MAX_GIT_SNAPSHOT_FILES = 40;
 
-type TextSnapshotContextItem = Extract<AskFlowerContextItem, { kind: 'text_snapshot' }>;
+type TextSnapshotContextItem = Extract<FlowerTurnLauncherContextItem, { kind: 'text_snapshot' }>;
 type GitCommitLike = GitCommitDetail | GitCommitSummary;
 
 export type GitDirectoryShortcutRequest = Readonly<{
@@ -64,8 +64,8 @@ export type GitAskFlowerRequest =
       files: GitCommitFileSummary[];
     }>;
 
-export type BuildGitAskFlowerIntentResult = Readonly<{
-  intent: AskFlowerIntent | null;
+export type BuildGitFlowerTurnLauncherIntentResult = Readonly<{
+  intent: FlowerTurnLauncherIntent | null;
   error?: string;
 }>;
 
@@ -278,7 +278,7 @@ function buildCommitSnapshot(request: Extract<GitAskFlowerRequest, { kind: 'comm
   });
 }
 
-export function buildGitAskFlowerIntent(request: GitAskFlowerRequest): BuildGitAskFlowerIntentResult {
+export function buildGitFlowerTurnLauncherIntent(request: GitAskFlowerRequest): BuildGitFlowerTurnLauncherIntentResult {
   const repoRootPath = normalizeAbsolutePath(request.repoRootPath);
   if (!repoRootPath) {
     return {
@@ -315,13 +315,12 @@ export function buildGitAskFlowerIntent(request: GitAskFlowerRequest): BuildGitA
     ? normalizeAbsolutePath(request.worktreePath ?? '') || repoRootPath
     : repoRootPath;
 
-  const intent: AskFlowerIntent = {
+  const intent: EnvFlowerTurnLauncherIntent = {
     id: createClientId('ask-flower'),
-    source: 'git_browser',
-    mode: 'append',
-    suggestedWorkingDirAbs,
-    contextItems: [contextItem],
-    pendingAttachments: [],
+    source_surface: 'git_browser',
+    suggested_working_dir: suggestedWorkingDirAbs,
+    context_items: [contextItem],
+    pending_attachments: [],
     notes: [],
   };
 

@@ -108,7 +108,15 @@ import {
   type RuntimeServiceSnapshot,
   type RuntimeServiceWorkload,
 } from '../shared/runtimeService';
-import { FlowerIcon, FlowerSoftAuraIcon, FlowerSurface, type FlowerSurfaceDraftIntent } from '../../../internal/flower_ui/src';
+import {
+  FlowerIcon,
+  FlowerSoftAuraIcon,
+  FlowerSurface,
+  FlowerTurnLauncherWindow,
+  type FlowerTurnLauncherAnchor,
+  type FlowerTurnLauncherIntent,
+  type FlowerTurnLauncherSubmitInput,
+} from '../../../internal/flower_ui/src';
 import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
   openConnectionPhaseSequence,
@@ -323,6 +331,7 @@ import { runGatewaySourceAction } from './gatewaySourceActionRunner';
 import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnimation';
 import {
   createLocalEnvironmentFlowerSurfaceAdapter,
+  launchLocalEnvironmentFlowerTurn,
   type DesktopSettingsBridge,
 } from './flower/localEnvironmentFlowerSurfaceAdapter';
 import { createDesktopFlowerSurfaceCopy } from './flower/desktopFlowerSurfaceCopy';
@@ -2903,7 +2912,10 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
   const [providerRuntimeLinkProviderEnvironmentID, setProviderRuntimeLinkProviderEnvironmentID] = createSignal('');
   const [deleteControlPlaneTarget, setDeleteControlPlaneTarget] = createSignal<DesktopControlPlaneSummary | null>(null);
-  const [flowerDraftIntent, setFlowerDraftIntent] = createSignal<FlowerSurfaceDraftIntent | null>(null);
+  const [flowerTurnLauncherOpen, setFlowerTurnLauncherOpen] = createSignal(false);
+  const [flowerTurnLauncherIntent, setFlowerTurnLauncherIntent] = createSignal<FlowerTurnLauncherIntent | null>(null);
+  const [flowerTurnLauncherAnchor, setFlowerTurnLauncherAnchor] = createSignal<FlowerTurnLauncherAnchor | null>(null);
+  const [flowerFocusThreadID, setFlowerFocusThreadID] = createSignal('');
   const deleteTargetOperation = createMemo(() => {
     const target = deleteTarget();
     if (!target) {
@@ -5915,22 +5927,63 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     });
   }
 
-  function openEnvironmentFlowerSurface(environment: DesktopEnvironmentEntry): void {
+  function buildEnvironmentFlowerTurnLauncherIntent(environment: DesktopEnvironmentEntry): FlowerTurnLauncherIntent {
     const cleanLabel = trimString(environment.label) || i18n().t('environmentCenter.thisEnvironment');
     const contextSummary = environmentFlowerContextSummary(i18n(), environment);
-    const prompt = [
-      `From Desktop Environment: ${cleanLabel}`,
-      `Environment ID: ${environment.id}`,
-      contextSummary ? `Context: ${contextSummary}` : '',
-      '',
-      '',
-    ].filter((line, index, lines) => !(index === lines.length - 1 && line === '')).join('\n');
-    setFlowerDraftIntent({
-      id: `${environment.id}:${Date.now()}`,
-      prompt,
+    return {
+      id: `desktop-env-${trimString(environment.id) || 'environment'}-${Date.now()}`,
+      source_surface: 'desktop_welcome_environment_card',
+      suggested_working_dir: '',
+      context_items: [{
+        kind: 'environment',
+        label: cleanLabel,
+        detail: contextSummary,
+        target_id: environmentFlowerPrimaryTargetID(environment),
+      }],
+      notes: [],
       context_action: buildEnvironmentFlowerContextEnvelope(environment).raw,
-    });
-    void performLauncherAction({ kind: 'open_flower' });
+    };
+  }
+
+  function openEnvironmentFlowerSurface(
+    environment: DesktopEnvironmentEntry,
+    anchor?: FlowerTurnLauncherAnchor,
+  ): void {
+    setFlowerTurnLauncherIntent(buildEnvironmentFlowerTurnLauncherIntent(environment));
+    setFlowerTurnLauncherAnchor(anchor ?? null);
+    setFlowerTurnLauncherOpen(true);
+  }
+
+  function closeFlowerTurnLauncher(): void {
+    setFlowerTurnLauncherOpen(false);
+    setFlowerTurnLauncherIntent(null);
+    setFlowerTurnLauncherAnchor(null);
+  }
+
+  async function submitFlowerTurnLauncher(input: FlowerTurnLauncherSubmitInput): Promise<void> {
+    const prompt = trimString(input.prompt);
+    if (!prompt) {
+      throw new Error(i18n().t('environmentCenter.askFlowerCardNoMessage'));
+    }
+    try {
+      const bootstrap = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, {
+        prompt,
+        context_action: input.intent.context_action,
+        working_dir: input.intent.suggested_working_dir,
+        mode: 'act',
+      });
+      const threadID = trimString(bootstrap.thread.thread_id || bootstrap.thread_id);
+      if (!threadID) {
+        throw new Error('Missing thread id.');
+      }
+      setFlowerFocusThreadID(threadID);
+      closeFlowerTurnLauncher();
+      await openFlowerSurface();
+      showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
+    } catch (error) {
+      showActionToast(getErrorMessage(error), 'error');
+      throw error;
+    }
   }
 
   async function openEnvironmentCenterSurface(): Promise<void> {
@@ -6161,10 +6214,36 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
             })}
             copy={createDesktopFlowerSurfaceCopy(i18n())}
-            draftIntent={flowerDraftIntent()}
+            focusThreadID={flowerFocusThreadID()}
           />
         </Show>
       </DesktopLauncherShell>
+
+      <FlowerTurnLauncherWindow
+        open={flowerTurnLauncherOpen()}
+        intent={flowerTurnLauncherIntent()}
+        anchor={flowerTurnLauncherAnchor()}
+        copy={{
+          window_title: i18n().t('environmentCenter.askFlowerCardTitle'),
+          linked_context_label: i18n().t('environmentCenter.askFlowerCardContextLabel'),
+          working_dir_label: i18n().t('flowerSurface.threadList.workingDirectoryLabel'),
+          working_directory_unavailable: i18n().t('environmentCenter.askFlowerWorkingDirectoryUnavailable'),
+          ready: i18n().t('flowerSurface.chat.ready'),
+          close: i18n().t('flowerSurface.threadList.cancel'),
+          sending: i18n().t('environmentCenter.askFlowerCardSending'),
+          you_label: i18n().t('environmentCenter.askFlowerCardPromptLabel'),
+          reply_to_flower_label: i18n().t('environmentCenter.askFlowerCardReplyHint'),
+          send_turn: i18n().t('environmentCenter.askFlowerCardSend'),
+          empty_message: i18n().t('environmentCenter.askFlowerCardNoMessage'),
+          launch_failed_title: i18n().t('environmentCenter.askFlowerCardLaunchFailedTitle'),
+          prompt: {
+            environment_question: i18n().t('environmentCenter.askFlowerLauncherQuestion'),
+            environment_placeholder: i18n().t('environmentCenter.askFlowerLauncherPlaceholder'),
+          },
+        }}
+        onClose={closeFlowerTurnLauncher}
+        onSubmit={submitFlowerTurnLauncher}
+      />
 
       <DesktopActionToastViewport
         i18n={i18n()}
@@ -6605,7 +6684,7 @@ function ConnectEnvironmentSurface(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
-  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry) => void;
+  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry, anchor?: FlowerTurnLauncherAnchor) => void;
   runEnvironmentGuidanceAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -7040,7 +7119,7 @@ function EnvironmentCardsPanel(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
-  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry) => void;
+  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry, anchor?: FlowerTurnLauncherAnchor) => void;
   runEnvironmentGuidanceAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -9279,7 +9358,7 @@ function EnvironmentConnectionCard(props: Readonly<{
     environment: DesktopEnvironmentEntry,
     errorTarget?: 'connect' | 'dialog' | 'settings',
   ) => Promise<boolean>;
-  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry) => void;
+  openEnvironmentFlowerSurface: (environment: DesktopEnvironmentEntry, anchor?: FlowerTurnLauncherAnchor) => void;
   runEnvironmentGuidanceAction: (
     environment: DesktopEnvironmentEntry,
     action: EnvironmentActionModel,
@@ -9551,7 +9630,11 @@ function EnvironmentConnectionCard(props: Readonly<{
               title={props.i18n.t('environmentCenter.askFlowerForLabel', { label: props.environment.label })}
               onClick={(event) => {
                 event.stopPropagation();
-                props.openEnvironmentFlowerSurface(props.environment);
+                const rect = event.currentTarget.getBoundingClientRect();
+                props.openEnvironmentFlowerSurface(props.environment, {
+                  x: rect.right,
+                  y: rect.bottom,
+                });
               }}
             >
               <FlowerSoftAuraIcon

@@ -12,7 +12,7 @@ import type {
   FlowerProviderDraft,
   FlowerProviderModel,
   FlowerRouterDecision,
-  FlowerSendMessageInput,
+  FlowerTurnLaunchInput,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
@@ -318,13 +318,9 @@ function mapRuntimeFlowerLiveBootstrap(raw: unknown): FlowerLiveBootstrap {
   return mapFlowerLiveBootstrap(raw, localEnvironmentLiveMapperOptions());
 }
 
-export async function sendLocalEnvironmentFlowerPrompt(
+export async function launchLocalEnvironmentFlowerTurn(
   bridge: DesktopSettingsBridge,
-  input: Readonly<{
-    threadID?: string;
-    prompt: string;
-    contextAction?: unknown;
-  }>,
+  input: FlowerTurnLaunchInput,
 ): Promise<FlowerLiveBootstrap> {
   const prompt = trim(input.prompt);
   if (!prompt) throw new Error('Enter a message before sending.');
@@ -332,27 +328,39 @@ export async function sendLocalEnvironmentFlowerPrompt(
   const models = await loadModels(bridge);
   const modelID = currentModelID(snapshot, models);
   if (!modelID) throw new Error('Select a Flower model before starting a chat.');
-  let threadID = trim(input.threadID);
+  const mode = input.mode ?? 'act';
+  let threadID = trim(input.thread_id);
   if (!threadID) {
-    const created = await runtimeJSON<CreateThreadResponse>(bridge, 'POST', '/_redeven_proxy/api/ai/threads', {
+    const createBody: Record<string, unknown> = {
       title: '',
       model_id: modelID,
-      execution_mode: 'act',
-    });
+      execution_mode: mode,
+    };
+    if (trim(input.working_dir)) {
+      createBody.working_dir = trim(input.working_dir);
+    }
+    const created = await runtimeJSON<CreateThreadResponse>(bridge, 'POST', '/_redeven_proxy/api/ai/threads', createBody);
     threadID = trim(created.thread?.thread_id);
   }
   if (!threadID) throw new Error('Failed to create Flower chat.');
+  const attachments = [
+    ...(input.attachments ?? []).map((attachment) => ({
+      name: trim(attachment.name) || 'attachment',
+      mimeType: trim(attachment.mime_type) || 'application/octet-stream',
+      url: trim(attachment.url),
+    })),
+  ].filter((attachment) => !!attachment.url);
   await runtimeJSON<unknown>(bridge, 'POST', '/_redeven_proxy/api/ai/runs', {
     thread_id: threadID,
     model: modelID,
     input: {
       text: prompt,
-      attachments: [],
-      ...(input.contextAction ? { context_action: input.contextAction } : {}),
+      attachments,
+      ...(input.context_action ? { context_action: input.context_action } : {}),
     },
     options: {
       max_steps: 10,
-      mode: 'act',
+      mode,
     },
   });
   return loadRuntimeFlowerThread(bridge, threadID);
@@ -405,12 +413,8 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       return loadSettingsSnapshot(bridge);
     },
     resolveHandler: async () => decision(),
-    sendMessage: async (input: FlowerSendMessageInput) => {
-      return sendLocalEnvironmentFlowerPrompt(bridge, {
-        threadID: input.thread_id,
-        prompt: input.prompt,
-        ...(input.context_action ? { contextAction: input.context_action } : {}),
-      });
+    launchTurn: async (input: FlowerTurnLaunchInput) => {
+      return launchLocalEnvironmentFlowerTurn(bridge, input);
     },
     submitInput: async (input) => {
       const tid = trim(input.thread_id);

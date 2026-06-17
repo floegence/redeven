@@ -1,7 +1,7 @@
 import { createContext, useContext, type Resource } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
+import type { FlowerTurnLauncherAnchor, FlowerTurnLauncherIntent } from '../../../../../flower_ui/src';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
-import type { AskFlowerIntent } from './askFlowerIntent';
 import type { FilePreviewOpenOptions } from '../widgets/FilePreviewContext';
 import type { ActivityFileActionOpenRequest } from '../chat/types';
 import type {
@@ -36,11 +36,6 @@ export type EnvSettingsOrigin =
 
 export type OpenEnvSettingsOptions = {
   origin?: EnvSettingsOrigin;
-};
-
-export type AskFlowerComposerAnchor = {
-  x: number;
-  y: number;
 };
 
 export type SetEnvViewModeOptions = {
@@ -134,10 +129,7 @@ export type EnvContextValue = {
   settingsFocusSeq: () => number;
   settingsFocusSection: () => EnvSettingsSection | null;
 
-  askFlowerIntentSeq: () => number;
-  askFlowerIntent: () => AskFlowerIntent | null;
-  injectAskFlowerIntent: (intent: AskFlowerIntent) => void;
-  openAskFlowerComposer: (intent: AskFlowerIntent, anchor?: AskFlowerComposerAnchor) => void;
+  openFlowerTurnLauncher: (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => void;
   openTerminalInDirectoryRequestSeq: () => number;
   openTerminalInDirectoryRequest: () => OpenTerminalInDirectoryRequest | null;
   openTerminalInDirectory: (

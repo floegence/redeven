@@ -10,7 +10,7 @@ import { useEnvContext } from '../pages/EnvContext';
 import { useDownloadManager } from '../downloads/DownloadContext';
 import { buildFilePreviewDownloadCommand } from '../downloads/downloadCommands';
 import { writeTextToClipboard } from '../utils/clipboard';
-import { buildFilePreviewAskFlowerIntent } from '../utils/filePreviewAskFlower';
+import { buildFilePreviewFlowerTurnLauncherIntent } from '../utils/filePreviewAskFlower';
 import { FilePreviewPanel } from '../widgets/FilePreviewPanel';
 import { createFilePreviewController } from '../widgets/createFilePreviewController';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
@@ -259,7 +259,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
   };
 
   const handleAskFlower = (selectionText: string) => {
-    const result = buildFilePreviewAskFlowerIntent({
+    const result = buildFilePreviewFlowerTurnLauncherIntent({
       item: controller.item(),
       selectionText,
     });
@@ -268,7 +268,7 @@ export function WorkbenchFilePreviewWidget(props: WorkbenchWidgetBodyProps) {
       return;
     }
     if (!result.intent) return;
-    env.openAskFlowerComposer(result.intent);
+    env.openFlowerTurnLauncher(result.intent);
   };
 
   const handleDownload = () => {

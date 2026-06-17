@@ -743,6 +743,126 @@ html.dark .flower-component-shell {
   }
 }
 
+.flower-turn-launcher-window button:not(:disabled),
+.flower-turn-launcher-window [role='button']:not([aria-disabled='true']) {
+  cursor: pointer;
+}
+
+.flower-turn-launcher-surface {
+  --flower-turn-launcher-message: color-mix(in srgb, var(--card) 94%, var(--background) 6%);
+  --flower-turn-launcher-message-border: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.flower-turn-launcher-message-row {
+  display: flex;
+  min-width: 0;
+  gap: 0.5rem;
+}
+
+.flower-turn-launcher-message-surface {
+  border: 1px solid var(--flower-turn-launcher-message-border);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--flower-turn-launcher-message) 96%, white 4%), var(--flower-turn-launcher-message));
+}
+
+.flower-turn-launcher-dock {
+  position: relative;
+}
+
+.flower-turn-launcher-input {
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.flower-turn-launcher-input-body {
+  min-width: 0;
+}
+
+.flower-turn-launcher-editor-row {
+  display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.flower-turn-launcher-editor-shell {
+  position: relative;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  overflow: hidden;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+
+.flower-turn-launcher-editor-shell:focus-within {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+.flower-turn-launcher-textarea {
+  min-height: 5.25rem;
+  max-height: 12rem;
+  padding: 0.625rem 2.75rem 1.75rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+}
+
+.flower-turn-launcher-textarea::placeholder {
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
+}
+
+.flower-turn-launcher-validation {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.45rem;
+  max-width: calc(100% - 4rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 650;
+}
+
+.flower-turn-launcher-send-btn {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  width: 1.85rem;
+  height: 1.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+}
+
+.flower-turn-launcher-error {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  gap: 0.375rem;
+  margin: 0.375rem 0.25rem 0;
+  color: var(--destructive);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+@media (max-width: 640px) {
+  .flower-turn-launcher-dock {
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .flower-turn-launcher-textarea {
+    min-height: 4.75rem;
+    max-height: 10rem;
+  }
+}
+
 .flower-message-block-stack {
   display: flex;
   width: 100%;

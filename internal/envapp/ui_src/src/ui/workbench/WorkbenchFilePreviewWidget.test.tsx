@@ -71,7 +71,7 @@ vi.mock('../utils/clipboard', () => ({
 }));
 
 vi.mock('../utils/filePreviewAskFlower', () => ({
-  buildFilePreviewAskFlowerIntent: () => ({}),
+  buildFilePreviewFlowerTurnLauncherIntent: () => ({}),
 }));
 
 vi.mock('../downloads/DownloadContext', () => ({
@@ -167,7 +167,7 @@ function renderPreviewWidget(options: {
     <EnvContext.Provider
       value={{
         env: () => ({ permissions: { can_write: true } }),
-        openAskFlowerComposer: vi.fn(),
+        openFlowerTurnLauncher: vi.fn(),
       } as any}
     >
       <EnvWorkbenchInstancesContext.Provider

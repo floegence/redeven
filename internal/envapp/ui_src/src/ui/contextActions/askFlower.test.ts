@@ -5,13 +5,13 @@ describe('Ask Flower context actions', () => {
   it('maps terminal selection context into the shared envelope', () => {
     const action = buildAskFlowerContextAction({
       source: 'terminal',
-      suggestedWorkingDirAbs: '/workspace/repo',
-      contextItems: [
+      suggested_working_dir: '/workspace/repo',
+      context_items: [
         {
           kind: 'terminal_selection',
-          workingDir: '/workspace/repo',
+          working_dir: '/workspace/repo',
           selection: 'npm test',
-          selectionChars: 8,
+          selection_chars: 8,
         },
       ],
     });
@@ -42,19 +42,19 @@ describe('Ask Flower context actions', () => {
   it('carries execution context as routing hints, not permissions', () => {
     const action = buildAskFlowerContextAction({
       source: 'file_browser',
-      suggestedWorkingDirAbs: '/workspace/repo',
+      suggested_working_dir: '/workspace/repo',
       executionContext: {
         current_target_id: 'provider:https%3A%2F%2Fredeven.test:env:env_a',
         source_env_public_id: 'env_a',
         runtime_hint: 'auto',
         session_source: 'provider_environment',
       },
-      contextItems: [
+      context_items: [
         {
           kind: 'file_path',
           path: '/workspace/repo',
-          isDirectory: true,
-          rootLabel: 'Workspace',
+          is_directory: true,
+          root_label: 'Workspace',
         },
       ],
     });

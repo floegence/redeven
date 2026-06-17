@@ -42,13 +42,13 @@ function sameSet(left: Set<string>, right: Set<string>): boolean {
   return true;
 }
 
-describe('Ask Flower composer i18n dictionaries', () => {
-  it('keeps composer locale shape, placeholders, and protected terms aligned', () => {
-    const sourceLeaves = collectStringLeaves(enUS.askFlowerComposer);
+describe('Flower turn launcher i18n dictionaries', () => {
+  it('keeps launcher locale shape, placeholders, and protected terms aligned', () => {
+    const sourceLeaves = collectStringLeaves(enUS.flowerTurnLauncher);
     const sourceKeys = Object.keys(sourceLeaves).sort();
 
     for (const locale of SUPPORTED_LOCALES) {
-      const targetLeaves = collectStringLeaves(dictionaries[locale].askFlowerComposer);
+      const targetLeaves = collectStringLeaves(dictionaries[locale].flowerTurnLauncher);
       expect(Object.keys(targetLeaves).sort()).toEqual(sourceKeys);
 
       for (const key of sourceKeys) {

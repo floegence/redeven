@@ -6,7 +6,7 @@ import type {
   FlowerProviderDraft,
   FlowerProviderModel,
   FlowerRouterDecision,
-  FlowerSendMessageInput,
+  FlowerTurnLaunchInput,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
@@ -22,6 +22,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envLabel: string;
   rpc: RedevenV1Rpc;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
+  uploadAttachment?: (file: File) => Promise<string>;
   openFileBrowser?: FlowerSurfaceAdapter['openFileBrowser'];
   openFilePreview?: FlowerSurfaceAdapter['openFilePreview'];
 }>;
@@ -378,7 +379,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       return loadSettingsSnapshot();
     },
     resolveHandler: async () => decision(options),
-    sendMessage: async (input: FlowerSendMessageInput) => {
+    launchTurn: async (input: FlowerTurnLaunchInput) => {
       const copy = adapterCopy(options);
       const prompt = trim(input.prompt);
       if (!prompt) throw new Error(copy.enterMessageBeforeSending);
@@ -388,29 +389,48 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       if (!modelID) throw new Error(copy.selectModelBeforeChat);
       let threadID = trim(input.thread_id);
       if (!threadID) {
+        const createBody: Record<string, unknown> = {
+          title: '',
+          model_id: modelID,
+          execution_mode: input.mode ?? 'act',
+        };
+        if (trim(input.working_dir)) {
+          createBody.working_dir = trim(input.working_dir);
+        }
         const created = await fetchGatewayJSON<CreateThreadResponse>('/_redeven_proxy/api/ai/threads', {
           method: 'POST',
-          body: JSON.stringify({
-            title: '',
-            model_id: modelID,
-            execution_mode: 'act',
-          }),
+          body: JSON.stringify(createBody),
         });
         threadID = trim(created.thread?.thread_id);
       }
       if (!threadID) throw new Error(copy.failedToCreateChat);
+      const attachments = (input.attachments ?? [])
+        .map((attachment) => ({
+          name: trim(attachment.name) || 'attachment',
+          mimeType: trim(attachment.mime_type) || 'application/octet-stream',
+          url: trim(attachment.url),
+        }))
+        .filter((attachment) => !!attachment.url);
+      for (const file of (input.pending_files ?? [])) {
+        if (!options.uploadAttachment) continue;
+        attachments.push({
+          name: trim(file.name) || 'attachment',
+          mimeType: trim(file.type) || 'application/octet-stream',
+          url: await options.uploadAttachment(file),
+        });
+      }
       await options.rpc.ai.subscribeThread({ threadId: threadID });
       await options.rpc.ai.sendUserTurn({
         threadId: threadID,
         model: modelID,
         input: {
           text: prompt,
-          attachments: [],
+          attachments,
           ...(isContextActionEnvelope(input.context_action) ? { contextAction: input.context_action } : {}),
         },
         options: {
           maxSteps: 10,
-          mode: 'act',
+          mode: input.mode ?? 'act',
         },
       });
       return loadThread(threadID);

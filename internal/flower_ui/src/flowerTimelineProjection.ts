@@ -99,7 +99,7 @@ export function flowerMessageSignature(message: FlowerChatMessage): string {
 }
 
 function contentBlocksFromMessage(message: FlowerChatMessage): readonly FlowerRenderableMessageBlock[] {
-  return (message.blocks ?? []).flatMap((block, index): readonly FlowerRenderableMessageBlock[] => {
+  const projectedBlocks = (message.blocks ?? []).flatMap((block, index): readonly FlowerRenderableMessageBlock[] => {
     const key = `${message.id}:block:${index}`;
     if (block.type === 'activity-timeline') {
       if (block.items.length === 0) return [];
@@ -108,6 +108,18 @@ function contentBlocksFromMessage(message: FlowerChatMessage): readonly FlowerRe
     const content = trimString(block.content);
     return content ? [{ type: 'content', key, block_index: index, block_type: block.type, content }] : [];
   });
+  if (projectedBlocks.length > 0) return projectedBlocks;
+
+  const content = trimString(message.content);
+  return content
+    ? [{
+      type: 'content',
+      key: `${message.id}:content`,
+      block_index: 0,
+      block_type: 'markdown',
+      content,
+    }]
+    : [];
 }
 
 export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined): readonly FlowerTimelineEntry[] {

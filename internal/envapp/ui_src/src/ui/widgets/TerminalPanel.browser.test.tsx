@@ -329,7 +329,7 @@ vi.mock('../pages/EnvContext', () => ({
       { state: 'ready' },
     ),
     viewMode: () => 'activity',
-    openAskFlowerComposer: vi.fn(),
+    openFlowerTurnLauncher: vi.fn(),
     openTerminalInDirectoryRequestSeq: () => 0,
     openTerminalInDirectoryRequest: () => null,
     openTerminalInDirectory: vi.fn(),

@@ -2,10 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   createLocalEnvironmentFlowerSurfaceAdapter,
+  launchLocalEnvironmentFlowerTurn,
   mapFlowerSettingsDraftToRuntimeBundle,
   mapRuntimeFlowerSettings,
   mapRuntimeFlowerThread,
-  sendLocalEnvironmentFlowerPrompt,
   type DesktopSettingsBridge,
 } from './localEnvironmentFlowerSurfaceAdapter';
 import type { RuntimeFlowerRequest } from '../../shared/runtimeFlowerIPC';
@@ -239,7 +239,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     await adapter.loadSettings();
     await adapter.listThreads();
-    const snapshot = await adapter.sendMessage({ prompt: 'hello' });
+    const snapshot = await adapter.launchTurn({ prompt: 'hello' });
 
     expect(snapshot.thread.thread_id).toBe('thread-new');
     expect(snapshot.thread.messages[0].content).toBe('hello');
@@ -374,7 +374,7 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
-  it('reuses the same runtime sender for environment card prompts', async () => {
+  it('launches environment card turns through the shared runtime launch contract', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {
       calls.push(request);
@@ -386,17 +386,33 @@ describe('Local Environment Flower surface adapter', () => {
       throw new Error(`unexpected path: ${request.path}`);
     });
 
-    await sendLocalEnvironmentFlowerPrompt(bridge, {
+    await launchLocalEnvironmentFlowerTurn(bridge, {
       prompt: 'inspect env',
-      contextAction: { schema_version: 2, action_id: 'assistant.ask.flower' },
+      context_action: { schema_version: 2, action_id: 'assistant.ask.flower' },
+      working_dir: '/workspace/redeven',
+      attachments: [{
+        name: 'notes.txt',
+        mime_type: 'text/plain',
+        url: 'redeven://uploaded/notes',
+      }],
+      mode: 'plan',
     });
 
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads')?.body).toMatchObject({
+      working_dir: '/workspace/redeven',
+      execution_mode: 'plan',
+    });
     expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/runs')?.body).toMatchObject({
       input: {
         text: 'inspect env',
-        attachments: [],
+        attachments: [{
+          name: 'notes.txt',
+          mimeType: 'text/plain',
+          url: 'redeven://uploaded/notes',
+        }],
         context_action: { schema_version: 2, action_id: 'assistant.ask.flower' },
       },
+      options: { mode: 'plan' },
     });
   });
 });

@@ -15,12 +15,12 @@ describe('envViewMode', () => {
     expect(isEnvViewMode('infinite_map')).toBe(false);
   });
 
-  it('migrates legacy persisted modes to the final contract', () => {
+  it('accepts only final persisted modes', () => {
     expect(normalizePersistedEnvViewMode('activity')).toBe('activity');
     expect(normalizePersistedEnvViewMode('deck')).toBe('deck');
     expect(normalizePersistedEnvViewMode('workbench')).toBe('workbench');
-    expect(normalizePersistedEnvViewMode('tab')).toBe('activity');
-    expect(normalizePersistedEnvViewMode('infinite_map')).toBe('workbench');
+    expect(normalizePersistedEnvViewMode('tab')).toBeNull();
+    expect(normalizePersistedEnvViewMode('infinite_map')).toBeNull();
     expect(normalizePersistedEnvViewMode('unknown')).toBeNull();
   });
 

@@ -238,7 +238,7 @@ vi.mock('../i18n', () => {
     'common.actions.retry': 'Retry',
     'common.actions.settings': 'Settings',
     'flowerChat.composer.describePlaceholder': 'Describe what you need',
-    'flowerChat.composer.sendMessage': 'Send message',
+    'flowerChat.composer.launchTurn': 'Send message',
     'flowerChat.composer.typeMessagePlaceholder': 'Message Flower',
     'flowerChat.model.label': 'Model',
     'flowerChat.router.currentEnvHandler': 'Using this environment',

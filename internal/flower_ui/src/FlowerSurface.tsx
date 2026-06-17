@@ -20,9 +20,8 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
-  FlowerSendMessageFailure,
+  FlowerTurnLaunchFailure,
   FlowerRouterDecision,
-  FlowerSurfaceDraftIntent,
   FlowerThreadActivitySnapshot,
   FlowerThreadListItem,
   FlowerThreadStatus,
@@ -108,7 +107,6 @@ export type FlowerSurfaceProps = Readonly<{
   adapter: FlowerSurfaceAdapter;
   copy?: FlowerSurfaceCopy;
   focusThreadID?: string;
-  draftIntent?: FlowerSurfaceDraftIntent | null;
   class?: string;
 }>;
 
@@ -143,7 +141,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [renameDraft, setRenameDraft] = createSignal('');
   const [renameError, setRenameError] = createSignal('');
   const [renameSaving, setRenameSaving] = createSignal(false);
-  const [activeDraftIntent, setActiveDraftIntent] = createSignal<FlowerSurfaceDraftIntent | null>(null);
   const [loadingThreadID, setLoadingThreadID] = createSignal('');
   const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
   const [threadRailResizing, setThreadRailResizing] = createSignal(false);
@@ -153,7 +150,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
   let lastFocusedThreadID = '';
-  let lastDraftIntentID = '';
   let lastInputPromptSignature = '';
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
   let transcriptRef: HTMLDivElement | undefined;
@@ -857,35 +853,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   });
 
-  createEffect(() => {
-    const intentID = trimString(props.draftIntent?.id);
-    if (!intentID || intentID === lastDraftIntentID) {
-      return;
-    }
-    lastDraftIntentID = intentID;
-    const currentDraftIntent = props.draftIntent!;
-    const prompt = trimString(currentDraftIntent.prompt);
-    const targetThreadID = trimString(currentDraftIntent.thread_id);
-    if (targetThreadID) {
-      setActiveDraftIntent(currentDraftIntent);
-      setChatDraft(prompt);
-      setChatSubmitError('');
-      if (composerRef) {
-        composerRef.value = prompt;
-      }
-      setSelectedThreadID(targetThreadID);
-      void loadAndSelectThread(targetThreadID);
-      return;
-    }
-    startCompose();
-    setActiveDraftIntent(currentDraftIntent);
-    setChatDraft(prompt);
-    setChatSubmitError('');
-    if (composerRef) {
-      composerRef.value = prompt;
-    }
-  });
-
   const applySelectedThreadLiveEvents = async (threadID: string, sequence: number) => {
     const tid = trimString(threadID);
     if (!tid || selectedThreadLiveRequests.has(tid)) return;
@@ -1104,23 +1071,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setChatSubmitError(decision.blocker?.message || copy().chat.handlerStillStarting);
         return;
       }
-      const thread = await props.adapter.sendMessage({
+      const thread = await props.adapter.launchTurn({
         thread_id: selectedThreadID() || undefined,
         prompt,
         decision: selectedThreadID() ? null : decision,
-        ...(trimString(activeDraftIntent()?.prompt) === prompt && activeDraftIntent()?.context_action
-          ? { context_action: activeDraftIntent()?.context_action }
-          : {}),
       });
       const acceptedThread = applyLiveBootstrap(thread);
       setSelectedThreadID(acceptedThread.thread_id);
       settlePendingTurnForAcceptedThread(acceptedThread, pending);
       setLoadError('');
-      setActiveDraftIntent(null);
       returnToChat();
       await refreshSelectedThread(acceptedThread.thread_id);
     } catch (error) {
-      const failure = error as FlowerSendMessageFailure;
+      const failure = error as FlowerTurnLaunchFailure;
       if (failure.fresh_decision) {
         setHandlerState(handlerStateFromDecision(failure.fresh_decision));
       }
@@ -1140,7 +1103,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     transcriptNearBottom = true;
     setSelectedThreadID('');
     setChatDraft('');
-    setActiveDraftIntent(null);
     setPendingTurn(null);
     setChatSubmitError('');
     setInputDrafts({});
@@ -1379,9 +1341,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     setChatDraft(value);
-    if (activeDraftIntent() && trimString(value) !== trimString(activeDraftIntent()?.prompt)) {
-      setActiveDraftIntent(null);
-    }
     setChatSubmitError('');
   };
 

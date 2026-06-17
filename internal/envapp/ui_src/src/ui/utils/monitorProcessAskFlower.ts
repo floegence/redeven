@@ -1,9 +1,9 @@
 import type { SysMonitorProcessInfo, SysMonitorSnapshot } from '../protocol/redeven_v1';
-import type { AskFlowerContextItem, AskFlowerIntent } from '../pages/askFlowerIntent';
-import { attachAskFlowerContextAction } from '../contextActions/askFlower';
+import type { FlowerTurnLauncherContextItem, FlowerTurnLauncherIntent } from '../../../../../flower_ui/src';
+import { attachAskFlowerContextAction, type EnvFlowerTurnLauncherIntent } from '../contextActions/askFlower';
 import { createClientId } from './clientId';
 
-type ProcessSnapshotContextItem = Extract<AskFlowerContextItem, { kind: 'process_snapshot' }>;
+type ProcessSnapshotContextItem = Extract<FlowerTurnLauncherContextItem, { kind: 'process_snapshot' }>;
 
 function normalizedProcessName(pid: number, name: string): string {
   const trimmed = String(name ?? '').trim();
@@ -38,10 +38,10 @@ export function buildMonitorProcessSnapshotContextItem(params: {
     pid: Math.trunc(Number(proc?.pid ?? 0)),
     name: normalizedProcessName(Number(proc?.pid ?? 0), String(proc?.name ?? '')),
     username: String(proc?.username ?? '').trim() || 'system',
-    cpuPercent: Number(proc?.cpuPercent ?? 0),
-    memoryBytes: Math.max(0, Number(proc?.memoryBytes ?? 0)),
+    cpu_percent: Number(proc?.cpuPercent ?? 0),
+    memory_bytes: Math.max(0, Number(proc?.memoryBytes ?? 0)),
     platform: String(snapshot?.platform ?? '').trim() || undefined,
-    capturedAtMs: Number(snapshot?.timestampMs ?? 0) > 0 ? Number(snapshot?.timestampMs ?? 0) : undefined,
+    captured_at_ms: Number(snapshot?.timestampMs ?? 0) > 0 ? Number(snapshot?.timestampMs ?? 0) : undefined,
   };
 }
 
@@ -50,8 +50,8 @@ export function buildMonitorProcessSnapshotText(item: ProcessSnapshotContextItem
     `PID: ${item.pid}`,
     `Name: ${normalizedProcessName(item.pid, item.name)}`,
     `User: ${String(item.username ?? '').trim() || 'system'}`,
-    `CPU: ${Number(item.cpuPercent ?? 0).toFixed(1)}%`,
-    `Memory: ${formatMonitorProcessBytes(item.memoryBytes)} (${Math.max(0, Math.round(Number(item.memoryBytes ?? 0)))} bytes)`,
+    `CPU: ${Number(item.cpu_percent ?? 0).toFixed(1)}%`,
+    `Memory: ${formatMonitorProcessBytes(item.memory_bytes)} (${Math.max(0, Math.round(Number(item.memory_bytes ?? 0)))} bytes)`,
   ];
 
   const platform = String(item.platform ?? '').trim();
@@ -59,7 +59,7 @@ export function buildMonitorProcessSnapshotText(item: ProcessSnapshotContextItem
     lines.push(`Platform: ${platform}`);
   }
 
-  const capturedAtMs = Number(item.capturedAtMs ?? 0);
+  const capturedAtMs = Number(item.captured_at_ms ?? 0);
   if (capturedAtMs > 0) {
     lines.push(`Captured at: ${new Date(capturedAtMs).toLocaleString()}`);
   }
@@ -67,20 +67,20 @@ export function buildMonitorProcessSnapshotText(item: ProcessSnapshotContextItem
   return lines.join('\n');
 }
 
-export function buildMonitorProcessAskFlowerIntent(params: {
+export function buildMonitorProcessFlowerTurnLauncherIntent(params: {
   process: SysMonitorProcessInfo;
   snapshot?: Pick<SysMonitorSnapshot, 'platform' | 'timestampMs'> | null;
-}): AskFlowerIntent {
-  return attachAskFlowerContextAction({
+}): FlowerTurnLauncherIntent {
+  const intent: EnvFlowerTurnLauncherIntent = {
     id: createClientId('ask-flower'),
-    source: 'monitoring',
-    mode: 'append',
-    contextItems: [
+    source_surface: 'monitoring',
+    context_items: [
       buildMonitorProcessSnapshotContextItem(params),
     ],
-    pendingAttachments: [],
+    pending_attachments: [],
     notes: [],
-  });
+  };
+  return attachAskFlowerContextAction(intent);
 }
 
 export function monitorProcessDisplayLabel(params: { pid: number; name: string }): string {
