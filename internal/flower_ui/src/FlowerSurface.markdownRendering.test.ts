@@ -49,4 +49,31 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain("case 'running':");
     expect(src).not.toContain("case 'running':\n        return <Terminal");
   });
+
+  it('renders the streaming cursor after every message block', () => {
+    const src = surfaceSource();
+    const blockListIndex = src.indexOf('<Index each={blocks}>');
+    const cursorTailIndex = src.indexOf('flower-message-streaming-tail');
+
+    expect(blockListIndex).toBeGreaterThanOrEqual(0);
+    expect(cursorTailIndex).toBeGreaterThan(blockListIndex);
+    expect(src).toContain('{streamingCursor()}');
+    expect(src).not.toContain('<Show when={streaming}>{streamingCursor()}</Show>');
+  });
+
+  it('adds copy actions and user message time metadata to chat messages', () => {
+    const src = surfaceSource();
+
+    expect(src).toContain('MESSAGE_COPY_RESET_MS');
+    expect(src).toContain('copiedMessageAction()');
+    expect(src).toContain('writeTextToClipboard(value)');
+    expect(src).toContain('copy().chat.copyMessage');
+    expect(src).toContain('copy().chat.messageCopied');
+    expect(src).toContain('flower-message-copy-button');
+    expect(src).toContain('flower-message-copy-icon-idle');
+    expect(src).toContain('flower-message-copy-icon-copied');
+    expect(src).toContain('formatMessageTime(message.created_at_ms)');
+    expect(src).toContain('flower-message-time');
+    expect(src).toContain("block.type === 'content' && block.block_type !== 'thinking'");
+  });
 });

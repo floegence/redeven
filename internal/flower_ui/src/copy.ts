@@ -240,6 +240,8 @@ export type FlowerSurfaceCopy = Readonly<{
     messageErrorFallback: string;
     copyCode: string;
     codeCopied: string;
+    copyMessage: string;
+    messageCopied: string;
     loadErrorTitle: string;
     threadLoadErrorTitle: string;
     threadLoading: string;
@@ -309,6 +311,8 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     messageErrorFallback: 'This message failed before Flower produced visible text.',
     copyCode: 'Copy code',
     codeCopied: 'Copied',
+    copyMessage: 'Copy message',
+    messageCopied: 'Copied',
     loadErrorTitle: 'Flower could not load.',
     threadLoadErrorTitle: 'Conversation could not load.',
     threadLoading: 'Loading conversation...',
