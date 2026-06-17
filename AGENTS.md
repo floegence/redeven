@@ -22,6 +22,8 @@ Goals:
 - Do not partial-push `main`, and do not update `origin/main` through another branch while newer local `main` commits remain unpublished.
 - One feature equals one dedicated worktree plus one local private branch.
 - Keep feature branches private until they are merged into `main`.
+- Do not push feature branches or create pull requests unless the user explicitly asks for that collaboration path.
+- Do not create a pull request merely to trigger CI; by default, fast-forward the ready feature into `main`, push `main`, and verify the `main` Actions run.
 - Default sync strategy for a feature branch: `git rebase origin/main`.
 - Do not merge `origin/main` into a feature branch in the normal flow.
 - Preserve intentional commit history when integrating:
@@ -51,8 +53,6 @@ git status
 # The worktree must be clean before rebasing.
 
 git fetch origin
-STAMP=$(date +%Y%m%d-%H%M%S)
-git branch "backup/$BR-$STAMP"
 git rebase origin/main
 ```
 
@@ -72,7 +72,6 @@ git rebase --abort
 After every rebase:
 
 ```bash
-git range-diff "backup/$BR-$STAMP"...HEAD
 git diff origin/main...HEAD
 ```
 
@@ -180,6 +179,18 @@ Rules:
   - documented examples that explicitly validate Unicode, locale resolution, or translated UI behavior.
 - When non-English text is added for i18n, keep it scoped to the relevant locale, resource, or test file and document the reason in English when the purpose is not obvious.
 
+## OKF Maintenance Contract
+
+- `okf/` is the only maintained repository knowledge corpus.
+- `okf/index.md` is the human entrypoint, `okf/**/*.md` are source concepts, and `okf/dist/` contains generated, committed bundle artifacts.
+- When changing architecture, protocols, permission/security boundaries, AI tools, Desktop/runtime/gateway behavior, Workbench interaction contracts, CI, release automation, or public installer behavior, update the corresponding `okf/**/*.md` in the same feature change.
+- OKF content must be derived from current source code, tests, generated contracts, and scripts. Do not restore or copy from removed product documents as an authority.
+- After changing OKF source files, regenerate and commit `okf/dist/okf_bundle.json`, `okf/dist/okf_bundle.manifest.json`, and `okf/dist/okf_bundle.sha256`.
+- Run `./scripts/okf/check_source_integrity.sh` and `./scripts/build_okf_bundle.sh --verify-only` before integration whenever OKF source or bundle output may be affected.
+- Do not restore `docs/`, `spec/design/`, `spec/protocol/*.md`, or old root-level product Markdown files.
+- The only maintained non-OKF Markdown files are `AGENTS.md`, `README.md`, and `THIRD_PARTY_NOTICES.md`.
+- Machine-readable protocol assets may live outside OKF when they are active source contracts, for example `spec/openapi/*.yaml`.
+
 ## AI Design Principles
 
 - Prefer prompt-first behavior shaping through prompts and structured contracts.
@@ -275,20 +286,27 @@ Rules:
 
 ## Local Quality Gate
 
-Run the CI-aligned local checks before integration:
+Run the CI-aligned checks and local-only pre-commit checks before integration:
 
 - `sh -n scripts/install.sh`
 - `sh -n scripts/generate_release_notes.sh`
+- `bash -n scripts/test_generate_release_notes.sh`
 - `bash -n scripts/lint_ui.sh`
+- `bash -n scripts/build_desktop_bundled_runtime.sh`
 - `bash -n scripts/build_desktop_bundled_agent.sh`
 - `bash -n scripts/check_desktop.sh`
 - `bash -n scripts/check_docker_runtime_e2e.sh`
 - `bash -n scripts/check_runtime_compatibility_contract.sh`
+- `bash -n scripts/check_flower_live_protocol.sh`
 - `bash -n scripts/ui_package_common.sh`
 - `bash -n scripts/open_source_hygiene_check.sh`
 - `bash -n scripts/install_git_hooks.sh`
+- `bash -n .githooks/pre-commit`
+- `node scripts/generate_third_party_notices.mjs --check`
 - `./scripts/lint_ui.sh`
+- `./scripts/test_generate_release_notes.sh`
 - `./scripts/check_runtime_compatibility_contract.sh --source-only`
+- `./scripts/check_flower_live_protocol.sh`
 - `./scripts/check_desktop.sh`
 - `./scripts/check_docker_runtime_e2e.sh`
 - `./scripts/open_source_hygiene_check.sh --staged`
