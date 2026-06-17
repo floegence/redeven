@@ -79,13 +79,17 @@ func buildUserMessageJSON(messageID string, input RunInput, uploadInfoByURL map[
 		return "", "", errors.New("empty input")
 	}
 
+	contextAction, err := normalizeAskFlowerContextActionEnvelope(input.ContextAction)
+	if err != nil {
+		return "", "", err
+	}
 	msg := persistedMessage{
 		ID:            id,
 		Role:          "user",
 		Blocks:        blocks,
 		Status:        "complete",
 		Timestamp:     createdAtUnixMs,
-		ContextAction: normalizeContextActionEnvelope(input.ContextAction),
+		ContextAction: contextAction,
 	}
 	b, err := json.Marshal(msg)
 	if err != nil {

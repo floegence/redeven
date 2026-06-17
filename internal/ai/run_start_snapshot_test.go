@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -186,5 +187,61 @@ func TestPrepareRun_PropagatesInternalReadonlyRunOptions(t *testing.T) {
 	}
 	if _, ok := prepared.r.toolAllowlist["task_complete"]; !ok {
 		t.Fatalf("toolAllowlist missing task_complete")
+	}
+}
+
+func TestPrepareRun_ContextActionSuggestedWorkingDirDoesNotChangeRunWorkingDir(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	ctx := context.Background()
+	meta := testSendTurnMeta()
+
+	threadWorkingDir := t.TempDir()
+	suggestedWorkingDir := t.TempDir()
+	thread, err := svc.CreateThread(ctx, meta, "prepare context action authority", "openai/gpt-5-mini", "", threadWorkingDir)
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_prepare_context_action_authority"
+	prepared, err := svc.prepareRun(meta, runID, RunStartRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input: RunInput{
+			Text: "inspect env",
+			ContextAction: &ContextActionEnvelope{
+				SchemaVersion:       ContextActionSchemaVersion,
+				ActionID:            "assistant.ask.flower",
+				Provider:            "flower",
+				Target:              ContextActionTarget{TargetID: "current", Locality: "auto"},
+				Source:              ContextActionSource{Surface: "file_browser"},
+				Context:             []ContextActionContextItem{{Kind: "file_path", Path: suggestedWorkingDir, IsDirectory: true}},
+				Presentation:        ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+				SuggestedWorkingDir: suggestedWorkingDir,
+			},
+		},
+		Options: RunOptions{MaxSteps: 1},
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("prepareRun: %v", err)
+	}
+	t.Cleanup(func() {
+		svc.mu.Lock()
+		delete(svc.runs, runID)
+		delete(svc.activeRunByTh, runThreadKey(meta.EndpointID, thread.ThreadID))
+		svc.mu.Unlock()
+		prepared.r.markDone()
+	})
+
+	threadWorkingDirEval, err := filepath.EvalSymlinks(threadWorkingDir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks(threadWorkingDir): %v", err)
+	}
+	if prepared.r.workingDir != threadWorkingDirEval {
+		t.Fatalf("run workingDir=%q, want thread working dir %q", prepared.r.workingDir, threadWorkingDirEval)
+	}
+	if prepared.r.workingDir == suggestedWorkingDir {
+		t.Fatalf("context action suggested working dir must not become runtime authority: %q", suggestedWorkingDir)
 	}
 }

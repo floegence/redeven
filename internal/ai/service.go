@@ -1109,6 +1109,11 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	if threadID == "" {
 		return nil, errors.New("missing thread_id")
 	}
+	contextAction, err := normalizeAskFlowerContextActionEnvelope(req.Input.ContextAction)
+	if err != nil {
+		return nil, err
+	}
+	req.Input.ContextAction = contextAction
 	channelID := strings.TrimSpace(meta.ChannelID)
 	if channelID == "" {
 		return nil, errors.New("missing channel_id")
@@ -1499,23 +1504,26 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			URL:      strings.TrimSpace(att.URL),
 		})
 	}
+	userProvidedContext := contextActionToUserProvidedContext(effectiveInput.ContextAction)
 	promptPack := contextmodel.PromptPack{
 		ThreadID:                  threadID,
 		RunID:                     runID,
 		Objective:                 strings.TrimSpace(openGoal),
 		AttachmentsManifest:       attachments,
+		UserProvidedContext:       userProvidedContext,
 		ContextSectionsTokenUsage: map[string]int{},
 	}
 	if s.contextPacker != nil {
 		pack, packErr := s.contextPacker.BuildPromptPack(ctx, contextpacker.BuildInput{
-			EndpointID:     endpointID,
-			ThreadID:       threadID,
-			RunID:          runID,
-			Objective:      strings.TrimSpace(openGoal),
-			UserInput:      effectiveCurrentInput.PublicText,
-			Attachments:    attachments,
-			Capability:     modelCapability,
-			MaxInputTokens: req.Options.MaxInputTokens,
+			EndpointID:          endpointID,
+			ThreadID:            threadID,
+			RunID:               runID,
+			Objective:           strings.TrimSpace(openGoal),
+			UserInput:           effectiveCurrentInput.PublicText,
+			Attachments:         attachments,
+			UserProvidedContext: userProvidedContext,
+			Capability:          modelCapability,
+			MaxInputTokens:      req.Options.MaxInputTokens,
 		})
 		if packErr != nil {
 			if r.log != nil {

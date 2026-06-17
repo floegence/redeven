@@ -3,9 +3,9 @@ import { readDesktopHostBridge } from './desktopHostWindow';
 export interface DesktopSessionContextSnapshot {
   local_environment_id: string;
   renderer_storage_scope_id: string;
-  target_kind?: 'local_environment' | 'external_local_ui' | 'ssh_environment';
+  target_kind?: 'local_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
   target_route?: 'local_host' | 'remote_desktop';
-  session_source?: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui';
+  session_source?: 'local_runtime' | 'provider_environment' | 'ssh_environment' | 'external_local_ui' | 'runtime_gateway';
   provider_origin?: string;
   provider_id?: string;
   env_public_id?: string;
@@ -47,9 +47,9 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
   return {
     local_environment_id: localEnvironmentID,
     renderer_storage_scope_id: rendererStorageScopeID,
-    ...(targetKind === 'local_environment' || targetKind === 'external_local_ui' || targetKind === 'ssh_environment' ? { target_kind: targetKind } : {}),
+    ...(targetKind === 'local_environment' || targetKind === 'external_local_ui' || targetKind === 'ssh_environment' || targetKind === 'gateway_environment' ? { target_kind: targetKind } : {}),
     ...(targetRoute === 'local_host' || targetRoute === 'remote_desktop' ? { target_route: targetRoute } : {}),
-    ...(sessionSource === 'local_runtime' || sessionSource === 'provider_environment' || sessionSource === 'ssh_environment' || sessionSource === 'external_local_ui' ? { session_source: sessionSource } : {}),
+    ...(sessionSource === 'local_runtime' || sessionSource === 'provider_environment' || sessionSource === 'ssh_environment' || sessionSource === 'external_local_ui' || sessionSource === 'runtime_gateway' ? { session_source: sessionSource } : {}),
     ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
     ...(providerID !== '' ? { provider_id: providerID } : {}),
     ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),

@@ -59,7 +59,11 @@ func uniqueStrings(items []string) []string {
 
 func (s *Service) normalizeInputAttachments(ctx context.Context, endpointID string, input RunInput) (RunInput, map[string]resolvedUploadAttachment, []string, error) {
 	input.Attachments = append([]RunAttachmentIn(nil), input.Attachments...)
-	input.ContextAction = normalizeContextActionEnvelope(input.ContextAction)
+	contextAction, err := normalizeAskFlowerContextActionEnvelope(input.ContextAction)
+	if err != nil {
+		return input, nil, nil, err
+	}
+	input.ContextAction = contextAction
 	if len(input.Attachments) == 0 {
 		return input, nil, nil, nil
 	}

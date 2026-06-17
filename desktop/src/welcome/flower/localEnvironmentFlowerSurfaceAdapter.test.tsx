@@ -379,7 +379,7 @@ describe('Local Environment Flower surface adapter', () => {
     const contextAction = {
       schema_version: 2,
       action_id: 'assistant.ask.flower',
-      provider: 'desktop_welcome',
+      provider: 'flower',
       target: {
         target_id: 'local:local',
         locality: 'auto',
@@ -390,20 +390,18 @@ describe('Local Environment Flower surface adapter', () => {
       },
       execution_context: {
         current_target_id: 'local:local',
-        source_env_public_id: '',
         runtime_hint: 'auto',
-        session_source: 'desktop_welcome',
+        session_source: 'local_runtime',
       },
       context: [{
         kind: 'text_snapshot',
         title: 'Local Environment',
         detail: 'Local · Ready',
-        content: 'Environment: Local Environment\nEnvironment ID: local',
+        content: 'Environment: Local Environment\nKind: local_environment\nEnvironment ID: local',
       }],
       presentation: {
-        label: 'Local Environment',
+        label: 'Ask Flower',
         priority: 100,
-        status_label: 'Ready',
       },
     };
     const bridge = bridgeFor((request) => {
@@ -449,5 +447,34 @@ describe('Local Environment Flower surface adapter', () => {
         mode: 'plan',
       },
     });
+  });
+
+  it('rejects invalid explicit context actions instead of dropping linked context', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+
+    await expect(launchLocalEnvironmentFlowerTurn(bridge, {
+      prompt: 'inspect env',
+      context_action: {
+        schema_version: 2,
+        action_id: 'assistant.ask.flower',
+        provider: 'codex',
+        target: { target_id: 'local:local', locality: 'auto' },
+        source: { surface: 'desktop_welcome_environment_card' },
+        context: [],
+        presentation: { label: 'Ask Flower', priority: 100 },
+      },
+      mode: 'act',
+    })).rejects.toThrow('Invalid Flower context action.');
+
+    expect(calls.map((call) => call.path)).toEqual([
+      '/_redeven_proxy/api/settings',
+      '/_redeven_proxy/api/ai/models',
+    ]);
   });
 });

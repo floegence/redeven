@@ -24,6 +24,7 @@ import type {
   AgentSettingsResponse,
   AIConfig,
 } from '../../../../internal/envapp/ui_src/src/ui/pages/settings/types';
+import { requireAskFlowerContextActionEnvelope } from '../../../../internal/envapp/ui_src/src/ui/contextActions/protocol';
 import {
   mapFlowerThread,
   mapFlowerLiveBootstrap,
@@ -329,6 +330,7 @@ export async function launchLocalEnvironmentFlowerTurn(
   const modelID = currentModelID(snapshot, models);
   if (!modelID) throw new Error('Select a Flower model before starting a chat.');
   const mode = input.mode ?? 'act';
+  const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
   let threadID = trim(input.thread_id);
   if (!threadID) {
     const createBody: Record<string, unknown> = {
@@ -356,7 +358,7 @@ export async function launchLocalEnvironmentFlowerTurn(
     input: {
       text: prompt,
       attachments,
-      ...(input.context_action ? { context_action: input.context_action } : {}),
+      ...(contextAction ? { context_action: contextAction } : {}),
     },
     options: {
       max_steps: 10,

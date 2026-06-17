@@ -39,6 +39,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## AI
 
 - [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.
+- [Prompt pack user context](ai/prompt-pack-context.md) - Ask Flower launcher context normalization and prompt-pack rendering.
 - [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.
 - [OKF search tool](ai/okf-search-tool.md) - Read-only repository knowledge lookup over the embedded OKF bundle.
 

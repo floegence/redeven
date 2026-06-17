@@ -9,6 +9,7 @@ import {
   type ContextActionEnvelope,
   type ContextActionExecutionContext,
   type ContextActionSurface,
+  type ContextActionTarget,
 } from './protocol';
 
 export type EnvFlowerTurnLauncherContextItem = Exclude<
@@ -73,6 +74,7 @@ export function buildAskFlowerContextAction(params: {
   source: ContextActionSurface;
   context_items: readonly EnvFlowerTurnLauncherContextItem[];
   suggested_working_dir?: string;
+  target?: ContextActionTarget;
   surfaceId?: string;
   executionContext?: ContextActionExecutionContext;
 }): ContextActionEnvelope {
@@ -80,7 +82,7 @@ export function buildAskFlowerContextAction(params: {
     schema_version: CONTEXT_ACTION_SCHEMA_VERSION,
     action_id: 'assistant.ask.flower',
     provider: 'flower',
-    target: createCurrentRuntimeTarget('auto'),
+    target: params.target ?? createCurrentRuntimeTarget('auto'),
     source: {
       surface: params.source,
       surface_id: params.surfaceId,

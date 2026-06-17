@@ -311,7 +311,7 @@ import {
   selectEnvironmentPanelProgress,
 } from './environmentProgressPrimaryPresentation';
 import {
-  buildEnvironmentFlowerContextEnvelope as buildEnvironmentFlowerContextActionEnvelope,
+  buildEnvironmentFlowerContextAction,
   environmentFlowerPrimaryTargetID,
 } from './environmentFlowerContext';
 import {
@@ -1482,13 +1482,6 @@ function environmentFlowerContextSummary(i18n: DesktopI18n, environment: Desktop
     environment.control_plane_label,
   ].map(trimString).filter(Boolean);
   return fields.join(' · ');
-}
-
-function buildEnvironmentFlowerContextEnvelope(environment: DesktopEnvironmentEntry) {
-  return buildEnvironmentFlowerContextActionEnvelope(
-    environment,
-    environmentFlowerContextSummary(createDesktopI18n('en-US'), environment),
-  );
 }
 
 function localizedFactValue(i18n: DesktopI18n, label: string, value: string): string {
@@ -5879,7 +5872,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     const cleanLabel = trimString(environment.label) || i18n().t('environmentCenter.thisEnvironment');
     const contextSummary = environmentFlowerContextSummary(i18n(), environment);
     return {
-      id: `desktop-env-${trimString(environment.id) || 'environment'}-${Date.now()}`,
+      id: `welcome-flower-${trimString(environment.id) || 'environment'}-${Date.now()}`,
       source_surface: 'desktop_welcome_environment_card',
       suggested_working_dir: '',
       context_items: [{
@@ -5889,7 +5882,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         target_id: environmentFlowerPrimaryTargetID(environment),
       }],
       notes: [],
-      context_action: buildEnvironmentFlowerContextEnvelope(environment).raw,
+      context_action: buildEnvironmentFlowerContextAction(environment, contextSummary),
     };
   }
 

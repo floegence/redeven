@@ -70,6 +70,33 @@ describe('desktopSessionContext', () => {
     expect(desktopRendererStorageScopeID()).toBe('provider:https%3A%2F%2Fredeven.test:env:env_demo');
   });
 
+  it('preserves runtime gateway session identity from Desktop', () => {
+    const parentWindow = {
+      location: { origin: window.location.origin },
+      redevenDesktopSessionContext: {
+        getSnapshot: () => ({
+          local_environment_id: 'gateway:bastion:env:env_demo',
+          renderer_storage_scope_id: 'gateway:bastion:env:env_demo',
+          target_kind: 'gateway_environment',
+          target_route: 'remote_desktop',
+          session_source: 'runtime_gateway',
+          label: 'Gateway Demo',
+        }),
+      },
+    } as unknown as Window;
+
+    setWindowHierarchy(parentWindow);
+
+    expect(readDesktopSessionContextSnapshot()).toEqual({
+      local_environment_id: 'gateway:bastion:env:env_demo',
+      renderer_storage_scope_id: 'gateway:bastion:env:env_demo',
+      target_kind: 'gateway_environment',
+      target_route: 'remote_desktop',
+      session_source: 'runtime_gateway',
+      label: 'Gateway Demo',
+    });
+  });
+
   it('falls back to the provided scope id when no desktop session context exists', () => {
     expect(readDesktopSessionContextSnapshot()).toBeNull();
     expect(desktopRendererStorageScopeID()).toBe('');

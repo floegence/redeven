@@ -21,8 +21,9 @@ type BuildInput struct {
 	Objective string
 	UserInput string
 
-	Attachments []model.AttachmentManifest
-	Capability  model.ModelCapability
+	Attachments         []model.AttachmentManifest
+	UserProvidedContext *model.UserProvidedContext
+	Capability          model.ModelCapability
 
 	MaxInputTokens int
 }
@@ -113,6 +114,7 @@ func (b *Builder) BuildPromptPack(ctx context.Context, in BuildInput) (model.Pro
 	pack.RetrievedLongTermMemory = append([]model.MemoryItem(nil), retrieved.LongTermMemory...)
 	pack.ThreadSnapshot = strings.TrimSpace(retrieved.ThreadSnapshot)
 	pack.AttachmentsManifest = adapter.AdaptAttachments(cap, in.Attachments)
+	pack.UserProvidedContext = cloneUserProvidedContext(in.UserProvidedContext)
 
 	sectionBudget := splitSectionBudget(totalBudget)
 	pack = enforceSectionBudget(pack, sectionBudget)
@@ -144,12 +146,13 @@ func splitSectionBudget(total int) map[string]int {
 		total = 128000
 	}
 	sections := map[string]float64{
-		"system":     0.15,
-		"objective":  0.18,
-		"dialogue":   0.24,
-		"structured": 0.08,
-		"execution":  0.25,
-		"long_term":  0.10,
+		"system":       0.15,
+		"objective":    0.16,
+		"user_context": 0.10,
+		"dialogue":     0.24,
+		"structured":   0.08,
+		"execution":    0.22,
+		"long_term":    0.05,
 	}
 	out := make(map[string]int, len(sections))
 	for key, ratio := range sections {
@@ -163,6 +166,7 @@ func enforceSectionBudget(pack model.PromptPack, budget map[string]int) model.Pr
 	out.SystemContract = truncateToTokens(out.SystemContract, budget["system"])
 	out.Objective = truncateToTokens(out.Objective, budget["objective"])
 	out.ThreadSnapshot = truncateToTokens(out.ThreadSnapshot, budget["objective"]/2)
+	out.UserProvidedContext = enforceUserProvidedContextBudget(out.UserProvidedContext, budget["user_context"])
 
 	dialogueBudget := budget["dialogue"]
 	dialogue := make([]model.DialogueTurn, 0, len(out.RecentDialogue))
@@ -227,6 +231,7 @@ func collectSectionTokens(pack model.PromptPack) map[string]int {
 	usage := map[string]int{}
 	usage["system"] = textTokens(pack.SystemContract)
 	usage["objective"] = textTokens(pack.Objective) + textTokens(pack.ThreadSnapshot)
+	usage["user_context"] = userProvidedContextTokens(pack.UserProvidedContext)
 	dialogue := 0
 	for _, turn := range pack.RecentDialogue {
 		dialogue += textTokens(turn.UserText)
@@ -292,8 +297,105 @@ func textTokens(text string) int {
 	return len([]rune(text))/4 + 1
 }
 
+func cloneUserProvidedContext(in *model.UserProvidedContext) *model.UserProvidedContext {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	out.Items = append([]model.UserProvidedContextItem(nil), in.Items...)
+	return &out
+}
+
+func enforceUserProvidedContextBudget(in *model.UserProvidedContext, budget int) *model.UserProvidedContext {
+	if in == nil {
+		return nil
+	}
+	out := cloneUserProvidedContext(in)
+	if budget <= 0 {
+		out.Items = nil
+		return out
+	}
+	remaining := budget
+	headerCost := textTokens(out.ActionID) +
+		textTokens(out.Provider) +
+		textTokens(out.SourceSurface) +
+		textTokens(out.SourceSurfaceID) +
+		textTokens(out.TargetID) +
+		textTokens(out.Locality) +
+		textTokens(out.SuggestedWorkingDir)
+	remaining -= headerCost
+	if remaining <= 0 {
+		out.Items = nil
+		return out
+	}
+	items := make([]model.UserProvidedContextItem, 0, len(out.Items))
+	for _, item := range out.Items {
+		item = truncateUserProvidedContextItem(item, remaining)
+		cost := userProvidedContextItemTokens(item)
+		if cost <= 0 {
+			continue
+		}
+		if remaining-cost < 0 {
+			if len(items) == 0 {
+				items = append(items, item)
+			}
+			break
+		}
+		remaining -= cost
+		items = append(items, item)
+	}
+	out.Items = items
+	return out
+}
+
+func truncateUserProvidedContextItem(item model.UserProvidedContextItem, budget int) model.UserProvidedContextItem {
+	out := item
+	out.Title = truncateToTokens(out.Title, budget)
+	out.Detail = truncateToTokens(out.Detail, budget)
+	out.Content = truncateToTokens(out.Content, budget)
+	out.Path = truncateToTokens(out.Path, budget)
+	out.RootLabel = truncateToTokens(out.RootLabel, budget)
+	out.WorkingDir = truncateToTokens(out.WorkingDir, budget)
+	out.Selection = truncateToTokens(out.Selection, budget)
+	out.Name = truncateToTokens(out.Name, budget)
+	out.Username = truncateToTokens(out.Username, budget)
+	out.Platform = truncateToTokens(out.Platform, budget)
+	return out
+}
+
+func userProvidedContextTokens(ctx *model.UserProvidedContext) int {
+	if ctx == nil {
+		return 0
+	}
+	total := textTokens(ctx.ActionID) +
+		textTokens(ctx.Provider) +
+		textTokens(ctx.SourceSurface) +
+		textTokens(ctx.SourceSurfaceID) +
+		textTokens(ctx.TargetID) +
+		textTokens(ctx.Locality) +
+		textTokens(ctx.SuggestedWorkingDir)
+	for _, item := range ctx.Items {
+		total += userProvidedContextItemTokens(item)
+	}
+	return total
+}
+
+func userProvidedContextItemTokens(item model.UserProvidedContextItem) int {
+	return textTokens(item.Kind) +
+		textTokens(item.Title) +
+		textTokens(item.Detail) +
+		textTokens(item.Content) +
+		textTokens(item.Path) +
+		textTokens(item.RootLabel) +
+		textTokens(item.WorkingDir) +
+		textTokens(item.Selection) +
+		textTokens(item.Name) +
+		textTokens(item.Username) +
+		textTokens(item.Platform)
+}
+
 func (b *Builder) DebugSummary(pack model.PromptPack) string {
 	usage := collectSectionTokens(pack)
-	return fmt.Sprintf("tokens(system=%d objective=%d dialogue=%d execution=%d long_term=%d total=%d)",
-		usage["system"], usage["objective"], usage["dialogue"], usage["execution"], usage["long_term"], estimatePackTokens(pack))
+	return fmt.Sprintf("tokens(system=%d objective=%d user_context=%d dialogue=%d execution=%d long_term=%d total=%d)",
+		usage["system"], usage["objective"], usage["user_context"], usage["dialogue"], usage["execution"], usage["long_term"], estimatePackTokens(pack))
 }

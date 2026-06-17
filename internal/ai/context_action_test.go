@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -24,7 +25,8 @@ func TestBuildUserMessageJSONPersistsContextActionWithoutPermissionHints(t *test
 				"grant": "secret"
 			},
 			"context": [{"kind": "file_path", "path": "/workspace/app", "is_directory": true}],
-			"presentation": {"label": "Ask Flower", "priority": 100}
+			"presentation": {"label": "Ask Flower", "priority": 100},
+			"suggested_working_dir_abs": "/workspace/app"
 		}
 	}`)
 	var input RunInput
@@ -47,6 +49,9 @@ func TestBuildUserMessageJSONPersistsContextActionWithoutPermissionHints(t *test
 	}
 	if !strings.Contains(messageJSON, `"source_env_public_id":"env_a"`) {
 		t.Fatalf("message JSON missing execution routing hint: %s", messageJSON)
+	}
+	if !strings.Contains(messageJSON, `"suggested_working_dir_abs":"/workspace/app"`) {
+		t.Fatalf("message JSON missing suggested working dir: %s", messageJSON)
 	}
 }
 
@@ -103,7 +108,10 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	if popped == nil {
 		t.Fatalf("PopNextQueuedTurn returned nil")
 	}
-	startReq := queuedTurnRecordToRunStartRequest(*popped, "act")
+	startReq, err := queuedTurnRecordToRunStartRequest(*popped, "act")
+	if err != nil {
+		t.Fatalf("queuedTurnRecordToRunStartRequest: %v", err)
+	}
 	if startReq.Input.ContextAction == nil {
 		t.Fatalf("restored RunStartRequest missing context action")
 	}
@@ -131,11 +139,17 @@ func TestQueuedTurnContextActionRoundTrip(t *testing.T) {
 		Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 	}
 
-	raw := marshalQueuedTurnContextAction(action)
+	raw, err := marshalQueuedTurnContextAction(action)
+	if err != nil {
+		t.Fatalf("marshalQueuedTurnContextAction: %v", err)
+	}
 	if raw == "" {
 		t.Fatalf("marshalQueuedTurnContextAction returned empty JSON")
 	}
-	got := unmarshalQueuedTurnContextAction(raw)
+	got, err := unmarshalQueuedTurnContextAction(raw)
+	if err != nil {
+		t.Fatalf("unmarshalQueuedTurnContextAction: %v", err)
+	}
 	if got == nil {
 		t.Fatalf("unmarshalQueuedTurnContextAction returned nil")
 	}
@@ -144,6 +158,23 @@ func TestQueuedTurnContextActionRoundTrip(t *testing.T) {
 	}
 	if got.ExecutionContext == nil || got.ExecutionContext.SourceEnvPublicID != "env_a" {
 		t.Fatalf("unexpected execution context: %#v", got.ExecutionContext)
+	}
+}
+
+func TestQueuedTurnContextActionRejectsInvalidStoredJSON(t *testing.T) {
+	t.Parallel()
+
+	_, err := unmarshalQueuedTurnContextAction(`{
+		"schema_version": 2,
+		"action_id": "assistant.ask.unlisted",
+		"provider": "flower",
+		"target": {"target_id": "current", "locality": "auto"},
+		"source": {"surface": "terminal"},
+		"context": [{"kind": "terminal_selection", "working_dir": "/workspace/app", "selection": "npm test", "selection_chars": 8}],
+		"presentation": {"label": "Ask Flower", "priority": 100}
+	}`)
+	if !errors.Is(err, ErrInvalidContextAction) {
+		t.Fatalf("unmarshalQueuedTurnContextAction err=%v, want %v", err, ErrInvalidContextAction)
 	}
 }
 
@@ -171,5 +202,173 @@ func TestContextActionNormalizationPreservesUserTextPayload(t *testing.T) {
 	}
 	if got := action.Context[0].WorkingDir; got != "/workspace/app" {
 		t.Fatalf("working_dir = %q, want trimmed path", got)
+	}
+}
+
+func TestNormalizeAskFlowerContextActionRejectsNonStandardActions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		action ContextActionEnvelope
+	}{
+		{
+			name: "nonstandard action id",
+			action: ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      "assistant.ask.unlisted",
+				Provider:      "flower",
+				Target:        ContextActionTarget{TargetID: "local:local", Locality: "auto"},
+				Source:        ContextActionSource{Surface: "desktop_welcome_environment_card"},
+				Context:       []ContextActionContextItem{{Kind: "text_snapshot", Title: "Local", Content: "Environment: Local"}},
+				Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
+		},
+		{
+			name: "nonstandard provider",
+			action: ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      "assistant.ask.flower",
+				Provider:      "codex",
+				Target:        ContextActionTarget{TargetID: "local:local", Locality: "auto"},
+				Source:        ContextActionSource{Surface: "desktop_welcome_environment_card"},
+				Context:       []ContextActionContextItem{{Kind: "text_snapshot", Title: "Local", Content: "Environment: Local"}},
+				Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
+		},
+		{
+			name: "nonstandard session source",
+			action: ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      "assistant.ask.flower",
+				Provider:      "flower",
+				Target:        ContextActionTarget{TargetID: "local:local", Locality: "auto"},
+				Source:        ContextActionSource{Surface: "desktop_welcome_environment_card"},
+				ExecutionContext: &ContextActionExecutionHint{
+					SessionSource: "unknown_source",
+				},
+				Context:      []ContextActionContextItem{{Kind: "text_snapshot", Title: "Local", Content: "Environment: Local"}},
+				Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
+		},
+		{
+			name: "nonstandard runtime hint",
+			action: ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      "assistant.ask.flower",
+				Provider:      "flower",
+				Target:        ContextActionTarget{TargetID: "local:local", Locality: "auto"},
+				Source:        ContextActionSource{Surface: "desktop_welcome_environment_card"},
+				ExecutionContext: &ContextActionExecutionHint{
+					RuntimeHint: "legacy",
+				},
+				Context:      []ContextActionContextItem{{Kind: "text_snapshot", Title: "Local", Content: "Environment: Local"}},
+				Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
+		},
+		{
+			name: "nonstandard target locality",
+			action: ContextActionEnvelope{
+				SchemaVersion: ContextActionSchemaVersion,
+				ActionID:      "assistant.ask.flower",
+				Provider:      "flower",
+				Target:        ContextActionTarget{TargetID: "local:local", Locality: "legacy"},
+				Source:        ContextActionSource{Surface: "desktop_welcome_environment_card"},
+				Context:       []ContextActionContextItem{{Kind: "text_snapshot", Title: "Local", Content: "Environment: Local"}},
+				Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			if action, err := normalizeAskFlowerContextActionEnvelope(&tt.action); err == nil || action != nil {
+				t.Fatalf("normalizeAskFlowerContextActionEnvelope()=(%#v, %v), want invalid nil", action, err)
+			}
+			if got := contextActionToUserProvidedContext(&tt.action); got != nil {
+				t.Fatalf("contextActionToUserProvidedContext()=%#v, want nil", got)
+			}
+			if got := contextActionRunEventPayload(&tt.action); got != nil {
+				t.Fatalf("contextActionRunEventPayload()=%#v, want nil", got)
+			}
+		})
+	}
+}
+
+func TestNormalizeAskFlowerContextActionAcceptsRuntimeGatewaySessionSource(t *testing.T) {
+	t.Parallel()
+
+	action, err := normalizeAskFlowerContextActionEnvelope(&ContextActionEnvelope{
+		SchemaVersion: ContextActionSchemaVersion,
+		ActionID:      "assistant.ask.flower",
+		Provider:      "flower",
+		Target:        ContextActionTarget{TargetID: "gateway:bastion:env:env_demo", Locality: "auto"},
+		Source:        ContextActionSource{Surface: "file_browser"},
+		ExecutionContext: &ContextActionExecutionHint{
+			SessionSource: "runtime_gateway",
+		},
+		Context:      []ContextActionContextItem{{Kind: "file_path", Path: "/workspace/app", IsDirectory: true}},
+		Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
+	})
+	if err != nil {
+		t.Fatalf("normalizeAskFlowerContextActionEnvelope: %v", err)
+	}
+	if action == nil {
+		t.Fatalf("normalizeAskFlowerContextActionEnvelope returned nil")
+	}
+	if action.ExecutionContext == nil || action.ExecutionContext.SessionSource != "runtime_gateway" {
+		t.Fatalf("session source=%#v, want runtime_gateway", action.ExecutionContext)
+	}
+}
+
+func TestContextActionToUserProvidedContext(t *testing.T) {
+	action := contextActionToUserProvidedContext(&ContextActionEnvelope{
+		SchemaVersion: ContextActionSchemaVersion,
+		ActionID:      " assistant.ask.flower ",
+		Provider:      " flower ",
+		Target:        ContextActionTarget{TargetID: " local:local ", Locality: " auto "},
+		Source:        ContextActionSource{Surface: " desktop_welcome_environment_card ", SurfaceID: " local "},
+		ExecutionContext: &ContextActionExecutionHint{
+			CurrentTargetID: "local:local",
+			RuntimeHint:     "auto",
+			SessionSource:   "local_runtime",
+		},
+		Context: []ContextActionContextItem{
+			{
+				Kind:    " text_snapshot ",
+				Title:   " Local Environment ",
+				Detail:  " Local · Ready ",
+				Content: "Environment: Local Environment\nKind: local_environment\nEnvironment ID: local",
+			},
+		},
+		Presentation:        ContextActionPresentation{Label: " Ask Flower ", Priority: 100},
+		SuggestedWorkingDir: " /workspace/redeven ",
+	})
+	if action == nil {
+		t.Fatalf("contextActionToUserProvidedContext returned nil")
+	}
+	if action.ActionID != "assistant.ask.flower" || action.Provider != "flower" {
+		t.Fatalf("unexpected action identity: %#v", action)
+	}
+	if action.SourceSurface != "desktop_welcome_environment_card" || action.SourceSurfaceID != "local" {
+		t.Fatalf("unexpected source: %#v", action)
+	}
+	if action.TargetID != "local:local" || action.Locality != "auto" {
+		t.Fatalf("unexpected target: %#v", action)
+	}
+	if action.SuggestedWorkingDir != "/workspace/redeven" {
+		t.Fatalf("SuggestedWorkingDir=%q, want /workspace/redeven", action.SuggestedWorkingDir)
+	}
+	if len(action.Items) != 1 {
+		t.Fatalf("items len=%d, want 1", len(action.Items))
+	}
+	item := action.Items[0]
+	if item.Kind != "text_snapshot" || item.Title != "Local Environment" || item.Detail != "Local · Ready" {
+		t.Fatalf("unexpected item metadata: %#v", item)
+	}
+	if !strings.Contains(item.Content, "Kind: local_environment") {
+		t.Fatalf("item content missing environment kind: %q", item.Content)
 	}
 }

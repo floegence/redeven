@@ -145,11 +145,26 @@ func TestBuilder_BuildPromptPack(t *testing.T) {
 	builder := New(repo, r, c)
 
 	pack, err := builder.BuildPromptPack(ctx, BuildInput{
-		EndpointID:     "env_1",
-		ThreadID:       "th_1",
-		RunID:          "run_2",
-		Objective:      "Fix tests",
-		UserInput:      "continue",
+		EndpointID: "env_1",
+		ThreadID:   "th_1",
+		RunID:      "run_2",
+		Objective:  "Fix tests",
+		UserInput:  "continue",
+		UserProvidedContext: &model.UserProvidedContext{
+			ActionID:            "assistant.ask.flower",
+			Provider:            "flower",
+			SourceSurface:       "desktop_welcome_environment_card",
+			SourceSurfaceID:     "local",
+			TargetID:            "local:local",
+			Locality:            "auto",
+			SuggestedWorkingDir: "/workspace/redeven",
+			Items: []model.UserProvidedContextItem{{
+				Kind:    "text_snapshot",
+				Title:   "Local Environment",
+				Detail:  "Local · Ready",
+				Content: "Environment: Local Environment\nKind: local_environment\nEnvironment ID: local",
+			}},
+		},
 		Capability:     model.ModelCapability{MaxContextTokens: 2048},
 		MaxInputTokens: 512,
 	})
@@ -180,5 +195,17 @@ func TestBuilder_BuildPromptPack(t *testing.T) {
 	}
 	if pack.EstimatedInputTokens <= 0 {
 		t.Fatalf("expected EstimatedInputTokens > 0")
+	}
+	if pack.UserProvidedContext == nil {
+		t.Fatalf("expected UserProvidedContext")
+	}
+	if got := pack.UserProvidedContext.SourceSurface; got != "desktop_welcome_environment_card" {
+		t.Fatalf("UserProvidedContext.SourceSurface=%q", got)
+	}
+	if len(pack.UserProvidedContext.Items) != 1 || pack.UserProvidedContext.Items[0].Title != "Local Environment" {
+		t.Fatalf("unexpected UserProvidedContext items: %#v", pack.UserProvidedContext.Items)
+	}
+	if pack.ContextSectionsTokenUsage["user_context"] <= 0 {
+		t.Fatalf("expected user_context token usage, got %#v", pack.ContextSectionsTokenUsage)
 	}
 }
