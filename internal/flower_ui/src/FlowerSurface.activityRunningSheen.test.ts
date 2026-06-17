@@ -34,6 +34,10 @@ describe('Flower activity running sheen', () => {
     const statusRule = cssRule(css, '.flower-activity-inline-duration,\n.flower-activity-inline-status');
     const runningTitleRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-title');
     const successButtonRule = cssRule(css, '.flower-activity-inline-row-success .flower-activity-inline-button');
+    const failedIconRule = cssRule(css, '.flower-activity-inline-row-error .flower-activity-inline-icon');
+    const canceledIconRule = cssRule(css, '.flower-activity-inline-row-canceled .flower-activity-inline-icon');
+    const failedStatusRule = cssRule(css, '.flower-activity-inline-status-error');
+    const canceledStatusRule = cssRule(css, '.flower-activity-inline-status-canceled');
 
     expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground: #8f99a6');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-strong: #6f7a89');
@@ -67,6 +71,11 @@ describe('Flower activity running sheen', () => {
     expect(runningTitleRule).toContain('font-weight: 600');
     expect(runningTitleRule).toContain('text-shadow: 0 0 0.7rem rgba(127, 137, 151, 0.10)');
     expect(successButtonRule).toContain('color: var(--flower-activity-tool-row-foreground-complete)');
+    expect(activityInlineRule).toContain('--flower-activity-tool-row-error: color-mix(in srgb, #f97316 78%, var(--foreground) 22%)');
+    expect(failedIconRule).toContain('color: var(--flower-activity-tool-row-error)');
+    expect(failedStatusRule).toContain('color: var(--flower-activity-tool-row-error)');
+    expect(canceledIconRule).toContain('color: var(--destructive)');
+    expect(canceledStatusRule).toContain('color: var(--destructive)');
     expect(css).toContain('@keyframes flower-activity-loader-square');
     expect(css).toContain('left: 100%');
     expect(loaderRule).toContain('grid-template-columns: repeat(2, 0.3rem)');
