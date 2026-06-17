@@ -20,7 +20,7 @@ function cssRule(css: string, selector: string): string {
 }
 
 describe('Flower streaming cursor', () => {
-  it('uses a vertical terminal-style cursor with slow breathing shimmer', () => {
+  it('uses a vertical terminal-style cursor with slow left-to-right shimmer', () => {
     const css = flowerStyles();
     const cursorRule = cssRule(css, '.flower-streaming-cursor');
     const shimmerRule = cssRule(css, '.flower-streaming-cursor::before');
@@ -28,8 +28,11 @@ describe('Flower streaming cursor', () => {
     expect(cursorRule).toContain('width: 0.42em');
     expect(cursorRule).toContain('height: 1.15em');
     expect(cursorRule).toContain('border-radius: 0.08rem');
-    expect(cursorRule).toContain('animation: flower-cursor-breathe 2.8s ease-in-out infinite');
-    expect(shimmerRule).toContain('animation: flower-cursor-shimmer 2.8s ease-in-out infinite');
+    expect(cursorRule).toContain('animation: flower-cursor-breathe 3.8s ease-in-out infinite');
+    expect(shimmerRule).toContain('90deg');
+    expect(shimmerRule).toContain('transform: translateX(-54%)');
+    expect(shimmerRule).toContain('animation: flower-cursor-shimmer 3.8s cubic-bezier(0.42, 0, 0.2, 1) infinite');
+    expect(css).toContain('transform: translateX(54%)');
     expect(css).toContain('.flower-streaming-cursor::before,');
     expect(css).not.toContain('animation: flower-cursor-flow');
     expect(css).not.toContain('@keyframes flower-cursor-flow');
