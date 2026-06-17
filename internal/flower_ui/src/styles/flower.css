@@ -1113,9 +1113,9 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline {
-  --flower-activity-tool-row-foreground: #a3acb8;
-  --flower-activity-tool-row-foreground-strong: #7f8997;
-  --flower-activity-tool-row-foreground-complete: #aeb6c0;
+  --flower-activity-tool-row-foreground: #8f99a6;
+  --flower-activity-tool-row-foreground-strong: #6f7a89;
+  --flower-activity-tool-row-foreground-complete: #9ba5b1;
   --flower-activity-tool-row-soft: rgba(126, 138, 153, 0.11);
   --flower-activity-tool-row-ok: #4c9a72;
   display: grid;
