@@ -300,9 +300,6 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.Projecte
 			if !gatePassed {
 				return r.failRun("Task completion rejected by completion gate", fmt.Errorf("task_complete rejected: %s", gateReason))
 			}
-			if strings.TrimSpace(resultText) != "" && !r.hasNonEmptyAssistantText() {
-				_ = r.appendTextDelta(resultText)
-			}
 			r.setCanonicalMarkdownCandidate(resultText)
 			r.reconcileCanonicalMarkdownMessage(resultText)
 			r.persistTaskCompleteSignal(strings.TrimSpace(signal.CallID), resultText, evidenceRefs)
@@ -312,9 +309,6 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.Projecte
 			r.emitLifecyclePhase("ended", map[string]any{"reason": "task_complete", "step_index": step})
 			r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 			return nil
-		}
-		if strings.TrimSpace(result.Output) != "" && !r.hasNonEmptyAssistantText() {
-			_ = r.appendTextDelta(strings.TrimSpace(result.Output))
 		}
 		r.setCanonicalMarkdownCandidate(result.Output)
 		r.reconcileCanonicalMarkdownMessage(result.Output)

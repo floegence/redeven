@@ -58,23 +58,6 @@ func activityTimelinePlaceholder(runID string) ActivityTimelineBlock {
 	}, nil)
 }
 
-func TestAssistantMarkdownTextSnapshot_JoinsMarkdownBlocksOnly(t *testing.T) {
-	t.Parallel()
-
-	r := &run{
-		assistantBlocks: []any{
-			&persistedMarkdownBlock{Type: "markdown", Content: "first part"},
-			activityTimelinePlaceholder("run_snapshot"),
-			&persistedMarkdownBlock{Type: "markdown", Content: "second part"},
-		},
-	}
-	got := r.assistantMarkdownTextSnapshot()
-	want := "first part\n\nsecond part"
-	if got != want {
-		t.Fatalf("assistantMarkdownTextSnapshot got=%q want=%q", got, want)
-	}
-}
-
 func TestAppendThinkingDelta_PreservesInitialMarkdownBlock(t *testing.T) {
 	t.Parallel()
 
@@ -180,7 +163,7 @@ func TestReconcileCanonicalMarkdownMessage_ReplacesPureMarkdownBlock(t *testing.
 	}
 }
 
-func TestReconcileCanonicalMarkdownMessage_AppendsCanonicalWithoutClearingEarlierMarkdown(t *testing.T) {
+func TestReconcileCanonicalMarkdownMessage_ReplacesMixedMarkdownWithSingleCanonicalBlock(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
@@ -201,41 +184,152 @@ func TestReconcileCanonicalMarkdownMessage_AppendsCanonicalWithoutClearingEarlie
 		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")
 	}
 
-	first, _ := r.assistantBlocks[0].(*persistedMarkdownBlock)
-	middle, _ := r.assistantBlocks[2].(*persistedMarkdownBlock)
-	last, _ := r.assistantBlocks[3].(*persistedMarkdownBlock)
-	if first == nil || first.Content != "intro" {
-		t.Fatalf("assistantBlocks[0]=%+v, want preserved intro markdown block", first)
+	if len(r.assistantBlocks) != 3 {
+		t.Fatalf("assistantBlocks len=%d, want cleared markdown, activity, and canonical markdown: %#v", len(r.assistantBlocks), r.assistantBlocks)
 	}
-	if middle == nil || middle.Content != "teaser" {
-		t.Fatalf("assistantBlocks[2]=%+v, want preserved teaser markdown block", middle)
+	cleared, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || cleared == nil || cleared.Content != "" {
+		t.Fatalf("assistantBlocks[0]=%T %+v, want cleared markdown", r.assistantBlocks[0], r.assistantBlocks[0])
 	}
-	if last == nil || last.Content != "canonical" {
-		t.Fatalf("assistantBlocks[3]=%+v, want appended canonical markdown block", last)
+	if _, ok := r.assistantBlocks[1].(ActivityTimelineBlock); !ok {
+		t.Fatalf("assistantBlocks[1]=%T, want activity timeline", r.assistantBlocks[1])
+	}
+	canonical, ok := r.assistantBlocks[2].(*persistedMarkdownBlock)
+	if !ok || canonical == nil || canonical.Content != "canonical" {
+		t.Fatalf("assistantBlocks[2]=%T %+v, want canonical markdown", r.assistantBlocks[2], r.assistantBlocks[2])
 	}
 	if len(events) != 2 {
 		t.Fatalf("stream events=%d, want 2", len(events))
 	}
-	if _, ok := events[0].(streamEventBlockStart); !ok {
-		t.Fatalf("event[0]=%T, want streamEventBlockStart", events[0])
-	}
-	firstEvent, ok := events[0].(streamEventBlockSet)
+	clearEvent, ok := events[0].(streamEventBlockSet)
 	if !ok {
-		firstEvent, ok = events[1].(streamEventBlockSet)
-		if !ok {
-			t.Fatalf("event[1]=%T, want streamEventBlockSet", events[1])
-		}
+		t.Fatalf("event[0]=%T, want streamEventBlockSet clear", events[0])
 	}
-	if firstEvent.BlockIndex != 3 {
-		t.Fatalf("block-set=%+v, want canonical append at index 3", firstEvent)
+	if clearEvent.BlockIndex != 0 {
+		t.Fatalf("clear block-set=%+v, want index 0", clearEvent)
 	}
-	firstBlock, ok := firstEvent.Block.(persistedMarkdownBlock)
-	if !ok || firstBlock.Content != "canonical" {
-		t.Fatalf("block-set block=%T %+v, want canonical markdown block", firstEvent.Block, firstEvent.Block)
+	clearBlock, ok := clearEvent.Block.(persistedMarkdownBlock)
+	if !ok || clearBlock.Content != "" {
+		t.Fatalf("clear block=%T %+v, want empty markdown", clearEvent.Block, clearEvent.Block)
+	}
+	canonicalEvent, ok := events[1].(streamEventBlockSet)
+	if !ok {
+		t.Fatalf("event[1]=%T, want streamEventBlockSet canonical", events[1])
+	}
+	if canonicalEvent.BlockIndex != 2 {
+		t.Fatalf("canonical block-set=%+v, want index 2", canonicalEvent)
+	}
+	canonicalBlock, ok := canonicalEvent.Block.(persistedMarkdownBlock)
+	if !ok || canonicalBlock.Content != "canonical" {
+		t.Fatalf("canonical block=%T %+v, want canonical markdown", canonicalEvent.Block, canonicalEvent.Block)
 	}
 }
 
-func TestReconcileCanonicalMarkdownMessage_AppendsMarkdownWhenNoMarkdownBlocksExist(t *testing.T) {
+func TestReconcileCanonicalMarkdownMessage_ClearsEarlierMarkdownWhenTargetAlreadyCanonical(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 2)
+	r := &run{
+		messageID: "msg_mixed_canonical",
+		onStreamEvent: func(ev any) {
+			events = append(events, ev)
+		},
+		assistantBlocks: []any{
+			&persistedMarkdownBlock{Type: "markdown", Content: "intro"},
+			activityTimelinePlaceholder("run_mixed_canonical"),
+			&persistedMarkdownBlock{Type: "markdown", Content: "canonical"},
+		},
+	}
+	r.setCanonicalMarkdownCandidate("canonical")
+
+	if !r.reconcileCanonicalMarkdownMessage("") {
+		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")
+	}
+
+	if len(r.assistantBlocks) != 3 {
+		t.Fatalf("assistantBlocks len=%d, want cleared markdown, activity timeline, and canonical markdown: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	cleared, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || cleared == nil || cleared.Content != "" {
+		t.Fatalf("assistantBlocks[0]=%T %+v, want cleared markdown", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	canonical, ok := r.assistantBlocks[2].(*persistedMarkdownBlock)
+	if !ok || canonical == nil || canonical.Content != "canonical" {
+		t.Fatalf("assistantBlocks[2]=%T %+v, want canonical markdown", r.assistantBlocks[2], r.assistantBlocks[2])
+	}
+	if len(events) != 1 {
+		t.Fatalf("stream events=%d, want one clear event", len(events))
+	}
+	clearEvent, ok := events[0].(streamEventBlockSet)
+	if !ok {
+		t.Fatalf("event[0]=%T, want streamEventBlockSet", events[0])
+	}
+	if clearEvent.BlockIndex != 0 {
+		t.Fatalf("clear block-set=%+v, want index 0", clearEvent)
+	}
+	clearBlock, ok := clearEvent.Block.(persistedMarkdownBlock)
+	if !ok || clearBlock.Content != "" {
+		t.Fatalf("clear block=%T %+v, want empty markdown", clearEvent.Block, clearEvent.Block)
+	}
+}
+
+func TestReconcileCanonicalMarkdownMessage_AppendsCanonicalAfterActivityTimeline(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 3)
+	r := &run{
+		messageID: "msg_canonical_after_activity",
+		onStreamEvent: func(ev any) {
+			events = append(events, ev)
+		},
+		assistantBlocks: []any{
+			&persistedMarkdownBlock{Type: "markdown", Content: "intro"},
+			activityTimelinePlaceholder("run_canonical_after_activity"),
+		},
+		nextBlockIndex: 2,
+	}
+	r.setCanonicalMarkdownCandidate("canonical")
+
+	if !r.reconcileCanonicalMarkdownMessage("") {
+		t.Fatalf("reconcileCanonicalMarkdownMessage returned false, want true")
+	}
+
+	if len(r.assistantBlocks) != 3 {
+		t.Fatalf("assistantBlocks len=%d, want cleared markdown, activity timeline, and canonical markdown: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	cleared, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || cleared == nil || cleared.Content != "" {
+		t.Fatalf("assistantBlocks[0]=%T %+v, want cleared markdown", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	if _, ok := r.assistantBlocks[1].(ActivityTimelineBlock); !ok {
+		t.Fatalf("assistantBlocks[1]=%T, want activity timeline", r.assistantBlocks[1])
+	}
+	canonical, ok := r.assistantBlocks[2].(*persistedMarkdownBlock)
+	if !ok || canonical == nil || canonical.Content != "canonical" {
+		t.Fatalf("assistantBlocks[2]=%T %+v, want canonical markdown", r.assistantBlocks[2], r.assistantBlocks[2])
+	}
+	if len(events) != 3 {
+		t.Fatalf("stream events=%d, want clear, start, and canonical set", len(events))
+	}
+	clearEvent, ok := events[0].(streamEventBlockSet)
+	if !ok || clearEvent.BlockIndex != 0 {
+		t.Fatalf("event[0]=%+v, want clear block-set at index 0", events[0])
+	}
+	startEvent, ok := events[1].(streamEventBlockStart)
+	if !ok || startEvent.BlockIndex != 2 || startEvent.BlockType != "markdown" {
+		t.Fatalf("event[1]=%+v, want markdown block-start at index 2", events[1])
+	}
+	setEvent, ok := events[2].(streamEventBlockSet)
+	if !ok || setEvent.BlockIndex != 2 {
+		t.Fatalf("event[2]=%+v, want canonical block-set at index 2", events[2])
+	}
+	setBlock, ok := setEvent.Block.(persistedMarkdownBlock)
+	if !ok || setBlock.Content != "canonical" {
+		t.Fatalf("canonical block=%T %+v, want canonical markdown", setEvent.Block, setEvent.Block)
+	}
+}
+
+func TestReconcileCanonicalMarkdownMessage_CreatesCanonicalMarkdownWhenNoMarkdownBlocksExist(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 2)
@@ -261,7 +355,7 @@ func TestReconcileCanonicalMarkdownMessage_AppendsMarkdownWhenNoMarkdownBlocksEx
 	}
 	block, _ := r.assistantBlocks[2].(*persistedMarkdownBlock)
 	if block == nil || block.Content != "canonical" {
-		t.Fatalf("assistantBlocks[2]=%+v, want appended canonical markdown block", block)
+		t.Fatalf("assistantBlocks[2]=%+v, want canonical markdown block", block)
 	}
 	if len(events) != 2 {
 		t.Fatalf("stream events=%d, want 2", len(events))
@@ -304,21 +398,17 @@ func TestReconcileCanonicalMarkdownMessage_UpdatesPersistedAssistantSnapshotText
 	if err := json.Unmarshal([]byte(rawJSON), &msg); err != nil {
 		t.Fatalf("json.Unmarshal: %v", err)
 	}
-	if len(msg.Blocks) != 4 {
-		t.Fatalf("blocks len=%d, want 4", len(msg.Blocks))
+	if len(msg.Blocks) != 2 {
+		t.Fatalf("blocks len=%d, want activity timeline plus canonical markdown", len(msg.Blocks))
 	}
 
-	first, ok := msg.Blocks[0].(map[string]any)
-	if !ok || first["type"] != "markdown" || first["content"] != "intro" {
-		t.Fatalf("blocks[0]=%T %+v, want preserved intro markdown block", msg.Blocks[0], msg.Blocks[0])
+	activity, ok := msg.Blocks[0].(map[string]any)
+	if !ok || activity["type"] != activityTimelineBlockType {
+		t.Fatalf("blocks[0]=%T %+v, want activity timeline", msg.Blocks[0], msg.Blocks[0])
 	}
-	middle, ok := msg.Blocks[2].(map[string]any)
-	if !ok || middle["type"] != "markdown" || middle["content"] != "teaser" {
-		t.Fatalf("blocks[2]=%T %+v, want preserved teaser markdown block", msg.Blocks[2], msg.Blocks[2])
-	}
-	last, ok := msg.Blocks[3].(map[string]any)
-	if !ok || last["type"] != "markdown" || last["content"] != "canonical final answer" {
-		t.Fatalf("blocks[3]=%T %+v, want canonical final answer", msg.Blocks[3], msg.Blocks[3])
+	canonical, ok := msg.Blocks[1].(map[string]any)
+	if !ok || canonical["type"] != "markdown" || canonical["content"] != "canonical final answer" {
+		t.Fatalf("blocks[1]=%T %+v, want canonical final answer", msg.Blocks[1], msg.Blocks[1])
 	}
 }
 
