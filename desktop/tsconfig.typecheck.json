@@ -9,6 +9,7 @@
     "paths": {
       "@floegence/floe-webapp-core": ["node_modules/@floegence/floe-webapp-core"],
       "@floegence/floe-webapp-core/*": ["node_modules/@floegence/floe-webapp-core/dist/*"],
+      "marked": ["node_modules/marked/lib/marked.d.ts"],
       "solid-js": ["node_modules/solid-js"],
       "solid-js/*": ["node_modules/solid-js/*"],
       "vitest": ["node_modules/vitest"]

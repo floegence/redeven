@@ -203,6 +203,7 @@ describe('buildFlowerTimelineEntries', () => {
           content: 'I need a decision.',
           status: 'complete',
           created_at_ms: 2,
+          blocks: [{ type: 'markdown', content: 'I need a decision.' }],
         },
       ],
       input_request: {
@@ -227,6 +228,22 @@ describe('buildFlowerTimelineEntries', () => {
     }));
 
     expect(entries.map((entry) => entry.type)).toEqual(['message', 'input_request', 'error']);
+  });
+
+  it('does not create renderable markdown blocks from message content', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [
+        {
+          id: 'assistant-content-only',
+          role: 'assistant',
+          content: '**content-only markdown**',
+          status: 'complete',
+          created_at_ms: 2,
+        },
+      ],
+    }));
+
+    expect(entries).toHaveLength(0);
   });
 
   it('keeps host-only file action paths out of activity signatures', () => {
