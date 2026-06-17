@@ -318,6 +318,12 @@ func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 		"3. **Act** — Use the available file tools for file inspection and mutation, apply_patch for patch-shaped edits, and terminal.exec for validated command actions.",
 		"4. **Verify** — Use terminal.exec to run checks (tests/lint/build) and confirm correctness.",
 		"5. **Respond** — Reply naturally when the turn is complete; use ask_user only when the next step truly depends on user input.",
+		"",
+		"Information source routing:",
+		"- Current workspace code, files, builds, tests, and device state -> terminal.exec or file tools.",
+		"- Redeven repository knowledge (architecture, protocols, runtime/Desktop/gateway behavior, Workbench contracts, release automation, and maintained OKF concepts) -> okf.search.",
+		"- Source-level conclusions -> verify any OKF background with terminal.exec or file tools before final conclusions.",
+		"- External/current/recent/news/third-party/general web facts -> authoritative URLs via terminal.exec/curl; use web.search only for discovery when the URL is unknown.",
 	}
 	return newPromptSection("tool_usage_strategy", lines...)
 }
@@ -368,6 +374,8 @@ func buildPromptOnlineResearchSection() promptSection {
 		"- Preferred sources: official product documentation, vendor docs, standards/RFCs, official GitHub repos/releases, and other primary sources.",
 		"- Use web.search (or provider web search) only for discovery when you cannot identify the correct authoritative URL.",
 		"- Treat search results as pointers, not evidence: fetch the underlying pages (via terminal.exec/curl), validate key details, and reference the exact URLs you relied on.",
+		"- OKF does not access the internet and must not be used for external/current/recent/news/third-party/general web facts.",
+		"- Do not use okf.search as a fallback when web.search is unavailable; fetch authoritative URLs with terminal.exec/curl instead.",
 		"- Avoid low-quality SEO content; if you must use it, corroborate with an authoritative source.",
 	)
 }
@@ -389,7 +397,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		"- Use tools when they are needed for reliable evidence or actions.",
 		"- If you cannot complete safely, use the allowed completion path for this run. Do not stop silently.",
 		"- You MUST use tools to investigate before answering questions about files, code, or the workspace.",
-		"- When okf.search is available, query it first for domain background, then verify with terminal.exec before final conclusions.",
+		"- Use okf.search only for Redeven repository knowledge; for source-level conclusions, verify OKF background with terminal.exec or file tools before final conclusions.",
 		"- Do NOT expose internal evidence path:line details to end users unless they explicitly ask for repository-level traceability.",
 	}
 	lines = append(lines,

@@ -14,6 +14,8 @@ import (
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
+const okfKnowledgeActivityLabel = "OKF knowledge"
+
 type floretToolRuntimeState struct {
 	mu    sync.Mutex
 	state runtimeState
@@ -435,7 +437,7 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 	case "okf.search":
 		query := strings.TrimSpace(anyToString(args["query"]))
 		activity = &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(firstNonEmptyString(query, "okf.search")),
+			Label:    activityPresentationLabel(firstNonEmptyString(query, okfKnowledgeActivityLabel)),
 			Renderer: observation.ActivityRendererStructured,
 			Payload:  mapWithOperation(payload, "okf.search"),
 		}
@@ -616,6 +618,12 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 			Renderer: observation.ActivityRendererWebSearch,
 			Chips:    webSearchActivityChips(payload),
 			Payload:  payload,
+		}, nil
+	case "okf.search":
+		return &observation.ActivityPresentation{
+			Label:    activityPresentationLabel(firstNonEmptyString(anyToString(payload["query"]), okfKnowledgeActivityLabel)),
+			Renderer: observation.ActivityRendererStructured,
+			Payload:  mapWithOperation(payload, "okf.search"),
 		}, nil
 	case "write_todos":
 		return &observation.ActivityPresentation{

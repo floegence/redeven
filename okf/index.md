@@ -40,7 +40,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 - [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.
 - [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.
-- [OKF search tool](ai/okf-search-tool.md) - Read-only AI search over the embedded OKF bundle.
+- [OKF search tool](ai/okf-search-tool.md) - Read-only repository knowledge lookup over the embedded OKF bundle.
 
 ## Protocol
 

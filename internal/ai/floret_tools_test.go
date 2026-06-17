@@ -245,6 +245,38 @@ func TestFloretActivityForApplyPatchCallOmitsPatchBody(t *testing.T) {
 	}
 }
 
+func TestFloretActivityForOKFCallUsesKnowledgeLookupPresentation(t *testing.T) {
+	t.Parallel()
+
+	activity := floretActivityForToolCall("okf.search", map[string]any{})
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	if activity.Label != okfKnowledgeActivityLabel {
+		t.Fatalf("label=%q, want %q", activity.Label, okfKnowledgeActivityLabel)
+	}
+	if activity.Renderer != observation.ActivityRendererStructured {
+		t.Fatalf("renderer=%q, want structured", activity.Renderer)
+	}
+	if activity.Payload["operation"] != "okf.search" {
+		t.Fatalf("operation payload=%v, want okf.search", activity.Payload["operation"])
+	}
+	if activity.Label == "okf.search" || activity.Label == "Search OKF" {
+		t.Fatalf("label=%q keeps search-engine wording", activity.Label)
+	}
+
+	withQuery := floretActivityForToolCall("okf.search", map[string]any{"query": "Workbench wheel ownership"})
+	if withQuery == nil {
+		t.Fatal("query activity is nil")
+	}
+	if withQuery.Label != "Workbench wheel ownership" {
+		t.Fatalf("query label=%q, want query", withQuery.Label)
+	}
+	if withQuery.Payload["operation"] != "okf.search" || withQuery.Payload["query"] != "Workbench wheel ownership" {
+		t.Fatalf("query payload=%#v", withQuery.Payload)
+	}
+}
+
 func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnlyFields(t *testing.T) {
 	t.Parallel()
 
@@ -280,6 +312,55 @@ func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnly
 	}
 	if len(activity.Chips) == 0 || activity.Chips[0].Kind != "exit_code" || activity.Chips[0].Value != "0" {
 		t.Fatalf("chips=%#v, want exit code chip", activity.Chips)
+	}
+}
+
+func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	activity := mustFloretToolResultActivity(t, r, ToolResult{
+		ToolID:   "call_okf",
+		ToolName: "okf.search",
+		Status:   toolResultStatusSuccess,
+		Summary:  toolSuccessSummary("okf.search"),
+		Data: map[string]any{
+			"total_concepts": 12,
+		},
+	})
+	if activity.Label != okfKnowledgeActivityLabel {
+		t.Fatalf("label=%q, want %q", activity.Label, okfKnowledgeActivityLabel)
+	}
+	if activity.Renderer != observation.ActivityRendererStructured {
+		t.Fatalf("renderer=%q, want structured", activity.Renderer)
+	}
+	if activity.Payload["operation"] != "okf.search" {
+		t.Fatalf("operation payload=%v, want okf.search", activity.Payload["operation"])
+	}
+	if activity.Payload["summary"] != "okf.knowledge.lookup" {
+		t.Fatalf("summary payload=%v, want okf.knowledge.lookup", activity.Payload["summary"])
+	}
+	if activity.Label == "okf.search" || activity.Label == "Search OKF" {
+		t.Fatalf("label=%q keeps search-engine wording", activity.Label)
+	}
+	if activity.Payload["summary"] == "okf.search" || activity.Payload["summary"] == "Search OKF" {
+		t.Fatalf("summary payload=%q keeps search-engine wording", activity.Payload["summary"])
+	}
+
+	withQuery := mustFloretToolResultActivity(t, r, ToolResult{
+		ToolID:   "call_okf_query",
+		ToolName: "okf.search",
+		Status:   toolResultStatusSuccess,
+		Data: map[string]any{
+			"query":          "Workbench wheel ownership",
+			"total_concepts": 12,
+		},
+	})
+	if withQuery.Label != "Workbench wheel ownership" {
+		t.Fatalf("query label=%q, want query", withQuery.Label)
+	}
+	if withQuery.Payload["operation"] != "okf.search" || withQuery.Payload["query"] != "Workbench wheel ownership" {
+		t.Fatalf("query payload=%#v", withQuery.Payload)
 	}
 }
 
