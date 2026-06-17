@@ -524,39 +524,81 @@ html.dark .flower-component-shell {
 .flower-streaming-cursor {
   position: relative;
   display: inline-block;
-  width: 1.65rem;
-  will-change: background-position;
-  height: 0.82rem;
-  margin-left: 0.18rem;
-  vertical-align: -0.08em;
-  border-radius: 0.25rem;
+  overflow: hidden;
+  width: 0.42em;
+  height: 1.15em;
+  margin-left: 0.16rem;
+  vertical-align: -0.18em;
+  border-radius: 0.08rem;
   background:
     linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--primary) 14%, transparent) 0%,
-      color-mix(in srgb, var(--primary) 26%, var(--background)) 34%,
-      color-mix(in srgb, white 78%, var(--primary) 22%) 50%,
-      color-mix(in srgb, var(--primary) 26%, var(--background)) 66%,
-      color-mix(in srgb, var(--primary) 14%, transparent) 100%
+      180deg,
+      color-mix(in srgb, var(--primary) 30%, var(--foreground) 14%) 0%,
+      color-mix(in srgb, var(--primary) 52%, var(--foreground) 18%) 48%,
+      color-mix(in srgb, var(--primary) 36%, var(--foreground) 16%) 100%
     );
-  background-size: 220% 100%;
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent),
-    0 0 16px color-mix(in srgb, var(--primary) 30%, transparent);
-  animation: flower-cursor-flow 1.15s linear infinite;
+    0 0 0 1px color-mix(in srgb, var(--primary) 20%, transparent),
+    0 0 0.72rem color-mix(in srgb, var(--primary) 24%, transparent);
+  transform-origin: 50% 50%;
+  will-change: opacity, transform, box-shadow;
+  animation: flower-cursor-breathe 2.8s ease-in-out infinite;
 }
 
-@keyframes flower-cursor-flow {
+.flower-streaming-cursor::before {
+  content: '';
+  position: absolute;
+  inset: -45% 0;
+  background:
+    linear-gradient(
+      180deg,
+      transparent 4%,
+      color-mix(in srgb, white 82%, var(--primary) 18%) 48%,
+      transparent 92%
+    );
+  opacity: 0;
+  transform: translateY(-72%);
+  animation: flower-cursor-shimmer 2.8s ease-in-out infinite;
+}
+
+@keyframes flower-cursor-breathe {
   0% {
-    background-position: 120% 0;
-    opacity: 0.58;
+    opacity: 0.54;
+    transform: scaleY(0.9);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent),
+      0 0 0.34rem color-mix(in srgb, var(--primary) 16%, transparent);
   }
   50% {
-    opacity: 1;
+    opacity: 0.98;
+    transform: scaleY(1);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent),
+      0 0 0.95rem color-mix(in srgb, var(--primary) 34%, transparent);
   }
   100% {
-    background-position: -120% 0;
-    opacity: 0.72;
+    opacity: 0.58;
+    transform: scaleY(0.9);
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent),
+      0 0 0.34rem color-mix(in srgb, var(--primary) 16%, transparent);
+  }
+}
+
+@keyframes flower-cursor-shimmer {
+  0%,
+  24% {
+    opacity: 0;
+    transform: translateY(-72%);
+  }
+  48%,
+  58% {
+    opacity: 0.68;
+  }
+  82%,
+  100% {
+    opacity: 0;
+    transform: translateY(72%);
   }
 }
 
@@ -3111,6 +3153,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 
 @media (prefers-reduced-motion: reduce) {
   .flower-streaming-cursor,
+  .flower-streaming-cursor::before,
   .redeven-flower-icon-spin,
   .redeven-flower-icon-breathe,
   .flower-thread-wave-bar {
