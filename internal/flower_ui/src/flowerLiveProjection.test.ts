@@ -424,6 +424,98 @@ describe('Flower live projection', () => {
     });
   });
 
+  it('replaces draft markdown with canonical markdown after activity blocks', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const beforeCommit = applyEvents(initial, 0, [
+      event(1, 'message.started', {
+        message_id: 'assistant-live',
+        role: 'assistant',
+        status: 'streaming',
+        created_at_ms: 2000,
+      }),
+      event(2, 'message.block_started', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        block_type: 'markdown',
+      }),
+      event(3, 'message.block_delta', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        delta: 'Let me inspect Loomcycle first.',
+      }),
+      event(4, 'message.block_set', {
+        message_id: 'assistant-live',
+        block_index: 1,
+        block: {
+          type: 'activity-timeline',
+          block: {
+            type: 'activity-timeline',
+            schema_version: 1,
+            run_id: 'run-live',
+            summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 1, counts: { success: 1 } },
+            items: [{
+              item_id: 'tool-1',
+              kind: 'tool',
+              status: 'success',
+              severity: 'quiet',
+              needs_attention: false,
+              requires_approval: false,
+            }],
+          },
+        },
+      }),
+      event(5, 'message.block_set', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        block: { type: 'markdown', content: '' },
+      }),
+      event(6, 'message.block_set', {
+        message_id: 'assistant-live',
+        block_index: 2,
+        block: { type: 'markdown', content: 'Canonical Loomcycle answer.' },
+      }),
+    ]);
+
+    expect(beforeCommit.thread.messages[1]?.blocks).toHaveLength(3);
+    expect(beforeCommit.thread.messages[1]?.blocks?.[0]).toEqual({ type: 'markdown', content: '' });
+    expect(beforeCommit.thread.messages[1]?.blocks?.[1]).toEqual(expect.objectContaining({ type: 'activity-timeline' }));
+    expect(beforeCommit.thread.messages[1]?.blocks?.[2]).toEqual({ type: 'markdown', content: 'Canonical Loomcycle answer.' });
+    expect(beforeCommit.thread.messages[1]?.content).toBe('Canonical Loomcycle answer.');
+
+    const committed = applyFlowerLiveEvent(beforeCommit.thread, beforeCommit.cursor, event(7, 'message.committed', {
+      message_id: 'assistant-live',
+      message: message({
+        id: 'assistant-live',
+        role: 'assistant',
+        status: 'complete',
+        content: 'Canonical Loomcycle answer.',
+        blocks: [
+          {
+            type: 'activity-timeline',
+            schema_version: 1,
+            run_id: 'run-live',
+            summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 1, counts: { success: 1 } },
+            items: [{
+              item_id: 'tool-1',
+              kind: 'tool',
+              status: 'success',
+              severity: 'quiet',
+              needs_attention: false,
+              requires_approval: false,
+            }],
+          },
+          { type: 'markdown', content: 'Canonical Loomcycle answer.' },
+        ],
+      }),
+    }));
+
+    expect(committed.thread.messages[1]?.blocks).toEqual([
+      expect.objectContaining({ type: 'activity-timeline' }),
+      { type: 'markdown', content: 'Canonical Loomcycle answer.' },
+    ]);
+    expect(committed.thread.messages[1]?.content).toBe('Canonical Loomcycle answer.');
+  });
+
   it('marks stream resync events as requiring bootstrap reload', () => {
     const initial = projectFlowerLiveBootstrap(bootstrap());
     const result = applyFlowerLiveEvent(initial, 5, event(8, 'stream.resync_required', {
