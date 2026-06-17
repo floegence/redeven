@@ -309,6 +309,44 @@ describe('Flower live projection', () => {
     });
   });
 
+  it('streams thinking before markdown without using thinking as message content', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const projected = applyEvents(initial, 0, [
+      event(1, 'message.started', {
+        message_id: 'assistant-live',
+        role: 'assistant',
+        status: 'streaming',
+        created_at_ms: 2000,
+      }),
+      event(2, 'message.block_started', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        block_type: 'thinking',
+      }),
+      event(3, 'message.block_delta', {
+        message_id: 'assistant-live',
+        block_index: 0,
+        delta: 'Inspecting provider flow.',
+      }),
+      event(4, 'message.block_started', {
+        message_id: 'assistant-live',
+        block_index: 1,
+        block_type: 'markdown',
+      }),
+      event(5, 'message.block_delta', {
+        message_id: 'assistant-live',
+        block_index: 1,
+        delta: 'Final answer.',
+      }),
+    ]);
+
+    expect(projected.thread.messages[1]?.blocks).toEqual([
+      { type: 'thinking', content: 'Inspecting provider flow.' },
+      { type: 'markdown', content: 'Final answer.' },
+    ]);
+    expect(projected.thread.messages[1]?.content).toBe('Final answer.');
+  });
+
   it('requires an explicit live block before accepting deltas', () => {
     const initial = thread({
       messages: [
@@ -636,6 +674,56 @@ describe('Flower live projection', () => {
 
     expect(mapped.thread.messages[0]?.content).toBe('Visible');
     expect(mapped.thread.messages[0]?.blocks).toEqual([{ type: 'markdown', content: 'Visible' }]);
+  });
+
+  it('restores transcript thinking blocks without using them as message content', () => {
+    const mapped = mapFlowerLiveBootstrap({
+      schema_version: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-live',
+      cursor: 42,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'th-live',
+        title: 'Live thread',
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 1000,
+        run_status: 'success',
+      },
+      transcript_messages: [{
+        id: 'assistant-thinking',
+        role: 'assistant',
+        timestamp: 1000,
+        status: 'complete',
+        blocks: [
+          { type: 'thinking', content: 'Inspecting provider flow.' },
+          { type: 'markdown', content: 'Final answer.' },
+        ],
+      }],
+      live_state: {
+        thread_patch: {},
+        message_order: [],
+        messages: {},
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      },
+      read_status: readStatus(),
+      generated_at_ms: 3000,
+    }, {
+      runtimeID: 'local',
+      runtimeKind: 'local_environment',
+      sourceLabel: 'This host',
+      targetLabels: [],
+    });
+
+    expect(mapped.thread.messages[0]?.blocks).toEqual([
+      { type: 'thinking', content: 'Inspecting provider flow.' },
+      { type: 'markdown', content: 'Final answer.' },
+    ]);
+    expect(mapped.thread.messages[0]?.content).toBe('Final answer.');
   });
 
   it('rejects committed message events without a valid message payload', () => {
