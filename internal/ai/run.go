@@ -181,6 +181,13 @@ type assistantAnswerState struct {
 	CanonicalMarkdown string
 }
 
+type canonicalMarkdownSource string
+
+const (
+	canonicalMarkdownSourceNaturalStop  canonicalMarkdownSource = "natural_stop"
+	canonicalMarkdownSourceTaskComplete canonicalMarkdownSource = "task_complete"
+)
+
 type assistantMarkdownUpdate struct {
 	index int
 	start bool
@@ -1380,24 +1387,61 @@ func (r *run) markdownBlockIndicesLocked() []int {
 	return idxs
 }
 
-func (r *run) trailingMarkdownBlockIndexLocked() int {
+func (r *run) nonEmptyMarkdownBlockIndicesLocked() []int {
+	if r == nil {
+		return nil
+	}
+	idxs := make([]int, 0, len(r.assistantBlocks))
+	for i, blk := range r.assistantBlocks {
+		block, ok := blk.(*persistedMarkdownBlock)
+		if !ok || block == nil || strings.TrimSpace(block.Content) == "" {
+			continue
+		}
+		idxs = append(idxs, i)
+	}
+	return idxs
+}
+
+func (r *run) trailingConcreteBlockIndexLocked() int {
 	if r == nil {
 		return -1
 	}
 	for i := len(r.assistantBlocks) - 1; i >= 0; i-- {
-		blk := r.assistantBlocks[i]
-		if blk == nil {
+		if r.assistantBlocks[i] == nil {
 			continue
 		}
-		if _, ok := blk.(*persistedMarkdownBlock); ok {
-			return i
-		}
-		return -1
+		return i
 	}
 	return -1
 }
 
-func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
+func (r *run) trailingEmptyMarkdownBlockIndexLocked() int {
+	idx := r.trailingConcreteBlockIndexLocked()
+	if idx < 0 {
+		return -1
+	}
+	block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
+	if !ok || block == nil || strings.TrimSpace(block.Content) != "" {
+		return -1
+	}
+	return idx
+}
+
+func (r *run) appendCanonicalMarkdownBlockLocked(canonical string) assistantMarkdownUpdate {
+	target := len(r.assistantBlocks)
+	r.persistEnsureIndex(target)
+	r.assistantBlocks[target] = &persistedMarkdownBlock{Type: "markdown", Content: canonical}
+	if r.nextBlockIndex <= target {
+		r.nextBlockIndex = target + 1
+	}
+	return assistantMarkdownUpdate{
+		index: target,
+		start: true,
+		block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
+	}
+}
+
+func (r *run) reconcileCanonicalMarkdownMessage(source canonicalMarkdownSource, fallback string) bool {
 	if r == nil {
 		return false
 	}
@@ -1407,77 +1451,65 @@ func (r *run) reconcileCanonicalMarkdownMessage(fallback string) bool {
 	}
 
 	r.muAssistant.Lock()
-	updates := make([]assistantMarkdownUpdate, 0, 4)
-
-	target := r.trailingMarkdownBlockIndexLocked()
-	targetUpdate := assistantMarkdownUpdate{}
-	hasTargetUpdate := false
-	if target < 0 {
-		target = len(r.assistantBlocks)
-		r.persistEnsureIndex(target)
-		r.assistantBlocks[target] = &persistedMarkdownBlock{Type: "markdown", Content: canonical}
-		if r.nextBlockIndex <= target {
-			r.nextBlockIndex = target + 1
+	var update assistantMarkdownUpdate
+	hasUpdate := false
+	visible := r.nonEmptyMarkdownBlockIndicesLocked()
+	if source == canonicalMarkdownSourceTaskComplete && len(visible) > 0 {
+		r.muAssistant.Unlock()
+		return false
+	}
+	switch len(visible) {
+	case 0:
+		if idx := r.trailingEmptyMarkdownBlockIndexLocked(); idx >= 0 {
+			block := r.assistantBlocks[idx].(*persistedMarkdownBlock)
+			block.Content = canonical
+			update = assistantMarkdownUpdate{
+				index: idx,
+				block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
+			}
+			hasUpdate = true
+			break
 		}
-		targetUpdate = assistantMarkdownUpdate{
-			index: target,
-			start: true,
-			block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
+		update = r.appendCanonicalMarkdownBlockLocked(canonical)
+		hasUpdate = true
+	case 1:
+		idx := visible[0]
+		if r.trailingConcreteBlockIndexLocked() != idx {
+			break
 		}
-		hasTargetUpdate = true
-	} else {
-		block, ok := r.assistantBlocks[target].(*persistedMarkdownBlock)
+		block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
 		if !ok || block == nil {
 			r.muAssistant.Unlock()
 			return false
 		}
 		if strings.TrimSpace(block.Content) != canonical {
 			block.Content = canonical
-			targetUpdate = assistantMarkdownUpdate{
-				index: target,
+			update = assistantMarkdownUpdate{
+				index: idx,
 				block: persistedMarkdownBlock{Type: "markdown", Content: canonical},
 			}
-			hasTargetUpdate = true
+			hasUpdate = true
 		}
-	}
-	for _, idx := range r.markdownBlockIndicesLocked() {
-		if idx == target {
-			continue
-		}
-		block, ok := r.assistantBlocks[idx].(*persistedMarkdownBlock)
-		if !ok || block == nil || strings.TrimSpace(block.Content) == "" {
-			continue
-		}
-		block.Content = ""
-		updates = append(updates, assistantMarkdownUpdate{
-			index: idx,
-			block: persistedMarkdownBlock{Type: "markdown", Content: ""},
-		})
-	}
-	if hasTargetUpdate {
-		updates = append(updates, targetUpdate)
 	}
 	r.muAssistant.Unlock()
 
-	if len(updates) == 0 {
+	if !hasUpdate {
 		return false
 	}
-	for _, update := range updates {
-		if update.start {
-			r.sendStreamEvent(streamEventBlockStart{
-				Type:       "block-start",
-				MessageID:  r.messageID,
-				BlockIndex: update.index,
-				BlockType:  "markdown",
-			})
-		}
-		r.sendStreamEvent(streamEventBlockSet{
-			Type:       "block-set",
+	if update.start {
+		r.sendStreamEvent(streamEventBlockStart{
+			Type:       "block-start",
 			MessageID:  r.messageID,
 			BlockIndex: update.index,
-			Block:      update.block,
+			BlockType:  "markdown",
 		})
 	}
+	r.sendStreamEvent(streamEventBlockSet{
+		Type:       "block-set",
+		MessageID:  r.messageID,
+		BlockIndex: update.index,
+		Block:      update.block,
+	})
 	return true
 }
 
@@ -2604,30 +2636,24 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 		return "", "", 0, err
 	}
 
-	canonical := r.canonicalMarkdownTextSnapshot("")
 	var sb strings.Builder
-	if canonical == "" {
-		for _, blk := range blocks {
-			text := assistantVisibleTextFromBlock(blk)
-			if text == "" {
-				continue
-			}
-			if sb.Len() > 0 {
-				sb.WriteString("\n\n")
-			}
-			sb.WriteString(text)
+	for _, blk := range blocks {
+		text := assistantVisibleTextFromBlock(blk)
+		if text == "" {
+			continue
 		}
+		if sb.Len() > 0 {
+			sb.WriteString("\n\n")
+		}
+		sb.WriteString(text)
 	}
 
-	assistantText := canonical
+	assistantText := strings.TrimSpace(sb.String())
 	if assistantText == "" {
-		assistantText = strings.TrimSpace(sb.String())
+		assistantText = r.canonicalMarkdownTextSnapshot("")
 	}
 	if assistantText == "" {
 		assistantText = r.waitingPromptSummarySnapshot()
-	}
-	if assistantText == "" {
-		assistantText = r.canonicalMarkdownTextSnapshot("")
 	}
 	return string(b), assistantText, assistantAt, nil
 }
