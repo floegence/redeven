@@ -561,4 +561,61 @@ describe('Flower live projection', () => {
       retained_from_seq: 1,
     })).toThrow(/message\.committed/);
   });
+
+  it('rejects unsupported activity item statuses instead of falling back', () => {
+    expect(() => mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        at_unix_ms: 3000,
+        kind: 'message.block_set',
+        payload: {
+          message_id: 'assistant-live',
+          block_index: 0,
+          block: {
+            type: 'activity-timeline',
+            schema_version: 1,
+            summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 1, counts: { success: 1 } },
+            items: [{
+              item_id: 'tool-1',
+              kind: 'tool',
+              status: 'timeout',
+              severity: 'error',
+              needs_attention: true,
+              requires_approval: false,
+            }],
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    })).toThrow(/activity item status is unsupported/);
+  });
+
+  it('rejects missing activity summary status instead of falling back', () => {
+    expect(() => mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        at_unix_ms: 3000,
+        kind: 'message.block_set',
+        payload: {
+          message_id: 'assistant-live',
+          block_index: 0,
+          block: {
+            type: 'activity-timeline',
+            schema_version: 1,
+            summary: { severity: 'quiet', needs_attention: false, total_items: 0, counts: {} },
+            items: [],
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    })).toThrow(/activity summary status is unsupported/);
+  });
 });

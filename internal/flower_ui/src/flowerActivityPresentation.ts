@@ -146,17 +146,19 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   next_actions: 'next actions',
   summary: 'summary',
   details: 'details',
-  status: 'status',
-  error: 'error',
+  status: 'result status',
+  error_code: 'error code',
+  error_message: 'error message',
+  error_retryable: 'retryable',
   content_ref: 'content ref',
 };
 
 const RENDERER_DETAIL_KEYS: Readonly<Record<Exclude<FlowerActivityRenderer, 'file' | 'patch' | 'todos'>, readonly string[]>> = {
-  terminal: ['command', 'timeout_ms', 'timeout_source', 'requested_timeout_ms', 'exit_code', 'duration_ms', 'timed_out', 'truncated', 'stdout', 'stderr', 'summary', 'details', 'error'],
-  web_search: ['query', 'provider', 'count', 'sources', 'results', 'summary', 'details', 'error'],
-  question: ['reason_code', 'required_from_user', 'questions', 'contains_secret', 'summary', 'details', 'error'],
-  completion: ['result', 'evidence_refs', 'remaining_risks', 'next_actions', 'summary', 'details', 'error'],
-  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'mode_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'status', 'message', 'agents', 'created', 'waiting', 'terminated', 'terminated_all', 'timed_out', 'targets', 'validation', 'stats', 'spec', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated', 'summary', 'details', 'error'],
+  terminal: ['command', 'status', 'timeout_ms', 'timeout_source', 'requested_timeout_ms', 'exit_code', 'duration_ms', 'timed_out', 'truncated', 'stdout', 'stderr', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
+  web_search: ['query', 'provider', 'count', 'sources', 'results', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
+  question: ['reason_code', 'required_from_user', 'questions', 'contains_secret', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
+  completion: ['result', 'evidence_refs', 'remaining_risks', 'next_actions', 'status', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
+  structured: ['operation', 'name', 'action', 'content', 'content_ref', 'activation_id', 'already_active', 'mode_hints', 'dependencies', 'dependency_degraded', 'reason', 'id', 'status', 'message', 'agents', 'created', 'waiting', 'terminated', 'terminated_all', 'timed_out', 'targets', 'validation', 'stats', 'spec', 'output', 'structured', 'key_files', 'rows', 'cards', 'items', 'query', 'count', 'provider', 'data', 'result', 'limit', 'evidence_refs', 'remaining_risks', 'next_actions', 'truncated', 'summary', 'details', 'error_code', 'error_message', 'error_retryable'],
 };
 
 const FILE_RAW_DETAIL_KEYS = new Set([
@@ -372,7 +374,30 @@ function detailLineTone(key: string): FlowerActivityDetailLine['tone'] {
   return key === 'command' || key === 'stdout' || key === 'stderr' ? 'code' : undefined;
 }
 
+function errorDetailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: string): FlowerActivityDetailLine | null {
+  if (key === 'error_code' || key === 'error_message' || key === 'error_retryable') {
+    const error = asRecord(payload.error);
+    const nestedKey = key === 'error_code' ? 'code' : key === 'error_message' ? 'message' : 'retryable';
+    const value = compactJSON(error[nestedKey]);
+    if (!value) return null;
+    return {
+      label: DETAIL_LABELS[key] ?? key,
+      value,
+    };
+  }
+  return null;
+}
+
+function errorDetailLinesFromPayload(payload: Readonly<Record<string, unknown>> | undefined): readonly FlowerActivityDetailLine[] {
+  if (!payload) return [];
+  return (['error_code', 'error_message', 'error_retryable'] as const)
+    .map((key) => errorDetailLineFromPayload(payload, key))
+    .filter((line): line is FlowerActivityDetailLine => line !== null);
+}
+
 function detailLineFromPayload(payload: Readonly<Record<string, unknown>>, key: string): FlowerActivityDetailLine | null {
+  const errorLine = errorDetailLineFromPayload(payload, key);
+  if (errorLine) return errorLine;
   if (!(key in payload)) return null;
   const value = compactJSON(payload[key]);
   if (!value) return null;
@@ -424,10 +449,28 @@ function fileStatusLines(item: FlowerActivityItem, payload: Readonly<Record<stri
   if (item.requires_approval) {
     lines.push({ label: 'approval', value: trimString(item.approval_state) || 'requested' });
   }
-  for (const key of ['status', 'summary', 'details', 'error', 'truncated']) {
+  for (const key of ['status', 'summary', 'details', 'truncated']) {
     if (!payload || FILE_RAW_DETAIL_KEYS.has(key)) continue;
+    if (key === 'truncated' && !boolValue(payload.truncated)) continue;
     const line = detailLineFromPayload(payload, key);
     if (line) lines.push(line);
+  }
+  lines.push(...errorDetailLinesFromPayload(payload));
+  return uniqueDetailLines(lines);
+}
+
+function resultStatusLines(item: FlowerActivityItem, payload: Readonly<Record<string, unknown>> | undefined): readonly FlowerActivityDetailLine[] {
+  const lines: FlowerActivityDetailLine[] = [];
+  if (item.requires_approval) {
+    lines.push({ label: 'approval', value: trimString(item.approval_state) || 'requested' });
+  }
+  if (payload) {
+    for (const key of ['status', 'summary', 'details', 'truncated']) {
+      if (key === 'truncated' && !boolValue(payload.truncated)) continue;
+      const line = detailLineFromPayload(payload, key);
+      if (line) lines.push(line);
+    }
+    lines.push(...errorDetailLinesFromPayload(payload));
   }
   return uniqueDetailLines(lines);
 }
@@ -500,7 +543,7 @@ function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActiv
     }
   }
   const statusLines = fileStatusLines(item, payload);
-  if (statusLines.length > 0 && detailBlocks.length === 0) {
+  if (statusLines.length > 0) {
     detailBlocks.push({ kind: 'structured', lines: statusLines });
   }
   return {
@@ -522,7 +565,7 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
     detailBlocks.push({ kind: 'file_diff', files });
   }
   const statusLines = fileStatusLines(item, payload);
-  if (statusLines.length > 0 && detailBlocks.length === 0) {
+  if (statusLines.length > 0) {
     detailBlocks.push({ kind: 'structured', lines: statusLines });
   }
   return {
@@ -538,6 +581,14 @@ function presentationForPatch(item: FlowerActivityItem, fileActions?: FlowerActi
 function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentation {
   const title: FlowerActivityTitle = { kind: 'plain', text: trimString(item.label) || 'Update todos' };
   const items = todoItemsFromPayload(item.payload);
+  const statusLines = resultStatusLines(item, item.payload);
+  const detailBlocks: FlowerActivityDetailBlock[] = [];
+  if (items.length > 0) {
+    detailBlocks.push({ kind: 'todos', items });
+  }
+  if (statusLines.length > 0) {
+    detailBlocks.push({ kind: 'structured', lines: statusLines });
+  }
   const counts = items.reduce<Record<FlowerActivityTodoStatus, number>>((acc, todo) => {
     acc[todo.status] += 1;
     return acc;
@@ -552,8 +603,8 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
     label: title.text,
     title,
     meta,
-    detailLines: [],
-    detailBlocks: items.length > 0 ? [{ kind: 'todos', items }] : [],
+    detailLines: statusLines,
+    detailBlocks,
   };
 }
 

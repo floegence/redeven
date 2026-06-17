@@ -1,10 +1,13 @@
 package ai
 
 import (
+	"encoding/json"
 	"errors"
 	"math"
 	"strings"
 	"testing"
+
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 func TestCompactMessages_PrependsDeclarationForRetainedToolResult(t *testing.T) {
@@ -107,6 +110,53 @@ func TestEnforceToolReferenceIntegrity_DropsOrphanToolResult(t *testing.T) {
 	}
 	if len(out) != 1 || out[0].Role != "user" {
 		t.Fatalf("output=%+v, want single user message", out)
+	}
+}
+
+func TestBuildToolResultMessagesUsesJSONSafeErrorPayload(t *testing.T) {
+	t.Parallel()
+
+	messages := buildToolResultMessages([]ToolResult{{
+		ToolID:   "call_timeout",
+		ToolName: "terminal.exec",
+		Status:   toolResultStatusTimeout,
+		Data: map[string]any{
+			"todos": []TodoItem{{
+				ID:      "todo_1",
+				Content: "Verify context payload",
+				Status:  TodoStatusCompleted,
+			}},
+		},
+		Error: &aitools.ToolError{
+			Code:      aitools.ErrorCodeTimeout,
+			Message:   "Tool execution timed out after 30000 ms",
+			Retryable: true,
+		},
+	}}, []ToolCall{{ID: "call_timeout", Name: "terminal.exec"}})
+	if len(messages) != 1 || len(messages[0].Content) != 1 {
+		t.Fatalf("messages=%+v, want one tool result", messages)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(messages[0].Content[0].Text), &payload); err != nil {
+		t.Fatalf("unmarshal tool result: %v", err)
+	}
+	errorPayload, ok := payload["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error payload=%#v, want map", payload["error"])
+	}
+	if errorPayload["code"] != "TIMEOUT" || errorPayload["message"] != "Tool execution timed out after 30000 ms" || errorPayload["retryable"] != true {
+		t.Fatalf("error payload=%#v", errorPayload)
+	}
+	data, ok := payload["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("data payload=%#v, want map", payload["data"])
+	}
+	todos, ok := data["todos"].([]any)
+	if !ok || len(todos) != 1 {
+		t.Fatalf("todos payload=%#v, want JSON array", data["todos"])
+	}
+	if _, ok := todos[0].(map[string]any); !ok {
+		t.Fatalf("todo payload=%T, want JSON object", todos[0])
 	}
 }
 

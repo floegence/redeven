@@ -154,11 +154,18 @@ func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
 	if r == nil || !isActivityObservationEvent(ev.Type) {
 		return
 	}
-	r.recordObservationActivityEvent(observationEventFromFloret(ev))
+	activityEvent, ok := observationActivityEventFromFloret(ev)
+	if !ok {
+		return
+	}
+	r.recordObservationActivityEvent(activityEvent)
 }
 
 func (r *run) recordObservationActivityEvent(ev observation.Event) {
 	if r == nil || !isActivityObservationEvent(ev.Type) {
+		return
+	}
+	if !shouldRecordObservationActivityEvent(ev) {
 		return
 	}
 	if ev.RunID == "" {
@@ -204,8 +211,25 @@ func (r *run) recordObservationActivityEvent(ev observation.Event) {
 	r.publishActivityTimeline(timeline)
 }
 
+func shouldRecordObservationActivityEvent(ev observation.Event) bool {
+	if strings.TrimSpace(ev.Type) != observation.EventTypeRunEnd {
+		return true
+	}
+	if strings.TrimSpace(ev.Error) != "" {
+		return true
+	}
+	message := strings.TrimSpace(ev.Message)
+	return message == string(observation.ActivityStatusWaiting) ||
+		message == string(observation.ActivityStatusCanceled) ||
+		message == "cancelled"
+}
+
 func (r *run) publishFinalActivityTimeline(timeline observation.ActivityTimeline) {
 	if r == nil || len(timeline.Items) == 0 {
+		return
+	}
+	timeline = removeSyntheticSuccessfulFinalToolItems(timeline)
+	if len(timeline.Items) == 0 {
 		return
 	}
 	r.mu.Lock()
@@ -215,6 +239,80 @@ func (r *run) publishFinalActivityTimeline(timeline observation.ActivityTimeline
 		return
 	}
 	r.publishActivityTimeline(timeline)
+}
+
+func removeSyntheticSuccessfulFinalToolItems(timeline observation.ActivityTimeline) observation.ActivityTimeline {
+	items := make([]observation.ActivityItem, 0, len(timeline.Items))
+	for _, item := range timeline.Items {
+		if item.Kind == observation.ActivityKindTool && item.Status == observation.ActivityStatusSuccess && anyToString(item.Payload["status"]) != toolResultStatusSuccess {
+			continue
+		}
+		items = append(items, item)
+	}
+	timeline.Items = items
+	timeline.Summary = activityTimelineSummaryFromItems(timeline.Summary, items)
+	return timeline
+}
+
+func activityTimelineSummaryFromItems(existing observation.ActivitySummary, items []observation.ActivityItem) observation.ActivitySummary {
+	summary := existing
+	summary.TotalItems = len(items)
+	summary.Counts = observation.ActivityCounts{}
+	summary.NeedsAttention = false
+	summary.AttentionReasons = nil
+	summary.Status = observation.ActivityStatusSuccess
+	summary.Severity = observation.ActivitySeverityQuiet
+	if len(items) == 0 {
+		return summary
+	}
+	for _, item := range items {
+		switch item.Status {
+		case observation.ActivityStatusPending:
+			summary.Counts.Pending++
+		case observation.ActivityStatusRunning:
+			summary.Counts.Running++
+		case observation.ActivityStatusWaiting:
+			summary.Counts.Waiting++
+		case observation.ActivityStatusSuccess:
+			summary.Counts.Success++
+		case observation.ActivityStatusError:
+			summary.Counts.Error++
+		case observation.ActivityStatusCanceled:
+			summary.Counts.Canceled++
+		}
+		if item.NeedsAttention {
+			summary.NeedsAttention = true
+			summary.AttentionReasons = append(summary.AttentionReasons, item.AttentionReasons...)
+		}
+	}
+	if summary.Counts.Error > 0 {
+		summary.Status = observation.ActivityStatusError
+		summary.Severity = observation.ActivitySeverityError
+		return summary
+	}
+	if summary.Counts.Waiting > 0 {
+		summary.Status = observation.ActivityStatusWaiting
+		summary.Severity = observation.ActivitySeverityBlocking
+		return summary
+	}
+	if summary.Counts.Running > 0 {
+		summary.Status = observation.ActivityStatusRunning
+		summary.Severity = observation.ActivitySeverityNormal
+		return summary
+	}
+	if summary.Counts.Pending > 0 {
+		summary.Status = observation.ActivityStatusPending
+		summary.Severity = observation.ActivitySeverityQuiet
+		return summary
+	}
+	if summary.Counts.Canceled > 0 {
+		summary.Status = observation.ActivityStatusCanceled
+		summary.Severity = observation.ActivitySeverityWarning
+		return summary
+	}
+	summary.Status = observation.ActivityStatusSuccess
+	summary.Severity = observation.ActivitySeverityNormal
+	return summary
 }
 
 func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
@@ -289,13 +387,17 @@ func (r *run) activityRunMeta() observation.ActivityRunMeta {
 	}
 }
 
-func observationEventFromFloret(ev flruntime.Event) observation.Event {
+func observationActivityEventFromFloret(ev flruntime.Event) (observation.Event, bool) {
 	observedAt := ev.Timestamp
 	if observedAt.IsZero() {
 		observedAt = time.Now()
 	}
+	eventType := strings.TrimSpace(ev.Type)
+	if eventType == observation.EventTypeRunEnd && !floretRunEndShouldProjectActivity(ev) {
+		return observation.Event{}, false
+	}
 	return observation.Event{
-		Type:         strings.TrimSpace(ev.Type),
+		Type:         eventType,
 		TraceID:      strings.TrimSpace(string(ev.TraceID)),
 		RunID:        strings.TrimSpace(string(ev.RunID)),
 		ThreadID:     strings.TrimSpace(string(ev.ThreadID)),
@@ -315,7 +417,17 @@ func observationEventFromFloret(ev flruntime.Event) observation.Event {
 		Activity:     ev.Activity,
 		Metadata:     ev.Metadata,
 		ObservedAt:   observedAt,
+	}, true
+}
+
+func floretRunEndShouldProjectActivity(ev flruntime.Event) bool {
+	if strings.TrimSpace(ev.Error) != "" {
+		return true
 	}
+	message := strings.TrimSpace(ev.Message)
+	return message == string(observation.ActivityStatusWaiting) ||
+		message == string(observation.ActivityStatusCanceled) ||
+		message == "cancelled"
 }
 
 func isActivityObservationEvent(eventType string) bool {

@@ -8,8 +8,21 @@ import (
 
 	"github.com/floegence/floret/observation"
 	fltools "github.com/floegence/floret/tools"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/session"
 )
+
+func mustFloretToolResultActivity(t *testing.T, r *run, result ToolResult) *observation.ActivityPresentation {
+	t.Helper()
+	activity, err := floretActivityForToolResult(r, result)
+	if err != nil {
+		t.Fatalf("floretActivityForToolResult: %v", err)
+	}
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	return activity
+}
 
 func TestFloretHostLabelsExcludeTargetContext(t *testing.T) {
 	r := newRun(runOptions{
@@ -101,6 +114,33 @@ func TestFloretActivityForTerminalCallUsesCommandAsLabel(t *testing.T) {
 	}
 }
 
+func TestFloretActivityForTerminalCallTrimsLabelToContract(t *testing.T) {
+	t.Parallel()
+
+	longCommand := "printf " + strings.Repeat("x", 260)
+	activity := floretActivityForToolCall("terminal.exec", map[string]any{
+		"command": longCommand,
+	})
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	if len([]rune(activity.Label)) > activityPresentationLabelLimit {
+		t.Fatalf("label length=%d, want <= %d", len([]rune(activity.Label)), activityPresentationLabelLimit)
+	}
+	if !strings.HasSuffix(activity.Label, "...") {
+		t.Fatalf("label=%q, want truncated suffix", activity.Label)
+	}
+	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_1"}, []observation.Event{{
+		Type:     observation.EventTypeToolCall,
+		ToolID:   "tool_long",
+		ToolName: "terminal.exec",
+		Activity: activity,
+	}}, 1000)
+	if err := observation.ValidateActivityTimeline(timeline); err != nil {
+		t.Fatalf("ValidateActivityTimeline: %v", err)
+	}
+}
+
 func TestFloretActivityForFileCallsOmitsSensitiveEditAndWriteBodies(t *testing.T) {
 	t.Parallel()
 
@@ -147,6 +187,31 @@ func TestFloretActivityForFileCallsOmitsSensitiveEditAndWriteBodies(t *testing.T
 	}
 }
 
+func TestFloretActivityForFileCallKeepsDisplayNameWithinContract(t *testing.T) {
+	t.Parallel()
+
+	longName := strings.Repeat("x", activityPayloadStringLimit+200) + ".txt"
+	activity := floretActivityForToolCall("file.read", map[string]any{
+		"file_path": "/workspace/" + longName,
+	})
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	assertContractSafeActivityPayload(t, activity.Payload, 0)
+	if len([]rune(anyToString(activity.Payload["display_name"]))) > activityPayloadStringLimit {
+		t.Fatalf("display_name length=%d exceeds contract", len([]rune(anyToString(activity.Payload["display_name"]))))
+	}
+	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_long_display_name"}, []observation.Event{{
+		Type:     observation.EventTypeToolCall,
+		ToolID:   "tool_long_display_name",
+		ToolName: "file.read",
+		Activity: activity,
+	}}, 1000)
+	if err := observation.ValidateActivityTimeline(timeline); err != nil {
+		t.Fatalf("ValidateActivityTimeline: %v", err)
+	}
+}
+
 func TestFloretActivityForApplyPatchCallOmitsPatchBody(t *testing.T) {
 	t.Parallel()
 
@@ -184,7 +249,7 @@ func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnly
 	t.Parallel()
 
 	r := newRun(runOptions{})
-	activity := floretActivityForToolResult(r, ToolResult{
+	activity := mustFloretToolResultActivity(t, r, ToolResult{
 		ToolID:   "call_terminal_1",
 		ToolName: "terminal.exec",
 		Status:   toolResultStatusSuccess,
@@ -218,11 +283,367 @@ func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnly
 	}
 }
 
+func TestFloretToolResultActivityUsesContractSafeErrorPayload(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	activity := mustFloretToolResultActivity(t, r, ToolResult{
+		ToolID:   "call_terminal_timeout",
+		ToolName: "terminal.exec",
+		Status:   toolResultStatusTimeout,
+		Summary:  "TIMEOUT",
+		Details:  "Tool execution timed out after 30000 ms",
+		Data: map[string]any{
+			"command":     "curl -sL https://example.test",
+			"exit_code":   124,
+			"duration_ms": 30000,
+			"timed_out":   true,
+		},
+		Error: &aitools.ToolError{
+			Code:      aitools.ErrorCodeTimeout,
+			Message:   "Tool execution timed out after 30000 ms",
+			Retryable: true,
+		},
+	})
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	errorPayload, ok := activity.Payload["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error payload=%#v, want map", activity.Payload["error"])
+	}
+	if errorPayload["code"] != "TIMEOUT" || errorPayload["message"] != "Tool execution timed out after 30000 ms" || errorPayload["retryable"] != true {
+		t.Fatalf("error payload=%#v", errorPayload)
+	}
+	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_1"}, []observation.Event{{
+		Type:     observation.EventTypeToolCall,
+		ToolID:   "tool_timeout",
+		ToolName: "terminal.exec",
+		Activity: floretActivityForToolCall("terminal.exec", map[string]any{"command": "curl -sL https://example.test"}),
+	}, {
+		Type:     observation.EventTypeToolResult,
+		ToolID:   "tool_timeout",
+		ToolName: "terminal.exec",
+		Error:    "Tool execution timed out after 30000 ms",
+		Activity: activity,
+	}}, 2000)
+	if err := observation.ValidateActivityTimeline(timeline); err != nil {
+		t.Fatalf("ValidateActivityTimeline: %v", err)
+	}
+	item := timeline.Items[0]
+	if item.Status != observation.ActivityStatusError || item.EndedAtUnixMS == 0 {
+		t.Fatalf("item=%+v, want closed error item", item)
+	}
+}
+
+func TestFloretToolResultActivityTrimsTerminalLabelToContract(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	activity := mustFloretToolResultActivity(t, r, ToolResult{
+		ToolID:   "call_terminal_long_result",
+		ToolName: "terminal.exec",
+		Status:   toolResultStatusSuccess,
+		Data: map[string]any{
+			"command": "printf " + strings.Repeat("x", 260),
+		},
+	})
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	if len([]rune(activity.Label)) > activityPresentationLabelLimit {
+		t.Fatalf("label length=%d, want <= %d", len([]rune(activity.Label)), activityPresentationLabelLimit)
+	}
+	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_1"}, []observation.Event{{
+		Type:     observation.EventTypeToolResult,
+		ToolID:   "tool_long_result",
+		ToolName: "terminal.exec",
+		Activity: activity,
+	}}, 1000)
+	if err := observation.ValidateActivityTimeline(timeline); err != nil {
+		t.Fatalf("ValidateActivityTimeline: %v", err)
+	}
+}
+
+func TestFloretToolResultActivitySanitizesStructuredTodoResults(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	activity := mustFloretToolResultActivity(t, r, ToolResult{
+		ToolID:   "call_todos",
+		ToolName: "write_todos",
+		Status:   toolResultStatusSuccess,
+		Data: map[string]any{
+			"summary": TodoSummary{Total: 1, Completed: 1},
+			"todos": []TodoItem{{
+				ID:      "todo_1",
+				Content: "Verify activity timeline",
+				Status:  TodoStatusCompleted,
+			}},
+		},
+	})
+	if activity == nil {
+		t.Fatal("activity is nil")
+	}
+	items := toAnySlice(activity.Payload["todos"])
+	if len(items) != 1 {
+		t.Fatalf("todos=%#v, want one item", activity.Payload["todos"])
+	}
+	if _, ok := items[0].(map[string]any); !ok {
+		t.Fatalf("todo item=%T, want JSON-safe map", items[0])
+	}
+	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_1"}, []observation.Event{{
+		Type:     observation.EventTypeToolResult,
+		ToolID:   "tool_todos",
+		ToolName: "write_todos",
+		Activity: activity,
+	}}, 1000)
+	if err := observation.ValidateActivityTimeline(timeline); err != nil {
+		t.Fatalf("ValidateActivityTimeline: %v", err)
+	}
+}
+
+func TestFloretToolResultActivityPayloadsAreJSONSafe(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	cases := []struct {
+		toolName string
+		activity *observation.ActivityPresentation
+	}{
+		{toolName: "terminal.exec", activity: mustFloretToolResultActivity(t, r, ToolResult{
+			ToolID:   "call_terminal_timeout",
+			ToolName: "terminal.exec",
+			Status:   toolResultStatusTimeout,
+			Data: map[string]any{
+				"command": "curl -sL https://example.test/slow",
+			},
+			Error: &aitools.ToolError{
+				Code:    aitools.ErrorCodeTimeout,
+				Message: "Tool execution timed out after 30000 ms",
+			},
+		})},
+		{toolName: "write_todos", activity: mustFloretToolResultActivity(t, r, ToolResult{
+			ToolID:   "call_todos",
+			ToolName: "write_todos",
+			Status:   toolResultStatusSuccess,
+			Data: map[string]any{
+				"summary": TodoSummary{Total: 1, Completed: 1},
+				"todos": []TodoItem{{
+					ID:      "todo_1",
+					Content: "Verify activity payloads",
+					Status:  TodoStatusCompleted,
+				}},
+			},
+		})},
+		{toolName: "apply_patch", activity: mustFloretToolResultActivity(t, r, ToolResult{
+			ToolID:   "call_patch",
+			ToolName: "apply_patch",
+			Status:   toolResultStatusSuccess,
+			Data: ApplyPatchResult{
+				FilesChanged: 1,
+				Mutations: []FileMutationResult{{
+					FilePath:    "/workspace/app.ts",
+					DisplayName: "app.ts",
+					ChangeType:  "update",
+					Additions:   1,
+					Deletions:   1,
+					UnifiedDiff: "--- a/app.ts\n+++ b/app.ts\n@@ -1 +1 @@\n-old\n+new",
+				}},
+			},
+		})},
+	}
+
+	for _, tt := range cases {
+		if tt.activity == nil {
+			t.Fatal("activity is nil")
+		}
+		assertContractSafeActivityPayload(t, tt.activity.Payload, 0)
+		timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_json_safe"}, []observation.Event{{
+			Type:     observation.EventTypeToolResult,
+			ToolID:   "tool_json_safe",
+			ToolName: tt.toolName,
+			Activity: tt.activity,
+		}}, 1000)
+		if err := observation.ValidateActivityTimeline(timeline); err != nil {
+			t.Fatalf("ValidateActivityTimeline(%#v): %v", tt.activity.Payload, err)
+		}
+	}
+}
+
+func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	activity := mustFloretToolResultActivity(t, r, ToolResult{
+		ToolID:   "call_contract_payload",
+		ToolName: "terminal.exec",
+		Status:   toolResultStatusSuccess,
+		Data: map[string]any{
+			"command": "printf ok",
+			"stdout":  strings.Repeat("o", activityPayloadStringLimit+400),
+			"bad key / with spaces": map[string]any{
+				"level1": map[string]any{
+					"level2": map[string]any{
+						"level3": map[string]any{
+							"level4": map[string]any{
+								"level5": map[string]any{
+									"level6": "too deep",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	})
+	assertContractSafeActivityPayload(t, activity.Payload, 0)
+	if _, ok := activity.Payload["bad key / with spaces"]; ok {
+		t.Fatalf("payload kept invalid key: %#v", activity.Payload)
+	}
+	if _, ok := activity.Payload["bad_key_with_spaces"]; !ok {
+		t.Fatalf("payload missing normalized key: %#v", activity.Payload)
+	}
+	if len([]rune(anyToString(activity.Payload["stdout"]))) > activityPayloadStringLimit {
+		t.Fatalf("stdout length=%d, want <= %d", len([]rune(anyToString(activity.Payload["stdout"]))), activityPayloadStringLimit)
+	}
+	if activity.Payload["truncated"] != true {
+		t.Fatalf("payload truncated flag=%#v, want true", activity.Payload["truncated"])
+	}
+	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_contract_payload"}, []observation.Event{{
+		Type:     observation.EventTypeToolResult,
+		ToolID:   "tool_contract_payload",
+		ToolName: "terminal.exec",
+		Activity: activity,
+	}}, 1000)
+	if err := observation.ValidateActivityTimeline(timeline); err != nil {
+		t.Fatalf("ValidateActivityTimeline: %v", err)
+	}
+}
+
+func TestFloretToolResultFromFlowerUsesContractSafeStructuredAndText(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	result, err := floretToolResultFromFlower(r, ToolResult{
+		ToolID:   "call_todos_error",
+		ToolName: "write_todos",
+		Status:   toolResultStatusError,
+		Summary:  "permission_denied",
+		Details:  "Denied",
+		Data: map[string]any{
+			"todos": []TodoItem{{
+				ID:      "todo_1",
+				Content: "Do the thing",
+				Status:  TodoStatusPending,
+			}},
+		},
+		Error: &aitools.ToolError{
+			Code:           aitools.ErrorCodePermissionDenied,
+			Message:        "Denied",
+			Retryable:      false,
+			SuggestedFixes: []string{"legacy field must not leak"},
+			Meta:           map[string]any{"secret": "old envelope"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("floretToolResultFromFlower: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("IsError=false, want true")
+	}
+	assertContractSafeActivityPayload(t, result.Structured, 0)
+	errorPayload, ok := result.Structured["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("structured error=%#v, want map", result.Structured["error"])
+	}
+	if _, ok := errorPayload["suggested_fixes"]; ok {
+		t.Fatalf("structured error kept old envelope: %#v", errorPayload)
+	}
+	data, ok := result.Structured["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("structured data=%#v, want map", result.Structured["data"])
+	}
+	todos := toAnySlice(data["todos"])
+	if len(todos) != 1 {
+		t.Fatalf("structured todos=%#v, want one", data["todos"])
+	}
+	if _, ok := todos[0].(map[string]any); !ok {
+		t.Fatalf("structured todo item=%T, want map", todos[0])
+	}
+	var textPayload map[string]any
+	if err := json.Unmarshal([]byte(result.Text), &textPayload); err != nil {
+		t.Fatalf("unmarshal result text: %v", err)
+	}
+	if strings.Contains(result.Text, "suggested_fixes") || strings.Contains(result.Text, "legacy field") || strings.Contains(result.Text, "Meta") {
+		t.Fatalf("result text kept old error envelope: %s", result.Text)
+	}
+	assertContractSafeActivityPayload(t, textPayload, 0)
+}
+
+func TestFloretToolResultFromFlowerSanitizesNestedLegacyErrorEnvelope(t *testing.T) {
+	t.Parallel()
+
+	result, err := floretToolResultFromFlower(newRun(runOptions{}), ToolResult{
+		ToolID:   "call_nested_error",
+		ToolName: "terminal.exec",
+		Status:   toolResultStatusError,
+		Data: map[string]any{
+			"envelope": aitools.ToolResultEnvelope{
+				Status: aitools.ResultStatusError,
+				Error: &aitools.ToolError{
+					Code:           aitools.ErrorCodePermissionDenied,
+					Message:        "Denied",
+					Retryable:      false,
+					SuggestedFixes: []string{"old fix"},
+					Meta:           map[string]any{"debug": "old meta"},
+				},
+			},
+			"direct_error": &aitools.ToolError{
+				Code:           aitools.ErrorCodeTimeout,
+				Message:        "Timed out",
+				Retryable:      true,
+				NormalizedArgs: map[string]any{"command": "old"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("floretToolResultFromFlower: %v", err)
+	}
+	if strings.Contains(result.Text, "suggested_fixes") || strings.Contains(result.Text, "normalized_args") || strings.Contains(result.Text, "meta") {
+		t.Fatalf("result text kept old nested error envelope: %s", result.Text)
+	}
+	data := result.Structured["data"].(map[string]any)
+	envelope := data["envelope"].(map[string]any)
+	nestedError := envelope["error"].(map[string]any)
+	if nestedError["code"] != "PERMISSION_DENIED" || nestedError["message"] != "Denied" {
+		t.Fatalf("nested error payload=%#v", nestedError)
+	}
+	directError := data["direct_error"].(map[string]any)
+	if directError["code"] != "TIMEOUT" || directError["message"] != "Timed out" || directError["retryable"] != true {
+		t.Fatalf("direct error payload=%#v", directError)
+	}
+	assertContractSafeActivityPayload(t, result.Structured, 0)
+}
+
+func TestFloretToolResultFromFlowerRejectsInvalidStatus(t *testing.T) {
+	t.Parallel()
+
+	_, err := floretToolResultFromFlower(newRun(runOptions{}), ToolResult{
+		ToolID:   "call_invalid",
+		ToolName: "terminal.exec",
+		Status:   "",
+	})
+	if err == nil || !strings.Contains(err.Error(), "status is required") {
+		t.Fatalf("error=%v, want missing status rejection", err)
+	}
+}
+
 func TestFloretToolResultActivityCarriesApplyPatchMutations(t *testing.T) {
 	t.Parallel()
 
 	r := newRun(runOptions{})
-	activity := floretActivityForToolResult(r, ToolResult{
+	activity := mustFloretToolResultActivity(t, r, ToolResult{
 		ToolID:   "call_patch_1",
 		ToolName: "apply_patch",
 		Status:   toolResultStatusSuccess,
@@ -356,4 +777,36 @@ func containsAnyString(values []any, want string) bool {
 		}
 	}
 	return false
+}
+
+func assertContractSafeActivityPayload(t *testing.T, value any, depth int) {
+	t.Helper()
+	if depth > activityPayloadMaxDepth {
+		t.Fatalf("payload depth=%d exceeds contract", depth)
+	}
+	switch typed := value.(type) {
+	case nil, bool,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64:
+		return
+	case string:
+		if len([]rune(typed)) > activityPayloadStringLimit {
+			t.Fatalf("payload string length=%d exceeds contract", len([]rune(typed)))
+		}
+		return
+	case map[string]any:
+		for key, item := range typed {
+			if contractSafePayloadKey(key) != key {
+				t.Fatalf("payload key %q is not contract-safe", key)
+			}
+			assertContractSafeActivityPayload(t, item, depth+1)
+		}
+	case []any:
+		for _, item := range typed {
+			assertContractSafeActivityPayload(t, item, depth+1)
+		}
+	default:
+		t.Fatalf("payload value type %T is not contract-safe: %#v", value, value)
+	}
 }

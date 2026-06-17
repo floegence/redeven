@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/floegence/floret/observation"
 	fltools "github.com/floegence/floret/tools"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 type floretToolRuntimeState struct {
@@ -99,10 +101,17 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				if err != nil {
 					return fltools.Result{}, err
 				}
+				if _, err := validateToolResultStatus(result.Status); err != nil {
+					return fltools.Result{}, err
+				}
 				if state != nil {
 					state.updateFromToolResult(call, result, inv.Step)
 				}
-				return floretToolResultFromFlower(r, result), nil
+				toolResult, err := floretToolResultFromFlower(r, result)
+				if err != nil {
+					return fltools.Result{}, err
+				}
+				return toolResult, nil
 			},
 		)
 		if err := registry.Register(tool); err != nil {
@@ -126,6 +135,130 @@ func firstNonEmptyString(values ...string) string {
 		}
 	}
 	return ""
+}
+
+const (
+	activityPresentationLabelLimit       = 200
+	activityPresentationDescriptionLimit = 500
+	activityPayloadKeyLimit              = 80
+	activityPayloadStringLimit           = 8000
+	activityPayloadMaxDepth              = 5
+)
+
+func activityPresentationLabel(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) <= activityPresentationLabelLimit {
+		return value
+	}
+	const suffix = "..."
+	limit := activityPresentationLabelLimit - len([]rune(suffix))
+	if limit <= 0 {
+		return string(runes[:activityPresentationLabelLimit])
+	}
+	return strings.TrimSpace(string(runes[:limit])) + suffix
+}
+
+func activityPresentationDescription(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	out, _ := contractSafeString(value, activityPresentationDescriptionLimit)
+	return out
+}
+
+func activityToolErrorPayload(toolErr *aitools.ToolError) map[string]any {
+	if toolErr == nil {
+		return map[string]any{}
+	}
+	toolErr.Normalize()
+	out := map[string]any{
+		"code":      strings.TrimSpace(string(toolErr.Code)),
+		"message":   strings.TrimSpace(toolErr.Message),
+		"retryable": toolErr.Retryable,
+	}
+	return out
+}
+
+func activityToolErrorPayloadFromValue(value any) (map[string]any, bool) {
+	switch typed := value.(type) {
+	case *aitools.ToolError:
+		if typed == nil {
+			return nil, false
+		}
+		return activityToolErrorPayload(typed), true
+	case aitools.ToolError:
+		toolErr := typed
+		return activityToolErrorPayload(&toolErr), true
+	default:
+		return nil, false
+	}
+}
+
+func activityToolErrorRecordFromValue(value any) (map[string]any, bool) {
+	if payload, ok := activityToolErrorPayloadFromValue(value); ok {
+		return payload, true
+	}
+	record, ok := value.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	code := strings.TrimSpace(anyToString(record["code"]))
+	message := strings.TrimSpace(anyToString(record["message"]))
+	if code == "" && message == "" {
+		return nil, false
+	}
+	out := map[string]any{
+		"code":      code,
+		"message":   message,
+		"retryable": readBoolField(record, "retryable"),
+	}
+	return out, true
+}
+
+func validateToolResultStatus(status string) (string, error) {
+	status = strings.TrimSpace(status)
+	switch status {
+	case toolResultStatusSuccess, toolResultStatusError, toolResultStatusTimeout, toolResultStatusAborted:
+		return status, nil
+	default:
+		if status == "" {
+			return "", fmt.Errorf("tool result status is required")
+		}
+		return "", fmt.Errorf("tool result status %q is not supported", status)
+	}
+}
+
+func contractSafeToolResultPayload(result ToolResult) (map[string]any, error) {
+	status, err := validateToolResultStatus(result.Status)
+	if err != nil {
+		return nil, err
+	}
+	if result.Error != nil && status == toolResultStatusSuccess {
+		return nil, fmt.Errorf("tool result status %q cannot carry an error", status)
+	}
+	raw := map[string]any{
+		"status":      status,
+		"summary":     strings.TrimSpace(result.Summary),
+		"details":     strings.TrimSpace(result.Details),
+		"truncated":   result.Truncated,
+		"content_ref": strings.TrimSpace(result.ContentRef),
+	}
+	if result.Data != nil {
+		raw["data"] = result.Data
+	}
+	if result.Error != nil {
+		raw["error"] = activityToolErrorPayload(result.Error)
+	}
+	payload, truncated := contractSafePayloadMap(raw, 0)
+	if truncated || result.Truncated {
+		payload["truncated"] = true
+	}
+	return payload, nil
 }
 
 func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
@@ -214,44 +347,41 @@ func floretToolEffects(def ToolDef) []fltools.Effect {
 	}
 }
 
-func floretToolResultFromFlower(r *run, result ToolResult) fltools.Result {
-	structured := map[string]any{
-		"status":      strings.TrimSpace(result.Status),
-		"summary":     strings.TrimSpace(result.Summary),
-		"details":     strings.TrimSpace(result.Details),
-		"truncated":   result.Truncated,
-		"content_ref": strings.TrimSpace(result.ContentRef),
-	}
-	if result.Data != nil {
-		structured["data"] = result.Data
-	}
-	if result.Error != nil {
-		result.Error.Normalize()
-		structured["error"] = result.Error
+func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, error) {
+	structured, err := contractSafeToolResultPayload(result)
+	if err != nil {
+		return fltools.Result{}, err
 	}
 	text, _ := json.Marshal(structured)
+	status := strings.TrimSpace(anyToString(structured["status"]))
+	activity, err := floretActivityForToolResult(r, result)
+	if err != nil {
+		return fltools.Result{}, err
+	}
 	return fltools.Result{
 		CallID:     strings.TrimSpace(result.ToolID),
 		Name:       strings.TrimSpace(result.ToolName),
 		Text:       string(text),
 		Structured: structured,
-		Activity:   floretActivityForToolResult(r, result),
-		IsError:    strings.TrimSpace(result.Status) != "" && strings.TrimSpace(result.Status) != toolResultStatusSuccess,
-	}
+		Activity:   activity,
+		IsError:    status != toolResultStatusSuccess,
+	}, nil
 }
 
 func floretActivityForToolCall(toolName string, args map[string]any) *observation.ActivityPresentation {
 	toolName = strings.TrimSpace(toolName)
 	payload := activityCallPayloadForTool(toolName, args)
+	payload, _ = contractSafePayloadMap(payload, 0)
+	var activity *observation.ActivityPresentation
 	switch toolName {
 	case "terminal.exec":
 		command := strings.TrimSpace(anyToString(args["command"]))
 		if command == "" {
 			command = "terminal.exec"
 		}
-		return &observation.ActivityPresentation{
-			Label:       command,
-			Description: strings.TrimSpace(anyToString(args["description"])),
+		activity = &observation.ActivityPresentation{
+			Label:       activityPresentationLabel(command),
+			Description: activityPresentationDescription(anyToString(args["description"])),
 			Renderer:    observation.ActivityRendererTerminal,
 			Chips:       []observation.ActivityChip{{Kind: "tool", Label: "shell", Tone: "neutral"}},
 			Payload:     payload,
@@ -262,8 +392,8 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 		if displayName != "" {
 			payload["display_name"] = displayName
 		}
-		return &observation.ActivityPresentation{
-			Label:    firstNonEmptyString(displayName, "file.read"),
+		activity = &observation.ActivityPresentation{
+			Label:    activityPresentationLabel(firstNonEmptyString(displayName, "file.read")),
 			Renderer: observation.ActivityRendererFile,
 			Payload:  mapWithOperation(payload, "read"),
 		}
@@ -273,8 +403,8 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 		if displayName != "" {
 			payload["display_name"] = displayName
 		}
-		return &observation.ActivityPresentation{
-			Label:    firstNonEmptyString(displayName, "file.edit"),
+		activity = &observation.ActivityPresentation{
+			Label:    activityPresentationLabel(firstNonEmptyString(displayName, "file.edit")),
 			Renderer: observation.ActivityRendererFile,
 			Payload:  mapWithOperation(payload, "edit"),
 		}
@@ -284,48 +414,48 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 		if displayName != "" {
 			payload["display_name"] = displayName
 		}
-		return &observation.ActivityPresentation{
-			Label:    firstNonEmptyString(displayName, "file.write"),
+		activity = &observation.ActivityPresentation{
+			Label:    activityPresentationLabel(firstNonEmptyString(displayName, "file.write")),
 			Renderer: observation.ActivityRendererFile,
 			Payload:  mapWithOperation(payload, "write"),
 		}
 	case "apply_patch":
-		return &observation.ActivityPresentation{
+		activity = &observation.ActivityPresentation{
 			Label:    "apply_patch",
 			Renderer: observation.ActivityRendererPatch,
 			Payload:  mapWithOperation(payload, "apply_patch"),
 		}
 	case "web.search":
 		query := strings.TrimSpace(anyToString(args["query"]))
-		return &observation.ActivityPresentation{
-			Label:    firstNonEmptyString(query, "web.search"),
+		activity = &observation.ActivityPresentation{
+			Label:    activityPresentationLabel(firstNonEmptyString(query, "web.search")),
 			Renderer: observation.ActivityRendererWebSearch,
 			Payload:  payload,
 		}
 	case "okf.search":
 		query := strings.TrimSpace(anyToString(args["query"]))
-		return &observation.ActivityPresentation{
-			Label:    firstNonEmptyString(query, "okf.search"),
+		activity = &observation.ActivityPresentation{
+			Label:    activityPresentationLabel(firstNonEmptyString(query, "okf.search")),
 			Renderer: observation.ActivityRendererStructured,
 			Payload:  mapWithOperation(payload, "okf.search"),
 		}
 	case "write_todos":
-		return &observation.ActivityPresentation{
+		activity = &observation.ActivityPresentation{
 			Label:    "Update todos",
 			Renderer: observation.ActivityRendererTodos,
 			Payload:  payload,
 		}
 	case "use_skill":
 		name := strings.TrimSpace(anyToString(args["name"]))
-		return &observation.ActivityPresentation{
-			Label:    firstNonEmptyString(name, "use_skill"),
+		activity = &observation.ActivityPresentation{
+			Label:    activityPresentationLabel(firstNonEmptyString(name, "use_skill")),
 			Renderer: observation.ActivityRendererStructured,
 			Payload:  mapWithOperation(payload, "use_skill"),
 		}
 	case "subagents":
 		action := strings.TrimSpace(anyToString(args["action"]))
-		return &observation.ActivityPresentation{
-			Label:    firstNonEmptyString(action, "subagents"),
+		activity = &observation.ActivityPresentation{
+			Label:    activityPresentationLabel(firstNonEmptyString(action, "subagents")),
 			Renderer: observation.ActivityRendererStructured,
 			Payload:  mapWithOperation(payload, "subagents"),
 		}
@@ -333,12 +463,13 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 		if toolName == "" {
 			return nil
 		}
-		return &observation.ActivityPresentation{
-			Label:    toolName,
+		activity = &observation.ActivityPresentation{
+			Label:    activityPresentationLabel(toolName),
 			Renderer: observation.ActivityRendererStructured,
 			Payload:  payload,
 		}
 	}
+	return contractSafeActivityPresentation(activity)
 }
 
 func activityCallPayloadForTool(toolName string, args map[string]any) map[string]any {
@@ -418,37 +549,48 @@ func sanitizedTodoActivityItems(items []any) []any {
 	return out
 }
 
-func floretActivityForToolResult(r *run, result ToolResult) *observation.ActivityPresentation {
+func floretActivityForToolResult(r *run, result ToolResult) (*observation.ActivityPresentation, error) {
 	toolName := strings.TrimSpace(result.ToolName)
-	payload := activityPresentationPayloadFromToolResultData(r, toolName, result.Data)
-	payload["status"] = strings.TrimSpace(result.Status)
+	status, err := validateToolResultStatus(result.Status)
+	if err != nil {
+		return nil, err
+	}
+	if result.Error != nil && status == toolResultStatusSuccess {
+		return nil, fmt.Errorf("tool result status %q cannot carry an error", status)
+	}
+	payload, dataTruncated := activityPresentationPayloadFromToolResultData(r, toolName, result.Data)
+	payload["status"] = status
 	payload["summary"] = strings.TrimSpace(result.Summary)
 	payload["details"] = strings.TrimSpace(result.Details)
-	if result.Truncated || readBoolField(payload, "truncated") {
+	if result.Truncated || dataTruncated || readBoolField(payload, "truncated") {
 		payload["truncated"] = true
 	}
 	if result.ContentRef != "" {
 		payload["content_ref"] = strings.TrimSpace(result.ContentRef)
 	}
 	if result.Error != nil {
-		payload["error"] = result.Error
+		payload["error"] = activityToolErrorPayload(result.Error)
+	}
+	payload, payloadTruncated := contractSafePayloadMap(payload, 0)
+	if payloadTruncated {
+		payload["truncated"] = true
 	}
 	switch toolName {
 	case "terminal.exec":
 		return &observation.ActivityPresentation{
-			Label:    strings.TrimSpace(anyToString(payload["command"])),
+			Label:    activityPresentationLabel(anyToString(payload["command"])),
 			Renderer: observation.ActivityRendererTerminal,
 			Chips:    terminalActivityChips(payload),
 			Payload:  payload,
-		}
+		}, nil
 	case "file.read":
 		displayName := firstNonEmptyString(anyToString(payload["display_name"]), "file.read")
 		return &observation.ActivityPresentation{
-			Label:    displayName,
+			Label:    activityPresentationLabel(displayName),
 			Renderer: observation.ActivityRendererFile,
 			Chips:    fileActivityChips(payload),
 			Payload:  mapWithOperation(payload, "read"),
-		}
+		}, nil
 	case "file.edit", "file.write":
 		operation := "edit"
 		if toolName == "file.write" {
@@ -456,78 +598,251 @@ func floretActivityForToolResult(r *run, result ToolResult) *observation.Activit
 		}
 		displayName := firstNonEmptyString(anyToString(payload["display_name"]), toolName)
 		return &observation.ActivityPresentation{
-			Label:    displayName,
+			Label:    activityPresentationLabel(displayName),
 			Renderer: observation.ActivityRendererFile,
 			Chips:    fileActivityChips(payload),
 			Payload:  mapWithOperation(payload, operation),
-		}
+		}, nil
 	case "apply_patch":
 		return &observation.ActivityPresentation{
 			Label:    "apply_patch",
 			Renderer: observation.ActivityRendererPatch,
 			Chips:    fileActivityChips(payload),
 			Payload:  mapWithOperation(payload, "apply_patch"),
-		}
+		}, nil
 	case "web.search":
 		return &observation.ActivityPresentation{
-			Label:    strings.TrimSpace(anyToString(payload["query"])),
+			Label:    activityPresentationLabel(anyToString(payload["query"])),
 			Renderer: observation.ActivityRendererWebSearch,
 			Chips:    webSearchActivityChips(payload),
 			Payload:  payload,
-		}
+		}, nil
 	case "write_todos":
 		return &observation.ActivityPresentation{
 			Label:    "Update todos",
 			Renderer: observation.ActivityRendererTodos,
 			Chips:    todoActivityChips(payload),
 			Payload:  payload,
-		}
+		}, nil
 	default:
 		if toolName == "" {
-			return nil
+			return nil, nil
 		}
 		return &observation.ActivityPresentation{
-			Label:    toolName,
+			Label:    activityPresentationLabel(toolName),
 			Renderer: observation.ActivityRendererStructured,
 			Payload:  payload,
-		}
+		}, nil
 	}
 }
 
-func activityPayloadFromResultData(data any) map[string]any {
+func activityPayloadFromResultData(data any) (map[string]any, bool) {
 	if data == nil {
-		return map[string]any{}
+		return map[string]any{}, false
 	}
 	if record, ok := data.(map[string]any); ok {
-		return cloneAnyMap(record)
+		return contractSafePayloadMap(record, 0)
 	}
 	raw, err := json.Marshal(data)
 	if err != nil || len(raw) == 0 {
-		return map[string]any{"value": strings.TrimSpace(fmt.Sprint(data))}
+		value, truncated := contractSafePayloadValue(strings.TrimSpace(fmt.Sprint(data)), 1)
+		return map[string]any{"value": value}, truncated
 	}
 	var out map[string]any
 	if err := json.Unmarshal(raw, &out); err == nil && out != nil {
-		return out
+		return contractSafePayloadMap(out, 0)
 	}
 	var value any
 	if err := json.Unmarshal(raw, &value); err != nil {
-		return map[string]any{"value": string(raw)}
+		safeValue, truncated := contractSafePayloadValue(string(raw), 1)
+		return map[string]any{"value": safeValue}, truncated
 	}
-	return map[string]any{"value": value}
+	safeValue, truncated := contractSafePayloadValue(value, 1)
+	return map[string]any{"value": safeValue}, truncated
 }
 
-func activityPresentationPayloadFromToolResultData(r *run, toolName string, data any) map[string]any {
-	payload := activityPayloadFromResultData(data)
+func contractSafePayloadMap(in map[string]any, depth int) (map[string]any, bool) {
+	out := make(map[string]any, len(in))
+	truncated := false
+	for key, value := range in {
+		key = contractSafePayloadKey(key)
+		if key == "" {
+			truncated = true
+			continue
+		}
+		if key == "error" {
+			if errorPayload, ok := activityToolErrorRecordFromValue(value); ok {
+				safeError, errorTruncated := contractSafePayloadMap(errorPayload, depth+1)
+				out[key] = safeError
+				truncated = truncated || errorTruncated
+				continue
+			}
+		}
+		safeValue, valueTruncated := contractSafePayloadValue(value, depth+1)
+		out[key] = safeValue
+		truncated = truncated || valueTruncated
+	}
+	return out, truncated
+}
+
+func contractSafePayloadValue(value any, depth int) (any, bool) {
+	if depth > activityPayloadMaxDepth {
+		text, truncated := contractSafeString(compactJSONForActivityPayload(value), activityPayloadStringLimit)
+		return text, true || truncated
+	}
+	if errorPayload, ok := activityToolErrorPayloadFromValue(value); ok {
+		safeError, truncated := contractSafePayloadMap(errorPayload, depth)
+		return safeError, truncated
+	}
+	switch typed := value.(type) {
+	case nil:
+		return nil, false
+	case string:
+		return contractSafeString(typed, activityPayloadStringLimit)
+	case bool,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64:
+		return typed, false
+	case float32:
+		if math.IsInf(float64(typed), 0) || math.IsNaN(float64(typed)) {
+			return strings.TrimSpace(fmt.Sprint(typed)), true
+		}
+		return typed, false
+	case float64:
+		if math.IsInf(typed, 0) || math.IsNaN(typed) {
+			return strings.TrimSpace(fmt.Sprint(typed)), true
+		}
+		return typed, false
+	case map[string]any:
+		if depth >= activityPayloadMaxDepth {
+			text, truncated := contractSafeString(compactJSONForActivityPayload(typed), activityPayloadStringLimit)
+			return text, true || truncated
+		}
+		return contractSafePayloadMap(typed, depth)
+	case []any:
+		if depth >= activityPayloadMaxDepth {
+			text, truncated := contractSafeString(compactJSONForActivityPayload(typed), activityPayloadStringLimit)
+			return text, true || truncated
+		}
+		out := make([]any, 0, len(typed))
+		truncated := false
+		for _, item := range typed {
+			safeItem, itemTruncated := contractSafePayloadValue(item, depth+1)
+			out = append(out, safeItem)
+			truncated = truncated || itemTruncated
+		}
+		return out, truncated
+	case []map[string]any:
+		if depth >= activityPayloadMaxDepth {
+			text, truncated := contractSafeString(compactJSONForActivityPayload(typed), activityPayloadStringLimit)
+			return text, true || truncated
+		}
+		out := make([]any, 0, len(typed))
+		truncated := false
+		for _, item := range typed {
+			safeItem, itemTruncated := contractSafePayloadMap(item, depth+1)
+			out = append(out, safeItem)
+			truncated = truncated || itemTruncated
+		}
+		return out, truncated
+	default:
+		raw, err := json.Marshal(value)
+		if err != nil || len(raw) == 0 {
+			return contractSafePayloadValue(strings.TrimSpace(fmt.Sprint(value)), depth)
+		}
+		var out any
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return contractSafePayloadValue(string(raw), depth)
+		}
+		return contractSafePayloadValue(out, depth)
+	}
+}
+
+func contractSafeActivityPresentation(activity *observation.ActivityPresentation) *observation.ActivityPresentation {
+	if activity == nil {
+		return nil
+	}
+	activity.Label = activityPresentationLabel(activity.Label)
+	activity.Description = activityPresentationDescription(activity.Description)
+	if len(activity.Payload) > 0 {
+		payload, truncated := contractSafePayloadMap(activity.Payload, 0)
+		if truncated {
+			payload["truncated"] = true
+		}
+		activity.Payload = payload
+	}
+	return activity
+}
+
+func contractSafePayloadKey(key string) string {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return ""
+	}
+	var b strings.Builder
+	lastUnderscore := false
+	for _, r := range key {
+		valid := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' || r == '.' || r == ':'
+		if valid {
+			b.WriteRune(r)
+			lastUnderscore = false
+			continue
+		}
+		if !lastUnderscore {
+			b.WriteByte('_')
+			lastUnderscore = true
+		}
+	}
+	out := strings.Trim(b.String(), "_-.:")
+	if out == "" {
+		return ""
+	}
+	runes := []rune(out)
+	if len(runes) > activityPayloadKeyLimit {
+		out = strings.Trim(string(runes[:activityPayloadKeyLimit]), "_-.:")
+	}
+	return out
+}
+
+func contractSafeString(value string, limit int) (string, bool) {
+	if value == "" {
+		return "", false
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value, false
+	}
+	const suffix = "..."
+	cut := limit - len([]rune(suffix))
+	if cut <= 0 {
+		return string(runes[:limit]), true
+	}
+	return string(runes[:cut]) + suffix, true
+}
+
+func compactJSONForActivityPayload(value any) string {
+	raw, err := json.Marshal(value)
+	if err == nil && len(raw) > 0 {
+		return string(raw)
+	}
+	return strings.TrimSpace(fmt.Sprint(value))
+}
+
+func activityPresentationPayloadFromToolResultData(r *run, toolName string, data any) (map[string]any, bool) {
+	payload, truncated := activityPayloadFromResultData(data)
+	var shaped map[string]any
 	switch strings.TrimSpace(toolName) {
 	case "file.read":
-		return fileReadActivityPayload(r, payload)
+		shaped = fileReadActivityPayload(r, payload)
 	case "file.edit", "file.write":
-		return fileMutationActivityPayload(r, payload)
+		shaped = fileMutationActivityPayload(r, payload)
 	case "apply_patch":
-		return applyPatchActivityPayload(r, payload)
+		shaped = applyPatchActivityPayload(r, payload)
 	default:
-		return payload
+		shaped = payload
 	}
+	safe, shapedTruncated := contractSafePayloadMap(shaped, 0)
+	return safe, truncated || shapedTruncated
 }
 
 func fileReadActivityPayload(r *run, payload map[string]any) map[string]any {

@@ -2916,19 +2916,9 @@ func buildToolResultMessages(results []ToolResult, calls []ToolCall) []Message {
 				callID = strings.TrimSpace(call.ID)
 			}
 		}
-		payload := map[string]any{
-			"status":      strings.TrimSpace(result.Status),
-			"summary":     strings.TrimSpace(result.Summary),
-			"details":     strings.TrimSpace(result.Details),
-			"truncated":   result.Truncated,
-			"content_ref": strings.TrimSpace(result.ContentRef),
-		}
-		if result.Data != nil {
-			payload["data"] = result.Data
-		}
-		if result.Error != nil {
-			result.Error.Normalize()
-			payload["error"] = result.Error
+		payload, err := contractSafeToolResultPayload(result)
+		if err != nil {
+			panic(fmt.Sprintf("invalid tool result message: %v", err))
 		}
 		b, _ := json.Marshal(payload)
 		out = append(out, Message{Role: "tool", Content: []ContentPart{{Type: "tool_result", ToolCallID: callID, Text: string(b), JSON: b}}})

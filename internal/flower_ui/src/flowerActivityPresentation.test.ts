@@ -78,6 +78,75 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('pnpm test -- src/ui/chat/activity/ActivityTimelineBlock.test.tsx');
   });
 
+  it('renders terminal result status and structured error details separately', () => {
+    const presentation = presentFlowerActivityItem(item({
+      renderer: 'terminal',
+      status: 'error',
+      label: 'curl -sL https://example.test',
+      payload: {
+        command: 'curl -sL https://example.test',
+        status: 'timeout',
+        duration_ms: 30000,
+        timed_out: true,
+        error: {
+          code: 'TIMEOUT',
+          message: 'Tool execution timed out after 30000 ms',
+          retryable: true,
+        },
+      },
+    }));
+
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('result status:timeout');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:TIMEOUT');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error message:Tool execution timed out after 30000 ms');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('retryable:true');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
+  });
+
+  it('keeps payload result status as detail data when it conflicts with the item status', () => {
+    const presentation = presentFlowerActivityItem(item({
+      renderer: 'terminal',
+      status: 'error',
+      label: 'curl -sL https://example.test',
+      payload: {
+        command: 'curl -sL https://example.test',
+        status: 'success',
+        error: {
+          code: 'UNKNOWN',
+          message: 'The final activity item failed.',
+          retryable: false,
+        },
+      },
+    }));
+
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('result status:success');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:UNKNOWN');
+    expect(presentation.meta).not.toContain('success');
+  });
+
+  it('renders web search error records as separate detail lines', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'web.search',
+      renderer: 'web_search',
+      status: 'error',
+      label: 'latest release',
+      payload: {
+        query: 'latest release',
+        error: {
+          code: 'NETWORK',
+          message: 'Search provider failed',
+          retryable: true,
+        },
+      },
+    }));
+
+    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`);
+    expect(rows).toContain('error code:NETWORK');
+    expect(rows).toContain('error message:Search provider failed');
+    expect(rows).toContain('retryable:true');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
+  });
+
   it('renders todo details from structured payload', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'write_todos',
@@ -107,6 +176,32 @@ describe('presentFlowerActivityItem', () => {
         { content: 'Verify detail rows', status: 'in_progress' },
       ],
     });
+  });
+
+  it('renders todo result status and error details without hiding the todo block', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'write_todos',
+      renderer: 'todos',
+      status: 'error',
+      label: 'Update todos',
+      payload: {
+        status: 'error',
+        todos: [
+          { content: 'Keep final review open', status: 'in_progress' },
+        ],
+        error: {
+          code: 'UNKNOWN',
+          message: 'Todo update failed',
+          retryable: false,
+        },
+      },
+    }));
+
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['todos', 'structured']);
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('result status:error');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:UNKNOWN');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error message:Todo update failed');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
   });
 
   it('reads todo details from result payloads without exposing JSON', () => {
@@ -257,6 +352,37 @@ describe('presentFlowerActivityItem', () => {
     }]);
   });
 
+  it('renders file error details even when a file detail block is present', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'file.read',
+      renderer: 'file',
+      status: 'error',
+      label: 'app.ts',
+      payload: {
+        operation: 'read',
+        display_name: 'app.ts',
+        file_action_id: 'read_app',
+        content: 'partial\n',
+        line_offset: 1,
+        line_count: 1,
+        total_lines: 10,
+        status: 'error',
+        error: {
+          code: 'PERMISSION_DENIED',
+          message: 'permission denied',
+          retryable: false,
+        },
+      },
+    }), fileActions);
+
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['file_read', 'structured']);
+    const rows = presentation.detailLines.map((line) => `${line.label}:${line.value}`);
+    expect(rows).toContain('result status:error');
+    expect(rows).toContain('error code:PERMISSION_DENIED');
+    expect(rows).toContain('error message:permission denied');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
+  });
+
   it('renders multi-file apply_patch as Edit N files and keeps per-file actions', () => {
     const presentation = presentFlowerActivityItem(item({
       tool_name: 'apply_patch',
@@ -302,6 +428,34 @@ describe('presentFlowerActivityItem', () => {
         },
       ],
     });
+  });
+
+  it('renders patch error details even when diff details are present', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'apply_patch',
+      renderer: 'patch',
+      status: 'error',
+      payload: {
+        operation: 'apply_patch',
+        status: 'error',
+        mutations: [{
+          display_name: 'app.ts',
+          file_action_id: 'edit_app',
+          change_type: 'update',
+          unified_diff: '--- a/src/app.ts\n+++ b/src/app.ts\n@@ -1,1 +1,1 @@\n-old\n+new',
+        }],
+        error: {
+          code: 'INVALID_ARGUMENTS',
+          message: 'patch failed',
+          retryable: false,
+        },
+      },
+    }), fileActions);
+
+    expect(presentation.detailBlocks.map((block) => block.kind)).toEqual(['file_diff', 'structured']);
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:INVALID_ARGUMENTS');
+    expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error message:patch failed');
+    expect(presentation.detailLines.map((line) => line.label)).not.toContain('error');
   });
 
   it('renders single-file apply_patch deletion as Delete', () => {
