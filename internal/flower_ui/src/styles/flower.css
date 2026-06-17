@@ -1350,6 +1350,7 @@ html.dark .flower-component-shell {
   --flower-activity-tool-row-foreground-complete: #9ba5b1;
   --flower-activity-tool-row-soft: rgba(126, 138, 153, 0.11);
   --flower-activity-tool-row-ok: #4c9a72;
+  --flower-activity-tool-row-error: color-mix(in srgb, #f97316 78%, var(--foreground) 22%);
   display: grid;
   width: 100%;
   min-width: 0;
@@ -1499,7 +1500,10 @@ html.dark .flower-component-shell {
   color: var(--flower-activity-tool-row-ok);
 }
 
-.flower-activity-inline-row-error .flower-activity-inline-icon,
+.flower-activity-inline-row-error .flower-activity-inline-icon {
+  color: var(--flower-activity-tool-row-error);
+}
+
 .flower-activity-inline-row-canceled .flower-activity-inline-icon {
   color: var(--destructive);
 }
@@ -1575,7 +1579,10 @@ html.dark .flower-component-shell {
   color: var(--flower-activity-tool-row-foreground-complete);
 }
 
-.flower-activity-inline-status-error,
+.flower-activity-inline-status-error {
+  color: var(--flower-activity-tool-row-error);
+}
+
 .flower-activity-inline-status-canceled {
   color: var(--destructive);
 }
