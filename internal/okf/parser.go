@@ -105,6 +105,9 @@ func loadConcepts(sourceRoot string) ([]Concept, error) {
 		}
 		if d.IsDir() {
 			name := d.Name()
+			if name == "dist" && path != sourceRoot {
+				return filepath.SkipDir
+			}
 			if strings.HasPrefix(name, ".") && path != sourceRoot {
 				return filepath.SkipDir
 			}

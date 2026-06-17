@@ -55,8 +55,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp internal/okf/dist/okf_bundle.manifest.json dist/
-          cp internal/okf/dist/okf_bundle.sha256 dist/
+          cp okf/dist/okf_bundle.manifest.json dist/
+          cp okf/dist/okf_bundle.sha256 dist/
           cp LICENSE dist/LICENSE
           cp THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
 

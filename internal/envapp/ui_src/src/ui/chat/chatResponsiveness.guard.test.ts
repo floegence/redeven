@@ -14,17 +14,6 @@ function readText(relPath: string): string {
 }
 
 describe('chat responsiveness guardrails', () => {
-  it('documents the local responsiveness contract for heavy chat blocks', () => {
-    const contract = readText('reference/chat-responsiveness-contract.md');
-
-    expect(contract).toContain('Large diffs must prefer a worker-backed diff model.');
-    expect(contract).toContain('Large code blocks should prefer worker-backed highlighting when available.');
-    expect(contract).toContain('Mermaid rendering must be scheduled after paint');
-    expect(contract).toContain('Activity switching must update shell ownership synchronously');
-    expect(contract).toContain('Codex-specific network/bootstrap work must wait until the activated view has painted once.');
-    expect(contract).toContain('Codex transcript DOM must stay bounded to the viewport window');
-  });
-
   it('keeps heavy chat blocks on explicit non-blocking render paths', () => {
     const codeBlock = readText('src/ui/chat/blocks/CodeBlock.tsx');
     const codeDiffBlock = readText('src/ui/chat/blocks/CodeDiffBlock.tsx');

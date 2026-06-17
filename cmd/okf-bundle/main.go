@@ -11,8 +11,8 @@ import (
 )
 
 func main() {
-	sourceRoot := flag.String("source-root", cleanAbs(filepath.Join("internal", "okf", "source")), "OKF source root")
-	distRoot := flag.String("dist-root", cleanAbs(filepath.Join("internal", "okf", "dist")), "Dist output root")
+	sourceRoot := flag.String("source-root", cleanAbs("okf"), "OKF source root")
+	distRoot := flag.String("dist-root", cleanAbs(filepath.Join("okf", "dist")), "Dist output root")
 	verifyOnly := flag.Bool("verify-only", false, "Verify dist files without rewriting")
 	validateSourceOnly := flag.Bool("validate-source-only", false, "Validate source files only without reading dist")
 	flag.Parse()

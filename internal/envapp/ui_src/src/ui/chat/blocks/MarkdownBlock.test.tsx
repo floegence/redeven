@@ -365,7 +365,7 @@ describe('MarkdownBlock', () => {
   it('renders codex file links with hash-style line labels without splitting them into headings', async () => {
     const content = [
       'Evidence in',
-      '[CODEX_UI.md#L121](/Users/tangjianyin/Downloads/code/redeven/CODEX_UI.md#L121)',
+      '[PROJECT_GUIDE.md#L121](/Users/tangjianyin/Downloads/code/redeven/PROJECT_GUIDE.md#L121)',
       'stays a file reference.',
     ].join(' ');
     const normalized = normalizeMarkdownForDisplay(content);
@@ -382,7 +382,7 @@ describe('MarkdownBlock', () => {
 
     const fileRef = host.querySelector('.chat-md-file-ref') as HTMLAnchorElement | null;
     expect(fileRef?.getAttribute('href')).toContain('#L121');
-    expect(fileRef?.querySelector('.chat-md-file-ref-name')?.textContent).toBe('CODEX_UI.md');
+    expect(fileRef?.querySelector('.chat-md-file-ref-name')?.textContent).toBe('PROJECT_GUIDE.md');
     expect(fileRef?.querySelector('.chat-md-file-ref-line')?.textContent).toBe('L121');
     expect(host.querySelector('h1')?.textContent ?? '').not.toContain('L121');
     expect(host.querySelector('h2')?.textContent ?? '').not.toContain('L121');

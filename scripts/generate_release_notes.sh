@@ -304,7 +304,7 @@ sha256sum -c SHA256SUMS
 ## Notes For Operators
 
 - This public repository defines the GitHub Release contract and verification flow only.
-- If you need installation details, see \`RELEASE.md\` in this repository.
+- If you need installation details, see \`README.md\` in this repository.
 ${compare_line}
 
 ---

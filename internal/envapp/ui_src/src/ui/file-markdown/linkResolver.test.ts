@@ -3,10 +3,10 @@ import { resolveFileMarkdownLink, resolveFileMarkdownLocalPath } from './linkRes
 
 describe('file markdown link resolver', () => {
   it('resolves relative document links against the current markdown file directory', () => {
-    expect(resolveFileMarkdownLocalPath('CAPABILITY_PERMISSIONS.md', '/workspace/README.md'))
-      .toBe('/workspace/CAPABILITY_PERMISSIONS.md');
-    expect(resolveFileMarkdownLocalPath('../PERMISSION_POLICY.md#trust', '/workspace/reference/README.md'))
-      .toBe('/workspace/PERMISSION_POLICY.md');
+    expect(resolveFileMarkdownLocalPath('SECURITY_NOTES.md', '/workspace/README.md'))
+      .toBe('/workspace/SECURITY_NOTES.md');
+    expect(resolveFileMarkdownLocalPath('../ACCESS_POLICY.md#trust', '/workspace/reference/README.md'))
+      .toBe('/workspace/ACCESS_POLICY.md');
   });
 
   it('classifies heading, external, absolute, and unresolved links', () => {
@@ -21,16 +21,16 @@ describe('file markdown link resolver', () => {
       href: 'https://example.com/help',
     });
 
-    expect(resolveFileMarkdownLink('/workspace/PERMISSION_POLICY.md#trust', '/workspace/README.md')).toEqual({
+    expect(resolveFileMarkdownLink('/workspace/ACCESS_POLICY.md#trust', '/workspace/README.md')).toEqual({
       kind: 'file',
-      href: '/workspace/PERMISSION_POLICY.md#trust',
-      path: '/workspace/PERMISSION_POLICY.md',
+      href: '/workspace/ACCESS_POLICY.md#trust',
+      path: '/workspace/ACCESS_POLICY.md',
       fragment: 'trust',
     });
 
-    expect(resolveFileMarkdownLink('PERMISSION_POLICY.md')).toEqual({
+    expect(resolveFileMarkdownLink('ACCESS_POLICY.md')).toEqual({
       kind: 'unresolved-local',
-      href: 'PERMISSION_POLICY.md',
+      href: 'ACCESS_POLICY.md',
       reason: 'missing_current_file_path',
     });
   });

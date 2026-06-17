@@ -1,0 +1,30 @@
+---
+type: Runtime Contract
+title: Runtime startup presentation
+description: redeven run startup output is structured events rendered by rich, plain, or machine presentation modes.
+tags: [architecture, runtime, startup, desktop]
+timestamp: 2026-06-17T00:00:00Z
+---
+
+`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and Desktop automation output are renderers over the same state snapshot, so readiness, failures, Local UI URLs, runtime-control details, and shutdown results stay machine-readable.
+
+# Mechanism
+
+The run command parses `--mode`, `--local-ui-bind`, `--desktop-managed`, `--startup-report-file`, and `--presentation`, rejects Desktop-managed startup unless the presentation contract is machine-compatible, initializes a `runtimepresentation.Reporter`, emits phase events as state, lock, bootstrap, config, control, and Local UI phases progress, and writes a Desktop launch report when a Desktop-managed Local UI becomes ready.
+
+# Boundaries
+
+Desktop readiness must come from the machine presentation and startup-report contract, not from scraping rich terminal output. The compact character mark remains a rich renderer concern rather than command startup logic.
+
+# Citations
+
+[1] redeven:cmd/redeven/main.go:222 - Run mode is parsed as remote, hybrid, local, or desktop.
+[2] redeven:cmd/redeven/main.go:228 - Desktop-managed runs are explicit CLI state.
+[3] redeven:cmd/redeven/main.go:229 - Startup reports are written to a caller-provided file.
+[4] redeven:cmd/redeven/main.go:310 - Desktop-managed startup and startup reports require machine-compatible presentation.
+[5] redeven:cmd/redeven/main.go:322 - Presentation config is resolved from requested mode and runtime context.
+[6] redeven:cmd/redeven/main.go:348 - Startup events are emitted through a runtimepresentation.Reporter.
+[7] redeven:cmd/redeven/main.go:640 - Runtime readiness is emitted as a structured ready event with a snapshot.
+[8] redeven:cmd/redeven/main.go:771 - Desktop-ready launch reports include Local UI, runtime-control, state, and Runtime Service details.
+[9] redeven:cmd/redeven/desktop_startup_coordination.go:20 - Desktop launch reports are enabled only for Desktop-managed desktop-mode startups with a report path.
+[10] redeven:internal/runtimepresentation/events.go:1 - Startup phases and event payloads live in the runtimepresentation package.

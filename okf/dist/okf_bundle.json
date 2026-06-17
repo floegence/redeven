@@ -1,0 +1,483 @@
+{
+  "schema_version": 1,
+  "okf_version": "0.1",
+  "root_index": {
+    "path": "index.md",
+    "okf_version": "0.1",
+    "frontmatter": {
+      "okf_version": "0.1"
+    },
+    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n\n## Security\n\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n\n## Desktop\n\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-managed Local UI launches, runtime-control, and startup probing.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Standalone Gateway binary, managed service lifecycle, and Desktop bridge.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App gateway, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF search tool](ai/okf-search-tool.md) - Read-only AI search over the embedded OKF bundle.\n\n## Protocol\n\n- [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, auth, environment catalog, health, bootstrap, and launch data.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle."
+  },
+  "concepts": [
+    {
+      "path": "ai/ai-tool-runtime.md",
+      "concept_id": "ai/ai-tool-runtime",
+      "type": "AI Tool Contract",
+      "title": "AI tool runtime",
+      "description": "Redeven AI builtin tools are registered with permission semantics, presentation metadata, and runtime execution dispatch.",
+      "tags": [
+        "ai",
+        "permissions",
+        "tools",
+        "ui"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Redeven AI builtin tools are registered with permission semantics, presentation metadata, and runtime execution dispatch.",
+        "tags": [
+          "ai",
+          "permissions",
+          "tools",
+          "ui"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "AI tool runtime",
+        "type": "AI Tool Contract"
+      },
+      "body": "Redeven's AI runtime treats tools as typed runtime capabilities. Builtins declare mutation and approval requirements, presentation metadata, grouping behavior, and renderer hints before execution dispatch reaches the runtime implementation.\n\n# Mechanism\n\nThe builtin registry includes file, patch, terminal, web search, OKF search, todo, interaction, skill, and subagent tools. Mutating tools require approval by default; terminal commands are profiled per invocation; `okf.search` is read-only structured research; web search is read-only provider-backed research. Tool execution normalizes success summaries, errors, truncation, and builtin dispatch results so the chat activity timeline can render compact tool activity instead of raw low-level payloads.\n\n# Boundaries\n\nTool names are not aliases for deleted knowledge-era tools. Current repository knowledge search is `okf.search` only.\n\n# Citations\n\n[1] redeven:internal/ai/tools/registry.go:20 - Builtin tool definitions declare mutation, approval, and presentation specs.\n[2] redeven:internal/ai/tools/registry.go:67 - `okf.search` is registered as read-only structured research.\n[3] redeven:internal/ai/tools/registry.go:132 - Terminal command approval is decided from the invocation risk profile.\n[4] redeven:internal/ai/builtin_tool_handlers.go:16 - Tool success summaries are normalized by builtin name.\n[5] redeven:internal/ai/run.go:2359 - Web search results receive source handling before final response synthesis.\n[6] redeven:internal/ai/run.go:2949 - `okf.search` dispatches to the embedded OKF search implementation.\n[7] redeven:internal/ai/prompt_builder.go:264 - Prompt construction includes tool usage, research, rules, workflow, and output contract sections.\n[8] redeven:internal/ai/tools/registry.go:92 - Unknown tool names do not resolve to builtin definitions.",
+      "snippet": "Redeven's AI runtime treats tools as typed runtime capabilities. Builtins declare mutation and approval requirements, presentation metadata, grouping behavior, and renderer hints before execution dispatch reaches the runtime implementation."
+    },
+    {
+      "path": "ai/okf-bundle-lifecycle.md",
+      "concept_id": "ai/okf-bundle-lifecycle",
+      "type": "OKF Lifecycle",
+      "title": "OKF bundle lifecycle",
+      "description": "Redeven builds a deterministic embedded OKF bundle from source Markdown concepts.",
+      "tags": [
+        "okf",
+        "provenance",
+        "release"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Redeven builds a deterministic embedded OKF bundle from source Markdown concepts.",
+        "tags": [
+          "okf",
+          "provenance",
+          "release"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "OKF bundle lifecycle",
+        "type": "OKF Lifecycle"
+      },
+      "body": "Redeven builds its embedded OKF bundle from curated source files under the top-level `okf/` authoring root, verifies deterministic dist outputs under `okf/dist/`, and embeds the resulting bundle into the binary used by runtime and AI features.\n\n# Mechanism\n\n`build_assets.sh` invokes `build_okf_bundle.sh`, which runs `cmd/okf-bundle` against explicit source and dist roots. The builder scans OKF Markdown concepts, validates required frontmatter and reserved filenames, skips generated `dist/` while hashing the source tree into `source_sha256`, writes bundle plus manifest plus sha outputs, CI validates source integrity and stale dist, and top-level `go:embed` makes the bundle available to runtime search code.\n\n# Boundaries\n\nThe bundle remains auditable only while OKF Markdown concepts are the sole authoring surface and `okf/dist/*` stays a generated verification artifact set rather than hand-edited truth.\n\n# Citations\n\n[1] redeven:scripts/build_assets.sh:53 - Embedded asset builds include the OKF bundle stage.\n[2] redeven:scripts/build_okf_bundle.sh:19 - Bundle script resolves `okf` as source root and `okf/dist` as dist root.\n[3] redeven:cmd/okf-bundle/main.go:14 - The standalone bundle command defaults to the top-level OKF source root.\n[4] redeven:cmd/redeven/okf.go:39 - The main CLI exposes `redeven okf bundle` with the same default roots.\n[5] redeven:internal/okf/builder.go:22 - BuildFromSource assembles the bundle from OKF concepts.\n[6] redeven:internal/okf/builder.go:99 - VerifyDistFiles rejects stale checked-in dist artifacts.\n[7] redeven:internal/okf/builder.go:116 - Source tree hashing skips generated `dist/` and dot directories.\n[8] redeven:okf/dist/embed.go:7 - Top-level dist files are embedded by the `okf/dist` package.\n[9] redeven:internal/okf/embed.go:6 - Internal runtime OKF loading reads through the top-level embedded dist package.\n[10] redeven:scripts/okf/check_source_integrity.sh:5 - Integrity checks validate the top-level OKF source before generated artifacts are trusted.",
+      "snippet": "Redeven builds its embedded OKF bundle from curated source files under the top-level `okf/` authoring root, verifies deterministic dist outputs under `okf/dist/`, and embeds the resulting bundle into the binary used by runtime and AI featur"
+    },
+    {
+      "path": "ai/okf-search-tool.md",
+      "concept_id": "ai/okf-search-tool",
+      "type": "AI Tool Contract",
+      "title": "OKF search tool",
+      "description": "okf.search is a read-only AI and chat surface over the embedded OKF bundle.",
+      "tags": [
+        "ai",
+        "okf",
+        "ui"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "okf.search is a read-only AI and chat surface over the embedded OKF bundle.",
+        "tags": [
+          "ai",
+          "okf",
+          "ui"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "OKF search tool",
+        "type": "AI Tool Contract"
+      },
+      "body": "Redeven exposes the embedded OKF bundle through a read-only `okf.search` builtin tool, and Env App renders structured OKF search results inside Flower's compact activity timeline.\n\n# Mechanism\n\nRuntime OKF code loads the embedded bundle once, scores concepts in memory, builtin tool registration advertises `okf.search` as a non-mutating tool with structured presentation metadata, tool execution dispatches to `okf.Search` behind a read-permission gate, and `ActivityTimelineBlock` renders the compact research row with detail access for query and concept match payloads.\n\n# Boundaries\n\nThe tool returns scoped concept summaries rather than raw file-level citation details and does not mutate OKF source or dist artifacts.\n\n# Citations\n\n[1] redeven:internal/okf/search.go:17 - LoadEmbeddedBundle reads the embedded bundle lazily once.\n[2] redeven:internal/okf/search.go:38 - Search caps max results and filters optional tag constraints.\n[3] redeven:internal/okf/search.go:100 - Concept scoring weights title, description, body, resource, type, and tags.\n[4] redeven:internal/ai/tools/registry.go:67 - Builtin presentation metadata classifies `okf.search` as read-only structured research.\n[5] redeven:internal/ai/builtin_tool_handlers.go:25 - Tool success summaries use the `okf.search` name directly.\n[6] redeven:internal/ai/run.go:2949 - Tool execution dispatches the `okf.search` builtin to OKF search.\n[7] redeven:internal/ai/run.go:2966 - Tool arguments are normalized into query, max result, and tag filters.",
+      "snippet": "Redeven exposes the embedded OKF bundle through a read-only `okf.search` builtin tool, and Env App renders structured OKF search results inside Flower's compact activity timeline. Runtime OKF code loads the embedded bundle once, scores conc"
+    },
+    {
+      "path": "architecture/env-app-upstream-web-dependencies.md",
+      "concept_id": "architecture/env-app-upstream-web-dependencies",
+      "type": "Frontend Contract",
+      "title": "Env App upstream web dependencies",
+      "description": "Env App composes published floe-webapp, Floeterm, and Flowersec web packages.",
+      "tags": [
+        "architecture",
+        "dependencies",
+        "protocol",
+        "ui"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Env App composes published floe-webapp, Floeterm, and Flowersec web packages.",
+        "tags": [
+          "architecture",
+          "dependencies",
+          "protocol",
+          "ui"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Env App upstream web dependencies",
+        "type": "Frontend Contract"
+      },
+      "body": "Env App is built as a Redeven-specific shell on top of published floe-webapp UI/runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers.\n\n# Mechanism\n\nThe UI package pins released versions of the upstream packages. `EnvAppShell` imports floe-webapp providers, layout primitives, icons, and protocol hooks; terminal surfaces use Floeterm `TerminalCore` and session coordination; controlplane services call Flowersec controlplane helpers to exchange entry tickets for connect artifacts; and local package-lock files are the audited dependency source for the embedded UI build.\n\n# Boundaries\n\nThis concept only holds while Env App continues to consume published upstream packages instead of local sibling checkouts or ad-hoc replacements for protocol, terminal, and controlplane artifact handling.\n\n# Citations\n\n[1] redeven:internal/envapp/ui_src/package.json:18 - Env App pins floe-webapp-core.\n[2] redeven:internal/envapp/ui_src/package.json:19 - Env App pins floe-webapp-protocol.\n[3] redeven:internal/envapp/ui_src/package.json:20 - Env App pins floeterm terminal-web.\n[4] redeven:internal/envapp/ui_src/package.json:21 - Env App pins flowersec-core.\n[5] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2 - Env App shell imports floe-webapp runtime and layout primitives.\n[6] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:24 - Env App shell consumes Flowersec observer typing for runtime connections.\n[7] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:25 - Env App shell consumes the floe-webapp protocol hook.\n[8] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:9 - Terminal panel consumes Floeterm TerminalCore and terminal session abstractions.\n[9] redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:2 - Controlplane services request entry connect artifacts through flowersec-core/controlplane.\n[10] redeven:AGENTS.md:173 - Published Dependency Policy forbids local sibling wiring in package manifests and build aliases.",
+      "snippet": "Env App is built as a Redeven-specific shell on top of published floe-webapp UI/runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers. The UI package pins releas"
+    },
+    {
+      "path": "architecture/local-ui-surface.md",
+      "concept_id": "architecture/local-ui-surface",
+      "type": "Runtime Contract",
+      "title": "Local UI surface",
+      "description": "Local UI serves browser entrypoints, access-gated APIs, direct sessions, Env App proxying, codespaces, and port forwards.",
+      "tags": [
+        "architecture",
+        "local-ui",
+        "runtime",
+        "security"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Local UI serves browser entrypoints, access-gated APIs, direct sessions, Env App proxying, codespaces, and port forwards.",
+        "tags": [
+          "architecture",
+          "local-ui",
+          "runtime",
+          "security"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Local UI surface",
+        "type": "Runtime Contract"
+      },
+      "body": "Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the Env App gateway, Local UI status APIs, direct Flowersec session handoff, Browser Editor codespace routes, and port-forward routes from the same runtime-managed HTTP server.\n\n# Mechanism\n\n`localui.Server` is built with an agent, Code App gateway, bind spec, runtime-control socket path, Local Environment identity, diagnostics store, and optional access gate. The handler mounts `/api/local/*`, `/_redeven_direct/ws`, `/_redeven_proxy/*`, `/cs/*`, and `/pf/*`. Password mode protects non-public routes, direct sessions are minted as short-lived Flowersec connect artifacts, and runtime responses include the normalized Runtime Service snapshot.\n\n# Boundaries\n\nLocal UI route behavior is part of the runtime trust boundary. Public Env App shell GET/HEAD requests may pass before local unlock so the shell can load, but local APIs, direct sessions, codespaces, and port-forward routes stay access-gated when password mode is enabled.\n\n# Citations\n\n[1] redeven:internal/localui/localui.go:50 - Local UI options require bind, agent, gateway, state, runtime-control, version, diagnostics, and access gate inputs.\n[2] redeven:internal/localui/localui.go:129 - The handler mounts root, codespace, port-forward, local API, direct WebSocket, and Env App proxy routes.\n[3] redeven:internal/localui/localui.go:187 - Local UI computes a local permission cap from the runtime config path.\n[4] redeven:internal/localui/localui.go:218 - Start opens all configured Local UI listeners and serves the handler.\n[5] redeven:internal/localui/localui.go:656 - Local API calls return locked responses when local access is missing.\n[6] redeven:internal/localui/localui.go:672 - Public Env App shell requests are limited to GET/HEAD under `/_redeven_proxy/env`.\n[7] redeven:internal/localui/localui.go:683 - Gateway requests are access-gated except for the public Env App shell path.\n[8] redeven:internal/localui/localui.go:1019 - `/api/local/runtime` returns direct WebSocket, Desktop flags, and Runtime Service data.\n[9] redeven:internal/localui/localui.go:1089 - Direct sessions mint short-lived connect artifacts with channel id and E2EE PSK.\n[10] redeven:internal/localui/localui.go:1151 - Connect artifact creation requires local access and an empty request body.",
+      "snippet": "Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the Env App gateway, Local UI status APIs, direct Flowersec session handoff, Browser Editor codespace routes, and port-forward routes from the same runtime-managed "
+    },
+    {
+      "path": "architecture/runtime-service-snapshot.md",
+      "concept_id": "architecture/runtime-service-snapshot",
+      "type": "Runtime Contract",
+      "title": "Runtime Service snapshot",
+      "description": "Runtime Service snapshots describe compatibility, open readiness, workload, capabilities, and Desktop/runtime bindings.",
+      "tags": [
+        "architecture",
+        "compatibility",
+        "desktop",
+        "runtime-service"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Runtime Service snapshots describe compatibility, open readiness, workload, capabilities, and Desktop/runtime bindings.",
+        "tags": [
+          "architecture",
+          "compatibility",
+          "desktop",
+          "runtime-service"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Runtime Service snapshot",
+        "type": "Runtime Contract"
+      },
+      "body": "The Runtime Service snapshot is Redeven's typed compatibility and readiness surface between the endpoint runtime, Desktop, Local UI, and provider-facing environment catalogs.\n\n# Mechanism\n\nThe Go runtime defines protocol version `redeven-runtime-v1`, owner states, compatibility states, open-readiness states, workload counts, runtime-control capabilities, Desktop model source binding state, and provider-link binding state. Normalization trims and defaults partial snapshots, applies endpoint facts such as Desktop ownership and effective run mode, infers open readiness from compatibility when missing, and blocks otherwise-open snapshots when the Env App shell is unavailable. The release compatibility contract is embedded and applied to snapshots.\n\n# Boundaries\n\nConsumers should use `open_readiness` and capability bindings rather than infer readiness from version strings or Desktop-only conditions. Protocol compatibility remains controlled by the embedded compatibility contract.\n\n# Citations\n\n[1] redeven:internal/runtimeservice/snapshot.go:8 - Runtime Service protocol version is `redeven-runtime-v1`.\n[2] redeven:internal/runtimeservice/snapshot.go:123 - Snapshot fields include version, owner, compatibility, readiness, workload, capabilities, and bindings.\n[3] redeven:internal/runtimeservice/snapshot.go:144 - Endpoint normalization applies Desktop-managed facts and effective run mode.\n[4] redeven:internal/runtimeservice/snapshot.go:180 - Snapshot normalization defaults protocol, owner, compatibility, readiness, counts, capabilities, and bindings.\n[5] redeven:internal/runtimeservice/snapshot.go:323 - Open readiness is normalized and inferred from compatibility when absent.\n[6] redeven:internal/runtimeservice/snapshot.go:346 - Update-required, Desktop-update-required, and managed-elsewhere states block opening.\n[7] redeven:internal/localui/localui.go:1043 - Local UI exposes the agent Runtime Service snapshot after endpoint normalization.\n[8] redeven:internal/localui/localui.go:1051 - Missing Env App shell forces an `env_app_shell_unavailable` open-readiness block.\n[9] redeven:internal/runtimeservice/compatibility.go:11 - The compatibility contract JSON is embedded in the runtime.\n[10] redeven:internal/runtimeservice/compatibility.go:142 - Applying the compatibility contract stamps protocol, epoch, minimum versions, review id, and compatibility.",
+      "snippet": "The Runtime Service snapshot is Redeven's typed compatibility and readiness surface between the endpoint runtime, Desktop, Local UI, and provider-facing environment catalogs. The Go runtime defines protocol version `redeven-runtime-v1`, own"
+    },
+    {
+      "path": "architecture/runtime-session-permission-gates.md",
+      "concept_id": "architecture/runtime-session-permission-gates",
+      "type": "Runtime Contract",
+      "title": "Runtime session permission gates",
+      "description": "Redeven validates session metadata and clamps granted permissions before opening runtime sessions.",
+      "tags": [
+        "architecture",
+        "security",
+        "session-security"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Redeven validates session metadata and clamps granted permissions before opening runtime sessions.",
+        "tags": [
+          "architecture",
+          "security",
+          "session-security"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Runtime session permission gates",
+        "type": "Runtime Contract"
+      },
+      "body": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code App and Port Forward.\n\n# Mechanism\n\nWhen `grant_server` arrives on the control channel, the runtime checks the channel id, endpoint id, and `floe_app`, resolves the local cap via `PermissionPolicy.ResolveCap`, intersects that cap with the declared read/write/execute grant, writes the clamped flags back into the session snapshot, and refuses Code App or Port Forward sessions that do not satisfy stricter runtime-side requirements.\n\n# Boundaries\n\nBrowser or UI-side permission claims remain non-authoritative. This concept only holds while the runtime continues enforcing local caps plus per-app validation before `runDataSession` starts.\n\n# Citations\n\n[1] redeven:internal/config/permission_policy.go:13 - PermissionPolicy clamps control-plane session metadata to a user-approved local maximum.\n[2] redeven:internal/config/permission_policy.go:74 - ResolveCap intersects global, per-user, and per-app caps.\n[3] redeven:internal/agent/agent.go:473 - Unsupported floe_app values are rejected before runtime session startup.\n[4] redeven:internal/agent/agent.go:485 - Granted permissions are intersected with the resolved local cap.\n[5] redeven:internal/agent/agent.go:502 - Effective permissions overwrite the session metadata snapshot used by the runtime.\n[6] redeven:internal/agent/agent.go:508 - Code App sessions require a valid codespace id and full read/write/execute access.\n[7] redeven:internal/agent/agent.go:531 - Port Forward sessions require a valid forward id and execute capability.",
+      "snippet": "Before any runtime session is accepted, Redeven validates `session_meta`, rejects unsupported app/channel combinations, intersects the control-plane grant with the local permission policy, and then applies extra app-specific gates for Code "
+    },
+    {
+      "path": "architecture/runtime-startup-presentation.md",
+      "concept_id": "architecture/runtime-startup-presentation",
+      "type": "Runtime Contract",
+      "title": "Runtime startup presentation",
+      "description": "redeven run startup output is structured events rendered by rich, plain, or machine presentation modes.",
+      "tags": [
+        "architecture",
+        "desktop",
+        "runtime",
+        "startup"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "redeven run startup output is structured events rendered by rich, plain, or machine presentation modes.",
+        "tags": [
+          "architecture",
+          "desktop",
+          "runtime",
+          "startup"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Runtime startup presentation",
+        "type": "Runtime Contract"
+      },
+      "body": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and Desktop automation output are renderers over the same state snapshot, so readiness, failures, Local UI URLs, runtime-control details, and shutdown results stay machine-readable.\n\n# Mechanism\n\nThe run command parses `--mode`, `--local-ui-bind`, `--desktop-managed`, `--startup-report-file`, and `--presentation`, rejects Desktop-managed startup unless the presentation contract is machine-compatible, initializes a `runtimepresentation.Reporter`, emits phase events as state, lock, bootstrap, config, control, and Local UI phases progress, and writes a Desktop launch report when a Desktop-managed Local UI becomes ready.\n\n# Boundaries\n\nDesktop readiness must come from the machine presentation and startup-report contract, not from scraping rich terminal output. The compact character mark remains a rich renderer concern rather than command startup logic.\n\n# Citations\n\n[1] redeven:cmd/redeven/main.go:222 - Run mode is parsed as remote, hybrid, local, or desktop.\n[2] redeven:cmd/redeven/main.go:228 - Desktop-managed runs are explicit CLI state.\n[3] redeven:cmd/redeven/main.go:229 - Startup reports are written to a caller-provided file.\n[4] redeven:cmd/redeven/main.go:310 - Desktop-managed startup and startup reports require machine-compatible presentation.\n[5] redeven:cmd/redeven/main.go:322 - Presentation config is resolved from requested mode and runtime context.\n[6] redeven:cmd/redeven/main.go:348 - Startup events are emitted through a runtimepresentation.Reporter.\n[7] redeven:cmd/redeven/main.go:640 - Runtime readiness is emitted as a structured ready event with a snapshot.\n[8] redeven:cmd/redeven/main.go:771 - Desktop-ready launch reports include Local UI, runtime-control, state, and Runtime Service details.\n[9] redeven:cmd/redeven/desktop_startup_coordination.go:20 - Desktop launch reports are enabled only for Desktop-managed desktop-mode startups with a report path.\n[10] redeven:internal/runtimepresentation/events.go:1 - Startup phases and event payloads live in the runtimepresentation package.",
+      "snippet": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and Desktop automation output are renderers over the same state snapshot, so readiness, failures, Local UI URLs, runtime-control details, and shutdown resul"
+    },
+    {
+      "path": "architecture/runtime-transport-dependencies.md",
+      "concept_id": "architecture/runtime-transport-dependencies",
+      "type": "Runtime Contract",
+      "title": "Runtime transport dependencies",
+      "description": "Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.",
+      "tags": [
+        "architecture",
+        "dependencies",
+        "terminal"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.",
+        "tags": [
+          "architecture",
+          "dependencies",
+          "terminal"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Runtime transport dependencies",
+        "type": "Runtime Contract"
+      },
+      "body": "Redeven runtime builds control and data sessions on Flowersec client and endpoint primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager.\n\n# Mechanism\n\nRedeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The agent connects the control channel through `fsclient.ConnectDirect`, opens data sessions through `endpoint.ConnectTunnel`, and wraps `termgo.NewManager` so terminal sessions, PTY activation, and lifecycle bookkeeping stay inside Floeterm's manager abstraction.\n\n# Boundaries\n\nCompatibility depends on these transport and terminal interfaces staying aligned across released versions. Replacing or bypassing them can break control and data channel behavior, stream semantics, or terminal session lifecycle.\n\n# Citations\n\n[1] redeven:go.mod:8 - Redeven pins floeterm terminal-go in the runtime module.\n[2] redeven:go.mod:9 - Redeven pins flowersec-go in the runtime module.\n[3] redeven:internal/agent/agent.go:20 - Agent imports Flowersec client, endpoint, proxy, and RPC packages.\n[4] redeven:internal/agent/agent.go:532 - The control channel connects through fsclient.ConnectDirect.\n[5] redeven:internal/agent/agent.go:688 - Runtime data sessions connect through endpoint.ConnectTunnel.\n[6] redeven:internal/terminal/manager.go:14 - Runtime terminal manager wraps floeterm terminal-go plus Flowersec RPC types.\n[7] redeven:internal/terminal/manager.go:98 - Runtime instantiates termgo.NewManager with Redeven shell and logging config.\n[8] redeven:AGENTS.md:173 - Repository rules require published upstream releases instead of local sibling checkouts.",
+      "snippet": "Redeven runtime builds control and data sessions on Flowersec client and endpoint primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager. Redeven pins released `flowersec-go` and `terminal-go`"
+    },
+    {
+      "path": "code/browser-editor-runtime.md",
+      "concept_id": "code/browser-editor-runtime",
+      "type": "Runtime Contract",
+      "title": "Browser Editor runtime",
+      "description": "Code App serves Browser Editor codespaces through the runtime gateway and managed code workspace engine APIs.",
+      "tags": [
+        "browser-editor",
+        "code-app",
+        "desktop",
+        "local-ui"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Code App serves Browser Editor codespaces through the runtime gateway and managed code workspace engine APIs.",
+        "tags": [
+          "browser-editor",
+          "code-app",
+          "desktop",
+          "local-ui"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Browser Editor runtime",
+        "type": "Runtime Contract"
+      },
+      "body": "Browser Editor support is owned by the runtime Code App gateway. Codespaces are opened through Local UI `/cs/\u003cid\u003e/` routes, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engine APIs.\n\n# Mechanism\n\nThe Code App gateway backend owns codespace lifecycle, port resolution, managed runtime status, import sessions, chunk upload, completion, version selection, version removal, and operation cancellation. Local UI routes `/cs/*` to the gateway. Runtime-control mirrors the code workspace engine import flow for Desktop-managed setup. The code-server runner starts the editor bound to loopback with no editor auth, an absolute proxy base path under `/cs/\u003ccode_space_id\u003e`, disabled telemetry/update checks, scoped data directories, and a short stable session socket path.\n\n# Boundaries\n\nOpening or managing Browser Editor is not just a static file route. Version setup and removal require full read/write/execute runtime permissions, while status reads require read permission.\n\n# Citations\n\n[1] redeven:internal/codeapp/gateway/gateway.go:80 - Gateway backend owns codespace start, stop, delete, and port resolution.\n[2] redeven:internal/codeapp/gateway/gateway.go:84 - Gateway backend owns managed code runtime status and import operations.\n[3] redeven:internal/localui/localui.go:132 - Local UI mounts `/cs/` for codespace routes.\n[4] redeven:internal/localui/runtime_control.go:139 - Runtime-control exposes code workspace engine status and import routes.\n[5] redeven:internal/codeapp/gateway/gateway.go:2302 - Code runtime status requires read permission.\n[6] redeven:internal/codeapp/gateway/gateway.go:2314 - Code runtime import sessions require full permission.\n[7] redeven:internal/codeapp/gateway/gateway.go:2341 - Runtime import chunks are uploaded by upload id and chunk index.\n[8] redeven:internal/codeapp/gateway/gateway.go:2389 - Runtime version selection requires full permission.\n[9] redeven:internal/codeapp/codeserver/runner.go:274 - code-server uses `/cs/\u003ccode_space_id\u003e` as the absolute proxy base path.\n[10] redeven:internal/codeapp/codeserver/runner.go:276 - code-server binds to loopback with editor auth disabled.",
+      "snippet": "Browser Editor support is owned by the runtime Code App gateway. Codespaces are opened through Local UI `/cs/\u003cid\u003e/` routes, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engin"
+    },
+    {
+      "path": "desktop/desktop-runtime-bridge.md",
+      "concept_id": "desktop/desktop-runtime-bridge",
+      "type": "Desktop Contract",
+      "title": "Desktop runtime bridge",
+      "description": "Desktop starts and probes Desktop-managed runtimes through machine startup reports, Local UI health, and runtime-control.",
+      "tags": [
+        "compatibility",
+        "desktop",
+        "local-ui",
+        "runtime-control"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Desktop starts and probes Desktop-managed runtimes through machine startup reports, Local UI health, and runtime-control.",
+        "tags": [
+          "compatibility",
+          "desktop",
+          "local-ui",
+          "runtime-control"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Desktop runtime bridge",
+        "type": "Desktop Contract"
+      },
+      "body": "Redeven Desktop treats the endpoint runtime as a managed service when it launches `redeven run --mode desktop --desktop-managed`. The handoff is machine-readable: Desktop receives Local UI URLs, runtime-control endpoint data, Runtime Service readiness, and startup failures without parsing human terminal output.\n\n# Mechanism\n\nThe CLI requires Desktop-managed Local UI runs to use machine presentation, writes startup reports, records Desktop owner metadata in the runtime lock, and exposes runtime-control only to loopback callers with the Desktop owner header and bearer token. Desktop probes `/api/local/runtime/health`, normalizes Runtime Service snapshots in TypeScript, verifies Env App shell readiness by inspecting the shell HTML and asset references, and builds the Env App entry URL from a normalized Local UI base URL.\n\n# Boundaries\n\nRuntime-control is not a general network API. It is scoped to the local Desktop/runtime bridge and protected by loopback, Desktop owner id, and bearer token checks.\n\n# Citations\n\n[1] redeven:cmd/redeven/main.go:292 - Desktop-managed startup is rejected for remote-only mode.\n[2] redeven:cmd/redeven/main.go:310 - Desktop-managed startup requires machine-compatible presentation.\n[3] redeven:cmd/redeven/main.go:627 - Runtime lock metadata records desktop-managed state and Desktop owner id.\n[4] redeven:cmd/redeven/main.go:771 - Desktop-ready startup reports include Local UI, runtime-control, and Runtime Service data.\n[5] redeven:internal/localui/runtime_control.go:23 - Runtime-control protocol version is `redeven-runtime-control-v1`.\n[6] redeven:internal/localui/runtime_control.go:166 - Runtime-control endpoint data includes base URL, token, and Desktop owner id.\n[7] redeven:internal/localui/runtime_control.go:193 - Runtime-control requests require loopback, matching Desktop owner id, and bearer token.\n[8] redeven:desktop/src/main/runtimeState.ts:119 - Desktop probes Local UI runtime health at `/api/local/runtime/health`.\n[9] redeven:desktop/src/main/runtimeState.ts:135 - Desktop validates the Env App shell HTML before treating it as ready.\n[10] redeven:desktop/src/main/localUIURL.ts:44 - Desktop builds the Env App entry URL under `/_redeven_proxy/env/`.",
+      "snippet": "Redeven Desktop treats the endpoint runtime as a managed service when it launches `redeven run --mode desktop --desktop-managed`. The handoff is machine-readable: Desktop receives Local UI URLs, runtime-control endpoint data, Runtime Servic"
+    },
+    {
+      "path": "gateway/gateway-service.md",
+      "concept_id": "gateway/gateway-service",
+      "type": "Gateway Contract",
+      "title": "Gateway service",
+      "description": "redeven-gateway is a separate Gateway service binary with managed lifecycle and Desktop bridge support.",
+      "tags": [
+        "desktop",
+        "gateway",
+        "release",
+        "runtime"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "redeven-gateway is a separate Gateway service binary with managed lifecycle and Desktop bridge support.",
+        "tags": [
+          "desktop",
+          "gateway",
+          "release",
+          "runtime"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Gateway service",
+        "type": "Gateway Contract"
+      },
+      "body": "Gateway is no longer folded into the Runtime Service snapshot. It is a separate `redeven-gateway` binary and service surface that Desktop can manage, bridge, pair, and use for Gateway-owned environment profiles.\n\n# Mechanism\n\nThe Gateway CLI exposes `serve`, `desktop-bridge`, `service-status`, `service-start`, `service-stop`, and `version`. Managed service start creates a bridge token, launches `serve` in the background, records a PID/listen status file, and waits for readiness. `desktop-bridge` verifies that the service is running and that the managed bridge token exists, then serves the Gateway protocol bridge over stdio. The release workflow builds and packages `redeven-gateway` alongside the main `redeven` binary.\n\n# Boundaries\n\nGateway state, pairing, profile write enablement, and private-profile-target allowance are Gateway service concerns. Runtime Service compatibility stays separate unless the runtime snapshot contract itself changes.\n\n# Citations\n\n[1] redeven:cmd/redeven-gateway/main.go:83 - `serve` accepts state root, listen address, private target, profile write, and pairing flags.\n[2] redeven:cmd/redeven-gateway/main.go:116 - `desktop-bridge` exposes the Gateway protocol bridge over stdio.\n[3] redeven:cmd/redeven-gateway/main.go:188 - `service-start` starts a managed Gateway service in the background.\n[4] redeven:cmd/redeven-gateway/main.go:217 - Managed service start ensures a managed bridge token exists.\n[5] redeven:cmd/redeven-gateway/main.go:227 - Managed service start launches `serve` with state and listener flags.\n[6] redeven:cmd/redeven-gateway/main.go:254 - `service-stop` terminates a running managed Gateway service and removes managed state markers.\n[7] redeven:cmd/redeven-gateway/main.go:293 - Gateway service construction receives Desktop bridge, profile target, profile write, pairing, and token options.\n[8] redeven:cmd/redeven-gateway/main.go:495 - CLI help lists the Gateway command set.\n[9] redeven:.github/workflows/release.yml:72 - Release builds the `redeven-gateway` binary.\n[10] redeven:internal/runtimeservice/compatibility_contract.json:8 - The current compatibility review records Gateway service decoupling as outside the Runtime Service window.",
+      "snippet": "Gateway is no longer folded into the Runtime Service snapshot. It is a separate `redeven-gateway` binary and service surface that Desktop can manage, bridge, pair, and use for Gateway-owned environment profiles. The Gateway CLI exposes `ser"
+    },
+    {
+      "path": "protocol/rcpp-v2-provider-api.md",
+      "concept_id": "protocol/rcpp-v2-provider-api",
+      "type": "Protocol Contract",
+      "title": "RCPP v2 provider API",
+      "description": "The provider protocol OpenAPI contract covers discovery, OAuth, environment catalog, runtime health, bootstrap, and launch data.",
+      "tags": [
+        "desktop",
+        "openapi",
+        "protocol",
+        "provider"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "The provider protocol OpenAPI contract covers discovery, OAuth, environment catalog, runtime health, bootstrap, and launch data.",
+        "tags": [
+          "desktop",
+          "openapi",
+          "protocol",
+          "provider"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "RCPP v2 provider API",
+        "type": "Protocol Contract"
+      },
+      "body": "Redeven's machine-readable provider integration contract is `spec/openapi/rcpp-v2.yaml`. It is the remaining maintained provider protocol specification after stale human protocol Markdown was removed.\n\n# Mechanism\n\nThe OpenAPI contract defines provider discovery under `/.well-known/redeven-provider.json`, OAuth authorization and token endpoints, provider account status, environment catalog listing, runtime health query, bootstrap ticket exchange, local bootstrap registration, and environment launch data resolution. Desktop and runtime code consume the same concepts through provider origin, provider id, access point origin, environment public id, runtime health snapshots, bootstrap tickets, and launch data.\n\n# Boundaries\n\nHuman protocol Markdown is not the source of truth. Provider-facing changes must update the OpenAPI contract and corresponding runtime/Desktop code together.\n\n# Citations\n\n[1] redeven:spec/openapi/rcpp-v2.yaml:3 - The OpenAPI title names the Redeven Control Plane Provider Protocol.\n[2] redeven:spec/openapi/rcpp-v2.yaml:15 - Provider discovery lives at `/.well-known/redeven-provider.json`.\n[3] redeven:spec/openapi/rcpp-v2.yaml:45 - OAuth authorization starts at `/oauth/authorize`.\n[4] redeven:spec/openapi/rcpp-v2.yaml:59 - OAuth token exchange lives at `/oauth/token`.\n[5] redeven:spec/openapi/rcpp-v2.yaml:85 - Provider account status is exposed under `/api/rcpp/v2/account/status`.\n[6] redeven:spec/openapi/rcpp-v2.yaml:101 - Environment listing is exposed under `/api/rcpp/v2/environments`.\n[7] redeven:spec/openapi/rcpp-v2.yaml:128 - Runtime health snapshots are queried through `/api/rcpp/v2/environments/runtime-health/query`.\n[8] redeven:spec/openapi/rcpp-v2.yaml:170 - Runtime bootstrap exchanges use `/api/rcpp/v2/runtime/bootstrap/exchange`.\n[9] redeven:spec/openapi/rcpp-v2.yaml:191 - Local bootstrap registration uses `/api/rcpp/v2/local/bootstrap/register`.\n[10] redeven:spec/openapi/rcpp-v2.yaml:201 - Launch data is resolved through `/api/rcpp/v2/launch-data`.",
+      "snippet": "Redeven's machine-readable provider integration contract is `spec/openapi/rcpp-v2.yaml`. It is the remaining maintained provider protocol specification after stale human protocol Markdown was removed. The OpenAPI contract defines provider d"
+    },
+    {
+      "path": "release/ci-and-release-gates.md",
+      "concept_id": "release/ci-and-release-gates",
+      "type": "Release Contract",
+      "title": "CI and release gates",
+      "description": "Redeven release confidence comes from shell checks, OKF validation, UI checks, Runtime Service compatibility, assets, Go tests, and lint.",
+      "tags": [
+        "ci",
+        "okf",
+        "quality",
+        "release"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Redeven release confidence comes from shell checks, OKF validation, UI checks, Runtime Service compatibility, assets, Go tests, and lint.",
+        "tags": [
+          "ci",
+          "okf",
+          "quality",
+          "release"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "CI and release gates",
+        "type": "Release Contract"
+      },
+      "body": "Redeven keeps CI and local release checks aligned around source validation and generated asset determinism. OKF is part of that gate, not an optional documentation artifact.\n\n# Mechanism\n\nCI has a dedicated OKF bundle check that validates source integrity and verifies checked-in dist files. The main check installs Go, Node, corepack, golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks, third-party notice validation, open-source hygiene, release note generator tests, Runtime Service compatibility checks, Flower protocol checks, UI lint, Desktop checks, embedded asset builds, Go tests, and golangci-lint. Release tags run the compatibility contract check before building assets and packaging binaries.\n\n# Boundaries\n\nChecked-in generated OKF dist files must match source. Release automation should collect `okf/dist` verification files from the current tree, not from removed `internal/okf` or knowledge paths.\n\n# Citations\n\n[1] redeven:.github/workflows/ci-check.yml:14 - CI defines a dedicated OKF bundle check job.\n[2] redeven:.github/workflows/ci-check.yml:26 - OKF source integrity is checked in CI.\n[3] redeven:.github/workflows/ci-check.yml:29 - OKF dist verification is checked in CI.\n[4] redeven:.github/workflows/ci-check.yml:46 - CI runs shell script syntax checks across release and validation scripts.\n[5] redeven:.github/workflows/ci-check.yml:72 - Open-source hygiene runs with `--all`.\n[6] redeven:.github/workflows/ci-check.yml:82 - Runtime compatibility contract source checks run in CI.\n[7] redeven:.github/workflows/ci-check.yml:91 - Embedded assets are built before Go tests and lint.\n[8] redeven:.github/workflows/release.yml:47 - Release tags validate the runtime compatibility contract for the tag.\n[9] redeven:.github/workflows/release.yml:51 - Release tags build embedded assets before packaging.\n[10] redeven:AGENTS.md:279 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.",
+      "snippet": "Redeven keeps CI and local release checks aligned around source validation and generated asset determinism. OKF is part of that gate, not an optional documentation artifact. CI has a dedicated OKF bundle check that validates source integrit"
+    },
+    {
+      "path": "release/okf-release-assets.md",
+      "concept_id": "release/okf-release-assets",
+      "type": "Release Contract",
+      "title": "OKF release assets",
+      "description": "Release workflow publishes OKF verification assets alongside CLI and desktop artifacts.",
+      "tags": [
+        "okf",
+        "release",
+        "security",
+        "supply-chain"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Release workflow publishes OKF verification assets alongside CLI and desktop artifacts.",
+        "tags": [
+          "okf",
+          "release",
+          "security",
+          "supply-chain"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "OKF release assets",
+        "type": "Release Contract"
+      },
+      "body": "GitHub releases ship `okf_bundle.manifest.json` and `okf_bundle.sha256` together with CLI tarballs, desktop packages, and signed `SHA256SUMS`.\n\n# Mechanism\n\nBuild jobs copy the OKF verification files into per-platform package artifacts. The release job recollects them, includes them in `SHA256SUMS`, signs the checksum file with Cosign keyless OIDC, and uploads the OKF files as standalone GitHub Release assets.\n\n# Boundaries\n\nDownstream verification relies on releases containing both the standalone OKF verification files and the signed aggregate checksum set.\n\n# Citations\n\n[1] redeven:.github/workflows/release.yml:51 - Release builds embedded assets before packaging binaries.\n[2] redeven:.github/workflows/release.yml:54 - Build jobs collect the OKF manifest and sha files into dist.\n[3] redeven:.github/workflows/release.yml:86 - Package artifacts upload those OKF files alongside CLI tarballs.\n[4] redeven:.github/workflows/release.yml:279 - The release job recopies downloaded OKF verification assets into dist.\n[5] redeven:.github/workflows/release.yml:294 - SHA256SUMS includes OKF bundle manifest and sha files.\n[6] redeven:.github/workflows/release.yml:378 - GitHub release upload includes the OKF verification files.",
+      "snippet": "GitHub releases ship `okf_bundle.manifest.json` and `okf_bundle.sha256` together with CLI tarballs, desktop packages, and signed `SHA256SUMS`. Build jobs copy the OKF verification files into per-platform package artifacts. The release job r"
+    },
+    {
+      "path": "security/permission-policy-and-filesystem-scope.md",
+      "concept_id": "security/permission-policy-and-filesystem-scope",
+      "type": "Security Contract",
+      "title": "Permission policy and filesystem scope",
+      "description": "Runtime permissions are clamped by local policy and file features are scoped by directory root policy.",
+      "tags": [
+        "filesystem",
+        "permissions",
+        "runtime",
+        "security"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Runtime permissions are clamped by local policy and file features are scoped by directory root policy.",
+        "tags": [
+          "filesystem",
+          "permissions",
+          "runtime",
+          "security"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Permission policy and filesystem scope",
+        "type": "Security Contract"
+      },
+      "body": "Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy.\n\n# Mechanism\n\nThe local permission policy is a three-bit read/write/execute cap. It starts from `local_max`, optionally intersects by user and by floe app, and supports presets for read-only, execute+read, and full read/write/execute. Session startup intersects the control-plane grant with the local cap before the runtime stores effective permission flags. Filesystem scope validates explicit root ids, labels, paths, kinds, default root references, and the invariant that write implies read.\n\n# Boundaries\n\nBrowser state, provider metadata, and UI affordances cannot widen runtime permissions. Future file, Git, Flower, Code App, and terminal changes should update OKF only after the runtime code or typed policy changes.\n\n# Citations\n\n[1] redeven:internal/config/permission_policy.go:11 - PermissionPolicy is the local endpoint cap for session metadata.\n[2] redeven:internal/config/permission_policy.go:25 - PermissionSet is the read/write/execute model.\n[3] redeven:internal/config/permission_policy.go:32 - Permission sets intersect by logical AND.\n[4] redeven:internal/config/permission_policy.go:68 - ResolveCap starts from local max and further intersects user/app caps.\n[5] redeven:internal/config/permission_policy.go:97 - Permission policy presets map CLI names to concrete caps.\n[6] redeven:internal/agent/agent.go:485 - Runtime session handling intersects granted permissions with the local cap.\n[7] redeven:internal/agent/agent.go:508 - Code App sessions require valid codespace identity and full read/write/execute access.\n[8] redeven:internal/agent/agent.go:531 - Port Forward sessions require valid forward identity and execute access.\n[9] redeven:internal/config/filesystem_scope.go:11 - FilesystemScope stores versioned root policy.\n[10] redeven:internal/config/filesystem_scope.go:71 - Filesystem root validation rejects write access without read access.",
+      "snippet": "Redeven treats endpoint runtime policy as authoritative. Control-plane grants can authorize a session, but the runtime clamps those grants with a local permission policy and file-facing features use explicit filesystem root policy."
+    },
+    {
+      "path": "ui/workbench-interaction-contracts.md",
+      "concept_id": "ui/workbench-interaction-contracts",
+      "type": "UI Contract",
+      "title": "Workbench interaction contracts",
+      "description": "Workbench wheel, text selection, and action surfaces use explicit marker props to avoid accidental canvas ownership.",
+      "tags": [
+        "accessibility",
+        "interaction",
+        "ui",
+        "workbench"
+      ],
+      "timestamp": "2026-06-17T00:00:00Z",
+      "frontmatter": {
+        "description": "Workbench wheel, text selection, and action surfaces use explicit marker props to avoid accidental canvas ownership.",
+        "tags": [
+          "accessibility",
+          "interaction",
+          "ui",
+          "workbench"
+        ],
+        "timestamp": "2026-06-17T00:00:00Z",
+        "title": "Workbench interaction contracts",
+        "type": "UI Contract"
+      },
+      "body": "Workbench input ownership is explicit. Canvas zoom, widget activation, local scrolling, text selection, and action controls must be distinguishable by marker contracts rather than inferred from hover state or incidental DOM layout.\n\n# Mechanism\n\nWheel ownership uses exported local scroll viewport props that set `data-floe-canvas-wheel-interactive=\"true\"` and a local-scroll role. Layout-only regions can declare a non-interactive wheel role. Text selection surfaces use separate marker props and do not receive wheel ownership unless combined with local scroll viewport props. Action surfaces declare their own marker so clickable controls can remain interactive inside widgets without becoming text selection surfaces.\n\n# Boundaries\n\nSelected widget boundaries guard canvas zoom. A surface that supports text selection does not automatically own wheel input, and a surface that owns local scrolling must declare the exported wheel contract props.\n\n# Citations\n\n[1] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:1 - Wheel ownership uses a dedicated data attribute.\n[2] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:8 - Local scroll viewport props mark real local scroll regions.\n[3] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchWheelInteractive.ts:13 - Layout-only wheel props avoid granting scroll ownership.\n[4] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchTextSelectionSurface.ts:12 - Text selection surfaces use a separate marker attribute.\n[5] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchTextSelectionSurface.ts:22 - Text-selection scroll viewports explicitly combine scroll and selection props.\n[6] redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.test.ts:51 - Tests enforce that text-selection props do not grant wheel ownership by themselves.\n[7] redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx:864 - Interaction tests cover selected text-selection surfaces versus widget-body activation.\n[8] redeven:internal/envapp/ui_src/src/ui/widgets/FilePreviewContent.tsx:211 - File preview content uses the combined text-selection scroll viewport props.",
+      "snippet": "Workbench input ownership is explicit. Canvas zoom, widget activation, local scrolling, text selection, and action controls must be distinguishable by marker contracts rather than inferred from hover state or incidental DOM layout."
+    }
+  ],
+  "source_sha256": "d583b9d4f5cb3b51a3b76fe87590b3e72c1c6f2b9af0656b8399ddced9fc0fb2"
+}

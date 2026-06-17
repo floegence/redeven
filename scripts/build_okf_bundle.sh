@@ -16,8 +16,8 @@ for arg in "$@"; do
   esac
 done
 
-SOURCE_ROOT="$ROOT_DIR/internal/okf/source"
-DIST_ROOT="$ROOT_DIR/internal/okf/dist"
+SOURCE_ROOT="$ROOT_DIR/okf"
+DIST_ROOT="$ROOT_DIR/okf/dist"
 
 if [ "$VERIFY_ONLY" -eq 1 ]; then
   (
