@@ -1156,7 +1156,7 @@ html.dark .flower-component-shell {
   border: 0;
   border-radius: 0.375rem;
   background: transparent;
-  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+  color: color-mix(in srgb, var(--muted-foreground) 76%, transparent);
   cursor: pointer;
   overflow: hidden;
   padding: 0.125rem 0.25rem;
@@ -1176,7 +1176,7 @@ html.dark .flower-component-shell {
 .flower-activity-inline-button:not(:disabled):hover,
 .flower-activity-inline-button:not(:disabled):focus-visible {
   background: color-mix(in srgb, var(--muted) 24%, transparent);
-  color: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground) 18%);
+  color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   outline: none;
 }
 
@@ -1188,31 +1188,70 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline-row-running .flower-activity-inline-icon {
-  color: color-mix(in srgb, var(--primary) 74%, var(--foreground) 26%);
+  color: color-mix(in srgb, var(--muted-foreground) 78%, transparent);
 }
 
 .flower-activity-inline-row-running .flower-activity-inline-button::before {
   content: '';
   position: absolute;
   z-index: 0;
-  inset: 0;
+  inset-block: 0;
+  inset-inline-end: auto;
+  left: -9.5%;
+  width: 18%;
   border-radius: inherit;
   pointer-events: none;
   background:
     linear-gradient(
       100deg,
       transparent 0%,
-      transparent 24%,
-      color-mix(in srgb, var(--primary) 7%, transparent) 36%,
-      color-mix(in srgb, white 38%, var(--primary) 20%) 48%,
-      color-mix(in srgb, var(--primary) 9%, transparent) 60%,
-      transparent 74%,
+      transparent 16%,
+      color-mix(in srgb, var(--muted-foreground) 12%, transparent) 38%,
+      color-mix(in srgb, white 72%, transparent) 50%,
+      color-mix(in srgb, var(--muted-foreground) 12%, transparent) 62%,
+      transparent 84%,
       transparent 100%
     );
-  opacity: 0;
-  transform: translateX(-112%);
-  animation: flower-activity-running-sheen 4.6s cubic-bezier(0.45, 0, 0.2, 1) infinite;
-  will-change: transform, opacity;
+  opacity: 0.62;
+  transform: skewX(-9deg);
+  animation: flower-activity-running-sheen 5.4s cubic-bezier(0.42, 0, 0.2, 1) infinite;
+  will-change: left;
+}
+
+.flower-activity-inline-loader {
+  display: inline-grid;
+  width: 0.8rem;
+  height: 0.8rem;
+  grid-template-columns: repeat(2, 0.3rem);
+  grid-template-rows: repeat(2, 0.3rem);
+  place-content: center;
+  gap: 0.14rem;
+}
+
+.flower-activity-inline-loader-square {
+  width: 0.3rem;
+  height: 0.3rem;
+  border-radius: 0.075rem;
+  background: currentColor;
+  opacity: 0.28;
+  transform: scale(0.72);
+  animation: flower-activity-loader-square 1.35s ease-in-out infinite;
+}
+
+.flower-activity-inline-loader-square:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.flower-activity-inline-loader-square:nth-child(2) {
+  animation-delay: 135ms;
+}
+
+.flower-activity-inline-loader-square:nth-child(4) {
+  animation-delay: 270ms;
+}
+
+.flower-activity-inline-loader-square:nth-child(3) {
+  animation-delay: 405ms;
 }
 
 .flower-activity-inline-row-waiting .flower-activity-inline-icon,
@@ -1233,7 +1272,7 @@ html.dark .flower-component-shell {
   display: inline-flex;
   min-width: 0;
   align-items: baseline;
-  gap: 0.45rem;
+  gap: 0.3rem;
 }
 
 .flower-activity-inline-title {
@@ -1243,9 +1282,9 @@ html.dark .flower-component-shell {
   align-items: baseline;
   gap: 0.35rem;
   overflow: hidden;
-  color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
-  font-size: 0.78125rem;
-  font-weight: 700;
+  color: color-mix(in srgb, var(--muted-foreground) 72%, var(--foreground) 28%);
+  font-size: 0.75rem;
+  font-weight: 620;
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1253,8 +1292,8 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline-title-verb {
   flex: 0 0 auto;
-  color: color-mix(in srgb, var(--foreground) 88%, var(--muted-foreground) 12%);
-  font-weight: 800;
+  color: color-mix(in srgb, var(--muted-foreground) 82%, var(--foreground) 18%);
+  font-weight: 700;
 }
 
 .flower-activity-inline-title-target {
@@ -1267,19 +1306,19 @@ html.dark .flower-component-shell {
 .flower-activity-inline-detail {
   min-width: 0;
   overflow: hidden;
-  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
+  color: color-mix(in srgb, var(--muted-foreground) 80%, transparent);
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.71875rem;
-  font-weight: 560;
+  font-size: 0.6875rem;
+  font-weight: 520;
   line-height: 1.25;
 }
 
 .flower-activity-inline-duration,
 .flower-activity-inline-status {
-  color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
+  color: color-mix(in srgb, var(--muted-foreground) 70%, transparent);
   font-size: 0.6875rem;
-  font-weight: 650;
+  font-weight: 560;
   line-height: 1;
   white-space: nowrap;
 }
@@ -1290,7 +1329,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline-status-running {
-  color: color-mix(in srgb, var(--primary) 74%, var(--foreground) 26%);
+  color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
 }
 
 .flower-activity-inline-status-waiting,
@@ -1309,19 +1348,32 @@ html.dark .flower-component-shell {
 
 @keyframes flower-activity-running-sheen {
   0%,
-  18% {
-    opacity: 0;
-    transform: translateX(-112%);
+  12% {
+    opacity: 0.08;
+    left: -9.5%;
   }
 
   34%,
-  68% {
-    opacity: 0.34;
+  66% {
+    opacity: 0.62;
   }
 
   100% {
-    opacity: 0;
-    transform: translateX(112%);
+    opacity: 0.08;
+    left: 100%;
+  }
+}
+
+@keyframes flower-activity-loader-square {
+  0%,
+  100% {
+    opacity: 0.26;
+    transform: scale(0.72);
+  }
+
+  42% {
+    opacity: 0.88;
+    transform: scale(1);
   }
 }
 
@@ -3211,10 +3263,17 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-streaming-cursor,
   .flower-streaming-cursor::before,
   .flower-activity-inline-row-running .flower-activity-inline-button::before,
+  .flower-activity-inline-loader-square,
   .redeven-flower-icon-spin,
   .redeven-flower-icon-breathe,
   .flower-thread-wave-bar {
     animation: none !important;
     transform: none !important;
+  }
+
+  .flower-activity-inline-row-running .flower-activity-inline-button::before {
+    content: none !important;
+    opacity: 0 !important;
+    background: none !important;
   }
 }

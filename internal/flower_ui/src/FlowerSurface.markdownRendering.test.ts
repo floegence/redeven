@@ -40,4 +40,13 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain('payload.status');
     expect(src).not.toContain("payload['status']");
   });
+
+  it('renders running activity rows with the subdued square loader', () => {
+    const src = surfaceSource();
+
+    expect(src).toContain('flower-activity-inline-loader');
+    expect(src).toContain('flower-activity-inline-loader-square');
+    expect(src).toContain("case 'running':");
+    expect(src).not.toContain("case 'running':\n        return <Terminal");
+  });
 });

@@ -42,6 +42,7 @@ describe('presentFlowerActivityItem', () => {
   it('uses the terminal command as the compact row label', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',
+      status: 'running',
       label: 'npm run build -- --mode production',
       payload: {
         command: 'npm run build -- --mode production',
@@ -58,7 +59,6 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('npm run build -- --mode production');
     expect(presentation.title).toEqual({ kind: 'command', command: 'npm run build -- --mode production' });
     expect(presentation.meta).toContain('exit 0');
-    expect(presentation.meta).not.toContain('terminal.exec');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('command:npm run build -- --mode production');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('stdout:built');
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('cwd');
@@ -122,6 +122,31 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('result status:success');
     expect(presentation.detailLines.map((line) => `${line.label}:${line.value}`)).toContain('error code:UNKNOWN');
     expect(presentation.meta).not.toContain('success');
+  });
+
+  it('keeps real running descriptions in compact meta text', () => {
+    const presentation = presentFlowerActivityItem(item({
+      renderer: 'terminal',
+      status: 'running',
+      description: 'Compiling the workspace',
+      payload: {
+        command: 'python3 fetch.py',
+        duration_ms: 512,
+      },
+    }));
+
+    expect(presentation.meta).toContain('512ms');
+    expect(presentation.meta).toContain('Compiling the workspace');
+  });
+
+  it('keeps the generic fallback title independent from tool_name', () => {
+    const presentation = presentFlowerActivityItem(item({
+      renderer: 'structured',
+      label: 'Resolve workspace status',
+      tool_name: 'terminal.exec',
+    }));
+
+    expect(presentation.label).toBe('Resolve workspace status');
   });
 
   it('renders web search error records as separate detail lines', () => {
@@ -483,14 +508,15 @@ describe('presentFlowerActivityItem', () => {
     });
   });
 
-  it('keeps every row expandable with identity details', () => {
+  it('keeps every row expandable with a neutral fallback title', () => {
     const presentation = presentFlowerActivityItem(item({
       payload: undefined,
       renderer: undefined,
       label: undefined,
     }));
 
-    expect(presentation.label).toBe('terminal.exec');
+    expect(presentation.label).toBe('Activity');
+    expect(presentation.meta).not.toContain('terminal.exec');
     expect(presentation.detailLines.length).toBeGreaterThan(0);
     expect(presentation.detailLines.map((line) => line.label)).toContain('status');
     expect(presentation.detailBlocks.length).toBeGreaterThan(0);

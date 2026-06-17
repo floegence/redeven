@@ -1598,7 +1598,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <div class="flower-approval-icon"><Terminal class="h-4 w-4" /></div>
           <div class="flower-approval-copy">
             <div class="flower-approval-kicker">{copy().chat.toolApprovalRequired}</div>
-            <div class="flower-approval-title">{action.summary.label || action.tool_name}</div>
+            <div class="flower-approval-title">{action.summary.label || action.summary.description || copy().chat.toolApprovalRequired}</div>
             <Show when={action.summary.description || action.read_only_reason}>
               {(description) => <div class="flower-approval-description">{description()}</div>}
             </Show>
@@ -1654,7 +1654,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       case 'pending':
         return <Clock class="h-3.5 w-3.5" />;
       case 'running':
-        return <Terminal class="h-3.5 w-3.5" />;
+        return (
+          <span class="flower-activity-inline-loader" aria-hidden="true">
+            <span class="flower-activity-inline-loader-square" />
+            <span class="flower-activity-inline-loader-square" />
+            <span class="flower-activity-inline-loader-square" />
+            <span class="flower-activity-inline-loader-square" />
+          </span>
+        );
     }
   };
 
@@ -1738,7 +1745,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const activityItemAriaLabel = (item: FlowerActivityItem, timeline: FlowerActivityTimelineBlock): string => (
     [
       presentFlowerActivityItem(item, timeline.file_actions).label,
-      item.tool_name,
       copy().chat.toolStatuses[item.status],
       item.requires_approval ? copy().chat.toolApprovalState(approvalStateLabel(item.approval_state, copy())) : '',
     ].filter(Boolean).join('. ')

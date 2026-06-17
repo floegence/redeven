@@ -284,9 +284,8 @@ function rendererForItem(item: FlowerActivityItem): FlowerActivityRenderer {
 }
 
 function defaultLabelForItem(item: FlowerActivityItem): string {
-  const toolName = trimString(item.tool_name);
-  const kind = trimString(item.kind);
-  return toolName || kind || 'Activity';
+  const label = trimString(item.label);
+  return label || 'Activity';
 }
 
 function operationFromPayload(payload: Readonly<Record<string, unknown>> | undefined): string {
@@ -350,7 +349,6 @@ function metaForItem(item: FlowerActivityItem): string {
   const parts = [
     trimString(item.description),
     ...chipText(item),
-    trimString(item.tool_name),
   ].filter(Boolean);
   return Array.from(new Set(parts)).join(' · ');
 }
@@ -520,7 +518,7 @@ function titleForPatchItem(item: FlowerActivityItem, files: readonly FlowerActiv
 
 function presentationForFile(item: FlowerActivityItem, fileActions?: FlowerActivityFileActions): FlowerActivityPresentation {
   const payload = item.payload ?? {};
-  const operation = operationFromPayload(payload) || (trimString(item.tool_name) === 'file.read' ? 'read' : 'edit');
+  const operation = operationFromPayload(payload) || 'edit';
   const verb = fileVerbForOperation(operation);
   const action = actionFromPayload(payload, verb, trimString(item.label), fileActions);
   const displayName = action.display_name || trimString(item.label) || defaultLabelForItem(item);

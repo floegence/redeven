@@ -1762,12 +1762,15 @@ func toolStartActivityPresentation(toolName string, args map[string]any, timeout
 	switch toolName {
 	case "terminal.exec":
 		command := strings.TrimSpace(anyToString(args["command"]))
-		if command == "" {
-			command = "terminal.exec"
+		label := command
+		if label == "" {
+			label = "Activity"
 		}
 		payload := map[string]any{
-			"command": command,
-			"status":  toolCallStatusRunning,
+			"status": toolCallStatusRunning,
+		}
+		if command != "" {
+			payload["command"] = command
 		}
 		if timeout.EffectiveMS > 0 {
 			payload["timeout_ms"] = timeout.EffectiveMS
@@ -1779,22 +1782,91 @@ func toolStartActivityPresentation(toolName string, args map[string]any, timeout
 			payload["timeout_source"] = source
 		}
 		return &observation.ActivityPresentation{
-			Label:       activityPresentationLabel(command),
-			Description: "Running command",
-			Renderer:    observation.ActivityRendererTerminal,
-			Payload:     payload,
+			Label:    activityPresentationLabel(label),
+			Renderer: observation.ActivityRendererTerminal,
+			Payload:  payload,
 		}
 	default:
-		if toolName == "" {
-			toolName = "tool"
+		payload := map[string]any{
+			"status": toolCallStatusRunning,
+		}
+		switch toolName {
+		case "file.read", "file.edit", "file.write":
+			path := strings.TrimSpace(anyToString(args["file_path"]))
+			displayName := displayNameForFilePath(path)
+			label := displayName
+			if label == "" {
+				label = "file"
+			}
+			payload["display_name"] = displayName
+			operation := "edit"
+			if toolName == "file.read" {
+				operation = "read"
+			} else if toolName == "file.write" {
+				operation = "write"
+			}
+			return &observation.ActivityPresentation{
+				Label:    activityPresentationLabel(label),
+				Renderer: observation.ActivityRendererFile,
+				Payload:  mapWithOperation(payload, operation),
+			}
+		case "web.search":
+			label := firstNonEmptyString(anyToString(args["query"]), "Search web")
+			return &observation.ActivityPresentation{
+				Label:    activityPresentationLabel(label),
+				Renderer: observation.ActivityRendererWebSearch,
+				Payload:  payload,
+			}
+		case "okf.search":
+			label := firstNonEmptyString(anyToString(args["query"]), "Search OKF")
+			return &observation.ActivityPresentation{
+				Label:    activityPresentationLabel(label),
+				Renderer: observation.ActivityRendererStructured,
+				Payload:  payload,
+			}
+		case "write_todos":
+			return &observation.ActivityPresentation{
+				Label:    "Update todos",
+				Renderer: observation.ActivityRendererTodos,
+				Payload:  payload,
+			}
+		case "use_skill":
+			label := firstNonEmptyString(anyToString(args["name"]), "Use skill")
+			return &observation.ActivityPresentation{
+				Label:    activityPresentationLabel(label),
+				Renderer: observation.ActivityRendererStructured,
+				Payload:  payload,
+			}
+		case "subagents":
+			label := firstNonEmptyString(anyToString(args["action"]), "Subagent task")
+			return &observation.ActivityPresentation{
+				Label:    activityPresentationLabel(label),
+				Renderer: observation.ActivityRendererStructured,
+				Payload:  payload,
+			}
+		case "ask_user":
+			return &observation.ActivityPresentation{
+				Label:    "Ask user",
+				Renderer: observation.ActivityRendererQuestion,
+				Payload:  payload,
+			}
+		case "task_complete":
+			return &observation.ActivityPresentation{
+				Label:    "Complete task",
+				Renderer: observation.ActivityRendererCompletion,
+				Payload:  payload,
+			}
+		case "exit_plan_mode":
+			return &observation.ActivityPresentation{
+				Label:    "Exit plan mode",
+				Renderer: observation.ActivityRendererStructured,
+				Payload:  payload,
+			}
 		}
 		return &observation.ActivityPresentation{
-			Label:       activityPresentationLabel(toolName),
-			Description: "Running tool",
-			Renderer:    observation.ActivityRendererStructured,
-			Payload: map[string]any{
-				"status": toolCallStatusRunning,
-			},
+			Label:    "Activity",
+			Renderer: observation.ActivityRendererStructured,
+			Payload:  payload,
 		}
 	}
 }
