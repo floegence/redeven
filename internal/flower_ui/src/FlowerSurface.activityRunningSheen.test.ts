@@ -35,9 +35,9 @@ describe('Flower activity running sheen', () => {
     const runningTitleRule = cssRule(css, '.flower-activity-inline-row-running .flower-activity-inline-title');
     const successButtonRule = cssRule(css, '.flower-activity-inline-row-success .flower-activity-inline-button');
 
-    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground: #a3acb8');
-    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-strong: #7f8997');
-    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-complete: #aeb6c0');
+    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground: #8f99a6');
+    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-strong: #6f7a89');
+    expect(activityInlineRule).toContain('--flower-activity-tool-row-foreground-complete: #9ba5b1');
     expect(activityInlineRule).toContain('--flower-activity-tool-row-soft: rgba(126, 138, 153, 0.11)');
     expect(buttonRule).toContain('position: relative');
     expect(buttonRule).toContain('overflow: hidden');
