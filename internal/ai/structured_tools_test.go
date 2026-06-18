@@ -87,8 +87,8 @@ func TestDisplayNameForFilePathStripsContentRefSuffixes(t *testing.T) {
 
 	cases := map[string]string{
 		"/workspace/a.md#dcbdf9b8c27f#e1703606242a": "a.md",
-		"a.md#L47":                  "a.md",
-		"notes#literal":             "notes#literal",
+		"a.md#L47":                       "a.md",
+		"notes#literal":                  "notes#literal",
 		"/workspace/reference/readme.md": "readme.md",
 	}
 	for in, want := range cases {

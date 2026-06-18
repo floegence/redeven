@@ -32,7 +32,6 @@ type taskWorkspaceSpec struct {
 
 type taskRuntimeSpec struct {
 	ExecutionMode                    string            `yaml:"execution_mode"`
-	MaxSteps                         int               `yaml:"max_steps"`
 	TimeoutSeconds                   int               `yaml:"timeout_seconds"`
 	ReasoningOnly                    bool              `yaml:"reasoning_only"`
 	RequireUserConfirmOnTaskComplete bool              `yaml:"require_user_confirm_on_task_complete"`
@@ -101,7 +100,6 @@ type evalTaskWorkspace struct {
 
 type evalTaskRuntime struct {
 	ExecutionMode                    string            `json:"execution_mode"`
-	MaxSteps                         int               `json:"max_steps"`
 	TimeoutPerTurn                   time.Duration     `json:"-"`
 	TimeoutSeconds                   int               `json:"timeout_seconds"`
 	ReasoningOnly                    bool              `json:"reasoning_only,omitempty"`
@@ -177,11 +175,6 @@ func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) 
 		timeoutSeconds = 45
 	}
 
-	maxSteps := item.Runtime.MaxSteps
-	if maxSteps <= 0 {
-		maxSteps = 4
-	}
-
 	workspace, err := normalizeTaskWorkspaceSpec(item.Runtime.Workspace, specDir)
 	if err != nil {
 		return evalTask{}, fmt.Errorf("task %s has invalid workspace config: %w", id, err)
@@ -233,7 +226,6 @@ func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) 
 		Turns:    turns,
 		Runtime: evalTaskRuntime{
 			ExecutionMode:                    executionMode,
-			MaxSteps:                         maxSteps,
 			TimeoutPerTurn:                   time.Duration(timeoutSeconds) * time.Second,
 			TimeoutSeconds:                   timeoutSeconds,
 			ReasoningOnly:                    item.Runtime.ReasoningOnly,

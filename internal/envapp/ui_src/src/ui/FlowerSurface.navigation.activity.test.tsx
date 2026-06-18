@@ -140,6 +140,7 @@ describe('FlowerSurface navigation activity', () => {
           role: 'assistant',
           content: '',
           status: 'streaming',
+          active_cursor: true,
           created_at_ms: 5_200,
           blocks: [
             { type: 'thinking', content: 'Checking the workspace.' },

@@ -123,8 +123,6 @@ func evaluateReplay(assistantText string, toolCalls int) []string {
 		reasons = append(reasons, "empty_assistant_text")
 	}
 	fallbackPhrases := []string{
-		"i have reached the current automatic loop limit",
-		"reply with one concrete next step",
 		"assistant finished without a visible response",
 		"tool workflow failed",
 		"no response",

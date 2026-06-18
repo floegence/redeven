@@ -1329,6 +1329,7 @@ describe('FlowerSurface navigation threads', () => {
           role: 'assistant',
           content: '',
           status: 'streaming',
+          active_cursor: true,
           created_at_ms: 6_100,
         },
       ],
@@ -1384,6 +1385,7 @@ describe('FlowerSurface navigation threads', () => {
           role: 'assistant',
           content: 'Committed paragraph.\n\nGrowing tail',
           status: 'streaming',
+          active_cursor: true,
           created_at_ms: 6_600,
           blocks: [{ type: 'markdown', content: 'Committed paragraph.\n\nGrowing tail' }],
         },
@@ -1436,6 +1438,7 @@ describe('FlowerSurface navigation threads', () => {
           role: 'assistant',
           content: 'Selectable running text.\n\nStreaming tail',
           status: 'streaming',
+          active_cursor: true,
           created_at_ms: 6_900,
           blocks: [{ type: 'markdown', content: 'Selectable running text.\n\nStreaming tail' }],
         },
@@ -1499,6 +1502,7 @@ describe('FlowerSurface navigation threads', () => {
           role: 'assistant',
           content: 'Committed paragraph.\n\nGrowing tail',
           status: 'streaming',
+          active_cursor: true,
           created_at_ms: 7_100,
           blocks: [{ type: 'markdown', content: 'Committed paragraph.\n\nGrowing tail' }],
         },
@@ -1602,6 +1606,7 @@ describe('FlowerSurface navigation threads', () => {
           role: 'assistant',
           content: 'Stable selected activity text.\n\nWaiting on tool',
           status: 'streaming',
+          active_cursor: true,
           created_at_ms: 7_300,
           blocks: [
             { type: 'markdown', content: 'Stable selected activity text.\n\nWaiting on tool' },
@@ -1847,5 +1852,46 @@ describe('FlowerSurface navigation threads', () => {
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
     await waitFor(() => runtime.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-indicator') === 'dot');
     expect(runtime.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
+  });
+
+  it('renders only the backend-selected active cursor in a running thread', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-single-cursor',
+      title: 'Single cursor',
+      created_at_ms: 8_000,
+      updated_at_ms: 8_100,
+      status: 'running',
+      read_status: readStatus(false, 810, 'running'),
+      messages: [
+        {
+          id: 'message-old-streaming',
+          role: 'assistant',
+          content: 'Old streaming-looking output.',
+          status: 'streaming',
+          created_at_ms: 8_000,
+          blocks: [{ type: 'markdown', content: 'Old streaming-looking output.' }],
+        },
+        {
+          id: 'message-active-streaming',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 8_100,
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-single-cursor"] button')));
+    (runtime.querySelector('[data-thread-id="thread-single-cursor"] button') as HTMLButtonElement).click();
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-active-streaming"] .flower-streaming-cursor')));
+    expect(runtime.querySelector('[data-flower-message-id="message-old-streaming"] .flower-streaming-cursor')).toBeNull();
+    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
   });
 });

@@ -6,7 +6,6 @@ import type {
   FlowerLiveBootstrap,
   FlowerLiveBlock,
   FlowerLiveEvent,
-  FlowerLiveMessageDraft,
   FlowerLiveThreadPatch,
   FlowerThreadSnapshot,
   FlowerThreadStatus,
@@ -52,12 +51,6 @@ function mergeMessages(messages: readonly FlowerChatMessage[], message: FlowerCh
   return next;
 }
 
-function removeMessage(messages: readonly FlowerChatMessage[], messageID: string): readonly FlowerChatMessage[] {
-  if (!messageID) return messages;
-  const next = messages.filter((message) => message.id !== messageID);
-  return next.length === messages.length ? messages : next;
-}
-
 function pendingApprovalActions(actions: readonly FlowerApprovalAction[] | undefined): readonly FlowerApprovalAction[] {
   return (actions ?? []).filter((action) => action.status === 'pending' && action.state === 'requested');
 }
@@ -85,20 +78,6 @@ function contentFromBlocks(blocks: readonly FlowerChatMessageBlock[]): string {
     })
     .filter(Boolean)
     .join('\n\n');
-}
-
-function messageFromDraft(draft: FlowerLiveMessageDraft): FlowerChatMessage | null {
-  const messageID = trim(draft.message_id);
-  if (!messageID) return null;
-  const blocks = draft.blocks.map(blockFromLiveBlock).filter((block): block is FlowerChatMessageBlock => block != null);
-  return {
-    id: messageID,
-    role: draft.role === 'user' || draft.role === 'system' ? draft.role : 'assistant',
-    status: draft.status === 'error' || draft.status === 'complete' ? draft.status : 'streaming',
-    created_at_ms: Math.max(0, Math.floor(Number(draft.created_at_ms ?? 0))),
-    content: contentFromBlocks(blocks),
-    ...(blocks.length > 0 ? { blocks } : {}),
-  };
 }
 
 function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadPatch): FlowerThreadSnapshot {
@@ -131,13 +110,10 @@ export function projectFlowerLiveBootstrap(bootstrap: FlowerLiveBootstrap): Flow
   let thread: FlowerThreadSnapshot = {
     ...bootstrap.thread,
     read_status: bootstrap.read_status,
-    messages: [...bootstrap.transcript_messages],
+    messages: [...bootstrap.timeline_messages],
     approval_actions: approvalsFromRecord(bootstrap.live_state.approval_actions),
   };
   thread = applyThreadPatch(thread, bootstrap.live_state.thread_patch);
-  for (const messageID of bootstrap.live_state.message_order) {
-    thread = { ...thread, messages: mergeMessages(thread.messages, messageFromDraft(bootstrap.live_state.messages[messageID])) };
-  }
   const inputRequest = firstInputRequest(bootstrap.live_state.input_requests);
   if (inputRequest) {
     thread = { ...thread, status: 'waiting_user', input_request: inputRequest };
@@ -177,29 +153,8 @@ function findMessage(thread: FlowerThreadSnapshot, messageID: string): FlowerCha
   return thread.messages.find((message) => message.id === messageID) ?? null;
 }
 
-function ensureStreamingAssistantMessage(thread: FlowerThreadSnapshot, messageID: string, createdAtMs = Date.now()): FlowerThreadSnapshot {
-  const id = trim(messageID);
-  if (!id || findMessage(thread, id)) return thread;
-  return {
-    ...thread,
-    messages: [...thread.messages, {
-      id,
-      role: 'assistant',
-      status: 'streaming',
-      created_at_ms: createdAtMs,
-      content: '',
-    }],
-  };
-}
-
 function replaceMessage(thread: FlowerThreadSnapshot, message: FlowerChatMessage): FlowerThreadSnapshot {
   return { ...thread, messages: mergeMessages(thread.messages, message) };
-}
-
-function updateMessage(thread: FlowerThreadSnapshot, messageID: string, update: (message: FlowerChatMessage) => FlowerChatMessage): FlowerThreadSnapshot {
-  const current = findMessage(thread, messageID);
-  if (!current) return thread;
-  return replaceMessage(thread, update(current));
 }
 
 function updateMessageStrict(
@@ -247,9 +202,6 @@ export function applyFlowerLiveEvent(
   switch (event.kind) {
     case 'run.started':
       next = { ...next, status: 'running' };
-      if (event.payload.message_id) {
-        next = ensureStreamingAssistantMessage(next, event.payload.message_id, event.at_unix_ms);
-      }
       break;
     case 'run.status_changed':
       next = {
@@ -263,10 +215,8 @@ export function applyFlowerLiveEvent(
       next = applyThreadPatch(next, event.payload.patch);
       break;
     case 'message.started':
-      next = ensureStreamingAssistantMessage(next, event.payload.message_id, event.payload.created_at_ms || event.at_unix_ms);
       break;
     case 'message.block_started':
-      next = ensureStreamingAssistantMessage(next, event.payload.message_id, event.at_unix_ms);
       {
         const block = blockFromLiveBlock({ type: event.payload.block_type, content: '' });
         if (!block || block.type === 'activity-timeline') {
@@ -279,7 +229,6 @@ export function applyFlowerLiveEvent(
       }
       break;
     case 'message.block_delta':
-      next = ensureStreamingAssistantMessage(next, event.payload.message_id, event.at_unix_ms);
       {
         const result = updateMessageStrict(next, event.payload.message_id, (message) => appendBlockDelta(message, event.payload.block_index, event.payload.delta));
         next = result.thread;
@@ -289,7 +238,6 @@ export function applyFlowerLiveEvent(
       tailLength = event.payload.delta.length;
       break;
     case 'message.block_set':
-      next = ensureStreamingAssistantMessage(next, event.payload.message_id, event.at_unix_ms);
       {
         const block = blockFromLiveBlock({
           type: trim(event.payload.block?.type),
@@ -306,14 +254,21 @@ export function applyFlowerLiveEvent(
       }
       break;
     case 'message.committed':
-      next = {
-        ...next,
-        messages: mergeMessages(removeMessage(next.messages, event.payload.message_id), event.payload.message),
-        approval_actions: pendingApprovalActions(next.approval_actions),
-      };
+      if (findMessage(next, event.payload.message_id || event.payload.message.id)) {
+        next = {
+          ...replaceMessage(next, event.payload.message),
+          approval_actions: pendingApprovalActions(next.approval_actions),
+        };
+      } else {
+        resyncRequired = true;
+      }
       break;
     case 'message.failed':
-      next = updateMessage(next, event.payload.message_id, (message) => ({ ...message, status: 'error' }));
+      {
+        const result = updateMessageStrict(next, event.payload.message_id, (message) => ({ ...message, status: 'error' }));
+        next = result.thread;
+        resyncRequired = !result.ok;
+      }
       break;
     case 'approval.requested':
     case 'approval.resolved':
@@ -330,7 +285,6 @@ export function applyFlowerLiveEvent(
       next = { ...next, input_request: null };
       break;
     case 'activity.updated':
-      next = ensureStreamingAssistantMessage(next, event.payload.message_id, event.at_unix_ms);
       {
         const result = updateMessageStrict(next, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, event.payload.activity));
         next = result.thread;
@@ -338,6 +292,12 @@ export function applyFlowerLiveEvent(
       }
       break;
     case 'usage.updated':
+      break;
+    case 'timeline.replaced':
+      next = {
+        ...next,
+        messages: [...event.payload.messages],
+      };
       break;
   }
 

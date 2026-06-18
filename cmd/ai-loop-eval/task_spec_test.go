@@ -25,7 +25,6 @@ tasks:
       - "Analyze ${workspace}"
     runtime:
       execution_mode: plan
-      max_steps: 3
       timeout_seconds: 20
       no_user_interaction: true
     assertions:
@@ -51,7 +50,6 @@ tasks:
       - "Mutate ${workspace}"
     runtime:
       execution_mode: act
-      max_steps: 2
       timeout_seconds: 15
       workspace:
         mode: fixture_copy

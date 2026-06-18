@@ -461,7 +461,6 @@ func subagentsToolInputSchema() map[string]any {
 			"budget": map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"max_steps":   map[string]any{"type": "integer", "minimum": 1},
 					"timeout_sec": map[string]any{"type": "integer", "minimum": 1},
 				},
 				"additionalProperties": false,

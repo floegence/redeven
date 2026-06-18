@@ -64,11 +64,9 @@ function bootstrap(overrides: Partial<FlowerLiveBootstrap> = {}): FlowerLiveBoot
     cursor: 0,
     retained_from_seq: 1,
     thread: baseThread,
-    transcript_messages: baseThread.messages,
+    timeline_messages: baseThread.messages,
     live_state: {
       thread_patch: {},
-      message_order: [],
-      messages: {},
       runs: {},
       approval_actions: {},
       input_requests: {},
@@ -77,6 +75,26 @@ function bootstrap(overrides: Partial<FlowerLiveBootstrap> = {}): FlowerLiveBoot
     generated_at_ms: 3000,
     ...overrides,
   };
+}
+
+function bootstrapWithLiveAssistant(overrides: Partial<FlowerChatMessage> = {}): FlowerLiveBootstrap {
+  const baseThread = thread();
+  const assistant: FlowerChatMessage = {
+    id: 'assistant-live',
+    role: 'assistant',
+    content: '',
+    status: 'streaming',
+    created_at_ms: 2000,
+    active_cursor: true,
+    ...overrides,
+  };
+  return bootstrap({
+    thread: { ...baseThread, status: 'running' },
+    timeline_messages: [
+      ...baseThread.messages,
+      assistant,
+    ],
+  });
 }
 
 function event<K extends FlowerLiveEvent['kind']>(
@@ -126,7 +144,7 @@ describe('Flower live projection', () => {
         updated_at_unix_ms: 1000,
         run_status: 'running',
       },
-      transcript_messages: [{
+      timeline_messages: [{
         id: 'msg-user',
         role: 'user',
         timestamp: 1000,
@@ -135,8 +153,6 @@ describe('Flower live projection', () => {
       }],
       live_state: {
         thread_patch: {},
-        message_order: [],
-        messages: {},
         runs: {},
         approval_actions: {},
         input_requests: {},
@@ -199,7 +215,7 @@ describe('Flower live projection', () => {
         updated_at_unix_ms: 1000,
         run_status: 'idle',
       },
-      transcript_messages: [{
+      timeline_messages: [{
         id: 'msg-context',
         role: 'user',
         timestamp: 1000,
@@ -209,8 +225,6 @@ describe('Flower live projection', () => {
       }],
       live_state: {
         thread_patch: {},
-        message_order: [],
-        messages: {},
         runs: {},
         approval_actions: {},
         input_requests: {},
@@ -224,25 +238,15 @@ describe('Flower live projection', () => {
       targetLabels: [],
     });
 
-    expect(mapped.transcript_messages[0]?.context_action).toEqual(contextAction);
+    expect(mapped.timeline_messages[0]?.context_action).toEqual(contextAction);
     expect(mapped.thread.messages[0]?.context_action).toEqual(contextAction);
   });
 
-  it('projects bootstrap live state into streaming assistant messages and approvals', () => {
+  it('projects bootstrap timeline messages and approvals without local message synthesis', () => {
     const projected = projectFlowerLiveBootstrap(bootstrap({
       cursor: 5,
       live_state: {
         thread_patch: { run_status: 'waiting_approval' },
-        message_order: ['assistant-live'],
-        messages: {
-          'assistant-live': {
-            message_id: 'assistant-live',
-            role: 'assistant',
-            status: 'streaming',
-            created_at_ms: 2000,
-            blocks: [{ type: 'markdown', content: 'Inspecting files' }],
-          },
-        },
         runs: {
           'run-1': { run_id: 'run-1', status: 'waiting_approval', message_id: 'assistant-live' },
         },
@@ -263,6 +267,25 @@ describe('Flower live projection', () => {
         },
         input_requests: {},
       },
+      timeline_messages: [
+        {
+          id: 'msg-user',
+          role: 'user',
+          content: 'Hello',
+          status: 'complete',
+          created_at_ms: 1000,
+          blocks: [{ type: 'text', content: 'Hello' }],
+        },
+        {
+          id: 'assistant-live',
+          role: 'assistant',
+          content: 'Inspecting files',
+          status: 'streaming',
+          created_at_ms: 2000,
+          blocks: [{ type: 'markdown', content: 'Inspecting files' }],
+          active_cursor: true,
+        },
+      ],
     }));
 
     expect(projected.status).toBe('waiting_approval');
@@ -287,26 +310,28 @@ describe('Flower live projection', () => {
         updated_at_unix_ms: 1000,
         run_status: 'running',
       },
-      transcript_messages: [{
-        id: 'msg-user',
-        role: 'user',
-        timestamp: 1000,
-        status: 'complete',
-        blocks: [{ type: 'markdown', content: 'Hello' }],
-      }],
+      timeline_messages: [
+        {
+          id: 'msg-user',
+          role: 'user',
+          timestamp: 1000,
+          status: 'complete',
+          blocks: [{ type: 'markdown', content: 'Hello' }],
+        },
+        {
+          id: 'assistant-live',
+          role: 'assistant',
+          timestamp: 2000,
+          status: 'streaming',
+          active_cursor: true,
+          blocks: [{ type: 'markdown', content: 'hello ' }],
+        },
+      ],
       live_state: {
         thread_patch: { run_status: 'running' },
-        message_order: ['assistant-live'],
-        messages: {
-          'assistant-live': {
-            message_id: 'assistant-live',
-            role: 'assistant',
-            status: 'streaming',
-            created_at_ms: 2000,
-            blocks: [{ type: 'markdown', content: 'hello ' }],
-          },
+        runs: {
+          'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
         },
-        runs: {},
         approval_actions: {},
         input_requests: {},
       },
@@ -333,19 +358,10 @@ describe('Flower live projection', () => {
   });
 
   it('applies message deltas incrementally without dropping whitespace', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant({
+      blocks: [{ type: 'markdown', content: '' }],
+    }));
     const events = [
-      event(1, 'message.started', {
-        message_id: 'assistant-live',
-        role: 'assistant',
-        status: 'streaming',
-        created_at_ms: 2000,
-      }),
-      event(2, 'message.block_started', {
-        message_id: 'assistant-live',
-        block_index: 0,
-        block_type: 'markdown',
-      }),
       event(3, 'message.block_delta', {
         message_id: 'assistant-live',
         block_index: 0,
@@ -358,7 +374,7 @@ describe('Flower live projection', () => {
       }),
     ];
 
-    const projected = applyEvents(initial, 0, events);
+    const projected = applyEvents(initial, 2, events);
 
     expect(projected.cursor).toBe(4);
     expect(projected.thread.messages[1]?.content).toBe('hello world');
@@ -369,28 +385,17 @@ describe('Flower live projection', () => {
   });
 
   it('streams thinking before markdown without using thinking as message content', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant({
+      blocks: [
+        { type: 'thinking', content: '' },
+        { type: 'markdown', content: '' },
+      ],
+    }));
     const projected = applyEvents(initial, 0, [
-      event(1, 'message.started', {
-        message_id: 'assistant-live',
-        role: 'assistant',
-        status: 'streaming',
-        created_at_ms: 2000,
-      }),
-      event(2, 'message.block_started', {
-        message_id: 'assistant-live',
-        block_index: 0,
-        block_type: 'thinking',
-      }),
       event(3, 'message.block_delta', {
         message_id: 'assistant-live',
         block_index: 0,
         delta: 'Inspecting provider flow.',
-      }),
-      event(4, 'message.block_started', {
-        message_id: 'assistant-live',
-        block_index: 1,
-        block_type: 'markdown',
       }),
       event(5, 'message.block_delta', {
         message_id: 'assistant-live',
@@ -404,6 +409,18 @@ describe('Flower live projection', () => {
       { type: 'markdown', content: 'Final answer.' },
     ]);
     expect(projected.thread.messages[1]?.content).toBe('Final answer.');
+  });
+
+  it('requires resync when message starts before the canonical timeline contains it', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const result = applyFlowerLiveEvent(initial, 0, event(1, 'message.block_delta', {
+      message_id: 'assistant-live',
+      block_index: 0,
+      delta: 'draft',
+    }));
+
+    expect(result.resyncRequired).toBe(true);
+    expect(result.thread.messages.map((item) => item.id)).toEqual(['msg-user']);
   });
 
   it('requires an explicit live block before accepting deltas', () => {
@@ -431,19 +448,10 @@ describe('Flower live projection', () => {
   });
 
   it('keeps whole-batch and split replay projections equivalent', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant({
+      blocks: [{ type: 'markdown', content: '' }],
+    }));
     const events = [
-      event(1, 'message.started', {
-        message_id: 'assistant-live',
-        role: 'assistant',
-        status: 'streaming',
-        created_at_ms: 2000,
-      }),
-      event(2, 'message.block_started', {
-        message_id: 'assistant-live',
-        block_index: 0,
-        block_type: 'markdown',
-      }),
       event(3, 'message.block_delta', {
         message_id: 'assistant-live',
         block_index: 0,
@@ -456,9 +464,9 @@ describe('Flower live projection', () => {
       }),
     ];
 
-    const whole = applyEvents(initial, 0, events);
-    const firstHalf = applyEvents(initial, 0, events.slice(0, 2));
-    const split = applyEvents(firstHalf.thread, firstHalf.cursor, events.slice(2));
+    const whole = applyEvents(initial, 2, events);
+    const firstHalf = applyEvents(initial, 2, events.slice(0, 1));
+    const split = applyEvents(firstHalf.thread, firstHalf.cursor, events.slice(1));
 
     expect(split).toEqual(whole);
   });
@@ -483,19 +491,10 @@ describe('Flower live projection', () => {
   });
 
   it('commits a streaming draft under the same message id', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant({
+      blocks: [{ type: 'markdown', content: '' }],
+    }));
     const withDraft = applyEvents(initial, 0, [
-      event(1, 'message.started', {
-        message_id: 'assistant-live',
-        role: 'assistant',
-        status: 'streaming',
-        created_at_ms: 2000,
-      }),
-      event(2, 'message.block_started', {
-        message_id: 'assistant-live',
-        block_index: 0,
-        block_type: 'markdown',
-      }),
       event(3, 'message.block_delta', {
         message_id: 'assistant-live',
         block_index: 0,
@@ -522,19 +521,10 @@ describe('Flower live projection', () => {
   });
 
   it('preserves streamed markdown through activity blocks and commit', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant({
+      blocks: [{ type: 'markdown', content: '' }],
+    }));
     const beforeCommit = applyEvents(initial, 0, [
-      event(1, 'message.started', {
-        message_id: 'assistant-live',
-        role: 'assistant',
-        status: 'streaming',
-        created_at_ms: 2000,
-      }),
-      event(2, 'message.block_started', {
-        message_id: 'assistant-live',
-        block_index: 0,
-        block_type: 'markdown',
-      }),
       event(3, 'message.block_delta', {
         message_id: 'assistant-live',
         block_index: 0,
@@ -614,7 +604,7 @@ describe('Flower live projection', () => {
   });
 
   it('requires resync for unsupported live block_start types', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant());
     const result = applyFlowerLiveEvent(initial, 0, event(1, 'message.block_started', {
       message_id: 'assistant-live',
       block_index: 0,
@@ -626,20 +616,12 @@ describe('Flower live projection', () => {
   });
 
   it('requires resync instead of padding skipped live block indexes', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrap());
-    const result = applyEvents(initial, 0, [
-      event(1, 'message.started', {
-        message_id: 'assistant-live',
-        role: 'assistant',
-        status: 'streaming',
-        created_at_ms: 2000,
-      }),
-      event(2, 'message.block_started', {
-        message_id: 'assistant-live',
-        block_index: 1,
-        block_type: 'markdown',
-      }),
-    ]);
+    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant());
+    const result = applyFlowerLiveEvent(initial, 1, event(2, 'message.block_started', {
+      message_id: 'assistant-live',
+      block_index: 1,
+      block_type: 'markdown',
+    }));
 
     expect(result.thread.messages.find((item) => item.id === 'assistant-live')?.blocks).toBeUndefined();
     expect(applyFlowerLiveEvent(initial, 1, event(2, 'message.block_started', {
@@ -650,21 +632,10 @@ describe('Flower live projection', () => {
   });
 
   it('requires resync for unsupported live block_set types', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrap());
-    const withBlock = applyEvents(initial, 0, [
-      event(1, 'message.started', {
-        message_id: 'assistant-live',
-        role: 'assistant',
-        status: 'streaming',
-        created_at_ms: 2000,
-      }),
-      event(2, 'message.block_started', {
-        message_id: 'assistant-live',
-        block_index: 0,
-        block_type: 'markdown',
-      }),
-    ]);
-    const result = applyFlowerLiveEvent(withBlock.thread, withBlock.cursor, event(3, 'message.block_set', {
+    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant({
+      blocks: [{ type: 'markdown', content: '' }],
+    }));
+    const result = applyFlowerLiveEvent(initial, 2, event(3, 'message.block_set', {
       message_id: 'assistant-live',
       block_index: 0,
       block: { type: 'shell', content: 'pwd' },
@@ -674,6 +645,53 @@ describe('Flower live projection', () => {
     expect(result.thread.messages.find((item) => item.id === 'assistant-live')?.blocks).toEqual([
       { type: 'markdown', content: '' },
     ]);
+  });
+
+  it('requires resync for failed events that reference an unknown message', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const result = applyFlowerLiveEvent(initial, 0, event(1, 'message.failed', {
+      message_id: 'assistant-live',
+      error: 'stream failed',
+    }));
+
+    expect(result.resyncRequired).toBe(true);
+    expect(result.thread.messages.map((item) => item.id)).toEqual(['msg-user']);
+  });
+
+  it('replaces the message list with canonical timeline order', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant({
+      content: 'old streaming output',
+      blocks: [{ type: 'markdown', content: 'old streaming output' }],
+    }));
+    const result = applyFlowerLiveEvent(initial, 5, event(6, 'timeline.replaced', {
+      messages: [
+        message({ id: 'msg-user-1', content: 'First request', created_at_ms: 1000, blocks: [{ type: 'markdown', content: 'First request' }] }),
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: 'Canceled partial output',
+          status: 'canceled',
+          created_at_ms: 1500,
+          blocks: [{ type: 'markdown', content: 'Canceled partial output' }],
+        },
+        message({ id: 'msg-user-2', content: 'Second request', created_at_ms: 2000, blocks: [{ type: 'markdown', content: 'Second request' }] }),
+        {
+          id: 'assistant-2',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 2500,
+          blocks: [{ type: 'markdown', content: '' }],
+          active_cursor: true,
+        },
+      ],
+    }));
+
+    expect(result.resyncRequired).toBe(false);
+    expect(result.thread.messages.map((item) => item.id)).toEqual(['msg-user-1', 'assistant-1', 'msg-user-2', 'assistant-2']);
+    expect(result.thread.messages[1]).toMatchObject({ role: 'assistant', status: 'canceled' });
+    expect(result.thread.messages[1]?.active_cursor).toBeUndefined();
+    expect(result.thread.messages[3]).toMatchObject({ role: 'assistant', status: 'streaming', active_cursor: true });
   });
 
   it('drops unsupported persisted message blocks instead of textifying them', () => {
@@ -692,7 +710,7 @@ describe('Flower live projection', () => {
         updated_at_unix_ms: 1000,
         run_status: 'running',
       },
-      transcript_messages: [{
+      timeline_messages: [{
         id: 'assistant-unsupported',
         role: 'assistant',
         timestamp: 1000,
@@ -705,8 +723,6 @@ describe('Flower live projection', () => {
       }],
       live_state: {
         thread_patch: {},
-        message_order: [],
-        messages: {},
         runs: {},
         approval_actions: {},
         input_requests: {},
@@ -740,7 +756,7 @@ describe('Flower live projection', () => {
         updated_at_unix_ms: 1000,
         run_status: 'success',
       },
-      transcript_messages: [{
+      timeline_messages: [{
         id: 'assistant-thinking',
         role: 'assistant',
         timestamp: 1000,
@@ -752,8 +768,6 @@ describe('Flower live projection', () => {
       }],
       live_state: {
         thread_patch: {},
-        message_order: [],
-        messages: {},
         runs: {},
         approval_actions: {},
         input_requests: {},

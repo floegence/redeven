@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -158,7 +159,7 @@ func TestStartRunDetached_ImmediateCancelStillStopsRun(t *testing.T) {
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hi"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}); err != nil {
 		t.Fatalf("StartRunDetached: %v", err)
 	}
@@ -220,7 +221,7 @@ func TestListActiveThreadRuns_ReturnsDetachedRunSnapshot(t *testing.T) {
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hi"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}); err != nil {
 		t.Fatalf("StartRunDetached: %v", err)
 	}
@@ -313,26 +314,28 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
 	}
-	if len(resp.Events) != 4 {
-		t.Fatalf("events=%d, want 4", len(resp.Events))
+	gotKinds := make([]FlowerLiveKind, 0, len(resp.Events))
+	for _, ev := range resp.Events {
+		gotKinds = append(gotKinds, ev.Kind)
 	}
-	if got := resp.Events[0].Kind; got != FlowerLiveRunStarted {
-		t.Fatalf("kind[0]=%q, want run.started", got)
+	wantKinds := []FlowerLiveKind{
+		FlowerLiveRunStarted,
+		FlowerLiveTimelineReplaced,
+		FlowerLiveMessageStarted,
+		FlowerLiveTimelineReplaced,
+		FlowerLiveMessageBlockStart,
+		FlowerLiveTimelineReplaced,
+		FlowerLiveMessageBlockDelta,
+		FlowerLiveTimelineReplaced,
 	}
-	if got := resp.Events[1].Kind; got != FlowerLiveMessageStarted {
-		t.Fatalf("kind[1]=%q, want message.started", got)
+	if !reflect.DeepEqual(gotKinds, wantKinds) {
+		t.Fatalf("event kinds=%#v, want %#v", gotKinds, wantKinds)
 	}
-	if got := resp.Events[2].Kind; got != FlowerLiveMessageBlockStart {
-		t.Fatalf("kind[2]=%q, want message.block_started", got)
-	}
-	if got := resp.Events[3].Kind; got != FlowerLiveMessageBlockDelta {
-		t.Fatalf("kind[3]=%q, want message.block_delta", got)
-	}
-	if err := assertNoFullMessageInDelta(resp.Events[3]); err != nil {
+	if err := assertNoFullMessageInDelta(resp.Events[6]); err != nil {
 		t.Fatalf("delta payload shape: %v", err)
 	}
-	if strings.Contains(string(resp.Events[3].Payload), "active_run") {
-		t.Fatalf("delta payload contains old live shape: %s", string(resp.Events[3].Payload))
+	if strings.Contains(string(resp.Events[6].Payload), "active_run") {
+		t.Fatalf("delta payload contains old live shape: %s", string(resp.Events[6].Payload))
 	}
 
 	finalMessage := `{"id":"msg_live_projection_1","role":"assistant","status":"complete","content":"done","created_at_ms":1700000000000,"blocks":[{"type":"markdown","content":"done"}]}`
@@ -342,11 +345,14 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListFlowerThreadLiveEvents after transcript: %v", err)
 	}
-	if len(next.Events) != 1 {
-		t.Fatalf("next events=%d, want 1", len(next.Events))
+	if len(next.Events) != 2 {
+		t.Fatalf("next events=%d, want 2", len(next.Events))
 	}
 	if got := next.Events[0].Kind; got != FlowerLiveMessageCommitted {
 		t.Fatalf("kind=%q, want message.committed", got)
+	}
+	if got := next.Events[1].Kind; got != FlowerLiveTimelineReplaced {
+		t.Fatalf("kind=%q, want timeline.replaced", got)
 	}
 	var committed FlowerLiveMessageCommittedPayload
 	if !decodeFlowerPayload(next.Events[0].Payload, &committed) {

@@ -76,8 +76,8 @@ function actionLabel(action: string): string {
       return 'Port forward deleted';
     case 'ai_run':
       return 'AI run';
-    case 'ai_run_cancel':
-      return 'AI run canceled';
+    case 'ai_thread_cancel':
+      return 'AI thread canceled';
     case 'ai_tool_approval':
       return 'AI tool approval';
     case 'ai_upload':

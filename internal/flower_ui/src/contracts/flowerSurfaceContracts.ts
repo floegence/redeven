@@ -78,7 +78,7 @@ export type FlowerSettingsSnapshot = Readonly<{
 
 export type FlowerChatMessageRole = 'user' | 'assistant' | 'system';
 
-export type FlowerChatMessageStatus = 'sending' | 'streaming' | 'error' | 'complete';
+export type FlowerChatMessageStatus = 'sending' | 'streaming' | 'error' | 'complete' | 'canceled';
 
 export type FlowerChatMessage = Readonly<{
   id: string;
@@ -88,6 +88,8 @@ export type FlowerChatMessage = Readonly<{
   created_at_ms: number;
   blocks?: readonly FlowerChatMessageBlock[];
   context_action?: unknown;
+  live?: boolean;
+  active_cursor?: boolean;
 }>;
 
 export type FlowerThreadStatus =
@@ -334,20 +336,13 @@ export type FlowerLiveKind =
   | 'input.requested'
   | 'input.resolved'
   | 'usage.updated'
+  | 'timeline.replaced'
   | 'stream.resync_required';
 
 export type FlowerLiveBlock = Readonly<{
   type: string;
   content?: string;
   block?: unknown;
-}>;
-
-export type FlowerLiveMessageDraft = Readonly<{
-  message_id: string;
-  role: string;
-  status: string;
-  created_at_ms: number;
-  blocks: readonly FlowerLiveBlock[];
 }>;
 
 export type FlowerLiveRunState = Readonly<{
@@ -382,8 +377,6 @@ export type FlowerLiveThreadPatch = Readonly<{
 
 export type FlowerLiveMaterializedState = Readonly<{
   thread_patch: FlowerLiveThreadPatch;
-  message_order: readonly string[];
-  messages: Readonly<Record<string, FlowerLiveMessageDraft>>;
   runs: Readonly<Record<string, FlowerLiveRunState>>;
   approval_actions: Readonly<Record<string, FlowerApprovalAction>>;
   input_requests: Readonly<Record<string, FlowerInputRequest>>;
@@ -396,7 +389,7 @@ export type FlowerLiveBootstrap = Readonly<{
   cursor: number;
   retained_from_seq: number;
   thread: FlowerThreadSnapshot;
-  transcript_messages: readonly FlowerChatMessage[];
+  timeline_messages: readonly FlowerChatMessage[];
   live_state: FlowerLiveMaterializedState;
   read_status: FlowerThreadReadStatus;
   generated_at_ms: number;
@@ -460,6 +453,10 @@ export type FlowerLiveUsageUpdatedPayload = Readonly<{
   usage: Readonly<Record<string, unknown>>;
 }>;
 
+export type FlowerLiveTimelineReplacedPayload = Readonly<{
+  messages: readonly FlowerChatMessage[];
+}>;
+
 export type FlowerLiveResyncRequiredPayload = Readonly<{
   reason: string;
 }>;
@@ -500,6 +497,7 @@ export type FlowerLiveEventPayloadByKind = Readonly<{
   'input.requested': FlowerLiveInputRequestedPayload;
   'input.resolved': FlowerLiveInputResolvedPayload;
   'usage.updated': FlowerLiveUsageUpdatedPayload;
+  'timeline.replaced': FlowerLiveTimelineReplacedPayload;
   'stream.resync_required': FlowerLiveResyncRequiredPayload;
 }>;
 

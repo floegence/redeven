@@ -26,9 +26,7 @@ import (
 )
 
 const (
-	nativeDefaultMaxSteps                   = 24
 	nativeDefaultMaxOutputTokens            = 4096
-	nativeDefaultNoToolRounds               = 3
 	nativeDefaultCompactThreshold           = 0.80
 	nativeMinCompactThreshold               = 0.65
 	nativeMaxCompactThreshold               = 0.90
@@ -37,7 +35,7 @@ const (
 	nativeToolResultPruneRunes              = 480
 	nativeToolResultKeepTurns               = 2
 	providerContinuationKindOpenAIResponses = "openai_responses"
-	nativeHardMaxSteps                      = 200
+	nativeHardMaxToolCalls                  = 200
 )
 
 const (
@@ -3385,8 +3383,8 @@ func readAnyInt(raw any) int {
 	}
 }
 
-func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity string, round int, maxSteps int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) string {
-	snapshot := buildPromptRuntimeSnapshot(r, objective, mode, complexity, round, maxSteps, isFirstRound, tools, state, exceptionOverlay, capability)
+func (r *run) buildLayeredSystemPrompt(objective string, mode string, complexity string, round int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) string {
+	snapshot := buildPromptRuntimeSnapshot(r, objective, mode, complexity, round, isFirstRound, tools, state, exceptionOverlay, capability)
 	document := buildPromptDocument(snapshot)
 	return document.render(layeredPromptStaticPrefixCache, promptStaticPrefixCacheKey(snapshot))
 }

@@ -1279,6 +1279,11 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	}
 
 	updateThreadRunState("running", "", "", nil)
+	if persisted != nil && s.contextRepo != nil {
+		turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
+		_ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, messageID, persisted.MessageID, messageID, persisted.CreatedAtUnixMs)
+		cancelTurn()
+	}
 	s.broadcastThreadState(endpointID, threadID, runID, "running", "", "")
 	s.broadcastThreadSummary(endpointID, threadID)
 	r.ensureAssistantMessageStarted()
@@ -1454,6 +1459,11 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		autoTitleMessageCreatedAtUnixMs = persisted.CreatedAtUnixMs
 		s.broadcastTranscriptMessage(endpointID, threadID, runID, persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 		s.broadcastThreadSummary(endpointID, threadID)
+		if s.contextRepo != nil {
+			turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
+			_ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, messageID, userMsgID, messageID, persisted.CreatedAtUnixMs)
+			cancelTurn()
+		}
 	}
 	effectiveCurrentInput.MessageID = userMsgID
 	effectiveCurrentInput.MessageRowID = autoTitleMessageRowID
@@ -1608,12 +1618,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	r.markAssistantPersisted()
 	s.broadcastTranscriptMessage(endpointID, threadID, runID, assistantRowID, assistantJSON, assistantAt)
 	s.broadcastThreadSummary(endpointID, threadID)
-	if s.contextRepo != nil {
-		turnID := "turn_" + strings.TrimSpace(runID)
-		turnCtx, cancelTurn := context.WithTimeout(context.Background(), persistTO)
-		_ = s.contextRepo.AppendTurn(turnCtx, endpointID, threadID, runID, turnID, userMsgID, messageID, assistantAt)
-		cancelTurn()
-	}
 
 	finalReason := strings.TrimSpace(r.getFinalizationReason())
 	if db != nil {
@@ -2068,6 +2072,7 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 
 	if r != nil {
 		r.requestCancel("canceled")
+		s.publishCanceledAssistantDraft(meta, r, db, persistTO)
 	}
 
 	if db != nil && threadID != "" {

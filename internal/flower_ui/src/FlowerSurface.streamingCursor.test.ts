@@ -39,4 +39,14 @@ describe('Flower streaming cursor', () => {
     expect(cursorRule).not.toContain('width: 1.65rem');
     expect(cursorRule).not.toContain('height: 0.82rem');
   });
+
+  it('keeps the composer action button shape unified for send and stop', () => {
+    const css = flowerStyles();
+    const submitRule = cssRule(css, '.flower-composer-submit');
+
+    expect(submitRule).toContain('width: 2.25rem');
+    expect(submitRule).toContain('height: 2.25rem');
+    expect(submitRule).toContain('padding: 0');
+    expect(css).not.toContain('flower-composer-submit-stop');
+  });
 });

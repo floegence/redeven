@@ -43,13 +43,6 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		req.Options.ResponseFormat = "json_object"
 	}
 
-	maxSteps := req.Options.MaxSteps
-	if maxSteps <= 0 {
-		maxSteps = nativeDefaultMaxSteps
-	}
-	if maxSteps > nativeHardMaxSteps {
-		maxSteps = nativeHardMaxSteps
-	}
 	mode := normalizeRunMode(req.Options.Mode, r.cfg.EffectiveMode())
 	req.Options.Mode = mode
 	r.runMode = mode
@@ -81,11 +74,11 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		"model":             modelName,
 	})
 	r.persistRunEvent("native.runtime.start", RealtimeStreamKindLifecycle, map[string]any{
-		"engine":        "floret",
-		"provider_type": providerType,
-		"model":         modelName,
-		"max_steps":     maxSteps,
-		"mode":          mode,
+		"engine":         "floret",
+		"provider_type":  providerType,
+		"model":          modelName,
+		"max_tool_calls": nativeHardMaxToolCalls,
+		"mode":           mode,
 	})
 
 	registry := NewInMemoryToolRegistry()
@@ -139,7 +132,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		contextWindow = req.ModelCapability.MaxContextTokens
 	}
 	inputContextLimit := resolveInputContextLimit(contextWindow, req.Options.MaxInputTokens)
-	systemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, 0, maxSteps, true, activeTools, state, "", capabilityContract)
+	systemPrompt := r.buildLayeredSystemPrompt(taskObjective, mode, taskComplexity, 0, true, activeTools, state, "", capabilityContract)
 	flTools, err := buildFloretToolRegistry(r, activeTools, sharedState)
 	if err != nil {
 		return r.failRun("Failed to initialize Floret tool registry", err)
@@ -157,7 +150,6 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			TopP:                 req.Options.TopP,
 		},
 		TurnBudgets{
-			MaxSteps:       maxSteps,
 			MaxInputTokens: req.Options.MaxInputTokens,
 			MaxOutputToken: req.Options.MaxOutputTokens,
 			MaxCostUSD:     req.Options.MaxCostUSD,
@@ -206,7 +198,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		Completion:            completionPolicy,
 		Signals:               controlSpec,
 		Limits: flruntime.TurnLimits{
-			MaxToolCalls:           nativeHardMaxSteps,
+			MaxToolCalls:           nativeHardMaxToolCalls,
 			MaxTotalTokens:         maxTotalTokens,
 			MaxCostUSD:             req.Options.MaxCostUSD,
 			MaxLengthContinuations: 2,

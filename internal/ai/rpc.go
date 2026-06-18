@@ -16,7 +16,6 @@ const (
 	// Type IDs must stay in sync with
 	// internal/envapp/ui_src/src/ui/protocol/redeven_v1/typeIds.ts.
 	TypeID_AI_SEND_USER_TURN                     uint32 = 6001
-	TypeID_AI_RUN_CANCEL                         uint32 = 6002
 	TypeID_AI_SUBSCRIBE_SUMMARY                  uint32 = 6003
 	TypeID_AI_EVENT_NOTIFY                       uint32 = 6004 // notify (agent -> client)
 	TypeID_AI_MESSAGES_LIST                      uint32 = 6006
@@ -59,15 +58,6 @@ type aiSubmitRequestUserInputResponseResp struct {
 	Kind                    string `json:"kind"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
 	AppliedExecutionMode    string `json:"applied_execution_mode,omitempty"`
-}
-
-type aiRunCancelReq struct {
-	RunID    string `json:"run_id,omitempty"`
-	ThreadID string `json:"thread_id,omitempty"`
-}
-
-type aiRunCancelResp struct {
-	OK bool `json:"ok"`
 }
 
 type aiSubscribeSummaryReq struct{}
@@ -181,31 +171,6 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			ConsumedWaitingPromptID: strings.TrimSpace(resp.ConsumedWaitingPromptID),
 			AppliedExecutionMode:    strings.TrimSpace(resp.AppliedExecutionMode),
 		}, nil
-	})
-
-	accessgate.RegisterTyped[aiRunCancelReq, aiRunCancelResp](r, TypeID_AI_RUN_CANCEL, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *aiRunCancelReq) (*aiRunCancelResp, error) {
-		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
-			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
-		}
-		if req == nil {
-			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
-		}
-
-		runID := strings.TrimSpace(req.RunID)
-		threadID := strings.TrimSpace(req.ThreadID)
-		switch {
-		case runID != "":
-			if err := s.CancelRun(meta, runID); err != nil {
-				return nil, toAIRPCError(err)
-			}
-		case threadID != "":
-			if err := s.CancelThread(meta, threadID); err != nil {
-				return nil, toAIRPCError(err)
-			}
-		default:
-			return nil, &rpc.Error{Code: 400, Message: "run_id or thread_id is required"}
-		}
-		return &aiRunCancelResp{OK: true}, nil
 	})
 
 	accessgate.RegisterTyped[aiSubscribeSummaryReq, aiSubscribeSummaryResp](r, TypeID_AI_SUBSCRIBE_SUMMARY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, _ *aiSubscribeSummaryReq) (*aiSubscribeSummaryResp, error) {

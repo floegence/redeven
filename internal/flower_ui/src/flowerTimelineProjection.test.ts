@@ -193,6 +193,99 @@ describe('buildFlowerTimelineEntries', () => {
     expect(entries).toHaveLength(0);
   });
 
+  it('does not keep empty streaming messages without an active cursor', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      status: 'running',
+      messages: [
+        {
+          id: 'assistant-streaming-empty',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 2,
+        },
+      ],
+    }));
+
+    expect(entries).toHaveLength(0);
+  });
+
+  it('keeps empty active cursor messages visible', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      status: 'running',
+      messages: [
+        {
+          id: 'assistant-active-cursor',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 2,
+        },
+      ],
+    }));
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.type).toBe('message');
+  });
+
+  it('keeps only the latest active cursor in a running thread', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      status: 'running',
+      messages: [
+        {
+          id: 'assistant-old-active',
+          role: 'assistant',
+          content: 'Older partial output',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 2,
+          blocks: [{ type: 'markdown', content: 'Older partial output' }],
+        },
+        {
+          id: 'assistant-empty-stale-active',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 3,
+        },
+        {
+          id: 'assistant-current-active',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 4,
+        },
+      ],
+    }));
+
+    const messages = entries.filter((entry): entry is Extract<typeof entry, { type: 'message' }> => entry.type === 'message');
+    expect(messages.map((entry) => entry.message.id)).toEqual(['assistant-old-active', 'assistant-current-active']);
+    expect(messages.map((entry) => entry.message.active_cursor === true)).toEqual([false, true]);
+  });
+
+  it('drops stale empty active cursor messages when the thread is no longer running', () => {
+    for (const status of ['canceled', 'success', 'waiting_approval'] as const) {
+      const entries = buildFlowerTimelineEntries(thread({
+        status,
+        messages: [
+          {
+            id: `assistant-stale-cursor-${status}`,
+            role: 'assistant',
+            content: '',
+            status: 'streaming',
+            active_cursor: true,
+            created_at_ms: 2,
+          },
+        ],
+      }));
+
+      expect(entries, status).toHaveLength(0);
+    }
+  });
+
   it('appends waiting input and thread errors as transcript entries', () => {
     const entries = buildFlowerTimelineEntries(thread({
       status: 'waiting_user',

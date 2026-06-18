@@ -42,6 +42,7 @@ const (
 	FlowerLiveInputRequested    FlowerLiveKind = "input.requested"
 	FlowerLiveInputResolved     FlowerLiveKind = "input.resolved"
 	FlowerLiveUsageUpdated      FlowerLiveKind = "usage.updated"
+	FlowerLiveTimelineReplaced  FlowerLiveKind = "timeline.replaced"
 	FlowerLiveResyncRequired    FlowerLiveKind = "stream.resync_required"
 )
 
@@ -208,15 +209,31 @@ type FlowerLiveUsageUpdatedPayload struct {
 	Usage map[string]any `json:"usage"`
 }
 
+type FlowerTimelineMessage struct {
+	MessageID     string `json:"id"`
+	Role          string `json:"role"`
+	Content       string `json:"content"`
+	Status        string `json:"status"`
+	CreatedAtMs   int64  `json:"created_at_ms"`
+	Blocks        []any  `json:"blocks,omitempty"`
+	ContextAction any    `json:"context_action,omitempty"`
+	Live          bool   `json:"live"`
+	ActiveCursor  bool   `json:"active_cursor"`
+}
+
+type FlowerLiveTimelineReplacedPayload struct {
+	Messages []FlowerTimelineMessage `json:"messages"`
+}
+
 type FlowerLiveResyncRequiredPayload struct {
 	Reason string `json:"reason"`
 }
 
 type FlowerLiveMessageDraft struct {
-	MessageID   string           `json:"message_id"`
-	Role        string           `json:"role"`
-	Status      string           `json:"status"`
-	CreatedAtMs int64            `json:"created_at_ms"`
+	MessageID   string            `json:"message_id"`
+	Role        string            `json:"role"`
+	Status      string            `json:"status"`
+	CreatedAtMs int64             `json:"created_at_ms"`
 	Blocks      []FlowerLiveBlock `json:"blocks"`
 }
 
@@ -237,24 +254,23 @@ type FlowerLiveRunState struct {
 
 type FlowerLiveMaterializedState struct {
 	ThreadPatch     FlowerLiveThreadPatch             `json:"thread_patch"`
-	MessageOrder    []string                          `json:"message_order"`
-	Messages        map[string]FlowerLiveMessageDraft `json:"messages"`
-	Runs            map[string]FlowerLiveRunState      `json:"runs"`
-	ApprovalActions map[string]FlowerApprovalAction    `json:"approval_actions"`
-	InputRequests   map[string]RequestUserInputPrompt  `json:"input_requests"`
+	Messages        map[string]FlowerLiveMessageDraft `json:"-"`
+	Runs            map[string]FlowerLiveRunState     `json:"runs"`
+	ApprovalActions map[string]FlowerApprovalAction   `json:"approval_actions"`
+	InputRequests   map[string]RequestUserInputPrompt `json:"input_requests"`
 }
 
 type FlowerLiveBootstrapResponse struct {
-	SchemaVersion     int64                       `json:"schema_version"`
-	EndpointID        string                      `json:"endpoint_id"`
-	ThreadID          string                      `json:"thread_id"`
-	Cursor            int64                       `json:"cursor"`
-	RetainedFromSeq   int64                       `json:"retained_from_seq"`
-	Thread            ThreadView                  `json:"thread"`
-	TranscriptMessages []json.RawMessage          `json:"transcript_messages"`
-	LiveState         FlowerLiveMaterializedState `json:"live_state"`
-	ReadStatus        FlowerThreadReadView        `json:"read_status"`
-	GeneratedAtMs     int64                       `json:"generated_at_unix_ms"`
+	SchemaVersion    int64                       `json:"schema_version"`
+	EndpointID       string                      `json:"endpoint_id"`
+	ThreadID         string                      `json:"thread_id"`
+	Cursor           int64                       `json:"cursor"`
+	RetainedFromSeq  int64                       `json:"retained_from_seq"`
+	Thread           ThreadView                  `json:"thread"`
+	TimelineMessages []FlowerTimelineMessage     `json:"timeline_messages"`
+	LiveState        FlowerLiveMaterializedState `json:"live_state"`
+	ReadStatus       FlowerThreadReadView        `json:"read_status"`
+	GeneratedAtMs    int64                       `json:"generated_at_unix_ms"`
 }
 
 type FlowerLiveEventsResponse struct {

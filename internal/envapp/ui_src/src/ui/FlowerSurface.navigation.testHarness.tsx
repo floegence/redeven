@@ -1,5 +1,5 @@
 import { Show, createSignal } from 'solid-js';
-import { render } from 'solid-js/web';
+import { Dynamic, render } from 'solid-js/web';
 import { afterEach, vi } from 'vitest';
 
 import { FlowerSurface, type FlowerThreadFocusRequest } from '../../../../flower_ui/src';
@@ -58,7 +58,6 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Button: (props: any) => {
-    const Icon = props.icon;
     return (
       <button
         type="button"
@@ -67,9 +66,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
         disabled={props.disabled}
         onClick={props.onClick}
       >
-        <Show when={Icon}>
-          <Icon />
-        </Show>
+        {props.icon ? <Dynamic component={props.icon} /> : null}
         {props.children}
       </button>
     );
@@ -232,11 +229,9 @@ export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): Fl
     cursor,
     retained_from_seq: 1,
     thread: threadValue,
-    transcript_messages: threadValue.messages,
+    timeline_messages: threadValue.messages,
     live_state: {
       thread_patch: {},
-      message_order: [],
-      messages: {},
       runs: {},
       approval_actions: {},
       input_requests: {},

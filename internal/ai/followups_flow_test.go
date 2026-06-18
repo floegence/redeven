@@ -40,7 +40,7 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 		Input: RunInput{
 			Text: "send immediately while waiting",
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if !errors.Is(err, ErrWaitingUserQueueConflict) {
 		t.Fatalf("SendUserTurn immediate err=%v, want %v", err, ErrWaitingUserQueueConflict)
@@ -54,7 +54,7 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 			MessageID: "m_waiting_queue_later_1",
 			Text:      "queue this until I answer",
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SendUserTurn queue later: %v", err)
@@ -150,7 +150,7 @@ func TestService_StopThread_RecoversQueuedFollowupsToDraftsAndClearsQueue(t *tes
 			MessageID: "m_stop_recover_1",
 			Text:      "recover this after stop",
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SendUserTurn: %v", err)

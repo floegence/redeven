@@ -43,7 +43,7 @@ func TestExecutePreparedRun_InitializesThreadModelLock(t *testing.T) {
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "initialize lock"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, nil, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)

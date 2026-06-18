@@ -44,7 +44,6 @@ describe('Redeven v1 AI codec', () => {
         },
       },
       options: {
-        maxSteps: 10,
         mode: 'act',
       },
     });

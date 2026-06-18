@@ -6,7 +6,7 @@ tags: [ai, tools, permissions, ui]
 timestamp: 2026-06-18T00:00:00Z
 ---
 
-Redeven's AI runtime treats tools as typed runtime capabilities. Builtins declare mutation and approval requirements, presentation metadata, grouping behavior, and renderer hints before execution dispatch reaches the runtime implementation.
+Redeven's AI runtime treats tools as typed runtime capabilities. Builtins declare mutation and approval requirements, presentation metadata, grouping behavior, and renderer hints before execution dispatch reaches the runtime implementation. Floret owns the provider loop, projected turn execution, loop progress guards, tool dispatch primitive, activity observation, and engine metrics; Redeven owns product threads, persisted messages, concrete tool implementations, permission gates, and Flower timeline projection.
 
 # Mechanism
 
@@ -16,11 +16,15 @@ The builtin registry includes file, patch, terminal, web search, OKF search, tod
 
 When a thread is configured for explicit target routing, the runtime forwards target-scoped builtin calls through `TargetToolExecutor`. The target executor receives a `TargetToolCall` containing `target_id`, `tool_name`, sanitized arguments, and required capabilities. The run layer returns a result payload that preserves or injects `target_id` and `execution_location`, so target-routed tool results cannot lose provenance before they reach the model or activity timeline.
 
+Native Flower execution uses the published Floret runtime package. Redeven passes its internal hard tool-call protection to Floret as `MaxToolCalls`; Floret `Metrics.Steps` is consumed as telemetry for result projection and activity accounting, not as a product configuration or request field.
+
 # Boundaries
 
 Tool names are not aliases for deleted knowledge-era tools. Current repository knowledge lookup is `okf.search` only. OKF is an embedded project corpus and does not access the internet; external, current, recent, news, third-party, market, pricing, and general web facts must use direct authoritative URLs or web search discovery instead.
 
 Target provenance is part of the tool contract, not a UI hint. Flower must not infer remote execution from thread context alone; it can only claim remote or target execution when a tool result or Redeven product command returns explicit execution provenance.
+
+Redeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link.
 
 # Citations
 
@@ -37,3 +41,7 @@ Target provenance is part of the tool contract, not a UI hint. Flower must not i
 [11] redeven:internal/ai/run.go:3129 - Explicit target policy forwards eligible tools through the target executor.
 [12] redeven:internal/ai/run.go:3466 - Local `terminal.exec` returns local runtime execution provenance.
 [13] redeven:internal/ai/floret_tools.go:969 - Terminal activity chips render execution location and target id provenance.
+[14] redeven:internal/ai/floret_runtime.go:180 - Native Flower execution runs through Floret projected turns.
+[15] redeven:internal/ai/floret_runtime.go:200 - Redeven passes `MaxToolCalls` into the Floret turn limits.
+[16] redeven:internal/ai/floret_runtime.go:257 - Floret step metrics are read during result projection.
+[17] redeven:internal/ai/native_runtime.go:38 - Redeven's remaining hard execution protection is the tool-call count constant.

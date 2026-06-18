@@ -14,10 +14,10 @@ import type {
   FlowerChatMessage,
   FlowerInputRequest,
   FlowerLiveBootstrap,
+  FlowerLiveBlock,
   FlowerLiveEvent,
   FlowerLiveEventsResponse,
   FlowerLiveMaterializedState,
-  FlowerLiveMessageDraft,
   FlowerLiveMessageCommittedPayload,
   FlowerLiveMessageStartedPayload,
   FlowerLiveMessageBlockDeltaPayload,
@@ -504,7 +504,7 @@ function messageBlockPreviewText(block: FlowerMessageBlock): string {
   return '';
 }
 
-function mapLiveDraftBlock(blockValue: unknown): FlowerLiveMessageDraft['blocks'][number] | null {
+function mapLiveBlock(blockValue: unknown): FlowerLiveBlock | null {
   const block = recordValue(blockValue);
   if (!block) return null;
   const type = trim(block.type);
@@ -526,12 +526,21 @@ function mapMessageBlock(blockValue: unknown): FlowerMessageBlock | null {
   if (!block) return null;
   const type = trim(block?.type);
   if (type === 'markdown' || type === 'text' || type === 'thinking') {
-    return trim(block.content) ? { type, content: trim(block.content) } : null;
+    if (typeof block.content !== 'string' || trim(block.content) === '') return null;
+    return { type, content: block.content };
   }
   if (type === 'activity-timeline') {
     return mapActivityTimelineBlock(blockValue);
   }
   return null;
+}
+
+function mapMessageStatus(raw: unknown): FlowerChatMessage['status'] {
+  const status = trim(raw) as FlowerChatMessage['status'];
+  if (status === 'sending' || status === 'streaming' || status === 'error' || status === 'complete' || status === 'canceled') {
+    return status;
+  }
+  return 'complete';
 }
 
 export function mapFlowerMessage(raw: unknown): FlowerChatMessage | null {
@@ -543,14 +552,18 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage | null {
   const blocksRaw = Array.isArray(message.blocks) ? message.blocks : [];
   const blocks = blocksRaw.map(mapMessageBlock).filter(isPresent);
   const contextAction = recordValue(message.context_action) ?? recordValue(message.contextAction);
+  const blockContent = blocks.map(messageBlockPreviewText).filter(Boolean).join('\n\n');
+  const content = blockContent || trim(message.content);
   return {
     id,
     role,
-    content: blocks.map(messageBlockPreviewText).filter(Boolean).join('\n\n'),
-    status: trim(message.status) as FlowerChatMessage['status'] || 'complete',
+    content,
+    status: mapMessageStatus(message.status),
     created_at_ms: unixMs(message.timestamp ?? message.created_at_ms ?? message.created_at_unix_ms, 'message.timestamp'),
     ...(blocks.length > 0 ? { blocks } : {}),
     ...(contextAction ? { context_action: contextAction } : {}),
+    ...(message.live !== undefined ? { live: Boolean(message.live) } : {}),
+    ...(message.active_cursor !== undefined ? { active_cursor: Boolean(message.active_cursor) } : {}),
   };
 }
 
@@ -623,35 +636,12 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
   };
 }
 
-function mapLiveMessageDraft(raw: unknown): FlowerLiveMessageDraft | null {
-  const record = recordValue(raw);
-  if (!record) return null;
-  const messageID = trim(record.message_id);
-  if (!messageID) return null;
-  return {
-    message_id: messageID,
-    role: trim(record.role) || 'assistant',
-    status: trim(record.status) || 'streaming',
-    created_at_ms: Math.max(0, Math.floor(Number(record.created_at_ms ?? 0))),
-    blocks: Array.isArray(record.blocks)
-      ? record.blocks.map(mapLiveDraftBlock).filter(isPresent)
-      : [],
-  };
-}
-
 function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
   const record = recordValue(raw) ?? {};
-  const messages: Record<string, FlowerLiveMessageDraft> = {};
   const runs: Record<string, FlowerLiveRunState> = {};
   const approvals: Record<string, FlowerApprovalAction> = {};
   const inputRequests: Record<string, FlowerInputRequest> = {};
 
-  const messageOrder = Array.isArray(record.message_order) ? record.message_order.map(trim).filter(Boolean) : [];
-  const messagesRecord = recordValue(record.messages) ?? {};
-  for (const [messageID, value] of Object.entries(messagesRecord)) {
-    const mapped = mapLiveMessageDraft({ message_id: messageID, ...(recordValue(value) ?? {}) });
-    if (mapped) messages[messageID] = mapped;
-  }
   const runsRecord = recordValue(record.runs) ?? {};
   for (const [runID, value] of Object.entries(runsRecord)) {
     const run = recordValue(value) ?? {};
@@ -677,8 +667,6 @@ function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
 
   return {
     thread_patch: mapThreadPatch(record.thread_patch) ?? {},
-    message_order: messageOrder,
-    messages,
     runs,
     approval_actions: approvals,
     input_requests: inputRequests,
@@ -755,7 +743,7 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
         const activityBlock = blockType === 'activity-timeline' ? mapActivityTimelineBlock(record.block) : null;
         const mappedBlock = activityBlock
           ? { type: 'activity-timeline', block: activityBlock }
-          : mapLiveDraftBlock(record.block);
+          : mapLiveBlock(record.block);
         return {
         message_id: trim(record.message_id),
         block_index: Math.max(0, Math.floor(Number(record.block_index ?? 0))),
@@ -800,6 +788,10 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
       return { prompt_id: trim(record.prompt_id) } as FlowerLiveInputResolvedPayload;
     case 'usage.updated':
       return { usage: record.usage && typeof record.usage === 'object' ? record.usage as Record<string, unknown> : {} } as FlowerLiveUsageUpdatedPayload;
+    case 'timeline.replaced':
+      return {
+        messages: Array.isArray(record.messages) ? record.messages.map(mapFlowerMessage).filter(isPresent) : [],
+      };
     case 'stream.resync_required':
       return { reason: trim(record.reason) } as FlowerLiveResyncRequiredPayload;
     default:
@@ -823,6 +815,7 @@ const liveKinds = new Set<FlowerLiveKind>([
   'input.requested',
   'input.resolved',
   'usage.updated',
+  'timeline.replaced',
   'stream.resync_required',
 ]);
 
@@ -845,7 +838,8 @@ function makeLiveEvent<K extends FlowerLiveKind>(
 
 export function mapFlowerLiveBootstrap(raw: unknown, options: FlowerLiveThreadMapperOptions): FlowerLiveBootstrap {
   const record = recordValue(raw) ?? {};
-  const thread = mapFlowerThread(record.thread, Array.isArray(record.transcript_messages) ? record.transcript_messages.map(mapFlowerMessage).filter(isPresent) : [], options, record.read_status);
+  const timelineMessages = Array.isArray(record.timeline_messages) ? record.timeline_messages.map(mapFlowerMessage).filter(isPresent) : [];
+  const thread = mapFlowerThread(record.thread, timelineMessages, options, record.read_status);
   return {
     schema_version: Math.max(0, Math.floor(Number(record.schema_version ?? 0))),
     endpoint_id: trim(record.endpoint_id),
@@ -853,7 +847,7 @@ export function mapFlowerLiveBootstrap(raw: unknown, options: FlowerLiveThreadMa
     cursor: Math.max(0, Math.floor(Number(record.cursor ?? 0))),
     retained_from_seq: Math.max(0, Math.floor(Number(record.retained_from_seq ?? 0))),
     thread,
-    transcript_messages: Array.isArray(record.transcript_messages) ? record.transcript_messages.map(mapFlowerMessage).filter(isPresent) : [],
+    timeline_messages: timelineMessages,
     live_state: mapLiveState(record.live_state),
     read_status: mapFlowerReadStatus(record.read_status ?? thread.read_status),
     generated_at_ms: Math.max(0, Math.floor(Number(record.generated_at_ms ?? record.generated_at_unix_ms ?? Date.now()))),

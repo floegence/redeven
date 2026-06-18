@@ -40,7 +40,6 @@ const (
 	subagentContextModeThreadCompact = "thread_compact"
 	subagentContextModeThreadFull    = "thread_full"
 
-	subagentDefaultMaxSteps   = 8
 	subagentDefaultTimeoutSec = 900
 	subagentSteerMinInterval  = 2 * time.Second
 
@@ -133,7 +132,6 @@ type subagentTask struct {
 	mode              string
 	modelID           string
 	allowedTools      []string
-	maxSteps          int
 	timeoutSec        int
 	forceReadonlyExec bool
 
@@ -562,7 +560,6 @@ func (t *subagentTask) statusSnapshot() string {
 type subagentRoleDefaults struct {
 	Mode              string
 	Allowlist         []string
-	MaxSteps          int
 	ForceReadonlyExec bool
 }
 
@@ -609,21 +606,18 @@ func buildRoleDefaults(agentType string) subagentRoleDefaults {
 		return subagentRoleDefaults{
 			Mode:              "act",
 			Allowlist:         defaultSubagentToolAllowlistWorker(),
-			MaxSteps:          12,
 			ForceReadonlyExec: false,
 		}
 	case subagentAgentTypeReviewer:
 		return subagentRoleDefaults{
 			Mode:              "plan",
 			Allowlist:         defaultSubagentToolAllowlistReadonly(),
-			MaxSteps:          10,
 			ForceReadonlyExec: true,
 		}
 	default:
 		return subagentRoleDefaults{
 			Mode:              "plan",
 			Allowlist:         defaultSubagentToolAllowlistReadonly(),
-			MaxSteps:          subagentDefaultMaxSteps,
 			ForceReadonlyExec: true,
 		}
 	}
@@ -839,7 +833,6 @@ func buildSubagentDelegationPrompt(spec subagentSpec) string {
 	readonlyExec := spec.Constraints["readonly_exec"] == true
 	noUserInteraction := spec.Constraints["no_user_interaction"] == true
 	subdelegateAllowed := spec.Constraints["allow_subdelegate"] == true
-	maxSteps := parseIntRaw(spec.Budget["max_steps"], subagentDefaultMaxSteps)
 	timeoutSec := parseIntRaw(spec.Budget["timeout_sec"], subagentDefaultTimeoutSec)
 
 	promptParts := []string{
@@ -873,14 +866,13 @@ func buildSubagentDelegationPrompt(spec subagentSpec) string {
 		"- Do not ask the user for clarification.",
 		"- Use concrete evidence and references in the final result.",
 		"",
-		"# Budget",
-		fmt.Sprintf("- Max steps: %d", maxSteps),
+		"# Timebox",
 		fmt.Sprintf("- Timeout: %d seconds", timeoutSec),
 	}
 	return strings.TrimSpace(strings.Join(promptParts, "\n"))
 }
 
-func buildSubagentSpec(args map[string]any, agentType string, objective string, triggerReason string, allowedTools []string, maxSteps int, timeoutSec int, forceReadonlyExec bool) (subagentSpec, error) {
+func buildSubagentSpec(args map[string]any, agentType string, objective string, triggerReason string, allowedTools []string, timeoutSec int, forceReadonlyExec bool) (subagentSpec, error) {
 	title := strings.TrimSpace(anyToString(args["title"]))
 	if title == "" {
 		title = objective
@@ -926,7 +918,7 @@ func buildSubagentSpec(args map[string]any, agentType string, objective string, 
 		Deliverables:     cloneStringSlice(deliverables),
 		DefinitionOfDone: cloneStringSlice(definitionOfDone),
 		OutputSchema:     cloneAnyMap(outputSchema),
-		Budget:           map[string]any{"max_steps": maxSteps, "timeout_sec": timeoutSec},
+		Budget:           map[string]any{"timeout_sec": timeoutSec},
 		CreatedAtMS:      time.Now().UnixMilli(),
 	}
 	spec.DelegationPromptMarkdown = buildSubagentDelegationPrompt(spec)
@@ -1030,17 +1022,13 @@ func (m *subagentManager) create(ctx context.Context, args map[string]any) (map[
 		mode = defaults.Mode
 	}
 
-	maxSteps := parseIntArg(args, "budget.max_steps", defaults.MaxSteps)
-	if maxSteps <= 0 {
-		maxSteps = defaults.MaxSteps
+	timeoutSec := parseIntArg(args, "budget.timeout_sec", subagentDefaultTimeoutSec)
+	if timeoutSec <= 0 {
+		timeoutSec = subagentDefaultTimeoutSec
 	}
-	if maxSteps > 32 {
-		maxSteps = 32
-	}
-	timeoutSec := subagentDefaultTimeoutSec
 
 	allowedTools := sanitizeSubagentToolAllowlist(extractStringSlice(args["allowed_tools"]), defaults.Allowlist, defaults.ForceReadonlyExec)
-	spec, err := buildSubagentSpec(args, agentType, objective, triggerReason, allowedTools, maxSteps, timeoutSec, defaults.ForceReadonlyExec)
+	spec, err := buildSubagentSpec(args, agentType, objective, triggerReason, allowedTools, timeoutSec, defaults.ForceReadonlyExec)
 	if err != nil {
 		return nil, err
 	}
@@ -1072,7 +1060,6 @@ func (m *subagentManager) create(ctx context.Context, args map[string]any) (map[
 		mode:              mode,
 		modelID:           modelID,
 		allowedTools:      append([]string(nil), allowedTools...),
-		maxSteps:          maxSteps,
 		timeoutSec:        timeoutSec,
 		forceReadonlyExec: defaults.ForceReadonlyExec,
 		ctx:               taskCtx,
@@ -1203,8 +1190,7 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			History:   history,
 			Input:     RunInput{Text: attemptInput},
 			Options: RunOptions{
-				Mode:     task.mode,
-				MaxSteps: task.maxSteps,
+				Mode: task.mode,
 			},
 		}
 

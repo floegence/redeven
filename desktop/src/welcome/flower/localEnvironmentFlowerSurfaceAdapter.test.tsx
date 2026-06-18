@@ -105,11 +105,9 @@ function liveBootstrap(overrides: Record<string, unknown> = {}, messages: unknow
     cursor,
     retained_from_seq: 1,
     thread,
-    transcript_messages: messages,
+    timeline_messages: messages,
     live_state: {
       thread_patch: {},
-      message_order: [],
-      messages: {},
       runs: {},
       approval_actions: {},
       input_requests: {},
@@ -223,7 +221,7 @@ describe('Local Environment Flower surface adapter', () => {
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1', models: [{ id: 'default/gpt-4.1' }] };
       if (request.path === '/_redeven_proxy/api/ai/threads?limit=200') return { threads: [threadView()] };
       if (request.path === '/_redeven_proxy/api/ai/threads') return { thread: threadView({ thread_id: 'thread-new' }) };
-      if (request.path === '/_redeven_proxy/api/ai/runs') return '';
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-new/turns') return { run_id: 'run-1', kind: 'start' };
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-new/live/bootstrap') {
         return liveBootstrap({ thread_id: 'thread-new' }, [{
             id: 'm1',
@@ -249,14 +247,14 @@ describe('Local Environment Flower surface adapter', () => {
       'GET /_redeven_proxy/api/settings',
       'GET /_redeven_proxy/api/ai/models',
       'POST /_redeven_proxy/api/ai/threads',
-      'POST /_redeven_proxy/api/ai/runs',
+      'POST /_redeven_proxy/api/ai/threads/thread-new/turns',
       'GET /_redeven_proxy/api/ai/threads/thread-new/live/bootstrap',
     ]);
-    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/runs')?.body).toMatchObject({
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/thread-new/turns')?.body).toMatchObject({
       thread_id: 'thread-new',
       model: 'default/gpt-4.1',
       input: { text: 'hello', attachments: [] },
-      options: { max_steps: 10, mode: 'act' },
+      options: { mode: 'act' },
     });
   });
 
@@ -317,20 +315,17 @@ describe('Local Environment Flower surface adapter', () => {
     const bridge = bridgeFor((request) => {
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') {
         return {
-          ...liveBootstrap({ run_status: 'running', cursor: 9 }),
+          ...liveBootstrap({ run_status: 'running', cursor: 9 }, [{
+            id: 'assistant-live',
+            role: 'assistant',
+            status: 'streaming',
+            created_at_ms: 42_000,
+            active_cursor: true,
+            blocks: [{ type: 'markdown', content: 'working live' }],
+          }]),
           cursor: 9,
           live_state: {
             thread_patch: { run_status: 'running' },
-            message_order: ['assistant-live'],
-            messages: {
-              'assistant-live': {
-                message_id: 'assistant-live',
-                role: 'assistant',
-                status: 'streaming',
-                created_at_ms: 42_000,
-                blocks: [{ type: 'markdown', content: 'working live' }],
-              },
-            },
             runs: {
               'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
             },
@@ -346,16 +341,13 @@ describe('Local Environment Flower surface adapter', () => {
     const snapshot = await adapter.loadThread('thread-1');
 
     expect(snapshot.thread.status).toBe('running');
-    expect(snapshot.live_state.messages['assistant-live']).toMatchObject({
-      message_id: 'assistant-live',
-      status: 'streaming',
-    });
     const projected = projectFlowerLiveBootstrap(snapshot);
     expect(projected.messages[0]).toMatchObject({
       id: 'assistant-live',
       role: 'assistant',
       content: 'working live',
       status: 'streaming',
+      active_cursor: true,
     });
     expect(snapshot.cursor).toBe(9);
   });
@@ -429,7 +421,7 @@ describe('Local Environment Flower surface adapter', () => {
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/threads') return { thread: threadView({ thread_id: 'thread-card' }) };
-      if (request.path === '/_redeven_proxy/api/ai/runs') return '';
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-card/turns') return { run_id: 'run-card', kind: 'start' };
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-card/live/bootstrap') return liveBootstrap({ thread_id: 'thread-card' });
       throw new Error(`unexpected path: ${request.path}`);
     });
@@ -450,7 +442,7 @@ describe('Local Environment Flower surface adapter', () => {
       working_dir: '/workspace/redeven',
       execution_mode: 'plan',
     });
-    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/runs')?.body).toEqual({
+    expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/thread-card/turns')?.body).toEqual({
       thread_id: 'thread-card',
       model: 'default/gpt-4.1',
       input: {
@@ -463,7 +455,6 @@ describe('Local Environment Flower surface adapter', () => {
         context_action: contextAction,
       },
       options: {
-        max_steps: 10,
         mode: 'plan',
       },
     });

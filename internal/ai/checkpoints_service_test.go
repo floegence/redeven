@@ -24,7 +24,7 @@ func TestPrepareRun_DoesNotCreateThreadCheckpoint(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, nil, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)
@@ -56,7 +56,7 @@ func TestSendUserTurn_DoesNotCreateThreadCheckpoint(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SendUserTurn: %v", err)
@@ -96,7 +96,7 @@ func TestSubmitRequestUserInputResponse_DoesNotCreateThreadCheckpoint(t *testing
 			"question_1": {Text: "continue"},
 		}),
 		Input:   RunInput{Text: "continue"},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SubmitRequestUserInputResponse: %v", err)

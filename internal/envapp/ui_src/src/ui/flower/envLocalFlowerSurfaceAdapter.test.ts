@@ -56,11 +56,9 @@ function liveBootstrap(threadID: string, status = 'canceled') {
     cursor: 3,
     retained_from_seq: 1,
     thread,
-    transcript_messages: [],
+    timeline_messages: [],
     live_state: {
       thread_patch: {},
-      message_order: [],
-      messages: {},
       runs: {},
       approval_actions: {},
       input_requests: {},

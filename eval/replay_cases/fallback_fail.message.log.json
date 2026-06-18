@@ -24,10 +24,10 @@
           {
             "type": "activity-timeline",
             "schema_version": 1,
-            "run_id": "run_loop_exhausted",
+            "run_id": "run_fallback_fail",
             "thread_id": "thread_eval",
             "turn_id": "a_1",
-            "trace_id": "run_loop_exhausted",
+            "trace_id": "run_fallback_fail",
             "summary": {
               "status": "success",
               "severity": "quiet",
@@ -122,7 +122,7 @@
           },
           {
             "type": "markdown",
-            "content": "I have reached the current automatic loop limit. I summarized all collected progress. Reply with one concrete next step and I will continue immediately."
+            "content": "Tool workflow failed before a useful answer could be produced."
           }
         ],
         "status": "complete"

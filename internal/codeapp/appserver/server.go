@@ -743,11 +743,6 @@ type settingsUpdateView struct {
 	AIUpdate *settingsAIUpdateView `json:"ai_update,omitempty"`
 }
 
-type aiRunStartView struct {
-	RunID    string `json:"run_id"`
-	ThreadID string `json:"thread_id"`
-}
-
 type settingsAISecretsView struct {
 	ProviderAPIKeySet          map[string]bool `json:"provider_api_key_set"`
 	WebSearchProviderAPIKeySet map[string]bool `json:"web_search_provider_api_key_set"`
@@ -788,24 +783,6 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
-}
-
-func requestAcceptsJSONOnly(r *http.Request) bool {
-	accept := strings.TrimSpace(r.Header.Get("Accept"))
-	if accept == "" {
-		return false
-	}
-	sawJSON := false
-	for _, item := range strings.Split(accept, ",") {
-		mediaType := strings.TrimSpace(strings.SplitN(item, ";", 2)[0])
-		if strings.EqualFold(mediaType, "application/x-ndjson") {
-			return false
-		}
-		if strings.EqualFold(mediaType, "application/json") {
-			sawJSON = true
-		}
-	}
-	return sawJSON
 }
 
 func (g *Server) handleAPIWithDiagnostics(w http.ResponseWriter, r *http.Request, localUI bool) {
@@ -3880,6 +3857,46 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
+		case action == "turns" && r.Method == http.MethodPost && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+			if !ok {
+				return
+			}
+			if g.ai == nil || !g.ai.Enabled() {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.SendUserTurnRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			bodyThreadID := strings.TrimSpace(body.ThreadID)
+			if bodyThreadID != "" && bodyThreadID != threadID {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "thread id mismatch"})
+				return
+			}
+			body.ThreadID = threadID
+			resp, err := g.ai.SendUserTurn(r.Context(), meta, body)
+			if err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			g.appendAudit(meta, "ai_thread_turn", "accepted", map[string]any{
+				"thread_id": threadID,
+				"run_id":    strings.TrimSpace(resp.RunID),
+				"kind":      strings.TrimSpace(resp.Kind),
+				"model":     strings.TrimSpace(body.Model),
+			}, nil)
+			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
+			return
+
 		case action == "approvals" && r.Method == http.MethodPost && len(parts) == 2:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
@@ -4255,112 +4272,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return
 
-	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/runs":
-		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-		if !ok {
-			return
-		}
-		if g.ai == nil || !g.ai.Enabled() {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
-			return
-		}
-		channelID := strings.TrimSpace(meta.ChannelID)
-		if channelID == "" {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid session"})
-			return
-		}
-		dec := json.NewDecoder(r.Body)
-		dec.DisallowUnknownFields()
-		var req ai.RunStartRequest
-		if err := dec.Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-			return
-		}
-		if err := dec.Decode(&struct{}{}); err != io.EOF {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-			return
-		}
-
-		if strings.TrimSpace(req.ThreadID) == "" {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing thread_id"})
-			return
-		}
-		if g.ai.HasActiveThreadForEndpoint(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(req.ThreadID)) {
-			writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "thread already active"})
-			return
-		}
-		th, err := g.ai.GetThread(r.Context(), meta, strings.TrimSpace(req.ThreadID))
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-			return
-		}
-		if th == nil {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "thread not found"})
-			return
-		}
-
-		if strings.TrimSpace(req.Model) == "" {
-			if m := strings.TrimSpace(th.ModelID); m != "" {
-				req.Model = m
-			} else {
-				models, err := g.ai.ListModels()
-				if err != nil {
-					writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
-					return
-				}
-				req.Model = models.CurrentModel
-			}
-		}
-
-		runID, err := ai.NewRunID()
-		if err != nil {
-			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "failed to allocate run id"})
-			return
-		}
-
-		if requestAcceptsJSONOnly(r) {
-			if err := g.ai.StartRunDetached(meta, runID, req); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			auditDetail := map[string]any{
-				"run_id":    runID,
-				"thread_id": strings.TrimSpace(req.ThreadID),
-				"model":     strings.TrimSpace(req.Model),
-				"detached":  true,
-			}
-			g.appendAudit(meta, "ai_run", "accepted", auditDetail, nil)
-			w.Header().Set("X-Redeven-AI-Run-ID", runID)
-			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: aiRunStartView{
-				RunID:    runID,
-				ThreadID: strings.TrimSpace(req.ThreadID),
-			}})
-			return
-		}
-
-		// Stream response (NDJSON).
-		w.Header().Set("X-Redeven-AI-Run-ID", runID)
-		w.Header().Set("Content-Type", "application/x-ndjson; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-
-		// Block until the run completes (or the client disconnects).
-		startedAt := time.Now()
-		runErr := g.ai.StartRun(r.Context(), meta, runID, req, w)
-		auditDetail := map[string]any{
-			"run_id":      runID,
-			"thread_id":   strings.TrimSpace(req.ThreadID),
-			"model":       strings.TrimSpace(req.Model),
-			"duration_ms": time.Since(startedAt).Milliseconds(),
-		}
-		if runErr != nil {
-			g.log.Warn("ai run failed", "channel_id", channelID, "run_id", runID, "error", runErr)
-			g.appendAudit(meta, "ai_run", "failure", auditDetail, runErr)
-			return
-		}
-		g.appendAudit(meta, "ai_run", "success", auditDetail, nil)
-		return
-
-	case (r.Method == http.MethodPost || r.Method == http.MethodGet) && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/"):
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/"):
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
@@ -4467,21 +4379,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				"status":    strings.TrimSpace(out.Status),
 			}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
-			return
-		}
-
-		if r.Method == http.MethodPost && action == "cancel" {
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			if err := g.ai.CancelRun(meta, runID); err != nil {
-				g.appendAudit(meta, "ai_run_cancel", "failure", map[string]any{"run_id": runID}, err)
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			g.appendAudit(meta, "ai_run_cancel", "success", map[string]any{"run_id": runID}, nil)
-			writeJSON(w, http.StatusOK, apiResp{OK: true})
 			return
 		}
 

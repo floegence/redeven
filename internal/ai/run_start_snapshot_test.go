@@ -78,7 +78,7 @@ func TestPrepareRun_InitializesLiveAssistantDraftImmediately(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, nil, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)
@@ -160,7 +160,6 @@ func TestPrepareRun_PropagatesInternalReadonlyRunOptions(t *testing.T) {
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello"},
 		Options: RunOptions{
-			MaxSteps:          1,
 			ToolAllowlist:     []string{"terminal.exec", "task_complete"},
 			ForceReadonlyExec: true,
 		},
@@ -221,7 +220,7 @@ func TestPrepareRun_ContextActionSuggestedWorkingDirDoesNotChangeRunWorkingDir(t
 				SuggestedWorkingDir: suggestedWorkingDir,
 			},
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	}, nil, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)

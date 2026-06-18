@@ -63,7 +63,6 @@ export type wire_ai_send_user_turn_req = {
     context_action?: ContextActionEnvelope;
   };
   options: {
-    max_steps: number;
     mode?: string;
   };
   expected_run_id?: string;
@@ -90,7 +89,6 @@ export type wire_ai_submit_request_user_input_response_req = {
     attachments: wire_ai_attachment[];
   };
   options: {
-    max_steps: number;
     mode?: string;
   };
   expected_run_id?: string;
@@ -102,15 +100,6 @@ export type wire_ai_submit_request_user_input_response_resp = {
   kind: string;
   consumed_waiting_prompt_id?: string;
   applied_execution_mode?: string;
-};
-
-export type wire_ai_cancel_run_req = {
-  run_id?: string;
-  thread_id?: string;
-};
-
-export type wire_ai_cancel_run_resp = {
-  ok: boolean;
 };
 
 export type wire_ai_active_run = {

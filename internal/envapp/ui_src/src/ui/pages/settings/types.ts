@@ -51,7 +51,6 @@ export type AIConfig = Readonly<{
   providers: AIProvider[];
   mode?: 'act' | 'plan';
   tool_recovery_enabled?: boolean;
-  tool_recovery_max_steps?: number;
   tool_recovery_allow_path_rewrite?: boolean;
   tool_recovery_allow_probe_tools?: boolean;
   tool_recovery_fail_on_repeated_signature?: boolean;
@@ -297,7 +296,6 @@ export type AIProviderDialogMode = 'create' | 'edit';
 export type AIPreservedUIFields = {
   mode?: 'act' | 'plan';
   tool_recovery_enabled?: boolean;
-  tool_recovery_max_steps?: number;
   tool_recovery_allow_path_rewrite?: boolean;
   tool_recovery_allow_probe_tools?: boolean;
   tool_recovery_fail_on_repeated_signature?: boolean;

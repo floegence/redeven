@@ -15,7 +15,7 @@ func buildPromptForToolRoutingTest(t *testing.T) string {
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "okf.search"}, {Name: "web.search"}}
 	contract := resolveRunCapabilityContract(r, tools, false)
-	return r.buildLayeredSystemPrompt("objective", "act", TaskComplexityStandard, 0, 8, true, tools, newRuntimeState("objective"), "", contract)
+	return r.buildLayeredSystemPrompt("objective", "act", TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
 }
 
 func assertPromptContains(t *testing.T, prompt string, want string) {

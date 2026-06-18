@@ -125,15 +125,23 @@ function contentBlocksFromMessage(message: FlowerChatMessage): readonly FlowerRe
 
 export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null | undefined): readonly FlowerTimelineEntry[] {
   if (!thread) return [];
+  const threadRunning = thread.status === 'running';
+  const activeCursorMessageID = threadRunning
+    ? [...thread.messages].reverse().find((message) => message.role === 'assistant' && message.active_cursor === true)?.id ?? ''
+    : '';
   const entries: FlowerTimelineEntry[] = thread.messages.flatMap((message): readonly FlowerTimelineEntry[] => {
+    const activeCursor = message.id === activeCursorMessageID;
+    const projectedMessage = activeCursor === message.active_cursor
+      ? message
+      : { ...message, active_cursor: activeCursor };
     const blocks = contentBlocksFromMessage(message);
-    if (blocks.length === 0 && message.status !== 'streaming' && message.status !== 'error') {
+    if (blocks.length === 0 && !activeCursor && message.status !== 'error') {
       return [];
     }
     return [{
       type: 'message',
       key: `message:${message.id}`,
-      message,
+      message: projectedMessage,
       blocks,
     }];
   });

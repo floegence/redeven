@@ -107,7 +107,7 @@ func TestSendUserTurn_ExpectedRunChanged_DoesNotPersistMessage(t *testing.T) {
 		Input: RunInput{
 			Text: "hello conflict",
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if err == nil {
 		t.Fatalf("SendUserTurn expected ErrRunChanged, got nil")
@@ -155,7 +155,7 @@ func TestSubmitRequestUserInputResponse_WaitingPromptMismatch_DoesNotPersistMess
 		Input: RunInput{
 			Text: "reply without waiting prompt id",
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if !errors.Is(err, ErrWaitingUserQueueConflict) {
 		t.Fatalf("SendUserTurn err=%v, want %v", err, ErrWaitingUserQueueConflict)
@@ -171,7 +171,7 @@ func TestSubmitRequestUserInputResponse_WaitingPromptMismatch_DoesNotPersistMess
 			},
 		},
 		Input:   RunInput{Text: "reply with wrong waiting prompt id"},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if !errors.Is(err, ErrWaitingPromptChanged) {
 		t.Fatalf("SubmitRequestUserInputResponse wrong-id err=%v, want %v", err, ErrWaitingPromptChanged)
@@ -219,7 +219,7 @@ func TestSubmitRequestUserInputResponse_WaitingPromptMatch_ReturnsConsumedPrompt
 		Input: RunInput{
 			Text: "reply with matching waiting prompt id",
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SubmitRequestUserInputResponse: %v", err)
@@ -293,7 +293,7 @@ func TestSubmitRequestUserInputResponse_WaitingChoiceSetMode_UpdatesThreadExecut
 		Input: RunInput{
 			Text: "confirmed, switch to act and continue",
 		},
-		Options: RunOptions{MaxSteps: 1, Mode: "plan"},
+		Options: RunOptions{Mode: "plan"},
 	})
 	if err != nil {
 		t.Fatalf("SubmitRequestUserInputResponse: %v", err)
@@ -358,7 +358,7 @@ func TestSubmitRequestUserInputResponse_PromptOnlyPersistsStructuredResponseCont
 			"direction": {ChoiceID: "proceed"},
 		}),
 		Input:   RunInput{},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SubmitRequestUserInputResponse: %v", err)
@@ -447,7 +447,7 @@ func TestSubmitRequestUserInputResponse_SecretAnswerDoesNotLeakToTranscriptOrStr
 			"api_key": {Text: secretValue},
 		}),
 		Input:   RunInput{},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SubmitRequestUserInputResponse: %v", err)
@@ -553,7 +553,7 @@ func TestExecutePreparedRun_WithPersistedUserMessage_ReusesPersistedMessageID(t 
 			Text:        normalizedInput.Text,
 			Attachments: normalizedInput.Attachments,
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	}
 
 	prepared, err := svc.prepareRun(meta, "run_prepersist_reuse_user_msg", req, nil, &persisted)
@@ -627,7 +627,7 @@ func TestSendUserTurn_ActiveRun_QueuesFollowUpWithoutCanceling(t *testing.T) {
 			MessageID: "m_client_follow_up_1",
 			Text:      "queue this follow-up",
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SendUserTurn: %v", err)
@@ -752,7 +752,7 @@ func TestSendUserTurn_QueuedDraftSourceMayReuseMessageID(t *testing.T) {
 			MessageID: draft.MessageID,
 			Text:      "queued from draft",
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SendUserTurn: %v", err)
@@ -846,7 +846,7 @@ func TestThreadActor_MaybeStartQueuedTurn_StartsQueuedMessageWithOriginalMessage
 			MessageID: "m_client_follow_up_2",
 			Text:      "queued follow-up to auto start",
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SendUserTurn: %v", err)
@@ -937,7 +937,7 @@ func TestThreadActor_MaybeStartQueuedTurn_DropsInvalidQueuedTurnAndLogsIt(t *tes
 				Presentation: ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 			},
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	}); !errors.Is(err, ErrInvalidContextAction) {
 		t.Fatalf("enqueueQueuedTurn err=%v, want %v", err, ErrInvalidContextAction)
 	}
@@ -1008,7 +1008,7 @@ func TestSendUserTurn_ModelLockConflict_DoesNotPersistMessage(t *testing.T) {
 		Input: RunInput{
 			Text: "try switching model while locked",
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if !errors.Is(err, ErrModelSwitchRequiresExplicitRestart) {
 		t.Fatalf("SendUserTurn err=%v, want %v", err, ErrModelSwitchRequiresExplicitRestart)
@@ -1257,7 +1257,7 @@ func TestSendUserTurnRejectsNonStandardContextActions(t *testing.T) {
 				Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 			},
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if !errors.Is(err, ErrInvalidContextAction) {
 		t.Fatalf("SendUserTurn err=%v, want %v", err, ErrInvalidContextAction)
@@ -1299,7 +1299,7 @@ func TestSendUserTurnRejectsNonStandardContextActionsWhileWaitingUser(t *testing
 				Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 			},
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if !errors.Is(err, ErrInvalidContextAction) {
 		t.Fatalf("SendUserTurn queue-after-waiting-user err=%v, want %v", err, ErrInvalidContextAction)
@@ -1349,7 +1349,7 @@ func TestSendUserTurnRejectsNonStandardContextActionsWhileActiveRunWouldQueue(t 
 				Presentation:  ContextActionPresentation{Label: "Ask Flower", Priority: 100},
 			},
 		},
-		Options: RunOptions{MaxSteps: 1},
+		Options: RunOptions{},
 	})
 	if !errors.Is(err, ErrInvalidContextAction) {
 		t.Fatalf("SendUserTurn active-run queue err=%v, want %v", err, ErrInvalidContextAction)
