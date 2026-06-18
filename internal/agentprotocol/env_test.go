@@ -56,6 +56,41 @@ func TestResolveEnvironmentTargetRecognizesUnsupportedRedevenTargetShapes(t *tes
 	}
 }
 
+func TestResolveEnvironmentTargetDoesNotTreatCatalogSSHAsLifecycleSupported(t *testing.T) {
+	t.Parallel()
+
+	catalog := TargetCatalog{Targets: []TargetDescriptor{
+		{
+			ID:     "local:local",
+			Kind:   TargetKindLocalEnvironment,
+			Label:  "Local Environment",
+			Status: TargetStatusConfigured,
+		},
+		{
+			ID:     "ssh:devbox:default:key_agent:remote_default",
+			Kind:   TargetKindSSHEnvironment,
+			Label:  "Devbox",
+			Status: TargetStatusConfigured,
+			Execution: &TargetExecutionRoute{
+				Location:       TargetExecutionLocationSSH,
+				SSHDestination: "devbox",
+				SSHAuthMode:    "key_agent",
+			},
+		},
+	}}
+
+	got, err := ResolveEnvironmentTarget(catalog, "ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default")
+	if err != nil {
+		t.Fatalf("ResolveEnvironmentTarget() error = %v", err)
+	}
+	if got.Supported || got.ReasonCode != EnvReasonUnsupportedTargetKind || got.Target.Kind != TargetKindSSHEnvironment {
+		t.Fatalf("resolution = %#v, want unsupported ssh environment", got)
+	}
+	if got.Target.Execution != nil {
+		t.Fatalf("environment target resolution leaked execution route: %#v", got.Target.Execution)
+	}
+}
+
 func TestEnvironmentStatusFromAttachSanitizesRuntimeControlToken(t *testing.T) {
 	t.Parallel()
 
@@ -119,6 +154,7 @@ func TestEnvironmentTargetCatalogSanitizesLocalPaths(t *testing.T) {
 		LocalUIURL:               "http://127.0.0.1:23998/",
 		EnvPublicID:              "env_123",
 		Capabilities:             []string{CapabilityLocalUI},
+		Execution:                &TargetExecutionRoute{Location: TargetExecutionLocationLocalRuntime},
 	}}})
 	if len(catalog.Targets) != 1 {
 		t.Fatalf("target count = %d, want 1", len(catalog.Targets))
@@ -128,7 +164,8 @@ func TestEnvironmentTargetCatalogSanitizesLocalPaths(t *testing.T) {
 		target.StateDir != "" ||
 		target.ConfigPath != "" ||
 		target.RuntimeControlSocketPath != "" ||
-		target.AgentHomeDir != "" {
+		target.AgentHomeDir != "" ||
+		target.Execution != nil {
 		t.Fatalf("environment target leaked local paths: %#v", target)
 	}
 	if target.LocalUIURL == "" || target.EnvPublicID != "env_123" {

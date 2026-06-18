@@ -104,6 +104,10 @@ func TestBuiltInToolDefinitions_TargetScopedToolsExposeTargetID(t *testing.T) {
 		if fmt.Sprint(targetID["type"]) != "string" {
 			t.Fatalf("%s target_id type=%v, want string", def.Name, targetID["type"])
 		}
+		description := strings.TrimSpace(fmt.Sprint(targetID["description"]))
+		if !strings.Contains(description, "explicitly routes") || strings.Contains(description, "before the thread starts") {
+			t.Fatalf("%s target_id description should avoid implicit remote execution wording: %q", def.Name, description)
+		}
 	}
 	for name := range targetScoped {
 		if !seen[name] {

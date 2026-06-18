@@ -569,7 +569,7 @@ func builtInToolDefinitions() []ToolDef {
 		b, _ := json.Marshal(m)
 		return b
 	}
-	targetIDProperty := map[string]any{"type": "string", "description": "Target environment id selected by Flower before the thread starts."}
+	targetIDProperty := map[string]any{"type": "string", "description": "Optional target id used only when this thread explicitly routes builtin tools through a target executor. Under the normal local-runtime policy this field does not make the tool run remotely."}
 	withTargetID := func(properties map[string]any) map[string]any {
 		out := make(map[string]any, len(properties)+1)
 		for key, value := range properties {
@@ -625,7 +625,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.exec",
-			Description:      "Execute a shell command on the local machine. Defaults to the run working directory. When timeout_ms is omitted, the runtime applies a 2-minute default timeout; any requested timeout is capped at 10 minutes.",
+			Description:      "Execute a shell command in the local AI runtime. Defaults to the run working directory. Do not treat thread target context as remote execution; remote or target execution must come from explicit target tool/result provenance. When timeout_ms is omitted, the runtime applies a 2-minute default timeout; any requested timeout is capped at 10 minutes.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "timeout_ms": map[string]any{"type": "integer", "minimum": 1, "maximum": 600000}, "description": map[string]any{"type": "string", "maxLength": 200}}), "required": []string{"command"}, "additionalProperties": false}),
 			ParallelSafe:     false,
 			Mutating:         false,

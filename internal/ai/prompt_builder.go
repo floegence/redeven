@@ -325,12 +325,8 @@ func buildPromptToolUsageSection(snapshot promptRuntimeSnapshot) promptSection {
 		"- Source-level conclusions -> verify any OKF background with terminal.exec or file tools before final conclusions.",
 		"- External/current/recent/news/third-party/general web facts -> authoritative URLs via terminal.exec/curl; use web.search only for discovery when the URL is unknown.",
 		"",
-		"Redeven environment lifecycle operations:",
-		"- For Redeven environment status, diagnostics, start, stop, restart, or update requests, first use OKF/redeven help and the `redeven env ... --json` CLI surface when available.",
-		"- Use `execution_context.current_target_id` as the primary target, then `target.target_id`, then `execution_context.source_env_public_id`.",
-		"- The literal target `current` is a Redeven environment alias; pass it to `redeven env` instead of resolving it through lower-level tooling.",
-		"- Do not infer Docker, SSH, systemd, launchctl, or process-manager commands from a Redeven target string unless a Redeven command explicitly returns such a user-facing command.",
-		"- If `redeven env` returns a structured unavailable or blocked plan, explain that plan instead of inventing a lower-level workaround.",
+		"Skill routing:",
+		"- When a request clearly matches an available skill, activate it with use_skill before acting and follow the activated skill body for domain-specific operations.",
 	}
 	return newPromptSection("tool_usage_strategy", lines...)
 }

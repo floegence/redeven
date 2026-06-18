@@ -121,6 +121,15 @@ func ResolveEnvironmentTarget(catalog TargetCatalog, rawTarget string) (Environm
 	requested := strings.TrimSpace(rawTarget)
 	target, err := ResolveTarget(catalog, requested)
 	if err == nil {
+		if !environmentLifecycleTargetSupported(target) {
+			return EnvironmentTargetResolution{
+				RequestedTarget: requested,
+				Target:          sanitizeEnvironmentTarget(target),
+				Supported:       false,
+				ReasonCode:      EnvReasonUnsupportedTargetKind,
+				Message:         unsupportedTargetMessage(target.Kind),
+			}, nil
+		}
 		return EnvironmentTargetResolution{
 			RequestedTarget: requested,
 			Target:          sanitizeEnvironmentTarget(target),
@@ -140,6 +149,11 @@ func ResolveEnvironmentTarget(catalog TargetCatalog, rawTarget string) (Environm
 		}, nil
 	}
 	return EnvironmentTargetResolution{}, err
+}
+
+func environmentLifecycleTargetSupported(target TargetDescriptor) bool {
+	return strings.TrimSpace(target.Kind) == TargetKindLocalEnvironment &&
+		strings.TrimSpace(target.ID) == "local:local"
 }
 
 func EnvironmentTargetCatalog(catalog TargetCatalog) TargetCatalog {
@@ -522,6 +536,7 @@ func sanitizeEnvironmentTarget(target TargetDescriptor) TargetDescriptor {
 	target.ConfigPath = ""
 	target.RuntimeControlSocketPath = ""
 	target.AgentHomeDir = ""
+	target.Execution = nil
 	return target
 }
 

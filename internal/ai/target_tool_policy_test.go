@@ -29,6 +29,22 @@ func (e *recordingTargetToolExecutor) ExecuteTargetTool(_ context.Context, call 
 	}, nil
 }
 
+type provenanceOmittingTargetToolExecutor struct {
+	call TargetToolCall
+}
+
+func (e *provenanceOmittingTargetToolExecutor) ExecuteTargetTool(_ context.Context, call TargetToolCall) (TargetToolResult, error) {
+	e.call = call
+	return TargetToolResult{
+		TargetID:          call.TargetID,
+		ExecutionLocation: "ssh_target",
+		Result: map[string]any{
+			"stdout":    "ok",
+			"exit_code": 0,
+		},
+	}, nil
+}
+
 func TestHandleToolCall_ExplicitTargetPolicyBlocksLocalFileToolWithoutTarget(t *testing.T) {
 	t.Parallel()
 
@@ -93,6 +109,38 @@ func TestHandleToolCall_ExplicitTargetPolicyUsesTargetExecutor(t *testing.T) {
 	}
 	if _, ok := args["target_id"]; ok {
 		t.Fatalf("forwarded target tool args must not include target_id: %#v", args)
+	}
+}
+
+func TestHandleToolCall_ExplicitTargetPolicyPreservesTargetProvenance(t *testing.T) {
+	t.Parallel()
+
+	executor := &provenanceOmittingTargetToolExecutor{}
+	r := newRun(runOptions{
+		Log:                slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir:       t.TempDir(),
+		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget},
+		TargetToolExecutor: executor,
+	})
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_term_1", "terminal.exec", map[string]any{
+		"target_id": "ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default",
+		"command":   "pwd",
+	})
+	if err != nil {
+		t.Fatalf("handleToolCall returned error: %v", err)
+	}
+	if outcome == nil || !outcome.Success {
+		t.Fatalf("outcome=%#v, want success", outcome)
+	}
+	result, ok := outcome.Result.(map[string]any)
+	if !ok {
+		t.Fatalf("result=%#v, want map", outcome.Result)
+	}
+	if result["target_id"] != "ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default" ||
+		result["execution_location"] != "ssh_target" {
+		t.Fatalf("target provenance was not preserved: %#v", result)
 	}
 }
 

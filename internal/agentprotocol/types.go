@@ -14,6 +14,7 @@ const (
 	ErrCodeTargetDiscoveryFailed = "TARGET_DISCOVERY_FAILED"
 	ErrCodeTargetMissing         = "TARGET_MISSING"
 	ErrCodeTargetNotFound        = "TARGET_NOT_FOUND"
+	ErrCodeTargetExecFailed      = "TARGET_EXEC_FAILED"
 	ErrCodeEnvironmentStatus     = "ENVIRONMENT_STATUS_FAILED"
 	ErrCodeEnvironmentOperation  = "ENVIRONMENT_OPERATION_FAILED"
 )
@@ -95,26 +96,35 @@ type TargetCatalog struct {
 }
 
 type TargetDescriptor struct {
-	ID                       string   `json:"id"`
-	Kind                     string   `json:"kind"`
-	Label                    string   `json:"label"`
-	Status                   string   `json:"status"`
-	StateRoot                string   `json:"state_root,omitempty"`
-	StateDir                 string   `json:"state_dir,omitempty"`
-	ConfigPath               string   `json:"config_path,omitempty"`
-	RuntimeControlSocketPath string   `json:"runtime_control_socket_path,omitempty"`
-	LocalUIURL               string   `json:"local_ui_url,omitempty"`
-	LocalUIURLs              []string `json:"local_ui_urls,omitempty"`
-	PasswordRequired         bool     `json:"password_required,omitempty"`
-	EffectiveRunMode         string   `json:"effective_run_mode,omitempty"`
-	RemoteEnabled            bool     `json:"remote_enabled,omitempty"`
-	DesktopManaged           bool     `json:"desktop_managed,omitempty"`
-	ControlplaneBaseURL      string   `json:"controlplane_base_url,omitempty"`
-	ControlplaneProvider     string   `json:"controlplane_provider_id,omitempty"`
-	EnvPublicID              string   `json:"env_public_id,omitempty"`
-	LocalEnvironmentID       string   `json:"local_environment_public_id,omitempty"`
-	AgentHomeDir             string   `json:"agent_home_dir,omitempty"`
-	Shell                    string   `json:"shell,omitempty"`
-	Capabilities             []string `json:"capabilities"`
-	UnavailableReasonCode    string   `json:"unavailable_reason_code,omitempty"`
+	ID                       string                `json:"id"`
+	Kind                     string                `json:"kind"`
+	Label                    string                `json:"label"`
+	Status                   string                `json:"status"`
+	StateRoot                string                `json:"state_root,omitempty"`
+	StateDir                 string                `json:"state_dir,omitempty"`
+	ConfigPath               string                `json:"config_path,omitempty"`
+	RuntimeControlSocketPath string                `json:"runtime_control_socket_path,omitempty"`
+	LocalUIURL               string                `json:"local_ui_url,omitempty"`
+	LocalUIURLs              []string              `json:"local_ui_urls,omitempty"`
+	PasswordRequired         bool                  `json:"password_required,omitempty"`
+	EffectiveRunMode         string                `json:"effective_run_mode,omitempty"`
+	RemoteEnabled            bool                  `json:"remote_enabled,omitempty"`
+	DesktopManaged           bool                  `json:"desktop_managed,omitempty"`
+	ControlplaneBaseURL      string                `json:"controlplane_base_url,omitempty"`
+	ControlplaneProvider     string                `json:"controlplane_provider_id,omitempty"`
+	EnvPublicID              string                `json:"env_public_id,omitempty"`
+	LocalEnvironmentID       string                `json:"local_environment_public_id,omitempty"`
+	AgentHomeDir             string                `json:"agent_home_dir,omitempty"`
+	Shell                    string                `json:"shell,omitempty"`
+	Capabilities             []string              `json:"capabilities"`
+	UnavailableReasonCode    string                `json:"unavailable_reason_code,omitempty"`
+	Execution                *TargetExecutionRoute `json:"execution,omitempty"`
+}
+
+type TargetExecutionRoute struct {
+	Location                 string `json:"location"`
+	SSHDestination           string `json:"ssh_destination,omitempty"`
+	SSHPort                  *int   `json:"ssh_port,omitempty"`
+	SSHAuthMode              string `json:"ssh_auth_mode,omitempty"`
+	SSHConnectTimeoutSeconds int    `json:"ssh_connect_timeout_seconds,omitempty"`
 }
