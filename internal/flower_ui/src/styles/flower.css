@@ -88,8 +88,40 @@ html.dark .flower-component-shell {
   min-width: 0;
   flex: 0 0 auto;
   align-items: center;
+  gap: 0.5rem;
   justify-content: stretch;
   padding: 0.75rem 0.75rem 0.5rem;
+}
+
+.flower-sidebar-leading-action {
+  display: inline-flex;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: 0 0 auto;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, var(--flower-thread-rail-control-border));
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--primary) 7%, var(--flower-thread-rail-control));
+  color: var(--flower-thread-rail-foreground);
+  padding: 0;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease,
+    filter 150ms ease;
+}
+
+.flower-sidebar-leading-action:hover,
+.flower-sidebar-leading-action:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--flower-thread-rail-control-border));
+  background: color-mix(in srgb, var(--primary) 12%, var(--flower-thread-rail-control));
+  box-shadow: 0 10px 24px -20px color-mix(in srgb, var(--primary) 55%, transparent);
+  filter: saturate(1.08);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .flower-new-chat-button {
