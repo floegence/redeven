@@ -517,7 +517,7 @@ function gatewaySessionTarget(session: DesktopSessionSummary): GatewayDesktopTar
 }
 
 function gatewaySessionEnvironmentEntryID(target: GatewayDesktopTarget): string {
-  return `gateway:${target.gateway_id}:env:${target.gateway_env_id}`;
+  return target.session_key;
 }
 
 function openSessionByURL(

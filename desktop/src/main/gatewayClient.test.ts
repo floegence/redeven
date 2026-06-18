@@ -658,12 +658,12 @@ describe('GatewayURLClient', () => {
     expect(server.requests[0]?.url).toBe('/gateway/v1/open-session');
   });
 
-  it('accepts URL Gateway direct artifacts only on the paired Gateway origin without URL-carried secrets', async () => {
+  it('accepts signed URL Gateway direct artifacts on isolated origins without URL-carried secrets', async () => {
     for (const artifactURL of [
-      'http://127.0.0.1:1/_redeven_proxy/env/',
       'http://user:pass@127.0.0.1:1/_redeven_proxy/env/',
       'http://127.0.0.1:1/_redeven_proxy/env/?token=secret',
       'http://127.0.0.1:1/_redeven_proxy/env/#proof',
+      'ftp://gateway.example/_redeven_proxy/env/',
     ]) {
       let record!: GatewayRecord;
       let gatewayPrivateKey = '';
@@ -710,6 +710,63 @@ describe('GatewayURLClient', () => {
         requested_capability: requestedCapability,
         client_nonce: clientNonce,
       })).rejects.toMatchObject({ code: 'GATEWAY_INVALID_ARTIFACT' });
+    }
+
+    for (const artifactURL of [
+      'http://127.0.0.1:1/_redeven_proxy/env/',
+      'http://gateway.example/_redeven_proxy/env/',
+      'https://gateway.example/_redeven_proxy/env/',
+    ]) {
+      let record!: GatewayRecord;
+      let gatewayPrivateKey = '';
+      const gatewaySessionID = 'gws_demo';
+      const gatewayEnvID = 'env_demo';
+      const requestedCapability = 'env_app' as const;
+      const clientNonce = 'client-nonce';
+      const server = await startServer((_request, _body, response) => {
+        const artifact = {
+          kind: 'local_direct_artifact' as const,
+          url: artifactURL,
+          expires_at_unix_ms: Date.now() + 60_000,
+          artifact_nonce: randomBytes(8).toString('hex'),
+        };
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify({
+          ok: true,
+          data: {
+            protocol_version: 'redeven-gateway-v1',
+            gateway_session_id: gatewaySessionID,
+            gateway_env_id: gatewayEnvID,
+            connect_artifact: {
+              ...artifact,
+              proof: gatewayArtifactProof({
+                privateKey: gatewayPrivateKey,
+                record,
+                gatewayEnvID,
+                gatewaySessionID,
+                requestedCapability,
+                clientNonce,
+                artifact,
+              }),
+            },
+          },
+        }));
+      });
+      cleanupServers.add(server);
+      const paired = pairedURLRecord(server.baseURL);
+      record = paired.record;
+      gatewayPrivateKey = paired.gatewayPrivateKey;
+
+      const response = await new GatewayURLClient(paired.secretStore).openSession(record, {
+        gateway_env_id: gatewayEnvID,
+        requested_capability: requestedCapability,
+        client_nonce: clientNonce,
+      });
+
+      expect(response.connect_artifact).toMatchObject({
+        kind: 'local_direct_artifact',
+        url: artifactURL,
+      });
     }
 
     let artifactURL = '';
@@ -765,8 +822,11 @@ describe('GatewayURLClient', () => {
       kind: 'local_direct_artifact',
       url: `${server.baseURL}_redeven_proxy/env/`,
     });
-    expect(response.set_cookie_headers).toEqual([
-      'redeven_local_access=session-secret; Path=/; HttpOnly; SameSite=Lax',
+    expect(Object.keys(response).sort()).toEqual([
+      'connect_artifact',
+      'gateway_env_id',
+      'gateway_session_id',
+      'protocol_version',
     ]);
   });
 

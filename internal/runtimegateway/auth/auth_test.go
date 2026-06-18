@@ -58,6 +58,25 @@ func TestVerifierRejectsTamperedSignature(t *testing.T) {
 	}
 }
 
+func TestVerifierInvalidSignatureDoesNotConsumeNonce(t *testing.T) {
+	store := trust.NewStore("")
+	material := pairTestClient(t, store, "https://gateway.example.internal")
+	verifier := NewVerifier(store)
+	body := []byte(`{"ok":true}`)
+	req := newSignedTestRequest(t, material, http.MethodPost, "/gateway/v1/catalog", body, "nonce-retry-after-invalid-signature")
+	validSignature := req.Header.Get("X-Redeven-Request-Signature")
+	req.Header.Set("X-Redeven-Request-Signature", "not-a-valid-signature")
+
+	if _, err := verifier.Verify(context.Background(), req, body, material.bindingAudience); err == nil {
+		t.Fatal("Verify() error = nil, want invalid signature error")
+	}
+
+	req.Header.Set("X-Redeven-Request-Signature", validSignature)
+	if _, err := verifier.Verify(context.Background(), req, body, material.bindingAudience); err != nil {
+		t.Fatalf("Verify() after retry error = %v", err)
+	}
+}
+
 func TestVerifierRejectsBodyDigestMismatch(t *testing.T) {
 	store := trust.NewStore("")
 	material := pairTestClient(t, store, "https://gateway.example.internal")

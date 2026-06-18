@@ -60,7 +60,6 @@ import {
   buildGatewayDesktopTarget,
   buildManagedLocalRuntimeDesktopTarget,
   desktopSessionKeyFromRuntimeTargetID,
-  gatewayDesktopSessionKey,
   buildExternalLocalUIDesktopTarget,
   buildProviderEnvironmentDesktopTarget,
   buildSSHDesktopTarget,
@@ -2537,33 +2536,6 @@ function rendererSafeSessionURL(session: DesktopSessionRecord): string {
   return stripSensitiveURLPayload(session.entry_url) || stripSensitiveURLPayload(session.startup.local_ui_url);
 }
 
-async function installGatewaySessionCookies(
-  targetURL: string,
-  setCookieHeaders: readonly string[] | undefined,
-  partition?: string,
-): Promise<void> {
-  const parsed = new URL(targetURL);
-  const targetSession = compact(partition)
-    ? session.fromPartition(compact(partition))
-    : session.defaultSession;
-  for (const name of ['redeven_local_access', 'redeven_gateway_env_session']) {
-    const rawCookie = (setCookieHeaders ?? []).find((value) => new RegExp(`^${name}=`, 'iu').test(compact(value)));
-    const token = compact(rawCookie?.match(new RegExp(`^${name}=([^;,]+)`, 'iu'))?.[1]);
-    if (!token) {
-      continue;
-    }
-    await targetSession.cookies.set({
-      url: `${parsed.protocol}//${parsed.host}/`,
-      name,
-      value: token,
-      path: '/',
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: parsed.protocol === 'https:',
-    });
-  }
-}
-
 function desktopStateStore(): DesktopStateStore {
   if (!desktopStateStoreCache) {
     desktopStateStoreCache = new DesktopStateStore(defaultDesktopStateStorePath(app.getPath('userData')));
@@ -4734,8 +4706,8 @@ async function deleteGatewayEnvironmentProfileFromLauncher(
         },
       );
     }
-    const sessionRecord = liveSession(gatewayDesktopSessionKey(record.gateway_id, request.gateway_env_id));
-    if (sessionRecord) {
+    const sessionRecords = liveGatewayEnvironmentSessions(record.gateway_id, request.gateway_env_id);
+    for (const sessionRecord of sessionRecords) {
       await finalizeSessionClosure(sessionRecord.session_key);
     }
     await syncGatewayRecord(record, {
@@ -6394,6 +6366,28 @@ function liveSession(sessionKey: DesktopSessionKey): DesktopSessionRecord | null
   return sessionRecord;
 }
 
+function liveGatewayEnvironmentSessions(gatewayID: string, gatewayEnvID: string): readonly DesktopSessionRecord[] {
+  const cleanGatewayID = compact(gatewayID);
+  const cleanGatewayEnvID = compact(gatewayEnvID);
+  if (cleanGatewayID === '' || cleanGatewayEnvID === '') {
+    return [];
+  }
+  const matches: DesktopSessionRecord[] = [];
+  for (const sessionRecord of sessionsByKey.values()) {
+    if (
+      sessionRecord.target.kind === 'gateway_environment'
+      && sessionRecord.target.gateway_id === cleanGatewayID
+      && sessionRecord.target.gateway_env_id === cleanGatewayEnvID
+    ) {
+      const live = liveSession(sessionRecord.session_key);
+      if (live) {
+        matches.push(live);
+      }
+    }
+  }
+  return matches;
+}
+
 function focusUtilityWindow(kind: DesktopUtilityWindowKind, options?: Readonly<{ stealAppFocus?: boolean }>): boolean {
   const win = liveUtilityWindow(kind);
   if (!win) {
@@ -7017,7 +7011,6 @@ async function createSessionRecord(
     runtimeHandle?: DesktopSessionRuntimeHandle | null;
     attached?: boolean;
     stealAppFocus?: boolean;
-    gatewaySetCookieHeaders?: readonly string[];
   }> = {},
 ): Promise<DesktopSessionRecord> {
   const diagnostics = new DesktopDiagnosticsRecorder();
@@ -7028,9 +7021,6 @@ async function createSessionRecord(
   const safeEntryURL = stripSensitiveURLPayload(entryURL) || entryURL;
   const safeAllowedBaseURL = stripSensitiveURLPayload(startup.local_ui_url) || startup.local_ui_url;
   const sessionPartition = desktopSessionPartitionForTarget(target);
-  if (target.kind === 'gateway_environment') {
-    await installGatewaySessionCookies(entryURL, options.gatewaySetCookieHeaders, sessionPartition);
-  }
   const initialLoad = createInitialLoadDeferred();
   let sessionRecord!: DesktopSessionRecord;
   const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics, {
@@ -10751,7 +10741,7 @@ function finishGatewayOpenCapabilityFailure(
   operationKey: string,
   record: GatewayRecord,
   request: Extract<DesktopLauncherActionRequest, Readonly<{ kind: 'open_gateway_environment' }>>,
-  target: DesktopSessionTarget,
+  targetID: string,
   result: DesktopLauncherActionFailure,
 ): DesktopLauncherActionFailure {
   const failure = result.failure ?? desktopOperationFailurePresentation({
@@ -10770,7 +10760,7 @@ function finishGatewayOpenCapabilityFailure(
       phase: 'failed',
       environmentID: request.environment_id,
       environmentLabel: request.label,
-      targetID: target.session_key,
+      targetID,
       targetLabel: request.label,
       targetDetail: record.display_name,
       location: 'runtime_gateway',
@@ -10802,27 +10792,9 @@ async function openGatewayEnvironmentFromLauncher(
       },
     );
   }
-  const target = buildGatewayDesktopTarget({
-    gatewayID: record.gateway_id,
-    gatewayLabel: record.display_name,
-    gatewayEnvID: request.gateway_env_id,
-    label: request.label,
-  });
-  const existingSession = liveSession(target.session_key);
-  if (existingSession) {
-    if (existingSession.lifecycle === 'opening') {
-      return launcherActionFailureForOpeningSession(existingSession, {
-        environmentID: request.environment_id,
-      });
-    }
-    resetLauncherIssueState();
-    focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
-    return launcherActionSuccess('focused_environment_window', {
-      sessionKey: existingSession.session_key,
-    });
-  }
-
-  const operationKey = `${target.session_key}:open`;
+  const operationTargetID = `gateway:${encodeURIComponent(record.gateway_id)}:env:${encodeURIComponent(request.gateway_env_id)}`;
+  const clientNonce = crypto.randomBytes(24).toString('base64url');
+  const operationKey = `${operationTargetID}:open:${clientNonce}`;
   const operation = launcherOperations.create({
     operation_key: operationKey,
     action: 'open_gateway_environment',
@@ -10839,7 +10811,7 @@ async function openGatewayEnvironmentFromLauncher(
       phase: 'checking_runtime_record',
       environmentID: request.environment_id,
       environmentLabel: request.label,
-      targetID: target.session_key,
+      targetID: operationTargetID,
       targetLabel: request.label,
       targetDetail: record.display_name,
       location: 'runtime_gateway',
@@ -10871,9 +10843,8 @@ async function openGatewayEnvironmentFromLauncher(
       onGatewayServiceProgress: lifecycleContext?.onProgress,
     });
     if (capabilityFailure) {
-      return finishGatewayOpenCapabilityFailure(operationKey, record, request, target, capabilityFailure);
+      return finishGatewayOpenCapabilityFailure(operationKey, record, request, operationTargetID, capabilityFailure);
     }
-    const clientNonce = crypto.randomBytes(24).toString('base64url');
     const issued = await gatewayLifecycleManager().openSessionWithBridge(record, {
       gateway_env_id: request.gateway_env_id,
       requested_capability: 'env_app',
@@ -10929,7 +10900,6 @@ async function openGatewayEnvironmentFromLauncher(
     });
     const sessionRecord = await createSessionRecord(openTarget, startup, {
       stealAppFocus: true,
-      gatewaySetCookieHeaders: response.set_cookie_headers,
     });
     await waitForSessionInitialLoad(sessionRecord);
     resetLauncherIssueState();
@@ -10971,7 +10941,7 @@ async function openGatewayEnvironmentFromLauncher(
           phase: 'failed',
           environmentID: request.environment_id,
           environmentLabel: request.label,
-          targetID: target.session_key,
+          targetID: operationTargetID,
           targetLabel: request.label,
           targetDetail: record.display_name,
           location: 'runtime_gateway',
@@ -11042,7 +11012,7 @@ async function openGatewayEnvironmentFromLauncher(
         phase: signal?.aborted ? 'canceled' : 'failed',
         environmentID: request.environment_id,
         environmentLabel: request.label,
-        targetID: target.session_key,
+        targetID: operationTargetID,
         targetLabel: request.label,
         targetDetail: record.display_name,
         location: 'runtime_gateway',

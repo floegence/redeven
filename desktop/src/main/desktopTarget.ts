@@ -22,7 +22,7 @@ import type { DesktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 
 export type DesktopTargetKind = 'local_environment' | 'external_local_ui' | 'ssh_environment' | 'gateway_environment';
 export type DesktopLocalEnvironmentStateSessionRoute = 'local_host' | 'remote_desktop';
-export type DesktopSessionKey = `env:${string}:${DesktopLocalEnvironmentStateSessionRoute}` | `url:${string}` | `ssh:${string}` | `gateway:${string}:env:${string}`;
+export type DesktopSessionKey = `env:${string}:${DesktopLocalEnvironmentStateSessionRoute}` | `url:${string}` | `ssh:${string}` | `gateway:${string}:env:${string}:session:${string}`;
 export type DesktopSessionLifecycle = 'opening' | 'open' | 'closing';
 
 export type LocalEnvironmentDesktopTarget = Readonly<{
@@ -64,13 +64,13 @@ export type SSHDesktopTarget = Readonly<{
 
 export type GatewayDesktopTarget = Readonly<{
   kind: 'gateway_environment';
-  session_key: `gateway:${string}:env:${string}`;
+  session_key: `gateway:${string}:env:${string}:session:${string}`;
   environment_id: string;
   label: string;
   gateway_id: string;
   gateway_label: string;
   gateway_env_id: string;
-  gateway_session_id?: string;
+  gateway_session_id: string;
 }>;
 
 export type DesktopSessionTarget = LocalEnvironmentDesktopTarget | ExternalLocalUIDesktopTarget | SSHDesktopTarget | GatewayDesktopTarget;
@@ -143,13 +143,15 @@ export function sshDesktopSessionKey(rawDetails: DesktopSSHEnvironmentDetails): 
 export function gatewayDesktopSessionKey(
   gatewayID: string,
   gatewayEnvID: string,
-): `gateway:${string}:env:${string}` {
+  gatewaySessionID: string,
+): `gateway:${string}:env:${string}:session:${string}` {
   const cleanGatewayID = compact(gatewayID);
   const cleanGatewayEnvID = compact(gatewayEnvID);
-  if (cleanGatewayID === '' || cleanGatewayEnvID === '') {
-    throw new Error('Gateway id and environment id are required.');
+  const cleanGatewaySessionID = compact(gatewaySessionID);
+  if (cleanGatewayID === '' || cleanGatewayEnvID === '' || cleanGatewaySessionID === '') {
+    throw new Error('Gateway id, environment id, and session id are required.');
   }
-  return `gateway:${encodeURIComponent(cleanGatewayID)}:env:${encodeURIComponent(cleanGatewayEnvID)}`;
+  return `gateway:${encodeURIComponent(cleanGatewayID)}:env:${encodeURIComponent(cleanGatewayEnvID)}:session:${encodeURIComponent(cleanGatewaySessionID)}`;
 }
 
 export function desktopSessionStateKeyFragment(sessionKey: DesktopSessionKey): string {
@@ -295,19 +297,20 @@ export function buildGatewayDesktopTarget(input: Readonly<{
 }>): GatewayDesktopTarget {
   const gatewayID = compact(input.gatewayID);
   const gatewayEnvID = compact(input.gatewayEnvID);
-  if (gatewayID === '' || gatewayEnvID === '') {
-    throw new Error('Gateway id and environment id are required.');
+  const gatewaySessionID = compact(input.gatewaySessionID);
+  if (gatewayID === '' || gatewayEnvID === '' || gatewaySessionID === '') {
+    throw new Error('Gateway id, environment id, and session id are required.');
   }
   const label = compact(input.label) || gatewayEnvID;
   return {
     kind: 'gateway_environment',
-    session_key: gatewayDesktopSessionKey(gatewayID, gatewayEnvID),
+    session_key: gatewayDesktopSessionKey(gatewayID, gatewayEnvID, gatewaySessionID),
     environment_id: `gateway:${gatewayID}:env:${gatewayEnvID}`,
     label,
     gateway_id: gatewayID,
     gateway_label: compact(input.gatewayLabel) || gatewayID,
     gateway_env_id: gatewayEnvID,
-    gateway_session_id: compact(input.gatewaySessionID) || undefined,
+    gateway_session_id: gatewaySessionID,
   };
 }
 

@@ -47,6 +47,7 @@ type openAPIRequestBody struct {
 
 type openAPIResponse struct {
 	Ref     string                      `yaml:"$ref"`
+	Headers map[string]any              `yaml:"headers"`
 	Content map[string]openAPIMediaType `yaml:"content"`
 }
 
@@ -97,6 +98,7 @@ func TestGatewayOpenAPIContract(t *testing.T) {
 	assertRequiredWireFields(t, contract)
 	assertProfileAccessRouteSchemas(t, contract)
 	assertConnectArtifactSchemas(t, contract)
+	assertOpenSessionDoesNotExposeCookies(t, contract)
 }
 
 func TestGatewayNamingBoundary(t *testing.T) {
@@ -477,6 +479,23 @@ func assertRequiredWireFields(t *testing.T, contract openAPIContract) {
 	}
 	for name, fields := range required {
 		assertRequired(t, name, schemaByName(t, contract, name), fields...)
+	}
+}
+
+func assertOpenSessionDoesNotExposeCookies(t *testing.T, contract openAPIContract) {
+	t.Helper()
+	operation, ok := contract.Paths["/gateway/v1/open-session"]["post"]
+	if !ok {
+		t.Fatal("open-session POST operation is missing")
+	}
+	response, ok := operation.Responses["200"]
+	if !ok {
+		t.Fatal("open-session 200 response is missing")
+	}
+	for name := range response.Headers {
+		if strings.EqualFold(name, "Set-Cookie") {
+			t.Fatal("Gateway open-session must not expose browser cookies")
+		}
 	}
 }
 

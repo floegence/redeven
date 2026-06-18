@@ -14,9 +14,11 @@ The Gateway CLI exposes `serve`, `desktop-bridge`, `service-status`, `service-st
 
 The Gateway HTTP JSON protocol source contract is `spec/openapi/gateway-v1.yaml`. That OpenAPI file describes the `/gateway/v1/*` wire surface, request/response envelopes, schema variants, auth headers, the managed bridge token boundary, and the `redeven-gateway-v1` protocol version. The contract is checked by `internal/runtimegateway/protocol/openapi_contract_test.go` and by `scripts/check_gateway_protocol_contract.sh`, so Go service routes, Desktop client routes, enums, envelope shape, and protocol literals cannot drift silently.
 
+For URL environment profiles, each open-session creates an isolated local-direct listener and returns a signed artifact URL rooted at a random profile access path on that listener. The main Gateway protocol host does not proxy profile traffic, and open-session does not install browser cookies. Requests must either use the random artifact path or prove a same-origin navigation chain from it, so probing the listener port without the artifact URL cannot reach the target. The listener lifetime is capped by the signed artifact expiry and it is also closed on profile update/delete or Gateway server shutdown. Target-site cookies are captured in a per-open-session server-side cookie jar, browser-supplied cookies and authorization headers are stripped before proxying, target `Set-Cookie` and service-worker scope headers are removed from browser responses.
+
 # Boundaries
 
-Gateway state, pairing, profile write enablement, and private-profile-target allowance are Gateway service concerns. Runtime Service compatibility stays separate unless the runtime snapshot contract itself changes.
+Gateway state, pairing, profile write enablement, private-profile-target allowance, and URL profile session listener lifecycle are Gateway service concerns. Runtime Service compatibility stays separate unless the runtime snapshot contract itself changes.
 
 OpenAPI is intentionally limited to the Gateway HTTP JSON wire contract. It does not define the Desktop bridge stdio frame protocol, Env App proxy routes, Runtime Service compatibility windows, or a full state-machine DSL. Gateway semantics such as nonce lifetime, trust profile pinning, stale catalog invalidation after protocol failure, and managed-versus-external recovery actions are enforced by Go/TypeScript tests and documented in OKF rather than encoded as a new custom protocol language.
 
@@ -38,4 +40,8 @@ Gateway should not depend on the Flowersec DSL for this API contract. Flowersec 
 [12] redeven:spec/openapi/gateway-v1.yaml:24 - The Gateway OpenAPI contract declares the `redeven-gateway-v1` version.
 [13] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:73 - The contract test rejects the old runtime-gateway protocol name.
 [14] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:76 - The contract test rejects Runtime Service compatibility fields in Gateway OpenAPI.
-[15] redeven:scripts/check_gateway_protocol_contract.sh:9 - The standalone contract check runs the Gateway OpenAPI and naming-boundary tests.
+[15] redeven:internal/gatewayservice/server.go:643 - URL profile open-session creates an isolated profile session listener.
+[16] redeven:internal/gatewayservice/server.go:847 - Profile session requests are gated by the artifact access path or same-origin proof.
+[17] redeven:internal/gatewayservice/server.go:1019 - The profile proxy injects only server-side jar cookies into target requests.
+[18] redeven:internal/gatewayservice/server.go:1034 - The profile proxy strips target `Set-Cookie` before responding to the browser.
+[19] redeven:scripts/check_gateway_protocol_contract.sh:9 - The standalone contract check runs the Gateway OpenAPI and naming-boundary tests.

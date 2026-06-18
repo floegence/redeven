@@ -84,7 +84,6 @@ export function buildGatewayEnvironmentEntries(
 ): readonly DesktopEnvironmentEntry[] {
   const createdAtMS = input.createdAtMS ?? Date.now();
   const entries: DesktopEnvironmentEntry[] = [];
-  const matchedOpenSessionKeys = new Set<string>();
   const disabledGatewayIDs = new Set(
     input.gatewaySources
       .filter((gateway) => gateway.local_enabled === false)
@@ -99,22 +98,25 @@ export function buildGatewayEnvironmentEntries(
       continue;
     }
     for (const environment of gateway.environments) {
-      const entry = buildGatewayEnvironmentEntry(gateway, environment, source, createdAtMS, input.openSessions ?? []);
+      const entry = buildGatewayEnvironmentEntry(gateway, environment, source, createdAtMS);
       if (entry) {
-        if (entry.open_session_key) {
-          matchedOpenSessionKeys.add(entry.open_session_key);
-        }
         entries.push(entry);
       }
     }
   }
-  return [
-    ...entries,
-    ...(input.openSessions ?? []).filter((entry) => (
+  const sources = input.gatewaySources
+    .map(gatewayEnvironmentSource)
+    .filter((source): source is DesktopEnvironmentSource => source !== null);
+  const openSessionEntries = attachEnvironmentSources(
+    (input.openSessions ?? []).filter((entry) => (
       entry.open_session_key
-      && !matchedOpenSessionKeys.has(entry.open_session_key)
       && !(entry.kind === 'gateway_environment' && entry.gateway_id && disabledGatewayIDs.has(entry.gateway_id))
     )),
+    sources,
+  );
+  return [
+    ...entries,
+    ...openSessionEntries,
   ];
 }
 
@@ -123,7 +125,6 @@ function buildGatewayEnvironmentEntry(
   environment: DesktopGatewayEnvironment,
   source: DesktopEnvironmentSource,
   createdAtMS: number,
-  openSessionEntries: readonly DesktopEnvironmentEntry[],
 ): DesktopEnvironmentEntry | null {
   const id = desktopGatewayEnvironmentEntryID(gateway.gateway_id, environment.gateway_env_id);
   if (!id) {
@@ -157,10 +158,6 @@ function buildGatewayEnvironmentEntry(
   const canUpdate = hasGatewayLifecycleControl
     && (environment.state === 'available' || environment.state === 'stopped')
     && desktopGatewayEnvironmentHasControlCapability(environment, 'update_runtime');
-  const openSession = openSessionEntries.find((entry) => (
-    entry.gateway_id === gateway.gateway_id
-    && entry.gateway_env_id === environment.gateway_env_id
-  )) ?? null;
   const runtimeOperations = gatewayRuntimeOperations({
     openable: isOpenable,
     canStart,
@@ -169,7 +166,6 @@ function buildGatewayEnvironmentEntry(
     canUpdate,
     needsResolve,
   });
-  const windowState = openSession?.window_state ?? 'closed';
   return {
     id,
     kind: 'gateway_environment',
@@ -196,9 +192,9 @@ function buildGatewayEnvironmentEntry(
     pinned: false,
     tag: gateway.status === 'online' ? 'Gateway' : 'Resolve',
     category: 'gateway',
-    window_state: windowState,
-    is_open: windowState === 'open',
-    is_opening: windowState === 'opening',
+    window_state: 'closed',
+    is_open: false,
+    is_opening: false,
     runtime_health: {
       status: isOpenable || canStart ? 'online' : 'offline',
       checked_at_unix_ms: Date.now(),
@@ -208,9 +204,9 @@ function buildGatewayEnvironmentEntry(
       offline_reason: gatewayOfflineReason(gateway, environment),
     },
     runtime_operations: runtimeOperations,
-    open_session_key: openSession?.open_session_key ?? '',
-    open_session_lifecycle: openSession?.open_session_lifecycle,
-    open_action: windowState === 'open' ? 'focus' : windowState === 'opening' ? 'opening' : 'open',
+    open_session_key: '',
+    open_session_lifecycle: undefined,
+    open_action: 'open',
     can_edit: canEditGatewayProfile,
     can_delete: canWriteGatewayProfile && hasManagedGatewayProfile,
     created_at_ms: createdAtMS,

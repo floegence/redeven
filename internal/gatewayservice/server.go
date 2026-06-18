@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httputil"
 	"net/netip"
 	"net/url"
@@ -28,8 +29,7 @@ import (
 )
 
 const (
-	envSessionCookieName = "redeven_gateway_env_session"
-	envProxySessionTTL   = 12 * time.Hour
+	gatewayConnectArtifactTTL = 10 * time.Minute
 
 	managedBridgeTransportHeader = "X-Redeven-Gateway-Transport"
 	managedBridgeTokenHeader     = "X-Redeven-Gateway-Managed-Bridge-Token"
@@ -56,14 +56,21 @@ type Server struct {
 	profile *gatewayenvprofiles.Store
 
 	profileSessionsMu sync.Mutex
-	profileSessions   map[string]profileSession
+	profileSessions   map[string]*profileSession
 	proxyTransport    http.RoundTripper
 }
 
 type profileSession struct {
+	ID              string
 	GatewayEnvID    string
 	TargetBaseURL   string
+	AllowedClientIP string
+	AccessPath      string
 	ExpiresAtUnixMS int64
+	EntryURL        string
+	Listener        net.Listener
+	Server          *http.Server
+	CookieJar       *cookiejar.Jar
 }
 
 type envelope struct {
@@ -96,7 +103,7 @@ func New(options Options) (*Server, error) {
 				AllowPrivateNetworkTargets: options.AllowPrivateProfileTargets,
 			},
 		}),
-		profileSessions: make(map[string]profileSession),
+		profileSessions: make(map[string]*profileSession),
 		proxyTransport: gatewayProfileProxyTransport(gatewayenvprofiles.URLTargetPolicy{
 			AllowPrivateNetworkTargets: options.AllowPrivateProfileTargets,
 		}),
@@ -126,7 +133,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/gateway/v1/env-profiles/upsert", s.handleEnvProfileUpsert)
 	mux.HandleFunc("/gateway/v1/env-profiles/delete", s.handleEnvProfileDelete)
 	mux.HandleFunc("/gateway/v1/env-lifecycle", s.handleEnvLifecycle)
-	return s.withProfileProxy(mux)
+	return mux
 }
 
 func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.Listener, error) {
@@ -147,10 +154,12 @@ func (s *Server) Start(ctx context.Context, listen string) (*http.Server, []net.
 	}
 	go func() {
 		<-ctx.Done()
+		s.closeAllProfileSessions()
 		_ = srv.Close()
 	}()
 	go func() {
 		_ = srv.Serve(ln)
+		s.closeAllProfileSessions()
 	}()
 	go s.sweepLoop(ctx)
 	return srv, []net.Listener{ln}, nil
@@ -513,11 +522,10 @@ func (s *Server) pairingAllowedForChallenge(r *http.Request, gatewayNonce string
 	return ok && s.pairingCode != "" && strings.TrimSpace(challenge.PairingCode) == s.pairingCode
 }
 
-func (s *Server) sessionService(w http.ResponseWriter, r *http.Request) *gatewaysession.Service {
+func (s *Server) sessionService(_ http.ResponseWriter, r *http.Request) *gatewaysession.Service {
 	return gatewaysession.NewService(gatewaysession.WithConnectArtifactIssuer(artifactIssuer{
 		server:          s,
 		request:         r,
-		responseWriter:  w,
 		bindingAudience: bindingAudience(r),
 	}))
 }
@@ -525,7 +533,6 @@ func (s *Server) sessionService(w http.ResponseWriter, r *http.Request) *gateway
 type artifactIssuer struct {
 	server          *Server
 	request         *http.Request
-	responseWriter  http.ResponseWriter
 	bindingAudience string
 }
 
@@ -555,15 +562,23 @@ func (i artifactIssuer) IssueGatewayConnectArtifact(ctx context.Context, req gat
 			Message: "Gateway environment opening is not available for this profile yet.",
 		}
 	}
-	token, expiresAt, err := i.server.mintProfileSession(profile)
+	if i.server.isManagedDesktopBridgeRequest(i.request) {
+		return i.issueSignedArtifact(req, "", "gateway_profile_url")
+	}
+	session, err := i.server.openProfileSession(profile, i.request)
 	if err != nil {
 		return gatewaysession.GatewayConnectArtifactIssue{}, err
 	}
-	i.server.setProfileSessionCookie(i.responseWriter, i.request, token, expiresAt)
-	return i.issueSignedArtifact(req, "gateway_profile_url")
+	issue, err := i.issueSignedArtifact(req, session.EntryURL, "gateway_profile_url")
+	if err != nil {
+		i.server.discardProfileSession(session)
+		return gatewaysession.GatewayConnectArtifactIssue{}, err
+	}
+	i.server.activateProfileSession(session, issue.ConnectArtifact.ExpiresAtUnixMS)
+	return issue, nil
 }
 
-func (i artifactIssuer) issueSignedArtifact(req gatewayprotocol.OpenSessionRequest, connectionKind string) (gatewaysession.GatewayConnectArtifactIssue, error) {
+func (i artifactIssuer) issueSignedArtifact(req gatewayprotocol.OpenSessionRequest, directURL string, connectionKind string) (gatewaysession.GatewayConnectArtifactIssue, error) {
 	metadata, _, err := i.server.trustStore().GatewayMetadata(i.bindingAudience)
 	if err != nil {
 		return gatewaysession.GatewayConnectArtifactIssue{}, err
@@ -592,11 +607,10 @@ func (i artifactIssuer) issueSignedArtifact(req gatewayprotocol.OpenSessionReque
 			BridgeSessionID:     req.BridgeSessionID,
 			RouteID:             req.RouteID,
 			GatewayPrivateKey:   privateKey,
-			TTL:                 10 * time.Minute,
+			TTL:                 gatewayConnectArtifactTTL,
 		})
 	}
-	entryURL := gatewayEnvAppEntryURL(i.request)
-	if strings.TrimSpace(entryURL) == "" {
+	if strings.TrimSpace(directURL) == "" {
 		return gatewaysession.GatewayConnectArtifactIssue{}, errors.New("Gateway Env App entry URL is unavailable")
 	}
 	issue, err := gatewaysession.NewSignedLocalDirectIssue(struct {
@@ -614,9 +628,9 @@ func (i artifactIssuer) issueSignedArtifact(req gatewayprotocol.OpenSessionReque
 		BindingAudience:     i.bindingAudience,
 		RequestedCapability: req.RequestedCapability,
 		ClientNonce:         req.ClientNonce,
-		URL:                 entryURL,
+		URL:                 directURL,
 		GatewayPrivateKey:   privateKey,
-		TTL:                 10 * time.Minute,
+		TTL:                 gatewayConnectArtifactTTL,
 	})
 	if err != nil {
 		return gatewaysession.GatewayConnectArtifactIssue{}, err
@@ -627,7 +641,276 @@ func (i artifactIssuer) issueSignedArtifact(req gatewayprotocol.OpenSessionReque
 	return issue, nil
 }
 
-func gatewayEnvAppEntryURL(r *http.Request) string {
+func (s *Server) openProfileSession(profile gatewayenvprofiles.EnvironmentProfile, r *http.Request) (*profileSession, error) {
+	sessionID, err := randomB64u(24)
+	if err != nil {
+		return nil, err
+	}
+	accessToken, err := randomB64u(24)
+	if err != nil {
+		return nil, err
+	}
+	ln, err := net.Listen("tcp", net.JoinHostPort(profileSessionListenHost(r), "0"))
+	if err != nil {
+		return nil, err
+	}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		_ = ln.Close()
+		return nil, err
+	}
+	session := &profileSession{
+		ID:              sessionID,
+		GatewayEnvID:    strings.TrimSpace(profile.GatewayEnvID),
+		TargetBaseURL:   strings.TrimSpace(profile.AccessRoute.URL),
+		AllowedClientIP: requestRemoteIP(r),
+		AccessPath:      profileSessionAccessPath(accessToken),
+		EntryURL:        profileSessionEntryURL(r, ln.Addr(), accessToken),
+		Listener:        ln,
+		CookieJar:       jar,
+	}
+	if session.GatewayEnvID == "" || session.TargetBaseURL == "" || session.AccessPath == "" || session.EntryURL == "" {
+		_ = ln.Close()
+		return nil, errors.New("Gateway profile session is incomplete")
+	}
+	session.Server = &http.Server{
+		Handler:           s.profileSessionHandler(session),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	s.profileSessionsMu.Lock()
+	s.profileSessions[session.ID] = session
+	s.profileSessionsMu.Unlock()
+	go func() {
+		_ = session.Server.Serve(ln)
+		s.profileSessionsMu.Lock()
+		if current, ok := s.profileSessions[session.ID]; ok && current == session {
+			delete(s.profileSessions, session.ID)
+		}
+		s.profileSessionsMu.Unlock()
+	}()
+	return session, nil
+}
+
+func (s *Server) activateProfileSession(session *profileSession, expiresAtUnixMS int64) {
+	if s == nil || session == nil {
+		return
+	}
+	s.profileSessionsMu.Lock()
+	if current, ok := s.profileSessions[session.ID]; ok && current == session {
+		session.ExpiresAtUnixMS = expiresAtUnixMS
+	}
+	s.profileSessionsMu.Unlock()
+}
+
+func (s *Server) discardProfileSession(session *profileSession) {
+	if s == nil || session == nil {
+		return
+	}
+	s.profileSessionsMu.Lock()
+	if current, ok := s.profileSessions[session.ID]; ok && current == session {
+		delete(s.profileSessions, session.ID)
+	}
+	s.profileSessionsMu.Unlock()
+	closeProfileSession(session)
+}
+
+func (s *Server) revokeProfileSessions(gatewayEnvID string) {
+	cleanEnvID := strings.TrimSpace(gatewayEnvID)
+	if cleanEnvID == "" {
+		return
+	}
+	var sessions []*profileSession
+	s.profileSessionsMu.Lock()
+	for id, session := range s.profileSessions {
+		if session == nil {
+			delete(s.profileSessions, id)
+			continue
+		}
+		if strings.TrimSpace(session.GatewayEnvID) == cleanEnvID {
+			delete(s.profileSessions, id)
+			sessions = append(sessions, session)
+		}
+	}
+	s.profileSessionsMu.Unlock()
+	for _, session := range sessions {
+		closeProfileSession(session)
+	}
+}
+
+func (s *Server) closeAllProfileSessions() {
+	if s == nil {
+		return
+	}
+	var sessions []*profileSession
+	s.profileSessionsMu.Lock()
+	for id, session := range s.profileSessions {
+		delete(s.profileSessions, id)
+		if session != nil {
+			sessions = append(sessions, session)
+		}
+	}
+	s.profileSessionsMu.Unlock()
+	for _, session := range sessions {
+		closeProfileSession(session)
+	}
+}
+
+func closeProfileSession(session *profileSession) {
+	if session == nil {
+		return
+	}
+	if session.Server != nil {
+		_ = session.Server.Close()
+		return
+	}
+	if session.Listener != nil {
+		_ = session.Listener.Close()
+	}
+}
+
+func profileSessionListenHost(r *http.Request) string {
+	if r != nil {
+		if addr, ok := r.Context().Value(http.LocalAddrContextKey).(net.Addr); ok && addr != nil {
+			if host, _, err := net.SplitHostPort(addr.String()); err == nil {
+				host = strings.Trim(strings.TrimSpace(host), "[]")
+				if host != "" {
+					return host
+				}
+			}
+		}
+	}
+	return "127.0.0.1"
+}
+
+func profileSessionEntryURL(r *http.Request, addr net.Addr, accessToken string) string {
+	host := ""
+	if r != nil {
+		host = requestHostName(r.Host)
+	}
+	if host == "" {
+		if addrHost, _, err := net.SplitHostPort(addr.String()); err == nil {
+			host = strings.Trim(addrHost, "[]")
+		}
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" || host == "[::]" {
+		host = "127.0.0.1"
+	}
+	_, port, err := net.SplitHostPort(addr.String())
+	if err != nil || strings.TrimSpace(port) == "" {
+		return ""
+	}
+	return (&url.URL{
+		Scheme: "http",
+		Host:   net.JoinHostPort(host, port),
+		Path:   strings.TrimRight(profileSessionAccessPath(accessToken), "/") + "/",
+	}).String()
+}
+
+func profileSessionAccessPath(accessToken string) string {
+	token := strings.TrimSpace(accessToken)
+	if token == "" {
+		return ""
+	}
+	return "/_redeven_profile/" + token
+}
+
+func requestHostName(hostport string) string {
+	hostport = strings.TrimSpace(hostport)
+	if hostport == "" {
+		return ""
+	}
+	if host, _, err := net.SplitHostPort(hostport); err == nil {
+		return strings.Trim(host, "[]")
+	}
+	if strings.HasPrefix(hostport, "[") && strings.HasSuffix(hostport, "]") {
+		return strings.Trim(hostport, "[]")
+	}
+	if strings.Contains(hostport, ":") {
+		return ""
+	}
+	return hostport
+}
+
+func requestRemoteIP(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	host, _, err := net.SplitHostPort(strings.TrimSpace(r.RemoteAddr))
+	if err != nil {
+		host = strings.TrimSpace(r.RemoteAddr)
+	}
+	return strings.Trim(strings.TrimSpace(host), "[]")
+}
+
+func profileSessionClientAllowed(session *profileSession, r *http.Request) bool {
+	if session == nil {
+		return false
+	}
+	allowed := strings.TrimSpace(session.AllowedClientIP)
+	if allowed == "" {
+		return true
+	}
+	return requestRemoteIP(r) == allowed
+}
+
+func profileSessionRequestAllowed(session *profileSession, r *http.Request) (string, bool) {
+	if session == nil || r == nil || r.URL == nil {
+		return "", false
+	}
+	path := strings.TrimSpace(r.URL.Path)
+	if path == "" {
+		path = "/"
+	}
+	accessPath := strings.TrimRight(session.AccessPath, "/")
+	if accessPath != "" && (path == accessPath || strings.HasPrefix(path, accessPath+"/")) {
+		targetPath := strings.TrimPrefix(path, accessPath)
+		if targetPath == "" {
+			targetPath = "/"
+		}
+		return targetPath, true
+	}
+	if !profileSessionSameOriginRequest(r) || !profileSessionRefererHasAccessPath(session, r) {
+		return "", false
+	}
+	return path, true
+}
+
+func profileSessionSameOriginRequest(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	if fetchSite := strings.TrimSpace(r.Header.Get("Sec-Fetch-Site")); fetchSite != "" && !strings.EqualFold(fetchSite, "same-origin") {
+		return false
+	}
+	self := requestOrigin(r)
+	if self == "" {
+		return true
+	}
+	if origin := strings.TrimSpace(r.Header.Get("Origin")); origin != "" && !sameOriginString(origin, self) {
+		return false
+	}
+	if referer := strings.TrimSpace(r.Header.Get("Referer")); referer != "" && !sameOriginString(referer, self) {
+		return false
+	}
+	return true
+}
+
+func profileSessionRefererHasAccessPath(session *profileSession, r *http.Request) bool {
+	if session == nil || r == nil {
+		return false
+	}
+	referer := strings.TrimSpace(r.Header.Get("Referer"))
+	if referer == "" {
+		return false
+	}
+	parsed, err := url.Parse(referer)
+	if err != nil || parsed == nil {
+		return false
+	}
+	return strings.HasPrefix(strings.TrimSpace(parsed.Path), strings.TrimRight(session.AccessPath, "/")+"/")
+}
+
+func requestOrigin(r *http.Request) string {
 	if r == nil {
 		return ""
 	}
@@ -639,136 +922,15 @@ func gatewayEnvAppEntryURL(r *http.Request) string {
 	if host == "" {
 		return ""
 	}
-	return (&url.URL{Scheme: scheme, Host: host, Path: "/_redeven_proxy/env/"}).String()
+	return (&url.URL{Scheme: scheme, Host: host}).String()
 }
 
-func (s *Server) mintProfileSession(profile gatewayenvprofiles.EnvironmentProfile) (string, int64, error) {
-	token, err := randomB64u(24)
-	if err != nil {
-		return "", 0, err
-	}
-	expiresAt := time.Now().Add(envProxySessionTTL).UnixMilli()
-	session := profileSession{
-		GatewayEnvID:    strings.TrimSpace(profile.GatewayEnvID),
-		TargetBaseURL:   strings.TrimSpace(profile.AccessRoute.URL),
-		ExpiresAtUnixMS: expiresAt,
-	}
-	if session.GatewayEnvID == "" || session.TargetBaseURL == "" {
-		return "", 0, errors.New("Gateway profile session is incomplete")
-	}
-	s.profileSessionsMu.Lock()
-	s.profileSessions[token] = session
-	s.profileSessionsMu.Unlock()
-	return token, expiresAt, nil
-}
-
-func (s *Server) profileSessionFromRequest(r *http.Request) (profileSession, bool) {
-	if s == nil || r == nil {
-		return profileSession{}, false
-	}
-	cookie, err := r.Cookie(envSessionCookieName)
-	if err != nil || cookie == nil {
-		return profileSession{}, false
-	}
-	token := strings.TrimSpace(cookie.Value)
-	if token == "" {
-		return profileSession{}, false
-	}
-	now := time.Now().UnixMilli()
-	s.profileSessionsMu.Lock()
-	defer s.profileSessionsMu.Unlock()
-	session, ok := s.profileSessions[token]
-	if !ok {
-		return profileSession{}, false
-	}
-	if session.ExpiresAtUnixMS <= now || strings.TrimSpace(session.TargetBaseURL) == "" {
-		delete(s.profileSessions, token)
-		return profileSession{}, false
-	}
-	return session, true
-}
-
-func (s *Server) revokeProfileSessions(gatewayEnvID string) {
-	cleanEnvID := strings.TrimSpace(gatewayEnvID)
-	if cleanEnvID == "" {
-		return
-	}
-	s.profileSessionsMu.Lock()
-	for token, session := range s.profileSessions {
-		if strings.TrimSpace(session.GatewayEnvID) == cleanEnvID {
-			delete(s.profileSessions, token)
-		}
-	}
-	s.profileSessionsMu.Unlock()
-}
-
-func (s *Server) hasProfileSessionCookie(r *http.Request) bool {
-	cookie, err := r.Cookie(envSessionCookieName)
-	return err == nil && cookie != nil && strings.TrimSpace(cookie.Value) != ""
-}
-
-func setProfileSessionCookie(w http.ResponseWriter, token string, expiresAtUnixMs int64, secure bool) {
-	if w == nil {
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     envSessionCookieName,
-		Value:    strings.TrimSpace(token),
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   secure,
-		SameSite: http.SameSiteLaxMode,
-		Expires:  time.UnixMilli(expiresAtUnixMs),
-	})
-}
-
-func (s *Server) setProfileSessionCookie(w http.ResponseWriter, r *http.Request, token string, expiresAtUnixMs int64) {
-	setProfileSessionCookie(w, token, expiresAtUnixMs, requestIsSecure(r))
-}
-
-func requestIsSecure(r *http.Request) bool {
-	if r == nil {
+func sameOriginString(raw string, origin string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil || parsed.Scheme == "" || parsed.Host == "" {
 		return false
 	}
-	if r.TLS != nil {
-		return true
-	}
-	return strings.EqualFold(strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")), "https")
-}
-
-func clearProfileSessionCookie(w http.ResponseWriter) {
-	if w == nil {
-		return
-	}
-	http.SetCookie(w, &http.Cookie{
-		Name:     envSessionCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   -1,
-		Expires:  time.Unix(0, 0),
-	})
-}
-
-func shouldProxyRequest(r *http.Request) bool {
-	if r == nil || r.URL == nil {
-		return false
-	}
-	path := strings.TrimSpace(r.URL.Path)
-	return path == "/" ||
-		path == "/favicon.ico" ||
-		path == "/logo.png" ||
-		strings.HasPrefix(path, "/_redeven_proxy/") ||
-		strings.HasPrefix(path, "/_redeven_direct/") ||
-		strings.HasPrefix(path, "/api/local/")
-}
-
-func shouldBlockStaleSession(r *http.Request) bool {
-	if r == nil || r.URL == nil {
-		return false
-	}
-	return !strings.HasPrefix(strings.TrimSpace(r.URL.Path), "/gateway/v1/")
+	return (&url.URL{Scheme: parsed.Scheme, Host: parsed.Host}).String() == origin
 }
 
 func targetOrigin(target *url.URL) string {
@@ -776,23 +938,6 @@ func targetOrigin(target *url.URL) string {
 		return ""
 	}
 	return (&url.URL{Scheme: target.Scheme, Host: target.Host}).String()
-}
-
-func stripProfileCookie(header string) string {
-	parts := strings.Split(header, ";")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		clean := strings.TrimSpace(part)
-		if clean == "" {
-			continue
-		}
-		name, _, _ := strings.Cut(clean, "=")
-		if strings.EqualFold(strings.TrimSpace(name), envSessionCookieName) {
-			continue
-		}
-		out = append(out, clean)
-	}
-	return strings.Join(out, "; ")
 }
 
 func gatewayProfileProxyTransport(policy gatewayenvprofiles.URLTargetPolicy) http.RoundTripper {
@@ -842,19 +987,19 @@ func gatewayProfileProxyTransport(policy gatewayenvprofiles.URLTargetPolicy) htt
 	return transport
 }
 
-func (s *Server) withProfileProxy(next http.Handler) http.Handler {
-	if next == nil {
-		return http.NotFoundHandler()
-	}
+func (s *Server) profileSessionHandler(session *profileSession) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		session, ok := s.profileSessionFromRequest(r)
-		if !ok || !shouldProxyRequest(r) {
-			if !ok && s.hasProfileSessionCookie(r) && shouldBlockStaleSession(r) {
-				clearProfileSessionCookie(w)
-				http.Error(w, "Gateway profile session is no longer available", http.StatusUnauthorized)
-				return
-			}
-			next.ServeHTTP(w, r)
+		if session == nil || time.Now().UnixMilli() > session.ExpiresAtUnixMS {
+			http.Error(w, "Gateway profile session is no longer available", http.StatusUnauthorized)
+			return
+		}
+		if !profileSessionClientAllowed(session, r) {
+			http.Error(w, "Gateway profile session is not available from this client", http.StatusForbidden)
+			return
+		}
+		targetPath, ok := profileSessionRequestAllowed(session, r)
+		if !ok {
+			http.Error(w, "Gateway profile session is not available", http.StatusUnauthorized)
 			return
 		}
 		target, err := url.Parse(strings.TrimSpace(session.TargetBaseURL))
@@ -868,25 +1013,40 @@ func (s *Server) withProfileProxy(next http.Handler) http.Handler {
 			Rewrite: func(pr *httputil.ProxyRequest) {
 				pr.SetURL(target)
 				pr.Out.Host = target.Host
-				pr.Out.URL.Path = pr.In.URL.Path
-				pr.Out.URL.RawPath = pr.In.URL.RawPath
+				pr.Out.URL.Path = targetPath
+				pr.Out.URL.RawPath = ""
 				pr.Out.URL.RawQuery = pr.In.URL.RawQuery
+				pr.Out.Header.Del("Cookie")
+				pr.Out.Header.Del("Authorization")
+				pr.Out.Header.Del("Proxy-Authorization")
 				if origin != "" {
 					pr.Out.Header.Set("Origin", origin)
 					if strings.TrimSpace(pr.Out.Header.Get("Referer")) != "" {
 						pr.Out.Header.Set("Referer", origin)
 					}
 				}
-				if cookie := stripProfileCookie(pr.Out.Header.Get("Cookie")); cookie != "" {
-					pr.Out.Header.Set("Cookie", cookie)
-				} else {
-					pr.Out.Header.Del("Cookie")
+				if session.CookieJar != nil {
+					for _, cookie := range session.CookieJar.Cookies(pr.Out.URL) {
+						pr.Out.AddCookie(cookie)
+					}
 				}
 				pr.Out.Header.Del("Forwarded")
 				pr.Out.Header.Del("X-Forwarded-Host")
 				pr.Out.Header.Del("X-Forwarded-Proto")
 				pr.Out.Header.Del("X-Forwarded-For")
 				pr.Out.Header.Del("X-Forwarded-Port")
+			},
+			ModifyResponse: func(resp *http.Response) error {
+				if session.CookieJar != nil && resp != nil && resp.Request != nil && resp.Request.URL != nil {
+					session.CookieJar.SetCookies(resp.Request.URL, resp.Cookies())
+				}
+				resp.Header.Del("Set-Cookie")
+				resp.Header.Del("Service-Worker-Allowed")
+				resp.Header.Del("Referrer-Policy")
+				resp.Header.Add("Content-Security-Policy", "worker-src 'none'")
+				resp.Header.Set("Referrer-Policy", "same-origin")
+				resp.Header.Set("Cache-Control", "no-store")
+				return nil
 			},
 			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
 				http.Error(w, "Gateway profile target is unavailable", http.StatusBadGateway)
@@ -1007,13 +1167,22 @@ func (s *Server) sweepLoop(ctx context.Context) {
 
 func (s *Server) sweepExpired() {
 	now := time.Now().UnixMilli()
+	var sessions []*profileSession
 	s.profileSessionsMu.Lock()
 	for k, v := range s.profileSessions {
+		if v == nil {
+			delete(s.profileSessions, k)
+			continue
+		}
 		if v.ExpiresAtUnixMS > 0 && now > v.ExpiresAtUnixMS {
 			delete(s.profileSessions, k)
+			sessions = append(sessions, v)
 		}
 	}
 	s.profileSessionsMu.Unlock()
+	for _, session := range sessions {
+		closeProfileSession(session)
+	}
 }
 
 func randomB64u(n int) (string, error) {

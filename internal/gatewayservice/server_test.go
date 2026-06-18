@@ -7,9 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,6 +20,7 @@ import (
 
 	"github.com/floegence/redeven/internal/runtimegateway/protocol"
 	"github.com/floegence/redeven/internal/runtimegateway/security"
+	gatewaytrust "github.com/floegence/redeven/internal/runtimegateway/trust"
 )
 
 type gatewayTestMaterial struct {
@@ -402,9 +406,25 @@ func TestGatewayServiceRejectsDefaultHostEnvOpenSession(t *testing.T) {
 	if res.Result().StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d; body=%s", res.Result().StatusCode, http.StatusNotFound, res.Body.String())
 	}
-	for _, cookie := range res.Result().Cookies() {
-		if cookie.Name == envSessionCookieName {
-			t.Fatalf("open-session(env_local) set gateway profile session cookie: %#v", cookie)
+	if got := res.Result().Header.Values("Set-Cookie"); len(got) != 0 {
+		t.Fatalf("open-session(env_local) set cookies: %#v", got)
+	}
+}
+
+func TestGatewayServiceControlListenerDoesNotServeProfileProxyPaths(t *testing.T) {
+	s := newGatewayTestServer(t, false)
+	for _, path := range []string{
+		"/_redeven_proxy/env/",
+		"/_redeven_direct/env/",
+		"/api/local/runtime/health",
+	} {
+		req := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:24000"+path, nil)
+		res := httptest.NewRecorder()
+
+		s.Handler().ServeHTTP(res, req)
+
+		if res.Result().StatusCode != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want %d; body=%s", path, res.Result().StatusCode, http.StatusNotFound, res.Body.String())
 		}
 	}
 }
@@ -421,7 +441,7 @@ func TestGatewayServiceDirectArtifactDoesNotCarryPairingSecrets(t *testing.T) {
 		},
 	})
 
-	openResp, _ := openGatewayEnvViaHTTP(t, s, material, "env_url", "client-nonce")
+	openResp := openGatewayEnvViaHTTP(t, s, material, "env_url", "client-nonce")
 
 	parsed, err := url.Parse(openResp.ConnectArtifact.URL)
 	if err != nil {
@@ -476,7 +496,7 @@ func TestGatewayServiceBridgeArtifactRequiresServerTransportMode(t *testing.T) {
 	}
 }
 
-func TestGatewayServiceProfileCatalogOpenAndDeleteRevokesProxySession(t *testing.T) {
+func TestGatewayServiceProfileCatalogOpenAndDeleteRevokesProfileSession(t *testing.T) {
 	s := newGatewayTestServer(t, true)
 	audience := "ssh://bastion:22/opt/redeven"
 	managementMaterial := pairGatewayTestManagementClient(t, s, audience)
@@ -515,38 +535,22 @@ func TestGatewayServiceProfileCatalogOpenAndDeleteRevokesProxySession(t *testing
 		t.Fatalf("access catalog leaked editable route = %#v", env.ProfileAccessRoute)
 	}
 
-	_, cookies := openGatewayEnvViaHTTP(t, s, accessMaterial, "env_url", "client-nonce")
-	proxyReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:24000/api/local/runtime/health", nil)
-	for _, cookie := range cookies {
-		proxyReq.AddCookie(cookie)
-	}
-	proxyRes := httptest.NewRecorder()
-	s.Handler().ServeHTTP(proxyRes, proxyReq)
-	if proxyRes.Result().StatusCode != http.StatusOK || !strings.Contains(proxyRes.Body.String(), `"proxied":true`) {
-		t.Fatalf("proxy status = %d body=%s", proxyRes.Result().StatusCode, proxyRes.Body.String())
+	openResp := openGatewayEnvViaHTTP(t, s, accessMaterial, "env_url", "client-nonce")
+	proxyStatus, proxyBody, _ := getProfileArtifactURL(t, openResp.ConnectArtifact.URL, "/api/local/runtime/health", nil)
+	if proxyStatus != http.StatusOK || !strings.Contains(proxyBody, `"proxied":true`) {
+		t.Fatalf("proxy status = %d body=%s", proxyStatus, proxyBody)
 	}
 
 	deleteResp := deleteGatewayProfileViaHTTP(t, s, managementMaterial, "env_url")
 	if !deleteResp.Deleted {
 		t.Fatalf("delete response = %#v", deleteResp)
 	}
-	staleProxyReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:24000/api/local/runtime/health", nil)
-	for _, cookie := range cookies {
-		staleProxyReq.AddCookie(cookie)
-	}
-	staleProxyRes := httptest.NewRecorder()
-	s.Handler().ServeHTTP(staleProxyRes, staleProxyReq)
-	if staleProxyRes.Result().StatusCode != http.StatusUnauthorized {
-		t.Fatalf("stale proxy status = %d, want %d; body=%s", staleProxyRes.Result().StatusCode, http.StatusUnauthorized, staleProxyRes.Body.String())
-	}
-	for _, cookie := range staleProxyRes.Result().Cookies() {
-		if cookie.Name == envSessionCookieName && cookie.MaxAge >= 0 {
-			t.Fatalf("stale proxy did not clear profile session cookie: %#v", cookie)
-		}
+	if err := getProfileArtifactURLError(openResp.ConnectArtifact.URL, "/api/local/runtime/health"); err == nil {
+		t.Fatal("stale profile session URL remained reachable after delete")
 	}
 }
 
-func TestGatewayServiceProfileUpsertRevokesExistingProxySession(t *testing.T) {
+func TestGatewayServiceProfileUpsertRevokesExistingProfileSession(t *testing.T) {
 	s := newGatewayTestServer(t, true)
 	audience := "ssh://bastion:22/opt/redeven"
 	managementMaterial := pairGatewayTestManagementClient(t, s, audience)
@@ -560,7 +564,7 @@ func TestGatewayServiceProfileUpsertRevokesExistingProxySession(t *testing.T) {
 			URL:  "https://target.example/",
 		},
 	})
-	_, cookies := openGatewayEnvViaHTTP(t, s, accessMaterial, "env_url", "client-nonce")
+	openResp := openGatewayEnvViaHTTP(t, s, accessMaterial, "env_url", "client-nonce")
 
 	upsertGatewayProfileViaHTTP(t, s, managementMaterial, protocol.EnvProfileInput{
 		GatewayEnvID: "env_url",
@@ -571,14 +575,292 @@ func TestGatewayServiceProfileUpsertRevokesExistingProxySession(t *testing.T) {
 		},
 	})
 
-	staleProxyReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:24000/api/local/runtime/health", nil)
-	for _, cookie := range cookies {
-		staleProxyReq.AddCookie(cookie)
+	if err := getProfileArtifactURLError(openResp.ConnectArtifact.URL, "/api/local/runtime/health"); err == nil {
+		t.Fatal("stale profile session URL remained reachable after upsert")
 	}
-	staleProxyRes := httptest.NewRecorder()
-	s.Handler().ServeHTTP(staleProxyRes, staleProxyReq)
-	if staleProxyRes.Result().StatusCode != http.StatusUnauthorized {
-		t.Fatalf("stale proxy after upsert status = %d, want %d; body=%s", staleProxyRes.Result().StatusCode, http.StatusUnauthorized, staleProxyRes.Body.String())
+}
+
+func TestGatewayServiceProfileSessionRequiresArtifactPathSecret(t *testing.T) {
+	s := newGatewayTestServer(t, false)
+	material := pairGatewayTestClient(t, s, "http://127.0.0.1:24000/")
+	upstreamHits := 0
+	s.proxyTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		upstreamHits++
+		w := httptest.NewRecorder()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"ok":true}`)
+		return w.Result(), nil
+	})
+	seedGatewayProfile(t, s, protocol.EnvProfileInput{
+		GatewayEnvID: "env_url",
+		DisplayName:  "URL Env",
+		AccessRoute: protocol.EnvProfileAccessRoute{
+			Kind: protocol.EnvProfileAccessRouteKindURL,
+			URL:  "https://target.example/",
+		},
+	})
+
+	openResult := openGatewayEnvViaHTTPWithControlBase(t, s, material, "env_url", "client-nonce")
+	openResp := openResult.Response
+	parsed, err := url.Parse(openResp.ConnectArtifact.URL)
+	if err != nil {
+		t.Fatalf("artifact URL parse error = %v", err)
+	}
+	controlURL, err := url.Parse(openResult.ControlBaseURL)
+	if err != nil {
+		t.Fatalf("control URL parse error = %v", err)
+	}
+	if !strings.HasPrefix(parsed.Path, "/_redeven_profile/") {
+		t.Fatalf("artifact URL path = %q, want profile access path", parsed.Path)
+	}
+	if parsed.Scheme != controlURL.Scheme || parsed.Host == controlURL.Host {
+		t.Fatalf("artifact URL origin = %s://%s, want different port from control origin %s://%s", parsed.Scheme, parsed.Host, controlURL.Scheme, controlURL.Host)
+	}
+
+	status, body, _ := getProfileArtifactAbsoluteURL(t, openResp.ConnectArtifact.URL, "/api/local/runtime/health", map[string]string{
+		"Referer": "http://" + parsed.Host + "/without-profile-access/",
+	})
+	if status != http.StatusUnauthorized {
+		t.Fatalf("direct path status = %d, want %d; body=%s", status, http.StatusUnauthorized, body)
+	}
+	if upstreamHits != 0 {
+		t.Fatalf("direct path reached upstream %d time(s)", upstreamHits)
+	}
+
+	status, body, _ = getProfileArtifactURL(t, openResp.ConnectArtifact.URL, "/api/local/runtime/health", nil)
+	if status != http.StatusOK || !strings.Contains(body, `"ok":true`) {
+		t.Fatalf("artifact path status = %d body=%s", status, body)
+	}
+	status, body, _ = getProfileArtifactAbsoluteURL(t, openResp.ConnectArtifact.URL, "/api/local/runtime/health", map[string]string{
+		"Referer":        openResp.ConnectArtifact.URL,
+		"Sec-Fetch-Site": "same-origin",
+	})
+	if status != http.StatusOK || !strings.Contains(body, `"ok":true`) {
+		t.Fatalf("same-origin absolute path status = %d body=%s", status, body)
+	}
+}
+
+func TestGatewayServiceProfileSessionKeepsBrowserAndTargetCookiesIsolated(t *testing.T) {
+	s := newGatewayTestServer(t, false)
+	material := pairGatewayTestClient(t, s, "http://127.0.0.1:24000/")
+	upstreamCookies := []string{}
+	upstreamAuthorization := []string{}
+	s.proxyTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		upstreamCookies = append(upstreamCookies, req.Header.Get("Cookie"))
+		upstreamAuthorization = append(upstreamAuthorization, req.Header.Get("Authorization"))
+		w := httptest.NewRecorder()
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Set-Cookie", "target_session=jar-value; Path=/; HttpOnly")
+		w.Header().Set("Service-Worker-Allowed", "/")
+		_, _ = io.WriteString(w, `{"ok":true}`)
+		return w.Result(), nil
+	})
+	seedGatewayProfile(t, s, protocol.EnvProfileInput{
+		GatewayEnvID: "env_url",
+		DisplayName:  "URL Env",
+		AccessRoute: protocol.EnvProfileAccessRoute{
+			Kind: protocol.EnvProfileAccessRouteKindURL,
+			URL:  "https://target.example/",
+		},
+	})
+
+	openResp := openGatewayEnvViaHTTP(t, s, material, "env_url", "client-nonce")
+	status, body, headers := getProfileArtifactURL(t, openResp.ConnectArtifact.URL, "/api/local/runtime/health", map[string]string{
+		"Cookie":        "browser_cookie=must-not-forward",
+		"Authorization": "Bearer browser-token",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("first proxy status = %d body=%s", status, body)
+	}
+	if got := upstreamCookies[0]; got != "" {
+		t.Fatalf("first upstream cookie = %q, want no browser cookie", got)
+	}
+	if got := upstreamAuthorization[0]; got != "" {
+		t.Fatalf("first upstream authorization = %q, want stripped", got)
+	}
+	if got := headers.Values("Set-Cookie"); len(got) != 0 {
+		t.Fatalf("browser received target Set-Cookie: %#v", got)
+	}
+	if got := headers.Get("Service-Worker-Allowed"); got != "" {
+		t.Fatalf("browser received Service-Worker-Allowed = %q, want stripped", got)
+	}
+	if !headerValuesContain(headers.Values("Content-Security-Policy"), "worker-src 'none'") {
+		t.Fatalf("Content-Security-Policy values = %#v, want worker-src block", headers.Values("Content-Security-Policy"))
+	}
+
+	status, body, _ = getProfileArtifactURL(t, openResp.ConnectArtifact.URL, "/api/local/runtime/health", nil)
+	if status != http.StatusOK {
+		t.Fatalf("second proxy status = %d body=%s", status, body)
+	}
+	if len(upstreamCookies) != 2 || upstreamCookies[1] != "target_session=jar-value" {
+		t.Fatalf("second upstream cookies = %#v, want server-side jar cookie only", upstreamCookies)
+	}
+}
+
+func TestGatewayServiceProfileSessionExpiresWithSignedArtifact(t *testing.T) {
+	s := newGatewayTestServer(t, false)
+	material := pairGatewayTestClient(t, s, "http://127.0.0.1:24000/")
+	seedGatewayProfile(t, s, protocol.EnvProfileInput{
+		GatewayEnvID: "env_url",
+		DisplayName:  "URL Env",
+		AccessRoute: protocol.EnvProfileAccessRoute{
+			Kind: protocol.EnvProfileAccessRouteKindURL,
+			URL:  "https://target.example/",
+		},
+	})
+
+	openResp := openGatewayEnvViaHTTP(t, s, material, "env_url", "client-nonce")
+	session := onlyProfileSession(t, s)
+	if session.ExpiresAtUnixMS != openResp.ConnectArtifact.ExpiresAtUnixMS {
+		t.Fatalf("profile session expiry = %d, want signed artifact expiry %d", session.ExpiresAtUnixMS, openResp.ConnectArtifact.ExpiresAtUnixMS)
+	}
+
+	s.profileSessionsMu.Lock()
+	session.ExpiresAtUnixMS = time.Now().Add(-time.Second).UnixMilli()
+	s.profileSessionsMu.Unlock()
+	s.sweepExpired()
+
+	if err := getProfileArtifactURLError(openResp.ConnectArtifact.URL, "/api/local/runtime/health"); err == nil {
+		t.Fatal("expired profile session URL remained reachable after sweep")
+	}
+}
+
+func TestGatewayServiceMainServerCloseClosesProfileSessions(t *testing.T) {
+	s := newGatewayTestServer(t, false)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srv, _, err := s.Start(ctx, "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	material := pairGatewayTestClient(t, s, "http://127.0.0.1:24000/")
+	seedGatewayProfile(t, s, protocol.EnvProfileInput{
+		GatewayEnvID: "env_url",
+		DisplayName:  "URL Env",
+		AccessRoute: protocol.EnvProfileAccessRoute{
+			Kind: protocol.EnvProfileAccessRouteKindURL,
+			URL:  "https://target.example/",
+		},
+	})
+	openResp := openGatewayEnvViaHTTP(t, s, material, "env_url", "client-nonce")
+	if got := profileSessionCount(s); got != 1 {
+		t.Fatalf("profile session count = %d, want 1", got)
+	}
+
+	if err := srv.Close(); err != nil {
+		t.Fatalf("server Close() error = %v", err)
+	}
+	waitForProfileSessionCount(t, s, 0)
+	if err := getProfileArtifactURLError(openResp.ConnectArtifact.URL, "/api/local/runtime/health"); err == nil {
+		t.Fatal("profile session URL remained reachable after main server Close")
+	}
+}
+
+func TestGatewayServiceProfileSessionCookieJarsArePerOpenSession(t *testing.T) {
+	s := newGatewayTestServer(t, false)
+	material := pairGatewayTestClient(t, s, "http://127.0.0.1:24000/")
+	upstreamCookies := []string{}
+	s.proxyTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		upstreamCookies = append(upstreamCookies, req.Header.Get("Cookie"))
+		w := httptest.NewRecorder()
+		w.Header().Set("Content-Type", "application/json")
+		if req.Header.Get("Cookie") == "" {
+			w.Header().Set("Set-Cookie", "target_session=jar-value; Path=/; HttpOnly")
+		}
+		_, _ = io.WriteString(w, `{"ok":true}`)
+		return w.Result(), nil
+	})
+	seedGatewayProfile(t, s, protocol.EnvProfileInput{
+		GatewayEnvID: "env_url",
+		DisplayName:  "URL Env",
+		AccessRoute: protocol.EnvProfileAccessRoute{
+			Kind: protocol.EnvProfileAccessRouteKindURL,
+			URL:  "https://target.example/",
+		},
+	})
+
+	first := openGatewayEnvViaHTTP(t, s, material, "env_url", "client-nonce-1")
+	second := openGatewayEnvViaHTTP(t, s, material, "env_url", "client-nonce-2")
+	if first.ConnectArtifact.URL == second.ConnectArtifact.URL {
+		t.Fatalf("two open-session artifacts reused the same URL: %q", first.ConnectArtifact.URL)
+	}
+	getProfileArtifactURL(t, first.ConnectArtifact.URL, "/api/local/runtime/health", nil)
+	getProfileArtifactURL(t, first.ConnectArtifact.URL, "/api/local/runtime/health", nil)
+	getProfileArtifactURL(t, second.ConnectArtifact.URL, "/api/local/runtime/health", nil)
+	if len(upstreamCookies) != 3 {
+		t.Fatalf("upstream cookies = %#v", upstreamCookies)
+	}
+	if upstreamCookies[0] != "" || upstreamCookies[1] != "target_session=jar-value" || upstreamCookies[2] != "" {
+		t.Fatalf("upstream cookies = %#v, want per-session jar isolation", upstreamCookies)
+	}
+}
+
+func TestGatewayServiceBridgeOpenSessionDoesNotCreateProfileListener(t *testing.T) {
+	s := newGatewayTestServer(t, true)
+	material := pairGatewayTestManagementClient(t, s, "ssh://bastion:22/opt/redeven")
+	upsertGatewayProfileViaHTTP(t, s, material, protocol.EnvProfileInput{
+		GatewayEnvID: "env_url",
+		DisplayName:  "URL Env",
+		AccessRoute: protocol.EnvProfileAccessRoute{
+			Kind: protocol.EnvProfileAccessRouteKindURL,
+			URL:  "https://target.example/",
+		},
+	})
+
+	resp := openGatewayEnvWithBridgeFieldsViaHTTP(t, s, material, "env_url", true)
+
+	if resp.ConnectArtifact.Kind != protocol.ConnectArtifactKindDesktopBridge {
+		t.Fatalf("artifact = %#v, want desktop bridge", resp.ConnectArtifact)
+	}
+	if resp.ConnectArtifact.URL != "" {
+		t.Fatalf("bridge artifact URL = %q, want empty", resp.ConnectArtifact.URL)
+	}
+	if got := profileSessionCount(s); got != 0 {
+		t.Fatalf("profile session count = %d, want 0", got)
+	}
+}
+
+func TestGatewayServiceProfileSessionSigningFailureClosesListener(t *testing.T) {
+	stateRoot := t.TempDir()
+	s := newGatewayTestServerWithOptions(t, Options{
+		StateRoot:                  stateRoot,
+		AllowPrivateProfileTargets: true,
+		ProfileWriteEnabled:        true,
+		PairingCode:                "pair-demo",
+		ManagedBridgeToken:         gatewayTestManagedBridgeToken,
+	})
+	material := pairGatewayTestClient(t, s, "http://127.0.0.1:24000/")
+	seedGatewayProfile(t, s, protocol.EnvProfileInput{
+		GatewayEnvID: "env_url",
+		DisplayName:  "URL Env",
+		AccessRoute: protocol.EnvProfileAccessRoute{
+			Kind: protocol.EnvProfileAccessRouteKindURL,
+			URL:  "https://target.example/",
+		},
+	})
+	s.trust = gatewayTrustStoreWithInvalidPrivateKey(t, stateRoot)
+	s.auth = nil
+
+	body, err := json.Marshal(protocol.OpenSessionRequest{
+		ProtocolVersion:     protocol.Version,
+		GatewayEnvID:        "env_url",
+		RequestedCapability: protocol.RequestedCapabilityEnvApp,
+		ClientNonce:         "client-nonce",
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/open-session", bytes.NewReader(body))
+	signGatewayTestRequest(t, req, material, body)
+	res := httptest.NewRecorder()
+
+	s.Handler().ServeHTTP(res, req)
+
+	if res.Result().StatusCode == http.StatusOK {
+		t.Fatalf("open session status = %d, want failure; body=%s", res.Result().StatusCode, res.Body.String())
+	}
+	if got := profileSessionCount(s); got != 0 {
+		t.Fatalf("profile session count = %d, want 0", got)
 	}
 }
 
@@ -659,7 +941,74 @@ func newGatewayTestServerWithOptions(t *testing.T, options Options) *Server {
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
+	t.Cleanup(s.closeAllProfileSessions)
 	return s
+}
+
+func profileSessionCount(s *Server) int {
+	if s == nil {
+		return 0
+	}
+	s.profileSessionsMu.Lock()
+	defer s.profileSessionsMu.Unlock()
+	return len(s.profileSessions)
+}
+
+func onlyProfileSession(t *testing.T, s *Server) *profileSession {
+	t.Helper()
+	s.profileSessionsMu.Lock()
+	defer s.profileSessionsMu.Unlock()
+	if len(s.profileSessions) != 1 {
+		t.Fatalf("profile session count = %d, want 1", len(s.profileSessions))
+	}
+	for _, session := range s.profileSessions {
+		if session == nil {
+			t.Fatal("profile session is nil")
+		}
+		return session
+	}
+	t.Fatal("profile session is missing")
+	return nil
+}
+
+func waitForProfileSessionCount(t *testing.T, s *Server, want int) {
+	t.Helper()
+	deadline := time.Now().Add(time.Second)
+	for {
+		if got := profileSessionCount(s); got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("profile session count = %d, want %d", profileSessionCount(s), want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func gatewayTrustStoreWithInvalidPrivateKey(t *testing.T, stateRoot string) *gatewaytrust.Store {
+	t.Helper()
+	path := filepath.Join(stateRoot, "gateway-trust.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) error = %v", path, err)
+	}
+	var state map[string]any
+	if err := json.Unmarshal(raw, &state); err != nil {
+		t.Fatalf("trust state json.Unmarshal() error = %v", err)
+	}
+	gateway, ok := state["gateway"].(map[string]any)
+	if !ok {
+		t.Fatalf("trust state gateway = %#v", state["gateway"])
+	}
+	gateway["private_key"] = "not a private key"
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("trust state json.Marshal() error = %v", err)
+	}
+	if err := os.WriteFile(path, encoded, 0o600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
+	return gatewaytrust.NewStore(path)
 }
 
 func localTestProxyTransport() http.RoundTripper {
@@ -678,7 +1027,11 @@ func localTestProxyTransport() http.RoundTripper {
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) {
-	return fn(r)
+	resp, err := fn(r)
+	if resp != nil && resp.Request == nil {
+		resp.Request = r
+	}
+	return resp, err
 }
 
 func pairGatewayTestClient(t *testing.T, s *Server, audience string) gatewayTestMaterial {
@@ -934,7 +1287,17 @@ func seedGatewayProfile(t *testing.T, s *Server, profile protocol.EnvProfileInpu
 	return env
 }
 
-func openGatewayEnvViaHTTP(t *testing.T, s *Server, material gatewayTestMaterial, gatewayEnvID string, clientNonce string) (protocol.OpenSessionResponse, []*http.Cookie) {
+type openGatewayEnvHTTPResult struct {
+	Response       protocol.OpenSessionResponse
+	ControlBaseURL string
+}
+
+func openGatewayEnvViaHTTP(t *testing.T, s *Server, material gatewayTestMaterial, gatewayEnvID string, clientNonce string) protocol.OpenSessionResponse {
+	t.Helper()
+	return openGatewayEnvViaHTTPWithControlBase(t, s, material, gatewayEnvID, clientNonce).Response
+}
+
+func openGatewayEnvViaHTTPWithControlBase(t *testing.T, s *Server, material gatewayTestMaterial, gatewayEnvID string, clientNonce string) openGatewayEnvHTTPResult {
 	t.Helper()
 	body, err := json.Marshal(protocol.OpenSessionRequest{
 		ProtocolVersion:     protocol.Version,
@@ -945,14 +1308,130 @@ func openGatewayEnvViaHTTP(t *testing.T, s *Server, material gatewayTestMaterial
 	if err != nil {
 		t.Fatalf("json.Marshal() error = %v", err)
 	}
-	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/open-session", bytes.NewReader(body))
-	signGatewayTestRequest(t, req, material, body)
-	res := httptest.NewRecorder()
-	s.Handler().ServeHTTP(res, req)
-	if res.Result().StatusCode != http.StatusOK {
-		t.Fatalf("open session status = %d, want %d; body=%s", res.Result().StatusCode, http.StatusOK, res.Body.String())
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("net.Listen() error = %v", err)
 	}
-	return decodeOpenSessionEnvelope(t, res.Body.Bytes()), res.Result().Cookies()
+	server := &http.Server{Handler: s.Handler()}
+	serverDone := make(chan struct{})
+	go func() {
+		_ = server.Serve(listener)
+		close(serverDone)
+	}()
+	t.Cleanup(func() {
+		_ = server.Close()
+		<-serverDone
+	})
+	baseURL := "http://" + listener.Addr().String() + "/"
+	req, err := http.NewRequest(http.MethodPost, baseURL+"gateway/v1/open-session", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+	signGatewayTestRequest(t, req, material, body)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("open session request error = %v", err)
+	}
+	defer res.Body.Close()
+	resBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatalf("open session response read error = %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("open session status = %d, want %d; body=%s", res.StatusCode, http.StatusOK, string(resBody))
+	}
+	if got := res.Header.Values("Set-Cookie"); len(got) != 0 {
+		t.Fatalf("open session set cookies: %#v", got)
+	}
+	return openGatewayEnvHTTPResult{
+		Response:       decodeOpenSessionEnvelope(t, resBody),
+		ControlBaseURL: baseURL,
+	}
+}
+
+func getProfileArtifactURL(t *testing.T, rawURL string, path string, headers map[string]string) (int, string, http.Header) {
+	t.Helper()
+	return getProfileArtifactURLWithMode(t, rawURL, path, headers, true)
+}
+
+func getProfileArtifactAbsoluteURL(t *testing.T, rawURL string, path string, headers map[string]string) (int, string, http.Header) {
+	t.Helper()
+	return getProfileArtifactURLWithMode(t, rawURL, path, headers, false)
+}
+
+func getProfileArtifactURLWithMode(t *testing.T, rawURL string, path string, headers map[string]string, preserveArtifactPath bool) (int, string, http.Header) {
+	t.Helper()
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		t.Fatalf("artifact URL parse error = %v", err)
+	}
+	if preserveArtifactPath {
+		basePath := strings.TrimRight(parsed.Path, "/")
+		cleanPath := strings.TrimSpace(path)
+		switch {
+		case cleanPath == "", cleanPath == "/":
+			parsed.Path = basePath + "/"
+		case strings.HasPrefix(cleanPath, "/"):
+			parsed.Path = basePath + cleanPath
+		default:
+			parsed.Path = basePath + "/" + cleanPath
+		}
+	} else {
+		parsed.Path = path
+	}
+	parsed.RawQuery = ""
+	req, err := http.NewRequest(http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		t.Fatalf("NewRequest() error = %v", err)
+	}
+	for key, value := range headers {
+		req.Header.Set(key, value)
+	}
+	var resp *http.Response
+	for attempt := 0; attempt < 10; attempt++ {
+		resp, err = http.DefaultClient.Do(req)
+		if err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatalf("artifact GET error = %v", err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("artifact body read error = %v", err)
+	}
+	return resp.StatusCode, string(body), resp.Header.Clone()
+}
+
+func getProfileArtifactURLError(rawURL string, path string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return err
+	}
+	parsed.Path = path
+	parsed.RawQuery = ""
+	req, err := http.NewRequest(http.MethodGet, parsed.String(), nil)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 200 * time.Millisecond}
+	resp, err := client.Do(req)
+	if resp != nil {
+		_ = resp.Body.Close()
+	}
+	return err
+}
+
+func headerValuesContain(values []string, want string) bool {
+	for _, value := range values {
+		if strings.Contains(value, want) {
+			return true
+		}
+	}
+	return false
 }
 
 func openGatewayEnvWithBridgeFieldsViaHTTP(t *testing.T, s *Server, material gatewayTestMaterial, gatewayEnvID string, spoofBridgeHeader bool) protocol.OpenSessionResponse {

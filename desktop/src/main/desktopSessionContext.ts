@@ -24,7 +24,9 @@ export function desktopSessionContextSnapshotFromTarget(target: DesktopSessionTa
 
   return {
     local_environment_id: target.environment_id,
-    renderer_storage_scope_id: target.environment_id,
+    renderer_storage_scope_id: target.kind === 'gateway_environment'
+      ? target.session_key
+      : target.environment_id,
     target_kind: target.kind,
     session_source: target.kind === 'ssh_environment'
       ? 'ssh_environment'

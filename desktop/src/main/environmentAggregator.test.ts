@@ -137,14 +137,14 @@ describe('environmentAggregator', () => {
     });
   });
 
-  it('lets Gateway catalog rows inherit open session state without duplicating the row', () => {
+  it('keeps Gateway catalog rows and open-session rows as separate entries', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       openSessions: [{
-        session_key: 'gateway:bastion:env:env_demo',
+        session_key: 'gateway:bastion:env:env_demo:session:gws_demo',
         target: {
           kind: 'gateway_environment',
-          session_key: 'gateway:bastion:env:env_demo',
+          session_key: 'gateway:bastion:env:env_demo:session:gws_demo',
           environment_id: 'gateway:bastion:env:env_demo',
           label: 'Demo',
           gateway_id: 'bastion',
@@ -163,23 +163,70 @@ describe('environmentAggregator', () => {
     });
     const gatewayEntries = snapshot.environments.filter((entry) => entry.kind === 'gateway_environment');
 
-    expect(gatewayEntries).toHaveLength(1);
-    expect(gatewayEntries[0]).toMatchObject({
+    expect(gatewayEntries).toHaveLength(2);
+    expect(gatewayEntries.find((entry) => entry.id === 'gateway:bastion:env:env_demo')).toMatchObject({
       id: 'gateway:bastion:env:env_demo',
+      is_open: false,
+      open_action: 'open',
+      open_session_key: '',
+    });
+    expect(gatewayEntries.find((entry) => entry.id === 'gateway:bastion:env:env_demo:session:gws_demo')).toMatchObject({
       is_open: true,
       open_action: 'focus',
-      open_session_key: 'gateway:bastion:env:env_demo',
+      open_session_key: 'gateway:bastion:env:env_demo:session:gws_demo',
+      environment_source: {
+        kind: 'gateway',
+        source_id: 'gateway:bastion',
+        label: 'Bastion',
+      },
     });
+  });
+
+  it('keeps multiple Gateway open sessions for the same environment distinct', () => {
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences(),
+      openSessions: ['gws_first', 'gws_second'].map((gatewaySessionID) => ({
+        session_key: `gateway:bastion:env:env_demo:session:${gatewaySessionID}` as const,
+        target: {
+          kind: 'gateway_environment' as const,
+          session_key: `gateway:bastion:env:env_demo:session:${gatewaySessionID}` as const,
+          environment_id: 'gateway:bastion:env:env_demo',
+          label: 'Demo',
+          gateway_id: 'bastion',
+          gateway_label: 'Bastion',
+          gateway_env_id: 'env_demo',
+          gateway_session_id: gatewaySessionID,
+        },
+        lifecycle: 'open' as const,
+        entry_url: `https://gateway.example/${gatewaySessionID}`,
+        startup: {
+          local_ui_url: `https://gateway.example/${gatewaySessionID}`,
+          local_ui_urls: [`https://gateway.example/${gatewaySessionID}`],
+        },
+      })),
+      gatewaySources: [gatewaySource()],
+    });
+    const gatewayEntries = snapshot.environments.filter((entry) => entry.kind === 'gateway_environment');
+
+    expect(gatewayEntries.map((entry) => entry.id).sort()).toEqual([
+      'gateway:bastion:env:env_demo',
+      'gateway:bastion:env:env_demo:session:gws_first',
+      'gateway:bastion:env:env_demo:session:gws_second',
+    ]);
+    expect(gatewayEntries.filter((entry) => entry.is_open).map((entry) => entry.open_session_key).sort()).toEqual([
+      'gateway:bastion:env:env_demo:session:gws_first',
+      'gateway:bastion:env:env_demo:session:gws_second',
+    ]);
   });
 
   it('hides disabled Gateway catalog rows and does not backfill their open sessions', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       openSessions: [{
-        session_key: 'gateway:bastion:env:env_demo',
+        session_key: 'gateway:bastion:env:env_demo:session:gws_demo',
         target: {
           kind: 'gateway_environment',
-          session_key: 'gateway:bastion:env:env_demo',
+          session_key: 'gateway:bastion:env:env_demo:session:gws_demo',
           environment_id: 'gateway:bastion:env:env_demo',
           label: 'Demo',
           gateway_id: 'bastion',
@@ -204,10 +251,10 @@ describe('environmentAggregator', () => {
     const snapshot = buildDesktopWelcomeSnapshot({
       preferences: testDesktopPreferences(),
       openSessions: [{
-        session_key: 'gateway:bastion:env:env_demo',
+        session_key: 'gateway:bastion:env:env_demo:session:gws_demo',
         target: {
           kind: 'gateway_environment',
-          session_key: 'gateway:bastion:env:env_demo',
+          session_key: 'gateway:bastion:env:env_demo:session:gws_demo',
           environment_id: 'gateway:bastion:env:env_demo',
           label: 'Demo',
           gateway_id: 'bastion',
@@ -227,7 +274,8 @@ describe('environmentAggregator', () => {
 
     expect(snapshot.environments.filter((entry) => entry.kind === 'gateway_environment')).toHaveLength(1);
     expect(snapshot.environments.find((entry) => entry.kind === 'gateway_environment')).toMatchObject({
-      open_session_key: 'gateway:bastion:env:env_demo',
+      id: 'gateway:bastion:env:env_demo:session:gws_demo',
+      open_session_key: 'gateway:bastion:env:env_demo:session:gws_demo',
       gateway_id: 'bastion',
       gateway_env_id: 'env_demo',
       is_open: true,
