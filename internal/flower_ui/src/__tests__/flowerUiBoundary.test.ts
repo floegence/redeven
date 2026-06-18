@@ -97,6 +97,8 @@ describe('shared Flower UI boundary', () => {
     expect(surfaceSrc).toContain('sidebarLeadingAction?: JSX.Element');
     expect(surfaceSrc).toContain('{props.sidebarLeadingAction}');
     expect(cssSrc).toContain('.flower-sidebar-leading-action');
+    expect(cssSrc).toContain('margin: 0.75rem 0.75rem 0.5rem;');
+    expect(cssSrc).toContain('flex: 1 1 0;');
     expect(surfaceSrc).toContain('flower-new-chat-button');
     expect(surfaceSrc).toContain('flower-new-chat-label');
     expect(surfaceSrc).toContain('copy().chat.newChat');
