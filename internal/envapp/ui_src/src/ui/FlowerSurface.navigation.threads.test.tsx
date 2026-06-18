@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type {
   FlowerLiveBootstrap,
+  FlowerLiveEvent,
   FlowerLiveEventsResponse,
   FlowerThreadSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -13,6 +14,7 @@ import {
   adapter,
   deferred,
   flush,
+  inputRequest,
   liveBootstrap,
   readStatus,
   renderSurfaceWithAdapter,
@@ -49,6 +51,25 @@ const withoutContextActionKey = (
   delete next[key];
   return next;
 };
+
+function liveEvent<K extends FlowerLiveEvent['kind']>(
+  threadID: string,
+  seq: number,
+  kind: K,
+  payload: FlowerLiveEvent<K>['payload'],
+): FlowerLiveEvent<K> {
+  return {
+    schema_version: 1,
+    seq,
+    endpoint_id: 'test-runtime',
+    thread_id: threadID,
+    run_id: 'run-1',
+    turn_id: 'turn-1',
+    at_unix_ms: 10_000 + seq,
+    kind,
+    payload,
+  } as FlowerLiveEvent<K>;
+}
 
 describe('FlowerSurface navigation threads', () => {
   it('consumes external focus requests once without stealing later manual thread selection', async () => {
@@ -1161,6 +1182,600 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.textContent).toContain('file.read');
     expect(runtime.querySelector('.flower-activity-inline')).toBeTruthy();
     expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Provider returned a structured failure.');
+  });
+
+  it('keeps selected message rows mounted when a background thread list refresh changes', async () => {
+    const selectedDetail = thread({
+      thread_id: 'thread-selected-detail',
+      title: 'Selected detail',
+      created_at_ms: 5_000,
+      updated_at_ms: 5_100,
+      status: 'running',
+      read_status: readStatus(false, 510, 'running'),
+      messages: [
+        {
+          id: 'message-selected-stable',
+          role: 'assistant',
+          content: 'Selectable transcript text stays mounted.',
+          status: 'complete',
+          created_at_ms: 5_100,
+          blocks: [{ type: 'markdown', content: 'Selectable transcript text stays mounted.' }],
+        },
+      ],
+    });
+    const selectedSummary = {
+      ...selectedDetail,
+      title: 'Selected summary after refresh',
+      updated_at_ms: 5_300,
+      read_status: readStatus(false, 530, 'running'),
+      messages: [],
+    };
+    const backgroundInitial = thread({
+      thread_id: 'thread-background-refresh',
+      title: 'Background refresh',
+      created_at_ms: 4_000,
+      updated_at_ms: 4_100,
+      status: 'running',
+      read_status: readStatus(false, 410, 'running'),
+      messages: [],
+    });
+    const backgroundUpdated = {
+      ...backgroundInitial,
+      updated_at_ms: 4_500,
+      status: 'success' as const,
+      read_status: readStatus(true, 450, 'success'),
+    };
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [selectedDetail, backgroundInitial];
+    let delayedDetailReloadStarted = false;
+    const loadThread = vi.fn(() => {
+      if (loadThread.mock.calls.length === 1) {
+        return Promise.resolve(liveBootstrap(selectedDetail));
+      }
+      delayedDetailReloadStarted = true;
+      return new Promise<FlowerLiveBootstrap>(() => undefined);
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => listSnapshot),
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-selected-detail"] button')));
+    (runtime.querySelector('[data-thread-id="thread-selected-detail"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Selectable transcript text stays mounted.') ?? false);
+    const messageRow = runtime.querySelector('[data-flower-message-id="message-selected-stable"]');
+    expect(messageRow).toBeTruthy();
+
+    listSnapshot = [selectedSummary, backgroundUpdated];
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => delayedDetailReloadStarted);
+
+    const messageRowAfterRefresh = runtime.querySelector('[data-flower-message-id="message-selected-stable"]');
+    expect(messageRowAfterRefresh).toBe(messageRow);
+    expect(runtime.textContent).toContain('Selectable transcript text stays mounted.');
+    expect(runtime.querySelector('[data-thread-id="thread-background-refresh"]')?.getAttribute('data-flower-thread-indicator')).toBe('dot');
+  });
+
+  it('keeps selected message rows mounted when only a background thread changes', async () => {
+    const selectedDetail = thread({
+      thread_id: 'thread-selected-unchanged',
+      title: 'Selected unchanged',
+      created_at_ms: 5_500,
+      updated_at_ms: 5_600,
+      status: 'idle',
+      read_status: readStatus(false, 560, 'idle'),
+      messages: [
+        {
+          id: 'message-selected-unchanged',
+          role: 'assistant',
+          content: 'Selected thread has no business update.',
+          status: 'complete',
+          created_at_ms: 5_600,
+          blocks: [{ type: 'markdown', content: 'Selected thread has no business update.' }],
+        },
+      ],
+    });
+    const selectedUnchangedSummary = {
+      ...selectedDetail,
+      messages: [],
+    };
+    const backgroundInitial = thread({
+      thread_id: 'thread-background-only',
+      title: 'Background only',
+      created_at_ms: 5_000,
+      updated_at_ms: 5_100,
+      status: 'running',
+      read_status: readStatus(false, 510, 'running'),
+      messages: [],
+    });
+    const backgroundUpdated = {
+      ...backgroundInitial,
+      updated_at_ms: 5_900,
+      status: 'success' as const,
+      read_status: readStatus(true, 590, 'success'),
+    };
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [selectedDetail, backgroundInitial];
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => listSnapshot),
+      loadThread: vi.fn(async () => liveBootstrap(selectedDetail)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-selected-unchanged"] button')));
+    (runtime.querySelector('[data-thread-id="thread-selected-unchanged"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Selected thread has no business update.') ?? false);
+    const messageRow = runtime.querySelector('[data-flower-message-id="message-selected-unchanged"]');
+    expect(messageRow).toBeTruthy();
+
+    listSnapshot = [selectedUnchangedSummary, backgroundUpdated];
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-thread-id="thread-background-only"]')?.getAttribute('data-flower-thread-indicator') === 'dot');
+
+    expect(runtime.querySelector('[data-flower-message-id="message-selected-unchanged"]')).toBe(messageRow);
+    expect(runtime.textContent).toContain('Selected thread has no business update.');
+  });
+
+  it('hydrates a cursor-only streaming row in place when live text arrives', async () => {
+    const streamingThread = thread({
+      thread_id: 'thread-streaming-row',
+      title: 'Streaming row',
+      created_at_ms: 6_000,
+      updated_at_ms: 6_100,
+      status: 'running',
+      read_status: readStatus(false, 610, 'running'),
+      messages: [
+        {
+          id: 'message-streaming-row',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 6_100,
+        },
+      ],
+    });
+    const liveEvents = deferred<FlowerLiveEventsResponse>();
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [streamingThread]),
+      loadThread: vi.fn(async () => liveBootstrap(streamingThread, 0)),
+      listThreadLiveEvents: vi.fn(() => liveEvents.promise),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-streaming-row"] button')));
+    (runtime.querySelector('[data-thread-id="thread-streaming-row"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-streaming-row"] .flower-streaming-cursor')));
+    const messageRow = runtime.querySelector('[data-flower-message-id="message-streaming-row"]');
+    expect(messageRow).toBeTruthy();
+    expect(messageRow?.textContent).not.toContain('Real streamed answer');
+
+    liveEvents.resolve({
+      events: [
+        liveEvent('thread-streaming-row', 1, 'message.block_started', {
+          message_id: 'message-streaming-row',
+          block_index: 0,
+          block_type: 'markdown',
+        }),
+        liveEvent('thread-streaming-row', 2, 'message.block_delta', {
+          message_id: 'message-streaming-row',
+          block_index: 0,
+          delta: 'Real streamed answer',
+        }),
+      ],
+      next_cursor: 2,
+      retained_from_seq: 1,
+    });
+
+    await waitFor(() => runtime.textContent?.includes('Real streamed answer') ?? false);
+    expect(runtime.querySelector('[data-flower-message-id="message-streaming-row"]')).toBe(messageRow);
+    expect(runtime.querySelector('[data-flower-message-id="message-streaming-row"] .flower-streaming-cursor')).toBeTruthy();
+  });
+
+  it('keeps committed markdown DOM stable when streaming appends to the tail', async () => {
+    const streamingThread = thread({
+      thread_id: 'thread-streaming-markdown-stability',
+      title: 'Streaming markdown stability',
+      created_at_ms: 6_500,
+      updated_at_ms: 6_600,
+      status: 'running',
+      read_status: readStatus(false, 660, 'running'),
+      messages: [
+        {
+          id: 'message-streaming-markdown-stability',
+          role: 'assistant',
+          content: 'Committed paragraph.\n\nGrowing tail',
+          status: 'streaming',
+          created_at_ms: 6_600,
+          blocks: [{ type: 'markdown', content: 'Committed paragraph.\n\nGrowing tail' }],
+        },
+      ],
+    });
+    const liveEvents = deferred<FlowerLiveEventsResponse>();
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [streamingThread]),
+      loadThread: vi.fn(async () => liveBootstrap(streamingThread, 0)),
+      listThreadLiveEvents: vi.fn(() => liveEvents.promise),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-streaming-markdown-stability"] button')));
+    (runtime.querySelector('[data-thread-id="thread-streaming-markdown-stability"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-chat-md-committed-segment')));
+    const messageRow = runtime.querySelector('[data-flower-message-id="message-streaming-markdown-stability"]');
+    const committedSegment = runtime.querySelector('.flower-chat-md-committed-segment');
+    expect(messageRow).toBeTruthy();
+    expect(committedSegment?.textContent).toContain('Committed paragraph.');
+
+    liveEvents.resolve({
+      events: [
+        liveEvent('thread-streaming-markdown-stability', 1, 'message.block_delta', {
+          message_id: 'message-streaming-markdown-stability',
+          block_index: 0,
+          delta: ' plus more',
+        }),
+      ],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+
+    await waitFor(() => runtime.textContent?.includes('Growing tail plus more') ?? false);
+    expect(runtime.querySelector('[data-flower-message-id="message-streaming-markdown-stability"]')).toBe(messageRow);
+    expect(runtime.querySelector('.flower-chat-md-committed-segment')).toBe(committedSegment);
+  });
+
+  it('keeps a text selection stable while the selected running thread streams updates', async () => {
+    const streamingThread = thread({
+      thread_id: 'thread-running-selection',
+      title: 'Running selection',
+      created_at_ms: 6_800,
+      updated_at_ms: 6_900,
+      status: 'running',
+      read_status: readStatus(false, 690, 'running'),
+      messages: [
+        {
+          id: 'message-running-selection',
+          role: 'assistant',
+          content: 'Selectable running text.\n\nStreaming tail',
+          status: 'streaming',
+          created_at_ms: 6_900,
+          blocks: [{ type: 'markdown', content: 'Selectable running text.\n\nStreaming tail' }],
+        },
+      ],
+    });
+    const liveEvents = deferred<FlowerLiveEventsResponse>();
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [streamingThread]),
+      loadThread: vi.fn(async () => liveBootstrap(streamingThread, 0)),
+      listThreadLiveEvents: vi.fn(() => liveEvents.promise),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-selection"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-selection"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-running-selection"] .flower-streaming-cursor')));
+    const messageRow = runtime.querySelector('[data-flower-message-id="message-running-selection"]');
+    const committedSegment = runtime.querySelector('.flower-chat-md-committed-segment');
+    const textNode = committedSegment?.firstChild?.firstChild;
+    expect(messageRow).toBeTruthy();
+    expect(textNode?.textContent).toContain('Selectable running text.');
+    if (!textNode) throw new Error('Expected selectable committed text node.');
+
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 'Selectable running text'.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    expect(selection?.toString()).toBe('Selectable running text');
+
+    liveEvents.resolve({
+      events: [
+        liveEvent('thread-running-selection', 1, 'message.block_delta', {
+          message_id: 'message-running-selection',
+          block_index: 0,
+          delta: ' updated',
+        }),
+      ],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+
+    await waitFor(() => runtime.textContent?.includes('Streaming tail updated') ?? false);
+    expect(runtime.querySelector('[data-flower-message-id="message-running-selection"]')).toBe(messageRow);
+    expect(runtime.querySelector('.flower-chat-md-committed-segment')).toBe(committedSegment);
+    expect(window.getSelection()?.toString()).toBe('Selectable running text');
+  });
+
+  it('keeps committed markdown selection stable when a streaming message commits', async () => {
+    const streamingThread = thread({
+      thread_id: 'thread-commit-selection',
+      title: 'Commit selection',
+      created_at_ms: 7_000,
+      updated_at_ms: 7_100,
+      status: 'running',
+      read_status: readStatus(false, 710, 'running'),
+      messages: [
+        {
+          id: 'message-commit-selection',
+          role: 'assistant',
+          content: 'Committed paragraph.\n\nGrowing tail',
+          status: 'streaming',
+          created_at_ms: 7_100,
+          blocks: [{ type: 'markdown', content: 'Committed paragraph.\n\nGrowing tail' }],
+        },
+      ],
+    });
+    const liveEvents = deferred<FlowerLiveEventsResponse>();
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [streamingThread]),
+      loadThread: vi.fn(async () => liveBootstrap(streamingThread, 0)),
+      listThreadLiveEvents: vi.fn(() => liveEvents.promise),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-commit-selection"] button')));
+    (runtime.querySelector('[data-thread-id="thread-commit-selection"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-commit-selection"] .flower-streaming-cursor')));
+    const messageRow = runtime.querySelector('[data-flower-message-id="message-commit-selection"]');
+    const committedSegment = runtime.querySelector('.flower-chat-md-committed-segment');
+    const textNode = committedSegment?.firstChild?.firstChild;
+    expect(messageRow).toBeTruthy();
+    expect(textNode?.textContent).toContain('Committed paragraph.');
+    if (!textNode) throw new Error('Expected selectable committed text node.');
+
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 'Committed paragraph'.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    expect(selection?.toString()).toBe('Committed paragraph');
+
+    liveEvents.resolve({
+      events: [
+        liveEvent('thread-commit-selection', 1, 'message.committed', {
+          message_id: 'message-commit-selection',
+          message: {
+            id: 'message-commit-selection',
+            role: 'assistant',
+            content: 'Committed paragraph.\n\nGrowing tail',
+            status: 'complete',
+            created_at_ms: 7_100,
+            blocks: [{ type: 'markdown', content: 'Committed paragraph.\n\nGrowing tail' }],
+          },
+        }),
+      ],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+
+    await waitFor(() => !runtime.querySelector('[data-flower-message-id="message-commit-selection"] .flower-streaming-cursor'));
+    expect(runtime.querySelector('[data-flower-message-id="message-commit-selection"]')).toBe(messageRow);
+    expect(runtime.querySelector('.flower-chat-md-committed-segment')).toBe(committedSegment);
+    expect(runtime.textContent).toContain('Growing tail');
+    expect(window.getSelection()?.toString()).toBe('Committed paragraph');
+  });
+
+  it('updates running activity rows in place without disturbing selected transcript text', async () => {
+    const runningActivity = activityTimeline({
+      run_id: 'run-1',
+      turn_id: 'turn-1',
+      status: 'running',
+      severity: 'normal',
+      items: [activityItem({
+        item_id: 'tool-search',
+        tool_id: 'tool-search',
+        tool_name: 'terminal.exec',
+        status: 'running',
+        severity: 'normal',
+        needs_attention: false,
+        metadata: { command: 'curl https://example.com' },
+        started_at_unix_ms: 10_000,
+      })],
+    });
+    const completedActivity = activityTimeline({
+      run_id: 'run-1',
+      turn_id: 'turn-1',
+      status: 'success',
+      severity: 'quiet',
+      items: [activityItem({
+        item_id: 'tool-search',
+        tool_id: 'tool-search',
+        tool_name: 'terminal.exec',
+        status: 'success',
+        severity: 'quiet',
+        needs_attention: false,
+        metadata: { command: 'curl https://example.com', result_status: 'success' },
+        started_at_unix_ms: 10_000,
+        ended_at_unix_ms: 10_006,
+      })],
+    });
+    const runningThread = thread({
+      thread_id: 'thread-running-activity',
+      title: 'Running activity',
+      created_at_ms: 7_200,
+      updated_at_ms: 7_300,
+      status: 'running',
+      read_status: readStatus(false, 730, 'running'),
+      messages: [
+        {
+          id: 'message-running-activity',
+          role: 'assistant',
+          content: 'Stable selected activity text.\n\nWaiting on tool',
+          status: 'streaming',
+          created_at_ms: 7_300,
+          blocks: [
+            { type: 'markdown', content: 'Stable selected activity text.\n\nWaiting on tool' },
+            runningActivity,
+          ],
+        },
+      ],
+    });
+    const liveEvents = deferred<FlowerLiveEventsResponse>();
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread, 0)),
+      listThreadLiveEvents: vi.fn(() => liveEvents.promise),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-activity"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-activity"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-running-activity"] .flower-streaming-cursor')));
+    const messageRow = runtime.querySelector('[data-flower-message-id="message-running-activity"]');
+    const activityRow = runtime.querySelector('[data-flower-activity-item-id="tool-search"]');
+    const committedSegment = runtime.querySelector('.flower-chat-md-committed-segment');
+    const textNode = committedSegment?.firstChild?.firstChild;
+    expect(messageRow).toBeTruthy();
+    expect(activityRow?.getAttribute('data-flower-activity-status')).toBe('running');
+    expect(textNode?.textContent).toContain('Stable selected activity text.');
+    if (!textNode) throw new Error('Expected selectable committed text node.');
+
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 'Stable selected activity text'.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    expect(selection?.toString()).toBe('Stable selected activity text');
+
+    liveEvents.resolve({
+      events: [
+        liveEvent('thread-running-activity', 1, 'activity.updated', {
+          run_id: 'run-1',
+          message_id: 'message-running-activity',
+          block_index: 1,
+          activity: completedActivity,
+        }),
+      ],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+
+    await waitFor(() => runtime.querySelector('[data-flower-activity-item-id="tool-search"]')?.getAttribute('data-flower-activity-status') === 'success');
+    expect(runtime.querySelector('[data-flower-message-id="message-running-activity"]')).toBe(messageRow);
+    expect(runtime.querySelector('[data-flower-activity-item-id="tool-search"]')).toBe(activityRow);
+    expect(runtime.querySelector('.flower-chat-md-committed-segment')).toBe(committedSegment);
+    expect(runtime.querySelector('[data-flower-activity-item-id="tool-search"]')?.textContent).toContain('Done');
+    expect(window.getSelection()?.toString()).toBe('Stable selected activity text');
+  });
+
+  it('reloads selected detail when the activity snapshot changes without a status timestamp change', async () => {
+    const oldReadStatus = readStatus(false, 740, 'running');
+    const freshReadStatus = readStatus(false, 741, 'running');
+    const oldDetail = thread({
+      thread_id: 'thread-activity-snapshot',
+      title: 'Activity snapshot',
+      created_at_ms: 7_400,
+      updated_at_ms: 7_400,
+      status: 'running',
+      read_status: oldReadStatus,
+      messages: [
+        {
+          id: 'message-activity-snapshot',
+          role: 'assistant',
+          content: 'Old selected detail.',
+          status: 'streaming',
+          created_at_ms: 7_400,
+          blocks: [{ type: 'markdown', content: 'Old selected detail.' }],
+        },
+      ],
+    });
+    const freshSummary = {
+      ...oldDetail,
+      read_status: freshReadStatus,
+      messages: [],
+    };
+    const freshDetail = {
+      ...oldDetail,
+      read_status: freshReadStatus,
+      messages: [
+        {
+          id: 'message-activity-snapshot',
+          role: 'assistant' as const,
+          content: 'Fresh selected detail.',
+          status: 'streaming' as const,
+          created_at_ms: 7_400,
+          blocks: [{ type: 'markdown' as const, content: 'Fresh selected detail.' }],
+        },
+      ],
+    };
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [oldDetail];
+    const loadThread = vi.fn(async () => (loadThread.mock.calls.length === 1 ? liveBootstrap(oldDetail) : liveBootstrap(freshDetail)));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => listSnapshot),
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-activity-snapshot"] button')));
+    (runtime.querySelector('[data-thread-id="thread-activity-snapshot"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Old selected detail.') ?? false);
+
+    listSnapshot = [freshSummary];
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+
+    await waitFor(() => loadThread.mock.calls.length >= 2);
+    await waitFor(() => runtime.textContent?.includes('Fresh selected detail.') ?? false);
+    expect(runtime.textContent).not.toContain('Old selected detail.');
+  });
+
+  it('reloads selected detail when the waiting prompt id changes without a status timestamp change', async () => {
+    const waitingReadStatus = (promptID: string) => {
+      const status = readStatus(false, 710, 'waiting_user');
+      return {
+        ...status,
+        snapshot: {
+          ...status.snapshot,
+          waiting_prompt_id: promptID,
+        },
+      };
+    };
+    const oldPrompt = inputRequest({
+      prompt_id: 'prompt-old',
+      public_summary: 'Old prompt summary',
+    });
+    const newPrompt = inputRequest({
+      prompt_id: 'prompt-new',
+      public_summary: 'New prompt summary',
+    });
+    const oldDetail = thread({
+      thread_id: 'thread-waiting-prompt',
+      title: 'Waiting prompt',
+      created_at_ms: 7_000,
+      updated_at_ms: 7_100,
+      status: 'waiting_user',
+      read_status: waitingReadStatus('prompt-old'),
+      messages: [],
+      input_request: oldPrompt,
+    });
+    const newSummary = {
+      ...oldDetail,
+      read_status: waitingReadStatus('prompt-new'),
+      input_request: undefined,
+    };
+    const newDetail = {
+      ...oldDetail,
+      read_status: waitingReadStatus('prompt-new'),
+      input_request: newPrompt,
+    };
+    let listSnapshot: readonly FlowerThreadSnapshot[] = [oldDetail];
+    const loadThread = vi.fn(async () => (loadThread.mock.calls.length === 1 ? liveBootstrap(oldDetail) : liveBootstrap(newDetail)));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => listSnapshot),
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-waiting-prompt"] button')));
+    (runtime.querySelector('[data-thread-id="thread-waiting-prompt"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.textContent?.includes('Old prompt summary') ?? false);
+
+    listSnapshot = [newSummary];
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+
+    await waitFor(() => loadThread.mock.calls.length >= 2);
+    await waitFor(() => runtime.textContent?.includes('New prompt summary') ?? false);
+    expect(runtime.textContent).not.toContain('Old prompt summary');
   });
 
   it('keeps background terminal refreshes when selected detail polling mutates the list', async () => {

@@ -16,7 +16,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const src = surfaceSource();
 
     expect(src).toContain("import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';");
-    expect(src).toContain("if (block.block_type === 'markdown')");
+    expect(src).toContain("const markdown = createMemo(() => block().block_type === 'markdown')");
     expect(src).toContain('<FlowerMarkdownBlock');
     expect(src).toContain('copyCodeLabel={copy().chat.copyCode}');
     expect(src).toContain('codeCopiedLabel={copy().chat.codeCopied}');
@@ -32,11 +32,11 @@ describe('FlowerSurface markdown rendering boundary', () => {
   it('binds activity row status to the timeline item status, not payload status', () => {
     const src = surfaceSource();
 
-    expect(src).toContain("`flower-activity-inline-row-${item.status}`");
-    expect(src).toContain('data-flower-activity-status={item.status}');
-    expect(src).toContain('statusIcon(item.status)');
-    expect(src).toContain("`flower-activity-inline-status-${item.status}`");
-    expect(src).toContain('copy().chat.toolStatuses[item.status]');
+    expect(src).toContain("`flower-activity-inline-row-${item().status}`");
+    expect(src).toContain('data-flower-activity-status={item().status}');
+    expect(src).toContain('statusIcon(item().status)');
+    expect(src).toContain("`flower-activity-inline-status-${item().status}`");
+    expect(src).toContain('copy().chat.toolStatuses[item().status]');
     expect(src).not.toContain('payload.status');
     expect(src).not.toContain("payload['status']");
   });
@@ -52,13 +52,13 @@ describe('FlowerSurface markdown rendering boundary', () => {
 
   it('renders the streaming cursor after every message block', () => {
     const src = surfaceSource();
-    const blockListIndex = src.indexOf('<Index each={blocks}>');
+    const blockListIndex = src.indexOf('<For each={blockKeys()}>');
     const cursorTailIndex = src.indexOf('flower-message-streaming-tail');
 
     expect(blockListIndex).toBeGreaterThanOrEqual(0);
     expect(cursorTailIndex).toBeGreaterThan(blockListIndex);
     expect(src).toContain('{streamingCursor()}');
-    expect(src).not.toContain('<Show when={streaming}>{streamingCursor()}</Show>');
+    expect(src).not.toContain('<Show when={streaming()}>{streamingCursor()}</Show>');
   });
 
   it('adds copy actions and user message time metadata to chat messages', () => {
@@ -72,7 +72,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('flower-message-copy-button');
     expect(src).toContain('flower-message-copy-icon-idle');
     expect(src).toContain('flower-message-copy-icon-copied');
-    expect(src).toContain('formatMessageTime(message.created_at_ms)');
+    expect(src).toContain('formatMessageTime(message().created_at_ms)');
     expect(src).toContain('flower-message-time');
     expect(src).toContain("block.type === 'content' && block.block_type !== 'thinking'");
   });

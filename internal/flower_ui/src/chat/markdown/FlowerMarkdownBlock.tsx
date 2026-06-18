@@ -141,7 +141,7 @@ export const FlowerMarkdownBlock: Component<FlowerMarkdownBlockProps> = (props) 
     <div ref={(node) => { rootRef = node; }} class={cn('flower-chat-md-block', props.class)} onClick={handleClick}>
       <For each={segmentKeys()}>
         {(key) => {
-          const committedSegmentHtml = () => snapshot().committedSegments.find((segment) => segment.key === key)?.html ?? '';
+          const committedSegmentHtml = createMemo(() => snapshot().committedSegments.find((segment) => segment.key === key)?.html ?? '');
 
           return (
             <div
