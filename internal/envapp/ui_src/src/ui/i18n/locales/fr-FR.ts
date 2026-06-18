@@ -18,6 +18,7 @@ export const frFR = {
       delete: "Supprimer",
       refresh: "Actualiser",
       retry: "Réessayer",
+      stop: "Arrêter",
       copy: "Copier",
       copied: "Copié",
       settings: "Paramètres",

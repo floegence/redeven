@@ -18,6 +18,7 @@ export const deDE = {
       delete: "Löschen",
       refresh: "Aktualisieren",
       retry: "Wiederholen",
+      stop: "Stoppen",
       copy: "Kopieren",
       copied: "Copied",
       settings: "Einstellungen",

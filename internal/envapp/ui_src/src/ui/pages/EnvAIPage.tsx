@@ -24,6 +24,7 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers): FlowerSurfaceCopy {
       noModelSelected: i18n.t('flowerSettings.noModelSelected'),
       linkedContextLabel: i18n.t('flowerTurnLauncher.linkedContextLabel'),
       send: i18n.t('flowerChat.composer.launchTurn'),
+      stop: i18n.t('common.actions.stop'),
       handlerBlockedTitle: i18n.t('flowerChat.router.handlerBlockedTitle'),
       handlerStartFailedTitle: i18n.t('flowerChat.router.handlerStartFailedTitle'),
       handlerStillStarting: i18n.t('flowerChat.router.handlerStillStarting'),

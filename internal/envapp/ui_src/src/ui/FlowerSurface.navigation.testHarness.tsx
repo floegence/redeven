@@ -48,6 +48,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Settings: Icon,
     Shield: Icon,
     Sparkles: Icon,
+    Stop: Icon,
     Terminal: Icon,
     Trash: Icon,
     X: Icon,
@@ -430,6 +431,7 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
     }))),
     resolveHandler: vi.fn(async () => decision()),
     launchTurn: vi.fn(async () => liveBootstrap(thread())),
+    stopThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'canceled' }))),
     submitInput: vi.fn(async () => liveBootstrap(thread({ status: 'running' }))),
     submitApproval: vi.fn(async () => undefined),
   };

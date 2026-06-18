@@ -28,7 +28,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		select {
 		case <-r.Context().Done():
 			return
-		case <-time.After(3 * time.Second):
+		case <-time.After(30 * time.Second):
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"error":{"message":"forced stop for followups test"}}`))
@@ -70,8 +70,8 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		AgentHomeDir:     stateDir,
 		Shell:            "bash",
 		Config:           cfg,
-		RunMaxWallTime:   6 * time.Second,
-		RunIdleTimeout:   6 * time.Second,
+		RunMaxWallTime:   30 * time.Second,
+		RunIdleTimeout:   30 * time.Second,
 		PersistOpTimeout: 2 * time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) {
 			return "sk-test", true, nil
@@ -334,6 +334,63 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		}
 		if resp.Data.Thread.QueuedTurnCount != 1 {
 			t.Fatalf("queued_turn_count=%d, want 1", resp.Data.Thread.QueuedTurnCount)
+		}
+	}
+
+	{
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/cancel", nil)
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		srv.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("cancel thread status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var resp struct {
+			OK   bool `json:"ok"`
+			Data struct {
+				OK                 bool `json:"ok"`
+				RecoveredFollowups []struct {
+					FollowupID string `json:"followup_id"`
+					Lane       string `json:"lane"`
+					Text       string `json:"text"`
+				} `json:"recovered_followups"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal cancel thread: %v", err)
+		}
+		if !resp.OK || !resp.Data.OK || len(resp.Data.RecoveredFollowups) != 1 {
+			t.Fatalf("unexpected cancel thread response: %s", rr.Body.String())
+		}
+		if got := resp.Data.RecoveredFollowups[0]; got.FollowupID != followupID2 || got.Lane != "draft" || got.Text != "edited queued text" {
+			t.Fatalf("unexpected recovered followup: %+v", got)
+		}
+	}
+
+	{
+		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups", nil)
+		req.Header.Set("Origin", envOrigin)
+		rr := httptest.NewRecorder()
+		srv.serveHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("list followups after cancel status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		var resp struct {
+			Data struct {
+				Queued []struct {
+					FollowupID string `json:"followup_id"`
+				} `json:"queued"`
+				Drafts []struct {
+					FollowupID string `json:"followup_id"`
+					Text       string `json:"text"`
+				} `json:"drafts"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal list followups after cancel: %v", err)
+		}
+		if len(resp.Data.Queued) != 0 || len(resp.Data.Drafts) != 1 || resp.Data.Drafts[0].FollowupID != followupID2 {
+			t.Fatalf("unexpected followups after cancel: %s", rr.Body.String())
 		}
 	}
 }

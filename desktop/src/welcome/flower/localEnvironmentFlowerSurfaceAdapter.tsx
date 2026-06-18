@@ -418,6 +418,12 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       return launchLocalEnvironmentFlowerTurn(bridge, input);
     },
+    stopThread: async (threadID) => {
+      const tid = trim(threadID);
+      if (!tid) throw new Error('Missing thread id.');
+      await runtimeJSON<unknown>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/cancel`, {});
+      return loadRuntimeFlowerThread(bridge, tid);
+    },
     submitInput: async (input) => {
       const tid = trim(input.thread_id);
       const promptID = trim(input.prompt_id);

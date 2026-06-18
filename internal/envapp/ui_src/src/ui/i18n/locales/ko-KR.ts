@@ -18,6 +18,7 @@ export const koKR = {
       delete: "삭제",
       refresh: "새로 고침",
       retry: "다시 시도",
+      stop: "중지",
       copy: "복사",
       copied: "복사됨",
       settings: "설정",

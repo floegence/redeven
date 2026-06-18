@@ -18,6 +18,7 @@ export const jaJP = {
       delete: "削除",
       refresh: "更新",
       retry: "再試行",
+      stop: "停止",
       copy: "コピー",
       copied: "コピー済み",
       settings: "設定",

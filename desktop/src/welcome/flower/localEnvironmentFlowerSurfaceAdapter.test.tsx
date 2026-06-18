@@ -293,6 +293,26 @@ describe('Local Environment Flower surface adapter', () => {
     });
   });
 
+  it('stops threads through the runtime cancel endpoint and reloads live bootstrap', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/cancel') return { ok: true };
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') return liveBootstrap({ run_status: 'canceled' });
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    const bootstrap = await adapter.stopThread('thread-1');
+
+    expect(bootstrap.thread.status).toBe('canceled');
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      'POST /_redeven_proxy/api/ai/threads/thread-1/cancel',
+      'GET /_redeven_proxy/api/ai/threads/thread-1/live/bootstrap',
+    ]);
+    expect(calls[0].body).toEqual({});
+  });
+
   it('loads streaming live state from the canonical live bootstrap endpoint', async () => {
     const bridge = bridgeFor((request) => {
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') {

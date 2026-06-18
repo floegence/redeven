@@ -18,6 +18,7 @@ export const esES = {
       delete: "Eliminar",
       refresh: "Actualizar",
       retry: "Reintentar",
+      stop: "Detener",
       copy: "Copiar",
       copied: "Copiado",
       settings: "Configuración",

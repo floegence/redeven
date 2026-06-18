@@ -736,6 +736,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;
+  stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
   submitApproval: (input: FlowerSubmitApprovalRequest) => Promise<void>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;

@@ -1,7 +1,7 @@
 import type { Component, JSX } from 'solid-js';
 import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, Copy, FileText, FolderOpen, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, Copy, FileText, FolderOpen, GripVertical, Plus, Settings, Stop, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -95,6 +95,7 @@ const THREAD_RAIL_WIDTH_DEFAULT = 272;
 const THREAD_RAIL_WIDTH_MIN = 220;
 const THREAD_RAIL_WIDTH_MAX = 380;
 const SIDEBAR_STABLE_LIVE_STATUSES = new Set<FlowerThreadStatus>(['running']);
+const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'waiting_approval']);
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const LIVE_EVENT_RENDER_YIELD_SIZE = 8;
 const MESSAGE_COPY_RESET_MS = 1600;
@@ -192,6 +193,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [inputSubmitError, setInputSubmitError] = createSignal('');
   const [inputSubmitting, setInputSubmitting] = createSignal(false);
   const [chatRunning, setChatRunning] = createSignal(false);
+  const [threadStopping, setThreadStopping] = createSignal(false);
   const [pendingTurn, setPendingTurn] = createSignal<PendingFlowerTurn | null>(null);
   const [settingsSaving, setSettingsSaving] = createSignal(false);
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
@@ -240,6 +242,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     thread?.status === 'waiting_user' ? thread.input_request ?? null : null
   );
   const selectedInputRequest = createMemo(() => visibleInputRequest(selectedThread()));
+  const selectedThreadCanStop = createMemo(() => (
+    !selectedInputRequest() && COMPOSER_STOP_THREAD_STATUSES.has(selectedThreadLiveStatus())
+  ));
   const selectedThreadHasContent = createMemo(() => {
     const thread = selectedThread();
     if (!thread) return false;
@@ -1103,16 +1108,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSidePanel('settings');
   };
 
-  const submitChat = async () => {
-    const prompt = trimString(composerRef?.value ?? chatDraft());
-    setChatSubmitError('');
-    if (selectedInputRequest()) {
-      await submitInputRequest();
-      return;
-    }
-    if (chatRunning()) {
-      return;
-    }
+  const launchChatTurn = async (promptInput: string) => {
+    const prompt = trimString(promptInput);
     if (!snapshot()) {
       setChatSubmitError(copy().chat.loadingSettings);
       return;
@@ -1183,6 +1180,47 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     } finally {
       setChatRunning(false);
     }
+  };
+
+  const stopSelectedThread = async (): Promise<FlowerThreadSnapshot> => {
+    const threadID = trimString(selectedThreadID());
+    if (!threadID) throw new Error('Missing thread id.');
+    const live = await props.adapter.stopThread(threadID);
+    const thread = applyLiveBootstrap(live);
+    setSelectedThreadID(thread.thread_id);
+    clearPendingTurnIfThreadCaughtUp(thread);
+    setLoadError('');
+    return thread;
+  };
+
+  const submitChat = async () => {
+    const prompt = trimString(composerRef?.value ?? chatDraft());
+    setChatSubmitError('');
+    if (selectedInputRequest()) {
+      await submitInputRequest();
+      return;
+    }
+    if (selectedThreadCanStop()) {
+      if (threadStopping() || chatRunning()) return;
+      setThreadStopping(true);
+      try {
+        await stopSelectedThread();
+        returnToChat();
+      } catch (error) {
+        setChatSubmitError(getErrorMessage(error));
+        return;
+      } finally {
+        setThreadStopping(false);
+      }
+      if (prompt) {
+        await launchChatTurn(prompt);
+      }
+      return;
+    }
+    if (chatRunning()) {
+      return;
+    }
+    await launchChatTurn(prompt);
   };
 
   const startCompose = () => {
@@ -1626,8 +1664,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const composerTextareaDisabled = createMemo(() => {
-    if (!selectedInputRequest()) return chatRunning();
+    if (!selectedInputRequest()) return false;
     return inputSubmitting() || !activeInputQuestion();
+  });
+
+  const composerChatDraftText = createMemo(() => trimString(chatDraft()));
+  const composerPrimaryActionIsStop = createMemo(() => selectedThreadCanStop() && !composerChatDraftText());
+  const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? Stop : ArrowUp);
+  const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : copy().chat.send);
+  const composerPrimaryActionDisabled = createMemo(() => {
+    if (threadStopping() || chatRunning()) return true;
+    if (selectedThreadCanStop()) return false;
+    return !readyForChat() || !handlerAllowsSubmitIntent() || !composerChatDraftText();
   });
 
   const questionAnswer = (question: FlowerInputRequestQuestion): FlowerInputAnswer | null => {
@@ -2584,13 +2632,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     fallback={(
                       <Button
                         variant="primary"
-                        icon={ArrowUp}
+                        icon={composerPrimaryActionIcon()}
                         size="icon"
-                        class="flower-composer-submit rounded-full"
-                        aria-label={copy().chat.send}
-                        title={copy().chat.send}
-                        disabled={chatRunning() || !readyForChat() || !handlerAllowsSubmitIntent() || !trimString(chatDraft())}
-                        loading={chatRunning()}
+                        class={cn('flower-composer-submit rounded-full', composerPrimaryActionIsStop() && 'flower-composer-submit-stop')}
+                        aria-label={composerPrimaryActionLabel()}
+                        title={composerPrimaryActionLabel()}
+                        disabled={composerPrimaryActionDisabled()}
+                        loading={chatRunning() || threadStopping()}
                         onClick={() => void submitChat()}
                       />
                     )}
