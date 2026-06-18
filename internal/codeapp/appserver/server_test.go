@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bytes"
@@ -213,13 +213,13 @@ func openTestThreadReadStateStore(t *testing.T) *threadreadstate.Store {
 	return store
 }
 
-func performGatewayRequest(gw *Gateway, method string, path string, origin string, body string) *httptest.ResponseRecorder {
+func performServerRequest(srv *Server, method string, path string, origin string, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
 	if origin != "" {
 		req.Header.Set("Origin", origin)
 	}
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	return rr
 }
 
@@ -240,7 +240,7 @@ func resolveMetaForTest(channelID string, meta session.Meta) func(channelID stri
 	}
 }
 
-func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
+func TestServer_ManagementAPI_EnvOriginOnly(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -254,7 +254,7 @@ func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
 	}
 	channelID := "ch_test_1"
 	envOrigin := envOriginWithChannel(channelID)
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            b,
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -270,7 +270,7 @@ func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/spaces", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("env origin status = %d, want %d", rr.Code, http.StatusOK)
@@ -294,14 +294,14 @@ func TestGateway_ManagementAPI_EnvOriginOnly(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/spaces", nil)
 		req.Header.Set("Origin", "https://cs-abc.example.com")
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("cs origin status = %d, want %d", rr.Code, http.StatusNotFound)
 		}
 	}
 }
 
-func TestGateway_CodeRuntimeRoutes(t *testing.T) {
+func TestServer_CodeRuntimeRoutes(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -385,7 +385,7 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 			}, nil
 		},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            b,
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -403,7 +403,7 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 			req.Header.Set("Content-Type", "application/json")
 		}
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		return rr
 	}
 
@@ -449,7 +449,7 @@ func TestGateway_CodeRuntimeRoutes(t *testing.T) {
 	}
 }
 
-func TestGateway_DistRoutes_AreIsolated(t *testing.T) {
+func TestServer_DistRoutes_AreIsolated(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -457,7 +457,7 @@ func TestGateway_DistRoutes_AreIsolated(t *testing.T) {
 		"inject.js":      {Data: []byte("console.log('inject');")},
 		"other.txt":      {Data: []byte("should-not-be-served")},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -473,7 +473,7 @@ func TestGateway_DistRoutes_AreIsolated(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/env/", nil)
 		req.Header.Set("Origin", "https://env-123.example.com")
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("env UI status = %d, want %d (Location=%q)", rr.Code, http.StatusOK, rr.Header().Get("Location"))
 		}
@@ -485,7 +485,7 @@ func TestGateway_DistRoutes_AreIsolated(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/env/", nil)
 		req.Header.Set("Origin", "https://cs-abc.example.com")
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("cs origin env UI status = %d, want %d", rr.Code, http.StatusNotFound)
 		}
@@ -498,7 +498,7 @@ func TestGateway_DistRoutes_AreIsolated(t *testing.T) {
 			req.Header.Set("Origin", origin)
 		}
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("inject.js origin=%q status = %d, want %d", origin, rr.Code, http.StatusOK)
 		}
@@ -509,14 +509,14 @@ func TestGateway_DistRoutes_AreIsolated(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/other.txt", nil)
 		req.Header.Set("Origin", "https://env-123.example.com")
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("other.txt status = %d, want %d", rr.Code, http.StatusNotFound)
 		}
 	}
 }
 
-func TestGateway_DistRoutes_DoNotExposeEnvAppDirectoryListings(t *testing.T) {
+func TestServer_DistRoutes_DoNotExposeEnvAppDirectoryListings(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -525,7 +525,7 @@ func TestGateway_DistRoutes_DoNotExposeEnvAppDirectoryListings(t *testing.T) {
 		"env/assets/index.js":  {Data: []byte("console.log('env');")},
 		"env/assets/index.css": {Data: []byte("body{}")},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -540,7 +540,7 @@ func TestGateway_DistRoutes_DoNotExposeEnvAppDirectoryListings(t *testing.T) {
 		req.Header.Set("Origin", "https://env-123.example.com")
 		req.Header.Set("Accept", "text/html")
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		return rr
 	}
 
@@ -558,12 +558,12 @@ func TestGateway_DistRoutes_DoNotExposeEnvAppDirectoryListings(t *testing.T) {
 	}
 }
 
-func TestGateway_EnvAppShellReadiness(t *testing.T) {
+func TestServer_EnvAppShellReadiness(t *testing.T) {
 	t.Parallel()
 
-	newGateway := func(t *testing.T, dist fs.FS) *Gateway {
+	newServer := func(t *testing.T, dist fs.FS) *Server {
 		t.Helper()
-		gw, err := New(Options{
+		srv, err := New(Options{
 			Backend:            &stubBackend{},
 			DistFS:             dist,
 			ListenAddr:         "127.0.0.1:0",
@@ -573,39 +573,39 @@ func TestGateway_EnvAppShellReadiness(t *testing.T) {
 		if err != nil {
 			t.Fatalf("New: %v", err)
 		}
-		return gw
+		return srv
 	}
 
 	validShell := []byte(`<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>`)
-	if gw := newGateway(t, fstest.MapFS{
+	if srv := newServer(t, fstest.MapFS{
 		"env/index.html":      {Data: validShell},
 		"env/assets/index.js": {Data: []byte("console.log('env');")},
-	}); !gw.EnvAppShellReady() {
-		t.Fatalf("EnvAppShellReady() = false, want true: %v", gw.EnvAppShellReadinessError())
+	}); !srv.EnvAppShellReady() {
+		t.Fatalf("EnvAppShellReady() = false, want true: %v", srv.EnvAppShellReadinessError())
 	}
 
-	if gw := newGateway(t, fstest.MapFS{
+	if srv := newServer(t, fstest.MapFS{
 		"env/favicon.svg": {Data: []byte("<svg></svg>")},
 		"env/logo.png":    {Data: []byte("png")},
-	}); gw.EnvAppShellReady() {
+	}); srv.EnvAppShellReady() {
 		t.Fatalf("EnvAppShellReady() = true, want false for missing shell")
 	}
 
-	if gw := newGateway(t, fstest.MapFS{
+	if srv := newServer(t, fstest.MapFS{
 		"env/index.html": {Data: validShell},
-	}); gw.EnvAppShellReady() {
+	}); srv.EnvAppShellReady() {
 		t.Fatalf("EnvAppShellReady() = true, want false for missing asset")
 	}
 }
 
-func TestGateway_DistRoutes_AllowExternalOriginWithoutBrowserOriginHeader(t *testing.T) {
+func TestServer_DistRoutes_AllowExternalOriginWithoutBrowserOriginHeader(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -620,7 +620,7 @@ func TestGateway_DistRoutes_AllowExternalOriginWithoutBrowserOriginHeader(t *tes
 	req.Host = "env-123.example.com"
 	req.Header.Set("X-Forwarded-Proto", "https")
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("env UI status = %d, want %d (body=%q)", rr.Code, http.StatusOK, rr.Body.String())
 	}
@@ -629,7 +629,7 @@ func TestGateway_DistRoutes_AllowExternalOriginWithoutBrowserOriginHeader(t *tes
 	}
 }
 
-func TestGateway_ManagementAPI_AllowsInternalSessionHeaderOnPublicEnvOrigin(t *testing.T) {
+func TestServer_ManagementAPI_AllowsInternalSessionHeaderOnPublicEnvOrigin(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -642,7 +642,7 @@ func TestGateway_ManagementAPI_AllowsInternalSessionHeaderOnPublicEnvOrigin(t *t
 		},
 	}
 	channelID := "ch_test_1"
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            b,
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -658,14 +658,14 @@ func TestGateway_ManagementAPI_AllowsInternalSessionHeaderOnPublicEnvOrigin(t *t
 	req.Header.Set("X-Forwarded-Proto", "https")
 	req.Header.Set(sessionhop.HeaderChannelID, channelID)
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("env origin with internal channel header status = %d, want %d (body=%q)", rr.Code, http.StatusOK, rr.Body.String())
 	}
 }
 
-func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
+func TestServer_ManagementAPI_CRUDRoutes(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -728,7 +728,7 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 
 	channelID := "ch_test_2"
 	envOrigin := envOriginWithChannel(channelID)
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            b,
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -748,7 +748,7 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 }`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("create status = %d, want %d", rr.Code, http.StatusOK)
 		}
@@ -775,7 +775,7 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/spaces/abc", strings.NewReader(`{"name":"n2"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("patch status = %d, want %d", rr.Code, http.StatusOK)
 		}
@@ -802,7 +802,7 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/spaces/abc", strings.NewReader(`{}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusBadRequest {
 			t.Fatalf("patch missing fields status = %d, want %d", rr.Code, http.StatusBadRequest)
 		}
@@ -813,7 +813,7 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/spaces/abc/start", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("start status = %d, want %d", rr.Code, http.StatusOK)
 		}
@@ -837,7 +837,7 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/spaces/abc/stop", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("stop status = %d, want %d", rr.Code, http.StatusOK)
 		}
@@ -851,7 +851,7 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 		req := httptest.NewRequest(http.MethodDelete, "/_redeven_proxy/api/spaces/abc", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("delete status = %d, want %d", rr.Code, http.StatusOK)
 		}
@@ -861,7 +861,7 @@ func TestGateway_ManagementAPI_CRUDRoutes(t *testing.T) {
 	}
 }
 
-func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
+func TestServer_ManagementAPI_PermissionGates(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -888,7 +888,7 @@ func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
 				return nil
 			},
 		}
-		gw, err := New(Options{
+		srv, err := New(Options{
 			Backend:            b,
 			DistFS:             dist,
 			ListenAddr:         "127.0.0.1:0",
@@ -904,7 +904,7 @@ func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/spaces", strings.NewReader(`{"path":"/tmp","name":"n","description":"d"}`))
 			req.Header.Set("Origin", envOrigin)
 			rr := httptest.NewRecorder()
-			gw.serveHTTP(rr, req)
+			srv.serveHTTP(rr, req)
 			if rr.Code != http.StatusForbidden {
 				t.Fatalf("create status = %d, want %d", rr.Code, http.StatusForbidden)
 			}
@@ -915,7 +915,7 @@ func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/spaces/abc", strings.NewReader(`{"name":"n2"}`))
 			req.Header.Set("Origin", envOrigin)
 			rr := httptest.NewRecorder()
-			gw.serveHTTP(rr, req)
+			srv.serveHTTP(rr, req)
 			if rr.Code != http.StatusForbidden {
 				t.Fatalf("patch status = %d, want %d", rr.Code, http.StatusForbidden)
 			}
@@ -926,7 +926,7 @@ func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
 			req := httptest.NewRequest(http.MethodDelete, "/_redeven_proxy/api/spaces/abc", nil)
 			req.Header.Set("Origin", envOrigin)
 			rr := httptest.NewRecorder()
-			gw.serveHTTP(rr, req)
+			srv.serveHTTP(rr, req)
 			if rr.Code != http.StatusForbidden {
 				t.Fatalf("delete status = %d, want %d", rr.Code, http.StatusForbidden)
 			}
@@ -945,7 +945,7 @@ func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
 				return nil
 			},
 		}
-		gw, err := New(Options{
+		srv, err := New(Options{
 			Backend:            b,
 			DistFS:             dist,
 			ListenAddr:         "127.0.0.1:0",
@@ -961,7 +961,7 @@ func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/spaces/abc/start", nil)
 			req.Header.Set("Origin", envOrigin)
 			rr := httptest.NewRecorder()
-			gw.serveHTTP(rr, req)
+			srv.serveHTTP(rr, req)
 			if rr.Code != http.StatusForbidden {
 				t.Fatalf("start status = %d, want %d", rr.Code, http.StatusForbidden)
 			}
@@ -972,7 +972,7 @@ func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/spaces/abc/stop", nil)
 			req.Header.Set("Origin", envOrigin)
 			rr := httptest.NewRecorder()
-			gw.serveHTTP(rr, req)
+			srv.serveHTTP(rr, req)
 			if rr.Code != http.StatusForbidden {
 				t.Fatalf("stop status = %d, want %d", rr.Code, http.StatusForbidden)
 			}
@@ -980,7 +980,7 @@ func TestGateway_ManagementAPI_PermissionGates(t *testing.T) {
 	}
 }
 
-func TestGateway_Settings_RedactsSecrets(t *testing.T) {
+func TestServer_Settings_RedactsSecrets(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -991,7 +991,7 @@ func TestGateway_Settings_RedactsSecrets(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	channelID := "ch_test_3"
 	envOrigin := envOriginWithChannel(channelID)
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -1007,7 +1007,7 @@ func TestGateway_Settings_RedactsSecrets(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("env origin status = %d, want %d", rr.Code, http.StatusOK)
@@ -1043,14 +1043,14 @@ func TestGateway_Settings_RedactsSecrets(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
 		req.Header.Set("Origin", "https://cs-abc.example.com")
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("cs origin status = %d, want %d", rr.Code, http.StatusNotFound)
 		}
 	}
 }
 
-func TestGateway_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
+func TestServer_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -1087,7 +1087,7 @@ func TestGateway_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
 		_ = aiSvc.Close()
 	})
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -1120,7 +1120,7 @@ func TestGateway_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/settings", bytes.NewBufferString(body))
 	req.Header.Set("Origin", envOrigin)
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
@@ -1158,7 +1158,7 @@ func TestGateway_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
 	}
 }
 
-func TestGateway_LocalUISettingsPermissionCapDoesNotHotReload(t *testing.T) {
+func TestServer_LocalUISettingsPermissionCapDoesNotHotReload(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -1167,7 +1167,7 @@ func TestGateway_LocalUISettingsPermissionCapDoesNotHotReload(t *testing.T) {
 	}
 
 	cfgPath := writeTestConfig(t)
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -1184,14 +1184,14 @@ func TestGateway_LocalUISettingsPermissionCapDoesNotHotReload(t *testing.T) {
 		bytes.NewBufferString(`{"permission_policy":{"schema_version":1,"local_max":{"read":false,"write":false,"execute":false}}}`),
 	))
 	saveRes := httptest.NewRecorder()
-	gw.serveHTTP(saveRes, saveReq)
+	srv.serveHTTP(saveRes, saveReq)
 	if saveRes.Code != http.StatusOK {
 		t.Fatalf("save status = %d, want %d body=%s", saveRes.Code, http.StatusOK, saveRes.Body.String())
 	}
 
 	getReq := WithLocalUIEnvRoute(httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil))
 	getRes := httptest.NewRecorder()
-	gw.serveHTTP(getRes, getReq)
+	srv.serveHTTP(getRes, getReq)
 	if getRes.Code != http.StatusOK {
 		t.Fatalf("get status = %d, want %d body=%s", getRes.Code, http.StatusOK, getRes.Body.String())
 	}
@@ -1219,7 +1219,7 @@ func TestGateway_LocalUISettingsPermissionCapDoesNotHotReload(t *testing.T) {
 	}
 }
 
-func TestGateway_SettingsFilesystemScopeRefreshesSharedRegistry(t *testing.T) {
+func TestServer_SettingsFilesystemScopeRefreshesSharedRegistry(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
@@ -1233,7 +1233,7 @@ func TestGateway_SettingsFilesystemScopeRefreshesSharedRegistry(t *testing.T) {
 		t.Fatalf("custom path unexpectedly writable before scope update")
 	}
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
 		ListenAddr:         "127.0.0.1:0",
@@ -1281,7 +1281,7 @@ func TestGateway_SettingsFilesystemScopeRefreshesSharedRegistry(t *testing.T) {
 
 	rr := WithLocalUIEnvRoute(httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/settings", bytes.NewBufferString(body)))
 	res := httptest.NewRecorder()
-	gw.serveHTTP(res, rr)
+	srv.serveHTTP(res, rr)
 	if res.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d body=%s", res.Code, http.StatusOK, res.Body.String())
 	}
@@ -1295,7 +1295,7 @@ func TestGateway_SettingsFilesystemScopeRefreshesSharedRegistry(t *testing.T) {
 	}
 }
 
-func TestGateway_LocalUIDoesNotExposeLegacyDesktopModelBinding(t *testing.T) {
+func TestServer_LocalUIDoesNotExposeLegacyDesktopModelBinding(t *testing.T) {
 	t.Parallel()
 
 	aiSvc, err := ai.NewService(ai.Options{
@@ -1310,7 +1310,7 @@ func TestGateway_LocalUIDoesNotExposeLegacyDesktopModelBinding(t *testing.T) {
 		_ = aiSvc.Close()
 	})
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html><div id=\"root\"></div></html>")}},
 		ListenAddr:         "127.0.0.1:0",
@@ -1328,7 +1328,7 @@ func TestGateway_LocalUIDoesNotExposeLegacyDesktopModelBinding(t *testing.T) {
 		bytes.NewBufferString(`{"token":"legacy-token"}`),
 	))
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code == http.StatusOK {
 		t.Fatalf("legacy desktop model endpoint unexpectedly succeeded: %s", rr.Body.String())
@@ -1341,7 +1341,7 @@ func TestGateway_LocalUIDoesNotExposeLegacyDesktopModelBinding(t *testing.T) {
 	}
 }
 
-func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
+func TestServer_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -1352,7 +1352,7 @@ func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	channelID := "ch_test_keys_1"
 	envOrigin := envOriginWithChannel(channelID)
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -1368,7 +1368,7 @@ func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", bytes.NewBufferString(`{"provider_ids":["openai","anthropic"]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
@@ -1392,7 +1392,7 @@ func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":"sk-test"}]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("set key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
@@ -1413,7 +1413,7 @@ func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", bytes.NewBufferString(`{"provider_ids":["openai"]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
@@ -1434,7 +1434,7 @@ func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":null}]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("clear key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
@@ -1455,7 +1455,7 @@ func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/web_search_provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":"brave-test"}]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("set web search key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
@@ -1478,7 +1478,7 @@ func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/web_search_provider_keys/status", bytes.NewBufferString(`{"provider_ids":["openai","anthropic"]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("web search status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
@@ -1498,7 +1498,7 @@ func TestGateway_AIProviderKeys_StatusAndUpdate(t *testing.T) {
 	}
 }
 
-func TestGateway_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
+func TestServer_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -1531,7 +1531,7 @@ func TestGateway_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 		_ = aiSvc.Close()
 	})
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -1566,7 +1566,7 @@ func TestGateway_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_bundle", bytes.NewBufferString(body))
 	req.Header.Set("Origin", envOrigin)
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("provider bundle code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
@@ -1585,7 +1585,7 @@ func TestGateway_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", bytes.NewBufferString(`{"provider_ids":["openai"]}`))
 	req.Header.Set("Origin", envOrigin)
 	rr = httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("key status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
@@ -1624,7 +1624,7 @@ func TestGateway_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_bundle", bytes.NewBufferString(badBody))
 	req.Header.Set("Origin", envOrigin)
 	rr = httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("invalid bundle code = %d, want %d body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
 	}
@@ -1632,7 +1632,7 @@ func TestGateway_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", bytes.NewBufferString(`{"provider_ids":["broken"]}`))
 	req.Header.Set("Origin", envOrigin)
 	rr = httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("broken key status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
@@ -1647,7 +1647,7 @@ func TestGateway_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	}
 }
 
-func TestGateway_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.T) {
+func TestServer_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -1680,7 +1680,7 @@ func TestGateway_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.
 		_ = aiSvc.Close()
 	})
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -1700,7 +1700,7 @@ func TestGateway_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.
 		{http.MethodPut, "/_redeven_proxy/api/ai/provider_keys", `{"patches":[{"provider_id":"openai","api_key":"sk-openai"},{"provider_id":"unused","api_key":"sk-unused"}]}`},
 		{http.MethodPut, "/_redeven_proxy/api/ai/web_search_provider_keys", `{"patches":[{"provider_id":"openai","api_key":"brave-openai"},{"provider_id":"unused","api_key":"brave-unused"}]}`},
 	} {
-		rr := performGatewayRequest(gw, req.method, req.path, envOrigin, req.body)
+		rr := performServerRequest(srv, req.method, req.path, envOrigin, req.body)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("%s %s code = %d, want %d body=%s", req.method, req.path, rr.Code, http.StatusOK, rr.Body.String())
 		}
@@ -1723,12 +1723,12 @@ func TestGateway_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.
 	    ]
 	  }
 	}`
-	rr := performGatewayRequest(gw, http.MethodPut, "/_redeven_proxy/api/ai/provider_bundle", envOrigin, body)
+	rr := performServerRequest(srv, http.MethodPut, "/_redeven_proxy/api/ai/provider_bundle", envOrigin, body)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("provider bundle code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
 
-	rr = performGatewayRequest(gw, http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", envOrigin, `{"provider_ids":["openai","unused"]}`)
+	rr = performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", envOrigin, `{"provider_ids":["openai","unused"]}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("provider key status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
@@ -1745,7 +1745,7 @@ func TestGateway_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.
 		t.Fatalf("unused provider key set=%v, want=false", set["unused"])
 	}
 
-	rr = performGatewayRequest(gw, http.MethodPost, "/_redeven_proxy/api/ai/web_search_provider_keys/status", envOrigin, `{"provider_ids":["openai","unused"]}`)
+	rr = performServerRequest(srv, http.MethodPost, "/_redeven_proxy/api/ai/web_search_provider_keys/status", envOrigin, `{"provider_ids":["openai","unused"]}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("web search key status code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
@@ -1763,7 +1763,7 @@ func TestGateway_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.
 	}
 }
 
-func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
+func TestServer_Settings_IncludesAIKeyStatus(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -1774,7 +1774,7 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 	cfgPath := writeTestConfigWithAI(t)
 	channelID := "ch_test_keys_2"
 	envOrigin := envOriginWithChannel(channelID)
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -1790,7 +1790,7 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":"sk-test"}]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("set key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 		}
@@ -1799,7 +1799,7 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/web_search_provider_keys", bytes.NewBufferString(`{"patches":[{"provider_id":"openai","api_key":"brave-test"}]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("set web search key code = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 		}
@@ -1810,7 +1810,7 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("settings status = %d, want %d body=%s", rr.Code, http.StatusOK, rr.Body.String())
@@ -1838,7 +1838,7 @@ func TestGateway_Settings_IncludesAIKeyStatus(t *testing.T) {
 	}
 }
 
-func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
+func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -1897,7 +1897,7 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		t.Fatalf("AppendThreadMessage(first): %v", err)
 	}
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:              &stubBackend{},
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
@@ -1957,7 +1957,7 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 
 	readList := func(origin string) aiListResponse {
 		t.Helper()
-		rr := performGatewayRequest(gw, http.MethodGet, "/_redeven_proxy/api/ai/threads?limit=20", origin, "")
+		rr := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads?limit=20", origin, "")
 		if rr.Code != http.StatusOK {
 			t.Fatalf("GET /api/ai/threads status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -1970,7 +1970,7 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 
 	readDetail := func(origin string) aiDetailResponse {
 		t.Helper()
-		rr := performGatewayRequest(gw, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), origin, "")
+		rr := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), origin, "")
 		if rr.Code != http.StatusOK {
 			t.Fatalf("GET /api/ai/threads/:id status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -1994,8 +1994,8 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		if err != nil {
 			t.Fatalf("marshal mark-read body: %v", err)
 		}
-		rr := performGatewayRequest(
-			gw,
+		rr := performServerRequest(
+			srv,
 			http.MethodPost,
 			"/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID)+"/read",
 			origin,
@@ -2102,7 +2102,7 @@ func TestGateway_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	}
 }
 
-func TestGateway_AIThreadForkDecodesBodyStrictly(t *testing.T) {
+func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -2136,7 +2136,7 @@ func TestGateway_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	if err := aiSvc.AppendThreadMessage(context.Background(), &meta, thread.ThreadID, "user", "Fork me", "markdown"); err != nil {
 		t.Fatalf("AppendThreadMessage: %v", err)
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -2150,20 +2150,20 @@ func TestGateway_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	origin := envOriginWithChannel(channelID)
 	forkPath := "/_redeven_proxy/api/ai/threads/" + url.PathEscape(thread.ThreadID) + "/fork"
 
-	unknown := performGatewayRequest(gw, http.MethodPost, forkPath, origin, `{"unknown":true}`)
+	unknown := performServerRequest(srv, http.MethodPost, forkPath, origin, `{"unknown":true}`)
 	if unknown.Code != http.StatusBadRequest {
 		t.Fatalf("unknown fork body status=%d, want=%d body=%s", unknown.Code, http.StatusBadRequest, unknown.Body.String())
 	}
-	trailing := performGatewayRequest(gw, http.MethodPost, forkPath, origin, `{} {}`)
+	trailing := performServerRequest(srv, http.MethodPost, forkPath, origin, `{} {}`)
 	if trailing.Code != http.StatusBadRequest {
 		t.Fatalf("trailing fork body status=%d, want=%d body=%s", trailing.Code, http.StatusBadRequest, trailing.Body.String())
 	}
-	extraPath := performGatewayRequest(gw, http.MethodPost, forkPath+"/extra", origin, `{}`)
+	extraPath := performServerRequest(srv, http.MethodPost, forkPath+"/extra", origin, `{}`)
 	if extraPath.Code != http.StatusNotFound {
 		t.Fatalf("extra fork path status=%d, want=%d body=%s", extraPath.Code, http.StatusNotFound, extraPath.Body.String())
 	}
 
-	rr := performGatewayRequest(gw, http.MethodPost, forkPath, origin, `{"title":"Gateway fork"}`)
+	rr := performServerRequest(srv, http.MethodPost, forkPath, origin, `{"title":"Server fork"}`)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("fork status=%d, want=%d body=%s", rr.Code, http.StatusOK, rr.Body.String())
 	}
@@ -2179,12 +2179,12 @@ func TestGateway_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal fork response: %v", err)
 	}
-	if !resp.OK || strings.TrimSpace(resp.Data.Thread.ThreadID) == "" || resp.Data.Thread.ThreadID == thread.ThreadID || resp.Data.Thread.Title != "Gateway fork" {
+	if !resp.OK || strings.TrimSpace(resp.Data.Thread.ThreadID) == "" || resp.Data.Thread.ThreadID == thread.ThreadID || resp.Data.Thread.Title != "Server fork" {
 		t.Fatalf("fork response=%+v, want titled fork", resp)
 	}
 }
 
-func TestGateway_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
+func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -2259,7 +2259,7 @@ func TestGateway_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 		t.Fatalf("EnsureFlower(other user): %v", err)
 	}
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:              &stubBackend{},
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
@@ -2273,7 +2273,7 @@ func TestGateway_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	}
 
 	originUser1 := envOriginWithChannel("ch_test_ai_delete_cleanup_user_1")
-	rr := performGatewayRequest(gw, http.MethodDelete, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), originUser1, "")
+	rr := performServerRequest(srv, http.MethodDelete, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), originUser1, "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("DELETE /api/ai/threads/:id status=%d body=%s", rr.Code, rr.Body.String())
 	}
@@ -2286,13 +2286,13 @@ func TestGateway_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 		t.Fatalf("remaining read-state rows=%+v, want none", remaining)
 	}
 
-	detailRR := performGatewayRequest(gw, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), originUser1, "")
+	detailRR := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), originUser1, "")
 	if detailRR.Code != http.StatusNotFound {
 		t.Fatalf("GET deleted thread status=%d, want=%d body=%s", detailRR.Code, http.StatusNotFound, detailRR.Body.String())
 	}
 }
 
-func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimaryDeleteFailure(t *testing.T) {
+func TestServer_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimaryDeleteFailure(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -2352,7 +2352,7 @@ func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimary
 		t.Fatalf("EnsureFlower(user_2): %v", err)
 	}
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:              &stubBackend{},
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
@@ -2366,7 +2366,7 @@ func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimary
 
 	meta := metaByChannel["ch_test_ai_delete_restore_user_1"]
 	called := false
-	err = gw.deleteFlowerThreadWithReadStateCleanup(context.Background(), &meta, threadID, func() error {
+	err = srv.deleteFlowerThreadWithReadStateCleanup(context.Background(), &meta, threadID, func() error {
 		called = true
 		midDelete, err := store.DeleteThread(context.Background(), meta.EndpointID, threadreadstate.SurfaceFlower, threadID)
 		if err != nil {
@@ -2396,7 +2396,7 @@ func TestGateway_DeleteFlowerThreadWithReadStateCleanupRestoresSnapshotOnPrimary
 	}
 }
 
-func TestGateway_CodexThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
+func TestServer_CodexThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -2468,7 +2468,7 @@ func TestGateway_CodexThreadReadState_ListDetailAndReadArePerUser(t *testing.T) 
 		},
 	}
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:              &stubBackend{},
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
@@ -2524,7 +2524,7 @@ func TestGateway_CodexThreadReadState_ListDetailAndReadArePerUser(t *testing.T) 
 
 	readList := func(origin string) codexListResponse {
 		t.Helper()
-		rr := performGatewayRequest(gw, http.MethodGet, "/_redeven_proxy/api/codex/threads?limit=20", origin, "")
+		rr := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/codex/threads?limit=20", origin, "")
 		if rr.Code != http.StatusOK {
 			t.Fatalf("GET /api/codex/threads status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -2537,7 +2537,7 @@ func TestGateway_CodexThreadReadState_ListDetailAndReadArePerUser(t *testing.T) 
 
 	readDetail := func(origin string) codexDetailResponse {
 		t.Helper()
-		rr := performGatewayRequest(gw, http.MethodGet, "/_redeven_proxy/api/codex/threads/"+url.PathEscape(thread.ID), origin, "")
+		rr := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/codex/threads/"+url.PathEscape(thread.ID), origin, "")
 		if rr.Code != http.StatusOK {
 			t.Fatalf("GET /api/codex/threads/:id status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -2559,8 +2559,8 @@ func TestGateway_CodexThreadReadState_ListDetailAndReadArePerUser(t *testing.T) 
 		if err != nil {
 			t.Fatalf("marshal codex mark-read body: %v", err)
 		}
-		rr := performGatewayRequest(
-			gw,
+		rr := performServerRequest(
+			srv,
 			http.MethodPost,
 			"/_redeven_proxy/api/codex/threads/"+url.PathEscape(thread.ID)+"/read",
 			origin,
@@ -2644,7 +2644,7 @@ func TestGateway_CodexThreadReadState_ListDetailAndReadArePerUser(t *testing.T) 
 	}
 }
 
-func TestGateway_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testing.T) {
+func TestServer_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testing.T) {
 	t.Parallel()
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -2662,7 +2662,7 @@ func TestGateway_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testin
 		XForwardedProto string `json:"x_forwarded_proto"`
 	}
 
-	srv := &http.Server{
+	upstreamSrv := &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode(seen{
 				Host:            r.Host,
@@ -2675,8 +2675,8 @@ func TestGateway_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testin
 		}),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	go func() { _ = srv.Serve(ln) }()
-	t.Cleanup(func() { _ = srv.Shutdown(context.Background()) })
+	go func() { _ = upstreamSrv.Serve(ln) }()
+	t.Cleanup(func() { _ = upstreamSrv.Shutdown(context.Background()) })
 
 	dist := fstest.MapFS{
 		"env/index.html": {Data: []byte("<html>env</html>")},
@@ -2690,7 +2690,7 @@ func TestGateway_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testin
 			return port, nil
 		},
 	}
-	gw, err := New(Options{
+	appSrv, err := New(Options{
 		Backend:            b,
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -2710,7 +2710,7 @@ func TestGateway_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testin
 	req.Header.Set("X-Forwarded-Proto", "https")
 
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	appSrv.serveHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d, body=%q", rr.Code, http.StatusOK, rr.Body.String())
 	}
@@ -2730,7 +2730,7 @@ func TestGateway_CodeServerProxy_RewritesHostAndStripsForwardedHeaders(t *testin
 	}
 }
 
-func TestGateway_CodeServerProxy_ServesVSDAWebShim(t *testing.T) {
+func TestServer_CodeServerProxy_ServesVSDAWebShim(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -2742,7 +2742,7 @@ func TestGateway_CodeServerProxy_ServesVSDAWebShim(t *testing.T) {
 			return 0, errors.New("should not be called")
 		},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            b,
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -2758,7 +2758,7 @@ func TestGateway_CodeServerProxy_ServesVSDAWebShim(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "http://ignored.local/stable-dev/static/node_modules/vsda/rust/web/vsda.js", nil)
 		req.Header.Set("Origin", "https://cs-abc.example.com")
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("vsda.js status = %d, want %d, body=%q", rr.Code, http.StatusOK, rr.Body.String())
 		}
@@ -2778,7 +2778,7 @@ func TestGateway_CodeServerProxy_ServesVSDAWebShim(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "http://ignored.local/stable-dev/static/node_modules/vsda/rust/web/vsda_bg.wasm", nil)
 		req.Header.Set("Origin", "https://cs-abc.example.com")
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("vsda_bg.wasm status = %d, want %d, body=%q", rr.Code, http.StatusOK, rr.Body.String())
 		}
@@ -2795,7 +2795,7 @@ func TestGateway_CodeServerProxy_ServesVSDAWebShim(t *testing.T) {
 	}
 }
 
-func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder(t *testing.T) {
+func TestServer_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -2812,7 +2812,7 @@ func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder(t *test
 			return 0, errors.New("should not be called")
 		},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            b,
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -2826,7 +2826,7 @@ func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder(t *test
 	req := httptest.NewRequest(http.MethodGet, "http://ignored.local/", nil)
 	req.Header.Set("Origin", "https://cs-abc.example.com")
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusFound)
 	}
@@ -2847,7 +2847,7 @@ func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder(t *test
 	}
 }
 
-func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder_WithoutOrigin(t *testing.T) {
+func TestServer_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder_WithoutOrigin(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -2862,7 +2862,7 @@ func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder_Without
 			return 0, errors.New("should not be called")
 		},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            b,
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -2876,9 +2876,9 @@ func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder_Without
 	req := httptest.NewRequest(http.MethodGet, "http://ignored.local/", nil)
 	req.Host = "cs-abc.example.com"
 	req.Header.Set("X-Forwarded-Proto", "https")
-	// Top-level navigation commonly omits Origin; the gateway should fall back to Host.
+	// Top-level navigation commonly omits Origin; the app server should fall back to Host.
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusFound)
 	}
@@ -2893,7 +2893,7 @@ func TestGateway_CodeServerProxy_CodespaceRootRedirectsToWorkspaceFolder_Without
 	}
 }
 
-func TestGateway_CodeServerProxy_RequiresCodespaceOrigin(t *testing.T) {
+func TestServer_CodeServerProxy_RequiresCodespaceOrigin(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -2905,7 +2905,7 @@ func TestGateway_CodeServerProxy_RequiresCodespaceOrigin(t *testing.T) {
 			return 0, errors.New("should not be called")
 		},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            b,
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -2919,23 +2919,23 @@ func TestGateway_CodeServerProxy_RequiresCodespaceOrigin(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://ignored.local/", nil)
 	req.Header.Set("Origin", "https://env-123.example.com")
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusNotFound)
 	}
 }
 
-func TestGateway_DistFS_UsesEmbedLayout(t *testing.T) {
+func TestServer_DistFS_UsesEmbedLayout(t *testing.T) {
 	t.Parallel()
 
-	// Guardrail: the gateway expects DistFS to be rooted at "dist/" and serve:
+	// Guardrail: the app server expects DistFS to be rooted at "dist/" and serve:
 	// - /_redeven_proxy/env/* -> env/*
 	// - /_redeven_proxy/inject.js -> inject.js
 	dist := fstest.MapFS{
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
@@ -2948,7 +2948,7 @@ func TestGateway_DistFS_UsesEmbedLayout(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/inject.js", nil)
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("inject.js status = %d, want %d", rr.Code, http.StatusOK)
 	}

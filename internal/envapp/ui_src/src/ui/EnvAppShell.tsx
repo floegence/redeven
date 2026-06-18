@@ -129,12 +129,12 @@ import {
   type RuntimeMaintenanceContext,
 } from './services/desktopShellBridge';
 import {
-  fetchGatewayJSON,
-  getGatewayAccessStatus,
-  uploadGatewayFile,
-  unlockGatewayAccess,
-  type GatewayAccessStatus,
-} from './services/gatewayApi';
+  fetchLocalApiJSON,
+  getEnvAppAccessStatus,
+  uploadLocalApiFile,
+  unlockEnvAppAccess,
+  type EnvAppAccessStatus,
+} from './services/localApi';
 import {
   AccessUnlockError,
   formatAccessUnlockRetryAfter,
@@ -393,7 +393,7 @@ export function EnvAppShell() {
   const [localAccessResumeToken, setLocalAccessResumeToken] = createSignal(initialAccessResumeToken);
   const [localAccessRetryUntilMs, setLocalAccessRetryUntilMs] = createSignal(0);
 
-  const [remoteAccessStatus, setRemoteAccessStatus] = createSignal<GatewayAccessStatus | null>(null);
+  const [remoteAccessStatus, setRemoteAccessStatus] = createSignal<EnvAppAccessStatus | null>(null);
   const [remoteAccessChecked, setRemoteAccessChecked] = createSignal(false);
   const [remoteAccessPassword, setRemoteAccessPassword] = createSignal('');
   const [remoteAccessError, setRemoteAccessError] = createSignal<string | null>(null);
@@ -1000,7 +1000,7 @@ export function EnvAppShell() {
   ): Promise<string> => {
     const threadID = String(request.thread_id ?? '').trim();
     if (!threadID) return '';
-    const target = await fetchGatewayJSON<FlowerFileActionOpenTarget>(
+    const target = await fetchLocalApiJSON<FlowerFileActionOpenTarget>(
       `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/file-action-open-target`,
       {
         method: 'POST',
@@ -1122,7 +1122,7 @@ export function EnvAppShell() {
           selectModelBeforeChat: i18n.t('flowerChat.router.selectModelBeforeChat'),
           failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
         },
-        uploadAttachment: uploadGatewayFile,
+        uploadAttachment: uploadLocalApiFile,
         openFileBrowser: openFlowerFileBrowser,
         openFilePreview: openFlowerFilePreview,
       });
@@ -1638,7 +1638,7 @@ export function EnvAppShell() {
     setManualError(null);
 
     try {
-      const out = isLocalMode() ? await unlockLocalAccess(accessPassword()) : await unlockGatewayAccess(accessPassword());
+      const out = isLocalMode() ? await unlockLocalAccess(accessPassword()) : await unlockEnvAppAccess(accessPassword());
       const token = String(out?.resume_token ?? '').trim();
       if (!token) {
         throw new Error(i18n.t('accessGate.missingResumeTokenError'));
@@ -1656,7 +1656,7 @@ export function EnvAppShell() {
           setLocalRuntime(refreshedRuntime);
         }
       } else {
-        const nextStatus = await getGatewayAccessStatus();
+        const nextStatus = await getEnvAppAccessStatus();
         setRemoteAccessStatus(nextStatus);
         setRemoteAccessChecked(true);
       }
@@ -1859,7 +1859,7 @@ export function EnvAppShell() {
     void (async () => {
       const rt = await getLocalRuntime();
       let localStatus: LocalAccessStatus | null = null;
-      let remoteStatus: GatewayAccessStatus = { password_required: false, unlocked: true };
+      let remoteStatus: EnvAppAccessStatus = { password_required: false, unlocked: true };
       if (rt) {
         setLocalRuntime(rt);
         setRemoteAccessStatus(null);
@@ -1890,7 +1890,7 @@ export function EnvAppShell() {
         setLocalAccessChannelReady(false);
 
         try {
-          remoteStatus = await getGatewayAccessStatus();
+          remoteStatus = await getEnvAppAccessStatus();
         } catch {
           remoteStatus = { password_required: false, unlocked: true };
         }

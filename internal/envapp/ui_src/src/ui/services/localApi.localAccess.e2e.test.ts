@@ -29,7 +29,7 @@ function errorResponseWithRetry(message: string, status: number, retryAfterMs: n
   });
 }
 
-describe('gatewayApi access credentials', () => {
+describe('localApi access credentials', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.restoreAllMocks();
@@ -44,8 +44,8 @@ describe('gatewayApi access credentials', () => {
       getLocalRuntime: vi.fn(async () => ({ mode: 'local', env_public_id: 'env_local' })),
     }));
 
-    const mod = await import('./gatewayApi');
-    await expect(mod.gatewayRequestCredentials()).resolves.toBe('same-origin');
+    const mod = await import('./localApi');
+    await expect(mod.localApiRequestCredentials()).resolves.toBe('same-origin');
   });
 
   it('uses omit credentials when local runtime is not available', async () => {
@@ -53,11 +53,11 @@ describe('gatewayApi access credentials', () => {
       getLocalRuntime: vi.fn(async () => null),
     }));
 
-    const mod = await import('./gatewayApi');
-    await expect(mod.gatewayRequestCredentials()).resolves.toBe('omit');
+    const mod = await import('./localApi');
+    await expect(mod.localApiRequestCredentials()).resolves.toBe('omit');
   });
 
-  it('applies same-origin credentials to gateway fetches on localhost', async () => {
+  it('applies same-origin credentials to local API fetches on localhost', async () => {
     vi.doMock('./controlplaneApi', () => ({
       getLocalRuntime: vi.fn(async () => ({ mode: 'local', env_public_id: 'env_local' })),
     }));
@@ -70,8 +70,8 @@ describe('gatewayApi access credentials', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const mod = await import('./gatewayApi');
-    const out = await mod.fetchGatewayJSON<{ ok: boolean }>('/_redeven_proxy/api/settings', { method: 'GET' });
+    const mod = await import('./localApi');
+    const out = await mod.fetchLocalApiJSON<{ ok: boolean }>('/_redeven_proxy/api/settings', { method: 'GET' });
 
     expect(out).toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -84,11 +84,11 @@ describe('gatewayApi access credentials', () => {
     const auth = await import('./localAccessAuth');
     auth.writeLocalAccessResumeToken('resume123');
 
-    const mod = await import('./gatewayApi');
+    const mod = await import('./localApi');
     const form = new FormData();
     form.append('file', new Blob(['demo']), 'demo.txt');
 
-    const init = await mod.prepareGatewayRequestInit({ method: 'POST', body: form });
+    const init = await mod.prepareLocalApiRequestInit({ method: 'POST', body: form });
     const headers = new Headers(init.headers);
 
     expect(init.credentials).toBe('same-origin');
@@ -96,7 +96,7 @@ describe('gatewayApi access credentials', () => {
     expect(headers.has('Content-Type')).toBe(false);
   });
 
-  it('uploads files through the shared gateway helper and returns the upload url', async () => {
+  it('uploads files through the shared local API helper and returns the upload url', async () => {
     vi.doMock('./controlplaneApi', () => ({
       getLocalRuntime: vi.fn(async () => ({ mode: 'local', env_public_id: 'env_local' })),
     }));
@@ -113,8 +113,8 @@ describe('gatewayApi access credentials', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const mod = await import('./gatewayApi');
-    const out = await mod.uploadGatewayFile(new File(['demo'], 'demo.txt', { type: 'text/plain' }));
+    const mod = await import('./localApi');
+    const out = await mod.uploadLocalApiFile(new File(['demo'], 'demo.txt', { type: 'text/plain' }));
 
     expect(out).toBe('/_redeven_proxy/api/ai/uploads/upl_demo');
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -124,8 +124,8 @@ describe('gatewayApi access credentials', () => {
     const fetchMock = vi.fn(async () => jsonResponse({}));
     vi.stubGlobal('fetch', fetchMock);
 
-    const mod = await import('./gatewayApi');
-    await expect(mod.uploadGatewayFile(new File(['demo'], 'demo.txt', { type: 'text/plain' })))
+    const mod = await import('./localApi');
+    await expect(mod.uploadLocalApiFile(new File(['demo'], 'demo.txt', { type: 'text/plain' })))
       .rejects
       .toThrow('Upload response missing url');
   });
@@ -143,8 +143,8 @@ describe('gatewayApi access credentials', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const mod = await import('./gatewayApi');
-    const out = await mod.getGatewayAccessStatus();
+    const mod = await import('./localApi');
+    const out = await mod.getEnvAppAccessStatus();
 
     expect(out).toEqual({ password_required: true, unlocked: false });
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -164,27 +164,27 @@ describe('gatewayApi access credentials', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    const mod = await import('./gatewayApi');
-    const out = await mod.unlockGatewayAccess('secret');
+    const mod = await import('./localApi');
+    const out = await mod.unlockEnvAppAccess('secret');
 
     expect(out).toEqual({ unlocked: true, resume_token: 'resume123' });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('surfaces nested gateway error messages instead of [object Object]', async () => {
+  it('surfaces nested local API error messages instead of [object Object]', async () => {
     const fetchMock = vi.fn(async () => errorResponse('invalid password', 401));
     vi.stubGlobal('fetch', fetchMock);
 
-    const mod = await import('./gatewayApi');
-    await expect(mod.unlockGatewayAccess('wrong')).rejects.toThrow('invalid password');
+    const mod = await import('./localApi');
+    await expect(mod.unlockEnvAppAccess('wrong')).rejects.toThrow('invalid password');
   });
 
-  it('preserves retry-after metadata for gateway unlock cooldown responses', async () => {
+  it('preserves retry-after metadata for local unlock cooldown responses', async () => {
     const fetchMock = vi.fn(async () => errorResponseWithRetry('Too many incorrect password attempts.', 429, 30_000));
     vi.stubGlobal('fetch', fetchMock);
 
-    const mod = await import('./gatewayApi');
-    await expect(mod.unlockGatewayAccess('wrong')).rejects.toMatchObject({
+    const mod = await import('./localApi');
+    await expect(mod.unlockEnvAppAccess('wrong')).rejects.toMatchObject({
       message: 'Too many incorrect password attempts.',
       retryAfterMs: 30_000,
       status: 429,

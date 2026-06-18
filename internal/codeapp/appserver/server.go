@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bytes"
@@ -64,7 +64,7 @@ type Options struct {
 	// It is used to read and persist settings updates initiated from the Env App UI.
 	ConfigPath string
 	// SecretsStore holds user-managed secrets (such as AI provider API keys).
-	// If nil, the gateway will derive a default secrets path from ConfigPath.
+	// If nil, the app server will derive a default secrets path from ConfigPath.
 	SecretsStore *settings.SecretsStore
 	// ThreadReadStateStore persists scoped per-surface thread read watermarks.
 	ThreadReadStateStore *threadreadstate.Store
@@ -197,7 +197,7 @@ func codeRuntimeImportChunkIndexFromPath(rawPath string) (int64, bool) {
 	return value, true
 }
 
-type Gateway struct {
+type Server struct {
 	log *slog.Logger
 
 	backend Backend
@@ -289,7 +289,7 @@ func localUIRouteFromRequest(r *http.Request) (localUIRoute, bool) {
 	return route, true
 }
 
-func New(opts Options) (*Gateway, error) {
+func New(opts Options) (*Server, error) {
 	if opts.Backend == nil {
 		return nil, errors.New("missing Backend")
 	}
@@ -328,7 +328,7 @@ func New(opts Options) (*Gateway, error) {
 			return nil, err
 		}
 	}
-	return &Gateway{
+	return &Server{
 		log:                     logger,
 		agentHomeDir:            scope.HomePathAbs(),
 		scope:                   scope,
@@ -353,35 +353,35 @@ func New(opts Options) (*Gateway, error) {
 	}, nil
 }
 
-func (g *Gateway) CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error) {
+func (g *Server) CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error) {
 	if g == nil || g.backend == nil {
-		return CodeRuntimeStatus{}, errors.New("gateway not ready")
+		return CodeRuntimeStatus{}, errors.New("app server not ready")
 	}
 	return g.backend.CodeRuntimeStatus(ctx)
 }
 
-func (g *Gateway) CreateCodeRuntimeImportSession(ctx context.Context, manifest CodeRuntimeArtifactManifest) (CodeRuntimeImportSession, error) {
+func (g *Server) CreateCodeRuntimeImportSession(ctx context.Context, manifest CodeRuntimeArtifactManifest) (CodeRuntimeImportSession, error) {
 	if g == nil || g.backend == nil {
-		return CodeRuntimeImportSession{}, errors.New("gateway not ready")
+		return CodeRuntimeImportSession{}, errors.New("app server not ready")
 	}
 	return g.backend.CreateCodeRuntimeImportSession(ctx, manifest)
 }
 
-func (g *Gateway) AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (CodeRuntimeImportChunkResult, error) {
+func (g *Server) AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (CodeRuntimeImportChunkResult, error) {
 	if g == nil || g.backend == nil {
-		return CodeRuntimeImportChunkResult{}, errors.New("gateway not ready")
+		return CodeRuntimeImportChunkResult{}, errors.New("app server not ready")
 	}
 	return g.backend.AppendCodeRuntimeImportChunk(ctx, uploadID, chunkIndex, body)
 }
 
-func (g *Gateway) CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (CodeRuntimeStatus, error) {
+func (g *Server) CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (CodeRuntimeStatus, error) {
 	if g == nil || g.backend == nil {
-		return CodeRuntimeStatus{}, errors.New("gateway not ready")
+		return CodeRuntimeStatus{}, errors.New("app server not ready")
 	}
 	return g.backend.CompleteCodeRuntimeImportSession(ctx, uploadID)
 }
 
-func (g *Gateway) Start(ctx context.Context) error {
+func (g *Server) Start(ctx context.Context) error {
 	if g == nil {
 		return nil
 	}
@@ -410,15 +410,15 @@ func (g *Gateway) Start(ctx context.Context) error {
 
 	go func() {
 		if err := g.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			g.log.Warn("codeapp gateway stopped", "error", err)
+			g.log.Warn("code app server stopped", "error", err)
 		}
 	}()
 
-	g.log.Info("codeapp gateway listening", "addr", g.ln.Addr().String())
+	g.log.Info("code app server listening", "addr", g.ln.Addr().String())
 	return nil
 }
 
-func (g *Gateway) Close() error {
+func (g *Server) Close() error {
 	if g == nil {
 		return nil
 	}
@@ -434,7 +434,7 @@ func (g *Gateway) Close() error {
 	return nil
 }
 
-func (g *Gateway) URL() string {
+func (g *Server) URL() string {
 	if g == nil || g.ln == nil {
 		return ""
 	}
@@ -453,27 +453,27 @@ func loadLocalPermissionPolicySnapshot(configPath string) *config.PermissionPoli
 	return cfg.PermissionPolicy
 }
 
-func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (g *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	g.serveHTTP(w, r)
 }
 
 // EnvAppShellReadinessError validates that the embedded Env App shell can be
 // opened by Desktop before the runtime advertises open-readiness.
-func (g *Gateway) EnvAppShellReadinessError() error {
+func (g *Server) EnvAppShellReadinessError() error {
 	if g == nil {
-		return errors.New("gateway not ready")
+		return errors.New("app server not ready")
 	}
 	return validateEnvAppShellFS(g.distFS)
 }
 
 // EnvAppShellReady reports whether the embedded Env App shell is complete.
-func (g *Gateway) EnvAppShellReady() bool {
+func (g *Server) EnvAppShellReady() bool {
 	return g.EnvAppShellReadinessError() == nil
 }
 
-func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
+func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if g == nil || r == nil {
-		http.Error(w, "gateway not ready", http.StatusServiceUnavailable)
+		http.Error(w, "app server not ready", http.StatusServiceUnavailable)
 		return
 	}
 	p := r.URL.Path
@@ -568,9 +568,9 @@ func (g *Gateway) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (g *Gateway) serveEnvAppDist(w http.ResponseWriter, r *http.Request) {
+func (g *Server) serveEnvAppDist(w http.ResponseWriter, r *http.Request) {
 	if g == nil || r == nil {
-		http.Error(w, "gateway not ready", http.StatusServiceUnavailable)
+		http.Error(w, "app server not ready", http.StatusServiceUnavailable)
 		return
 	}
 	if !isDistRequestMethod(r.Method) {
@@ -631,9 +631,9 @@ func shouldServeEnvAppShellForMissingPath(r *http.Request, distPath string) bool
 	return accept == "" || strings.Contains(accept, "text/html") || strings.Contains(accept, "*/*")
 }
 
-func (g *Gateway) serveDistFile(w http.ResponseWriter, r *http.Request, distPath string) {
+func (g *Server) serveDistFile(w http.ResponseWriter, r *http.Request, distPath string) {
 	if g == nil || r == nil {
-		http.Error(w, "gateway not ready", http.StatusServiceUnavailable)
+		http.Error(w, "app server not ready", http.StatusServiceUnavailable)
 		return
 	}
 	if !isDistRequestMethod(r.Method) {
@@ -808,7 +808,7 @@ func requestAcceptsJSONOnly(r *http.Request) bool {
 	return sawJSON
 }
 
-func (g *Gateway) handleAPIWithDiagnostics(w http.ResponseWriter, r *http.Request, localUI bool) {
+func (g *Server) handleAPIWithDiagnostics(w http.ResponseWriter, r *http.Request, localUI bool) {
 	if g != nil && g.diag != nil {
 		w.Header().Set(diagnostics.EnabledHeader, strconv.FormatBool(g.diag.Enabled()))
 	}
@@ -831,7 +831,7 @@ func (g *Gateway) handleAPIWithDiagnostics(w http.ResponseWriter, r *http.Reques
 	rw := diagnostics.NewStatusWriter(w)
 	g.handleAPI(rw, r)
 	g.diag.Append(diagnostics.Event{
-		Scope:      diagnostics.ScopeGatewayAPI,
+		Scope:      diagnostics.ScopeLocalAPI,
 		Kind:       "request",
 		TraceID:    traceID,
 		Method:     r.Method,
@@ -929,7 +929,7 @@ func (e aiProviderBundleSaveError) Unwrap() error {
 	return e.err
 }
 
-func (g *Gateway) saveAIProviderBundle(
+func (g *Server) saveAIProviderBundle(
 	nextAI config.AIConfig,
 	aiKeyPatches []settings.AIProviderAPIKeyPatch,
 	webSearchKeyPatches []settings.WebSearchProviderAPIKeyPatch,
@@ -985,7 +985,7 @@ func (g *Gateway) saveAIProviderBundle(
 	return updated, nil
 }
 
-func (g *Gateway) restoreAIProviderBundleConfig(prevConfig *config.Config) error {
+func (g *Server) restoreAIProviderBundleConfig(prevConfig *config.Config) error {
 	if prevConfig == nil {
 		return nil
 	}
@@ -1184,14 +1184,14 @@ func parseDiagnosticsLimit(r *http.Request, key string, defaultValue int, maxVal
 	return value
 }
 
-func (g *Gateway) loadDiagnosticsSource(source string, limit int) ([]diagnostics.Event, error) {
+func (g *Server) loadDiagnosticsSource(source string, limit int) ([]diagnostics.Event, error) {
 	if g == nil || strings.TrimSpace(g.stateDir) == "" {
 		return nil, nil
 	}
 	return diagnostics.ListSource(g.stateDir, source, limit)
 }
 
-func (g *Gateway) loadDiagnosticsRecentEvents(sourceLimit int) ([]diagnostics.Event, error) {
+func (g *Server) loadDiagnosticsRecentEvents(sourceLimit int) ([]diagnostics.Event, error) {
 	agentEvents, err := g.loadDiagnosticsSource(diagnostics.SourceAgent, sourceLimit)
 	if err != nil {
 		return nil, err
@@ -1221,7 +1221,7 @@ func writeDiagnosticsSSEEvent(w io.Writer, ev diagnosticsStreamEvent) error {
 	return err
 }
 
-func (g *Gateway) buildDiagnosticsView(recentLimit int, sourceLimit int, summaryLimit int) (diagnosticsView, error) {
+func (g *Server) buildDiagnosticsView(recentLimit int, sourceLimit int, summaryLimit int) (diagnosticsView, error) {
 	view := diagnosticsView{Enabled: g != nil && g.diag != nil && g.diag.Enabled(), StateDir: strings.TrimSpace(g.stateDir)}
 	if !view.Enabled {
 		return view, nil
@@ -1241,7 +1241,7 @@ func (g *Gateway) buildDiagnosticsView(recentLimit int, sourceLimit int, summary
 	return view, nil
 }
 
-func (g *Gateway) buildDiagnosticsExportView(sourceLimit int, summaryLimit int) (diagnosticsExportView, error) {
+func (g *Server) buildDiagnosticsExportView(sourceLimit int, summaryLimit int) (diagnosticsExportView, error) {
 	view := diagnosticsExportView{
 		Enabled:    g != nil && g.diag != nil && g.diag.Enabled(),
 		StateDir:   strings.TrimSpace(g.stateDir),
@@ -1265,7 +1265,7 @@ func (g *Gateway) buildDiagnosticsExportView(sourceLimit int, summaryLimit int) 
 	return view, nil
 }
 
-func (g *Gateway) handleCodexEventStream(w http.ResponseWriter, r *http.Request, threadID string) {
+func (g *Server) handleCodexEventStream(w http.ResponseWriter, r *http.Request, threadID string) {
 	if g == nil || g.codex == nil {
 		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "codex service not ready"})
 		return
@@ -1443,7 +1443,7 @@ func writeCodexSSEEvent(w io.Writer, ev codexbridge.Event) error {
 	return err
 }
 
-func (g *Gateway) toSettingsView(cfg *config.Config) settingsView {
+func (g *Server) toSettingsView(cfg *config.Config) settingsView {
 	configPath := ""
 	secrets := (*settings.SecretsStore)(nil)
 	aiSvc := (*ai.Service)(nil)
@@ -1521,9 +1521,9 @@ func (g *Gateway) toSettingsView(cfg *config.Config) settingsView {
 	return out
 }
 
-func (g *Gateway) loadConfigLocked() (*config.Config, error) {
+func (g *Server) loadConfigLocked() (*config.Config, error) {
 	if g == nil {
-		return nil, errors.New("gateway not ready")
+		return nil, errors.New("app server not ready")
 	}
 	path := strings.TrimSpace(g.configPath)
 	if path == "" {
@@ -1534,9 +1534,9 @@ func (g *Gateway) loadConfigLocked() (*config.Config, error) {
 	return config.Load(path)
 }
 
-func (g *Gateway) updateConfigLocked(mut func(cfg *config.Config) error) (*config.Config, error) {
+func (g *Server) updateConfigLocked(mut func(cfg *config.Config) error) (*config.Config, error) {
 	if g == nil {
-		return nil, errors.New("gateway not ready")
+		return nil, errors.New("app server not ready")
 	}
 	path := strings.TrimSpace(g.configPath)
 	if path == "" {
@@ -1604,17 +1604,17 @@ func requireSessionPermission(w http.ResponseWriter, meta *session.Meta, perm re
 	return true
 }
 
-func (g *Gateway) requirePermission(w http.ResponseWriter, r *http.Request, perm requiredPermission) (*session.Meta, bool) {
+func (g *Server) requirePermission(w http.ResponseWriter, r *http.Request, perm requiredPermission) (*session.Meta, bool) {
 	if g == nil || w == nil || r == nil {
 		return nil, false
 	}
 
-	// Local UI mode: inject a fixed local session_meta so the Env App gateway APIs can work
+	// Local UI mode: inject a fixed local session_meta so the Env App local APIs can work.
 	// without the env-/ch- origin labels used in Standard Mode.
 	if route, ok := localUIRouteFromRequest(r); ok {
 		meta := g.localSessionMeta(route)
 		if meta == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "gateway not ready"})
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "app server not ready"})
 			return nil, false
 		}
 		if !requireSessionPermission(w, meta, perm) {
@@ -1624,7 +1624,7 @@ func (g *Gateway) requirePermission(w http.ResponseWriter, r *http.Request, perm
 	}
 
 	if g.resolveSessionMeta == nil {
-		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "gateway not ready"})
+		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "app server not ready"})
 		return nil, false
 	}
 
@@ -1647,7 +1647,7 @@ func (g *Gateway) requirePermission(w http.ResponseWriter, r *http.Request, perm
 	return meta, true
 }
 
-func (g *Gateway) requireLocalAppPermission(w http.ResponseWriter, r *http.Request, floeApp string, perm requiredPermission) (*session.Meta, bool) {
+func (g *Server) requireLocalAppPermission(w http.ResponseWriter, r *http.Request, floeApp string, perm requiredPermission) (*session.Meta, bool) {
 	if _, ok := localUIRouteFromRequest(r); !ok {
 		return g.requirePermission(w, r, perm)
 	}
@@ -1660,7 +1660,7 @@ func (g *Gateway) requireLocalAppPermission(w http.ResponseWriter, r *http.Reque
 	}
 	meta := g.localSessionMeta(route)
 	if meta == nil {
-		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "gateway not ready"})
+		writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "app server not ready"})
 		return nil, false
 	}
 	if !requireSessionPermission(w, meta, perm) {
@@ -1679,7 +1679,7 @@ const (
 	localFloeAppPortForward = "com.floegence.redeven.portforward"
 )
 
-func (g *Gateway) localSessionMeta(route localUIRoute) *session.Meta {
+func (g *Server) localSessionMeta(route localUIRoute) *session.Meta {
 	floeApp := localFloeAppAgent
 	codeSpaceID := "env-ui"
 	sessionKind := "envapp_rpc"
@@ -1720,7 +1720,7 @@ func localPermissionCapFromPolicy(policy *config.PermissionPolicy, userPublicID 
 	return policy.ResolveCap(userPublicID, floeApp)
 }
 
-func (g *Gateway) localPermissionCapForApp(floeApp string) config.PermissionSet {
+func (g *Server) localPermissionCapForApp(floeApp string) config.PermissionSet {
 	if g != nil && g.localPermissionCap != nil {
 		return *g.localPermissionCap
 	}
@@ -1763,7 +1763,7 @@ func auditURLHost(raw string) (scheme string, host string) {
 	return strings.TrimSpace(u.Scheme), strings.TrimSpace(u.Host)
 }
 
-func (g *Gateway) appendAudit(meta *session.Meta, action string, status string, detail map[string]any, err error) {
+func (g *Server) appendAudit(meta *session.Meta, action string, status string, detail map[string]any, err error) {
 	if g == nil || g.audit == nil || meta == nil {
 		return
 	}
@@ -1807,7 +1807,7 @@ func (g *Gateway) appendAudit(meta *session.Meta, action string, status string, 
 	})
 }
 
-const gatewayFSFileEndpointPath = "/_redeven_proxy/api/fs/file"
+const localAPIFileEndpointPath = "/_redeven_proxy/api/fs/file"
 
 var fsFileFallbackContentTypes = map[string]string{
 	".aac":  "audio/aac",
@@ -1828,7 +1828,7 @@ var fsFileFallbackContentTypes = map[string]string{
 
 // handleFSServeFile serves a project file identified by the "path" query parameter.
 // Security: uses filesystem_scope so local preview cannot bypass configured roots.
-func (g *Gateway) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
+func (g *Server) handleFSServeFile(w http.ResponseWriter, r *http.Request) {
 	userPath := strings.TrimSpace(r.URL.Query().Get("path"))
 	if userPath == "" {
 		http.Error(w, "missing path parameter", http.StatusBadRequest)
@@ -1910,7 +1910,7 @@ func isRenderableMime(ct string) bool {
 	}
 }
 
-func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
+func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	if g.handleWorkbenchLayoutAPI(w, r) {
 		return
 	}
@@ -1918,7 +1918,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
-	case (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == gatewayFSFileEndpointPath:
+	case (r.Method == http.MethodGet || r.Method == http.MethodHead) && r.URL.Path == localAPIFileEndpointPath:
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return
 		}
@@ -4993,7 +4993,7 @@ func (g *Gateway) handleAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (g *Gateway) handleCodeServerProxy(w http.ResponseWriter, r *http.Request) {
+func (g *Server) handleCodeServerProxy(w http.ResponseWriter, r *http.Request) {
 	// VS Code Web uses `vsda` (WASM) for signing during the remote connection handshake.
 	//
 	// In Redeven, code-server is an external dependency and some distributions do not ship
@@ -5349,9 +5349,9 @@ func truncateErr(err error) string {
 	return strings.TrimSpace(s[:max]) + "..."
 }
 
-func (g *Gateway) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) {
+func (g *Server) handlePortForwardProxy(w http.ResponseWriter, r *http.Request) {
 	if g == nil || r == nil {
-		http.Error(w, "gateway not ready", http.StatusServiceUnavailable)
+		http.Error(w, "app server not ready", http.StatusServiceUnavailable)
 		return
 	}
 	if g.pf == nil {
@@ -5661,7 +5661,7 @@ func joinProxyBasePath(basePath string, targetPath string) string {
 	return base + p
 }
 
-func (g *Gateway) maybeRedirectCodespaceRootToWorkspace(w http.ResponseWriter, r *http.Request) bool {
+func (g *Server) maybeRedirectCodespaceRootToWorkspace(w http.ResponseWriter, r *http.Request) bool {
 	if g == nil || r == nil || g.backend == nil || r.URL == nil {
 		return false
 	}

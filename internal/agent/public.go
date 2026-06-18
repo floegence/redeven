@@ -3,15 +3,15 @@ package agent
 import (
 	"strings"
 
-	"github.com/floegence/redeven/internal/codeapp/gateway"
+	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/diagnostics"
 )
 
-func (a *Agent) CodeGateway() *gateway.Gateway {
+func (a *Agent) CodeAppServer() *appserver.Server {
 	if a == nil || a.code == nil {
 		return nil
 	}
-	return a.code.Gateway()
+	return a.code.AppServer()
 }
 
 func (a *Agent) DiagnosticsStore() *diagnostics.Store {

@@ -3,8 +3,10 @@ package codeapp
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -12,10 +14,76 @@ import (
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/terminal"
 	"github.com/floegence/redeven/internal/testutil/legacydb"
+	"github.com/floegence/redeven/internal/threadreadstate"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 
 	_ "modernc.org/sqlite"
 )
+
+func TestAppServerThreadReadStatePathMigratesLegacyStore(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	legacyPath := filepath.Join(stateDir, "gateway", "thread_read_state.sqlite")
+	legacy, err := threadreadstate.Open(legacyPath)
+	if err != nil {
+		t.Fatalf("threadreadstate.Open legacy: %v", err)
+	}
+	if _, err := legacy.AdvanceFlower(
+		context.Background(),
+		"env_1",
+		"user_1",
+		"thread_1",
+		threadreadstate.FlowerSnapshot{
+			ActivityRevision:    42,
+			LastMessageAtUnixMs: 123_456,
+			ActivitySignature:   "sig_1",
+			WaitingPromptID:     "prompt_1",
+		},
+	); err != nil {
+		_ = legacy.Close()
+		t.Fatalf("AdvanceFlower legacy: %v", err)
+	}
+	if err := legacy.Close(); err != nil {
+		t.Fatalf("legacy Close: %v", err)
+	}
+
+	currentPath, err := appServerThreadReadStatePath(stateDir)
+	if err != nil {
+		t.Fatalf("appServerThreadReadStatePath: %v", err)
+	}
+	wantPath := filepath.Join(stateDir, "apps", "appserver", "thread_read_state.sqlite")
+	if currentPath != wantPath {
+		t.Fatalf("currentPath=%q, want %q", currentPath, wantPath)
+	}
+	if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy path stat err=%v, want not exist", err)
+	}
+
+	current, err := threadreadstate.Open(currentPath)
+	if err != nil {
+		t.Fatalf("threadreadstate.Open current: %v", err)
+	}
+	defer func() { _ = current.Close() }()
+	records, err := current.EnsureFlower(context.Background(), "env_1", "user_1", map[string]threadreadstate.FlowerSnapshot{
+		"thread_1": {
+			ActivityRevision:    42,
+			LastMessageAtUnixMs: 123_456,
+			ActivitySignature:   "sig_1",
+			WaitingPromptID:     "prompt_1",
+		},
+	})
+	if err != nil {
+		t.Fatalf("EnsureFlower current: %v", err)
+	}
+	record := records["thread_1"]
+	if record.LastSeenActivityRevision != 123_456 ||
+		record.LastReadMessageAtUnixMs != 123_456 ||
+		record.LastSeenActivitySignature != "sig_1" ||
+		record.LastSeenWaitingPromptID != "prompt_1" {
+		t.Fatalf("migrated record=%#v, want legacy read state", record)
+	}
+}
 
 func TestNewMigratesLegacyFollowupQueueSchema(t *testing.T) {
 	t.Parallel()

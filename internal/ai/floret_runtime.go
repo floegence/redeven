@@ -182,7 +182,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if maxTotalTokens <= 0 {
 		maxTotalTokens = 0
 	}
-	floretCfg := redevenFloretGatewayConfig(systemPrompt, floretContextPolicy(contextWindow, inputContextLimit, req.Options.MaxOutputTokens))
+	floretCfg := redevenFloretAdapterConfig(systemPrompt, floretContextPolicy(contextWindow, inputContextLimit, req.Options.MaxOutputTokens))
 
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
 	result, err := flruntime.RunProjectedTurn(ctx, flruntime.ProjectedTurnOptions{
@@ -357,10 +357,10 @@ func enableFlowerWebSearchTool(providerCfg config.AIProvider, capability provide
 	return strings.EqualFold(strings.TrimSpace(providerCfg.Type), "openai_compatible")
 }
 
-func redevenFloretGatewayConfig(systemPrompt string, contextPolicy flconfig.ContextPolicy) flconfig.Config {
+func redevenFloretAdapterConfig(systemPrompt string, contextPolicy flconfig.ContextPolicy) flconfig.Config {
 	return flconfig.Config{
 		Provider:      flconfig.ProviderFake,
-		Model:         "redeven-model-gateway",
+		Model:         "redeven-model-adapter",
 		SystemPrompt:  systemPrompt,
 		ContextPolicy: contextPolicy,
 	}

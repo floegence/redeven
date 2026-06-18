@@ -1378,7 +1378,7 @@ export const zhTW = {
     providerTypeTitle: "Provider Type",
     providerTypeDescription: "點擊 provider type 可在列內開啟連線與 model 詳情。再次點擊可收合。",
     nativeConnectionDescription: "原生連線",
-    customGatewayDescription: "自訂 gateway",
+    customEndpointDescription: "自訂 endpoint",
     currentProviderType: "目前",
     collapseProviderType: "收合",
     openProviderType: "開啟",

@@ -31,7 +31,7 @@ const hoisted = vi.hoisted(() => {
     protocolState: {
       status: 'connected' as 'connected' | 'disconnected',
     },
-    fetchGatewayJSONMock: vi.fn(),
+    fetchLocalApiJSONMock: vi.fn(),
     envContextValue: {
       env_id: () => 'env-1',
       env: envResource,
@@ -45,7 +45,7 @@ const hoisted = vi.hoisted(() => {
 
 const notificationMock = hoisted.notificationMock;
 const protocolState = hoisted.protocolState;
-const fetchGatewayJSONMock = hoisted.fetchGatewayJSONMock;
+const fetchLocalApiJSONMock = hoisted.fetchLocalApiJSONMock;
 const STORAGE_KEYS = [
   'redeven_ai_active_thread_id',
   'redeven_ai_draft_working_dir',
@@ -135,8 +135,8 @@ vi.mock('../protocol/redeven_v1', () => ({
   }),
 }));
 
-vi.mock('../services/gatewayApi', () => ({
-  fetchGatewayJSON: hoisted.fetchGatewayJSONMock,
+vi.mock('../services/localApi', () => ({
+  fetchLocalApiJSON: hoisted.fetchLocalApiJSONMock,
 }));
 
 vi.mock('./EnvContext', () => ({
@@ -190,8 +190,8 @@ describe('AIChatContext model selection', () => {
     const [settingsSeq, setSettingsSeq] = createSignal(0);
     hoisted.envContextState.settingsSeq = settingsSeq;
     bumpSettingsSeq = () => setSettingsSeq((seq) => seq + 1);
-    fetchGatewayJSONMock.mockReset();
-    fetchGatewayJSONMock.mockImplementation(async (url: string, init?: RequestInit) => {
+    fetchLocalApiJSONMock.mockReset();
+    fetchLocalApiJSONMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
         return structuredClone(settingsState);
       }
@@ -247,7 +247,7 @@ describe('AIChatContext model selection', () => {
         const updated = threadsState.find((thread) => thread.thread_id === threadId);
         return { thread: updated };
       }
-      throw new Error(`Unhandled gateway request: ${url}`);
+      throw new Error(`Unhandled local API request: ${url}`);
     });
     notificationMock.error.mockReset();
     notificationMock.info.mockReset();

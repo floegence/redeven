@@ -360,7 +360,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 	if err := stream.Err(); err != nil {
 		return TurnResult{}, err
 	}
-	// Some OpenAI-compatible gateways omit `response.completed` even when they have already
+	// Some OpenAI-compatible endpoints omit `response.completed` even when they have already
 	// streamed usable text or tool call deltas. Treat missing completion as a soft-failure
 	// and continue best-effort when we have enough information to proceed.
 	hasToolCall := false
@@ -2006,7 +2006,7 @@ func resolveStrictToolSchema(providerType string, baseURL string, override *bool
 func shouldUseStrictOpenAIToolSchema(providerType string, baseURL string) bool {
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
 	if providerType == "openai_compatible" || providerType == "chatglm" || providerType == "deepseek" || providerType == "qwen" {
-		// Compatible gateways vary widely in strict function schema support; disable strict mode by default.
+		// Compatible endpoints vary widely in strict function schema support; disable strict mode by default.
 		return false
 	}
 	if providerType == "moonshot" {

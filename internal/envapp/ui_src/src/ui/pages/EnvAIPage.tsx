@@ -109,8 +109,8 @@ export function EnvAIPage() {
       failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
     },
     uploadAttachment: async (file) => {
-      const { uploadGatewayFile } = await import('../services/gatewayApi');
-      return uploadGatewayFile(file);
+      const { uploadLocalApiFile } = await import('../services/localApi');
+      return uploadLocalApiFile(file);
     },
     openFileBrowser: env.openFlowerFileBrowser,
     openFilePreview: env.openFlowerFilePreview,

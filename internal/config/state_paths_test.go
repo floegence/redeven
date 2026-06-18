@@ -52,9 +52,6 @@ func TestDefaultStateLayoutUsesSingleLocalEnvironment(t *testing.T) {
 	if layout.AppsDir != filepath.Join(wantStateDir, "apps") {
 		t.Fatalf("AppsDir = %q", layout.AppsDir)
 	}
-	if layout.GatewayDir != filepath.Join(wantStateDir, "gateway") {
-		t.Fatalf("GatewayDir = %q", layout.GatewayDir)
-	}
 }
 
 func TestResolveStateRootUsesEnvOverride(t *testing.T) {

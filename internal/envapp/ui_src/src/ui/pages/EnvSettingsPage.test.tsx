@@ -72,8 +72,8 @@ const runtimeUpdateMocks = vi.hoisted(() => ({
   refetchMaintenanceContext: vi.fn(async () => null),
 }));
 
-const gatewayMocks = vi.hoisted(() => ({
-  fetchGatewayJSON: vi.fn(async () => null),
+const localApiMocks = vi.hoisted(() => ({
+  fetchLocalApiJSON: vi.fn(async () => null),
 }));
 
 const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
@@ -210,8 +210,8 @@ vi.mock('../maintenance/shared', () => ({
   formatUnknownError: (error: unknown) => (error instanceof Error ? error.message : String(error ?? '')),
 }));
 
-vi.mock('../services/gatewayApi', () => ({
-  fetchGatewayJSON: gatewayMocks.fetchGatewayJSON,
+vi.mock('../services/localApi', () => ({
+  fetchLocalApiJSON: localApiMocks.fetchLocalApiJSON,
 }));
 
 vi.mock('../services/desktopCodeWorkspaceBridge', () => ({
@@ -402,7 +402,7 @@ describe('EnvSettingsPage', () => {
     desktopSessionContextMocks.readSnapshot.mockReturnValue(null);
     host = document.createElement('div');
     document.body.appendChild(host);
-    (gatewayMocks.fetchGatewayJSON as any).mockImplementation(async (url: string) => {
+    (localApiMocks.fetchLocalApiJSON as any).mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/settings') {
         return structuredClone(settingsResponse);
       }
@@ -547,7 +547,7 @@ describe('EnvSettingsPage', () => {
     await flushPage();
 
     expect(host.querySelector('[data-settings-card="Flower"]')).toBeTruthy();
-    expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/settings', { method: 'GET' });
+    expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/settings', { method: 'GET' });
   });
 
   it('shows an icon-only back to Flower only for settings opened from Flower', async () => {
@@ -704,7 +704,7 @@ describe('EnvSettingsPage', () => {
           },
           {
             id: 'custom',
-            name: 'Custom gateway',
+            name: 'Custom endpoint',
             type: 'openai_compatible',
             base_url: 'https://llm.example.invalid/v1',
             web_search: { mode: 'brave' },
@@ -724,7 +724,7 @@ describe('EnvSettingsPage', () => {
       },
     };
 
-    (gatewayMocks.fetchGatewayJSON as any).mockImplementation(async (url: string) => {
+    (localApiMocks.fetchLocalApiJSON as any).mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/settings') {
         return structuredClone(settingsResponse);
       }
@@ -746,7 +746,7 @@ describe('EnvSettingsPage', () => {
     render(() => <EnvSettingsPage />, host);
     await openSettingsSection(host, 'ai');
     await vi.waitFor(() => {
-      expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith('/_redeven_proxy/api/settings', { method: 'GET' });
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/settings', { method: 'GET' });
     });
 
     await vi.waitFor(() => {
@@ -770,7 +770,7 @@ describe('EnvSettingsPage', () => {
     confirmButton?.click();
 
     await vi.waitFor(() => {
-      expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith(
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(
         '/_redeven_proxy/api/ai/provider_bundle',
         expect.objectContaining({ method: 'PUT' }),
       );
@@ -818,7 +818,7 @@ describe('EnvSettingsPage', () => {
     await vi.waitFor(() => {
       expect(notificationMocks.error).toHaveBeenCalledWith('Save failed', 'current_model_id is not in providers[].models[]: missing/provider-model');
     });
-    expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith(
+    expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith(
       '/_redeven_proxy/api/ai/provider_bundle',
       expect.objectContaining({ method: 'PUT' }),
     );

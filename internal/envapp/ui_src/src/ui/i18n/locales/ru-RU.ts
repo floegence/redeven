@@ -1396,7 +1396,7 @@ export const ruRU = {
     providerTypeTitle: "Тип Provider",
     providerTypeDescription: "Нажмите тип Provider, чтобы открыть сведения о подключении и model внутри строки. Нажмите еще раз, чтобы свернуть.",
     nativeConnectionDescription: "Нативное подключение",
-    customGatewayDescription: "Пользовательский gateway",
+    customEndpointDescription: "Пользовательский endpoint",
     currentProviderType: "Текущий",
     collapseProviderType: "Свернуть",
     openProviderType: "Открыть",

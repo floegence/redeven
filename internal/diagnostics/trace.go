@@ -17,7 +17,7 @@ const (
 	ScopeDesktopHTTP      = "desktop_http"
 	ScopeDesktopLifecycle = "desktop_lifecycle"
 	ScopeLocalUIHTTP      = "localui_http"
-	ScopeGatewayAPI       = "gateway_api"
+	ScopeLocalAPI         = "local_api"
 	ScopeDirectSession    = "direct_session"
 	ScopeCodexBridge      = "codex_bridge"
 )
@@ -60,7 +60,7 @@ func ShouldMarkSlow(scope string, kind string, durationMs int64) bool {
 		return false
 	}
 	switch strings.TrimSpace(scope) {
-	case ScopeDesktopHTTP, ScopeLocalUIHTTP, ScopeGatewayAPI:
+	case ScopeDesktopHTTP, ScopeLocalUIHTTP, ScopeLocalAPI:
 		return true
 	case ScopeDirectSession:
 		switch strings.TrimSpace(kind) {

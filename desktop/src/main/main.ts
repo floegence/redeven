@@ -4473,6 +4473,12 @@ function validateGatewayProfileRouteForRecord(
       'URL access profiles cannot own runtime lifecycle control.',
     );
   }
+  if (request.access_route.auth_mode === 'password' || request.ssh_secret) {
+    return gatewayCapabilityFailure(
+      record,
+      'Gateway profile SSH password auth is not supported yet. Use key-agent SSH authentication.',
+    );
+  }
   return null;
 }
 

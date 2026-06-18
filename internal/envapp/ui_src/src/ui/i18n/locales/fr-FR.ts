@@ -1378,7 +1378,7 @@ export const frFR = {
     providerTypeTitle: "Type de Provider",
     providerTypeDescription: "Cliquez sur un type de Provider pour ouvrir ses détails de connexion et de model dans la ligne. Cliquez à nouveau pour réduire.",
     nativeConnectionDescription: "Connexion native",
-    customGatewayDescription: "Passerelle personnalisée",
+    customEndpointDescription: "Endpoint personnalisé",
     currentProviderType: "Actuel",
     collapseProviderType: "Réduire",
     openProviderType: "Ouvrir",

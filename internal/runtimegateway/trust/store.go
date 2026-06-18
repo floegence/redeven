@@ -160,16 +160,10 @@ func (s *Store) PairingChallenge(req protocol.PairingChallengeRequest) (protocol
 }
 
 func (s *Store) CompletePairing(req protocol.PairingCompleteRequest) (protocol.PairingCompleteResponse, error) {
-	if strings.TrimSpace(req.ProtocolVersion) != protocol.Version {
-		return protocol.PairingCompleteResponse{}, errors.New("protocol_version is not supported")
+	if err := protocol.ValidatePairingCompleteRequest(req); err != nil {
+		return protocol.PairingCompleteResponse{}, err
 	}
-	req.ClientNonce = strings.TrimSpace(req.ClientNonce)
-	req.GatewayNonce = strings.TrimSpace(req.GatewayNonce)
-	req.GatewayID = strings.TrimSpace(req.GatewayID)
-	req.BindingAudience = strings.TrimSpace(req.BindingAudience)
-	req.ClientKeyID = strings.TrimSpace(req.ClientKeyID)
-	req.ClientCapability = strings.TrimSpace(req.ClientCapability)
-	req.Proof = strings.TrimSpace(req.Proof)
+	req = protocol.NormalizePairingCompleteRequest(req)
 	if req.ClientNonce == "" || req.GatewayNonce == "" || req.GatewayID == "" || req.BindingAudience == "" || req.ClientKeyID == "" || req.Proof == "" {
 		return protocol.PairingCompleteResponse{}, errors.New("pairing completion request is incomplete")
 	}

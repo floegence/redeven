@@ -1378,7 +1378,7 @@ export const esES = {
     providerTypeTitle: "Tipo de Provider",
     providerTypeDescription: "Haz clic en un tipo de Provider para abrir sus detalles de conexión y model en línea. Haz clic de nuevo para contraerlo.",
     nativeConnectionDescription: "Conexión nativa",
-    customGatewayDescription: "Gateway personalizado",
+    customEndpointDescription: "Endpoint personalizado",
     currentProviderType: "Actual",
     collapseProviderType: "Contraer",
     openProviderType: "Abrir",

@@ -19,7 +19,7 @@ import type {
   FollowBottomRequestReason,
 } from '../chat/scroll/createFollowBottomController';
 import {
-  CodexGatewayError,
+  CodexAPIError,
   archiveCodexThread,
   fetchCodexCapabilities,
   fetchCodexStatus,
@@ -215,7 +215,7 @@ function sameReadStatus(
 }
 
 function formatCodexErrorForNotification(error: unknown, t: I18nHelpers['t']): string {
-  if (error instanceof CodexGatewayError) {
+  if (error instanceof CodexAPIError) {
     const message = String(error.message ?? '').trim();
     const details = String(error.details ?? '').trim();
     const code = String(error.errorCode ?? '').trim();
@@ -1830,7 +1830,7 @@ export function CodexProvider(props: ParentProps) {
       return true;
     } catch (error) {
       removeDispatchingInput(threadID, input.id);
-      if (error instanceof CodexGatewayError && error.errorCode === 'activeTurnNotSteerable') {
+      if (error instanceof CodexAPIError && error.errorCode === 'activeTurnNotSteerable') {
         args.onRejectedSteer?.(input);
         setBlockedAutoSendKey('');
         void refetchThreads();

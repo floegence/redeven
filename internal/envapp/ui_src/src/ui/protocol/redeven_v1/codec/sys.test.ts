@@ -24,8 +24,8 @@ describe('sys codec', () => {
         compatibility_review_id: 'runtime-service-maintenance-v1',
         open_readiness: {
           state: 'starting',
-          reason_code: 'env_app_gateway_starting',
-          message: 'Env App gateway is starting.',
+          reason_code: 'env_app_app_server_starting',
+          message: 'Env App app server is starting.',
         },
         active_workload: {
           terminal_count: 3,
@@ -84,8 +84,8 @@ describe('sys codec', () => {
         compatibilityReviewId: 'runtime-service-maintenance-v1',
         openReadiness: {
           state: 'starting',
-          reasonCode: 'env_app_gateway_starting',
-          message: 'Env App gateway is starting.',
+          reasonCode: 'env_app_app_server_starting',
+          message: 'Env App app server is starting.',
         },
         activeWorkload: {
           terminalCount: 3,

@@ -5,6 +5,7 @@ repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
 ./scripts/open_source_hygiene_check.sh --staged
+./scripts/check_gateway_protocol_contract.sh
 
 # IMPORTANT: Heavy Desktop Vitest coverage and Docker runtime E2E belong to
 # pre-commit, not GitHub Actions, so developer machines catch integration

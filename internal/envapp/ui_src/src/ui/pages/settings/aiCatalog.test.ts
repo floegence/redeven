@@ -74,6 +74,6 @@ describe('AI provider preset catalog', () => {
     expect(providerSupportsCustomModelNames('deepseek')).toBe(false);
     expect(providerSupportsCustomModelNames('openai_compatible')).toBe(true);
     expect(providerDisplayName({ type: 'deepseek', name: 'Personal DeepSeek' })).toBe('DeepSeek');
-    expect(providerDisplayName({ type: 'openai_compatible', name: 'Gateway A' })).toBe('Gateway A');
+    expect(providerDisplayName({ type: 'openai_compatible', name: 'Endpoint A' })).toBe('Endpoint A');
   });
 });

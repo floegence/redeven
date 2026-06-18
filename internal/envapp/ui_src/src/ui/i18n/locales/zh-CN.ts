@@ -1672,7 +1672,7 @@ export const zhCN = {
     providerTypeTitle: "Provider Type",
     providerTypeDescription: "点击 provider type 可在行内打开连接和 model 详情。再次点击可折叠。",
     nativeConnectionDescription: "原生连接",
-    customGatewayDescription: "自定义 gateway",
+    customEndpointDescription: "自定义 endpoint",
     currentProviderType: "当前",
     collapseProviderType: "折叠",
     openProviderType: "打开",

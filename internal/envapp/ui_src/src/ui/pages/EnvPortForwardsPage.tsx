@@ -29,7 +29,7 @@ import {
   type DesktopSessionContextSnapshot,
 } from '../services/desktopSessionContext';
 import { FLOE_APP_PORT_FORWARD } from '../services/floeproxyContract';
-import { fetchGatewayJSON } from '../services/gatewayApi';
+import { fetchLocalApiJSON } from '../services/localApi';
 import { trustedLauncherOriginFromSandboxLocation } from '../services/sandboxOrigins';
 import { registerSandboxWindow } from '../services/sandboxWindowRegistry';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
@@ -470,7 +470,7 @@ type OpenWebServiceCopy = Readonly<{
 
 async function touchWebService(forwardID: string, setStatus: (s: string) => void, copy: Pick<OpenWebServiceCopy, 'updating'>): Promise<void> {
   setStatus(copy.updating);
-  await fetchGatewayJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(forwardID)}/touch`, { method: 'POST' });
+  await fetchLocalApiJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(forwardID)}/touch`, { method: 'POST' });
 }
 
 async function openPortForwardTunnel(
@@ -560,7 +560,7 @@ export function EnvPortForwardsPage() {
       return refreshSeq();
     },
     async () => {
-      const out = await fetchGatewayJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET' });
+      const out = await fetchLocalApiJSON<{ forwards: PortForward[] }>('/_redeven_proxy/api/forwards', { method: 'GET' });
       return Array.isArray(out?.forwards) ? out.forwards : [];
     }
   );
@@ -607,7 +607,7 @@ export function EnvPortForwardsPage() {
     }
     setCreateLoading(true);
     try {
-      await fetchGatewayJSON('/_redeven_proxy/api/forwards', {
+      await fetchLocalApiJSON('/_redeven_proxy/api/forwards', {
         method: 'POST',
         body: JSON.stringify({ target, name, description }),
       });
@@ -631,7 +631,7 @@ export function EnvPortForwardsPage() {
     if (!fid) return;
     setDeleting(true);
     try {
-      await fetchGatewayJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(fid)}`, { method: 'DELETE' });
+      await fetchLocalApiJSON(`/_redeven_proxy/api/forwards/${encodeURIComponent(fid)}`, { method: 'DELETE' });
       bumpRefresh();
       notify.success(i18n.t('webServices.notifications.serviceDeletedTitle'), i18n.t('webServices.notifications.serviceDeletedMessage'));
     } catch (e) {

@@ -1,4 +1,4 @@
-import { fetchGatewayJSON } from './gatewayApi';
+import { fetchLocalApiJSON } from './localApi';
 
 export type CodeRuntimeDetectionState = 'ready' | 'missing' | 'unusable';
 export type CodeRuntimeOperationAction = 'prepare_workspace_engine' | 'remove_local_environment_version' | '';
@@ -75,11 +75,11 @@ export type CodeRuntimeImportChunkResult = Readonly<{
 }>;
 
 export async function fetchCodeRuntimeStatus(): Promise<CodeRuntimeStatus> {
-  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/status', { method: 'GET' });
+  return fetchLocalApiJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/status', { method: 'GET' });
 }
 
 export async function createCodeRuntimeImportSession(manifest: unknown): Promise<CodeRuntimeImportSession> {
-  return normalizeCodeRuntimeImportSession(await fetchGatewayJSON<CodeRuntimeImportSession>('/_redeven_proxy/api/code-runtime/import-sessions', {
+  return normalizeCodeRuntimeImportSession(await fetchLocalApiJSON<CodeRuntimeImportSession>('/_redeven_proxy/api/code-runtime/import-sessions', {
     method: 'POST',
     body: JSON.stringify({ manifest }),
   }));
@@ -88,7 +88,7 @@ export async function createCodeRuntimeImportSession(manifest: unknown): Promise
 export async function appendCodeRuntimeImportChunk(uploadID: string, chunkIndex: number, chunk: Uint8Array<ArrayBuffer>): Promise<CodeRuntimeImportChunkResult> {
   const cleanUploadID = encodeURIComponent(String(uploadID ?? '').trim());
   const cleanChunkIndex = Math.max(0, Math.floor(chunkIndex));
-  return normalizeCodeRuntimeImportChunkResult(await fetchGatewayJSON<CodeRuntimeImportChunkResult>(
+  return normalizeCodeRuntimeImportChunkResult(await fetchLocalApiJSON<CodeRuntimeImportChunkResult>(
     `/_redeven_proxy/api/code-runtime/import-sessions/${cleanUploadID}/chunks/${cleanChunkIndex}`,
     {
       method: 'PUT',
@@ -102,27 +102,27 @@ export async function appendCodeRuntimeImportChunk(uploadID: string, chunkIndex:
 
 export async function completeCodeRuntimeImportSession(uploadID: string): Promise<CodeRuntimeStatus> {
   const cleanUploadID = encodeURIComponent(String(uploadID ?? '').trim());
-  return fetchGatewayJSON<CodeRuntimeStatus>(`/_redeven_proxy/api/code-runtime/import-sessions/${cleanUploadID}/complete`, {
+  return fetchLocalApiJSON<CodeRuntimeStatus>(`/_redeven_proxy/api/code-runtime/import-sessions/${cleanUploadID}/complete`, {
     method: 'POST',
   });
 }
 
 export async function selectCodeRuntimeVersion(version: string): Promise<CodeRuntimeStatus> {
-  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/select', {
+  return fetchLocalApiJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/select', {
     method: 'POST',
     body: JSON.stringify({ version }),
   });
 }
 
 export async function removeCodeRuntimeVersion(version: string): Promise<CodeRuntimeStatus> {
-  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/remove-version', {
+  return fetchLocalApiJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/remove-version', {
     method: 'POST',
     body: JSON.stringify({ version }),
   });
 }
 
 export async function cancelCodeRuntimeOperation(): Promise<CodeRuntimeStatus> {
-  return fetchGatewayJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/cancel', { method: 'POST' });
+  return fetchLocalApiJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/cancel', { method: 'POST' });
 }
 
 export function codeRuntimeReady(status: CodeRuntimeStatus | null | undefined): boolean {

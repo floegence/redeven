@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bufio"
@@ -16,7 +16,7 @@ import (
 	"github.com/floegence/redeven/internal/notes"
 )
 
-func openGatewayNotesService(t *testing.T) *notes.Service {
+func openServerNotesService(t *testing.T) *notes.Service {
 	t.Helper()
 
 	svc, err := notes.Open(filepath.Join(t.TempDir(), "notes.db"))
@@ -31,15 +31,15 @@ func openGatewayNotesService(t *testing.T) *notes.Service {
 	return svc
 }
 
-func newNotesGatewayForTest(t *testing.T, svc *notes.Service, cap config.PermissionSet) *Gateway {
+func newNotesServerForTest(t *testing.T, svc *notes.Service, cap config.PermissionSet) *Server {
 	t.Helper()
-	return &Gateway{
+	return &Server{
 		notes:              svc,
 		localPermissionCap: &cap,
 	}
 }
 
-func performNotesRequest(t *testing.T, gw *Gateway, method string, path string, body string) *httptest.ResponseRecorder {
+func performNotesRequest(t *testing.T, srv *Server, method string, path string, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	req := WithLocalUIEnvRoute(httptest.NewRequest(method, path, bytes.NewBufferString(body)))
@@ -47,7 +47,7 @@ func performNotesRequest(t *testing.T, gw *Gateway, method string, path string, 
 		req.Header.Set("Content-Type", "application/json")
 	}
 	rr := httptest.NewRecorder()
-	gw.handleAPI(rr, req)
+	srv.handleAPI(rr, req)
 	return rr
 }
 
@@ -117,11 +117,11 @@ func readNotesSSEEvent(t *testing.T, reader *bufio.Reader) notes.Event {
 	return event
 }
 
-func TestGatewayNotesCRUDFlow(t *testing.T) {
+func TestServerNotesCRUDFlow(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayNotesService(t)
-	gw := newNotesGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	svc := openServerNotesService(t)
+	srv := newNotesServerForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
 
 	type topicEnvelope struct {
 		Topic notes.Topic `json:"topic"`
@@ -130,36 +130,36 @@ func TestGatewayNotesCRUDFlow(t *testing.T) {
 		Item notes.Item `json:"item"`
 	}
 
-	createTopicResp := performNotesRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/notes/topics", `{"name":"Research"}`)
+	createTopicResp := performNotesRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/notes/topics", `{"name":"Research"}`)
 	if createTopicResp.Code != http.StatusOK {
 		t.Fatalf("create topic status = %d, body = %s", createTopicResp.Code, createTopicResp.Body.String())
 	}
 	createdTopic := decodeNotesResponse[topicEnvelope](t, createTopicResp).Topic
 
-	renameResp := performNotesRequest(t, gw, http.MethodPatch, "/_redeven_proxy/api/notes/topics/"+createdTopic.TopicID, `{"name":"Research Alpha"}`)
+	renameResp := performNotesRequest(t, srv, http.MethodPatch, "/_redeven_proxy/api/notes/topics/"+createdTopic.TopicID, `{"name":"Research Alpha"}`)
 	if renameResp.Code != http.StatusOK {
 		t.Fatalf("rename topic status = %d, body = %s", renameResp.Code, renameResp.Body.String())
 	}
 
-	createItemResp := performNotesRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/notes/items", `{"topic_id":"`+createdTopic.TopicID+`","headline":"Gateway headline","body":"gateway body","color_token":"sage","x":320,"y":240}`)
+	createItemResp := performNotesRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/notes/items", `{"topic_id":"`+createdTopic.TopicID+`","headline":"Server headline","body":"app server body","color_token":"sage","x":320,"y":240}`)
 	if createItemResp.Code != http.StatusOK {
 		t.Fatalf("create item status = %d, body = %s", createItemResp.Code, createItemResp.Body.String())
 	}
 	createdItem := decodeNotesResponse[itemEnvelope](t, createItemResp).Item
-	if createdItem.Title != "Gateway headline" || createdItem.Headline != "Gateway headline" {
-		t.Fatalf("created item title/headline = %q/%q, want Gateway headline", createdItem.Title, createdItem.Headline)
+	if createdItem.Title != "Server headline" || createdItem.Headline != "Server headline" {
+		t.Fatalf("created item title/headline = %q/%q, want Server headline", createdItem.Title, createdItem.Headline)
 	}
 
-	updateItemResp := performNotesRequest(t, gw, http.MethodPatch, "/_redeven_proxy/api/notes/items/"+createdItem.NoteID, `{"title":"Gateway retitle","body":"gateway body updated"}`)
+	updateItemResp := performNotesRequest(t, srv, http.MethodPatch, "/_redeven_proxy/api/notes/items/"+createdItem.NoteID, `{"title":"Server retitle","body":"app server body updated"}`)
 	if updateItemResp.Code != http.StatusOK {
 		t.Fatalf("update item status = %d, body = %s", updateItemResp.Code, updateItemResp.Body.String())
 	}
 	updatedItem := decodeNotesResponse[itemEnvelope](t, updateItemResp).Item
-	if updatedItem.Title != "Gateway retitle" || updatedItem.Headline != "Gateway retitle" {
-		t.Fatalf("updated item title/headline = %q/%q, want Gateway retitle", updatedItem.Title, updatedItem.Headline)
+	if updatedItem.Title != "Server retitle" || updatedItem.Headline != "Server retitle" {
+		t.Fatalf("updated item title/headline = %q/%q, want Server retitle", updatedItem.Title, updatedItem.Headline)
 	}
 
-	snapshotResp := performNotesRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/notes/snapshot", "")
+	snapshotResp := performNotesRequest(t, srv, http.MethodGet, "/_redeven_proxy/api/notes/snapshot", "")
 	if snapshotResp.Code != http.StatusOK {
 		t.Fatalf("snapshot status = %d, body = %s", snapshotResp.Code, snapshotResp.Body.String())
 	}
@@ -170,17 +170,17 @@ func TestGatewayNotesCRUDFlow(t *testing.T) {
 		t.Fatalf("snapshot topics = %#v, want renamed topic", snapshot.Topics)
 	}
 	if !hasItem(snapshot.Items, func(item notes.Item) bool {
-		return item.NoteID == createdItem.NoteID && item.Title == "Gateway retitle" && item.Headline == "Gateway retitle"
+		return item.NoteID == createdItem.NoteID && item.Title == "Server retitle" && item.Headline == "Server retitle"
 	}) {
 		t.Fatalf("snapshot items = %#v, want created item", snapshot.Items)
 	}
 
-	deleteResp := performNotesRequest(t, gw, http.MethodDelete, "/_redeven_proxy/api/notes/items/"+createdItem.NoteID, "")
+	deleteResp := performNotesRequest(t, srv, http.MethodDelete, "/_redeven_proxy/api/notes/items/"+createdItem.NoteID, "")
 	if deleteResp.Code != http.StatusOK {
 		t.Fatalf("delete item status = %d, body = %s", deleteResp.Code, deleteResp.Body.String())
 	}
 
-	restoreResp := performNotesRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/notes/items/"+createdItem.NoteID+"/restore", "")
+	restoreResp := performNotesRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/notes/items/"+createdItem.NoteID+"/restore", "")
 	if restoreResp.Code != http.StatusOK {
 		t.Fatalf("restore item status = %d, body = %s", restoreResp.Code, restoreResp.Body.String())
 	}
@@ -190,23 +190,23 @@ func TestGatewayNotesCRUDFlow(t *testing.T) {
 	}
 }
 
-func TestGatewayNotesDeleteTrashedItemPermanently(t *testing.T) {
+func TestServerNotesDeleteTrashedItemPermanently(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayNotesService(t)
-	gw := newNotesGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	svc := openServerNotesService(t)
+	srv := newNotesServerForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
 
 	type topicEnvelope struct {
 		Topic notes.Topic `json:"topic"`
 	}
 
-	createTopicResp := performNotesRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/notes/topics", `{"name":"Archive"}`)
+	createTopicResp := performNotesRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/notes/topics", `{"name":"Archive"}`)
 	if createTopicResp.Code != http.StatusOK {
 		t.Fatalf("create topic status = %d, body = %s", createTopicResp.Code, createTopicResp.Body.String())
 	}
 	createdTopic := decodeNotesResponse[topicEnvelope](t, createTopicResp).Topic
 
-	createItemResp := performNotesRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/notes/items", `{"topic_id":"`+createdTopic.TopicID+`","body":"trash me","x":12,"y":18}`)
+	createItemResp := performNotesRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/notes/items", `{"topic_id":"`+createdTopic.TopicID+`","body":"trash me","x":12,"y":18}`)
 	if createItemResp.Code != http.StatusOK {
 		t.Fatalf("create item status = %d, body = %s", createItemResp.Code, createItemResp.Body.String())
 	}
@@ -214,17 +214,17 @@ func TestGatewayNotesDeleteTrashedItemPermanently(t *testing.T) {
 		Item notes.Item `json:"item"`
 	}](t, createItemResp).Item
 
-	deleteResp := performNotesRequest(t, gw, http.MethodDelete, "/_redeven_proxy/api/notes/items/"+createdItem.NoteID, "")
+	deleteResp := performNotesRequest(t, srv, http.MethodDelete, "/_redeven_proxy/api/notes/items/"+createdItem.NoteID, "")
 	if deleteResp.Code != http.StatusOK {
 		t.Fatalf("delete item status = %d, body = %s", deleteResp.Code, deleteResp.Body.String())
 	}
 
-	deleteTrashResp := performNotesRequest(t, gw, http.MethodDelete, "/_redeven_proxy/api/notes/trash/items/"+createdItem.NoteID, "")
+	deleteTrashResp := performNotesRequest(t, srv, http.MethodDelete, "/_redeven_proxy/api/notes/trash/items/"+createdItem.NoteID, "")
 	if deleteTrashResp.Code != http.StatusOK {
 		t.Fatalf("delete trashed item status = %d, body = %s", deleteTrashResp.Code, deleteTrashResp.Body.String())
 	}
 
-	snapshotResp := performNotesRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/notes/snapshot", "")
+	snapshotResp := performNotesRequest(t, srv, http.MethodGet, "/_redeven_proxy/api/notes/snapshot", "")
 	if snapshotResp.Code != http.StatusOK {
 		t.Fatalf("snapshot status = %d, body = %s", snapshotResp.Code, snapshotResp.Body.String())
 	}
@@ -234,13 +234,13 @@ func TestGatewayNotesDeleteTrashedItemPermanently(t *testing.T) {
 	}
 }
 
-func TestGatewayNotesFreshSnapshotIncludesWelcomeSeed(t *testing.T) {
+func TestServerNotesFreshSnapshotIncludesWelcomeSeed(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayNotesService(t)
-	gw := newNotesGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	svc := openServerNotesService(t)
+	srv := newNotesServerForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
 
-	snapshotResp := performNotesRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/notes/snapshot", "")
+	snapshotResp := performNotesRequest(t, srv, http.MethodGet, "/_redeven_proxy/api/notes/snapshot", "")
 	if snapshotResp.Code != http.StatusOK {
 		t.Fatalf("snapshot status = %d, body = %s", snapshotResp.Code, snapshotResp.Body.String())
 	}
@@ -254,33 +254,33 @@ func TestGatewayNotesFreshSnapshotIncludesWelcomeSeed(t *testing.T) {
 	}
 }
 
-func TestGatewayNotesWriteRequiresPermission(t *testing.T) {
+func TestServerNotesWriteRequiresPermission(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayNotesService(t)
-	gw := newNotesGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: false, Execute: true})
+	svc := openServerNotesService(t)
+	srv := newNotesServerForTest(t, svc, config.PermissionSet{Read: true, Write: false, Execute: true})
 
-	rr := performNotesRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/notes/topics", `{"name":"Blocked"}`)
+	rr := performNotesRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/notes/topics", `{"name":"Blocked"}`)
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body = %s", rr.Code, rr.Body.String())
 	}
 }
 
-func TestGatewayNotesEventStreamBaselineAndIncremental(t *testing.T) {
+func TestServerNotesEventStreamBaselineAndIncremental(t *testing.T) {
 	t.Parallel()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	svc := openGatewayNotesService(t)
+	svc := openServerNotesService(t)
 	topic, err := svc.CreateTopic(ctx, notes.CreateTopicRequest{Name: "Realtime"})
 	if err != nil {
 		t.Fatalf("CreateTopic() error = %v", err)
 	}
 
-	gw := newNotesGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	srv := newNotesServerForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gw.handleAPI(w, WithLocalUIEnvRoute(r))
+		srv.handleAPI(w, WithLocalUIEnvRoute(r))
 	}))
 	defer server.Close()
 

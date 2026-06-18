@@ -105,7 +105,7 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0; stderr=%q", code, stderr.String())
 	}
 	out := stdout.Bytes()
-	if bytes.HasPrefix(out, []byte("{")) || bytes.Contains(out, []byte("codeapp gateway listening")) {
+	if bytes.HasPrefix(out, []byte("{")) || bytes.Contains(out, []byte("code app server listening")) {
 		t.Fatalf("stdout contains non-protocol log bytes: %q", string(out[:min(len(out), 160)]))
 	}
 
@@ -126,7 +126,7 @@ func TestDesktopBridgeKeepsStdoutProtocolPure(t *testing.T) {
 	if hello.StartedAtUnixMS != 1778751234567 {
 		t.Fatalf("hello StartedAtUnixMS = %d", hello.StartedAtUnixMS)
 	}
-	if strings.Contains(stderr.String(), "codeapp gateway listening") || strings.Contains(stderr.String(), "init runtime") {
+	if strings.Contains(stderr.String(), "code app server listening") || strings.Contains(stderr.String(), "init runtime") {
 		t.Fatalf("stderr = %q, bridge must not start runtime components", stderr.String())
 	}
 }

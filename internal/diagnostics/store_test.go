@@ -12,7 +12,7 @@ func TestStoreAppendListAndSnapshot(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 	store.Append(Event{Scope: ScopeLocalUIHTTP, Kind: "request", Method: "get", Path: "/api/local/runtime", StatusCode: 200, DurationMs: 35})
-	store.Append(Event{Scope: ScopeGatewayAPI, Kind: "request", TraceID: "trace-1", Method: "post", Path: "/_redeven_proxy/api/settings", StatusCode: 500, DurationMs: 1250, Detail: map[string]any{"password": "secret", "reason": "failed"}})
+	store.Append(Event{Scope: ScopeLocalAPI, Kind: "request", TraceID: "trace-1", Method: "post", Path: "/_redeven_proxy/api/settings", StatusCode: 500, DurationMs: 1250, Detail: map[string]any{"password": "secret", "reason": "failed"}})
 
 	events, err := store.List(10)
 	if err != nil {
@@ -76,7 +76,7 @@ func TestStoreDisabledUntilEnabled(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	store.Append(Event{Scope: ScopeGatewayAPI, Kind: "request", Method: "GET", Path: "/_redeven_proxy/api/settings"})
+	store.Append(Event{Scope: ScopeLocalAPI, Kind: "request", Method: "GET", Path: "/_redeven_proxy/api/settings"})
 	events, err := store.List(10)
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
@@ -89,7 +89,7 @@ func TestStoreDisabledUntilEnabled(t *testing.T) {
 	if !store.Enabled() {
 		t.Fatalf("Enabled() = false, want true after SetEnabled(true)")
 	}
-	store.Append(Event{Scope: ScopeGatewayAPI, Kind: "request", Method: "GET", Path: "/_redeven_proxy/api/settings"})
+	store.Append(Event{Scope: ScopeLocalAPI, Kind: "request", Method: "GET", Path: "/_redeven_proxy/api/settings"})
 
 	events, err = store.List(10)
 	if err != nil {
@@ -100,7 +100,7 @@ func TestStoreDisabledUntilEnabled(t *testing.T) {
 	}
 
 	store.SetEnabled(false)
-	store.Append(Event{Scope: ScopeGatewayAPI, Kind: "request", Method: "POST", Path: "/_redeven_proxy/api/settings"})
+	store.Append(Event{Scope: ScopeLocalAPI, Kind: "request", Method: "POST", Path: "/_redeven_proxy/api/settings"})
 
 	events, err = store.List(10)
 	if err != nil {

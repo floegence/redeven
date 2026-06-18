@@ -69,13 +69,13 @@ func TestNormalizeSnapshotPreservesExplicitStartingReadiness(t *testing.T) {
 		Compatibility:   CompatibilityCompatible,
 		OpenReadiness: OpenReadiness{
 			State:      OpenReadinessStarting,
-			ReasonCode: "env_app_gateway_starting",
-			Message:    "Env App gateway is starting.",
+			ReasonCode: "env_app_app_server_starting",
+			Message:    "Env App app server is starting.",
 		},
 	})
 	if snapshot.OpenReadiness.State != OpenReadinessStarting ||
-		snapshot.OpenReadiness.ReasonCode != "env_app_gateway_starting" ||
-		snapshot.OpenReadiness.Message != "Env App gateway is starting." {
+		snapshot.OpenReadiness.ReasonCode != "env_app_app_server_starting" ||
+		snapshot.OpenReadiness.Message != "Env App app server is starting." {
 		t.Fatalf("unexpected OpenReadiness: %#v", snapshot.OpenReadiness)
 	}
 }

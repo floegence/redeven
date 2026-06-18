@@ -29,7 +29,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Code
 
-- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App gateway, codespace proxying, and managed Browser Editor setup.
+- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.
 
 ## UI
 
@@ -45,6 +45,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Protocol
 
+- [Gateway v1 protocol](protocol/gateway-v1-protocol.md) - OpenAPI source contract for Gateway HTTP JSON endpoints, auth, envelopes, and Desktop behavior boundaries.
 - [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, auth, environment catalog, health, bootstrap, and launch data.
 
 ## Release

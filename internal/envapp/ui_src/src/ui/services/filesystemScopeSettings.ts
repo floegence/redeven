@@ -1,5 +1,5 @@
 import type { AgentSettingsResponse, FilesystemRootPolicy, FilesystemScope, SettingsUpdateResponse } from '../pages/settings/types';
-import { fetchGatewayJSON } from './gatewayApi';
+import { fetchLocalApiJSON } from './localApi';
 
 export type FilesystemRootWriteUpdateResult = Readonly<{
   settings: AgentSettingsResponse;
@@ -7,7 +7,7 @@ export type FilesystemRootWriteUpdateResult = Readonly<{
 }>;
 
 export async function fetchFilesystemSettings(): Promise<AgentSettingsResponse> {
-  return fetchGatewayJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' });
+  return fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' });
 }
 
 function runtimeFilesystemRoots(agentHomeDir: string, scope: FilesystemScope | null | undefined): readonly FilesystemRootPolicy[] {
@@ -101,7 +101,7 @@ export async function saveFilesystemRootWritePermission(
   const agentHomeDir = String(currentSettings.runtime?.agent_home_dir ?? '').trim();
   const baseScope = normalizeFilesystemScopeDraft(agentHomeDir, currentSettings.runtime?.filesystem_scope ?? null);
   const filesystemScope = updateFilesystemRootWritePermission(baseScope, rootId, write);
-  const data = await fetchGatewayJSON<AgentSettingsResponse | SettingsUpdateResponse>('/_redeven_proxy/api/settings', {
+  const data = await fetchLocalApiJSON<AgentSettingsResponse | SettingsUpdateResponse>('/_redeven_proxy/api/settings', {
     method: 'PUT',
     body: JSON.stringify({
       agent_home_dir: agentHomeDir,

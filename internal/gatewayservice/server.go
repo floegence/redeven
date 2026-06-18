@@ -222,6 +222,10 @@ func (s *Server) handlePairingComplete(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	if err := gatewayprotocol.ValidatePairingCompleteRequest(req); err != nil {
+		writePairingCompleteRequestError(w, err)
+		return
+	}
 	if !s.pairingAllowedForChallenge(r, req.GatewayNonce) {
 		writeGatewayError(w, http.StatusLocked, gatewayprotocol.GatewayErrorCodeUnauthorized, "Gateway pairing requires an authorized pairing code.", false)
 		return
@@ -236,6 +240,17 @@ func (s *Server) handlePairingComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeGatewayData(w, http.StatusOK, resp)
+}
+
+func writePairingCompleteRequestError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, gatewayprotocol.ErrUnsupportedProtocolVersion):
+		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "protocol_version is not supported.", false)
+	case errors.Is(err, gatewayprotocol.ErrInvalidClientCapability):
+		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "client_capability is invalid.", false)
+	default:
+		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "Gateway pairing completion request is invalid.", false)
+	}
 }
 
 func (s *Server) handleCatalog(w http.ResponseWriter, r *http.Request) {
@@ -915,6 +930,16 @@ func writeProfileError(w http.ResponseWriter, err error) {
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is required.", false)
 	case errors.Is(err, gatewayprotocol.ErrMissingLifecycleOperation):
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "operation is required.", false)
+	case errors.Is(err, gatewayprotocol.ErrInvalidSSHSecretMode):
+		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_secret.mode is invalid.", false)
+	case errors.Is(err, gatewayprotocol.ErrSSHSecretUnsupported):
+		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh_secret is not supported.", false)
+	case errors.Is(err, gatewayprotocol.ErrInvalidAccessRouteFields):
+		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "access_route contains fields outside its kind.", false)
+	case errors.Is(err, gatewayprotocol.ErrInvalidSSHAuthMode):
+		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "access_route.auth_mode is invalid.", false)
+	case errors.Is(err, gatewayprotocol.ErrSSHPasswordAuthUnsupported):
+		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "ssh password auth is not supported.", false)
 	case errors.Is(err, gatewayenvprofiles.ErrGatewayEnvIDReserved):
 		writeGatewayError(w, http.StatusBadRequest, gatewayprotocol.GatewayErrorCodeInvalidRequest, "gateway_env_id is reserved.", false)
 	case errors.Is(err, gatewayenvprofiles.ErrGatewayEnvIDInvalid):

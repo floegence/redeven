@@ -1,4 +1,4 @@
-import { fetchGatewayJSON, prepareGatewayRequestInit } from './gatewayApi';
+import { fetchLocalApiJSON, prepareLocalApiRequestInit } from './localApi';
 import type { NoteColorToken, NotesEvent, NotesItem, NotesSnapshot, NotesTopic } from '../notes/notesModel';
 
 export type CreateTopicInput = Readonly<{
@@ -37,11 +37,11 @@ type ItemResponse = Readonly<{
 }>;
 
 export async function getNotesSnapshot(): Promise<NotesSnapshot> {
-  return fetchGatewayJSON<NotesSnapshot>('/_redeven_proxy/api/notes/snapshot', { method: 'GET' });
+  return fetchLocalApiJSON<NotesSnapshot>('/_redeven_proxy/api/notes/snapshot', { method: 'GET' });
 }
 
 export async function createNotesTopic(input: CreateTopicInput): Promise<NotesTopic> {
-  const out = await fetchGatewayJSON<TopicResponse>('/_redeven_proxy/api/notes/topics', {
+  const out = await fetchLocalApiJSON<TopicResponse>('/_redeven_proxy/api/notes/topics', {
     method: 'POST',
     body: JSON.stringify({ name: String(input.name ?? '') }),
   });
@@ -49,7 +49,7 @@ export async function createNotesTopic(input: CreateTopicInput): Promise<NotesTo
 }
 
 export async function updateNotesTopic(topicID: string, input: UpdateTopicInput): Promise<NotesTopic> {
-  const out = await fetchGatewayJSON<TopicResponse>(`/_redeven_proxy/api/notes/topics/${encodeURIComponent(String(topicID ?? '').trim())}`, {
+  const out = await fetchLocalApiJSON<TopicResponse>(`/_redeven_proxy/api/notes/topics/${encodeURIComponent(String(topicID ?? '').trim())}`, {
     method: 'PATCH',
     body: JSON.stringify({ name: String(input.name ?? '') }),
   });
@@ -57,13 +57,13 @@ export async function updateNotesTopic(topicID: string, input: UpdateTopicInput)
 }
 
 export async function deleteNotesTopic(topicID: string): Promise<void> {
-  await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/notes/topics/${encodeURIComponent(String(topicID ?? '').trim())}`, {
+  await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/notes/topics/${encodeURIComponent(String(topicID ?? '').trim())}`, {
     method: 'DELETE',
   });
 }
 
 export async function createNotesItem(input: CreateNoteInput): Promise<NotesItem> {
-  const out = await fetchGatewayJSON<ItemResponse>('/_redeven_proxy/api/notes/items', {
+  const out = await fetchLocalApiJSON<ItemResponse>('/_redeven_proxy/api/notes/items', {
     method: 'POST',
     body: JSON.stringify({
       topic_id: String(input.topic_id ?? '').trim(),
@@ -79,7 +79,7 @@ export async function createNotesItem(input: CreateNoteInput): Promise<NotesItem
 }
 
 export async function updateNotesItem(noteID: string, input: UpdateNoteInput): Promise<NotesItem> {
-  const out = await fetchGatewayJSON<ItemResponse>(`/_redeven_proxy/api/notes/items/${encodeURIComponent(String(noteID ?? '').trim())}`, {
+  const out = await fetchLocalApiJSON<ItemResponse>(`/_redeven_proxy/api/notes/items/${encodeURIComponent(String(noteID ?? '').trim())}`, {
     method: 'PATCH',
     body: JSON.stringify({
       headline: input.headline,
@@ -94,33 +94,33 @@ export async function updateNotesItem(noteID: string, input: UpdateNoteInput): P
 }
 
 export async function bringNotesItemToFront(noteID: string): Promise<NotesItem> {
-  const out = await fetchGatewayJSON<ItemResponse>(`/_redeven_proxy/api/notes/items/${encodeURIComponent(String(noteID ?? '').trim())}/front`, {
+  const out = await fetchLocalApiJSON<ItemResponse>(`/_redeven_proxy/api/notes/items/${encodeURIComponent(String(noteID ?? '').trim())}/front`, {
     method: 'POST',
   });
   return out.item;
 }
 
 export async function deleteNotesItem(noteID: string): Promise<void> {
-  await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/notes/items/${encodeURIComponent(String(noteID ?? '').trim())}`, {
+  await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/notes/items/${encodeURIComponent(String(noteID ?? '').trim())}`, {
     method: 'DELETE',
   });
 }
 
 export async function restoreNotesItem(noteID: string): Promise<NotesItem> {
-  const out = await fetchGatewayJSON<ItemResponse>(`/_redeven_proxy/api/notes/items/${encodeURIComponent(String(noteID ?? '').trim())}/restore`, {
+  const out = await fetchLocalApiJSON<ItemResponse>(`/_redeven_proxy/api/notes/items/${encodeURIComponent(String(noteID ?? '').trim())}/restore`, {
     method: 'POST',
   });
   return out.item;
 }
 
 export async function clearNotesTrashTopic(topicID: string): Promise<void> {
-  await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/notes/trash/topics/${encodeURIComponent(String(topicID ?? '').trim())}`, {
+  await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/notes/trash/topics/${encodeURIComponent(String(topicID ?? '').trim())}`, {
     method: 'DELETE',
   });
 }
 
 export async function deleteNotesTrashItemPermanently(noteID: string): Promise<void> {
-  await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/notes/trash/items/${encodeURIComponent(String(noteID ?? '').trim())}`, {
+  await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/notes/trash/items/${encodeURIComponent(String(noteID ?? '').trim())}`, {
     method: 'DELETE',
   });
 }
@@ -132,7 +132,7 @@ export async function connectNotesEventStream(args: {
 }): Promise<void> {
   const response = await fetch(
     `/_redeven_proxy/api/notes/events?after_seq=${encodeURIComponent(String(args.afterSeq ?? 0))}`,
-    await prepareGatewayRequestInit({
+    await prepareLocalApiRequestInit({
       method: 'GET',
       headers: { Accept: 'text/event-stream' },
       signal: args.signal,

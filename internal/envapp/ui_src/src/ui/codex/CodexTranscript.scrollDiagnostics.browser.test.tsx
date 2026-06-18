@@ -72,8 +72,8 @@ vi.mock('../utils/fileStreamReader', () => ({
   readFileBytesOnce: vi.fn(),
 }));
 
-vi.mock('../../services/gatewayApi', () => ({
-  prepareGatewayRequestInit: vi.fn(async (init?: RequestInit) => init ?? {}),
+vi.mock('../../services/localApi', () => ({
+  prepareLocalApiRequestInit: vi.fn(async (init?: RequestInit) => init ?? {}),
 }));
 
 vi.mock('../../utils/clipboard', () => ({

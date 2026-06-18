@@ -26,7 +26,7 @@ const hoisted = vi.hoisted(() => {
     protocolState: {
       status: 'connected' as 'connected' | 'disconnected',
     },
-    fetchGatewayJSONMock: vi.fn(),
+    fetchLocalApiJSONMock: vi.fn(),
     realtimeHandler: null as ((event: any) => void) | null,
     envContextValue: {
       env_id: () => 'env-1',
@@ -38,7 +38,7 @@ const hoisted = vi.hoisted(() => {
   };
 });
 
-const fetchGatewayJSONMock = hoisted.fetchGatewayJSONMock;
+const fetchLocalApiJSONMock = hoisted.fetchLocalApiJSONMock;
 const protocolState = hoisted.protocolState;
 
 const makeThread = (overrides: Partial<ThreadView> = {}): ThreadView => ({
@@ -101,8 +101,8 @@ vi.mock('../protocol/redeven_v1', () => ({
   }),
 }));
 
-vi.mock('../services/gatewayApi', () => ({
-  fetchGatewayJSON: hoisted.fetchGatewayJSONMock,
+vi.mock('../services/localApi', () => ({
+  fetchLocalApiJSON: hoisted.fetchLocalApiJSONMock,
 }));
 
 vi.mock('./EnvContext', () => ({
@@ -135,8 +135,8 @@ describe('AIChatContext context run tracking', () => {
     protocolState.status = 'connected';
     threadsState = [makeThread({ last_context_run_id: 'run_saved' })];
     hoisted.realtimeHandler = null;
-    fetchGatewayJSONMock.mockReset();
-    fetchGatewayJSONMock.mockImplementation(async (url: string) => {
+    fetchLocalApiJSONMock.mockReset();
+    fetchLocalApiJSONMock.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/settings') {
         return { ai: { enabled: true } };
       }
@@ -149,7 +149,7 @@ describe('AIChatContext context run tracking', () => {
       if (url === '/_redeven_proxy/api/ai/threads?limit=200') {
         return { threads: structuredClone(threadsState) };
       }
-      throw new Error(`Unhandled gateway request: ${url}`);
+      throw new Error(`Unhandled local API request: ${url}`);
     });
   });
 

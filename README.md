@@ -32,7 +32,7 @@ Redeven is a single binary that brings your computers and servers into one brows
 It runs on your machine, your remote servers, or any reachable SSH host. Your files, processes, API keys, and credentials stay where they belong — Redeven does not move your plaintext through anyone else's infrastructure.
 
 - **Clients connect to an endpoint runtime** — Browser, Desktop, CLI, and SSH-hosted sessions all enter the same runtime-managed workspace.
-- **The runtime is the trust boundary** — a single Go binary owns files, terminals, monitoring, Git, web-service forwarding, Workbench layout, notes, Browser Editor setup, Flower, and Codex gateway access.
+- **The runtime is the trust boundary** — a single Go binary owns files, terminals, monitoring, Git, web-service forwarding, Workbench layout, notes, Browser Editor setup, Flower, and Codex bridge access.
 - **Transport and policy stay explicit** — Flowersec carries encrypted RPC and stream traffic, while session grants, local permission policy, filesystem scope, and local secrets constrain what each session can do.
 
 ![Redeven architecture overview](assets/readme/architecture-overview.png)

@@ -1375,7 +1375,7 @@ export const enUS = defineDictionary({
     installNotice: 'Redeven is waiting for the host codex binary. Install it on the host and expose it on PATH.',
     notesTitle: 'Notes',
     notesHostRuntimeDefaults: 'Codex keeps its own runtime defaults on the host; Redeven does not mirror them into config.json.',
-    notesActivityIsolation: 'The dedicated Codex activity entry and gateway namespace stay isolated from Flower.',
+    notesActivityIsolation: 'The dedicated Codex activity entry and local API namespace stay isolated from Flower.',
   },
   codeRuntime: {
     title: 'Browser Editor',
@@ -1941,7 +1941,7 @@ export const enUS = defineDictionary({
     providerTypeTitle: 'Provider Type',
     providerTypeDescription: 'Click a provider type to open its connection and model details inline. Click again to collapse it.',
     nativeConnectionDescription: 'Native connection',
-    customGatewayDescription: 'Custom gateway',
+    customEndpointDescription: 'Custom endpoint',
     currentProviderType: 'Current',
     collapseProviderType: 'Collapse',
     openProviderType: 'Open',

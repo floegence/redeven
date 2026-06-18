@@ -21,8 +21,8 @@ const envContextMocks = vi.hoisted(() => ({
   ),
 }));
 
-const gatewayMocks = vi.hoisted(() => ({
-  fetchGatewayJSON: vi.fn(),
+const localApiMocks = vi.hoisted(() => ({
+  fetchLocalApiJSON: vi.fn(),
 }));
 
 const controlplaneMocks = vi.hoisted(() => ({
@@ -94,8 +94,8 @@ vi.mock('../services/floeproxyContract', () => ({
   FLOE_APP_PORT_FORWARD: 'com.floegence.redeven.portforward',
 }));
 
-vi.mock('../services/gatewayApi', () => ({
-  fetchGatewayJSON: gatewayMocks.fetchGatewayJSON,
+vi.mock('../services/localApi', () => ({
+  fetchLocalApiJSON: localApiMocks.fetchLocalApiJSON,
 }));
 
 vi.mock('../services/sandboxOrigins', () => ({
@@ -243,8 +243,8 @@ describe('EnvPortForwardsPage', () => {
       () => ({ permissions: { can_execute: true } }),
       { state: 'ready', loading: false, error: null },
     );
-    gatewayMocks.fetchGatewayJSON.mockReset();
-    gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
+    localApiMocks.fetchLocalApiJSON.mockReset();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/forwards') {
         return {
           forwards: [
@@ -271,7 +271,7 @@ describe('EnvPortForwardsPage', () => {
       if (url === '/_redeven_proxy/api/forwards/forward-1/touch') {
         return { forward_id: 'forward-1' };
       }
-      throw new Error(`Unexpected gateway call: ${url}`);
+      throw new Error(`Unexpected local API call: ${url}`);
     });
 
     host = document.createElement('div');
@@ -317,7 +317,7 @@ describe('EnvPortForwardsPage', () => {
     openButton?.click();
 
     await waitForAssertion(() => {
-      expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST' });
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST' });
       expect(assign).toHaveBeenCalledWith('http://localhost:3000');
     });
     expect(close).not.toHaveBeenCalled();
@@ -338,7 +338,7 @@ describe('EnvPortForwardsPage', () => {
     openButton?.click();
 
     await waitForAssertion(() => {
-      expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST' });
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/forwards/forward-1/touch', { method: 'POST' });
       expect(sandboxWindowRegistryMocks.registerSandboxWindow).toHaveBeenCalledWith(popup, {
         origin: 'https://forward.test',
         floe_app: 'com.floegence.redeven.portforward',

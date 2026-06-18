@@ -1378,7 +1378,7 @@ export const koKR = {
     providerTypeTitle: "Provider Type",
     providerTypeDescription: "provider type 을 클릭하면 연결 및 model 세부 정보를 인라인으로 엽니다. 다시 클릭하면 접습니다.",
     nativeConnectionDescription: "네이티브 연결",
-    customGatewayDescription: "Custom gateway",
+    customEndpointDescription: "Custom endpoint",
     currentProviderType: "현재",
     collapseProviderType: "접기",
     openProviderType: "열기",

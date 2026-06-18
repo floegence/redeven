@@ -115,7 +115,7 @@ type AIProvider struct {
 	//
 	// When unset, runtime falls back to built-in policy:
 	// - openai official endpoints: strict
-	// - openai custom gateways: non-strict
+	// - openai custom endpoints: non-strict
 	// - openai_compatible: non-strict
 	// - moonshot/chatglm/deepseek/qwen: non-strict
 	StrictToolSchema *bool `json:"strict_tool_schema,omitempty"`

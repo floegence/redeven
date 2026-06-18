@@ -277,6 +277,89 @@ func TestGatewayServiceManagedModeRejectsSpoofedBridgeProfileWritePairing(t *tes
 	}
 }
 
+func TestGatewayServiceRejectsUnknownPairingClientCapability(t *testing.T) {
+	s := newGatewayTestServer(t, false)
+	keys, err := security.GenerateKeyPair()
+	if err != nil {
+		t.Fatalf("GenerateKeyPair() error = %v", err)
+	}
+	audience := "http://127.0.0.1:24000/"
+	challenge := gatewayPairingChallengeViaHTTP(t, s, protocol.PairingChallengeRequest{
+		ProtocolVersion: protocol.Version,
+		ClientNonce:     "pair-client-nonce",
+		ClientPublicKey: strings.TrimSpace(keys.PublicKeyPEM),
+		BindingAudience: audience,
+		PairingCode:     "pair-demo",
+	}, false)
+	body, err := json.Marshal(protocol.PairingCompleteRequest{
+		ProtocolVersion:  protocol.Version,
+		ClientNonce:      "pair-client-nonce",
+		GatewayNonce:     challenge.GatewayNonce,
+		GatewayID:        challenge.GatewayID,
+		BindingAudience:  audience,
+		ClientKeyID:      security.ClientKeyID(strings.TrimSpace(keys.PublicKeyPEM)),
+		ClientCapability: "files",
+		Proof:            "unused",
+	})
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/pairing/complete", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	res := httptest.NewRecorder()
+	s.Handler().ServeHTTP(res, req)
+
+	if res.Result().StatusCode != http.StatusBadRequest {
+		t.Fatalf("pairing complete status = %d, want %d; body=%s", res.Result().StatusCode, http.StatusBadRequest, res.Body.String())
+	}
+	if !strings.Contains(res.Body.String(), "client_capability") {
+		t.Fatalf("body = %s, want client_capability guidance", res.Body.String())
+	}
+}
+
+func TestGatewayServiceRejectsSchemaInvalidProfileRoutes(t *testing.T) {
+	s := newGatewayTestServer(t, true)
+	material := pairGatewayTestManagementClient(t, s, "ssh://bastion:22/opt/redeven")
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "url route with ssh field",
+			body: `{"protocol_version":"redeven-gateway-v1","profile":{"display_name":"URL Env","access_route":{"kind":"url","url":"https://target.example/","ssh_destination":"devbox"}}}`,
+			want: "access_route",
+		},
+		{
+			name: "ssh secret",
+			body: `{"protocol_version":"redeven-gateway-v1","profile":{"display_name":"SSH Env","access_route":{"kind":"ssh_host","ssh_destination":"devbox","auth_mode":"key_agent"},"ssh_secret":{"mode":"replace","password":"secret"}}}`,
+			want: "ssh_secret",
+		},
+		{
+			name: "ssh password auth",
+			body: `{"protocol_version":"redeven-gateway-v1","profile":{"display_name":"SSH Env","access_route":{"kind":"ssh_host","ssh_destination":"devbox","auth_mode":"password"}}}`,
+			want: "password auth",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := []byte(tc.body)
+			req := httptest.NewRequest(http.MethodPost, "http://127.0.0.1:24000/gateway/v1/env-profiles/upsert", bytes.NewReader(body))
+			setManagedBridgeHeaders(req)
+			signGatewayTestRequest(t, req, material, body)
+			res := httptest.NewRecorder()
+			s.Handler().ServeHTTP(res, req)
+
+			if res.Result().StatusCode != http.StatusBadRequest {
+				t.Fatalf("profile upsert status = %d, want %d; body=%s", res.Result().StatusCode, http.StatusBadRequest, res.Body.String())
+			}
+			if !strings.Contains(res.Body.String(), tc.want) {
+				t.Fatalf("body = %s, want %q guidance", res.Body.String(), tc.want)
+			}
+		})
+	}
+}
+
 func TestGatewayServiceURLServerRejectsSpoofedBridgeProfileWrite(t *testing.T) {
 	s := newGatewayTestServer(t, false)
 	material := pairGatewayTestClient(t, s, "http://127.0.0.1:24000/")

@@ -122,7 +122,7 @@ describe('createDebugConsoleController', () => {
           {
             created_at: '2026-03-27T10:00:01Z',
             source: 'agent',
-            scope: 'gateway_api',
+            scope: 'local_api',
             kind: 'request',
             trace_id: 'trace-1',
             method: 'GET',
@@ -180,7 +180,7 @@ describe('createDebugConsoleController', () => {
       {
         created_at: '2026-03-27T10:00:01Z',
         source: 'agent',
-        scope: 'gateway_api',
+        scope: 'local_api',
         kind: 'request',
         trace_id: 'trace-1',
         method: 'GET',
@@ -243,7 +243,7 @@ describe('createDebugConsoleController', () => {
       {
         created_at: '2026-03-27T10:00:01Z',
         source: 'agent',
-        scope: 'gateway_api',
+        scope: 'local_api',
         kind: 'request',
         trace_id: 'trace-1',
         method: 'GET',
@@ -318,7 +318,7 @@ describe('createDebugConsoleController', () => {
         {
           created_at: '2026-03-27T10:00:00Z',
           source: 'agent',
-          scope: 'gateway_api',
+          scope: 'local_api',
           kind: 'request',
           trace_id: 'trace-1',
           method: 'GET',
@@ -377,7 +377,7 @@ describe('createDebugConsoleController', () => {
         {
           created_at: '2026-03-27T10:00:00Z',
           source: 'agent',
-          scope: 'gateway_api',
+          scope: 'local_api',
           kind: 'request',
           trace_id: 'trace-1',
           method: 'GET',
@@ -401,7 +401,7 @@ describe('createDebugConsoleController', () => {
         {
           created_at: '2026-03-27T10:00:00Z',
           source: 'agent',
-          scope: 'gateway_api',
+          scope: 'local_api',
           kind: 'request',
           trace_id: 'trace-1',
           method: 'GET',
@@ -496,7 +496,7 @@ describe('createDebugConsoleController', () => {
     emit?.({
       created_at: '2026-03-27T10:00:05Z',
       source: 'browser',
-      scope: 'gateway_api',
+      scope: 'local_api',
       kind: 'completed',
       trace_id: 'http-000001',
       method: 'POST',
@@ -550,7 +550,7 @@ describe('createDebugConsoleController', () => {
         {
           created_at: '2026-03-27T10:00:00Z',
           source: 'agent',
-          scope: 'gateway_api',
+          scope: 'local_api',
           kind: 'request',
           trace_id: 'trace-1',
           method: 'GET',
@@ -635,7 +635,7 @@ describe('createDebugConsoleController', () => {
           {
             created_at: '2026-03-27T10:00:01Z',
             source: 'agent',
-            scope: 'gateway_api',
+            scope: 'local_api',
             kind: 'request',
             method: 'GET',
             path: '/_redeven_proxy/api/settings',

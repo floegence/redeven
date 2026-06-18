@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bufio"
@@ -19,7 +19,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestGateway_Diagnostics_RequestTracing(t *testing.T) {
+func TestServer_Diagnostics_RequestTracing(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := writeTestConfig(t)
@@ -28,7 +28,7 @@ func TestGateway_Diagnostics_RequestTracing(t *testing.T) {
 		t.Fatalf("diagnostics.New() error = %v", err)
 	}
 	channelID := "ch_diag_trace"
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
 		ConfigPath:         cfgPath,
@@ -42,7 +42,7 @@ func TestGateway_Diagnostics_RequestTracing(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
 	req.Header.Set("Origin", envOriginWithChannel(channelID))
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
@@ -59,8 +59,8 @@ func TestGateway_Diagnostics_RequestTracing(t *testing.T) {
 		t.Fatalf("expected diagnostics event")
 	}
 	event := events[0]
-	if event.Scope != diagnostics.ScopeGatewayAPI {
-		t.Fatalf("event.Scope = %q, want %q", event.Scope, diagnostics.ScopeGatewayAPI)
+	if event.Scope != diagnostics.ScopeLocalAPI {
+		t.Fatalf("event.Scope = %q, want %q", event.Scope, diagnostics.ScopeLocalAPI)
 	}
 	if event.TraceID != traceID {
 		t.Fatalf("event.TraceID = %q, want %q", event.TraceID, traceID)
@@ -70,7 +70,7 @@ func TestGateway_Diagnostics_RequestTracing(t *testing.T) {
 	}
 }
 
-func TestGateway_DiagnosticsAPI_AggregatesAgentAndDesktopEvents(t *testing.T) {
+func TestServer_DiagnosticsAPI_AggregatesAgentAndDesktopEvents(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := writeTestConfig(t)
@@ -83,11 +83,11 @@ func TestGateway_DiagnosticsAPI_AggregatesAgentAndDesktopEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("diagnostics.New(desktop) error = %v", err)
 	}
-	agentStore.Append(diagnostics.Event{Scope: diagnostics.ScopeGatewayAPI, Kind: "request", TraceID: "trace-shared", Method: http.MethodGet, Path: "/_redeven_proxy/api/settings", StatusCode: 200, DurationMs: 1400})
+	agentStore.Append(diagnostics.Event{Scope: diagnostics.ScopeLocalAPI, Kind: "request", TraceID: "trace-shared", Method: http.MethodGet, Path: "/_redeven_proxy/api/settings", StatusCode: 200, DurationMs: 1400})
 	desktopStore.Append(diagnostics.Event{Scope: diagnostics.ScopeDesktopHTTP, Kind: "completed", TraceID: "trace-shared", Method: http.MethodGet, Path: "/api/local/runtime", StatusCode: 200, DurationMs: 1600})
 
 	channelID := "ch_diag_api"
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
 		ConfigPath:         cfgPath,
@@ -101,7 +101,7 @@ func TestGateway_DiagnosticsAPI_AggregatesAgentAndDesktopEvents(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/debug/diagnostics", nil)
 	req.Header.Set("Origin", envOriginWithChannel(channelID))
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
 	}
@@ -125,7 +125,7 @@ func TestGateway_DiagnosticsAPI_AggregatesAgentAndDesktopEvents(t *testing.T) {
 	exportReq := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/debug/diagnostics/export", nil)
 	exportReq.Header.Set("Origin", envOriginWithChannel(channelID))
 	exportRes := httptest.NewRecorder()
-	gw.serveHTTP(exportRes, exportReq)
+	srv.serveHTTP(exportRes, exportReq)
 	if exportRes.Code != http.StatusOK {
 		t.Fatalf("export status = %d, want %d", exportRes.Code, http.StatusOK)
 	}
@@ -141,7 +141,7 @@ func TestGateway_DiagnosticsAPI_AggregatesAgentAndDesktopEvents(t *testing.T) {
 	}
 }
 
-func TestGateway_SettingsUpdatesDoNotMutateDiagnosticsRuntimeOrExposeDebugConsole(t *testing.T) {
+func TestServer_SettingsUpdatesDoNotMutateDiagnosticsRuntimeOrExposeDebugConsole(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := writeTestConfig(t)
@@ -155,7 +155,7 @@ func TestGateway_SettingsUpdatesDoNotMutateDiagnosticsRuntimeOrExposeDebugConsol
 		t.Fatalf("diagnostics.New() error = %v", err)
 	}
 	channelID := "ch_diag_toggle"
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
 		ConfigPath:         cfgPath,
@@ -169,7 +169,7 @@ func TestGateway_SettingsUpdatesDoNotMutateDiagnosticsRuntimeOrExposeDebugConsol
 	getReq := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
 	getReq.Header.Set("Origin", envOriginWithChannel(channelID))
 	getRes := httptest.NewRecorder()
-	gw.serveHTTP(getRes, getReq)
+	srv.serveHTTP(getRes, getReq)
 	if got := getRes.Header().Get(diagnostics.EnabledHeader); got != "false" {
 		t.Fatalf("initial %s = %q, want false", diagnostics.EnabledHeader, got)
 	}
@@ -182,7 +182,7 @@ func TestGateway_SettingsUpdatesDoNotMutateDiagnosticsRuntimeOrExposeDebugConsol
 }`))
 	updateReq.Header.Set("Origin", envOriginWithChannel(channelID))
 	updateRes := httptest.NewRecorder()
-	gw.serveHTTP(updateRes, updateReq)
+	srv.serveHTTP(updateRes, updateReq)
 	if updateRes.Code != http.StatusOK {
 		t.Fatalf("update status = %d, want %d body=%s", updateRes.Code, http.StatusOK, updateRes.Body.String())
 	}
@@ -215,7 +215,7 @@ func TestGateway_SettingsUpdatesDoNotMutateDiagnosticsRuntimeOrExposeDebugConsol
 	postReq := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/settings", nil)
 	postReq.Header.Set("Origin", envOriginWithChannel(channelID))
 	postRes := httptest.NewRecorder()
-	gw.serveHTTP(postRes, postReq)
+	srv.serveHTTP(postRes, postReq)
 	if got := postRes.Header().Get(diagnostics.EnabledHeader); got != "false" {
 		t.Fatalf("post-update %s = %q, want false", diagnostics.EnabledHeader, got)
 	}
@@ -224,7 +224,7 @@ func TestGateway_SettingsUpdatesDoNotMutateDiagnosticsRuntimeOrExposeDebugConsol
 	}
 }
 
-func TestGateway_DiagnosticsStreamEmitsNewEvents(t *testing.T) {
+func TestServer_DiagnosticsStreamEmitsNewEvents(t *testing.T) {
 	cfgPath := writeTestConfig(t)
 	stateDir := filepath.Dir(cfgPath)
 	diagStore, err := diagnostics.New(diagnostics.Options{StateDir: stateDir, Source: diagnostics.SourceAgent})
@@ -232,7 +232,7 @@ func TestGateway_DiagnosticsStreamEmitsNewEvents(t *testing.T) {
 		t.Fatalf("diagnostics.New() error = %v", err)
 	}
 	channelID := "ch_diag_stream"
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
 		ConfigPath:         cfgPath,
@@ -247,7 +247,7 @@ func TestGateway_DiagnosticsStreamEmitsNewEvents(t *testing.T) {
 	diagnosticsStreamPollInterval = 10 * time.Millisecond
 	defer func() { diagnosticsStreamPollInterval = prevInterval }()
 
-	server := httptest.NewServer(http.HandlerFunc(gw.serveHTTP))
+	server := httptest.NewServer(http.HandlerFunc(srv.serveHTTP))
 	defer server.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
@@ -271,7 +271,7 @@ func TestGateway_DiagnosticsStreamEmitsNewEvents(t *testing.T) {
 
 	time.Sleep(40 * time.Millisecond)
 	diagStore.Append(diagnostics.Event{
-		Scope:      diagnostics.ScopeGatewayAPI,
+		Scope:      diagnostics.ScopeLocalAPI,
 		Kind:       "request",
 		TraceID:    "trace-stream-1",
 		Method:     http.MethodGet,

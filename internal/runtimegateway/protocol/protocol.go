@@ -1,7 +1,9 @@
 package protocol
 
 import (
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -206,12 +208,20 @@ type EnvProfileInput struct {
 	AccessRoute  EnvProfileAccessRoute  `json:"access_route"`
 	ControlOwner EnvProfileControlOwner `json:"control_owner,omitempty"`
 	SSHSecret    *EnvProfileSSHSecret   `json:"ssh_secret,omitempty"`
+
+	sshSecretFieldPresent bool
 }
 
 type EnvProfileSSHSecret struct {
 	Mode     string `json:"mode"`
 	Password string `json:"password,omitempty"`
 }
+
+const (
+	EnvProfileSSHSecretModeKeep    = "keep"
+	EnvProfileSSHSecretModeReplace = "replace"
+	EnvProfileSSHSecretModeClear   = "clear"
+)
 
 type EnvProfileAccessRoute struct {
 	Kind                  EnvProfileAccessRouteKind `json:"kind"`
@@ -225,6 +235,8 @@ type EnvProfileAccessRoute struct {
 	ContainerEngine       string                    `json:"container_engine,omitempty"`
 	ContainerID           string                    `json:"container_id,omitempty"`
 	ContainerRuntimeRoot  string                    `json:"container_runtime_root,omitempty"`
+
+	wireFields map[string]struct{}
 }
 
 type EnvProfileUpsertResponse struct {
@@ -325,13 +337,88 @@ var (
 	ErrMissingDisplayName         = errors.New("display_name is required")
 	ErrMissingAccessRoute         = errors.New("access_route is required")
 	ErrMissingLifecycleOperation  = errors.New("operation is required")
+	ErrInvalidSSHSecretMode       = errors.New("ssh_secret.mode is invalid")
+	ErrSSHSecretUnsupported       = errors.New("ssh_secret is not supported")
+	ErrInvalidAccessRouteFields   = errors.New("access_route contains fields outside its kind")
+	ErrInvalidSSHAuthMode         = errors.New("access_route.auth_mode is invalid")
+	ErrSSHPasswordAuthUnsupported = errors.New("ssh password auth is not supported")
+	ErrInvalidClientCapability    = errors.New("client_capability is invalid")
 )
+
+func (input *EnvProfileInput) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	for key := range raw {
+		switch key {
+		case "gateway_env_id", "display_name", "access_route", "control_owner", "ssh_secret":
+		default:
+			return fmt.Errorf("unknown field %q", key)
+		}
+	}
+	type envProfileInputWire EnvProfileInput
+	var wire envProfileInputWire
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	*input = EnvProfileInput(wire)
+	_, input.sshSecretFieldPresent = raw["ssh_secret"]
+	return nil
+}
+
+func (route *EnvProfileAccessRoute) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	fields := make(map[string]struct{}, len(raw))
+	for key := range raw {
+		switch key {
+		case "kind", "url", "origin_label", "ssh_destination", "ssh_port", "auth_mode", "ssh_password_configured", "ssh_runtime_root", "container_engine", "container_id", "container_runtime_root":
+			fields[key] = struct{}{}
+		default:
+			return fmt.Errorf("unknown field %q", key)
+		}
+	}
+	type envProfileAccessRouteWire EnvProfileAccessRoute
+	var wire envProfileAccessRouteWire
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	*route = EnvProfileAccessRoute(wire)
+	route.wireFields = fields
+	return nil
+}
 
 func ValidateProtocolVersion(version string) error {
 	if version == Version {
 		return nil
 	}
 	return ErrUnsupportedProtocolVersion
+}
+
+func NormalizePairingCompleteRequest(req PairingCompleteRequest) PairingCompleteRequest {
+	req.ProtocolVersion = strings.TrimSpace(req.ProtocolVersion)
+	req.ClientNonce = strings.TrimSpace(req.ClientNonce)
+	req.GatewayNonce = strings.TrimSpace(req.GatewayNonce)
+	req.GatewayID = strings.TrimSpace(req.GatewayID)
+	req.BindingAudience = strings.TrimSpace(req.BindingAudience)
+	req.ClientKeyID = strings.TrimSpace(req.ClientKeyID)
+	req.ClientCapability = strings.TrimSpace(req.ClientCapability)
+	req.Proof = strings.TrimSpace(req.Proof)
+	return req
+}
+
+func ValidatePairingCompleteRequest(req PairingCompleteRequest) error {
+	req = NormalizePairingCompleteRequest(req)
+	if err := ValidateProtocolVersion(req.ProtocolVersion); err != nil {
+		return err
+	}
+	if req.ClientCapability != "" && req.ClientCapability != string(GatewayCapabilityEnvProfileWrite) {
+		return ErrInvalidClientCapability
+	}
+	return nil
 }
 
 func NewCatalogResponse(gateway GatewayMetadata, environments []Environment) CatalogResponse {
@@ -449,7 +536,92 @@ func ValidateEnvProfileUpsertRequest(req EnvProfileUpsertRequest) error {
 	if req.Profile.AccessRoute.Kind == "" {
 		return ErrMissingAccessRoute
 	}
+	if req.Profile.SSHSecret != nil || req.Profile.sshSecretFieldPresent {
+		return ErrSSHSecretUnsupported
+	}
+	if err := validateEnvProfileAccessRouteShape(req.Profile.AccessRoute); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateEnvProfileAccessRouteShape(route EnvProfileAccessRoute) error {
+	switch route.Kind {
+	case EnvProfileAccessRouteKindURL:
+		if routeHasAnyField(route,
+			"ssh_destination",
+			"ssh_port",
+			"auth_mode",
+			"ssh_password_configured",
+			"ssh_runtime_root",
+			"container_engine",
+			"container_id",
+			"container_runtime_root",
+		) ||
+			strings.TrimSpace(route.SSHDestination) != "" ||
+			route.SSHPort != 0 ||
+			strings.TrimSpace(route.SSHAuthMode) != "" ||
+			route.SSHPasswordConfigured ||
+			strings.TrimSpace(route.SSHRuntimeRoot) != "" ||
+			strings.TrimSpace(route.ContainerEngine) != "" ||
+			strings.TrimSpace(route.ContainerID) != "" ||
+			strings.TrimSpace(route.ContainerRuntimeRoot) != "" {
+			return ErrInvalidAccessRouteFields
+		}
+	case EnvProfileAccessRouteKindSSHHost:
+		if routeHasAnyField(route,
+			"url",
+			"ssh_password_configured",
+			"container_engine",
+			"container_id",
+			"container_runtime_root",
+		) ||
+			strings.TrimSpace(route.URL) != "" ||
+			route.SSHPasswordConfigured ||
+			strings.TrimSpace(route.ContainerEngine) != "" ||
+			strings.TrimSpace(route.ContainerID) != "" ||
+			strings.TrimSpace(route.ContainerRuntimeRoot) != "" {
+			return ErrInvalidAccessRouteFields
+		}
+		if err := validateEnvProfileSSHAuthMode(route.SSHAuthMode); err != nil {
+			return err
+		}
+	case EnvProfileAccessRouteKindSSHContainer:
+		if routeHasAnyField(route, "url", "ssh_password_configured") ||
+			strings.TrimSpace(route.URL) != "" ||
+			route.SSHPasswordConfigured {
+			return ErrInvalidAccessRouteFields
+		}
+		if err := validateEnvProfileSSHAuthMode(route.SSHAuthMode); err != nil {
+			return err
+		}
+	default:
+		return ErrMissingAccessRoute
+	}
+	return nil
+}
+
+func validateEnvProfileSSHAuthMode(authMode string) error {
+	switch strings.TrimSpace(authMode) {
+	case "", "key_agent":
+		return nil
+	case "password":
+		return ErrSSHPasswordAuthUnsupported
+	default:
+		return ErrInvalidSSHAuthMode
+	}
+}
+
+func routeHasAnyField(route EnvProfileAccessRoute, names ...string) bool {
+	if len(route.wireFields) == 0 {
+		return false
+	}
+	for _, name := range names {
+		if _, ok := route.wireFields[name]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 func NormalizeEnvProfileDeleteRequest(req EnvProfileDeleteRequest) EnvProfileDeleteRequest {

@@ -1378,7 +1378,7 @@ export const jaJP = {
     providerTypeTitle: "Provider Type",
     providerTypeDescription: "provider type をクリックすると接続と model 詳細をインラインで開きます。もう一度クリックすると折りたたみます。",
     nativeConnectionDescription: "ネイティブ接続",
-    customGatewayDescription: "Custom gateway",
+    customEndpointDescription: "Custom endpoint",
     currentProviderType: "現在",
     collapseProviderType: "折りたたむ",
     openProviderType: "開く",

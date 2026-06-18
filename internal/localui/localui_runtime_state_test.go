@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/agent"
+	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
-	"github.com/floegence/redeven/internal/codeapp/gateway"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/runtimemanagement"
@@ -27,15 +27,15 @@ func discardLogger() *slog.Logger {
 type runtimeControlCodeWorkspaceTestBackend struct {
 	localUITestBackend
 	t                    *testing.T
-	createdManifest      gateway.CodeRuntimeArtifactManifest
+	createdManifest      appserver.CodeRuntimeArtifactManifest
 	receivedUploadID     string
 	receivedChunkIndex   int64
 	receivedChunkPayload string
 	completedUploadID    string
 }
 
-func (b *runtimeControlCodeWorkspaceTestBackend) CodeRuntimeStatus(context.Context) (gateway.CodeRuntimeStatus, error) {
-	return gateway.CodeRuntimeStatus{
+func (b *runtimeControlCodeWorkspaceTestBackend) CodeRuntimeStatus(context.Context) (appserver.CodeRuntimeStatus, error) {
+	return appserver.CodeRuntimeStatus{
 		ActiveRuntime: codeserver.RuntimeTargetStatus{
 			DetectionState: codeserver.RuntimeDetectionMissing,
 			Source:         "none",
@@ -48,9 +48,9 @@ func (b *runtimeControlCodeWorkspaceTestBackend) CodeRuntimeStatus(context.Conte
 	}, nil
 }
 
-func (b *runtimeControlCodeWorkspaceTestBackend) CreateCodeRuntimeImportSession(_ context.Context, manifest gateway.CodeRuntimeArtifactManifest) (gateway.CodeRuntimeImportSession, error) {
+func (b *runtimeControlCodeWorkspaceTestBackend) CreateCodeRuntimeImportSession(_ context.Context, manifest appserver.CodeRuntimeArtifactManifest) (appserver.CodeRuntimeImportSession, error) {
 	b.createdManifest = manifest
-	return gateway.CodeRuntimeImportSession{
+	return appserver.CodeRuntimeImportSession{
 		UploadID:       "upload_test",
 		OperationID:    "upload_test",
 		Manifest:       manifest,
@@ -60,7 +60,7 @@ func (b *runtimeControlCodeWorkspaceTestBackend) CreateCodeRuntimeImportSession(
 	}, nil
 }
 
-func (b *runtimeControlCodeWorkspaceTestBackend) AppendCodeRuntimeImportChunk(_ context.Context, uploadID string, chunkIndex int64, body io.Reader) (gateway.CodeRuntimeImportChunkResult, error) {
+func (b *runtimeControlCodeWorkspaceTestBackend) AppendCodeRuntimeImportChunk(_ context.Context, uploadID string, chunkIndex int64, body io.Reader) (appserver.CodeRuntimeImportChunkResult, error) {
 	raw, err := io.ReadAll(body)
 	if err != nil {
 		b.t.Fatalf("ReadAll() error = %v", err)
@@ -68,7 +68,7 @@ func (b *runtimeControlCodeWorkspaceTestBackend) AppendCodeRuntimeImportChunk(_ 
 	b.receivedUploadID = uploadID
 	b.receivedChunkIndex = chunkIndex
 	b.receivedChunkPayload = string(raw)
-	return gateway.CodeRuntimeImportChunkResult{
+	return appserver.CodeRuntimeImportChunkResult{
 		UploadID:       uploadID,
 		ReceivedBytes:  int64(len(raw)),
 		ExpectedBytes:  int64(len(raw)),
@@ -76,9 +76,9 @@ func (b *runtimeControlCodeWorkspaceTestBackend) AppendCodeRuntimeImportChunk(_ 
 	}, nil
 }
 
-func (b *runtimeControlCodeWorkspaceTestBackend) CompleteCodeRuntimeImportSession(_ context.Context, uploadID string) (gateway.CodeRuntimeStatus, error) {
+func (b *runtimeControlCodeWorkspaceTestBackend) CompleteCodeRuntimeImportSession(_ context.Context, uploadID string) (appserver.CodeRuntimeStatus, error) {
 	b.completedUploadID = uploadID
-	return gateway.CodeRuntimeStatus{
+	return appserver.CodeRuntimeStatus{
 		ActiveRuntime: codeserver.RuntimeTargetStatus{
 			DetectionState: codeserver.RuntimeDetectionReady,
 			Source:         "managed",
@@ -135,7 +135,7 @@ func TestServerStartPublishesRuntimeManagementStatus(t *testing.T) {
 		version:                "dev",
 		desktopManaged:         true,
 		desktopOwnerID:         "desktop-owner-state",
-		gw:                     newTestGateway(t, cfgPath),
+		appServer:              newTestAppServer(t, cfgPath),
 		diag: func() *diagnostics.Store {
 			store, err := diagnostics.New(diagnostics.Options{
 				Logger:   discardLogger(),
@@ -212,7 +212,7 @@ func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 		version:                "dev",
 		desktopManaged:         true,
 		desktopOwnerID:         "desktop-owner-state",
-		gw:                     newTestGateway(t, cfgPath),
+		appServer:              newTestAppServer(t, cfgPath),
 		a:                      a,
 		pending:                make(map[string]pendingDirect),
 	}
@@ -280,7 +280,7 @@ func TestServerRuntimeControlCodeWorkspaceEngineImport(t *testing.T) {
 		version:                "dev",
 		desktopManaged:         true,
 		desktopOwnerID:         "desktop-owner-state",
-		gw:                     newTestGatewayWithBackend(t, cfgPath, backend),
+		appServer:              newTestAppServerWithBackend(t, cfgPath, backend),
 		a:                      newDesktopManagedTestAgent(t, cfgPath),
 		pending:                make(map[string]pendingDirect),
 	}

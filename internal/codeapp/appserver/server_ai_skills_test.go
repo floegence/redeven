@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"archive/zip"
@@ -20,22 +20,22 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestGateway_AISkills_CRUDAndToggle(t *testing.T) {
+func TestServer_AISkills_CRUDAndToggle(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	workspace := t.TempDir()
-	skillName := "gateway-skill"
+	skillName := "appserver-skill"
 	skillDir := filepath.Join(homeDir, ".redeven", "skills", skillName)
 	if err := os.MkdirAll(skillDir, 0o755); err != nil {
 		t.Fatalf("mkdir skill dir: %v", err)
 	}
 	skillPath := filepath.Join(skillDir, "SKILL.md")
 	skillContent := `---
-name: gateway-skill
+name: appserver-skill
 description: test skill
 ---
 
-# gateway skill`
+# appserver skill`
 	if err := os.WriteFile(skillPath, []byte(skillContent), 0o600); err != nil {
 		t.Fatalf("write skill file: %v", err)
 	}
@@ -68,7 +68,7 @@ description: test skill
 	cfgPath := writeTestConfigWithAI(t)
 	channelID := "ch_skills_1"
 	envOrigin := envOriginWithChannel(channelID)
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Logger:             logger,
 		Backend:            &stubBackend{},
 		DistFS:             dist,
@@ -96,7 +96,7 @@ description: test skill
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/skills", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("skills list status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -112,7 +112,7 @@ description: test skill
 		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/skills/toggles", bytes.NewBufferString(`{"patches":[{"path":"`+skillPath+`","enabled":false}]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("skills toggle status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -137,7 +137,7 @@ description: test skill
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/skills", bytes.NewBufferString(`{"scope":"user","name":"created-skill","description":"created from test"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("skills create status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -148,14 +148,14 @@ description: test skill
 		req := httptest.NewRequest(http.MethodDelete, "/_redeven_proxy/api/ai/skills", bytes.NewBufferString(`{"scope":"user","name":"created-skill"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("skills delete status=%d body=%s", rr.Code, rr.Body.String())
 		}
 	}
 }
 
-func TestGateway_AISkills_PermissionModel(t *testing.T) {
+func TestServer_AISkills_PermissionModel(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	workspace := t.TempDir()
@@ -195,7 +195,7 @@ func TestGateway_AISkills_PermissionModel(t *testing.T) {
 	cfgPath := writeTestConfigWithAI(t)
 	channelID := "ch_skills_perm_1"
 	envOrigin := envOriginWithChannel(channelID)
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Logger:             logger,
 		Backend:            &stubBackend{},
 		DistFS:             dist,
@@ -212,7 +212,7 @@ func TestGateway_AISkills_PermissionModel(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/skills", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("skills list should allow read permission, got=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -221,7 +221,7 @@ func TestGateway_AISkills_PermissionModel(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/skills/toggles", bytes.NewBufferString(`{"patches":[{"path":"/tmp/not-used","enabled":false}]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusForbidden {
 			t.Fatalf("skills toggle should require admin, got=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -230,14 +230,14 @@ func TestGateway_AISkills_PermissionModel(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/skills/import/github", bytes.NewBufferString(`{"scope":"user","repo":"openai/skills","ref":"main","paths":["skills/.curated/skill-installer"]}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusForbidden {
 			t.Fatalf("skills github import should require admin, got=%d body=%s", rr.Code, rr.Body.String())
 		}
 	}
 }
 
-func TestGateway_AISkills_GitHubImportAndBrowse(t *testing.T) {
+func TestServer_AISkills_GitHubImportAndBrowse(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
 	workspace := t.TempDir()
@@ -312,7 +312,7 @@ description: Install Codex skills
 	cfgPath := writeTestConfigWithAI(t)
 	channelID := "ch_skills_github_1"
 	envOrigin := envOriginWithChannel(channelID)
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Logger:             logger,
 		Backend:            &stubBackend{},
 		DistFS:             dist,
@@ -333,7 +333,7 @@ description: Install Codex skills
 			req.Header.Set("Content-Type", "application/json")
 		}
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("%s %s failed status=%d body=%s", method, path, rr.Code, rr.Body.String())
 		}

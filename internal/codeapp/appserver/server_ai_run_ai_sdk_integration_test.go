@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func isGatewayRunPolicyClassifierRequest(req map[string]any) bool {
+func isServerRunPolicyClassifierRequest(req map[string]any) bool {
 	if req == nil {
 		return false
 	}
@@ -26,7 +26,7 @@ func isGatewayRunPolicyClassifierRequest(req map[string]any) bool {
 	return strings.Contains(strings.TrimSpace(instructions), "RUN_POLICY_CLASSIFIER_V1")
 }
 
-func extractGatewayResponsesUserText(req map[string]any) string {
+func extractServerResponsesUserText(req map[string]any) string {
 	if req == nil {
 		return ""
 	}
@@ -72,7 +72,7 @@ func extractGatewayResponsesUserText(req map[string]any) string {
 	return ""
 }
 
-func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
+func TestServer_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 	t.Parallel()
 
 	token := "MOCK_OK_GATEWAY"
@@ -119,8 +119,8 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 		}
 
 		now := time.Now().Unix()
-		if isGatewayRunPolicyClassifierRequest(req) {
-			userText := strings.ToLower(strings.TrimSpace(extractGatewayResponsesUserText(req)))
+		if isServerRunPolicyClassifierRequest(req) {
+			userText := strings.ToLower(strings.TrimSpace(extractServerResponsesUserText(req)))
 			classifierToken := `{"intent":"task","reason":"actionable_request_detected","objective_mode":"replace","complexity":"standard","todo_policy":"recommended","minimum_todo_items":0,"confidence":0.78}`
 			if strings.Contains(userText, "hi") || strings.Contains(userText, "hello") {
 				classifierToken = `{"intent":"social","reason":"small_talk_detected","objective_mode":"replace","complexity":"simple","todo_policy":"none","minimum_todo_items":0,"confidence":0.95}`
@@ -132,7 +132,7 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 			write(map[string]any{
 				"type": "response.completed",
 				"response": map[string]any{
-					"id":     "resp_gateway_classifier",
+					"id":     "resp_appserver_classifier",
 					"model":  "gpt-5-mini",
 					"status": "completed",
 				},
@@ -142,11 +142,11 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 			return
 		}
 
-		itemID := "msg_gateway_1"
+		itemID := "msg_appserver_1"
 		write(map[string]any{
 			"type": "response.created",
 			"response": map[string]any{
-				"id":         "resp_gateway_1",
+				"id":         "resp_appserver_1",
 				"created_at": now,
 				"model":      "gpt-5-mini",
 			},
@@ -201,7 +201,7 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 		},
 	}
 
-	channelID := "ch_test_ai_gateway_1"
+	channelID := "ch_test_ai_appserver_1"
 	envOrigin := envOriginWithChannel(channelID)
 	meta := session.Meta{
 		EndpointID:        "env_123",
@@ -237,7 +237,7 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Logger:             logger,
 		Backend:            &stubBackend{},
 		DistFS:             dist,
@@ -256,7 +256,7 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads", bytes.NewBufferString(`{"title":"hello"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("create thread status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -289,7 +289,7 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/runs", bytes.NewBuffer(b))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("run status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -310,7 +310,7 @@ func TestGateway_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+threadID, nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("get thread status=%d body=%s", rr.Code, rr.Body.String())
 		}

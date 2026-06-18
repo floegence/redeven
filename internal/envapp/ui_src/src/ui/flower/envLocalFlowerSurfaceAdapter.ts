@@ -1,5 +1,5 @@
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
-import { fetchGatewayJSON } from '../services/gatewayApi';
+import { fetchLocalApiJSON } from '../services/localApi';
 import type { AgentSettingsResponse, AIConfig } from '../pages/settings/types';
 import type {
   FlowerProvider,
@@ -283,14 +283,14 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
 
 async function loadSettingsSnapshot(): Promise<FlowerSettingsSnapshot> {
   const [settings, models] = await Promise.all([
-    fetchGatewayJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' }),
+    fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' }),
     loadModels().catch(() => undefined),
   ]);
   return mapSettings(settings, models);
 }
 
 async function loadModels(): Promise<ModelsResponse> {
-  return fetchGatewayJSON<ModelsResponse>('/_redeven_proxy/api/ai/models', { method: 'GET' });
+  return fetchLocalApiJSON<ModelsResponse>('/_redeven_proxy/api/ai/models', { method: 'GET' });
 }
 
 function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse): string {
@@ -302,7 +302,7 @@ function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
   const copy = adapterCopy(options);
   const loadThread = async (threadID: string) => mapEnvFlowerLiveBootstrap(
-    await fetchGatewayJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(trim(threadID))}/live/bootstrap`, { method: 'GET' }),
+    await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(trim(threadID))}/live/bootstrap`, { method: 'GET' }),
     options,
   );
 
@@ -315,25 +315,25 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       subtitle: copy.environmentLocalSubtitle,
     },
     transport: {
-      listThreads: () => fetchGatewayJSON('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' }),
-      loadThread: (threadID) => fetchGatewayJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/bootstrap`, { method: 'GET' }),
-      listThreadLiveEvents: (threadID, afterSeq, limit) => fetchGatewayJSON(
+      listThreads: () => fetchLocalApiJSON('/_redeven_proxy/api/ai/threads?limit=200', { method: 'GET' }),
+      loadThread: (threadID) => fetchLocalApiJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/bootstrap`, { method: 'GET' }),
+      listThreadLiveEvents: (threadID, afterSeq, limit) => fetchLocalApiJSON(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/live/events?after_seq=${afterSeq}&limit=${limit}`,
         { method: 'GET' },
       ),
-      markThreadRead: (threadID, body) => fetchGatewayJSON<MarkThreadReadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/read`, {
+      markThreadRead: (threadID, body) => fetchLocalApiJSON<MarkThreadReadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/read`, {
         method: 'POST',
         body: JSON.stringify(body),
       }),
-      patchThread: (threadID, body) => fetchGatewayJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, {
+      patchThread: (threadID, body) => fetchLocalApiJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}`, {
         method: 'PATCH',
         body: JSON.stringify(body),
       }),
-      forkThread: (threadID) => fetchGatewayJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`, {
+      forkThread: (threadID) => fetchLocalApiJSON<LoadThreadResponse>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`, {
         method: 'POST',
         body: JSON.stringify({}),
       }),
-      submitApproval: (body) => fetchGatewayJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, {
+      submitApproval: (body) => fetchLocalApiJSON(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, {
         method: 'POST',
         body: JSON.stringify(body),
       }),
@@ -357,7 +357,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         const apiKey = trim(provider.web_search_api_key);
         return apiKey ? [{ provider_id: providerID, api_key: apiKey }] : [];
       });
-      await fetchGatewayJSON<unknown>('/_redeven_proxy/api/ai/provider_bundle', {
+      await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/provider_bundle', {
         method: 'PUT',
         body: JSON.stringify({
           ai: draftToAIConfig(draft),
@@ -387,7 +387,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         if (trim(input.working_dir)) {
           createBody.working_dir = trim(input.working_dir);
         }
-        const created = await fetchGatewayJSON<CreateThreadResponse>('/_redeven_proxy/api/ai/threads', {
+        const created = await fetchLocalApiJSON<CreateThreadResponse>('/_redeven_proxy/api/ai/threads', {
           method: 'POST',
           body: JSON.stringify(createBody),
         });

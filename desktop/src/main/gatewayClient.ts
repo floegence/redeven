@@ -848,6 +848,12 @@ function normalizeGatewayProfileURL(value: string | undefined): string {
 }
 
 function gatewayEnvProfilePayload(request: GatewayEnvProfileUpsertRequest): unknown {
+  if (request.access_route.auth_mode === 'password') {
+    throw new Error('Gateway profile SSH password auth is not supported.');
+  }
+  if (request.ssh_secret) {
+    throw new Error('Gateway profile SSH secrets are not supported.');
+  }
   const routeURL = normalizeGatewayProfileURL(request.access_route.url);
   return {
     protocol_version: GATEWAY_PROTOCOL_VERSION,
@@ -862,19 +868,13 @@ function gatewayEnvProfilePayload(request: GatewayEnvProfileUpsertRequest): unkn
         ...(Number.isFinite(Number(request.access_route.ssh_port)) && Number(request.access_route.ssh_port) > 0
           ? { ssh_port: Math.floor(Number(request.access_route.ssh_port)) }
           : {}),
-        ...(request.access_route.auth_mode === 'password' ? { auth_mode: 'password' } : {}),
+        ...(request.access_route.auth_mode === 'key_agent' ? { auth_mode: 'key_agent' } : {}),
         ...(compact(request.access_route.ssh_runtime_root) ? { ssh_runtime_root: compact(request.access_route.ssh_runtime_root) } : {}),
         ...(compact(request.access_route.container_engine) ? { container_engine: compact(request.access_route.container_engine) } : {}),
         ...(compact(request.access_route.container_id) ? { container_id: compact(request.access_route.container_id) } : {}),
         ...(compact(request.access_route.container_runtime_root) ? { container_runtime_root: compact(request.access_route.container_runtime_root) } : {}),
       },
       control_owner: request.control_owner === 'gateway' ? 'gateway' : 'none',
-      ...(request.ssh_secret ? {
-        ssh_secret: {
-          mode: request.ssh_secret.mode,
-          ...(compact(request.ssh_secret.password) ? { password: compact(request.ssh_secret.password) } : {}),
-        },
-      } : {}),
     },
   };
 }

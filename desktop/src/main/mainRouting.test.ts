@@ -186,6 +186,62 @@ describe('main routing', () => {
     );
   });
 
+  it('keeps Gateway protocol mismatches separate from pairing, trust, reachability, and Runtime compatibility', () => {
+    const mainSrc = readMainSource();
+    const diagnosisStart = mainSrc.indexOf('function gatewayDiagnosisForError(');
+    const diagnosisEnd = mainSrc.indexOf('async function checkGatewayRecord(', diagnosisStart);
+    expect(diagnosisStart).toBeGreaterThanOrEqual(0);
+    expect(diagnosisEnd).toBeGreaterThan(diagnosisStart);
+    const diagnosisSrc = mainSrc.slice(diagnosisStart, diagnosisEnd);
+    const protocolStart = diagnosisSrc.indexOf("if (error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED') {");
+    const protocolEnd = diagnosisSrc.indexOf("if (managedProbe?.legacy_runtime_residue === true)", protocolStart);
+    expect(protocolStart).toBeGreaterThanOrEqual(0);
+    expect(protocolEnd).toBeGreaterThan(protocolStart);
+    const protocolSrc = diagnosisSrc.slice(protocolStart, protocolEnd);
+
+    expect(protocolSrc).toContain("classification: manageable ? 'needs_update' : 'catalog_failed'");
+    expect(protocolSrc).toContain("catalog_state: 'catalog_failed'");
+    expect(protocolSrc).toContain("summary: manageable ? 'Gateway update required' : 'Gateway protocol unsupported'");
+    expect(protocolSrc).not.toContain("catalog_state: 'pairing_failed'");
+    expect(protocolSrc).not.toContain("classification: 'pairing_required'");
+    expect(protocolSrc).not.toContain("classification: 'identity_changed'");
+    expect(protocolSrc).not.toContain("classification: 'ssh_unreachable'");
+    expect(protocolSrc).not.toContain('Runtime Service');
+    expect(protocolSrc).not.toContain('compatibility');
+  });
+
+  it('invalidates cached Gateway catalog entries after protocol mismatches', () => {
+    const mainSrc = readMainSource();
+    const syncStart = mainSrc.indexOf('function gatewaySyncRecordFromError(');
+    const syncEnd = mainSrc.indexOf('function gatewayServiceStateInvalidatesCatalog(', syncStart);
+    expect(syncStart).toBeGreaterThanOrEqual(0);
+    expect(syncEnd).toBeGreaterThan(syncStart);
+    const syncSrc = mainSrc.slice(syncStart, syncEnd);
+
+    expect(syncSrc).toContain('const invalidateCatalog = gatewayErrorInvalidatesCatalog(error, serviceState);');
+    expect(syncSrc).toContain('environments: invalidateCatalog ? [] : previous.source?.environments ?? errorSource.environments');
+    expect(syncSrc).toContain('capabilities: invalidateCatalog ? [] : previous.source?.capabilities ?? errorSource.capabilities');
+
+    const invalidatesStart = mainSrc.indexOf('function gatewayErrorInvalidatesCatalog(');
+    const invalidatesEnd = mainSrc.indexOf('function gatewayCatalogFresh(', invalidatesStart);
+    expect(invalidatesStart).toBeGreaterThanOrEqual(0);
+    expect(invalidatesEnd).toBeGreaterThan(invalidatesStart);
+    const invalidatesSrc = mainSrc.slice(invalidatesStart, invalidatesEnd);
+
+    const serviceInvalidatesStart = mainSrc.indexOf('function gatewayServiceStateInvalidatesCatalog(');
+    const serviceInvalidatesEnd = mainSrc.indexOf('function gatewayErrorInvalidatesCatalog(', serviceInvalidatesStart);
+    expect(serviceInvalidatesStart).toBeGreaterThanOrEqual(0);
+    expect(serviceInvalidatesEnd).toBeGreaterThan(serviceInvalidatesStart);
+    const serviceInvalidatesSrc = mainSrc.slice(serviceInvalidatesStart, serviceInvalidatesEnd);
+
+    expect(serviceInvalidatesSrc).toContain("serviceState?.status === 'service_needs_update'");
+    expect(invalidatesSrc).toContain('gatewayServiceStateInvalidatesCatalog(serviceState)');
+    expect(invalidatesSrc).toContain("error.code === 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED'");
+    expect(invalidatesSrc).toContain("error.code === 'GATEWAY_INVALID_RESPONSE'");
+    expect(invalidatesSrc).toContain("error.code === 'GATEWAY_TRUST_CHANGED'");
+    expect(invalidatesSrc).not.toContain("error.code === 'UNAUTHORIZED'");
+  });
+
   it('keeps launcher snapshot construction on the fast in-memory path', () => {
     const mainSrc = readMainSource();
     const snapshotStart = mainSrc.indexOf('async function buildCurrentDesktopWelcomeSnapshot(');

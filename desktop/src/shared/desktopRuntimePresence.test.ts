@@ -300,8 +300,8 @@ describe('desktopRuntimePresence', () => {
         compatibility: 'compatible',
         open_readiness: {
           state: 'starting',
-          reason_code: 'env_app_gateway_starting',
-          message: 'Env App gateway is starting.',
+          reason_code: 'env_app_app_server_starting',
+          message: 'Env App app server is starting.',
         },
         active_workload: {
           terminal_count: 0,

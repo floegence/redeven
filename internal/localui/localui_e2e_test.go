@@ -217,8 +217,8 @@ func TestServer_E2E_CodespaceBrowserBootstrapFromResumeToken(t *testing.T) {
 	defer upstream.Close()
 
 	upstreamPort := upstream.Listener.Addr().(*net.TCPAddr).Port
-	gw := newTestGatewayWithBackend(t, cfgPath, localUITestCodeSpaceBackend{port: upstreamPort})
-	s := newTestServerWithGateway(t, gate, gw, cfgPath)
+	appSrv := newTestAppServerWithBackend(t, cfgPath, localUITestCodeSpaceBackend{port: upstreamPort})
+	s := newTestServerWithAppServer(t, gate, appSrv, cfgPath)
 
 	srv := httptest.NewServer(s.handler())
 	defer srv.Close()

@@ -285,7 +285,7 @@ func TestStoreUpsertSSHProfilesPersistsGatewayOwnedRouteWithoutAdvertisedLifecyc
 	if got := byID["env_ssh"].AccessRoute; got.Kind != protocol.EnvProfileAccessRouteKindSSHHost || got.SSHDestination != "devbox" || got.SSHPort != 2222 || got.SSHRuntimeRoot != "~/.redeven" {
 		t.Fatalf("stored ssh route = %#v", got)
 	}
-	keptEnv, err := store.Upsert(context.Background(), protocol.EnvProfileUpsertRequest{
+	renamedEnv, err := store.Upsert(context.Background(), protocol.EnvProfileUpsertRequest{
 		ProtocolVersion: protocol.Version,
 		Profile: protocol.EnvProfileInput{
 			GatewayEnvID: "env_ssh",
@@ -297,35 +297,13 @@ func TestStoreUpsertSSHProfilesPersistsGatewayOwnedRouteWithoutAdvertisedLifecyc
 				SSHAuthMode:    "key_agent",
 				SSHRuntimeRoot: "~/.redeven",
 			},
-			SSHSecret: &protocol.EnvProfileSSHSecret{Mode: "keep"},
 		},
 	})
 	if err != nil {
-		t.Fatalf("Upsert(ssh keep secret) error = %v", err)
+		t.Fatalf("Upsert(ssh rename) error = %v", err)
 	}
-	if keptEnv.ProfileAccessRoute == nil || keptEnv.ProfileAccessRoute.SSHPasswordConfigured {
-		t.Fatalf("kept ssh profile access route = %#v, want no password marker", keptEnv.ProfileAccessRoute)
-	}
-	keyAgentEnv, err := store.Upsert(context.Background(), protocol.EnvProfileUpsertRequest{
-		ProtocolVersion: protocol.Version,
-		Profile: protocol.EnvProfileInput{
-			GatewayEnvID: "env_ssh",
-			DisplayName:  "Key Agent SSH Env",
-			AccessRoute: protocol.EnvProfileAccessRoute{
-				Kind:           protocol.EnvProfileAccessRouteKindSSHHost,
-				SSHDestination: "devbox",
-				SSHPort:        2222,
-				SSHAuthMode:    "key_agent",
-				SSHRuntimeRoot: "~/.redeven",
-			},
-			SSHSecret: &protocol.EnvProfileSSHSecret{Mode: "keep"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("Upsert(ssh key_agent keep secret) error = %v", err)
-	}
-	if keyAgentEnv.ProfileAccessRoute == nil || keyAgentEnv.ProfileAccessRoute.SSHPasswordConfigured {
-		t.Fatalf("key-agent ssh profile access route = %#v, want no password marker", keyAgentEnv.ProfileAccessRoute)
+	if renamedEnv.ProfileAccessRoute == nil || renamedEnv.ProfileAccessRoute.SSHPasswordConfigured {
+		t.Fatalf("renamed ssh profile access route = %#v, want no password marker", renamedEnv.ProfileAccessRoute)
 	}
 	if got := byID["env_container"].AccessRoute; got.Kind != protocol.EnvProfileAccessRouteKindSSHContainer || got.ContainerEngine != "podman" || got.ContainerID != "workspace-1" || got.ContainerRuntimeRoot != "~/.redeven" {
 		t.Fatalf("stored container route = %#v", got)
@@ -369,6 +347,21 @@ func TestStoreRejectsInvalidSSHProfiles(t *testing.T) {
 			want: ErrSSHPortInvalid,
 		},
 		{
+			name: "unsupported ssh secret",
+			req: protocol.EnvProfileUpsertRequest{
+				ProtocolVersion: protocol.Version,
+				Profile: protocol.EnvProfileInput{
+					DisplayName: "SSH",
+					AccessRoute: protocol.EnvProfileAccessRoute{
+						Kind:           protocol.EnvProfileAccessRouteKindSSHHost,
+						SSHDestination: "devbox",
+					},
+					SSHSecret: &protocol.EnvProfileSSHSecret{Mode: "reuse", Password: "secret"},
+				},
+			},
+			want: protocol.ErrSSHSecretUnsupported,
+		},
+		{
 			name: "unsupported ssh password auth",
 			req: protocol.EnvProfileUpsertRequest{
 				ProtocolVersion: protocol.Version,
@@ -379,26 +372,9 @@ func TestStoreRejectsInvalidSSHProfiles(t *testing.T) {
 						SSHDestination: "devbox",
 						SSHAuthMode:    "password",
 					},
-					SSHSecret: &protocol.EnvProfileSSHSecret{Mode: "reuse", Password: "secret"},
 				},
 			},
-			want: ErrSSHPasswordAuthUnsupported,
-		},
-		{
-			name: "unsupported ssh password replacement",
-			req: protocol.EnvProfileUpsertRequest{
-				ProtocolVersion: protocol.Version,
-				Profile: protocol.EnvProfileInput{
-					DisplayName: "SSH",
-					AccessRoute: protocol.EnvProfileAccessRoute{
-						Kind:           protocol.EnvProfileAccessRouteKindSSHHost,
-						SSHDestination: "devbox",
-						SSHAuthMode:    "password",
-					},
-					SSHSecret: &protocol.EnvProfileSSHSecret{Mode: "replace"},
-				},
-			},
-			want: ErrSSHPasswordAuthUnsupported,
+			want: protocol.ErrSSHPasswordAuthUnsupported,
 		},
 		{
 			name: "invalid container engine",

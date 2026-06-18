@@ -101,7 +101,7 @@ func TestDiscoverTargetsFromLocalEnvironmentState(t *testing.T) {
 	}
 	assertHasCapability(t, target.Capabilities, CapabilityLocalUI)
 	assertHasCapability(t, target.Capabilities, CapabilityRemoteControl)
-	assertHasCapability(t, target.Capabilities, CapabilityCodexGateway)
+	assertHasCapability(t, target.Capabilities, CapabilityCodexAPI)
 }
 
 func TestDiscoverTargetsWithoutConfigReturnsInspectableTarget(t *testing.T) {

@@ -15,7 +15,7 @@ import (
 
 	"github.com/floegence/redeven/internal/agent"
 	"github.com/floegence/redeven/internal/ai"
-	"github.com/floegence/redeven/internal/codeapp/gateway"
+	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/gorilla/websocket"
 )
@@ -25,7 +25,7 @@ const runtimeControlProtocolVersion = "redeven-runtime-control-v1"
 type runtimeControlServer struct {
 	log            logger
 	agent          *agent.Agent
-	gw             *gateway.Gateway
+	appServer      *appserver.Server
 	desktopOwnerID string
 	afterChange    func()
 	token          string
@@ -38,7 +38,7 @@ type logger interface {
 	Info(msg string, args ...any)
 }
 
-func newRuntimeControlServer(a *agent.Agent, gw *gateway.Gateway, desktopOwnerID string, log logger, afterChange func()) (*runtimeControlServer, error) {
+func newRuntimeControlServer(a *agent.Agent, appServer *appserver.Server, desktopOwnerID string, log logger, afterChange func()) (*runtimeControlServer, error) {
 	desktopOwnerID = strings.TrimSpace(desktopOwnerID)
 	if a == nil {
 		return nil, errors.New("missing Agent")
@@ -54,18 +54,18 @@ func newRuntimeControlServer(a *agent.Agent, gw *gateway.Gateway, desktopOwnerID
 	return &runtimeControlServer{
 		log:            log,
 		agent:          a,
-		gw:             gw,
+		appServer:      appServer,
 		desktopOwnerID: desktopOwnerID,
 		afterChange:    afterChange,
 		token:          token,
 	}, nil
 }
 
-func (s *runtimeControlServer) gateway() *gateway.Gateway {
+func (s *runtimeControlServer) appServerHandler() *appserver.Server {
 	if s == nil {
 		return nil
 	}
-	return s.gw
+	return s.appServer
 }
 
 func (s *runtimeControlServer) Start(ctx context.Context) error {
@@ -315,7 +315,7 @@ func (s *runtimeControlServer) handleProviderLinkDisconnect(w http.ResponseWrite
 }
 
 type runtimeControlCodeWorkspaceEngineImportSessionRequest struct {
-	Manifest gateway.CodeRuntimeArtifactManifest `json:"manifest"`
+	Manifest appserver.CodeRuntimeArtifactManifest `json:"manifest"`
 }
 
 func (s *runtimeControlServer) handleCodeWorkspaceEngineStatus(w http.ResponseWriter, r *http.Request) {
@@ -326,12 +326,12 @@ func (s *runtimeControlServer) handleCodeWorkspaceEngineStatus(w http.ResponseWr
 		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
 		return
 	}
-	gw := s.gateway()
-	if gw == nil {
+	appSrv := s.appServerHandler()
+	if appSrv == nil {
 		writeRuntimeControlError(w, http.StatusServiceUnavailable, "CODE_WORKSPACE_ENGINE_UNAVAILABLE", "Code workspace engine is not available.")
 		return
 	}
-	status, err := gw.CodeRuntimeStatus(r.Context())
+	status, err := appSrv.CodeRuntimeStatus(r.Context())
 	if err != nil {
 		writeRuntimeControlError(w, http.StatusServiceUnavailable, "CODE_WORKSPACE_ENGINE_STATUS_FAILED", err.Error())
 		return
@@ -347,8 +347,8 @@ func (s *runtimeControlServer) handleCodeWorkspaceEngineImportSession(w http.Res
 		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
 		return
 	}
-	gw := s.gateway()
-	if gw == nil {
+	appSrv := s.appServerHandler()
+	if appSrv == nil {
 		writeRuntimeControlError(w, http.StatusServiceUnavailable, "CODE_WORKSPACE_ENGINE_UNAVAILABLE", "Code workspace engine is not available.")
 		return
 	}
@@ -359,7 +359,7 @@ func (s *runtimeControlServer) handleCodeWorkspaceEngineImportSession(w http.Res
 		writeRuntimeControlError(w, http.StatusBadRequest, "CODE_WORKSPACE_ENGINE_INVALID_REQUEST", "Invalid code workspace engine import request JSON.")
 		return
 	}
-	session, err := gw.CreateCodeRuntimeImportSession(r.Context(), body.Manifest)
+	session, err := appSrv.CreateCodeRuntimeImportSession(r.Context(), body.Manifest)
 	if err != nil {
 		writeRuntimeControlError(w, http.StatusBadRequest, "CODE_WORKSPACE_ENGINE_IMPORT_FAILED", err.Error())
 		return
@@ -386,8 +386,8 @@ func (s *runtimeControlServer) handleCodeWorkspaceEngineImportSessionPath(w http
 }
 
 func (s *runtimeControlServer) handleCodeWorkspaceEngineImportChunk(w http.ResponseWriter, r *http.Request, uploadID string, rawIndex string) {
-	gw := s.gateway()
-	if gw == nil {
+	appSrv := s.appServerHandler()
+	if appSrv == nil {
 		writeRuntimeControlError(w, http.StatusServiceUnavailable, "CODE_WORKSPACE_ENGINE_UNAVAILABLE", "Code workspace engine is not available.")
 		return
 	}
@@ -396,7 +396,7 @@ func (s *runtimeControlServer) handleCodeWorkspaceEngineImportChunk(w http.Respo
 		writeRuntimeControlError(w, http.StatusBadRequest, "CODE_WORKSPACE_ENGINE_INVALID_CHUNK", "Invalid code workspace engine chunk index.")
 		return
 	}
-	result, err := gw.AppendCodeRuntimeImportChunk(r.Context(), uploadID, chunkIndex, r.Body)
+	result, err := appSrv.AppendCodeRuntimeImportChunk(r.Context(), uploadID, chunkIndex, r.Body)
 	if err != nil {
 		writeRuntimeControlError(w, http.StatusBadRequest, "CODE_WORKSPACE_ENGINE_UPLOAD_FAILED", err.Error())
 		return
@@ -405,12 +405,12 @@ func (s *runtimeControlServer) handleCodeWorkspaceEngineImportChunk(w http.Respo
 }
 
 func (s *runtimeControlServer) handleCodeWorkspaceEngineImportComplete(w http.ResponseWriter, r *http.Request, uploadID string) {
-	gw := s.gateway()
-	if gw == nil {
+	appSrv := s.appServerHandler()
+	if appSrv == nil {
 		writeRuntimeControlError(w, http.StatusServiceUnavailable, "CODE_WORKSPACE_ENGINE_UNAVAILABLE", "Code workspace engine is not available.")
 		return
 	}
-	status, err := gw.CompleteCodeRuntimeImportSession(r.Context(), uploadID)
+	status, err := appSrv.CompleteCodeRuntimeImportSession(r.Context(), uploadID)
 	if err != nil {
 		writeRuntimeControlError(w, http.StatusBadRequest, "CODE_WORKSPACE_ENGINE_PREPARE_FAILED", err.Error())
 		return

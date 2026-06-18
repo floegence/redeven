@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"io"
@@ -14,7 +14,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestGateway_AI_Permissions_RequireRWX(t *testing.T) {
+func TestServer_AI_Permissions_RequireRWX(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -65,7 +65,7 @@ func TestGateway_AI_Permissions_RequireRWX(t *testing.T) {
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Logger:             logger,
 		Backend:            &stubBackend{},
 		DistFS:             dist,
@@ -83,7 +83,7 @@ func TestGateway_AI_Permissions_RequireRWX(t *testing.T) {
 		req := httptest.NewRequest(method, path, nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusForbidden {
 			t.Fatalf("%s %s status=%d body=%s", method, path, rr.Code, rr.Body.String())
 		}

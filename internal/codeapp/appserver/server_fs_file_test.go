@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func newFSFileTestGateway(t *testing.T, home string, meta session.Meta, policy *config.PermissionPolicy) (*Gateway, string) {
+func newFSFileTestServer(t *testing.T, home string, meta session.Meta, policy *config.PermissionPolicy) (*Server, string) {
 	t.Helper()
 
 	cfgPath := writeTestConfig(t)
@@ -40,7 +40,7 @@ func newFSFileTestGateway(t *testing.T, home string, meta session.Meta, policy *
 	}
 
 	channelID := "ch_fs_file_test"
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
 		ConfigPath:         cfgPath,
@@ -51,7 +51,7 @@ func newFSFileTestGateway(t *testing.T, home string, meta session.Meta, policy *
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	return gw, envOriginWithChannel(channelID)
+	return srv, envOriginWithChannel(channelID)
 }
 
 func newFSFileTestScope(home string) (*filesystemscope.Registry, error) {
@@ -78,10 +78,10 @@ func newFSFileTestScope(home string) (*filesystemscope.Registry, error) {
 }
 
 func fsFileResourcePath(path string) string {
-	return gatewayFSFileEndpointPath + "?path=" + url.QueryEscape(path)
+	return localAPIFileEndpointPath + "?path=" + url.QueryEscape(path)
 }
 
-func performFSFileRequest(gw *Gateway, method string, target string, origin string, rangeHeader string) *httptest.ResponseRecorder {
+func performFSFileRequest(srv *Server, method string, target string, origin string, rangeHeader string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, fsFileResourcePath(target), nil)
 	if origin != "" {
 		req.Header.Set("Origin", origin)
@@ -90,11 +90,11 @@ func performFSFileRequest(gw *Gateway, method string, target string, origin stri
 		req.Header.Set("Range", rangeHeader)
 	}
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	return rr
 }
 
-func TestGatewayFSFileResourceServesRangeAndHead(t *testing.T) {
+func TestServerFSFileResourceServesRangeAndHead(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
@@ -103,9 +103,9 @@ func TestGatewayFSFileResourceServesRangeAndHead(t *testing.T) {
 		t.Fatalf("os.WriteFile: %v", err)
 	}
 
-	gw, origin := newFSFileTestGateway(t, home, session.Meta{CanRead: true}, nil)
+	srv, origin := newFSFileTestServer(t, home, session.Meta{CanRead: true}, nil)
 
-	getResp := performFSFileRequest(gw, http.MethodGet, mediaPath, origin, "")
+	getResp := performFSFileRequest(srv, http.MethodGet, mediaPath, origin, "")
 	if getResp.Code != http.StatusOK {
 		t.Fatalf("GET status = %d, want %d body=%s", getResp.Code, http.StatusOK, getResp.Body.String())
 	}
@@ -122,7 +122,7 @@ func TestGatewayFSFileResourceServesRangeAndHead(t *testing.T) {
 		t.Fatalf("GET body = %q", body)
 	}
 
-	headResp := performFSFileRequest(gw, http.MethodHead, mediaPath, origin, "")
+	headResp := performFSFileRequest(srv, http.MethodHead, mediaPath, origin, "")
 	if headResp.Code != http.StatusOK {
 		t.Fatalf("HEAD status = %d, want %d body=%s", headResp.Code, http.StatusOK, headResp.Body.String())
 	}
@@ -133,7 +133,7 @@ func TestGatewayFSFileResourceServesRangeAndHead(t *testing.T) {
 		t.Fatalf("HEAD Content-Length = %q, want 16", got)
 	}
 
-	rangeResp := performFSFileRequest(gw, http.MethodGet, mediaPath, origin, "bytes=2-5")
+	rangeResp := performFSFileRequest(srv, http.MethodGet, mediaPath, origin, "bytes=2-5")
 	if rangeResp.Code != http.StatusPartialContent {
 		t.Fatalf("Range status = %d, want %d body=%s", rangeResp.Code, http.StatusPartialContent, rangeResp.Body.String())
 	}
@@ -147,13 +147,13 @@ func TestGatewayFSFileResourceServesRangeAndHead(t *testing.T) {
 		t.Fatalf("Range body = %q, want 2345", body)
 	}
 
-	invalidRangeResp := performFSFileRequest(gw, http.MethodGet, mediaPath, origin, "bytes=99-120")
+	invalidRangeResp := performFSFileRequest(srv, http.MethodGet, mediaPath, origin, "bytes=99-120")
 	if invalidRangeResp.Code != http.StatusRequestedRangeNotSatisfiable {
 		t.Fatalf("invalid Range status = %d, want %d", invalidRangeResp.Code, http.StatusRequestedRangeNotSatisfiable)
 	}
 }
 
-func TestGatewayFSFileResourceAllowsLargeMediaRange(t *testing.T) {
+func TestServerFSFileResourceAllowsLargeMediaRange(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
@@ -172,8 +172,8 @@ func TestGatewayFSFileResourceAllowsLargeMediaRange(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	gw, origin := newFSFileTestGateway(t, home, session.Meta{CanRead: true}, nil)
-	resp := performFSFileRequest(gw, http.MethodGet, mediaPath, origin, "bytes=0-3")
+	srv, origin := newFSFileTestServer(t, home, session.Meta{CanRead: true}, nil)
+	resp := performFSFileRequest(srv, http.MethodGet, mediaPath, origin, "bytes=0-3")
 	if resp.Code != http.StatusPartialContent {
 		t.Fatalf("status = %d, want %d body=%s", resp.Code, http.StatusPartialContent, resp.Body.String())
 	}
@@ -182,7 +182,7 @@ func TestGatewayFSFileResourceAllowsLargeMediaRange(t *testing.T) {
 	}
 }
 
-func TestGatewayFSFileResourceRejectsUnauthorizedOriginsAndPermissions(t *testing.T) {
+func TestServerFSFileResourceRejectsUnauthorizedOriginsAndPermissions(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
@@ -191,19 +191,19 @@ func TestGatewayFSFileResourceRejectsUnauthorizedOriginsAndPermissions(t *testin
 		t.Fatalf("os.WriteFile: %v", err)
 	}
 
-	gw, origin := newFSFileTestGateway(t, home, session.Meta{CanRead: true}, nil)
+	srv, origin := newFSFileTestServer(t, home, session.Meta{CanRead: true}, nil)
 
-	codespaceResp := performFSFileRequest(gw, http.MethodGet, filePath, strings.Replace(origin, "env-", "cs-", 1), "")
+	codespaceResp := performFSFileRequest(srv, http.MethodGet, filePath, strings.Replace(origin, "env-", "cs-", 1), "")
 	if codespaceResp.Code != http.StatusNotFound {
 		t.Fatalf("codespace status = %d, want %d", codespaceResp.Code, http.StatusNotFound)
 	}
 
-	unknownResp := performFSFileRequest(gw, http.MethodGet, filePath, "https://example.com", "")
+	unknownResp := performFSFileRequest(srv, http.MethodGet, filePath, "https://example.com", "")
 	if unknownResp.Code != http.StatusNotFound {
 		t.Fatalf("unknown origin status = %d, want %d", unknownResp.Code, http.StatusNotFound)
 	}
 
-	gwNoRead, noReadOrigin := newFSFileTestGateway(t, home, session.Meta{CanRead: false}, nil)
+	gwNoRead, noReadOrigin := newFSFileTestServer(t, home, session.Meta{CanRead: false}, nil)
 	noReadResp := performFSFileRequest(gwNoRead, http.MethodGet, filePath, noReadOrigin, "")
 	if noReadResp.Code != http.StatusForbidden {
 		t.Fatalf("no-read status = %d, want %d", noReadResp.Code, http.StatusForbidden)
@@ -212,13 +212,13 @@ func TestGatewayFSFileResourceRejectsUnauthorizedOriginsAndPermissions(t *testin
 	noOriginReq := httptest.NewRequest(http.MethodGet, fsFileResourcePath(filePath), nil)
 	noOriginReq.Host = "env-123.example.com"
 	noOriginResp := httptest.NewRecorder()
-	gw.serveHTTP(noOriginResp, noOriginReq)
+	srv.serveHTTP(noOriginResp, noOriginReq)
 	if noOriginResp.Code != http.StatusBadRequest {
 		t.Fatalf("missing channel label status = %d, want %d", noOriginResp.Code, http.StatusBadRequest)
 	}
 }
 
-func TestGatewayFSFileResourceRejectsScopeAndUnsupportedTypes(t *testing.T) {
+func TestServerFSFileResourceRejectsScopeAndUnsupportedTypes(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
@@ -253,30 +253,30 @@ func TestGatewayFSFileResourceRejectsScopeAndUnsupportedTypes(t *testing.T) {
 		t.Fatalf("write svg: %v", err)
 	}
 
-	gw, origin := newFSFileTestGateway(t, home, session.Meta{CanRead: true}, nil)
+	srv, origin := newFSFileTestServer(t, home, session.Meta{CanRead: true}, nil)
 
-	outsideResp := performFSFileRequest(gw, http.MethodGet, outsidePath, origin, "")
+	outsideResp := performFSFileRequest(srv, http.MethodGet, outsidePath, origin, "")
 	if outsideResp.Code != http.StatusForbidden {
 		t.Fatalf("outside status = %d, want %d", outsideResp.Code, http.StatusForbidden)
 	}
 
-	dirResp := performFSFileRequest(gw, http.MethodGet, dirPath, origin, "")
+	dirResp := performFSFileRequest(srv, http.MethodGet, dirPath, origin, "")
 	if dirResp.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("dir status = %d, want %d", dirResp.Code, http.StatusUnsupportedMediaType)
 	}
 
-	unsupportedResp := performFSFileRequest(gw, http.MethodGet, unsupportedPath, origin, "")
+	unsupportedResp := performFSFileRequest(srv, http.MethodGet, unsupportedPath, origin, "")
 	if unsupportedResp.Code != http.StatusUnsupportedMediaType {
 		t.Fatalf("unsupported status = %d, want %d", unsupportedResp.Code, http.StatusUnsupportedMediaType)
 	}
 	for _, activePath := range []string{htmlPath, jsPath, svgPath} {
-		activeResp := performFSFileRequest(gw, http.MethodGet, activePath, origin, "")
+		activeResp := performFSFileRequest(srv, http.MethodGet, activePath, origin, "")
 		if activeResp.Code != http.StatusUnsupportedMediaType {
 			t.Fatalf("active content %s status = %d, want %d", filepath.Base(activePath), activeResp.Code, http.StatusUnsupportedMediaType)
 		}
 	}
 
-	pdfResp := performFSFileRequest(gw, http.MethodGet, pdfPath, origin, "")
+	pdfResp := performFSFileRequest(srv, http.MethodGet, pdfPath, origin, "")
 	if pdfResp.Code != http.StatusOK {
 		t.Fatalf("pdf status = %d, want %d body=%s", pdfResp.Code, http.StatusOK, pdfResp.Body.String())
 	}
@@ -285,7 +285,7 @@ func TestGatewayFSFileResourceRejectsScopeAndUnsupportedTypes(t *testing.T) {
 	}
 }
 
-func TestGatewayFSFileResourceHonorsLocalUIReadCap(t *testing.T) {
+func TestServerFSFileResourceHonorsLocalUIReadCap(t *testing.T) {
 	t.Parallel()
 
 	home := t.TempDir()
@@ -296,17 +296,17 @@ func TestGatewayFSFileResourceHonorsLocalUIReadCap(t *testing.T) {
 
 	noRead := config.PermissionSet{Read: false, Write: false, Execute: false}
 	policy := &config.PermissionPolicy{SchemaVersion: 1, LocalMax: &noRead}
-	gw, _ := newFSFileTestGateway(t, home, session.Meta{CanRead: true}, policy)
+	srv, _ := newFSFileTestServer(t, home, session.Meta{CanRead: true}, policy)
 
 	req := WithLocalUIEnvRoute(httptest.NewRequest(http.MethodGet, fsFileResourcePath(filePath), bytes.NewReader(nil)))
 	resp := httptest.NewRecorder()
-	gw.serveHTTP(resp, req)
+	srv.serveHTTP(resp, req)
 	if resp.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d body=%s", resp.Code, http.StatusForbidden, resp.Body.String())
 	}
 }
 
-func TestGatewayFSFileContentTypeFallbacks(t *testing.T) {
+func TestServerFSFileContentTypeFallbacks(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]string{

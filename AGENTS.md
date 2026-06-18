@@ -296,6 +296,7 @@ Run the CI-aligned checks and local-only pre-commit checks before integration:
 - `bash -n scripts/build_desktop_bundled_agent.sh`
 - `bash -n scripts/check_desktop.sh`
 - `bash -n scripts/check_docker_runtime_e2e.sh`
+- `bash -n scripts/check_gateway_protocol_contract.sh`
 - `bash -n scripts/check_runtime_compatibility_contract.sh`
 - `bash -n scripts/check_flower_live_protocol.sh`
 - `bash -n scripts/ui_package_common.sh`
@@ -306,6 +307,7 @@ Run the CI-aligned checks and local-only pre-commit checks before integration:
 - `./scripts/lint_ui.sh`
 - `./scripts/test_generate_release_notes.sh`
 - `./scripts/check_runtime_compatibility_contract.sh --source-only`
+- `./scripts/check_gateway_protocol_contract.sh`
 - `./scripts/check_flower_live_protocol.sh`
 - `./scripts/check_desktop.sh`
 - `./scripts/check_docker_runtime_e2e.sh`

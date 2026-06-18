@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"encoding/json"
@@ -26,7 +26,7 @@ type workbenchTerminalSessionCreateRequest struct {
 	WorkingDir string `json:"working_dir,omitempty"`
 }
 
-func (g *Gateway) handleWorkbenchLayoutAPI(w http.ResponseWriter, r *http.Request) bool {
+func (g *Server) handleWorkbenchLayoutAPI(w http.ResponseWriter, r *http.Request) bool {
 	if r == nil || !strings.HasPrefix(strings.TrimSpace(r.URL.Path), "/_redeven_proxy/api/workbench/") {
 		return false
 	}
@@ -98,7 +98,7 @@ func (g *Gateway) handleWorkbenchLayoutAPI(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (g *Gateway) handleWorkbenchWidgetStateAPI(w http.ResponseWriter, r *http.Request) bool {
+func (g *Server) handleWorkbenchWidgetStateAPI(w http.ResponseWriter, r *http.Request) bool {
 	widgetID, tail, ok := parseWorkbenchWidgetPath(r.URL.Path)
 	if !ok {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
@@ -285,7 +285,7 @@ func decodeWorkbenchLayoutJSON(body io.Reader, out any) error {
 	return nil
 }
 
-func (g *Gateway) handleWorkbenchLayoutEventStream(w http.ResponseWriter, r *http.Request) {
+func (g *Server) handleWorkbenchLayoutEventStream(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "streaming not supported"})

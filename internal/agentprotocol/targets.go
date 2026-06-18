@@ -25,7 +25,7 @@ const (
 	CapabilityTerminal      = "terminal"
 	CapabilityMonitor       = "monitor"
 	CapabilityGit           = "git"
-	CapabilityCodexGateway  = "codex_gateway"
+	CapabilityCodexAPI      = "codex_api"
 )
 
 var ErrTargetNotFound = errors.New("target not found")
@@ -99,7 +99,7 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 			CapabilityTerminal,
 			CapabilityMonitor,
 			CapabilityGit,
-			CapabilityCodexGateway,
+			CapabilityCodexAPI,
 		)
 		target.UnavailableReasonCode = ""
 	}

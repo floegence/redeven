@@ -208,8 +208,8 @@ describe('AIProviderDialog', () => {
             provider: {
               ...baseProvider(),
               type: 'openai_compatible',
-              name: 'Gateway',
-              base_url: 'https://gateway.example/v1',
+              name: 'Endpoint',
+              base_url: 'https://endpoint.example/v1',
               models: [
                 {
                   model_name: 'custom-model',
@@ -266,7 +266,7 @@ describe('AIProviderDialog', () => {
             provider: {
               ...baseProvider(),
               type: 'openai_compatible',
-              base_url: 'https://gateway.example/v1',
+              base_url: 'https://endpoint.example/v1',
               web_search: { mode: 'brave' },
             },
             keySet: false,

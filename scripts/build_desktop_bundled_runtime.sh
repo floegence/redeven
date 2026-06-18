@@ -136,7 +136,7 @@ bundle_from_source() {
   local goos="$1"
   local goarch="$2"
   local output_path="$3"
-  local gateway_output_path="$4"
+  local runtime_gateway_output_path="$4"
 
   if ! command -v go >/dev/null 2>&1; then
     ui_pkg_die "go not found (required to build the desktop bundled runtime)"
@@ -149,12 +149,12 @@ bundle_from_source() {
   ui_pkg_log "Building desktop bundled runtime from the current repository..."
   ui_pkg_log "TARGET: ${goos}-${goarch}"
   ui_pkg_log "OUTPUT: $output_path"
-  ui_pkg_log "GATEWAY_OUTPUT: $gateway_output_path"
+  ui_pkg_log "GATEWAY_OUTPUT: $runtime_gateway_output_path"
 
   "$SCRIPT_DIR/build_assets.sh"
 
   build_go_command "$goos" "$goarch" "$output_path" ./cmd/redeven "$version" "$commit" "$build_time"
-  build_go_command "$goos" "$goarch" "$gateway_output_path" ./cmd/redeven-gateway "$version" "$commit" "$build_time"
+  build_go_command "$goos" "$goarch" "$runtime_gateway_output_path" ./cmd/redeven-gateway "$version" "$commit" "$build_time"
 }
 
 main() {

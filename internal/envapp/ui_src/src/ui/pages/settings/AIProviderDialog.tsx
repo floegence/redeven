@@ -110,7 +110,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
   );
   const providerTypeDescription = (providerType: AIProviderType): string => (
     providerUsesCustomConnectionName(providerType)
-      ? i18n.t('flowerProviderDialog.customGatewayDescription')
+      ? i18n.t('flowerProviderDialog.customEndpointDescription')
       : i18n.t('flowerProviderDialog.nativeConnectionDescription')
   );
   const providerTypeDisplayLabel = (providerType: AIProviderType): string => localizedProviderTypeLabel(providerType, i18n.locale());

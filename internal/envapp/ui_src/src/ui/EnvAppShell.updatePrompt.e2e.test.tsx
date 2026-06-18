@@ -7,10 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const getLocalRuntimeMock = vi.fn();
 const getLocalAccessStatusMock = vi.fn();
 const unlockLocalAccessMock = vi.fn();
+const getEnvAppAccessStatusMock = vi.fn();
+const unlockEnvAppAccessMock = vi.fn();
 const getEnvironmentMock = vi.fn();
 const getAgentLatestVersionMock = vi.fn();
-const getGatewayAccessStatusMock = vi.fn();
-const unlockGatewayAccessMock = vi.fn();
 const mintLocalDirectConnectArtifactMock = vi.fn();
 const mintEnvProxyEntryTicketMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
@@ -243,12 +243,12 @@ vi.mock('./utils/askFlowerPath', () => ({
   },
   resolveSuggestedWorkingDirAbsolute: () => '',
 }));
-vi.mock('./services/gatewayApi', () => ({
-  fetchGatewayJSON: vi.fn(),
-  gatewayRequestCredentials: () => 'same-origin',
-  getGatewayAccessStatus: getGatewayAccessStatusMock,
-  uploadGatewayFile: vi.fn(),
-  unlockGatewayAccess: unlockGatewayAccessMock,
+vi.mock('./services/localApi', () => ({
+  fetchLocalApiJSON: vi.fn(),
+  localApiRequestCredentials: () => 'same-origin',
+  getEnvAppAccessStatus: getEnvAppAccessStatusMock,
+  uploadLocalApiFile: vi.fn(),
+  unlockEnvAppAccess: unlockEnvAppAccessMock,
 }));
 vi.mock('./services/sandboxWindowRegistry', () => ({ getSandboxWindowInfo: () => null }));
 vi.mock('./pages/EnvContext', () => ({ EnvContext: createContext({}) }));
@@ -295,8 +295,8 @@ beforeEach(() => {
   getLocalRuntimeMock.mockResolvedValue(null);
   getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
   unlockLocalAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
-  getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-  unlockGatewayAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
+  getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+  unlockEnvAppAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
   getEnvironmentMock.mockResolvedValue({
     public_id: 'env_remote',
     name: 'Remote env',
@@ -378,7 +378,7 @@ describe('EnvAppShell update prompt orchestration', () => {
   });
 
   it('does not query the latest version before the access gate is cleared', async () => {
-    getGatewayAccessStatusMock.mockResolvedValueOnce({ password_required: true, unlocked: false });
+    getEnvAppAccessStatusMock.mockResolvedValueOnce({ password_required: true, unlocked: false });
 
     const host = document.createElement('div');
     document.body.appendChild(host);

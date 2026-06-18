@@ -1,7 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, createUniqueId, onCleanup } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { prepareGatewayRequestInit } from '../../services/gatewayApi';
+import { prepareLocalApiRequestInit } from '../../services/localApi';
 import { writeTextToClipboard } from '../../utils/clipboard';
 import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
 import { useI18n, type I18nHelpers } from '../../i18n';
@@ -493,7 +493,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
 
     const resp = await fetch(
       terminalOutputURL(runID, toolID, metaOnly),
-      await prepareGatewayRequestInit({ method: 'GET' }),
+      await prepareLocalApiRequestInit({ method: 'GET' }),
     );
     const raw = await resp.text();
     let payload: any = null;
