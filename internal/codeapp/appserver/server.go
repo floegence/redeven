@@ -4010,13 +4010,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
 				return
 			}
-			if err := g.ai.CancelThread(meta, threadID); err != nil {
+			resp, err := g.ai.StopThread(r.Context(), meta, threadID)
+			if err != nil {
 				g.appendAudit(meta, "ai_thread_cancel", "failure", map[string]any{"thread_id": threadID}, err)
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
 			g.appendAudit(meta, "ai_thread_cancel", "success", map[string]any{"thread_id": threadID}, nil)
-			writeJSON(w, http.StatusOK, apiResp{OK: true})
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
 		case action == "" && r.Method == http.MethodDelete:

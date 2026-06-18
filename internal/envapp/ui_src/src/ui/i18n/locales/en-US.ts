@@ -16,6 +16,7 @@ export const enUS = defineDictionary({
       delete: 'Delete',
       refresh: 'Refresh',
       retry: 'Retry',
+      stop: 'Stop',
       copy: 'Copy',
       copied: 'Copied',
       settings: 'Settings',

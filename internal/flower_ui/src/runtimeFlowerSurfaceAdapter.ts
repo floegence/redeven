@@ -81,6 +81,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;
+  stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
@@ -173,6 +174,11 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     },
     resolveHandler: options.resolveHandler,
     launchTurn: options.launchTurn,
+    stopThread: async (threadID) => {
+      const tid = trim(threadID);
+      if (!tid) throw new Error(missingThreadIDMessage(options));
+      return options.stopThread(tid);
+    },
     submitInput: options.submitInput,
     submitApproval: async (input: FlowerSubmitApprovalRequest) => {
       const tid = trim(input.thread_id);

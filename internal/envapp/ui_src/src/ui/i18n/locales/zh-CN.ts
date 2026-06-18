@@ -17,6 +17,7 @@ export const zhCN = {
       delete: "删除",
       refresh: "刷新",
       retry: "重试",
+      stop: "停止",
       copy: "复制",
       copied: "已复制",
       settings: "设置",

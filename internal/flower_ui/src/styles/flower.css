@@ -2817,6 +2817,15 @@ html.dark .flower-component-shell {
   padding: 0;
 }
 
+.flower-composer-submit-stop:not(:disabled) {
+  background: color-mix(in srgb, var(--destructive) 88%, var(--background) 12%);
+  color: white;
+}
+
+.flower-composer-submit-stop:not(:disabled):hover {
+  background: color-mix(in srgb, var(--destructive) 96%, black 4%);
+}
+
 .flower-model-chip-warmup {
   color: color-mix(in srgb, var(--foreground) 62%, transparent);
 }

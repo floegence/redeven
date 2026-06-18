@@ -18,6 +18,7 @@ export const ptBR = {
       delete: "Excluir",
       refresh: "Atualizar",
       retry: "Tentar novamente",
+      stop: "Parar",
       copy: "Copiar",
       copied: "Copiado",
       settings: "Configurações",

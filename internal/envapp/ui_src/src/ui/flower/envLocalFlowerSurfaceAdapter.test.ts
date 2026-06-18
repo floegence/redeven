@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createEnvLocalFlowerSurfaceAdapter } from './envLocalFlowerSurfaceAdapter';
 
@@ -10,6 +10,10 @@ const fetchMock = vi.fn();
 
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 
+beforeEach(() => {
+  fetchMock.mockReset();
+});
+
 function jsonResponse(data: unknown): Response {
   return {
     ok: true,
@@ -18,7 +22,84 @@ function jsonResponse(data: unknown): Response {
   } as Response;
 }
 
+function readStatus(status = 'idle') {
+  return {
+    is_unread: false,
+    snapshot: {
+      activity_revision: 2,
+      last_message_at_unix_ms: 2,
+      activity_signature: `status:${status}`,
+    },
+    read_state: {
+      last_seen_activity_revision: 2,
+      last_read_message_at_unix_ms: 2,
+      last_seen_activity_signature: `status:${status}`,
+    },
+  };
+}
+
+function liveBootstrap(threadID: string, status = 'canceled') {
+  const thread = {
+    thread_id: threadID,
+    title: 'Stopped thread',
+    model_id: 'default/gpt-4.1',
+    run_status: status,
+    created_at_unix_ms: 1,
+    updated_at_unix_ms: 2,
+    last_message_at_unix_ms: 2,
+    read_status: readStatus(status),
+  };
+  return {
+    schema_version: 1,
+    endpoint_id: 'env-a',
+    thread_id: threadID,
+    cursor: 3,
+    retained_from_seq: 1,
+    thread,
+    transcript_messages: [],
+    live_state: {
+      thread_patch: {},
+      message_order: [],
+      messages: {},
+      runs: {},
+      approval_actions: {},
+      input_requests: {},
+    },
+    read_status: thread.read_status,
+    generated_at_ms: 10_000,
+  };
+}
+
 describe('Env local Flower surface adapter', () => {
+  it('stops a thread through RPC and reloads the live bootstrap', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/ai/threads/thread_1/live/bootstrap' && init?.method === 'GET') {
+        return jsonResponse(liveBootstrap('thread_1'));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const stopThread = vi.fn(async () => ({ ok: true }));
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: {
+        ai: {
+          stopThread,
+        },
+      } as any,
+    });
+
+    const bootstrap = await adapter.stopThread('thread_1');
+
+    expect(stopThread).toHaveBeenCalledWith({ threadId: 'thread_1' });
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/_redeven_proxy/api/ai/threads/thread_1/live/bootstrap',
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(bootstrap.thread.thread_id).toBe('thread_1');
+    expect(bootstrap.thread.status).toBe('canceled');
+  });
+
   it('rejects invalid explicit context actions instead of dropping linked context', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/settings') {

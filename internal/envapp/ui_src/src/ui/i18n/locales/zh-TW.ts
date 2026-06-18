@@ -18,6 +18,7 @@ export const zhTW = {
       delete: "刪除",
       refresh: "重新整理",
       retry: "重試",
+      stop: "停止",
       copy: "複製",
       copied: "已複製",
       settings: "設定",

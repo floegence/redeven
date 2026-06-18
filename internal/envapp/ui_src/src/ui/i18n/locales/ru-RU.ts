@@ -18,6 +18,7 @@ export const ruRU = {
       delete: "Удалить",
       refresh: "Обновить",
       retry: "Повторить",
+      stop: "Остановить",
       copy: "Копировать",
       copied: "Скопировано",
       settings: "Настройки",

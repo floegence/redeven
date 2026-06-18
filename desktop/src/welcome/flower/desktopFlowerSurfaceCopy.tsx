@@ -36,6 +36,7 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
       handlerStillStarting: t(i18n, k('chat.handlerStillStarting')),
       handlerRetry: t(i18n, k('chat.handlerRetry')),
       send: t(i18n, k('chat.send')),
+      stop: t(i18n, k('chat.stop')),
       runErrorTitle: t(i18n, k('chat.runErrorTitle')),
       runErrorActions: {
         updateAPIKey: t(i18n, k('chat.runErrorActionUpdateAPIKey')),
