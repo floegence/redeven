@@ -97,6 +97,12 @@ func TestToolTerminalExec_IncludesEffectiveTimeoutMetadata(t *testing.T) {
 	if source := strings.TrimSpace(anyToString(result["timeout_source"])); source != terminalExecTimeoutSourceDefault {
 		t.Fatalf("timeout_source=%q, want %q", source, terminalExecTimeoutSourceDefault)
 	}
+	if location := strings.TrimSpace(anyToString(result["execution_location"])); location != ToolTargetModeLocalRuntime {
+		t.Fatalf("execution_location=%q, want %q", location, ToolTargetModeLocalRuntime)
+	}
+	if cwd := strings.TrimSpace(anyToString(result["cwd"])); cwd != resolvedWorkspace {
+		t.Fatalf("cwd=%q, want %q", cwd, resolvedWorkspace)
+	}
 }
 
 func TestDefaultTerminalExecRunner_TimeoutKillsChildProcessTree(t *testing.T) {

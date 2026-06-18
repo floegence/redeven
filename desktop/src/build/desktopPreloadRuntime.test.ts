@@ -119,6 +119,7 @@ describe('desktop preload runtime', () => {
 const { app, BrowserWindow, ipcMain } = require('electron');
 
 const preload = process.env.${electronRuntimePreloadEnvName};
+app.setPath('userData', ${JSON.stringify(path.join(tempDir, 'electron-user-data'))});
 
 if (!preload) {
   throw new Error('Missing ${electronRuntimePreloadEnvName}');

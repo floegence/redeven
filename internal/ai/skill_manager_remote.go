@@ -413,10 +413,16 @@ func (m *skillManager) ListSources() (SkillSourcesView, error) {
 		item, ok := m.sources[p]
 		if !ok {
 			now := time.Now().UnixMilli()
+			sourceType := SkillSourceTypeLocalManual
+			sourceID := "local:" + entry.Scope + ":" + entry.Name
+			if entry.Scope == string(SkillSourceTypeSystem) {
+				sourceType = SkillSourceTypeSystem
+				sourceID = "system:" + entry.Name
+			}
 			item = SkillSourceRecord{
 				SkillPath:           p,
-				SourceType:          SkillSourceTypeLocalManual,
-				SourceID:            "local:" + entry.Scope + ":" + entry.Name,
+				SourceType:          sourceType,
+				SourceID:            sourceID,
 				InstalledAtUnixMs:   now,
 				LastCheckedAtUnixMs: now,
 			}

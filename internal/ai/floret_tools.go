@@ -968,6 +968,12 @@ func mapWithOperation(in map[string]any, operation string) map[string]any {
 
 func terminalActivityChips(payload map[string]any) []observation.ActivityChip {
 	chips := []observation.ActivityChip{}
+	if location := activityScalarString(payload["execution_location"]); strings.TrimSpace(location) != "" {
+		chips = append(chips, observation.ActivityChip{Kind: "execution_location", Label: "location", Value: location, Tone: "neutral"})
+	}
+	if targetID := activityScalarString(payload["target_id"]); strings.TrimSpace(targetID) != "" {
+		chips = append(chips, observation.ActivityChip{Kind: "target", Label: "target", Value: targetID, Tone: "neutral"})
+	}
 	if exit := activityScalarString(payload["exit_code"]); strings.TrimSpace(exit) != "" {
 		tone := "neutral"
 		if strings.TrimSpace(exit) != "0" {

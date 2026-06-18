@@ -55,8 +55,9 @@ type TargetToolCall struct {
 }
 
 type TargetToolResult struct {
-	TargetID string `json:"target_id"`
-	Result   any    `json:"result,omitempty"`
+	TargetID          string `json:"target_id"`
+	ExecutionLocation string `json:"execution_location,omitempty"`
+	Result            any    `json:"result,omitempty"`
 }
 
 func toolRequiresTarget(toolName string) bool {

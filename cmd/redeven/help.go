@@ -319,15 +319,18 @@ Usage:
   redeven targets <command> [flags]
   redeven help targets list
   redeven help targets resolve
+  redeven help targets exec
 
 Commands:
   list       List discoverable targets.
   resolve    Resolve one target id, current alias, label, env_public_id, or local_environment_public_id.
+  exec       Execute an agent-selected shell command on a supported target.
 
 Examples:
   redeven targets list
   redeven targets list --json
   redeven targets resolve --target local --json
+  redeven targets exec --target current --command 'uname -a' --json
 `, "\n")
 }
 
@@ -371,13 +374,50 @@ Examples:
 	`, "\n")
 }
 
+func targetsExecHelpText() string {
+	return strings.TrimLeft(`
+redeven targets exec
+
+Execute a shell command on a supported Redeven target through a structured
+target execution contract.
+
+This command is for target OS diagnostics and small command probes chosen by an
+agent or user, such as time, uptime, kernel, disk, process, package manager, or
+service checks. Environment lifecycle actions still belong to redeven env.
+
+Supported execution locations:
+  local_runtime     Default Local Environment shell.
+  local_host        Saved local host runtime target.
+  ssh_target        Saved SSH host/runtime target using key or agent auth.
+
+Unsupported targets return a JSON result with supported=false and reason_code
+instead of falling back to Docker, systemd, launchctl, or ad hoc process manager
+commands.
+
+Usage:
+  redeven targets exec --target <target> --command <command> [flags]
+
+Flags:
+  --target <target>                 Target id, current, label, env_public_id, or local_environment_public_id (default: current).
+  --command <command>               Shell command to execute on the target.
+  --cwd <path>                      Working directory on the selected target.
+  --timeout <duration>              Command timeout (default: 120s, max: 10m).
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+
+Examples:
+  redeven targets exec --target current --command 'date' --json
+  redeven targets exec --target ssh:devbox --command 'uname -a' --json
+`, "\n")
+}
+
 func envHelpText() string {
 	return strings.TrimLeft(`
 redeven env
 
 Inspect Redeven environments and plan lifecycle operations through a stable
 machine-readable contract. Flower and automation should use this command for
-environment status, diagnostics, stop, start, restart, and update requests
+environment status, runtime attach diagnostics, stop, start, restart, and update requests
 instead of inferring Docker, SSH, systemd, or process-manager commands from a
 target id.
 
@@ -714,6 +754,8 @@ func lookupHelpText(args []string) (string, bool) {
 		return targetsListHelpText(), true
 	case "targets resolve":
 		return targetsResolveHelpText(), true
+	case "targets exec":
+		return targetsExecHelpText(), true
 	case "search":
 		return searchHelpText(), true
 	case "okf":

@@ -119,6 +119,7 @@ type skillManager struct {
 	stateLoaded   bool
 	sources       map[string]SkillSourceRecord
 	sourcesLoaded bool
+	embedded      map[string]string
 
 	catalogVersion  int64
 	catalogEntries  []SkillCatalogEntry
@@ -137,6 +138,15 @@ func newSkillManager(workspace string, stateDir string) *skillManager {
 	home, _ := os.UserHomeDir()
 	path := ""
 	sourcePath := ""
+	embedded := map[string]string{}
+	for _, skill := range embeddedSystemSkills() {
+		p := filepath.Clean(strings.TrimSpace(skill.Path))
+		content := strings.TrimSpace(skill.Content)
+		if p == "" || content == "" {
+			continue
+		}
+		embedded[p] = content
+	}
 	stateDir = strings.TrimSpace(stateDir)
 	if stateDir != "" {
 		path = filepath.Join(stateDir, "skills_state.json")
@@ -158,6 +168,7 @@ func newSkillManager(workspace string, stateDir string) *skillManager {
 		active:           map[string]SkillActivation{},
 		disabledPaths:    map[string]struct{}{},
 		sources:          map[string]SkillSourceRecord{},
+		embedded:         embedded,
 		githubAPIBaseURL: firstNonEmpty(
 			strings.TrimSpace(os.Getenv("REDEVEN_AGENT_AI_SKILLS_GITHUB_API_BASE_URL")),
 			"https://api.github.com",
@@ -377,6 +388,19 @@ func (m *skillManager) discoverLocked() {
 			grouped[meta.Name] = append(grouped[meta.Name], meta)
 		}
 	}
+	embeddedPaths := make([]string, 0, len(m.embedded))
+	for p := range m.embedded {
+		embeddedPaths = append(embeddedPaths, p)
+	}
+	sort.Strings(embeddedPaths)
+	for _, p := range embeddedPaths {
+		meta, _, err := parseSkillContent(p, string(SkillSourceTypeSystem), m.embedded[p])
+		if err != nil {
+			allErrors = append(allErrors, SkillCatalogNotice{Path: p, Message: err.Error()})
+			continue
+		}
+		grouped[meta.Name] = append(grouped[meta.Name], meta)
+	}
 
 	effectiveByName := make(map[string]SkillMeta)
 	entries := make([]SkillCatalogEntry, 0, len(grouped))
@@ -536,7 +560,11 @@ func parseSkillFile(path string, scope string) (SkillMeta, string, error) {
 	if err != nil {
 		return SkillMeta{}, "", err
 	}
-	frontmatterRaw, body, ok := splitFrontmatter(string(content))
+	return parseSkillContent(path, scope, string(content))
+}
+
+func parseSkillContent(skillPath string, scope string, raw string) (SkillMeta, string, error) {
+	frontmatterRaw, body, ok := splitFrontmatter(raw)
 	if !ok {
 		return SkillMeta{}, "", fmt.Errorf("missing frontmatter")
 	}
@@ -577,7 +605,7 @@ func parseSkillFile(path string, scope string) (SkillMeta, string, error) {
 	meta := SkillMeta{
 		Name:                    fm.Name,
 		Description:             fm.Description,
-		Path:                    filepath.Clean(path),
+		Path:                    filepath.Clean(strings.TrimSpace(skillPath)),
 		Scope:                   strings.TrimSpace(scope),
 		Priority:                fm.Priority,
 		ModeHints:               modeHints,
@@ -653,7 +681,7 @@ func (m *skillManager) Activate(name string, mode string, implicit bool) (SkillA
 	if !ok {
 		return SkillActivation{}, false, fmt.Errorf("unknown skill: %s", name)
 	}
-	_, body, err := parseSkillFile(meta.Path, meta.Scope)
+	body, err := m.skillBodyLocked(meta)
 	if err != nil {
 		return SkillActivation{}, false, err
 	}
@@ -671,6 +699,19 @@ func (m *skillManager) Activate(name string, mode string, implicit bool) (SkillA
 	}
 	m.active[name] = activation
 	return activation, false, nil
+}
+
+func (m *skillManager) skillBodyLocked(meta SkillMeta) (string, error) {
+	if m == nil {
+		return "", fmt.Errorf("nil skill manager")
+	}
+	p := filepath.Clean(strings.TrimSpace(meta.Path))
+	if content := strings.TrimSpace(m.embedded[p]); content != "" {
+		_, body, err := parseSkillContent(p, meta.Scope, content)
+		return body, err
+	}
+	_, body, err := parseSkillFile(p, meta.Scope)
+	return body, err
 }
 
 func (m *skillManager) Active() []SkillActivation {

@@ -315,6 +315,39 @@ func TestFloretToolResultActivityCarriesExpandableTerminalDetailsWithoutCallOnly
 	}
 }
 
+func TestFloretToolResultActivityShowsTerminalExecutionProvenanceChips(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	activity := mustFloretToolResultActivity(t, r, ToolResult{
+		ToolID:   "call_terminal_target",
+		ToolName: "terminal.exec",
+		Status:   toolResultStatusSuccess,
+		Data: map[string]any{
+			"execution_location": "ssh_target",
+			"target_id":          "ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default",
+			"stdout":             "ok\n",
+			"exit_code":          0,
+			"duration_ms":        42,
+		},
+	})
+	if !activityHasChip(activity.Chips, "execution_location", "ssh_target") {
+		t.Fatalf("chips=%#v, want execution location chip", activity.Chips)
+	}
+	if !activityHasChip(activity.Chips, "target", "ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default") {
+		t.Fatalf("chips=%#v, want target chip", activity.Chips)
+	}
+}
+
+func activityHasChip(chips []observation.ActivityChip, kind string, value string) bool {
+	for _, chip := range chips {
+		if chip.Kind == kind && chip.Value == value {
+			return true
+		}
+	}
+	return false
+}
+
 func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T) {
 	t.Parallel()
 

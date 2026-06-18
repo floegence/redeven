@@ -3168,7 +3168,36 @@ func (r *run) execTargetTool(ctx context.Context, toolID string, toolName string
 	if err != nil {
 		return nil, err
 	}
-	return result.Result, nil
+	return targetToolResultPayload(result, targetID), nil
+}
+
+func targetToolResultPayload(result TargetToolResult, requestedTargetID string) any {
+	targetID := strings.TrimSpace(result.TargetID)
+	if targetID == "" {
+		targetID = strings.TrimSpace(requestedTargetID)
+	}
+	executionLocation := strings.TrimSpace(result.ExecutionLocation)
+	if payload, ok := result.Result.(map[string]any); ok && payload != nil {
+		out := cloneAnyMap(payload)
+		if strings.TrimSpace(anyToString(out["target_id"])) == "" && targetID != "" {
+			out["target_id"] = targetID
+		}
+		if strings.TrimSpace(anyToString(out["execution_location"])) == "" && executionLocation != "" {
+			out["execution_location"] = executionLocation
+		}
+		return out
+	}
+	out := map[string]any{}
+	if targetID != "" {
+		out["target_id"] = targetID
+	}
+	if executionLocation != "" {
+		out["execution_location"] = executionLocation
+	}
+	if result.Result != nil {
+		out["result"] = result.Result
+	}
+	return out
 }
 
 type targetToolPolicyError struct {
@@ -3517,12 +3546,14 @@ func (r *run) toolTerminalExec(ctx context.Context, command string, stdin string
 	}
 
 	result := map[string]any{
-		"stdout":      outcome.Stdout,
-		"stderr":      outcome.Stderr,
-		"exit_code":   outcome.ExitCode,
-		"duration_ms": outcome.DurationMS,
-		"truncated":   outcome.Truncated,
-		"timed_out":   outcome.TimedOut,
+		"execution_location": "local_runtime",
+		"cwd":                cwdAbs,
+		"stdout":             outcome.Stdout,
+		"stderr":             outcome.Stderr,
+		"exit_code":          outcome.ExitCode,
+		"duration_ms":        outcome.DurationMS,
+		"truncated":          outcome.Truncated,
+		"timed_out":          outcome.TimedOut,
 	}
 	for k, v := range terminalExecTimeoutDecisionResult(timeoutDecision) {
 		result[k] = v

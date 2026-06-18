@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/floegence/redeven/internal/agentprotocol"
 )
@@ -20,6 +22,8 @@ func (c *cli) targetsCmd(args []string) int {
 		return c.targetsListCmd(args[1:])
 	case "resolve":
 		return c.targetsResolveCmd(args[1:])
+	case "exec":
+		return c.targetsExecCmd(args[1:])
 	default:
 		writeErrorWithHelp(
 			c.stderr,
@@ -109,6 +113,73 @@ func (c *cli) targetsResolveCmd(args []string) int {
 	}
 	fmt.Fprintf(c.stdout, "%s\t%s\t%s\n", target.ID, target.Status, target.Label)
 	return 0
+}
+
+func (c *cli) targetsExecCmd(args []string) int {
+	fs := newCLIFlagSet("targets exec")
+	targetName := fs.String("target", "current", "Target id, current, label, env_public_id, or local_environment_public_id.")
+	command := fs.String("command", "", "Shell command to execute on the target.")
+	cwd := fs.String("cwd", "", "Working directory on the selected target.")
+	timeout := fs.Duration("timeout", 120*time.Second, "Command timeout (max 10m).")
+	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).")
+	jsonOut := fs.Bool("json", false, "Write the protocol JSON envelope.")
+
+	if err := parseCommandFlags(fs, args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			writeText(c.stdout, targetsExecHelpText())
+			return 0
+		}
+		message, details := translateFlagParseError("targets exec", err)
+		writeErrorWithHelp(c.stderr, message, details, targetsExecHelpText())
+		return 2
+	}
+
+	if strings.TrimSpace(*command) == "" {
+		message := "missing required flag for `redeven targets exec`: --command"
+		if *jsonOut {
+			return c.writeAgentProtocolFailure(agentprotocol.ErrCodeTargetExecFailed, message, strings.TrimSpace(*targetName), true)
+		}
+		writeErrorWithHelp(c.stderr, message, []string{"Example: redeven targets exec --target current --command 'uname -a' --json"}, targetsExecHelpText())
+		return 2
+	}
+
+	result, err := agentprotocol.ExecuteTargetCommand(context.Background(), agentprotocol.TargetExecOptions{
+		StateRoot: *stateRoot,
+		Target:    *targetName,
+		Command:   *command,
+		CWD:       *cwd,
+		Timeout:   *timeout,
+	})
+	if err != nil {
+		if errors.Is(err, agentprotocol.ErrTargetNotFound) {
+			if *jsonOut {
+				return c.writeAgentProtocolFailure(agentprotocol.ErrCodeTargetNotFound, "target not found", strings.TrimSpace(*targetName), true)
+			}
+			writeErrorWithHelp(c.stderr, "target not found", []string{"Run `redeven targets list` to see available targets."}, targetsExecHelpText())
+			return 2
+		}
+		return c.writeAgentProtocolFailure(agentprotocol.ErrCodeTargetExecFailed, err.Error(), strings.TrimSpace(*targetName), *jsonOut)
+	}
+	if *jsonOut {
+		return c.writeAgentProtocolSuccess(result, result.TargetID, true)
+	}
+	if !result.Supported {
+		fmt.Fprintln(c.stderr, strings.TrimSpace(result.Message))
+		return 1
+	}
+	if result.Stdout != "" {
+		_, _ = c.stdout.Write([]byte(result.Stdout))
+	}
+	if result.Stderr != "" {
+		_, _ = c.stderr.Write([]byte(result.Stderr))
+	}
+	if result.TimedOut {
+		return 124
+	}
+	if result.ExitCode < 0 || result.ExitCode > 125 {
+		return 1
+	}
+	return result.ExitCode
 }
 
 func (c *cli) writeAgentProtocolSuccess(data any, targetID string, jsonOut bool) int {

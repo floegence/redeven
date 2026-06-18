@@ -103,6 +103,7 @@ func TestRunCLIHelp(t *testing.T) {
 			"local automation",
 			"redeven targets list --json",
 			"redeven targets resolve --target local --json",
+			"redeven targets exec --target current --command 'uname -a' --json",
 		)
 	})
 
@@ -116,7 +117,7 @@ func TestRunCLIHelp(t *testing.T) {
 		}
 		assertContainsAll(t, stdout,
 			"redeven env",
-			"environment status, diagnostics, stop, start, restart, and update requests",
+			"environment status, runtime attach diagnostics, stop, start, restart, and update requests",
 			"instead of inferring Docker, SSH, systemd, or process-manager commands",
 			"redeven env status --target local --json",
 		)
@@ -589,6 +590,130 @@ func TestTargetsCommandJSON(t *testing.T) {
 		}
 	})
 
+	t.Run("exec writes local execution provenance", func(t *testing.T) {
+		code, stdout, stderr := runCLITest(t, "targets", "exec", "--state-root", stateRoot, "--target", "current", "--command", "printf cli-ok", "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+		}
+		if payload["ok"] != true {
+			t.Fatalf("unexpected envelope: %#v", payload)
+		}
+		data := payload["data"].(map[string]any)
+		if data["target_id"] != "local:local" || data["execution_location"] != agentprotocol.TargetExecutionLocationLocalRuntime {
+			t.Fatalf("exec provenance = %#v", data)
+		}
+		if data["stdout"] != "cli-ok" || data["exit_code"].(float64) != 0 {
+			t.Fatalf("exec result = %#v", data)
+		}
+		trace := payload["trace"].(map[string]any)
+		if trace["target_id"] != "local:local" {
+			t.Fatalf("trace target_id = %#v", trace["target_id"])
+		}
+	})
+
+	t.Run("exec unsupported target returns structured success envelope", func(t *testing.T) {
+		containerTarget := "local:container:docker:dev:abc12345"
+		writeCLICatalogConnection(t, stateRoot, "container-dev", map[string]any{
+			"schema_version": 1,
+			"record_kind":    "connection",
+			"kind":           "runtime_target",
+			"id":             containerTarget,
+			"label":          "Dev Container",
+			"host_access": map[string]any{
+				"kind": "local_host",
+			},
+			"placement": map[string]any{
+				"kind":             "container_process",
+				"container_engine": "docker",
+				"container_ref":    "dev",
+				"runtime_root":     "/workspace",
+			},
+		})
+
+		code, stdout, stderr := runCLITest(t, "targets", "exec", "--state-root", stateRoot, "--target", containerTarget, "--command", "date", "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+		}
+		if payload["ok"] != true {
+			t.Fatalf("unexpected envelope: %#v", payload)
+		}
+		data := payload["data"].(map[string]any)
+		if data["supported"] != false || data["reason_code"] != agentprotocol.TargetExecReasonUnsupportedTargetKind {
+			t.Fatalf("unexpected unsupported exec result: %#v", data)
+		}
+		if data["target_id"] != containerTarget {
+			t.Fatalf("target_id = %#v, want %q", data["target_id"], containerTarget)
+		}
+		if strings.Contains(stdout, "docker exec") || strings.Contains(stdout, "ssh ") || strings.Contains(stdout, "systemctl") {
+			t.Fatalf("unsupported exec result contains forbidden low-level command: %s", stdout)
+		}
+	})
+
+	t.Run("exec recognized unsupported target shape returns structured success envelope", func(t *testing.T) {
+		providerTarget := "provider:https%3A%2F%2Fredeven.test:env:env_456"
+		code, stdout, stderr := runCLITest(t, "targets", "exec", "--state-root", stateRoot, "--target", providerTarget, "--command", "date", "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+		}
+		if payload["ok"] != true {
+			t.Fatalf("unexpected envelope: %#v", payload)
+		}
+		data := payload["data"].(map[string]any)
+		if data["supported"] != false || data["reason_code"] != agentprotocol.TargetExecReasonUnsupportedTargetKind {
+			t.Fatalf("unexpected unsupported exec result: %#v", data)
+		}
+		if data["target_id"] != providerTarget {
+			t.Fatalf("target_id = %#v, want %q", data["target_id"], providerTarget)
+		}
+		trace := payload["trace"].(map[string]any)
+		if trace["target_id"] != providerTarget {
+			t.Fatalf("trace target_id = %#v", trace["target_id"])
+		}
+	})
+
+	t.Run("exec password ssh target returns structured success envelope", func(t *testing.T) {
+		passwordTarget := "ssh:devbox:22:password:remote_default"
+		writeCLICatalogConnection(t, stateRoot, "ssh-password-dev", map[string]any{
+			"schema_version":  1,
+			"record_kind":     "connection",
+			"kind":            "ssh",
+			"id":              passwordTarget,
+			"label":           "Password Devbox",
+			"ssh_destination": "devbox",
+			"ssh_port":        22,
+			"auth_mode":       "password",
+			"runtime_root":    "remote_default",
+		})
+
+		code, stdout, stderr := runCLITest(t, "targets", "exec", "--state-root", stateRoot, "--target", passwordTarget, "--command", "date", "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+		}
+		if payload["ok"] != true {
+			t.Fatalf("unexpected envelope: %#v", payload)
+		}
+		data := payload["data"].(map[string]any)
+		if data["supported"] != false || data["reason_code"] != agentprotocol.TargetExecReasonPasswordAuthUnavailable {
+			t.Fatalf("unexpected password ssh exec result: %#v", data)
+		}
+	})
+
 	t.Run("resolve missing target returns error envelope", func(t *testing.T) {
 		code, stdout, stderr := runCLITest(t, "targets", "resolve", "--state-root", stateRoot, "--target", "missing", "--json")
 		if code != 1 {
@@ -633,6 +758,22 @@ func runCLITestWithStdin(t *testing.T, stdinText string, args ...string) (int, s
 	var stderr bytes.Buffer
 	code := runCLI(args, strings.NewReader(stdinText), &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
+}
+
+func writeCLICatalogConnection(t *testing.T, stateRoot string, name string, value map[string]any) {
+	t.Helper()
+	dir := filepath.Join(stateRoot, "catalog", "connections")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("MkdirAll(%s) error = %v", dir, err)
+	}
+	body, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent() error = %v", err)
+	}
+	path := filepath.Join(dir, name+".json")
+	if err := os.WriteFile(path, append(body, '\n'), 0o600); err != nil {
+		t.Fatalf("WriteFile(%s) error = %v", path, err)
+	}
 }
 
 func assertContainsAll(t *testing.T, text string, needles ...string) {

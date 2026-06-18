@@ -84,6 +84,57 @@ Follow this skill.`
 	}
 }
 
+func TestSkillManager_EmbedsRedevenEnvironmentSystemSkill(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	stateDir := t.TempDir()
+	mgr := newSkillManager(workspace, stateDir)
+	mgr.userHome = workspace
+	catalog := mgr.Reload()
+	var entry *SkillCatalogEntry
+	for i := range catalog.Skills {
+		if catalog.Skills[i].Name == "redeven-environment" {
+			entry = &catalog.Skills[i]
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatalf("redeven-environment system skill missing from catalog: %#v", catalog.Skills)
+	}
+	if entry.Scope != string(SkillSourceTypeSystem) || !entry.Enabled || !entry.Effective {
+		t.Fatalf("unexpected system skill entry: %#v", entry)
+	}
+
+	activation, alreadyActive, err := mgr.Activate("redeven-environment", "act", false)
+	if err != nil {
+		t.Fatalf("Activate(redeven-environment) error = %v", err)
+	}
+	if alreadyActive {
+		t.Fatalf("first activation should not be already active")
+	}
+	if !strings.Contains(activation.Content, "redeven targets exec") || !strings.Contains(activation.Content, "terminal.exec") {
+		t.Fatalf("unexpected system skill body: %q", activation.Content)
+	}
+
+	sources, err := mgr.ListSources()
+	if err != nil {
+		t.Fatalf("ListSources() error = %v", err)
+	}
+	foundSource := false
+	for _, source := range sources.Items {
+		if source.SkillPath == entry.Path {
+			foundSource = true
+			if source.SourceType != SkillSourceTypeSystem || source.SourceID != "system:redeven-environment" {
+				t.Fatalf("unexpected system skill source: %#v", source)
+			}
+		}
+	}
+	if !foundSource {
+		t.Fatalf("missing system skill source for %s: %#v", entry.Path, sources.Items)
+	}
+}
+
 func TestSkillManager_ModeAwareFallbackAndToggles(t *testing.T) {
 	t.Parallel()
 
@@ -124,11 +175,11 @@ mode_hint:
 		t.Fatalf("expected at least two catalog skills")
 	}
 
-	actList := mgr.List("act")
+	actList := filterSkillMetaByName(mgr.List("act"), "mode-skill")
 	if len(actList) != 1 || strings.TrimSpace(actList[0].Description) != "act variant" {
 		t.Fatalf("unexpected act skills: %#v", actList)
 	}
-	planList := mgr.List("plan")
+	planList := filterSkillMetaByName(mgr.List("plan"), "mode-skill")
 	if len(planList) != 1 || strings.TrimSpace(planList[0].Description) != "plan variant" {
 		t.Fatalf("unexpected plan skills: %#v", planList)
 	}
@@ -137,11 +188,11 @@ mode_hint:
 	if err != nil {
 		t.Fatalf("PatchToggles disable primary: %v", err)
 	}
-	actList = mgr.List("act")
+	actList = filterSkillMetaByName(mgr.List("act"), "mode-skill")
 	if len(actList) != 0 {
 		t.Fatalf("act list should be empty after disabling primary, got %#v", actList)
 	}
-	planList = mgr.List("plan")
+	planList = filterSkillMetaByName(mgr.List("plan"), "mode-skill")
 	if len(planList) != 1 || strings.TrimSpace(planList[0].Description) != "plan variant" {
 		t.Fatalf("unexpected plan skills after toggle: %#v", planList)
 	}
@@ -217,12 +268,22 @@ This content should appear in overlay.`
 	}
 	contract := resolveRunCapabilityContract(r, nil, false)
 	prompt := r.buildLayeredSystemPrompt("objective", "build", TaskComplexityStandard, 0, 8, true, nil, newRuntimeState("objective"), "", contract)
-	if !strings.Contains(prompt, "Available skills: prompt-skill") {
+	if !strings.Contains(prompt, "Available skills:") || !strings.Contains(prompt, "prompt-skill") {
 		t.Fatalf("prompt missing skills catalog: %q", prompt)
 	}
 	if !strings.Contains(prompt, "This content should appear in overlay") {
 		t.Fatalf("prompt missing active skill overlay: %q", prompt)
 	}
+}
+
+func filterSkillMetaByName(items []SkillMeta, name string) []SkillMeta {
+	out := make([]SkillMeta, 0, len(items))
+	for _, item := range items {
+		if item.Name == name {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 type subagentOpenAISimpleMock struct{}
