@@ -84,12 +84,11 @@ describe('desktopSessionContext', () => {
 
     expect(snapshot).toMatchObject({
       local_environment_id: 'gateway:bastion:env:env_demo',
-      renderer_storage_scope_id: 'gateway:bastion:env:env_demo',
+      renderer_storage_scope_id: 'gateway:bastion:env:env_demo:session:gws_demo',
       target_kind: 'gateway_environment',
       session_source: 'runtime_gateway',
       label: 'Demo Env',
     });
-    expect(JSON.stringify(snapshot)).not.toContain('gws_demo');
     expect(JSON.stringify(snapshot)).not.toContain('proof');
     expect(JSON.stringify(snapshot)).not.toContain('artifact');
   });

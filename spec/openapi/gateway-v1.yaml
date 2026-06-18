@@ -2,10 +2,8 @@ openapi: 3.1.0
 x-redeven-contract-scope:
   includes: /gateway/v1/* JSON protocol endpoints only.
   excludes:
-    - Gateway Env App proxy routes such as /
-    - /_redeven_proxy/*
-    - /_redeven_direct/*
-    - /api/local/*
+    - Gateway Env App page/data routes on isolated local-direct listeners.
+    - Desktop bridge Local UI routes such as /, /_redeven_proxy/*, /_redeven_direct/*, and /api/local/*.
     - Desktop bridge stdio frame and hello protocol schemas.
 x-redeven-signature-payload:
   algorithm: ed25519
@@ -133,11 +131,6 @@ paths:
       responses:
         '200':
           description: Gateway open-session artifact.
-          headers:
-            Set-Cookie:
-              description: Local direct artifacts may set a Gateway profile session cookie.
-              schema:
-                type: string
           content:
             application/json:
               schema:

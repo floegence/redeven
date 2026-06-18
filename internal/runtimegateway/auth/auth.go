@@ -69,9 +69,6 @@ func (v *Verifier) Verify(ctx context.Context, r *http.Request, body []byte, bin
 	if !ok {
 		return VerifiedRequest{}, errors.New("Gateway client is not paired")
 	}
-	if !v.consumeNonce(clientKeyID, nonce, ts, now) {
-		return VerifiedRequest{}, errors.New("Gateway authentication nonce was already used")
-	}
 	bodyDigest, err := security.CanonicalJSONDigestFromBytes(body)
 	if err != nil {
 		return VerifiedRequest{}, errors.New("Gateway request body is not canonical JSON")
@@ -91,6 +88,9 @@ func (v *Verifier) Verify(ctx context.Context, r *http.Request, body []byte, bin
 	}
 	if !security.VerifySignature(publicKey, payload, signature) {
 		return VerifiedRequest{}, errors.New("Gateway request signature is invalid")
+	}
+	if !v.consumeNonce(clientKeyID, nonce, ts, now) {
+		return VerifiedRequest{}, errors.New("Gateway authentication nonce was already used")
 	}
 	return VerifiedRequest{
 		GatewayID:       gatewayID,

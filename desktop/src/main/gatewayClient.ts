@@ -60,7 +60,6 @@ export type GatewayOpenSessionResponse = Readonly<{
   gateway_session_id: string;
   gateway_env_id: string;
   connect_artifact: GatewayConnectArtifact;
-  set_cookie_headers?: readonly string[];
   diagnostics_hint?: Readonly<{
     gateway_env_id: string;
     connection_kind: string;
@@ -158,7 +157,6 @@ type GatewayTransportCallOptions = GatewayRequestOptions & Readonly<{
 
 type GatewayHTTPDataResult = Readonly<{
   data: unknown;
-  set_cookie_headers: readonly string[];
 }>;
 
 export class GatewayClientError extends Error {
@@ -243,15 +241,6 @@ function parseGatewayHTTPResponse(raw: string, statusCode: number): unknown {
     );
   }
   return Object.prototype.hasOwnProperty.call(parsed, 'data') ? parsed.data : parsed;
-}
-
-function responseSetCookieHeaders(headers: http.IncomingHttpHeaders): readonly string[] {
-  const values = headers['set-cookie'];
-  if (Array.isArray(values)) {
-    return values.map(compact).filter(Boolean);
-  }
-  const single = compact(values);
-  return single ? [single] : [];
 }
 
 function responseStatusCode(raw: string): number {
@@ -350,7 +339,6 @@ function requestGatewayJSON(
           try {
             resolve({
               data: parseGatewayHTTPResponse(raw, statusCode),
-              set_cookie_headers: responseSetCookieHeaders(response.headers),
             });
           } catch (error) {
             reject(error);
@@ -503,7 +491,6 @@ function requestGatewayBridgeJSON(
         try {
           resolve({
             data: parseGatewayHTTPResponse(responseBody(raw), responseStatusCode(raw)),
-            set_cookie_headers: rawGatewaySetCookieHeaders(raw),
           });
         } catch (error) {
           reject(error);
@@ -605,22 +592,6 @@ function normalizeGatewayCapability(value: unknown): DesktopGatewayCapability | 
     default:
       return null;
   }
-}
-
-function rawGatewaySetCookieHeaders(raw: string): readonly string[] {
-  const splitAt = raw.indexOf('\r\n\r\n');
-  const head = splitAt >= 0 ? raw.slice(0, splitAt) : raw;
-  return head
-    .split('\r\n')
-    .slice(1)
-    .map((line) => {
-      const separator = line.indexOf(':');
-      if (separator < 0 || line.slice(0, separator).trim().toLowerCase() !== 'set-cookie') {
-        return '';
-      }
-      return compact(line.slice(separator + 1));
-    })
-    .filter(Boolean);
 }
 
 function normalizeGatewayStatus(value: unknown): GatewayCatalogResponse['gateway']['status'] {
@@ -961,14 +932,7 @@ function normalizePairingCompleteResponse(value: unknown): GatewayPairingComplet
   return response;
 }
 
-function normalizedGatewayOrigin(record: GatewayRecord): string {
-  if (record.connection.kind !== 'url') {
-    throw new GatewayClientError('GATEWAY_TRANSPORT_UNSUPPORTED', 'This Gateway transport is not handled by the URL client.');
-  }
-  return new URL(gatewayURL(record.connection, 'gateway/v1/open-session')).origin;
-}
-
-function assertLocalDirectArtifactURL(record: GatewayRecord, rawURL: string): string {
+function assertLocalDirectArtifactURL(rawURL: string): string {
   let parsed: URL;
   try {
     parsed = new URL(rawURL);
@@ -981,14 +945,13 @@ function assertLocalDirectArtifactURL(record: GatewayRecord, rawURL: string): st
   if (parsed.search || parsed.hash) {
     throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact URL must not include query or fragment data.');
   }
-  const gatewayOrigin = normalizedGatewayOrigin(record);
-  if (parsed.origin !== gatewayOrigin) {
-    throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact URL must stay on the paired Gateway origin.');
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact URL must use HTTP or HTTPS.');
   }
   return parsed.toString();
 }
 
-function normalizeConnectArtifact(value: unknown, record?: GatewayRecord): GatewayConnectArtifact {
+function normalizeConnectArtifact(value: unknown): GatewayConnectArtifact {
   if (!value || typeof value !== 'object') {
     throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway open-session response is missing connect_artifact.');
   }
@@ -1005,7 +968,7 @@ function normalizeConnectArtifact(value: unknown, record?: GatewayRecord): Gatew
     if (!url) {
       throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway direct artifact is missing its URL.');
     }
-    const normalizedURL = record ? assertLocalDirectArtifactURL(record, url) : url;
+    const normalizedURL = assertLocalDirectArtifactURL(url);
     return {
       kind,
       url: normalizedURL,
@@ -1032,7 +995,7 @@ function normalizeConnectArtifact(value: unknown, record?: GatewayRecord): Gatew
   throw new GatewayClientError('GATEWAY_INVALID_ARTIFACT', 'Gateway connect artifact kind is not supported.');
 }
 
-export function normalizeGatewayOpenSessionResponse(value: unknown, record?: GatewayRecord): GatewayOpenSessionResponse {
+export function normalizeGatewayOpenSessionResponse(value: unknown): GatewayOpenSessionResponse {
   if (!value || typeof value !== 'object') {
     throw new GatewayClientError('GATEWAY_INVALID_RESPONSE', 'Gateway open-session response is invalid.');
   }
@@ -1049,7 +1012,7 @@ export function normalizeGatewayOpenSessionResponse(value: unknown, record?: Gat
     protocol_version: normalizeProtocolVersion(candidate.protocol_version),
     gateway_session_id: gatewaySessionID,
     gateway_env_id: gatewayEnvID,
-    connect_artifact: normalizeConnectArtifact(candidate.connect_artifact, record),
+    connect_artifact: normalizeConnectArtifact(candidate.connect_artifact),
     ...(diagnostics ? {
       diagnostics_hint: {
         gateway_env_id: compact(diagnostics.gateway_env_id),
@@ -1114,10 +1077,7 @@ export class GatewayURLClient {
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     });
-    const response = {
-      ...normalizeGatewayOpenSessionResponse(data.data, record),
-      set_cookie_headers: data.set_cookie_headers,
-    };
+    const response = normalizeGatewayOpenSessionResponse(data.data);
     if (response.gateway_env_id !== request.gateway_env_id) {
       throw new GatewayClientError('GATEWAY_ENV_ID_MISMATCH', 'Gateway open-session response does not match the requested environment.');
     }
@@ -1262,10 +1222,7 @@ export class GatewayBridgeClient {
       timeoutMs: options.timeoutMs,
       signal: options.signal,
     });
-    const response = {
-      ...normalizeGatewayOpenSessionResponse(data.data),
-      set_cookie_headers: data.set_cookie_headers,
-    };
+    const response = normalizeGatewayOpenSessionResponse(data.data);
     if (response.gateway_env_id !== request.gateway_env_id) {
       throw new GatewayClientError('GATEWAY_ENV_ID_MISMATCH', 'Gateway open-session response does not match the requested environment.');
     }

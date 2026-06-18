@@ -131,8 +131,8 @@ describe('desktopTarget', () => {
     });
   });
 
-  it('builds Gateway targets with stable Gateway-scoped session keys', () => {
-    expect(gatewayDesktopSessionKey(' bastion ', ' env/demo ')).toBe('gateway:bastion:env:env%2Fdemo');
+  it('builds Gateway targets with open-session scoped session keys', () => {
+    expect(gatewayDesktopSessionKey(' bastion ', ' env/demo ', ' gws_123 ')).toBe('gateway:bastion:env:env%2Fdemo:session:gws_123');
     expect(buildGatewayDesktopTarget({
       gatewayID: ' bastion ',
       gatewayLabel: ' Bastion Gateway ',
@@ -141,7 +141,7 @@ describe('desktopTarget', () => {
       gatewaySessionID: ' gws_123 ',
     })).toEqual({
       kind: 'gateway_environment',
-      session_key: 'gateway:bastion:env:env%2Fdemo',
+      session_key: 'gateway:bastion:env:env%2Fdemo:session:gws_123',
       environment_id: 'gateway:bastion:env:env/demo',
       label: 'Demo Env',
       gateway_id: 'bastion',
