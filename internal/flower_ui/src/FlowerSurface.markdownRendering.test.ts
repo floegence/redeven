@@ -16,7 +16,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const src = surfaceSource();
 
     expect(src).toContain("import { FlowerMarkdownBlock } from './chat/markdown/FlowerMarkdownBlock';");
-    expect(src).toContain("block().block_type === 'markdown'");
+    expect(src).toContain("if (block.block_type === 'markdown')");
     expect(src).toContain('<FlowerMarkdownBlock');
     expect(src).toContain('copyCodeLabel={copy().chat.copyCode}');
     expect(src).toContain('codeCopiedLabel={copy().chat.codeCopied}');
@@ -52,7 +52,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
 
   it('renders the streaming cursor after every message block', () => {
     const src = surfaceSource();
-    const blockListIndex = src.indexOf('<Index each={blocks()}>');
+    const blockListIndex = src.indexOf('<Index each={blocks}>');
     const cursorTailIndex = src.indexOf('flower-message-streaming-tail');
 
     expect(blockListIndex).toBeGreaterThanOrEqual(0);
@@ -72,8 +72,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('flower-message-copy-button');
     expect(src).toContain('flower-message-copy-icon-idle');
     expect(src).toContain('flower-message-copy-icon-copied');
-    expect(src).toContain('formatMessageTime(message().created_at_ms)');
+    expect(src).toContain('formatMessageTime(message.created_at_ms)');
     expect(src).toContain('flower-message-time');
-    expect(src).toContain("block().block_type !== 'thinking'");
+    expect(src).toContain("block.type === 'content' && block.block_type !== 'thinking'");
   });
 });
