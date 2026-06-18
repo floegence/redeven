@@ -322,6 +322,10 @@ func enforceUserProvidedContextBudget(in *model.UserProvidedContext, budget int)
 		textTokens(out.SourceSurfaceID) +
 		textTokens(out.TargetID) +
 		textTokens(out.Locality) +
+		textTokens(out.CurrentTargetID) +
+		textTokens(out.SourceEnvPublicID) +
+		textTokens(out.RuntimeHint) +
+		textTokens(out.SessionSource) +
 		textTokens(out.SuggestedWorkingDir)
 	remaining -= headerCost
 	if remaining <= 0 {
@@ -373,6 +377,10 @@ func userProvidedContextTokens(ctx *model.UserProvidedContext) int {
 		textTokens(ctx.SourceSurfaceID) +
 		textTokens(ctx.TargetID) +
 		textTokens(ctx.Locality) +
+		textTokens(ctx.CurrentTargetID) +
+		textTokens(ctx.SourceEnvPublicID) +
+		textTokens(ctx.RuntimeHint) +
+		textTokens(ctx.SessionSource) +
 		textTokens(ctx.SuggestedWorkingDir)
 	for _, item := range ctx.Items {
 		total += userProvidedContextItemTokens(item)

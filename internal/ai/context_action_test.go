@@ -331,9 +331,10 @@ func TestContextActionToUserProvidedContext(t *testing.T) {
 		Target:        ContextActionTarget{TargetID: " local:local ", Locality: " auto "},
 		Source:        ContextActionSource{Surface: " desktop_welcome_environment_card ", SurfaceID: " local "},
 		ExecutionContext: &ContextActionExecutionHint{
-			CurrentTargetID: "local:local",
-			RuntimeHint:     "auto",
-			SessionSource:   "local_runtime",
+			CurrentTargetID:   "local:container:docker:redeven-dev:abcd1234",
+			SourceEnvPublicID: "env_123",
+			RuntimeHint:       "auto",
+			SessionSource:     "local_runtime",
 		},
 		Context: []ContextActionContextItem{
 			{
@@ -357,6 +358,12 @@ func TestContextActionToUserProvidedContext(t *testing.T) {
 	}
 	if action.TargetID != "local:local" || action.Locality != "auto" {
 		t.Fatalf("unexpected target: %#v", action)
+	}
+	if action.CurrentTargetID != "local:container:docker:redeven-dev:abcd1234" ||
+		action.SourceEnvPublicID != "env_123" ||
+		action.RuntimeHint != "auto" ||
+		action.SessionSource != "local_runtime" {
+		t.Fatalf("unexpected execution context: %#v", action)
 	}
 	if action.SuggestedWorkingDir != "/workspace/redeven" {
 		t.Fatalf("SuggestedWorkingDir=%q, want /workspace/redeven", action.SuggestedWorkingDir)

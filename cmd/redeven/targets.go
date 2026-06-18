@@ -67,7 +67,7 @@ func (c *cli) targetsListCmd(args []string) int {
 
 func (c *cli) targetsResolveCmd(args []string) int {
 	fs := newCLIFlagSet("targets resolve")
-	targetName := fs.String("target", "", "Target id, label, env_public_id, or local_environment_public_id.")
+	targetName := fs.String("target", "", "Target id, current, label, env_public_id, or local_environment_public_id.")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).")
 	jsonOut := fs.Bool("json", false, "Write the protocol JSON envelope.")
 

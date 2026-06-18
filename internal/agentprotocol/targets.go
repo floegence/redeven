@@ -110,10 +110,10 @@ func DiscoverTargets(opts DiscoverTargetsOptions) (TargetCatalog, error) {
 
 func ResolveTarget(catalog TargetCatalog, rawTarget string) (TargetDescriptor, error) {
 	target := strings.TrimSpace(rawTarget)
-	if target == "" && len(catalog.Targets) == 1 {
+	normalized := strings.ToLower(target)
+	if (target == "" || normalized == "current") && len(catalog.Targets) == 1 {
 		return catalog.Targets[0], nil
 	}
-	normalized := strings.ToLower(target)
 	for _, candidate := range catalog.Targets {
 		if normalized == strings.ToLower(strings.TrimSpace(candidate.ID)) ||
 			normalized == strings.ToLower(strings.TrimSpace(candidate.Label)) ||

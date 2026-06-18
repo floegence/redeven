@@ -157,6 +157,10 @@ func TestBuilder_BuildPromptPack(t *testing.T) {
 			SourceSurfaceID:     "local",
 			TargetID:            "local:local",
 			Locality:            "auto",
+			CurrentTargetID:     "local:container:docker:redeven-dev:abcd1234",
+			SourceEnvPublicID:   "env_123",
+			RuntimeHint:         "auto",
+			SessionSource:       "local_runtime",
 			SuggestedWorkingDir: "/workspace/redeven",
 			Items: []model.UserProvidedContextItem{{
 				Kind:    "text_snapshot",
@@ -166,7 +170,7 @@ func TestBuilder_BuildPromptPack(t *testing.T) {
 			}},
 		},
 		Capability:     model.ModelCapability{MaxContextTokens: 2048},
-		MaxInputTokens: 512,
+		MaxInputTokens: 1024,
 	})
 	if err != nil {
 		t.Fatalf("BuildPromptPack: %v", err)
@@ -201,6 +205,12 @@ func TestBuilder_BuildPromptPack(t *testing.T) {
 	}
 	if got := pack.UserProvidedContext.SourceSurface; got != "desktop_welcome_environment_card" {
 		t.Fatalf("UserProvidedContext.SourceSurface=%q", got)
+	}
+	if got := pack.UserProvidedContext.CurrentTargetID; got != "local:container:docker:redeven-dev:abcd1234" {
+		t.Fatalf("UserProvidedContext.CurrentTargetID=%q", got)
+	}
+	if got := pack.UserProvidedContext.SessionSource; got != "local_runtime" {
+		t.Fatalf("UserProvidedContext.SessionSource=%q", got)
 	}
 	if len(pack.UserProvidedContext.Items) != 1 || pack.UserProvidedContext.Items[0].Title != "Local Environment" {
 		t.Fatalf("unexpected UserProvidedContext items: %#v", pack.UserProvidedContext.Items)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/floegence/redeven/internal/agentprotocol"
@@ -27,6 +28,7 @@ func TestRunCLIHelp(t *testing.T) {
 		assertContainsAll(t, stdout,
 			"Redeven runtime and Local UI launcher.",
 			"Quick start:",
+			"env         Inspect and plan Redeven environment lifecycle operations.",
 			"targets     Inspect Redeven targets for local automation.",
 			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket <bootstrap-ticket>",
 			"redeven run --mode local",
@@ -101,6 +103,22 @@ func TestRunCLIHelp(t *testing.T) {
 			"local automation",
 			"redeven targets list --json",
 			"redeven targets resolve --target local --json",
+		)
+	})
+
+	t.Run("env help includes lifecycle contract", func(t *testing.T) {
+		code, stdout, stderr := runCLITest(t, "help", "env")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0", code)
+		}
+		if stderr != "" {
+			t.Fatalf("stderr = %q, want empty", stderr)
+		}
+		assertContainsAll(t, stdout,
+			"redeven env",
+			"environment status, diagnostics, stop, start, restart, and update requests",
+			"instead of inferring Docker, SSH, systemd, or process-manager commands",
+			"redeven env status --target local --json",
 		)
 	})
 }
@@ -623,5 +641,286 @@ func assertContainsAll(t *testing.T, text string, needles ...string) {
 		if !strings.Contains(text, needle) {
 			t.Fatalf("expected output to contain %q\nfull output:\n%s", needle, text)
 		}
+	}
+}
+
+func TestEnvCommandJSON(t *testing.T) {
+	stateRoot, err := os.MkdirTemp("/tmp", "rdv-env-cli-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer func() { _ = os.RemoveAll(stateRoot) }()
+	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
+	if err := config.Save(layout.ConfigPath, &config.Config{
+		ProviderOrigin:           "https://redeven.test",
+		ControlplaneBaseURL:      "https://dev.redeven.test",
+		ControlplaneProviderID:   "provider_1",
+		EnvironmentID:            "env_123",
+		LocalEnvironmentPublicID: "le_123",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	statusServer, err := runtimemanagement.NewServer(layout.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
+		return runtimemanagement.RuntimeAttachStatus{
+			State: runtimemanagement.AttachStateReady,
+			Identity: runtimemanagement.RuntimeInstanceIdentity{
+				StateDir:        layout.StateDir,
+				PID:             12345,
+				RuntimeVersion:  "1.2.3",
+				DesktopManaged:  true,
+				DesktopOwnerID:  "desktop_1",
+				StartedAtUnixMS: 1779100944496,
+			},
+			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+				LocalUIURL:  "http://127.0.0.1:23998/",
+				LocalUIURLs: []string{"http://127.0.0.1:23998/"},
+				RuntimeControl: &runtimemanagement.RuntimeControlEndpoint{
+					BaseURL: "http://runtime",
+					Token:   "secret-runtime-control-token",
+				},
+			},
+			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
+				EffectiveRunMode: "desktop",
+				RemoteEnabled:    true,
+			}),
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	if err := statusServer.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer func() { _ = statusServer.Close() }()
+
+	t.Run("list writes sanitized environment targets", func(t *testing.T) {
+		code, stdout, stderr := runCLITest(t, "env", "list", "--state-root", stateRoot, "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		for _, forbidden := range []string{
+			"state_root",
+			"state_dir",
+			"config_path",
+			"runtime_control_socket_path",
+			layout.StateRoot,
+			layout.StateDir,
+			layout.ConfigPath,
+			layout.RuntimeControlSocketPath,
+		} {
+			if forbidden != "" && strings.Contains(stdout, forbidden) {
+				t.Fatalf("list leaked local path material %q: %s", forbidden, stdout)
+			}
+		}
+	})
+
+	t.Run("status writes sanitized runtime summary", func(t *testing.T) {
+		code, stdout, stderr := runCLITest(t, "env", "status", "--state-root", stateRoot, "--target", "local", "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		if strings.Contains(stdout, "secret-runtime-control-token") ||
+			strings.Contains(stdout, `"token"`) ||
+			strings.Contains(stdout, `"runtime_control":{"`) {
+			t.Fatalf("status leaked runtime-control material: %s", stdout)
+		}
+		for _, forbidden := range []string{
+			"state_root",
+			"state_dir",
+			"config_path",
+			"runtime_control_socket_path",
+			layout.StateRoot,
+			layout.StateDir,
+			layout.ConfigPath,
+			layout.RuntimeControlSocketPath,
+		} {
+			if forbidden != "" && strings.Contains(stdout, forbidden) {
+				t.Fatalf("status leaked local path material %q: %s", forbidden, stdout)
+			}
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+		}
+		if payload["ok"] != true {
+			t.Fatalf("unexpected envelope: %#v", payload)
+		}
+		data := payload["data"].(map[string]any)
+		runtime := data["runtime"].(map[string]any)
+		if runtime["state"] != "ready" || runtime["desktop_managed"] != true {
+			t.Fatalf("unexpected runtime summary: %#v", runtime)
+		}
+		operations := data["operations"].(map[string]any)
+		stop := operations["stop"].(map[string]any)
+		if stop["availability"] != "available" || stop["command"] != "redeven env stop --target local:local --json" {
+			t.Fatalf("unexpected stop plan: %#v", stop)
+		}
+	})
+
+	t.Run("current target resolves to default environment", func(t *testing.T) {
+		code, stdout, stderr := runCLITest(t, "env", "status", "--state-root", stateRoot, "--target", "current", "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+		}
+		data := payload["data"].(map[string]any)
+		target := data["target"].(map[string]any)
+		if target["id"] != "local:local" {
+			t.Fatalf("target id = %#v, want local:local", target["id"])
+		}
+	})
+
+	t.Run("resolve keeps container target in Redeven semantics", func(t *testing.T) {
+		target := "local:container:docker:redeven-dev-mysql-db-dev-1:63ce185e"
+		code, stdout, stderr := runCLITest(t, "env", "resolve", "--state-root", stateRoot, "--target", target, "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+		}
+		data := payload["data"].(map[string]any)
+		if data["supported"] != false || data["reason_code"] != agentprotocol.EnvReasonUnsupportedTargetKind {
+			t.Fatalf("unexpected unsupported resolution: %#v", data)
+		}
+		resolvedTarget := data["target"].(map[string]any)
+		if resolvedTarget["kind"] != agentprotocol.TargetKindLocalContainerRuntime {
+			t.Fatalf("target kind = %#v, want local container runtime", resolvedTarget["kind"])
+		}
+	})
+
+	t.Run("restart unsupported target returns business plan", func(t *testing.T) {
+		target := "local:container:docker:redeven-dev-mysql-db-dev-1:63ce185e"
+		code, stdout, stderr := runCLITest(t, "env", "restart", "--state-root", stateRoot, "--target", target, "--json")
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+		}
+		if strings.Contains(stdout, "docker restart") || strings.Contains(stdout, "docker stop") || strings.Contains(stdout, "systemctl") {
+			t.Fatalf("restart plan contains forbidden low-level command: %s", stdout)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+			t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+		}
+		data := payload["data"].(map[string]any)
+		operation := data["operation"].(map[string]any)
+		if operation["availability"] != agentprotocol.OperationAvailabilityUnavailable ||
+			operation["reason_code"] != agentprotocol.EnvReasonUnsupportedTargetKind {
+			t.Fatalf("unexpected restart operation: %#v", operation)
+		}
+	})
+}
+
+func TestEnvRestartStoppedLocalRuntimeReturnsDesktopHandoffPlan(t *testing.T) {
+	stateRoot, err := os.MkdirTemp("/tmp", "rdv-env-stopped-cli-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer func() { _ = os.RemoveAll(stateRoot) }()
+	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
+	if err := config.Save(layout.ConfigPath, &config.Config{
+		ProviderOrigin:           "https://redeven.test",
+		ControlplaneBaseURL:      "https://dev.redeven.test",
+		ControlplaneProviderID:   "provider_1",
+		EnvironmentID:            "env_123",
+		LocalEnvironmentPublicID: "le_123",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	code, stdout, stderr := runCLITest(t, "env", "restart", "--state-root", stateRoot, "--target", "local", "--json")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+	}
+	data := payload["data"].(map[string]any)
+	runtime := data["runtime"].(map[string]any)
+	if runtime["state"] != "not_running" {
+		t.Fatalf("runtime state = %#v, want not_running", runtime["state"])
+	}
+	operation := data["operation"].(map[string]any)
+	if operation["availability"] != agentprotocol.OperationAvailabilityUnavailable ||
+		operation["reason_code"] != agentprotocol.EnvReasonDesktopStartRequired ||
+		operation["performed"] == true {
+		t.Fatalf("unexpected restart operation: %#v", operation)
+	}
+}
+
+func TestEnvStopRechecksDesktopOwnerBeforeStopping(t *testing.T) {
+	stateRoot, err := os.MkdirTemp("/tmp", "rdv-env-stop-owner-cli-*")
+	if err != nil {
+		t.Fatalf("MkdirTemp() error = %v", err)
+	}
+	defer func() { _ = os.RemoveAll(stateRoot) }()
+	layout, err := config.LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
+	if err := config.Save(layout.ConfigPath, &config.Config{
+		ProviderOrigin:           "https://redeven.test",
+		ControlplaneBaseURL:      "https://dev.redeven.test",
+		ControlplaneProviderID:   "provider_1",
+		EnvironmentID:            "env_123",
+		LocalEnvironmentPublicID: "le_123",
+	}); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+	var calls int32
+	statusServer, err := runtimemanagement.NewServer(layout.RuntimeControlSocketPath, func(context.Context) (runtimemanagement.RuntimeAttachStatus, error) {
+		desktopManaged := atomic.AddInt32(&calls, 1) == 1
+		return runtimemanagement.RuntimeAttachStatus{
+			State: runtimemanagement.AttachStateReady,
+			Identity: runtimemanagement.RuntimeInstanceIdentity{
+				StateDir:       layout.StateDir,
+				PID:            os.Getpid(),
+				RuntimeVersion: "1.2.3",
+				DesktopManaged: desktopManaged,
+			},
+			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
+				LocalUIURL: "http://127.0.0.1:23998/",
+			},
+			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
+				EffectiveRunMode: "desktop",
+			}),
+		}, nil
+	})
+	if err != nil {
+		t.Fatalf("NewServer() error = %v", err)
+	}
+	if err := statusServer.Start(context.Background()); err != nil {
+		t.Fatalf("Start() error = %v", err)
+	}
+	defer func() { _ = statusServer.Close() }()
+
+	code, stdout, stderr := runCLITest(t, "env", "stop", "--state-root", stateRoot, "--target", "local", "--json")
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0; stderr=%s", code, stderr)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(stdout), &payload); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v\nstdout=%s", err, stdout)
+	}
+	if payload["ok"] != true {
+		t.Fatalf("unexpected envelope: %#v", payload)
+	}
+	data := payload["data"].(map[string]any)
+	operation := data["operation"].(map[string]any)
+	if operation["availability"] != agentprotocol.OperationAvailabilityBlocked ||
+		operation["reason_code"] != agentprotocol.EnvReasonRuntimeOwnerExternal ||
+		operation["performed"] == true {
+		t.Fatalf("unexpected stop operation: %#v", operation)
 	}
 }
