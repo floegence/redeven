@@ -413,13 +413,10 @@ describe('FlowerSurface navigation threads', () => {
         {
           id: 'm-running',
           role: 'assistant',
-          content: 'Committed paragraph.\n\n```ts\nconsole',
+          content: 'Working...',
           status: 'streaming',
           created_at_ms: 5_000,
-          blocks: [
-            { type: 'markdown', content: 'Committed paragraph.' },
-            { type: 'markdown', content: '```ts\nconsole' },
-          ],
+          blocks: [{ type: 'markdown', content: 'Working...' }],
         },
       ],
     });
@@ -443,8 +440,8 @@ describe('FlowerSurface navigation threads', () => {
           kind: 'message.block_delta' as const,
           payload: {
             message_id: 'm-running',
-            block_index: 1,
-            delta: '.log("still flowing")',
+            block_index: 0,
+            delta: ' still flowing',
           },
         }],
         next_cursor: 2,
@@ -472,16 +469,11 @@ describe('FlowerSurface navigation threads', () => {
     expect(waveAfterSelect).toBeTruthy();
     expect(waveAfterSelect).toBe(waveBeforeClick);
     expect(runtime.querySelector('[data-thread-id="thread-running-wave"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-running"] .flower-chat-md-committed-segment')));
-    const runningMessageRow = runtime.querySelector('[data-flower-message-id="m-running"]');
-    const committedSegment = runtime.querySelector('[data-flower-message-id="m-running"] .flower-chat-md-committed-segment');
 
     liveUpdateReady = true;
-    await waitFor(() => runtime.textContent?.includes('console.log("still flowing")') ?? false, 2500);
+    await waitFor(() => runtime.textContent?.includes('Working... still flowing') ?? false, 2500);
     expect(runtime.querySelector('[data-thread-id="thread-running-wave"] .flower-thread-wave')).toBe(waveAfterSelect);
-    expect(runtime.querySelector('[data-flower-message-id="m-running"]')).toBe(runningMessageRow);
-    expect(runtime.querySelector('[data-flower-message-id="m-running"] .flower-chat-md-committed-segment')).toBe(committedSegment);
-    expect(runtime.textContent).toContain('console.log("still flowing")');
+    expect(runtime.textContent).toContain('Working... still flowing');
   });
 
   it('lets a new selected thread fetch live events even while the previous thread request is still pending', async () => {
@@ -1098,7 +1090,7 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => forkThread.mock.calls.length === 1);
   });
 
-  it('preserves loaded selected-thread transcript while a summary-only list refresh is waiting for detail reload', async () => {
+  it('preserves loaded selected-thread details while a summary-only list refresh is waiting for detail reload', async () => {
     const detailedThread = thread({
       thread_id: 'thread-detail',
       title: 'Detailed thread',
@@ -1168,72 +1160,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.textContent).toContain('Loaded detail stays visible.');
     expect(runtime.textContent).toContain('file.read');
     expect(runtime.querySelector('.flower-activity-inline')).toBeTruthy();
-    expect(runtime.querySelector('.flower-error-card')).toBeNull();
-  });
-
-  it('keeps selected message DOM nodes stable when only another thread changes', async () => {
-    const selectedDetail = thread({
-      thread_id: 'thread-selected-stable',
-      title: 'Selected stable',
-      created_at_ms: 4_000,
-      updated_at_ms: 4_100,
-      status: 'success',
-      messages: [{
-        id: 'm-selected-stable',
-        role: 'assistant',
-        content: 'Selected detail remains selectable.',
-        status: 'complete',
-        created_at_ms: 4_100,
-        blocks: [{ type: 'markdown', content: 'Selected detail remains selectable.' }],
-      }],
-    });
-    const selectedSummary = {
-      ...selectedDetail,
-      target_labels: [...selectedDetail.target_labels],
-      messages: [],
-      input_request: undefined,
-      error: undefined,
-    };
-    const backgroundInitial = thread({
-      thread_id: 'thread-background-changing',
-      title: 'Background changing',
-      created_at_ms: 3_000,
-      updated_at_ms: 3_100,
-      status: 'running',
-      messages: [],
-      read_status: readStatus(false, 310, 'running'),
-    });
-    const backgroundChanged = {
-      ...backgroundInitial,
-      updated_at_ms: 3_200,
-      status: 'success' as const,
-      read_status: readStatus(true, 320, 'success'),
-    };
-    let listSnapshot: readonly FlowerThreadSnapshot[] = [selectedSummary, backgroundInitial];
-    const listThreads = vi.fn(async () => listSnapshot);
-    const loadThread = vi.fn(async () => liveBootstrap(selectedDetail));
-    const runtime = renderSurfaceWithAdapter({
-      ...adapter(true),
-      listThreads,
-      loadThread,
-    });
-
-    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-selected-stable"] button')));
-    (runtime.querySelector('[data-thread-id="thread-selected-stable"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-selected-stable"]')));
-    const selectedMessageRow = runtime.querySelector('[data-flower-message-id="m-selected-stable"]');
-    const refreshCount = listThreads.mock.calls.length;
-
-    listSnapshot = [
-      { ...selectedSummary, target_labels: [...selectedSummary.target_labels] },
-      backgroundChanged,
-    ];
-    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
-    await waitFor(() => listThreads.mock.calls.length > refreshCount);
-    await flush();
-
-    expect(runtime.querySelector('[data-flower-message-id="m-selected-stable"]')).toBe(selectedMessageRow);
-    expect(runtime.querySelector('[data-thread-id="thread-background-changing"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
+    expect(runtime.querySelector('.flower-error-card')?.textContent).toContain('Provider returned a structured failure.');
   });
 
   it('keeps background terminal refreshes when selected detail polling mutates the list', async () => {

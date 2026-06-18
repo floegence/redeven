@@ -40,24 +40,6 @@ export type FlowerTimelineEntry =
     error: FlowerThreadError;
   }>;
 
-export type FlowerTimelineEntryIdentityCache = Map<string, {
-  signature: string;
-  entry: FlowerTimelineEntry;
-}>;
-
-function stableSignatureValue(value: unknown): string {
-  if (value === null || value === undefined) return '';
-  if (typeof value !== 'object') return JSON.stringify(value) ?? String(value);
-  if (Array.isArray(value)) {
-    return `[${value.map(stableSignatureValue).join(',')}]`;
-  }
-  const record = value as Record<string, unknown>;
-  return `{${Object.entries(record)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableSignatureValue(item)}`)
-    .join(',')}}`;
-}
-
 export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock): string {
   return [
     timeline.run_id ?? '',
@@ -93,7 +75,7 @@ export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock)
       item.renderer ?? '',
       item.chips?.map((chip) => [chip.kind, chip.label, chip.value ?? '', chip.tone ?? ''].join(',')).join(';') ?? '',
       item.target_refs?.map((ref) => [ref.kind, ref.label, ref.uri ?? '', String(ref.line ?? '')].join(',')).join(';') ?? '',
-      stableSignatureValue(item.payload),
+      item.payload ? JSON.stringify(item.payload) : '',
       item.metadata ? Object.entries(item.metadata).sort(([left], [right]) => left.localeCompare(right)).map(([key, value]) => `${key}:${value}`).join(',') : '',
     ].join(':')).join('|'),
   ].join('\x1e');
@@ -113,54 +95,8 @@ export function flowerMessageSignature(message: FlowerChatMessage): string {
     message.status,
     String(message.created_at_ms),
     message.blocks?.map(messageBlockSignature).join('\x1d') ?? '',
-    stableSignatureValue(message.context_action),
+    message.context_action ? JSON.stringify(message.context_action) : '',
   ].join('\x1e');
-}
-
-export function flowerTimelineEntrySignature(entry: FlowerTimelineEntry): string {
-  switch (entry.type) {
-    case 'message':
-      return `message:${flowerMessageSignature(entry.message)}:${entry.blocks.map((block) => (
-        block.type === 'content'
-          ? `content:${block.key}:${block.block_index}:${block.block_type}:${block.content}`
-          : `activity:${block.key}:${block.block_index}:${activityTimelineSignature(block.block)}`
-      )).join('\x1d')}`;
-    case 'input_request':
-      return `input:${entry.request.prompt_id}:${stableSignatureValue(entry.request)}`;
-    case 'error':
-      return `error:${entry.error.code ?? ''}:${entry.error.message}`;
-  }
-}
-
-function timelineEntryCacheKey(scope: string, key: string): string {
-  return `${scope}\x1f${key}`;
-}
-
-export function preserveFlowerTimelineEntryIdentity(
-  entries: readonly FlowerTimelineEntry[],
-  cache: FlowerTimelineEntryIdentityCache,
-  scope = '',
-): readonly FlowerTimelineEntry[] {
-  const visibleCacheKeys = new Set<string>();
-  const stableEntries = entries.map((entry) => {
-    const cacheKey = timelineEntryCacheKey(scope, entry.key);
-    visibleCacheKeys.add(cacheKey);
-    const signature = flowerTimelineEntrySignature(entry);
-    const cached = cache.get(cacheKey);
-    if (cached?.signature === signature) {
-      return cached.entry;
-    }
-    cache.set(cacheKey, { signature, entry });
-    return entry;
-  });
-
-  for (const key of Array.from(cache.keys())) {
-    if (!visibleCacheKeys.has(key)) {
-      cache.delete(key);
-    }
-  }
-
-  return stableEntries;
 }
 
 function contentBlocksFromMessage(message: FlowerChatMessage): readonly FlowerRenderableMessageBlock[] {

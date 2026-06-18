@@ -1,4 +1,4 @@
-import type { Accessor, Component, JSX } from 'solid-js';
+import type { Component, JSX } from 'solid-js';
 import { For, Index, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, Copy, FileText, FolderOpen, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
@@ -34,13 +34,9 @@ import type {
 import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import {
   buildFlowerTimelineEntries,
-  preserveFlowerTimelineEntryIdentity,
-  type FlowerTimelineEntryIdentityCache,
   type FlowerRenderableMessageBlock,
   type FlowerTimelineEntry,
 } from './flowerTimelineProjection';
-import { flowerReadSnapshotKey, sameFlowerThreadSnapshot } from './flowerThreadIdentity';
-import { mergeFlowerThreadListRefresh } from './flowerThreadListRefresh';
 import { formatFlowerCurrentModelLabel } from './flowerModelLabel';
 import {
   presentFlowerActivityItem,
@@ -349,7 +345,49 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const selectedThreadRunErrorMessage = createMemo(() => presentRunError(selectedThread()?.error));
   const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
-  const timelineEntryCache: FlowerTimelineEntryIdentityCache = new Map();
+  const readSnapshotKey = (snapshot: FlowerThreadActivitySnapshot | null | undefined): string => [
+    String(Math.max(0, Math.floor(Number(snapshot?.activity_revision ?? 0)))),
+    String(Math.max(0, Math.floor(Number(snapshot?.last_message_at_unix_ms ?? 0)))),
+    trimString(snapshot?.activity_signature),
+    trimString(snapshot?.waiting_prompt_id),
+  ].join('\x1e');
+  const readStateKey = (thread: FlowerThreadSnapshot): string => [
+    String(thread.read_status.is_unread),
+    readSnapshotKey(thread.read_status.snapshot),
+    String(Math.max(0, Math.floor(Number(thread.read_status.read_state.last_seen_activity_revision ?? 0)))),
+    String(Math.max(0, Math.floor(Number(thread.read_status.read_state.last_read_message_at_unix_ms ?? 0)))),
+    trimString(thread.read_status.read_state.last_seen_activity_signature),
+    trimString(thread.read_status.read_state.last_seen_waiting_prompt_id),
+  ].join('\x1e');
+  const sameStringArray = (left: readonly string[] | undefined, right: readonly string[] | undefined): boolean => {
+    if (left === right) return true;
+    const leftValues = left ?? [];
+    const rightValues = right ?? [];
+    return leftValues.length === rightValues.length && leftValues.every((value, index) => value === rightValues[index]);
+  };
+  const sameReferenceOrEmpty = <T,>(left: readonly T[] | undefined, right: readonly T[] | undefined): boolean => (
+    left === right || ((left?.length ?? 0) === 0 && (right?.length ?? 0) === 0)
+  );
+  const sameThreadSnapshot = (left: FlowerThreadSnapshot, right: FlowerThreadSnapshot): boolean => (
+    left === right
+    || (
+      left.thread_id === right.thread_id
+      && left.title === right.title
+      && left.model_id === right.model_id
+      && left.working_dir === right.working_dir
+      && Number(left.pinned_at_ms ?? 0) === Number(right.pinned_at_ms ?? 0)
+      && left.created_at_ms === right.created_at_ms
+      && left.updated_at_ms === right.updated_at_ms
+      && left.status === right.status
+      && left.source_label === right.source_label
+      && sameStringArray(left.target_labels, right.target_labels)
+      && readStateKey(left) === readStateKey(right)
+      && sameReferenceOrEmpty(left.messages, right.messages)
+      && sameReferenceOrEmpty(left.approval_actions, right.approval_actions)
+      && left.input_request === right.input_request
+      && left.error === right.error
+    )
+  );
   const readStatusWithUnread = (thread: FlowerThreadSnapshot, isUnread: boolean): FlowerThreadSnapshot => (
     thread.read_status.is_unread === isUnread
       ? thread
@@ -358,7 +396,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const threadWithLocalReadVisibility = (thread: FlowerThreadSnapshot): FlowerThreadSnapshot => {
     if (!thread.read_status.is_unread) return thread;
     const localKey = locallyReadSnapshots.get(thread.thread_id);
-    if (!localKey || localKey !== flowerReadSnapshotKey(thread.read_status.snapshot)) {
+    if (!localKey || localKey !== readSnapshotKey(thread.read_status.snapshot)) {
       return thread;
     }
     return readStatusWithUnread(thread, false);
@@ -378,7 +416,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       t.target_labels?.join('\x1e') ?? '',
       t.working_dir ?? '',
       stableLiveSidebar ? 'live' : String(visibleThread.read_status.is_unread),
-      stableLiveSidebar ? 'live' : flowerReadSnapshotKey(t.read_status.snapshot),
+      stableLiveSidebar ? 'live' : readSnapshotKey(t.read_status.snapshot),
     ].join('\x1f');
   };
   const sidebarItemSignature = (t: FlowerThreadListItem): string => [
@@ -393,7 +431,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     t.target_labels.join('\x1e'),
     t.working_dir,
     SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : String(t.read_status.is_unread),
-    SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : flowerReadSnapshotKey(t.read_status.snapshot),
+    SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : readSnapshotKey(t.read_status.snapshot),
   ].join('\x1f');
   const threadItems = createMemo(() => {
     localReadVisibilityRevision();
@@ -518,7 +556,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         threadLocalMutationRevision += 1;
         return [thread, ...current];
       }
-      if (sameFlowerThreadSnapshot(current[existingIndex], thread)) {
+      if (sameThreadSnapshot(current[existingIndex], thread)) {
         return current;
       }
       const next = [...current];
@@ -550,7 +588,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const markThreadReadLocally = (threadID: string, snapshot: FlowerThreadActivitySnapshot) => {
     const tid = trimString(threadID);
     if (!tid) return;
-    const key = flowerReadSnapshotKey(snapshot);
+    const key = readSnapshotKey(snapshot);
     if (!key) return;
     locallyReadSnapshots.set(tid, key);
     setLocalReadVisibilityRevision((revision) => revision + 1);
@@ -704,6 +742,70 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
+  const threadHasLoadedDetail = (thread: FlowerThreadSnapshot): boolean => (
+    thread.messages.length > 0
+    || visibleInputRequest(thread) !== null
+    || thread.error !== undefined
+  );
+  const threadHasLocalActiveState = (thread: FlowerThreadSnapshot): boolean => {
+    const pending = pendingTurn();
+    return pending?.thread_id === thread.thread_id
+      || thread.status === 'running'
+      || thread.status === 'waiting_user'
+      || thread.status === 'waiting_approval';
+  };
+  const selectedThreadShouldSurviveMissingListSummary = (thread: FlowerThreadSnapshot): boolean => (
+    threadHasLoadedDetail(thread) || threadHasLocalActiveState(thread)
+  );
+
+  const mergeThreadListSummary = (
+    summary: FlowerThreadSnapshot,
+    existing: FlowerThreadSnapshot,
+  ): FlowerThreadSnapshot => ({
+    ...summary,
+    messages: existing.messages,
+    ...(existing.approval_actions !== undefined ? { approval_actions: existing.approval_actions } : {}),
+    ...(summary.status === 'waiting_user' && existing.input_request !== undefined ? { input_request: existing.input_request } : {}),
+    ...(existing.error !== undefined ? { error: existing.error } : {}),
+  });
+
+  const mergeThreadListRefresh = (
+    current: readonly FlowerThreadSnapshot[],
+    next: readonly FlowerThreadSnapshot[],
+    preserveMissingCurrentThreads = false,
+  ): readonly FlowerThreadSnapshot[] => {
+    const byID = new Map(current.map((thread) => [thread.thread_id, thread] as const));
+    const nextIDs = new Set(next.map((thread) => thread.thread_id));
+    const merged = next.map((thread) => {
+      const existing = byID.get(thread.thread_id);
+      if (!existing) return thread;
+      const listSummaryOnly = thread.messages.length === 0
+        && thread.input_request === undefined
+        && thread.error === undefined;
+      if (listSummaryOnly && threadHasLoadedDetail(existing)) {
+        return mergeThreadListSummary(thread, existing);
+      }
+      return thread;
+    });
+    if (preserveMissingCurrentThreads) {
+      for (const thread of current) {
+        if (!nextIDs.has(thread.thread_id)) {
+          merged.push(thread);
+        }
+      }
+    } else {
+      const selectedID = selectedThreadID();
+      const selectedThread = current.find((thread) => thread.thread_id === selectedID);
+      if (selectedThread && !nextIDs.has(selectedID) && selectedThreadShouldSurviveMissingListSummary(selectedThread)) {
+        merged.push(selectedThread);
+      }
+    }
+    if (current.length === merged.length && current.every((thread, index) => sameThreadSnapshot(thread, merged[index]))) {
+      return current;
+    }
+    return merged;
+  };
+
   const loadAndSelectThread = async (threadID: string) => {
     const tid = trimString(threadID);
     if (!tid) return;
@@ -773,11 +875,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       let mergedThreads: readonly FlowerThreadSnapshot[] = [];
       setThreads((current) => {
-        mergedThreads = mergeFlowerThreadListRefresh(current, next, {
-          selectedThreadID: selectedID,
-          pendingThreadID: pendingTurn()?.thread_id,
-          preserveMissingCurrentThreads: startedMutationRevision !== threadLocalMutationRevision,
-        });
+        mergedThreads = mergeThreadListRefresh(current, next, startedMutationRevision !== threadLocalMutationRevision);
         return mergedThreads;
       });
       setSelectedThreadID((current) => {
@@ -1226,9 +1324,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return entries;
   });
   const visibleTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
-    const entries = [...selectedTimelineEntries(), ...pendingTimelineEntries()];
-    const scope = selectedThreadID() || pendingTurnForSelectedThread()?.thread_id || '';
-    return preserveFlowerTimelineEntryIdentity(entries, timelineEntryCache, scope);
+    return [...selectedTimelineEntries(), ...pendingTimelineEntries()];
   });
 
   const shouldSubmitOnEnterKeydown = (event: KeyboardEvent): boolean => {
@@ -2137,47 +2233,50 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const messageContentBubble = (
-    message: Accessor<FlowerChatMessage>,
-    block: Accessor<Extract<FlowerRenderableMessageBlock, { type: 'content' }>>,
-    streaming: Accessor<boolean>,
-    failed: Accessor<boolean>,
-    copyAction: Accessor<JSX.Element | null>,
+    message: FlowerChatMessage,
+    block: Extract<FlowerRenderableMessageBlock, { type: 'content' }>,
+    streaming: boolean,
+    failed: boolean,
+    copyAction: JSX.Element | null = null,
   ) => {
-    const renderedBody = block().block_type === 'markdown'
-      ? (
-        <FlowerMarkdownBlock
-          content={block().content}
-          streaming={streaming()}
-          copyCodeLabel={copy().chat.copyCode}
-          codeCopiedLabel={copy().chat.codeCopied}
-        />
-      )
-      : <span class="flower-message-plain-text">{block().content}</span>;
+    const body = () => {
+      if (block.block_type === 'markdown') {
+        return (
+          <FlowerMarkdownBlock
+            content={block.content}
+            streaming={streaming}
+            copyCodeLabel={copy().chat.copyCode}
+            codeCopiedLabel={copy().chat.codeCopied}
+          />
+        );
+      }
+      return <span class="flower-message-plain-text">{block.content}</span>;
+    };
     const contentBody = () => (
-      message().role === 'assistant' && copyAction() && block().block_type !== 'thinking'
+      message.role === 'assistant' && copyAction && block.block_type !== 'thinking'
         ? (
           <div class="flower-message-assistant-copy-line">
-            <div class="flower-message-assistant-copy-body">{renderedBody}</div>
-            {copyAction()}
+            <div class="flower-message-assistant-copy-body">{body()}</div>
+            {copyAction}
           </div>
         )
-        : renderedBody
+        : body()
     );
 
     return (
       <div class={cn(
         'flower-message-bubble',
-        message().role === 'user'
+        message.role === 'user'
           ? 'flower-message-bubble-framed'
           : 'flower-message-bubble-plain',
-        message().role === 'user'
+        message.role === 'user'
           ? 'flower-message-bubble-user'
           : 'flower-message-bubble-assistant',
-        streaming() && 'flower-message-bubble-streaming',
-        failed() && 'flower-message-bubble-error',
-        block().block_type === 'thinking' && 'flower-message-bubble-thinking',
+        streaming && 'flower-message-bubble-streaming',
+        failed && 'flower-message-bubble-error',
+        block.block_type === 'thinking' && 'flower-message-bubble-thinking',
       )}>
-        <Show when={failed()}>
+        <Show when={failed}>
           <div class="flower-message-error-kicker">
             <AlertTriangle class="h-3.5 w-3.5" />
             <span>{copy().chat.messageErrorTitle}</span>
@@ -2205,77 +2304,81 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const messageBlockView = (
-    message: Accessor<FlowerChatMessage>,
+    message: FlowerChatMessage,
     block: () => FlowerRenderableMessageBlock,
-    streamingBlockKey: Accessor<string>,
-    failed: Accessor<boolean>,
-    copyText: Accessor<string>,
-    assistantCopyBlockKey: Accessor<string>,
+    streamingBlockKey: string,
+    failed: boolean,
+    copyText: string,
+    assistantCopyBlockKey: string,
   ) => {
-    if (block().type === 'activity') {
-      const activityBlockValue = block() as Extract<FlowerRenderableMessageBlock, { type: 'activity' }>;
-      return activityBlock(message().id, activityBlockValue.block_index, activityBlockValue.block, activityBlockValue.key);
-    }
-    const contentBlock = (): Extract<FlowerRenderableMessageBlock, { type: 'content' }> => block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }>;
-    const copyAction = () => {
-      const value = contentBlock();
-      const currentMessage = message();
-      return currentMessage.role === 'assistant' && value.key === assistantCopyBlockKey()
-        ? messageCopyButton(currentMessage, copyText(), 'assistant')
-        : null;
-    };
-    const streaming = () => streamingBlockKey() === contentBlock().key;
-    return messageContentBubble(message, contentBlock, streaming, failed, copyAction);
+    const activity = () => block().type === 'activity' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'activity' }> : null;
+    const content = () => block().type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null;
+    return (
+      <Show
+        when={activity()}
+        fallback={(
+          <Show when={content()}>
+            {(contentBlock) => {
+              const value = contentBlock();
+              const copyAction = message.role === 'assistant' && value.key === assistantCopyBlockKey
+                ? messageCopyButton(message, copyText, 'assistant')
+                : null;
+              return messageContentBubble(message, value, streamingBlockKey === value.key, failed, copyAction);
+            }}
+          </Show>
+        )}
+      >
+        {(activityBlockValue) => activityBlock(message.id, activityBlockValue().block_index, activityBlockValue().block, activityBlockValue().key)}
+      </Show>
+    );
   };
 
-  const messageEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'message' }>>) => {
-    const message = createMemo(() => entry().message);
-    const streaming = createMemo(() => message().status === 'streaming');
-    const failed = createMemo(() => message().status === 'error');
-    const hasRenderableBlock = createMemo(() => entry().blocks.length > 0);
-    if (failed() && !hasRenderableBlock() && !streaming() && selectedThreadRunErrorMessage()) {
+  const messageEntry = (entry: Extract<FlowerTimelineEntry, { type: 'message' }>) => {
+    const message = entry.message;
+    const streaming = message.status === 'streaming';
+    const failed = message.status === 'error';
+    const hasRenderableBlock = entry.blocks.length > 0;
+    if (failed && !hasRenderableBlock && !streaming && selectedThreadRunErrorMessage()) {
       return null;
     }
-    const blocks = createMemo((): readonly FlowerRenderableMessageBlock[] => {
-      const placeholderBlock: FlowerRenderableMessageBlock | null = !hasRenderableBlock() && (streaming() || failed())
-        ? {
+    const placeholderBlock: FlowerRenderableMessageBlock | null = !hasRenderableBlock && (streaming || failed)
+      ? {
           type: 'content',
-          key: `${message().id}:placeholder`,
+          key: `${message.id}:placeholder`,
           block_index: -1,
           block_type: 'text',
-          content: failed() ? copy().chat.messageErrorFallback : ' ',
+          content: failed ? copy().chat.messageErrorFallback : ' ',
         }
-        : null;
-      return placeholderBlock ? [placeholderBlock] : entry().blocks;
-    });
-    const streamingBlockKey = createMemo(() => streaming() ? lastContentBlockKey(blocks()) : '');
-    const copyText = createMemo(() => messageCopyText(message(), blocks()));
-    const messageTime = createMemo(() => formatMessageTime(message().created_at_ms));
-    const assistantCopyBlockKey = createMemo(() => message().role === 'assistant' ? lastCopyableContentBlockKey(blocks()) : '');
+      : null;
+    const blocks = placeholderBlock ? [placeholderBlock] : entry.blocks;
+    const streamingBlockKey = streaming ? lastContentBlockKey(blocks) : '';
+    const copyText = messageCopyText(message, blocks);
+    const messageTime = formatMessageTime(message.created_at_ms);
+    const assistantCopyBlockKey = message.role === 'assistant' ? lastCopyableContentBlockKey(blocks) : '';
     return (
       <div
-        class={cn('flower-message-row', message().role === 'user' ? 'flower-message-row-user' : 'flower-message-row-assistant')}
-        data-flower-message-id={message().id}
-        data-flower-message-role={message().role}
-        data-flower-message-status={message().status}
+        class={cn('flower-message-row', message.role === 'user' ? 'flower-message-row-user' : 'flower-message-row-assistant')}
+        data-flower-message-id={message.id}
+        data-flower-message-role={message.role}
+        data-flower-message-status={message.status}
       >
-        <div class={cn('flower-message-block-stack', message().role === 'user' ? 'flower-message-block-stack-user' : 'flower-message-block-stack-assistant')}>
-          <Index each={blocks()}>
+        <div class={cn('flower-message-block-stack', message.role === 'user' ? 'flower-message-block-stack-user' : 'flower-message-block-stack-assistant')}>
+          <Index each={blocks}>
             {(block) => messageBlockView(message, block, streamingBlockKey, failed, copyText, assistantCopyBlockKey)}
           </Index>
-          <Show when={message().role === 'user' && (copyText() || messageTime())}>
+          <Show when={message.role === 'user' && (copyText || messageTime)}>
             <div class="flower-message-action-row flower-message-action-row-user">
-              <Show when={messageTime()}>
-                {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
+              <Show when={messageTime}>
+                {(value) => <time class="flower-message-time" datetime={new Date(message.created_at_ms).toISOString()}>{value()}</time>}
               </Show>
-              {messageCopyButton(message(), copyText(), 'user')}
+              {messageCopyButton(message, copyText, 'user')}
             </div>
           </Show>
-          <Show when={message().role === 'user'}>
-            {messageContextActionLine(message())}
+          <Show when={message.role === 'user'}>
+            {messageContextActionLine(message)}
           </Show>
-          <Show when={streaming()}>
-            <div class={cn('flower-message-streaming-tail', message().role === 'user' ? 'flower-message-streaming-tail-user' : 'flower-message-streaming-tail-assistant')}>
+          <Show when={streaming}>
+            <div class={cn('flower-message-streaming-tail', message.role === 'user' ? 'flower-message-streaming-tail-user' : 'flower-message-streaming-tail-assistant')}>
               {streamingCursor()}
             </div>
           </Show>
@@ -2284,25 +2387,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const timelineEntry = (entry: Accessor<FlowerTimelineEntry>) => {
-    const initial = entry();
-    switch (initial.type) {
+  const timelineEntry = (entry: FlowerTimelineEntry) => {
+    switch (entry.type) {
       case 'message':
-        return messageEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>);
-      case 'input_request': {
-        const request = createMemo(() => {
-          const value = entry();
-          return value.type === 'input_request' ? value.request : null;
-        });
-        return <Show when={request()}>{(value) => inputRequestPrompt(value())}</Show>;
-      }
-      case 'error': {
-        const error = createMemo(() => {
-          const value = entry();
-          return value.type === 'error' ? value.error : null;
-        });
-        return <Show when={error()}>{(value) => runErrorNotice(value())}</Show>;
-      }
+        return messageEntry(entry);
+      case 'input_request':
+        return inputRequestPrompt(entry.request);
+      case 'error':
+        return runErrorNotice(entry.error);
     }
   };
 
@@ -2390,7 +2482,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     ? setupGuide()
                     : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => setChatDraft(prompt)} />}
             >
-              <Index each={visibleTimelineEntries()}>{timelineEntry}</Index>
+              <For each={visibleTimelineEntries()}>{timelineEntry}</For>
             </Show>
           </div>
         </div>
