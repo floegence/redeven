@@ -23,6 +23,7 @@ export type FlowerEmptyStateCopy = Readonly<{
 export type FlowerThreadListCopy = Readonly<{
   title: string;
   description: string;
+  warmupDescription: string;
   refreshLabel: string;
   searchPlaceholder: string;
   empty: string;
@@ -204,6 +205,10 @@ export type FlowerProviderDialogCopy = Readonly<{
 export type FlowerSurfaceCopy = Readonly<{
   chat: Readonly<{
     loadingSettings: string;
+    warmupTitle: string;
+    warmupDetail: string;
+    warmupComposerPlaceholder: string;
+    warmupModelLabel: string;
     configureProviderBeforeChat: string;
     enterMessageBeforeSending: string;
     titleFallback: string;
@@ -276,6 +281,10 @@ export type FlowerSurfaceCopy = Readonly<{
 export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   chat: {
     loadingSettings: 'Flower settings are still loading.',
+    warmupTitle: 'Preparing Flower',
+    warmupDetail: 'Desktop is starting the Local Environment runtime before Flower loads conversations.',
+    warmupComposerPlaceholder: 'Preparing Flower on Local Environment...',
+    warmupModelLabel: 'Loading Local AI Profile...',
     configureProviderBeforeChat: 'Set up a model provider to start chatting.',
     enterMessageBeforeSending: 'Enter a message before sending.',
     titleFallback: 'Ask Flower',
@@ -356,6 +365,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
   threadList: {
     title: 'Conversations',
     description: 'Created-time order stays stable while conversations update.',
+    warmupDescription: 'Loading after the Local Environment runtime is ready.',
     refreshLabel: 'Refresh conversations',
     searchPlaceholder: 'Search conversations...',
     empty: 'No conversations yet.',

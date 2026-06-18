@@ -119,6 +119,7 @@ import {
   type FlowerTurnLauncherIntent,
   type FlowerTurnLauncherSubmitInput,
   type FlowerThreadFocusRequest,
+  type FlowerSurfaceWarmupState,
 } from '../../../internal/flower_ui/src';
 import { desktopEntryKindOwnsRuntimeManagement } from '../shared/environmentManagementPrinciples';
 import {
@@ -328,6 +329,7 @@ import {
   IDLE_LAUNCHER_BUSY_STATE,
   selectedSnapshotOpenConnectionProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
+  selectedFlowerWarmupProgress,
   gatewaySourceMatchesRuntimeLifecycleProgress,
   type DesktopLauncherBusyState,
 } from './launcherBusyState';
@@ -3059,6 +3061,29 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ))
     )),
   ]);
+  const localEnvironmentEntry = createMemo(() => (
+    snapshot().environments.find((environment) => environment.kind === 'local_environment')
+      ?? null
+  ));
+  const flowerRuntimeLifecycleProgress = createMemo(() => {
+    const environment = localEnvironmentEntry();
+    return environment
+      ? selectedSnapshotRuntimeLifecycleProgressForEnvironment(environment, activeActionProgress())
+      : null;
+  });
+  const flowerWarmupState = createMemo<FlowerSurfaceWarmupState | null>(() => {
+    const progress = selectedFlowerWarmupProgress(flowerRuntimeLifecycleProgress());
+    if (!progress) {
+      return null;
+    }
+    return {
+      active: true,
+      title: i18n().t('flowerSurface.chat.warmupTitle'),
+      detail: localizedProgressDetail(i18n(), progress) || i18n().t('flowerSurface.chat.warmupDetail'),
+      phaseLabel: localizedProgressTitle(i18n(), progress) || i18n().t('flowerSurface.chat.loadingSettings'),
+      modelLabel: i18n().t('flowerSurface.chat.warmupModelLabel'),
+    };
+  });
 
   createEffect(() => {
     document.title = i18n().t('desktop.title');
@@ -6161,6 +6186,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),
             })}
             copy={createDesktopFlowerSurfaceCopy(i18n())}
+            warmup={flowerWarmupState()}
             focusThreadRequest={flowerFocusThreadRequest()}
             onFocusThreadRequestConsumed={(requestID) => {
               setFlowerFocusThreadRequest((current) => (

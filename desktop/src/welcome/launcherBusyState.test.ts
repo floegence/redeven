@@ -33,6 +33,7 @@ import {
   selectedSnapshotOpenConnectionProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForEnvironment,
   selectedSnapshotRuntimeLifecycleProgressForGateway,
+  selectedFlowerWarmupProgress,
 } from './launcherBusyState';
 import type { RuntimeProgressEnvironmentMatch } from './launcherBusyState';
 import { environmentProgressPrimaryPresentation } from './environmentProgressPrimaryPresentation';
@@ -108,6 +109,7 @@ function localRuntimeLifecycleActionProgress(input: Readonly<{
   operationKey?: string;
   startedAt?: number;
   updatedAt?: number;
+  presentationContext?: DesktopLauncherActionProgress['presentation_context'];
 }>): DesktopLauncherActionProgress {
   return {
     action: input.action,
@@ -122,6 +124,7 @@ function localRuntimeLifecycleActionProgress(input: Readonly<{
     phase: input.phase,
     title: input.title,
     detail: 'Desktop is updating the local runtime lifecycle.',
+    ...(input.presentationContext ? { presentation_context: input.presentationContext } : {}),
     lifecycle_progress: runtimeLifecycleProgress({
       location: 'local_host',
       operation: input.operation,
@@ -1055,6 +1058,46 @@ describe('launcherBusyState', () => {
       kind: 'attention_trigger',
       label: 'Cleanup failed',
     });
+  });
+
+  it('selects only active explicit Flower warmup start progress', () => {
+    const warmupStart = localRuntimeLifecycleActionProgress({
+      status: 'running',
+      action: 'start_environment_runtime',
+      operation: 'start',
+      phase: 'starting_runtime_process',
+      title: 'Starting runtime',
+      presentationContext: 'flower_warmup',
+    });
+    const plainStart = localRuntimeLifecycleActionProgress({
+      status: 'running',
+      action: 'start_environment_runtime',
+      operation: 'start',
+      phase: 'starting_runtime_process',
+      title: 'Starting runtime',
+    });
+    const terminalWarmup = localRuntimeLifecycleActionProgress({
+      status: 'succeeded',
+      action: 'start_environment_runtime',
+      operation: 'start',
+      phase: 'runtime_ready',
+      title: 'Runtime ready',
+      presentationContext: 'flower_warmup',
+    });
+    const restartWarmup = localRuntimeLifecycleActionProgress({
+      status: 'running',
+      action: 'restart_environment_runtime',
+      operation: 'restart',
+      phase: 'starting_runtime_process',
+      title: 'Restarting runtime',
+      presentationContext: 'flower_warmup',
+    });
+
+    expect(selectedFlowerWarmupProgress(warmupStart)).toBe(warmupStart);
+    expect(selectedFlowerWarmupProgress(plainStart)).toBeNull();
+    expect(selectedFlowerWarmupProgress(terminalWarmup)).toBeNull();
+    expect(selectedFlowerWarmupProgress(restartWarmup)).toBeNull();
+    expect(selectedFlowerWarmupProgress(null)).toBeNull();
   });
 
   it('selects terminal runtime lifecycle progress from snapshot without consulting request busy progress', () => {

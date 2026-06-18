@@ -518,6 +518,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   open_progress?: DesktopOpenConnectionProgress;
   step_progress?: DesktopStepProgress;
   gateway_diagnosis?: DesktopGatewayDiagnosis;
+  presentation_context?: 'flower_warmup';
   cancelable: boolean;
   interrupt_label?: string;
   interrupt_label_key?: DesktopTranslationKey;
@@ -994,6 +995,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   open_progress?: DesktopOpenConnectionProgress;
   step_progress?: DesktopStepProgress;
   gateway_diagnosis?: DesktopGatewayDiagnosis;
+  presentation_context?: 'flower_warmup';
   cancelable?: boolean;
   interrupt_label?: string;
   interrupt_label_key?: DesktopTranslationKey;

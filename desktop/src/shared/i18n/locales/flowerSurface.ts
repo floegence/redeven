@@ -7,6 +7,10 @@ export const flowerSurfaceEnUS = {
   },
   chat: {
     loadingSettings: 'Flower settings are still loading.',
+    warmupTitle: 'Preparing Flower',
+    warmupDetail: 'Desktop is starting the Local Environment runtime before Flower loads conversations.',
+    warmupComposerPlaceholder: 'Preparing Flower on Local Environment...',
+    warmupModelLabel: 'Loading Local AI Profile...',
     configureProviderBeforeChat: 'Set up a model provider to start chatting.',
     enterMessageBeforeSending: 'Enter a message before sending.',
     titleFallback: 'Ask Flower',
@@ -70,6 +74,7 @@ export const flowerSurfaceEnUS = {
   threadList: {
     title: 'Conversations',
     description: 'Created-time order stays stable while conversations update.',
+    warmupDescription: 'Loading after the Local Environment runtime is ready.',
     refreshLabel: 'Refresh conversations',
     searchPlaceholder: 'Search conversations...',
     empty: 'No conversations yet.',
@@ -297,6 +302,10 @@ export const flowerSurfaceZhCN = {
   chat: {
     ...flowerSurfaceEnUS.chat,
     loadingSettings: 'Flower 设置仍在加载。',
+    warmupTitle: '正在准备 Flower',
+    warmupDetail: 'Desktop 正在启动 Local Environment runtime，随后会加载 Flower 对话。',
+    warmupComposerPlaceholder: '正在准备 Local Environment 上的 Flower...',
+    warmupModelLabel: '正在加载 Local AI Profile...',
     configureProviderBeforeChat: '先设置模型提供方，就可以开始对话。',
     enterMessageBeforeSending: '发送前请输入消息。',
     titleFallback: '询问 Flower',
@@ -361,6 +370,7 @@ export const flowerSurfaceZhCN = {
     ...flowerSurfaceEnUS.threadList,
     title: '对话',
     description: '按创建时间稳定排序，对话更新时位置不漂移。',
+    warmupDescription: 'Local Environment runtime 就绪后加载。',
     refreshLabel: '刷新对话',
     searchPlaceholder: '搜索对话...',
     empty: '还没有对话。',
@@ -567,6 +577,10 @@ export const flowerSurfaceZhTW = {
   chat: {
     ...flowerSurfaceEnUS.chat,
     loadingSettings: 'Flower 設定仍在載入。',
+    warmupTitle: '正在準備 Flower',
+    warmupDetail: 'Desktop 正在啟動 Local Environment runtime，完成後 Flower 會載入對話。',
+    warmupComposerPlaceholder: '正在 Local Environment 上準備 Flower...',
+    warmupModelLabel: '正在載入 Local AI Profile...',
     configureProviderBeforeChat: '先設定模型提供方，就可以開始對話。',
     enterMessageBeforeSending: '傳送前請輸入訊息。',
     titleFallback: '詢問 Flower',
@@ -631,6 +645,7 @@ export const flowerSurfaceZhTW = {
     ...flowerSurfaceEnUS.threadList,
     title: '對話',
     description: '依建立時間穩定排序，對話更新時位置不漂移。',
+    warmupDescription: 'Local Environment runtime 就緒後載入。',
     refreshLabel: '重新整理對話',
     searchPlaceholder: '搜尋對話...',
     empty: '還沒有對話。',
@@ -832,6 +847,10 @@ export const flowerSurfaceJaJP = createFlowerSurfaceLocale({
   runtime: { localEnvironment: 'Local Environment', subtitle: 'Local Environment runtime' },
   chat: {
     loadingSettings: 'Flower 設定を読み込み中です。',
+    warmupTitle: 'Flower を準備しています',
+    warmupDetail: 'Desktop が Local Environment runtime を起動しています。準備ができると Flower が会話を読み込みます。',
+    warmupComposerPlaceholder: 'Local Environment で Flower を準備中...',
+    warmupModelLabel: 'Local AI Profile を読み込み中...',
     configureProviderBeforeChat: 'Flower chat を開始する前に Provider と model を設定してください。',
     enterMessageBeforeSending: '送信するメッセージを入力してください。',
     titleFallback: 'Flower に聞く',
@@ -895,6 +914,7 @@ export const flowerSurfaceJaJP = createFlowerSurfaceLocale({
   threadList: {
     title: '会話',
     description: '会話が更新されても、作成時刻順の並びは安定します。',
+    warmupDescription: 'Local Environment runtime の準備後に読み込みます。',
     refreshLabel: '会話を更新',
     searchPlaceholder: '会話を検索...',
     empty: 'まだ会話はありません。',
@@ -1091,6 +1111,10 @@ export const flowerSurfaceKoKR = createFlowerSurfaceLocale({
   runtime: { localEnvironment: 'Local Environment', subtitle: 'Local Environment runtime' },
   chat: {
     loadingSettings: 'Flower 설정을 불러오는 중입니다.',
+    warmupTitle: 'Flower 준비 중',
+    warmupDetail: 'Desktop이 Local Environment runtime을 시작하고 있습니다. 준비되면 Flower가 대화를 불러옵니다.',
+    warmupComposerPlaceholder: 'Local Environment에서 Flower 준비 중...',
+    warmupModelLabel: 'Local AI Profile 불러오는 중...',
     configureProviderBeforeChat: 'Flower chat을 시작하기 전에 Provider와 model을 설정하세요.',
     enterMessageBeforeSending: '보낼 메시지를 입력하세요.',
     titleFallback: 'Flower에게 묻기',
@@ -1154,6 +1178,7 @@ export const flowerSurfaceKoKR = createFlowerSurfaceLocale({
   threadList: {
     title: '대화',
     description: '대화가 업데이트되어도 생성 시간순 정렬은 안정적으로 유지됩니다.',
+    warmupDescription: 'Local Environment runtime이 준비된 뒤 불러옵니다.',
     refreshLabel: '대화 새로고침',
     searchPlaceholder: '대화 검색...',
     empty: '아직 대화가 없습니다.',
@@ -1350,6 +1375,10 @@ export const flowerSurfaceDeDE = createFlowerSurfaceLocale({
   runtime: { localEnvironment: 'Local Environment', subtitle: 'Local Environment runtime' },
   chat: {
     loadingSettings: 'Flower-Einstellungen werden noch geladen.',
+    warmupTitle: 'Flower wird vorbereitet',
+    warmupDetail: 'Desktop startet die Local Environment runtime, bevor Flower die Unterhaltungen lädt.',
+    warmupComposerPlaceholder: 'Flower wird in Local Environment vorbereitet...',
+    warmupModelLabel: 'Local AI Profile wird geladen...',
     configureProviderBeforeChat: 'Konfiguriere Provider und model, bevor du einen Flower chat startest.',
     enterMessageBeforeSending: 'Gib vor dem Senden eine Nachricht ein.',
     titleFallback: 'Flower fragen',
@@ -1413,6 +1442,7 @@ export const flowerSurfaceDeDE = createFlowerSurfaceLocale({
   threadList: {
     title: 'Unterhaltungen',
     description: 'Die Reihenfolge nach Erstellzeit bleibt stabil, während Unterhaltungen aktualisiert werden.',
+    warmupDescription: 'Wird geladen, sobald die Local Environment runtime bereit ist.',
     refreshLabel: 'Unterhaltungen aktualisieren',
     searchPlaceholder: 'Unterhaltungen suchen...',
     empty: 'Noch keine Unterhaltungen.',
@@ -1609,6 +1639,10 @@ export const flowerSurfaceFrFR = createFlowerSurfaceLocale({
   runtime: { localEnvironment: 'Local Environment', subtitle: 'Local Environment runtime' },
   chat: {
     loadingSettings: 'Les paramètres Flower sont encore en chargement.',
+    warmupTitle: 'Préparation de Flower',
+    warmupDetail: 'Desktop démarre la runtime Local Environment avant que Flower ne charge les conversations.',
+    warmupComposerPlaceholder: 'Préparation de Flower sur Local Environment...',
+    warmupModelLabel: 'Chargement du Local AI Profile...',
     configureProviderBeforeChat: 'Configure un Provider et un model avant de démarrer un chat Flower.',
     enterMessageBeforeSending: 'Saisis un message avant l’envoi.',
     titleFallback: 'Demander à Flower',
@@ -1672,6 +1706,7 @@ export const flowerSurfaceFrFR = createFlowerSurfaceLocale({
   threadList: {
     title: 'Discussions',
     description: 'L’ordre par date de création reste stable pendant les mises à jour des discussions.',
+    warmupDescription: 'Chargement après la disponibilité de la runtime Local Environment.',
     refreshLabel: 'Actualiser les conversations',
     searchPlaceholder: 'Rechercher des conversations...',
     empty: 'Aucune conversation pour l’instant.',
@@ -1868,6 +1903,10 @@ export const flowerSurfaceEsES = createFlowerSurfaceLocale({
   runtime: { localEnvironment: 'Local Environment', subtitle: 'Local Environment runtime' },
   chat: {
     loadingSettings: 'La configuración de Flower aún se está cargando.',
+    warmupTitle: 'Preparando Flower',
+    warmupDetail: 'Desktop está iniciando la runtime Local Environment antes de que Flower cargue las conversaciones.',
+    warmupComposerPlaceholder: 'Preparando Flower en Local Environment...',
+    warmupModelLabel: 'Cargando Local AI Profile...',
     configureProviderBeforeChat: 'Configura un Provider y un model antes de iniciar un chat de Flower.',
     enterMessageBeforeSending: 'Escribe un mensaje antes de enviar.',
     titleFallback: 'Preguntar a Flower',
@@ -1931,6 +1970,7 @@ export const flowerSurfaceEsES = createFlowerSurfaceLocale({
   threadList: {
     title: 'Conversaciones',
     description: 'El orden por fecha de creación se mantiene estable mientras las conversaciones se actualizan.',
+    warmupDescription: 'Se cargará cuando la runtime Local Environment esté lista.',
     refreshLabel: 'Actualizar conversaciones',
     searchPlaceholder: 'Buscar conversaciones...',
     empty: 'Aún no hay conversaciones.',
@@ -2127,6 +2167,10 @@ export const flowerSurfacePtBR = createFlowerSurfaceLocale({
   runtime: { localEnvironment: 'Local Environment', subtitle: 'Local Environment runtime' },
   chat: {
     loadingSettings: 'As configurações do Flower ainda estão carregando.',
+    warmupTitle: 'Preparando o Flower',
+    warmupDetail: 'O Desktop está iniciando a runtime Local Environment antes de o Flower carregar as conversas.',
+    warmupComposerPlaceholder: 'Preparando o Flower no Local Environment...',
+    warmupModelLabel: 'Carregando Local AI Profile...',
     configureProviderBeforeChat: 'Configure um Provider e um model antes de iniciar um chat do Flower.',
     enterMessageBeforeSending: 'Digite uma mensagem antes de enviar.',
     titleFallback: 'Perguntar ao Flower',
@@ -2190,6 +2234,7 @@ export const flowerSurfacePtBR = createFlowerSurfaceLocale({
   threadList: {
     title: 'Conversas',
     description: 'A ordem por criação fica estável enquanto as conversas são atualizadas.',
+    warmupDescription: 'Carrega depois que a runtime Local Environment estiver pronta.',
     refreshLabel: 'Atualizar conversas',
     searchPlaceholder: 'Buscar conversas...',
     empty: 'Ainda não há conversas.',
@@ -2386,6 +2431,10 @@ export const flowerSurfaceRuRU = createFlowerSurfaceLocale({
   runtime: { localEnvironment: 'Local Environment', subtitle: 'Local Environment runtime' },
   chat: {
     loadingSettings: 'Настройки Flower еще загружаются.',
+    warmupTitle: 'Подготовка Flower',
+    warmupDetail: 'Desktop запускает runtime Local Environment перед загрузкой бесед Flower.',
+    warmupComposerPlaceholder: 'Подготовка Flower в Local Environment...',
+    warmupModelLabel: 'Загрузка Local AI Profile...',
     configureProviderBeforeChat: 'Настрой Provider и model перед началом chat Flower.',
     enterMessageBeforeSending: 'Введите сообщение перед отправкой.',
     titleFallback: 'Спросить Flower',
@@ -2449,6 +2498,7 @@ export const flowerSurfaceRuRU = createFlowerSurfaceLocale({
   threadList: {
     title: 'Беседы',
     description: 'Порядок по времени создания остается стабильным при обновлении бесед.',
+    warmupDescription: 'Загрузка начнется после готовности runtime Local Environment.',
     refreshLabel: 'Обновить беседы',
     searchPlaceholder: 'Искать беседы...',
     empty: 'Бесед пока нет.',

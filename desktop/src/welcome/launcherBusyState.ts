@@ -388,6 +388,21 @@ export function selectedSnapshotRuntimeLifecycleProgressForEnvironment(
   );
 }
 
+export function selectedFlowerWarmupProgress(
+  progress: DesktopLauncherActionProgress | null | undefined,
+): DesktopLauncherActionProgress | null {
+  if (
+    !progress
+    || progress.presentation_context !== 'flower_warmup'
+    || progress.action !== 'start_environment_runtime'
+    || progress.lifecycle_progress?.operation !== 'start'
+    || !launcherProgressBlocksPrimaryAction(progress)
+  ) {
+    return null;
+  }
+  return progress;
+}
+
 export function selectedSnapshotOpenConnectionProgressForEnvironment(
   environment: DesktopEnvironmentEntry,
   progressItems: readonly DesktopLauncherActionProgress[],
