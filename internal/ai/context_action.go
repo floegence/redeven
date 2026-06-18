@@ -268,7 +268,7 @@ func contextActionToUserProvidedContext(action *ContextActionEnvelope) *contextm
 			CapturedAtMs:   item.CapturedAtMs,
 		})
 	}
-	return &contextmodel.UserProvidedContext{
+	out := &contextmodel.UserProvidedContext{
 		ActionID:            action.ActionID,
 		Provider:            action.Provider,
 		SourceSurface:       action.Source.Surface,
@@ -278,4 +278,11 @@ func contextActionToUserProvidedContext(action *ContextActionEnvelope) *contextm
 		SuggestedWorkingDir: action.SuggestedWorkingDir,
 		Items:               items,
 	}
+	if action.ExecutionContext != nil {
+		out.CurrentTargetID = action.ExecutionContext.CurrentTargetID
+		out.SourceEnvPublicID = action.ExecutionContext.SourceEnvPublicID
+		out.RuntimeHint = action.ExecutionContext.RuntimeHint
+		out.SessionSource = action.ExecutionContext.SessionSource
+	}
+	return out
 }

@@ -113,6 +113,10 @@ type UserProvidedContext struct {
 	SourceSurfaceID     string                    `json:"source_surface_id,omitempty"`
 	TargetID            string                    `json:"target_id"`
 	Locality            string                    `json:"locality"`
+	CurrentTargetID     string                    `json:"current_target_id,omitempty"`
+	SourceEnvPublicID   string                    `json:"source_env_public_id,omitempty"`
+	RuntimeHint         string                    `json:"runtime_hint,omitempty"`
+	SessionSource       string                    `json:"session_source,omitempty"`
 	SuggestedWorkingDir string                    `json:"suggested_working_dir_abs,omitempty"`
 	Items               []UserProvidedContextItem `json:"items"`
 }
@@ -179,6 +183,10 @@ func (p PromptPack) ApproxText() string {
 			strings.TrimSpace(p.UserProvidedContext.SourceSurfaceID),
 			strings.TrimSpace(p.UserProvidedContext.TargetID),
 			strings.TrimSpace(p.UserProvidedContext.Locality),
+			strings.TrimSpace(p.UserProvidedContext.CurrentTargetID),
+			strings.TrimSpace(p.UserProvidedContext.SourceEnvPublicID),
+			strings.TrimSpace(p.UserProvidedContext.RuntimeHint),
+			strings.TrimSpace(p.UserProvidedContext.SessionSource),
 			strings.TrimSpace(p.UserProvidedContext.SuggestedWorkingDir),
 		)
 		for _, item := range p.UserProvidedContext.Items {

@@ -59,3 +59,16 @@ func TestBuildLayeredSystemPrompt_RemovesOKFFirstDomainBackgroundRule(t *testing
 	assertPromptNotContains(t, prompt, "query it first for domain background")
 	assertPromptNotContains(t, prompt, "When okf.search is available, query it first")
 }
+
+func TestBuildLayeredSystemPrompt_RoutesRedevenEnvironmentLifecycleToEnvCLI(t *testing.T) {
+	t.Parallel()
+
+	prompt := buildPromptForToolRoutingTest(t)
+	assertPromptContains(t, prompt, "Redeven environment lifecycle operations:")
+	assertPromptContains(t, prompt, "`redeven env ... --json` CLI surface")
+	assertPromptContains(t, prompt, "Use `execution_context.current_target_id` as the primary target")
+	assertPromptContains(t, prompt, "then `target.target_id`, then `execution_context.source_env_public_id`")
+	assertPromptContains(t, prompt, "The literal target `current` is a Redeven environment alias")
+	assertPromptContains(t, prompt, "Do not infer Docker, SSH, systemd, launchctl, or process-manager commands from a Redeven target string")
+	assertPromptContains(t, prompt, "structured unavailable or blocked plan")
+}

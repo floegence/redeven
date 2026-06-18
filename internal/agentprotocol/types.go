@@ -14,6 +14,8 @@ const (
 	ErrCodeTargetDiscoveryFailed = "TARGET_DISCOVERY_FAILED"
 	ErrCodeTargetMissing         = "TARGET_MISSING"
 	ErrCodeTargetNotFound        = "TARGET_NOT_FOUND"
+	ErrCodeEnvironmentStatus     = "ENVIRONMENT_STATUS_FAILED"
+	ErrCodeEnvironmentOperation  = "ENVIRONMENT_OPERATION_FAILED"
 )
 
 type Response struct {

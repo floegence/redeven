@@ -2275,10 +2275,22 @@ func renderUserProvidedContext(ctx *contextmodel.UserProvidedContext) string {
 		meta = append(meta, "surface_id="+txt)
 	}
 	if txt := strings.TrimSpace(ctx.TargetID); txt != "" {
-		meta = append(meta, "target="+txt)
+		meta = append(meta, "target.target_id="+txt)
 	}
 	if txt := strings.TrimSpace(ctx.Locality); txt != "" {
-		meta = append(meta, "locality="+txt)
+		meta = append(meta, "target.locality="+txt)
+	}
+	if txt := strings.TrimSpace(ctx.CurrentTargetID); txt != "" {
+		meta = append(meta, "execution_context.current_target_id="+txt)
+	}
+	if txt := strings.TrimSpace(ctx.SourceEnvPublicID); txt != "" {
+		meta = append(meta, "execution_context.source_env_public_id="+txt)
+	}
+	if txt := strings.TrimSpace(ctx.RuntimeHint); txt != "" {
+		meta = append(meta, "execution_context.runtime_hint="+txt)
+	}
+	if txt := strings.TrimSpace(ctx.SessionSource); txt != "" {
+		meta = append(meta, "execution_context.session_source="+txt)
 	}
 	if len(meta) > 0 {
 		parts = append(parts, "- "+strings.Join(meta, ", "))

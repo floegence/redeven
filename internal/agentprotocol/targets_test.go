@@ -238,7 +238,7 @@ func TestResolveTarget(t *testing.T) {
 	}
 	catalog := TargetCatalog{Targets: []TargetDescriptor{target}}
 
-	for _, raw := range []string{"local", "local:local", "Local Environment", "env_123", "le_123", ""} {
+	for _, raw := range []string{"local", "local:local", "Local Environment", "env_123", "le_123", "", "current"} {
 		got, err := ResolveTarget(catalog, raw)
 		if err != nil {
 			t.Fatalf("ResolveTarget(%q) error = %v", raw, err)

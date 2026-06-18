@@ -38,6 +38,7 @@ Commands:
               Stop an already-running Desktop-managed runtime daemon.
   desktop-model-source
               Connect Desktop Local Environment models to runtime-control.
+  env         Inspect and plan Redeven environment lifecycle operations.
   targets     Inspect Redeven targets for local automation.
   search      Run web search using configured provider credentials.
   okf         Build or verify embedded OKF bundle assets.
@@ -321,7 +322,7 @@ Usage:
 
 Commands:
   list       List discoverable targets.
-  resolve    Resolve one target id, label, env_public_id, or local_environment_public_id.
+  resolve    Resolve one target id, current alias, label, env_public_id, or local_environment_public_id.
 
 Examples:
   redeven targets list
@@ -353,19 +354,248 @@ func targetsResolveHelpText() string {
 	return strings.TrimLeft(`
 redeven targets resolve
 
-Resolve one target id, label, env_public_id, or local_environment_public_id.
+Resolve one target id, current alias, label, env_public_id, or local_environment_public_id.
 
 Usage:
   redeven targets resolve --target <target> [flags]
 
 Flags:
-  --target <target>                 Target id, label, env_public_id, or local_environment_public_id.
+  --target <target>                 Target id, current, label, env_public_id, or local_environment_public_id.
   --json                            Write the protocol JSON envelope.
   --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
 
 Examples:
+  redeven targets resolve --target current
   redeven targets resolve --target local
   redeven targets resolve --target local:local --json
+	`, "\n")
+}
+
+func envHelpText() string {
+	return strings.TrimLeft(`
+redeven env
+
+Inspect Redeven environments and plan lifecycle operations through a stable
+machine-readable contract. Flower and automation should use this command for
+environment status, diagnostics, stop, start, restart, and update requests
+instead of inferring Docker, SSH, systemd, or process-manager commands from a
+target id.
+
+Usage:
+  redeven env <command> [flags]
+  redeven help env list
+  redeven help env resolve
+  redeven help env status
+  redeven help env diagnose
+  redeven help env stop
+  redeven help env start
+  redeven help env restart
+  redeven help env update
+
+Commands:
+  list       List discoverable environments.
+  resolve    Resolve an environment target into Redeven environment semantics.
+  status     Inspect sanitized runtime status and available operation plans.
+  diagnose   Inspect status plus runtime attach diagnostics.
+  stop       Stop a supported Desktop-managed Local Environment runtime.
+  start      Return the structured start plan for an environment target.
+  restart    Return the structured restart plan for an environment target.
+  update     Return the structured update plan for an environment target.
+
+Examples:
+  redeven env list --json
+  redeven env status --target current --json
+  redeven env status --target local --json
+  redeven env restart --target local:container:docker:dev:abcd1234 --json
+`, "\n")
+}
+
+func envListHelpText() string {
+	return strings.TrimLeft(`
+redeven env list
+
+List discoverable Redeven environments.
+
+Usage:
+  redeven env list [flags]
+
+Flags:
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+
+Examples:
+  redeven env list --json
+`, "\n")
+}
+
+func envResolveHelpText() string {
+	return strings.TrimLeft(`
+redeven env resolve
+
+Resolve an environment target. Recognized but unsupported target shapes return
+a successful structured result with supported=false and a reason_code instead
+of falling back to low-level Docker or SSH semantics.
+
+Usage:
+  redeven env resolve --target <target> [flags]
+
+Flags:
+  --target <target>                 Environment target id, current, label, env_public_id, or recognized Redeven target shape.
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+
+Examples:
+  redeven env resolve --target current --json
+  redeven env resolve --target local --json
+  redeven env resolve --target local:container:docker:dev:abcd1234 --json
+`, "\n")
+}
+
+func envStatusHelpText() string {
+	return strings.TrimLeft(`
+redeven env status
+
+Inspect sanitized Redeven environment runtime status and operation plans. This
+output intentionally omits local state/config/socket paths, runtime-control
+tokens, and raw Desktop launch reports; diagnostic commands may still include
+local diagnostic paths.
+
+Usage:
+  redeven env status [flags]
+
+Flags:
+  --target <target>                 Environment target id, current, label, env_public_id, or recognized Redeven target shape.
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --probe-timeout <duration>        Runtime health probe timeout.
+
+Examples:
+  redeven env status --target current --json
+  redeven env status --target local --json
+`, "\n")
+}
+
+func envDiagnoseHelpText() string {
+	return strings.TrimLeft(`
+redeven env diagnose
+
+Inspect sanitized Redeven environment runtime status with attach diagnostics.
+
+Usage:
+  redeven env diagnose [flags]
+
+Flags:
+  --target <target>                 Environment target id, current, label, env_public_id, or recognized Redeven target shape.
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --probe-timeout <duration>        Runtime health probe timeout.
+
+Examples:
+  redeven env diagnose --target current --json
+  redeven env diagnose --target local --json
+`, "\n")
+}
+
+func envOperationHelpText(operation string) string {
+	switch strings.TrimSpace(strings.ToLower(operation)) {
+	case "stop":
+		return envStopHelpText()
+	case "start":
+		return envStartHelpText()
+	case "restart":
+		return envRestartHelpText()
+	case "update":
+		return envUpdateHelpText()
+	default:
+		return envHelpText()
+	}
+}
+
+func envStopHelpText() string {
+	return strings.TrimLeft(`
+redeven env stop
+
+Stop a supported Desktop-managed Local Environment runtime, or return a
+structured unavailable/blocked plan when the target is unsupported or owned by
+another runtime surface.
+
+Usage:
+  redeven env stop [flags]
+
+Flags:
+  --target <target>                 Environment target id, current, label, env_public_id, or recognized Redeven target shape.
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --probe-timeout <duration>        Runtime health probe timeout.
+  --grace-period <duration>         Time to wait after requesting runtime shutdown.
+
+Examples:
+  redeven env stop --target local --json
+`, "\n")
+}
+
+func envStartHelpText() string {
+	return strings.TrimLeft(`
+redeven env start
+
+Return the structured start plan for an environment target. Phase one does not
+start Desktop runtime sessions from this CLI; use Redeven Desktop when the plan
+requires Desktop handoff.
+
+Usage:
+  redeven env start [flags]
+
+Flags:
+  --target <target>                 Environment target id, current, label, env_public_id, or recognized Redeven target shape.
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --probe-timeout <duration>        Runtime health probe timeout.
+
+Examples:
+  redeven env start --target local --json
+`, "\n")
+}
+
+func envRestartHelpText() string {
+	return strings.TrimLeft(`
+redeven env restart
+
+Return the structured restart plan for an environment target. Phase one does
+not restart Desktop runtime sessions from this CLI and never infers Docker,
+SSH, or systemd commands from the target id.
+
+Usage:
+  redeven env restart [flags]
+
+Flags:
+  --target <target>                 Environment target id, current, label, env_public_id, or recognized Redeven target shape.
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --probe-timeout <duration>        Runtime health probe timeout.
+
+Examples:
+  redeven env restart --target local:container:docker:dev:abcd1234 --json
+`, "\n")
+}
+
+func envUpdateHelpText() string {
+	return strings.TrimLeft(`
+redeven env update
+
+Return the structured update plan for an environment target. Phase one reports
+Desktop update handoff requirements without mutating runtimes.
+
+Usage:
+  redeven env update [flags]
+
+Flags:
+  --target <target>                 Environment target id, current, label, env_public_id, or recognized Redeven target shape.
+  --json                            Write the protocol JSON envelope.
+  --state-root <path>               State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
+  --probe-timeout <duration>        Runtime health probe timeout.
+
+Examples:
+  redeven env update --target local --json
 `, "\n")
 }
 
@@ -460,6 +690,24 @@ func lookupHelpText(args []string) (string, bool) {
 		return desktopRuntimeStopHelpText(), true
 	case "desktop-model-source":
 		return desktopModelSourceHelpText(), true
+	case "env":
+		return envHelpText(), true
+	case "env list":
+		return envListHelpText(), true
+	case "env resolve":
+		return envResolveHelpText(), true
+	case "env status":
+		return envStatusHelpText(), true
+	case "env diagnose":
+		return envDiagnoseHelpText(), true
+	case "env stop":
+		return envStopHelpText(), true
+	case "env start":
+		return envStartHelpText(), true
+	case "env restart":
+		return envRestartHelpText(), true
+	case "env update":
+		return envUpdateHelpText(), true
 	case "targets":
 		return targetsHelpText(), true
 	case "targets list":
