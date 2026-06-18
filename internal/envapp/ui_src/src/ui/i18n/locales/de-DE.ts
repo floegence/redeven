@@ -1378,7 +1378,7 @@ export const deDE = {
     providerTypeTitle: "Provider Type",
     providerTypeDescription: "Klicken Sie auf einen provider type, um Verbindungs- und model-Details inline zu öffnen. Klicken Sie erneut, um ihn einzuklappen.",
     nativeConnectionDescription: "Native Verbindung",
-    customGatewayDescription: "Custom gateway",
+    customEndpointDescription: "Custom endpoint",
     currentProviderType: "Aktuell",
     collapseProviderType: "Einklappen",
     openProviderType: "Öffnen",

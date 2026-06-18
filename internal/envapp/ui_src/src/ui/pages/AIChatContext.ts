@@ -13,7 +13,7 @@ import { useNotification } from '@floegence/floe-webapp-core';
 import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { useRedevenRpc, type AIRealtimeEvent, type AIRequestUserInputPrompt } from '../protocol/redeven_v1';
 import { useEnvContext } from './EnvContext';
-import { fetchGatewayJSON } from '../services/gatewayApi';
+import { fetchLocalApiJSON } from '../services/localApi';
 import {
   readRendererScopedUIStorageItem,
   removeRendererScopedUIStorageItem,
@@ -525,7 +525,7 @@ export function createAIChatContextValue(): AIChatContextValue {
   );
   const [settings] = createResource<SettingsResponse | null, number | null>(
     () => settingsKey(),
-    async (k) => (k == null ? null : await fetchGatewayJSON<SettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
+    async (k) => (k == null ? null : await fetchLocalApiJSON<SettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
   );
   const aiEnabled = createMemo(() => {
     const s = settings();
@@ -547,7 +547,7 @@ export function createAIChatContextValue(): AIChatContextValue {
       k == null
         ? null
         : normalizeModelsResponse(
-            await fetchGatewayJSON<unknown>('/_redeven_proxy/api/ai/models', { method: 'GET' }),
+            await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/models', { method: 'GET' }),
           ),
   );
 
@@ -649,7 +649,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     async (k) =>
       k == null
         ? null
-        : await fetchGatewayJSON<ListThreadsResponse>('/_redeven_proxy/api/ai/threads?limit=200', {
+        : await fetchLocalApiJSON<ListThreadsResponse>('/_redeven_proxy/api/ai/threads?limit=200', {
             method: 'GET',
           }),
   );
@@ -773,7 +773,7 @@ export function createAIChatContextValue(): AIChatContextValue {
 
     setMarkingReadKeyByThread((prev) => ({ ...prev, [tid]: requestKey }));
     try {
-      const resp = await fetchGatewayJSON<Readonly<{ read_status: ThreadReadStatus }>>(
+      const resp = await fetchLocalApiJSON<Readonly<{ read_status: ThreadReadStatus }>>(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/read`,
         {
           method: 'POST',
@@ -1178,7 +1178,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (!tid || !mid) return false;
 
     try {
-      await fetchGatewayJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, {
+      await fetchLocalApiJSON<{ thread: ThreadView }>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}`, {
         method: 'PATCH',
         body: JSON.stringify({ model_id: mid }),
       });
@@ -1203,7 +1203,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (!mid) return false;
     try {
       const resp = normalizeModelsResponse(
-        await fetchGatewayJSON<unknown>('/_redeven_proxy/api/ai/current_model', {
+        await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/current_model', {
           method: 'PUT',
           body: JSON.stringify({ model_id: mid }),
         }),
@@ -1350,7 +1350,7 @@ export function createAIChatContextValue(): AIChatContextValue {
     if (opts?.executionMode) body.execution_mode = normalizeExecutionMode(opts.executionMode);
     const workingDir = String(draftWorkingDir() ?? '').trim();
     if (workingDir) body.working_dir = workingDir;
-    const resp = await fetchGatewayJSON<CreateThreadResponse>('/_redeven_proxy/api/ai/threads', {
+    const resp = await fetchLocalApiJSON<CreateThreadResponse>('/_redeven_proxy/api/ai/threads', {
       method: 'POST',
       body: JSON.stringify(body),
     });

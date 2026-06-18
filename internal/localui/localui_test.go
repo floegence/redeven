@@ -19,7 +19,7 @@ import (
 
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
-	gatewaypkg "github.com/floegence/redeven/internal/codeapp/gateway"
+	appserverpkg "github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/session"
@@ -44,15 +44,15 @@ func writeTestConfig(t *testing.T) string {
 
 type localUITestBackend struct{}
 
-func (localUITestBackend) ListSpaces(context.Context) ([]gatewaypkg.SpaceStatus, error) {
+func (localUITestBackend) ListSpaces(context.Context) ([]appserverpkg.SpaceStatus, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (localUITestBackend) CreateSpace(context.Context, gatewaypkg.CreateSpaceRequest) (*gatewaypkg.SpaceStatus, error) {
+func (localUITestBackend) CreateSpace(context.Context, appserverpkg.CreateSpaceRequest) (*appserverpkg.SpaceStatus, error) {
 	return nil, errors.New("not implemented")
 }
 
-func (localUITestBackend) UpdateSpace(context.Context, string, gatewaypkg.UpdateSpaceRequest) (*gatewaypkg.SpaceStatus, error) {
+func (localUITestBackend) UpdateSpace(context.Context, string, appserverpkg.UpdateSpaceRequest) (*appserverpkg.SpaceStatus, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -60,7 +60,7 @@ func (localUITestBackend) DeleteSpace(context.Context, string) error {
 	return errors.New("not implemented")
 }
 
-func (localUITestBackend) StartSpace(context.Context, string) (*gatewaypkg.SpaceStatus, error) {
+func (localUITestBackend) StartSpace(context.Context, string) (*appserverpkg.SpaceStatus, error) {
 	return nil, errors.New("not implemented")
 }
 
@@ -72,40 +72,40 @@ func (localUITestBackend) ResolveCodeServerPort(context.Context, string) (int, e
 	return 0, errors.New("not implemented")
 }
 
-func (localUITestBackend) CodeRuntimeStatus(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
-	return gatewaypkg.CodeRuntimeStatus{}, nil
+func (localUITestBackend) CodeRuntimeStatus(context.Context) (appserverpkg.CodeRuntimeStatus, error) {
+	return appserverpkg.CodeRuntimeStatus{}, nil
 }
 
-func (localUITestBackend) CreateCodeRuntimeImportSession(context.Context, gatewaypkg.CodeRuntimeArtifactManifest) (gatewaypkg.CodeRuntimeImportSession, error) {
-	return gatewaypkg.CodeRuntimeImportSession{}, nil
+func (localUITestBackend) CreateCodeRuntimeImportSession(context.Context, appserverpkg.CodeRuntimeArtifactManifest) (appserverpkg.CodeRuntimeImportSession, error) {
+	return appserverpkg.CodeRuntimeImportSession{}, nil
 }
 
-func (localUITestBackend) AppendCodeRuntimeImportChunk(context.Context, string, int64, io.Reader) (gatewaypkg.CodeRuntimeImportChunkResult, error) {
-	return gatewaypkg.CodeRuntimeImportChunkResult{}, nil
+func (localUITestBackend) AppendCodeRuntimeImportChunk(context.Context, string, int64, io.Reader) (appserverpkg.CodeRuntimeImportChunkResult, error) {
+	return appserverpkg.CodeRuntimeImportChunkResult{}, nil
 }
 
-func (localUITestBackend) CompleteCodeRuntimeImportSession(context.Context, string) (gatewaypkg.CodeRuntimeStatus, error) {
-	return gatewaypkg.CodeRuntimeStatus{}, nil
+func (localUITestBackend) CompleteCodeRuntimeImportSession(context.Context, string) (appserverpkg.CodeRuntimeStatus, error) {
+	return appserverpkg.CodeRuntimeStatus{}, nil
 }
 
-func (localUITestBackend) SelectCodeRuntimeVersion(context.Context, string) (gatewaypkg.CodeRuntimeStatus, error) {
-	return gatewaypkg.CodeRuntimeStatus{}, nil
+func (localUITestBackend) SelectCodeRuntimeVersion(context.Context, string) (appserverpkg.CodeRuntimeStatus, error) {
+	return appserverpkg.CodeRuntimeStatus{}, nil
 }
 
-func (localUITestBackend) SetCodeRuntimeDefaultVersion(context.Context, string) (gatewaypkg.CodeRuntimeStatus, error) {
-	return gatewaypkg.CodeRuntimeStatus{}, nil
+func (localUITestBackend) SetCodeRuntimeDefaultVersion(context.Context, string) (appserverpkg.CodeRuntimeStatus, error) {
+	return appserverpkg.CodeRuntimeStatus{}, nil
 }
 
-func (localUITestBackend) RemoveCodeRuntimeSelection(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
-	return gatewaypkg.CodeRuntimeStatus{}, nil
+func (localUITestBackend) RemoveCodeRuntimeSelection(context.Context) (appserverpkg.CodeRuntimeStatus, error) {
+	return appserverpkg.CodeRuntimeStatus{}, nil
 }
 
-func (localUITestBackend) RemoveCodeRuntimeVersion(context.Context, string) (gatewaypkg.CodeRuntimeStatus, error) {
-	return gatewaypkg.CodeRuntimeStatus{}, nil
+func (localUITestBackend) RemoveCodeRuntimeVersion(context.Context, string) (appserverpkg.CodeRuntimeStatus, error) {
+	return appserverpkg.CodeRuntimeStatus{}, nil
 }
 
-func (localUITestBackend) CancelCodeRuntimeOperation(context.Context) (gatewaypkg.CodeRuntimeStatus, error) {
-	return gatewaypkg.CodeRuntimeStatus{}, nil
+func (localUITestBackend) CancelCodeRuntimeOperation(context.Context) (appserverpkg.CodeRuntimeStatus, error) {
+	return appserverpkg.CodeRuntimeStatus{}, nil
 }
 
 type localUITestCodeSpaceBackend struct {
@@ -117,9 +117,9 @@ func (b localUITestCodeSpaceBackend) ResolveCodeServerPort(context.Context, stri
 	return b.port, nil
 }
 
-func newTestGateway(t *testing.T, cfgPath string) *gatewaypkg.Gateway {
+func newTestAppServer(t *testing.T, cfgPath string) *appserverpkg.Server {
 	t.Helper()
-	return newTestGatewayWithBackendAndDist(t, cfgPath, localUITestBackend{}, fstest.MapFS{
+	return newTestAppServerWithBackendAndDist(t, cfgPath, localUITestBackend{}, fstest.MapFS{
 		"env/index.html":      {Data: []byte("<html>env</html>")},
 		"env/favicon.svg":     {Data: []byte("<svg>icon</svg>")},
 		"env/logo.png":        {Data: []byte("png")},
@@ -127,9 +127,9 @@ func newTestGateway(t *testing.T, cfgPath string) *gatewaypkg.Gateway {
 	})
 }
 
-func newTestGatewayWithBackend(t *testing.T, cfgPath string, backend gatewaypkg.Backend) *gatewaypkg.Gateway {
+func newTestAppServerWithBackend(t *testing.T, cfgPath string, backend appserverpkg.Backend) *appserverpkg.Server {
 	t.Helper()
-	return newTestGatewayWithBackendAndDist(t, cfgPath, backend, fstest.MapFS{
+	return newTestAppServerWithBackendAndDist(t, cfgPath, backend, fstest.MapFS{
 		"env/index.html":      {Data: []byte("<html>env</html>")},
 		"env/favicon.svg":     {Data: []byte("<svg>icon</svg>")},
 		"env/logo.png":        {Data: []byte("png")},
@@ -137,27 +137,27 @@ func newTestGatewayWithBackend(t *testing.T, cfgPath string, backend gatewaypkg.
 	})
 }
 
-func newTestGatewayWithBackendAndDist(t *testing.T, cfgPath string, backend gatewaypkg.Backend, dist fs.FS) *gatewaypkg.Gateway {
+func newTestAppServerWithBackendAndDist(t *testing.T, cfgPath string, backend appserverpkg.Backend, dist fs.FS) *appserverpkg.Server {
 	t.Helper()
-	gw, err := gatewaypkg.New(gatewaypkg.Options{
+	appSrv, err := appserverpkg.New(appserverpkg.Options{
 		Backend:            backend,
 		DistFS:             dist,
 		ConfigPath:         cfgPath,
 		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
 	})
 	if err != nil {
-		t.Fatalf("gateway.New() error = %v", err)
+		t.Fatalf("appserver.New() error = %v", err)
 	}
-	return gw
+	return appSrv
 }
 
 func newTestServer(t *testing.T, gate *accessgate.Gate) *Server {
 	t.Helper()
 	cfgPath := writeTestConfig(t)
-	return newTestServerWithGateway(t, gate, newTestGateway(t, cfgPath), cfgPath)
+	return newTestServerWithAppServer(t, gate, newTestAppServer(t, cfgPath), cfgPath)
 }
 
-func newTestServerWithGateway(t *testing.T, gate *accessgate.Gate, gw *gatewaypkg.Gateway, cfgPath string) *Server {
+func newTestServerWithAppServer(t *testing.T, gate *accessgate.Gate, appSrv *appserverpkg.Server, cfgPath string) *Server {
 	t.Helper()
 	localPermissionCap := config.ResolvePermissionCapFromConfigPath(
 		cfgPath,
@@ -171,7 +171,7 @@ func newTestServerWithGateway(t *testing.T, gate *accessgate.Gate, gw *gatewaypk
 		version:            "dev",
 		localPermissionCap: &localPermissionCap,
 		accessGate:         gate,
-		gw:                 gw,
+		appServer:          appSrv,
 		pending:            make(map[string]pendingDirect),
 	}
 }
@@ -245,13 +245,13 @@ func TestServer_handleRoot_redirectWhenLocked(t *testing.T) {
 	}
 }
 
-func TestServer_handleGateway_allowsEnvAppShellWhenLocked(t *testing.T) {
+func TestServer_handleEnvAppProxy_allowsEnvAppShellWhenLocked(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
 
 	envReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/env/", nil)
 	envRes := httptest.NewRecorder()
-	s.handleGateway(envRes, envReq)
+	s.handleEnvAppProxy(envRes, envReq)
 	if envRes.Result().StatusCode != http.StatusOK {
 		t.Fatalf("env shell status = %d, want %d", envRes.Result().StatusCode, http.StatusOK)
 	}
@@ -261,19 +261,19 @@ func TestServer_handleGateway_allowsEnvAppShellWhenLocked(t *testing.T) {
 
 	apiReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/settings", nil)
 	apiRes := httptest.NewRecorder()
-	s.handleGateway(apiRes, apiReq)
+	s.handleEnvAppProxy(apiRes, apiReq)
 	if apiRes.Result().StatusCode != http.StatusLocked {
-		t.Fatalf("gateway api status = %d, want %d", apiRes.Result().StatusCode, http.StatusLocked)
+		t.Fatalf("local API status = %d, want %d", apiRes.Result().StatusCode, http.StatusLocked)
 	}
 }
 
-func TestServer_handleGateway_rejectsEnvAppDirectoryListingWhenLocked(t *testing.T) {
+func TestServer_handleEnvAppProxy_rejectsEnvAppDirectoryListingWhenLocked(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/env/assets/", nil)
 	res := httptest.NewRecorder()
-	s.handleGateway(res, req)
+	s.handleEnvAppProxy(res, req)
 	if res.Result().StatusCode != http.StatusNotFound {
 		t.Fatalf("env assets directory status = %d, want %d; body=%q", res.Result().StatusCode, http.StatusNotFound, res.Body.String())
 	}
@@ -335,11 +335,11 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 
 func TestServer_handleRuntimeHealth_blocksOpenWhenEnvAppShellUnavailable(t *testing.T) {
 	cfgPath := writeTestConfig(t)
-	gw := newTestGatewayWithBackendAndDist(t, cfgPath, localUITestBackend{}, fstest.MapFS{
+	appSrv := newTestAppServerWithBackendAndDist(t, cfgPath, localUITestBackend{}, fstest.MapFS{
 		"env/favicon.svg": {Data: []byte("<svg>icon</svg>")},
 		"env/logo.png":    {Data: []byte("png")},
 	})
-	s := newTestServerWithGateway(t, nil, gw, cfgPath)
+	s := newTestServerWithAppServer(t, nil, appSrv, cfgPath)
 	s.a = &agent.Agent{}
 
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/api/local/runtime/health", nil)
@@ -524,7 +524,7 @@ func TestServer_LocalPermissionCapDoesNotHotReload(t *testing.T) {
 		configPath:         cfgPath,
 		version:            "dev",
 		localPermissionCap: &localPermissionCap,
-		gw:                 newTestGateway(t, cfgPath),
+		appServer:          newTestAppServer(t, cfgPath),
 		pending:            make(map[string]pendingDirect),
 	}
 
@@ -602,8 +602,8 @@ func TestServer_handleCodeSpace_bootstrapsLocalAccessCookieFromResumeToken(t *te
 	defer upstream.Close()
 
 	upstreamPort := upstream.Listener.Addr().(*net.TCPAddr).Port
-	gw := newTestGatewayWithBackend(t, cfgPath, localUITestCodeSpaceBackend{port: upstreamPort})
-	s := newTestServerWithGateway(t, gate, gw, cfgPath)
+	appSrv := newTestAppServerWithBackend(t, cfgPath, localUITestCodeSpaceBackend{port: upstreamPort})
+	s := newTestServerWithAppServer(t, gate, appSrv, cfgPath)
 
 	unlockReq := httptest.NewRequest(http.MethodPost, "http://localhost:23998/api/local/access/unlock", bytes.NewBufferString(`{"password":"secret"}`))
 	unlockReq.Header.Set("Content-Type", "application/json")
@@ -715,7 +715,7 @@ func TestServer_DiagnosticsAddsTraceHeaderForRuntime(t *testing.T) {
 		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		configPath: cfgPath,
 		version:    "dev",
-		gw:         newTestGateway(t, cfgPath),
+		appServer:  newTestAppServer(t, cfgPath),
 		diag:       diagStore,
 		pending:    make(map[string]pendingDirect),
 	}
@@ -759,7 +759,7 @@ func TestServer_DiagnosticsConnectInfoReusesTraceID(t *testing.T) {
 		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		configPath: cfgPath,
 		version:    "dev",
-		gw:         newTestGateway(t, cfgPath),
+		appServer:  newTestAppServer(t, cfgPath),
 		diag:       diagStore,
 		pending:    make(map[string]pendingDirect),
 	}
@@ -809,7 +809,7 @@ func TestServer_DiagnosticsSkipsDiagnosticsAPIRequests(t *testing.T) {
 		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		configPath: cfgPath,
 		version:    "dev",
-		gw:         newTestGateway(t, cfgPath),
+		appServer:  newTestAppServer(t, cfgPath),
 		diag:       diagStore,
 		pending:    make(map[string]pendingDirect),
 	}
@@ -1025,7 +1025,7 @@ func TestServer_Start_UsesActualDynamicPortForDisplayURLs(t *testing.T) {
 		log:        slog.New(slog.NewTextHandler(io.Discard, nil)),
 		bind:       bind,
 		configPath: cfgPath,
-		gw:         newTestGateway(t, cfgPath),
+		appServer:  newTestAppServer(t, cfgPath),
 		pending:    make(map[string]pendingDirect),
 	}
 
@@ -1059,7 +1059,7 @@ func TestNew_PreservesExplicitDynamicLoopbackBind(t *testing.T) {
 	s, err := New(Options{
 		Logger:     slog.New(slog.NewTextHandler(io.Discard, nil)),
 		Bind:       bind,
-		Gateway:    newTestGateway(t, cfgPath),
+		AppServer:  newTestAppServer(t, cfgPath),
 		Agent:      &agent.Agent{},
 		ConfigPath: cfgPath,
 		Version:    "dev",

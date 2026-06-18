@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CodexGatewayError, startCodexTurn } from './api';
+import { CodexAPIError, startCodexTurn } from './api';
 
-vi.mock('../services/gatewayApi', () => ({
-  prepareGatewayRequestInit: vi.fn(async (init: RequestInit) => init),
+vi.mock('../services/localApi', () => ({
+  prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init),
 }));
 
 describe('codex api', () => {
@@ -10,7 +10,7 @@ describe('codex api', () => {
     vi.restoreAllMocks();
   });
 
-  it('preserves structured gateway details for turn start failures', async () => {
+  it('preserves structured local API details for turn start failures', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       ok: false,
       error: 'provider rejected request',
@@ -19,7 +19,7 @@ describe('codex api', () => {
     }), { status: 400 }));
 
     await expect(startCodexTurn({ threadID: 'thread_1', inputText: 'hi' })).rejects.toMatchObject({
-      name: 'CodexGatewayError',
+      name: 'CodexAPIError',
       message: 'provider rejected request',
       errorCode: 'rateLimitExceeded',
       details: 'HTTP 429 rate limit exceeded',
@@ -30,6 +30,6 @@ describe('codex api', () => {
   it('uses the Codex-specific error class for turn start HTTP errors', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('not found', { status: 404 }));
 
-    await expect(startCodexTurn({ threadID: 'missing', inputText: 'hi' })).rejects.toBeInstanceOf(CodexGatewayError);
+    await expect(startCodexTurn({ threadID: 'missing', inputText: 'hi' })).rejects.toBeInstanceOf(CodexAPIError);
   });
 });

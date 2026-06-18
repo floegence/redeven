@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const getLocalRuntimeMock = vi.fn();
 const getLocalAccessStatusMock = vi.fn();
 const unlockLocalAccessMock = vi.fn();
+const getEnvAppAccessStatusMock = vi.fn();
+const unlockEnvAppAccessMock = vi.fn();
 const getEnvironmentMock = vi.fn();
-const getGatewayAccessStatusMock = vi.fn();
-const unlockGatewayAccessMock = vi.fn();
 const mintLocalDirectConnectArtifactMock = vi.fn();
 const mintEnvProxyEntryTicketMock = vi.fn();
 const mintEnvEntryTicketForAppMock = vi.fn();
@@ -457,12 +457,12 @@ vi.mock('./utils/askFlowerPath', () => ({
   resolveSuggestedWorkingDirAbsolute: () => '',
 }));
 vi.mock('./utils/windowNavigation', () => ({ reloadCurrentPage: reloadCurrentPageMock }));
-vi.mock('./services/gatewayApi', () => ({
-  fetchGatewayJSON: vi.fn(),
-  gatewayRequestCredentials: () => 'same-origin',
-  getGatewayAccessStatus: getGatewayAccessStatusMock,
-  uploadGatewayFile: vi.fn(),
-  unlockGatewayAccess: unlockGatewayAccessMock,
+vi.mock('./services/localApi', () => ({
+  fetchLocalApiJSON: vi.fn(),
+  localApiRequestCredentials: () => 'same-origin',
+  getEnvAppAccessStatus: getEnvAppAccessStatusMock,
+  uploadLocalApiFile: vi.fn(),
+  unlockEnvAppAccess: unlockEnvAppAccessMock,
 }));
 vi.mock('./services/sandboxWindowRegistry', () => ({ getSandboxWindowInfo: () => null }));
 vi.mock('./pages/EnvContext', () => ({
@@ -590,10 +590,10 @@ beforeEach(() => {
   refreshLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
   getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
   unlockLocalAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
-  getGatewayAccessStatusMock
+  getEnvAppAccessStatusMock
     .mockResolvedValueOnce({ password_required: true, unlocked: false })
     .mockResolvedValueOnce({ password_required: true, unlocked: true });
-  unlockGatewayAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
+  unlockEnvAppAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
   getEnvironmentMock.mockResolvedValue({
     public_id: 'env_local',
     name: 'Local runtime',
@@ -621,7 +621,7 @@ beforeEach(() => {
 describe('EnvAppShell environment entry affordances', () => {
   it('returns Flower-origin runtime settings to Flower and clears the origin on normal settings entry', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
 
     const host = document.createElement('div');
@@ -891,7 +891,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
   it('keeps desktop top bar tooltips enabled for the remaining shared icon actions', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -917,7 +917,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
   it('omits the environment name from the full-page header shell title slot', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -940,7 +940,7 @@ describe('EnvAppShell environment entry affordances', () => {
   it('keeps the notes entry available on mobile while disabling top bar tooltips', async () => {
     layoutIsMobile = true;
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -971,7 +971,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
   it('toggles the notes overlay from the top bar and shared close callback', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1005,7 +1005,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
   it('binds Notes to the full-page display shell viewport while deck mode is active', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1028,7 +1028,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
   it('registers a typing-safe notes toggle command', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1067,7 +1067,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
   it('suppresses the desktop sidebar width transition for one frame when opening Codex from a full-screen activity surface', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     const storage = createStorageMock();
     storage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     vi.stubGlobal('localStorage', storage);
@@ -1510,8 +1510,8 @@ describe('EnvAppShell remote access gate', () => {
     getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
 
     const accessDeferred = deferred<{ password_required: boolean; unlocked: boolean }>();
-    getGatewayAccessStatusMock.mockReset();
-    getGatewayAccessStatusMock.mockReturnValueOnce(accessDeferred.promise);
+    getEnvAppAccessStatusMock.mockReset();
+    getEnvAppAccessStatusMock.mockReturnValueOnce(accessDeferred.promise);
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1768,8 +1768,8 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(unlockGatewayAccessMock).toHaveBeenCalledWith('secret');
-      expect(getGatewayAccessStatusMock).toHaveBeenCalledTimes(2);
+      expect(unlockEnvAppAccessMock).toHaveBeenCalledWith('secret');
+      expect(getEnvAppAccessStatusMock).toHaveBeenCalledTimes(2);
       expect(connectMock).toHaveBeenCalledTimes(1);
       const remoteConnectConfig = connectMock.mock.calls[0]?.[0];
       expect(remoteConnectConfig).toMatchObject({
@@ -1910,8 +1910,8 @@ describe('EnvAppShell remote access gate', () => {
     getLocalRuntimeMock.mockResolvedValue(null);
     getEnvPublicIDFromSessionMock.mockReturnValue('env_demo');
     accessStatusMock.mockResolvedValue({ passwordRequired: false, unlocked: true });
-    getGatewayAccessStatusMock.mockReset();
-    getGatewayAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockReset();
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     connectMock.mockImplementationOnce(async () => {
       protocolStatus = 'error';
       protocolClient = null;

@@ -10,7 +10,7 @@ paths=(
   internal/flower_ui/src
   desktop/src/welcome/flower
   internal/envapp/ui_src/src/ui
-  internal/codeapp/gateway
+  internal/codeapp/appserver
   internal/ai
   cmd/ai-loop-eval
 )

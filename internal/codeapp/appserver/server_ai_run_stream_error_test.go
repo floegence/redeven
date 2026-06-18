@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestGateway_AI_Run_InvalidModelStillStreamsError(t *testing.T) {
+func TestServer_AI_Run_InvalidModelStillStreamsError(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -70,7 +70,7 @@ func TestGateway_AI_Run_InvalidModelStillStreamsError(t *testing.T) {
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Logger:             logger,
 		Backend:            &stubBackend{},
 		DistFS:             dist,
@@ -89,7 +89,7 @@ func TestGateway_AI_Run_InvalidModelStillStreamsError(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads", bytes.NewBufferString(`{"title":"hello"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("create thread status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -122,7 +122,7 @@ func TestGateway_AI_Run_InvalidModelStillStreamsError(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/runs", bytes.NewBuffer(b))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("run status=%d body=%s", rr.Code, rr.Body.String())
@@ -143,7 +143,7 @@ func TestGateway_AI_Run_InvalidModelStillStreamsError(t *testing.T) {
 	}
 }
 
-func TestGateway_AI_Run_JSONAcceptStartsDetached(t *testing.T) {
+func TestServer_AI_Run_JSONAcceptStartsDetached(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -191,7 +191,7 @@ func TestGateway_AI_Run_JSONAcceptStartsDetached(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = aiSvc.Close() })
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Logger:  logger,
 		Backend: &stubBackend{},
 		DistFS: fstest.MapFS{
@@ -222,7 +222,7 @@ func TestGateway_AI_Run_JSONAcceptStartsDetached(t *testing.T) {
 	req.Header.Set("Origin", envOrigin)
 	req.Header.Set("Accept", "application/json")
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusAccepted {
 		t.Fatalf("run status=%d body=%s", rr.Code, rr.Body.String())

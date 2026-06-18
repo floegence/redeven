@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 	"github.com/floegence/redeven/internal/notes"
 )
 
-func (g *Gateway) handleNotesAPI(w http.ResponseWriter, r *http.Request) bool {
+func (g *Server) handleNotesAPI(w http.ResponseWriter, r *http.Request) bool {
 	if r == nil || !strings.HasPrefix(strings.TrimSpace(r.URL.Path), "/_redeven_proxy/api/notes") {
 		return false
 	}
@@ -230,7 +230,7 @@ func decodeNotesJSON(body io.Reader, out any) error {
 	return nil
 }
 
-func (g *Gateway) handleNotesEventStream(w http.ResponseWriter, r *http.Request) {
+func (g *Server) handleNotesEventStream(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: "streaming not supported"})

@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"context"
@@ -84,10 +84,10 @@ func writeLocalUITestConfigWithPolicy(t *testing.T, policy *config.PermissionPol
 	return cfgPath
 }
 
-func TestGateway_LocalUICodespaceRootRedirectsToWorkspace(t *testing.T) {
+func TestServer_LocalUICodespaceRootRedirectsToWorkspace(t *testing.T) {
 	t.Parallel()
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend: &stubBackend{
 			listSpaces: func(context.Context) ([]SpaceStatus, error) {
 				return []SpaceStatus{{CodeSpaceID: "demo", WorkspacePath: "/workspace/repo"}}, nil
@@ -104,7 +104,7 @@ func TestGateway_LocalUICodespaceRootRedirectsToWorkspace(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://192.168.1.11:12345/cs/demo/", nil)
 	req = WithLocalUICodeSpaceRoute(req, "demo")
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusFound)
@@ -114,7 +114,7 @@ func TestGateway_LocalUICodespaceRootRedirectsToWorkspace(t *testing.T) {
 	}
 }
 
-func TestGateway_LocalUICodespaceProxyStripsPathPrefix(t *testing.T) {
+func TestServer_LocalUICodespaceProxyStripsPathPrefix(t *testing.T) {
 	t.Parallel()
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +136,7 @@ func TestGateway_LocalUICodespaceProxyStripsPathPrefix(t *testing.T) {
 		t.Fatalf("LookupPort() error = %v", err)
 	}
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend: &stubBackend{
 			resolveCodeServerPort: func(context.Context, string) (int, error) {
 				return port, nil
@@ -153,7 +153,7 @@ func TestGateway_LocalUICodespaceProxyStripsPathPrefix(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://192.168.1.11:12345/cs/demo/static/file.js?x=1", nil)
 	req = WithLocalUICodeSpaceRoute(req, "demo")
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rr.Code, http.StatusOK)
@@ -177,7 +177,7 @@ func TestGateway_LocalUICodespaceProxyStripsPathPrefix(t *testing.T) {
 	}
 }
 
-func TestGateway_LocalUIAllowsPortForwardManagementAPI(t *testing.T) {
+func TestServer_LocalUIAllowsPortForwardManagementAPI(t *testing.T) {
 	t.Parallel()
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +185,7 @@ func TestGateway_LocalUIAllowsPortForwardManagementAPI(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend: &stubBackend{},
 		PortForward: &stubPortForwardBackend{forwards: map[string]pfregistry.Forward{
 			"demo": {
@@ -205,7 +205,7 @@ func TestGateway_LocalUIAllowsPortForwardManagementAPI(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/forwards", nil)
 	req = WithLocalUIEnvRoute(req)
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d, body=%s", rr.Code, http.StatusOK, rr.Body.String())
@@ -224,7 +224,7 @@ func TestGateway_LocalUIAllowsPortForwardManagementAPI(t *testing.T) {
 	}
 }
 
-func TestGateway_LocalUIPortForwardManagementUsesPortForwardAppCap(t *testing.T) {
+func TestServer_LocalUIPortForwardManagementUsesPortForwardAppCap(t *testing.T) {
 	t.Parallel()
 
 	localMax := config.PermissionSet{Read: true, Write: true, Execute: true}
@@ -236,7 +236,7 @@ func TestGateway_LocalUIPortForwardManagementUsesPortForwardAppCap(t *testing.T)
 			localFloeAppPortForward: &portForwardCap,
 		},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		PortForward:        &stubPortForwardBackend{forwards: map[string]pfregistry.Forward{}},
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
@@ -250,14 +250,14 @@ func TestGateway_LocalUIPortForwardManagementUsesPortForwardAppCap(t *testing.T)
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/forwards", nil)
 	req = WithLocalUIEnvRoute(req)
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d, body=%s", rr.Code, http.StatusForbidden, rr.Body.String())
 	}
 }
 
-func TestGateway_LocalUICodespaceProxyUsesCodeAppCap(t *testing.T) {
+func TestServer_LocalUICodespaceProxyUsesCodeAppCap(t *testing.T) {
 	t.Parallel()
 
 	localMax := config.PermissionSet{Read: true, Write: true, Execute: true}
@@ -269,7 +269,7 @@ func TestGateway_LocalUICodespaceProxyUsesCodeAppCap(t *testing.T) {
 			localFloeAppCode: &codeCap,
 		},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}},
 		ConfigPath:         writeLocalUITestConfigWithPolicy(t, policy),
@@ -282,14 +282,14 @@ func TestGateway_LocalUICodespaceProxyUsesCodeAppCap(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/cs/demo/", nil)
 	req = WithLocalUICodeSpaceRoute(req, "demo")
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d, body=%s", rr.Code, http.StatusForbidden, rr.Body.String())
 	}
 }
 
-func TestGateway_LocalUIPortForwardProxyStripsPathPrefix(t *testing.T) {
+func TestServer_LocalUIPortForwardProxyStripsPathPrefix(t *testing.T) {
 	t.Parallel()
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -307,7 +307,7 @@ func TestGateway_LocalUIPortForwardProxyStripsPathPrefix(t *testing.T) {
 		t.Fatalf("url.Parse() error = %v", err)
 	}
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend: &stubBackend{},
 		PortForward: &stubPortForwardBackend{forwards: map[string]pfregistry.Forward{
 			"demo": {
@@ -326,7 +326,7 @@ func TestGateway_LocalUIPortForwardProxyStripsPathPrefix(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/pf/demo/static/file.js?x=1", nil)
 	req = WithLocalUIPortForwardRoute(req, "demo")
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d, body=%s", rr.Code, http.StatusOK, rr.Body.String())
@@ -350,7 +350,7 @@ func TestGateway_LocalUIPortForwardProxyStripsPathPrefix(t *testing.T) {
 	}
 }
 
-func TestGateway_LocalUIPortForwardProxyKeepsLocalPrefixInTargetRedirects(t *testing.T) {
+func TestServer_LocalUIPortForwardProxyKeepsLocalPrefixInTargetRedirects(t *testing.T) {
 	t.Parallel()
 
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -358,7 +358,7 @@ func TestGateway_LocalUIPortForwardProxyKeepsLocalPrefixInTargetRedirects(t *tes
 	}))
 	defer upstream.Close()
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend: &stubBackend{},
 		PortForward: &stubPortForwardBackend{forwards: map[string]pfregistry.Forward{
 			"demo": {
@@ -377,7 +377,7 @@ func TestGateway_LocalUIPortForwardProxyKeepsLocalPrefixInTargetRedirects(t *tes
 	req := httptest.NewRequest(http.MethodGet, "http://localhost:23998/pf/demo/", nil)
 	req = WithLocalUIPortForwardRoute(req, "demo")
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusFound {
 		t.Fatalf("status = %d, want %d, body=%s", rr.Code, http.StatusFound, rr.Body.String())

@@ -3,7 +3,7 @@ package ai
 // This package defines the Go-side implementation of the Env App AI feature.
 //
 // Design notes:
-// - The browser talks to the runtime via the existing local gateway (/_redeven_proxy/api/ai/*) over Flowersec E2EE proxy.
+// - The browser talks to the runtime via the existing local API (/_redeven_proxy/api/ai/*) over Flowersec E2EE proxy.
 // - The runtime enforces permissions using authoritative session_meta (direct control channel), not browser-claimed flags.
 // - The LLM orchestration runs inside Go runtime; the Go runtime is the only authority that can execute tools.
 

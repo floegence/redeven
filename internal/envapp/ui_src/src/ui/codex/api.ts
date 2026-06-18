@@ -1,5 +1,5 @@
 import { AccessUnlockError, normalizeRetryAfterMs } from '../services/accessUnlockError';
-import { prepareGatewayRequestInit } from '../services/gatewayApi';
+import { prepareLocalApiRequestInit } from '../services/localApi';
 import type {
   CodexCapabilitiesSnapshot,
   CodexEvent,
@@ -14,21 +14,21 @@ import type {
   CodexUserInputEntry,
 } from './types';
 
-export class CodexGatewayError extends Error {
+export class CodexAPIError extends Error {
   errorCode: string;
   details: string;
   status: number;
 
   constructor(message: string, errorCode = '', status = 400, details = '') {
     super(message);
-    this.name = 'CodexGatewayError';
+    this.name = 'CodexAPIError';
     this.errorCode = String(errorCode ?? '').trim();
     this.details = String(details ?? '').trim();
     this.status = Math.max(0, Number(status ?? 0) || 0);
   }
 }
 
-function codexGatewayErrorMessage(data: any, status: number): string {
+function codexAPIErrorMessage(data: any, status: number): string {
   const nested = String(data?.error?.message ?? '').trim();
   if (nested) return nested;
   const flat = String(data?.error ?? '').trim();
@@ -36,20 +36,20 @@ function codexGatewayErrorMessage(data: any, status: number): string {
   return `HTTP ${status}`;
 }
 
-function codexGatewayErrorCode(data: any): string {
+function codexAPIErrorCode(data: any): string {
   return String(data?.error_code ?? data?.error?.code ?? '').trim();
 }
 
-function codexGatewayErrorDetails(data: any): string {
+function codexAPIErrorDetails(data: any): string {
   return String(data?.error_details ?? data?.error?.details ?? '').trim();
 }
 
-function codexGatewayRetryAfterMs(data: any): number {
+function codexAPIRetryAfterMs(data: any): number {
   return normalizeRetryAfterMs(data?.error?.retry_after_ms ?? data?.data?.retry_after_ms);
 }
 
-async function fetchCodexGatewayJSON<T>(url: string, init: RequestInit): Promise<T> {
-  const resp = await fetch(url, await prepareGatewayRequestInit(init));
+async function fetchCodexJSON<T>(url: string, init: RequestInit): Promise<T> {
+  const resp = await fetch(url, await prepareLocalApiRequestInit(init));
   const text = await resp.text();
   let data: any = null;
   try {
@@ -57,30 +57,30 @@ async function fetchCodexGatewayJSON<T>(url: string, init: RequestInit): Promise
   } catch {
     // ignore
   }
-  const errorCode = codexGatewayErrorCode(data);
-  const errorDetails = codexGatewayErrorDetails(data);
+  const errorCode = codexAPIErrorCode(data);
+  const errorDetails = codexAPIErrorDetails(data);
   if (!resp.ok) {
-    const message = codexGatewayErrorMessage(data, resp.status);
-    const retryAfterMs = codexGatewayRetryAfterMs(data);
+    const message = codexAPIErrorMessage(data, resp.status);
+    const retryAfterMs = codexAPIRetryAfterMs(data);
     if (retryAfterMs > 0 || errorCode === 'ACCESS_PASSWORD_RETRY_LATER') {
       throw new AccessUnlockError({ message, status: resp.status, code: errorCode || 'HTTP_ERROR', retryAfterMs });
     }
-    throw new CodexGatewayError(message, errorCode, resp.status, errorDetails);
+    throw new CodexAPIError(message, errorCode, resp.status, errorDetails);
   }
   if (data?.ok === false) {
     const status = resp.status || 400;
-    const message = codexGatewayErrorMessage(data, status);
-    const retryAfterMs = codexGatewayRetryAfterMs(data);
+    const message = codexAPIErrorMessage(data, status);
+    const retryAfterMs = codexAPIRetryAfterMs(data);
     if (retryAfterMs > 0 || errorCode === 'ACCESS_PASSWORD_RETRY_LATER') {
       throw new AccessUnlockError({ message, status, code: errorCode || 'REQUEST_FAILED', retryAfterMs });
     }
-    throw new CodexGatewayError(message, errorCode, status, errorDetails);
+    throw new CodexAPIError(message, errorCode, status, errorDetails);
   }
   return (data?.data ?? data) as T;
 }
 
 export async function fetchCodexStatus(): Promise<CodexStatus> {
-  return fetchCodexGatewayJSON<CodexStatus>('/_redeven_proxy/api/codex/status', { method: 'GET' });
+  return fetchCodexJSON<CodexStatus>('/_redeven_proxy/api/codex/status', { method: 'GET' });
 }
 
 export async function fetchCodexCapabilities(cwd?: string): Promise<CodexCapabilitiesSnapshot> {
@@ -90,7 +90,7 @@ export async function fetchCodexCapabilities(cwd?: string): Promise<CodexCapabil
     params.set('cwd', normalizedCWD);
   }
   const query = params.toString();
-  return fetchCodexGatewayJSON<CodexCapabilitiesSnapshot>(
+  return fetchCodexJSON<CodexCapabilitiesSnapshot>(
     `/_redeven_proxy/api/codex/capabilities${query ? `?${query}` : ''}`,
     { method: 'GET' },
   );
@@ -105,7 +105,7 @@ export async function listCodexThreads(args: {
   if (typeof args.archived === 'boolean') {
     params.set('archived', String(args.archived));
   }
-  const out = await fetchCodexGatewayJSON<Readonly<{ threads?: CodexThread[] }>>(
+  const out = await fetchCodexJSON<Readonly<{ threads?: CodexThread[] }>>(
     `/_redeven_proxy/api/codex/threads?${params.toString()}`,
     { method: 'GET' },
   );
@@ -114,7 +114,7 @@ export async function listCodexThreads(args: {
 
 export async function openCodexThread(threadID: string): Promise<CodexThreadDetail> {
   const id = encodeURIComponent(String(threadID ?? '').trim());
-  return fetchCodexGatewayJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}`, { method: 'GET' });
+  return fetchCodexJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}`, { method: 'GET' });
 }
 
 export async function markCodexThreadRead(args: {
@@ -125,7 +125,7 @@ export async function markCodexThreadRead(args: {
   };
 }): Promise<CodexThreadReadStatus> {
   const threadID = encodeURIComponent(String(args.threadID ?? '').trim());
-  const out = await fetchCodexGatewayJSON<Readonly<{ read_status: CodexThreadReadStatus }>>(
+  const out = await fetchCodexJSON<Readonly<{ read_status: CodexThreadReadStatus }>>(
     `/_redeven_proxy/api/codex/threads/${threadID}/read`,
     {
       method: 'POST',
@@ -147,7 +147,7 @@ export async function startCodexThread(args: {
   sandbox_mode?: string;
   approvals_reviewer?: string;
 }): Promise<CodexThreadDetail> {
-  return fetchCodexGatewayJSON<CodexThreadDetail>('/_redeven_proxy/api/codex/threads', {
+  return fetchCodexJSON<CodexThreadDetail>('/_redeven_proxy/api/codex/threads', {
     method: 'POST',
     body: JSON.stringify({
       cwd: String(args.cwd ?? '').trim(),
@@ -171,7 +171,7 @@ export async function startCodexTurn(args: {
   approvals_reviewer?: string;
 }): Promise<void> {
   const threadID = encodeURIComponent(String(args.threadID ?? '').trim());
-  await fetchCodexGatewayJSON<unknown>(`/_redeven_proxy/api/codex/threads/${threadID}/turns`, {
+  await fetchCodexJSON<unknown>(`/_redeven_proxy/api/codex/threads/${threadID}/turns`, {
     method: 'POST',
     body: JSON.stringify({
       input_text: String(args.inputText ?? ''),
@@ -188,7 +188,7 @@ export async function startCodexTurn(args: {
 
 export async function steerCodexTurn(args: CodexSteerTurnRequest): Promise<void> {
   const threadID = encodeURIComponent(String(args.thread_id ?? '').trim());
-  await fetchCodexGatewayJSON<unknown>(`/_redeven_proxy/api/codex/threads/${threadID}/turns/steer`, {
+  await fetchCodexJSON<unknown>(`/_redeven_proxy/api/codex/threads/${threadID}/turns/steer`, {
     method: 'POST',
     body: JSON.stringify({
       expected_turn_id: String(args.expected_turn_id ?? '').trim(),
@@ -199,17 +199,17 @@ export async function steerCodexTurn(args: CodexSteerTurnRequest): Promise<void>
 
 export async function archiveCodexThread(threadID: string): Promise<void> {
   const id = encodeURIComponent(String(threadID ?? '').trim());
-  await fetchCodexGatewayJSON<unknown>(`/_redeven_proxy/api/codex/threads/${id}/archive`, { method: 'POST' });
+  await fetchCodexJSON<unknown>(`/_redeven_proxy/api/codex/threads/${id}/archive`, { method: 'POST' });
 }
 
 export async function unarchiveCodexThread(threadID: string): Promise<void> {
   const id = encodeURIComponent(String(threadID ?? '').trim());
-  await fetchCodexGatewayJSON<unknown>(`/_redeven_proxy/api/codex/threads/${id}/unarchive`, { method: 'POST' });
+  await fetchCodexJSON<unknown>(`/_redeven_proxy/api/codex/threads/${id}/unarchive`, { method: 'POST' });
 }
 
 export async function forkCodexThread(args: CodexForkThreadRequest): Promise<CodexThreadDetail> {
   const id = encodeURIComponent(String(args.thread_id ?? '').trim());
-  return fetchCodexGatewayJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}/fork`, {
+  return fetchCodexJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}/fork`, {
     method: 'POST',
     body: JSON.stringify({
       model: String(args.model ?? '').trim(),
@@ -222,7 +222,7 @@ export async function forkCodexThread(args: CodexForkThreadRequest): Promise<Cod
 
 export async function interruptCodexTurn(args: CodexInterruptTurnRequest): Promise<void> {
   const id = encodeURIComponent(String(args.thread_id ?? '').trim());
-  await fetchCodexGatewayJSON<unknown>(`/_redeven_proxy/api/codex/threads/${id}/interrupt`, {
+  await fetchCodexJSON<unknown>(`/_redeven_proxy/api/codex/threads/${id}/interrupt`, {
     method: 'POST',
     body: JSON.stringify({
       turn_id: String(args.turn_id ?? '').trim(),
@@ -232,7 +232,7 @@ export async function interruptCodexTurn(args: CodexInterruptTurnRequest): Promi
 
 export async function startCodexReview(args: CodexReviewStartRequest): Promise<CodexThreadDetail> {
   const id = encodeURIComponent(String(args.thread_id ?? '').trim());
-  return fetchCodexGatewayJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}/review`, {
+  return fetchCodexJSON<CodexThreadDetail>(`/_redeven_proxy/api/codex/threads/${id}/review`, {
     method: 'POST',
     body: JSON.stringify({
       target: String(args.target ?? 'uncommitted_changes').trim() || 'uncommitted_changes',
@@ -253,7 +253,7 @@ export async function respondToCodexRequest(args: {
     if (!normalizedKey) continue;
     answers[normalizedKey] = [String(value ?? '').trim()];
   }
-  await fetchCodexGatewayJSON<unknown>(
+  await fetchCodexJSON<unknown>(
     `/_redeven_proxy/api/codex/threads/${encodeURIComponent(String(args.threadID ?? '').trim())}/requests/${encodeURIComponent(String(args.requestID ?? '').trim())}/response`,
     {
       method: 'POST',
@@ -274,7 +274,7 @@ export async function connectCodexEventStream(args: {
 }): Promise<void> {
   const response = await fetch(
     `/_redeven_proxy/api/codex/threads/${encodeURIComponent(String(args.threadID ?? '').trim())}/events?after_seq=${encodeURIComponent(String(args.afterSeq ?? 0))}`,
-    await prepareGatewayRequestInit({
+    await prepareLocalApiRequestInit({
       method: 'GET',
       headers: { Accept: 'text/event-stream' },
       signal: args.signal,

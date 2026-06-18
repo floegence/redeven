@@ -1,4 +1,4 @@
-import { prepareGatewayRequestInit } from './gatewayApi';
+import { prepareLocalApiRequestInit } from './localApi';
 import {
   normalizeRuntimeWorkbenchLayoutEvent,
   normalizeRuntimeWorkbenchOpenPreviewResponse,
@@ -37,7 +37,7 @@ export class WorkbenchWidgetStateConflictError extends Error {
   }
 }
 
-function gatewayErrorMessage(data: any, status: number): string {
+function localApiErrorMessage(data: any, status: number): string {
   const nested = String(data?.error?.message ?? '').trim();
   if (nested) return nested;
   const flat = String(data?.error ?? '').trim();
@@ -45,12 +45,12 @@ function gatewayErrorMessage(data: any, status: number): string {
   return `HTTP ${status}`;
 }
 
-function gatewayErrorCode(data: any): string {
+function localApiErrorCode(data: any): string {
   return String(data?.error_code ?? data?.error?.code ?? '').trim();
 }
 
 async function fetchWorkbenchLayoutJSON<T>(url: string, init: RequestInit): Promise<T> {
-  const response = await fetch(url, await prepareGatewayRequestInit(init));
+  const response = await fetch(url, await prepareLocalApiRequestInit(init));
   const text = await response.text();
   let data: any = null;
   try {
@@ -59,8 +59,8 @@ async function fetchWorkbenchLayoutJSON<T>(url: string, init: RequestInit): Prom
     // ignore
   }
   if (!response.ok || data?.ok === false) {
-    const message = gatewayErrorMessage(data, response.status);
-    const errorCode = gatewayErrorCode(data);
+    const message = localApiErrorMessage(data, response.status);
+    const errorCode = localApiErrorCode(data);
     if (errorCode === 'WORKBENCH_LAYOUT_REVISION_CONFLICT') {
       throw new WorkbenchLayoutConflictError(message, Number(data?.data?.current_revision ?? 0));
     }
@@ -182,7 +182,7 @@ export async function connectWorkbenchLayoutEventStream(args: {
 }): Promise<void> {
   const response = await fetch(
     `/_redeven_proxy/api/workbench/layout/events?after_seq=${encodeURIComponent(String(args.afterSeq ?? 0))}`,
-    await prepareGatewayRequestInit({
+    await prepareLocalApiRequestInit({
       method: 'GET',
       headers: { Accept: 'text/event-stream' },
       signal: args.signal,

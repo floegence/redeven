@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bytes"
@@ -16,7 +16,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestGateway_AI_ThreadTodosEndpoint(t *testing.T) {
+func TestServer_AI_ThreadTodosEndpoint(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -67,7 +67,7 @@ func TestGateway_AI_ThreadTodosEndpoint(t *testing.T) {
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Logger:             logger,
 		Backend:            &stubBackend{},
 		DistFS:             dist,
@@ -85,7 +85,7 @@ func TestGateway_AI_ThreadTodosEndpoint(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads", bytes.NewBufferString(`{"title":"todo thread"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("create thread status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -110,7 +110,7 @@ func TestGateway_AI_ThreadTodosEndpoint(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+threadID+"/todos", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("todos status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -141,7 +141,7 @@ func TestGateway_AI_ThreadTodosEndpoint(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/not_found/todos", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusNotFound {
 			t.Fatalf("missing thread status=%d body=%s", rr.Code, rr.Body.String())
 		}

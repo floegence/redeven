@@ -12,8 +12,8 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | undefined | null | false>) => classes.filter(Boolean).join(' '),
 }));
 
-vi.mock('../../services/gatewayApi', () => ({
-  prepareGatewayRequestInit: vi.fn(async (init?: RequestInit) => init ?? {}),
+vi.mock('../../services/localApi', () => ({
+  prepareLocalApiRequestInit: vi.fn(async (init?: RequestInit) => init ?? {}),
 }));
 
 vi.mock('../../utils/clipboard', () => ({

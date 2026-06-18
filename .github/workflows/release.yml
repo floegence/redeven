@@ -48,6 +48,9 @@ jobs:
       - name: Validate runtime compatibility contract
         run: ./scripts/check_runtime_compatibility_contract.sh "${GITHUB_REF_NAME}"
 
+      - name: Validate Gateway protocol contract
+        run: ./scripts/check_gateway_protocol_contract.sh
+
       - name: Build embedded assets
         run: ./scripts/build_assets.sh
 

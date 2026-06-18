@@ -28,8 +28,8 @@ describe('shared Flower UI boundary', () => {
     const forbidden = [
       'useEnvContext',
       'useProtocol',
-      'fetchGatewayJSON',
-      'prepareGatewayRequestInit',
+      'fetchLocalApiJSON',
+      'prepareLocalApiRequestInit',
       'desktopSettingsBridge',
       'redevenDesktopSettings',
       '/_redeven_proxy',

@@ -1,4 +1,4 @@
-import { fetchGatewayJSON, prepareGatewayRequestInit } from './gatewayApi';
+import { fetchLocalApiJSON, prepareLocalApiRequestInit } from './localApi';
 
 export type DiagnosticsEvent = Readonly<{
   created_at: string;
@@ -85,13 +85,13 @@ export function diagnosticsEventKey(event: DiagnosticsEvent): string {
 export async function getDiagnostics(limit = 60): Promise<DiagnosticsView> {
   const query = new URLSearchParams();
   query.set('limit', String(limit));
-  return fetchGatewayJSON<DiagnosticsView>(`/_redeven_proxy/api/debug/diagnostics?${query.toString()}`, { method: 'GET' });
+  return fetchLocalApiJSON<DiagnosticsView>(`/_redeven_proxy/api/debug/diagnostics?${query.toString()}`, { method: 'GET' });
 }
 
 export async function exportDiagnostics(limit = 500): Promise<DiagnosticsExportView> {
   const query = new URLSearchParams();
   query.set('limit', String(limit));
-  return fetchGatewayJSON<DiagnosticsExportView>(`/_redeven_proxy/api/debug/diagnostics/export?${query.toString()}`, { method: 'GET' });
+  return fetchLocalApiJSON<DiagnosticsExportView>(`/_redeven_proxy/api/debug/diagnostics/export?${query.toString()}`, { method: 'GET' });
 }
 
 export async function connectDiagnosticsStream(args: {
@@ -103,7 +103,7 @@ export async function connectDiagnosticsStream(args: {
   query.set('limit', String(args.limit ?? 200));
   const response = await fetch(
     `/_redeven_proxy/api/debug/diagnostics/stream?${query.toString()}`,
-    await prepareGatewayRequestInit({
+    await prepareLocalApiRequestInit({
       method: 'GET',
       headers: { Accept: 'text/event-stream' },
       signal: args.signal,

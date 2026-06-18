@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bufio"
@@ -17,7 +17,7 @@ import (
 	"github.com/floegence/redeven/internal/workbenchlayout"
 )
 
-func openGatewayWorkbenchLayoutService(t *testing.T) *workbenchlayout.Service {
+func openServerWorkbenchLayoutService(t *testing.T) *workbenchlayout.Service {
 	t.Helper()
 
 	svc, err := workbenchlayout.Open(filepath.Join(t.TempDir(), "layout.sqlite"))
@@ -32,28 +32,28 @@ func openGatewayWorkbenchLayoutService(t *testing.T) *workbenchlayout.Service {
 	return svc
 }
 
-func newWorkbenchLayoutGatewayForTest(t *testing.T, svc *workbenchlayout.Service, cap config.PermissionSet) *Gateway {
+func newWorkbenchLayoutServerForTest(t *testing.T, svc *workbenchlayout.Service, cap config.PermissionSet) *Server {
 	t.Helper()
-	return &Gateway{
+	return &Server{
 		layouts:            svc,
 		localPermissionCap: &cap,
 	}
 }
 
-func newWorkbenchLayoutGatewayWithTerminalForTest(t *testing.T, svc *workbenchlayout.Service, cap config.PermissionSet) *Gateway {
+func newWorkbenchLayoutServerWithTerminalForTest(t *testing.T, svc *workbenchlayout.Service, cap config.PermissionSet) *Server {
 	t.Helper()
 	manager := terminal.NewManager("/bin/bash", t.TempDir(), nil)
 	t.Cleanup(func() {
 		manager.Cleanup()
 	})
-	return &Gateway{
+	return &Server{
 		layouts:            svc,
 		term:               manager,
 		localPermissionCap: &cap,
 	}
 }
 
-func performWorkbenchLayoutRequest(t *testing.T, gw *Gateway, method string, path string, body string) *httptest.ResponseRecorder {
+func performWorkbenchLayoutRequest(t *testing.T, srv *Server, method string, path string, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	req := WithLocalUIEnvRoute(httptest.NewRequest(method, path, bytes.NewBufferString(body)))
@@ -61,7 +61,7 @@ func performWorkbenchLayoutRequest(t *testing.T, gw *Gateway, method string, pat
 		req.Header.Set("Content-Type", "application/json")
 	}
 	rr := httptest.NewRecorder()
-	gw.handleAPI(rr, req)
+	srv.handleAPI(rr, req)
 	return rr
 }
 
@@ -199,13 +199,13 @@ func readWorkbenchLayoutSSEEvent(t *testing.T, reader *bufio.Reader) workbenchla
 	return event
 }
 
-func TestGatewayWorkbenchLayoutFlow(t *testing.T) {
+func TestServerWorkbenchLayoutFlow(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayWorkbenchLayoutService(t)
-	gw := newWorkbenchLayoutGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
 
-	snapshotResp := performWorkbenchLayoutRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/workbench/layout/snapshot", "")
+	snapshotResp := performWorkbenchLayoutRequest(t, srv, http.MethodGet, "/_redeven_proxy/api/workbench/layout/snapshot", "")
 	if snapshotResp.Code != http.StatusOK {
 		t.Fatalf("snapshot status = %d, body = %s", snapshotResp.Code, snapshotResp.Body.String())
 	}
@@ -214,7 +214,7 @@ func TestGatewayWorkbenchLayoutFlow(t *testing.T) {
 		t.Fatalf("initial snapshot = %#v, want empty revision 0", initialSnapshot)
 	}
 
-	putResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchLayoutRequestJSON())
+	putResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchLayoutRequestJSON())
 	if putResp.Code != http.StatusOK {
 		t.Fatalf("put status = %d, body = %s", putResp.Code, putResp.Body.String())
 	}
@@ -235,7 +235,7 @@ func TestGatewayWorkbenchLayoutFlow(t *testing.T) {
 		t.Fatalf("put snapshot background layers = %#v, want region-1", putSnapshot.BackgroundLayers)
 	}
 
-	latestSnapshotResp := performWorkbenchLayoutRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/workbench/layout/snapshot", "")
+	latestSnapshotResp := performWorkbenchLayoutRequest(t, srv, http.MethodGet, "/_redeven_proxy/api/workbench/layout/snapshot", "")
 	if latestSnapshotResp.Code != http.StatusOK {
 		t.Fatalf("latest snapshot status = %d, body = %s", latestSnapshotResp.Code, latestSnapshotResp.Body.String())
 	}
@@ -250,7 +250,7 @@ func TestGatewayWorkbenchLayoutFlow(t *testing.T) {
 	rr := httptest.NewRecorder()
 	done := make(chan struct{})
 	go func() {
-		gw.handleAPI(rr, req)
+		srv.handleAPI(rr, req)
 		close(done)
 	}()
 
@@ -275,18 +275,18 @@ func TestGatewayWorkbenchLayoutFlow(t *testing.T) {
 	}
 }
 
-func TestGatewayWorkbenchLayoutWriteRequiresPermission(t *testing.T) {
+func TestServerWorkbenchLayoutWriteRequiresPermission(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayWorkbenchLayoutService(t)
-	gw := newWorkbenchLayoutGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: false, Execute: true})
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true, Write: false, Execute: true})
 
-	rr := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchLayoutRequestJSON())
+	rr := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchLayoutRequestJSON())
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body = %s", rr.Code, rr.Body.String())
 	}
 
-	openResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
+	openResp := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
   "item": {
     "path": "/workspace/demo.txt",
     "name": "demo.txt"
@@ -297,25 +297,25 @@ func TestGatewayWorkbenchLayoutWriteRequiresPermission(t *testing.T) {
 	}
 }
 
-func TestGatewayWorkbenchLayoutReadRequiresPermission(t *testing.T) {
+func TestServerWorkbenchLayoutReadRequiresPermission(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayWorkbenchLayoutService(t)
-	gw := newWorkbenchLayoutGatewayForTest(t, svc, config.PermissionSet{Read: false, Write: true, Execute: true})
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: false, Write: true, Execute: true})
 
-	rr := performWorkbenchLayoutRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/workbench/layout/snapshot", "")
+	rr := performWorkbenchLayoutRequest(t, srv, http.MethodGet, "/_redeven_proxy/api/workbench/layout/snapshot", "")
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body = %s", rr.Code, rr.Body.String())
 	}
 }
 
-func TestGatewayWorkbenchLayoutConflictReturnsCurrentRevision(t *testing.T) {
+func TestServerWorkbenchLayoutConflictReturnsCurrentRevision(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayWorkbenchLayoutService(t)
-	gw := newWorkbenchLayoutGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
 
-	first := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchLayoutRequestJSON())
+	first := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchLayoutRequestJSON())
 	if first.Code != http.StatusOK {
 		t.Fatalf("first put status = %d, body = %s", first.Code, first.Body.String())
 	}
@@ -335,7 +335,7 @@ func TestGatewayWorkbenchLayoutConflictReturnsCurrentRevision(t *testing.T) {
     }
   ]
 }`
-	conflictResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/layout", conflictBody)
+	conflictResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/layout", conflictBody)
 	if conflictResp.Code != http.StatusConflict {
 		t.Fatalf("conflict status = %d, want 409, body = %s", conflictResp.Code, conflictResp.Body.String())
 	}
@@ -356,18 +356,18 @@ func TestGatewayWorkbenchLayoutConflictReturnsCurrentRevision(t *testing.T) {
 	}
 }
 
-func TestGatewayWorkbenchWidgetStateFlow(t *testing.T) {
+func TestServerWorkbenchWidgetStateFlow(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayWorkbenchLayoutService(t)
-	gw := newWorkbenchLayoutGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
 
-	putLayoutResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchLayoutRequestJSON())
+	putLayoutResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchLayoutRequestJSON())
 	if putLayoutResp.Code != http.StatusOK {
 		t.Fatalf("layout put status = %d, body = %s", putLayoutResp.Code, putLayoutResp.Body.String())
 	}
 
-	stateResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
+	stateResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
   "base_revision": 0,
   "widget_type": "redeven.files",
   "state": {
@@ -384,7 +384,7 @@ func TestGatewayWorkbenchWidgetStateFlow(t *testing.T) {
 		t.Fatalf("state = %#v, want files revision 1", state)
 	}
 
-	snapshotResp := performWorkbenchLayoutRequest(t, gw, http.MethodGet, "/_redeven_proxy/api/workbench/layout/snapshot", "")
+	snapshotResp := performWorkbenchLayoutRequest(t, srv, http.MethodGet, "/_redeven_proxy/api/workbench/layout/snapshot", "")
 	if snapshotResp.Code != http.StatusOK {
 		t.Fatalf("snapshot status = %d, body = %s", snapshotResp.Code, snapshotResp.Body.String())
 	}
@@ -393,7 +393,7 @@ func TestGatewayWorkbenchWidgetStateFlow(t *testing.T) {
 		t.Fatalf("snapshot widget states = %#v, want files path", snapshot.WidgetStates)
 	}
 
-	rootConflictResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
+	rootConflictResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
   "base_revision": 0,
   "widget_type": "redeven.files",
   "state": {
@@ -406,7 +406,7 @@ func TestGatewayWorkbenchWidgetStateFlow(t *testing.T) {
 		t.Fatalf("root conflict status = %d, want 409, body = %s", rootConflictResp.Code, rootConflictResp.Body.String())
 	}
 
-	conflictResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
+	conflictResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
   "base_revision": 0,
   "widget_type": "redeven.files",
   "state": {
@@ -425,7 +425,7 @@ func TestGatewayWorkbenchWidgetStateFlow(t *testing.T) {
 		t.Fatalf("error_code = %q, want %q", resp.ErrorCode, workbenchWidgetStateConflictErrorCode)
 	}
 
-	unknownFieldResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
+	unknownFieldResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-files-1/state", `{
   "base_revision": 1,
   "widget_type": "redeven.files",
   "state": {
@@ -440,13 +440,13 @@ func TestGatewayWorkbenchWidgetStateFlow(t *testing.T) {
 	}
 }
 
-func TestGatewayWorkbenchOpenPreviewAction(t *testing.T) {
+func TestServerWorkbenchOpenPreviewAction(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayWorkbenchLayoutService(t)
-	gw := newWorkbenchLayoutGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
 
-	createResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
+	createResp := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
   "request_id": "request-preview-create",
   "item": {
     "path": "/workspace/demo.txt",
@@ -477,7 +477,7 @@ func TestGatewayWorkbenchOpenPreviewAction(t *testing.T) {
 		t.Fatalf("snapshot widget/state ids = %q/%q, want atomic preview shell", created.Snapshot.Widgets[0].WidgetID, created.Snapshot.WidgetStates[0].WidgetID)
 	}
 
-	reuseResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
+	reuseResp := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
   "item": {
     "path": "/workspace/demo.txt",
     "name": "demo.txt"
@@ -491,7 +491,7 @@ func TestGatewayWorkbenchOpenPreviewAction(t *testing.T) {
 		t.Fatalf("reuse response = %#v, want existing widget %q", reused, created.WidgetID)
 	}
 
-	forceResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
+	forceResp := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
   "item": {
     "path": "/workspace/demo.txt",
     "name": "demo.txt"
@@ -507,13 +507,13 @@ func TestGatewayWorkbenchOpenPreviewAction(t *testing.T) {
 	}
 }
 
-func TestGatewayWorkbenchOpenPreviewRejectsInvalidInput(t *testing.T) {
+func TestServerWorkbenchOpenPreviewRejectsInvalidInput(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayWorkbenchLayoutService(t)
-	gw := newWorkbenchLayoutGatewayForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
 
-	resp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
+	resp := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/actions/open_preview", `{
   "item": {
     "path": "relative.txt",
     "name": "relative.txt"
@@ -524,18 +524,18 @@ func TestGatewayWorkbenchOpenPreviewRejectsInvalidInput(t *testing.T) {
 	}
 }
 
-func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
+func TestServerWorkbenchTerminalSessionAPIs(t *testing.T) {
 	t.Parallel()
 
-	svc := openGatewayWorkbenchLayoutService(t)
-	gw := newWorkbenchLayoutGatewayWithTerminalForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
+	svc := openServerWorkbenchLayoutService(t)
+	srv := newWorkbenchLayoutServerWithTerminalForTest(t, svc, config.PermissionSet{Read: true, Write: true, Execute: true})
 
-	putLayoutResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchTerminalLayoutRequestJSON())
+	putLayoutResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/layout", sampleWorkbenchTerminalLayoutRequestJSON())
 	if putLayoutResp.Code != http.StatusOK {
 		t.Fatalf("layout put status = %d, body = %s", putLayoutResp.Code, putLayoutResp.Body.String())
 	}
 
-	createResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions", `{
+	createResp := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions", `{
   "name": "repo",
   "working_dir": ""
 }`)
@@ -566,7 +566,7 @@ func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("json.Marshal(geometryBody) error = %v", err)
 	}
-	geometryResp := performWorkbenchLayoutRequest(t, gw, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/state", string(geometryBody))
+	geometryResp := performWorkbenchLayoutRequest(t, srv, http.MethodPut, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/state", string(geometryBody))
 	if geometryResp.Code != http.StatusOK {
 		t.Fatalf("geometry put status = %d, body = %s", geometryResp.Code, geometryResp.Body.String())
 	}
@@ -575,7 +575,7 @@ func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
 		t.Fatalf("geometry state = %#v, want font size 14 and jetbrains", geometryState.State)
 	}
 
-	createSecondResp := performWorkbenchLayoutRequest(t, gw, http.MethodPost, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions", `{
+	createSecondResp := performWorkbenchLayoutRequest(t, srv, http.MethodPost, "/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions", `{
   "name": "server",
   "working_dir": ""
 }`)
@@ -598,7 +598,7 @@ func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
 
 	deleteResp := performWorkbenchLayoutRequest(
 		t,
-		gw,
+		srv,
 		http.MethodDelete,
 		"/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions/"+createData.Session.ID,
 		"",
@@ -616,7 +616,7 @@ func TestGatewayWorkbenchTerminalSessionAPIs(t *testing.T) {
 
 	deleteLastResp := performWorkbenchLayoutRequest(
 		t,
-		gw,
+		srv,
 		http.MethodDelete,
 		"/_redeven_proxy/api/workbench/widgets/widget-terminal-1/terminal/sessions/"+createSecondData.Session.ID,
 		"",

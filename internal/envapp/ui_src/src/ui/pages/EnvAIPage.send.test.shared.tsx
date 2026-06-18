@@ -42,7 +42,7 @@ const mocks = vi.hoisted(() => {
     timestamp: 10,
     blocks: [{ type: 'markdown', content: `Transcript for ${threadId}` }],
   }]);
-  const fetchGatewayJSONMock = vi.fn(async (url: string, init?: RequestInit) => {
+  const fetchLocalApiJSONMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.includes('/file-action-open-target')) {
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) as Record<string, unknown> : {};
       return {
@@ -134,7 +134,7 @@ const mocks = vi.hoisted(() => {
   const openFlowerFilePreviewMock = vi.fn(async () => undefined);
 
   return {
-    fetchGatewayJSONMock,
+    fetchLocalApiJSONMock,
     liveMessagesMock,
     openFileBrowserAtPathMock,
     openFilePreviewMock,
@@ -207,8 +207,8 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Tag: (props: any) => <span class={props.class}>{props.children}</span>,
 }));
 
-vi.mock('../services/gatewayApi', () => ({
-  fetchGatewayJSON: mocks.fetchGatewayJSONMock,
+vi.mock('../services/localApi', () => ({
+  fetchLocalApiJSON: mocks.fetchLocalApiJSONMock,
 }));
 
 vi.mock('../protocol/redeven_v1', () => ({
@@ -326,7 +326,7 @@ function mockLiveMessages(payload: { messages: Array<{ messageJson: unknown }> }
 export function registerEnvAIPageSendTests() {
   describe('EnvAIPage FlowerSurface integration', () => {
     beforeEach(() => {
-      mocks.fetchGatewayJSONMock.mockClear();
+      mocks.fetchLocalApiJSONMock.mockClear();
       mocks.sendUserTurnMock.mockClear();
       mocks.subscribeThreadMock.mockClear();
       mocks.liveMessagesMock.mockClear();
@@ -365,7 +365,7 @@ export function registerEnvAIPageSendTests() {
         (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
         await flush();
         await flush();
-        expect(mocks.fetchGatewayJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap', { method: 'GET' });
+        expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap', { method: 'GET' });
         expect(mocks.liveMessagesMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
         expect(host.textContent).toContain('Transcript for thread-1');
       } finally {
@@ -1080,7 +1080,7 @@ export function registerEnvAIPageSendTests() {
       }
     });
 
-    it('requires read_status.read_state from the Env-local gateway contract', async () => {
+    it('requires read_status.read_state from the Env-local local API contract', async () => {
       mocks.state.omitReadState = true;
       const { host, dispose } = await renderPage();
       try {

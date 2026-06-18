@@ -109,7 +109,7 @@ func New(opts Options) (*Server, error) {
 		Rewrite: func(pr *httputil.ProxyRequest) {
 			pr.SetURL(upstreamURL)
 			// Preserve the browser-visible origin context projected by flowersec-proxy.
-			// The gateway uses this for origin-role isolation of Env / Codespace / Forward
+			// The app server uses this for origin-role isolation of Env / Codespace / Forward
 			// surfaces, so the trusted local hop must not collapse it back to 127.0.0.1.
 			pr.Out.Host = pr.In.Host
 			if proto := strings.TrimSpace(pr.In.Header.Get("X-Forwarded-Proto")); proto != "" {

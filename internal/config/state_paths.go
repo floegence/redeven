@@ -33,7 +33,6 @@ type StateLayout struct {
 	DiagnosticsDir           string
 	AuditDir                 string
 	AppsDir                  string
-	GatewayDir               string
 }
 
 func DefaultConfigPath() (string, error) {
@@ -97,7 +96,6 @@ func stateLayoutForResolvedRoot(stateRoot string) StateLayout {
 		DiagnosticsDir:           filepath.Join(stateDir, "diagnostics"),
 		AuditDir:                 filepath.Join(stateDir, "audit"),
 		AppsDir:                  filepath.Join(stateDir, "apps"),
-		GatewayDir:               filepath.Join(stateDir, "gateway"),
 	}
 }
 

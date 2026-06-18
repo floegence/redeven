@@ -1,0 +1,944 @@
+openapi: 3.1.0
+x-redeven-contract-scope:
+  includes: /gateway/v1/* JSON protocol endpoints only.
+  excludes:
+    - Gateway Env App proxy routes such as /
+    - /_redeven_proxy/*
+    - /_redeven_direct/*
+    - /api/local/*
+    - Desktop bridge stdio frame and hello protocol schemas.
+x-redeven-signature-payload:
+  algorithm: ed25519
+  canonicalization: canonical JSON with lexicographically sorted object keys
+  fields:
+    - protocol_version
+    - method
+    - route
+    - body_digest
+    - gateway_id
+    - binding_audience
+    - nonce
+    - timestamp_unix_ms
+info:
+  title: Redeven Gateway Protocol
+  version: redeven-gateway-v1
+  summary: Desktop-managed Gateway HTTP API for pairing, catalog, environment sessions, profile management, and lifecycle requests.
+servers:
+  - url: https://gateway.example
+    description: Paired Gateway URL transport.
+  - url: http://redeven-gateway.local
+    description: HTTP request stream carried by the Desktop bridge gateway_protocol surface.
+tags:
+  - name: Pairing
+  - name: Catalog
+  - name: Session
+  - name: Profiles
+  - name: Lifecycle
+paths:
+  /gateway/v1/pairing/challenge:
+    post:
+      tags: [Pairing]
+      operationId: createGatewayPairingChallenge
+      summary: Create a signed Gateway pairing challenge.
+      description: URL transports require the configured pairing code. Desktop-managed bridge transports are authorized by the managed bridge token injected below the bridge layer.
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PairingChallengeRequest'
+      responses:
+        '200':
+          description: Signed Gateway pairing challenge.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PairingChallengeEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v1/pairing/complete:
+    post:
+      tags: [Pairing]
+      operationId: completeGatewayPairing
+      summary: Complete pairing after the client verifies the challenge.
+      description: Profile-write pairing is accepted only on the managed Desktop bridge transport.
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PairingCompleteRequest'
+      responses:
+        '200':
+          description: Signed Gateway pairing completion.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PairingCompleteEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v1/catalog:
+    post:
+      tags: [Catalog]
+      operationId: listGatewayEnvironments
+      summary: List Gateway metadata and visible environments.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatalogRequest'
+      responses:
+        '200':
+          description: Gateway catalog.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v1/open-session:
+    post:
+      tags: [Session]
+      operationId: openGatewayEnvironmentSession
+      summary: Mint a short-lived artifact for opening a Gateway environment.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenSessionRequest'
+      responses:
+        '200':
+          description: Gateway open-session artifact.
+          headers:
+            Set-Cookie:
+              description: Local direct artifacts may set a Gateway profile session cookie.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenSessionEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v1/env-profiles/upsert:
+    post:
+      tags: [Profiles]
+      operationId: upsertGatewayEnvironmentProfile
+      summary: Create or update a Gateway-owned environment profile.
+      description: Requires a paired profile-write client over the managed Desktop bridge transport.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+          GatewayManagedBridgeToken: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvProfileUpsertRequest'
+      responses:
+        '200':
+          description: Saved Gateway environment profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvProfileUpsertEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v1/env-profiles/delete:
+    post:
+      tags: [Profiles]
+      operationId: deleteGatewayEnvironmentProfile
+      summary: Delete a Gateway-owned environment profile.
+      description: Requires a paired profile-write client over the managed Desktop bridge transport.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+          GatewayManagedBridgeToken: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvProfileDeleteRequest'
+      responses:
+        '200':
+          description: Profile deletion result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvProfileDeleteEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+  /gateway/v1/env-lifecycle:
+    post:
+      tags: [Lifecycle]
+      operationId: runGatewayEnvironmentLifecycle
+      summary: Request a Gateway-owned environment lifecycle operation.
+      security:
+        - GatewayID: []
+          GatewayBindingAudience: []
+          GatewayClientKeyID: []
+          GatewayClientNonce: []
+          GatewayRequestTimestamp: []
+          GatewayRequestSignature: []
+      parameters:
+        - $ref: '#/components/parameters/GatewayTransportHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvLifecycleRequest'
+      responses:
+        '200':
+          description: Lifecycle operation status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvLifecycleEnvelope'
+        default:
+          $ref: '#/components/responses/GatewayError'
+components:
+  securitySchemes:
+    GatewayID:
+      type: apiKey
+      in: header
+      name: X-Redeven-Gateway-ID
+    GatewayBindingAudience:
+      type: apiKey
+      in: header
+      name: X-Redeven-Gateway-Binding-Audience
+    GatewayClientKeyID:
+      type: apiKey
+      in: header
+      name: X-Redeven-Client-Key-ID
+    GatewayClientNonce:
+      type: apiKey
+      in: header
+      name: X-Redeven-Client-Nonce
+    GatewayRequestTimestamp:
+      type: apiKey
+      in: header
+      name: X-Redeven-Request-TS
+    GatewayRequestSignature:
+      type: apiKey
+      in: header
+      name: X-Redeven-Request-Signature
+    GatewayManagedBridgeToken:
+      type: apiKey
+      in: header
+      name: X-Redeven-Gateway-Managed-Bridge-Token
+  responses:
+    GatewayError:
+      description: Gateway error envelope.
+      x-redeven-http-statuses: [400, 401, 403, 404, 423, 500, 501]
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GatewayErrorEnvelope'
+  parameters:
+    GatewayTransportHeader:
+      name: X-Redeven-Gateway-Transport
+      in: header
+      required: false
+      description: Set to desktop_bridge by the Desktop bridge transport when routing Gateway HTTP over a bridge stream.
+      schema:
+        type: string
+        enum: [desktop_bridge]
+  schemas:
+    ProtocolVersion:
+      type: string
+      const: redeven-gateway-v1
+    GatewayErrorCode:
+      type: string
+      enum:
+        - INVALID_REQUEST
+        - UNAUTHORIZED
+        - TRUST_CHANGED
+        - NOT_FOUND
+        - CAPABILITY_UNSUPPORTED
+        - UNAVAILABLE
+        - NOT_IMPLEMENTED
+    GatewayErrorShape:
+      type: object
+      required: [code, message]
+      additionalProperties: false
+      properties:
+        code:
+          $ref: '#/components/schemas/GatewayErrorCode'
+        message:
+          type: string
+        retryable:
+          type: boolean
+        redacted_detail:
+          type: string
+    GatewayErrorEnvelope:
+      type: object
+      required: [ok, error]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: false
+        error:
+          $ref: '#/components/schemas/GatewayErrorShape'
+    CatalogRequest:
+      type: object
+      required: [protocol_version]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+    CatalogEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/CatalogResponse'
+    CatalogResponse:
+      type: object
+      required: [protocol_version, gateway, environments]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway:
+          $ref: '#/components/schemas/GatewayMetadata'
+        environments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Environment'
+    GatewayMetadata:
+      type: object
+      required: [gateway_id, display_name, status, capabilities]
+      additionalProperties: false
+      properties:
+        gateway_id:
+          type: string
+        display_name:
+          type: string
+        status:
+          $ref: '#/components/schemas/GatewayStatus'
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/GatewayCapability'
+          uniqueItems: true
+        gateway_public_key_fingerprint:
+          type: string
+    GatewayStatus:
+      type: string
+      enum:
+        - online
+        - pairing_required
+        - trust_changed
+        - error
+        - unknown
+    GatewayCapability:
+      type: string
+      enum:
+        - env_catalog
+        - env_open_session
+        - env_profile_write
+        - env_lifecycle
+        - terminal
+        - files
+        - web_service
+        - port_forward
+    Environment:
+      type: object
+      required:
+        - gateway_env_id
+        - display_name
+        - env_kind
+        - state
+        - capabilities
+        - access_capabilities
+        - control_capabilities
+        - origin
+      additionalProperties: false
+      properties:
+        gateway_env_id:
+          type: string
+        display_name:
+          type: string
+        env_kind:
+          $ref: '#/components/schemas/EnvironmentKind'
+        state:
+          $ref: '#/components/schemas/EnvironmentState'
+        capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvironmentCapability'
+          uniqueItems: true
+        access_capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvironmentCapability'
+          uniqueItems: true
+        control_capabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnvironmentCapability'
+          uniqueItems: true
+        profile:
+          $ref: '#/components/schemas/EnvironmentProfile'
+        profile_access_route:
+          $ref: '#/components/schemas/EnvProfileAccessRoute'
+        origin:
+          $ref: '#/components/schemas/EnvironmentOrigin'
+        last_seen_at_unix_ms:
+          type: integer
+          format: int64
+          minimum: 1
+    EnvironmentKind:
+      type: string
+      enum:
+        - managed_local_env
+        - reachable_env
+    EnvironmentState:
+      type: string
+      enum:
+        - unknown
+        - available
+        - starting
+        - stopped
+        - archived
+    EnvironmentCapability:
+      type: string
+      enum:
+        - open
+        - start
+        - stop
+        - restart
+        - update_runtime
+        - terminal
+        - files
+        - web_service
+        - port_forward
+    EnvironmentProfile:
+      type: object
+      required: [managed, access_route_kind]
+      additionalProperties: false
+      properties:
+        managed:
+          type: boolean
+          const: true
+        access_route_kind:
+          $ref: '#/components/schemas/EnvProfileAccessRouteKind'
+    EnvironmentOrigin:
+      type: object
+      required: [kind, label]
+      additionalProperties: false
+      properties:
+        kind:
+          $ref: '#/components/schemas/EnvironmentOriginKind'
+        label:
+          type: string
+    EnvironmentOriginKind:
+      type: string
+      enum:
+        - gateway_host
+        - ssh_target
+        - container
+        - network_target
+    PairingChallengeRequest:
+      type: object
+      required:
+        - protocol_version
+        - client_nonce
+        - client_public_key
+        - binding_audience
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        client_nonce:
+          type: string
+        client_public_key:
+          type: string
+        binding_audience:
+          type: string
+        pairing_code:
+          type: string
+    PairingChallengeEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/PairingChallengeResponse'
+    PairingChallengeResponse:
+      type: object
+      required:
+        - protocol_version
+        - gateway_id
+        - gateway_public_key
+        - gateway_public_key_fingerprint
+        - gateway_nonce
+        - expires_at_unix_ms
+        - signature
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway_id:
+          type: string
+        gateway_public_key:
+          type: string
+        gateway_public_key_fingerprint:
+          type: string
+        gateway_nonce:
+          type: string
+        pairing_code:
+          type: string
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+        signature:
+          type: string
+    PairingCompleteRequest:
+      type: object
+      required:
+        - protocol_version
+        - client_nonce
+        - gateway_nonce
+        - gateway_id
+        - binding_audience
+        - client_key_id
+        - proof
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        client_nonce:
+          type: string
+        gateway_nonce:
+          type: string
+        gateway_id:
+          type: string
+        binding_audience:
+          type: string
+        client_key_id:
+          type: string
+        client_capability:
+          type: string
+          enum: [env_profile_write]
+        proof:
+          type: string
+    PairingCompleteEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/PairingCompleteResponse'
+    PairingCompleteResponse:
+      type: object
+      required:
+        - protocol_version
+        - gateway_id
+        - client_key_id
+        - paired_at_unix_ms
+        - proof
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway_id:
+          type: string
+        client_key_id:
+          type: string
+        paired_at_unix_ms:
+          type: integer
+          format: int64
+        proof:
+          type: string
+    OpenSessionRequest:
+      type: object
+      required:
+        - protocol_version
+        - gateway_env_id
+        - requested_capability
+        - client_nonce
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway_env_id:
+          type: string
+        requested_capability:
+          $ref: '#/components/schemas/RequestedCapability'
+        client_nonce:
+          type: string
+        bridge_session_id:
+          type: string
+        route_id:
+          type: string
+    RequestedCapability:
+      type: string
+      enum:
+        - env_app
+        - terminal
+        - files
+        - web_service
+        - port_forward
+    OpenSessionEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/OpenSessionResponse'
+    OpenSessionResponse:
+      type: object
+      required:
+        - protocol_version
+        - gateway_session_id
+        - gateway_env_id
+        - connect_artifact
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway_session_id:
+          type: string
+        gateway_env_id:
+          type: string
+        connect_artifact:
+          $ref: '#/components/schemas/GatewayConnectArtifact'
+        diagnostics_hint:
+          $ref: '#/components/schemas/DiagnosticsHint'
+    GatewayConnectArtifact:
+      oneOf:
+        - $ref: '#/components/schemas/LocalDirectConnectArtifact'
+        - $ref: '#/components/schemas/DesktopBridgeConnectArtifact'
+    LocalDirectConnectArtifact:
+      type: object
+      required:
+        - kind
+        - url
+        - expires_at_unix_ms
+        - artifact_nonce
+        - proof
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: local_direct_artifact
+        url:
+          type: string
+          format: uri
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+        artifact_nonce:
+          type: string
+        proof:
+          type: string
+    DesktopBridgeConnectArtifact:
+      type: object
+      required:
+        - kind
+        - bridge_session_id
+        - route_id
+        - expires_at_unix_ms
+        - artifact_nonce
+        - proof
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: desktop_bridge_artifact
+        bridge_session_id:
+          type: string
+        route_id:
+          type: string
+        expires_at_unix_ms:
+          type: integer
+          format: int64
+        artifact_nonce:
+          type: string
+        proof:
+          type: string
+    DiagnosticsHint:
+      type: object
+      required: [gateway_env_id, connection_kind]
+      additionalProperties: false
+      properties:
+        gateway_env_id:
+          type: string
+        connection_kind:
+          type: string
+    EnvProfileUpsertRequest:
+      type: object
+      required: [protocol_version, profile]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        profile:
+          $ref: '#/components/schemas/EnvProfileInput'
+    EnvProfileInput:
+      type: object
+      required: [display_name, access_route]
+      additionalProperties: false
+      properties:
+        gateway_env_id:
+          type: string
+          pattern: '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$'
+        display_name:
+          type: string
+        access_route:
+          $ref: '#/components/schemas/EnvProfileAccessRoute'
+        control_owner:
+          $ref: '#/components/schemas/EnvProfileControlOwner'
+    EnvProfileControlOwner:
+      type: string
+      enum:
+        - none
+        - gateway
+    EnvProfileAccessRoute:
+      oneOf:
+        - $ref: '#/components/schemas/EnvProfileURLAccessRoute'
+        - $ref: '#/components/schemas/EnvProfileSSHHostAccessRoute'
+        - $ref: '#/components/schemas/EnvProfileSSHContainerAccessRoute'
+      discriminator:
+        propertyName: kind
+    EnvProfileURLAccessRoute:
+      type: object
+      required: [kind, url]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: url
+        url:
+          type: string
+          format: uri
+          description: Absolute http or https URL. Embedded credentials are rejected by Gateway profile validation.
+        origin_label:
+          type: string
+    EnvProfileSSHHostAccessRoute:
+      type: object
+      required: [kind, ssh_destination]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: ssh_host
+        origin_label:
+          type: string
+        ssh_destination:
+          type: string
+        ssh_port:
+          type: integer
+          description: Omit or send 0 to use the default SSH port.
+          minimum: 0
+          maximum: 65535
+        auth_mode:
+          type: string
+          description: key_agent is the only supported SSH auth mode in Gateway v1.
+          enum:
+            - key_agent
+        ssh_password_configured:
+          type: boolean
+          readOnly: true
+        ssh_runtime_root:
+          type: string
+    EnvProfileSSHContainerAccessRoute:
+      type: object
+      required: [kind, ssh_destination, container_engine, container_id, container_runtime_root]
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          const: ssh_container
+        origin_label:
+          type: string
+        ssh_destination:
+          type: string
+        ssh_port:
+          type: integer
+          description: Omit or send 0 to use the default SSH port.
+          minimum: 0
+          maximum: 65535
+        auth_mode:
+          type: string
+          description: key_agent is the only supported SSH auth mode in Gateway v1.
+          enum:
+            - key_agent
+        ssh_password_configured:
+          type: boolean
+          readOnly: true
+        ssh_runtime_root:
+          type: string
+        container_engine:
+          type: string
+          enum:
+            - docker
+            - podman
+        container_id:
+          type: string
+        container_runtime_root:
+          type: string
+    EnvProfileAccessRouteKind:
+      type: string
+      enum:
+        - url
+        - ssh_host
+        - ssh_container
+    EnvProfileUpsertEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/EnvProfileUpsertResponse'
+    EnvProfileUpsertResponse:
+      type: object
+      required: [protocol_version, environment]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        environment:
+          $ref: '#/components/schemas/Environment'
+    EnvProfileDeleteRequest:
+      type: object
+      required: [protocol_version, gateway_env_id]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway_env_id:
+          type: string
+    EnvProfileDeleteEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/EnvProfileDeleteResponse'
+    EnvProfileDeleteResponse:
+      type: object
+      required: [protocol_version, gateway_env_id, deleted]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway_env_id:
+          type: string
+        deleted:
+          type: boolean
+    EnvLifecycleRequest:
+      type: object
+      required: [protocol_version, gateway_env_id, operation]
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway_env_id:
+          type: string
+        operation:
+          $ref: '#/components/schemas/EnvLifecycleOperation'
+    EnvLifecycleOperation:
+      type: string
+      enum:
+        - start
+        - stop
+        - restart
+        - update_runtime
+    EnvLifecycleEnvelope:
+      type: object
+      required: [ok, data]
+      additionalProperties: false
+      properties:
+        ok:
+          type: boolean
+          const: true
+        data:
+          $ref: '#/components/schemas/EnvLifecycleResponse'
+    EnvLifecycleResponse:
+      type: object
+      required:
+        - protocol_version
+        - gateway_env_id
+        - operation
+        - state
+      additionalProperties: false
+      properties:
+        protocol_version:
+          $ref: '#/components/schemas/ProtocolVersion'
+        gateway_env_id:
+          type: string
+        operation:
+          $ref: '#/components/schemas/EnvLifecycleOperation'
+        state:
+          $ref: '#/components/schemas/EnvLifecycleState'
+        message:
+          type: string
+    EnvLifecycleState:
+      type: string
+      enum:
+        - accepted
+        - running
+        - succeeded
+        - failed
+        - unsupported

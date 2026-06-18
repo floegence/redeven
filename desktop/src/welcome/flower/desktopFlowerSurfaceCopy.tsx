@@ -269,7 +269,7 @@ function createDesktopFlowerProviderDialogCopy(i18n: DesktopI18n): FlowerSurface
       chatglm: t(i18n, k('dialogNativeConnection')),
       deepseek: t(i18n, k('dialogNativeConnection')),
       qwen: t(i18n, k('dialogNativeConnection')),
-      openai_compatible: t(i18n, k('dialogCustomGateway')),
+      openai_compatible: t(i18n, k('dialogCustomEndpoint')),
     },
     connectionTitle: t(i18n, k('dialogConnectionTitle')),
     connectionDescription: t(i18n, k('dialogConnectionDescription')),

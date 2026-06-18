@@ -169,7 +169,7 @@ func TestFloretProviderAdapter_UsesRedevenModelNameInsteadOfFloretPlaceholder(t 
 		nil,
 	)
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
-		Model:    "redeven-model-gateway",
+		Model:    "redeven-model-adapter",
 		Messages: []flruntime.ModelMessage{{Role: "user", Content: "hello"}},
 	})
 	if err != nil {

@@ -25,7 +25,7 @@ import (
 	"github.com/floegence/flowersec/flowersec-go/protocolio"
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
-	"github.com/floegence/redeven/internal/codeapp/gateway"
+	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/portforward"
@@ -59,8 +59,8 @@ type Options struct {
 	ControlplaneProviderID string
 	EnvPublicID            string
 
-	// Gateway is the Env App gateway handler mounted under /_redeven_proxy/*.
-	Gateway *gateway.Gateway
+	// AppServer is the Env App local API and proxy handler mounted under /_redeven_proxy/*.
+	AppServer *appserver.Server
 
 	// Agent serves direct sessions (RPC/streams) after a successful E2EE handshake.
 	Agent *agent.Agent
@@ -100,9 +100,9 @@ type Server struct {
 	envPublicID            string
 	localPermissionCap     *config.PermissionSet
 
-	gw   *gateway.Gateway
-	a    *agent.Agent
-	diag *diagnostics.Store
+	appServer *appserver.Server
+	a         *agent.Agent
+	diag      *diagnostics.Store
 
 	accessGate *accessgate.Gate
 
@@ -144,8 +144,8 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
 	mux.HandleFunc("/_redeven_direct/ws", s.handleDirectWS)
-	// Reuse the existing gateway for Env App UI + management APIs.
-	mux.HandleFunc("/_redeven_proxy/", s.handleGateway)
+	// Reuse the existing app server for Env App UI and management APIs.
+	mux.HandleFunc("/_redeven_proxy/", s.handleEnvAppProxy)
 	var handler http.Handler = mux
 	if s.diag == nil {
 		return handler
@@ -164,8 +164,8 @@ func New(opts Options) (*Server, error) {
 	if opts.Agent == nil {
 		return nil, errors.New("missing Agent")
 	}
-	if opts.Gateway == nil {
-		return nil, errors.New("missing Gateway")
+	if opts.AppServer == nil {
+		return nil, errors.New("missing AppServer")
 	}
 	if strings.TrimSpace(opts.ConfigPath) == "" {
 		return nil, errors.New("missing ConfigPath")
@@ -207,7 +207,7 @@ func New(opts Options) (*Server, error) {
 		controlplaneProviderID: strings.TrimSpace(opts.ControlplaneProviderID),
 		envPublicID:            strings.TrimSpace(opts.EnvPublicID),
 		localPermissionCap:     &localPermissionCap,
-		gw:                     opts.Gateway,
+		appServer:              opts.AppServer,
 		a:                      opts.Agent,
 		diag:                   opts.Diagnostics,
 		accessGate:             opts.AccessGate,
@@ -267,7 +267,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 
 	if s.desktopManaged && strings.TrimSpace(s.desktopOwnerID) != "" {
-		runtimeControl, err := newRuntimeControlServer(s.a, s.gw, s.desktopOwnerID, s.log, nil)
+		runtimeControl, err := newRuntimeControlServer(s.a, s.appServer, s.desktopOwnerID, s.log, nil)
 		if err != nil {
 			_ = s.Close()
 			return fmt.Errorf("init runtime-control: %w", err)
@@ -325,7 +325,7 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	}
 
 	if s.desktopManaged && strings.TrimSpace(s.desktopOwnerID) != "" {
-		runtimeControl, err := newRuntimeControlServer(s.a, s.gw, s.desktopOwnerID, s.log, nil)
+		runtimeControl, err := newRuntimeControlServer(s.a, s.appServer, s.desktopOwnerID, s.log, nil)
 		if err != nil {
 			_ = s.Close()
 			return fmt.Errorf("init runtime-control: %w", err)
@@ -680,11 +680,11 @@ func (s *Server) isPublicEnvAppRequest(r *http.Request) bool {
 	return p == "/_redeven_proxy/env" || p == "/_redeven_proxy/env/" || strings.HasPrefix(p, "/_redeven_proxy/env/")
 }
 
-func (s *Server) handleGateway(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleEnvAppProxy(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
-	if s.gw == nil {
+	if s.appServer == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -694,14 +694,14 @@ func (s *Server) handleGateway(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.gw.ServeHTTP(w, gateway.WithLocalUIEnvRoute(r))
+	s.appServer.ServeHTTP(w, appserver.WithLocalUIEnvRoute(r))
 }
 
 func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
-	if s.gw == nil {
+	if s.appServer == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -724,14 +724,14 @@ func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.gw.ServeHTTP(w, gateway.WithLocalUICodeSpaceRoute(r, codeSpaceID))
+	s.appServer.ServeHTTP(w, appserver.WithLocalUICodeSpaceRoute(r, codeSpaceID))
 }
 
 func (s *Server) handlePortForward(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
-	if s.gw == nil {
+	if s.appServer == nil {
 		http.NotFound(w, r)
 		return
 	}
@@ -754,7 +754,7 @@ func (s *Server) handlePortForward(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.gw.ServeHTTP(w, gateway.WithLocalUIPortForwardRoute(r, forwardID))
+	s.appServer.ServeHTTP(w, appserver.WithLocalUIPortForwardRoute(r, forwardID))
 }
 
 func localCodeSpaceRoute(path string) (codeSpaceID string, basePath string, ok bool) {
@@ -898,7 +898,7 @@ func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	// The Env App ships its own favicon under the embedded gateway base path.
+	// The Env App ships its own favicon under the embedded app-server base path.
 	http.Redirect(w, r, "/_redeven_proxy/env/favicon.svg", http.StatusFound)
 }
 
@@ -999,7 +999,7 @@ func localUIDiagnosticsRouteKind(path string) string {
 	case path == "/_redeven_direct/ws":
 		return "direct_ws"
 	case strings.HasPrefix(path, "/_redeven_proxy/"):
-		return "gateway_entry"
+		return "env_app_proxy_entry"
 	default:
 		return "other"
 	}
@@ -1049,7 +1049,7 @@ func (s *Server) runtimeServiceSnapshot() runtimeservice.Snapshot {
 		snapshot = s.a.RuntimeServiceSnapshot()
 	}
 	snapshot = runtimeservice.NormalizeSnapshotForEndpoint(snapshot, s.desktopManaged, s.resolvedEffectiveRunMode(), s.remoteEnabled)
-	if snapshot.OpenReadiness.State == runtimeservice.OpenReadinessOpenable && (s.gw == nil || !s.gw.EnvAppShellReady()) {
+	if snapshot.OpenReadiness.State == runtimeservice.OpenReadinessOpenable && (s.appServer == nil || !s.appServer.EnvAppShellReady()) {
 		snapshot.OpenReadiness = runtimeservice.EnvAppShellUnavailableReadiness()
 		return runtimeservice.NormalizeSnapshot(snapshot)
 	}

@@ -5,7 +5,7 @@ import { useRuntimeUpdateContext } from '../../maintenance/RuntimeUpdateContext'
 import { resolveAgentUpgradeState } from '../../maintenance/agentUpgradeState';
 import { isReleaseVersion } from '../../maintenance/agentVersion';
 import { formatAgentStatusLabel } from '../../maintenance/shared';
-import { fetchGatewayJSON } from '../../services/gatewayApi';
+import { fetchLocalApiJSON } from '../../services/localApi';
 import {
   cancelCodeRuntimeOperation,
   codeRuntimeOperationNeedsAttention,
@@ -145,11 +145,11 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
 
   const [settings, { mutate: mutateSettings, refetch }] = createResource<AgentSettingsResponse | null, number | null>(
     () => key(),
-    async (k) => (k == null ? null : await fetchGatewayJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
+    async (k) => (k == null ? null : await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' })),
   );
   const [codexStatus, { refetch: refetchCodexStatus }] = createResource<CodexHostStatus | null, number | null>(
     () => key(),
-    async (k) => (k == null ? null : await fetchGatewayJSON<CodexHostStatus>('/_redeven_proxy/api/codex/status', { method: 'GET' })),
+    async (k) => (k == null ? null : await fetchLocalApiJSON<CodexHostStatus>('/_redeven_proxy/api/codex/status', { method: 'GET' })),
   );
   const [codeRuntimeStatus, { refetch: refetchCodeRuntimeStatus }] = createResource<CodeRuntimeStatus | null, number | null>(
     () => key(),
@@ -247,7 +247,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const hideLoadingCurtain = () => setLoadingCurtain({ visible: false, surface: '' });
 
   const saveSettings = async (body: any): Promise<SettingsUpdateResponse> => {
-    const json = await fetchGatewayJSON<any>('/_redeven_proxy/api/settings', {
+    const json = await fetchLocalApiJSON<any>('/_redeven_proxy/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

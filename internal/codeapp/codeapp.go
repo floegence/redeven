@@ -13,8 +13,8 @@ import (
 
 	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
+	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
-	"github.com/floegence/redeven/internal/codeapp/gateway"
 	"github.com/floegence/redeven/internal/codeapp/registry"
 	"github.com/floegence/redeven/internal/codeapp/ui"
 	"github.com/floegence/redeven/internal/codexbridge"
@@ -60,7 +60,7 @@ type Options struct {
 	Diagnostics *diagnostics.Store
 	Terminal    *terminal.Manager
 	// LocalUIEnabled enables Local UI-specific runtime behavior such as shorter
-	// code-server reconnection grace and local gateway routing.
+	// code-server reconnection grace and local app-server routing.
 	LocalUIEnabled          bool
 	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
 	ResolveSessionTunnelURL func(channelID string) (string, bool)
@@ -90,7 +90,7 @@ type Service struct {
 	ai      *ai.Service
 	codex   *codexbridge.Manager
 	reads   *threadreadstate.Store
-	gw      *gateway.Gateway
+	appSrv  *appserver.Server
 
 	terminalLayoutCleanup func()
 }
@@ -237,7 +237,14 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
-	threadReadStatePath := filepath.Join(stateAbs, "gateway", "thread_read_state.sqlite")
+	threadReadStatePath, err := appServerThreadReadStatePath(stateAbs)
+	if err != nil {
+		_ = reg.Close()
+		_ = pfSvc.Close()
+		_ = aiSvc.Close()
+		_ = codexSvc.Close()
+		return nil, err
+	}
 	threadReadStateStore, err := threadreadstate.OpenResettingInvalidSchema(threadReadStatePath)
 	if err != nil {
 		_ = reg.Close()
@@ -280,7 +287,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	}
 	terminalLayoutCleanup := registerWorkbenchTerminalSessionCleanup(logger, workbenchLayoutSvc, opts.Terminal)
 
-	gw, err := gateway.New(gateway.Options{
+	appSrv, err := appserver.New(appserver.Options{
 		Logger:                  logger,
 		DistFS:                  mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
 		Backend:                 svc,
@@ -312,7 +319,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
-	if err := gw.Start(ctx); err != nil {
+	if err := appSrv.Start(ctx); err != nil {
 		terminalLayoutCleanup()
 		_ = reg.Close()
 		_ = pfSvc.Close()
@@ -323,7 +330,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
-	svc.gw = gw
+	svc.appSrv = appSrv
 	svc.notes = notesSvc
 	svc.layouts = workbenchLayoutSvc
 	svc.ai = aiSvc
@@ -338,8 +345,8 @@ func (s *Service) Close() error {
 	if s == nil {
 		return nil
 	}
-	if s.gw != nil {
-		_ = s.gw.Close()
+	if s.appSrv != nil {
+		_ = s.appSrv.Close()
 	}
 	if s.runner != nil {
 		_ = s.runner.StopAll()
@@ -371,18 +378,78 @@ func (s *Service) Close() error {
 	return nil
 }
 
-func (s *Service) GatewayURL() string {
-	if s == nil || s.gw == nil {
+func (s *Service) AppServerURL() string {
+	if s == nil || s.appSrv == nil {
 		return ""
 	}
-	return s.gw.URL()
+	return s.appSrv.URL()
 }
 
-func (s *Service) Gateway() *gateway.Gateway {
+func (s *Service) AppServer() *appserver.Server {
 	if s == nil {
 		return nil
 	}
-	return s.gw
+	return s.appSrv
+}
+
+func appServerThreadReadStatePath(stateAbs string) (string, error) {
+	currentDir := filepath.Join(stateAbs, "apps", "appserver")
+	if err := os.MkdirAll(currentDir, 0o700); err != nil {
+		return "", err
+	}
+	currentPath := filepath.Join(currentDir, "thread_read_state.sqlite")
+	legacyPath := filepath.Join(stateAbs, "gateway", "thread_read_state.sqlite")
+	if err := migrateSQLiteStoreIfCurrentMissing(legacyPath, currentPath); err != nil {
+		return "", err
+	}
+	return currentPath, nil
+}
+
+func migrateSQLiteStoreIfCurrentMissing(legacyPath string, currentPath string) error {
+	if _, err := os.Stat(currentPath); err == nil {
+		return nil
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+
+	info, err := os.Stat(legacyPath)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("legacy app server store path is a directory: %s", legacyPath)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(currentPath), 0o700); err != nil {
+		return err
+	}
+	var suffixesToMove []string
+	for _, suffix := range []string{"", "-wal", "-shm", "-journal"} {
+		from := legacyPath + suffix
+		to := currentPath + suffix
+		if _, err := os.Stat(from); errors.Is(err, os.ErrNotExist) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		if _, err := os.Stat(to); err == nil {
+			return fmt.Errorf("cannot migrate legacy app server store because destination exists: %s", to)
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		suffixesToMove = append(suffixesToMove, suffix)
+	}
+	for _, suffix := range suffixesToMove {
+		from := legacyPath + suffix
+		to := currentPath + suffix
+		if err := os.Rename(from, to); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *Service) AI() *ai.Service {

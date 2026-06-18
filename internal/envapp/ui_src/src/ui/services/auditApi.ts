@@ -1,4 +1,4 @@
-import { fetchGatewayJSON } from './gatewayApi';
+import { fetchLocalApiJSON } from './localApi';
 
 export type AgentAuditEntry = {
   created_at: string;
@@ -30,7 +30,7 @@ export type AgentAuditEntry = {
 export async function listAgentAuditLogs(limit = 200): Promise<AgentAuditEntry[]> {
   const qp = new URLSearchParams();
   qp.set('limit', String(limit));
-  const out = await fetchGatewayJSON<{ entries: AgentAuditEntry[] }>(`/_redeven_proxy/api/audit/logs?${qp.toString()}`, {
+  const out = await fetchLocalApiJSON<{ entries: AgentAuditEntry[] }>(`/_redeven_proxy/api/audit/logs?${qp.toString()}`, {
     method: 'GET',
   });
   return Array.isArray(out?.entries) ? out.entries : [];

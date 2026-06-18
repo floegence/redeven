@@ -20,6 +20,8 @@ const debugConsoleCloseMock = vi.fn(async () => {
 const windowOpenMock = vi.fn();
 const getLocalRuntimeMock = vi.fn();
 const getLocalAccessStatusMock = vi.fn();
+const unlockLocalAccessMock = vi.fn();
+const getEnvAppAccessStatusMock = vi.fn();
 const getEnvironmentMock = vi.fn();
 const mintLocalDirectConnectArtifactMock = vi.fn();
 const connectArtifactEntryMock = vi.fn();
@@ -247,7 +249,7 @@ vi.mock('./services/controlplaneApi', () => ({
   mintLocalDirectConnectArtifact: mintLocalDirectConnectArtifactMock,
   mintEnvEntryTicketForApp: vi.fn(),
   refreshLocalRuntime: vi.fn(async () => null),
-  unlockLocalAccess: vi.fn(async () => ({ unlocked: true, resume_token: 'resume123' })),
+  unlockLocalAccess: unlockLocalAccessMock,
 }));
 
 vi.mock('./accessResume', () => ({
@@ -499,11 +501,11 @@ vi.mock('./services/desktopShellBridge', () => ({
   performRuntimeMaintenanceActionInDesktopShell: vi.fn(async () => null),
   runtimeMaintenanceMethodUsesDesktop: () => false,
 }));
-vi.mock('./services/gatewayApi', () => ({
-  fetchGatewayJSON: vi.fn(),
-  getGatewayAccessStatus: vi.fn(async () => ({ password_required: false, unlocked: true })),
-  uploadGatewayFile: vi.fn(),
-  unlockGatewayAccess: vi.fn(async () => ({ unlocked: true, resume_token: 'resume123' })),
+vi.mock('./services/localApi', () => ({
+  fetchLocalApiJSON: vi.fn(),
+  getEnvAppAccessStatus: getEnvAppAccessStatusMock,
+  uploadLocalApiFile: vi.fn(),
+  unlockEnvAppAccess: vi.fn(async () => ({ unlocked: true, resume_token: 'resume123' })),
 }));
 vi.mock('./services/accessUnlockError', () => ({
   formatAccessUnlockRetryAfter: () => '1m',
@@ -569,6 +571,8 @@ beforeEach(() => {
     direct_ws_url: 'ws://localhost/_redeven_direct/ws',
   });
   getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+  unlockLocalAccessMock.mockResolvedValue({ unlocked: true, resume_token: 'resume123' });
+  getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
   getEnvironmentMock.mockResolvedValue({
     public_id: 'env_local',
     name: 'Local runtime',

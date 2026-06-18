@@ -61,14 +61,14 @@ function createController(overrides: Record<string, unknown> = {}) {
     {
       created_at: '2026-03-27T10:00:02Z',
       source: 'agent',
-      scope: 'gateway_api',
+      scope: 'local_api',
       kind: 'request',
       trace_id: 'trace-1',
       method: 'GET',
       path: '/_redeven_proxy/api/settings',
       status_code: 200,
       duration_ms: 16,
-      message: 'gateway request completed',
+      message: 'local API request completed',
       detail: {
         transport: 'browser_fetch',
         request: {
@@ -108,7 +108,7 @@ function createController(overrides: Record<string, unknown> = {}) {
       slow: false,
       first_seen_at: '2026-03-27T10:00:02Z',
       last_seen_at: '2026-03-27T10:00:02Z',
-      scopes: ['gateway_api'],
+      scopes: ['local_api'],
       sources: ['agent'],
       events: serverEvents(),
     },
@@ -234,7 +234,7 @@ describe('DebugConsoleWindow', () => {
 
     expect(host.textContent).toContain('Debug Console');
     expect(host.textContent).toContain('GET http://localhost/_redeven_proxy/api/settings?tab=debug');
-    expect(host.textContent).toContain('gateway request completed');
+    expect(host.textContent).toContain('local API request completed');
     expect(host.textContent).toContain('Request payload');
     expect(host.textContent).toContain('Response payload');
     expect(host.textContent).toContain('Clear');

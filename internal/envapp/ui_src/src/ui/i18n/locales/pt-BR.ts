@@ -1378,7 +1378,7 @@ export const ptBR = {
     providerTypeTitle: "Tipo de Provider",
     providerTypeDescription: "Clique em um tipo de Provider para abrir seus detalhes de conexão e model inline. Clique novamente para recolher.",
     nativeConnectionDescription: "Conexão nativa",
-    customGatewayDescription: "Gateway personalizado",
+    customEndpointDescription: "Endpoint personalizado",
     currentProviderType: "Atual",
     collapseProviderType: "Recolher",
     openProviderType: "Abrir",

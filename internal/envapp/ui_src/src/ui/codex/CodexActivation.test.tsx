@@ -46,7 +46,7 @@ vi.mock('./CodexPageShell', () => ({
 }));
 
 vi.mock('./api', () => ({
-  CodexGatewayError: class CodexGatewayError extends Error {
+  CodexAPIError: class CodexAPIError extends Error {
     errorCode = '';
     status = 400;
   },

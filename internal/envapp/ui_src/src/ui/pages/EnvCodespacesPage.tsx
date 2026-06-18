@@ -34,7 +34,7 @@ import {
 import { BrowserEditorSetupActivityPanel } from "./BrowserEditorSetupActivityPanel";
 import { getEnvPublicIDFromSession, getLocalRuntime, mintEnvEntryTicketForApp } from "../services/controlplaneApi";
 import { FLOE_APP_CODE } from "../services/floeproxyContract";
-import { fetchGatewayJSON } from "../services/gatewayApi";
+import { fetchLocalApiJSON } from "../services/localApi";
 import { useI18n, type I18nHelpers } from "../i18n";
 import {
   browserEditorLocalFailureFromError,
@@ -243,7 +243,7 @@ async function openCodespace(codeSpaceID: string, setStatus: (s: string) => void
   try {
     const local = await getLocalRuntime();
     setStatus(copy.starting);
-    const sp = await fetchGatewayJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(codeSpaceID)}/start`, { method: "POST" });
+    const sp = await fetchLocalApiJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(codeSpaceID)}/start`, { method: "POST" });
     const folder = String(sp?.workspace_path ?? "").trim();
 
     if (local) {
@@ -743,7 +743,7 @@ export function EnvCodespacesPage() {
   let cache: DirCache = new Map();
 
   const [spaces, { refetch }] = createResource<SpaceStatus[]>(async () => {
-    const out = await fetchGatewayJSON<{ spaces: SpaceStatus[] }>("/_redeven_proxy/api/spaces", { method: "GET" });
+    const out = await fetchLocalApiJSON<{ spaces: SpaceStatus[] }>("/_redeven_proxy/api/spaces", { method: "GET" });
     const list = out?.spaces;
     return Array.isArray(list) ? list : [];
   });
@@ -853,7 +853,7 @@ export function EnvCodespacesPage() {
       const metaErr = validateMeta(name, description, i18n);
       if (metaErr) throw new Error(metaErr);
 
-      await fetchGatewayJSON<SpaceStatus>("/_redeven_proxy/api/spaces", {
+      await fetchLocalApiJSON<SpaceStatus>("/_redeven_proxy/api/spaces", {
         method: "POST",
         body: JSON.stringify({
           path: path,
@@ -943,7 +943,7 @@ export function EnvCodespacesPage() {
     if (!(await ensureCodeRuntimeAvailable("start", space))) return;
     setBusyAction(space.code_space_id, "start");
     try {
-      await fetchGatewayJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/start`, { method: "POST" });
+      await fetchLocalApiJSON<SpaceStatus>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/start`, { method: "POST" });
       await refetch();
       notification.success(
         i18n.t("codespaces.notifications.startedTitle"),
@@ -960,7 +960,7 @@ export function EnvCodespacesPage() {
     if (busyActionOf(space.code_space_id)) return;
     setBusyAction(space.code_space_id, "stop");
     try {
-      await fetchGatewayJSON<void>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/stop`, { method: "POST" });
+      await fetchLocalApiJSON<void>(`/_redeven_proxy/api/spaces/${encodeURIComponent(space.code_space_id)}/stop`, { method: "POST" });
       await refetch();
       notification.success(
         i18n.t("codespaces.notifications.stoppedTitle"),
@@ -979,7 +979,7 @@ export function EnvCodespacesPage() {
 
     setDeleteLoading(true);
     try {
-      await fetchGatewayJSON<void>(`/_redeven_proxy/api/spaces/${encodeURIComponent(target.code_space_id)}`, { method: "DELETE" });
+      await fetchLocalApiJSON<void>(`/_redeven_proxy/api/spaces/${encodeURIComponent(target.code_space_id)}`, { method: "DELETE" });
       await refetch();
       setDeleteDialogOpen(false);
       setDeleteTarget(null);

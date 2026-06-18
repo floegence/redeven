@@ -170,6 +170,47 @@ describe('buildGatewayActionPresentation', () => {
     expectNoLegacyGatewayActions([stopped, bridgeUnavailable, needsUpdate, legacyResidue]);
   });
 
+  it('separates managed Gateway protocol updates from access-only protocol failures', () => {
+    const managed = buildGatewayActionPresentation({
+      gateway: gateway({
+        diagnosis: diagnosis('needs_update', {
+          manageable: true,
+          error_code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED',
+          error_message: 'Gateway protocol version is not supported.',
+          recommended_recovery: 'update_gateway',
+        }),
+      }),
+      clicked_action: action('refresh_gateway'),
+      show_diagnosis_result: true,
+    });
+    expect(managed).toMatchObject({
+      title: 'Gateway update required',
+      primary_action: { intent: 'update_gateway', label: 'Update Gateway' },
+    });
+
+    const accessOnly = buildGatewayActionPresentation({
+      gateway: gateway({
+        connection_kind: 'url',
+        management_capability: 'access_only',
+        service_state: undefined,
+        diagnosis: diagnosis('needs_update', {
+          manageable: false,
+          error_code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED',
+          error_message: 'Gateway protocol version is not supported.',
+        }),
+      }),
+      clicked_action: action('refresh_gateway'),
+      show_diagnosis_result: true,
+    });
+    expect(accessOnly).toMatchObject({
+      title: 'Gateway protocol check failed',
+    });
+    expect(accessOnly.primary_action?.intent).not.toBe('update_gateway');
+    expect(accessOnly.continuation_action?.kind).not.toBe('update_gateway');
+    expect(JSON.stringify(accessOnly)).not.toContain('PRIVATE KEY');
+    expect(JSON.stringify(accessOnly)).not.toContain('X-Redeven-Request-Signature');
+  });
+
   it('keeps auth, trust, catalog, and target failures facts-only when no service recovery is valid', () => {
     const factsOnlyClassifications: readonly DesktopGatewayDiagnosisClassification[] = [
       'ssh_unreachable',

@@ -2,22 +2,22 @@ import { getLocalRuntime } from './controlplaneApi';
 import { AccessUnlockError, isKnownAccessUnlockErrorCode, normalizeRetryAfterMs } from './accessUnlockError';
 import { applyLocalAccessResumeHeader } from './localAccessAuth';
 
-export type GatewayAccessStatus = {
+export type EnvAppAccessStatus = {
   password_required: boolean;
   unlocked: boolean;
 };
 
-export type GatewayAccessUnlockResult = {
+export type EnvAppAccessUnlockResult = {
   unlocked: boolean;
   resume_token?: string;
   resume_expires_at_unix_ms?: number;
 };
 
-export type GatewayUploadResponse = {
+export type LocalUploadResponse = {
   url?: string;
 };
 
-function gatewayErrorMessage(data: any, status: number): string {
+function localApiErrorMessage(data: any, status: number): string {
   const nested = String(data?.error?.message ?? '').trim();
   if (nested) return nested;
   const flat = String(data?.error ?? '').trim();
@@ -25,11 +25,11 @@ function gatewayErrorMessage(data: any, status: number): string {
   return `HTTP ${status}`;
 }
 
-function gatewayErrorCode(data: any): string {
+function localApiErrorCode(data: any): string {
   return String(data?.error?.code ?? '').trim();
 }
 
-function gatewayRetryAfterMs(data: any): number {
+function localApiRetryAfterMs(data: any): number {
   return normalizeRetryAfterMs(data?.error?.retry_after_ms ?? data?.data?.retry_after_ms);
 }
 
@@ -43,7 +43,7 @@ function shouldSetJSONContentType(body: BodyInit | null | undefined): boolean {
   return true;
 }
 
-export async function gatewayRequestCredentials(): Promise<RequestCredentials> {
+export async function localApiRequestCredentials(): Promise<RequestCredentials> {
   try {
     return (await getLocalRuntime()) ? 'same-origin' : 'omit';
   } catch {
@@ -51,7 +51,7 @@ export async function gatewayRequestCredentials(): Promise<RequestCredentials> {
   }
 }
 
-export async function prepareGatewayRequestInit(init: RequestInit): Promise<RequestInit> {
+export async function prepareLocalApiRequestInit(init: RequestInit): Promise<RequestInit> {
   const headers = new Headers(init.headers);
   if (shouldSetJSONContentType(init.body) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
@@ -68,13 +68,13 @@ export async function prepareGatewayRequestInit(init: RequestInit): Promise<Requ
   return {
     ...init,
     headers,
-    credentials: init.credentials ?? (await gatewayRequestCredentials()),
+    credentials: init.credentials ?? (await localApiRequestCredentials()),
     cache: 'no-store',
   };
 }
 
-export async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promise<T> {
-  const resp = await fetch(url, await prepareGatewayRequestInit(init));
+export async function fetchLocalApiJSON<T>(url: string, init: RequestInit): Promise<T> {
+  const resp = await fetch(url, await prepareLocalApiRequestInit(init));
   const text = await resp.text();
   let data: any = null;
   try {
@@ -83,18 +83,18 @@ export async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promi
     // ignore
   }
   if (!resp.ok) {
-    const message = gatewayErrorMessage(data, resp.status);
-    const code = gatewayErrorCode(data) || 'HTTP_ERROR';
-    const retryAfterMs = gatewayRetryAfterMs(data);
+    const message = localApiErrorMessage(data, resp.status);
+    const code = localApiErrorCode(data) || 'HTTP_ERROR';
+    const retryAfterMs = localApiRetryAfterMs(data);
     if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
       throw new AccessUnlockError({ message, status: resp.status, code, retryAfterMs });
     }
     throw new Error(message);
   }
   if (data?.ok === false) {
-    const message = gatewayErrorMessage(data, resp.status || 400);
-    const code = gatewayErrorCode(data) || 'REQUEST_FAILED';
-    const retryAfterMs = gatewayRetryAfterMs(data);
+    const message = localApiErrorMessage(data, resp.status || 400);
+    const code = localApiErrorCode(data) || 'REQUEST_FAILED';
+    const retryAfterMs = localApiRetryAfterMs(data);
     if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
       throw new AccessUnlockError({ message, status: resp.status || 400, code, retryAfterMs });
     }
@@ -103,11 +103,11 @@ export async function fetchGatewayJSON<T>(url: string, init: RequestInit): Promi
   return (data?.data ?? data) as T;
 }
 
-export async function uploadGatewayFile(file: File): Promise<string> {
+export async function uploadLocalApiFile(file: File): Promise<string> {
   const form = new FormData();
   form.append('file', file);
 
-  const out = await fetchGatewayJSON<GatewayUploadResponse>('/_redeven_proxy/api/ai/uploads', {
+  const out = await fetchLocalApiJSON<LocalUploadResponse>('/_redeven_proxy/api/ai/uploads', {
     method: 'POST',
     body: form,
   });
@@ -119,16 +119,16 @@ export async function uploadGatewayFile(file: File): Promise<string> {
   return url;
 }
 
-export async function getGatewayAccessStatus(): Promise<GatewayAccessStatus> {
-  const out = await fetchGatewayJSON<GatewayAccessStatus>('/_redeven_proxy/api/access/status', { method: 'GET', credentials: 'omit' });
+export async function getEnvAppAccessStatus(): Promise<EnvAppAccessStatus> {
+  const out = await fetchLocalApiJSON<EnvAppAccessStatus>('/_redeven_proxy/api/access/status', { method: 'GET', credentials: 'omit' });
   if (typeof out?.password_required !== 'boolean' || typeof out?.unlocked !== 'boolean') {
     throw new Error('Invalid access status response');
   }
   return out;
 }
 
-export async function unlockGatewayAccess(password: string): Promise<GatewayAccessUnlockResult> {
-  const out = await fetchGatewayJSON<GatewayAccessUnlockResult>('/_redeven_proxy/api/access/unlock', {
+export async function unlockEnvAppAccess(password: string): Promise<EnvAppAccessUnlockResult> {
+  const out = await fetchLocalApiJSON<EnvAppAccessUnlockResult>('/_redeven_proxy/api/access/unlock', {
     method: 'POST',
     credentials: 'omit',
     body: JSON.stringify({ password: String(password ?? '') }),

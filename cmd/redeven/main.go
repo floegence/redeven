@@ -717,9 +717,9 @@ func (c *cli) runCmd(args []string) int {
 			Phase: runtimepresentation.PhaseStartLocalUI,
 			Title: "Starting Local UI",
 		})
-		gw := a.CodeGateway()
-		if gw == nil {
-			return failDesktopLaunch(desktopLaunchCodeStartupFailed, "local ui unavailable: gateway not initialized")
+		appSrv := a.CodeAppServer()
+		if appSrv == nil {
+			return failDesktopLaunch(desktopLaunchCodeStartupFailed, "local ui unavailable: app server not initialized")
 		}
 
 		srv, err := localui.New(localui.Options{
@@ -732,7 +732,7 @@ func (c *cli) runCmd(args []string) int {
 			ControlplaneBaseURL:      cfg.ControlplaneBaseURL,
 			ControlplaneProviderID:   cfg.ControlplaneProviderID,
 			EnvPublicID:              cfg.EnvironmentID,
-			Gateway:                  gw,
+			AppServer:                appSrv,
 			Agent:                    a,
 			ConfigPath:               stateLayout.ConfigPath,
 			StateRoot:                stateLayout.StateRoot,

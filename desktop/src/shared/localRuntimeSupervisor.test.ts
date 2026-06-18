@@ -172,8 +172,8 @@ describe('localRuntimeSupervisor', () => {
       compatibility: 'compatible',
       open_readiness: {
         state: 'starting',
-        reason_code: 'env_app_gateway_starting',
-        message: 'Env App gateway is starting.',
+        reason_code: 'env_app_app_server_starting',
+        message: 'Env App app server is starting.',
       },
       active_workload: {},
     });
@@ -195,7 +195,7 @@ describe('localRuntimeSupervisor', () => {
       can_open: true,
       can_prepare: false,
       requires_restart: false,
-      message: 'Env App gateway is starting.',
+      message: 'Env App app server is starting.',
     });
   });
 

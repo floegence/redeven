@@ -157,7 +157,7 @@ export const localeSettingsSectionMessages = {
       installNotice: 'Redeven 正在等待主机上的 codex 二进制。请在主机上安装它，并将其暴露到 PATH。',
       notesTitle: '说明',
       notesHostRuntimeDefaults: 'Codex 会在主机上保留自己的 Runtime 默认值；Redeven 不会把它们镜像到 config.json。',
-      notesActivityIsolation: '专用 Codex activity entry 和 gateway namespace 会与 Flower 保持隔离。',
+      notesActivityIsolation: '专用 Codex activity entry 和 local API namespace 会与 Flower 保持隔离。',
     }),
     permissionPolicy: {
       title: '权限策略',
@@ -418,7 +418,7 @@ export const localeSettingsSectionMessages = {
       installNotice: 'Redeven 正在等待主機上的 codex 二進位。請在主機上安裝它，並將其暴露到 PATH。',
       notesTitle: '說明',
       notesHostRuntimeDefaults: 'Codex 會在主機上保留自己的 Runtime 預設值；Redeven 不會把它們鏡像到 config.json。',
-      notesActivityIsolation: '專用 Codex activity entry 與 gateway namespace 會和 Flower 保持隔離。',
+      notesActivityIsolation: '專用 Codex activity entry 與 local API namespace 會和 Flower 保持隔離。',
     }),
     permissionPolicy: {
       title: '權限策略',
@@ -679,7 +679,7 @@ export const localeSettingsSectionMessages = {
       installNotice: 'Redeven はホストの codex バイナリを待っています。ホストにインストールし、PATH に公開してください。',
       notesTitle: 'メモ',
       notesHostRuntimeDefaults: 'Codex はホスト上で独自の Runtime デフォルトを保持します。Redeven はそれらを config.json にミラーしません。',
-      notesActivityIsolation: '専用の Codex activity entry と gateway namespace は Flower から分離されたままです。',
+      notesActivityIsolation: '専用の Codex activity entry と local API namespace は Flower から分離されたままです。',
     }),
     permissionPolicy: {
       title: '権限ポリシー',
@@ -940,7 +940,7 @@ export const localeSettingsSectionMessages = {
       installNotice: 'Redeven이 호스트의 codex 바이너리를 기다리고 있습니다. 호스트에 설치하고 PATH에 노출하세요.',
       notesTitle: '참고',
       notesHostRuntimeDefaults: 'Codex는 호스트에서 자체 Runtime 기본값을 유지합니다. Redeven은 이를 config.json으로 미러링하지 않습니다.',
-      notesActivityIsolation: '전용 Codex activity entry와 gateway namespace는 Flower와 분리되어 유지됩니다.',
+      notesActivityIsolation: '전용 Codex activity entry와 local API namespace는 Flower와 분리되어 유지됩니다.',
     }),
     permissionPolicy: {
       title: '권한 정책',
@@ -1201,7 +1201,7 @@ export const localeSettingsSectionMessages = {
       installNotice: 'Redeven wartet auf das hostseitige codex-Binary. Installieren Sie es auf dem Host und machen Sie es über PATH verfügbar.',
       notesTitle: 'Hinweise',
       notesHostRuntimeDefaults: 'Codex behält seine eigenen Runtime-Standardwerte auf dem Host. Redeven spiegelt sie nicht in config.json.',
-      notesActivityIsolation: 'Der dedizierte Codex activity entry und gateway namespace bleiben von Flower isoliert.',
+      notesActivityIsolation: 'Der dedizierte Codex activity entry und local API namespace bleiben von Flower isoliert.',
     }),
     permissionPolicy: {
       title: 'Berechtigungsrichtlinie',
@@ -1462,7 +1462,7 @@ export const localeSettingsSectionMessages = {
       installNotice: 'Redeven attend le binaire codex de l’hôte. Installez-le sur l’hôte et exposez-le dans PATH.',
       notesTitle: 'Notes',
       notesHostRuntimeDefaults: 'Codex conserve ses propres valeurs Runtime par défaut sur l’hôte ; Redeven ne les copie pas dans config.json.',
-      notesActivityIsolation: 'L’entrée d’activité Codex dédiée et le gateway namespace restent isolés de Flower.',
+      notesActivityIsolation: 'L’entrée d’activité Codex dédiée et le local API namespace restent isolés de Flower.',
     }),
     permissionPolicy: {
       title: 'Politique d’autorisations',
@@ -1723,7 +1723,7 @@ export const localeSettingsSectionMessages = {
       installNotice: 'Redeven está esperando el binario codex del host. Instálalo en el host y expónlo en PATH.',
       notesTitle: 'Notas',
       notesHostRuntimeDefaults: 'Codex mantiene sus propios valores Runtime predeterminados en el host; Redeven no los refleja en config.json.',
-      notesActivityIsolation: 'La entrada de actividad Codex dedicada y el gateway namespace permanecen aislados de Flower.',
+      notesActivityIsolation: 'La entrada de actividad Codex dedicada y el local API namespace permanecen aislados de Flower.',
     }),
     permissionPolicy: {
       title: 'Política de permisos',
@@ -1984,7 +1984,7 @@ export const localeSettingsSectionMessages = {
       installNotice: 'Redeven está aguardando o binário codex do host. Instale-o no host e exponha-o no PATH.',
       notesTitle: 'Notas',
       notesHostRuntimeDefaults: 'Codex mantém seus próprios padrões de Runtime no host; Redeven não os espelha em config.json.',
-      notesActivityIsolation: 'A entrada de atividade Codex dedicada e o gateway namespace ficam isolados de Flower.',
+      notesActivityIsolation: 'A entrada de atividade Codex dedicada e o local API namespace ficam isolados de Flower.',
     }),
     permissionPolicy: {
       title: 'Política de permissões',
@@ -2245,7 +2245,7 @@ export const localeSettingsSectionMessages = {
       installNotice: 'Redeven ожидает бинарный файл codex на хосте. Установите его на хосте и сделайте доступным через PATH.',
       notesTitle: 'Примечания',
       notesHostRuntimeDefaults: 'Codex хранит собственные значения Runtime по умолчанию на хосте; Redeven не копирует их в config.json.',
-      notesActivityIsolation: 'Выделенная запись активности Codex и gateway namespace остаются изолированными от Flower.',
+      notesActivityIsolation: 'Выделенная запись активности Codex и local API namespace остаются изолированными от Flower.',
     }),
     permissionPolicy: {
       title: 'Политика разрешений',

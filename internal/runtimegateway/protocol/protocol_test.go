@@ -186,6 +186,9 @@ func assertNoSecretWireFields(t *testing.T, typ reflect.Type) {
 	t.Helper()
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
+		if field.PkgPath != "" {
+			continue
+		}
 		tag := field.Tag.Get("json")
 		wireName := strings.Split(tag, ",")[0]
 		if typ == reflect.TypeOf(EnvProfileSSHSecret{}) && (wireName == "password" || wireName == "mode") {

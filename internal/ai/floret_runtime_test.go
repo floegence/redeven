@@ -35,12 +35,12 @@ func TestFloretEventSinkDoesNotProjectSanitizedProviderText(t *testing.T) {
 func TestRedevenFloretGatewayConfigDoesNotCarryProviderConfiguration(t *testing.T) {
 	t.Parallel()
 
-	cfg := redevenFloretGatewayConfig("system", floretContextPolicy(1000, 800, 200))
+	cfg := redevenFloretAdapterConfig("system", floretContextPolicy(1000, 800, 200))
 	if cfg.Provider != flconfig.ProviderFake {
-		t.Fatalf("provider=%q, want fake gateway identity", cfg.Provider)
+		t.Fatalf("provider=%q, want fake adapter identity", cfg.Provider)
 	}
-	if cfg.Model != "redeven-model-gateway" {
-		t.Fatalf("model=%q, want gateway placeholder", cfg.Model)
+	if cfg.Model != "redeven-model-adapter" {
+		t.Fatalf("model=%q, want adapter placeholder", cfg.Model)
 	}
 	if cfg.BaseURL != "" || cfg.APIKey != "" {
 		t.Fatalf("Floret config must not carry Redeven provider endpoint or secret: base_url=%q api_key=%q", cfg.BaseURL, cfg.APIKey)

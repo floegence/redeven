@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
+func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -89,7 +89,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		"env/index.html": {Data: []byte("<html>env</html>")},
 		"inject.js":      {Data: []byte("console.log('inject');")},
 	}
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Logger:             logger,
 		Backend:            &stubBackend{},
 		DistFS:             dist,
@@ -109,7 +109,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 	}
 	threadIDForCleanup = thread.ThreadID
 
-	err = aiSvc.StartRunDetached(&meta, "run_gateway_active", ai.RunStartRequest{
+	err = aiSvc.StartRunDetached(&meta, "run_appserver_active", ai.RunStartRequest{
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: ai.RunInput{
@@ -136,8 +136,8 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: ai.RunInput{
-			MessageID: "m_gateway_queue_1",
-			Text:      "first queued via gateway test",
+			MessageID: "m_appserver_queue_1",
+			Text:      "first queued via app server test",
 		},
 		Options: ai.RunOptions{MaxSteps: 1},
 	})
@@ -148,8 +148,8 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: ai.RunInput{
-			MessageID: "m_gateway_queue_2",
-			Text:      "second queued via gateway test",
+			MessageID: "m_appserver_queue_2",
+			Text:      "second queued via app server test",
 		},
 		Options: ai.RunOptions{MaxSteps: 1},
 	})
@@ -170,7 +170,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("list followups status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -203,7 +203,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID, nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("get thread status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -228,7 +228,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups/order", body)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("reorder followups status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -239,7 +239,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups/order", body)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusConflict {
 			t.Fatalf("stale reorder status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -249,7 +249,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("list followups after reorder status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -274,7 +274,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPatch, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups/"+followupID2, body)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("patch followup status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -284,7 +284,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("list followups after patch status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -308,7 +308,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		req := httptest.NewRequest(http.MethodDelete, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/followups/"+followupID1, nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("delete followup status=%d body=%s", rr.Code, rr.Body.String())
 		}
@@ -318,7 +318,7 @@ func TestGateway_AI_FollowupsEndpoints(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID, nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 		if rr.Code != http.StatusOK {
 			t.Fatalf("get thread after delete status=%d body=%s", rr.Code, rr.Body.String())
 		}

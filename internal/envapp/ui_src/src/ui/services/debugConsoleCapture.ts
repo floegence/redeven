@@ -199,7 +199,7 @@ function fetchScopeForPath(path: string): string {
   if (path.startsWith('/api/local/') || path.startsWith('/_redeven_direct/')) {
     return 'localui_http';
   }
-  return 'gateway_api';
+  return 'local_api';
 }
 
 function bodyContentType(headers: Headers): string {

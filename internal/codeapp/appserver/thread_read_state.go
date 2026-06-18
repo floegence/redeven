@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"context"
@@ -96,7 +96,7 @@ type codexMarkThreadReadResponse struct {
 	ReadStatus codexThreadReadStatusView `json:"read_status"`
 }
 
-func (g *Gateway) buildAIListThreadsView(
+func (g *Server) buildAIListThreadsView(
 	ctx context.Context,
 	meta *session.Meta,
 	out *ai.ListThreadsResponse,
@@ -118,7 +118,7 @@ func (g *Gateway) buildAIListThreadsView(
 	return view, nil
 }
 
-func (g *Gateway) buildAIThreadEnvelope(
+func (g *Server) buildAIThreadEnvelope(
 	ctx context.Context,
 	meta *session.Meta,
 	thread *ai.ThreadView,
@@ -134,7 +134,7 @@ func (g *Gateway) buildAIThreadEnvelope(
 	return &aiThreadEnvelope{Thread: view}, nil
 }
 
-func (g *Gateway) buildAIFlowerLiveBootstrapView(
+func (g *Server) buildAIFlowerLiveBootstrapView(
 	ctx context.Context,
 	meta *session.Meta,
 	bootstrap *ai.FlowerLiveBootstrapResponse,
@@ -166,7 +166,7 @@ func (g *Gateway) buildAIFlowerLiveBootstrapView(
 	return &out, nil
 }
 
-func (g *Gateway) buildCodexThreadListView(
+func (g *Server) buildCodexThreadListView(
 	ctx context.Context,
 	meta *session.Meta,
 	threads []codexbridge.Thread,
@@ -182,7 +182,7 @@ func (g *Gateway) buildCodexThreadListView(
 	return out, nil
 }
 
-func (g *Gateway) buildCodexThreadDetailView(
+func (g *Server) buildCodexThreadDetailView(
 	ctx context.Context,
 	meta *session.Meta,
 	detail *codexbridge.ThreadDetail,
@@ -209,7 +209,7 @@ func (g *Gateway) buildCodexThreadDetailView(
 	return view, nil
 }
 
-func (g *Gateway) markAIThreadRead(
+func (g *Server) markAIThreadRead(
 	ctx context.Context,
 	meta *session.Meta,
 	threadID string,
@@ -244,7 +244,7 @@ func (g *Gateway) markAIThreadRead(
 	}, nil
 }
 
-func (g *Gateway) markCodexThreadRead(
+func (g *Server) markCodexThreadRead(
 	ctx context.Context,
 	meta *session.Meta,
 	threadID string,
@@ -266,7 +266,7 @@ func (g *Gateway) markCodexThreadRead(
 	}, nil
 }
 
-func (g *Gateway) ensureFlowerReadRecords(
+func (g *Server) ensureFlowerReadRecords(
 	ctx context.Context,
 	meta *session.Meta,
 	threads []ai.ThreadView,
@@ -292,7 +292,7 @@ func (g *Gateway) ensureFlowerReadRecords(
 	return g.threadReadState.EnsureFlower(ctx, meta.EndpointID, meta.UserPublicID, snapshots)
 }
 
-func (g *Gateway) ensureCodexReadRecords(
+func (g *Server) ensureCodexReadRecords(
 	ctx context.Context,
 	meta *session.Meta,
 	threads []codexbridge.Thread,
@@ -308,7 +308,7 @@ func (g *Gateway) ensureCodexReadRecords(
 	return g.ensureCodexReadRecordsForSnapshots(ctx, meta, snapshots)
 }
 
-func (g *Gateway) ensureCodexReadRecordsForSnapshots(
+func (g *Server) ensureCodexReadRecordsForSnapshots(
 	ctx context.Context,
 	meta *session.Meta,
 	snapshots map[string]threadreadstate.CodexSnapshot,
@@ -322,7 +322,7 @@ func (g *Gateway) ensureCodexReadRecordsForSnapshots(
 	return g.threadReadState.EnsureCodex(ctx, meta.EndpointID, meta.UserPublicID, snapshots)
 }
 
-func (g *Gateway) validateFlowerReadSnapshot(
+func (g *Server) validateFlowerReadSnapshot(
 	ctx context.Context,
 	meta *session.Meta,
 	threadID string,
@@ -358,7 +358,7 @@ func (g *Gateway) validateFlowerReadSnapshot(
 	return snapshot, nil
 }
 
-func (g *Gateway) validateCodexReadSnapshot(
+func (g *Server) validateCodexReadSnapshot(
 	ctx context.Context,
 	threadID string,
 	snapshot threadreadstate.CodexSnapshot,
@@ -381,7 +381,7 @@ func (g *Gateway) validateCodexReadSnapshot(
 	return snapshot, nil
 }
 
-func (g *Gateway) advanceFlowerReadRecord(
+func (g *Server) advanceFlowerReadRecord(
 	ctx context.Context,
 	meta *session.Meta,
 	threadID string,
@@ -419,7 +419,7 @@ func (g *Gateway) advanceFlowerReadRecord(
 	return g.threadReadState.AdvanceFlower(ctx, meta.EndpointID, meta.UserPublicID, threadID, snapshot)
 }
 
-func (g *Gateway) advanceCodexReadRecord(
+func (g *Server) advanceCodexReadRecord(
 	ctx context.Context,
 	meta *session.Meta,
 	threadID string,
@@ -446,7 +446,7 @@ func (g *Gateway) advanceCodexReadRecord(
 	return g.threadReadState.AdvanceCodex(ctx, meta.EndpointID, meta.UserPublicID, threadID, snapshot)
 }
 
-func (g *Gateway) deleteFlowerThreadReadState(
+func (g *Server) deleteFlowerThreadReadState(
 	ctx context.Context,
 	endpointID string,
 	threadID string,
@@ -457,7 +457,7 @@ func (g *Gateway) deleteFlowerThreadReadState(
 	return g.threadReadState.DeleteThread(ctx, endpointID, threadreadstate.SurfaceFlower, threadID)
 }
 
-func (g *Gateway) restoreFlowerThreadReadState(ctx context.Context, records []threadreadstate.Record) error {
+func (g *Server) restoreFlowerThreadReadState(ctx context.Context, records []threadreadstate.Record) error {
 	if g == nil || g.threadReadState == nil || len(records) == 0 {
 		return nil
 	}
@@ -479,7 +479,7 @@ func (e flowerThreadDeleteCleanupError) Unwrap() error {
 	return e.err
 }
 
-func (g *Gateway) deleteFlowerThreadWithReadStateCleanup(
+func (g *Server) deleteFlowerThreadWithReadStateCleanup(
 	ctx context.Context,
 	meta *session.Meta,
 	threadID string,
@@ -495,7 +495,7 @@ func (g *Gateway) deleteFlowerThreadWithReadStateCleanup(
 	if err := primaryDelete(); err != nil {
 		if restoreErr := g.restoreFlowerThreadReadState(ctx, deletedReadState); restoreErr != nil && g.log != nil {
 			g.log.Warn(
-				"gateway: failed to restore deleted Flower thread read state after thread delete failure",
+				"app server: failed to restore deleted Flower thread read state after thread delete failure",
 				"endpoint_id", strings.TrimSpace(meta.EndpointID),
 				"thread_id", strings.TrimSpace(threadID),
 				"error", restoreErr,

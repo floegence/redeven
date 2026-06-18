@@ -276,7 +276,7 @@ func (r *Runner) start(codeSpaceID string, workspacePath string, port int) (*Ins
 		"--bind-addr", fmt.Sprintf("127.0.0.1:%d", port),
 		"--auth", "none",
 		"--abs-proxy-base-path", absProxyBasePath,
-		// The codespace is only reachable via the agent gateway (localhost) and/or Flowersec E2EE proxy.
+		// The codespace is only reachable via the local app server and/or Flowersec E2EE proxy.
 		"--disable-telemetry",
 		"--disable-update-check",
 		"--user-data-dir", userDataDir,

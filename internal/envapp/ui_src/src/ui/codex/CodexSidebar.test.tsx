@@ -602,7 +602,7 @@ describe('CodexSidebar', () => {
       {
         id: 'thread_1',
         name: 'Backend audit',
-        preview: 'Review the gateway wiring',
+        preview: 'Review the local API wiring',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
@@ -615,7 +615,7 @@ describe('CodexSidebar', () => {
       thread: {
         id: 'thread_1',
         name: 'Backend audit',
-        preview: 'Review the gateway wiring',
+        preview: 'Review the local API wiring',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
@@ -723,7 +723,7 @@ describe('CodexSidebar', () => {
       {
         id: 'thread_1',
         name: 'Backend audit',
-        preview: 'Review the gateway wiring',
+        preview: 'Review the local API wiring',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
@@ -757,7 +757,7 @@ describe('CodexSidebar', () => {
       thread: {
         id: threadID,
         name: threadID === 'thread_1' ? 'Backend audit' : 'UI polish',
-        preview: threadID === 'thread_1' ? 'Review the gateway wiring' : 'Align the Codex shell with floe-webapp',
+        preview: threadID === 'thread_1' ? 'Review the local API wiring' : 'Align the Codex shell with floe-webapp',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: threadID === 'thread_1' ? 1 : 3,
@@ -833,7 +833,7 @@ describe('CodexSidebar', () => {
       {
         id: 'thread_1',
         name: 'Backend audit',
-        preview: 'Review the gateway wiring',
+        preview: 'Review the local API wiring',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
@@ -867,7 +867,7 @@ describe('CodexSidebar', () => {
       thread: {
         id: threadID,
         name: threadID === 'thread_1' ? 'Backend audit' : 'UI polish',
-        preview: threadID === 'thread_1' ? 'Review the gateway wiring' : 'Align the Codex shell with floe-webapp',
+        preview: threadID === 'thread_1' ? 'Review the local API wiring' : 'Align the Codex shell with floe-webapp',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: threadID === 'thread_1' ? 1 : 3,
@@ -942,7 +942,7 @@ describe('CodexSidebar', () => {
       {
         id: 'thread_1',
         name: 'Backend audit',
-        preview: 'Review the gateway wiring',
+        preview: 'Review the local API wiring',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
@@ -976,7 +976,7 @@ describe('CodexSidebar', () => {
       thread: {
         id: threadID,
         name: threadID === 'thread_1' ? 'Backend audit' : 'UI polish',
-        preview: threadID === 'thread_1' ? 'Review the gateway wiring' : 'Align the Codex shell with floe-webapp',
+        preview: threadID === 'thread_1' ? 'Review the local API wiring' : 'Align the Codex shell with floe-webapp',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: threadID === 'thread_1' ? 1 : 3,
@@ -1112,7 +1112,7 @@ describe('CodexSidebar', () => {
     const thread1 = {
       id: 'thread_1',
       name: 'Backend audit',
-      preview: 'Review the gateway wiring',
+      preview: 'Review the local API wiring',
       ephemeral: false,
       model_provider: 'gpt-5.4',
       created_at_unix_s: 1,
@@ -1235,7 +1235,7 @@ describe('CodexSidebar', () => {
       {
         id: 'thread_1',
         name: 'Backend audit',
-        preview: 'Review the gateway wiring',
+        preview: 'Review the local API wiring',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
@@ -1259,7 +1259,7 @@ describe('CodexSidebar', () => {
       thread: {
         id: threadID,
         name: threadID === 'thread_1' ? 'Backend audit' : 'UI polish',
-        preview: threadID === 'thread_1' ? 'Review the gateway wiring' : 'Align the Codex shell with floe-webapp',
+        preview: threadID === 'thread_1' ? 'Review the local API wiring' : 'Align the Codex shell with floe-webapp',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
@@ -1275,7 +1275,7 @@ describe('CodexSidebar', () => {
                   {
                     id: `${threadID}_item_1`,
                     type: 'agentMessage',
-                    text: 'Gateway note',
+                    text: 'Local API note',
                   },
                 ]
               : [
@@ -1328,7 +1328,7 @@ describe('CodexSidebar', () => {
     expect(host.textContent).toContain('Conversations');
     expect(host.textContent).toContain('Host ready');
     expect(host.textContent).toContain('Backend audit');
-    expect(host.textContent).toContain('Review the gateway wiring');
+    expect(host.textContent).toContain('Review the local API wiring');
     expect(sidebarThreadIDs(host)).toEqual(['thread_1', 'thread_2']);
     const sidebarContent = host.querySelector('[data-testid="sidebar-content"]');
     const scrollRegion = host.querySelector('[data-testid="codex-thread-scroll-region"]');
@@ -1383,7 +1383,7 @@ describe('CodexSidebar', () => {
       {
         id: 'thread_1',
         name: 'Backend audit',
-        preview: 'Review the gateway wiring',
+        preview: 'Review the local API wiring',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
@@ -1502,7 +1502,7 @@ describe('CodexSidebar', () => {
     const existingThread = {
       id: 'thread_1',
       name: 'Existing thread',
-      preview: 'Inspect the current gateway wiring',
+      preview: 'Inspect the current local API wiring',
       ephemeral: false,
       model_provider: 'gpt-5.4',
       created_at_unix_s: 1,
@@ -1681,7 +1681,7 @@ describe('CodexSidebar', () => {
       {
         id: 'thread_1',
         name: 'Backend audit',
-        preview: 'Review the gateway wiring',
+        preview: 'Review the local API wiring',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
@@ -1709,7 +1709,7 @@ describe('CodexSidebar', () => {
         thread: {
           id: 'thread_1',
           name: 'Backend audit',
-          preview: 'Review the gateway wiring',
+          preview: 'Review the local API wiring',
           ephemeral: false,
           model_provider: 'gpt-5.4',
           created_at_unix_s: 1,
@@ -1723,7 +1723,7 @@ describe('CodexSidebar', () => {
               {
                 id: 'thread_1_item_1',
                 type: 'agentMessage',
-                text: 'Gateway note',
+                text: 'Local API note',
               },
             ],
           }],
@@ -1751,7 +1751,7 @@ describe('CodexSidebar', () => {
     await flushAsync();
     await flushAsync();
 
-    expect(host.textContent).toContain('Gateway note');
+    expect(host.textContent).toContain('Local API note');
 
     const target = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));
     if (!target) {
@@ -1760,7 +1760,7 @@ describe('CodexSidebar', () => {
     target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     expect(host.querySelector('[aria-current="page"]')?.textContent).toContain('UI polish');
-    expect(host.textContent).toContain('Gateway note');
+    expect(host.textContent).toContain('Local API note');
     expect(host.querySelector('[data-codex-surface="loading-state"]')).toBeNull();
     expect(openCodexThreadMock).not.toHaveBeenCalledWith('thread_2');
 
@@ -1769,7 +1769,7 @@ describe('CodexSidebar', () => {
 
     expect(host.querySelector('[data-codex-surface="loading-state"]')).not.toBeNull();
     expect(host.textContent).toContain('Loading the selected Codex thread.');
-    expect(host.textContent).not.toContain('Gateway note');
+    expect(host.textContent).not.toContain('Local API note');
 
     thread2Detail.resolve({
       thread: {
@@ -1811,7 +1811,7 @@ describe('CodexSidebar', () => {
     await flushAsync();
 
     expect(host.textContent).toContain('Polish note');
-    expect(host.textContent).not.toContain('Gateway note');
+    expect(host.textContent).not.toContain('Local API note');
   });
 
   it('ignores out-of-order bootstrap responses when switching threads quickly', async () => {
@@ -1848,7 +1848,7 @@ describe('CodexSidebar', () => {
       {
         id: 'thread_1',
         name: 'Backend audit',
-        preview: 'Review the gateway wiring',
+        preview: 'Review the local API wiring',
         ephemeral: false,
         model_provider: 'gpt-5.4',
         created_at_unix_s: 1,
@@ -1886,7 +1886,7 @@ describe('CodexSidebar', () => {
         thread: {
           id: 'thread_1',
           name: 'Backend audit',
-          preview: 'Review the gateway wiring',
+          preview: 'Review the local API wiring',
           ephemeral: false,
           model_provider: 'gpt-5.4',
           created_at_unix_s: 1,
@@ -1900,7 +1900,7 @@ describe('CodexSidebar', () => {
               {
                 id: 'thread_1_item_1',
                 type: 'agentMessage',
-                text: 'Gateway note',
+                text: 'Local API note',
               },
             ],
           }],
@@ -1940,7 +1940,7 @@ describe('CodexSidebar', () => {
     await flushAsync();
 
     expect(host.querySelector('[data-codex-surface="loading-state"]')).not.toBeNull();
-    expect(host.textContent).not.toContain('Gateway note');
+    expect(host.textContent).not.toContain('Local API note');
 
     thread2Detail.resolve({
       thread: {

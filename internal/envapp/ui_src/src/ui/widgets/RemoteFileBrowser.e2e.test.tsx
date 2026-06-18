@@ -43,8 +43,8 @@ const legacyClipboardStore = vi.hoisted(() => ({
   execCommand: vi.fn(),
 }));
 
-const gatewayFetchStore = vi.hoisted(() => ({
-  fetchGatewayJSON: vi.fn(),
+const localApiFetchStore = vi.hoisted(() => ({
+  fetchLocalApiJSON: vi.fn(),
 }));
 
 const gitWorkspaceRenderStore = vi.hoisted(() => ({
@@ -248,8 +248,8 @@ vi.mock('../downloads/DownloadContext', () => ({
   }),
 }));
 
-vi.mock('../services/gatewayApi', () => ({
-  fetchGatewayJSON: gatewayFetchStore.fetchGatewayJSON,
+vi.mock('../services/localApi', () => ({
+  fetchLocalApiJSON: localApiFetchStore.fetchLocalApiJSON,
 }));
 
 vi.mock('./FileBrowserSurfaceContext', () => ({
@@ -1087,7 +1087,7 @@ beforeEach(() => {
   mockRpc.fs.copy.mockResolvedValue({ success: true, newPath: '/workspace/repo/copied' });
   mockRpc.fs.delete.mockResolvedValue({ success: true });
   mockRpc.fs.getPathContext.mockResolvedValue({ agentHomePathAbs: '/workspace' });
-  gatewayFetchStore.fetchGatewayJSON.mockImplementation(async (url: string, init?: RequestInit) => {
+  localApiFetchStore.fetchLocalApiJSON.mockImplementation(async (url: string, init?: RequestInit) => {
     if (url !== '/_redeven_proxy/api/settings') return null;
     if (init?.method === 'GET') {
       return {

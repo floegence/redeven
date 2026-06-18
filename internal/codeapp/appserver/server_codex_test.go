@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bytes"
@@ -139,7 +139,7 @@ func codexTestDistFS() fs.FS {
 	}
 }
 
-func TestGateway_SettingsUpdate_RejectsHostManagedCodexConfig(t *testing.T) {
+func TestServer_SettingsUpdate_RejectsHostManagedCodexConfig(t *testing.T) {
 	t.Parallel()
 
 	cfgPath := writeTestConfig(t)
@@ -150,7 +150,7 @@ func TestGateway_SettingsUpdate_RejectsHostManagedCodexConfig(t *testing.T) {
 	channelID := "ch_test_codex_settings"
 	envOrigin := envOriginWithChannel(channelID)
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend:            &stubBackend{},
 		DistFS:             codexTestDistFS(),
 		ListenAddr:         "127.0.0.1:0",
@@ -168,7 +168,7 @@ func TestGateway_SettingsUpdate_RejectsHostManagedCodexConfig(t *testing.T) {
 }`))
 	req.Header.Set("Origin", envOrigin)
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d, want=%d body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
@@ -186,7 +186,7 @@ func TestGateway_SettingsUpdate_RejectsHostManagedCodexConfig(t *testing.T) {
 	}
 }
 
-func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
+func TestServer_CodexRoutes_ExposeIndependentServerSurface(t *testing.T) {
 	t.Parallel()
 
 	channelID := "ch_test_codex_routes"
@@ -219,7 +219,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		gotAfterSeq        int64
 	)
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend: &stubBackend{},
 		Codex: &stubCodexBackend{
 			status: func(ctx context.Context) codexbridge.Status {
@@ -434,7 +434,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/codex/status", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -453,7 +453,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/codex/threads?limit=10&archived=true", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -470,7 +470,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/codex/capabilities?cwd=%2Fworkspace%2Fui", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -489,7 +489,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads", bytes.NewBufferString(`{"cwd":"/workspace","model":"gpt-5.4","approval_policy":"on-request","sandbox_mode":"workspace-write"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -506,7 +506,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/codex/threads/thread_1", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -530,7 +530,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -556,7 +556,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -577,7 +577,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -597,7 +597,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/archive", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -611,7 +611,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/unarchive", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -630,7 +630,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 			}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -651,7 +651,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/interrupt", bytes.NewBufferString(`{"turn_id":"turn_1"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -665,7 +665,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/codex/threads/thread_1/review", bytes.NewBufferString(`{"target":"uncommitted_changes"}`))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -682,7 +682,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/codex/threads/thread_1/events?after_seq=2", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -699,7 +699,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 	})
 
 	t.Run("event stream compacts adjacent deltas", func(t *testing.T) {
-		gw.codex = &stubCodexBackend{
+		srv.codex = &stubCodexBackend{
 			subscribeThreadEvent: func(ctx context.Context, threadID string, afterSeq int64) ([]codexbridge.Event, <-chan codexbridge.Event, error) {
 				ch := make(chan codexbridge.Event)
 				close(ch)
@@ -714,7 +714,7 @@ func TestGateway_CodexRoutes_ExposeIndependentGatewaySurface(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/codex/threads/thread_1/events", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
-		gw.serveHTTP(rr, req)
+		srv.serveHTTP(rr, req)
 
 		if rr.Code != http.StatusOK {
 			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
@@ -761,13 +761,13 @@ func TestCompactCodexEvents(t *testing.T) {
 	}
 }
 
-func TestGateway_CodexUnavailableErrorsReturnServiceUnavailable(t *testing.T) {
+func TestServer_CodexUnavailableErrorsReturnServiceUnavailable(t *testing.T) {
 	t.Parallel()
 
 	channelID := "ch_test_codex_unavailable"
 	envOrigin := envOriginWithChannel(channelID)
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Backend: &stubBackend{},
 		Codex: &stubCodexBackend{
 			readCapabilities: func(ctx context.Context, cwd string) (*codexbridge.Capabilities, error) {
@@ -798,7 +798,7 @@ func TestGateway_CodexUnavailableErrorsReturnServiceUnavailable(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 			req.Header.Set("Origin", envOrigin)
 			rr := httptest.NewRecorder()
-			gw.serveHTTP(rr, req)
+			srv.serveHTTP(rr, req)
 
 			if rr.Code != http.StatusServiceUnavailable {
 				t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())

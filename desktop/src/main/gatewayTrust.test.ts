@@ -174,6 +174,7 @@ describe('gatewayTrust', () => {
       secret_store: store,
       now_unix_ms: 1_000,
     })).rejects.toMatchObject({ code: 'GATEWAY_PROTOCOL_VERSION_UNSUPPORTED' });
+    expect(store.values.size).toBe(0);
   });
 
   it('rejects pairing challenges with invalid Gateway signatures', async () => {
@@ -292,6 +293,10 @@ describe('gatewayTrust', () => {
       ...response,
       proof: 'invalid',
     })).toThrow('Gateway pairing completion signature is invalid');
+    expect(() => assertGatewayPairingCompleteResponse(material, challenge, {
+      ...response,
+      protocol_version: 'redeven-runtime-gateway-v1',
+    })).toThrow('Gateway protocol version is not supported');
   });
 
   it('blocks authenticated calls until the Gateway is paired and not revoked', async () => {

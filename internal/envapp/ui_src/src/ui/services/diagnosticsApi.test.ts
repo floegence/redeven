@@ -19,7 +19,7 @@ describe('diagnosticsApi', () => {
     vi.restoreAllMocks();
   });
 
-  it('loads diagnostics through the gateway helper', async () => {
+  it('loads diagnostics through the local API helper', async () => {
     vi.doMock('./controlplaneApi', () => ({
       getLocalRuntime: vi.fn(async () => ({ mode: 'local', env_public_id: 'env_local' })),
     }));
@@ -72,7 +72,7 @@ describe('diagnosticsApi', () => {
       new ReadableStream({
         start(controller) {
           controller.enqueue(encoder.encode('event: diagnostics_event\n'));
-          controller.enqueue(encoder.encode('data: {"key":"evt-1","event":{"created_at":"2026-03-18T14:15:16Z","source":"agent","scope":"gateway_api","kind":"request","trace_id":"trace-1","method":"GET","path":"/_redeven_proxy/api/settings","status_code":200,"duration_ms":16}}\n\n'));
+          controller.enqueue(encoder.encode('data: {"key":"evt-1","event":{"created_at":"2026-03-18T14:15:16Z","source":"agent","scope":"local_api","kind":"request","trace_id":"trace-1","method":"GET","path":"/_redeven_proxy/api/settings","status_code":200,"duration_ms":16}}\n\n'));
           controller.close();
         },
       }),

@@ -5,7 +5,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvCodespacesPage } from './EnvCodespacesPage';
-import { buildFlowerTurnLauncherCopy } from '../../../../../flower_ui/src';
+import { buildFlowerTurnLauncherCopy } from '../../../../../flower_ui/src/flowerTurnLauncherCopy';
 
 const notificationMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -32,8 +32,8 @@ const rpcMocks = vi.hoisted(() => ({
   },
 }));
 
-const gatewayMocks = vi.hoisted(() => ({
-  fetchGatewayJSON: vi.fn(),
+const localApiMocks = vi.hoisted(() => ({
+  fetchLocalApiJSON: vi.fn(),
 }));
 
 const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
@@ -156,8 +156,8 @@ vi.mock('../services/floeproxyContract', () => ({
   FLOE_APP_CODE: 'com.floegence.redeven.code',
 }));
 
-vi.mock('../services/gatewayApi', () => ({
-  fetchGatewayJSON: gatewayMocks.fetchGatewayJSON,
+vi.mock('../services/localApi', () => ({
+  fetchLocalApiJSON: localApiMocks.fetchLocalApiJSON,
 }));
 
 vi.mock('../services/desktopCodeWorkspaceBridge', () => ({
@@ -340,8 +340,8 @@ describe('EnvCodespacesPage', () => {
       });
       return { ok: true, prepared: true, status: runtimeStatusResponse };
     });
-    gatewayMocks.fetchGatewayJSON.mockReset();
-    gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
+    localApiMocks.fetchLocalApiJSON.mockReset();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
         return runtimeStatusResponse;
       }
@@ -389,7 +389,7 @@ describe('EnvCodespacesPage', () => {
           pid: 4242,
         };
       }
-      throw new Error(`Unexpected gateway call: ${url}`);
+      throw new Error(`Unexpected local API call: ${url}`);
     });
 
     host = document.createElement('div');
@@ -445,7 +445,7 @@ describe('EnvCodespacesPage', () => {
       pending_attachments: [],
       notes: [],
     });
-    expect(buildFlowerTurnLauncherCopy(intent).question).toBe('What should Flower do with this folder?');
+    expect(buildFlowerTurnLauncherCopy(intent).question).toBe('What would you like to explore inside it?');
   });
 
   it('shows Browser Editor setup guidance when the runtime is missing', async () => {
@@ -482,7 +482,7 @@ describe('EnvCodespacesPage', () => {
   it('shows the Browser Editor setup panel inline while the initial runtime check is still running', async () => {
     let resolveRuntimeStatus!: (value: any) => void;
 
-    gatewayMocks.fetchGatewayJSON.mockImplementation((url: string) => {
+    localApiMocks.fetchLocalApiJSON.mockImplementation((url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
         return new Promise((resolve) => {
           resolveRuntimeStatus = resolve as (value: any) => void;
@@ -506,7 +506,7 @@ describe('EnvCodespacesPage', () => {
           ],
         });
       }
-      throw new Error(`Unexpected gateway call: ${url}`);
+      throw new Error(`Unexpected local API call: ${url}`);
     });
 
     render(() => <EnvCodespacesPage />, host);
@@ -558,7 +558,7 @@ describe('EnvCodespacesPage', () => {
     expect(wizard?.textContent).toContain('Download failed.');
   });
 
-  it('prepares the workspace through Desktop instead of calling the old gateway install path', async () => {
+  it('prepares the workspace through Desktop instead of calling the old local API install path', async () => {
     runtimeStatusResponse = makeRuntimeStatus({
       active_runtime: {
         detection_state: 'missing',
@@ -578,7 +578,7 @@ describe('EnvCodespacesPage', () => {
       operation: { state: 'idle', log_tail: [] },
     });
 
-    gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
         return runtimeStatusResponse;
       }
@@ -600,7 +600,7 @@ describe('EnvCodespacesPage', () => {
           ],
         };
       }
-      throw new Error(`Unexpected gateway call: ${url}`);
+      throw new Error(`Unexpected local API call: ${url}`);
     });
 
     let resolvePrepare!: (value: { ok: true; prepared: true; status: any }) => void;
@@ -619,7 +619,7 @@ describe('EnvCodespacesPage', () => {
 
     startButton?.click();
     await waitForHostText(host, 'Demo Space');
-    expect(gatewayMocks.fetchGatewayJSON.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/code-runtime/status').length).toBeGreaterThanOrEqual(2);
+    expect(localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/code-runtime/status').length).toBeGreaterThanOrEqual(2);
     await vi.waitFor(() => {
       expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledTimes(1);
     });
@@ -630,8 +630,8 @@ describe('EnvCodespacesPage', () => {
       status: expect.anything(),
       preferSessionUpload: false,
     });
-    expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/code-runtime/install', expect.anything());
-    expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
+    expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/code-runtime/install', expect.anything());
+    expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
 
     resolvePrepare({ ok: true, prepared: true, status: makeRuntimeStatus() });
     await flushPage();
@@ -662,7 +662,7 @@ describe('EnvCodespacesPage', () => {
       prepared: false,
       message: 'Redeven Browser Editor catalog lookup failed with HTTP 503.',
     });
-    gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
         return runtimeStatusResponse;
       }
@@ -684,7 +684,7 @@ describe('EnvCodespacesPage', () => {
           ],
         };
       }
-      throw new Error(`Unexpected gateway call: ${url}`);
+      throw new Error(`Unexpected local API call: ${url}`);
     });
 
     render(() => <EnvCodespacesPage />, host);
@@ -703,7 +703,7 @@ describe('EnvCodespacesPage', () => {
     expect(wizard?.textContent).toContain('Retry setup');
     expect(wizard?.textContent).not.toContain('Continue to start codespace');
     expect(notificationMocks.error).toHaveBeenCalledWith('Browser Editor setup failed', 'Redeven Browser Editor catalog lookup failed with HTTP 503.');
-    expect(gatewayMocks.fetchGatewayJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
+    expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
   });
 
   it('opens a local-runtime codespace in the system browser when the desktop shell bridge is available', async () => {
@@ -906,7 +906,7 @@ describe('EnvCodespacesPage', () => {
   });
 
   it('uses semantic panel and card surface classes for the neutral codespace shell', async () => {
-    gatewayMocks.fetchGatewayJSON.mockImplementation(async (url: string) => {
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
         return runtimeStatusResponse;
       }
@@ -928,7 +928,7 @@ describe('EnvCodespacesPage', () => {
           ],
         };
       }
-      throw new Error(`Unexpected gateway call: ${url}`);
+      throw new Error(`Unexpected local API call: ${url}`);
     });
 
     render(() => <EnvCodespacesPage />, host);

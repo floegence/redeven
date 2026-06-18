@@ -26,7 +26,7 @@ export const FLOWER_PROVIDER_TYPES: readonly { value: FlowerProviderType; label:
   { value: 'chatglm', label: 'ChatGLM', hint: 'Native connection' },
   { value: 'deepseek', label: 'DeepSeek', hint: 'Native connection' },
   { value: 'qwen', label: 'Qwen', hint: 'Native connection' },
-  { value: 'openai_compatible', label: 'OpenAI-compatible', hint: 'Custom gateway' },
+  { value: 'openai_compatible', label: 'OpenAI-compatible', hint: 'Custom endpoint' },
 ];
 
 export function flowerProviderTypeLabel(type: FlowerProviderType): string {

@@ -1,4 +1,4 @@
-package gateway
+package appserver
 
 import (
 	"bytes"
@@ -20,7 +20,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestGateway_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
+func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	t.Parallel()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -57,9 +57,9 @@ func TestGateway_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	prompt := &ai.RequestUserInputPrompt{
-		PromptID:         "prompt_gateway_input",
-		MessageID:        "msg_gateway_input",
-		ToolID:           "tool_gateway_input",
+		PromptID:         "prompt_appserver_input",
+		MessageID:        "msg_appserver_input",
+		ToolID:           "tool_appserver_input",
 		ToolName:         "request_user_input",
 		ReasonCode:       "needs_choice",
 		RequiredFromUser: []string{"Choose a path."},
@@ -95,7 +95,7 @@ func TestGateway_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		t.Fatalf("UpdateThreadRunState waiting_user: %v", err)
 	}
 
-	gw, err := New(Options{
+	srv, err := New(Options{
 		Logger:  logger,
 		Backend: &stubBackend{},
 		DistFS: fstest.MapFS{
@@ -112,9 +112,9 @@ func TestGateway_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	}
 
 	inputResponsePath := "/_redeven_proxy/api/ai/threads/" + url.PathEscape(thread.ThreadID) + "/input_response"
-	mismatch := performGatewayRequest(gw, http.MethodPost, inputResponsePath, envOrigin, `{
+	mismatch := performServerRequest(srv, http.MethodPost, inputResponsePath, envOrigin, `{
 		"thread_id":"other_thread",
-		"response":{"prompt_id":"prompt_gateway_input","answers":{"question_1":{"text":"ship it"}}},
+		"response":{"prompt_id":"prompt_appserver_input","answers":{"question_1":{"text":"ship it"}}},
 		"input":{"text":"ship it","attachments":[]},
 		"options":{"max_steps":1}
 	}`)
@@ -122,20 +122,20 @@ func TestGateway_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		t.Fatalf("mismatched thread_id status=%d, want=%d body=%s", mismatch.Code, http.StatusBadRequest, mismatch.Body.String())
 	}
 
-	trailing := performGatewayRequest(gw, http.MethodPost, inputResponsePath, envOrigin, `{} {}`)
+	trailing := performServerRequest(srv, http.MethodPost, inputResponsePath, envOrigin, `{} {}`)
 	if trailing.Code != http.StatusBadRequest {
 		t.Fatalf("trailing body status=%d, want=%d body=%s", trailing.Code, http.StatusBadRequest, trailing.Body.String())
 	}
 
 	body := bytes.NewBufferString(`{
-		"response":{"prompt_id":"prompt_gateway_input","answers":{"question_1":{"text":"ship it"}}},
+		"response":{"prompt_id":"prompt_appserver_input","answers":{"question_1":{"text":"ship it"}}},
 		"input":{"text":"ship it","attachments":[]},
 		"options":{"max_steps":1}
 	}`)
 	req := httptest.NewRequest(http.MethodPost, inputResponsePath, body)
 	req.Header.Set("Origin", envOrigin)
 	rr := httptest.NewRecorder()
-	gw.serveHTTP(rr, req)
+	srv.serveHTTP(rr, req)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("input response status=%d body=%s", rr.Code, rr.Body.String())
 	}
@@ -150,7 +150,7 @@ func TestGateway_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("json.Unmarshal response: %v", err)
 	}
-	if !resp.OK || resp.Data.Kind != "start" || resp.Data.RunID == "" || resp.Data.ConsumedWaitingPromptID != "prompt_gateway_input" {
+	if !resp.OK || resp.Data.Kind != "start" || resp.Data.RunID == "" || resp.Data.ConsumedWaitingPromptID != "prompt_appserver_input" {
 		t.Fatalf("unexpected input response payload: %+v", resp)
 	}
 }

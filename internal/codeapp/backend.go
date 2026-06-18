@@ -11,12 +11,12 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/floegence/redeven/internal/codeapp/gateway"
+	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/codeapp/registry"
 	"github.com/floegence/redeven/internal/filesystemscope"
 )
 
-func (s *Service) ListSpaces(ctx context.Context) ([]gateway.SpaceStatus, error) {
+func (s *Service) ListSpaces(ctx context.Context) ([]appserver.SpaceStatus, error) {
 	if s == nil || s.reg == nil {
 		return nil, errors.New("codeapp not ready")
 	}
@@ -25,7 +25,7 @@ func (s *Service) ListSpaces(ctx context.Context) ([]gateway.SpaceStatus, error)
 		return nil, err
 	}
 
-	out := make([]gateway.SpaceStatus, 0, len(spaces))
+	out := make([]appserver.SpaceStatus, 0, len(spaces))
 	for _, sp := range spaces {
 		var running bool
 		var pid int
@@ -35,7 +35,7 @@ func (s *Service) ListSpaces(ctx context.Context) ([]gateway.SpaceStatus, error)
 			pid = ins.PID
 			port = ins.Port
 		}
-		out = append(out, gateway.SpaceStatus{
+		out = append(out, appserver.SpaceStatus{
 			CodeSpaceID:        sp.CodeSpaceID,
 			WorkspacePath:      sp.WorkspacePath,
 			Name:               sp.Name,
@@ -51,7 +51,7 @@ func (s *Service) ListSpaces(ctx context.Context) ([]gateway.SpaceStatus, error)
 	return out, nil
 }
 
-func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceRequest) (*gateway.SpaceStatus, error) {
+func (s *Service) CreateSpace(ctx context.Context, req appserver.CreateSpaceRequest) (*appserver.SpaceStatus, error) {
 	if s == nil || s.reg == nil {
 		return nil, errors.New("codeapp not ready")
 	}
@@ -113,7 +113,7 @@ func (s *Service) CreateSpace(ctx context.Context, req gateway.CreateSpaceReques
 	spaceRoot := filepath.Join(s.stateDir, "apps", "code", "spaces", id)
 	_ = os.MkdirAll(spaceRoot, 0o700)
 
-	return &gateway.SpaceStatus{
+	return &appserver.SpaceStatus{
 		CodeSpaceID:        id,
 		WorkspacePath:      abs,
 		Name:               name,
@@ -157,7 +157,7 @@ func (s *Service) DeleteSpace(ctx context.Context, codeSpaceID string) error {
 	return os.RemoveAll(cleanDir)
 }
 
-func (s *Service) StartSpace(ctx context.Context, codeSpaceID string) (*gateway.SpaceStatus, error) {
+func (s *Service) StartSpace(ctx context.Context, codeSpaceID string) (*appserver.SpaceStatus, error) {
 	if s == nil || s.reg == nil {
 		return nil, errors.New("codeapp not ready")
 	}
@@ -186,7 +186,7 @@ func (s *Service) StartSpace(ctx context.Context, codeSpaceID string) (*gateway.
 		sp = updated
 	}
 
-	return &gateway.SpaceStatus{
+	return &appserver.SpaceStatus{
 		CodeSpaceID:        sp.CodeSpaceID,
 		WorkspacePath:      sp.WorkspacePath,
 		Name:               sp.Name,
@@ -243,59 +243,59 @@ func (s *Service) ResolveCodeServerPort(ctx context.Context, codeSpaceID string)
 	return ins.Port, nil
 }
 
-func (s *Service) CodeRuntimeStatus(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
+func (s *Service) CodeRuntimeStatus(ctx context.Context) (appserver.CodeRuntimeStatus, error) {
 	if s == nil || s.runtime == nil {
-		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+		return appserver.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
-	return gateway.CodeRuntimeStatus(s.runtime.Status(ctx)), nil
+	return appserver.CodeRuntimeStatus(s.runtime.Status(ctx)), nil
 }
 
-func (s *Service) CreateCodeRuntimeImportSession(ctx context.Context, manifest gateway.CodeRuntimeArtifactManifest) (gateway.CodeRuntimeImportSession, error) {
+func (s *Service) CreateCodeRuntimeImportSession(ctx context.Context, manifest appserver.CodeRuntimeArtifactManifest) (appserver.CodeRuntimeImportSession, error) {
 	if s == nil || s.runtime == nil {
-		return gateway.CodeRuntimeImportSession{}, errors.New("code runtime not ready")
+		return appserver.CodeRuntimeImportSession{}, errors.New("code runtime not ready")
 	}
 	return s.runtime.CreateImportSession(ctx, manifest)
 }
 
-func (s *Service) AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (gateway.CodeRuntimeImportChunkResult, error) {
+func (s *Service) AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (appserver.CodeRuntimeImportChunkResult, error) {
 	if s == nil || s.runtime == nil {
-		return gateway.CodeRuntimeImportChunkResult{}, errors.New("code runtime not ready")
+		return appserver.CodeRuntimeImportChunkResult{}, errors.New("code runtime not ready")
 	}
 	return s.runtime.AppendImportChunk(ctx, uploadID, chunkIndex, body)
 }
 
-func (s *Service) CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (gateway.CodeRuntimeStatus, error) {
+func (s *Service) CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (appserver.CodeRuntimeStatus, error) {
 	if s == nil || s.runtime == nil {
-		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+		return appserver.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
 	status, err := s.runtime.CompleteImportSession(ctx, uploadID)
-	return gateway.CodeRuntimeStatus(status), err
+	return appserver.CodeRuntimeStatus(status), err
 }
 
-func (s *Service) SelectCodeRuntimeVersion(ctx context.Context, version string) (gateway.CodeRuntimeStatus, error) {
+func (s *Service) SelectCodeRuntimeVersion(ctx context.Context, version string) (appserver.CodeRuntimeStatus, error) {
 	if s == nil || s.runtime == nil {
-		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+		return appserver.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
 	status, err := s.runtime.SelectVersion(ctx, version)
-	return gateway.CodeRuntimeStatus(status), err
+	return appserver.CodeRuntimeStatus(status), err
 }
 
-func (s *Service) RemoveCodeRuntimeVersion(ctx context.Context, version string) (gateway.CodeRuntimeStatus, error) {
+func (s *Service) RemoveCodeRuntimeVersion(ctx context.Context, version string) (appserver.CodeRuntimeStatus, error) {
 	if s == nil || s.runtime == nil {
-		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+		return appserver.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
 	status, err := s.runtime.RemoveLocalEnvironmentVersion(ctx, version)
-	return gateway.CodeRuntimeStatus(status), err
+	return appserver.CodeRuntimeStatus(status), err
 }
 
-func (s *Service) CancelCodeRuntimeOperation(ctx context.Context) (gateway.CodeRuntimeStatus, error) {
+func (s *Service) CancelCodeRuntimeOperation(ctx context.Context) (appserver.CodeRuntimeStatus, error) {
 	if s == nil || s.runtime == nil {
-		return gateway.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+		return appserver.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
-	return gateway.CodeRuntimeStatus(s.runtime.CancelOperation(ctx)), nil
+	return appserver.CodeRuntimeStatus(s.runtime.CancelOperation(ctx)), nil
 }
 
-func (s *Service) UpdateSpace(ctx context.Context, codeSpaceID string, req gateway.UpdateSpaceRequest) (*gateway.SpaceStatus, error) {
+func (s *Service) UpdateSpace(ctx context.Context, codeSpaceID string, req appserver.UpdateSpaceRequest) (*appserver.SpaceStatus, error) {
 	if s == nil || s.reg == nil {
 		return nil, errors.New("codeapp not ready")
 	}
@@ -352,7 +352,7 @@ func (s *Service) UpdateSpace(ctx context.Context, codeSpaceID string, req gatew
 		port = ins.Port
 	}
 
-	return &gateway.SpaceStatus{
+	return &appserver.SpaceStatus{
 		CodeSpaceID:        sp.CodeSpaceID,
 		WorkspacePath:      sp.WorkspacePath,
 		Name:               sp.Name,

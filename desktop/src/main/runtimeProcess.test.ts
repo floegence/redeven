@@ -23,7 +23,7 @@ function runtimeStatusPayload(
   const openReadiness = runtimeServiceOverrides.open_readiness
     ?? (readiness === 'openable'
       ? { state: 'openable' }
-      : { state: 'starting', reason_code: 'env_app_gateway_starting', message: 'Env App gateway is starting.' });
+      : { state: 'starting', reason_code: 'env_app_app_server_starting', message: 'Env App app server is starting.' });
   return {
     status: 'ready',
     local_ui_url: baseURL,

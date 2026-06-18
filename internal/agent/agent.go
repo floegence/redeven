@@ -1072,9 +1072,9 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, 
 		return err
 	}
 
-	up := strings.TrimSpace(a.code.GatewayURL())
+	up := strings.TrimSpace(a.code.AppServerURL())
 	if up == "" {
-		return errors.New("codeapp gateway not ready")
+		return errors.New("code app server not ready")
 	}
 
 	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up)
@@ -1130,9 +1130,9 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess endpoint.Sessi
 		return err
 	}
 
-	up := strings.TrimSpace(a.code.GatewayURL())
+	up := strings.TrimSpace(a.code.AppServerURL())
 	if up == "" {
-		return errors.New("codeapp gateway not ready")
+		return errors.New("code app server not ready")
 	}
 
 	up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up)
@@ -1207,9 +1207,9 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 		envID = strings.TrimSpace(a.cfg.EnvironmentID)
 	}
 	if strings.TrimSpace(meta.CodeSpaceID) == "env-ui" && envID != "" && strings.TrimSpace(meta.EndpointID) == envID {
-		up := strings.TrimSpace(a.code.GatewayURL())
+		up := strings.TrimSpace(a.code.AppServerURL())
 		if up == "" {
-			return errors.New("codeapp gateway not ready")
+			return errors.New("code app server not ready")
 		}
 		up, cleanupUpstream, err := a.prepareAccessProxyUpstream(ctx, meta, up)
 		if err != nil {

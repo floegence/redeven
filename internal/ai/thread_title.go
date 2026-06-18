@@ -139,7 +139,7 @@ func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Provi
 	responseFormat := "json_object"
 	switch adapter.ProviderType {
 	case "openai_compatible", "moonshot", "chatglm", "deepseek", "qwen":
-		// Some OpenAI-compatible gateways return empty/incomplete outputs under forced
+		// Some OpenAI-compatible endpoints return empty/incomplete outputs under forced
 		// json_object mode. Keep prompt-level JSON constraints and parse the text payload.
 		//
 		// Moonshot/Kimi streaming classifiers can also emit an empty visible content stream

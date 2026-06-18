@@ -4,7 +4,7 @@ import { Button, Input, Select, Dialog, ConfirmDialog, Checkbox } from '@floegen
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { SettingsSection, FieldLabel } from '../SettingsPrimitives';
 import { SkillsCatalogTable } from '../SkillsCatalogTable';
-import { fetchGatewayJSON } from '../../../services/gatewayApi';
+import { fetchLocalApiJSON } from '../../../services/localApi';
 import { useI18n } from '../../../i18n';
 import type { SkillCatalogEntry } from '../types';
 
@@ -17,13 +17,13 @@ export function SkillsSection() {
 
   const refetchSkills = async () => {
     try {
-      const data = await fetchGatewayJSON<any>('/_redeven_proxy/api/skills', { method: 'GET' });
+      const data = await fetchLocalApiJSON<any>('/_redeven_proxy/api/skills', { method: 'GET' });
       setSkillsData(data);
     } catch {}
   };
   const refetchSources = async () => {
     try {
-      const data = await fetchGatewayJSON<any>('/_redeven_proxy/api/skills/sources', { method: 'GET' });
+      const data = await fetchLocalApiJSON<any>('/_redeven_proxy/api/skills/sources', { method: 'GET' });
       setSourcesData(data);
     } catch {}
   };

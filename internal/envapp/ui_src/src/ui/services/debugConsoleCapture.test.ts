@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe('debugConsoleCapture', () => {
-  it('captures gateway fetch request and response payloads', async () => {
+  it('captures local API fetch request and response payloads', async () => {
     const originalFetch = globalThis.fetch;
     const fetchMock = vi.fn(async () => new Response(JSON.stringify({
       data: {

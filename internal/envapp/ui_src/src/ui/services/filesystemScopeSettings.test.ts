@@ -9,12 +9,12 @@ import {
   updateFilesystemRootWritePermission,
 } from './filesystemScopeSettings';
 
-const gatewayMocks = vi.hoisted(() => ({
-  fetchGatewayJSON: vi.fn(),
+const localApiMocks = vi.hoisted(() => ({
+  fetchLocalApiJSON: vi.fn(),
 }));
 
-vi.mock('./gatewayApi', () => ({
-  fetchGatewayJSON: gatewayMocks.fetchGatewayJSON,
+vi.mock('./localApi', () => ({
+  fetchLocalApiJSON: localApiMocks.fetchLocalApiJSON,
 }));
 
 function buildSettings(scope: FilesystemScope | null): AgentSettingsResponse {
@@ -45,7 +45,7 @@ function buildSettings(scope: FilesystemScope | null): AgentSettingsResponse {
 }
 
 beforeEach(() => {
-  gatewayMocks.fetchGatewayJSON.mockReset();
+  localApiMocks.fetchLocalApiJSON.mockReset();
 });
 
 describe('filesystem scope settings helpers', () => {
@@ -110,13 +110,13 @@ describe('filesystem scope settings helpers', () => {
 
   it('saves sidebar write toggles through the same runtime settings payload shape', async () => {
     const currentSettings = buildSettings(null);
-    gatewayMocks.fetchGatewayJSON.mockImplementation(async (_url: string, init?: RequestInit) => ({
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (_url: string, init?: RequestInit) => ({
       settings: buildSettings(JSON.parse(String(init?.body ?? '{}')).filesystem_scope as FilesystemScope),
     }));
 
     const result = await saveFilesystemRootWritePermission(currentSettings, 'computer', true);
 
-    expect(gatewayMocks.fetchGatewayJSON).toHaveBeenCalledWith('/_redeven_proxy/api/settings', {
+    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/settings', {
       method: 'PUT',
       body: JSON.stringify({
         agent_home_dir: '/Users/alice',

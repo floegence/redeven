@@ -43,14 +43,14 @@ const notification = {
   error: vi.fn(),
   info: vi.fn(),
 };
-const MockCodexGatewayError = vi.hoisted(() => class MockCodexGatewayError extends Error {
+const MockCodexAPIError = vi.hoisted(() => class MockCodexAPIError extends Error {
   errorCode: string;
   details: string;
   status: number;
 
   constructor(message: string, errorCode = '', status = 400, details = '') {
     super(message);
-    this.name = 'CodexGatewayError';
+    this.name = 'CodexAPIError';
     this.errorCode = errorCode;
     this.details = details;
     this.status = status;
@@ -239,7 +239,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 }));
 
 vi.mock('./api', () => ({
-  CodexGatewayError: MockCodexGatewayError,
+  CodexAPIError: MockCodexAPIError,
   fetchCodexStatus: (...args: any[]) => fetchCodexStatusMock(...args),
   fetchCodexCapabilities: (...args: any[]) => fetchCodexCapabilitiesMock(...args),
   listCodexThreads: (...args: any[]) => listCodexThreadsMock(...args),
@@ -1028,7 +1028,7 @@ describe('CodexPage', () => {
     listCodexThreadsMock.mockResolvedValue([
       {
         id: 'thread_1',
-        name: 'Gateway parity review',
+        name: 'Local API parity review',
         preview: 'Review the current workspace changes',
         ephemeral: false,
         model_provider: 'gpt-5.4',
@@ -1041,7 +1041,7 @@ describe('CodexPage', () => {
     openCodexThreadMock.mockResolvedValue({
       thread: {
         id: 'thread_1',
-        name: 'Gateway parity review',
+        name: 'Local API parity review',
         preview: 'Review the current workspace changes',
         ephemeral: false,
         model_provider: 'gpt-5.4',
@@ -1072,7 +1072,7 @@ describe('CodexPage', () => {
     startCodexReviewMock.mockResolvedValue({
       thread: {
         id: 'thread_1',
-        name: 'Gateway parity review',
+        name: 'Local API parity review',
         preview: 'Review the current workspace changes',
         ephemeral: false,
         model_provider: 'gpt-5.4',
@@ -1904,7 +1904,7 @@ describe('CodexPage', () => {
       },
     ]);
     openCodexThreadMock.mockResolvedValue(startedDetail);
-    steerCodexTurnMock.mockRejectedValue(new MockCodexGatewayError(
+    steerCodexTurnMock.mockRejectedValue(new MockCodexAPIError(
       'Active turn rejected steer',
       'activeTurnNotSteerable',
       400,
@@ -2639,7 +2639,7 @@ describe('CodexPage', () => {
 
     expect(textarea.value).toBe('');
 
-    rejectStartTurn(new MockCodexGatewayError(
+    rejectStartTurn(new MockCodexAPIError(
       'Turn start failed',
       'rateLimitExceeded',
       400,
