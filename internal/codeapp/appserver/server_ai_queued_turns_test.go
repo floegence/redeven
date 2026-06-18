@@ -115,7 +115,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		Input: ai.RunInput{
 			Text: "keep this run active briefly",
 		},
-		Options: ai.RunOptions{MaxSteps: 1},
+		Options: ai.RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("StartRunDetached: %v", err)
@@ -139,7 +139,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 			MessageID: "m_appserver_queue_1",
 			Text:      "first queued via app server test",
 		},
-		Options: ai.RunOptions{MaxSteps: 1},
+		Options: ai.RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SendUserTurn first: %v", err)
@@ -151,7 +151,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 			MessageID: "m_appserver_queue_2",
 			Text:      "second queued via app server test",
 		},
-		Options: ai.RunOptions{MaxSteps: 1},
+		Options: ai.RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SendUserTurn second: %v", err)

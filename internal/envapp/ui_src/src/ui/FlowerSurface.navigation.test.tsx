@@ -3,7 +3,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
-  FlowerLiveBootstrap,
   FlowerRouterDecision,
   FlowerSettingsSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -367,16 +366,25 @@ describe('FlowerSurface navigation', () => {
     }));
   });
 
-  it('keeps the pending turn visible after a new thread is accepted before messages catch up', async () => {
+  it('waits for canonical timeline messages after a new thread is accepted', async () => {
     const acceptedThread = thread({
       thread_id: 'thread-accepted-without-messages',
       title: 'Accepted pending',
       status: 'running',
       messages: [],
     });
-    const loadThreadDeferred = deferred<FlowerLiveBootstrap>();
+    const caughtUpThread = thread({
+      ...acceptedThread,
+      messages: [{
+        id: 'm-accepted-user',
+        role: 'user',
+        content: 'follow the accepted thread',
+        status: 'complete',
+        created_at_ms: 10,
+      }],
+    });
     const launchTurn = vi.fn(async () => liveBootstrap(acceptedThread));
-    const loadThread = vi.fn(() => loadThreadDeferred.promise);
+    const loadThread = vi.fn(async () => liveBootstrap(caughtUpThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
@@ -399,7 +407,7 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => runtime.textContent?.includes('follow the accepted thread') ?? false);
     expect(runtime.textContent).toContain('follow the accepted thread');
     expect(runtime.querySelector('[data-flower-message-role="user"][data-flower-message-status="complete"]')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-message-role="assistant"][data-flower-message-status="streaming"] .flower-streaming-cursor')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"][data-flower-message-status="streaming"] .flower-streaming-cursor')).toBeNull();
     expect(loadThread).toHaveBeenCalledWith('thread-accepted-without-messages');
   });
 

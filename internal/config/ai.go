@@ -37,11 +37,6 @@ type AIConfig struct {
 	// instead of ending the turn immediately.
 	ToolRecoveryEnabled *bool `json:"tool_recovery_enabled,omitempty"`
 
-	// ToolRecoveryMaxSteps limits how many recovery continuations can happen in one run.
-	//
-	// Defaults to 3.
-	ToolRecoveryMaxSteps *int `json:"tool_recovery_max_steps,omitempty"`
-
 	// ToolRecoveryAllowPathRewrite controls deterministic path normalization/rewrite strategies.
 	ToolRecoveryAllowPathRewrite *bool `json:"tool_recovery_allow_path_rewrite,omitempty"`
 
@@ -155,7 +150,6 @@ const (
 
 const (
 	defaultAIToolRecoveryEnabled                 = true
-	defaultAIToolRecoveryMaxSteps                = 3
 	defaultAIToolRecoveryAllowPathRewrite        = true
 	defaultAIToolRecoveryAllowProbeTools         = true
 	defaultAIToolRecoveryFailOnRepeatedSignature = true
@@ -316,11 +310,6 @@ func (c *AIConfig) Validate() error {
 		return fmt.Errorf("invalid ai mode %q", c.Mode)
 	}
 
-	if c.ToolRecoveryMaxSteps != nil {
-		if *c.ToolRecoveryMaxSteps < 0 || *c.ToolRecoveryMaxSteps > 8 {
-			return fmt.Errorf("invalid tool_recovery_max_steps %d (must be in [0,8])", *c.ToolRecoveryMaxSteps)
-		}
-	}
 	if c.TerminalExecPolicy != nil {
 		if c.TerminalExecPolicy.DefaultTimeoutMS != nil {
 			v := *c.TerminalExecPolicy.DefaultTimeoutMS
@@ -507,20 +496,6 @@ func (c *AIConfig) EffectiveToolRecoveryEnabled() bool {
 		return defaultAIToolRecoveryEnabled
 	}
 	return *c.ToolRecoveryEnabled
-}
-
-func (c *AIConfig) EffectiveToolRecoveryMaxSteps() int {
-	if c == nil || c.ToolRecoveryMaxSteps == nil {
-		return defaultAIToolRecoveryMaxSteps
-	}
-	v := *c.ToolRecoveryMaxSteps
-	if v < 0 {
-		return defaultAIToolRecoveryMaxSteps
-	}
-	if v > 8 {
-		return 8
-	}
-	return v
 }
 
 func (c *AIConfig) EffectiveToolRecoveryAllowPathRewrite() bool {

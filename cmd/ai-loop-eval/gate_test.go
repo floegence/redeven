@@ -82,7 +82,7 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 			},
 			Events: taskEventAssertions{
 				MustInclude: []string{"todos.updated"},
-				HardFail:    []string{"guard.hard_max_steps"},
+				HardFail:    []string{"signal.recovery.attempt"},
 			},
 			Todos: taskTodoAssertions{
 				RequireSnapshot:             true,
@@ -138,17 +138,14 @@ func TestAssessTaskOutcome_FallbackFails(t *testing.T) {
 				Forbidden:       []string{"No response"},
 			},
 			Events: taskEventAssertions{
-				HardFail: []string{"guard.hard_max_steps"},
+				HardFail: []string{"signal.recovery.attempt"},
 			},
 		},
 	}
 	result := taskResult{
 		Task:          task,
 		WorkspacePath: "/workspace",
-		FinalText:     "I have reached the current automatic loop limit. Reply with one concrete next step.",
-		Turns: []turnMetrics{{
-			LoopExhausted: true,
-		}},
+		FinalText:     "Tool workflow failed before a useful answer could be produced.",
 	}
 	outcome := assessTaskOutcome(task, result)
 	if outcome.Passed {
@@ -166,7 +163,7 @@ func TestAssessTaskOutcome_CurrentRuntimeEventsFailGate(t *testing.T) {
 		ID: "current_events",
 		Assertions: taskAssertionsSpec{
 			Events: taskEventAssertions{
-				HardFail: []string{"completion.attempt", "signal.recovery.attempt", "guard.hard_max_steps"},
+				HardFail: []string{"completion.attempt", "signal.recovery.attempt"},
 			},
 		},
 	}
@@ -176,7 +173,6 @@ func TestAssessTaskOutcome_CurrentRuntimeEventsFailGate(t *testing.T) {
 		Turns: []turnMetrics{{
 			CompletionRetrys: 1,
 			TaskLoopContinue: 1,
-			LoopExhausted:    true,
 		}},
 	}
 	outcome := assessTaskOutcome(task, result)
@@ -184,7 +180,7 @@ func TestAssessTaskOutcome_CurrentRuntimeEventsFailGate(t *testing.T) {
 		t.Fatalf("expected current hard-fail runtime events to fail")
 	}
 	reasons := strings.Join(outcome.HardFailReasons, ",")
-	for _, want := range []string{"completion_attempt_rejected", "signal_recovery_attempt", "turn_loop_exhausted"} {
+	for _, want := range []string{"completion_attempt_rejected", "signal_recovery_attempt"} {
 		if !strings.Contains(reasons, want) {
 			t.Fatalf("hard fail reasons %q missing %q", reasons, want)
 		}

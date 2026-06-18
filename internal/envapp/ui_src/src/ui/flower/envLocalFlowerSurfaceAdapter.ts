@@ -419,7 +419,6 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           ...(contextAction ? { contextAction } : {}),
         },
         options: {
-          maxSteps: 10,
           mode: input.mode ?? 'act',
         },
       });
@@ -453,7 +452,6 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           attachments: [],
         },
         options: {
-          maxSteps: 10,
           mode: 'act',
         },
       });

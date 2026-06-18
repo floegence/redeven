@@ -38,7 +38,7 @@ type suiteMetrics struct {
 	AverageEfficiency    float64 `json:"average_efficiency"`
 	AverageOverall       float64 `json:"average_overall"`
 	HardFailCount        int     `json:"hard_fail_count"`
-	HasLoopExhaustedTask bool    `json:"has_loop_exhausted_task"`
+	HasLoopUnsafeTask    bool    `json:"has_loop_unsafe_task"`
 }
 
 type benchmarkMetrics struct {
@@ -81,8 +81,6 @@ type gateReport struct {
 }
 
 var fallbackFinalPhrases = []string{
-	"i have reached the current automatic loop limit",
-	"reply with one concrete next step",
 	"assistant finished without a visible response",
 	"tool workflow failed",
 	"no response",
@@ -115,12 +113,9 @@ func assessTaskOutcome(task evalTask, result taskResult) taskOutcome {
 		if turn.ToolErrorCount > 0 || turn.RecoveryCount > 0 || turn.CompletionRetrys > 0 || turn.TaskLoopContinue > 0 {
 			out.RecoveryCandidate = true
 		}
-		if turn.LoopExhausted || turn.PhasePingPong || turn.FinalizationReason == "task_turn_limit_reached" {
+		if turn.PhasePingPong {
 			out.LoopSafe = false
 			out.Passed = false
-		}
-		if turn.LoopExhausted {
-			out.HardFailReasons = append(out.HardFailReasons, "turn_loop_exhausted")
 		}
 		if turn.PhasePingPong {
 			out.HardFailReasons = append(out.HardFailReasons, "phase_pingpong_detected")
@@ -132,9 +127,6 @@ func assessTaskOutcome(task evalTask, result taskResult) taskOutcome {
 		if hardFailEventConfigured(hardEventSet, "signal.recovery.attempt", "task.loop.continue") && turn.TaskLoopContinue > 0 {
 			out.Passed = false
 			out.HardFailReasons = append(out.HardFailReasons, "signal_recovery_attempt")
-		}
-		if hardFailEventConfigured(hardEventSet, "guard.hard_max_steps", "turn.loop.exhausted") && turn.LoopExhausted {
-			out.Passed = false
 		}
 		if strings.TrimSpace(turn.MonitorAbort) != "" {
 			out.Passed = false
@@ -308,7 +300,7 @@ func aggregateSuiteMetrics(results []taskResult) suiteMetrics {
 			}
 		}
 		if !outcome.LoopSafe {
-			metrics.HasLoopExhaustedTask = true
+			metrics.HasLoopUnsafeTask = true
 		}
 		metrics.HardFailCount += len(outcome.HardFailReasons)
 		metrics.AverageAccuracy += item.Score.Accuracy

@@ -13,7 +13,7 @@ BASELINE_PATH="${BASELINE_PATH:-$ROOT_DIR/eval/baselines/open_source_best.json}"
 cd "$ROOT_DIR"
 
 echo "[gate] replay fixtures"
-go run ./cmd/ai-loop-replay --message-log "$ROOT_DIR/eval/replay_cases/loop_exhausted_fail.message.log.json" --expect fail
+go run ./cmd/ai-loop-replay --message-log "$ROOT_DIR/eval/replay_cases/fallback_fail.message.log.json" --expect fail
 go run ./cmd/ai-loop-replay --message-log "$ROOT_DIR/eval/replay_cases/normal_pass.message.log.json" --expect pass
 
 echo "[gate] evaluate behavioral suite with hard gate"

@@ -1,7 +1,7 @@
 import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, Copy, FileText, FolderOpen, GripVertical, Plus, Settings, Stop, Terminal } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, ArrowUp, Check, ChevronDown, Clock, Copy, FileText, FolderOpen, GripVertical, Plus, Settings, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -61,10 +61,6 @@ type FlowerInputDraft = Readonly<{
 }>;
 type PendingFlowerTurn = Readonly<{
   thread_id: string;
-  prompt: string;
-  created_at_ms: number;
-  phase: 'sending' | 'submitted';
-  baseline_user_message_count: number;
 }>;
 type FlowerHandlerResolutionState =
   | Readonly<{ status: 'starting' }>
@@ -120,6 +116,21 @@ const ASK_FLOWER_CONTEXT_SESSION_SOURCES = new Set([
   'runtime_gateway',
   'region_sandbox',
 ]);
+
+const FlowerStopIcon: Component<{ class?: string }> = (props) => (
+  <svg
+    class={props.class}
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <rect x="8" y="8" width="8" height="8" rx="1.7" fill="currentColor" stroke="currentColor" />
+  </svg>
+);
 
 export {
   projectFlowerThreadListItem,
@@ -274,49 +285,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!pending) return null;
     return pending.thread_id === (selectedThreadID() || PENDING_NEW_THREAD_ID) ? pending : null;
   });
-  const userMessageCount = (thread: FlowerThreadSnapshot | null | undefined): number => (
-    thread?.messages.filter((message) => message.role === 'user').length ?? 0
-  );
-  const threadContainsPendingUserMessage = (thread: FlowerThreadSnapshot, pending: PendingFlowerTurn): boolean => {
-    const userMessages = thread.messages.filter((message) => message.role === 'user');
-    if (userMessages.length <= pending.baseline_user_message_count) return false;
-    return trimString(userMessages[userMessages.length - 1]?.content) === pending.prompt;
-  };
-  const pendingUserMessageIndex = (thread: FlowerThreadSnapshot, pending: PendingFlowerTurn): number => {
-    let userCount = 0;
-    for (let index = 0; index < thread.messages.length; index += 1) {
-      const message = thread.messages[index];
-      if (message?.role !== 'user') continue;
-      userCount += 1;
-      if (userCount > pending.baseline_user_message_count && trimString(message.content) === pending.prompt) {
-        return index;
-      }
-    }
-    return -1;
-  };
-  const threadContainsAssistantAfterPendingUser = (thread: FlowerThreadSnapshot, pending: PendingFlowerTurn): boolean => {
-    const userIndex = pendingUserMessageIndex(thread, pending);
-    if (userIndex < 0) return false;
-    return thread.messages.slice(userIndex + 1).some((message) => message.role === 'assistant');
-  };
-  const clearPendingTurnIfThreadCaughtUp = (thread: FlowerThreadSnapshot) => {
-    const pending = pendingTurn();
-    if (!pending || pending.thread_id !== thread.thread_id) return;
-    if (threadContainsAssistantAfterPendingUser(thread, pending) || (threadContainsPendingUserMessage(thread, pending) && thread.status !== 'running')) {
-      setPendingTurn(null);
-    }
-  };
-  const settlePendingTurnForAcceptedThread = (thread: FlowerThreadSnapshot, pending: PendingFlowerTurn) => {
-    if (threadContainsAssistantAfterPendingUser(thread, pending) || (threadContainsPendingUserMessage(thread, pending) && thread.status !== 'running')) {
-      setPendingTurn(null);
-      return;
-    }
-    setPendingTurn({
-      ...pending,
-      thread_id: thread.thread_id,
-      phase: 'submitted',
-    });
-  };
   const selectedThreadLoading = createMemo(() => trimString(loadingThreadID()) !== '' && loadingThreadID() === selectedThreadID());
   const warmupState = createMemo(() => props.warmup?.active ? props.warmup : null);
   const surfaceWarmupActive = createMemo(() => warmupState() !== null);
@@ -584,7 +552,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const live = await props.adapter.loadThread(tid);
     const thread = applyLiveBootstrap(live);
     if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return thread;
-    clearPendingTurnIfThreadCaughtUp(thread);
     if (thread.read_status.is_unread) {
       persistThreadRead(tid, thread.read_status.snapshot, sequence);
     }
@@ -768,7 +735,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       const thread = applyLiveBootstrap(await props.adapter.loadThread(tid));
       if (sequence !== threadLoadSequence) return;
-      clearPendingTurnIfThreadCaughtUp(thread);
       if (thread.read_status.is_unread) {
         persistThreadRead(tid, thread.read_status.snapshot, sequence);
       }
@@ -929,7 +895,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               continue;
             }
             threadState = result.thread;
-            clearPendingTurnIfThreadCaughtUp(result.thread);
             if (result.tailKey && result.tailLength > 0) {
               shouldScrollTail = true;
             }
@@ -1080,10 +1045,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     const pending: PendingFlowerTurn = {
       thread_id: selectedThreadID() || PENDING_NEW_THREAD_ID,
-      prompt,
-      created_at_ms: Date.now(),
-      phase: 'sending',
-      baseline_user_message_count: userMessageCount(selectedThread()),
     };
     setChatRunning(true);
     setPendingTurn(pending);
@@ -1109,7 +1070,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
       const acceptedThread = applyLiveBootstrap(thread);
       setSelectedThreadID(acceptedThread.thread_id);
-      settlePendingTurnForAcceptedThread(acceptedThread, pending);
+      setPendingTurn(null);
       setLoadError('');
       returnToChat();
       await refreshSelectedThread(acceptedThread.thread_id);
@@ -1135,7 +1096,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const live = await props.adapter.stopThread(threadID);
     const thread = applyLiveBootstrap(live);
     setSelectedThreadID(thread.thread_id);
-    clearPendingTurnIfThreadCaughtUp(thread);
     setLoadError('');
     return thread;
   };
@@ -1149,6 +1109,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     if (selectedThreadCanStop()) {
       if (threadStopping() || chatRunning()) return;
+      const shouldSendAfterStop = prompt !== '';
       setThreadStopping(true);
       try {
         await stopSelectedThread();
@@ -1159,7 +1120,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       } finally {
         setThreadStopping(false);
       }
-      if (prompt) {
+      if (shouldSendAfterStop) {
         await launchChatTurn(prompt);
       }
       return;
@@ -1262,54 +1223,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
-  const pendingTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
-    const pending = pendingTurnForSelectedThread();
-    if (!pending) return [];
-    const selected = selectedThread();
-    const assistantTimestamp = Math.max(pending.created_at_ms, selected?.updated_at_ms ?? 0);
-    const userMessageVisible = selected ? !threadContainsPendingUserMessage(selected, pending) : true;
-    const assistantMessageVisible = selected ? !threadContainsAssistantAfterPendingUser(selected, pending) : true;
-    const userMessage: FlowerChatMessage = {
-      id: `${pending.thread_id}:pending-user`,
-      role: 'user',
-      content: pending.prompt,
-      status: pending.phase === 'sending' ? 'sending' : 'complete',
-      created_at_ms: pending.created_at_ms,
-    };
-    const assistantMessage: FlowerChatMessage = {
-      id: `${pending.thread_id}:pending-assistant`,
-      role: 'assistant',
-      content: '',
-      status: 'streaming',
-      created_at_ms: assistantTimestamp,
-    };
-    const entries: FlowerTimelineEntry[] = [];
-    if (userMessageVisible) {
-      entries.push({
-        type: 'message',
-        key: `message:${userMessage.id}`,
-        message: userMessage,
-        blocks: [{
-          type: 'content',
-          key: `${userMessage.id}:block:0`,
-          block_index: 0,
-          block_type: 'text',
-          content: pending.prompt,
-        }],
-      });
-    }
-    if (assistantMessageVisible) {
-      entries.push({
-        type: 'message',
-        key: `message:${assistantMessage.id}`,
-        message: assistantMessage,
-        blocks: [],
-      });
-    }
-    return entries;
-  });
   const visibleTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
-    return [...selectedTimelineEntries(), ...pendingTimelineEntries()];
+    return selectedTimelineEntries();
   });
   const visibleTimelineEntryKeys = createMemo(() => visibleTimelineEntries().map((entry) => entry.key));
   const visibleTimelineEntriesByKey = createMemo(() => new Map(visibleTimelineEntries().map((entry) => [entry.key, entry] as const)));
@@ -1619,7 +1534,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const composerChatDraftText = createMemo(() => trimString(chatDraft()));
   const composerPrimaryActionIsStop = createMemo(() => selectedThreadCanStop() && !composerChatDraftText());
-  const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? Stop : ArrowUp);
+  const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : ArrowUp);
   const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
     if (threadStopping() || chatRunning()) return true;
@@ -2390,12 +2305,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const messageEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'message' }>>) => {
     const message = createMemo(() => entry().message);
-    const streaming = createMemo(() => message().status === 'streaming');
+    const activeCursor = createMemo(() => (
+      selectedThreadLiveStatus() === 'running'
+      && message().role === 'assistant'
+      && message().active_cursor === true
+    ));
     const failed = createMemo(() => message().status === 'error');
     const hasRenderableBlock = createMemo(() => entry().blocks.length > 0);
-    const visible = createMemo(() => !(failed() && !hasRenderableBlock() && !streaming() && selectedThreadRunErrorMessage()));
+    const visible = createMemo(() => !(failed() && !hasRenderableBlock() && !activeCursor() && selectedThreadRunErrorMessage()));
     const blocks = createMemo((): readonly FlowerRenderableMessageBlock[] => {
-      const placeholderBlock: FlowerRenderableMessageBlock | null = !hasRenderableBlock() && (streaming() || failed())
+      const placeholderBlock: FlowerRenderableMessageBlock | null = !hasRenderableBlock() && (activeCursor() || failed())
         ? {
             type: 'content',
             key: `${message().id}:placeholder`,
@@ -2408,7 +2327,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
     const blockKeys = createMemo(() => blocks().map((block) => block.key));
     const blocksByKey = createMemo(() => new Map(blocks().map((block) => [block.key, block] as const)));
-    const streamingBlockKey = createMemo(() => streaming() ? lastContentBlockKey(blocks()) : '');
+    const streamingBlockKey = createMemo(() => activeCursor() ? lastContentBlockKey(blocks()) : '');
     const copyText = createMemo(() => messageCopyText(message(), blocks()));
     const messageTime = createMemo(() => formatMessageTime(message().created_at_ms));
     const assistantCopyBlockKey = createMemo(() => message().role === 'assistant' ? lastCopyableContentBlockKey(blocks()) : '');
@@ -2442,7 +2361,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             <Show when={message().role === 'user'}>
               {messageContextActionLine(message())}
             </Show>
-            <Show when={streaming()}>
+            <Show when={activeCursor()}>
               <div class={cn('flower-message-streaming-tail', message().role === 'user' ? 'flower-message-streaming-tail-user' : 'flower-message-streaming-tail-assistant')}>
                 {streamingCursor()}
               </div>
@@ -2685,7 +2604,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         variant="primary"
                         icon={composerPrimaryActionIcon()}
                         size="icon"
-                        class={cn('flower-composer-submit rounded-full', composerPrimaryActionIsStop() && 'flower-composer-submit-stop')}
+                        class="flower-composer-submit rounded-full"
                         aria-label={composerPrimaryActionLabel()}
                         title={composerPrimaryActionLabel()}
                         disabled={composerPrimaryActionDisabled()}

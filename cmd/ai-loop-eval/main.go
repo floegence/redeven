@@ -35,7 +35,6 @@ type turnMetrics struct {
 	RecoveryCount        int           `json:"recovery_count"`
 	CompletionRetrys     int           `json:"completion_retries"`
 	TaskLoopContinue     int           `json:"task_loop_continue"`
-	LoopExhausted        bool          `json:"loop_exhausted"`
 	PhasePingPong        bool          `json:"phase_pingpong"`
 	FinalizationReason   string        `json:"finalization_reason,omitempty"`
 	EndState             string        `json:"end_state,omitempty"`
@@ -572,7 +571,6 @@ func runTask(
 	}
 
 	runOptions := ai.RunOptions{
-		MaxSteps:                         task.Runtime.MaxSteps,
 		ReasoningOnly:                    task.Runtime.ReasoningOnly,
 		RequireUserConfirmOnTaskComplete: task.Runtime.RequireUserConfirmOnTaskComplete,
 		NoUserInteraction:                task.Runtime.NoUserInteraction,
@@ -685,8 +683,6 @@ func runTask(
 					if reason := extractReasonFromPayload(ev.Payload); reason != "" {
 						reasonFlow = append(reasonFlow, "task:"+reason)
 					}
-				case "guard.hard_max_steps", "turn.loop.exhausted":
-					metrics.LoopExhausted = true
 				case "run.end":
 					metrics.FinalizationReason = payloadFieldString(ev.Payload, "finalization_reason")
 					metrics.EndState = payloadFieldString(ev.Payload, "state")
@@ -695,9 +691,6 @@ func runTask(
 		}
 		metrics.CompletionReasonFlow = reasonFlow
 		metrics.PhasePingPong = detectPhasePingPong(reasonFlow)
-		if strings.TrimSpace(strings.ToLower(metrics.FinalizationReason)) == "task_turn_limit_reached" {
-			metrics.LoopExhausted = true
-		}
 		if metrics.AttemptCount == 0 {
 			metrics.AttemptCount = 1
 		}
@@ -835,11 +828,6 @@ func evaluateScore(task evalTask, result taskResult, outcome taskOutcome) scoreB
 		toolErrors += turn.ToolErrorCount
 		if turn.MonitorAbort != "" {
 			accuracy -= 20
-			natural -= 20
-			efficiency -= 25
-		}
-		if turn.LoopExhausted {
-			accuracy -= 35
 			natural -= 20
 			efficiency -= 25
 		}

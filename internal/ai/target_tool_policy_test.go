@@ -242,7 +242,7 @@ func TestPrepareRunUsesThreadScopedTargetPolicy(t *testing.T) {
 	prepared, err := svc.prepareRun(meta, "run_target_policy", RunStartRequest{
 		ThreadID: thread.ThreadID,
 		Input:    RunInput{Text: "check policy"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, nil, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)

@@ -116,7 +116,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		"thread_id":"other_thread",
 		"response":{"prompt_id":"prompt_appserver_input","answers":{"question_1":{"text":"ship it"}}},
 		"input":{"text":"ship it","attachments":[]},
-		"options":{"max_steps":1}
+		"options":{}
 	}`)
 	if mismatch.Code != http.StatusBadRequest {
 		t.Fatalf("mismatched thread_id status=%d, want=%d body=%s", mismatch.Code, http.StatusBadRequest, mismatch.Body.String())
@@ -130,7 +130,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	body := bytes.NewBufferString(`{
 		"response":{"prompt_id":"prompt_appserver_input","answers":{"question_1":{"text":"ship it"}}},
 		"input":{"text":"ship it","attachments":[]},
-		"options":{"max_steps":1}
+		"options":{}
 	}`)
 	req := httptest.NewRequest(http.MethodPost, inputResponsePath, body)
 	req.Header.Set("Origin", envOrigin)

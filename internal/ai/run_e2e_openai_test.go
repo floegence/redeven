@@ -100,7 +100,7 @@ func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 		ThreadID: th.ThreadID,
 		Model:    "openai/" + modelName,
 		Input:    RunInput{Text: prompt},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}

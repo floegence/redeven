@@ -231,7 +231,7 @@ func TestIntegration_NativeSDK_Anthropic_Stream_Succeeds(t *testing.T) {
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "hello"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestIntegration_NativeSDK_Anthropic_LengthContinuationSucceeds(t *testing.T
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "请用 markdown 写一篇长篇童话故事"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
@@ -371,7 +371,7 @@ func TestIntegration_NativeSDK_Anthropic_ContentFilterFails(t *testing.T) {
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "请你输出一个5000字的故事"},
-		Options:  RunOptions{MaxSteps: 2},
+		Options:  RunOptions{},
 	}, rr)
 	if err == nil {
 		t.Fatalf("StartRun should fail for content-filtered response")
@@ -430,7 +430,7 @@ func TestIntegration_NativeSDK_Anthropic_IdentityLengthContinuationCompletesWith
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "你是谁"},
-		Options:  RunOptions{MaxSteps: 4},
+		Options:  RunOptions{},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}

@@ -352,7 +352,7 @@ func TestIntegration_NativeSDK_OpenAI_IdentityQuestionCompletesWithNaturalStop(t
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "你是谁"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}
@@ -473,7 +473,7 @@ func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-4o-mini",
 		Input:    RunInput{Text: "hello"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, rr); err != nil {
 		t.Fatalf("StartRun: %v", err)
 	}

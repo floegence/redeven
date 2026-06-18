@@ -3,8 +3,6 @@ import { captureDebugConsoleProtocolCall, captureDebugConsoleProtocolNotify } fr
 import { redevenV1TypeIds } from './typeIds';
 import type {
   AIRealtimeEvent,
-  AICancelRunRequest,
-  AICancelRunResponse,
   AIListMessagesRequest,
   AIListMessagesResponse,
   AISendUserTurnRequest,
@@ -90,14 +88,12 @@ import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgrade
 import type { TerminalClearRequest, TerminalClearResponse, TerminalHistoryRequest, TerminalHistoryResponse, TerminalNameUpdateEvent, TerminalOutputEvent, TerminalSessionAttachRequest, TerminalSessionAttachResponse, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionStatsRequest, TerminalSessionStatsResponse, TerminalSessionsChangedEvent } from './sdk/terminal';
 import {
   fromWireAIEventNotify,
-  fromWireAICancelRunResponse,
   fromWireAIListMessagesResponse,
   fromWireAISendUserTurnResponse,
   fromWireAISubmitRequestUserInputResponseResponse,
   fromWireAISubscribeSummaryResponse,
   fromWireAISubscribeThreadResponse,
   fromWireAIStopThreadResponse,
-  toWireAICancelRunRequest,
   toWireAIListMessagesRequest,
   toWireAISendUserTurnRequest,
   toWireAISubmitRequestUserInputResponseRequest,
@@ -177,8 +173,6 @@ import { fromWireSysPingResponse, fromWireSysRestartResponse, fromWireSysUpgrade
 import { fromWireTerminalNameUpdateNotify, fromWireTerminalOutputNotify, fromWireTerminalSessionAttachResponse, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionStatsResponse, fromWireTerminalHistoryResponse, toWireTerminalInputNotify, toWireTerminalResizeNotify, toWireTerminalSessionAttachRequest, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionStatsRequest, toWireTerminalHistoryRequest, toWireTerminalClearRequest, fromWireTerminalClearResponse, fromWireTerminalSessionsChangedNotify } from './codec/terminal';
 import type { wire_access_resume_req, wire_access_resume_resp, wire_access_status_resp } from './wire/access';
 import type {
-  wire_ai_cancel_run_req,
-  wire_ai_cancel_run_resp,
   wire_ai_event_notify,
   wire_ai_list_messages_req,
   wire_ai_list_messages_resp,
@@ -321,7 +315,6 @@ export type RedevenV1Rpc = {
     onSessionsChanged: (handler: (event: TerminalSessionsChangedEvent) => void) => () => void;
   };
   ai: {
-    cancelRun: (req: AICancelRunRequest) => Promise<AICancelRunResponse>;
     sendUserTurn: (req: AISendUserTurnRequest) => Promise<AISendUserTurnResponse>;
     submitRequestUserInputResponse: (req: AISubmitRequestUserInputResponseRequest) => Promise<AISubmitRequestUserInputResponseResponse>;
     subscribeSummary: () => Promise<AISubscribeSummaryResponse>;
@@ -634,11 +627,6 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const payload = toWireAISubmitRequestUserInputResponseRequest(req);
         const resp = await call<wire_ai_submit_request_user_input_response_req, wire_ai_submit_request_user_input_response_resp>(redevenV1TypeIds.ai.submitRequestUserInputResponse, payload);
         return fromWireAISubmitRequestUserInputResponseResponse(resp);
-      },
-      cancelRun: async (req) => {
-        const payload = toWireAICancelRunRequest(req);
-        const resp = await call<wire_ai_cancel_run_req, wire_ai_cancel_run_resp>(redevenV1TypeIds.ai.runCancel, payload);
-        return fromWireAICancelRunResponse(resp);
       },
       subscribeSummary: async () => {
         const resp = await call<Record<string, never>, wire_ai_subscribe_summary_resp>(redevenV1TypeIds.ai.subscribeSummary, {});

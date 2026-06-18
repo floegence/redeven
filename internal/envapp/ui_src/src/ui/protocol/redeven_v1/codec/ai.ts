@@ -1,7 +1,5 @@
 import type {
   AIActiveRun,
-  AICancelRunRequest,
-  AICancelRunResponse,
   AIFollowupAttachment,
   AIFollowupItem,
   AIListMessagesRequest,
@@ -26,8 +24,6 @@ import type {
 } from '../sdk/ai';
 import type {
   wire_ai_active_run,
-  wire_ai_cancel_run_req,
-  wire_ai_cancel_run_resp,
   wire_ai_event_notify,
   wire_ai_followup_attachment,
   wire_ai_followup_item,
@@ -216,7 +212,6 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
       context_action: req.input?.contextAction,
     },
     options: {
-      max_steps: Number(req.options?.maxSteps ?? 0),
       mode: req.options?.mode ? String(req.options.mode).trim() : undefined,
     },
     expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
@@ -265,7 +260,6 @@ export function toWireAISubmitRequestUserInputResponseRequest(req: AISubmitReque
         : [],
     },
     options: {
-      max_steps: Number(req.options?.maxSteps ?? 0),
       mode: req.options?.mode ? String(req.options.mode).trim() : undefined,
     },
     expected_run_id: req.expectedRunId?.trim() ? String(req.expectedRunId).trim() : undefined,
@@ -280,19 +274,6 @@ export function fromWireAISubmitRequestUserInputResponseResponse(resp: wire_ai_s
     consumedWaitingPromptId: String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
     appliedExecutionMode: normalizeExecutionMode(resp?.applied_execution_mode),
   };
-}
-
-export function toWireAICancelRunRequest(req: AICancelRunRequest): wire_ai_cancel_run_req {
-  const runId = String(req.runId ?? '').trim();
-  const threadId = String(req.threadId ?? '').trim();
-  return {
-    run_id: runId || undefined,
-    thread_id: threadId || undefined,
-  };
-}
-
-export function fromWireAICancelRunResponse(resp: wire_ai_cancel_run_resp): AICancelRunResponse {
-  return { ok: Boolean(resp?.ok ?? false) };
 }
 
 export function fromWireAISubscribeSummaryResponse(resp: wire_ai_subscribe_summary_resp): AISubscribeSummaryResponse {

@@ -45,9 +45,20 @@ describe('FlowerSurface navigation launch/send', () => {
       return button?.getAttribute('aria-label') === 'Stop' && !button.disabled;
     });
 
+    const stopButton = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement;
+    const stopIcon = stopButton.querySelector('svg');
+    const stopIconRect = stopIcon?.querySelector('rect');
+    expect(stopButton.className).toContain('flower-composer-submit');
+    expect(stopButton.className).toContain('rounded-full');
+    expect(stopIcon?.getAttribute('viewBox')).toBe('0 0 24 24');
+    expect(stopIconRect?.getAttribute('x')).toBe('8');
+    expect(stopIconRect?.getAttribute('y')).toBe('8');
+    expect(stopIconRect?.getAttribute('width')).toBe('8');
+    expect(stopIconRect?.getAttribute('height')).toBe('8');
+
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     expect(textarea.disabled).toBe(false);
-    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    stopButton.click();
     await waitFor(() => stopThread.mock.calls.length > 0);
 
     expect(stopThread).toHaveBeenCalledWith('thread-running-stop');
@@ -329,57 +340,36 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.textContent).toContain('Flower verification is complete.');
   });
 
-  it('shows a streaming assistant placeholder immediately after send when the running thread has not streamed yet', async () => {
-    const sentThread = thread({
-      thread_id: 'thread-streaming-placeholder',
-      title: 'Flower placeholder',
-      status: 'running',
-      messages: [
-        {
-          id: 'm-user',
-          role: 'user',
-          content: 'show the placeholder',
-          status: 'complete',
-          created_at_ms: 10,
-        },
-      ],
-    });
-    const loadThreadDeferred = deferred<FlowerLiveBootstrap>();
-    const loadThread = vi.fn(() => loadThreadDeferred.promise);
-    const launchTurn = vi.fn(async () => liveBootstrap(sentThread));
-    const runtime = renderSurfaceWithAdapter({
-      ...adapter(true),
-      listThreads: vi.fn(async () => []),
-      loadThread,
-      launchTurn,
-    });
-    await waitFor(() => Boolean(runtime.querySelector('textarea')));
-
-    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
-    textarea.value = 'show the placeholder';
-    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    await waitFor(() => {
-      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
-      return Boolean(button && !button.disabled);
-    });
-    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-role="user"]')));
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')), 2500);
-
-    expect(runtime.textContent).toContain('show the placeholder');
-    expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-plain')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-framed')).toBeNull();
-    expect(launchTurn).toHaveBeenCalledTimes(1);
-    expect(loadThread).toHaveBeenCalled();
-  });
-
-  it('shows the submitted user message and streaming cursor while send is still in flight', async () => {
+  it('does not synthesize timeline rows while send is still in flight', async () => {
     const sendDeferred = deferred<FlowerLiveBootstrap>();
     const launchTurn = vi.fn(() => sendDeferred.promise);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
+      loadThread: vi.fn(async (threadID: string) => {
+        if (threadID === 'thread-canonical-send') {
+          return liveBootstrap(thread({
+            thread_id: 'thread-canonical-send',
+            title: 'Canonical send',
+            status: 'running',
+            messages: [{
+              id: 'm-user-canonical',
+              role: 'user',
+              content: 'inspect the running turn',
+              status: 'complete',
+              created_at_ms: 10,
+            }, {
+              id: 'm-assistant-canonical',
+              role: 'assistant',
+              content: '',
+              status: 'streaming',
+              active_cursor: true,
+              created_at_ms: 20,
+            }],
+          }));
+        }
+        throw new Error(`unexpected loadThread: ${threadID}`);
+      }),
       launchTurn,
     });
     await waitFor(() => Boolean(runtime.querySelector('textarea')));
@@ -394,20 +384,58 @@ describe('FlowerSurface navigation launch/send', () => {
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => launchTurn.mock.calls.length > 0);
 
-    expect(runtime.textContent).toContain('inspect the running turn');
-    expect(runtime.querySelector('[data-flower-message-role="user"][data-flower-message-status="sending"]')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-message-role="assistant"][data-flower-message-status="streaming"] .flower-streaming-cursor')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-framed')).toBeNull();
+    expect(runtime.querySelector('[data-flower-message-role]')).toBeNull();
+    expect(runtime.querySelector('.flower-streaming-cursor')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+
+    sendDeferred.resolve(liveBootstrap(thread({
+      thread_id: 'thread-canonical-send',
+      title: 'Canonical send',
+      status: 'running',
+      messages: [{
+        id: 'm-user-canonical',
+        role: 'user',
+        content: 'inspect the running turn',
+        status: 'complete',
+        created_at_ms: 10,
+      }, {
+        id: 'm-assistant-canonical',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        active_cursor: true,
+        created_at_ms: 20,
+      }],
+    })));
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-user-canonical"]')));
+    expect(runtime.textContent).toContain('inspect the running turn');
+    expect(runtime.querySelector('[data-flower-message-id="m-assistant-canonical"] .flower-streaming-cursor')).toBeTruthy();
   });
 
-  it('shows the submitted user message immediately while the handler is still resolving', async () => {
+  it('does not synthesize timeline rows while the handler is still resolving', async () => {
     const handlerDeferred = deferred<FlowerRouterDecision>();
     const sendDeferred = deferred<FlowerLiveBootstrap>();
     const launchTurn = vi.fn(() => sendDeferred.promise);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
+      loadThread: vi.fn(async (threadID: string) => {
+        if (threadID === 'thread-route-settled') {
+          return liveBootstrap(thread({
+            thread_id: 'thread-route-settled',
+            title: 'Route settled',
+            status: 'running',
+            messages: [{
+              id: 'm-route-settled-user',
+              role: 'user',
+              content: 'show before route settles',
+              status: 'complete',
+              created_at_ms: 10,
+            }],
+          }));
+        }
+        throw new Error(`unexpected loadThread: ${threadID}`);
+      }),
       resolveHandler: vi.fn(() => handlerDeferred.promise),
       launchTurn,
     });
@@ -422,9 +450,9 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-role="user"][data-flower-message-status="sending"]')));
-    expect(runtime.textContent).toContain('show before route settles');
-    expect(runtime.querySelector('[data-flower-message-role="assistant"][data-flower-message-status="streaming"] .flower-streaming-cursor')).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(runtime.querySelector('[data-flower-message-role]')).toBeNull();
+    expect(runtime.querySelector('.flower-streaming-cursor')).toBeNull();
     expect(launchTurn).not.toHaveBeenCalled();
 
     handlerDeferred.resolve(decision());
@@ -432,5 +460,96 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'show before route settles',
     }));
+    sendDeferred.resolve(liveBootstrap(thread({
+      thread_id: 'thread-route-settled',
+      title: 'Route settled',
+      status: 'running',
+      messages: [{
+        id: 'm-route-settled-user',
+        role: 'user',
+        content: 'show before route settles',
+        status: 'complete',
+        created_at_ms: 10,
+      }],
+    })));
+    await waitFor(() => runtime.textContent?.includes('show before route settles') ?? false);
+  });
+
+  it('renders stop plus send messages in canonical timeline order', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-stop-send-order',
+      title: 'Stop send order',
+      status: 'running',
+      messages: [{
+        id: 'm-first-user',
+        role: 'user',
+        content: 'first request',
+        status: 'complete',
+        created_at_ms: 10,
+      }, {
+        id: 'm-canceled-assistant',
+        role: 'assistant',
+        content: 'partial old answer',
+        status: 'streaming',
+        active_cursor: true,
+        created_at_ms: 20,
+      }],
+    });
+    const stoppedThread = thread({
+      ...runningThread,
+      status: 'canceled',
+      messages: runningThread.messages.map((message) => (
+        message.id === 'm-canceled-assistant'
+          ? { ...message, status: 'canceled', active_cursor: false }
+          : message
+      )),
+    });
+    const launchedThread = thread({
+      ...runningThread,
+      status: 'running',
+      messages: [
+        ...(stoppedThread.messages ?? []),
+        {
+          id: 'm-second-user',
+          role: 'user',
+          content: 'second request',
+          status: 'complete',
+          created_at_ms: 30,
+        },
+        {
+          id: 'm-second-assistant',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 40,
+        },
+      ],
+    });
+    let loadedAfterLaunch = false;
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(loadedAfterLaunch ? launchedThread : runningThread)),
+      stopThread: vi.fn(async () => liveBootstrap(stoppedThread)),
+      launchTurn: vi.fn(async () => {
+        loadedAfterLaunch = true;
+        return liveBootstrap(launchedThread);
+      }),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stop-send-order"] button')));
+    (runtime.querySelector('[data-thread-id="thread-stop-send-order"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-canceled-assistant"] .flower-streaming-cursor')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'second request';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-second-assistant"] .flower-streaming-cursor')));
+    const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
+    expect(ids).toEqual(['m-first-user', 'm-canceled-assistant', 'm-second-user', 'm-second-assistant']);
+    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
   });
 });

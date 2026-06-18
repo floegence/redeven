@@ -4,11 +4,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const state: {
     omitReadState: boolean;
-    liveState: Record<string, unknown> | null;
+    liveState: Record<string, unknown>;
+    timelineMessages: unknown[] | null;
     threadDetailWaitingPrompt: Record<string, unknown> | null;
   } = {
     omitReadState: false,
-    liveState: null,
+    liveState: {
+      thread_patch: {},
+      runs: {},
+      approval_actions: {},
+      input_requests: {},
+    },
+    timelineMessages: null,
     threadDetailWaitingPrompt: null,
   };
   const readStatus = (lastMessageAtUnixMs: number, waitingPromptID = '') => {
@@ -35,7 +42,7 @@ const mocks = vi.hoisted(() => {
       } : {}),
     };
   };
-  const liveMessagesMock = vi.fn(async ({ threadId }: { threadId: string }): Promise<unknown[]> => [{
+  const timelineMessagesMock = vi.fn(async ({ threadId }: { threadId: string }): Promise<unknown[]> => [{
     id: `msg-${threadId}`,
     role: 'assistant',
     status: 'complete',
@@ -84,7 +91,10 @@ const mocks = vi.hoisted(() => {
         thread_id: threadID,
         title: 'Loaded Env Flower thread',
         model_id: 'openai/gpt-5.2',
-        run_status: state.threadDetailWaitingPrompt || state.liveState ? 'running' : 'success',
+        run_status: state.threadDetailWaitingPrompt || state.timelineMessages?.some((message) => {
+          const record = message && typeof message === 'object' ? message as Record<string, unknown> : {};
+          return record.status === 'streaming';
+        }) ? 'running' : 'success',
         working_dir: '/workspace/env-flower',
         created_at_unix_ms: 1,
         updated_at_unix_ms: 2,
@@ -98,15 +108,8 @@ const mocks = vi.hoisted(() => {
         cursor: 0,
         retained_from_seq: 1,
         thread,
-        transcript_messages: await liveMessagesMock({ threadId: threadID }),
-        live_state: state.liveState ?? {
-          thread_patch: {},
-          message_order: [],
-          messages: {},
-          runs: {},
-          approval_actions: {},
-          input_requests: {},
-        },
+        timeline_messages: state.timelineMessages ?? await timelineMessagesMock({ threadId: threadID }),
+        live_state: state.liveState,
         read_status: thread.read_status,
         generated_at_ms: 12_000,
       };
@@ -132,10 +135,12 @@ const mocks = vi.hoisted(() => {
   const openFilePreviewMock = vi.fn(async () => undefined);
   const openFlowerFileBrowserMock = vi.fn(async () => undefined);
   const openFlowerFilePreviewMock = vi.fn(async () => undefined);
+  const consumeAIThreadFocusRequestMock = vi.fn(() => undefined);
 
   return {
+    consumeAIThreadFocusRequestMock,
     fetchLocalApiJSONMock,
-    liveMessagesMock,
+    timelineMessagesMock,
     openFileBrowserAtPathMock,
     openFilePreviewMock,
     openFlowerFileBrowserMock,
@@ -224,6 +229,8 @@ vi.mock('./EnvContext', () => ({
   useEnvContext: () => ({
     env_id: () => 'env-1',
     env: () => ({ name: 'Demo Env' }),
+    aiThreadFocusRequest: () => null,
+    consumeAIThreadFocusRequest: mocks.consumeAIThreadFocusRequestMock,
     openFileBrowserAtPath: mocks.openFileBrowserAtPathMock,
     openFilePreview: mocks.openFilePreviewMock,
     openFlowerFileBrowser: mocks.openFlowerFileBrowserMock,
@@ -237,6 +244,7 @@ vi.mock('../i18n', () => {
     'common.actions.refresh': 'Refresh',
     'common.actions.retry': 'Retry',
     'common.actions.settings': 'Settings',
+    'common.actions.stop': 'Stop',
     'flowerChat.composer.describePlaceholder': 'Describe what you need',
     'flowerChat.composer.launchTurn': 'Send message',
     'flowerChat.composer.typeMessagePlaceholder': 'Message Flower',
@@ -319,8 +327,8 @@ async function renderPage() {
   return { host, dispose };
 }
 
-function mockLiveMessages(payload: { messages: Array<{ messageJson: unknown }> }) {
-  mocks.liveMessagesMock.mockResolvedValueOnce(payload.messages.map((row) => row.messageJson));
+function mockTimelineMessages(payload: { messages: Array<{ messageJson: unknown }> }) {
+  mocks.state.timelineMessages = payload.messages.map((row) => row.messageJson);
 }
 
 export function registerEnvAIPageSendTests() {
@@ -329,12 +337,19 @@ export function registerEnvAIPageSendTests() {
       mocks.fetchLocalApiJSONMock.mockClear();
       mocks.sendUserTurnMock.mockClear();
       mocks.subscribeThreadMock.mockClear();
-      mocks.liveMessagesMock.mockClear();
+      mocks.timelineMessagesMock.mockClear();
       mocks.openFileBrowserAtPathMock.mockClear();
       mocks.openFilePreviewMock.mockClear();
       mocks.openFlowerFileBrowserMock.mockClear();
       mocks.openFlowerFilePreviewMock.mockClear();
-      mocks.state.liveState = null;
+      mocks.consumeAIThreadFocusRequestMock.mockClear();
+      mocks.state.liveState = {
+        thread_patch: {},
+        runs: {},
+        approval_actions: {},
+        input_requests: {},
+      };
+      mocks.state.timelineMessages = null;
       mocks.state.omitReadState = false;
       mocks.state.threadDetailWaitingPrompt = null;
     });
@@ -366,7 +381,7 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(mocks.fetchLocalApiJSONMock).toHaveBeenCalledWith('/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap', { method: 'GET' });
-        expect(mocks.liveMessagesMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
+        expect(mocks.timelineMessagesMock).toHaveBeenCalledWith({ threadId: 'thread-1' });
         expect(host.textContent).toContain('Transcript for thread-1');
       } finally {
         dispose();
@@ -374,27 +389,25 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('shows live streaming output when transcript persistence has not caught up', async () => {
-      mocks.liveMessagesMock.mockResolvedValueOnce([]);
       mocks.state.liveState = {
         thread_patch: { run_status: 'running' },
-        message_order: ['msg-live'],
-        messages: {
-          'msg-live': {
-            message_id: 'msg-live',
-            role: 'assistant',
-            status: 'streaming',
-            created_at_ms: 12_000,
-            blocks: [
-              { type: 'markdown', content: 'Live answer recovered from the event stream.' },
-            ],
-          },
-        },
         runs: {
           'run-live': { run_id: 'run-live', status: 'running', message_id: 'msg-live' },
         },
         approval_actions: {},
         input_requests: {},
       };
+      mocks.state.timelineMessages = [{
+        id: 'msg-live',
+        role: 'assistant',
+        status: 'streaming',
+        live: true,
+        active_cursor: true,
+        created_at_ms: 12_000,
+        blocks: [
+          { type: 'markdown', content: 'Live answer recovered from the event stream.' },
+        ],
+      }];
 
       const { host, dispose } = await renderPage();
       try {
@@ -408,7 +421,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('maps Env-local message blocks into the shared Flower inline transcript', async () => {
-      mockLiveMessages({
+      mockTimelineMessages({
         messages: [
           {
             rowId: 1,
@@ -440,13 +453,13 @@ export function registerEnvAIPageSendTests() {
                     status: 'success',
                     severity: 'quiet',
                     needs_attention: false,
-	                    requires_approval: false,
-	                    started_at_unix_ms: 10,
-	                    ended_at_unix_ms: 1260,
-	                    label: 'pwd',
-	                    renderer: 'terminal',
-	                    payload: { command: 'pwd', exit_code: 0 },
-	                  }],
+                    requires_approval: false,
+                    started_at_unix_ms: 10,
+                    ended_at_unix_ms: 1260,
+                    label: 'pwd',
+                    renderer: 'terminal',
+                    payload: { command: 'pwd', exit_code: 0 },
+                  }],
                 },
                 { type: 'markdown', content: 'Env workspace inspection is complete.' },
               ],
@@ -477,13 +490,13 @@ export function registerEnvAIPageSendTests() {
                   tool_name: 'web.search',
                   kind: 'hosted_tool',
                   status: 'success',
-	                  severity: 'quiet',
-	                  needs_attention: false,
-	                  requires_approval: false,
-	                  label: 'Flower inline transcript',
-	                  renderer: 'web_search',
-	                  payload: { query: 'Flower inline transcript', sources: [] },
-	                }],
+                  severity: 'quiet',
+                  needs_attention: false,
+                  requires_approval: false,
+                  label: 'Flower inline transcript',
+                  renderer: 'web_search',
+                  payload: { query: 'Flower inline transcript', sources: [] },
+                }],
               }],
             } as any,
           },
@@ -493,20 +506,20 @@ export function registerEnvAIPageSendTests() {
       try {
         (host.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
         await flush();
-	        await flush();
-	        const transcriptText = host.textContent ?? '';
-	        expect(transcriptText.indexOf('I will inspect the Env workspace.')).toBeLessThan(transcriptText.indexOf('pwd'));
-	        expect(transcriptText.indexOf('pwd')).toBeLessThan(transcriptText.indexOf('Env workspace inspection is complete.'));
-	        expect(host.querySelectorAll('.flower-activity-inline-row')).toHaveLength(2);
-	        expect(host.textContent).toContain('pwd');
-	        expect(host.textContent).toContain('Flower inline transcript');
+        await flush();
+        const transcriptText = host.textContent ?? '';
+        expect(transcriptText.indexOf('I will inspect the Env workspace.')).toBeLessThan(transcriptText.indexOf('pwd'));
+        expect(transcriptText.indexOf('pwd')).toBeLessThan(transcriptText.indexOf('Env workspace inspection is complete.'));
+        expect(host.querySelectorAll('.flower-activity-inline-row')).toHaveLength(2);
+        expect(host.textContent).toContain('pwd');
+        expect(host.textContent).toContain('Flower inline transcript');
       } finally {
         dispose();
       }
     });
 
     it('accepts persisted todo activity payload metadata from runtime transcripts', async () => {
-      mockLiveMessages({
+      mockTimelineMessages({
         messages: [{
           rowId: 1,
           messageJson: {
@@ -567,7 +580,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('rejects malformed Env-local activity target line fields', async () => {
-      mockLiveMessages({
+      mockTimelineMessages({
         messages: [
           {
             rowId: 1,
@@ -623,7 +636,7 @@ export function registerEnvAIPageSendTests() {
       ['preview_path', { preview_path: '/workspace/env-flower/src/app.ts' }],
       ['root_dir', { root_dir: '/workspace/env-flower' }],
     ])('rejects Env-local activity target ref %s fields that belong to host-only data', async (field, extra) => {
-      mockLiveMessages({
+      mockTimelineMessages({
         messages: [
           {
             rowId: 1,
@@ -678,7 +691,7 @@ export function registerEnvAIPageSendTests() {
       ['path', { path: '/workspace/env-flower/src/app.ts' }],
       ['rootDir', { rootDir: '/Users/alice/.codex/skills/frontend-design' }],
     ])('rejects nested Env-local activity payload %s fields that belong to host-only data', async (field, result) => {
-      mockLiveMessages({
+      mockTimelineMessages({
         messages: [
           {
             rowId: 1,
@@ -732,7 +745,7 @@ export function registerEnvAIPageSendTests() {
       ['file_path', { file_path: '/workspace/env-flower/src/app.ts' }],
       ['root_dir', { root_dir: '/workspace/env-flower' }],
     ])('rejects Env-local file action %s fields that belong to host-only data', async (field, extra) => {
-      mockLiveMessages({
+      mockTimelineMessages({
         messages: [
           {
             rowId: 1,
@@ -791,7 +804,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('opens Env file browser and preview from Flower file activity details', async () => {
-      mockLiveMessages({
+      mockTimelineMessages({
         messages: [{
           rowId: 1,
           messageJson: {
@@ -812,12 +825,12 @@ export function registerEnvAIPageSendTests() {
               },
               file_actions: {
                 read_app: {
-	                  action_id: 'read_app',
-	                  display_name: 'app.ts',
-	                  can_preview: true,
-	                  can_browse_directory: true,
-	                },
-	              },
+                  action_id: 'read_app',
+                  display_name: 'app.ts',
+                  can_preview: true,
+                  can_browse_directory: true,
+                },
+              },
               items: [{
                 item_id: 'tool-file-read',
                 tool_id: 'tool-file-read',
@@ -879,7 +892,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('renders sanitized use_skill activity payloads', async () => {
-      mockLiveMessages({
+      mockTimelineMessages({
         messages: [{
           rowId: 1,
           messageJson: {
@@ -937,7 +950,7 @@ export function registerEnvAIPageSendTests() {
     });
 
     it('opens Env file browser and preview from relative apply_patch diff details', async () => {
-      mockLiveMessages({
+      mockTimelineMessages({
         messages: [{
           rowId: 1,
           messageJson: {
@@ -958,12 +971,12 @@ export function registerEnvAIPageSendTests() {
               },
               file_actions: {
                 patch_app: {
-	                  action_id: 'patch_app',
-	                  display_name: 'src/app.ts',
-	                  can_preview: true,
-	                  can_browse_directory: true,
-	                },
-	              },
+                  action_id: 'patch_app',
+                  display_name: 'src/app.ts',
+                  can_preview: true,
+                  can_browse_directory: true,
+                },
+              },
               items: [{
                 item_id: 'tool-patch',
                 tool_id: 'tool-patch',

@@ -398,9 +398,6 @@ func TestAIConfig_EffectiveToolRecoveryDefaults(t *testing.T) {
 	if got := nilCfg.EffectiveToolRecoveryEnabled(); !got {
 		t.Fatalf("EffectiveToolRecoveryEnabled nil=%v, want true", got)
 	}
-	if got := nilCfg.EffectiveToolRecoveryMaxSteps(); got != 3 {
-		t.Fatalf("EffectiveToolRecoveryMaxSteps nil=%d, want 3", got)
-	}
 	if got := nilCfg.EffectiveToolRecoveryAllowPathRewrite(); !got {
 		t.Fatalf("EffectiveToolRecoveryAllowPathRewrite nil=%v, want true", got)
 	}
@@ -415,9 +412,6 @@ func TestAIConfig_EffectiveToolRecoveryDefaults(t *testing.T) {
 	if got := cfg.EffectiveToolRecoveryEnabled(); !got {
 		t.Fatalf("EffectiveToolRecoveryEnabled empty=%v, want true", got)
 	}
-	if got := cfg.EffectiveToolRecoveryMaxSteps(); got != 3 {
-		t.Fatalf("EffectiveToolRecoveryMaxSteps empty=%d, want 3", got)
-	}
 	if got := cfg.EffectiveToolRecoveryAllowPathRewrite(); !got {
 		t.Fatalf("EffectiveToolRecoveryAllowPathRewrite empty=%v, want true", got)
 	}
@@ -429,15 +423,11 @@ func TestAIConfig_EffectiveToolRecoveryDefaults(t *testing.T) {
 	}
 
 	cfg.ToolRecoveryEnabled = boolPtr(false)
-	cfg.ToolRecoveryMaxSteps = intPtr(0)
 	cfg.ToolRecoveryAllowPathRewrite = boolPtr(false)
 	cfg.ToolRecoveryAllowProbeTools = boolPtr(false)
 	cfg.ToolRecoveryFailOnRepeatedSignature = boolPtr(false)
 	if got := cfg.EffectiveToolRecoveryEnabled(); got {
 		t.Fatalf("EffectiveToolRecoveryEnabled explicit=%v, want false", got)
-	}
-	if got := cfg.EffectiveToolRecoveryMaxSteps(); got != 0 {
-		t.Fatalf("EffectiveToolRecoveryMaxSteps explicit=%d, want 0", got)
 	}
 	if got := cfg.EffectiveToolRecoveryAllowPathRewrite(); got {
 		t.Fatalf("EffectiveToolRecoveryAllowPathRewrite explicit=%v, want false", got)
@@ -447,35 +437,6 @@ func TestAIConfig_EffectiveToolRecoveryDefaults(t *testing.T) {
 	}
 	if got := cfg.EffectiveToolRecoveryFailOnRepeatedSignature(); got {
 		t.Fatalf("EffectiveToolRecoveryFailOnRepeatedSignature explicit=%v, want false", got)
-	}
-}
-
-func TestAIConfigValidate_RejectsInvalidToolRecoveryMaxSteps(t *testing.T) {
-	t.Parallel()
-
-	base := AIConfig{
-		CurrentModelID: "openai/gpt-5-mini",
-		Providers: []AIProvider{
-			{
-				ID:      "openai",
-				Name:    "OpenAI",
-				Type:    "openai",
-				BaseURL: "https://api.openai.com/v1",
-				Models:  []AIProviderModel{{ModelName: "gpt-5-mini"}},
-			},
-		},
-	}
-
-	cfg1 := base
-	cfg1.ToolRecoveryMaxSteps = intPtr(-1)
-	if err := cfg1.Validate(); err == nil {
-		t.Fatalf("expected validation error for tool_recovery_max_steps=-1")
-	}
-
-	cfg2 := base
-	cfg2.ToolRecoveryMaxSteps = intPtr(9)
-	if err := cfg2.Validate(); err == nil {
-		t.Fatalf("expected validation error for tool_recovery_max_steps=9")
 	}
 }
 

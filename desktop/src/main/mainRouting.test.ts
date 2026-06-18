@@ -900,9 +900,10 @@ describe('main routing', () => {
     expect(pathSrc).toContain("'/_redeven_proxy/api/settings'");
     expect(pathSrc).toContain("'/_redeven_proxy/api/ai/provider_bundle'");
     expect(pathSrc).toContain("'/_redeven_proxy/api/ai/models'");
-    expect(pathSrc).toContain("'/_redeven_proxy/api/ai/runs'");
+    expect(pathSrc).not.toContain("'/_redeven_proxy/api/ai/runs'");
     expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live\\/bootstrap$/u");
     expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live\\/events$/u");
+    expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/turns$/u");
     expect(pathSrc).not.toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live$/u");
     expect(pathSrc).not.toContain('live\\/updates');
     expect(pathSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/approvals$/u");

@@ -278,8 +278,6 @@ type RunAttachmentIn struct {
 }
 
 type RunOptions struct {
-	MaxSteps int `json:"max_steps"`
-
 	// ReasoningOnly relaxes tool-pressure heuristics while preserving the same Floret turn flow.
 	ReasoningOnly bool `json:"reasoning_only,omitempty"`
 

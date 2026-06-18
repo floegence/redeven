@@ -288,7 +288,7 @@ func TestIntegration_Service_OpenAIContinuationPersistsAndResumes(t *testing.T) 
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, httptest.NewRecorder()); err != nil {
 		t.Fatalf("StartRun first: %v", err)
 	}
@@ -305,7 +305,7 @@ func TestIntegration_Service_OpenAIContinuationPersistsAndResumes(t *testing.T) 
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello again"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, httptest.NewRecorder()); err != nil {
 		t.Fatalf("StartRun second: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDReplays
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, httptest.NewRecorder()); err != nil {
 		t.Fatalf("StartRun first: %v", err)
 	}
@@ -364,7 +364,7 @@ func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDReplays
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input:    RunInput{Text: "hello again"},
-		Options:  RunOptions{MaxSteps: 1},
+		Options:  RunOptions{},
 	}, httptest.NewRecorder()); err != nil {
 		t.Fatalf("StartRun second: %v", err)
 	}

@@ -7444,18 +7444,17 @@ function runtimeFlowerPath(rawPath: unknown): string {
   if (pathname === '/_redeven_proxy/api/settings' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/provider_bundle' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/models' && query === '') return pathWithQuery;
-  if (pathname === '/_redeven_proxy/api/ai/runs' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/uploads' && query === '') return pathWithQuery;
   if (pathname === '/_redeven_proxy/api/ai/threads' && allowsLimitQuery(query)) return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u.test(pathname) && allowsLiveEventsQuery(query)) return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname) && query === '') return pathWithQuery;
+  if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/approvals$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/cancel$/u.test(pathname) && query === '') return pathWithQuery;
-  if (/^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/cancel$/u.test(pathname) && query === '') return pathWithQuery;
   if (/^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname) && query === '') return pathWithQuery;
   throw new Error('Flower runtime request path is not allowed.');
 }
@@ -7472,15 +7471,14 @@ function runtimeFlowerMethodAllowed(path: string, method: RuntimeFlowerRequest['
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u.test(pathname);
     case 'POST':
-      return pathname === '/_redeven_proxy/api/ai/runs'
-        || pathname === '/_redeven_proxy/api/ai/uploads'
+      return pathname === '/_redeven_proxy/api/ai/uploads'
         || pathname === '/_redeven_proxy/api/ai/threads'
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/read$/u.test(pathname)
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/turns$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/fork$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/input_response$/u.test(pathname)
         || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/approvals$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/cancel$/u.test(pathname)
-        || /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/cancel$/u.test(pathname);
+        || /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/cancel$/u.test(pathname);
     case 'PUT':
       return pathname === '/_redeven_proxy/api/ai/provider_bundle';
     case 'PATCH':

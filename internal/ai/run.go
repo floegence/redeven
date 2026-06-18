@@ -1151,7 +1151,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	}
 	r.debug("ai.run.start",
 		"model", modelID,
-		"max_steps", req.Options.MaxSteps,
 		"history_count", len(req.History),
 		"attachment_count", len(req.Input.Attachments),
 		"input_chars", utf8.RuneCountInString(strings.TrimSpace(req.Input.Text)),
@@ -2576,6 +2575,8 @@ func normalizeSnapshotMessageStatus(status string) string {
 		return "streaming"
 	case "error":
 		return "error"
+	case "canceled":
+		return "canceled"
 	case "complete":
 		return "complete"
 	default:

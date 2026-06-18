@@ -8,8 +8,6 @@ tasks:
       - "Analyze workspace ${workspace} using real files. Report repository purpose, major directories or modules, and one concrete validation path. Cite at least 2 absolute evidence file paths."
     runtime:
       execution_mode: act
-      max_steps: 4
-      max_no_tool_rounds: 2
       timeout_seconds: 40
       workspace:
         mode: source_readonly
@@ -43,7 +41,6 @@ tasks:
         max_calls: 12
       events:
         hard_fail:
-          - "guard.hard_max_steps"
           - "signal.recovery.attempt"
 
   - id: readonly_review_question
@@ -54,8 +51,6 @@ tasks:
       - "Do not edit any files. Based on real files in ${workspace}, answer this question: is there a likely bug, risk, or inconsistency worth checking first? Give one finding, or explicitly say none found, with concrete evidence paths."
     runtime:
       execution_mode: act
-      max_steps: 4
-      max_no_tool_rounds: 2
       timeout_seconds: 35
       workspace:
         mode: source_readonly
@@ -86,7 +81,6 @@ tasks:
         max_calls: 10
       events:
         hard_fail:
-          - "guard.hard_max_steps"
           - "signal.recovery.attempt"
 
   - id: plan_mode_requests_act_switch
@@ -97,8 +91,6 @@ tasks:
       - "I need you to edit a file in ${workspace} to add a missing note. In this thread, do whatever is required to proceed safely."
     runtime:
       execution_mode: plan
-      max_steps: 3
-      max_no_tool_rounds: 1
       timeout_seconds: 30
       workspace:
         mode: none
@@ -125,7 +117,6 @@ tasks:
         must_include:
           - "ask_user.waiting"
         hard_fail:
-          - "guard.hard_max_steps"
           - "signal.recovery.attempt"
 
   - id: multi_step_todo_discipline
@@ -136,8 +127,6 @@ tasks:
       - "Perform a 3-step readonly repository audit for ${workspace}: identify entrypoints, name one risky area, and describe one verification command. Keep your todo list updated while you work."
     runtime:
       execution_mode: act
-      max_steps: 6
-      max_no_tool_rounds: 2
       timeout_seconds: 50
       workspace:
         mode: source_readonly
@@ -174,7 +163,6 @@ tasks:
         must_include:
           - "todos.updated"
         hard_fail:
-          - "guard.hard_max_steps"
           - "signal.recovery.attempt"
       todos:
         require_snapshot: true
@@ -190,8 +178,6 @@ tasks:
       - "Run a compact readonly investigation of ${workspace}: inspect the README, inspect one source directory, run one harmless verification command, and summarize the result with evidence paths. Keep any tool logs out of the final prose."
     runtime:
       execution_mode: act
-      max_steps: 6
-      max_no_tool_rounds: 2
       timeout_seconds: 50
       workspace:
         mode: source_readonly
@@ -230,7 +216,6 @@ tasks:
           - "activity.group.updated"
           - "activity.timeline.persisted"
         hard_fail:
-          - "guard.hard_max_steps"
           - "signal.recovery.attempt"
 
   - id: continue_context_followup
@@ -242,8 +227,6 @@ tasks:
       - "continue"
     runtime:
       execution_mode: act
-      max_steps: 5
-      max_no_tool_rounds: 2
       timeout_seconds: 45
       workspace:
         mode: source_readonly
@@ -275,7 +258,6 @@ tasks:
         max_calls: 14
       events:
         hard_fail:
-          - "guard.hard_max_steps"
           - "signal.recovery.attempt"
 
   - id: no_user_interaction_closeout
@@ -286,8 +268,6 @@ tasks:
       - "You need to make a code change in ${workspace}, but this run cannot ask me anything. Finish in the correct Flower way."
     runtime:
       execution_mode: plan
-      max_steps: 3
-      max_no_tool_rounds: 1
       timeout_seconds: 30
       no_user_interaction: true
       workspace:
@@ -318,5 +298,4 @@ tasks:
         must_not_include:
           - "ask_user.waiting"
         hard_fail:
-          - "guard.hard_max_steps"
           - "signal.recovery.attempt"

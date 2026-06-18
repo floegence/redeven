@@ -171,7 +171,7 @@ func (s *Service) generateAutoThreadTitleByModel(ctx context.Context, resolved r
 			{Role: "system", Content: []ContentPart{{Type: "text", Text: autoThreadTitleSystemPrompt}}},
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: buildAutoThreadTitleUserPrompt(threadID, messageID, userInput)}}},
 		},
-		Budgets:          TurnBudgets{MaxSteps: 1, MaxOutputToken: autoThreadTitleMaxTokens},
+		Budgets:          TurnBudgets{MaxOutputToken: autoThreadTitleMaxTokens},
 		ModeFlags:        ModeFlags{Mode: config.AIModePlan},
 		ProviderControls: ProviderControls{DisableReasoning: true},
 	}, nil)

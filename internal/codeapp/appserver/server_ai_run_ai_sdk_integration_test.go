@@ -283,30 +283,35 @@ func TestServer_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 			"thread_id": threadID,
 			"model":     "openai/gpt-5-mini",
 			"input":     map[string]any{"text": "hi", "attachments": []any{}},
-			"options":   map[string]any{"max_steps": 1},
+			"options":   map[string]any{"mode": "act"},
 		}
 		b, _ := json.Marshal(body)
-		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/runs", bytes.NewBuffer(b))
+		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads/"+threadID+"/turns", bytes.NewBuffer(b))
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
 		srv.serveHTTP(rr, req)
-		if rr.Code != http.StatusOK {
-			t.Fatalf("run status=%d body=%s", rr.Code, rr.Body.String())
+		if rr.Code != http.StatusAccepted {
+			t.Fatalf("send turn status=%d body=%s", rr.Code, rr.Body.String())
 		}
-		runID := strings.TrimSpace(rr.Header().Get("X-Redeven-AI-Run-ID"))
-		if runID == "" {
-			t.Fatalf("missing X-Redeven-AI-Run-ID header")
+		var resp struct {
+			OK   bool `json:"ok"`
+			Data struct {
+				RunID string `json:"run_id"`
+				Kind  string `json:"kind"`
+			} `json:"data"`
 		}
-		if !strings.Contains(rr.Body.String(), token) {
-			t.Fatalf("NDJSON stream missing token %q, body=%q", token, rr.Body.String())
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("unmarshal send turn: %v", err)
 		}
-		if !strings.Contains(rr.Body.String(), `"type":"message-end"`) {
-			t.Fatalf("NDJSON stream missing message-end, body=%q", rr.Body.String())
+		if !resp.OK || strings.TrimSpace(resp.Data.RunID) == "" || resp.Data.Kind != "start" {
+			t.Fatalf("unexpected send turn response: %s", rr.Body.String())
 		}
 	}
 
-	// Thread metadata should be updated by persisted assistant message.
-	{
+	// Thread metadata should be updated by the detached thread turn once the assistant message is persisted.
+	deadline := time.Now().Add(3 * time.Second)
+	lastPreview := ""
+	for time.Now().Before(deadline) {
 		req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/ai/threads/"+threadID, nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
@@ -328,11 +333,11 @@ func TestServer_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
 		if !resp.OK {
 			t.Fatalf("unexpected get thread response: %s", rr.Body.String())
 		}
-		if strings.TrimSpace(resp.Data.Thread.LastMessagePreview) == "" {
-			t.Fatalf("last_message_preview should not be empty")
+		lastPreview = strings.TrimSpace(resp.Data.Thread.LastMessagePreview)
+		if strings.Contains(lastPreview, token) {
+			return
 		}
-		if !strings.Contains(resp.Data.Thread.LastMessagePreview, token) {
-			t.Fatalf("last_message_preview=%q, want it to include %q", resp.Data.Thread.LastMessagePreview, token)
-		}
+		time.Sleep(20 * time.Millisecond)
 	}
+	t.Fatalf("last_message_preview=%q, want it to include %q", lastPreview, token)
 }

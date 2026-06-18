@@ -70,7 +70,6 @@ type ProviderControls struct {
 }
 
 type TurnBudgets struct {
-	MaxSteps       int     `json:"max_steps,omitempty"`
 	MaxInputTokens int     `json:"max_input_tokens,omitempty"`
 	MaxOutputToken int     `json:"max_output_tokens,omitempty"`
 	MaxCostUSD     float64 `json:"max_cost_usd,omitempty"`

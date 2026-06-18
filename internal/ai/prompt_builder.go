@@ -184,8 +184,7 @@ func (d promptDocument) render(cache *promptStaticPrefixCache, key cachedPromptP
 	return strings.Join(parts, "\n\n")
 }
 
-func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexity string, round int, maxSteps int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) promptRuntimeSnapshot {
-	_ = maxSteps
+func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexity string, round int, isFirstRound bool, tools []ToolDef, state runtimeState, exceptionOverlay string, capability runCapabilityContract) promptRuntimeSnapshot {
 	complexity = normalizeTaskComplexity(complexity)
 	allowUserInteraction := capability.AllowUserInteraction
 	if !allowUserInteraction && strings.TrimSpace(capability.PromptProfile) == "" {

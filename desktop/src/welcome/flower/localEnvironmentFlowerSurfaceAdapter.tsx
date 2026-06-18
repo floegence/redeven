@@ -352,7 +352,7 @@ export async function launchLocalEnvironmentFlowerTurn(
       url: trim(attachment.url),
     })),
   ].filter((attachment) => !!attachment.url);
-  await runtimeJSON<unknown>(bridge, 'POST', '/_redeven_proxy/api/ai/runs', {
+  await runtimeJSON<unknown>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/turns`, {
     thread_id: threadID,
     model: modelID,
     input: {
@@ -361,7 +361,6 @@ export async function launchLocalEnvironmentFlowerTurn(
       ...(contextAction ? { context_action: contextAction } : {}),
     },
     options: {
-      max_steps: 10,
       mode,
     },
   });
@@ -446,7 +445,6 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
           attachments: [],
         },
         options: {
-          max_steps: 10,
           mode: 'act',
         },
       });

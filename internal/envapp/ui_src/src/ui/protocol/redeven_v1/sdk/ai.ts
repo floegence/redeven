@@ -71,7 +71,6 @@ export type AISendUserTurnRequest = {
     contextAction?: ContextActionEnvelope;
   };
   options: {
-    maxSteps: number;
     mode?: 'act' | 'plan';
   };
   expectedRunId?: string;
@@ -102,7 +101,6 @@ export type AISubmitRequestUserInputResponseRequest = {
     }>;
   };
   options: {
-    maxSteps: number;
     mode?: 'act' | 'plan';
   };
   expectedRunId?: string;
@@ -114,15 +112,6 @@ export type AISubmitRequestUserInputResponseResponse = {
   kind: string;
   consumedWaitingPromptId?: string;
   appliedExecutionMode?: 'act' | 'plan';
-};
-
-export type AICancelRunRequest = {
-  runId?: string;
-  threadId?: string;
-};
-
-export type AICancelRunResponse = {
-  ok: boolean;
 };
 
 export type AISubscribeSummaryResponse = {

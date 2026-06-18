@@ -164,7 +164,6 @@ func TestMarshalQueuedTurnOptions_PreservesNoUserInteraction(t *testing.T) {
 	t.Parallel()
 
 	raw := marshalQueuedTurnOptions(RunOptions{
-		MaxSteps:          3,
 		Mode:              "plan",
 		NoUserInteraction: true,
 	})

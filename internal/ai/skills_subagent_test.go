@@ -267,7 +267,7 @@ This content should appear in overlay.`
 		t.Fatalf("activate skill: %v", err)
 	}
 	contract := resolveRunCapabilityContract(r, nil, false)
-	prompt := r.buildLayeredSystemPrompt("objective", "build", TaskComplexityStandard, 0, 8, true, nil, newRuntimeState("objective"), "", contract)
+	prompt := r.buildLayeredSystemPrompt("objective", "build", TaskComplexityStandard, 0, true, nil, newRuntimeState("objective"), "", contract)
 	if !strings.Contains(prompt, "Available skills:") || !strings.Contains(prompt, "prompt-skill") {
 		t.Fatalf("prompt missing skills catalog: %q", prompt)
 	}
@@ -421,8 +421,8 @@ func TestSubagentManager_DelegateAndWait(t *testing.T) {
 	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "# Mission") {
 		t.Fatalf("missing canonical delegation prompt in create result: %#v", created)
 	}
-	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "Timeout: 900 seconds") {
-		t.Fatalf("expected fixed 900-second timeout in delegation prompt: %#v", created)
+	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "Timeout: 60 seconds") {
+		t.Fatalf("expected requested timeout in delegation prompt: %#v", created)
 	}
 
 	waited, err := r.manageSubagents(context.Background(), map[string]any{
@@ -741,8 +741,8 @@ func TestSubagentManager_InheritsWebSearchResolver(t *testing.T) {
 	if id == "" {
 		t.Fatalf("missing subagent_id in result: %#v", created)
 	}
-	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "Timeout: 900 seconds") {
-		t.Fatalf("expected fixed 900-second timeout in delegation prompt: %#v", created)
+	if !strings.Contains(strings.TrimSpace(anyToString(created["delegation_prompt_markdown"])), "Timeout: 60 seconds") {
+		t.Fatalf("expected requested timeout in delegation prompt: %#v", created)
 	}
 
 	waited, err := r.manageSubagents(context.Background(), map[string]any{
