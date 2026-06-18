@@ -312,6 +312,7 @@ export type FlowerThreadListProps = Readonly<{
   activeThreadID?: string;
   query: string;
   refreshing?: boolean;
+  warmup?: boolean;
   copy?: FlowerThreadListCopy;
   onQueryChange: (query: string) => void;
   onSelect: (threadID: string) => void;
@@ -338,6 +339,9 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   const groupByKey = createMemo(() => new Map(groups().map((group) => [group.key, group] as const)));
   const groupKeys = createMemo(() => groups().map((group) => group.key));
   const [menu, setMenu] = createSignal<{ item: FlowerThreadListItem; x: number; y: number; restore?: HTMLElement } | null>(null);
+  const warmupRows = [0, 1, 2, 3, 4, 5] as const;
+  const showWarmupSkeleton = createMemo(() => props.warmup === true && props.items.length === 0);
+  const searchDisabled = createMemo(() => props.warmup === true && props.items.length === 0);
 
   const openMenu = (event: MouseEvent | KeyboardEvent, item: FlowerThreadListItem) => {
     event.preventDefault();
@@ -379,14 +383,16 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
       <div class="flex items-center gap-2">
         <div class="min-w-0 flex-1">
           <h2 class="flower-thread-list-title truncate text-sm font-semibold">{copy().title}</h2>
-          <p class="flower-thread-list-description truncate text-xs">{copy().description}</p>
+          <p class="flower-thread-list-description truncate text-xs">
+            {props.warmup ? copy().warmupDescription : copy().description}
+          </p>
         </div>
         <button
           type="button"
           class="flower-thread-refresh-button flex cursor-pointer items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45"
           aria-label={copy().refreshLabel}
           title={copy().refreshLabel}
-          disabled={props.refreshing}
+          disabled={props.refreshing || props.warmup}
           onClick={props.onRefresh}
         >
           <Refresh class={cn('h-3.5 w-3.5', props.refreshing && 'animate-spin')} />
@@ -394,49 +400,71 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
       </div>
       <label class="relative block">
         <Search class="flower-thread-list-description pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2" />
-        <Input class="flower-thread-search-input pl-9" value={props.query} placeholder={copy().searchPlaceholder} onInput={(event) => props.onQueryChange(event.currentTarget.value)} />
+        <Input
+          class="flower-thread-search-input pl-9"
+          value={props.query}
+          placeholder={copy().searchPlaceholder}
+          disabled={searchDisabled()}
+          onInput={(event) => props.onQueryChange(event.currentTarget.value)}
+        />
       </label>
       <div class="flower-scroll flex-1 space-y-2">
-        <Show
-          when={filtered().length > 0}
-          fallback={<div class="flower-thread-empty rounded-lg border border-dashed p-6 text-sm">{copy().empty}</div>}
-        >
-          <For each={groupKeys()}>
-            {(groupKey) => {
-              const group = () => groupByKey().get(groupKey);
-              return (
-              <section class="space-y-1">
-                <h3 class="flower-thread-group-label px-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
-                  {group()?.kind === 'pinned' ? copy().pinnedGroup : timeGroupLabel(group()?.group ?? 'older', copy())}
-                </h3>
-                <For each={group()?.threadIDs ?? []}>
-                  {(threadID) => {
-                    const thread = () => itemByID().get(threadID);
-                    return (
-                      <Show when={thread()}>
-                        {(item) => (
-                          <FlowerThreadCard
-                            item={item()}
-                            active={props.activeThreadID === threadID}
-                            copy={copy()}
-                            canDelete={!!props.onDelete}
-                            busy={props.busyThreadID === threadID}
-                            onSelect={() => props.onSelect(threadID)}
-                            onDelete={props.onDelete ? () => props.onDelete?.(threadID) : undefined}
-                            onContextMenu={openMenu}
-                            onKeyboardMenu={openMenu}
-                            onRename={props.onMenuAction ? (value) => props.onMenuAction?.('rename', value) : undefined}
-                            onPin={props.canPin && props.onMenuAction ? (value) => props.onMenuAction?.('pin', value) : undefined}
-                          />
-                        )}
-                      </Show>
-                    );
-                  }}
-                </For>
-              </section>
-              );
-            }}
-          </For>
+        <Show when={!showWarmupSkeleton()} fallback={(
+          <div class="flower-thread-warmup-list" role="status" aria-live="polite" aria-label={copy().warmupDescription}>
+            <For each={warmupRows}>
+              {(row) => (
+                <div class="flower-thread-warmup-card" data-row={String(row)}>
+                  <span class="flower-thread-warmup-dot" />
+                  <span class="flower-thread-warmup-lines">
+                    <span class="flower-thread-warmup-line flower-thread-warmup-line-title" />
+                    <span class="flower-thread-warmup-line flower-thread-warmup-line-meta" />
+                  </span>
+                </div>
+              )}
+            </For>
+          </div>
+        )}>
+          <Show
+            when={filtered().length > 0}
+            fallback={<div class="flower-thread-empty rounded-lg border border-dashed p-6 text-sm">{copy().empty}</div>}
+          >
+            <For each={groupKeys()}>
+              {(groupKey) => {
+                const group = () => groupByKey().get(groupKey);
+                return (
+                  <section class="space-y-1">
+                    <h3 class="flower-thread-group-label px-1 text-[10px] font-semibold uppercase tracking-[0.08em]">
+                      {group()?.kind === 'pinned' ? copy().pinnedGroup : timeGroupLabel(group()?.group ?? 'older', copy())}
+                    </h3>
+                    <For each={group()?.threadIDs ?? []}>
+                      {(threadID) => {
+                        const thread = () => itemByID().get(threadID);
+                        return (
+                          <Show when={thread()}>
+                            {(item) => (
+                              <FlowerThreadCard
+                                item={item()}
+                                active={props.activeThreadID === threadID}
+                                copy={copy()}
+                                canDelete={!!props.onDelete}
+                                busy={props.busyThreadID === threadID}
+                                onSelect={() => props.onSelect(threadID)}
+                                onDelete={props.onDelete ? () => props.onDelete?.(threadID) : undefined}
+                                onContextMenu={openMenu}
+                                onKeyboardMenu={openMenu}
+                                onRename={props.onMenuAction ? (value) => props.onMenuAction?.('rename', value) : undefined}
+                                onPin={props.canPin && props.onMenuAction ? (value) => props.onMenuAction?.('pin', value) : undefined}
+                              />
+                            )}
+                          </Show>
+                        );
+                      }}
+                    </For>
+                  </section>
+                );
+              }}
+            </For>
+          </Show>
         </Show>
       </div>
       <Show when={menu()}>

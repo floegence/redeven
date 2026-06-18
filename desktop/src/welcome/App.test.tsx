@@ -215,6 +215,9 @@ describe('DesktopWelcomeShell', () => {
   it('keeps the outer Flower entry icon-only while chat creation lives inside the shared surface', () => {
     const appSrc = readWelcomeSource();
 
+    expect(appSrc).toContain('const flowerWarmupState = createMemo<FlowerSurfaceWarmupState | null>');
+    expect(appSrc).toContain('selectedFlowerWarmupProgress(flowerRuntimeLifecycleProgress())');
+    expect(appSrc).toContain('warmup={flowerWarmupState()}');
     expect(appSrc).toContain("aria-label={i18n().t('flowerSurface.chat.entryLabel')}");
     expect(appSrc).toContain("when={snapshot().surface !== 'flower'}");
     expect(appSrc).toContain('class="redeven-flower-topbar-button"');

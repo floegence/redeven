@@ -71,6 +71,13 @@ type FlowerHandlerResolutionState =
   | Readonly<{ status: 'ready'; decision: FlowerRouterDecision }>
   | Readonly<{ status: 'blocked'; decision: FlowerRouterDecision; message: string }>
   | Readonly<{ status: 'failed'; decision: FlowerRouterDecision | null; message: string }>;
+export type FlowerSurfaceWarmupState = Readonly<{
+  active: boolean;
+  title?: string;
+  detail?: string;
+  phaseLabel?: string;
+  modelLabel?: string;
+}>;
 type FlowerApprovalSubmittingState = 'approve' | 'reject';
 type MessageContextActionSummary = Readonly<{
   surface: string;
@@ -164,6 +171,7 @@ export type FlowerThreadFocusRequest = Readonly<{
 export type FlowerSurfaceProps = Readonly<{
   adapter: FlowerSurfaceAdapter;
   copy?: FlowerSurfaceCopy;
+  warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
   class?: string;
@@ -303,6 +311,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
   const selectedThreadLoading = createMemo(() => trimString(loadingThreadID()) !== '' && loadingThreadID() === selectedThreadID());
+  const warmupState = createMemo(() => props.warmup?.active ? props.warmup : null);
+  const surfaceWarmupActive = createMemo(() => warmupState() !== null);
+  const warmupCanReplaceTranscript = createMemo(() => (
+    surfaceWarmupActive()
+    && !selectedThreadHasContent()
+    && !pendingTurnForSelectedThread()
+    && !selectedThreadLoading()
+  ));
+  const warmupTitle = createMemo(() => trimString(warmupState()?.title) || copy().chat.warmupTitle);
+  const warmupDetail = createMemo(() => trimString(warmupState()?.detail) || copy().chat.warmupDetail);
+  const warmupPhaseLabel = createMemo(() => trimString(warmupState()?.phaseLabel) || copy().chat.loadingSettings);
+  const warmupModelLabel = createMemo(() => trimString(warmupState()?.modelLabel) || copy().chat.warmupModelLabel);
 
   const presentRunError = (error: FlowerThreadSnapshot['error']): string => {
     const code = trimString(error?.code);
@@ -1594,6 +1614,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   const composerPlaceholder = createMemo(() => {
+    if (surfaceWarmupActive() && !selectedInputRequest()) return copy().chat.warmupComposerPlaceholder;
     if (!selectedInputRequest()) return copy().chat.placeholder;
     const question = activeInputQuestion();
     if (!question) {
@@ -2405,6 +2426,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
+  const warmupPanel = () => (
+    <div class="flower-warmup" role="status" aria-live="polite" aria-label={warmupTitle()}>
+      <div class="flower-warmup-panel">
+        <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14 redeven-flower-icon-breathe" iconClass="redeven-flower-icon-spin" />
+        <div class="flower-warmup-copy">
+          <div class="flower-warmup-eyebrow">{warmupPhaseLabel()}</div>
+          <h2>{warmupTitle()}</h2>
+          <p>{warmupDetail()}</p>
+        </div>
+        <div class="flower-warmup-indicator" aria-hidden="true">
+          <div class="flower-warmup-indicator-bar" />
+        </div>
+      </div>
+    </div>
+  );
+
   const chatPanel = () => (
     <div class="flower-chat-shell flower-chat-shell">
       <div class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md">
@@ -2439,6 +2476,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               when={selectedThreadHasContent() || pendingTurnForSelectedThread()}
                 fallback={selectedThreadLoading()
                   ? threadLoadingState()
+                  : warmupCanReplaceTranscript()
+                    ? warmupPanel()
                   : needsSetup()
                     ? setupGuide()
                     : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => setChatDraft(prompt)} />}
@@ -2518,7 +2557,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     <div class="flower-model-stack" aria-live="polite">
                       <div class="flower-model-selection">
                         <span class="flower-model-selection-label">{copy().chat.modelLabel}</span>
-                        <span class="flower-model-chip">{selectedThreadModelLabel()}</span>
+                        <span class={cn('flower-model-chip', surfaceWarmupActive() && 'flower-model-chip-warmup')}>
+                          {surfaceWarmupActive() ? warmupModelLabel() : selectedThreadModelLabel()}
+                        </span>
                       </div>
                       <Show when={handlerNotice()}>
                         {(notice) => <div role="alert" class="flower-handler-error-card">
@@ -2588,6 +2629,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       data-flower-selected-thread-id={selectedThreadID()}
       data-flower-selected-thread-status={selectedThread()?.status ?? 'idle'}
       data-flower-selected-thread-loading={selectedThreadLoading() ? 'true' : 'false'}
+      data-flower-warmup={surfaceWarmupActive() ? 'true' : 'false'}
       data-flower-side-panel={sidePanel()}
       style={{ '--flower-thread-rail-width': `${threadRailWidth()}px` }}
     >
@@ -2598,6 +2640,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             class="flower-new-chat-button"
             aria-label={copy().chat.newChat}
             title={copy().chat.newChat}
+            disabled={surfaceWarmupActive()}
             onClick={startCompose}
           >
             <Plus class="h-4 w-4 shrink-0" />
@@ -2609,6 +2652,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           activeThreadID={selectedThreadID()}
           query={historyFilter()}
           refreshing={threadsRefreshing()}
+          warmup={surfaceWarmupActive()}
           copy={copy().threadList}
           onQueryChange={setHistoryFilter}
           onRefresh={() => void refreshThreads()}

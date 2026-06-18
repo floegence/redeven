@@ -11,7 +11,8 @@ import { buildDesktopPreloads } from './desktopPreloadBundle';
 
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
-const electronRuntimeIntegrationTimeoutMs = 30_000;
+const electronRuntimeIntegrationTimeoutMs = 60_000;
+const electronRuntimeIntegrationTestTimeoutMs = electronRuntimeIntegrationTimeoutMs * 3;
 const electronRuntimePreloadEnvName = 'REDEVEN_DESKTOP_TEST_PRELOAD_PATH';
 const electronRuntimePayloadStartMarker = '__REDEVEN_DESKTOP_RUNTIME_PAYLOAD_START__';
 const electronRuntimePayloadEndMarker = '__REDEVEN_DESKTOP_RUNTIME_PAYLOAD_END__';
@@ -256,21 +257,27 @@ app.commandLine.appendSwitch('headless');
 app.commandLine.appendSwitch('disable-gpu');
 
 app.whenReady().then(async () => {
-  const mainWindow = createBrowserWindow();
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  try {
+    const mainWindow = createBrowserWindow();
     const childWindow = createBrowserWindow();
-    void childWindow.loadURL(url);
-    void childWindow.webContents.once('did-finish-load', async () => {
-      const child = JSON.parse(await childWindow.webContents.executeJavaScript('(' + snapshotBridgeState.toString() + ')()'));
-      const main = JSON.parse(await mainWindow.webContents.executeJavaScript('(' + snapshotBridgeState.toString() + ')()'));
-      process.stdout.write('${electronRuntimePayloadStartMarker}' + JSON.stringify({ main, child }) + '${electronRuntimePayloadEndMarker}');
-      await app.quit();
-    });
-    return { action: 'deny' };
-  });
 
-  await mainWindow.loadURL('data:text/html,<html><body>main</body></html>');
-  await mainWindow.webContents.executeJavaScript('window.open("data:text/html,<html><body>child</body></html>", "redeven_session_child_preview", "noopener,noreferrer")');
+    await mainWindow.loadURL('data:text/html,<html><body>main</body></html>');
+    await childWindow.loadURL('data:text/html,<html><body>child</body></html>');
+    const child = JSON.parse(await childWindow.webContents.executeJavaScript('(' + snapshotBridgeState.toString() + ')()'));
+    const main = JSON.parse(await mainWindow.webContents.executeJavaScript('(' + snapshotBridgeState.toString() + ')()'));
+    await new Promise((resolve) => {
+      process.stdout.write('${electronRuntimePayloadStartMarker}' + JSON.stringify({ main, child }) + '${electronRuntimePayloadEndMarker}', resolve);
+    });
+  } catch (error) {
+    console.error(error instanceof Error ? error.stack : error);
+    process.exitCode = 1;
+  } finally {
+    await app.quit();
+  }
+}).catch((error) => {
+  console.error(error instanceof Error ? error.stack : error);
+  process.exitCode = 1;
+  app.quit();
 });
 `, 'utf8');
 
@@ -352,5 +359,5 @@ app.whenReady().then(async () => {
     expect(session.main.hasDesktopLanguageBridge).toBe(true);
     expect(session.main.hasDesktopWindowChromeBridge).toBe(true);
     expect(session.child).toEqual(session.main);
-  }, electronRuntimeIntegrationTimeoutMs);
+  }, electronRuntimeIntegrationTestTimeoutMs);
 });

@@ -134,6 +134,65 @@ describe('LauncherOperationRegistry', () => {
     expect(update.lifecycle_progress?.steps.map((step) => step.id)).not.toContain('runtime_ready');
   });
 
+  it('carries Flower warmup presentation context through snapshots and progress', () => {
+    const changed: string[] = [];
+    const registry = new LauncherOperationRegistry((snapshot) => {
+      changed.push(`${snapshot.operation_key}:${snapshot.presentation_context ?? 'none'}:${snapshot.phase}`);
+    });
+    const operationKey = 'local:host:local';
+    const operation = registry.create({
+      operation_key: operationKey,
+      action: 'start_environment_runtime',
+      subject_kind: 'local_environment',
+      subject_id: 'local',
+      environment_id: 'local',
+      environment_label: 'Local Environment',
+      phase: 'checking_existing_runtime',
+      title: 'Checking existing runtime',
+      detail: 'Desktop is checking whether a compatible local runtime is already running.',
+      presentation_context: 'flower_warmup',
+      lifecycle_progress: runtimeLifecycleProgress({
+        location: 'local_host',
+        operation: 'start',
+        phase: 'checking_existing_runtime',
+        targetID: operationKey,
+        targetLabel: 'Local Environment',
+      }),
+      cancelable: false,
+    });
+
+    expect(operation.presentation_context).toBe('flower_warmup');
+    expect(registry.progressItems()).toEqual([
+      expect.objectContaining({
+        operation_key: operationKey,
+        presentation_context: 'flower_warmup',
+        lifecycle_progress: expect.objectContaining({
+          operation: 'start',
+          phase: 'checking_existing_runtime',
+        }),
+      }),
+    ]);
+
+    registry.update(operationKey, {
+      phase: 'starting_runtime_process',
+      title: 'Starting runtime',
+      detail: 'Desktop is starting the local runtime process.',
+    });
+
+    expect(registry.get(operationKey)).toEqual(expect.objectContaining({
+      presentation_context: 'flower_warmup',
+      phase: 'starting_runtime_process',
+    }));
+    expect(registry.progressItems()[0]).toEqual(expect.objectContaining({
+      presentation_context: 'flower_warmup',
+      phase: 'starting_runtime_process',
+    }));
+    expect(changed).toEqual([
+      `${operationKey}:flower_warmup:checking_existing_runtime`,
+      `${operationKey}:flower_warmup:starting_runtime_process`,
+    ]);
+  });
+
   it('rejects stale same-key attempt updates after a newer operation starts', () => {
     const registry = new LauncherOperationRegistry();
     const operationKey = 'local:host:dev';

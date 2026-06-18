@@ -10,11 +10,11 @@ Redeven Desktop treats the endpoint runtime as a managed service when it launche
 
 # Mechanism
 
-The CLI requires Desktop-managed Local UI runs to use machine presentation, writes startup reports, records Desktop owner metadata in the runtime lock, and exposes runtime-control only to loopback callers with the Desktop owner header and bearer token. Desktop probes `/api/local/runtime/health`, normalizes Runtime Service snapshots in TypeScript, verifies Env App shell readiness by inspecting the shell HTML and asset references, and builds the Env App entry URL from a normalized Local UI base URL.
+The CLI requires Desktop-managed Local UI runs to use machine presentation, writes startup reports, records Desktop owner metadata in the runtime lock, and exposes runtime-control only to loopback callers with the Desktop owner header and bearer token. Desktop probes `/api/local/runtime/health`, normalizes Runtime Service snapshots in TypeScript, verifies Env App shell readiness by inspecting the shell HTML and asset references, and builds the Env App entry URL from a normalized Local UI base URL. When Desktop Welcome opens Flower and the Local Environment runtime is cold, the Flower attach path starts that same local runtime lifecycle through launcher operation progress; the Flower surface uses the explicit `flower_warmup` presentation context to show runtime startup as a warmup state instead of treating the surface as stalled.
 
 # Boundaries
 
-Runtime-control is not a general network API. It is scoped to the local Desktop/runtime bridge and protected by loopback, Desktop owner id, and bearer token checks.
+Runtime-control is not a general network API. It is scoped to the local Desktop/runtime bridge and protected by loopback, Desktop owner id, and bearer token checks. Flower warmup is a Desktop presentation context over the existing runtime lifecycle operation, not a separate readiness source or a parser for runtime terminal output.
 
 # Citations
 
@@ -28,3 +28,6 @@ Runtime-control is not a general network API. It is scoped to the local Desktop/
 [8] redeven:desktop/src/main/runtimeState.ts:119 - Desktop probes Local UI runtime health at `/api/local/runtime/health`.
 [9] redeven:desktop/src/main/runtimeState.ts:135 - Desktop validates the Env App shell HTML before treating it as ready.
 [10] redeven:desktop/src/main/localUIURL.ts:44 - Desktop builds the Env App entry URL under `/_redeven_proxy/env/`.
+[11] redeven:desktop/src/main/main.ts:7524 - Welcome Flower cold-starts Local Environment through structured local runtime lifecycle progress.
+[12] redeven:desktop/src/welcome/App.tsx:3073 - The Flower warmup state only consumes lifecycle progress marked with the `flower_warmup` presentation context.
+[13] redeven:internal/flower_ui/src/FlowerSurface.tsx:315 - Flower renders the explicit warmup state without replacing selected-thread content.

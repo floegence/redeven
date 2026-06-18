@@ -14,6 +14,10 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
   return {
     chat: {
       loadingSettings: t(i18n, k('chat.loadingSettings')),
+      warmupTitle: t(i18n, k('chat.warmupTitle')),
+      warmupDetail: t(i18n, k('chat.warmupDetail')),
+      warmupComposerPlaceholder: t(i18n, k('chat.warmupComposerPlaceholder')),
+      warmupModelLabel: t(i18n, k('chat.warmupModelLabel')),
       configureProviderBeforeChat: t(i18n, k('chat.configureProviderBeforeChat')),
       enterMessageBeforeSending: t(i18n, k('chat.enterMessageBeforeSending')),
       titleFallback: t(i18n, k('chat.titleFallback')),
@@ -86,6 +90,7 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
     threadList: {
       title: t(i18n, k('threadList.title')),
       description: t(i18n, k('threadList.description')),
+      warmupDescription: t(i18n, k('threadList.warmupDescription')),
       refreshLabel: t(i18n, k('threadList.refreshLabel')),
       searchPlaceholder: t(i18n, k('threadList.searchPlaceholder')),
       empty: t(i18n, k('threadList.empty')),
