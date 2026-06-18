@@ -6188,6 +6188,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             copy={createDesktopFlowerSurfaceCopy(i18n())}
             warmup={flowerWarmupState()}
             focusThreadRequest={flowerFocusThreadRequest()}
+            sidebarLeadingAction={(
+              <button
+                type="button"
+                class="flower-sidebar-leading-action"
+                aria-label={i18n().t('shell.backToEnvironments')}
+                title={i18n().t('shell.backToEnvironments')}
+                onClick={() => void openEnvironmentCenterSurface()}
+              >
+                <ArrowLeft class="h-4 w-4" />
+              </button>
+            )}
             onFocusThreadRequestConsumed={(requestID) => {
               setFlowerFocusThreadRequest((current) => (
                 current?.request_id === requestID ? null : current

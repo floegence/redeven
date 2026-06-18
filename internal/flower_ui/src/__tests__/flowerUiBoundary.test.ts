@@ -89,11 +89,14 @@ describe('shared Flower UI boundary', () => {
     expect(appSrc).not.toContain('placeholder="Ask Flower anything..."');
   });
 
-  it('keeps the shared Flower sidebar as New chat plus thread list, not a section nav rail', () => {
+  it('keeps the shared Flower sidebar as optional leading action plus New chat and thread list, not a section nav rail', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
     const cssSrc = readText(path.join(flowerRoot, 'styles', 'flower.css'));
 
     expect(surfaceSrc).toContain('flower-component-thread-rail');
+    expect(surfaceSrc).toContain('sidebarLeadingAction?: JSX.Element');
+    expect(surfaceSrc).toContain('{props.sidebarLeadingAction}');
+    expect(cssSrc).toContain('.flower-sidebar-leading-action');
     expect(surfaceSrc).toContain('flower-new-chat-button');
     expect(surfaceSrc).toContain('flower-new-chat-label');
     expect(surfaceSrc).toContain('copy().chat.newChat');

@@ -175,6 +175,7 @@ export type FlowerSurfaceProps = Readonly<{
   copy?: FlowerSurfaceCopy;
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
+  sidebarLeadingAction?: JSX.Element;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
   class?: string;
 }>;
@@ -2733,6 +2734,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     >
       <aside class="flower-component-thread-rail" aria-label={copy().chat.conversationsAria}>
         <div class="flower-sidebar-actions">
+          {props.sidebarLeadingAction}
           <button
             type="button"
             class="flower-new-chat-button"

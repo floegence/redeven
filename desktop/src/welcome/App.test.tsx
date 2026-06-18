@@ -226,6 +226,10 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('<FlowerNavigationIcon class="h-5 w-5" />');
     expect(appSrc).toContain('copy={createDesktopFlowerSurfaceCopy(i18n())}');
     expect(appSrc).toContain("runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment')");
+    expect(appSrc).toContain('sidebarLeadingAction={(');
+    expect(appSrc).toContain('class="flower-sidebar-leading-action"');
+    expect(appSrc).toContain("aria-label={i18n().t('shell.backToEnvironments')}");
+    expect(appSrc).toContain('onClick={() => void openEnvironmentCenterSurface()}');
     expect(appSrc).toContain('FlowerIcon,');
     expect(appSrc).toContain('FlowerSoftAuraIcon,');
     expect(appSrc).toContain('FlowerSurface,');
@@ -245,6 +249,8 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("i18n().t('shell.backToEnvironments')");
     expect(appSrc).toContain('class="redeven-flower-back-button"');
     expect(appSrc).toContain('<ArrowLeft class="h-3.5 w-3.5" />');
+    expect(appSrc).toContain('class="flower-sidebar-leading-action"');
+    expect(appSrc).toContain('<ArrowLeft class="h-4 w-4" />');
     expect(appSrc).toContain('<TopBarIconButton label={topBarLogoLabel()} onClick={activateTopBarLogo}>');
   });
 
