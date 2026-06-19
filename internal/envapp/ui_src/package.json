@@ -26,7 +26,7 @@
     "@solidjs/router": "^0.15.3",
     "diff": "^8.0.3",
     "docx-preview": "^0.3.6",
-    "dompurify": "^3.4.10",
+    "dompurify": "^3.4.11",
     "exceljs": "^4.4.0",
     "highlight.js": "^11.11.1",
     "katex": "^0.16.45",
@@ -43,7 +43,7 @@
   "overrides": {
     "@floegence/flowersec-core": "^0.19.9",
     "@babel/core": "^7.29.7",
-    "dompurify": "^3.4.10",
+    "dompurify": "^3.4.11",
     "flatted": "^3.4.2",
     "js-yaml": "^4.2.0",
     "lodash-es": "^4.18.1",
@@ -62,7 +62,7 @@
     "overrides": {
       "@floegence/flowersec-core": "^0.19.9",
       "@babel/core": "^7.29.7",
-      "dompurify": "^3.4.10",
+      "dompurify": "^3.4.11",
       "flatted": "^3.4.2",
       "js-yaml": "^4.2.0",
       "lodash-es": "^4.18.1",
