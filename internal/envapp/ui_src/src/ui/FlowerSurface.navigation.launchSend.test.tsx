@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type {
   FlowerLiveBootstrap,
+  FlowerLiveEventsResponse,
   FlowerRouterDecision,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
@@ -11,6 +12,8 @@ import {
   decision,
   deferred,
   inputRequest,
+  activityItem,
+  activityTimeline,
   liveBootstrap,
   renderSurfaceWithAdapter,
   thread,
@@ -190,6 +193,302 @@ describe('FlowerSurface navigation launch/send', () => {
     }));
   });
 
+  it('keeps old agent activity before the new user message after Enter stop plus send', async () => {
+    const oldActivity = activityTimeline({
+      run_id: 'run-first',
+      turn_id: 'm-first-assistant',
+      status: 'running',
+      items: [activityItem({
+        item_id: 'tool-first-terminal',
+        tool_id: 'tool-first-terminal',
+        tool_name: 'terminal.exec',
+        status: 'running',
+        renderer: 'terminal',
+        label: 'printf ENTER_A_BEGIN; sleep 30; printf ENTER_A_DONE',
+        payload: { command: 'printf ENTER_A_BEGIN; sleep 30; printf ENTER_A_DONE' },
+      })],
+    });
+    const runningThread = thread({
+      thread_id: 'thread-running-enter-stop-send-activity-order',
+      title: 'Running Enter activity order',
+      status: 'running',
+      messages: [
+        {
+          id: 'm-first-user',
+          role: 'user',
+          content: 'first request',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+        {
+          id: 'm-first-assistant',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 20,
+          blocks: [oldActivity],
+        },
+      ],
+    });
+    const stoppedThread = thread({
+      ...runningThread,
+      status: 'canceled',
+      messages: runningThread.messages.map((message) => (
+        message.id === 'm-first-assistant'
+          ? { ...message, status: 'canceled', active_cursor: false }
+          : message
+      )),
+    });
+    const launchedThread = thread({
+      ...runningThread,
+      status: 'running',
+      messages: [
+        ...(stoppedThread.messages ?? []),
+        {
+          id: 'm-second-user',
+          role: 'user',
+          content: 'second request',
+          status: 'complete',
+          created_at_ms: 30,
+        },
+        {
+          id: 'm-second-assistant',
+          role: 'assistant',
+          content: 'ENTER_B_DONE',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 40,
+          blocks: [{ type: 'markdown', content: 'ENTER_B_DONE' }],
+        },
+      ],
+    });
+    let loadedAfterLaunch = false;
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(loadedAfterLaunch ? launchedThread : runningThread)),
+      stopThread: vi.fn(async () => liveBootstrap(stoppedThread, 2)),
+      launchTurn: vi.fn(async () => {
+        loadedAfterLaunch = true;
+        return liveBootstrap(launchedThread, 3);
+      }),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-enter-stop-send-activity-order"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-enter-stop-send-activity-order"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('[data-flower-message-id="m-first-assistant"]')?.textContent?.includes('printf ENTER_A_BEGIN') ?? false);
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'second request';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+    await waitFor(() => runtime.querySelector('[data-flower-message-id="m-second-assistant"]')?.textContent?.includes('ENTER_B_DONE') ?? false);
+    const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
+    expect(ids).toEqual(['m-first-user', 'm-first-assistant', 'm-second-user', 'm-second-assistant']);
+    const secondUserText = runtime.querySelector('[data-flower-message-id="m-second-user"]')?.textContent ?? '';
+    const secondAssistantText = runtime.querySelector('[data-flower-message-id="m-second-assistant"]')?.textContent ?? '';
+    expect(secondUserText).toContain('second request');
+    expect(secondAssistantText).toContain('ENTER_B_DONE');
+    expect(secondAssistantText).not.toContain('ENTER_A_DONE');
+    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
+  });
+
+  it('ignores stale live poll snapshots that return after Enter stop plus send', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-running-enter-stop-send-stale-poll',
+      title: 'Running stale poll',
+      status: 'running',
+      messages: [
+        {
+          id: 'm-first-user',
+          role: 'user',
+          content: 'first request',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+        {
+          id: 'm-first-assistant',
+          role: 'assistant',
+          content: 'partial',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 20,
+          blocks: [{ type: 'markdown', content: 'partial' }],
+        },
+      ],
+    });
+    const stoppedThread = thread({
+      ...runningThread,
+      status: 'canceled',
+      messages: runningThread.messages.map((message) => (
+        message.id === 'm-first-assistant'
+          ? { ...message, status: 'canceled', active_cursor: false }
+          : message
+      )),
+    });
+    const launchedThread = thread({
+      ...runningThread,
+      status: 'running',
+      messages: [
+        ...(stoppedThread.messages ?? []),
+        {
+          id: 'm-second-user',
+          role: 'user',
+          content: 'second request',
+          status: 'complete',
+          created_at_ms: 30,
+        },
+        {
+          id: 'm-second-assistant',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 40,
+          blocks: [{ type: 'markdown', content: '' }],
+        },
+      ],
+    });
+    const stalePoll = deferred<FlowerLiveEventsResponse>();
+    let loadedAfterLaunch = false;
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(loadedAfterLaunch ? launchedThread : runningThread, loadedAfterLaunch ? 3 : 1)),
+      listThreadLiveEvents: vi.fn(() => stalePoll.promise),
+      stopThread: vi.fn(async () => liveBootstrap(stoppedThread, 2)),
+      launchTurn: vi.fn(async () => {
+        loadedAfterLaunch = true;
+        return liveBootstrap(launchedThread, 3);
+      }),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-enter-stop-send-stale-poll"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-enter-stop-send-stale-poll"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-first-assistant"] .flower-streaming-cursor')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'second request';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-second-assistant"] .flower-streaming-cursor')));
+    stalePoll.resolve({
+      events: [{
+        schema_version: 1,
+        seq: 2,
+        endpoint_id: 'test-runtime',
+        thread_id: 'thread-running-enter-stop-send-stale-poll',
+        run_id: 'run-first',
+        at_unix_ms: 50,
+        kind: 'timeline.replaced',
+        payload: { messages: stoppedThread.messages },
+      }],
+      next_cursor: 2,
+      retained_from_seq: 1,
+      has_more: false,
+    });
+    await waitFor(() => {
+      const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
+      return ids.includes('m-second-assistant');
+    });
+
+    const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
+    expect(ids).toEqual(['m-first-user', 'm-first-assistant', 'm-second-user', 'm-second-assistant']);
+    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
+  });
+
+  it('ignores stale bootstrap reloads that return after stop plus send', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-running-stop-send-stale-bootstrap',
+      title: 'Running stale bootstrap',
+      status: 'running',
+      messages: [
+        {
+          id: 'm-first-user',
+          role: 'user',
+          content: 'first request',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+        {
+          id: 'm-first-assistant',
+          role: 'assistant',
+          content: 'partial old answer',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 20,
+          blocks: [{ type: 'markdown', content: 'partial old answer' }],
+        },
+      ],
+    });
+    const stoppedThread = thread({
+      ...runningThread,
+      status: 'canceled',
+      messages: runningThread.messages.map((message) => (
+        message.id === 'm-first-assistant'
+          ? { ...message, status: 'canceled', active_cursor: false }
+          : message
+      )),
+    });
+    const launchedThread = thread({
+      ...runningThread,
+      status: 'running',
+      messages: [
+        ...(stoppedThread.messages ?? []),
+        {
+          id: 'm-second-user',
+          role: 'user',
+          content: 'second request',
+          status: 'complete',
+          created_at_ms: 30,
+        },
+        {
+          id: 'm-second-assistant',
+          role: 'assistant',
+          content: 'new answer',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 40,
+          blocks: [{ type: 'markdown', content: 'new answer' }],
+        },
+      ],
+    });
+    let loadedAfterLaunch = false;
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(loadedAfterLaunch ? stoppedThread : runningThread, loadedAfterLaunch ? 2 : 1)),
+      stopThread: vi.fn(async () => liveBootstrap(stoppedThread, 2)),
+      launchTurn: vi.fn(async () => {
+        loadedAfterLaunch = true;
+        return liveBootstrap(launchedThread, 4);
+      }),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-stop-send-stale-bootstrap"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-stop-send-stale-bootstrap"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-first-assistant"] .flower-streaming-cursor')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'second request';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => runtime.querySelector('[data-flower-message-id="m-second-assistant"]')?.textContent?.includes('new answer') ?? false);
+    await waitFor(() => {
+      const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
+      return ids.length === 4;
+    });
+
+    const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
+    expect(ids).toEqual(['m-first-user', 'm-first-assistant', 'm-second-user', 'm-second-assistant']);
+    expect(runtime.querySelector('[data-flower-message-id="m-second-assistant"]')?.textContent).toContain('new answer');
+    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
+  });
+
   it('keeps the composer draft when stop fails before stop plus send', async () => {
     const runningThread = thread({
       thread_id: 'thread-running-stop-fails',
@@ -256,12 +555,13 @@ describe('FlowerSurface navigation launch/send', () => {
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'answer the waiting prompt';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    await waitFor(() => {
-      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
-      return Boolean(button && button.textContent?.includes('Continue') && !button.disabled);
-    });
-    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => submitInput.mock.calls.length > 0);
+	await waitFor(() => {
+	  const button = runtime.querySelector('.flower-composer-continue') as HTMLButtonElement | null;
+	  return Boolean(button && button.textContent?.includes('Continue') && !button.disabled);
+	});
+	expect(runtime.querySelector('.flower-composer-submit')).toBeNull();
+	(runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
+	await waitFor(() => submitInput.mock.calls.length > 0);
 
     expect(stopThread).not.toHaveBeenCalled();
     expect(launchTurn).not.toHaveBeenCalled();

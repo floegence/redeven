@@ -320,6 +320,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const selectedThreadRunErrorMessage = createMemo(() => presentRunError(selectedThread()?.error));
   const threadItemCache = new Map<string, { item: ReturnType<typeof projectFlowerThreadListItem>; sig: string }>();
+  const liveCursorValue = (value: unknown): number => Math.max(0, Math.floor(Number(value ?? 0)));
+  const setLiveCursor = (threadID: string, cursor: unknown) => {
+    const tid = trimString(threadID);
+    if (!tid) return;
+    liveCursors.set(tid, Math.max(liveCursorValue(liveCursors.get(tid)), liveCursorValue(cursor)));
+  };
+  const liveBootstrapIsCurrent = (live: FlowerLiveBootstrap): boolean => {
+    const tid = trimString(live.thread_id || live.thread.thread_id);
+    if (!tid) return true;
+    return liveCursorValue(live.cursor) >= liveCursorValue(liveCursors.get(tid));
+  };
   const readSnapshotKey = (snapshot: FlowerThreadActivitySnapshot | null | undefined): string => [
     String(Math.max(0, Math.floor(Number(snapshot?.activity_revision ?? 0)))),
     String(Math.max(0, Math.floor(Number(snapshot?.last_message_at_unix_ms ?? 0)))),
@@ -542,7 +553,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const applyLiveBootstrap = (live: FlowerLiveBootstrap): FlowerThreadSnapshot => {
     const thread = projectFlowerLiveBootstrap(live);
-    liveCursors.set(thread.thread_id, Math.max(0, Math.floor(Number(live.cursor ?? 0))));
+    if (!liveBootstrapIsCurrent(live)) {
+      return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
+    }
+    setLiveCursor(thread.thread_id, live.cursor);
     upsertThread(thread);
     return thread;
   };
@@ -588,9 +602,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     void props.adapter.markThreadRead(tid, snapshot)
       .then((live) => {
         if (sequence === threadLoadSequence && selectedThreadID() === tid) {
-          const thread = projectFlowerLiveBootstrap(live);
-          liveCursors.set(thread.thread_id, Math.max(0, Math.floor(Number(live.cursor ?? 0))));
-          upsertThread(thread);
+          applyLiveBootstrap(live);
         }
         clearLocalReadVisibility(tid);
       })
@@ -865,11 +877,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     selectedThreadLiveUpdateToken = token;
     selectedThreadLiveRequests.set(tid, token);
     try {
-      let cursor = Math.max(0, Math.floor(Number(liveCursors.get(tid) ?? 0)));
+      let cursor = liveCursorValue(liveCursors.get(tid));
       let keepGoing = true;
       while (keepGoing && sequence === threadLoadSequence && selectedThreadID() === tid) {
         keepGoing = false;
+        const requestedCursor = cursor;
         const response = await props.adapter.listThreadLiveEvents(tid, cursor, 100);
+        if (liveCursorValue(liveCursors.get(tid)) > requestedCursor) {
+          return;
+        }
         let resyncRequired = false;
         let threadState = threads().find((thread) => thread.thread_id === tid) ?? null;
         if (!threadState) {
@@ -921,7 +937,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           }
         }
         cursor = Math.max(cursor, Math.floor(Number(response.next_cursor ?? 0)));
-        liveCursors.set(tid, cursor);
+        setLiveCursor(tid, cursor);
         if (resyncRequired || (response.retained_from_seq > 0 && cursor > 0 && cursor < response.retained_from_seq)) {
           await reloadSelectedThread(tid, sequence);
           return;
@@ -2613,13 +2629,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       />
                     )}
                   >
-                    <Button
-                      variant="primary"
-                      icon={ArrowUp}
-                      class="flower-composer-submit"
-                      disabled={inputSubmitting() || !inputRequestReadyToSubmit()}
-                      loading={inputSubmitting()}
-                      onClick={() => void submitChat()}
+	                    <Button
+	                      variant="primary"
+	                      icon={ArrowUp}
+	                      class="flower-composer-continue"
+	                      disabled={inputSubmitting() || !inputRequestReadyToSubmit()}
+	                      loading={inputSubmitting()}
+	                      onClick={() => void submitChat()}
                     >
                       {inputSubmitting()
                         ? chatCopyValue('inputRequestSubmitting', 'Submitting...')

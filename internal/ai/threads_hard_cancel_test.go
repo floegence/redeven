@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"testing"
@@ -158,5 +159,99 @@ func TestService_CancelRun_DetachesStaleActiveMapping(t *testing.T) {
 	}
 	if tv.RunStatus != "canceled" {
 		t.Fatalf("unexpected run_status=%q, want %q", tv.RunStatus, "canceled")
+	}
+}
+
+func TestService_CancelRun_PersistsCanceledAssistantBeforeNextUserTurn(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+
+	meta := &session.Meta{
+		ChannelID:         "ch_test",
+		EndpointID:        "env_test",
+		UserPublicID:      "u_test",
+		UserEmail:         "u_test@example.com",
+		NamespacePublicID: "ns_test",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+	}
+
+	th, err := svc.CreateThread(ctx, meta, "hello", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	firstUser, _, err := svc.persistUserMessage(ctx, meta, meta.EndpointID, th.ThreadID, RunInput{Text: "first request"})
+	if err != nil {
+		t.Fatalf("persist first user: %v", err)
+	}
+	runID := "run_cancel_order_test"
+	assistantID, err := newMessageID()
+	if err != nil {
+		t.Fatalf("newMessageID: %v", err)
+	}
+	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
+	oldRun := &run{
+		id:                       runID,
+		channelID:                meta.ChannelID,
+		endpointID:               meta.EndpointID,
+		threadID:                 th.ThreadID,
+		userPublicID:             meta.UserPublicID,
+		messageID:                assistantID,
+		threadsDB:                svc.threadsDB,
+		persistOpTimeout:         svc.persistOpTO,
+		doneCh:                   make(chan struct{}),
+		activitySegmentBlockIndex: -1,
+		currentThinkingBlockIndex: -1,
+	}
+
+	svc.mu.Lock()
+	svc.activeRunByTh[thKey] = runID
+	svc.runs[runID] = oldRun
+	svc.mu.Unlock()
+
+	if err := svc.CancelRun(meta, runID); err != nil {
+		t.Fatalf("CancelRun: %v", err)
+	}
+
+	secondUser, _, err := svc.persistUserMessage(ctx, meta, meta.EndpointID, th.ThreadID, RunInput{Text: "second request"})
+	if err != nil {
+		t.Fatalf("persist second user: %v", err)
+	}
+
+	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 20, 0)
+	if err != nil {
+		t.Fatalf("ListMessages: %v", err)
+	}
+	got := make([]string, 0, len(msgs))
+	for _, msg := range msgs {
+		got = append(got, msg.MessageID+":"+msg.Role+":"+msg.Status)
+	}
+	want := []string{
+		firstUser.MessageID + ":user:complete",
+		assistantID + ":assistant:canceled",
+		secondUser.MessageID + ":user:complete",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("messages=%v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("messages=%v, want %v", got, want)
+		}
+	}
+	var assistantPayload struct {
+		Status string `json:"status"`
+		Blocks []any  `json:"blocks"`
+	}
+	if err := json.Unmarshal([]byte(msgs[1].MessageJSON), &assistantPayload); err != nil {
+		t.Fatalf("unmarshal assistant json: %v", err)
+	}
+	if assistantPayload.Status != "canceled" {
+		t.Fatalf("assistant json status=%q, want canceled", assistantPayload.Status)
+	}
+	if len(assistantPayload.Blocks) != 0 {
+		t.Fatalf("assistant canceled boundary should not carry stale blocks: %#v", assistantPayload.Blocks)
 	}
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -16,7 +15,6 @@ import (
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/floegence/floret/observation"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go"
 	ooption "github.com/openai/openai-go/option"
@@ -2071,33 +2069,6 @@ func buildMessagesForRun(req RunRequest) []Message {
 	return messages
 }
 
-func buildResumeMessagesForRun(req RunRequest) []Message {
-	if strings.TrimSpace(req.ContextPack.ThreadID) != "" {
-		return buildMessagesFromPromptPackWithOptions(req.ContextPack, req.Input.Text, promptPackMessageBuildOptions{
-			IncludeRecentDialogue: false,
-		})
-	}
-	messages := make([]Message, 0, 1+len(req.Input.Attachments))
-	if txt := strings.TrimSpace(req.Input.Text); txt != "" {
-		messages = append(messages, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: txt}}})
-	}
-	for _, it := range req.Input.Attachments {
-		if strings.TrimSpace(it.URL) == "" {
-			continue
-		}
-		messages = append(messages, Message{
-			Role: "user",
-			Content: []ContentPart{{
-				Type:     "file",
-				FileURI:  strings.TrimSpace(it.URL),
-				MimeType: strings.TrimSpace(it.MimeType),
-				Text:     strings.TrimSpace(it.Name),
-			}},
-		})
-	}
-	return messages
-}
-
 func buildMessagesFromPromptPack(pack contextmodel.PromptPack, currentUserInput string) []Message {
 	return buildMessagesFromPromptPackWithOptions(pack, currentUserInput, promptPackMessageBuildOptions{
 		IncludeRecentDialogue: true,
@@ -2373,114 +2344,8 @@ func indentText(text string, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
-type providerTurnResumeState struct {
-	Enabled            bool
-	PreviousResponseID string
-	SkipReason         string
-}
-
-func canonicalProviderContinuationBaseURL(providerType string, baseURL string) string {
-	providerType = strings.ToLower(strings.TrimSpace(providerType))
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if baseURL != "" {
-		return baseURL
-	}
-	if providerType == "openai" {
-		return "https://api.openai.com/v1"
-	}
-	return ""
-}
-
 func isOpenAIResponsesProviderContinuationEnabled(providerType string) bool {
 	return strings.EqualFold(strings.TrimSpace(providerType), "openai")
-}
-
-func isOpenAIContinuationRejection(err error) bool {
-	if err == nil {
-		return false
-	}
-	var apiErr *openai.Error
-	if !errors.As(err, &apiErr) || apiErr == nil {
-		return false
-	}
-	if apiErr.StatusCode != http.StatusBadRequest && apiErr.StatusCode != http.StatusNotFound {
-		return false
-	}
-	payload := strings.ToLower(strings.Join([]string{
-		strings.TrimSpace(apiErr.Code),
-		strings.TrimSpace(apiErr.Param),
-		strings.TrimSpace(apiErr.Type),
-		strings.TrimSpace(apiErr.Message),
-	}, " "))
-	if strings.Contains(payload, "previous_response_id") {
-		return true
-	}
-	if strings.Contains(payload, "response_id") && (strings.Contains(payload, "invalid") || strings.Contains(payload, "not found") || strings.Contains(payload, "expired")) {
-		return true
-	}
-	return false
-}
-
-func buildProviderContinuationCandidate(providerID string, providerType string, modelName string, baseURL string, state *TurnProviderState) threadstore.ThreadProviderContinuation {
-	if state == nil {
-		return threadstore.ThreadProviderContinuation{}
-	}
-	kind := strings.TrimSpace(state.ContinuationKind)
-	continuationID := strings.TrimSpace(state.ContinuationID)
-	if kind == "" || continuationID == "" {
-		return threadstore.ThreadProviderContinuation{}
-	}
-	return threadstore.ThreadProviderContinuation{
-		Kind:            kind,
-		ContinuationID:  continuationID,
-		ProviderID:      strings.TrimSpace(providerID),
-		Model:           strings.TrimSpace(modelName),
-		BaseURL:         canonicalProviderContinuationBaseURL(providerType, baseURL),
-		UpdatedAtUnixMs: time.Now().UnixMilli(),
-	}.Normalized()
-}
-
-func (r *run) loadProviderTurnResumeState(ctx context.Context, providerCfg config.AIProvider, providerType string, modelName string) (providerTurnResumeState, error) {
-	state := providerTurnResumeState{}
-	if r == nil || r.threadsDB == nil {
-		state.SkipReason = "thread_store_unavailable"
-		return state, nil
-	}
-	if strings.TrimSpace(r.endpointID) == "" || strings.TrimSpace(r.threadID) == "" {
-		state.SkipReason = "thread_identity_missing"
-		return state, nil
-	}
-	if !isOpenAIResponsesProviderContinuationEnabled(providerType) {
-		state.SkipReason = "provider_not_supported"
-		return state, nil
-	}
-	continuation, err := r.threadsDB.GetThreadProviderContinuation(ctx, strings.TrimSpace(r.endpointID), strings.TrimSpace(r.threadID))
-	if err != nil {
-		return state, err
-	}
-	if continuation == nil || continuation.IsZero() {
-		state.SkipReason = "thread_state_missing"
-		return state, nil
-	}
-	if continuation.Kind != providerContinuationKindOpenAIResponses {
-		state.SkipReason = "kind_mismatch"
-		return state, nil
-	}
-	if continuation.ProviderID != strings.TrimSpace(providerCfg.ID) {
-		state.SkipReason = "provider_id_mismatch"
-		return state, nil
-	}
-	if continuation.Model != strings.TrimSpace(modelName) {
-		state.SkipReason = "model_mismatch"
-		return state, nil
-	}
-	if continuation.BaseURL != canonicalProviderContinuationBaseURL(providerType, providerCfg.BaseURL) {
-		state.SkipReason = "base_url_mismatch"
-		return state, nil
-	}
-	state.Enabled = true
-	state.PreviousResponseID = continuation.ContinuationID
-	return state, nil
 }
 
 func estimateTextTokens(text string) int {
@@ -3510,6 +3375,29 @@ func joinToolNames(tools []ToolDef) string {
 		if name := strings.TrimSpace(tool.Name); name != "" {
 			names = append(names, name)
 		}
+	}
+	sort.Strings(names)
+	return strings.Join(names, ",")
+}
+
+func joinToolAndSignalNames(tools []string, signals []string) string {
+	names := make([]string, 0, len(tools)+len(signals))
+	seen := make(map[string]struct{}, len(tools)+len(signals))
+	for _, source := range [][]string{tools, signals} {
+		for _, rawName := range source {
+			name := strings.TrimSpace(rawName)
+			if name == "" {
+				continue
+			}
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			seen[name] = struct{}{}
+			names = append(names, name)
+		}
+	}
+	if len(names) == 0 {
+		return "[]"
 	}
 	sort.Strings(names)
 	return strings.Join(names, ",")

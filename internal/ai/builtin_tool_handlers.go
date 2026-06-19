@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	flruntime "github.com/floegence/floret/runtime"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
@@ -26,8 +27,6 @@ func toolSuccessSummary(toolName string) string {
 		return "apply_patch.applied"
 	case "write_todos":
 		return "todos.updated"
-	case "exit_plan_mode":
-		return "plan.exit.requested"
 	case "web.search":
 		return "web.search"
 	case "okf.search":
@@ -114,23 +113,6 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (ToolRe
 }
 
 func (h *builtInToolHandler) HandlePartial(_ context.Context, _ PartialToolCall) error {
-	return nil
-}
-
-type signalToolHandler struct{}
-
-func (h signalToolHandler) Validate(_ context.Context, call ToolCall) error {
-	if strings.TrimSpace(call.Name) == "" {
-		return fmt.Errorf("missing signal tool name")
-	}
-	return nil
-}
-
-func (h signalToolHandler) Execute(_ context.Context, call ToolCall) (ToolResult, error) {
-	return ToolResult{ToolID: call.ID, ToolName: call.Name, Status: toolResultStatusSuccess, Summary: "signal.accepted", Data: cloneAnyMap(call.Args)}, nil
-}
-
-func (h signalToolHandler) HandlePartial(_ context.Context, _ PartialToolCall) error {
 	return nil
 }
 
@@ -482,92 +464,94 @@ func subagentsToolInputSchema() map[string]any {
 	}
 }
 
-func askUserToolInputSchema() map[string]any {
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"questions": map[string]any{
-				"type":        "array",
-				"minItems":    1,
-				"maxItems":    5,
-				"description": "Structured user-input questions. Each question must be fully specified with id, question, response_mode, and the required choice contract for that mode.",
-				"items": map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"id":                 map[string]any{"type": "string", "minLength": 1, "maxLength": 80, "description": "Stable question id, for example question_1."},
-						"header":             map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
-						"question":           map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
-						"is_secret":          map[string]any{"type": "boolean"},
-						"response_mode":      map[string]any{"type": "string", "enum": []string{"select", "write", "select_or_write"}, "description": "select requires fixed choices and choices_exhaustive=true; write must omit choices; select_or_write requires fixed choices and choices_exhaustive=false."},
-						"choices_exhaustive": map[string]any{"type": "boolean", "description": "Required when choices are present. true only for exhaustive select; false for select_or_write with a custom text answer."},
-						"write_label":        map[string]any{"type": "string", "maxLength": 200, "description": "For select_or_write, the label for the custom text answer. For write, the direct input label."},
-						"write_placeholder":  map[string]any{"type": "string", "maxLength": 160},
-						"choices": map[string]any{
-							"type":        "array",
-							"maxItems":    4,
-							"description": "Fixed select choices only. Do not include Other/None as a choice; use response_mode=select_or_write with choices_exhaustive=false when custom text is allowed.",
-							"items": map[string]any{
-								"type": "object",
-								"properties": map[string]any{
-									"choice_id":   map[string]any{"type": "string", "minLength": 1, "maxLength": 64},
-									"label":       map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
-									"description": map[string]any{"type": "string", "maxLength": 240},
-									"kind":        map[string]any{"type": "string", "enum": []string{"select"}, "description": "Fixed options must use kind=select."},
-									"actions": map[string]any{
-										"type":     "array",
-										"maxItems": 4,
-										"items": map[string]any{
-											"type": "object",
-											"properties": map[string]any{
-												"type": map[string]any{"type": "string", "enum": []string{"set_mode"}},
-												"mode": map[string]any{"type": "string", "enum": []string{"act", "plan"}},
-											},
-											"required":             []string{"type"},
-											"additionalProperties": false,
+func toolSchemaRaw(m map[string]any) json.RawMessage {
+	b, _ := json.Marshal(m)
+	return b
+}
+
+func redevenAskUserSignalInputSchema(base map[string]any) map[string]any {
+	schema := cloneAnyMap(base)
+	schema["type"] = "object"
+	schema["properties"] = map[string]any{
+		"questions": map[string]any{
+			"type":        "array",
+			"minItems":    1,
+			"maxItems":    5,
+			"description": "Structured user-input questions. Each question must be fully specified with id, question, response_mode, and the required choice contract for that mode.",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"id":                 map[string]any{"type": "string", "minLength": 1, "maxLength": 80, "description": "Stable question id, for example question_1."},
+					"header":             map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
+					"question":           map[string]any{"type": "string", "minLength": 1, "maxLength": 400},
+					"is_secret":          map[string]any{"type": "boolean"},
+					"response_mode":      map[string]any{"type": "string", "enum": []string{"select", "write", "select_or_write"}, "description": "select requires fixed choices and choices_exhaustive=true; write must omit choices; select_or_write requires fixed choices and choices_exhaustive=false."},
+					"choices_exhaustive": map[string]any{"type": "boolean", "description": "Required when choices are present. true only for exhaustive select; false for select_or_write with a custom text answer."},
+					"write_label":        map[string]any{"type": "string", "maxLength": 200, "description": "For select_or_write, the label for the custom text answer. For write, the direct input label."},
+					"write_placeholder":  map[string]any{"type": "string", "maxLength": 160},
+					"choices": map[string]any{
+						"type":        "array",
+						"maxItems":    4,
+						"description": "Fixed select choices only. Do not include Other/None as a choice; use response_mode=select_or_write with choices_exhaustive=false when custom text is allowed.",
+						"items": map[string]any{
+							"type": "object",
+							"properties": map[string]any{
+								"choice_id":   map[string]any{"type": "string", "minLength": 1, "maxLength": 64},
+								"label":       map[string]any{"type": "string", "minLength": 1, "maxLength": 200},
+								"description": map[string]any{"type": "string", "maxLength": 240},
+								"kind":        map[string]any{"type": "string", "enum": []string{"select"}, "description": "Fixed options must use kind=select."},
+								"actions": map[string]any{
+									"type":     "array",
+									"maxItems": 4,
+									"items": map[string]any{
+										"type": "object",
+										"properties": map[string]any{
+											"type": map[string]any{"type": "string", "enum": []string{"set_mode"}},
+											"mode": map[string]any{"type": "string", "enum": []string{"act", "plan"}},
 										},
+										"required":             []string{"type"},
+										"additionalProperties": false,
 									},
 								},
-								"required":             []string{"choice_id", "label", "kind"},
-								"additionalProperties": false,
 							},
+							"required":             []string{"choice_id", "label", "kind"},
+							"additionalProperties": false,
 						},
 					},
-					"required":             []string{"id", "header", "question", "is_secret", "response_mode"},
-					"additionalProperties": false,
 				},
-			},
-			"reason_code": map[string]any{
-				"type": "string",
-				"enum": []string{
-					"user_decision_required",
-					"permission_blocked",
-					"missing_external_input",
-					"conflicting_constraints",
-					"safety_confirmation",
-				},
-			},
-			"required_from_user": map[string]any{
-				"type":     "array",
-				"minItems": 1,
-				"maxItems": 8,
-				"items":    map[string]any{"type": "string", "maxLength": 200},
-			},
-			"evidence_refs": map[string]any{
-				"type":     "array",
-				"maxItems": 12,
-				"items":    map[string]any{"type": "string", "maxLength": 120},
+				"required":             []string{"id", "header", "question", "is_secret", "response_mode"},
+				"additionalProperties": false,
 			},
 		},
-		"required":             []string{"questions", "reason_code", "required_from_user", "evidence_refs"},
-		"additionalProperties": false,
+		"reason_code": map[string]any{
+			"type": "string",
+			"enum": []string{
+				"user_decision_required",
+				"permission_blocked",
+				"missing_external_input",
+				"conflicting_constraints",
+				"safety_confirmation",
+			},
+		},
+		"required_from_user": map[string]any{
+			"type":     "array",
+			"minItems": 1,
+			"maxItems": 8,
+			"items":    map[string]any{"type": "string", "maxLength": 200},
+		},
+		"evidence_refs": map[string]any{
+			"type":     "array",
+			"maxItems": 12,
+			"items":    map[string]any{"type": "string", "maxLength": 120},
+		},
 	}
+	schema["required"] = []string{"questions", "reason_code", "required_from_user", "evidence_refs"}
+	schema["additionalProperties"] = false
+	return schema
 }
 
 func builtInToolDefinitions() []ToolDef {
-	toSchema := func(m map[string]any) json.RawMessage {
-		b, _ := json.Marshal(m)
-		return b
-	}
+	toSchema := toolSchemaRaw
 	targetIDProperty := map[string]any{"type": "string", "description": "Optional target id used only when this thread explicitly routes builtin tools through a target executor. Under the normal local-runtime policy this field does not make the tool run remotely."}
 	withTargetID := func(properties map[string]any) map[string]any {
 		out := make(map[string]any, len(properties)+1)
@@ -667,36 +651,6 @@ func builtInToolDefinitions() []ToolDef {
 			Priority:         100,
 		},
 		{
-			Name:         "task_complete",
-			Description:  "Optionally report a detailed result summary when explicitly useful. A normal assistant final answer can complete the task without this tool.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"result": map[string]any{"type": "string"}, "evidence_refs": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "remaining_risks": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "next_actions": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"result"}, "additionalProperties": false}),
-			ParallelSafe: true,
-			Mutating:     false,
-			Source:       "builtin",
-			Namespace:    "builtin.signal",
-			Priority:     100,
-		},
-		{
-			Name:         "ask_user",
-			Description:  "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Preserve explicit interaction-shape constraints from the user, such as asking for fixed options, clickable choices, one-question-at-a-time, or indirect questioning. Each question must declare response_mode. Choice-based questions must also declare choices_exhaustive: use select only when choices_exhaustive=true, write for direct free text, and select_or_write when choices_exhaustive=false and custom text is allowed. If the user asks for answer choices, do not downgrade the question into pure write mode. choices[] should contain fixed options only. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks.",
-			InputSchema:  toSchema(askUserToolInputSchema()),
-			ParallelSafe: true,
-			Mutating:     false,
-			Source:       "builtin",
-			Namespace:    "builtin.signal",
-			Priority:     100,
-		},
-		{
-			Name:         "exit_plan_mode",
-			Description:  "Request a deterministic switch prompt from plan mode into act mode when execution is needed. Use this instead of constructing a manual mode-switch ask_user payload.",
-			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"summary": map[string]any{"type": "string", "maxLength": 500, "description": "Short explanation of why act mode is needed."}, "allowed_prompts": map[string]any{"type": "array", "maxItems": 8, "items": map[string]any{"type": "object", "properties": map[string]any{"tool": map[string]any{"type": "string", "maxLength": 80}, "prompt": map[string]any{"type": "string", "maxLength": 240}}, "required": []string{"tool", "prompt"}, "additionalProperties": false}}}, "additionalProperties": false}),
-			ParallelSafe: true,
-			Mutating:     false,
-			Source:       "builtin",
-			Namespace:    "builtin.signal",
-			Priority:     100,
-		},
-		{
 			Name:         "use_skill",
 			Description:  "Load and activate a skill by name.",
 			InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"name": map[string]any{"type": "string"}, "reason": map[string]any{"type": "string"}}, "required": []string{"name"}, "additionalProperties": false}),
@@ -723,15 +677,62 @@ func builtInToolDefinitions() []ToolDef {
 	return defs
 }
 
+func builtInControlSignalDefinitions() []ToolDef {
+	toSchema := toolSchemaRaw
+	defs := make([]ToolDef, 0, 3)
+	for _, core := range flruntime.CoreControlDefinitions(true) {
+		name := strings.TrimSpace(core.Name)
+		description := strings.TrimSpace(core.Description)
+		inputSchema := core.InputSchema
+		switch name {
+		case flruntime.CoreControlAskUser:
+			description = "Ask user for required structured input when the next step depends on a user decision, external input, approval, or a guided interaction turn. Preserve explicit interaction-shape constraints from the user, such as asking for fixed options, clickable choices, one-question-at-a-time, or indirect questioning. Each question must declare response_mode. Choice-based questions must also declare choices_exhaustive: use select only when choices_exhaustive=true, write for direct free text, and select_or_write when choices_exhaustive=false and custom text is allowed. If the user asks for answer choices, do not downgrade the question into pure write mode. choices[] should contain fixed options only. Do not use it to delegate tool-collectable work. Include reason_code, required_from_user, and evidence_refs for explainable policy checks."
+			inputSchema = redevenAskUserSignalInputSchema(core.InputSchema)
+		case flruntime.CoreControlTaskComplete:
+			description = "Optionally report a detailed result summary when explicitly useful. A normal assistant final answer can complete the task without this signal."
+		}
+		defs = append(defs, ToolDef{
+			Name:         name,
+			Description:  description,
+			InputSchema:  toSchema(inputSchema),
+			ParallelSafe: true,
+			Mutating:     false,
+			Source:       "floret",
+			Namespace:    "floret.core_signal",
+			Priority:     100,
+		})
+	}
+	defs = append(defs, ToolDef{
+		Name:         "exit_plan_mode",
+		Description:  "Request a deterministic switch prompt from plan mode into act mode when execution is needed. Use this instead of constructing a manual mode-switch ask_user payload.",
+		InputSchema:  toSchema(map[string]any{"type": "object", "properties": map[string]any{"summary": map[string]any{"type": "string", "maxLength": 500, "description": "Short explanation of why act mode is needed."}, "allowed_prompts": map[string]any{"type": "array", "maxItems": 8, "items": map[string]any{"type": "object", "properties": map[string]any{"tool": map[string]any{"type": "string", "maxLength": 80}, "prompt": map[string]any{"type": "string", "maxLength": 240}}, "required": []string{"tool", "prompt"}, "additionalProperties": false}}}, "additionalProperties": false}),
+		ParallelSafe: true,
+		Mutating:     false,
+		Source:       "builtin",
+		Namespace:    "builtin.signal",
+		Priority:     100,
+	})
+	for i := range defs {
+		defs[i].Presentation = aitools.MustPresentationSpec(defs[i].Name)
+	}
+	return defs
+}
+
+func builtInModelCapabilityDefinitions() []ToolDef {
+	tools := builtInToolDefinitions()
+	signals := builtInControlSignalDefinitions()
+	out := make([]ToolDef, 0, len(tools)+len(signals))
+	out = append(out, tools...)
+	out = append(out, signals...)
+	return out
+}
+
 func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 	if reg == nil {
 		return fmt.Errorf("nil tool registry")
 	}
 	for _, def := range builtInToolDefinitions() {
 		if def.Name == "web.search" && (r == nil || !r.webSearchToolEnabled) {
-			continue
-		}
-		if (def.Name == "ask_user" || def.Name == "exit_plan_mode") && r != nil && r.noUserInteraction {
 			continue
 		}
 		if !r.allowSubagentDelegate {
@@ -741,9 +742,6 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 			}
 		}
 		handler := ToolHandler(&builtInToolHandler{r: r, toolName: def.Name})
-		if def.Name == "task_complete" || def.Name == "ask_user" || def.Name == "exit_plan_mode" {
-			handler = signalToolHandler{}
-		}
 		if err := reg.Register(def, handler); err != nil {
 			return err
 		}

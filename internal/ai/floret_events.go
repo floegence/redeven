@@ -39,6 +39,11 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if r == nil {
 		return
 	}
+	if !r.acceptsPresentationUpdates() {
+		return
+	}
+	r.applyFloretStreamObservation(ev.Stream)
+	r.applyFloretSourceObservation(ev.Sources)
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:
@@ -106,6 +111,56 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"tool_id":   strings.TrimSpace(ev.ToolID),
 			"tool_name": strings.TrimSpace(ev.ToolName),
 			"metadata":  ev.Metadata,
+		})
+	}
+}
+
+func (r *run) applyFloretSourceObservation(sources []flruntime.SourceRef) {
+	if r == nil || len(sources) == 0 {
+		return
+	}
+	if !r.acceptsPresentationUpdates() {
+		return
+	}
+	for _, src := range sources {
+		r.addWebSource(strings.TrimSpace(src.Title), strings.TrimSpace(src.URL))
+	}
+}
+
+func (r *run) applyFloretStreamObservation(stream *flruntime.StreamObservation) {
+	if r == nil || stream == nil {
+		return
+	}
+	if !r.acceptsPresentationUpdates() {
+		return
+	}
+	switch stream.Type {
+	case flruntime.StreamObservationAssistantDelta:
+		if stream.Text != "" {
+			_ = r.appendTextDelta(stream.Text)
+		}
+	case flruntime.StreamObservationReasoningDelta:
+		if stream.Text != "" {
+			r.touchActivity()
+			_ = r.appendThinkingDelta(stream.Text)
+		}
+	case flruntime.StreamObservationModelRetry:
+		r.persistRunEvent("floret.provider.retry.stream", RealtimeStreamKindLifecycle, map[string]any{
+			"attempt": stream.Attempt,
+			"reason":  strings.TrimSpace(stream.Reason),
+		})
+	case flruntime.StreamObservationModelStreamDone:
+		r.persistRunEvent("floret.provider.stream.done", RealtimeStreamKindLifecycle, map[string]any{
+			"attempt":              stream.Attempt,
+			"finish_reason":        strings.TrimSpace(stream.FinishReason),
+			"raw_finish_reason":    strings.TrimSpace(stream.RawFinishReason),
+			"finish_inferred":      stream.FinishInferred,
+			"stream_reason_detail": strings.TrimSpace(stream.Reason),
+		})
+	case flruntime.StreamObservationModelStreamAbort:
+		r.persistRunEvent("floret.provider.stream.abort", RealtimeStreamKindLifecycle, map[string]any{
+			"attempt": stream.Attempt,
+			"reason":  strings.TrimSpace(stream.Reason),
 		})
 	}
 }

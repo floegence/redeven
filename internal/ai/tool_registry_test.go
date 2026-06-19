@@ -1,17 +1,32 @@
 package ai
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
+type registryTestHandler struct{}
+
+func (h registryTestHandler) Validate(context.Context, ToolCall) error {
+	return nil
+}
+
+func (h registryTestHandler) Execute(context.Context, ToolCall) (ToolResult, error) {
+	return ToolResult{Status: toolResultStatusSuccess}, nil
+}
+
+func (h registryTestHandler) HandlePartial(context.Context, PartialToolCall) error {
+	return nil
+}
+
 func TestInMemoryToolRegistry_RejectsMissingPresentationSpec(t *testing.T) {
 	t.Parallel()
 
 	reg := NewInMemoryToolRegistry()
-	err := reg.Register(ToolDef{Name: "custom.tool", Source: "builtin"}, signalToolHandler{})
+	err := reg.Register(ToolDef{Name: "custom.tool", Source: "builtin"}, registryTestHandler{})
 	if err == nil {
 		t.Fatalf("Register succeeded without presentation spec")
 	}
@@ -29,7 +44,7 @@ func TestInMemoryToolRegistry_AcceptsDeclaredPresentationSpec(t *testing.T) {
 		Source:       "builtin",
 		Presentation: aitools.MustPresentationSpec("terminal.exec"),
 	}
-	if err := reg.Register(def, signalToolHandler{}); err != nil {
+	if err := reg.Register(def, registryTestHandler{}); err != nil {
 		t.Fatalf("Register with presentation spec: %v", err)
 	}
 	snapshot := reg.Snapshot()
@@ -47,10 +62,10 @@ func TestInMemoryToolRegistry_ReplacesByPriority(t *testing.T) {
 	reg := NewInMemoryToolRegistry()
 	low := registryTestTool("file.read", "skill", 10)
 	high := registryTestTool("file.read", "skill", 20)
-	if err := reg.Register(low, signalToolHandler{}); err != nil {
+	if err := reg.Register(low, registryTestHandler{}); err != nil {
 		t.Fatalf("Register low priority: %v", err)
 	}
-	if err := reg.Register(high, signalToolHandler{}); err != nil {
+	if err := reg.Register(high, registryTestHandler{}); err != nil {
 		t.Fatalf("Register high priority replacement: %v", err)
 	}
 	snapshot := reg.Snapshot()
@@ -68,10 +83,10 @@ func TestInMemoryToolRegistry_ReplacesBySourceRank(t *testing.T) {
 	reg := NewInMemoryToolRegistry()
 	skill := registryTestTool("file.read", "skill", 10)
 	builtin := registryTestTool("file.read", "builtin", 10)
-	if err := reg.Register(skill, signalToolHandler{}); err != nil {
+	if err := reg.Register(skill, registryTestHandler{}); err != nil {
 		t.Fatalf("Register skill tool: %v", err)
 	}
-	if err := reg.Register(builtin, signalToolHandler{}); err != nil {
+	if err := reg.Register(builtin, registryTestHandler{}); err != nil {
 		t.Fatalf("Register builtin replacement: %v", err)
 	}
 	snapshot := reg.Snapshot()
@@ -89,10 +104,10 @@ func TestInMemoryToolRegistry_RejectsDuplicateWithSamePriorityAndSource(t *testi
 	reg := NewInMemoryToolRegistry()
 	first := registryTestTool("file.read", "builtin", 10)
 	second := registryTestTool("file.read", "builtin", 10)
-	if err := reg.Register(first, signalToolHandler{}); err != nil {
+	if err := reg.Register(first, registryTestHandler{}); err != nil {
 		t.Fatalf("Register first tool: %v", err)
 	}
-	err := reg.Register(second, signalToolHandler{})
+	err := reg.Register(second, registryTestHandler{})
 	if err == nil {
 		t.Fatalf("Register duplicate succeeded, want conflict")
 	}
@@ -105,7 +120,7 @@ func TestInMemoryToolRegistry_UnregisterRemovesTool(t *testing.T) {
 	t.Parallel()
 
 	reg := NewInMemoryToolRegistry()
-	if err := reg.Register(registryTestTool("file.read", "builtin", 10), signalToolHandler{}); err != nil {
+	if err := reg.Register(registryTestTool("file.read", "builtin", 10), registryTestHandler{}); err != nil {
 		t.Fatalf("Register tool: %v", err)
 	}
 	if err := reg.Unregister(" file.read "); err != nil {
@@ -125,7 +140,7 @@ func TestInMemoryToolRegistry_SnapshotSortsByPriorityThenName(t *testing.T) {
 		registryTestTool("write_todos", "builtin", 30),
 		registryTestTool("file.read", "builtin", 10),
 	} {
-		if err := reg.Register(def, signalToolHandler{}); err != nil {
+		if err := reg.Register(def, registryTestHandler{}); err != nil {
 			t.Fatalf("Register %s: %v", def.Name, err)
 		}
 	}

@@ -266,6 +266,54 @@ describe('buildFlowerTimelineEntries', () => {
     expect(messages.map((entry) => entry.message.active_cursor === true)).toEqual([false, true]);
   });
 
+  it('preserves canonical stop plus send message order while keeping one running cursor', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      status: 'running',
+      messages: [
+        {
+          id: 'user-first',
+          role: 'user',
+          content: 'first request',
+          status: 'complete',
+          created_at_ms: 10,
+        },
+        {
+          id: 'assistant-canceled',
+          role: 'assistant',
+          content: 'partial old answer',
+          status: 'canceled',
+          active_cursor: true,
+          created_at_ms: 20,
+          blocks: [{ type: 'markdown', content: 'partial old answer' }],
+        },
+        {
+          id: 'user-second',
+          role: 'user',
+          content: 'second request',
+          status: 'complete',
+          created_at_ms: 30,
+        },
+        {
+          id: 'assistant-current',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 40,
+        },
+      ],
+    }));
+
+    const messages = entries.filter((entry): entry is Extract<typeof entry, { type: 'message' }> => entry.type === 'message');
+    expect(messages.map((entry) => entry.message.id)).toEqual([
+      'user-first',
+      'assistant-canceled',
+      'user-second',
+      'assistant-current',
+    ]);
+    expect(messages.map((entry) => entry.message.active_cursor === true)).toEqual([false, false, false, true]);
+  });
+
   it('drops stale empty active cursor messages when the thread is no longer running', () => {
     for (const status of ['canceled', 'success', 'waiting_approval'] as const) {
       const entries = buildFlowerTimelineEntries(thread({

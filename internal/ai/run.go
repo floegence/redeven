@@ -68,6 +68,8 @@ type runOptions struct {
 	ToolAllowlist         []string
 	ForceReadonlyExec     bool
 	NoUserInteraction     bool
+	WebSearchToolEnabled  bool
+	WebSearchMode         string
 	SkillManager          *skillManager
 	ToolTargetPolicy      ToolTargetPolicy
 	TargetToolExecutor    TargetToolExecutor
@@ -197,6 +199,10 @@ type assistantMarkdownUpdate struct {
 type toolApprovalRequest struct {
 	decision      chan bool
 	toolName      string
+	argsHash      string
+	effects       []string
+	flags         []string
+	targets       []FlowerSafeTarget
 	requestedAtMs int64
 	expiresAtMs   int64
 	resolved      bool
@@ -253,6 +259,8 @@ func newRun(opts runOptions) *run {
 		lifecycleMinEmitGap:       600 * time.Millisecond,
 		collectedWebSources:       make(map[string]SourceRef),
 		collectedWebSourceOrder:   make([]string, 0, 8),
+		webSearchToolEnabled:      opts.WebSearchToolEnabled,
+		webSearchMode:             strings.TrimSpace(opts.WebSearchMode),
 		currentThinkingBlockIndex: -1,
 		activitySegmentActive:     false,
 		activitySegmentBlockIndex: -1,
@@ -474,6 +482,9 @@ func (r *run) setProviderContinuationCandidate(cont threadstore.ThreadProviderCo
 	if r == nil {
 		return
 	}
+	if !r.acceptsEngineResultProjection() {
+		return
+	}
 	r.muAssistant.Lock()
 	r.providerContinuation = cont.Normalized()
 	r.muAssistant.Unlock()
@@ -549,13 +560,24 @@ func (r *run) isDetached() bool {
 	return r.detached.Load()
 }
 
+func (r *run) acceptsPresentationUpdates() bool {
+	return r != nil && !r.isDetached()
+}
+
+func (r *run) acceptsEngineResultProjection() bool {
+	return r != nil && !r.isDetached()
+}
+
 func (r *run) sendStreamEvent(ev any) {
 	if r == nil || ev == nil {
 		return
 	}
 
 	r.touchActivity()
-	if !r.detached.Load() && r.onStreamEvent != nil {
+	if r.detached.Load() {
+		return
+	}
+	if r.onStreamEvent != nil {
 		r.onStreamEvent(ev)
 	}
 	if r.stream == nil {
@@ -1217,6 +1239,9 @@ func (r *run) appendTextDelta(delta string) error {
 	if r == nil || delta == "" {
 		return nil
 	}
+	if !r.acceptsPresentationUpdates() {
+		return nil
+	}
 	if r.needNewTextBlock {
 		r.finishActivitySegment()
 		idx := r.nextBlockIndex
@@ -1238,6 +1263,9 @@ func (r *run) appendTextDelta(delta string) error {
 
 func (r *run) appendThinkingDelta(delta string) error {
 	if r == nil || delta == "" {
+		return nil
+	}
+	if !r.acceptsPresentationUpdates() {
 		return nil
 	}
 	if r.needNewThinkingBlock || r.currentThinkingBlockIndex < 0 {
@@ -1348,6 +1376,9 @@ func (r *run) setCanonicalMarkdownCandidate(text string) {
 	if r == nil {
 		return
 	}
+	if !r.acceptsEngineResultProjection() {
+		return
+	}
 	text = normalizeCanonicalMarkdownText(text)
 	if text == "" {
 		return
@@ -1444,6 +1475,9 @@ func (r *run) reconcileCanonicalMarkdownMessage(source canonicalMarkdownSource, 
 	if r == nil {
 		return false
 	}
+	if !r.acceptsEngineResultProjection() {
+		return false
+	}
 	canonical := r.canonicalMarkdownTextSnapshot(fallback)
 	if canonical == "" {
 		return false
@@ -1514,6 +1548,9 @@ func (r *run) reconcileCanonicalMarkdownMessage(source canonicalMarkdownSource, 
 
 func (r *run) reconcileCanonicalWaitingUserMessage() bool {
 	if r == nil {
+		return false
+	}
+	if !r.acceptsEngineResultProjection() {
 		return false
 	}
 
@@ -1756,131 +1793,51 @@ func (r *run) persistToolCallSnapshot(toolID string, toolName string, status str
 
 func toolStartActivityPresentation(toolName string, args map[string]any, timeout terminalExecTimeoutDecision) *observation.ActivityPresentation {
 	toolName = strings.TrimSpace(toolName)
-	switch toolName {
-	case "terminal.exec":
-		command := strings.TrimSpace(anyToString(args["command"]))
-		label := command
-		if label == "" {
-			label = "Activity"
-		}
-		payload := map[string]any{
-			"status": toolCallStatusRunning,
-		}
-		if command != "" {
-			payload["command"] = command
-		}
-		if timeout.EffectiveMS > 0 {
-			payload["timeout_ms"] = timeout.EffectiveMS
-		}
-		if timeout.RequestedMS > 0 {
-			payload["requested_timeout_ms"] = timeout.RequestedMS
-		}
-		if source := strings.TrimSpace(timeout.Source); source != "" {
-			payload["timeout_source"] = source
-		}
-		return &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(label),
-			Renderer: observation.ActivityRendererTerminal,
-			Payload:  payload,
-		}
-	default:
-		payload := map[string]any{
-			"status": toolCallStatusRunning,
-		}
-		switch toolName {
-		case "file.read", "file.edit", "file.write":
-			path := strings.TrimSpace(anyToString(args["file_path"]))
-			displayName := displayNameForFilePath(path)
-			label := displayName
-			if label == "" {
-				label = "file"
-			}
-			payload["display_name"] = displayName
-			operation := "edit"
-			if toolName == "file.read" {
-				operation = "read"
-			} else if toolName == "file.write" {
-				operation = "write"
-			}
-			return &observation.ActivityPresentation{
-				Label:    activityPresentationLabel(label),
-				Renderer: observation.ActivityRendererFile,
-				Payload:  mapWithOperation(payload, operation),
-			}
-		case "web.search":
-			label := firstNonEmptyString(anyToString(args["query"]), "Search web")
-			return &observation.ActivityPresentation{
-				Label:    activityPresentationLabel(label),
-				Renderer: observation.ActivityRendererWebSearch,
-				Payload:  payload,
-			}
-		case "okf.search":
-			label := firstNonEmptyString(anyToString(args["query"]), okfKnowledgeActivityLabel)
-			return &observation.ActivityPresentation{
-				Label:    activityPresentationLabel(label),
-				Renderer: observation.ActivityRendererStructured,
-				Payload:  payload,
-			}
-		case "write_todos":
-			return &observation.ActivityPresentation{
-				Label:    "Update todos",
-				Renderer: observation.ActivityRendererTodos,
-				Payload:  payload,
-			}
-		case "use_skill":
-			label := firstNonEmptyString(anyToString(args["name"]), "Use skill")
-			return &observation.ActivityPresentation{
-				Label:    activityPresentationLabel(label),
-				Renderer: observation.ActivityRendererStructured,
-				Payload:  payload,
-			}
-		case "subagents":
-			label := firstNonEmptyString(anyToString(args["action"]), "Subagent task")
-			return &observation.ActivityPresentation{
-				Label:    activityPresentationLabel(label),
-				Renderer: observation.ActivityRendererStructured,
-				Payload:  payload,
-			}
-		case "ask_user":
-			return &observation.ActivityPresentation{
-				Label:    "Ask user",
-				Renderer: observation.ActivityRendererQuestion,
-				Payload:  payload,
-			}
-		case "task_complete":
-			return &observation.ActivityPresentation{
-				Label:    "Complete task",
-				Renderer: observation.ActivityRendererCompletion,
-				Payload:  payload,
-			}
-		case "exit_plan_mode":
-			return &observation.ActivityPresentation{
-				Label:    "Exit plan mode",
-				Renderer: observation.ActivityRendererStructured,
-				Payload:  payload,
-			}
-		}
-		return &observation.ActivityPresentation{
+	activity := floretActivityForToolCall(toolName, args)
+	if activity == nil {
+		activity = &observation.ActivityPresentation{
 			Label:    "Activity",
 			Renderer: observation.ActivityRendererStructured,
-			Payload:  payload,
+			Payload:  map[string]any{},
 		}
 	}
+	activity = cloneActivityPresentation(activity)
+	if strings.TrimSpace(toolName) == "" {
+		activity.Label = "Activity"
+	}
+	if _, ok := aitools.PresentationSpec(toolName); !ok && !isFlowerControlTool(toolName) {
+		activity.Label = "Activity"
+	}
+	if toolName == "terminal.exec" && strings.TrimSpace(anyToString(args["command"])) == "" {
+		activity.Label = "Activity"
+	}
+	if activity.Payload == nil {
+		activity.Payload = map[string]any{}
+	}
+	activity.Payload["status"] = toolCallStatusRunning
+	if toolName == "terminal.exec" {
+		if timeout.EffectiveMS > 0 {
+			activity.Payload["timeout_ms"] = timeout.EffectiveMS
+		}
+		if timeout.RequestedMS > 0 {
+			activity.Payload["requested_timeout_ms"] = timeout.RequestedMS
+		}
+		if source := strings.TrimSpace(timeout.Source); source != "" {
+			activity.Payload["timeout_source"] = source
+		}
+	}
+	return contractSafeActivityPresentation(activity)
 }
 
-func toolResultStatusForError(toolErr *aitools.ToolError) string {
-	if toolErr == nil {
-		return toolResultStatusError
+func cloneActivityPresentation(in *observation.ActivityPresentation) *observation.ActivityPresentation {
+	if in == nil {
+		return nil
 	}
-	toolErr.Normalize()
-	switch toolErr.Code {
-	case aitools.ErrorCodeTimeout:
-		return toolResultStatusTimeout
-	case aitools.ErrorCodeCanceled:
-		return toolResultStatusAborted
-	default:
-		return toolResultStatusError
-	}
+	out := *in
+	out.Chips = append([]observation.ActivityChip(nil), in.Chips...)
+	out.TargetRefs = append([]observation.ActivityTargetRef(nil), in.TargetRefs...)
+	out.Payload = cloneAnyMap(in.Payload)
+	return &out
 }
 
 func (r *run) recordToolResultActivity(toolID string, toolName string, status string, result any, toolErr *aitools.ToolError, observedAt time.Time) {
@@ -2006,6 +1963,18 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	if toolName == "" {
 		return nil, errors.New("missing tool_name")
 	}
+	if r.isDetached() {
+		return &toolCallOutcome{
+			Success:  false,
+			ToolName: toolName,
+			Args:     cloneAnyMap(args),
+			ToolError: &aitools.ToolError{
+				Code:      aitools.ErrorCodeCanceled,
+				Message:   "Run was canceled",
+				Retryable: false,
+			},
+		}, nil
+	}
 	if args == nil {
 		args = map[string]any{}
 	}
@@ -2023,49 +1992,13 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		ToolError:      nil,
 		RecoveryAction: "",
 	}
-	needsApproval := requiresApproval(toolName, args)
 	mutating := isMutatingInvocation(toolName, args)
-	dangerous := isDangerousInvocation(toolName, args)
-
-	requireUserApproval := r.cfg.EffectiveRequireUserApproval()
-	blockDangerousCommands := r.cfg.EffectiveBlockDangerousCommands()
-	isPlanMode := strings.TrimSpace(strings.ToLower(r.runMode)) == config.AIModePlan
-	denyDangerous := blockDangerousCommands && dangerous
-	denyPlanMutating := isPlanMode && mutating
-	commandProfile := aitools.InvocationCommandProfile(toolName, args)
-	commandRisk := strings.TrimSpace(string(commandProfile.Risk))
-	normalizedCommand := strings.TrimSpace(commandProfile.NormalizedCommand)
-	commandEffects := append([]string(nil), commandProfile.Effects...)
-	classificationReason := strings.TrimSpace(commandProfile.Reason)
 	var terminalTimeoutDecision terminalExecTimeoutDecision
 	var terminalExecResultMeta map[string]any
 	if toolName == "terminal.exec" {
 		terminalTimeoutDecision = resolveTerminalExecTimeoutDecision(r.cfg, readInt64Field(args, "timeout_ms", "timeoutMs"))
 		terminalExecResultMeta = terminalExecTimeoutDecisionResult(terminalTimeoutDecision)
 	}
-	readonlyRisk := string(aitools.TerminalCommandRiskReadonly)
-	denyReadonlyExec := r.forceReadonlyExec && toolName == "terminal.exec" && commandRisk != "" && commandRisk != readonlyRisk
-	requireApprovalForInvocation := requireUserApproval && needsApproval && !denyReadonlyExec
-	denyNoUserInteractionApproval := r.noUserInteraction && requireApprovalForInvocation
-	policyDecision := "allow"
-	policyReason := "none"
-	if denyNoUserInteractionApproval {
-		policyDecision = "deny"
-		policyReason = "no_user_interaction_policy"
-	} else if denyReadonlyExec {
-		policyDecision = "deny"
-		policyReason = "subagent_readonly_guard_blocked"
-	} else if denyDangerous {
-		policyDecision = "deny"
-		policyReason = "dangerous_command_blocked"
-	} else if denyPlanMutating {
-		policyDecision = "deny"
-		policyReason = "plan_mode_readonly_blocked"
-	} else if requireApprovalForInvocation {
-		policyDecision = "ask"
-		policyReason = "user_approval_required"
-	}
-
 	toolStartedAt := time.Now()
 	toolSpanID := executionSpanID(r.id, toolName, toolID)
 	r.persistRunEvent("tool.call", RealtimeStreamKindTool, map[string]any{
@@ -2073,28 +2006,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		"tool_name": toolName,
 		"args":      redactAnyForLog("args", args, 0),
 	})
-	if toolName == "terminal.exec" {
-		r.persistRunEvent("tool.policy", RealtimeStreamKindLifecycle, map[string]any{
-			"tool_id":                         toolID,
-			"tool_name":                       toolName,
-			"normalized_command":              normalizedCommand,
-			"command_risk":                    commandRisk,
-			"command_effects":                 commandEffects,
-			"classification_reason":           classificationReason,
-			"policy_decision":                 policyDecision,
-			"policy_reason":                   policyReason,
-			"policy_force_readonly_exec":      r.forceReadonlyExec,
-			"policy_require_user_approval":    requireUserApproval,
-			"policy_no_user_interaction":      r.noUserInteraction,
-			"policy_plan_mode_readonly":       isPlanMode,
-			"policy_block_dangerous_commands": blockDangerousCommands,
-			"timeout_requested_ms":            terminalTimeoutDecision.RequestedMS,
-			"timeout_effective_ms":            terminalTimeoutDecision.EffectiveMS,
-			"timeout_default_ms":              terminalTimeoutDecision.DefaultMS,
-			"timeout_max_ms":                  terminalTimeoutDecision.MaxMS,
-			"timeout_source":                  terminalTimeoutDecision.Source,
-		})
-	}
 	toolCallPayload := map[string]any{
 		"tool_id":   toolID,
 		"tool_name": toolName,
@@ -2117,19 +2028,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	r.debug("ai.run.tool.call",
 		"tool_id", toolID,
 		"tool_name", toolName,
-		"requires_approval", needsApproval,
-		"mutating", mutating,
-		"dangerous", dangerous,
-		"policy_require_user_approval", requireUserApproval,
-		"policy_no_user_interaction", r.noUserInteraction,
-		"policy_plan_mode_readonly", isPlanMode,
-		"policy_block_dangerous_commands", blockDangerousCommands,
-		"command_risk", commandRisk,
-		"command_effects", commandEffects,
-		"classification_reason", classificationReason,
-		"normalized_command", normalizedCommand,
-		"policy_decision", policyDecision,
-		"policy_reason", policyReason,
 		"args_preview", previewAnyForLog(redactToolArgsForLog(toolName, args), 512),
 	)
 
@@ -2178,7 +2076,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			"tool_name": toolName,
 			"error":     toolErr,
 		})
-		r.recordToolResultActivity(toolID, toolName, toolResultStatusForError(toolErr), errorResult, toolErr, errorAt)
 		errPayload := map[string]any{
 			"tool_id":         toolID,
 			"tool_name":       toolName,
@@ -2211,180 +2108,11 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		return outcome, nil
 	}
 
-	if denyReadonlyExec {
-		toolErr := &aitools.ToolError{
-			Code:      aitools.ErrorCodePermissionDenied,
-			Message:   "terminal.exec command is blocked by subagent readonly policy",
-			Retryable: false,
-			SuggestedFixes: []string{
-				"Use readonly commands (for example rg, ls, cat, grep, git status, git diff).",
-				"Switch to a worker subagent role when write operations are required.",
-			},
-		}
-		setToolError(toolErr, "", nil)
-		return outcome, nil
-	}
-
-	if denyDangerous {
-		toolErr := &aitools.ToolError{
-			Code:      aitools.ErrorCodePermissionDenied,
-			Message:   "Command blocked by dangerous-command policy",
-			Retryable: false,
-			SuggestedFixes: []string{
-				"Use a readonly command for investigation.",
-				"Use apply_patch with the canonical Begin/End Patch format for file edits instead of destructive shell commands.",
-				"Disable block_dangerous_commands in Settings > AI > Execution policy only if you accept the risk.",
-			},
-		}
-		setToolError(toolErr, "", nil)
-		return outcome, nil
-	}
-
-	if denyNoUserInteractionApproval {
-		toolErr := &aitools.ToolError{
-			Code:      aitools.ErrorCodePermissionDenied,
-			Message:   "Tool invocation requires user approval, but user interaction is disabled in this run",
-			Retryable: false,
-			SuggestedFixes: []string{
-				"Use a tool invocation that does not require user approval.",
-				"Complete with task_complete and report blockers instead of requesting approval.",
-			},
-		}
-		setToolError(toolErr, "", nil)
-		return outcome, nil
-	}
-
-	if denyPlanMutating {
-		toolErr := &aitools.ToolError{
-			Code:      aitools.ErrorCodePermissionDenied,
-			Message:   "Mutating tool call blocked by plan-mode readonly policy",
-			Retryable: false,
-			SuggestedFixes: []string{
-				"Switch AI mode to act to enable mutating tools.",
-				"If execution is required, call exit_plan_mode to request switching to act mode.",
-			},
-		}
-		setToolError(toolErr, "", nil)
-		return outcome, nil
-	}
-
 	meta, err := r.sessionMetaForTool()
 	if err != nil {
 		toolErr := aitools.ClassifyError(aitools.Invocation{ToolName: toolName, Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
 		setToolError(toolErr, "", nil)
 		return outcome, nil
-	}
-
-	if requireApprovalForInvocation {
-		ch := make(chan bool, 1)
-		requestedAt := time.Now().UnixMilli()
-		expiresAt := int64(0)
-		if r.toolApprovalTO > 0 {
-			expiresAt = requestedAt + r.toolApprovalTO.Milliseconds()
-		}
-		r.mu.Lock()
-		r.toolApprovals[toolID] = &toolApprovalRequest{
-			decision:      ch,
-			toolName:      toolName,
-			requestedAtMs: requestedAt,
-			expiresAtMs:   expiresAt,
-		}
-		r.waitingApproval = true
-		r.mu.Unlock()
-		r.recordObservationActivityEvent(observation.Event{
-			Type:       observation.EventTypeToolApprovalRequested,
-			ToolID:     toolID,
-			ToolName:   toolName,
-			ObservedAt: time.Now(),
-			Metadata: map[string]any{
-				"approval_id": toolID,
-			},
-		})
-		r.persistRunEvent("tool.approval.requested", RealtimeStreamKindLifecycle, map[string]any{"tool_id": toolID, "tool_name": toolName})
-		r.debug("ai.run.tool.approval.requested", "tool_id", toolID, "tool_name", toolName)
-
-		approved := false
-		timedOut := false
-		waitErr := ""
-		to := r.toolApprovalTO
-		if to <= 0 {
-			to = 10 * time.Minute
-		}
-		timer := time.NewTimer(to)
-		defer timer.Stop()
-		select {
-		case approved = <-ch:
-		case <-ctx.Done():
-			waitErr = "canceled"
-		case <-timer.C:
-			timedOut = true
-		}
-
-		r.mu.Lock()
-		delete(r.toolApprovals, toolID)
-		r.waitingApproval = false
-		r.mu.Unlock()
-
-		if waitErr != "" {
-			toolErr := &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Canceled", Retryable: false}
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				toolErr = &aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Timed out", Retryable: true}
-			}
-			r.recordObservationActivityEvent(observation.Event{
-				Type:       observation.EventTypeToolApprovalCanceled,
-				ToolID:     toolID,
-				ToolName:   toolName,
-				Error:      strings.TrimSpace(toolErr.Message),
-				ObservedAt: time.Now(),
-				Metadata: map[string]any{
-					"approval_id": toolID,
-				},
-			})
-			setToolError(toolErr, "", nil)
-			return outcome, nil
-		}
-		if timedOut {
-			toolErr := &aitools.ToolError{Code: aitools.ErrorCodeTimeout, Message: "Approval timed out", Retryable: true}
-			r.recordObservationActivityEvent(observation.Event{
-				Type:       observation.EventTypeToolApprovalTimedOut,
-				ToolID:     toolID,
-				ToolName:   toolName,
-				Error:      strings.TrimSpace(toolErr.Message),
-				ObservedAt: time.Now(),
-				Metadata: map[string]any{
-					"approval_id": toolID,
-				},
-			})
-			setToolError(toolErr, "", nil)
-			return outcome, nil
-		}
-		if !approved {
-			toolErr := &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: "Rejected by user", Retryable: false}
-			r.recordObservationActivityEvent(observation.Event{
-				Type:       observation.EventTypeToolApprovalRejected,
-				ToolID:     toolID,
-				ToolName:   toolName,
-				Error:      strings.TrimSpace(toolErr.Message),
-				ObservedAt: time.Now(),
-				Metadata: map[string]any{
-					"approval_id": toolID,
-				},
-			})
-			setToolError(toolErr, "", nil)
-			return outcome, nil
-		}
-
-		r.recordObservationActivityEvent(observation.Event{
-			Type:       observation.EventTypeToolApprovalApproved,
-			ToolID:     toolID,
-			ToolName:   toolName,
-			ObservedAt: time.Now(),
-			Metadata: map[string]any{
-				"approval_id": toolID,
-			},
-		})
-		r.persistRunEvent("tool.approval.approved", RealtimeStreamKindLifecycle, map[string]any{"tool_id": toolID, "tool_name": toolName})
-		r.debug("ai.run.tool.approval.approved", "tool_id", toolID, "tool_name", toolName)
 	}
 
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
@@ -2395,21 +2123,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		persistResult = terminalExecResultMeta
 	}
 	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusRunning, argsForPersist, persistResult, nil, "", toolStartedAt, time.Now())
-	toolExecutionStartedAt := time.Now()
-	argsHashBytes := sha256.Sum256([]byte(marshalPersistJSON(argsForPersist, 0)))
-	r.recordObservationActivityEvent(observation.Event{
-		Type:       observation.EventTypeToolCall,
-		ToolID:     toolID,
-		ToolName:   toolName,
-		ToolKind:   "local",
-		ArgsHash:   hex.EncodeToString(argsHashBytes[:]),
-		Activity:   toolStartActivityPresentation(toolName, argsForPersist, terminalTimeoutDecision),
-		ObservedAt: toolExecutionStartedAt,
-		Metadata: map[string]any{
-			"effects": commandEffects,
-		},
-	})
-
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
 		if errors.Is(toolErrRaw, context.Canceled) {
@@ -2448,7 +2161,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		"tool_name": toolName,
 		"status":    "success",
 	})
-	r.recordToolResultActivity(toolID, toolName, toolResultStatusSuccess, result, nil, resultAt)
 	successPayload := map[string]any{
 		"tool_id":   toolID,
 		"tool_name": toolName,
@@ -2594,8 +2306,12 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 
 	r.muAssistant.Lock()
 	if len(r.assistantBlocks) == 0 {
-		r.muAssistant.Unlock()
-		return "", "", 0, errors.New("assistant blocks unavailable")
+		if strings.TrimSpace(strings.ToLower(status)) != "canceled" {
+			r.muAssistant.Unlock()
+			return "", "", 0, errors.New("assistant blocks unavailable")
+		}
+		r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
+		r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
 	}
 	blocks := make([]any, 0, len(r.assistantBlocks))
 	for _, blk := range r.assistantBlocks {

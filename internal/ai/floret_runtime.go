@@ -96,8 +96,9 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		modeFilter = allowlistModeToolFilter{base: modeFilter, allowlist: allow}
 	}
 	activeTools := modeFilter.FilterToolsForMode(mode, registry.Snapshot())
-	capabilityContract := resolveRunCapabilityContract(r, activeTools, req.ModelCapability.SupportsAskUserQuestionBatches)
-	controlTools := floretControlToolsForContract(registry.Snapshot(), capabilityContract)
+	activeSignals := modeFilter.FilterToolsForMode(mode, builtInControlSignalDefinitions())
+	capabilityContract := resolveRunCapabilityContract(r, activeTools, activeSignals, req.ModelCapability.SupportsAskUserQuestionBatches)
+	controlTools := floretControlToolsForContract(activeSignals, capabilityContract)
 	r.persistRunEvent("capability.contract.resolved", RealtimeStreamKindLifecycle, capabilityContract.eventPayload())
 	r.ensureSkillManager()
 
@@ -120,13 +121,11 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if err != nil {
 		return r.failRun("Failed to project Floret transcript", err)
 	}
-	resumeHistory, err := flowerMessagesToFloret(buildResumeMessagesForRun(req))
+	providerContinuation := newProviderContinuationProjector(r, providerCfg.ID, providerType, modelName, providerCfg.BaseURL)
+	previousState, err := providerContinuation.PreviousState(ctx)
 	if err != nil {
-		return r.failRun("Failed to project Floret resume transcript", err)
+		return r.failRun("Failed to load provider continuation", err)
 	}
-	resumeState, previousState := r.loadFloretPreviousProviderState(ctx, providerCfg, providerType, modelName)
-	_ = resumeState
-
 	contextWindow := nativeDefaultContextLimit
 	if req.ModelCapability.MaxContextTokens > 0 {
 		contextWindow = req.ModelCapability.MaxContextTokens
@@ -155,14 +154,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 			MaxCostUSD:     req.Options.MaxCostUSD,
 		},
 		r.webSearchMode,
-		resumeHistory,
-		func(sources []SourceRef) {
-			for _, src := range sources {
-				r.addWebSource(src.Title, src.URL)
-			}
-		},
 	)
-	flProvider.bindStreamRun(r)
 	completionPolicy := flruntime.TurnCompletionNaturalStop
 	hostLabels := floretHostLabelsForRun(r)
 	controlSpec, err := newFloretControlSpec(r, sharedState, controlTools, taskComplexity, mode)
@@ -181,6 +173,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		Config:       floretCfg,
 		ModelGateway: flProvider,
 		Tools:        flTools,
+		Approver:     floretToolApproverForRun(r),
 		Sink:         floretEventSink{run: r},
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
@@ -207,54 +200,22 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if err != nil && result.Status == "" {
 		return r.failRunWithCode(classifyRunFailureCode(err, runErrorCodeFloretEngineFailed), "", err)
 	}
+	if !r.acceptsEngineResultProjection() {
+		return nil
+	}
 	r.publishFinalActivityTimeline(result.ActivityTimeline)
 	r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), estimateFloretHistoryTokens(systemPrompt, history, activeTools))
-	providerState := flProvider.currentProviderState()
-	r.setProviderContinuationCandidate(buildProviderContinuationCandidate(
-		strings.TrimSpace(providerCfg.ID),
-		providerType,
-		modelName,
-		providerCfg.BaseURL,
-		floretProviderStateToFlower(providerState),
-	))
+	r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
 	if ctx.Err() != nil && result.Status != flruntime.TurnStatusCompleted && result.Status != flruntime.TurnStatusWaiting {
 		return r.failRun("Floret run was canceled", ctx.Err())
 	}
 	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, mode)
 }
 
-func (r *run) loadFloretPreviousProviderState(ctx context.Context, providerCfg config.AIProvider, providerType string, modelName string) (providerTurnResumeState, *flruntime.ModelState) {
-	resumeState, err := r.loadProviderTurnResumeState(ctx, providerCfg, providerType, modelName)
-	if err != nil {
-		r.persistRunEvent("provider.continuation.load_failed", RealtimeStreamKindLifecycle, map[string]any{
-			"provider_type": providerType,
-			"error":         sanitizeLogText(err.Error(), 240),
-		})
-		return providerTurnResumeState{SkipReason: "load_failed"}, nil
-	}
-	if resumeState.Enabled {
-		r.persistRunEvent("provider.continuation.available", RealtimeStreamKindLifecycle, map[string]any{
-			"provider_type":        providerType,
-			"provider_id":          strings.TrimSpace(providerCfg.ID),
-			"model":                modelName,
-			"continuation_kind":    providerContinuationKindOpenAIResponses,
-			"previous_response_id": resumeState.PreviousResponseID,
-			"provider_base_url":    canonicalProviderContinuationBaseURL(providerType, providerCfg.BaseURL),
-		})
-		return resumeState, &flruntime.ModelState{Kind: providerContinuationKindOpenAIResponses, ID: strings.TrimSpace(resumeState.PreviousResponseID)}
-	}
-	if strings.TrimSpace(resumeState.SkipReason) != "" {
-		r.persistRunEvent("provider.continuation.skipped", RealtimeStreamKindLifecycle, map[string]any{
-			"provider_type": providerType,
-			"provider_id":   strings.TrimSpace(providerCfg.ID),
-			"model":         modelName,
-			"reason":        resumeState.SkipReason,
-		})
-	}
-	return resumeState, nil
-}
-
 func (r *run) projectFloretResult(ctx context.Context, result flruntime.ProjectedTurnResult, req RunRequest, state runtimeState, complexity string, mode string) error {
+	if !r.acceptsEngineResultProjection() {
+		return nil
+	}
 	step := result.Metrics.Steps
 	if step <= 0 {
 		step = 1
@@ -409,6 +370,9 @@ func (r *run) persistFloretNativeTurnResult(step int, result flruntime.Projected
 }
 
 func (r *run) projectFloretAskUserWaiting(step int, signal *flruntime.TurnSignal) error {
+	if !r.acceptsEngineResultProjection() {
+		return nil
+	}
 	if signal == nil {
 		return errors.New("nil ask_user control signal")
 	}
@@ -451,6 +415,9 @@ func (r *run) projectFloretAskUserWaiting(step int, signal *flruntime.TurnSignal
 }
 
 func (r *run) projectFloretExitPlanModeWaiting(step int, signal *flruntime.TurnSignal) error {
+	if !r.acceptsEngineResultProjection() {
+		return nil
+	}
 	if signal == nil {
 		return errors.New("nil exit_plan_mode control signal")
 	}

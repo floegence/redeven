@@ -14,7 +14,7 @@ func buildPromptForToolRoutingTest(t *testing.T) string {
 		AgentHomeDir: t.TempDir(),
 	})
 	tools := []ToolDef{{Name: "terminal.exec"}, {Name: "file.read"}, {Name: "okf.search"}, {Name: "web.search"}}
-	contract := resolveRunCapabilityContract(r, tools, false)
+	contract := resolveRunCapabilityContract(r, tools, nil, false)
 	return r.buildLayeredSystemPrompt("objective", "act", TaskComplexityStandard, 0, true, tools, newRuntimeState("objective"), "", contract)
 }
 

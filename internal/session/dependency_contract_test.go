@@ -108,7 +108,27 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	}
 }
 
-func TestRepositoryDoesNotUseGoWorkspaceForFlowersec(t *testing.T) {
+func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	goMod := readRepoFile(t, root, "go.mod")
+	goSum := readRepoFile(t, root, "go.sum")
+
+	if !strings.Contains(goMod, "github.com/floegence/floret v0.3.15") {
+		t.Fatalf("go.mod must depend on floret v0.3.15")
+	}
+	assertNoLocalGoModuleReference(t, "go.mod", goMod, "github.com/floegence/floret", "floret")
+	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.15 ") {
+		t.Fatalf("go.sum must include floret v0.3.15 module checksum")
+	}
+	if !strings.Contains(goSum, "github.com/floegence/floret v0.3.15/go.mod ") {
+		t.Fatalf("go.sum must include floret v0.3.15 go.mod checksum")
+	}
+	assertNoLocalGoModuleReference(t, "go.sum", goSum, "github.com/floegence/floret", "floret")
+}
+
+func TestRepositoryDoesNotUseGoWorkspaceForPublishedDependencies(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -170,6 +190,21 @@ func assertNoLocalNPMReference(t *testing.T, file string, content string) {
 						t.Fatalf("%s must not use local npm dependency reference %q for %s", file, marker, dependency)
 					}
 				}
+			}
+		}
+	}
+}
+
+func assertNoLocalGoModuleReference(t *testing.T, file string, content string, module string, sibling string) {
+	t.Helper()
+
+	if strings.Contains(content, "\nreplace ") || strings.Contains(content, "\nreplace(") {
+		t.Fatalf("%s must not use replace directives", file)
+	}
+	for _, marker := range []string{"../" + sibling, "./" + sibling, "file:", "link:", "workspace:", "portal:"} {
+		for _, line := range strings.Split(content, "\n") {
+			if strings.Contains(line, module) && strings.Contains(line, marker) {
+				t.Fatalf("%s must not reference local %s checkout via %q", file, sibling, marker)
 			}
 		}
 	}

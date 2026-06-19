@@ -211,6 +211,7 @@ func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID st
 	if err != nil {
 		return nil, err
 	}
+	turns = associateTimelineTurnAssistantMessages(turns, persistedByID)
 	activeMessageID := activeFlowerCursorMessageID(state)
 	used := map[string]struct{}{}
 	out := make([]FlowerTimelineMessage, 0, len(persistedByID)+len(state.Messages))
@@ -247,6 +248,29 @@ func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID st
 		appendByID(messageID)
 	}
 	return out, nil
+}
+
+func associateTimelineTurnAssistantMessages(turns []threadstore.ConversationTurn, messages map[string]FlowerTimelineMessage) []threadstore.ConversationTurn {
+	if len(turns) == 0 || len(messages) == 0 {
+		return turns
+	}
+	out := make([]threadstore.ConversationTurn, len(turns))
+	copy(out, turns)
+	for i := range out {
+		if strings.TrimSpace(out[i].AssistantMessageID) != "" {
+			continue
+		}
+		turnID := strings.TrimSpace(out[i].TurnID)
+		if turnID == "" {
+			continue
+		}
+		message, ok := messages[turnID]
+		if !ok || strings.TrimSpace(message.Role) != "assistant" {
+			continue
+		}
+		out[i].AssistantMessageID = turnID
+	}
+	return out
 }
 
 func activeFlowerCursorMessageID(state FlowerLiveMaterializedState) string {
@@ -1239,10 +1263,34 @@ func (r *run) toolApprovalActionLocked(toolID string, approval *toolApprovalRequ
 		CanApprove:    true,
 		Summary: FlowerApprovalSummary{
 			Label:       toolApprovalLabel(toolName),
-			Description: "Review this tool before it runs.",
-			Effects:     toolApprovalEffects(toolName),
+			Description: toolApprovalDescription(approval),
+			Effects:     toolApprovalSummaryEffects(toolName, approval),
+			Flags:       append([]string(nil), approval.flags...),
+			Targets:     append([]FlowerSafeTarget(nil), approval.targets...),
 		},
 	}
+}
+
+func toolApprovalDescription(approval *toolApprovalRequest) string {
+	if approval == nil {
+		return "Review this tool before it runs."
+	}
+	for _, target := range approval.targets {
+		if label := strings.TrimSpace(target.Label); label != "" {
+			return "Review access to " + label + " before this tool runs."
+		}
+	}
+	if hash := strings.TrimSpace(approval.argsHash); hash != "" {
+		return "Review this tool before it runs. Arguments hash: " + hash
+	}
+	return "Review this tool before it runs."
+}
+
+func toolApprovalSummaryEffects(toolName string, approval *toolApprovalRequest) []string {
+	if approval != nil && len(approval.effects) > 0 {
+		return append([]string(nil), approval.effects...)
+	}
+	return toolApprovalEffects(toolName)
 }
 
 func flowerApprovalActionFromActivity(runID string, item observation.ActivityItem) FlowerApprovalAction {

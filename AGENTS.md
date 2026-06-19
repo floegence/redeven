@@ -223,6 +223,42 @@ Rules:
   - confirm the release artifacts are available;
   - then upgrade `redeven` to the published version.
 
+## Flower / Floret Boundary
+
+Redeven consumes Floret only through published `github.com/floegence/floret`
+module versions. Do not use `replace`, `go.work`, `go.work.sum`, local sibling
+paths, package-manager links, or build aliases to point Redeven at a local
+Floret checkout. Run Floret dependency checks with `GOWORK=off`.
+
+Flower and Redeven own product policy, concrete tool implementations, durable
+threads, canonical Flower timeline projection, Desktop and Env App adapters,
+provider credentials, provider profiles, provider-specific persistence, session
+grants, filesystem scope, target routing, approval UI, and product modes.
+
+Floret owns the reusable agent-engine lifecycle consumed by Redeven: provider
+loop execution, tool dispatch lifecycle, tool permission/resource/approval
+lifecycle, runtime streaming observation, core control-signal handling, and
+opaque model state lifecycle.
+
+Redeven code must not bypass those Floret lifecycles:
+- tool approval must flow through Floret `PermissionSpec`, resource extraction,
+  and `Approver`;
+- provider adapters may map provider bytes to Floret `ModelEvent`, but must not
+  mutate Flower run state, assistant blocks, cursor state, transcript rows, or
+  activity timeline directly;
+- tool handlers may execute already-approved domain actions, but must not run
+  user approval waits or policy deny gates that belong before Floret dispatch;
+- control signals must not be registered as ordinary tools;
+- provider continuation state must enter persistence from the Floret result or
+  runtime lifecycle, not from adapter-only side caches;
+- activity presentation must use Redeven's `ToolPresentationSpec` projection as
+  the single product display source.
+
+Do not move Redeven product concerns into Floret to satisfy short-term
+integration needs. If a future design intentionally changes this boundary, it
+must first update the Floret and Redeven public contracts, AGENTS rules, OKF,
+tests, and published Floret release notes.
+
 ## UI Interaction Affordance
 
 - Any clickable or directly interactive UI control must expose a pointer cursor while it is interactive.
@@ -299,6 +335,7 @@ Run the CI-aligned checks and local-only pre-commit checks before integration:
 - `bash -n scripts/check_gateway_protocol_contract.sh`
 - `bash -n scripts/check_runtime_compatibility_contract.sh`
 - `bash -n scripts/check_flower_live_protocol.sh`
+- `bash -n scripts/check_flower_ui.sh`
 - `bash -n scripts/ui_package_common.sh`
 - `bash -n scripts/open_source_hygiene_check.sh`
 - `bash -n scripts/install_git_hooks.sh`
@@ -309,6 +346,7 @@ Run the CI-aligned checks and local-only pre-commit checks before integration:
 - `./scripts/check_runtime_compatibility_contract.sh --source-only`
 - `./scripts/check_gateway_protocol_contract.sh`
 - `./scripts/check_flower_live_protocol.sh`
+- `./scripts/check_flower_ui.sh`
 - `./scripts/check_desktop.sh`
 - `./scripts/check_docker_runtime_e2e.sh`
 - `./scripts/open_source_hygiene_check.sh --staged`

@@ -932,7 +932,7 @@ func sanitizeReadonlyAllowlist(allowlist []string) []string {
 
 func sanitizeSubagentToolAllowlist(allowlist []string, fallback []string, readonlyOnly bool) []string {
 	defByName := make(map[string]ToolDef)
-	for _, def := range builtInToolDefinitions() {
+	for _, def := range builtInModelCapabilityDefinitions() {
 		name := strings.TrimSpace(def.Name)
 		if name == "" {
 			continue
@@ -1180,6 +1180,8 @@ func (m *subagentManager) runTask(task *subagentTask, firstInput string) {
 			ToolAllowlist:         append([]string(nil), task.allowedTools...),
 			ForceReadonlyExec:     task.forceReadonlyExec,
 			NoUserInteraction:     true,
+			WebSearchToolEnabled:  m.parent.webSearchToolEnabled,
+			WebSearchMode:         m.parent.webSearchMode,
 			ToolTargetPolicy:      m.parent.toolTargetPolicy,
 			TargetToolExecutor:    m.parent.targetToolExecutor,
 		})
@@ -2089,7 +2091,7 @@ func parseIntRaw(v any, fallback int) int {
 }
 
 func defaultSubagentToolAllowlistReadonly() []string {
-	defs := builtInToolDefinitions()
+	defs := builtInModelCapabilityDefinitions()
 	out := make([]string, 0, len(defs))
 	for _, def := range defs {
 		if def.Mutating {
@@ -2108,7 +2110,7 @@ func defaultSubagentToolAllowlistReadonly() []string {
 }
 
 func defaultSubagentToolAllowlistWorker() []string {
-	defs := builtInToolDefinitions()
+	defs := builtInModelCapabilityDefinitions()
 	out := make([]string, 0, len(defs))
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)

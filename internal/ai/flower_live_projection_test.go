@@ -121,6 +121,77 @@ func TestBuildFlowerTimelineMessagesUsesCanonicalTurnOrder(t *testing.T) {
 	}
 }
 
+func TestBuildFlowerTimelineMessagesKeepsLateCanceledAssistantWithItsTurn(t *testing.T) {
+	ctx := context.Background()
+	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	endpointID := "env_flower_stop_send_late_cancel"
+	threadID := "thread_flower_stop_send_late_cancel"
+	if err := store.CreateThread(ctx, threadstore.Thread{
+		ThreadID:   threadID,
+		EndpointID: endpointID,
+		Title:      "late cancel",
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	appendFlowerTimelineTestMessage(t, store, endpointID, threadID, "msg-user-1", "user", "first request", 1_000)
+	appendFlowerTimelineTestMessage(t, store, endpointID, threadID, "msg-user-2", "user", "second request", 3_000)
+	appendFlowerTimelineTestMessage(t, store, endpointID, threadID, "msg-assistant-1", "assistant", "partial first answer", 2_000)
+	if err := store.AppendConversationTurn(ctx, threadstore.ConversationTurn{
+		TurnID:          "msg-assistant-1",
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		RunID:           "run-1",
+		UserMessageID:   "msg-user-1",
+		CreatedAtUnixMs: 1_000,
+	}); err != nil {
+		t.Fatalf("AppendConversationTurn(run-1): %v", err)
+	}
+	if err := store.AppendConversationTurn(ctx, threadstore.ConversationTurn{
+		TurnID:          "msg-assistant-2",
+		EndpointID:      endpointID,
+		ThreadID:        threadID,
+		RunID:           "run-2",
+		UserMessageID:   "msg-user-2",
+		CreatedAtUnixMs: 3_000,
+	}); err != nil {
+		t.Fatalf("AppendConversationTurn(run-2): %v", err)
+	}
+
+	svc := &Service{threadsDB: store}
+	timeline, err := svc.buildFlowerTimelineMessages(ctx, endpointID, threadID, FlowerLiveMaterializedState{
+		Messages: map[string]FlowerLiveMessageDraft{
+			"msg-assistant-2": {
+				MessageID:   "msg-assistant-2",
+				Role:        "assistant",
+				Status:      "streaming",
+				CreatedAtMs: 4_000,
+				Blocks:      []FlowerLiveBlock{{Type: "markdown", Content: "second answer streaming"}},
+			},
+		},
+		Runs:            map[string]FlowerLiveRunState{"run-2": {RunID: "run-2", Status: string(RunStateRunning), MessageID: "msg-assistant-2"}},
+		ApprovalActions: map[string]FlowerApprovalAction{},
+		InputRequests:   map[string]RequestUserInputPrompt{},
+	})
+	if err != nil {
+		t.Fatalf("buildFlowerTimelineMessages: %v", err)
+	}
+
+	gotIDs := make([]string, 0, len(timeline))
+	for _, message := range timeline {
+		gotIDs = append(gotIDs, message.MessageID)
+	}
+	wantIDs := []string{"msg-user-1", "msg-assistant-1", "msg-user-2", "msg-assistant-2"}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("timeline ids=%v, want %v", gotIDs, wantIDs)
+	}
+}
+
 func TestBuildFlowerTimelineMessagesPreservesPersistedContextAction(t *testing.T) {
 	ctx := context.Background()
 	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))

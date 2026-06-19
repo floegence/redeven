@@ -1,7 +1,12 @@
 package ai
 
 import (
+	"context"
+	"encoding/json"
+	"io"
+	"log/slog"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -9,7 +14,84 @@ import (
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/config"
+	"github.com/floegence/redeven/internal/session"
 )
+
+type capturingTurnProvider struct {
+	mu       sync.Mutex
+	requests []TurnRequest
+}
+
+func (p *capturingTurnProvider) StreamTurn(_ context.Context, req TurnRequest, _ func(StreamEvent)) (TurnResult, error) {
+	p.mu.Lock()
+	p.requests = append(p.requests, req)
+	p.mu.Unlock()
+	return TurnResult{FinishReason: "stop", Text: "done"}, nil
+}
+
+func (p *capturingTurnProvider) firstRequest() TurnRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if len(p.requests) == 0 {
+		return TurnRequest{}
+	}
+	return p.requests[0]
+}
+
+func TestRunNativeProjectsWebSearchToolThroughFloretGateway(t *testing.T) {
+	t.Parallel()
+
+	provider := &capturingTurnProvider{}
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "bash",
+		AIConfig:     &config.AIConfig{},
+		SessionMeta: &session.Meta{
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+		RunID:     "run_floret_web_search_tool",
+		ThreadID:  "thread_floret_web_search_tool",
+		MessageID: "msg_floret_web_search_tool",
+	})
+	err := r.runNative(t.Context(), RunRequest{
+		Model: "compat/gpt-5-mini",
+		Input: RunInput{Text: "search the web"},
+		Options: RunOptions{
+			Mode: config.AIModePlan,
+		},
+	}, config.AIProvider{
+		ID:      "compat",
+		Type:    "openai_compatible",
+		BaseURL: "https://example.test/v1",
+		WebSearch: &config.AIProviderWebSearch{
+			Mode: config.AIProviderWebSearchModeBrave,
+		},
+	}, "sk-test", "search the web", provider)
+	if err != nil {
+		t.Fatalf("runNative: %v", err)
+	}
+	req := provider.firstRequest()
+	if !containsString(toolDefNames(req.Tools), "web.search") {
+		t.Fatalf("provider tools=%v, want web.search", toolDefNames(req.Tools))
+	}
+	if req.WebSearchMode != providerWebSearchModeExternalBrave {
+		t.Fatalf("WebSearchMode=%q, want %q", req.WebSearchMode, providerWebSearchModeExternalBrave)
+	}
+}
+
+func toolDefNames(defs []ToolDef) []string {
+	out := make([]string, 0, len(defs))
+	for _, def := range defs {
+		if name := strings.TrimSpace(def.Name); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
+}
 
 func TestFloretEventSinkDoesNotProjectSanitizedProviderText(t *testing.T) {
 	t.Parallel()
@@ -29,6 +111,94 @@ func TestFloretEventSinkDoesNotProjectSanitizedProviderText(t *testing.T) {
 
 	if len(r.assistantBlocks) != 0 || len(events) != 0 {
 		t.Fatalf("provider event sink wrote assistant output: blocks=%#v events=%#v", r.assistantBlocks, events)
+	}
+}
+
+func TestFloretEventSinkProjectsStreamObservationDeltas(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 4)
+	r := &run{
+		messageID:                 "msg_floret_stream",
+		onStreamEvent:             func(ev any) { events = append(events, ev) },
+		currentTextBlockIndex:     -1,
+		currentThinkingBlockIndex: -1,
+		needNewTextBlock:          true,
+		needNewThinkingBlock:      true,
+	}
+	sink := floretEventSink{run: r}
+	sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: "thinking"}})
+	sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "answer"}})
+
+	if len(r.assistantBlocks) != 2 {
+		t.Fatalf("assistantBlocks len=%d, want thinking and markdown: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+	thinking, ok := r.assistantBlocks[0].(*persistedThinkingBlock)
+	if !ok || thinking.Content != "thinking" {
+		t.Fatalf("assistantBlocks[0]=%T %+v, want thinking", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+	markdown, ok := r.assistantBlocks[1].(*persistedMarkdownBlock)
+	if !ok || markdown.Content != "answer" {
+		t.Fatalf("assistantBlocks[1]=%T %+v, want answer", r.assistantBlocks[1], r.assistantBlocks[1])
+	}
+	if len(events) != 4 {
+		t.Fatalf("stream events=%d, want block start/delta pairs: %#v", len(events), events)
+	}
+}
+
+func TestFloretEventSinkPreservesWhitespaceStreamObservationDeltas(t *testing.T) {
+	t.Parallel()
+
+	r := &run{
+		messageID:                 "msg_floret_stream_whitespace",
+		onStreamEvent:             func(any) {},
+		currentTextBlockIndex:     -1,
+		currentThinkingBlockIndex: -1,
+		needNewTextBlock:          true,
+		needNewThinkingBlock:      true,
+	}
+	sink := floretEventSink{run: r}
+	for _, text := range []string{"foo", " ", "bar", "\n"} {
+		sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: text}})
+	}
+	for _, text := range []string{"think", " ", "step", "\n"} {
+		sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: text}})
+	}
+
+	var markdown *persistedMarkdownBlock
+	var thinking *persistedThinkingBlock
+	for _, block := range r.assistantBlocks {
+		switch typed := block.(type) {
+		case *persistedMarkdownBlock:
+			markdown = typed
+		case *persistedThinkingBlock:
+			thinking = typed
+		}
+	}
+	if markdown == nil || markdown.Content != "foo bar\n" {
+		t.Fatalf("markdown=%#v, want preserved whitespace", markdown)
+	}
+	if thinking == nil || thinking.Content != "think step\n" {
+		t.Fatalf("thinking=%#v, want preserved whitespace", thinking)
+	}
+}
+
+func TestFloretEventSinkRecordsSourceObservations(t *testing.T) {
+	t.Parallel()
+
+	r := &run{}
+	sink := floretEventSink{run: r}
+	sink.EmitEvent(flruntime.Event{Sources: []flruntime.SourceRef{{
+		Title: "Example docs",
+		URL:   "https://example.test/docs",
+	}}})
+
+	if len(r.collectedWebSourceOrder) != 1 {
+		t.Fatalf("source order=%#v", r.collectedWebSourceOrder)
+	}
+	got := r.collectedWebSources["https://example.test/docs"]
+	if got.Title != "Example docs" || got.URL != "https://example.test/docs" {
+		t.Fatalf("source=%#v", got)
 	}
 }
 
@@ -320,5 +490,76 @@ func TestFlowerMessagesToFloretRejectsUnsupportedRole(t *testing.T) {
 	_, err := flowerMessagesToFloret([]Message{{Role: "developer"}})
 	if err == nil || !strings.Contains(err.Error(), "unsupported role") {
 		t.Fatalf("error=%v, want unsupported role rejection", err)
+	}
+}
+
+func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 4)
+	r := newRun(runOptions{})
+	r.id = "run_floret_detached_result"
+	r.threadID = "thread_floret_detached_result"
+	r.messageID = "msg_floret_detached_result"
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+	r.markDetached()
+
+	err := r.projectFloretResult(
+		t.Context(),
+		flruntime.ProjectedTurnResult{
+			Status:  flruntime.TurnStatusCompleted,
+			Output:  "Late final answer.",
+			Metrics: flruntime.RunMetrics{Steps: 1},
+		},
+		RunRequest{},
+		newRuntimeState(""),
+		TaskComplexityStandard,
+		config.AIModeAct,
+	)
+	if err != nil {
+		t.Fatalf("projectFloretResult completed: %v", err)
+	}
+	err = r.projectFloretResult(
+		t.Context(),
+		flruntime.ProjectedTurnResult{
+			Status:  flruntime.TurnStatusWaiting,
+			Metrics: flruntime.RunMetrics{Steps: 2},
+			Signal: &flruntime.TurnSignal{
+				Name: "ask_user",
+				Payload: map[string]any{
+					"questions": []any{map[string]any{"id": "q1", "question": "Late question?"}},
+				},
+			},
+		},
+		RunRequest{},
+		newRuntimeState(""),
+		TaskComplexityStandard,
+		config.AIModeAct,
+	)
+	if err != nil {
+		t.Fatalf("projectFloretResult waiting: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("stream events=%d, want none after detach: %#v", len(events), events)
+	}
+	if r.getEndReason() != "" || r.getFinalizationReason() != "" {
+		t.Fatalf("detached result mutated final state: end=%q final=%q", r.getEndReason(), r.getFinalizationReason())
+	}
+	if r.waitingPrompt != nil {
+		t.Fatalf("detached waiting result set waiting prompt: %#v", r.waitingPrompt)
+	}
+	raw, text, _, err := r.snapshotAssistantMessageJSONWithStatus("canceled")
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSONWithStatus: %v", err)
+	}
+	if text != "" {
+		t.Fatalf("assistant text=%q, want empty canceled boundary", text)
+	}
+	var msg persistedMessage
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		t.Fatalf("unmarshal snapshot: %v", err)
+	}
+	if msg.Status != "canceled" || len(msg.Blocks) != 0 {
+		t.Fatalf("snapshot status=%q blocks=%d, want canceled empty boundary", msg.Status, len(msg.Blocks))
 	}
 }

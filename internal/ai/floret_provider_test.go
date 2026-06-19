@@ -2,14 +2,13 @@ package ai
 
 import (
 	"context"
-	"net/http"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
-	openai "github.com/openai/openai-go"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
 )
@@ -23,29 +22,13 @@ func (p *recordingFlowerProvider) StreamTurn(_ context.Context, req TurnRequest,
 	return TurnResult{FinishReason: "stop", Text: "ok"}, nil
 }
 
-type replayingFlowerProvider struct {
+type rejectedContinuationFlowerProvider struct {
 	requests []TurnRequest
 }
 
-func (p *replayingFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, _ func(StreamEvent)) (TurnResult, error) {
+func (p *rejectedContinuationFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, _ func(StreamEvent)) (TurnResult, error) {
 	p.requests = append(p.requests, req)
-	if len(p.requests) == 1 {
-		return TurnResult{}, &openai.Error{
-			StatusCode: http.StatusBadRequest,
-			Code:       "invalid_previous_response_id",
-			Param:      "previous_response_id",
-			Type:       "invalid_request_error",
-			Message:    "invalid previous_response_id",
-		}
-	}
-	return TurnResult{
-		FinishReason: "stop",
-		Text:         "ok",
-		ProviderState: &TurnProviderState{
-			ContinuationKind: providerContinuationKindOpenAIResponses,
-			ContinuationID:   "resp_next",
-		},
-	}, nil
+	return TurnResult{}, errors.New("invalid previous_response_id")
 }
 
 func TestFloretProviderAdapter_DisableReasoningControlsProviderRequest(t *testing.T) {
@@ -60,8 +43,6 @@ func TestFloretProviderAdapter_DisableReasoningControlsProviderRequest(t *testin
 		ProviderControls{ThinkingBudgetTokens: 4096},
 		TurnBudgets{},
 		"",
-		nil,
-		nil,
 	)
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		ThreadID:         "thread",
@@ -92,6 +73,7 @@ type reasoningFlowerProvider struct {
 	resultReasoning string
 	resultText      string
 	omitResultText  bool
+	sources         []SourceRef
 }
 
 func (p reasoningFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
@@ -106,6 +88,7 @@ func (p reasoningFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, 
 		FinishReason: "stop",
 		Text:         text,
 		Reasoning:    p.resultReasoning,
+		Sources:      append([]SourceRef(nil), p.sources...),
 	}, nil
 }
 
@@ -146,10 +129,7 @@ func newFloretProviderAdapterRunTest(t *testing.T, provider Provider) (*floretPr
 		ProviderControls{},
 		TurnBudgets{},
 		"",
-		nil,
-		nil,
 	)
-	adapter.bindStreamRun(r)
 	return adapter, r, store, &events
 }
 
@@ -165,8 +145,6 @@ func TestFloretProviderAdapter_UsesRedevenModelNameInsteadOfFloretPlaceholder(t 
 		ProviderControls{},
 		TurnBudgets{},
 		"",
-		nil,
-		nil,
 	)
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Model:    "redeven-model-adapter",
@@ -194,8 +172,6 @@ func TestFloretProviderAdapter_UsesProjectedPreviousState(t *testing.T) {
 		ProviderControls{},
 		TurnBudgets{},
 		"",
-		[]flruntime.TranscriptMessage{{Role: "user", Content: "resume turn"}},
-		nil,
 	)
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Step:            1,
@@ -212,15 +188,15 @@ func TestFloretProviderAdapter_UsesProjectedPreviousState(t *testing.T) {
 	if recorder.req.ProviderControls.PreviousResponseID != "resp_prev" {
 		t.Fatalf("PreviousResponseID=%q, want resp_prev", recorder.req.ProviderControls.PreviousResponseID)
 	}
-	if len(recorder.req.Messages) != 1 || messageTextForFloret(recorder.req.Messages[0], true) != "resume turn" {
-		t.Fatalf("messages=%#v, want projected resume history", recorder.req.Messages)
+	if len(recorder.req.Messages) != 1 || messageTextForFloret(recorder.req.Messages[0], true) != "full history" {
+		t.Fatalf("messages=%#v, want Floret-projected history", recorder.req.Messages)
 	}
 }
 
-func TestFloretProviderAdapter_ReplaysWithoutRejectedPreviousResponseID(t *testing.T) {
+func TestFloretProviderAdapter_EmitsErrorForRejectedPreviousResponseIDWithoutReplay(t *testing.T) {
 	t.Parallel()
 
-	recorder := &replayingFlowerProvider{}
+	recorder := &rejectedContinuationFlowerProvider{}
 	adapter := newFloretProviderAdapter(
 		recorder,
 		"openai",
@@ -229,8 +205,6 @@ func TestFloretProviderAdapter_ReplaysWithoutRejectedPreviousResponseID(t *testi
 		ProviderControls{},
 		TurnBudgets{},
 		"",
-		[]flruntime.TranscriptMessage{{Role: "user", Content: "resume turn"}},
-		nil,
 	)
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Step:            1,
@@ -242,53 +216,36 @@ func TestFloretProviderAdapter_ReplaysWithoutRejectedPreviousResponseID(t *testi
 	if err != nil {
 		t.Fatalf("StreamModel: %v", err)
 	}
-	var terminal *flruntime.ModelEvent
+	var errorEvent *flruntime.ModelEvent
+	var doneEvent *flruntime.ModelEvent
 	for event := range stream {
-		if event.Type == flruntime.ModelEventDone {
+		switch event.Type {
+		case flruntime.ModelEventError:
 			ev := event
-			terminal = &ev
+			errorEvent = &ev
+		case flruntime.ModelEventDone:
+			ev := event
+			doneEvent = &ev
 		}
 	}
-	if len(recorder.requests) != 2 {
-		t.Fatalf("request count=%d, want 2", len(recorder.requests))
+	if len(recorder.requests) != 1 {
+		t.Fatalf("request count=%d, want 1", len(recorder.requests))
 	}
 	if got := recorder.requests[0].ProviderControls.PreviousResponseID; got != "resp_prev" {
-		t.Fatalf("first PreviousResponseID=%q, want resp_prev", got)
+		t.Fatalf("PreviousResponseID=%q, want resp_prev", got)
 	}
-	if got := recorder.requests[1].ProviderControls.PreviousResponseID; got != "" {
-		t.Fatalf("replay PreviousResponseID=%q, want empty", got)
+	if len(recorder.requests[0].Messages) != 1 || messageTextForFloret(recorder.requests[0].Messages[0], true) != "full history" {
+		t.Fatalf("messages=%#v, want Floret-projected history", recorder.requests[0].Messages)
 	}
-	if len(recorder.requests[1].Messages) != 1 || messageTextForFloret(recorder.requests[1].Messages[0], true) != "full history" {
-		t.Fatalf("replay messages=%#v, want full projected history", recorder.requests[1].Messages)
+	if errorEvent == nil || errorEvent.Err == nil || !strings.Contains(errorEvent.Reason, "previous_response_id") {
+		t.Fatalf("error event=%#v, want rejected continuation error", errorEvent)
 	}
-	if terminal == nil || terminal.ResponseState == nil || terminal.ResponseState.ID != "resp_next" {
-		t.Fatalf("terminal event=%#v, want resp_next state", terminal)
-	}
-}
-
-func TestFloretProviderAdapter_KeepsLastNonNilProviderState(t *testing.T) {
-	t.Parallel()
-
-	adapter := newFloretProviderAdapter(
-		&recordingFlowerProvider{},
-		"openai",
-		"gpt-5-mini",
-		"act",
-		ProviderControls{},
-		TurnBudgets{},
-		"",
-		nil,
-		nil,
-	)
-	adapter.setCurrentProviderState(&flruntime.ModelState{Kind: providerContinuationKindOpenAIResponses, ID: "resp_keep"})
-	adapter.setCurrentProviderState(nil)
-	got := adapter.currentProviderState()
-	if got == nil || got.ID != "resp_keep" {
-		t.Fatalf("currentProviderState=%#v, want last non-nil state", got)
+	if doneEvent != nil {
+		t.Fatalf("done event=%#v, want no terminal success after rejected continuation", doneEvent)
 	}
 }
 
-func TestFloretProviderAdapter_StreamsReasoningWithoutRunEvent(t *testing.T) {
+func TestFloretProviderAdapter_StreamsReasoningWithoutMutatingRun(t *testing.T) {
 	t.Parallel()
 
 	adapter, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
@@ -311,26 +268,8 @@ func TestFloretProviderAdapter_StreamsReasoningWithoutRunEvent(t *testing.T) {
 	if !reasoningEventSeen {
 		t.Fatalf("missing ModelEventReasoning for streamed reasoning")
 	}
-
-	if len(r.assistantBlocks) != 2 {
-		t.Fatalf("assistantBlocks len=%d, want thinking and markdown blocks: %#v", len(r.assistantBlocks), r.assistantBlocks)
-	}
-	thinking, ok := r.assistantBlocks[0].(*persistedThinkingBlock)
-	if !ok || thinking == nil || thinking.Content != "Inspecting sources." {
-		t.Fatalf("assistantBlocks[0]=%T %+v, want streamed thinking block", r.assistantBlocks[0], r.assistantBlocks[0])
-	}
-	markdown, ok := r.assistantBlocks[1].(*persistedMarkdownBlock)
-	if !ok || markdown == nil || markdown.Content != "Final answer." {
-		t.Fatalf("assistantBlocks[1]=%T %+v, want final markdown block", r.assistantBlocks[1], r.assistantBlocks[1])
-	}
-	if len(*events) != 4 {
-		t.Fatalf("stream events=%d, want thinking start/delta and markdown start/delta: %#v", len(*events), *events)
-	}
-	if ev, ok := (*events)[0].(streamEventBlockStart); !ok || ev.BlockType != "thinking" || ev.BlockIndex != 0 {
-		t.Fatalf("event[0]=%T %+v, want thinking block-start", (*events)[0], (*events)[0])
-	}
-	if ev, ok := (*events)[1].(streamEventBlockDelta); !ok || ev.BlockIndex != 0 || ev.Delta != "Inspecting sources." {
-		t.Fatalf("event[1]=%T %+v, want thinking block-delta", (*events)[1], (*events)[1])
+	if len(r.assistantBlocks) != 0 || len(*events) != 0 {
+		t.Fatalf("provider adapter must not mutate run stream state: blocks=%#v events=%#v", r.assistantBlocks, *events)
 	}
 
 	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 20)
@@ -342,10 +281,10 @@ func TestFloretProviderAdapter_StreamsReasoningWithoutRunEvent(t *testing.T) {
 	}
 }
 
-func TestFloretProviderAdapter_ResultReasoningFallbackWithoutRunEvent(t *testing.T) {
+func TestFloretProviderAdapter_ResultReasoningFallbackDoesNotMutateRun(t *testing.T) {
 	t.Parallel()
 
-	adapter, r, store, _ := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+	adapter, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
 		resultReasoning: "Fallback reasoning.",
 		omitResultText:  true,
 	})
@@ -365,13 +304,8 @@ func TestFloretProviderAdapter_ResultReasoningFallbackWithoutRunEvent(t *testing
 	if !reasoningEventSeen {
 		t.Fatalf("missing ModelEventReasoning for result reasoning fallback")
 	}
-
-	if len(r.assistantBlocks) != 1 {
-		t.Fatalf("assistantBlocks len=%d, want thinking block: %#v", len(r.assistantBlocks), r.assistantBlocks)
-	}
-	thinking, ok := r.assistantBlocks[0].(*persistedThinkingBlock)
-	if !ok || thinking == nil || thinking.Content != "Fallback reasoning." {
-		t.Fatalf("assistantBlocks[0]=%T %+v, want fallback thinking block", r.assistantBlocks[0], r.assistantBlocks[0])
+	if len(r.assistantBlocks) != 0 || len(*events) != 0 {
+		t.Fatalf("provider adapter must not mutate run stream state: blocks=%#v events=%#v", r.assistantBlocks, *events)
 	}
 
 	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 20)
@@ -383,23 +317,57 @@ func TestFloretProviderAdapter_ResultReasoningFallbackWithoutRunEvent(t *testing
 	}
 }
 
-func TestFloretProviderAdapter_PersistsThinkingInTranscriptOnly(t *testing.T) {
+func TestFloretProviderAdapter_EmitsSourcesWithoutMutatingRun(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	adapter, r, store, _ := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
-		streamReasoning: "Inspecting transcript contract.",
-		resultText:      "Final transcript answer.",
+	adapter, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+		resultText: "Final answer.",
+		sources: []SourceRef{{
+			Title: "Example docs",
+			URL:   "https://example.test/docs",
+		}},
 	})
-	stream, err := adapter.StreamModel(ctx, flruntime.ModelRequest{
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Model:    "gpt-5-mini",
-		Messages: []flruntime.ModelMessage{{Role: "user", Content: "answer"}},
+		Messages: []flruntime.ModelMessage{{Role: "user", Content: "cite"}},
 	})
 	if err != nil {
 		t.Fatalf("StreamModel: %v", err)
 	}
-	for range stream {
+	var sourceEvent *flruntime.ModelEvent
+	for event := range stream {
+		if event.Type == flruntime.ModelEventSources {
+			ev := event
+			sourceEvent = &ev
+		}
 	}
+	if sourceEvent == nil || len(sourceEvent.Sources) != 1 || sourceEvent.Sources[0].URL != "https://example.test/docs" {
+		t.Fatalf("source event=%#v", sourceEvent)
+	}
+	if len(r.collectedWebSources) != 0 || len(*events) != 0 {
+		t.Fatalf("provider adapter must not mutate run source state: sources=%#v events=%#v", r.collectedWebSources, *events)
+	}
+
+	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 20)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	if len(runEvents) != 0 {
+		t.Fatalf("run events=%#v, want none for provider sources", runEvents)
+	}
+}
+
+func TestFloretProviderAdapter_PersistsThinkingInTranscriptOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	_, r, store, _ := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+		streamReasoning: "Inspecting transcript contract.",
+		resultText:      "Final transcript answer.",
+	})
+	sink := floretEventSink{run: r}
+	sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: "Inspecting transcript contract."}})
+	sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "Final transcript answer."}})
 
 	r.assistantCreatedAtUnixMs = 1700000000000
 	assistantJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()

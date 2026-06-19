@@ -1,7 +1,12 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -9,6 +14,7 @@ import (
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
+	"github.com/floegence/redeven/internal/session"
 )
 
 func TestRecordObservationActivityEventPublishesFloretTimelineBlock(t *testing.T) {
@@ -66,6 +72,93 @@ func TestRecordObservationActivityEventPublishesFloretTimelineBlock(t *testing.T
 	}
 	if item.StartedAtUnixMS != 1000 || item.EndedAtUnixMS != 1200 {
 		t.Fatalf("item timing=%+v", item)
+	}
+}
+
+func TestDetachedRunIgnoresPresentationUpdates(t *testing.T) {
+	t.Parallel()
+
+	var events []any
+	r := &run{
+		id:                        "run_detached_presentation",
+		threadID:                  "thread_detached_presentation",
+		messageID:                 "msg_detached_presentation",
+		activitySegmentBlockIndex: -1,
+		activitySegmentEvents:     make([]observation.Event, 0, 4),
+		currentThinkingBlockIndex: -1,
+		onStreamEvent: func(ev any) {
+			events = append(events, ev)
+		},
+	}
+
+	r.markDetached()
+	if err := r.appendTextDelta("late answer"); err != nil {
+		t.Fatalf("appendTextDelta: %v", err)
+	}
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolResult,
+		ToolID:     "tool_late_terminal",
+		ToolName:   "terminal.exec",
+		ObservedAt: time.UnixMilli(1200),
+	})
+	r.applyFloretStreamObservation(&flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "late floret"})
+
+	if len(events) != 0 {
+		t.Fatalf("stream events=%d, want none after detach", len(events))
+	}
+	raw, text, _, err := r.snapshotAssistantMessageJSONWithStatus("canceled")
+	if err != nil {
+		t.Fatalf("snapshotAssistantMessageJSONWithStatus: %v", err)
+	}
+	if text != "" {
+		t.Fatalf("assistant text=%q, want empty canceled boundary", text)
+	}
+	var msg persistedMessage
+	if err := json.Unmarshal([]byte(raw), &msg); err != nil {
+		t.Fatalf("unmarshal snapshot: %v", err)
+	}
+	if msg.Status != "canceled" || len(msg.Blocks) != 0 {
+		t.Fatalf("snapshot status=%q blocks=%d, want canceled empty boundary", msg.Status, len(msg.Blocks))
+	}
+}
+
+func TestHandleToolCallDoesNotEmitActivityTimeline(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "note.txt"), []byte("hello\n"), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	var frames []ActivityTimelineBlock
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir: workspace,
+		WorkingDir:   workspace,
+		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+		RunID:        "run_handler_activity_source",
+		EndpointID:   "env_handler_activity_source",
+		ThreadID:     "thread_handler_activity_source",
+		MessageID:    "msg_handler_activity_source",
+		OnStreamEvent: func(ev any) {
+			bs, ok := ev.(streamEventBlockSet)
+			if !ok {
+				return
+			}
+			if block, ok := bs.Block.(ActivityTimelineBlock); ok {
+				frames = append(frames, block)
+			}
+		},
+	})
+
+	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{"file_path": "note.txt"})
+	if err != nil {
+		t.Fatalf("handleToolCall: %v", err)
+	}
+	if outcome == nil || !outcome.Success {
+		t.Fatalf("outcome=%#v, want successful file.read", outcome)
+	}
+	if len(frames) != 0 {
+		t.Fatalf("activity frames=%d, want handleToolCall to leave activity emission to Floret observations", len(frames))
 	}
 }
 
@@ -157,7 +250,7 @@ func TestToolStartActivityPresentationUsesFriendlyNonTerminalLabels(t *testing.T
 			name:     "okf search fallback",
 			toolName: "okf.search",
 			args:     map[string]any{},
-			label:    okfKnowledgeActivityLabel,
+			label:    aitools.MustPresentationSpec("okf.search").CallLabelFallback,
 			renderer: observation.ActivityRendererStructured,
 		},
 		{
