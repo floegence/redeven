@@ -8,6 +8,7 @@ import (
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
 type floretControlProjector struct {
@@ -41,9 +42,17 @@ func (p floretControlProjector) Project(call fltools.ToolCall) (flruntime.TurnSi
 	}
 	switch strings.TrimSpace(flowerCall.Name) {
 	case "task_complete":
-		return p.projectTaskComplete(flowerCall), true, nil
+		core, _, err := flruntime.ProjectCoreControlSignal(call)
+		if err != nil {
+			return flruntime.TurnSignal{}, true, err
+		}
+		return p.projectTaskComplete(flowerCall, core), true, nil
 	case "ask_user":
-		signal, err := p.projectAskUser(flowerCall)
+		core, _, err := flruntime.ProjectCoreControlSignal(call)
+		if err != nil {
+			return flruntime.TurnSignal{}, true, err
+		}
+		signal, err := p.projectAskUser(flowerCall, core)
 		return signal, true, err
 	case "exit_plan_mode":
 		signal, err := p.projectExitPlanMode(flowerCall)
@@ -53,11 +62,14 @@ func (p floretControlProjector) Project(call fltools.ToolCall) (flruntime.TurnSi
 	}
 }
 
-func (p floretControlProjector) projectTaskComplete(call ToolCall) flruntime.TurnSignal {
-	resultText := extractSignalText(call, "result")
+func (p floretControlProjector) projectTaskComplete(call ToolCall, core flruntime.TurnSignal) flruntime.TurnSignal {
+	resultText := firstNonEmptyString(core.OutputText, extractSignalText(call, "result"), extractSignalText(call, "output"))
 	evidenceRefs := extractSignalStringList(call, "evidence_refs")
 	payload := cloneAnyMap(call.Args)
 	payload["result"] = resultText
+	if _, ok := payload["output"]; !ok && resultText != "" {
+		payload["output"] = resultText
+	}
 	if len(evidenceRefs) > 0 {
 		payload["evidence_refs"] = evidenceRefs
 	}
@@ -66,16 +78,12 @@ func (p floretControlProjector) projectTaskComplete(call ToolCall) flruntime.Tur
 		Name:        "task_complete",
 		CallID:      strings.TrimSpace(call.ID),
 		Payload:     payload,
-		Activity: &observation.ActivityPresentation{
-			Label:    "task_complete",
-			Renderer: observation.ActivityRendererCompletion,
-			Payload:  floretCompletionPayload(call.Args, resultText, evidenceRefs),
-		},
-		OutputText: resultText,
+		Activity:    floretActivityForControlSignal("task_complete", payload, ""),
+		OutputText:  resultText,
 	}
 }
 
-func (p floretControlProjector) projectAskUser(call ToolCall) (flruntime.TurnSignal, error) {
+func (p floretControlProjector) projectAskUser(call ToolCall, core flruntime.TurnSignal) (flruntime.TurnSignal, error) {
 	questions, questionContractError := extractModelSignalRequestUserInputQuestions(call, "questions")
 	signal := askUserSignal{
 		Questions:        questions,
@@ -87,6 +95,9 @@ func (p floretControlProjector) projectAskUser(call ToolCall) (flruntime.TurnSig
 	signal = normalizeAskUserSignal(signal)
 	if signal.Question == "" && len(signal.Questions) > 0 {
 		signal.Question = strings.TrimSpace(signal.Questions[0].Question)
+	}
+	if signal.Question == "" {
+		signal.Question = strings.TrimSpace(core.OutputText)
 	}
 	if signal.Question == "" {
 		signal.Question = "I need clarification to continue safely."
@@ -126,13 +137,8 @@ func (p floretControlProjector) projectAskUser(call ToolCall) (flruntime.TurnSig
 		Name:        "ask_user",
 		CallID:      strings.TrimSpace(call.ID),
 		Payload:     payload,
-		Activity: &observation.ActivityPresentation{
-			Label:       "Waiting for user input",
-			Description: signal.Question,
-			Renderer:    observation.ActivityRendererQuestion,
-			Payload:     floretQuestionPayload(signal),
-		},
-		OutputText: signal.Question,
+		Activity:    floretActivityForControlSignal("ask_user", payload, signal.Question),
+		OutputText:  signal.Question,
 	}, nil
 }
 
@@ -149,52 +155,40 @@ func (p floretControlProjector) projectExitPlanMode(call ToolCall) (flruntime.Tu
 		return flruntime.TurnSignal{}, err
 	}
 	payload := map[string]any{
-		"source":         "exit_plan_mode",
-		"summary":        result.Summary,
-		"args":           args,
-		"waiting_prompt": result.WaitingPrompt,
+		"source":          "exit_plan_mode",
+		"summary":         result.Summary,
+		"allowed_prompts": args.AllowedPrompts,
+		"args":            args,
+		"waiting_prompt":  result.WaitingPrompt,
 	}
 	return flruntime.TurnSignal{
 		Disposition: flruntime.SignalWaiting,
 		Name:        "exit_plan_mode",
 		CallID:      strings.TrimSpace(call.ID),
 		Payload:     payload,
-		Activity: &observation.ActivityPresentation{
-			Label:       "Exit plan mode",
-			Description: buildExitPlanModeQuestion(args.Summary),
-			Renderer:    observation.ActivityRendererQuestion,
-			Payload: map[string]any{
-				"summary":         strings.TrimSpace(args.Summary),
-				"allowed_prompts": args.AllowedPrompts,
-			},
-		},
-		OutputText: buildExitPlanModeQuestion(args.Summary),
+		Activity:    floretActivityForControlSignal("exit_plan_mode", payload, buildExitPlanModeQuestion(args.Summary)),
+		OutputText:  buildExitPlanModeQuestion(args.Summary),
 	}, nil
 }
 
-func floretCompletionPayload(args map[string]any, resultText string, evidenceRefs []string) map[string]any {
-	payload := map[string]any{
-		"result": strings.TrimSpace(resultText),
+func floretActivityForControlSignal(toolName string, payload map[string]any, description string) *observation.ActivityPresentation {
+	toolName = strings.TrimSpace(toolName)
+	if toolName == "" {
+		return nil
 	}
-	if len(evidenceRefs) > 0 {
-		payload["evidence_refs"] = append([]string(nil), evidenceRefs...)
+	spec, hasSpec := aitools.PresentationSpec(toolName)
+	renderer := activityRendererFromSpec(spec, hasSpec)
+	activityPayload := activityPayloadFromFieldList(spec.ResultPayloadFields, payload)
+	activityPayload = activityPayloadWithSpecOperation(activityPayload, spec, hasSpec)
+	activityPayload, _ = contractSafePayloadMap(activityPayload, 0)
+	activity := &observation.ActivityPresentation{
+		Label:       activityResultLabel(toolName, spec, hasSpec, renderer, activityPayload),
+		Description: activityPresentationDescription(description),
+		Renderer:    renderer,
+		Chips:       activityChipsFromSpec(spec, activityPayload),
+		Payload:     activityPayload,
 	}
-	if risks := extractStringSlice(args["remaining_risks"]); len(risks) > 0 {
-		payload["remaining_risks"] = risks
-	}
-	if next := extractStringSlice(args["next_actions"]); len(next) > 0 {
-		payload["next_actions"] = next
-	}
-	return payload
-}
-
-func floretQuestionPayload(signal askUserSignal) map[string]any {
-	return map[string]any{
-		"reason_code":        strings.TrimSpace(signal.ReasonCode),
-		"required_from_user": append([]string(nil), signal.RequiredFromUser...),
-		"evidence_refs":      append([]string(nil), signal.EvidenceRefs...),
-		"questions":          normalizeRequestUserInputQuestions(signal.Questions),
-	}
+	return contractSafeActivityPresentation(activity)
 }
 
 func flowerToolCallFromFloret(call fltools.ToolCall) (ToolCall, error) {

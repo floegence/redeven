@@ -104,6 +104,9 @@ jobs:
       - name: Flower live protocol guard
         run: ./scripts/check_flower_live_protocol.sh
 
+      - name: Flower UI behavior contracts
+        run: ./scripts/check_flower_ui.sh
+
       - name: UI lint
         run: ./scripts/lint_ui.sh
 

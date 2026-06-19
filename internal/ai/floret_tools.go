@@ -5,16 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/floegence/floret/observation"
+	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
-
-const okfKnowledgeActivityLabel = "OKF knowledge"
 
 type floretToolRuntimeState struct {
 	mu    sync.Mutex
@@ -88,7 +86,7 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 		tool := fltools.Define[map[string]any](
 			toolDef,
 			nil,
-			nil,
+			floretToolResources,
 			func(ctx context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
 				call := ToolCall{
 					ID:   strings.TrimSpace(inv.CallID),
@@ -121,6 +119,15 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 		}
 	}
 	return registry, nil
+}
+
+func floretToolApproverForRun(r *run) fltools.Approver {
+	if r == nil {
+		return nil
+	}
+	return func(ctx context.Context, req fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
+		return r.approveFloretTool(ctx, req)
+	}
 }
 
 func floretHostLabelsForRun(r *run) map[string]string {
@@ -273,7 +280,8 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 		inputSchema = stripRedevenTargetFieldsFromFloretToolSchema(strings.TrimSpace(def.Name), parsed)
 	}
 	effects := floretToolEffects(def)
-	readOnly := !def.Mutating && def.Name != "terminal.exec"
+	readOnly := !def.Mutating && !floretToolOpenWorld(def) && def.Name != "terminal.exec"
+	permission := floretToolPermission(def)
 	return fltools.Definition{
 		Name:         strings.TrimSpace(def.Name),
 		Title:        strings.TrimSpace(def.Name),
@@ -282,9 +290,13 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 		Effects:      effects,
 		ReadOnly:     readOnly,
 		Destructive:  def.Mutating,
-		OpenWorld:    false,
+		OpenWorld:    floretToolOpenWorld(def),
 		ParallelSafe: floretToolParallelSafe(def, effects),
-		Permission:   fltools.PermissionSpec{Mode: fltools.PermissionAllow},
+		Permission:   permission,
+		PermissionFor: func(req fltools.PermissionRequest) (fltools.PermissionSpec, error) {
+			args, _ := req.Args.(map[string]any)
+			return floretPermissionForInvocation(def, cloneAnyMap(args)), nil
+		},
 		Activity: func(inv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
 			args, _ := inv.Args.(map[string]any)
 			return floretActivityForToolCall(strings.TrimSpace(def.Name), args), nil
@@ -294,6 +306,142 @@ func floretToolDefinition(def ToolDef) (fltools.Definition, error) {
 			"namespace": strings.TrimSpace(def.Namespace),
 		},
 	}, nil
+}
+
+func floretToolPermission(def ToolDef) fltools.PermissionSpec {
+	name := strings.TrimSpace(def.Name)
+	resourceKinds := floretToolResourceKinds(name)
+	mode := fltools.PermissionAllow
+	if def.RequiresApproval || aitools.RequiresApproval(name) || name == "terminal.exec" || floretToolOpenWorld(def) {
+		mode = fltools.PermissionAsk
+	}
+	return fltools.PermissionSpec{Mode: mode, ResourceKinds: resourceKinds}
+}
+
+func floretPermissionForInvocation(def ToolDef, args map[string]any) fltools.PermissionSpec {
+	toolName := strings.TrimSpace(def.Name)
+	resourceKinds := floretToolResourceKinds(toolName)
+	if toolName == "terminal.exec" && !aitools.RequiresApprovalForInvocation(toolName, args) {
+		return fltools.PermissionSpec{Mode: fltools.PermissionAllow, ResourceKinds: resourceKinds}
+	}
+	permission := floretToolPermission(def)
+	if permission.ResourceKinds == nil {
+		permission.ResourceKinds = resourceKinds
+	}
+	if aitools.RequiresApprovalForInvocation(toolName, args) {
+		permission.Mode = fltools.PermissionAsk
+	}
+	return permission
+}
+
+func floretToolResourceKinds(toolName string) []string {
+	switch strings.TrimSpace(toolName) {
+	case "terminal.exec":
+		return []string{"command"}
+	case "file.read", "file.edit", "file.write", "apply_patch":
+		return []string{"file"}
+	case "web.search":
+		return []string{"web_query"}
+	case "okf.search":
+		return []string{"knowledge_query"}
+	case "use_skill":
+		return []string{"skill"}
+	case "subagents":
+		return []string{"subagent"}
+	default:
+		return nil
+	}
+}
+
+func floretToolOpenWorld(def ToolDef) bool {
+	switch strings.TrimSpace(def.Name) {
+	case "terminal.exec", "web.search":
+		return true
+	default:
+		return false
+	}
+}
+
+func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.ResourceRef, error) {
+	args := cloneAnyMap(inv.Args)
+	switch strings.TrimSpace(inv.Name) {
+	case "terminal.exec":
+		if command := strings.TrimSpace(anyToString(args["command"])); command != "" {
+			return []fltools.ResourceRef{{Kind: "command", Value: command}}, nil
+		}
+	case "file.read", "file.edit", "file.write":
+		if path := strings.TrimSpace(anyToString(args["file_path"])); path != "" {
+			return []fltools.ResourceRef{{Kind: "file", Value: path}}, nil
+		}
+	case "apply_patch":
+		if patch := strings.TrimSpace(anyToString(args["patch"])); patch != "" {
+			files := resourceRefsFromPatch(patch)
+			if len(files) > 0 {
+				return files, nil
+			}
+		}
+	case "web.search":
+		if query := strings.TrimSpace(anyToString(args["query"])); query != "" {
+			return []fltools.ResourceRef{{Kind: "web_query", Value: query}}, nil
+		}
+	case "okf.search":
+		if query := strings.TrimSpace(anyToString(args["query"])); query != "" {
+			return []fltools.ResourceRef{{Kind: "knowledge_query", Value: query}}, nil
+		}
+	case "use_skill":
+		if name := strings.TrimSpace(anyToString(args["name"])); name != "" {
+			return []fltools.ResourceRef{{Kind: "skill", Value: name}}, nil
+		}
+	case "subagents":
+		if action := strings.TrimSpace(anyToString(args["action"])); action != "" {
+			return []fltools.ResourceRef{{Kind: "subagent", Value: action}}, nil
+		}
+	}
+	return nil, nil
+}
+
+func resourceRefsFromPatch(patch string) []fltools.ResourceRef {
+	parsed, err := parsePatchText(patch)
+	if err == nil {
+		return resourceRefsFromPatchFiles(parsed.files)
+	}
+	seen := map[string]struct{}{}
+	out := make([]fltools.ResourceRef, 0, 4)
+	for _, line := range strings.Split(patch, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "--- ") || strings.HasPrefix(line, "+++ ") {
+			path := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "--- "), "+++ "))
+			if path == "" || path == "/dev/null" {
+				continue
+			}
+			path = strings.TrimPrefix(path, "a/")
+			path = strings.TrimPrefix(path, "b/")
+			if _, ok := seen[path]; ok {
+				continue
+			}
+			seen[path] = struct{}{}
+			out = append(out, fltools.ResourceRef{Kind: "file", Value: path})
+		}
+	}
+	return out
+}
+
+func resourceRefsFromPatchFiles(files []unifiedDiffFile) []fltools.ResourceRef {
+	seen := map[string]struct{}{}
+	out := make([]fltools.ResourceRef, 0, len(files))
+	for _, file := range files {
+		for _, path := range []string{strings.TrimSpace(file.oldPath), strings.TrimSpace(file.newPath)} {
+			if path == "" || path == "/dev/null" {
+				continue
+			}
+			if _, ok := seen[path]; ok {
+				continue
+			}
+			seen[path] = struct{}{}
+			out = append(out, fltools.ResourceRef{Kind: "file", Value: path})
+		}
+	}
+	return out
 }
 
 func stripRedevenTargetFieldsFromFloretToolSchema(toolName string, inputSchema map[string]any) map[string]any {
@@ -372,183 +520,282 @@ func floretToolResultFromFlower(r *run, result ToolResult) (fltools.Result, erro
 
 func floretActivityForToolCall(toolName string, args map[string]any) *observation.ActivityPresentation {
 	toolName = strings.TrimSpace(toolName)
-	payload := activityCallPayloadForTool(toolName, args)
+	if toolName == "" {
+		return nil
+	}
+	spec, hasSpec := aitools.PresentationSpec(toolName)
+	renderer := activityRendererFromSpec(spec, hasSpec)
+	payload := activityPayloadFromFieldList(spec.CallPayloadFields, args)
+	payload = activityPayloadWithSpecOperation(payload, spec, hasSpec)
+	payload = activityPayloadWithHostDisplayFields(payload, args, spec, hasSpec)
 	payload, _ = contractSafePayloadMap(payload, 0)
-	var activity *observation.ActivityPresentation
-	switch toolName {
-	case "terminal.exec":
-		command := strings.TrimSpace(anyToString(args["command"]))
-		if command == "" {
-			command = "terminal.exec"
-		}
-		activity = &observation.ActivityPresentation{
-			Label:       activityPresentationLabel(command),
-			Description: activityPresentationDescription(anyToString(args["description"])),
-			Renderer:    observation.ActivityRendererTerminal,
-			Chips:       []observation.ActivityChip{{Kind: "tool", Label: "shell", Tone: "neutral"}},
-			Payload:     payload,
-		}
-	case "file.read":
-		path := strings.TrimSpace(anyToString(args["file_path"]))
-		displayName := displayNameForFilePath(path)
-		if displayName != "" {
-			payload["display_name"] = displayName
-		}
-		activity = &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(firstNonEmptyString(displayName, "file.read")),
-			Renderer: observation.ActivityRendererFile,
-			Payload:  mapWithOperation(payload, "read"),
-		}
-	case "file.edit":
-		path := strings.TrimSpace(anyToString(args["file_path"]))
-		displayName := displayNameForFilePath(path)
-		if displayName != "" {
-			payload["display_name"] = displayName
-		}
-		activity = &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(firstNonEmptyString(displayName, "file.edit")),
-			Renderer: observation.ActivityRendererFile,
-			Payload:  mapWithOperation(payload, "edit"),
-		}
-	case "file.write":
-		path := strings.TrimSpace(anyToString(args["file_path"]))
-		displayName := displayNameForFilePath(path)
-		if displayName != "" {
-			payload["display_name"] = displayName
-		}
-		activity = &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(firstNonEmptyString(displayName, "file.write")),
-			Renderer: observation.ActivityRendererFile,
-			Payload:  mapWithOperation(payload, "write"),
-		}
-	case "apply_patch":
-		activity = &observation.ActivityPresentation{
-			Label:    "apply_patch",
-			Renderer: observation.ActivityRendererPatch,
-			Payload:  mapWithOperation(payload, "apply_patch"),
-		}
-	case "web.search":
-		query := strings.TrimSpace(anyToString(args["query"]))
-		activity = &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(firstNonEmptyString(query, "web.search")),
-			Renderer: observation.ActivityRendererWebSearch,
-			Payload:  payload,
-		}
-	case "okf.search":
-		query := strings.TrimSpace(anyToString(args["query"]))
-		activity = &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(firstNonEmptyString(query, okfKnowledgeActivityLabel)),
-			Renderer: observation.ActivityRendererStructured,
-			Payload:  mapWithOperation(payload, "okf.search"),
-		}
-	case "write_todos":
-		activity = &observation.ActivityPresentation{
-			Label:    "Update todos",
-			Renderer: observation.ActivityRendererTodos,
-			Payload:  payload,
-		}
-	case "use_skill":
-		name := strings.TrimSpace(anyToString(args["name"]))
-		activity = &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(firstNonEmptyString(name, "use_skill")),
-			Renderer: observation.ActivityRendererStructured,
-			Payload:  mapWithOperation(payload, "use_skill"),
-		}
-	case "subagents":
-		action := strings.TrimSpace(anyToString(args["action"]))
-		activity = &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(firstNonEmptyString(action, "subagents")),
-			Renderer: observation.ActivityRendererStructured,
-			Payload:  mapWithOperation(payload, "subagents"),
-		}
-	default:
-		if toolName == "" {
-			return nil
-		}
-		activity = &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(toolName),
-			Renderer: observation.ActivityRendererStructured,
-			Payload:  payload,
-		}
+	activity := &observation.ActivityPresentation{
+		Label:    activityCallLabel(toolName, spec, hasSpec, renderer, args, payload),
+		Renderer: renderer,
+		Payload:  payload,
+	}
+	if renderer == observation.ActivityRendererTerminal {
+		activity.Description = activityPresentationDescription(anyToString(args["description"]))
+		activity.Chips = []observation.ActivityChip{{Kind: "tool", Label: "shell", Tone: "neutral"}}
 	}
 	return contractSafeActivityPresentation(activity)
 }
 
-func activityCallPayloadForTool(toolName string, args map[string]any) map[string]any {
-	out := map[string]any{}
-	addString := func(key string) {
-		if value := strings.TrimSpace(anyToString(args[key])); value != "" {
-			out[key] = value
-		}
+func activityRendererFromSpec(spec aitools.ToolPresentationSpec, ok bool) observation.ActivityRenderer {
+	if !ok {
+		return observation.ActivityRendererStructured
 	}
-	addScalar := func(key string) {
-		switch value := args[key].(type) {
-		case string:
-			if strings.TrimSpace(value) != "" {
-				out[key] = strings.TrimSpace(value)
-			}
-		case bool:
-			out[key] = value
-		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
-			out[key] = value
-		}
+	switch renderer := observation.ActivityRenderer(strings.TrimSpace(spec.Renderer)); renderer {
+	case observation.ActivityRendererStructured,
+		observation.ActivityRendererTerminal,
+		observation.ActivityRendererFile,
+		observation.ActivityRendererPatch,
+		observation.ActivityRendererWebSearch,
+		observation.ActivityRendererTodos,
+		observation.ActivityRendererQuestion,
+		observation.ActivityRendererCompletion:
+		return renderer
+	default:
+		return observation.ActivityRendererStructured
 	}
-	switch strings.TrimSpace(toolName) {
-	case "terminal.exec":
-		addString("command")
-		addScalar("timeout_ms")
-		addString("description")
-	case "file.read":
-		addScalar("offset")
-		addScalar("limit")
-	case "file.edit":
-		addScalar("replace_all")
-	case "file.write":
-	case "apply_patch":
-		if patch := strings.TrimSpace(anyToString(args["patch"])); patch != "" {
-			filesChanged, hunks, additions, deletions := summarizeUnifiedDiff(patch)
-			out["files_changed"] = filesChanged
-			out["hunks"] = hunks
-			out["additions"] = additions
-			out["deletions"] = deletions
-		}
-	case "web.search", "okf.search":
-		addString("query")
-		addScalar("count")
-		addString("provider")
-	case "write_todos":
-		if todos := toAnySlice(args["todos"]); len(todos) > 0 {
-			out["todos"] = sanitizedTodoActivityItems(todos)
-		}
-		addScalar("expected_version")
-		addString("explanation")
-	case "use_skill":
-		addString("name")
-	case "subagents":
-		addString("action")
-		addScalar("limit")
+}
+
+func activityPayloadWithHostDisplayFields(payload map[string]any, source map[string]any, spec aitools.ToolPresentationSpec, hasSpec bool) map[string]any {
+	out := cloneAnyMap(payload)
+	if !hasSpec || !activitySpecAllowsPayloadField(spec, "display_name") {
+		return out
+	}
+	if strings.TrimSpace(anyToString(out["display_name"])) != "" {
+		return out
+	}
+	filePath := firstNonEmptyString(anyToString(source["file_path"]), anyToString(source["new_path"]), anyToString(source["old_path"]))
+	if displayName := displayNameForFilePath(filePath); displayName != "" {
+		out["display_name"] = displayName
 	}
 	return out
 }
 
-func sanitizedTodoActivityItems(items []any) []any {
-	out := make([]any, 0, len(items))
-	for _, item := range items {
-		record, ok := item.(map[string]any)
-		if !ok {
+func activityPayloadWithSpecOperation(payload map[string]any, spec aitools.ToolPresentationSpec, hasSpec bool) map[string]any {
+	if !hasSpec || strings.TrimSpace(spec.Operation) == "" {
+		return payload
+	}
+	return mapWithOperation(payload, strings.TrimSpace(spec.Operation))
+}
+
+func activityLabelFromFields(fields []string, records ...map[string]any) string {
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if field == "" {
 			continue
 		}
-		clean := map[string]any{}
-		for _, key := range []string{"id", "content", "status", "note"} {
-			if value := strings.TrimSpace(anyToString(record[key])); value != "" {
-				clean[key] = value
+		for _, record := range records {
+			if record == nil {
+				continue
+			}
+			if value := strings.TrimSpace(anyToString(record[field])); value != "" {
+				return activityPresentationLabel(value)
 			}
 		}
+	}
+	return ""
+}
+
+func activityFallbackLabel(value string, fallback string) string {
+	return activityPresentationLabel(firstNonEmptyString(value, fallback))
+}
+
+func activityCallLabelFallback(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool) string {
+	if hasSpec {
+		if label := strings.TrimSpace(spec.CallLabelFallback); label != "" {
+			return label
+		}
+	}
+	return toolName
+}
+
+func activityResultLabelFallback(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool) string {
+	if hasSpec {
+		if label := strings.TrimSpace(spec.ResultLabelFallback); label != "" {
+			return label
+		}
+		if label := strings.TrimSpace(spec.CallLabelFallback); label != "" {
+			return label
+		}
+	}
+	return toolName
+}
+
+func activitySpecAllowsPayloadField(spec aitools.ToolPresentationSpec, key string) bool {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return false
+	}
+	for _, field := range spec.CallPayloadFields {
+		if strings.TrimSpace(field) == key {
+			return true
+		}
+	}
+	for _, field := range spec.ResultPayloadFields {
+		if strings.TrimSpace(field) == key {
+			return true
+		}
+	}
+	return false
+}
+
+func activityPayloadFromFieldList(fields []string, source map[string]any) map[string]any {
+	return activityPayloadFromFieldListWithRegistry(nil, fields, source)
+}
+
+func activityPayloadFromFieldListWithRegistry(r *run, fields []string, source map[string]any) map[string]any {
+	out := map[string]any{}
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		if value, ok := activityPayloadFieldValue(r, field, source); ok {
+			out[field] = value
+		}
+	}
+	return out
+}
+
+func activityPayloadFieldValue(r *run, field string, source map[string]any) (any, bool) {
+	if source == nil {
+		return nil, false
+	}
+	if value, ok := source[field]; ok {
+		switch field {
+		case "mutations":
+			return activityMutationPayloads(r, toAnySlice(value)), true
+		case "stdout", "stderr":
+			if text, ok := value.(string); ok && text != "" {
+				return text, true
+			}
+		}
+		if text, ok := value.(string); ok {
+			if strings.TrimSpace(text) == "" {
+				return nil, false
+			}
+			return strings.TrimSpace(text), true
+		}
+		return value, true
+	}
+	switch field {
+	case "files_changed", "hunks", "additions", "deletions":
+		if patch := strings.TrimSpace(anyToString(source["patch"])); patch != "" {
+			filesChanged, hunks, additions, deletions := summarizeUnifiedDiff(patch)
+			switch field {
+			case "files_changed":
+				return filesChanged, true
+			case "hunks":
+				return hunks, true
+			case "additions":
+				return additions, true
+			case "deletions":
+				return deletions, true
+			}
+		}
+	case "display_name":
+		path := firstNonEmptyString(anyToString(source["file_path"]), anyToString(source["new_path"]), anyToString(source["old_path"]))
+		if displayName := displayNameForFilePath(path); displayName != "" {
+			return displayName, true
+		}
+	case "file_action_id":
+		actionID := activityFileActionIDFromPayload(r, source)
+		if actionID != "" {
+			return actionID, true
+		}
+	case "results_count":
+		if count := len(toAnySlice(source["results"])); count > 0 {
+			return count, true
+		}
+	case "source_count":
+		if count := len(toAnySlice(source["sources"])); count > 0 {
+			return count, true
+		}
+	case "result_count":
+		for _, key := range []string{"result_count", "total_concepts", "count"} {
+			if value, ok := source[key]; ok {
+				return value, true
+			}
+		}
+	case "agent_count":
+		if count := len(toAnySlice(source["agents"])); count > 0 {
+			return count, true
+		}
+	case "total", "pending", "in_progress", "completed", "cancelled":
+		if value, ok := activityTodoCountValue(source, field); ok {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
+func activityMutationPayloads(r *run, mutations []any) []any {
+	out := make([]any, 0, len(mutations))
+	for _, mutation := range mutations {
+		record, ok := mutation.(map[string]any)
+		if !ok || record == nil {
+			continue
+		}
+		clean := activityPayloadFromFieldListWithRegistry(r, []string{
+			"display_name",
+			"file_action_id",
+			"change_type",
+			"additions",
+			"deletions",
+			"unified_diff",
+			"diff_unavailable_reason",
+			"truncated",
+		}, record)
 		if len(clean) > 0 {
 			out = append(out, clean)
 		}
 	}
 	return out
+}
+
+func activityTodoCountValue(source map[string]any, field string) (any, bool) {
+	if value, ok := source[field]; ok {
+		return value, true
+	}
+	if summary, ok := source["summary"].(map[string]any); ok {
+		if value, ok := summary[field]; ok {
+			return value, true
+		}
+	}
+	count := 0
+	for _, item := range toAnySlice(source["todos"]) {
+		record, _ := item.(map[string]any)
+		if strings.TrimSpace(anyToString(record["status"])) == field {
+			count++
+		}
+	}
+	if count > 0 {
+		return count, true
+	}
+	return nil, false
+}
+
+func activityCallLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, _ observation.ActivityRenderer, args map[string]any, payload map[string]any) string {
+	if label := activityLabelFromFields(spec.ActivityLabelFields, args, payload); label != "" {
+		return label
+	}
+	fallback := activityCallLabelFallback(toolName, spec, hasSpec)
+	return activityFallbackLabel(fallback, toolName)
+}
+
+func activityResultLabel(toolName string, spec aitools.ToolPresentationSpec, hasSpec bool, _ observation.ActivityRenderer, payload map[string]any) string {
+	if label := activityLabelFromFields(spec.ActivityLabelFields, payload); label != "" {
+		return label
+	}
+	if hasSpec && strings.TrimSpace(spec.ResultLabelFallback) == "" && strings.TrimSpace(spec.CallLabelFallback) == "" {
+		return ""
+	}
+	fallback := activityResultLabelFallback(toolName, spec, hasSpec)
+	return activityFallbackLabel(fallback, toolName)
 }
 
 func floretActivityForToolResult(r *run, result ToolResult) (*observation.ActivityPresentation, error) {
@@ -560,11 +807,24 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 	if result.Error != nil && status == toolResultStatusSuccess {
 		return nil, fmt.Errorf("tool result status %q cannot carry an error", status)
 	}
-	payload, dataTruncated := activityPresentationPayloadFromToolResultData(r, toolName, result.Data)
-	payload["status"] = status
-	payload["summary"] = strings.TrimSpace(result.Summary)
-	payload["details"] = strings.TrimSpace(result.Details)
-	if result.Truncated || dataTruncated || readBoolField(payload, "truncated") {
+	if toolName == "" {
+		return nil, nil
+	}
+	spec, hasSpec := aitools.PresentationSpec(toolName)
+	renderer := activityRendererFromSpec(spec, hasSpec)
+	rawPayload, dataTruncated := activityPayloadFromResultData(result.Data)
+	payload := activityPayloadFromFieldListWithRegistry(r, spec.ResultPayloadFields, rawPayload)
+	payload = activityPayloadWithSpecOperation(payload, spec, hasSpec)
+	if status != "" {
+		payload["status"] = status
+	}
+	if summary := strings.TrimSpace(result.Summary); summary != "" {
+		payload["summary"] = summary
+	}
+	if details := strings.TrimSpace(result.Details); details != "" {
+		payload["details"] = details
+	}
+	if result.Truncated || dataTruncated || readBoolField(rawPayload, "truncated") || readBoolField(payload, "truncated") {
 		payload["truncated"] = true
 	}
 	if result.ContentRef != "" {
@@ -577,71 +837,13 @@ func floretActivityForToolResult(r *run, result ToolResult) (*observation.Activi
 	if payloadTruncated {
 		payload["truncated"] = true
 	}
-	switch toolName {
-	case "terminal.exec":
-		return &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(anyToString(payload["command"])),
-			Renderer: observation.ActivityRendererTerminal,
-			Chips:    terminalActivityChips(payload),
-			Payload:  payload,
-		}, nil
-	case "file.read":
-		displayName := firstNonEmptyString(anyToString(payload["display_name"]), "file.read")
-		return &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(displayName),
-			Renderer: observation.ActivityRendererFile,
-			Chips:    fileActivityChips(payload),
-			Payload:  mapWithOperation(payload, "read"),
-		}, nil
-	case "file.edit", "file.write":
-		operation := "edit"
-		if toolName == "file.write" {
-			operation = "write"
-		}
-		displayName := firstNonEmptyString(anyToString(payload["display_name"]), toolName)
-		return &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(displayName),
-			Renderer: observation.ActivityRendererFile,
-			Chips:    fileActivityChips(payload),
-			Payload:  mapWithOperation(payload, operation),
-		}, nil
-	case "apply_patch":
-		return &observation.ActivityPresentation{
-			Label:    "apply_patch",
-			Renderer: observation.ActivityRendererPatch,
-			Chips:    fileActivityChips(payload),
-			Payload:  mapWithOperation(payload, "apply_patch"),
-		}, nil
-	case "web.search":
-		return &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(anyToString(payload["query"])),
-			Renderer: observation.ActivityRendererWebSearch,
-			Chips:    webSearchActivityChips(payload),
-			Payload:  payload,
-		}, nil
-	case "okf.search":
-		return &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(firstNonEmptyString(anyToString(payload["query"]), okfKnowledgeActivityLabel)),
-			Renderer: observation.ActivityRendererStructured,
-			Payload:  mapWithOperation(payload, "okf.search"),
-		}, nil
-	case "write_todos":
-		return &observation.ActivityPresentation{
-			Label:    "Update todos",
-			Renderer: observation.ActivityRendererTodos,
-			Chips:    todoActivityChips(payload),
-			Payload:  payload,
-		}, nil
-	default:
-		if toolName == "" {
-			return nil, nil
-		}
-		return &observation.ActivityPresentation{
-			Label:    activityPresentationLabel(toolName),
-			Renderer: observation.ActivityRendererStructured,
-			Payload:  payload,
-		}, nil
+	activity := &observation.ActivityPresentation{
+		Label:    activityResultLabel(toolName, spec, hasSpec, renderer, payload),
+		Renderer: renderer,
+		Chips:    activityChipsFromSpec(spec, payload),
+		Payload:  payload,
 	}
+	return contractSafeActivityPresentation(activity), nil
 }
 
 func activityPayloadFromResultData(data any) (map[string]any, bool) {
@@ -836,99 +1038,17 @@ func compactJSONForActivityPayload(value any) string {
 	return strings.TrimSpace(fmt.Sprint(value))
 }
 
-func activityPresentationPayloadFromToolResultData(r *run, toolName string, data any) (map[string]any, bool) {
-	payload, truncated := activityPayloadFromResultData(data)
-	var shaped map[string]any
-	switch strings.TrimSpace(toolName) {
-	case "file.read":
-		shaped = fileReadActivityPayload(r, payload)
-	case "file.edit", "file.write":
-		shaped = fileMutationActivityPayload(r, payload)
-	case "apply_patch":
-		shaped = applyPatchActivityPayload(r, payload)
-	default:
-		shaped = payload
-	}
-	safe, shapedTruncated := contractSafePayloadMap(shaped, 0)
-	return safe, truncated || shapedTruncated
-}
-
-func fileReadActivityPayload(r *run, payload map[string]any) map[string]any {
-	out := map[string]any{}
-	displayName := firstNonEmptyString(anyToString(payload["display_name"]), displayNameForFilePath(anyToString(payload["file_path"])))
-	if displayName != "" {
-		out["display_name"] = displayName
-	}
-	actionID := registerFlowerActivityFileAction(r, displayName, anyToString(payload["file_path"]), activityDirectoryPath(anyToString(payload["file_path"])))
-	if actionID != "" {
-		out["file_action_id"] = actionID
-	}
-	for _, key := range []string{"content", "line_offset", "line_count", "total_lines", "truncated"} {
-		if value, ok := payload[key]; ok {
-			out[key] = value
-		}
-	}
-	return out
-}
-
-func fileMutationActivityPayload(r *run, payload map[string]any) map[string]any {
-	return fileMutationActivityPayloadFromRecord(r, payload)
-}
-
-func applyPatchActivityPayload(r *run, payload map[string]any) map[string]any {
-	out := map[string]any{}
-	for _, key := range []string{"files_changed", "hunks", "additions", "deletions", "input_format", "normalized_format"} {
-		if value, ok := payload[key]; ok {
-			out[key] = value
-		}
-	}
-	mutations := toAnySlice(payload["mutations"])
-	if len(mutations) == 0 {
-		return out
-	}
-	outMutations := make([]any, 0, len(mutations))
-	for _, mutation := range mutations {
-		record, ok := mutation.(map[string]any)
-		if !ok {
-			continue
-		}
-		outMutations = append(outMutations, fileMutationActivityPayloadFromRecord(r, record))
-	}
-	if len(outMutations) > 0 {
-		out["mutations"] = outMutations
-	}
-	return out
-}
-
-func fileMutationActivityPayloadFromRecord(r *run, payload map[string]any) map[string]any {
-	out := map[string]any{}
+func activityFileActionIDFromPayload(r *run, payload map[string]any) string {
 	filePath := anyToString(payload["file_path"])
 	oldPath := anyToString(payload["old_path"])
 	newPath := anyToString(payload["new_path"])
 	changeType := anyToString(payload["change_type"])
 	displayName := firstNonEmptyString(anyToString(payload["display_name"]), displayNameForFilePath(firstNonEmptyString(newPath, filePath, oldPath)))
-	if displayName != "" {
-		out["display_name"] = displayName
-	}
 	previewPath := mutationActionPath(filePath, oldPath, newPath, changeType)
-	actionID := registerFlowerActivityFileAction(r, displayName, previewPath, mutationDirectoryPath(previewPath, oldPath, newPath))
-	if actionID != "" {
-		out["file_action_id"] = actionID
+	if previewPath == "" && oldPath == "" && newPath == "" {
+		previewPath = filePath
 	}
-	for _, key := range []string{"change_type", "additions", "deletions", "unified_diff", "diff_unavailable_reason", "truncated"} {
-		if value, ok := payload[key]; ok {
-			out[key] = value
-		}
-	}
-	return out
-}
-
-func activityDirectoryPath(filePath string) string {
-	filePath = strings.TrimSpace(filePath)
-	if filePath == "" || filePath == "/dev/null" {
-		return ""
-	}
-	return filepath.Dir(filePath)
+	return registerFlowerActivityFileAction(r, displayName, previewPath, mutationDirectoryPath(previewPath, oldPath, newPath))
 }
 
 func registerFlowerActivityFileAction(r *run, displayName string, previewPath string, directoryPath string) string {
@@ -966,71 +1086,80 @@ func mapWithOperation(in map[string]any, operation string) map[string]any {
 	return out
 }
 
-func terminalActivityChips(payload map[string]any) []observation.ActivityChip {
+func activityChipsFromSpec(spec aitools.ToolPresentationSpec, payload map[string]any) []observation.ActivityChip {
 	chips := []observation.ActivityChip{}
-	if location := activityScalarString(payload["execution_location"]); strings.TrimSpace(location) != "" {
-		chips = append(chips, observation.ActivityChip{Kind: "execution_location", Label: "location", Value: location, Tone: "neutral"})
-	}
-	if targetID := activityScalarString(payload["target_id"]); strings.TrimSpace(targetID) != "" {
-		chips = append(chips, observation.ActivityChip{Kind: "target", Label: "target", Value: targetID, Tone: "neutral"})
-	}
-	if exit := activityScalarString(payload["exit_code"]); strings.TrimSpace(exit) != "" {
-		tone := "neutral"
-		if strings.TrimSpace(exit) != "0" {
-			tone = "danger"
+	for _, field := range spec.ChipFields {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
 		}
-		chips = append(chips, observation.ActivityChip{Kind: "exit_code", Label: "exit", Value: exit, Tone: tone})
-	}
-	if duration := activityScalarString(payload["duration_ms"]); strings.TrimSpace(duration) != "" {
-		chips = append(chips, observation.ActivityChip{Kind: "duration", Label: "duration", Value: duration + " ms", Tone: "neutral"})
-	}
-	if readBoolField(payload, "truncated") {
-		chips = append(chips, observation.ActivityChip{Kind: "truncated", Label: "truncated", Tone: "warning"})
+		if chip, ok := activityChipForField(field, payload); ok {
+			chips = append(chips, chip)
+		}
 	}
 	return chips
 }
 
-func fileActivityChips(payload map[string]any) []observation.ActivityChip {
-	chips := []observation.ActivityChip{}
-	if value := activityScalarString(payload["change_type"]); strings.TrimSpace(value) != "" {
-		chips = append(chips, observation.ActivityChip{Kind: "change", Label: strings.TrimSpace(value), Tone: "neutral"})
+func activityChipForField(field string, payload map[string]any) (observation.ActivityChip, bool) {
+	if field == "truncated" {
+		if !readBoolField(payload, "truncated") {
+			return observation.ActivityChip{}, false
+		}
+		return observation.ActivityChip{Kind: "truncated", Label: "truncated", Tone: "warning"}, true
 	}
-	if value := activityScalarString(payload["line_count"]); strings.TrimSpace(value) != "" {
-		chips = append(chips, observation.ActivityChip{Kind: "lines", Label: "lines", Value: value, Tone: "neutral"})
+	value := strings.TrimSpace(activityScalarString(payload[field]))
+	if value == "" {
+		return observation.ActivityChip{}, false
 	}
-	if readBoolField(payload, "truncated") {
-		chips = append(chips, observation.ActivityChip{Kind: "truncated", Label: "truncated", Tone: "warning"})
+	chip := observation.ActivityChip{
+		Kind:  activityChipKind(field),
+		Label: activityChipLabel(field),
+		Value: value,
+		Tone:  "neutral",
 	}
-	return chips
+	if field == "exit_code" && value != "0" {
+		chip.Tone = "danger"
+	}
+	if field == "duration_ms" {
+		chip.Value = value + " ms"
+	}
+	if field == "change_type" {
+		chip.Label = value
+		chip.Value = ""
+	}
+	return chip, true
 }
 
-func webSearchActivityChips(payload map[string]any) []observation.ActivityChip {
-	count := len(toAnySlice(payload["sources"]))
-	if count == 0 {
-		count = len(toAnySlice(payload["results"]))
+func activityChipKind(field string) string {
+	switch field {
+	case "target_id":
+		return "target"
+	default:
+		return field
 	}
-	if count <= 0 {
-		return nil
-	}
-	return []observation.ActivityChip{{Kind: "results", Label: "results", Value: fmt.Sprintf("%d", count), Tone: "neutral"}}
 }
 
-func todoActivityChips(payload map[string]any) []observation.ActivityChip {
-	counts := map[string]int{}
-	for _, item := range toAnySlice(payload["todos"]) {
-		record, _ := item.(map[string]any)
-		status := strings.TrimSpace(anyToString(record["status"]))
-		if status != "" {
-			counts[status]++
-		}
+func activityChipLabel(field string) string {
+	switch field {
+	case "execution_location":
+		return "location"
+	case "target_id":
+		return "target"
+	case "exit_code":
+		return "exit"
+	case "duration_ms":
+		return "duration"
+	case "files_changed":
+		return "files"
+	case "results_count", "result_count":
+		return "results"
+	case "source_count":
+		return "sources"
+	case "agent_count":
+		return "agents"
+	default:
+		return strings.ReplaceAll(field, "_", " ")
 	}
-	chips := []observation.ActivityChip{}
-	for _, status := range []string{"pending", "in_progress", "completed", "cancelled"} {
-		if count := counts[status]; count > 0 {
-			chips = append(chips, observation.ActivityChip{Kind: status, Label: status, Value: fmt.Sprintf("%d", count), Tone: "neutral"})
-		}
-	}
-	return chips
 }
 
 func activityScalarString(value any) string {
@@ -1079,6 +1208,18 @@ func isFlowerControlTool(name string) bool {
 
 func floretControlDefinitionsFromTools(activeTools []ToolDef) ([]fltools.ToolDefinition, error) {
 	defs := make([]fltools.ToolDefinition, 0, 3)
+	hasTaskComplete := false
+	for _, def := range activeTools {
+		if strings.TrimSpace(def.Name) == "task_complete" {
+			hasTaskComplete = true
+			break
+		}
+	}
+	coreDefs := flruntime.CoreControlDefinitions(hasTaskComplete)
+	coreByName := make(map[string]fltools.ToolDefinition, len(coreDefs))
+	for _, def := range coreDefs {
+		coreByName[strings.TrimSpace(def.Name)] = def
+	}
 	for _, def := range activeTools {
 		name := strings.TrimSpace(def.Name)
 		if !isFlowerControlTool(name) {
@@ -1092,7 +1233,7 @@ func floretControlDefinitionsFromTools(activeTools []ToolDef) ([]fltools.ToolDef
 			}
 			inputSchema = parsed
 		}
-		defs = append(defs, fltools.ToolDefinition{
+		toolDef := fltools.ToolDefinition{
 			Name:        name,
 			Title:       name,
 			Description: strings.TrimSpace(def.Description),
@@ -1103,7 +1244,24 @@ func floretControlDefinitionsFromTools(activeTools []ToolDef) ([]fltools.ToolDef
 				"source":    strings.TrimSpace(def.Source),
 				"namespace": strings.TrimSpace(def.Namespace),
 			},
-		})
+		}
+		if coreDef, ok := coreByName[name]; ok {
+			toolDef = coreDef
+			if strings.TrimSpace(def.Description) != "" {
+				toolDef.Description = strings.TrimSpace(def.Description)
+			}
+			if inputSchema != nil {
+				toolDef.InputSchema = inputSchema
+			}
+			if toolDef.Annotations == nil {
+				toolDef.Annotations = map[string]any{}
+			}
+			toolDef.Annotations["kind"] = "control"
+			toolDef.Annotations["source"] = strings.TrimSpace(def.Source)
+			toolDef.Annotations["namespace"] = strings.TrimSpace(def.Namespace)
+			toolDef.Annotations["core_control"] = true
+		}
+		defs = append(defs, toolDef)
 	}
 	return defs, nil
 }

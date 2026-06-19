@@ -10,7 +10,7 @@ import (
 func TestBuiltInToolDefinitions_StrictSchemaCompatible(t *testing.T) {
 	t.Parallel()
 
-	defs := builtInToolDefinitions()
+	defs := builtInModelCapabilityDefinitions()
 	for _, def := range defs {
 		def := def
 		t.Run(def.Name, func(t *testing.T) {

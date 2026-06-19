@@ -125,13 +125,20 @@ type ToolRedactionSpec struct {
 
 // ToolPresentationSpec is the runtime-owned display contract consumed by the chat UI.
 type ToolPresentationSpec struct {
-	Kind           ToolPresentationKind `json:"kind"`
-	Risk           string               `json:"risk"` // readonly|mutating|approval|blocking
-	Renderer       string               `json:"renderer"`
-	Grouping       ToolGroupingPolicy   `json:"grouping"`
-	DetailKinds    []string             `json:"detail_kinds,omitempty"`
-	Redaction      ToolRedactionSpec    `json:"redaction,omitempty"`
-	SummaryVersion int                  `json:"summary_version"`
+	Kind                ToolPresentationKind `json:"kind"`
+	Risk                string               `json:"risk"` // readonly|mutating|approval|blocking
+	Renderer            string               `json:"renderer"`
+	Grouping            ToolGroupingPolicy   `json:"grouping"`
+	Operation           string               `json:"operation,omitempty"`
+	ActivityLabelFields []string             `json:"activity_label_fields,omitempty"`
+	CallLabelFallback   string               `json:"call_label_fallback,omitempty"`
+	ResultLabelFallback string               `json:"result_label_fallback,omitempty"`
+	CallPayloadFields   []string             `json:"call_payload_fields,omitempty"`
+	ResultPayloadFields []string             `json:"result_payload_fields,omitempty"`
+	ChipFields          []string             `json:"chip_fields,omitempty"`
+	DetailKinds         []string             `json:"detail_kinds,omitempty"`
+	Redaction           ToolRedactionSpec    `json:"redaction,omitempty"`
+	SummaryVersion      int                  `json:"summary_version"`
 }
 
 // Definition describes built-in tool properties used by policies.

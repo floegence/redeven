@@ -2,6 +2,8 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	fltools "github.com/floegence/floret/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -72,7 +75,7 @@ func runToolCall(t *testing.T, r *run, toolID string, args map[string]any, appro
 
 	done := make(chan result, 1)
 	go func() {
-		outcome, err := r.handleToolCall(context.Background(), toolID, "terminal.exec", args)
+		outcome, err := r.runTerminalExecThroughFloret(context.Background(), toolID, args)
 		done <- result{outcome: outcome, err: err}
 	}()
 
@@ -107,6 +110,74 @@ func runToolCall(t *testing.T, r *run, toolID string, args map[string]any, appro
 		t.Fatalf("timed out waiting for tool result")
 		return nil
 	}
+}
+
+func (r *run) runTerminalExecThroughFloret(ctx context.Context, toolID string, args map[string]any) (*toolCallOutcome, error) {
+	reg := NewInMemoryToolRegistry()
+	if err := registerBuiltInTools(reg, r); err != nil {
+		return nil, err
+	}
+	def, _, ok := reg.resolve("terminal.exec")
+	if !ok {
+		return nil, errMissingTerminalToolForTest()
+	}
+	flReg, err := buildFloretToolRegistry(r, []ToolDef{def}, nil)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(args)
+	if err != nil {
+		return nil, err
+	}
+	result := flReg.RunWithOptions(ctx, fltools.ToolCall{
+		ID:   strings.TrimSpace(toolID),
+		Name: "terminal.exec",
+		Args: string(raw),
+	}, floretToolApproverForRun(r), fltools.RunOptions{
+		RunID:         strings.TrimSpace(r.id),
+		ThreadID:      strings.TrimSpace(r.threadID),
+		TurnID:        strings.TrimSpace(r.messageID),
+		PromptScopeID: strings.TrimSpace(r.threadID),
+		Step:          1,
+	})
+	return toolCallOutcomeFromFloretResult(result), nil
+}
+
+func errMissingTerminalToolForTest() error {
+	return errors.New("terminal.exec test tool is missing")
+}
+
+func toolCallOutcomeFromFloretResult(result fltools.Result) *toolCallOutcome {
+	outcome := &toolCallOutcome{
+		Success:  false,
+		ToolName: strings.TrimSpace(result.Name),
+		Args:     map[string]any{},
+	}
+	if result.Structured != nil {
+		status := strings.TrimSpace(anyToString(result.Structured["status"]))
+		outcome.Success = status == toolResultStatusSuccess && !result.IsError
+		outcome.Result = result.Structured["data"]
+		if errorPayload, ok := result.Structured["error"].(map[string]any); ok {
+			outcome.ToolError = &aitools.ToolError{
+				Code:      aitools.ErrorCode(strings.TrimSpace(anyToString(errorPayload["code"]))),
+				Message:   strings.TrimSpace(anyToString(errorPayload["message"])),
+				Retryable: readBoolField(errorPayload, "retryable"),
+			}
+			outcome.ToolError.Normalize()
+		}
+		if outcome.ToolError == nil && !outcome.Success {
+			outcome.ToolError = &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: strings.TrimSpace(anyToString(result.Structured["details"]))}
+			outcome.ToolError.Normalize()
+		}
+		return outcome
+	}
+	if result.IsError {
+		outcome.ToolError = &aitools.ToolError{Code: aitools.ErrorCodePermissionDenied, Message: strings.TrimSpace(result.Text)}
+		outcome.ToolError.Normalize()
+		return outcome
+	}
+	outcome.Success = true
+	return outcome
 }
 
 func assertPlanMutatingBlocked(t *testing.T, outcome *toolCallOutcome, target string) {

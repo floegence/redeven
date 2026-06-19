@@ -1,6 +1,9 @@
 package tools
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestBuiltInDefinitions_AllHaveValidPresentationSpecs(t *testing.T) {
 	t.Parallel()
@@ -24,4 +27,111 @@ func TestMustPresentationSpec_PanicsForUnknownTool(t *testing.T) {
 		}
 	}()
 	_ = MustPresentationSpec("unknown.tool")
+}
+
+func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		toolName            string
+		operation           string
+		labelFields         []string
+		callPayloadFields   []string
+		callLabelFallback   string
+		resultLabelFallback string
+		resultPayloadFields []string
+	}{
+		{
+			toolName:          "terminal.exec",
+			labelFields:       []string{"command"},
+			callPayloadFields: []string{"command", "timeout_ms", "description"},
+		},
+		{
+			toolName:          "file.read",
+			operation:         "read",
+			labelFields:       []string{"display_name"},
+			callPayloadFields: []string{"offset", "limit"},
+		},
+		{
+			toolName:          "file.edit",
+			operation:         "edit",
+			labelFields:       []string{"display_name"},
+			callPayloadFields: []string{"replace_all"},
+		},
+		{
+			toolName:          "web.search",
+			labelFields:       []string{"query"},
+			callPayloadFields: []string{"query", "count", "provider"},
+		},
+		{
+			toolName:            "okf.search",
+			operation:           "okf.search",
+			labelFields:         []string{"query"},
+			callPayloadFields:   []string{"query", "count", "provider"},
+			callLabelFallback:   "OKF knowledge",
+			resultLabelFallback: "OKF knowledge",
+		},
+		{
+			toolName:            "write_todos",
+			callPayloadFields:   []string{"expected_version", "explanation"},
+			callLabelFallback:   "Update todos",
+			resultLabelFallback: "Update todos",
+		},
+		{
+			toolName:            "exit_plan_mode",
+			callLabelFallback:   "Exit plan mode",
+			resultLabelFallback: "Exit plan mode",
+			resultPayloadFields: []string{"summary", "allowed_prompts"},
+		},
+		{
+			toolName:            "task_complete",
+			callLabelFallback:   "Complete task",
+			resultLabelFallback: "Complete task",
+			resultPayloadFields: []string{"result", "evidence_refs", "remaining_risks", "next_actions"},
+		},
+		{
+			toolName:            "ask_user",
+			callLabelFallback:   "Ask user",
+			resultLabelFallback: "Ask user",
+			resultPayloadFields: []string{"reason_code", "required_from_user", "evidence_refs", "questions", "question"},
+		},
+		{
+			toolName:          "use_skill",
+			operation:         "use_skill",
+			labelFields:       []string{"name"},
+			callPayloadFields: []string{"name"},
+		},
+		{
+			toolName:          "subagents",
+			operation:         "subagents",
+			labelFields:       []string{"action"},
+			callPayloadFields: []string{"action", "limit"},
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.toolName, func(t *testing.T) {
+			t.Parallel()
+			spec := MustPresentationSpec(tc.toolName)
+			if spec.Operation != tc.operation {
+				t.Fatalf("operation=%q, want %q", spec.Operation, tc.operation)
+			}
+			if !reflect.DeepEqual(spec.ActivityLabelFields, tc.labelFields) {
+				t.Fatalf("label fields=%#v, want %#v", spec.ActivityLabelFields, tc.labelFields)
+			}
+			if !reflect.DeepEqual(spec.CallPayloadFields, tc.callPayloadFields) {
+				t.Fatalf("call payload fields=%#v, want %#v", spec.CallPayloadFields, tc.callPayloadFields)
+			}
+			if tc.resultPayloadFields != nil && !reflect.DeepEqual(spec.ResultPayloadFields, tc.resultPayloadFields) {
+				t.Fatalf("result payload fields=%#v, want %#v", spec.ResultPayloadFields, tc.resultPayloadFields)
+			}
+			if spec.CallLabelFallback != tc.callLabelFallback {
+				t.Fatalf("call fallback=%q, want %q", spec.CallLabelFallback, tc.callLabelFallback)
+			}
+			if spec.ResultLabelFallback != tc.resultLabelFallback {
+				t.Fatalf("result fallback=%q, want %q", spec.ResultLabelFallback, tc.resultLabelFallback)
+			}
+		})
+	}
 }

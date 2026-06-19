@@ -154,6 +154,9 @@ func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
 	if r == nil || !isActivityObservationEvent(ev.Type) {
 		return
 	}
+	if !r.acceptsPresentationUpdates() {
+		return
+	}
 	activityEvent, ok := observationActivityEventFromFloret(ev)
 	if !ok {
 		return
@@ -163,6 +166,9 @@ func (r *run) recordFloretActivityEvent(ev flruntime.Event) {
 
 func (r *run) recordObservationActivityEvent(ev observation.Event) {
 	if r == nil || !isActivityObservationEvent(ev.Type) {
+		return
+	}
+	if !r.acceptsPresentationUpdates() {
 		return
 	}
 	if !shouldRecordObservationActivityEvent(ev) {
@@ -226,6 +232,9 @@ func shouldRecordObservationActivityEvent(ev observation.Event) bool {
 
 func (r *run) publishFinalActivityTimeline(timeline observation.ActivityTimeline) {
 	if r == nil || len(timeline.Items) == 0 {
+		return
+	}
+	if !r.acceptsPresentationUpdates() {
 		return
 	}
 	timeline = removeSyntheticSuccessfulFinalToolItems(timeline)
@@ -317,6 +326,9 @@ func activityTimelineSummaryFromItems(existing observation.ActivitySummary, item
 
 func (r *run) publishActivityTimeline(timeline observation.ActivityTimeline) {
 	if r == nil {
+		return
+	}
+	if !r.acceptsPresentationUpdates() {
 		return
 	}
 	timeline = r.normalizeActivityTimeline(timeline)

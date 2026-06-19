@@ -2863,6 +2863,12 @@ html.dark .flower-component-shell {
   padding: 0;
 }
 
+.flower-composer-continue {
+  min-height: 2.25rem;
+  padding-inline: 0.875rem;
+  white-space: nowrap;
+}
+
 .flower-model-chip-warmup {
   color: color-mix(in srgb, var(--foreground) 62%, transparent);
 }

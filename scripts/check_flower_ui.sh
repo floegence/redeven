@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." &> /dev/null && pwd)
+
+source "$SCRIPT_DIR/ui_package_common.sh"
+
+main() {
+  local dir="$ROOT_DIR/internal/envapp/ui_src"
+  if [ ! -d "$dir" ]; then
+    ui_pkg_log "Flower UI: skipped (missing: $dir)"
+    return 0
+  fi
+
+  ui_pkg_log "Checking Flower UI behavior contracts..."
+  ui_pkg_log "ROOT_DIR: $ROOT_DIR"
+
+  (
+    cd "$dir"
+    if ui_pkg_need_install "$dir"; then
+      ui_pkg_run_pnpm install --frozen-lockfile
+    fi
+    ui_pkg_log ""
+	    ui_pkg_log "Flower UI: Env App interaction contracts..."
+	    ui_pkg_run_pnpm exec vitest run --environment=node --maxWorkers=2 --testTimeout=10000 \
+	      src/ui/FlowerSurface.navigation.launchSend.test.tsx \
+	      src/ui/FlowerSurface.navigation.threads.test.tsx
+
+    ui_pkg_log ""
+    ui_pkg_log "Flower UI: shared timeline projection contracts..."
+    ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
+      internal/flower_ui/src/flowerLiveProjection.test.ts \
+      internal/flower_ui/src/flowerTimelineProjection.test.ts \
+      internal/flower_ui/src/FlowerSurface.streamingCursor.test.ts
+  )
+
+  ui_pkg_log "Flower UI behavior checks passed."
+}
+
+main "$@"

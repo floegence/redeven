@@ -7,13 +7,37 @@ import (
 	"strings"
 	"testing"
 
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
+
+func TestBuiltInControlSignalDefinitions_UseFloretCoreSignals(t *testing.T) {
+	t.Parallel()
+
+	defsByName := map[string]ToolDef{}
+	for _, def := range builtInControlSignalDefinitions() {
+		defsByName[strings.TrimSpace(def.Name)] = def
+	}
+	for _, core := range flruntime.CoreControlDefinitions(true) {
+		name := strings.TrimSpace(core.Name)
+		def, ok := defsByName[name]
+		if !ok {
+			t.Fatalf("missing Floret core signal %s", name)
+		}
+		if def.Source != "floret" || def.Namespace != "floret.core_signal" {
+			t.Fatalf("%s source/namespace=%s/%s, want floret/floret.core_signal", name, def.Source, def.Namespace)
+		}
+	}
+	exitPlan := defsByName["exit_plan_mode"]
+	if exitPlan.Source != "builtin" || exitPlan.Namespace != "builtin.signal" {
+		t.Fatalf("exit_plan_mode source/namespace=%s/%s, want builtin/builtin.signal", exitPlan.Source, exitPlan.Namespace)
+	}
+}
 
 func TestBuiltInToolDefinitions_AskUserDescriptionMentionsStructuredInput(t *testing.T) {
 	t.Parallel()
 
-	defs := builtInToolDefinitions()
+	defs := builtInControlSignalDefinitions()
 	for _, def := range defs {
 		if strings.TrimSpace(def.Name) != "ask_user" {
 			continue
@@ -42,7 +66,7 @@ func TestBuiltInToolDefinitions_AskUserDescriptionMentionsStructuredInput(t *tes
 		return
 	}
 
-	t.Fatalf("ask_user tool definition not found")
+	t.Fatalf("ask_user signal definition not found")
 }
 
 func TestBuiltInToolDefinitions_OKFSearchDescriptionDeclaresKnowledgeBoundary(t *testing.T) {

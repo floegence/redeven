@@ -1623,7 +1623,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	if db != nil {
 		continuationCtx, cancelContinuation := context.WithTimeout(context.Background(), persistTO)
 		continuationCandidate := r.getProviderContinuationCandidate()
-		if syncErr := syncThreadProviderContinuationAfterRun(continuationCtx, db, endpointID, threadID, continuationCandidate); syncErr != nil && finalErr == nil {
+		if syncErr := persistProviderContinuationCandidate(continuationCtx, db, endpointID, threadID, continuationCandidate); syncErr != nil && finalErr == nil {
 			finalErr = syncErr
 		} else if syncErr == nil {
 			eventType := "provider.continuation.cleared"
@@ -1853,16 +1853,6 @@ func shouldClearThreadState(finalReason string) bool {
 	default:
 		return false
 	}
-}
-
-func syncThreadProviderContinuationAfterRun(ctx context.Context, db *threadstore.Store, endpointID string, threadID string, continuation threadstore.ThreadProviderContinuation) error {
-	if db == nil {
-		return nil
-	}
-	if continuation.IsZero() {
-		return db.ClearThreadProviderContinuation(ctx, endpointID, threadID)
-	}
-	return db.SetThreadProviderContinuation(ctx, endpointID, threadID, continuation)
 }
 
 func shouldPersistOpenGoalAfterRun(finalReason string) bool {

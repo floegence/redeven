@@ -627,6 +627,49 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	}
 }
 
+func TestFlowerLiveApprovalSnapshotCarriesFloretApprovalContext(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{
+		RunID:     "run_floret_approval_context",
+		ThreadID:  "thread_floret_approval_context",
+		MessageID: "msg_floret_approval_context",
+	})
+	r.toolApprovals["tool_floret_approval_context"] = &toolApprovalRequest{
+		decision:      make(chan bool, 1),
+		toolName:      "apply_patch",
+		argsHash:      "abc123",
+		effects:       []string{"write"},
+		flags:         []string{"destructive", "args_hash:abc123"},
+		targets:       []FlowerSafeTarget{{Kind: "file", Label: "added.txt", URI: "file:added.txt"}},
+		requestedAtMs: 1700000000000,
+		expiresAtMs:   1700000060000,
+	}
+
+	action, ok := r.snapshotToolApproval("tool_floret_approval_context")
+	if !ok {
+		t.Fatal("snapshotToolApproval returned false")
+	}
+	if action.ActionID != flowerApprovalActionID("run_floret_approval_context", "tool_floret_approval_context") {
+		t.Fatalf("ActionID=%q", action.ActionID)
+	}
+	if action.ToolName != "apply_patch" {
+		t.Fatalf("ToolName=%q, want apply_patch", action.ToolName)
+	}
+	if action.Summary.Description != "Review access to added.txt before this tool runs." {
+		t.Fatalf("Description=%q", action.Summary.Description)
+	}
+	if !reflect.DeepEqual(action.Summary.Effects, []string{"write"}) {
+		t.Fatalf("Effects=%#v", action.Summary.Effects)
+	}
+	if !reflect.DeepEqual(action.Summary.Flags, []string{"destructive", "args_hash:abc123"}) {
+		t.Fatalf("Flags=%#v", action.Summary.Flags)
+	}
+	if !reflect.DeepEqual(action.Summary.Targets, []FlowerSafeTarget{{Kind: "file", Label: "added.txt", URI: "file:added.txt"}}) {
+		t.Fatalf("Targets=%#v", action.Summary.Targets)
+	}
+}
+
 func TestFlowerLiveMaterializedStatePrunesTerminalRuns(t *testing.T) {
 	t.Parallel()
 

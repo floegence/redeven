@@ -194,8 +194,8 @@ func buildPromptRuntimeSnapshot(r *run, objective string, mode string, complexit
 	cwd := promptWorkingDirForRun(r)
 
 	availableToolNames := joinToolNames(tools)
-	if len(capability.AllowedTools) > 0 {
-		availableToolNames = strings.Join(cloneStringSlice(capability.AllowedTools), ", ")
+	if len(capability.AllowedTools) > 0 || len(capability.AllowedSignals) > 0 {
+		availableToolNames = joinToolAndSignalNames(capability.AllowedTools, capability.AllowedSignals)
 	}
 
 	availableSkills := []SkillMeta{}

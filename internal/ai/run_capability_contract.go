@@ -13,7 +13,7 @@ type runCapabilityContract struct {
 	allowedSignalSet map[string]struct{}
 }
 
-func resolveRunCapabilityContract(r *run, tools []ToolDef, supportsAskUserQuestionBatches bool) runCapabilityContract {
+func resolveRunCapabilityContract(r *run, tools []ToolDef, signals []ToolDef, supportsAskUserQuestionBatches bool) runCapabilityContract {
 	allowUserInteraction := true
 	if r != nil && r.noUserInteraction {
 		allowUserInteraction = false
@@ -33,8 +33,16 @@ func resolveRunCapabilityContract(r *run, tools []ToolDef, supportsAskUserQuesti
 		allowedTools = append(allowedTools, name)
 	}
 	allowedSignals := make([]string, 0, 3)
+	seenSignals := make(map[string]struct{}, len(signals))
+	for _, def := range signals {
+		name := strings.TrimSpace(def.Name)
+		if name == "" {
+			continue
+		}
+		seenSignals[name] = struct{}{}
+	}
 	for _, signal := range []string{"task_complete", "ask_user", "exit_plan_mode"} {
-		if _, ok := seenTools[signal]; !ok {
+		if _, ok := seenSignals[signal]; !ok {
 			continue
 		}
 		if signal != "task_complete" && !allowUserInteraction {

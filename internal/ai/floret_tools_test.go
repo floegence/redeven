@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -22,6 +23,16 @@ func mustFloretToolResultActivity(t *testing.T, r *run, result ToolResult) *obse
 		t.Fatal("activity is nil")
 	}
 	return activity
+}
+
+func presentationCallFallback(t *testing.T, toolName string) string {
+	t.Helper()
+	return aitools.MustPresentationSpec(toolName).CallLabelFallback
+}
+
+func presentationResultFallback(t *testing.T, toolName string) string {
+	t.Helper()
+	return aitools.MustPresentationSpec(toolName).ResultLabelFallback
 }
 
 func TestFloretHostLabelsExcludeTargetContext(t *testing.T) {
@@ -65,8 +76,52 @@ func TestFloretToolDefinitionStripsRedevenTargetSchema(t *testing.T) {
 	if containsAnyString(required, "target_id") || !containsAnyString(required, "command") {
 		t.Fatalf("schema required fields changed: %#v", required)
 	}
-	if def.Permission.Mode != fltools.PermissionAllow {
-		t.Fatalf("permission=%q, want allow because Redeven owns tool authorization", def.Permission.Mode)
+	if def.Permission.Mode != fltools.PermissionAsk {
+		t.Fatalf("permission=%q, want ask so Floret owns the permission lifecycle", def.Permission.Mode)
+	}
+	permission, err := def.PermissionFor(fltools.PermissionRequest{
+		Name: "terminal.exec",
+		Args: map[string]any{"command": "pwd"},
+	})
+	if err != nil {
+		t.Fatalf("PermissionFor: %v", err)
+	}
+	if permission.Mode != fltools.PermissionAllow {
+		t.Fatalf("readonly permission=%q, want allow", permission.Mode)
+	}
+}
+
+func TestFloretOpenWorldToolDefinitionKeepsApprovalLifecycle(t *testing.T) {
+	t.Parallel()
+
+	def, err := floretToolDefinition(ToolDef{
+		Name:         "web.search",
+		ParallelSafe: true,
+	})
+	if err != nil {
+		t.Fatalf("floretToolDefinition: %v", err)
+	}
+	if def.ReadOnly {
+		t.Fatalf("web.search must not be projected as Floret read-only")
+	}
+	if def.Destructive {
+		t.Fatalf("web.search must not be projected as destructive")
+	}
+	if !def.OpenWorld {
+		t.Fatalf("web.search must be projected as open-world")
+	}
+	if def.Permission.Mode != fltools.PermissionAsk {
+		t.Fatalf("static permission=%q, want ask", def.Permission.Mode)
+	}
+	permission, err := def.PermissionFor(fltools.PermissionRequest{
+		Name: "web.search",
+		Args: map[string]any{"query": "latest floret release"},
+	})
+	if err != nil {
+		t.Fatalf("PermissionFor: %v", err)
+	}
+	if permission.Mode != fltools.PermissionAsk {
+		t.Fatalf("dynamic permission=%q, want ask for open-world network tool", permission.Mode)
 	}
 }
 
@@ -245,6 +300,45 @@ func TestFloretActivityForApplyPatchCallOmitsPatchBody(t *testing.T) {
 	}
 }
 
+func TestFloretApplyPatchResourceRefsUseCanonicalPatchParser(t *testing.T) {
+	t.Parallel()
+
+	patch := strings.Join([]string{
+		"*** Begin Patch",
+		"*** Add File: added.txt",
+		"+hello",
+		"*** Update File: old.txt",
+		"@@ -1 +1 @@",
+		"-old",
+		"+new",
+		"*** Update File: from.txt",
+		"*** Move to: to.txt",
+		"@@ -1 +1 @@",
+		"-a",
+		"+b",
+		"*** Delete File: gone.txt",
+		"*** End Patch",
+	}, "\n")
+
+	refs := resourceRefsFromPatch(patch)
+	got := make([]string, 0, len(refs))
+	for _, ref := range refs {
+		if ref.Kind != "file" {
+			t.Fatalf("ref kind=%q, want file", ref.Kind)
+		}
+		got = append(got, ref.Value)
+	}
+	want := []string{"added.txt", "old.txt", "from.txt", "to.txt", "gone.txt"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("refs=%#v, want %#v", got, want)
+	}
+	for _, value := range got {
+		if value == "/dev/null" {
+			t.Fatalf("refs include /dev/null: %#v", got)
+		}
+	}
+}
+
 func TestFloretActivityForOKFCallUsesKnowledgeLookupPresentation(t *testing.T) {
 	t.Parallel()
 
@@ -252,8 +346,8 @@ func TestFloretActivityForOKFCallUsesKnowledgeLookupPresentation(t *testing.T) {
 	if activity == nil {
 		t.Fatal("activity is nil")
 	}
-	if activity.Label != okfKnowledgeActivityLabel {
-		t.Fatalf("label=%q, want %q", activity.Label, okfKnowledgeActivityLabel)
+	if want := presentationCallFallback(t, "okf.search"); activity.Label != want {
+		t.Fatalf("label=%q, want %q", activity.Label, want)
 	}
 	if activity.Renderer != observation.ActivityRendererStructured {
 		t.Fatalf("renderer=%q, want structured", activity.Renderer)
@@ -361,8 +455,8 @@ func TestFloretToolResultActivityForOKFUsesKnowledgeLookupFallback(t *testing.T)
 			"total_concepts": 12,
 		},
 	})
-	if activity.Label != okfKnowledgeActivityLabel {
-		t.Fatalf("label=%q, want %q", activity.Label, okfKnowledgeActivityLabel)
+	if want := presentationResultFallback(t, "okf.search"); activity.Label != want {
+		t.Fatalf("label=%q, want %q", activity.Label, want)
 	}
 	if activity.Renderer != observation.ActivityRendererStructured {
 		t.Fatalf("renderer=%q, want structured", activity.Renderer)
@@ -615,8 +709,8 @@ func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
 	if _, ok := activity.Payload["bad key / with spaces"]; ok {
 		t.Fatalf("payload kept invalid key: %#v", activity.Payload)
 	}
-	if _, ok := activity.Payload["bad_key_with_spaces"]; !ok {
-		t.Fatalf("payload missing normalized key: %#v", activity.Payload)
+	if _, ok := activity.Payload["bad_key_with_spaces"]; ok {
+		t.Fatalf("payload kept non-spec field: %#v", activity.Payload)
 	}
 	if len([]rune(anyToString(activity.Payload["stdout"]))) > activityPayloadStringLimit {
 		t.Fatalf("stdout length=%d, want <= %d", len([]rune(anyToString(activity.Payload["stdout"]))), activityPayloadStringLimit)
