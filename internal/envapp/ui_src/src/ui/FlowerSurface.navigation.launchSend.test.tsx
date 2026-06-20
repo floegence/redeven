@@ -54,10 +54,11 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(stopButton.className).toContain('flower-composer-submit');
     expect(stopButton.className).toContain('rounded-full');
     expect(stopIcon?.getAttribute('viewBox')).toBe('0 0 24 24');
-    expect(stopIconRect?.getAttribute('x')).toBe('8');
-    expect(stopIconRect?.getAttribute('y')).toBe('8');
-    expect(stopIconRect?.getAttribute('width')).toBe('8');
-    expect(stopIconRect?.getAttribute('height')).toBe('8');
+    expect(stopIconRect?.getAttribute('x')).toBe('6');
+    expect(stopIconRect?.getAttribute('y')).toBe('6');
+    expect(stopIconRect?.getAttribute('width')).toBe('12');
+    expect(stopIconRect?.getAttribute('height')).toBe('12');
+    expect(stopIconRect?.getAttribute('stroke')).toBe('none');
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     expect(textarea.disabled).toBe(false);
