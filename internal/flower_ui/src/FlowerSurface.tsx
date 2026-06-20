@@ -128,7 +128,7 @@ const FlowerStopIcon: Component<{ class?: string }> = (props) => (
     stroke-linecap="round"
     stroke-linejoin="round"
   >
-    <rect x="8" y="8" width="8" height="8" rx="1.7" fill="currentColor" stroke="currentColor" />
+    <rect x="6" y="6" width="12" height="12" rx="2.4" fill="currentColor" stroke="none" />
   </svg>
 );
 
