@@ -7,7 +7,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floeterm/terminal-go v0.4.16
 	github.com/floegence/floret v0.3.15
-	github.com/floegence/flowersec/flowersec-go v0.19.9
+	github.com/floegence/flowersec/flowersec-go v0.19.10
 	github.com/gorilla/websocket v1.5.3
 	github.com/openai/openai-go v1.12.0
 	github.com/shirou/gopsutil/v4 v4.25.12
