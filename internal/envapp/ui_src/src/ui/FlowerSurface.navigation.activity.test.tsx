@@ -10,6 +10,7 @@ import {
   activityItem,
   activityTimeline,
   adapter,
+  inputRequest,
   liveBootstrap,
   renderSurfaceWithAdapter,
   thread,
@@ -120,7 +121,7 @@ describe('FlowerSurface navigation activity', () => {
     }));
   });
 
-  it('renders streaming assistant output with a flowing cursor and a wide transcript stack', async () => {
+  it('renders streaming assistant output with bottom thinking text and a wide transcript stack', async () => {
     const streamingThread = thread({
       thread_id: 'thread-streaming',
       title: 'Streaming answer',
@@ -166,8 +167,93 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-framed')).toBeNull();
     expect(runtime.querySelector('[data-flower-message-role="user"] .flower-message-bubble-framed')).toBeTruthy();
     expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-streaming-cursor')).toBeNull();
+    expect(runtime.querySelector('.flower-message-streaming-tail')?.textContent).toContain('Thinking...');
     expect(runtime.textContent).toContain('Streaming partial answer');
   });
+
+  it('keeps bottom thinking text visible after completed tool activity while the thread is still running', async () => {
+    const toolGapThread = thread({
+      thread_id: 'thread-tool-gap-thinking',
+      title: 'Tool gap thinking',
+      created_at_ms: 5_400,
+      updated_at_ms: 5_500,
+      status: 'running',
+      messages: [
+        {
+          id: 'm-tool-gap',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 5_500,
+          blocks: [
+            activityTimeline({
+              run_id: 'run-tool-gap',
+              turn_id: 'm-tool-gap',
+              status: 'success',
+              severity: 'quiet',
+              items: [activityItem({
+                item_id: 'tool-gap-done',
+                tool_id: 'tool-gap-done',
+                tool_name: 'terminal.exec',
+                status: 'success',
+                severity: 'quiet',
+                label: 'npm test',
+                renderer: 'terminal',
+                payload: { command: 'npm test', exit_code: 0 },
+              })],
+            }),
+          ],
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [toolGapThread]),
+      loadThread: vi.fn(async () => liveBootstrap(toolGapThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-tool-gap-thinking"] button')));
+    (runtime.querySelector('[data-thread-id="thread-tool-gap-thinking"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-gap-done"]')));
+
+    expect(runtime.querySelector('[data-flower-activity-item-id="tool-gap-done"]')?.getAttribute('data-flower-activity-status')).toBe('success');
+    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-message-streaming-tail')?.textContent).toContain('Thinking...');
+  });
+
+  it.each(['success', 'failed', 'canceled', 'waiting_approval', 'waiting_user'] as const)(
+    'does not show the bottom thinking text for %s threads',
+    async (status) => {
+      const idleThread = thread({
+        thread_id: `thread-no-thinking-${status}`,
+        title: `No thinking ${status}`,
+        status,
+        messages: [
+          {
+            id: `m-no-thinking-${status}`,
+            role: 'assistant',
+            content: 'Visible answer.',
+            status: status === 'canceled' ? 'canceled' : status === 'failed' ? 'error' : 'complete',
+            created_at_ms: 5_700,
+            blocks: [{ type: 'markdown', content: 'Visible answer.' }],
+          },
+        ],
+        ...(status === 'waiting_user' ? { input_request: inputRequest() } : {}),
+      });
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [idleThread]),
+        loadThread: vi.fn(async () => liveBootstrap(idleThread)),
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="thread-no-thinking-${status}"] button`)));
+      (runtime.querySelector(`[data-thread-id="thread-no-thinking-${status}"] button`) as HTMLButtonElement).click();
+      await waitFor(() => runtime.textContent?.includes('Visible answer.') ?? false);
+
+      expect(runtime.querySelector('.flower-streaming-cursor')).toBeNull();
+    },
+  );
 
   it('shows completed Flower activity inline between assistant text blocks', async () => {
     const tool_names = [

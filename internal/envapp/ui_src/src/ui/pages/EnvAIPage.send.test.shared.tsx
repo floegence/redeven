@@ -245,6 +245,7 @@ vi.mock('../i18n', () => {
     'common.actions.retry': 'Retry',
     'common.actions.settings': 'Settings',
     'common.actions.stop': 'Stop',
+    'chatChrome.thinkingEllipsis': 'Mock thinking...',
     'flowerChat.composer.describePlaceholder': 'Describe what you need',
     'flowerChat.composer.launchTurn': 'Send message',
     'flowerChat.composer.typeMessagePlaceholder': 'Message Flower',
@@ -415,6 +416,7 @@ export function registerEnvAIPageSendTests() {
         await flush();
         await flush();
         expect(host.textContent).toContain('Live answer recovered from the event stream.');
+        expect(host.querySelector('.flower-message-streaming-tail')?.textContent).toContain('Mock thinking...');
       } finally {
         dispose();
       }

@@ -50,15 +50,20 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain("case 'running':\n        return <Terminal");
   });
 
-  it('renders the streaming cursor after every message block', () => {
+  it('renders the running thinking indicator after timeline entries', () => {
     const src = surfaceSource();
-    const blockListIndex = src.indexOf('<For each={blockKeys()}>');
+    const timelineListIndex = src.indexOf('<For each={visibleTimelineEntryKeys()}>');
     const cursorTailIndex = src.indexOf('flower-message-streaming-tail');
 
-    expect(blockListIndex).toBeGreaterThanOrEqual(0);
-    expect(cursorTailIndex).toBeGreaterThan(blockListIndex);
+    expect(timelineListIndex).toBeGreaterThanOrEqual(0);
+    expect(cursorTailIndex).toBeGreaterThan(timelineListIndex);
+    expect(src).toContain('const selectedThreadThinking = createMemo(() => selectedThreadLiveStatus() === \'running\')');
+    expect(src).toContain('<Show when={selectedThreadThinking()}>');
     expect(src).toContain('{streamingCursor()}');
-    expect(src).not.toContain('<Show when={streaming()}>{streamingCursor()}</Show>');
+    expect(src).toContain('role="status"');
+    expect(src).toContain('aria-live="polite"');
+    expect(src).toContain('copy().chat.thinkingIndicator');
+    expect(src).not.toContain('<Show when={activeCursor()}>\n              <div class={cn(\'flower-message-streaming-tail\'');
   });
 
   it('adds copy actions and user message time metadata to chat messages', () => {

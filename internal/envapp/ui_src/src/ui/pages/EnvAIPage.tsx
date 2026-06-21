@@ -29,6 +29,7 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers): FlowerSurfaceCopy {
       handlerStartFailedTitle: i18n.t('flowerChat.router.handlerStartFailedTitle'),
       handlerStillStarting: i18n.t('flowerChat.router.handlerStillStarting'),
       handlerRetry: i18n.t('common.actions.retry'),
+      thinkingIndicator: i18n.t('chatChrome.thinkingEllipsis'),
       toolApprovalStates: {
         ...DEFAULT_FLOWER_SURFACE_COPY.chat.toolApprovalStates,
         requested: i18n.t('flowerChat.sidebar.status.waitingApproval'),

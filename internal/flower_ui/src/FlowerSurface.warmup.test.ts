@@ -23,7 +23,7 @@ describe('Flower warmup presentation', () => {
     expect(source).toContain('data-flower-warmup={surfaceWarmupActive() ? \'true\' : \'false\'}');
     expect(source).toContain('surfaceWarmupActive()');
     expect(source).toContain('? warmupPanel()');
-    expect(source).toContain('when={selectedThreadHasContent() || pendingTurnForSelectedThread()}');
+    expect(source).toContain('when={selectedThreadHasContent() || pendingTurnForSelectedThread() || selectedThreadThinking()}');
     expect(source).toContain(': warmupCanReplaceTranscript()');
     expect(source).toContain('copy().chat.warmupComposerPlaceholder');
     expect(source).toContain('disabled={surfaceWarmupActive()}');

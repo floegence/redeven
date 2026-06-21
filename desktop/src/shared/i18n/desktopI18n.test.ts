@@ -257,6 +257,8 @@ describe('Desktop shared i18n dictionaries', () => {
         expect(englishMatches, locale).toEqual([]);
       }
     }
+    expect(DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.chat.thinkingIndicator).toBe('正在思考...');
+    expect(DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.thinkingIndicator).toBe('Thinking...');
     expect(DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.emptyState.explainTitle).toBe('解释代码');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.emptyState.explainTitle).toBe('解釋程式碼');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.threadList.refreshLabel).toBe('重新整理對話');

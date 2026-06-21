@@ -1383,7 +1383,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     fallback: string,
   ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
 
-  const streamingCursor = () => <span class="flower-streaming-cursor" aria-hidden="true" />;
+  const selectedThreadThinking = createMemo(() => selectedThreadLiveStatus() === 'running');
+  const streamingCursor = () => (
+    <div class="flower-streaming-cursor" role="status" aria-label={copy().chat.thinkingIndicator}>
+      <span class="flower-streaming-cursor-text" aria-hidden="true">{copy().chat.thinkingIndicator}</span>
+    </div>
+  );
 
   const formatMessageTime = (createdAtMs: number): string => {
     const value = Math.floor(Number(createdAtMs ?? 0));
@@ -2415,15 +2420,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ));
     const failed = createMemo(() => message().status === 'error');
     const hasRenderableBlock = createMemo(() => entry().blocks.length > 0);
-    const visible = createMemo(() => !(failed() && !hasRenderableBlock() && !activeCursor() && selectedThreadRunErrorMessage()));
+    const visible = createMemo(() => {
+      if (hasRenderableBlock()) return true;
+      if (activeCursor()) return true;
+      if (!failed()) return false;
+      return !selectedThreadRunErrorMessage();
+    });
     const blocks = createMemo((): readonly FlowerRenderableMessageBlock[] => {
-      const placeholderBlock: FlowerRenderableMessageBlock | null = !hasRenderableBlock() && (activeCursor() || failed())
+      const placeholderBlock: FlowerRenderableMessageBlock | null = !hasRenderableBlock() && failed()
         ? {
             type: 'content',
             key: `${message().id}:placeholder`,
             block_index: -1,
             block_type: 'text',
-            content: failed() ? copy().chat.messageErrorFallback : ' ',
+            content: copy().chat.messageErrorFallback,
           }
         : null;
       return placeholderBlock ? [placeholderBlock] : entry().blocks;
@@ -2463,11 +2473,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </Show>
             <Show when={message().role === 'user'}>
               {messageContextActionLine(message())}
-            </Show>
-            <Show when={activeCursor()}>
-              <div class={cn('flower-message-streaming-tail', message().role === 'user' ? 'flower-message-streaming-tail-user' : 'flower-message-streaming-tail-assistant')}>
-                {streamingCursor()}
-              </div>
             </Show>
           </div>
         </div>
@@ -2585,7 +2590,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {(message) => errorNotice(copy().chat.threadLoadErrorTitle, message())}
             </Show>
             <Show
-              when={selectedThreadHasContent() || pendingTurnForSelectedThread()}
+              when={selectedThreadHasContent() || pendingTurnForSelectedThread() || selectedThreadThinking()}
                 fallback={selectedThreadLoading()
                   ? threadLoadingState()
                   : warmupCanReplaceTranscript()
@@ -2604,6 +2609,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   );
                 }}
               </For>
+            </Show>
+            <Show when={selectedThreadThinking()}>
+              <div class="flower-message-streaming-tail flower-message-streaming-tail-assistant" role="status" aria-live="polite">
+                {streamingCursor()}
+              </div>
             </Show>
           </div>
         </div>

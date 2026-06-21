@@ -20,22 +20,30 @@ function cssRule(css: string, selector: string): string {
 }
 
 describe('Flower streaming cursor', () => {
-  it('uses a vertical terminal-style cursor with slow left-to-right shimmer', () => {
+  it('uses localized bottom text with a slow left-to-right shimmer', () => {
     const css = flowerStyles();
     const cursorRule = cssRule(css, '.flower-streaming-cursor');
-    const shimmerRule = cssRule(css, '.flower-streaming-cursor::before');
+    const textRule = cssRule(css, '.flower-streaming-cursor-text');
 
-    expect(cursorRule).toContain('width: 0.42em');
-    expect(cursorRule).toContain('height: 1.15em');
-    expect(cursorRule).toContain('border-radius: 0.08rem');
-    expect(cursorRule).toContain('animation: flower-cursor-breathe 3.8s ease-in-out infinite');
-    expect(shimmerRule).toContain('90deg');
-    expect(shimmerRule).toContain('transform: translateX(-54%)');
-    expect(shimmerRule).toContain('animation: flower-cursor-shimmer 3.8s cubic-bezier(0.42, 0, 0.2, 1) infinite');
-    expect(css).toContain('transform: translateX(54%)');
-    expect(css).toContain('.flower-streaming-cursor::before,');
+    expect(cursorRule).toContain('display: inline-flex');
+    expect(cursorRule).toContain('align-items: center');
+    expect(textRule).toContain('color: transparent');
+    expect(textRule).toContain('90deg');
+    expect(textRule).toContain('background-size: 220% 100%');
+    expect(textRule).toContain('background-clip: text');
+    expect(textRule).toContain('-webkit-background-clip: text');
+    expect(textRule).toContain('font-size: 0.75rem');
+    expect(textRule).toContain('font-weight: 600');
+    expect(textRule).toContain('white-space: nowrap');
+    expect(textRule).toContain('animation: flower-cursor-shimmer 2.4s ease-in-out infinite');
+    expect(css).toContain('@keyframes flower-cursor-shimmer');
+    expect(css).toContain('background-position: -120% 0');
+    expect(css).toContain('background-position: 180% 0');
+    expect(css).toContain('.flower-streaming-cursor-text,');
+    expect(css).toContain('.flower-streaming-cursor-text {\n    color: var(--muted-foreground);');
     expect(css).not.toContain('animation: flower-cursor-flow');
     expect(css).not.toContain('@keyframes flower-cursor-flow');
+    expect(css).not.toContain('.flower-streaming-cursor::before');
     expect(cursorRule).not.toContain('width: 1.65rem');
     expect(cursorRule).not.toContain('height: 0.82rem');
   });
