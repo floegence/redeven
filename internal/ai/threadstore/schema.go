@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 31
+	threadstoreCurrentSchemaVersion = 32
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -59,6 +59,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 28, ToVersion: 29, Apply: migrateThreadstoreToV29},
 			{FromVersion: 29, ToVersion: 30, Apply: migrateThreadstoreToV30},
 			{FromVersion: 30, ToVersion: 31, Apply: migrateThreadstoreToV31},
+			{FromVersion: 31, ToVersion: 32, Apply: migrateThreadstoreToV32},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -263,6 +264,10 @@ func migrateThreadstoreToV31(tx *sql.Tx) error {
 	return ensureFlowerThreadMetadataOwnershipColumnsTx(tx)
 }
 
+func migrateThreadstoreToV32(tx *sql.Tx) error {
+	return ensureAIThreadStateContinuationColumnsTx(tx)
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
@@ -344,8 +349,7 @@ func ensureAIThreadStateContinuationColumnsTx(tx *sql.Tx) error {
 		column string
 		sql    string
 	}{
-		{column: "provider_continuation_kind", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_kind TEXT NOT NULL DEFAULT ''`},
-		{column: "provider_continuation_id", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_id TEXT NOT NULL DEFAULT ''`},
+		{column: "provider_continuation_state_json", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_state_json TEXT NOT NULL DEFAULT ''`},
 		{column: "provider_continuation_provider_id", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_provider_id TEXT NOT NULL DEFAULT ''`},
 		{column: "provider_continuation_model", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_model TEXT NOT NULL DEFAULT ''`},
 		{column: "provider_continuation_base_url", sql: `ALTER TABLE ai_thread_state ADD COLUMN provider_continuation_base_url TEXT NOT NULL DEFAULT ''`},
@@ -432,8 +436,7 @@ CREATE TABLE IF NOT EXISTS ai_thread_state (
   thread_id TEXT NOT NULL,
   open_goal TEXT NOT NULL DEFAULT '',
   last_assistant_summary TEXT NOT NULL DEFAULT '',
-  provider_continuation_kind TEXT NOT NULL DEFAULT '',
-  provider_continuation_id TEXT NOT NULL DEFAULT '',
+  provider_continuation_state_json TEXT NOT NULL DEFAULT '',
   provider_continuation_provider_id TEXT NOT NULL DEFAULT '',
   provider_continuation_model TEXT NOT NULL DEFAULT '',
   provider_continuation_base_url TEXT NOT NULL DEFAULT '',
@@ -951,7 +954,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		},
 		"ai_thread_state": {
 			"endpoint_id", "thread_id", "open_goal", "last_assistant_summary",
-			"provider_continuation_kind", "provider_continuation_id", "provider_continuation_provider_id",
+			"provider_continuation_state_json", "provider_continuation_provider_id",
 			"provider_continuation_model", "provider_continuation_base_url",
 			"provider_continuation_updated_at_unix_ms", "updated_at_unix_ms",
 		},

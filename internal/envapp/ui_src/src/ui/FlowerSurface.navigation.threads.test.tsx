@@ -211,6 +211,76 @@ describe('FlowerSurface navigation threads', () => {
     expect(loadThread.mock.calls.map((call) => call[0])).toEqual(['thread-pending-focus']);
   });
 
+  it('keeps composer drafts scoped to each thread and new chat session while refocusing the composer after selection', async () => {
+    const threadA = thread({
+      thread_id: 'thread-draft-a',
+      title: 'Draft A',
+      created_at_ms: 1_000,
+      updated_at_ms: 1_000,
+    });
+    const threadB = thread({
+      thread_id: 'thread-draft-b',
+      title: 'Draft B',
+      created_at_ms: 2_000,
+      updated_at_ms: 2_000,
+    });
+    const loadThread = vi.fn(async (threadID: string) => liveBootstrap(threadID === 'thread-draft-a' ? threadA : threadB));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [threadA, threadB]),
+      loadThread,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-draft-a"] button')));
+
+    (runtime.querySelector('[data-thread-id="thread-draft-a"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-draft-a');
+    const composerA = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    await waitFor(() => document.activeElement === composerA);
+
+    composerA.value = 'draft for A';
+    composerA.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await flush();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('draft for A');
+
+    (runtime.querySelector('[data-thread-id="thread-draft-b"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-draft-b');
+    const composerB = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    await waitFor(() => document.activeElement === composerB);
+    expect(composerB.value).toBe('');
+
+    composerB.value = 'draft for B';
+    composerB.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await flush();
+
+    (runtime.querySelector('.flower-new-chat-button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === '');
+    const newComposer = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    await waitFor(() => document.activeElement === newComposer);
+    expect(newComposer.value).toBe('');
+
+    newComposer.value = 'draft for new chat';
+    newComposer.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await flush();
+
+    (runtime.querySelector('[data-thread-id="thread-draft-a"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-draft-a');
+    await waitFor(() => document.activeElement === runtime.querySelector('textarea'));
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('draft for A');
+
+    (runtime.querySelector('[data-thread-id="thread-draft-b"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-draft-b');
+    await waitFor(() => document.activeElement === runtime.querySelector('textarea'));
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('draft for B');
+
+    (runtime.querySelector('.flower-new-chat-button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === '');
+    await waitFor(() => document.activeElement === runtime.querySelector('textarea'));
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('draft for new chat');
+
+    expect(loadThread.mock.calls.map((call) => call[0])).toEqual(['thread-draft-a', 'thread-draft-b', 'thread-draft-a', 'thread-draft-b']);
+  });
+
   it('does not let a slow focus request override a later manual selection', async () => {
     const slowFocusedThread = thread({
       thread_id: 'thread-slow-focus',
@@ -826,6 +896,85 @@ describe('FlowerSurface navigation threads', () => {
 
     expect(markThreadRead.mock.calls[1]?.[0]).toBe('thread-running-final-after-leave');
     expect(markThreadRead.mock.calls[1]?.[1]).toMatchObject(finalUnreadDetail.read_status.snapshot);
+  });
+
+  it('marks a selected running thread read when live events complete it', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-live-complete-read',
+      title: 'Live complete read',
+      status: 'running',
+      read_status: readStatus(false, 12_000, 'running'),
+      updated_at_ms: 12_000,
+      messages: [
+        {
+          id: 'm-live-complete',
+          role: 'assistant',
+          content: 'Working',
+          status: 'streaming',
+          active_cursor: true,
+          created_at_ms: 12_000,
+          blocks: [{ type: 'markdown', content: 'Working' }],
+        },
+      ],
+    });
+    const finalReadStatus = readStatus(true, 12_500, 'success');
+    const finalThread = {
+      ...runningThread,
+      status: 'success' as const,
+      read_status: readStatus(false, 12_500, 'success'),
+      messages: [
+        {
+          id: 'm-live-complete',
+          role: 'assistant' as const,
+          content: 'Working done.',
+          status: 'complete' as const,
+          active_cursor: false,
+          created_at_ms: 12_500,
+          blocks: [{ type: 'markdown' as const, content: 'Working done.' }],
+        },
+      ],
+    };
+    const liveEvents = deferred<FlowerLiveEventsResponse>();
+    const markThreadRead = vi.fn(async (_threadID: string, snapshot) => liveBootstrap({
+      ...finalThread,
+      read_status: readStatus(false, snapshot.activity_revision, 'success'),
+    }, 2));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread, 0)),
+      listThreadLiveEvents: vi.fn(() => liveEvents.promise),
+      markThreadRead,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-live-complete-read"] button')));
+    (runtime.querySelector('[data-thread-id="thread-live-complete-read"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-live-complete"] .flower-streaming-cursor')));
+
+    liveEvents.resolve({
+      events: [
+        liveEvent('thread-live-complete-read', 1, 'message.committed', {
+          message_id: 'm-live-complete',
+          message: finalThread.messages[0],
+        }),
+        liveEvent('thread-live-complete-read', 2, 'thread.patched', {
+          patch: {
+            run_status: 'success',
+            updated_at_ms: 12_500,
+            read_status: finalReadStatus,
+          },
+        }),
+      ],
+      next_cursor: 2,
+      retained_from_seq: 1,
+    });
+
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-status') === 'success');
+    await waitFor(() => markThreadRead.mock.calls.length === 1);
+    expect(markThreadRead.mock.calls[0]?.[0]).toBe('thread-live-complete-read');
+    expect(markThreadRead.mock.calls[0]?.[1]).toMatchObject(finalReadStatus.snapshot);
+    expect(runtime.querySelector('[data-thread-id="thread-live-complete-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
+    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(0);
   });
 
   it('keeps a clicked thread visually read across stale list refreshes until a newer version arrives', async () => {

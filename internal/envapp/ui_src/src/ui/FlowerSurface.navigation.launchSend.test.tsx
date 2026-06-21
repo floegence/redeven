@@ -523,6 +523,52 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(launchTurn).not.toHaveBeenCalled();
   });
 
+  it('keeps the composer draft when stop plus send fails after stopping', async () => {
+    const runningThread = thread({
+      thread_id: 'thread-running-send-fails-after-stop',
+      title: 'Running send fails after stop',
+      status: 'running',
+    });
+    const stoppedThread = thread({
+      ...runningThread,
+      status: 'canceled',
+    });
+    const stopThread = vi.fn(async () => liveBootstrap(stoppedThread));
+    const launchTurn = vi.fn(async () => {
+      throw new Error('Send failed.');
+    });
+    let stopCompleted = false;
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(stopCompleted ? stoppedThread : runningThread)),
+      stopThread: vi.fn(async () => {
+        stopCompleted = true;
+        return stopThread();
+      }),
+      launchTurn,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-send-fails-after-stop"] button')));
+    (runtime.querySelector('[data-thread-id="thread-running-send-fails-after-stop"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'keep this draft after send fails';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null;
+      return button?.getAttribute('aria-label') === 'Send' && !button.disabled;
+    });
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-composer-error')));
+
+    expect(stopThread).toHaveBeenCalledTimes(1);
+    expect(launchTurn).toHaveBeenCalledTimes(1);
+    expect(runtime.querySelector('.flower-composer-error')?.textContent).toContain('Send failed.');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('keep this draft after send fails');
+  });
+
   it('keeps waiting_user threads on Continue instead of stop or stop plus send', async () => {
     const waitingThread = thread({
       thread_id: 'thread-waiting-user-continue',
@@ -556,13 +602,13 @@ describe('FlowerSurface navigation launch/send', () => {
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'answer the waiting prompt';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
-	await waitFor(() => {
-	  const button = runtime.querySelector('.flower-composer-continue') as HTMLButtonElement | null;
-	  return Boolean(button && button.textContent?.includes('Continue') && !button.disabled);
-	});
-	expect(runtime.querySelector('.flower-composer-submit')).toBeNull();
-	(runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
-	await waitFor(() => submitInput.mock.calls.length > 0);
+    await waitFor(() => {
+      const button = runtime.querySelector('.flower-composer-continue') as HTMLButtonElement | null;
+      return Boolean(button && button.textContent?.includes('Continue') && !button.disabled);
+    });
+    expect(runtime.querySelector('.flower-composer-submit')).toBeNull();
+    (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
+    await waitFor(() => submitInput.mock.calls.length > 0);
 
     expect(stopThread).not.toHaveBeenCalled();
     expect(launchTurn).not.toHaveBeenCalled();

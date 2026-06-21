@@ -88,7 +88,7 @@ func TestOpenAIProvider_StreamTurn_MissingCompleted_SucceedsWithText(t *testing.
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
 
-	res, err := adapter.StreamTurn(context.Background(), TurnRequest{
+	res, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model:    "gpt-5-mini",
 		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "hi"}}}},
 	}, nil)
@@ -116,7 +116,7 @@ func TestOpenAIProvider_StreamTurn_MissingCompleted_SucceedsWithToolCall(t *test
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
 
-	res, err := adapter.StreamTurn(context.Background(), TurnRequest{
+	res, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model: "gpt-5-mini",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "hi"}}},

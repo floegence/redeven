@@ -279,7 +279,7 @@ func writeSSEJSON(w io.Writer, f http.Flusher, v any) {
 	f.Flush()
 }
 
-func TestIntegration_NativeSDK_OpenAI_IdentityQuestionCompletesWithNaturalStop(t *testing.T) {
+func TestIntegration_ModelGateway_OpenAI_IdentityQuestionCompletesWithNaturalStop(t *testing.T) {
 	t.Parallel()
 
 	token := "我是 Flower。"
@@ -304,7 +304,7 @@ func TestIntegration_NativeSDK_OpenAI_IdentityQuestionCompletesWithNaturalStop(t
 		},
 	}
 
-	channelID := "ch_test_native_sdk_1"
+	channelID := "ch_test_model_gateway_sdk_1"
 	meta := session.Meta{
 		EndpointID:        "env_test",
 		NamespacePublicID: "ns_test",
@@ -346,7 +346,7 @@ func TestIntegration_NativeSDK_OpenAI_IdentityQuestionCompletesWithNaturalStop(t
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_test_native_sdk_identity_1"
+	runID := "run_test_model_gateway_sdk_identity_1"
 	rr := httptest.NewRecorder()
 	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
@@ -401,7 +401,7 @@ func TestIntegration_NativeSDK_OpenAI_IdentityQuestionCompletesWithNaturalStop(t
 	}
 }
 
-func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.T) {
+func TestIntegration_ModelGateway_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.T) {
 	t.Parallel()
 
 	token := "MOCK_OK_CHAT"
@@ -426,7 +426,7 @@ func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.
 		},
 	}
 
-	channelID := "ch_test_native_sdk_2"
+	channelID := "ch_test_model_gateway_sdk_2"
 	meta := session.Meta{
 		EndpointID:        "env_test",
 		NamespacePublicID: "ns_test",
@@ -469,7 +469,7 @@ func TestIntegration_NativeSDK_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.
 	}
 
 	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, "run_test_native_sdk_2", RunStartRequest{
+	if err := svc.StartRun(ctx, &meta, "run_test_model_gateway_sdk_2", RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-4o-mini",
 		Input:    RunInput{Text: "hello"},

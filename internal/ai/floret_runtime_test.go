@@ -19,26 +19,26 @@ import (
 
 type capturingTurnProvider struct {
 	mu       sync.Mutex
-	requests []TurnRequest
+	requests []ModelGatewayRequest
 }
 
-func (p *capturingTurnProvider) StreamTurn(_ context.Context, req TurnRequest, _ func(StreamEvent)) (TurnResult, error) {
+func (p *capturingTurnProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
 	p.mu.Lock()
 	p.requests = append(p.requests, req)
 	p.mu.Unlock()
-	return TurnResult{FinishReason: "stop", Text: "done"}, nil
+	return ModelGatewayResult{FinishReason: "stop", Text: "done"}, nil
 }
 
-func (p *capturingTurnProvider) firstRequest() TurnRequest {
+func (p *capturingTurnProvider) firstRequest() ModelGatewayRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if len(p.requests) == 0 {
-		return TurnRequest{}
+		return ModelGatewayRequest{}
 	}
 	return p.requests[0]
 }
 
-func TestRunNativeProjectsWebSearchToolThroughFloretGateway(t *testing.T) {
+func TestRunFloretProjectedTurnProjectsWebSearchToolThroughFloretGateway(t *testing.T) {
 	t.Parallel()
 
 	provider := &capturingTurnProvider{}
@@ -57,7 +57,7 @@ func TestRunNativeProjectsWebSearchToolThroughFloretGateway(t *testing.T) {
 		ThreadID:  "thread_floret_web_search_tool",
 		MessageID: "msg_floret_web_search_tool",
 	})
-	err := r.runNative(t.Context(), RunRequest{
+	err := r.runFloretProjectedTurn(t.Context(), RunRequest{
 		Model: "compat/gpt-5-mini",
 		Input: RunInput{Text: "search the web"},
 		Options: RunOptions{
@@ -72,7 +72,7 @@ func TestRunNativeProjectsWebSearchToolThroughFloretGateway(t *testing.T) {
 		},
 	}, "sk-test", "search the web", provider)
 	if err != nil {
-		t.Fatalf("runNative: %v", err)
+		t.Fatalf("runFloretProjectedTurn: %v", err)
 	}
 	req := provider.firstRequest()
 	if !containsString(toolDefNames(req.Tools), "web.search") {
@@ -561,5 +561,75 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 	}
 	if msg.Status != "canceled" || len(msg.Blocks) != 0 {
 		t.Fatalf("snapshot status=%q blocks=%d, want canceled empty boundary", msg.Status, len(msg.Blocks))
+	}
+}
+
+func TestProjectFloretExitPlanModeWaitingBuildsPromptFromSignalFacts(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 4)
+	r := newRun(runOptions{})
+	r.id = "run_exit_plan_waiting"
+	r.threadID = "thread_exit_plan_waiting"
+	r.messageID = "msg_exit_plan_waiting"
+	r.onStreamEvent = func(ev any) { events = append(events, ev) }
+
+	err := r.projectFloretResult(
+		t.Context(),
+		flruntime.ProjectedTurnResult{
+			Status: flruntime.TurnStatusWaiting,
+			Metrics: flruntime.RunMetrics{
+				Steps: 1,
+			},
+			Signal: &flruntime.TurnSignal{
+				Name:   "exit_plan_mode",
+				CallID: "call_exit_plan",
+				Payload: map[string]any{
+					"source":  "exit_plan_mode",
+					"summary": "Need to edit files.",
+					"allowed_prompts": []ExitPlanPromptRef{{
+						Tool:   "apply_patch",
+						Prompt: "Allow edits",
+					}},
+				},
+			},
+		},
+		RunRequest{},
+		newRuntimeState(""),
+		TaskComplexityStandard,
+		config.AIModePlan,
+	)
+	if err != nil {
+		t.Fatalf("projectFloretResult: %v", err)
+	}
+	prompt := r.snapshotWaitingPrompt()
+	if prompt == nil {
+		t.Fatalf("snapshotWaitingPrompt returned nil")
+	}
+	if prompt.ToolName != "exit_plan_mode" || prompt.ToolID != "call_exit_plan" || prompt.MessageID != "msg_exit_plan_waiting" {
+		t.Fatalf("prompt identity=%+v, want exit_plan_mode call prompt", prompt)
+	}
+	if len(prompt.Questions) != 1 {
+		t.Fatalf("questions=%+v, want one question", prompt.Questions)
+	}
+	question := prompt.Questions[0]
+	if !strings.Contains(question.Question, "Switch this thread to Act mode") {
+		t.Fatalf("question=%q, want Flower waiting prompt", question.Question)
+	}
+	if len(question.Choices) != 2 {
+		t.Fatalf("choices=%+v, want two choices", question.Choices)
+	}
+	firstChoice := question.Choices[0]
+	if len(firstChoice.Actions) != 1 || firstChoice.Actions[0].Type != requestUserInputActionSetMode || firstChoice.Actions[0].Mode != config.AIModeAct {
+		t.Fatalf("first choice actions=%+v, want set_mode act", firstChoice.Actions)
+	}
+	if r.getFinalizationReason() != finalizationReasonExitPlanModeWaiting {
+		t.Fatalf("finalization_reason=%q, want %q", r.getFinalizationReason(), finalizationReasonExitPlanModeWaiting)
+	}
+	if r.getEndReason() != "complete" {
+		t.Fatalf("end_reason=%q, want complete", r.getEndReason())
+	}
+	if len(events) == 0 {
+		t.Fatalf("stream events empty, want waiting projection events")
 	}
 }

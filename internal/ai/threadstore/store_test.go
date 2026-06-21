@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -1094,6 +1095,69 @@ CREATE INDEX IF NOT EXISTS idx_ai_flower_thread_metadata_parent ON ai_flower_thr
 		if !tableHasColumnForTest(t, s.db, "ai_flower_thread_metadata", column) {
 			t.Fatalf("missing migrated metadata column %q", column)
 		}
+	}
+}
+
+func TestStore_MigrateFromV31EnsuresProviderContinuationStateEnvelope(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	schema := threadstoreSchemaSpec()
+	tx, err := raw.Begin()
+	if err != nil {
+		_ = raw.Close()
+		t.Fatalf("begin v31 migration setup: %v", err)
+	}
+	for _, migration := range schema.Migrations {
+		if migration.ToVersion > 31 {
+			break
+		}
+		if err := migration.Apply(tx); err != nil {
+			_ = tx.Rollback()
+			_ = raw.Close()
+			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
+		}
+	}
+	if _, err := tx.Exec(`PRAGMA user_version=31;`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatalf("set user_version v31: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = raw.Close()
+		t.Fatalf("commit v31 migration setup: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open with v32 migration: %v", err)
+	}
+	defer func() { _ = s.Close() }()
+
+	for _, column := range []string{
+		"provider_continuation_state_json",
+		"provider_continuation_provider_id",
+		"provider_continuation_model",
+		"provider_continuation_base_url",
+		"provider_continuation_updated_at_unix_ms",
+	} {
+		if !tableHasColumnForTest(t, s.db, "ai_thread_state", column) {
+			t.Fatalf("missing migrated continuation column %q", column)
+		}
+	}
+	var version int
+	if err := s.db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
+		t.Fatalf("read user_version: %v", err)
+	}
+	if version != CurrentSchemaVersion() {
+		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
 	}
 }
 
@@ -2279,7 +2343,7 @@ func TestStore_ListRunEventsPage_ContextCategory(t *testing.T) {
 	appendEvent("context.compaction.started")
 	appendEvent("context.usage.updated")
 	appendEvent("context.compaction.skipped")
-	appendEvent("native.turn.result")
+	appendEvent("floret.projected_turn.result")
 
 	firstPage, nextCursor, hasMore, err := s.ListRunEventsPage(ctx, "env_1", "run_1", RunEventsQuery{
 		Category: "context",
@@ -2780,8 +2844,11 @@ func TestStore_ThreadProviderContinuationCRUD(t *testing.T) {
 	}
 
 	continuation := ThreadProviderContinuation{
-		Kind:            "openai_responses",
-		ContinuationID:  "resp_1",
+		State: ProviderContinuationState{
+			Kind:       "openai_responses",
+			ID:         "resp_1",
+			Attributes: map[string]string{"cursor": "cur_1", "region": "iad"},
+		},
 		ProviderID:      "openai",
 		Model:           "gpt-5-mini",
 		BaseURL:         "https://api.openai.com/v1",
@@ -2798,8 +2865,16 @@ func TestStore_ThreadProviderContinuationCRUD(t *testing.T) {
 	if got == nil {
 		t.Fatalf("expected continuation state")
 	}
-	if *got != continuation {
+	if !reflect.DeepEqual(*got, continuation) {
 		t.Fatalf("continuation=%+v, want %+v", *got, continuation)
+	}
+	got.State.Attributes["cursor"] = "mutated"
+	again, err := s.GetThreadProviderContinuation(ctx, "env_resume", "th_resume")
+	if err != nil {
+		t.Fatalf("GetThreadProviderContinuation again: %v", err)
+	}
+	if again == nil || again.State.Attributes["cursor"] != "cur_1" {
+		t.Fatalf("continuation attributes after mutation=%+v, want original", again)
 	}
 
 	state, err := s.GetThreadState(ctx, "env_resume", "th_resume")
@@ -2809,7 +2884,7 @@ func TestStore_ThreadProviderContinuationCRUD(t *testing.T) {
 	if state == nil {
 		t.Fatalf("expected thread state row")
 	}
-	if state.ProviderContinuation != continuation {
+	if !reflect.DeepEqual(state.ProviderContinuation, continuation) {
 		t.Fatalf("thread state continuation=%+v, want %+v", state.ProviderContinuation, continuation)
 	}
 

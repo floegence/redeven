@@ -123,7 +123,7 @@ func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
 	}
 
 	events := make([]StreamEvent, 0, 4)
-	result, err := provider.StreamTurn(context.Background(), TurnRequest{
+	result, err := provider.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model: "kimi-k2.6",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "hello"}}},
@@ -224,12 +224,12 @@ func TestMoonshotProvider_Turn_ToolCallResponse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
-	direct, ok := provider.(directTurnProvider)
+	direct, ok := provider.(directModelGateway)
 	if !ok {
-		t.Fatalf("provider does not implement directTurnProvider")
+		t.Fatalf("provider does not implement directModelGateway")
 	}
 
-	result, err := direct.Turn(context.Background(), TurnRequest{
+	result, err := direct.Turn(context.Background(), ModelGatewayRequest{
 		Model: "kimi-k2.6",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "ask the user"}}},
@@ -352,7 +352,7 @@ func TestMoonshotProvider_StreamTurn_PreservesReasoningFragmentWhitespace(t *tes
 	}
 
 	events := make([]StreamEvent, 0, 5)
-	result, err := provider.StreamTurn(context.Background(), TurnRequest{
+	result, err := provider.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model: "kimi-k2.6",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "think out loud"}}},
@@ -509,7 +509,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallAliasRoundTrip(t *testing.T) {
 	}
 
 	events := make([]StreamEvent, 0, 8)
-	result, err := provider.StreamTurn(context.Background(), TurnRequest{
+	result, err := provider.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model: "kimi-k2.6",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "run pwd"}}},
@@ -712,7 +712,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
 
-	firstResult, err := provider.StreamTurn(context.Background(), TurnRequest{
+	firstResult, err := provider.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model: "kimi-k2.6",
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "check load"}}},
@@ -749,7 +749,7 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 	}, firstResult.ToolCalls)...)
 	history = append(history, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "continue"}}})
 
-	secondResult, err := provider.StreamTurn(context.Background(), TurnRequest{
+	secondResult, err := provider.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model:    "kimi-k2.6",
 		Messages: history,
 	}, nil)
@@ -837,7 +837,7 @@ func TestMoonshotProvider_StreamTurn_AddsBuiltinWebSearchTool(t *testing.T) {
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
 
-	result, err := provider.StreamTurn(context.Background(), TurnRequest{
+	result, err := provider.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model:         "kimi-k2.6",
 		WebSearchMode: providerWebSearchModeKimiBuiltin,
 		Messages: []Message{

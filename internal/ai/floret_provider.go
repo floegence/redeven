@@ -12,7 +12,7 @@ import (
 )
 
 type floretProviderAdapter struct {
-	base Provider
+	base ModelGateway
 
 	providerType string
 	modelName    string
@@ -24,7 +24,7 @@ type floretProviderAdapter struct {
 	continuationSupported bool
 }
 
-func newFloretProviderAdapter(base Provider, providerType string, modelName string, mode string, controls ProviderControls, budgets TurnBudgets, webSearch string) *floretProviderAdapter {
+func newFloretProviderAdapter(base ModelGateway, providerType string, modelName string, mode string, controls ProviderControls, budgets TurnBudgets, webSearch string) *floretProviderAdapter {
 	return &floretProviderAdapter{
 		base:                  base,
 		providerType:          strings.ToLower(strings.TrimSpace(providerType)),
@@ -121,7 +121,7 @@ func flowerSourcesToFloret(in []SourceRef) []flruntime.SourceRef {
 	return out
 }
 
-func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (TurnRequest, error) {
+func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (ModelGatewayRequest, error) {
 	controls := p.controls
 	previous := cloneFloretModelState(req.PreviousState)
 	if p.shouldUsePreviousState(previous, req.Step) {
@@ -136,18 +136,18 @@ func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (TurnReq
 
 	messages, err := floretMessagesToFlower(req.Messages)
 	if err != nil {
-		return TurnRequest{}, err
+		return ModelGatewayRequest{}, err
 	}
 	tools, err := flowerToolsFromFloret(req.Tools)
 	if err != nil {
-		return TurnRequest{}, err
+		return ModelGatewayRequest{}, err
 	}
 
 	budgets := p.budgets
 	if req.MaxOutputTokens > 0 {
 		budgets.MaxOutputToken = int(req.MaxOutputTokens)
 	}
-	return TurnRequest{
+	return ModelGatewayRequest{
 		Model:            p.modelName,
 		Messages:         messages,
 		Tools:            tools,
@@ -448,19 +448,7 @@ func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
 	return out, nil
 }
 
-func flowerProviderStateToFloret(state *TurnProviderState) *flruntime.ModelState {
-	if state == nil {
-		return nil
-	}
-	kind := strings.TrimSpace(state.ContinuationKind)
-	id := strings.TrimSpace(state.ContinuationID)
-	if kind == "" || id == "" {
-		return nil
-	}
-	return &flruntime.ModelState{Kind: kind, ID: id}
-}
-
-func floretProviderStateToFlower(state *flruntime.ModelState) *TurnProviderState {
+func flowerProviderStateToFloret(state *ModelGatewayState) *flruntime.ModelState {
 	if state == nil {
 		return nil
 	}
@@ -469,7 +457,19 @@ func floretProviderStateToFlower(state *flruntime.ModelState) *TurnProviderState
 	if kind == "" || id == "" {
 		return nil
 	}
-	return &TurnProviderState{ContinuationKind: kind, ContinuationID: id}
+	return &flruntime.ModelState{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}
+}
+
+func floretProviderStateToFlower(state *flruntime.ModelState) *ModelGatewayState {
+	if state == nil {
+		return nil
+	}
+	kind := strings.TrimSpace(state.Kind)
+	id := strings.TrimSpace(state.ID)
+	if kind == "" || id == "" {
+		return nil
+	}
+	return &ModelGatewayState{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}
 }
 
 func floretUsageFromFlower(usage TurnUsage) flruntime.ProviderUsage {
@@ -507,12 +507,23 @@ func cloneFloretModelState(state *flruntime.ModelState) *flruntime.ModelState {
 	return out
 }
 
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for key, value := range in {
+		out[key] = value
+	}
+	return out
+}
+
 func normalizeFloretUsage(usage flruntime.ProviderUsage) flruntime.ProviderUsage {
 	if usage.TotalTokens <= 0 {
 		usage.TotalTokens = usage.InputTokens + usage.OutputTokens + usage.ReasoningTokens + usage.CacheReadTokens + usage.CacheWriteTokens
 	}
 	if usage.Source == "" && usage.TotalTokens > 0 {
-		usage.Source = "native"
+		usage.Source = "model_gateway"
 	}
 	if usage.TotalTokens > 0 || usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.ReasoningTokens > 0 {
 		usage.Available = true

@@ -80,8 +80,7 @@ type ExitPlanModeArgs struct {
 }
 
 type ExitPlanModeResult struct {
-	WaitingPrompt *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
-	Summary       string                  `json:"summary,omitempty"`
+	Summary string `json:"summary,omitempty"`
 }
 
 func mapToolFilePathError(err error) error {
@@ -568,13 +567,9 @@ func buildExitPlanModeQuestion(summary string) string {
 	return fmt.Sprintf("I need act mode to execute the proposed changes. Summary: %s. Switch this thread to Act mode?", summary)
 }
 
-func (r *run) toolExitPlanMode(toolID string, args ExitPlanModeArgs) (ExitPlanModeResult, error) {
-	toolID = strings.TrimSpace(toolID)
-	if toolID == "" {
-		return ExitPlanModeResult{}, errors.New("missing tool_id")
-	}
-	prompt := normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
-		MessageID:        strings.TrimSpace(r.messageID),
+func buildExitPlanModeWaitingPrompt(messageID string, toolID string, args ExitPlanModeArgs) *RequestUserInputPrompt {
+	return normalizeRequestUserInputPrompt(&RequestUserInputPrompt{
+		MessageID:        strings.TrimSpace(messageID),
 		ToolID:           toolID,
 		ToolName:         "exit_plan_mode",
 		ReasonCode:       AskUserReasonUserDecisionRequired,
@@ -606,13 +601,6 @@ func (r *run) toolExitPlanMode(toolID string, args ExitPlanModeArgs) (ExitPlanMo
 			},
 		},
 	})
-	if prompt == nil {
-		return ExitPlanModeResult{}, errors.New("failed to build waiting prompt")
-	}
-	return ExitPlanModeResult{
-		WaitingPrompt: prompt,
-		Summary:       truncateRunes(strings.TrimSpace(args.Summary), 280),
-	}, nil
 }
 
 func boolValuePtr(v bool) *bool {

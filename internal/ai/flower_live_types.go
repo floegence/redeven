@@ -95,6 +95,7 @@ type FlowerLiveThreadPatch struct {
 	UpdatedAtUnixMs     int64                   `json:"updated_at_unix_ms,omitempty"`
 	LastMessageAtUnixMs int64                   `json:"last_message_at_unix_ms,omitempty"`
 	LastMessagePreview  string                  `json:"last_message_preview,omitempty"`
+	ReadStatus          *FlowerThreadReadView   `json:"read_status,omitempty"`
 }
 
 type FlowerLiveThreadPatchedPayload struct {

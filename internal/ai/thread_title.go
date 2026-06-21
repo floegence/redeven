@@ -55,7 +55,7 @@ type autoThreadTitleApplyResult struct {
 }
 
 type resolvedProviderAdapter struct {
-	Adapter      Provider
+	Adapter      ModelGateway
 	ProviderType string
 	ModelName    string
 }
@@ -103,7 +103,7 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 			return resolvedProviderAdapter{}, fmt.Errorf("invalid desktop model source model %q", resolved.ID)
 		}
 		return resolvedProviderAdapter{
-			Adapter:      modelSource.Provider(modelID),
+			Adapter:      modelSource.ModelGateway(modelID),
 			ProviderType: providerType,
 			ModelName:    modelID,
 		}, nil
@@ -131,7 +131,7 @@ func (s *Service) initResolvedProviderAdapter(resolved resolvedRunModel) (resolv
 	}, nil
 }
 
-func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (Provider, string, error) {
+func (s *Service) initStructuredOutputProvider(resolved resolvedRunModel) (ModelGateway, string, error) {
 	adapter, err := s.initResolvedProviderAdapter(resolved)
 	if err != nil {
 		return nil, "", err
@@ -165,7 +165,7 @@ func (s *Service) generateAutoThreadTitleByModel(ctx context.Context, resolved r
 	}
 	defer cancel()
 
-	result, err := adapter.Adapter.StreamTurn(titleCtx, TurnRequest{
+	result, err := adapter.Adapter.StreamTurn(titleCtx, ModelGatewayRequest{
 		Model: strings.TrimSpace(adapter.ModelName),
 		Messages: []Message{
 			{Role: "system", Content: []ContentPart{{Type: "text", Text: autoThreadTitleSystemPrompt}}},

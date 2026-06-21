@@ -144,7 +144,7 @@ describe('FlowerSurface navigation structured input', () => {
     password.value = 'secret-token';
     password.dispatchEvent(new InputEvent('input', { bubbles: true }));
     await flush();
-    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
     await waitFor(() => submitInput.mock.calls.length > 0);
 
     expect(submitInput).toHaveBeenCalledWith({
@@ -210,7 +210,7 @@ describe('FlowerSurface navigation structured input', () => {
     (Array.from(runtime.querySelectorAll('.flower-input-request-choice')) as HTMLButtonElement[])
       .find((button) => button.textContent?.includes('Staging'))?.click();
     await flush();
-    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
     await waitFor(() => submitInput.mock.calls.length > 0);
     await waitFor(() => runtime.textContent?.includes('Continuing with staging.') ?? false);
 
@@ -253,11 +253,11 @@ describe('FlowerSurface navigation structured input', () => {
     (Array.from(runtime.querySelectorAll('.flower-input-request-choice')) as HTMLButtonElement[])
       .find((button) => button.textContent?.includes('Production'))?.click();
     await flush();
-    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    (runtime.querySelector('.flower-composer-continue') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-composer-error')));
 
     expect(runtime.querySelector('.flower-composer-error')?.textContent).toContain('Flower is no longer waiting for that input.');
-    expect(runtime.querySelector('.flower-composer-submit')?.textContent).toContain('Retry');
+    expect(runtime.querySelector('.flower-composer-continue')?.textContent).toContain('Retry');
     expect(runtime.querySelector('.flower-input-request-choice-selected')?.textContent).toContain('Production');
   });
 

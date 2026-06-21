@@ -24,16 +24,16 @@ import (
 )
 
 const (
-	nativeDefaultMaxOutputTokens            = 4096
-	nativeDefaultCompactThreshold           = 0.80
-	nativeMinCompactThreshold               = 0.65
-	nativeMaxCompactThreshold               = 0.90
-	nativeDefaultContextLimit               = 128000
-	nativeToolResultPruneBudget             = 50000
-	nativeToolResultPruneRunes              = 480
-	nativeToolResultKeepTurns               = 2
+	modelGatewayDefaultMaxOutputTokens      = 4096
+	modelGatewayDefaultCompactThreshold     = 0.80
+	modelGatewayMinCompactThreshold         = 0.65
+	modelGatewayMaxCompactThreshold         = 0.90
+	modelGatewayDefaultContextLimit         = 128000
+	modelGatewayToolResultPruneBudget       = 50000
+	modelGatewayToolResultPruneRunes        = 480
+	modelGatewayToolResultKeepTurns         = 2
 	providerContinuationKindOpenAIResponses = "openai_responses"
-	nativeHardMaxToolCalls                  = 200
+	modelGatewayHardMaxToolCalls            = 200
 )
 
 const (
@@ -134,12 +134,12 @@ type openAIProvider struct {
 	forceChat        bool
 }
 
-func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
+func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	if p == nil {
-		return TurnResult{}, errors.New("nil provider")
+		return ModelGatewayResult{}, errors.New("nil provider")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return TurnResult{}, errors.New("missing model")
+		return ModelGatewayResult{}, errors.New("missing model")
 	}
 	if p.forceChat {
 		return p.streamChatTurn(ctx, req, onEvent)
@@ -147,7 +147,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 
 	params := oresponses.ResponseNewParams{
 		Model:             oshared.ResponsesModel(strings.TrimSpace(req.Model)),
-		MaxOutputTokens:   openai.Int(nativeDefaultMaxOutputTokens),
+		MaxOutputTokens:   openai.Int(modelGatewayDefaultMaxOutputTokens),
 		ParallelToolCalls: openai.Bool(false),
 	}
 	if req.Budgets.MaxOutputToken > 0 {
@@ -354,7 +354,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return TurnResult{}, err
+		return ModelGatewayResult{}, err
 	}
 	// Some OpenAI-compatible endpoints omit `response.completed` even when they have already
 	// streamed usable text or tool call deltas. Treat missing completion as a soft-failure
@@ -371,10 +371,10 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 		break
 	}
 	if !gotCompleted && strings.TrimSpace(textBuf.String()) == "" && !hasToolCall {
-		return TurnResult{}, errors.New("missing response.completed event")
+		return ModelGatewayResult{}, errors.New("missing response.completed event")
 	}
 
-	result := TurnResult{
+	result := ModelGatewayResult{
 		FinishReason:    "unknown",
 		Text:            strings.TrimSpace(textBuf.String()),
 		RawProviderDiag: map[string]any{},
@@ -389,9 +389,9 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 		}
 		if rid := strings.TrimSpace(completed.ID); rid != "" {
 			result.RawProviderDiag["response_id"] = rid
-			result.ProviderState = &TurnProviderState{
-				ContinuationKind: providerContinuationKindOpenAIResponses,
-				ContinuationID:   rid,
+			result.ProviderState = &ModelGatewayState{
+				Kind: providerContinuationKindOpenAIResponses,
+				ID:   rid,
 			}
 		}
 	} else {
@@ -485,12 +485,12 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req TurnRequest, onEven
 	return result, nil
 }
 
-func (p *openAIProvider) streamChatTurn(ctx context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
+func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	if p == nil {
-		return TurnResult{}, errors.New("nil provider")
+		return ModelGatewayResult{}, errors.New("nil provider")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return TurnResult{}, errors.New("missing model")
+		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
 	messages := buildOpenAIChatMessages(req.Messages)
@@ -531,7 +531,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req TurnRequest, on
 
 	stream := p.client.Chat.Completions.NewStreaming(ctx, params)
 	var textBuf strings.Builder
-	result := TurnResult{
+	result := ModelGatewayResult{
 		FinishReason:    "unknown",
 		RawProviderDiag: map[string]any{},
 	}
@@ -656,7 +656,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req TurnRequest, on
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return TurnResult{}, err
+		return ModelGatewayResult{}, err
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
@@ -679,7 +679,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req TurnRequest, on
 		result.FinishReason = "stop"
 	}
 	if result.Text == "" && len(result.ToolCalls) == 0 {
-		return TurnResult{}, errors.New("missing streamed response")
+		return ModelGatewayResult{}, errors.New("missing streamed response")
 	}
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: &PartialUsage{
 		InputTokens:     result.Usage.InputTokens,
@@ -695,12 +695,12 @@ type moonshotProvider struct {
 	strictToolSchema bool
 }
 
-func (p *moonshotProvider) StreamTurn(ctx context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
+func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	if p == nil {
-		return TurnResult{}, errors.New("nil provider")
+		return ModelGatewayResult{}, errors.New("nil provider")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return TurnResult{}, errors.New("missing model")
+		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
 	messages := buildOpenAIChatMessages(req.Messages)
@@ -745,7 +745,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req TurnRequest, onEv
 	stream := p.client.Chat.Completions.NewStreaming(ctx, params)
 	var textBuf strings.Builder
 	var reasoningBuf strings.Builder
-	result := TurnResult{
+	result := ModelGatewayResult{
 		FinishReason:    "unknown",
 		RawProviderDiag: map[string]any{},
 	}
@@ -900,7 +900,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req TurnRequest, onEv
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return TurnResult{}, err
+		return ModelGatewayResult{}, err
 	}
 
 	sort.SliceStable(order, func(i, j int) bool { return order[i] < order[j] })
@@ -929,7 +929,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req TurnRequest, onEv
 		result.FinishReason = "stop"
 	}
 	if result.Text == "" && result.Reasoning == "" && len(result.ToolCalls) == 0 {
-		return TurnResult{}, errors.New("missing streamed response")
+		return ModelGatewayResult{}, errors.New("missing streamed response")
 	}
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: &PartialUsage{
 		InputTokens:     result.Usage.InputTokens,
@@ -940,12 +940,12 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req TurnRequest, onEv
 	return result, nil
 }
 
-func (p *moonshotProvider) Turn(ctx context.Context, req TurnRequest) (TurnResult, error) {
+func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (ModelGatewayResult, error) {
 	if p == nil {
-		return TurnResult{}, errors.New("nil provider")
+		return ModelGatewayResult{}, errors.New("nil provider")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return TurnResult{}, errors.New("missing model")
+		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
 	messages := buildOpenAIChatMessages(req.Messages)
@@ -985,9 +985,9 @@ func (p *moonshotProvider) Turn(ctx context.Context, req TurnRequest) (TurnResul
 
 	completion, err := p.client.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return TurnResult{}, err
+		return ModelGatewayResult{}, err
 	}
-	result := TurnResult{
+	result := ModelGatewayResult{
 		FinishReason:    "unknown",
 		RawProviderDiag: map[string]any{"response_id": strings.TrimSpace(completion.ID)},
 		Usage: TurnUsage{
@@ -997,7 +997,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req TurnRequest) (TurnResul
 		},
 	}
 	if len(completion.Choices) == 0 {
-		return TurnResult{}, errors.New("missing completion choices")
+		return ModelGatewayResult{}, errors.New("missing completion choices")
 	}
 	choice := completion.Choices[0]
 	result.FinishReason = mapOpenAIChatFinishReason(string(choice.FinishReason))
@@ -1026,7 +1026,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req TurnRequest) (TurnResul
 		result.FinishReason = "stop"
 	}
 	if result.Text == "" && result.Reasoning == "" && len(result.ToolCalls) == 0 {
-		return TurnResult{}, errors.New("missing completion content")
+		return ModelGatewayResult{}, errors.New("missing completion content")
 	}
 	return result, nil
 }
@@ -1528,17 +1528,17 @@ type anthropicProvider struct {
 	client anthropic.Client
 }
 
-func (p *anthropicProvider) StreamTurn(ctx context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
+func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	if p == nil {
-		return TurnResult{}, errors.New("nil provider")
+		return ModelGatewayResult{}, errors.New("nil provider")
 	}
 	if strings.TrimSpace(req.Model) == "" {
-		return TurnResult{}, errors.New("missing model")
+		return ModelGatewayResult{}, errors.New("missing model")
 	}
 	tools, aliasToReal := buildAnthropicTools(req.Tools)
 	params := anthropic.MessageNewParams{
 		Model:     anthropic.Model(strings.TrimSpace(req.Model)),
-		MaxTokens: nativeDefaultMaxOutputTokens,
+		MaxTokens: modelGatewayDefaultMaxOutputTokens,
 		Messages:  buildAnthropicMessages(req.Messages),
 		Tools:     tools,
 	}
@@ -1614,7 +1614,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req TurnRequest, onE
 	for stream.Next() {
 		event := stream.Current()
 		if err := msg.Accumulate(event); err != nil {
-			return TurnResult{}, err
+			return ModelGatewayResult{}, err
 		}
 		switch variant := event.AsAny().(type) {
 		case anthropic.ContentBlockStartEvent:
@@ -1683,10 +1683,10 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req TurnRequest, onE
 		}
 	}
 	if err := stream.Err(); err != nil {
-		return TurnResult{}, err
+		return ModelGatewayResult{}, err
 	}
 
-	result := TurnResult{
+	result := ModelGatewayResult{
 		FinishReason: mapAnthropicStopReason(msg.StopReason),
 		Text:         strings.TrimSpace(textBuf.String()),
 		Usage: TurnUsage{
@@ -1916,7 +1916,7 @@ func joinMessageText(msg Message) string {
 	return strings.Join(parts, "\n")
 }
 
-func (r *run) shouldUseNativeRuntime(provider *config.AIProvider) bool {
+func (r *run) supportsModelGatewayProvider(provider *config.AIProvider) bool {
 	if r == nil || provider == nil {
 		return false
 	}
@@ -1928,7 +1928,7 @@ func (r *run) shouldUseNativeRuntime(provider *config.AIProvider) bool {
 	}
 }
 
-func newProviderAdapter(providerType string, baseURL string, apiKey string, strictToolSchemaOverride *bool) (Provider, error) {
+func newProviderAdapter(providerType string, baseURL string, apiKey string, strictToolSchemaOverride *bool) (ModelGateway, error) {
 	providerType = strings.ToLower(strings.TrimSpace(providerType))
 	if strings.TrimSpace(apiKey) == "" {
 		return nil, errors.New("missing provider api key")
@@ -2377,14 +2377,14 @@ func (r *run) emitContextCompactionEvent(eventType string, payload map[string]an
 
 func normalizeCompactionThreshold(input float64) float64 {
 	if input <= 0 {
-		return nativeDefaultCompactThreshold
+		return modelGatewayDefaultCompactThreshold
 	}
-	return clampFloat(input, nativeMinCompactThreshold, nativeMaxCompactThreshold)
+	return clampFloat(input, modelGatewayMinCompactThreshold, modelGatewayMaxCompactThreshold)
 }
 
 func resolveInputContextLimit(contextWindow int, maxInputTokens int) int {
 	if contextWindow <= 0 {
-		contextWindow = nativeDefaultContextLimit
+		contextWindow = modelGatewayDefaultContextLimit
 	}
 	if maxInputTokens > 0 && maxInputTokens < contextWindow {
 		return maxInputTokens
@@ -2396,12 +2396,12 @@ func deriveModelWindowCompactionThreshold(contextWindow int, inputContextLimit i
 	inputContextLimit = resolveInputContextLimit(contextWindow, inputContextLimit)
 	contextWindow = resolveInputContextLimit(contextWindow, 0)
 	if contextWindow <= 0 {
-		return nativeDefaultCompactThreshold
+		return modelGatewayDefaultCompactThreshold
 	}
 	if inputContextLimit >= contextWindow {
-		return nativeMaxCompactThreshold
+		return modelGatewayMaxCompactThreshold
 	}
-	return clampFloat(float64(inputContextLimit)/float64(contextWindow), nativeMinCompactThreshold, nativeMaxCompactThreshold)
+	return clampFloat(float64(inputContextLimit)/float64(contextWindow), modelGatewayMinCompactThreshold, modelGatewayMaxCompactThreshold)
 }
 
 func resolveCompactionThreshold(configThreshold float64, contextWindow int, inputContextLimit int) float64 {
@@ -2410,7 +2410,7 @@ func resolveCompactionThreshold(configThreshold float64, contextWindow int, inpu
 	if window > 0 {
 		cfg = minFloat(cfg, window)
 	}
-	return clampFloat(cfg, nativeMinCompactThreshold, nativeMaxCompactThreshold)
+	return clampFloat(cfg, modelGatewayMinCompactThreshold, modelGatewayMaxCompactThreshold)
 }
 
 func clampFloat(value float64, minVal float64, maxVal float64) float64 {
@@ -3596,7 +3596,7 @@ func (r *run) persistAskUserWaitingSignal(signal askUserSignal, source string) (
 }
 
 func (r *run) persistExitPlanModeWaitingSignal(toolID string, args ExitPlanModeArgs, result ExitPlanModeResult) (string, int) {
-	if r == nil || result.WaitingPrompt == nil {
+	if r == nil {
 		return "", 0
 	}
 	toolID = strings.TrimSpace(toolID)
@@ -3609,7 +3609,10 @@ func (r *run) persistExitPlanModeWaitingSignal(toolID string, args ExitPlanModeA
 	}
 	args.Summary = truncateRunes(strings.TrimSpace(args.Summary), 280)
 	args.AllowedPrompts = normalizeExitPlanPromptRefs(args.AllowedPrompts)
-	prompt := normalizeRequestUserInputPrompt(result.WaitingPrompt)
+	if result.Summary == "" {
+		result.Summary = args.Summary
+	}
+	prompt := buildExitPlanModeWaitingPrompt(strings.TrimSpace(r.messageID), toolID, args)
 	if prompt == nil {
 		return "", 0
 	}

@@ -518,20 +518,20 @@ WHERE endpoint_id = ? AND thread_id = ?
 
 	// Thread state.
 	var st ThreadState
+	var providerContinuationStateJSON string
 	stErr := tx.QueryRowContext(ctx, `
-SELECT endpoint_id, thread_id, open_goal, last_assistant_summary,
-       provider_continuation_kind, provider_continuation_id, provider_continuation_provider_id,
-       provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
-       updated_at_unix_ms
-FROM ai_thread_state
+	SELECT endpoint_id, thread_id, open_goal, last_assistant_summary,
+	       provider_continuation_state_json, provider_continuation_provider_id,
+	       provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
+	       updated_at_unix_ms
+	FROM ai_thread_state
 WHERE endpoint_id = ? AND thread_id = ?
 `, endpointID, threadID).Scan(
 		&st.EndpointID,
 		&st.ThreadID,
 		&st.OpenGoal,
 		&st.LastAssistantSummary,
-		&st.ProviderContinuation.Kind,
-		&st.ProviderContinuation.ContinuationID,
+		&providerContinuationStateJSON,
 		&st.ProviderContinuation.ProviderID,
 		&st.ProviderContinuation.Model,
 		&st.ProviderContinuation.BaseURL,
@@ -543,6 +543,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 		st.ThreadID = strings.TrimSpace(st.ThreadID)
 		st.OpenGoal = strings.TrimSpace(st.OpenGoal)
 		st.LastAssistantSummary = strings.TrimSpace(st.LastAssistantSummary)
+		st.ProviderContinuation.State = parseProviderContinuationStateJSON(providerContinuationStateJSON)
 		st.ProviderContinuation = st.ProviderContinuation.normalized()
 		out.ThreadState = &st
 	} else if !errors.Is(stErr, sql.ErrNoRows) {

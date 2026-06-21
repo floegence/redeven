@@ -59,6 +59,12 @@ type FlowerInputDraft = Readonly<{
   choice_id?: string;
   text?: string;
 }>;
+type FlowerComposerSessionDraft = Readonly<{
+  chatDraft: string;
+  inputPromptSignature: string;
+  inputDrafts: Record<string, FlowerInputDraft>;
+  activeInputQuestionID: string;
+}>;
 type PendingFlowerTurn = Readonly<{
   thread_id: string;
 }>;
@@ -116,6 +122,33 @@ const ASK_FLOWER_CONTEXT_SESSION_SOURCES = new Set([
   'runtime_gateway',
   'region_sandbox',
 ]);
+
+function emptyFlowerComposerSessionDraft(): FlowerComposerSessionDraft {
+  return {
+    chatDraft: '',
+    inputPromptSignature: '',
+    inputDrafts: {},
+    activeInputQuestionID: '',
+  };
+}
+
+function sameFlowerInputDrafts(left: Record<string, FlowerInputDraft>, right: Record<string, FlowerInputDraft>): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) => {
+    const leftDraft = left[key] ?? {};
+    const rightDraft = right[key] ?? {};
+    return leftDraft.choice_id === rightDraft.choice_id && leftDraft.text === rightDraft.text;
+  });
+}
+
+function sameFlowerComposerSessionDraft(left: FlowerComposerSessionDraft, right: FlowerComposerSessionDraft): boolean {
+  return left.chatDraft === right.chatDraft
+    && left.inputPromptSignature === right.inputPromptSignature
+    && left.activeInputQuestionID === right.activeInputQuestionID
+    && sameFlowerInputDrafts(left.inputDrafts, right.inputDrafts);
+}
 
 const FlowerStopIcon: Component<{ class?: string }> = (props) => (
   <svg
@@ -199,10 +232,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [snapshot, setSnapshot] = createSignal<FlowerSettingsSnapshot | null>(null);
   const [threads, setThreads] = createSignal<readonly FlowerThreadSnapshot[]>([]);
   const [selectedThreadID, setSelectedThreadID] = createSignal('');
-  const [chatDraft, setChatDraft] = createSignal('');
+  const [composerSessionDrafts, setComposerSessionDrafts] = createSignal<Record<string, FlowerComposerSessionDraft>>({});
   const [chatSubmitError, setChatSubmitError] = createSignal('');
-  const [inputDrafts, setInputDrafts] = createSignal<Record<string, FlowerInputDraft>>({});
-  const [activeInputQuestionID, setActiveInputQuestionID] = createSignal('');
   const [inputSubmitError, setInputSubmitError] = createSignal('');
   const [inputSubmitting, setInputSubmitting] = createSignal(false);
   const [chatRunning, setChatRunning] = createSignal(false);
@@ -233,7 +264,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
   let startedFocusThreadRequestID = '';
-  let lastInputPromptSignature = '';
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
   let transcriptRef: HTMLDivElement | undefined;
   let renameDialogRef: HTMLDivElement | undefined;
@@ -241,6 +271,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let renameRestoreRef: HTMLElement | undefined;
   let transcriptNearBottom = true;
   let backgroundThreadsRefreshInFlight = false;
+  let composerFocusToken = 0;
+  const [composerFocusRevision, setComposerFocusRevision] = createSignal(0);
   const selectedThreadLiveRequests = new Map<string, number>();
   let selectedThreadLiveUpdateToken = 0;
   const locallyReadSnapshots = new Map<string, string>();
@@ -286,6 +318,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return pending.thread_id === (selectedThreadID() || PENDING_NEW_THREAD_ID) ? pending : null;
   });
   const selectedThreadLoading = createMemo(() => trimString(loadingThreadID()) !== '' && loadingThreadID() === selectedThreadID());
+  const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || PENDING_NEW_THREAD_ID);
+  const currentComposerSessionDraft = createMemo(() => composerSessionDrafts()[currentComposerSessionKey()] ?? emptyFlowerComposerSessionDraft());
+  const updateComposerSessionDraft = (sessionKey: string, updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
+    const key = trimString(sessionKey) || PENDING_NEW_THREAD_ID;
+    setComposerSessionDrafts((current) => {
+      const previous = current[key] ?? emptyFlowerComposerSessionDraft();
+      const next = updater(previous);
+      if (sameFlowerComposerSessionDraft(previous, next)) return current;
+      return { ...current, [key]: next };
+    });
+  };
+  const updateCurrentComposerSessionDraft = (updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
+    updateComposerSessionDraft(currentComposerSessionKey(), updater);
+  };
+  const requestComposerFocus = () => {
+    setComposerFocusRevision((revision) => revision + 1);
+  };
+  const scheduleComposerFocus = () => {
+    if (typeof queueMicrotask === 'undefined') return;
+    const token = ++composerFocusToken;
+    queueMicrotask(() => {
+      if (token !== composerFocusToken) return;
+      composerRef?.focus();
+    });
+  };
+  onCleanup(() => {
+    composerFocusToken += 1;
+  });
   const warmupState = createMemo(() => props.warmup?.active ? props.warmup : null);
   const surfaceWarmupActive = createMemo(() => warmupState() !== null);
   const warmupCanReplaceTranscript = createMemo(() => (
@@ -752,6 +812,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       setSelectedThreadID(thread.thread_id);
       setLoadingThreadID('');
+      requestComposerFocus();
     } catch (error) {
       if (sequence !== threadLoadSequence) return;
       setLoadingThreadID('');
@@ -868,6 +929,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     untrack(() => {
       void focusThreadFromRequest(requestID, focusedThreadID);
     });
+  });
+
+  createEffect(() => {
+    if (composerFocusRevision() <= 0) return;
+    scheduleComposerFocus();
   });
 
   const applySelectedThreadLiveEvents = async (threadID: string, sequence: number) => {
@@ -996,15 +1062,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   createEffect(() => {
-    const promptID = selectedInputRequest()?.prompt_id ?? '';
-    const signature = promptID ? `${selectedThreadID()}:${promptID}` : '';
-    if (signature === lastInputPromptSignature) {
-      return;
-    }
-    lastInputPromptSignature = signature;
-    setInputDrafts({});
-    const textQuestion = selectedInputRequest()?.questions.find((question) => question.response_mode === 'write' || question.response_mode === 'select_or_write') ?? null;
-    setActiveInputQuestionID(textQuestion?.id ?? '');
+    const request = selectedInputRequest();
+    const signature = request ? `${currentComposerSessionKey()}:${request.prompt_id}` : '';
+    const textQuestion = request?.questions.find((question) => question.response_mode === 'write' || question.response_mode === 'select_or_write') ?? null;
+    updateCurrentComposerSessionDraft((draft) => ({
+      ...draft,
+      inputPromptSignature: signature,
+      inputDrafts: request && draft.inputPromptSignature !== signature ? {} : draft.inputDrafts,
+      activeInputQuestionID: request
+        ? (
+          draft.activeInputQuestionID && request.questions.some((question) => question.id === draft.activeInputQuestionID)
+            ? draft.activeInputQuestionID
+            : (textQuestion?.id ?? '')
+        )
+        : '',
+    }));
     setInputSubmitError('');
   });
 
@@ -1064,18 +1136,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     };
     setChatRunning(true);
     setPendingTurn(pending);
-    setChatDraft('');
-    if (composerRef) {
-      composerRef.value = '';
-    }
+    updateCurrentComposerSessionDraft((draft) => ({
+      ...draft,
+      chatDraft: '',
+      inputPromptSignature: '',
+      inputDrafts: {},
+      activeInputQuestionID: '',
+    }));
     try {
       const decision = currentHandlerDecision() ?? await resolveHandlerDecision();
       if (!decision.selected_handler || decision.blocker || decision.route === 'blocked') {
         setPendingTurn(null);
-        setChatDraft(prompt);
-        if (composerRef) {
-          composerRef.value = prompt;
-        }
+        updateCurrentComposerSessionDraft((draft) => ({
+          ...draft,
+          chatDraft: prompt,
+        }));
         setChatSubmitError(decision.blocker?.message || copy().chat.handlerStillStarting);
         return;
       }
@@ -1096,10 +1171,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setHandlerState(handlerStateFromDecision(failure.fresh_decision));
       }
       setPendingTurn(null);
-      setChatDraft(prompt);
-      if (composerRef) {
-        composerRef.value = prompt;
-      }
+      updateCurrentComposerSessionDraft((draft) => ({
+        ...draft,
+        chatDraft: prompt,
+      }));
       setChatSubmitError(getErrorMessage(error));
     } finally {
       setChatRunning(false);
@@ -1117,7 +1192,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const submitChat = async () => {
-    const prompt = trimString(composerRef?.value ?? chatDraft());
+    const prompt = trimString(composerRef?.value ?? currentComposerSessionDraft().chatDraft);
     setChatSubmitError('');
     if (selectedInputRequest()) {
       await submitInputRequest();
@@ -1153,12 +1228,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     threadLoadSequence += 1;
     transcriptNearBottom = true;
     setSelectedThreadID('');
-    setChatDraft('');
     setPendingTurn(null);
     setChatSubmitError('');
-    setInputDrafts({});
     setInputSubmitError('');
     setThreadLoadError('');
+    requestComposerFocus();
     void resolveHandlerDecision();
     returnToChat();
   };
@@ -1479,16 +1553,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return mode === 'write' || mode === 'select_or_write';
   };
 
-  const questionDraft = (questionID: string): FlowerInputDraft => inputDrafts()[questionID] ?? {};
+  const questionDraft = (questionID: string): FlowerInputDraft => currentComposerSessionDraft().inputDrafts[questionID] ?? {};
 
   const setQuestionDraft = (questionID: string, next: FlowerInputDraft) => {
-    setInputDrafts((current) => ({
-      ...current,
-      [questionID]: {
+    updateCurrentComposerSessionDraft((draft) => {
+      const current = draft.inputDrafts[questionID] ?? {};
+      const nextDraft = {
         ...(trimString(next.choice_id) ? { choice_id: trimString(next.choice_id) } : {}),
         ...(next.text !== undefined ? { text: next.text } : {}),
-      },
-    }));
+      };
+      const nextInputDrafts = {
+        ...draft.inputDrafts,
+        [questionID]: nextDraft,
+      };
+      if (sameFlowerInputDrafts({ [questionID]: current }, { [questionID]: nextDraft })) {
+        return draft;
+      }
+      return { ...draft, inputDrafts: nextInputDrafts };
+    });
     setInputSubmitError('');
   };
 
@@ -1512,7 +1594,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setInputSubmitError('');
       return;
     }
-    setChatDraft(value);
+    updateCurrentComposerSessionDraft((draft) => (draft.chatDraft === value ? draft : { ...draft, chatDraft: value }));
     setChatSubmitError('');
   };
 
@@ -1520,13 +1602,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const activeInputQuestion = createMemo(() => {
     const questions = inputTextQuestions();
-    const activeID = trimString(activeInputQuestionID());
+    const activeID = trimString(currentComposerSessionDraft().activeInputQuestionID);
     return questions.find((question) => question.id === activeID) ?? questions[0] ?? null;
   });
   const activeInputQuestionIsSecret = createMemo(() => !!selectedInputRequest() && !!activeInputQuestion()?.is_secret);
 
   const composerTextValue = createMemo(() => {
-    if (!selectedInputRequest()) return chatDraft();
+    if (!selectedInputRequest()) return currentComposerSessionDraft().chatDraft;
     const question = activeInputQuestion();
     return question ? questionDraft(question.id).text ?? '' : '';
   });
@@ -1548,7 +1630,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return inputSubmitting() || !activeInputQuestion();
   });
 
-  const composerChatDraftText = createMemo(() => trimString(chatDraft()));
+  const composerChatDraftText = createMemo(() => trimString(currentComposerSessionDraft().chatDraft));
   const composerPrimaryActionIsStop = createMemo(() => selectedThreadCanStop() && !composerChatDraftText());
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : ArrowUp);
   const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : copy().chat.send);
@@ -1611,8 +1693,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
       const nextThread = applyLiveBootstrap(next);
       setSelectedThreadID(nextThread.thread_id);
-      setInputDrafts({});
-      setActiveInputQuestionID('');
+      updateCurrentComposerSessionDraft((draft) => ({
+        ...draft,
+        inputPromptSignature: '',
+        inputDrafts: {},
+        activeInputQuestionID: '',
+      }));
+      requestComposerFocus();
       setInputSubmitError('');
       await refreshSelectedThread(nextThread.thread_id);
     } catch (error) {
@@ -1718,7 +1805,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     )}
                     aria-selected={activeInputQuestion()?.id === question.id}
                     disabled={inputSubmitting()}
-                    onClick={() => setActiveInputQuestionID(question.id)}
+                    onClick={() => updateCurrentComposerSessionDraft((draft) => (draft.activeInputQuestionID === question.id ? draft : { ...draft, activeInputQuestionID: question.id }))}
                   >
                     {question.write_label || question.header}
                   </button>
@@ -2505,7 +2592,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     ? warmupPanel()
                   : needsSetup()
                     ? setupGuide()
-                    : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => setChatDraft(prompt)} />}
+                    : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => updateCurrentComposerSessionDraft((draft) => ({ ...draft, chatDraft: prompt }))} />}
             >
               <For each={visibleTimelineEntryKeys()}>
                 {(entryKey) => {

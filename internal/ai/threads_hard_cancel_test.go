@@ -193,15 +193,15 @@ func TestService_CancelRun_PersistsCanceledAssistantBeforeNextUserTurn(t *testin
 	}
 	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
 	oldRun := &run{
-		id:                       runID,
-		channelID:                meta.ChannelID,
-		endpointID:               meta.EndpointID,
-		threadID:                 th.ThreadID,
-		userPublicID:             meta.UserPublicID,
-		messageID:                assistantID,
-		threadsDB:                svc.threadsDB,
-		persistOpTimeout:         svc.persistOpTO,
-		doneCh:                   make(chan struct{}),
+		id:                        runID,
+		channelID:                 meta.ChannelID,
+		endpointID:                meta.EndpointID,
+		threadID:                  th.ThreadID,
+		userPublicID:              meta.UserPublicID,
+		messageID:                 assistantID,
+		threadsDB:                 svc.threadsDB,
+		persistOpTimeout:          svc.persistOpTO,
+		doneCh:                    make(chan struct{}),
 		activitySegmentBlockIndex: -1,
 		currentThinkingBlockIndex: -1,
 	}

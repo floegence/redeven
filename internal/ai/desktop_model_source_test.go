@@ -331,16 +331,16 @@ func TestDesktopModelSourceProviderStreamsAndMapsErrors(t *testing.T) {
 			if body.Request.Model != modelID {
 				return testDesktopModelSourceError(frame.ID, "MODEL_MISMATCH", "unexpected model")
 			}
-			return testDesktopModelSourceResult(t, frame.ID, TurnResult{FinishReason: "stop", Text: "hi"})
+			return testDesktopModelSourceResult(t, frame.ID, ModelGatewayResult{FinishReason: "stop", Text: "hi"})
 		default:
 			return testDesktopModelSourceError(frame.ID, "METHOD_NOT_FOUND", "unexpected method")
 		}
 	})
 	defer cleanup()
 
-	provider := modelSource.Provider(modelID)
+	gateway := modelSource.ModelGateway(modelID)
 	var events []StreamEvent
-	result, err := provider.StreamTurn(context.Background(), TurnRequest{
+	result, err := gateway.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model: modelID,
 	}, func(ev StreamEvent) {
 		events = append(events, ev)

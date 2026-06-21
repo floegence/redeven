@@ -614,6 +614,7 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
   if (!record) return null;
   const patch = recordValue(record.patch) ?? record;
   const queuedTurnCount = positiveInteger(patch.queued_turn_count);
+  const readStatus = patch.read_status === undefined ? null : mapFlowerReadStatus(patch.read_status);
   return {
     ...(trim(patch.thread_id) ? { thread_id: trim(patch.thread_id) } : {}),
     ...(trim(patch.title) ? { title: trim(patch.title) } : {}),
@@ -633,6 +634,7 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
     ...(positiveInteger(patch.updated_at_unix_ms) ? { updated_at_ms: positiveInteger(patch.updated_at_unix_ms) } : {}),
     ...(positiveInteger(patch.last_message_at_unix_ms) ? { last_message_at_ms: positiveInteger(patch.last_message_at_unix_ms) } : {}),
     ...(trim(patch.last_message_preview) ? { last_message_preview: trim(patch.last_message_preview) } : {}),
+    ...(readStatus ? { read_status: readStatus } : {}),
   };
 }
 

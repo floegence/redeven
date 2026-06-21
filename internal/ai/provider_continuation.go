@@ -46,7 +46,7 @@ func (p providerContinuationProjector) PreviousState(ctx context.Context) (*flru
 		return nil, nil
 	}
 	normalized := continuation.Normalized()
-	if normalized.Kind != providerContinuationKindOpenAIResponses {
+	if normalized.State.Kind != providerContinuationKindOpenAIResponses {
 		return nil, nil
 	}
 	if normalized.ProviderID != p.providerID {
@@ -58,21 +58,28 @@ func (p providerContinuationProjector) PreviousState(ctx context.Context) (*flru
 	if normalized.BaseURL != canonicalProviderContinuationBaseURL(p.providerType, p.baseURL) {
 		return nil, nil
 	}
-	return &flruntime.ModelState{Kind: normalized.Kind, ID: normalized.ContinuationID}, nil
+	return &flruntime.ModelState{
+		Kind:       normalized.State.Kind,
+		ID:         normalized.State.ID,
+		Attributes: cloneStringMap(normalized.State.Attributes),
+	}, nil
 }
 
-func (p providerContinuationProjector) Candidate(state *TurnProviderState) threadstore.ThreadProviderContinuation {
+func (p providerContinuationProjector) Candidate(state *ModelGatewayState) threadstore.ThreadProviderContinuation {
 	if state == nil {
 		return threadstore.ThreadProviderContinuation{}
 	}
-	kind := strings.TrimSpace(state.ContinuationKind)
-	continuationID := strings.TrimSpace(state.ContinuationID)
+	kind := strings.TrimSpace(state.Kind)
+	continuationID := strings.TrimSpace(state.ID)
 	if kind == "" || continuationID == "" {
 		return threadstore.ThreadProviderContinuation{}
 	}
 	return threadstore.ThreadProviderContinuation{
-		Kind:            kind,
-		ContinuationID:  continuationID,
+		State: threadstore.ProviderContinuationState{
+			Kind:       kind,
+			ID:         continuationID,
+			Attributes: cloneStringMap(state.Attributes),
+		},
 		ProviderID:      p.providerID,
 		Model:           p.modelName,
 		BaseURL:         canonicalProviderContinuationBaseURL(p.providerType, p.baseURL),

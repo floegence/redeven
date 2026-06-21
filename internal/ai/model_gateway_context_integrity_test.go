@@ -184,13 +184,13 @@ func TestDeriveModelWindowCompactionThreshold(t *testing.T) {
 			name:              "max_threshold_when_input_window_matches_default_context_window",
 			contextWindow:     0,
 			inputContextLimit: 0,
-			want:              nativeMaxCompactThreshold,
+			want:              modelGatewayMaxCompactThreshold,
 		},
 		{
 			name:              "minimum_when_input_window_is_much_smaller_than_context_window",
 			contextWindow:     6000,
 			inputContextLimit: 1000,
-			want:              nativeMinCompactThreshold,
+			want:              modelGatewayMinCompactThreshold,
 		},
 		{
 			name:              "derived_ratio_for_regular_window",
@@ -202,7 +202,7 @@ func TestDeriveModelWindowCompactionThreshold(t *testing.T) {
 			name:              "input_limit_larger_than_context_window_is_clamped",
 			contextWindow:     32000,
 			inputContextLimit: 64000,
-			want:              nativeMaxCompactThreshold,
+			want:              modelGatewayMaxCompactThreshold,
 		},
 	}
 
@@ -233,14 +233,14 @@ func TestResolveCompactionThreshold(t *testing.T) {
 			configThreshold:   0,
 			contextWindow:     128000,
 			inputContextLimit: 128000,
-			want:              nativeDefaultCompactThreshold,
+			want:              modelGatewayDefaultCompactThreshold,
 		},
 		{
 			name:              "config_lower_bound_is_clamped",
 			configThreshold:   0.30,
 			contextWindow:     128000,
 			inputContextLimit: 128000,
-			want:              nativeMinCompactThreshold,
+			want:              modelGatewayMinCompactThreshold,
 		},
 		{
 			name:              "window_limit_can_override_config",
@@ -254,7 +254,7 @@ func TestResolveCompactionThreshold(t *testing.T) {
 			configThreshold:   0.90,
 			contextWindow:     6000,
 			inputContextLimit: 1000,
-			want:              nativeMinCompactThreshold,
+			want:              modelGatewayMinCompactThreshold,
 		},
 		{
 			name:              "configured_threshold_stays_when_stricter_than_window",
@@ -287,10 +287,10 @@ func TestResolveInputContextLimit(t *testing.T) {
 		want          int
 	}{
 		{
-			name:          "defaults_to_native_context_window_when_context_window_invalid",
+			name:          "defaults_to_model_gateway_context_window_when_context_window_invalid",
 			contextWindow: 0,
 			maxInputToken: 0,
-			want:          nativeDefaultContextLimit,
+			want:          modelGatewayDefaultContextLimit,
 		},
 		{
 			name:          "uses_max_input_when_smaller_than_context_window",

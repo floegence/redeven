@@ -242,7 +242,7 @@ func TestOpenAIProviderStreamTurn_UsesPreviousResponseIDAndReturnsProviderState(
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
 
-	result, err := provider.StreamTurn(context.Background(), TurnRequest{
+	result, err := provider.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model: "gpt-5-mini",
 		Messages: []Message{{
 			Role:    "user",
@@ -262,8 +262,8 @@ func TestOpenAIProviderStreamTurn_UsesPreviousResponseIDAndReturnsProviderState(
 	if result.ProviderState == nil {
 		t.Fatalf("expected provider continuation state")
 	}
-	if result.ProviderState.ContinuationID != "resp_next" {
-		t.Fatalf("continuation_id=%q, want %q", result.ProviderState.ContinuationID, "resp_next")
+	if result.ProviderState.ID != "resp_next" {
+		t.Fatalf("provider_state.id=%q, want %q", result.ProviderState.ID, "resp_next")
 	}
 }
 
@@ -297,7 +297,7 @@ func TestIntegration_Service_OpenAIContinuationPersistsAndResumes(t *testing.T) 
 	if err != nil {
 		t.Fatalf("GetThreadProviderContinuation first: %v", err)
 	}
-	if continuation == nil || continuation.ContinuationID != "resp_run_1" {
+	if continuation == nil || continuation.State.ID != "resp_run_1" {
 		t.Fatalf("continuation after first run=%+v, want resp_run_1", continuation)
 	}
 
@@ -328,7 +328,7 @@ func TestIntegration_Service_OpenAIContinuationPersistsAndResumes(t *testing.T) 
 	if err != nil {
 		t.Fatalf("GetThreadProviderContinuation second: %v", err)
 	}
-	if continuation == nil || continuation.ContinuationID != "resp_run_2" {
+	if continuation == nil || continuation.State.ID != "resp_run_2" {
 		t.Fatalf("continuation after second run=%+v, want resp_run_2", continuation)
 	}
 }
@@ -406,8 +406,11 @@ func TestProviderContinuationProjector_PreviousStateRequiresMatchingEnvelope(t *
 		{
 			name: "matching state",
 			continuation: threadstore.ThreadProviderContinuation{
-				Kind:            providerContinuationKindOpenAIResponses,
-				ContinuationID:  "resp_prev",
+				State: threadstore.ProviderContinuationState{
+					Kind:       providerContinuationKindOpenAIResponses,
+					ID:         "resp_prev",
+					Attributes: map[string]string{"cursor": "cur_1"},
+				},
 				ProviderID:      "openai",
 				Model:           "gpt-5-mini",
 				BaseURL:         "https://api.openai.com/v1",
@@ -420,8 +423,10 @@ func TestProviderContinuationProjector_PreviousStateRequiresMatchingEnvelope(t *
 		{
 			name: "model mismatch",
 			continuation: threadstore.ThreadProviderContinuation{
-				Kind:            providerContinuationKindOpenAIResponses,
-				ContinuationID:  "resp_prev",
+				State: threadstore.ProviderContinuationState{
+					Kind: providerContinuationKindOpenAIResponses,
+					ID:   "resp_prev",
+				},
 				ProviderID:      "openai",
 				Model:           "gpt-5",
 				BaseURL:         "https://api.openai.com/v1",
@@ -433,8 +438,10 @@ func TestProviderContinuationProjector_PreviousStateRequiresMatchingEnvelope(t *
 		{
 			name: "provider id mismatch",
 			continuation: threadstore.ThreadProviderContinuation{
-				Kind:            providerContinuationKindOpenAIResponses,
-				ContinuationID:  "resp_prev",
+				State: threadstore.ProviderContinuationState{
+					Kind: providerContinuationKindOpenAIResponses,
+					ID:   "resp_prev",
+				},
 				ProviderID:      "openai",
 				Model:           "gpt-5-mini",
 				BaseURL:         "https://api.openai.com/v1",
@@ -446,8 +453,10 @@ func TestProviderContinuationProjector_PreviousStateRequiresMatchingEnvelope(t *
 		{
 			name: "base url mismatch",
 			continuation: threadstore.ThreadProviderContinuation{
-				Kind:            providerContinuationKindOpenAIResponses,
-				ContinuationID:  "resp_prev",
+				State: threadstore.ProviderContinuationState{
+					Kind: providerContinuationKindOpenAIResponses,
+					ID:   "resp_prev",
+				},
 				ProviderID:      "openai",
 				Model:           "gpt-5-mini",
 				BaseURL:         "https://api.openai.com/v1",
@@ -459,8 +468,10 @@ func TestProviderContinuationProjector_PreviousStateRequiresMatchingEnvelope(t *
 		{
 			name: "kind mismatch",
 			continuation: threadstore.ThreadProviderContinuation{
-				Kind:            "other_kind",
-				ContinuationID:  "resp_prev",
+				State: threadstore.ProviderContinuationState{
+					Kind: "other_kind",
+					ID:   "resp_prev",
+				},
 				ProviderID:      "openai",
 				Model:           "gpt-5-mini",
 				BaseURL:         "https://api.openai.com/v1",
@@ -472,8 +483,10 @@ func TestProviderContinuationProjector_PreviousStateRequiresMatchingEnvelope(t *
 		{
 			name: "provider type not supported",
 			continuation: threadstore.ThreadProviderContinuation{
-				Kind:            providerContinuationKindOpenAIResponses,
-				ContinuationID:  "resp_prev",
+				State: threadstore.ProviderContinuationState{
+					Kind: providerContinuationKindOpenAIResponses,
+					ID:   "resp_prev",
+				},
 				ProviderID:      "openai",
 				Model:           "gpt-5-mini",
 				BaseURL:         "https://api.openai.com/v1",
@@ -536,6 +549,9 @@ func TestProviderContinuationProjector_PreviousStateRequiresMatchingEnvelope(t *
 				if state == nil || state.ID != "resp_prev" || state.Kind != providerContinuationKindOpenAIResponses {
 					t.Fatalf("previous state=%+v, want resp_prev", state)
 				}
+				if state.Attributes["cursor"] != "cur_1" {
+					t.Fatalf("previous attributes=%v, want cursor", state.Attributes)
+				}
 				return
 			}
 			if state != nil {
@@ -570,8 +586,10 @@ func TestPersistProviderContinuationCandidate_PersistsProviderState(t *testing.T
 		t.Fatalf("CreateThread: %v", err)
 	}
 	if err := store.SetThreadProviderContinuation(ctx, "env_sync", "th_sync", threadstore.ThreadProviderContinuation{
-		Kind:            providerContinuationKindOpenAIResponses,
-		ContinuationID:  "resp_prev",
+		State: threadstore.ProviderContinuationState{
+			Kind: providerContinuationKindOpenAIResponses,
+			ID:   "resp_prev",
+		},
 		ProviderID:      "openai",
 		Model:           "gpt-5-mini",
 		BaseURL:         "https://api.openai.com/v1",
@@ -581,8 +599,11 @@ func TestPersistProviderContinuationCandidate_PersistsProviderState(t *testing.T
 	}
 
 	if err := persistProviderContinuationCandidate(ctx, store, "env_sync", "th_sync", threadstore.ThreadProviderContinuation{
-		Kind:            providerContinuationKindOpenAIResponses,
-		ContinuationID:  "resp_next",
+		State: threadstore.ProviderContinuationState{
+			Kind:       providerContinuationKindOpenAIResponses,
+			ID:         "resp_next",
+			Attributes: map[string]string{"cursor": "cur_next"},
+		},
 		ProviderID:      "openai",
 		Model:           "gpt-5-mini",
 		BaseURL:         "https://api.openai.com/v1",
@@ -595,7 +616,10 @@ func TestPersistProviderContinuationCandidate_PersistsProviderState(t *testing.T
 	if err != nil {
 		t.Fatalf("GetThreadProviderContinuation: %v", err)
 	}
-	if got == nil || got.ContinuationID != "resp_next" {
+	if got == nil || got.State.ID != "resp_next" {
 		t.Fatalf("continuation after sync=%+v, want resp_next", got)
+	}
+	if got.State.Attributes["cursor"] != "cur_next" {
+		t.Fatalf("continuation attributes=%v, want cursor", got.State.Attributes)
 	}
 }

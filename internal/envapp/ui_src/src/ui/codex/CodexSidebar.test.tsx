@@ -1343,7 +1343,6 @@ describe('CodexSidebar', () => {
     expect(scrollRegion?.className).toContain('overscroll-contain');
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
-    expect(host.textContent).not.toContain('Dedicated Codex chat shell with host-native runtime and independent thread state');
     expect(host.textContent).not.toContain('/usr/local/bin/codex');
 
     const target = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('UI polish'));

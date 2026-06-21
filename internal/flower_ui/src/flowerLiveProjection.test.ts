@@ -185,6 +185,59 @@ describe('Flower live projection', () => {
     expect(mapped.thread.read_status.snapshot.waiting_prompt_id).toBe('prompt-1');
   });
 
+  it('applies read_status from thread patch live events', () => {
+    const initial = thread({
+      status: 'running',
+      read_status: readStatus({
+        is_unread: false,
+        snapshot: {
+          activity_revision: 10,
+          last_message_at_unix_ms: 1000,
+          activity_signature: 'sig-10',
+        },
+      }),
+    });
+    const freshReadStatus = readStatus({
+      is_unread: true,
+      snapshot: {
+        activity_revision: 20,
+        last_message_at_unix_ms: 2000,
+        activity_signature: 'sig-20',
+      },
+      read_state: {
+        last_seen_activity_revision: 10,
+        last_read_message_at_unix_ms: 1000,
+        last_seen_activity_signature: 'sig-10',
+      },
+    });
+
+    const mapped = mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        run_id: 'run-1',
+        at_unix_ms: 4000,
+        kind: 'thread.patched',
+        payload: {
+          patch: {
+            run_status: 'success',
+            updated_at_unix_ms: 2000,
+            read_status: freshReadStatus,
+          },
+        },
+      }],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+    const result = applyFlowerLiveEvent(initial, 0, mapped.events[0]);
+
+    expect(result.thread.status).toBe('success');
+    expect(result.thread.read_status.is_unread).toBe(true);
+    expect(result.thread.read_status.snapshot.activity_signature).toBe('sig-20');
+  });
+
   it('maps persisted user message context actions into transcript messages', () => {
     const contextAction = {
       schema_version: 2,

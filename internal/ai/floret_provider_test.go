@@ -14,21 +14,21 @@ import (
 )
 
 type recordingFlowerProvider struct {
-	req TurnRequest
+	req ModelGatewayRequest
 }
 
-func (p *recordingFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, _ func(StreamEvent)) (TurnResult, error) {
+func (p *recordingFlowerProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
 	p.req = req
-	return TurnResult{FinishReason: "stop", Text: "ok"}, nil
+	return ModelGatewayResult{FinishReason: "stop", Text: "ok"}, nil
 }
 
 type rejectedContinuationFlowerProvider struct {
-	requests []TurnRequest
+	requests []ModelGatewayRequest
 }
 
-func (p *rejectedContinuationFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, _ func(StreamEvent)) (TurnResult, error) {
+func (p *rejectedContinuationFlowerProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
 	p.requests = append(p.requests, req)
-	return TurnResult{}, errors.New("invalid previous_response_id")
+	return ModelGatewayResult{}, errors.New("invalid previous_response_id")
 }
 
 func TestFloretProviderAdapter_DisableReasoningControlsProviderRequest(t *testing.T) {
@@ -76,7 +76,7 @@ type reasoningFlowerProvider struct {
 	sources         []SourceRef
 }
 
-func (p reasoningFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
+func (p reasoningFlowerProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	if p.streamReasoning != "" {
 		onEvent(StreamEvent{Type: StreamEventThinkingDelta, Text: p.streamReasoning})
 	}
@@ -84,7 +84,7 @@ func (p reasoningFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, 
 	if text == "" && !p.omitResultText {
 		text = "final answer"
 	}
-	return TurnResult{
+	return ModelGatewayResult{
 		FinishReason: "stop",
 		Text:         text,
 		Reasoning:    p.resultReasoning,
@@ -92,7 +92,7 @@ func (p reasoningFlowerProvider) StreamTurn(_ context.Context, req TurnRequest, 
 	}, nil
 }
 
-func newFloretProviderAdapterRunTest(t *testing.T, provider Provider) (*floretProviderAdapter, *run, *threadstore.Store, *[]any) {
+func newFloretProviderAdapterRunTest(t *testing.T, provider ModelGateway) (*floretProviderAdapter, *run, *threadstore.Store, *[]any) {
 	t.Helper()
 	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
 	if err != nil {
@@ -190,6 +190,43 @@ func TestFloretProviderAdapter_UsesProjectedPreviousState(t *testing.T) {
 	}
 	if len(recorder.req.Messages) != 1 || messageTextForFloret(recorder.req.Messages[0], true) != "full history" {
 		t.Fatalf("messages=%#v, want Floret-projected history", recorder.req.Messages)
+	}
+}
+
+func TestFloretProviderStateConversion_PreservesOpaqueAttributes(t *testing.T) {
+	t.Parallel()
+
+	original := &flruntime.ModelState{
+		Kind: providerContinuationKindOpenAIResponses,
+		ID:   "resp_state",
+		Attributes: map[string]string{
+			"cursor": "cur_1",
+			"region": "iad",
+		},
+	}
+	flower := floretProviderStateToFlower(original)
+	if flower == nil {
+		t.Fatalf("floretProviderStateToFlower returned nil")
+	}
+	flower.Attributes["cursor"] = "mutated"
+	if original.Attributes["cursor"] != "cur_1" {
+		t.Fatalf("original attributes mutated: %v", original.Attributes)
+	}
+	flower.Attributes["cursor"] = "cur_1"
+
+	roundTrip := flowerProviderStateToFloret(flower)
+	if roundTrip == nil {
+		t.Fatalf("flowerProviderStateToFloret returned nil")
+	}
+	if roundTrip.Kind != original.Kind || roundTrip.ID != original.ID {
+		t.Fatalf("roundTrip=%+v, want kind/id from original", roundTrip)
+	}
+	if roundTrip.Attributes["cursor"] != "cur_1" || roundTrip.Attributes["region"] != "iad" {
+		t.Fatalf("roundTrip attributes=%v, want original attributes", roundTrip.Attributes)
+	}
+	roundTrip.Attributes["cursor"] = "changed"
+	if flower.Attributes["cursor"] != "cur_1" {
+		t.Fatalf("flower attributes mutated by roundTrip: %v", flower.Attributes)
 	}
 }
 
