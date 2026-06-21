@@ -368,14 +368,14 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-enter-stop-send-stale-poll"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-enter-stop-send-stale-poll"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-first-assistant"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'second request';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
 
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-second-assistant"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
     stalePoll.resolve({
       events: [{
         schema_version: 1,
@@ -471,7 +471,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-stop-send-stale-bootstrap"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-stop-send-stale-bootstrap"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-first-assistant"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'second request';
@@ -756,7 +756,7 @@ describe('FlowerSurface navigation launch/send', () => {
     })));
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-user-canonical"]')));
     expect(runtime.textContent).toContain('inspect the running turn');
-    expect(runtime.querySelector('[data-flower-message-id="m-assistant-canonical"] .flower-streaming-cursor')).toBeTruthy();
+    expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
   });
 
   it('does not synthesize timeline rows while the handler is still resolving', async () => {
@@ -887,14 +887,14 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stop-send-order"] button')));
     (runtime.querySelector('[data-thread-id="thread-stop-send-order"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-canceled-assistant"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'second request';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-second-assistant"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
     const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
     expect(ids).toEqual(['m-first-user', 'm-canceled-assistant', 'm-second-user', 'm-second-assistant']);
     expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);

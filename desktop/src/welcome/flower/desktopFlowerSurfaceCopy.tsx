@@ -83,6 +83,7 @@ export function createDesktopFlowerSurfaceCopy(i18n: DesktopI18n): FlowerSurface
       toolApprovalReject: t(i18n, k('chat.toolApprovalReject')),
       toolApprovalSubmitting: t(i18n, k('chat.toolApprovalSubmitting')),
       toolApprovalUnavailable: t(i18n, k('chat.toolApprovalUnavailable')),
+      thinkingIndicator: t(i18n, k('chat.thinkingIndicator')),
       conversationsAria: t(i18n, k('chat.conversationsAria')),
       resizeConversationsLabel: t(i18n, k('chat.resizeConversationsLabel')),
       entryLabel: t(i18n, k('chat.entryLabel')),

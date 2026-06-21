@@ -407,7 +407,7 @@ describe('FlowerSurface navigation', () => {
     await waitFor(() => runtime.textContent?.includes('follow the accepted thread') ?? false);
     expect(runtime.textContent).toContain('follow the accepted thread');
     expect(runtime.querySelector('[data-flower-message-role="user"][data-flower-message-status="complete"]')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-message-role="assistant"][data-flower-message-status="streaming"] .flower-streaming-cursor')).toBeNull();
+    expect(runtime.querySelector('.flower-streaming-cursor')).toBeNull();
     expect(loadThread).toHaveBeenCalledWith('thread-accepted-without-messages');
   });
 

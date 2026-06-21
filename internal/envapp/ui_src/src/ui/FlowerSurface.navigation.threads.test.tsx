@@ -949,7 +949,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-live-complete-read"] button')));
     (runtime.querySelector('[data-thread-id="thread-live-complete-read"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-live-complete"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
 
     liveEvents.resolve({
       events: [
@@ -1493,7 +1493,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-streaming-row"] button')));
     (runtime.querySelector('[data-thread-id="thread-streaming-row"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-streaming-row"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
     const messageRow = runtime.querySelector('[data-flower-message-id="message-streaming-row"]');
     expect(messageRow).toBeTruthy();
     expect(messageRow?.textContent).not.toContain('Real streamed answer');
@@ -1517,7 +1517,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => runtime.textContent?.includes('Real streamed answer') ?? false);
     expect(runtime.querySelector('[data-flower-message-id="message-streaming-row"]')).toBe(messageRow);
-    expect(runtime.querySelector('[data-flower-message-id="message-streaming-row"] .flower-streaming-cursor')).toBeTruthy();
+    expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
   });
 
   it('keeps committed markdown DOM stable when streaming appends to the tail', async () => {
@@ -1603,7 +1603,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-selection"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-selection"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-running-selection"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
     const messageRow = runtime.querySelector('[data-flower-message-id="message-running-selection"]');
     const committedSegment = runtime.querySelector('.flower-chat-md-committed-segment');
     const textNode = committedSegment?.firstChild?.firstChild;
@@ -1667,7 +1667,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-commit-selection"] button')));
     (runtime.querySelector('[data-thread-id="thread-commit-selection"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-commit-selection"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
     const messageRow = runtime.querySelector('[data-flower-message-id="message-commit-selection"]');
     const committedSegment = runtime.querySelector('.flower-chat-md-committed-segment');
     const textNode = committedSegment?.firstChild?.firstChild;
@@ -1701,7 +1701,7 @@ describe('FlowerSurface navigation threads', () => {
       retained_from_seq: 1,
     });
 
-    await waitFor(() => !runtime.querySelector('[data-flower-message-id="message-commit-selection"] .flower-streaming-cursor'));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
     expect(runtime.querySelector('[data-flower-message-id="message-commit-selection"]')).toBe(messageRow);
     expect(runtime.querySelector('.flower-chat-md-committed-segment')).toBe(committedSegment);
     expect(runtime.textContent).toContain('Growing tail');
@@ -1774,7 +1774,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-activity"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-activity"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-running-activity"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
     const messageRow = runtime.querySelector('[data-flower-message-id="message-running-activity"]');
     const activityRow = runtime.querySelector('[data-flower-activity-item-id="tool-search"]');
     const committedSegment = runtime.querySelector('.flower-chat-md-committed-segment');
@@ -2003,7 +2003,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
   });
 
-  it('renders only the backend-selected active cursor in a running thread', async () => {
+  it('renders one bottom thinking indicator for a running thread with backend active cursor metadata', async () => {
     const runningThread = thread({
       thread_id: 'thread-single-cursor',
       title: 'Single cursor',
@@ -2039,8 +2039,10 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-single-cursor"] button')));
     (runtime.querySelector('[data-thread-id="thread-single-cursor"] button') as HTMLButtonElement).click();
 
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="message-active-streaming"] .flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
     expect(runtime.querySelector('[data-flower-message-id="message-old-streaming"] .flower-streaming-cursor')).toBeNull();
+    expect(runtime.querySelector('[data-flower-message-id="message-active-streaming"] .flower-streaming-cursor')).toBeNull();
     expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-message-streaming-tail')?.textContent).toContain('Thinking...');
   });
 });

@@ -727,7 +727,7 @@ html.dark .flower-component-shell {
   display: inline-flex;
   min-height: 1.2rem;
   align-items: center;
-  line-height: 1;
+  line-height: 1.35;
 }
 
 .flower-message-streaming-tail-user {
@@ -740,85 +740,39 @@ html.dark .flower-component-shell {
 }
 
 .flower-streaming-cursor {
-  position: relative;
-  display: inline-block;
-  overflow: hidden;
-  width: 0.42em;
-  height: 1.15em;
-  margin-left: 0.16rem;
-  vertical-align: -0.18em;
-  border-radius: 0.08rem;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--primary) 30%, var(--foreground) 14%) 0%,
-      color-mix(in srgb, var(--primary) 52%, var(--foreground) 18%) 48%,
-      color-mix(in srgb, var(--primary) 36%, var(--foreground) 16%) 100%
-    );
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--primary) 20%, transparent),
-    0 0 0.72rem color-mix(in srgb, var(--primary) 24%, transparent);
-  transform-origin: 50% 50%;
-  will-change: opacity, transform, box-shadow;
-  animation: flower-cursor-breathe 3.8s ease-in-out infinite;
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
 }
 
-.flower-streaming-cursor::before {
-  content: '';
-  position: absolute;
-  inset: 0 -130%;
+.flower-streaming-cursor-text {
+  display: inline-block;
+  color: transparent;
   background:
     linear-gradient(
       90deg,
-      transparent 16%,
-      color-mix(in srgb, white 72%, var(--primary) 28%) 48%,
-      transparent 84%
+      color-mix(in srgb, var(--muted-foreground) 72%, transparent) 30%,
+      color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%) 50%,
+      color-mix(in srgb, var(--muted-foreground) 72%, transparent) 70%
     );
-  opacity: 0;
-  transform: translateX(-54%);
-  animation: flower-cursor-shimmer 3.8s cubic-bezier(0.42, 0, 0.2, 1) infinite;
-}
-
-@keyframes flower-cursor-breathe {
-  0% {
-    opacity: 0.54;
-    transform: scaleY(0.9);
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent),
-      0 0 0.34rem color-mix(in srgb, var(--primary) 16%, transparent);
-  }
-  50% {
-    opacity: 0.98;
-    transform: scaleY(1);
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent),
-      0 0 0.95rem color-mix(in srgb, var(--primary) 34%, transparent);
-  }
-  100% {
-    opacity: 0.58;
-    transform: scaleY(0.9);
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--primary) 14%, transparent),
-      0 0 0.34rem color-mix(in srgb, var(--primary) 16%, transparent);
-  }
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: nowrap;
+  animation: flower-cursor-shimmer 2.4s ease-in-out infinite;
 }
 
 @keyframes flower-cursor-shimmer {
-  0%,
-  28% {
-    opacity: 0;
-    transform: translateX(-54%);
+  0% {
+    background-position: -120% 0;
   }
-  46% {
-    opacity: 0.58;
-  }
-  62% {
-    opacity: 0.5;
-    transform: translateX(54%);
-  }
+
   100% {
-    opacity: 0;
-    transform: translateX(54%);
+    background-position: 180% 0;
   }
 }
 
@@ -3855,7 +3809,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 
 @media (prefers-reduced-motion: reduce) {
   .flower-streaming-cursor,
-  .flower-streaming-cursor::before,
+  .flower-streaming-cursor-text,
   .flower-activity-inline-row-running .flower-activity-inline-button::before,
   .flower-activity-inline-loader-square,
   .flower-thread-warmup-card::after,
@@ -3865,6 +3819,11 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
   .flower-thread-wave-bar {
     animation: none !important;
     transform: none !important;
+  }
+
+  .flower-streaming-cursor-text {
+    color: var(--muted-foreground);
+    -webkit-text-fill-color: currentColor;
   }
 
   .flower-activity-inline-row-running .flower-activity-inline-button::before {
