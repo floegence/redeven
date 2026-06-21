@@ -143,31 +143,28 @@ func (p floretControlProjector) projectAskUser(call ToolCall, core flruntime.Tur
 }
 
 func (p floretControlProjector) projectExitPlanMode(call ToolCall) (flruntime.TurnSignal, error) {
-	if p.run == nil {
-		return flruntime.TurnSignal{}, errors.New("exit_plan_mode requires run projection")
-	}
 	args := ExitPlanModeArgs{
 		Summary:        extractSignalText(call, "summary"),
 		AllowedPrompts: extractExitPlanPromptRefs(call.Args["allowed_prompts"]),
 	}
-	result, err := p.run.toolExitPlanMode(strings.TrimSpace(call.ID), args)
-	if err != nil {
-		return flruntime.TurnSignal{}, err
-	}
+	args.Summary = truncateRunes(strings.TrimSpace(args.Summary), 280)
+	args.AllowedPrompts = normalizeExitPlanPromptRefs(args.AllowedPrompts)
 	payload := map[string]any{
 		"source":          "exit_plan_mode",
-		"summary":         result.Summary,
+		"summary":         args.Summary,
 		"allowed_prompts": args.AllowedPrompts,
-		"args":            args,
-		"waiting_prompt":  result.WaitingPrompt,
+	}
+	description := args.Summary
+	if description == "" {
+		description = "Agent requested a plan-to-act mode transition."
 	}
 	return flruntime.TurnSignal{
 		Disposition: flruntime.SignalWaiting,
 		Name:        "exit_plan_mode",
 		CallID:      strings.TrimSpace(call.ID),
 		Payload:     payload,
-		Activity:    floretActivityForControlSignal("exit_plan_mode", payload, buildExitPlanModeQuestion(args.Summary)),
-		OutputText:  buildExitPlanModeQuestion(args.Summary),
+		Activity:    floretActivityForControlSignal("exit_plan_mode", payload, description),
+		OutputText:  args.Summary,
 	}, nil
 }
 

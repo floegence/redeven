@@ -373,6 +373,7 @@ export type FlowerLiveThreadPatch = Readonly<{
   updated_at_ms?: number;
   last_message_at_ms?: number;
   last_message_preview?: string;
+  read_status?: FlowerThreadReadStatus;
 }>;
 
 export type FlowerLiveMaterializedState = Readonly<{

@@ -25,7 +25,8 @@ main() {
 	    ui_pkg_log "Flower UI: Env App interaction contracts..."
 	    ui_pkg_run_pnpm exec vitest run --environment=node --maxWorkers=2 --testTimeout=10000 \
 	      src/ui/FlowerSurface.navigation.launchSend.test.tsx \
-	      src/ui/FlowerSurface.navigation.threads.test.tsx
+	      src/ui/FlowerSurface.navigation.threads.test.tsx \
+	      src/ui/FlowerSurface.navigation.structuredInput.test.tsx
 
     ui_pkg_log ""
     ui_pkg_log "Flower UI: shared timeline projection contracts..."

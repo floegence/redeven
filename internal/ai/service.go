@@ -1635,8 +1635,8 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			} else {
 				eventType = "provider.continuation.persisted"
 				payload["reason"] = "provider_state_available"
-				payload["continuation_kind"] = continuationCandidate.Kind
-				payload["continuation_id"] = continuationCandidate.ContinuationID
+				payload["provider_state_kind"] = continuationCandidate.State.Kind
+				payload["provider_state_id"] = continuationCandidate.State.ID
 				payload["provider_id"] = continuationCandidate.ProviderID
 				payload["model"] = continuationCandidate.Model
 				payload["base_url"] = continuationCandidate.BaseURL

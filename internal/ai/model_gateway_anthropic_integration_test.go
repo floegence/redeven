@@ -211,7 +211,7 @@ func newAnthropicTestService(t *testing.T, mock *anthropicMock) (*Service, sessi
 	return svc, meta
 }
 
-func TestIntegration_NativeSDK_Anthropic_Stream_Succeeds(t *testing.T) {
+func TestIntegration_ModelGateway_Anthropic_Stream_Succeeds(t *testing.T) {
 	t.Parallel()
 
 	token := "MOCK_ANTHROPIC_OK"
@@ -227,7 +227,7 @@ func TestIntegration_NativeSDK_Anthropic_Stream_Succeeds(t *testing.T) {
 	}
 
 	rr := httptest.NewRecorder()
-	if err := svc.StartRun(ctx, &meta, "run_test_native_anthropic_1", RunStartRequest{
+	if err := svc.StartRun(ctx, &meta, "run_test_model_gateway_anthropic_1", RunStartRequest{
 		ThreadID: th.ThreadID,
 		Model:    "anthropic/claude-3-5-sonnet-latest",
 		Input:    RunInput{Text: "hello"},
@@ -261,7 +261,7 @@ func TestIntegration_NativeSDK_Anthropic_Stream_Succeeds(t *testing.T) {
 	}
 }
 
-func TestIntegration_NativeSDK_Anthropic_LengthContinuationSucceeds(t *testing.T) {
+func TestIntegration_ModelGateway_Anthropic_LengthContinuationSucceeds(t *testing.T) {
 	t.Parallel()
 
 	mock := &anthropicMock{
@@ -280,7 +280,7 @@ func TestIntegration_NativeSDK_Anthropic_LengthContinuationSucceeds(t *testing.T
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_test_native_anthropic_length_1"
+	runID := "run_test_model_gateway_anthropic_length_1"
 	rr := httptest.NewRecorder()
 	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
@@ -347,7 +347,7 @@ func TestIntegration_NativeSDK_Anthropic_LengthContinuationSucceeds(t *testing.T
 	}
 }
 
-func TestIntegration_NativeSDK_Anthropic_ContentFilterFails(t *testing.T) {
+func TestIntegration_ModelGateway_Anthropic_ContentFilterFails(t *testing.T) {
 	t.Parallel()
 
 	mock := &anthropicMock{
@@ -365,7 +365,7 @@ func TestIntegration_NativeSDK_Anthropic_ContentFilterFails(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_test_native_anthropic_content_filter_1"
+	runID := "run_test_model_gateway_anthropic_content_filter_1"
 	rr := httptest.NewRecorder()
 	err = svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,
@@ -395,8 +395,8 @@ func TestIntegration_NativeSDK_Anthropic_ContentFilterFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListRunEvents: %v", err)
 	}
-	nativeResult := findRunEventPayload(t, runEvents.Events, "native.turn.result")
-	if got := strings.TrimSpace(fmt.Sprint(nativeResult["finish_reason"])); got != "content_filter" {
+	projectedTurnResult := findRunEventPayload(t, runEvents.Events, "floret.projected_turn.result")
+	if got := strings.TrimSpace(fmt.Sprint(projectedTurnResult["finish_reason"])); got != "content_filter" {
 		t.Fatalf("finish_reason=%q, want content_filter", got)
 	}
 	rejected := findRunEventPayload(t, runEvents.Events, "reply.finish_rejected")
@@ -405,7 +405,7 @@ func TestIntegration_NativeSDK_Anthropic_ContentFilterFails(t *testing.T) {
 	}
 }
 
-func TestIntegration_NativeSDK_Anthropic_IdentityLengthContinuationCompletesWithNaturalStop(t *testing.T) {
+func TestIntegration_ModelGateway_Anthropic_IdentityLengthContinuationCompletesWithNaturalStop(t *testing.T) {
 	t.Parallel()
 
 	mock := &anthropicMock{
@@ -424,7 +424,7 @@ func TestIntegration_NativeSDK_Anthropic_IdentityLengthContinuationCompletesWith
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	runID := "run_test_native_anthropic_identity_length_1"
+	runID := "run_test_model_gateway_anthropic_identity_length_1"
 	rr := httptest.NewRecorder()
 	if err := svc.StartRun(ctx, &meta, runID, RunStartRequest{
 		ThreadID: th.ThreadID,

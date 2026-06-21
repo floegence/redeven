@@ -126,16 +126,13 @@ func TestToolFileWrite_CreatesNoopsAndSupportsExitPlanPrompt(t *testing.T) {
 		t.Fatalf("change_type=%q, want noop", noop.ChangeType)
 	}
 
-	exitResult, err := r.toolExitPlanMode("tool_exit_plan", ExitPlanModeArgs{
+	waitingPrompt := buildExitPlanModeWaitingPrompt("msg_exit", "tool_exit_plan", ExitPlanModeArgs{
 		Summary: "Need to write files and run verification.",
 	})
-	if err != nil {
-		t.Fatalf("toolExitPlanMode: %v", err)
+	if waitingPrompt == nil || len(waitingPrompt.Questions) != 1 {
+		t.Fatalf("waiting prompt=%+v", waitingPrompt)
 	}
-	if exitResult.WaitingPrompt == nil || len(exitResult.WaitingPrompt.Questions) != 1 {
-		t.Fatalf("waiting prompt=%+v", exitResult.WaitingPrompt)
-	}
-	question := exitResult.WaitingPrompt.Questions[0]
+	question := waitingPrompt.Questions[0]
 	if question.ResponseMode != requestUserInputResponseModeSelect {
 		t.Fatalf("response_mode=%q, want %q", question.ResponseMode, requestUserInputResponseModeSelect)
 	}
@@ -146,7 +143,7 @@ func TestToolFileWrite_CreatesNoopsAndSupportsExitPlanPrompt(t *testing.T) {
 		t.Fatalf("first choice actions=%+v, want set_mode act", question.Choices[0].Actions)
 	}
 
-	r.setWaitingPrompt(exitResult.WaitingPrompt)
+	r.setWaitingPrompt(waitingPrompt)
 	prompt := r.snapshotWaitingPrompt()
 	if prompt == nil {
 		t.Fatalf("expected exit_plan_mode waiting prompt snapshot")

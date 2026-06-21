@@ -246,7 +246,7 @@ func TestOpenAICompatibleResponses_WebSearchToolAliasRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
-	res, err := adapter.StreamTurn(context.Background(), TurnRequest{
+	res, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model:    "gpt-5-mini",
 		Messages: []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}},
 		Tools: []ToolDef{
@@ -318,7 +318,7 @@ func TestOpenAICompatibleBuiltinWebSearch_AttachesResponsesHostedTool(t *testing
 	if err != nil {
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
-	res, err := adapter.StreamTurn(context.Background(), TurnRequest{
+	res, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model:         "compat-model",
 		Messages:      []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}},
 		WebSearchMode: providerWebSearchModeOpenAIResponsesBuiltin,
@@ -565,7 +565,7 @@ func TestQwenResponsesBuiltinWebSearch_AttachesResponsesTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
-	res, err := adapter.StreamTurn(context.Background(), TurnRequest{
+	res, err := adapter.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model:         "qwen3.6-plus",
 		Messages:      []Message{{Role: "user", Content: []ContentPart{{Type: "text", Text: "search"}}}},
 		WebSearchMode: providerWebSearchModeQwenResponsesWebSearch,

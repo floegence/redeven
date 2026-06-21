@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-// AIConfig configures the optional Flower (AI assistant) feature (Go Native runtime).
+// AIConfig configures the optional Flower (AI assistant) feature (model gateway).
 //
 // Notes:
 //   - Secrets (api keys) must never be stored in this config. Keys are managed via a separate local secrets file.

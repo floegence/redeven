@@ -72,7 +72,7 @@ func extractServerResponsesUserText(req map[string]any) string {
 	return ""
 }
 
-func TestServer_AI_Run_UsesNativeSDKAndPersistsAssistantMessage(t *testing.T) {
+func TestServer_AI_Run_UsesModelGatewayAndPersistsAssistantMessage(t *testing.T) {
 	t.Parallel()
 
 	token := "MOCK_OK_GATEWAY"

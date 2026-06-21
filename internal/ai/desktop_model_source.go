@@ -131,7 +131,7 @@ func (e *DesktopModelSourceRPCError) Error() string {
 }
 
 type desktopModelSourceStreamRequest struct {
-	Request TurnRequest `json:"request"`
+	Request ModelGatewayRequest `json:"request"`
 }
 
 type desktopModelSourceRegistryEntry struct {
@@ -424,7 +424,7 @@ func (c *desktopModelSourceClient) ListModels(ctx context.Context) (*DesktopMode
 	return &out, nil
 }
 
-func (c *desktopModelSourceClient) Provider(defaultModelID string) Provider {
+func (c *desktopModelSourceClient) ModelGateway(defaultModelID string) ModelGateway {
 	if c == nil {
 		return nil
 	}
@@ -434,22 +434,22 @@ func (c *desktopModelSourceClient) Provider(defaultModelID string) Provider {
 	}
 }
 
-func (c *desktopModelSourceClient) StreamTurn(ctx context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
+func (c *desktopModelSourceClient) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	if c == nil {
-		return TurnResult{}, ErrNotConfigured
+		return ModelGatewayResult{}, ErrNotConfigured
 	}
 	c.mu.Lock()
 	conn := c.conn
 	c.mu.Unlock()
 	if conn == nil {
-		return TurnResult{}, errors.New("desktop model source is not connected")
+		return ModelGatewayResult{}, errors.New("desktop model source is not connected")
 	}
-	var out TurnResult
+	var out ModelGatewayResult
 	if err := conn.call(ctx, "ai.turn.stream", desktopModelSourceStreamRequest{Request: req}, onEvent, &out); err != nil {
 		c.mu.Lock()
 		c.lastErr = strings.TrimSpace(err.Error())
 		c.mu.Unlock()
-		return TurnResult{}, err
+		return ModelGatewayResult{}, err
 	}
 	return out, nil
 }
@@ -720,16 +720,16 @@ func (c *desktopModelSourceRuntimeConn) closeWithError(err error) {
 	}
 }
 
-func (p *desktopModelSourceProvider) StreamTurn(ctx context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error) {
+func (p *desktopModelSourceProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	if p == nil || p.client == nil {
-		return TurnResult{}, ErrNotConfigured
+		return ModelGatewayResult{}, ErrNotConfigured
 	}
 	model := strings.TrimSpace(req.Model)
 	if model == "" || !isDesktopModelSourceModelID(model) {
 		model = strings.TrimSpace(p.defaultModelID)
 	}
 	if model == "" {
-		return TurnResult{}, errors.New("missing desktop model source model")
+		return ModelGatewayResult{}, errors.New("missing desktop model source model")
 	}
 	req.Model = model
 	return p.client.StreamTurn(ctx, req, onEvent)
@@ -982,16 +982,16 @@ func (e *desktopModelSourceExecutor) status() (*DesktopModelSourceStatus, error)
 	}, nil
 }
 
-func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame DesktopModelSourceRPCFrame, write func(DesktopModelSourceRPCFrame) error) (TurnResult, error) {
+func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame DesktopModelSourceRPCFrame, write func(DesktopModelSourceRPCFrame) error) (ModelGatewayResult, error) {
 	var body desktopModelSourceStreamRequest
 	if len(frame.Params) > 0 {
 		if err := json.Unmarshal(frame.Params, &body); err != nil {
-			return TurnResult{}, err
+			return ModelGatewayResult{}, err
 		}
 	}
 	snapshot, cfg, secretStore, registry, err := e.snapshot()
 	if err != nil {
-		return TurnResult{}, err
+		return ModelGatewayResult{}, err
 	}
 	publicModelID := strings.TrimSpace(body.Request.Model)
 	if publicModelID == "" {
@@ -999,21 +999,21 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 	}
 	entry, ok := registry[publicModelID]
 	if !ok || cfg == nil || cfg.AI == nil {
-		return TurnResult{}, fmt.Errorf("model not allowed: %s", publicModelID)
+		return ModelGatewayResult{}, fmt.Errorf("model not allowed: %s", publicModelID)
 	}
 	if !desktopModelSourceSnapshotHasModel(snapshot, publicModelID) {
-		return TurnResult{}, errors.New("desktop model is missing its local API key")
+		return ModelGatewayResult{}, errors.New("desktop model is missing its local API key")
 	}
 	apiKey, ok, err := secretStore.GetAIProviderAPIKey(entry.ProviderID)
 	if err != nil {
-		return TurnResult{}, err
+		return ModelGatewayResult{}, err
 	}
 	if !ok || strings.TrimSpace(apiKey) == "" {
-		return TurnResult{}, errors.New("desktop provider is missing its local API key")
+		return ModelGatewayResult{}, errors.New("desktop provider is missing its local API key")
 	}
 	adapter, err := newProviderAdapter(strings.TrimSpace(entry.ProviderCfg.Type), strings.TrimSpace(entry.ProviderCfg.BaseURL), strings.TrimSpace(apiKey), entry.ProviderCfg.StrictToolSchema)
 	if err != nil {
-		return TurnResult{}, err
+		return ModelGatewayResult{}, err
 	}
 	req := body.Request
 	req.Model = strings.TrimSpace(entry.ModelName)

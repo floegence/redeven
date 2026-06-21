@@ -13,7 +13,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 )
 
-func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, taskObjective string, adapterOverride ...Provider) error {
+func (r *run) runFloretProjectedTurn(ctx context.Context, req RunRequest, providerCfg config.AIProvider, apiKey string, taskObjective string, adapterOverride ...ModelGateway) error {
 	if r == nil {
 		return errors.New("nil run")
 	}
@@ -48,7 +48,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	r.runMode = mode
 	taskComplexity := TaskComplexityStandard
 
-	var adapter Provider
+	var adapter ModelGateway
 	if len(adapterOverride) > 0 && adapterOverride[0] != nil {
 		adapter = adapterOverride[0]
 	} else {
@@ -73,11 +73,11 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		"provider_base_url": strings.TrimSpace(providerCfg.BaseURL),
 		"model":             modelName,
 	})
-	r.persistRunEvent("native.runtime.start", RealtimeStreamKindLifecycle, map[string]any{
+	r.persistRunEvent("floret.projected_turn.start", RealtimeStreamKindLifecycle, map[string]any{
 		"engine":         "floret",
 		"provider_type":  providerType,
 		"model":          modelName,
-		"max_tool_calls": nativeHardMaxToolCalls,
+		"max_tool_calls": modelGatewayHardMaxToolCalls,
 		"mode":           mode,
 	})
 
@@ -126,7 +126,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 	if err != nil {
 		return r.failRun("Failed to load provider continuation", err)
 	}
-	contextWindow := nativeDefaultContextLimit
+	contextWindow := modelGatewayDefaultContextLimit
 	if req.ModelCapability.MaxContextTokens > 0 {
 		contextWindow = req.ModelCapability.MaxContextTokens
 	}
@@ -191,7 +191,7 @@ func (r *run) runNative(ctx context.Context, req RunRequest, providerCfg config.
 		Completion:            completionPolicy,
 		Signals:               controlSpec,
 		Limits: flruntime.TurnLimits{
-			MaxToolCalls:           nativeHardMaxToolCalls,
+			MaxToolCalls:           modelGatewayHardMaxToolCalls,
 			MaxTotalTokens:         maxTotalTokens,
 			MaxCostUSD:             req.Options.MaxCostUSD,
 			MaxLengthContinuations: 2,
@@ -291,7 +291,7 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.Projecte
 			resultErr = errors.New("floret projected turn failed")
 		}
 		if finishReason := floretFailureFinishReason(result); finishReason != "" {
-			r.persistFloretNativeTurnResult(step, result, finishReason)
+			r.persistFloretProjectedTurnResult(step, result, finishReason)
 			return r.failReplyFinish(step, finishReason, floretFailureFinalizationReason(finishReason), floretFailureMessage(finishReason))
 		}
 		return r.failRunWithCode(classifyRunFailureCode(resultErr, runErrorCodeFloretEngineFailed), "", resultErr)
@@ -351,12 +351,12 @@ func floretFailureMessage(finishReason string) string {
 	}
 }
 
-func (r *run) persistFloretNativeTurnResult(step int, result flruntime.ProjectedTurnResult, finishReason string) {
+func (r *run) persistFloretProjectedTurnResult(step int, result flruntime.ProjectedTurnResult, finishReason string) {
 	if r == nil {
 		return
 	}
 	usage := flowerUsageFromFloret(result.Metrics.ProviderUsage)
-	r.persistRunEvent("native.turn.result", RealtimeStreamKindLifecycle, map[string]any{
+	r.persistRunEvent("floret.projected_turn.result", RealtimeStreamKindLifecycle, map[string]any{
 		"step_index":    step,
 		"finish_reason": normalizeReplyFinishReason(finishReason),
 		"tool_calls":    result.Metrics.ToolCalls,
@@ -421,30 +421,21 @@ func (r *run) projectFloretExitPlanModeWaiting(step int, signal *flruntime.TurnS
 	if signal == nil {
 		return errors.New("nil exit_plan_mode control signal")
 	}
-	var args ExitPlanModeArgs
-	if raw, ok := signal.Payload["args"].(ExitPlanModeArgs); ok {
-		args = raw
-	} else {
-		args.Summary = strings.TrimSpace(anyToString(signal.Payload["summary"]))
-	}
-	result, ok := signal.Payload["waiting_prompt"].(*RequestUserInputPrompt)
-	if !ok || result == nil {
-		return errors.New("exit_plan_mode missing waiting prompt")
-	}
-	result = normalizeRequestUserInputPrompt(result)
-	if result == nil || strings.TrimSpace(result.ToolName) != "exit_plan_mode" {
-		return errors.New("exit_plan_mode waiting prompt has invalid tool identity")
+	args := ExitPlanModeArgs{
+		Summary:        strings.TrimSpace(anyToString(signal.Payload["summary"])),
+		AllowedPrompts: extractExitPlanPromptRefs(signal.Payload["allowed_prompts"]),
 	}
 	exitResult := ExitPlanModeResult{
-		WaitingPrompt: result,
-		Summary:       strings.TrimSpace(anyToString(signal.Payload["summary"])),
+		Summary: strings.TrimSpace(anyToString(signal.Payload["summary"])),
 	}
-	r.persistExitPlanModeWaitingSignal(strings.TrimSpace(signal.CallID), args, exitResult)
+	_, questionsCount := r.persistExitPlanModeWaitingSignal(strings.TrimSpace(signal.CallID), args, exitResult)
+	prompt := r.snapshotWaitingPrompt()
 	r.reconcileCanonicalWaitingUserMessage()
+	questions := promptQuestions(prompt)
 	r.persistRunEvent("exit_plan_mode.waiting", RealtimeStreamKindLifecycle, map[string]any{
 		"summary":             strings.TrimSpace(exitResult.Summary),
-		"questions_count":     len(exitResult.WaitingPrompt.Questions),
-		"choices_count":       requestUserInputQuestionChoiceCount(exitResult.WaitingPrompt.Questions),
+		"questions_count":     questionsCount,
+		"choices_count":       requestUserInputQuestionChoiceCount(questions),
 		"source":              "exit_plan_mode",
 		"finalization_reason": finalizationReasonExitPlanModeWaiting,
 	})
@@ -453,6 +444,13 @@ func (r *run) projectFloretExitPlanModeWaiting(step int, signal *flruntime.TurnS
 	r.emitLifecyclePhase("ended", map[string]any{"reason": finalizationReasonExitPlanModeWaiting, "step_index": step})
 	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 	return nil
+}
+
+func promptQuestions(prompt *RequestUserInputPrompt) []RequestUserInputQuestion {
+	if prompt == nil {
+		return nil
+	}
+	return prompt.Questions
 }
 
 func flowerMessagesToFloret(messages []Message) ([]flruntime.TranscriptMessage, error) {
@@ -557,7 +555,7 @@ func messageReasoningForFloret(msg Message) string {
 
 func floretContextPolicy(contextWindow int, inputLimit int, maxOutput int) flconfig.ContextPolicy {
 	if contextWindow <= 0 {
-		contextWindow = nativeDefaultContextLimit
+		contextWindow = modelGatewayDefaultContextLimit
 	}
 	if inputLimit <= 0 {
 		inputLimit = resolveInputContextLimit(contextWindow, 0)

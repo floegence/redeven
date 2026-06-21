@@ -12,15 +12,19 @@ Redeven's AI runtime treats tools as typed runtime capabilities. Builtins declar
 
 The builtin registry includes file, patch, terminal, web search, OKF search, todo, interaction, skill, and subagent tools. Mutating tools require approval by default; terminal commands are profiled per invocation; `okf.search` is read-only Redeven repository knowledge lookup; web search is non-mutating product behavior but an open-world network effect in Floret's engine contract. `ToolPresentationSpec` is the single product display source for renderer, grouping, operation, label fields, fallback labels, compact call payload fields, result payload fields, and activity chip fields. Redeven projects builtins into Floret tool definitions with effects, read-only/destructive/open-world flags, resource extractors, static permission defaults, dynamic `PermissionFor`, and activity projection. Tool execution normalizes success summaries, errors, truncation, provenance, and builtin dispatch results so the chat activity timeline can render compact tool activity instead of raw low-level payloads.
 
-Floret owns the permission lifecycle. Redeven still decides product policy, including plan-mode readonly blocking, dangerous command blocking, subagent readonly guards, no-user-interaction blocking, and user approval requirements, but those decisions are returned through the Floret `Approver` before tool dispatch. Tool handlers execute already-approved domain actions and do not run their own user approval waits or pre-dispatch deny gates.
+Floret owns the permission lifecycle. Redeven still decides product policy, including plan-mode readonly blocking, dangerous command blocking, subagent readonly guards, no-user-interaction blocking, and user approval requirements, but those decisions are returned through the Floret `Approver` before tool dispatch. Tool handlers execute already-approved domain actions and write audit/query records such as `ai_tool_calls`, run events, and execution spans; those records support diagnostics and tool-detail lookup, not Flower UI activity generation.
 
-Provider adapters are model gateways, not Flower renderers. `floretProviderAdapter` maps provider stream bytes into Floret `ModelEvent` values. Redeven applies assistant text, reasoning deltas, retry/done/abort markers, and source observations only from Floret runtime events in the event sink. Provider continuation persistence reads the opaque provider state from the Floret turn result rather than from adapter-only side caches.
+Provider adapters are model gateways, not Flower renderers. `floretProviderAdapter` maps provider stream bytes into Floret `ModelEvent` values. Redeven applies assistant text, reasoning deltas, retry/done/abort markers, and source observations only from Floret runtime events in the event sink. Provider continuation persistence reads the complete opaque provider state from the Floret turn result, stores it as a state JSON envelope including `Attributes`, and only matches provider id, model, base URL, and state kind before passing it back to Floret.
+
+Flower UI tool activity comes from Floret `ActivityTimeline` projection. Redeven can key detail lookups from timeline item ids, but it must not synthesize chat activity rows from `ai_tool_calls`, `tool.call`, `tool.result`, execution spans, handler outcomes, or provider-adapter side effects.
+
+Control signal projection is separate from Redeven waiting UI persistence. Floret signal projection emits engine signal facts for `ask_user`, `task_complete`, and Redeven's `exit_plan_mode`; Flower `RequestUserInputPrompt` objects and product actions such as `set_mode=act` are created only by Redeven's waiting projection and persistence layer.
 
 `terminal.exec` is the local AI runtime shell. Its schema describes local execution, and successful terminal results include `execution_location=local_runtime` plus the resolved local working directory. Thread target context, Welcome environment context, or a target-shaped id does not change where this builtin runs.
 
 When a thread is configured for explicit target routing, the runtime forwards target-scoped builtin calls through `TargetToolExecutor`. The target executor receives a `TargetToolCall` containing `target_id`, `tool_name`, sanitized arguments, and required capabilities. The run layer returns a result payload that preserves or injects `target_id` and `execution_location`, so target-routed tool results cannot lose provenance before they reach the model or activity timeline.
 
-Native Flower execution uses the published Floret runtime package. Redeven passes its internal hard tool-call protection to Floret as `MaxToolCalls`; Floret `Metrics.Steps` is consumed as telemetry for result projection and activity accounting, not as a product configuration or request field. `ask_user` and `task_complete` use Floret core control definitions and provider-safe projection, while `exit_plan_mode` remains a Redeven product control signal.
+Flower execution uses the published Floret runtime package through `runFloretProjectedTurn`. Redeven passes its internal hard tool-call protection to Floret as `MaxToolCalls`; Floret `Metrics.Steps` is consumed as telemetry for result projection and activity accounting, not as a product configuration or request field. `ask_user` and `task_complete` use Floret core control definitions and provider-safe projection, while `exit_plan_mode` remains a Redeven product control signal.
 
 # Boundaries
 
@@ -47,9 +51,10 @@ Redeven must consume published Floret releases. Repository builds, tests, Deskto
 [13] redeven:internal/ai/floret_approval.go:14 - Redeven product policy is returned through the Floret tool approver.
 [14] redeven:internal/ai/floret_provider.go:55 - Provider stream deltas are sent to Floret as model events rather than mutating Flower state directly.
 [15] redeven:internal/ai/floret_events.go:42 - Flower applies streaming and source observations from Floret runtime events.
-[16] redeven:internal/ai/floret_runtime.go:170 - Native Flower execution runs through Floret projected turns with a Floret approver and event sink.
-[17] redeven:internal/ai/native_runtime.go:37 - Redeven's remaining hard execution protection is the tool-call count constant.
+[16] redeven:internal/ai/floret_runtime.go:170 - Flower execution runs through Floret projected turns with a Floret approver and event sink.
+[17] redeven:internal/ai/model_gateway.go:37 - Redeven's remaining hard execution protection is the tool-call count constant.
 [18] redeven:internal/ai/floret_runtime.go:192 - Redeven passes `MaxToolCalls` into the Floret turn limits.
 [19] redeven:internal/ai/floret_runtime.go:203 - Provider continuation candidates are built from the Floret turn result provider state.
-[20] redeven:internal/ai/floret_tools.go:1264 - Floret core control definitions are used for core control signal tool definitions.
-[21] redeven:go.mod:9 - Redeven depends on the published Floret module version.
+[20] redeven:internal/ai/provider_continuation.go:30 - Previous provider state is loaded as the full Floret model state envelope after provider/profile matching.
+[21] redeven:internal/ai/floret_runtime.go:417 - `exit_plan_mode` waiting prompts are built during Redeven result projection, not signal projection.
+[22] redeven:go.mod:9 - Redeven depends on the published Floret module version.

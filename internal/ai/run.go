@@ -1188,7 +1188,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 			Name: "Desktop",
 			Type: DesktopModelSourceProviderType,
 		}
-		return r.runNative(execCtx, req, providerCfg, "", strings.TrimSpace(taskObjective), r.desktopModelSource.Provider(modelID))
+		return r.runFloretProjectedTurn(execCtx, req, providerCfg, "", strings.TrimSpace(taskObjective), r.desktopModelSource.ModelGateway(modelID))
 	}
 	if !ok || providerID == "" {
 		return r.failRunWithCode(runErrorCodeProviderModelUnavailable, "", fmt.Errorf("invalid model id %q", modelID))
@@ -1229,10 +1229,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		)
 	}
 
-	if !r.shouldUseNativeRuntime(providerCfg) {
+	if !r.supportsModelGatewayProvider(providerCfg) {
 		return r.failRunWithCode(runErrorCodeProviderModelUnavailable, "", fmt.Errorf("unsupported provider type %q", strings.TrimSpace(providerCfg.Type)))
 	}
-	return r.runNative(execCtx, req, *providerCfg, strings.TrimSpace(apiKey), strings.TrimSpace(taskObjective))
+	return r.runFloretProjectedTurn(execCtx, req, *providerCfg, strings.TrimSpace(apiKey), strings.TrimSpace(taskObjective))
 }
 
 func (r *run) appendTextDelta(delta string) error {
@@ -2771,14 +2771,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("invalid args")
 		}
 		return r.toolWriteTodos(ctx, toolID, p.Todos, p.ExpectedVersion, p.Explanation)
-
-	case "exit_plan_mode":
-		var p ExitPlanModeArgs
-		b, _ := json.Marshal(args)
-		if err := json.Unmarshal(b, &p); err != nil {
-			return nil, errors.New("invalid args")
-		}
-		return r.toolExitPlanMode(toolID, p)
 
 	case "use_skill":
 		if meta == nil || !meta.CanExecute {

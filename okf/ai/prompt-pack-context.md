@@ -25,5 +25,5 @@ User-provided context is not a permission grant, not a working-directory mutatio
 [5] redeven:internal/ai/context/packer/builder.go:117 - The packer copies user-provided context into the prompt pack.
 [6] redeven:internal/ai/context/packer/builder.go:148 - Prompt-pack budgets include a dedicated `user_context` section.
 [7] redeven:internal/ai/service.go:1507 - Run preparation converts the effective input context action before building the prompt pack.
-[8] redeven:internal/ai/native_runtime.go:2259 - Provider messages render user-provided context before recent dialogue and current input.
+[8] redeven:internal/ai/model_gateway.go:2259 - Provider messages render user-provided context before recent dialogue and current input.
 [9] redeven:internal/flower_ui/src/FlowerSurface.tsx:1384 - Flower UI renders linked-context transcript badges only for valid Ask Flower context actions.

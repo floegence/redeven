@@ -2102,6 +2102,117 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	}
 }
 
+func TestServer_AIThreadLiveEventsIncludeReadStatus(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+	channelID := "ch_test_ai_live_events_read"
+	meta := session.Meta{
+		EndpointID:   "env_live_events_read",
+		UserPublicID: "user_live_events_read",
+		UserEmail:    "live-events-read@example.com",
+		CanRead:      true,
+		CanWrite:     true,
+		CanExecute:   true,
+	}
+	cfgPath := writeTestConfig(t)
+	store := openTestThreadReadStateStore(t)
+	aiSvc, err := ai.NewService(ai.Options{
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		Shell:        "/bin/sh",
+	})
+	if err != nil {
+		t.Fatalf("ai.NewService: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = aiSvc.Close()
+	})
+	thread, err := aiSvc.CreateThread(context.Background(), &meta, "Live events read state", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := aiSvc.AppendThreadMessage(context.Background(), &meta, thread.ThreadID, "user", "Initial", "markdown"); err != nil {
+		t.Fatalf("AppendThreadMessage(initial): %v", err)
+	}
+
+	srv, err := New(Options{
+		Backend:              &stubBackend{},
+		DistFS:               dist,
+		ListenAddr:           "127.0.0.1:0",
+		AI:                   aiSvc,
+		ConfigPath:           cfgPath,
+		ThreadReadStateStore: store,
+		ResolveSessionMeta:   resolveMetaForTest(channelID, meta),
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	origin := envOriginWithChannel(channelID)
+	initialDetail := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), origin, "")
+	if initialDetail.Code != http.StatusOK {
+		t.Fatalf("initial detail status=%d body=%s", initialDetail.Code, initialDetail.Body.String())
+	}
+	if err := aiSvc.AppendThreadMessage(context.Background(), &meta, thread.ThreadID, "user", "Final", "markdown"); err != nil {
+		t.Fatalf("AppendThreadMessage(final): %v", err)
+	}
+	if err := aiSvc.RenameThread(context.Background(), &meta, thread.ThreadID, "Live events read state updated"); err != nil {
+		t.Fatalf("RenameThread: %v", err)
+	}
+
+	rr := performServerRequest(
+		srv,
+		http.MethodGet,
+		"/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID)+"/live/events?after_seq=0&limit=10",
+		origin,
+		"",
+	)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("live events status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Data struct {
+			Events []struct {
+				Kind    string          `json:"kind"`
+				Payload json.RawMessage `json:"payload"`
+			} `json:"events"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal live events response: %v", err)
+	}
+	for _, event := range resp.Data.Events {
+		if event.Kind != "thread.patched" {
+			continue
+		}
+		var payload struct {
+			Patch struct {
+				ReadStatus struct {
+					IsUnread bool `json:"is_unread"`
+					Snapshot struct {
+						ActivityRevision  int64  `json:"activity_revision"`
+						ActivitySignature string `json:"activity_signature"`
+					} `json:"snapshot"`
+				} `json:"read_status"`
+			} `json:"patch"`
+		}
+		if err := json.Unmarshal(event.Payload, &payload); err != nil {
+			t.Fatalf("unmarshal thread patch payload: %v", err)
+		}
+		if !payload.Patch.ReadStatus.IsUnread {
+			t.Fatalf("thread.patched read_status.is_unread=false, want true")
+		}
+		if payload.Patch.ReadStatus.Snapshot.ActivityRevision <= 0 || strings.TrimSpace(payload.Patch.ReadStatus.Snapshot.ActivitySignature) == "" {
+			t.Fatalf("thread.patched read_status snapshot not populated: %#v", payload.Patch.ReadStatus.Snapshot)
+		}
+		return
+	}
+	t.Fatalf("events=%#v, want thread.patched with read_status", resp.Data.Events)
+}
+
 func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	t.Parallel()
 

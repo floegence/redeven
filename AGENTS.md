@@ -249,10 +249,24 @@ Redeven code must not bypass those Floret lifecycles:
 - tool handlers may execute already-approved domain actions, but must not run
   user approval waits or policy deny gates that belong before Floret dispatch;
 - control signals must not be registered as ordinary tools;
-- provider continuation state must enter persistence from the Floret result or
-  runtime lifecycle, not from adapter-only side caches;
+- Flower waiting prompts and persisted product UI actions may only be created in
+  the Redeven waiting projection/persistence layer, not while projecting a
+  Floret control signal;
+- provider continuation state must be persisted as the complete opaque Floret
+  model state envelope, including `Attributes`; Redeven may match provider,
+  model, base URL, and state kind, but must not truncate or interpret the
+  opaque attributes;
+- Redeven tool execution records, `ai_tool_calls`, run events, and execution
+  spans are audit/query records only. Flower UI tool activity must come from
+  Floret `ActivityTimeline` projection, with any detail lookup keyed from that
+  timeline rather than generated from audit tables;
 - activity presentation must use Redeven's `ToolPresentationSpec` projection as
   the single product display source.
+
+Flower read state is user scoped. Live thread patches returned through appserver
+must carry the current `read_status` when thread activity changes, so a running
+thread that stays selected until completion is marked read by the selected
+surface while background completions remain unread.
 
 Do not move Redeven product concerns into Floret to satisfy short-term
 integration needs. If a future design intentionally changes this boundary, it

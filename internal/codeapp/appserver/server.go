@@ -3701,7 +3701,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
 			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
+			view, err := g.buildAIFlowerLiveEventsView(r.Context(), meta, threadID, resp)
+			if err != nil {
+				writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: view})
 			return
 
 		case action == "" && r.Method == http.MethodPatch:

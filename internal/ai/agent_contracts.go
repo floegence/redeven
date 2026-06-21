@@ -80,7 +80,7 @@ type ModeFlags struct {
 	ReasoningOnly bool   `json:"reasoning_only,omitempty"`
 }
 
-type TurnRequest struct {
+type ModelGatewayRequest struct {
 	Model            string           `json:"model"`
 	Messages         []Message        `json:"messages"`
 	Tools            []ToolDef        `json:"tools"`
@@ -126,31 +126,32 @@ type TurnUsage struct {
 	ReasoningTokens int64 `json:"reasoning_tokens,omitempty"`
 }
 
-type TurnProviderState struct {
-	ContinuationKind string `json:"continuation_kind,omitempty"`
-	ContinuationID   string `json:"continuation_id,omitempty"`
+type ModelGatewayState struct {
+	Kind       string            `json:"kind,omitempty"`
+	ID         string            `json:"id,omitempty"`
+	Attributes map[string]string `json:"attributes,omitempty"`
 }
 
-type TurnResult struct {
+type ModelGatewayResult struct {
 	FinishReason    string             `json:"finish_reason"`
 	Text            string             `json:"text,omitempty"`
 	Reasoning       string             `json:"reasoning,omitempty"`
 	ToolCalls       []ToolCall         `json:"tool_calls,omitempty"`
 	Sources         []SourceRef        `json:"sources,omitempty"`
 	Usage           TurnUsage          `json:"usage,omitempty"`
-	ProviderState   *TurnProviderState `json:"provider_state,omitempty"`
+	ProviderState   *ModelGatewayState `json:"provider_state,omitempty"`
 	RawProviderDiag map[string]any     `json:"raw_provider_diag,omitempty"`
 	StreamEvents    []StreamEvent      `json:"stream_events,omitempty"`
 	ToolResults     []ToolResult       `json:"tool_results,omitempty"`
 }
 
-// Provider is the normalized runtime adapter contract.
-type Provider interface {
-	StreamTurn(ctx context.Context, req TurnRequest, onEvent func(StreamEvent)) (TurnResult, error)
+// ModelGateway streams one provider request for a Floret projected turn.
+type ModelGateway interface {
+	StreamTurn(ctx context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error)
 }
 
-type directTurnProvider interface {
-	Turn(ctx context.Context, req TurnRequest) (TurnResult, error)
+type directModelGateway interface {
+	Turn(ctx context.Context, req ModelGatewayRequest) (ModelGatewayResult, error)
 }
 
 type ToolDef struct {
