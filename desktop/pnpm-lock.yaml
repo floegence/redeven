@@ -6,7 +6,7 @@ settings:
 
 overrides:
   '@babel/core': ^7.29.7
-  dompurify: ^3.4.10
+  dompurify: ^3.4.11
   form-data: ^4.0.6
   js-yaml: ^4.2.0
   lodash: ^4.18.1
@@ -16,6 +16,7 @@ overrides:
   tar: ^7.5.16
   tmp: ^0.2.7
   uuid: ^14.0.0
+  undici: ^7.28.0
 
 importers:
 
@@ -29,8 +30,8 @@ importers:
         specifier: ^9.39.4
         version: 9.39.4
       '@floegence/floe-webapp-core':
-        specifier: ^0.36.67
-        version: 0.36.67(solid-js@1.9.13)
+        specifier: ^0.36.68
+        version: 0.36.68(solid-js@1.9.13)
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.2.8
@@ -501,8 +502,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@floegence/floe-webapp-core@0.36.67':
-    resolution: {integrity: sha512-vDoGdDLXbQ+uOmYxaqFYFKRkmS5WPQMGth8Wb4FRiBcrH6oAOChfwUTcZNegcr4tbU/2qlzqUzwfAvE/NvIkfQ==}
+  '@floegence/floe-webapp-core@0.36.68':
+    resolution: {integrity: sha512-/OHGN0JwNAhDtCAwB9C5pOoapPV+ir4BeMfdpDZ7UrckcKPoxE7YkDEWUn6kZ3Ez0JRZVdZvb6lPjpIgnSji1w==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -1607,8 +1608,8 @@ packages:
     os: [darwin]
     hasBin: true
 
-  dompurify@3.4.10:
-    resolution: {integrity: sha512-0xzNv0e7oYC6yyuOGZIABPM4qtg3QxLFniDNPP4ZP90wR8Yq3zgwpRbrNiT4N3IKqDbbYFEJLV+JWEs19aZ//w==}
+  dompurify@3.4.11:
+    resolution: {integrity: sha512-zhlUV12GsaRzMsf9q5M254YhA4+VuF0fG+QFqu6aYpoGlKtz+w8//jBcGVYBgQkR5GHjUomejY84AV+/uPbWdw==}
 
   dotenv-expand@11.0.7:
     resolution: {integrity: sha512-zIHwmZPRshsCdpMDyVsqGmgyP0yT8GAgXUnkdAoJisxvf33k7yO6OuoKmcTGuXPWSsm8Oh88nZicRLA9Y0rUeA==}
@@ -2819,12 +2820,8 @@ packages:
   undici-types@7.16.0:
     resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
 
-  undici@6.26.0:
-    resolution: {integrity: sha512-4yqz8a3n5HmGTlsbADNtr/dJlhkh/55Rq798G6ibiULcXbDtaLpTl1pvdqcbFfeoj3iSi52lePFM7h9H21cw/A==}
-    engines: {node: '>=18.17'}
-
-  undici@7.26.0:
-    resolution: {integrity: sha512-3O9Tf67pGhgOv9jM35AbhkXAKi13f3oy3aE4CSgr+TckGeY+/iu97ZXN+J7DpHPzLbVApFd1IFhcnBjREYXYcg==}
+  undici@7.28.0:
+    resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
     engines: {node: '>=20.18.1'}
 
   unist-util-is@6.0.1:
@@ -3480,7 +3477,7 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
-  '@floegence/floe-webapp-core@0.36.67(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.36.68(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
@@ -4713,7 +4710,7 @@ snapshots:
       verror: 1.10.1
     optional: true
 
-  dompurify@3.4.10:
+  dompurify@3.4.11:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -5279,7 +5276,7 @@ snapshots:
       saxes: 6.0.0
       symbol-tree: 3.2.4
       tough-cookie: 6.0.1
-      undici: 7.26.0
+      undici: 7.28.0
       w3c-xmlserializer: 5.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -5452,7 +5449,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.20
-      dompurify: 3.4.10
+      dompurify: 3.4.11
       es-toolkit: 1.47.0
       katex: 0.16.47
       khroma: 2.1.0
@@ -5521,7 +5518,7 @@ snapshots:
 
   monaco-editor@0.55.1:
     dependencies:
-      dompurify: 3.4.10
+      dompurify: 3.4.11
       marked: 14.0.0
 
   ms@2.1.3: {}
@@ -5551,7 +5548,7 @@ snapshots:
       semver: 7.7.4
       tar: 7.5.16
       tinyglobby: 0.2.16
-      undici: 6.26.0
+      undici: 7.28.0
       which: 6.0.1
 
   node-releases@2.0.46: {}
@@ -6007,9 +6004,7 @@ snapshots:
 
   undici-types@7.16.0: {}
 
-  undici@6.26.0: {}
-
-  undici@7.26.0: {}
+  undici@7.28.0: {}
 
   unist-util-is@6.0.1:
     dependencies:

@@ -1,20 +1,20 @@
 {
   "schema_version": 1,
   "release_review": {
-    "release_version": "unreleased",
+    "release_version": "v0.7.1",
     "previous_release": "v0.7.0",
-    "reviewed_at": "2026-06-03",
-    "review_id": "gateway-service-decoupling-v1",
-    "summary": "Gateway is now a separate redeven-gateway service and protocol; Runtime Service protocol compatibility stays on the existing window.",
+    "reviewed_at": "2026-06-21",
+    "review_id": "dependency-security-refresh-v0-7-1",
+    "summary": "Dependency security refresh updates Flowersec and browser UI packages without changing the Runtime Service protocol window.",
     "checked_surfaces": [
-      "Runtime Service protocol_version remains redeven-runtime-v1 and runtime-control/open flows continue to use the existing desktop-bridge contract for env runtimes",
-      "Gateway catalog, profile management, pairing, and open-session now use the separate redeven-gateway-v1 protocol and redeven-gateway binary rather than Runtime Service snapshot fields",
-      "Desktop Gateway management actions use the independent Gateway service package slot and state root; env runtime start/stop/update actions remain separate",
-      "Older redeven-runtime-gateway-v1 catalog responses are rejected by Gateway protocol validation instead of being consumed as normal environments",
-      "Gateway catalog no longer exposes env_local by default; Gateway host environments must be explicit Gateway-owned profiles",
-      "Compatibility epoch, minimum Desktop version, and minimum Runtime version remain unchanged because Runtime Service's own wire contract is not widened in this change"
+      "Runtime Service protocol_version remains redeven-runtime-v1; no runtime-control or desktop bridge payload fields changed in this dependency refresh",
+      "Flowersec Go and TypeScript dependencies are consumed from published v0.19.10 artifacts only, with no local sibling repository wiring or go.work involvement",
+      "Floe Webapp packages are consumed from published v0.36.68 artifacts only; Env App protocol and boot helpers keep the same public contract shape",
+      "Desktop and Env App package locks refresh DOMPurify and Undici patched transitive versions while preserving existing startup, attach, and Local UI health flows",
+      "Runtime binary release artifacts keep the same command surface and embedded asset build path; the release updates dependency provenance rather than Runtime Service wire semantics",
+      "Compatibility epoch, minimum Desktop version, and minimum Runtime version remain unchanged because no Runtime Service protocol fields, control methods, or minimum client requirements changed"
     ],
-    "same_window_rationale": "Gateway service management is outside the Runtime Service protocol window: it uses redeven-gateway-v1, a separate binary, and a separate managed package slot. Env runtime operations still use the existing Runtime Service protocol and desktop bridge, so no Runtime Service compatibility epoch or minimum version change is required for this release contract."
+    "same_window_rationale": "This release is a dependency security refresh. The Runtime Service protocol remains redeven-runtime-v1 with compatibility_epoch 5, minimum_desktop_version v0.7.0, and minimum_runtime_version v0.7.0. Flowersec, Floe Webapp, DOMPurify, and Undici updates change dependency provenance and patched package contents, not Runtime Service request/response schemas, desktop bridge behavior, startup report format, sys.ping semantics, Env App maintenance UI protocol, or SSH runtime bootstrap compatibility."
   },
   "runtime_protocol_version": "redeven-runtime-v1",
   "compatibility_epoch": 5,
