@@ -136,6 +136,11 @@ type run struct {
 	lastLifecycleAt     time.Time
 	lifecycleMinEmitGap time.Duration
 
+	muModelIO         sync.Mutex
+	lastModelIOPhase  FlowerModelIOPhase
+	lastModelIOStep   int
+	modelIOStatusLive bool
+
 	nextBlockIndex            int
 	currentTextBlockIndex     int
 	needNewTextBlock          bool
@@ -605,6 +610,54 @@ func sanitizePublicStreamEvent(ev any) (any, bool) {
 	}
 	blockSet.Block = block
 	return blockSet, true
+}
+
+func (r *run) updateModelIOStatus(phase FlowerModelIOPhase, stepIndex int) {
+	if r == nil || phase == "" {
+		return
+	}
+	if !r.acceptsPresentationUpdates() {
+		return
+	}
+	r.muModelIO.Lock()
+	if r.modelIOStatusLive && r.lastModelIOPhase == phase && r.lastModelIOStep == stepIndex {
+		r.muModelIO.Unlock()
+		return
+	}
+	r.lastModelIOPhase = phase
+	r.lastModelIOStep = stepIndex
+	r.modelIOStatusLive = true
+	r.muModelIO.Unlock()
+	r.sendStreamEvent(streamEventModelIOStatus{
+		Type:        "model-io-status",
+		Phase:       string(phase),
+		RunID:       strings.TrimSpace(r.id),
+		StepIndex:   stepIndex,
+		UpdatedAtMs: time.Now().UnixMilli(),
+	})
+}
+
+func (r *run) clearModelIOStatus() {
+	if r == nil {
+		return
+	}
+	if !r.acceptsPresentationUpdates() {
+		return
+	}
+	r.muModelIO.Lock()
+	if !r.modelIOStatusLive {
+		r.muModelIO.Unlock()
+		return
+	}
+	r.lastModelIOPhase = ""
+	r.lastModelIOStep = 0
+	r.modelIOStatusLive = false
+	r.muModelIO.Unlock()
+	r.sendStreamEvent(streamEventModelIOStatus{
+		Type:        "model-io-status",
+		RunID:       strings.TrimSpace(r.id),
+		UpdatedAtMs: time.Now().UnixMilli(),
+	})
 }
 
 func isActivityTimelineBlockValue(value any) bool {

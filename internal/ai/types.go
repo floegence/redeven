@@ -438,6 +438,14 @@ type streamEventContextCompaction struct {
 	Payload   map[string]any `json:"payload,omitempty"`
 }
 
+type streamEventModelIOStatus struct {
+	Type        string `json:"type"`
+	Phase       string `json:"phase,omitempty"`
+	RunID       string `json:"runId,omitempty"`
+	StepIndex   int    `json:"stepIndex,omitempty"`
+	UpdatedAtMs int64  `json:"updatedAtMs,omitempty"`
+}
+
 // RealtimeEventType defines the high-level AI event category sent over Flowersec RPC notify.
 type RealtimeEventType string
 

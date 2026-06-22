@@ -363,6 +363,151 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 	}
 }
 
+func TestFlowerLiveModelIOStatusProjectsProviderLifecycle(t *testing.T) {
+	t.Parallel()
+
+	meta := session.Meta{
+		EndpointID:        "env_live_model_io",
+		NamespacePublicID: "ns_live_model_io",
+		ChannelID:         "ch_live_model_io",
+		UserPublicID:      "u_live_model_io",
+		UserEmail:         "model-io@example.com",
+		CanRead:           true,
+		CanWrite:          true,
+		CanExecute:        true,
+		CanAdmin:          true,
+	}
+	svc := newRealtimeTestService(t, 0)
+
+	ctx := context.Background()
+	th, err := svc.CreateThread(ctx, &meta, "model io", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	runID := "run_model_io_1"
+
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventMessageStart{Type: "message-start", MessageID: "msg_model_io_1"})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventModelIOStatus{
+		Type:        "model-io-status",
+		Phase:       string(FlowerModelIOPhaseWaitingResponse),
+		RunID:       runID,
+		StepIndex:   1,
+		UpdatedAtMs: 10_001,
+	})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventModelIOStatus{
+		Type:        "model-io-status",
+		Phase:       string(FlowerModelIOPhaseStreaming),
+		RunID:       runID,
+		StepIndex:   1,
+		UpdatedAtMs: 10_002,
+	})
+	resp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, 0, 10)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+	}
+	gotKinds := make([]FlowerLiveKind, 0, len(resp.Events))
+	for _, ev := range resp.Events {
+		gotKinds = append(gotKinds, ev.Kind)
+	}
+	wantKinds := []FlowerLiveKind{
+		FlowerLiveRunStarted,
+		FlowerLiveTimelineReplaced,
+		FlowerLiveMessageStarted,
+		FlowerLiveTimelineReplaced,
+		FlowerLiveModelIOUpdated,
+		FlowerLiveModelIOUpdated,
+	}
+	if !reflect.DeepEqual(gotKinds, wantKinds) {
+		t.Fatalf("event kinds=%#v, want %#v", gotKinds, wantKinds)
+	}
+	var payload FlowerLiveModelIOUpdatedPayload
+	if !decodeFlowerPayload(resp.Events[5].Payload, &payload) || payload.Status == nil {
+		t.Fatalf("failed to decode model io payload: %s", string(resp.Events[5].Payload))
+	}
+	if payload.Status.Phase != FlowerModelIOPhaseStreaming || payload.Status.RunID != runID || payload.Status.StepIndex != 1 {
+		t.Fatalf("model io status=%#v", payload.Status)
+	}
+
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+	}
+	if bootstrap.LiveState.ModelIO == nil || bootstrap.LiveState.ModelIO.Phase != FlowerModelIOPhaseStreaming {
+		t.Fatalf("bootstrap model_io=%#v", bootstrap.LiveState.ModelIO)
+	}
+}
+
+func TestFlowerLiveModelIOStatusIgnoresStaleRunClear(t *testing.T) {
+	state := FlowerLiveMaterializedState{}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: "run-new",
+		Kind:  FlowerLiveRunStarted,
+		Payload: mustFlowerPayload(FlowerLiveRunStartedPayload{
+			RunID:     "run-new",
+			MessageID: "msg-new",
+			Status:    string(RunStateRunning),
+		}),
+	})
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: "run-new",
+		Kind:  FlowerLiveModelIOUpdated,
+		Payload: mustFlowerPayload(FlowerLiveModelIOUpdatedPayload{Status: &FlowerModelIOStatus{
+			Phase:       FlowerModelIOPhaseStreaming,
+			RunID:       "run-new",
+			UpdatedAtMs: 10_000,
+		}}),
+	})
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID:   "run-old",
+		Kind:    FlowerLiveModelIOUpdated,
+		Payload: mustFlowerPayload(FlowerLiveModelIOUpdatedPayload{}),
+	})
+	if state.ModelIO == nil || state.ModelIO.RunID != "run-new" {
+		t.Fatalf("stale clear removed model_io: %#v", state.ModelIO)
+	}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		Kind:    FlowerLiveModelIOUpdated,
+		Payload: mustFlowerPayload(FlowerLiveModelIOUpdatedPayload{}),
+	})
+	if state.ModelIO == nil || state.ModelIO.RunID != "run-new" {
+		t.Fatalf("unidentified clear removed model_io: %#v", state.ModelIO)
+	}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: "run-old",
+		Kind:  FlowerLiveModelIOUpdated,
+		Payload: mustFlowerPayload(FlowerLiveModelIOUpdatedPayload{Status: &FlowerModelIOStatus{
+			Phase:       FlowerModelIOPhaseWaitingResponse,
+			RunID:       "run-old",
+			UpdatedAtMs: 10_010,
+		}}),
+	})
+	if state.ModelIO == nil || state.ModelIO.RunID != "run-new" || state.ModelIO.Phase != FlowerModelIOPhaseStreaming {
+		t.Fatalf("stale set replaced model_io: %#v", state.ModelIO)
+	}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: "run-old",
+		Kind:  FlowerLiveRunStatusChanged,
+		Payload: mustFlowerPayload(FlowerLiveRunStatusChangedPayload{
+			RunID:  "run-old",
+			Status: string(RunStateSuccess),
+		}),
+	})
+	if state.ModelIO == nil || state.ModelIO.RunID != "run-new" {
+		t.Fatalf("stale terminal removed model_io: %#v", state.ModelIO)
+	}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID: "run-new",
+		Kind:  FlowerLiveRunStatusChanged,
+		Payload: mustFlowerPayload(FlowerLiveRunStatusChangedPayload{
+			RunID:  "run-new",
+			Status: string(RunStateSuccess),
+		}),
+	})
+	if state.ModelIO != nil {
+		t.Fatalf("matching terminal left model_io: %#v", state.ModelIO)
+	}
+}
+
 func TestFlowerLiveResyncSignalDoesNotConsumeEventSequence(t *testing.T) {
 	t.Parallel()
 

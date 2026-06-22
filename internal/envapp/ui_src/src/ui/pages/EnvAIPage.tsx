@@ -29,7 +29,13 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers): FlowerSurfaceCopy {
       handlerStartFailedTitle: i18n.t('flowerChat.router.handlerStartFailedTitle'),
       handlerStillStarting: i18n.t('flowerChat.router.handlerStillStarting'),
       handlerRetry: i18n.t('common.actions.retry'),
-      thinkingIndicator: i18n.t('chatChrome.thinkingEllipsis'),
+      modelStatus: {
+        preparing: i18n.t('chatChrome.modelStatusPreparing'),
+        waitingResponse: i18n.t('chatChrome.modelStatusWaitingResponse'),
+        streaming: i18n.t('chatChrome.thinkingEllipsis'),
+        retrying: i18n.t('chatChrome.modelStatusRetrying'),
+        finalizing: i18n.t('chatChrome.modelStatusFinalizing'),
+      },
       toolApprovalStates: {
         ...DEFAULT_FLOWER_SURFACE_COPY.chat.toolApprovalStates,
         requested: i18n.t('flowerChat.sidebar.status.waitingApproval'),

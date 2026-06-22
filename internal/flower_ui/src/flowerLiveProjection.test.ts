@@ -128,6 +128,270 @@ function applyEvents(initial: FlowerThreadSnapshot, cursor: number, events: read
 }
 
 describe('Flower live projection', () => {
+  it('projects model io status from bootstrap and live updates', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap({
+      live_state: {
+        thread_patch: {},
+        runs: {
+          'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
+        },
+        model_io: {
+          phase: 'waiting_response',
+          run_id: 'run-1',
+          step_index: 1,
+          updated_at_ms: 3100,
+        },
+        approval_actions: {},
+        input_requests: {},
+      },
+    }));
+
+    expect(initial.model_io_status).toEqual({
+      phase: 'waiting_response',
+      run_id: 'run-1',
+      step_index: 1,
+      updated_at_ms: 3100,
+    });
+
+    const streaming = applyFlowerLiveEvent(initial, 0, event(1, 'model_io.updated', {
+      status: {
+        phase: 'streaming',
+        run_id: 'run-1',
+        updated_at_ms: 3200,
+      },
+    }));
+    expect(streaming.thread.model_io_status).toEqual({
+      phase: 'streaming',
+      run_id: 'run-1',
+      updated_at_ms: 3200,
+    });
+  });
+
+  it('accepts model io updates only from the active live run', () => {
+    const initial = thread();
+    const staleBeforeRun = applyFlowerLiveEvent(initial, 0, event(1, 'model_io.updated', {
+      status: {
+        phase: 'waiting_response',
+        run_id: 'run-old',
+        updated_at_ms: 3100,
+      },
+    }));
+    expect(staleBeforeRun.thread.model_io_status).toBeUndefined();
+
+    const started = applyFlowerLiveEvent(staleBeforeRun.thread, staleBeforeRun.cursor, event(2, 'run.started', {
+      run_id: 'run-new',
+      message_id: 'assistant-new',
+      status: 'running',
+    }));
+    const accepted = applyFlowerLiveEvent(started.thread, started.cursor, event(3, 'model_io.updated', {
+      status: {
+        phase: 'waiting_response',
+        run_id: 'run-new',
+        updated_at_ms: 3200,
+      },
+    }));
+    expect(accepted.thread.model_io_status).toMatchObject({
+      phase: 'waiting_response',
+      run_id: 'run-new',
+    });
+
+    const staleAfterRun = applyFlowerLiveEvent(accepted.thread, accepted.cursor, {
+      ...event(4, 'model_io.updated', {
+        status: {
+          phase: 'streaming',
+          run_id: 'run-old',
+          updated_at_ms: 3300,
+        },
+      }),
+      run_id: 'run-old',
+    });
+    expect(staleAfterRun.thread.model_io_status).toMatchObject({
+      phase: 'waiting_response',
+      run_id: 'run-new',
+    });
+  });
+
+  it('clears model io status only for the matching run', () => {
+    const initial = thread({
+      active_run_id: 'run-new',
+      model_io_status: {
+        phase: 'streaming',
+        run_id: 'run-new',
+        updated_at_ms: 3200,
+      },
+    });
+
+    const staleClear = applyFlowerLiveEvent(initial, 0, {
+      ...event(1, 'model_io.updated', { status: null }),
+      run_id: 'run-old',
+    });
+    expect(staleClear.thread.model_io_status?.run_id).toBe('run-new');
+
+    const emptyRunClear = applyFlowerLiveEvent(staleClear.thread, staleClear.cursor, {
+      ...event(2, 'model_io.updated', { status: null }),
+      run_id: '',
+    });
+    expect(emptyRunClear.thread.model_io_status?.run_id).toBe('run-new');
+
+    const staleSet = applyFlowerLiveEvent(emptyRunClear.thread, emptyRunClear.cursor, {
+      ...event(3, 'model_io.updated', {
+        status: {
+          phase: 'waiting_response',
+          run_id: 'run-old',
+          updated_at_ms: 3300,
+        },
+      }),
+      run_id: 'run-old',
+    });
+    expect(staleSet.thread.model_io_status).toMatchObject({
+      phase: 'streaming',
+      run_id: 'run-new',
+    });
+
+    const staleTerminal = applyFlowerLiveEvent(staleSet.thread, staleSet.cursor, {
+      ...event(4, 'run.status_changed', { run_id: 'run-old', status: 'success' }),
+      run_id: 'run-old',
+    });
+    expect(staleTerminal.thread.model_io_status?.run_id).toBe('run-new');
+
+    const matchingTerminal = applyFlowerLiveEvent(staleTerminal.thread, staleTerminal.cursor, {
+      ...event(5, 'run.status_changed', { run_id: 'run-new', status: 'success' }),
+      run_id: 'run-new',
+    });
+    expect(matchingTerminal.thread.model_io_status).toBeNull();
+  });
+
+  it('hides bootstrap model io status for waiting and terminal threads', () => {
+    for (const status of ['waiting_user', 'waiting_approval', 'success', 'failed', 'canceled'] as const) {
+      const projected = projectFlowerLiveBootstrap(bootstrap({
+        thread: thread({ status }),
+        live_state: {
+          thread_patch: {},
+          runs: {
+            'run-1': { run_id: 'run-1', status: 'running', message_id: 'assistant-live' },
+          },
+          model_io: {
+            phase: 'streaming',
+            run_id: 'run-1',
+            updated_at_ms: 3200,
+          },
+          approval_actions: {},
+          input_requests: {},
+        },
+      }));
+
+      expect(projected.model_io_status).toBeNull();
+    }
+  });
+
+  it('hides model io status when thread patches enter waiting or terminal status without run identity', () => {
+    const initial = thread({
+      active_run_id: 'run-new',
+      model_io_status: {
+        phase: 'streaming',
+        run_id: 'run-new',
+        updated_at_ms: 3200,
+      },
+    });
+
+    for (const [index, runStatusValue] of ['success', 'failed', 'canceled', 'waiting_approval', 'waiting_user'].entries()) {
+      const patched = applyFlowerLiveEvent(initial, 0, {
+        ...event(index + 1, 'thread.patched', {
+          patch: {
+            run_status: runStatusValue,
+            updated_at_ms: 3300 + index,
+          },
+        }),
+        run_id: '',
+      });
+
+      expect(patched.thread.status).toBe(runStatusValue);
+      expect(patched.thread.model_io_status).toBeNull();
+      expect(patched.thread.active_run_id).toBeUndefined();
+
+      const lateModelIO = applyFlowerLiveEvent(patched.thread, patched.cursor, {
+        ...event(index + 10, 'model_io.updated', {
+          status: {
+            phase: 'streaming',
+            run_id: 'run-new',
+            updated_at_ms: 3400 + index,
+          },
+        }),
+        run_id: 'run-new',
+      });
+
+      expect(lateModelIO.thread.model_io_status).toBeNull();
+    }
+  });
+
+  it('keeps model io status across non-status thread summary patches', () => {
+    const initial = thread({
+      active_run_id: 'run-new',
+      model_io_status: {
+        phase: 'streaming',
+        run_id: 'run-new',
+        updated_at_ms: 3200,
+      },
+    });
+
+    const patched = applyFlowerLiveEvent(initial, 0, {
+      ...event(1, 'thread.patched', {
+        patch: {
+          title: 'Updated thread title',
+          updated_at_ms: 3300,
+        },
+      }),
+      run_id: '',
+    });
+
+    expect(patched.thread.status).toBe('running');
+    expect(patched.thread.title).toBe('Updated thread title');
+    expect(patched.thread.model_io_status?.run_id).toBe('run-new');
+  });
+
+  it('hides model io status when approval or user input takes over', () => {
+    const base = thread({
+      active_run_id: 'run-1',
+      model_io_status: {
+        phase: 'streaming',
+        run_id: 'run-1',
+        updated_at_ms: 3200,
+      },
+    });
+
+    const approval = applyFlowerLiveEvent(base, 0, event(1, 'approval.requested', {
+      action: {
+        action_id: 'appr-1',
+        run_id: 'run-1',
+        tool_id: 'tool-1',
+        tool_name: 'terminal.exec',
+        state: 'requested',
+        status: 'pending',
+        revision: 1,
+        requested_at_ms: 3000,
+        can_approve: true,
+        summary: { label: 'terminal.exec' },
+      },
+    }));
+    expect(approval.thread.model_io_status).toBeNull();
+
+    const input = applyFlowerLiveEvent(base, 0, event(2, 'input.requested', {
+      request: {
+        prompt_id: 'prompt-1',
+        message_id: 'msg-1',
+        tool_id: 'tool-ask',
+        tool_name: 'ask_user',
+        questions: [{
+          id: 'q1',
+          header: 'Choice',
+          question: 'Pick one',
+          response_mode: 'write',
+        }],
+      },
+    }));
+    expect(input.thread.model_io_status).toBeNull();
+  });
+
   it('maps top-level read_status from live bootstrap responses', () => {
     const mapped = mapFlowerLiveBootstrap({
       schema_version: 1,

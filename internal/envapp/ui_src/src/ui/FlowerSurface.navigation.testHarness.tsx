@@ -15,6 +15,7 @@ import type {
   FlowerLiveBootstrap,
   FlowerThreadSnapshot,
   FlowerActivityStatus,
+  FlowerModelIOStatus,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -221,7 +222,17 @@ export function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThr
   };
 }
 
+export function modelIOStatus(overrides: Partial<FlowerModelIOStatus> = {}): FlowerModelIOStatus {
+  return {
+    phase: 'streaming',
+    run_id: 'run-live',
+    updated_at_ms: 3,
+    ...overrides,
+  };
+}
+
 export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): FlowerLiveBootstrap {
+  const modelIORunID = threadValue.model_io_status?.run_id;
   return {
     schema_version: 1,
     endpoint_id: 'test-runtime',
@@ -232,7 +243,10 @@ export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): Fl
     timeline_messages: threadValue.messages,
     live_state: {
       thread_patch: {},
-      runs: {},
+      runs: modelIORunID
+        ? { [modelIORunID]: { run_id: modelIORunID, status: 'running' } }
+        : {},
+      ...(threadValue.model_io_status ? { model_io: threadValue.model_io_status } : {}),
       approval_actions: {},
       input_requests: {},
     },

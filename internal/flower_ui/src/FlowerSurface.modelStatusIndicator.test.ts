@@ -19,15 +19,18 @@ function cssRule(css: string, selector: string): string {
   return css.slice(start, end + 2);
 }
 
-describe('Flower streaming cursor', () => {
-  it('uses readable localized bottom text with a decorative left-to-right shimmer', () => {
+describe('Flower model status indicator', () => {
+  it('uses readable localized dock text with a decorative left-to-right shimmer', () => {
     const css = flowerStyles();
-    const cursorRule = cssRule(css, '.flower-streaming-cursor');
-    const textRule = cssRule(css, '.flower-streaming-cursor-text');
-    const shimmerRule = cssRule(css, '.flower-streaming-cursor-text::after');
+    const laneRule = cssRule(css, '.flower-model-status-lane');
+    const indicatorRule = cssRule(css, '.flower-model-status-indicator');
+    const textRule = cssRule(css, '.flower-model-status-text');
+    const shimmerRule = cssRule(css, '.flower-model-status-text::after');
 
-    expect(cursorRule).toContain('display: inline-flex');
-    expect(cursorRule).toContain('align-items: center');
+    expect(laneRule).toContain('min-height: 1.35rem');
+    expect(laneRule).toContain('align-items: center');
+    expect(indicatorRule).toContain('display: inline-flex');
+    expect(indicatorRule).toContain('align-items: center');
     expect(textRule).toContain('font-size: 0.75rem');
     expect(textRule).toContain('font-weight: 600');
     expect(textRule).toContain('white-space: nowrap');
@@ -43,19 +46,15 @@ describe('Flower streaming cursor', () => {
     expect(shimmerRule).toContain('background-clip: text');
     expect(shimmerRule).toContain('-webkit-background-clip: text');
     expect(shimmerRule).toContain('-webkit-text-fill-color: transparent');
-    expect(shimmerRule).toContain('animation: flower-cursor-shimmer 2.4s ease-in-out infinite');
-    expect(css).toContain('@keyframes flower-cursor-shimmer');
+    expect(shimmerRule).toContain('animation: flower-model-status-shimmer 2.4s ease-in-out infinite');
+    expect(css).toContain('@keyframes flower-model-status-shimmer');
     expect(css).toContain('background-position: -120% 0');
     expect(css).toContain('background-position: 180% 0');
-    expect(css).toContain('.flower-streaming-cursor-text::after,');
-    expect(css).toContain('.flower-streaming-cursor-text {\n    color: var(--muted-foreground);');
-    expect(css).toContain('.flower-streaming-cursor-text::after {\n    content: none !important;');
-    expect(css).not.toContain('animation: flower-cursor-flow');
-    expect(css).not.toContain('@keyframes flower-cursor-flow');
-    expect(css).not.toContain('.flower-streaming-cursor::before');
-    expect(css).not.toContain('.flower-message-streaming-tail-user');
-    expect(cursorRule).not.toContain('width: 1.65rem');
-    expect(cursorRule).not.toContain('height: 0.82rem');
+    expect(css).toContain('.flower-model-status-text::after,');
+    expect(css).toContain('.flower-model-status-text {\n    color: var(--muted-foreground);');
+    expect(css).toContain('.flower-model-status-text::after {\n    content: none !important;');
+    expect(indicatorRule).not.toContain('width: 1.65rem');
+    expect(indicatorRule).not.toContain('height: 0.82rem');
   });
 
   it('keeps the composer action button shape unified for send and stop', () => {

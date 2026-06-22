@@ -14,7 +14,7 @@ The builtin registry includes file, patch, terminal, web search, OKF search, tod
 
 Floret owns the permission lifecycle. Redeven still decides product policy, including plan-mode readonly blocking, dangerous command blocking, subagent readonly guards, no-user-interaction blocking, and user approval requirements, but those decisions are returned through the Floret `Approver` before tool dispatch. Tool handlers execute already-approved domain actions and write audit/query records such as `ai_tool_calls`, run events, and execution spans; those records support diagnostics and tool-detail lookup, not Flower UI activity generation.
 
-Provider adapters are model gateways, not Flower renderers. `floretProviderAdapter` maps provider stream bytes into Floret `ModelEvent` values. Redeven applies assistant text, reasoning deltas, retry/done/abort markers, and source observations only from Floret runtime events in the event sink. Provider continuation persistence reads the complete opaque provider state from the Floret turn result, stores it as a state JSON envelope including `Attributes`, and only matches provider id, model, base URL, and state kind before passing it back to Floret.
+Provider adapters are model gateways, not Flower renderers. `floretProviderAdapter` maps provider stream bytes into Floret `ModelEvent` values. Assistant text, reasoning deltas, and model-generated tool-call stream observations are emitted as provider-neutral Floret model events before Redeven projects them into Flower live state. `ToolCallStream` identifies a tool call while the model is still generating it; final executable tool calls remain the separate `ToolCalls` batch. Redeven applies assistant text, reasoning deltas, tool-call stream observations, retry/done/abort markers, and source observations only from Floret runtime events in the event sink. Provider continuation persistence reads the complete opaque provider state from the Floret turn result, stores it as a state JSON envelope including `Attributes`, and only matches provider id, model, base URL, and state kind before passing it back to Floret.
 
 Flower UI tool activity comes from Floret `ActivityTimeline` projection. Redeven can key detail lookups from timeline item ids, but it must not synthesize chat activity rows from `ai_tool_calls`, `tool.call`, `tool.result`, execution spans, handler outcomes, or provider-adapter side effects.
 
@@ -32,7 +32,7 @@ Tool names are not aliases for deleted knowledge-era tools. Current repository k
 
 Target provenance is part of the tool contract, not a UI hint. Flower must not infer remote execution from thread context alone; it can only claim remote or target execution when a tool result or Redeven product command returns explicit execution provenance.
 
-Redeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link. The current runtime boundary depends on `github.com/floegence/floret v0.3.15`.
+Redeven must consume published Floret releases. Repository builds, tests, Desktop runs, and release validation must not depend on a sibling checkout, Go workspace, local replace directive, or package-manager local link. The current runtime boundary depends on `github.com/floegence/floret v0.3.16`.
 
 # Citations
 

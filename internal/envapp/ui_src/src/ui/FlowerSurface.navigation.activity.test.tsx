@@ -12,16 +12,17 @@ import {
   adapter,
   inputRequest,
   liveBootstrap,
+  modelIOStatus,
   renderSurfaceWithAdapter,
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
 
-function expectThinkingIndicator(root: ParentNode, label = 'Thinking...'): void {
-  const indicator = root.querySelector('.flower-streaming-cursor-text');
+function expectModelStatusIndicator(root: ParentNode, label = 'Thinking...'): void {
+  const indicator = root.querySelector('.flower-model-status-text');
   expect(indicator?.textContent).toBe(label);
   expect(indicator?.getAttribute('data-text')).toBe(label);
-  expect(root.querySelector('.flower-message-streaming-tail')?.textContent).toContain(label);
+  expect(root.querySelector('.flower-model-status-lane')?.textContent).toContain(label);
 }
 
 describe('FlowerSurface navigation activity', () => {
@@ -128,13 +129,14 @@ describe('FlowerSurface navigation activity', () => {
     }));
   });
 
-  it('renders streaming assistant output with bottom thinking text and a wide transcript stack', async () => {
+  it('renders streaming assistant output with bottom model status and a wide transcript stack', async () => {
     const streamingThread = thread({
       thread_id: 'thread-streaming',
       title: 'Streaming answer',
       created_at_ms: 5_000,
       updated_at_ms: 5_200,
       status: 'running',
+      model_io_status: modelIOStatus({ phase: 'streaming', run_id: 'run-streaming' }),
       messages: [
         {
           id: 'm-user-streaming',
@@ -165,27 +167,28 @@ describe('FlowerSurface navigation activity', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-streaming"] button')));
     (runtime.querySelector('[data-thread-id="thread-streaming"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     expect(runtime.querySelector('.flower-transcript-stack')).toBeTruthy();
-    expect(runtime.querySelector('.flower-message-bubble-streaming')?.textContent).toContain('Streaming partial answer');
+    expect(runtime.querySelector('.flower-message-bubble-streaming')).toBeNull();
     expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-block-stack-assistant')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-plain')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-plain')?.textContent).toContain('Streaming partial answer');
     expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-framed')).toBeNull();
     expect(runtime.querySelector('[data-flower-message-role="user"] .flower-message-bubble-framed')).toBeTruthy();
-    expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-streaming-cursor')).toBeNull();
-    expectThinkingIndicator(runtime);
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-model-status-indicator')).toBeNull();
+    expectModelStatusIndicator(runtime);
     expect(runtime.textContent).toContain('Streaming partial answer');
   });
 
-  it('keeps bottom thinking text visible after completed tool activity while the thread is still running', async () => {
+  it('shows preparing model status after completed tool activity before the next model request', async () => {
     const toolGapThread = thread({
-      thread_id: 'thread-tool-gap-thinking',
-      title: 'Tool gap thinking',
+      thread_id: 'thread-tool-gap-model-status',
+      title: 'Tool gap model status',
       created_at_ms: 5_400,
       updated_at_ms: 5_500,
       status: 'running',
+      model_io_status: modelIOStatus({ phase: 'preparing', run_id: 'run-tool-gap' }),
       messages: [
         {
           id: 'm-tool-gap',
@@ -220,26 +223,26 @@ describe('FlowerSurface navigation activity', () => {
       loadThread: vi.fn(async () => liveBootstrap(toolGapThread)),
     });
 
-    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-tool-gap-thinking"] button')));
-    (runtime.querySelector('[data-thread-id="thread-tool-gap-thinking"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-tool-gap-model-status"] button')));
+    (runtime.querySelector('[data-thread-id="thread-tool-gap-model-status"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="tool-gap-done"]')));
 
     expect(runtime.querySelector('[data-flower-activity-item-id="tool-gap-done"]')?.getAttribute('data-flower-activity-status')).toBe('success');
-    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
-    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-streaming-cursor')).toBeNull();
-    expectThinkingIndicator(runtime);
+    expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-model-status-indicator')).toBeNull();
+    expectModelStatusIndicator(runtime, 'Preparing model request...');
   });
 
   it.each(['success', 'failed', 'canceled', 'waiting_approval', 'waiting_user'] as const)(
-    'does not show the bottom thinking text for %s threads',
+    'does not show the bottom model status for %s threads',
     async (status) => {
       const idleThread = thread({
-        thread_id: `thread-no-thinking-${status}`,
-        title: `No thinking ${status}`,
+        thread_id: `thread-no-model-status-${status}`,
+        title: `No model status ${status}`,
         status,
         messages: [
           {
-            id: `m-no-thinking-${status}`,
+            id: `m-no-model-status-${status}`,
             role: 'assistant',
             content: 'Visible answer.',
             status: status === 'canceled' ? 'canceled' : status === 'failed' ? 'error' : 'complete',
@@ -255,11 +258,11 @@ describe('FlowerSurface navigation activity', () => {
         loadThread: vi.fn(async () => liveBootstrap(idleThread)),
       });
 
-      await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="thread-no-thinking-${status}"] button`)));
-      (runtime.querySelector(`[data-thread-id="thread-no-thinking-${status}"] button`) as HTMLButtonElement).click();
+      await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="thread-no-model-status-${status}"] button`)));
+      (runtime.querySelector(`[data-thread-id="thread-no-model-status-${status}"] button`) as HTMLButtonElement).click();
       await waitFor(() => runtime.textContent?.includes('Visible answer.') ?? false);
 
-      expect(runtime.querySelector('.flower-streaming-cursor')).toBeNull();
+      expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
     },
   );
 

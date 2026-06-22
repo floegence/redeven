@@ -141,8 +141,88 @@ func TestFloretEventSinkProjectsStreamObservationDeltas(t *testing.T) {
 	if !ok || markdown.Content != "answer" {
 		t.Fatalf("assistantBlocks[1]=%T %+v, want answer", r.assistantBlocks[1], r.assistantBlocks[1])
 	}
-	if len(events) != 4 {
-		t.Fatalf("stream events=%d, want block start/delta pairs: %#v", len(events), events)
+	if len(events) != 5 {
+		t.Fatalf("stream events=%d, want model io plus block start/delta pairs: %#v", len(events), events)
+	}
+	if _, ok := events[0].(streamEventModelIOStatus); !ok {
+		t.Fatalf("events[0]=%T, want model io status", events[0])
+	}
+}
+
+func TestFloretEventSinkProjectsToolCallStreamObservationToModelIO(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 1)
+	r := &run{
+		messageID:                 "msg_floret_tool_stream",
+		onStreamEvent:             func(ev any) { events = append(events, ev) },
+		currentTextBlockIndex:     -1,
+		currentThinkingBlockIndex: -1,
+		needNewTextBlock:          true,
+		needNewThinkingBlock:      true,
+	}
+	sink := floretEventSink{run: r}
+	sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{
+		Type: flruntime.StreamObservationToolCallDelta,
+		ToolCallStream: &flruntime.ModelToolCallStream{
+			ID:   "call-1",
+			Name: "read_file",
+		},
+		Attempt: 2,
+	}})
+
+	if len(r.assistantBlocks) != 0 {
+		t.Fatalf("assistantBlocks=%#v, want no message block for tool call stream observation", r.assistantBlocks)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events=%#v, want one model io status event", events)
+	}
+	modelIO, ok := events[0].(streamEventModelIOStatus)
+	if !ok {
+		t.Fatalf("event=%T, want streamEventModelIOStatus", events[0])
+	}
+	if modelIO.Phase != string(FlowerModelIOPhaseStreaming) || modelIO.StepIndex != 2 {
+		t.Fatalf("modelIO=%#v, want streaming step 2", modelIO)
+	}
+}
+
+func TestFloretActivityClearsModelIOBeforeLocalToolExecution(t *testing.T) {
+	t.Parallel()
+
+	events := make([]any, 0, 3)
+	r := &run{
+		id:            "run_model_io_activity",
+		threadID:      "thread_model_io_activity",
+		messageID:     "msg_model_io_activity",
+		onStreamEvent: func(ev any) { events = append(events, ev) },
+	}
+	sink := floretEventSink{run: r}
+	sink.EmitEvent(flruntime.Event{Type: "provider_finish", Step: 1, FinishReason: "tool_calls"})
+	r.recordObservationActivityEvent(observation.Event{
+		Type:       observation.EventTypeToolCall,
+		RunID:      "run_model_io_activity",
+		ThreadID:   "thread_model_io_activity",
+		TurnID:     "msg_model_io_activity",
+		ToolID:     "tool_read",
+		ToolName:   "file.read",
+		ToolKind:   "local",
+		ObservedAt: time.Now(),
+	})
+
+	var modelIOEvents []streamEventModelIOStatus
+	for _, ev := range events {
+		if modelIO, ok := ev.(streamEventModelIOStatus); ok {
+			modelIOEvents = append(modelIOEvents, modelIO)
+		}
+	}
+	if len(modelIOEvents) != 2 {
+		t.Fatalf("model IO events=%#v, want finalizing then clear", modelIOEvents)
+	}
+	if modelIOEvents[0].Phase != string(FlowerModelIOPhaseFinalizing) {
+		t.Fatalf("first model IO=%#v, want finalizing", modelIOEvents[0])
+	}
+	if modelIOEvents[1].Phase != "" || modelIOEvents[1].RunID != "run_model_io_activity" {
+		t.Fatalf("second model IO=%#v, want clear for run", modelIOEvents[1])
 	}
 }
 

@@ -32,8 +32,11 @@ import type {
   FlowerLiveApprovalPayload,
   FlowerLiveInputRequestedPayload,
   FlowerLiveInputResolvedPayload,
+  FlowerLiveModelIOUpdatedPayload,
   FlowerLiveUsageUpdatedPayload,
   FlowerLiveResyncRequiredPayload,
+  FlowerModelIOPhase,
+  FlowerModelIOStatus,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerThreadStatus,
@@ -125,6 +128,37 @@ function nonNegativeInteger(raw: unknown, field: string): number {
 function integerOrZero(raw: unknown): number {
   const value = Number(raw ?? 0);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
+}
+
+function modelIOPhase(raw: unknown): FlowerModelIOPhase | null {
+  switch (trim(raw)) {
+    case 'preparing':
+      return 'preparing';
+    case 'waiting_response':
+      return 'waiting_response';
+    case 'streaming':
+      return 'streaming';
+    case 'retrying':
+      return 'retrying';
+    case 'finalizing':
+      return 'finalizing';
+    default:
+      return null;
+  }
+}
+
+function mapModelIOStatus(raw: unknown): FlowerModelIOStatus | null {
+  const record = recordValue(raw);
+  if (!record) return null;
+  const phase = modelIOPhase(record.phase);
+  if (!phase) return null;
+  const stepIndex = integerOrZero(record.step_index);
+  return {
+    phase,
+    ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
+    ...(stepIndex > 0 ? { step_index: stepIndex } : {}),
+    updated_at_ms: integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms),
+  };
 }
 
 function stringRecord(raw: unknown): Readonly<Record<string, string>> | undefined {
@@ -666,10 +700,12 @@ function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
     const input = mapInputRequest(value);
     if (input) inputRequests[promptID] = input;
   }
+  const modelIO = mapModelIOStatus(record.model_io);
 
   return {
     thread_patch: mapThreadPatch(record.thread_patch) ?? {},
     runs,
+    ...(modelIO ? { model_io: modelIO } : {}),
     approval_actions: approvals,
     input_requests: inputRequests,
   };
@@ -679,6 +715,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const record = recordValue(raw) ?? {};
   const threadID = trim(record.thread_id);
   const status = runStatus(record.run_status);
+  const activeRunID = status === 'running' ? trim(record.last_context_run_id) : '';
   const waitingPrompt = record.waiting_prompt !== undefined ? mapInputRequest(record.waiting_prompt) : null;
   const inputRequest = status === 'waiting_user' ? waitingPrompt : null;
   const errorMessage = trim(record.run_error);
@@ -695,6 +732,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     created_at_ms: unixMs(record.created_at_unix_ms, 'thread.created_at_unix_ms'),
     updated_at_ms: unixMs(record.updated_at_unix_ms ?? record.last_message_at_unix_ms, 'thread.updated_at_unix_ms'),
     status,
+    ...(activeRunID ? { active_run_id: activeRunID } : {}),
     source_label: options.sourceLabel,
     target_labels: options.targetLabels,
     messages,
@@ -788,6 +826,8 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
       return { request: mapInputRequest(record.request) ?? undefined } as FlowerLiveInputRequestedPayload;
     case 'input.resolved':
       return { prompt_id: trim(record.prompt_id) } as FlowerLiveInputResolvedPayload;
+    case 'model_io.updated':
+      return { status: mapModelIOStatus(record.status) } as FlowerLiveModelIOUpdatedPayload;
     case 'usage.updated':
       return { usage: record.usage && typeof record.usage === 'object' ? record.usage as Record<string, unknown> : {} } as FlowerLiveUsageUpdatedPayload;
     case 'timeline.replaced':
@@ -816,6 +856,7 @@ const liveKinds = new Set<FlowerLiveKind>([
   'approval.resolved',
   'input.requested',
   'input.resolved',
+  'model_io.updated',
   'usage.updated',
   'timeline.replaced',
   'stream.resync_required',

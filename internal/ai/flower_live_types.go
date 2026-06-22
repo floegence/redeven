@@ -41,10 +41,28 @@ const (
 	FlowerLiveApprovalResolved  FlowerLiveKind = "approval.resolved"
 	FlowerLiveInputRequested    FlowerLiveKind = "input.requested"
 	FlowerLiveInputResolved     FlowerLiveKind = "input.resolved"
+	FlowerLiveModelIOUpdated    FlowerLiveKind = "model_io.updated"
 	FlowerLiveUsageUpdated      FlowerLiveKind = "usage.updated"
 	FlowerLiveTimelineReplaced  FlowerLiveKind = "timeline.replaced"
 	FlowerLiveResyncRequired    FlowerLiveKind = "stream.resync_required"
 )
+
+type FlowerModelIOPhase string
+
+const (
+	FlowerModelIOPhasePreparing       FlowerModelIOPhase = "preparing"
+	FlowerModelIOPhaseWaitingResponse FlowerModelIOPhase = "waiting_response"
+	FlowerModelIOPhaseStreaming       FlowerModelIOPhase = "streaming"
+	FlowerModelIOPhaseRetrying        FlowerModelIOPhase = "retrying"
+	FlowerModelIOPhaseFinalizing      FlowerModelIOPhase = "finalizing"
+)
+
+type FlowerModelIOStatus struct {
+	Phase       FlowerModelIOPhase `json:"phase"`
+	RunID       string             `json:"run_id,omitempty"`
+	StepIndex   int                `json:"step_index,omitempty"`
+	UpdatedAtMs int64              `json:"updated_at_ms"`
+}
 
 type FlowerLiveEvent struct {
 	SchemaVersion int64           `json:"schema_version"`
@@ -210,6 +228,10 @@ type FlowerLiveUsageUpdatedPayload struct {
 	Usage map[string]any `json:"usage"`
 }
 
+type FlowerLiveModelIOUpdatedPayload struct {
+	Status *FlowerModelIOStatus `json:"status"`
+}
+
 type FlowerTimelineMessage struct {
 	MessageID     string `json:"id"`
 	Role          string `json:"role"`
@@ -257,6 +279,7 @@ type FlowerLiveMaterializedState struct {
 	ThreadPatch     FlowerLiveThreadPatch             `json:"thread_patch"`
 	Messages        map[string]FlowerLiveMessageDraft `json:"-"`
 	Runs            map[string]FlowerLiveRunState     `json:"runs"`
+	ModelIO         *FlowerModelIOStatus              `json:"model_io,omitempty"`
 	ApprovalActions map[string]FlowerApprovalAction   `json:"approval_actions"`
 	InputRequests   map[string]RequestUserInputPrompt `json:"input_requests"`
 }

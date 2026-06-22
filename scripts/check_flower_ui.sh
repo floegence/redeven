@@ -33,7 +33,8 @@ main() {
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
       internal/flower_ui/src/flowerLiveProjection.test.ts \
       internal/flower_ui/src/flowerTimelineProjection.test.ts \
-      internal/flower_ui/src/FlowerSurface.streamingCursor.test.ts
+      internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \
+      internal/flower_ui/src/FlowerSurface.modelStatusIndicator.test.ts
   )
 
   ui_pkg_log "Flower UI behavior checks passed."
