@@ -77,6 +77,24 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain('flower-streaming-cursor');
   });
 
+  it('renders the scroll-to-latest control in the bottom dock above the composer', () => {
+    const src = surfaceSource();
+    const dockTrackIndex = src.indexOf('flower-chat-bottom-dock-track');
+    const scrollButtonIndex = src.indexOf('flower-scroll-to-latest-button');
+    const statusLaneIndex = src.indexOf('flower-model-status-lane');
+    const composerIndex = src.indexOf('flower-composer flower-chat-input-floating');
+
+    expect(dockTrackIndex).toBeGreaterThanOrEqual(0);
+    expect(scrollButtonIndex).toBeGreaterThan(dockTrackIndex);
+    expect(statusLaneIndex).toBeGreaterThan(scrollButtonIndex);
+    expect(composerIndex).toBeGreaterThan(statusLaneIndex);
+    expect(src).toContain('const [transcriptNearBottomState, setTranscriptNearBottomState] = createSignal(true)');
+    expect(src).toContain('const showScrollToLatestButton = createMemo');
+    expect(src).toContain('aria-label={copy().chat.scrollToLatest}');
+    expect(src).toContain('title={copy().chat.scrollToLatest}');
+    expect(src).toContain('onClick={scrollTranscriptToBottom}');
+  });
+
   it('adds copy actions and user message time metadata to chat messages', () => {
     const src = surfaceSource();
 

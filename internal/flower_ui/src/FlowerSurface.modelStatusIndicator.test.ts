@@ -70,4 +70,24 @@ describe('Flower model status indicator', () => {
     expect(continueRule).not.toContain('width: 2.25rem');
     expect(css).not.toContain('flower-composer-submit-stop');
   });
+
+  it('keeps the scroll-to-latest dock control compact and interactive', () => {
+    const css = flowerStyles();
+    const rowRule = cssRule(css, '.flower-scroll-to-latest-row');
+    const buttonRule = cssRule(css, '.flower-scroll-to-latest-button');
+
+    expect(rowRule).toContain('min-height: 2.35rem');
+    expect(rowRule).toContain('justify-content: center');
+    expect(rowRule).toContain('pointer-events: none');
+    expect(buttonRule).toContain('width: 2.1rem');
+    expect(buttonRule).toContain('height: 2.1rem');
+    expect(buttonRule).toContain('flex: 0 0 2.1rem');
+    expect(buttonRule).toContain('cursor: pointer');
+    expect(buttonRule).toContain('pointer-events: auto');
+    expect(buttonRule).toContain('border-radius: 9999px');
+    expect(buttonRule).toContain('transition:');
+    expect(css).toContain('.flower-scroll-to-latest-button:hover,');
+    expect(css).toContain('.flower-scroll-to-latest-button:focus-visible');
+    expect(css).toContain('.flower-scroll-to-latest-button {\n    transition: none;');
+  });
 });

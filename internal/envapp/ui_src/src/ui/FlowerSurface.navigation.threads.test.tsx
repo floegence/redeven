@@ -2055,4 +2055,61 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('.flower-model-status-text')?.textContent).toBe('Thinking...');
     expect(runtime.querySelector('.flower-model-status-text')?.getAttribute('data-text')).toBe('Thinking...');
   });
+
+  it('shows a bottom-dock scroll control when the transcript is away from latest output', async () => {
+    const selectedThread = thread({
+      thread_id: 'thread-scroll-latest',
+      title: 'Scroll latest',
+      messages: [
+        {
+          id: 'm-scroll-user',
+          role: 'user',
+          content: 'Start a long report',
+          status: 'complete',
+          created_at_ms: 1,
+        },
+        {
+          id: 'm-scroll-agent',
+          role: 'assistant',
+          content: 'Latest Agent output',
+          status: 'complete',
+          created_at_ms: 2,
+        },
+      ],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [selectedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(selectedThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-scroll-latest"] button')));
+    (runtime.querySelector('[data-thread-id="thread-scroll-latest"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-scroll-agent"]')));
+
+    const transcript = runtime.querySelector('.flower-chat-transcript') as HTMLDivElement;
+    let scrollTopValue = 120;
+    Object.defineProperties(transcript, {
+      clientHeight: { configurable: true, value: 400 },
+      scrollHeight: { configurable: true, value: 1400 },
+      scrollTop: {
+        configurable: true,
+        get: () => scrollTopValue,
+        set: (value: number) => {
+          scrollTopValue = value;
+        },
+      },
+    });
+    transcript.dispatchEvent(new Event('scroll', { bubbles: true }));
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-scroll-to-latest-button')));
+    const button = runtime.querySelector('.flower-scroll-to-latest-button') as HTMLButtonElement;
+    expect(button.getAttribute('aria-label')).toBe('Scroll to latest');
+    expect(runtime.querySelector('.flower-chat-bottom-dock-track .flower-scroll-to-latest-button')).toBe(button);
+
+    button.click();
+
+    expect(scrollTopValue).toBe(1400);
+    await waitFor(() => !runtime.querySelector('.flower-scroll-to-latest-button'));
+  });
 });

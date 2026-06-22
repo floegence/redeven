@@ -266,6 +266,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
   const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
   const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
+  const [transcriptNearBottomState, setTranscriptNearBottomState] = createSignal(true);
   let threadLoadSequence = 0;
   let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
@@ -286,6 +287,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const pendingReadPersistenceSnapshots = new Map<string, FlowerThreadActivitySnapshot>();
   const liveCursors = new Map<string, number>();
   let copiedMessageResetTimer: number | undefined;
+
+  const setTranscriptNearBottomValue = (nearBottom: boolean) => {
+    transcriptNearBottom = nearBottom;
+    setTranscriptNearBottomState(nearBottom);
+  };
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
   const selectedThreadLiveStatus = createMemo(() => selectedThread()?.status ?? 'idle');
@@ -799,7 +805,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!tid) return;
     const sequence = ++threadLoadSequence;
     const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
-    transcriptNearBottom = true;
+    setTranscriptNearBottomValue(true);
     setSelectedThreadID(tid);
     setChatSubmitError('');
     setInputSubmitError('');
@@ -1237,7 +1243,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
     threadLoadSequence += 1;
-    transcriptNearBottom = true;
+    setTranscriptNearBottomValue(true);
     setSelectedThreadID('');
     setPendingTurn(null);
     setChatSubmitError('');
@@ -1276,7 +1282,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const selectThread = (threadID: string) => {
     const requestID = trimString(props.focusThreadRequest?.request_id);
     if (requestID) props.onFocusThreadRequestConsumed?.(requestID);
-    transcriptNearBottom = true;
+    setTranscriptNearBottomValue(true);
     void loadAndSelectThread(threadID);
   };
 
@@ -1287,14 +1293,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const updateTranscriptNearBottom = () => {
-    transcriptNearBottom = transcriptIsNearBottom();
+    setTranscriptNearBottomValue(transcriptIsNearBottom());
   };
 
   const scrollTranscriptToBottom = () => {
     const node = transcriptRef;
     if (!node) return;
     node.scrollTop = node.scrollHeight;
-    transcriptNearBottom = true;
+    setTranscriptNearBottomValue(true);
   };
 
   let transcriptScrollFrame = 0;
@@ -1403,6 +1409,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const selectedModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => selectedThread()?.model_io_status ?? null);
   const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null);
+  const showScrollToLatestButton = createMemo(() => (
+    (selectedThreadHasContent() || selectedThreadHasModelStatus())
+    && !transcriptNearBottomState()
+  ));
   const modelStatusLabel = (phase: FlowerModelIOPhase): string => {
     const modelStatus = copy().chat.modelStatus;
     const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus;
@@ -2652,6 +2662,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
         <div class="flower-chat-bottom-dock flower-chat-bottom-dock">
           <div class="flower-chat-bottom-dock-track flower-chat-bottom-dock-track">
+            <Show when={showScrollToLatestButton()}>
+              <div class="flower-scroll-to-latest-row">
+                <button
+                  type="button"
+                  class="flower-scroll-to-latest-button"
+                  aria-label={copy().chat.scrollToLatest}
+                  title={copy().chat.scrollToLatest}
+                  onClick={scrollTranscriptToBottom}
+                >
+                  <ChevronDown class="h-4 w-4" />
+                </button>
+              </div>
+            </Show>
             <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
               <Show when={selectedThreadHasModelStatus()}>
                 {modelStatusIndicator()}
