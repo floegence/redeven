@@ -58,11 +58,16 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(timelineListIndex).toBeGreaterThanOrEqual(0);
     expect(cursorTailIndex).toBeGreaterThan(timelineListIndex);
     expect(src).toContain('const selectedThreadThinking = createMemo(() => selectedThreadLiveStatus() === \'running\')');
+    expect(src).toContain('const selectedThreadThinkingLabel = createMemo(() => (');
     expect(src).toContain('<Show when={selectedThreadThinking()}>');
     expect(src).toContain('{streamingCursor()}');
     expect(src).toContain('role="status"');
     expect(src).toContain('aria-live="polite"');
     expect(src).toContain('copy().chat.thinkingIndicator');
+    expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.thinkingIndicator');
+    expect(src).toContain('data-text={selectedThreadThinkingLabel()}');
+    expect(src).not.toContain('<div class="flower-streaming-cursor" role="status"');
+    expect(src).not.toContain('class="flower-streaming-cursor-text" data-text={selectedThreadThinkingLabel()} aria-hidden="true"');
     expect(src).not.toContain('<Show when={activeCursor()}>\n              <div class={cn(\'flower-message-streaming-tail\'');
   });
 
