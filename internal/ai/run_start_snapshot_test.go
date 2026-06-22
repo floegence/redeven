@@ -108,6 +108,15 @@ func TestPrepareRun_InitializesLiveAssistantDraftImmediately(t *testing.T) {
 	if strings.TrimSpace(runState.MessageID) != strings.TrimSpace(prepared.messageID) {
 		t.Fatalf("run messageID=%q, want %q", runState.MessageID, prepared.messageID)
 	}
+	if bootstrap.LiveState.ModelIO == nil {
+		t.Fatalf("model_io missing, want preparing status for accepted run")
+	}
+	if bootstrap.LiveState.ModelIO.Phase != FlowerModelIOPhasePreparing {
+		t.Fatalf("model_io phase=%q, want %q", bootstrap.LiveState.ModelIO.Phase, FlowerModelIOPhasePreparing)
+	}
+	if strings.TrimSpace(bootstrap.LiveState.ModelIO.RunID) != runID {
+		t.Fatalf("model_io run_id=%q, want %q", bootstrap.LiveState.ModelIO.RunID, runID)
+	}
 	msg := bootstrap.LiveState.Messages[prepared.messageID]
 	if strings.TrimSpace(msg.MessageID) != strings.TrimSpace(prepared.messageID) {
 		t.Fatalf("assistant message id=%q, want %q", msg.MessageID, prepared.messageID)

@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   FlowerActivityStatus,
+  FlowerLiveEvent,
   FlowerThreadSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import {
@@ -17,6 +18,11 @@ import {
   thread,
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
 function expectModelStatusIndicator(root: ParentNode, label = 'Thinking...'): void {
   const indicator = root.querySelector('.flower-model-status-text');
@@ -170,15 +176,138 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     expect(runtime.querySelector('.flower-transcript-stack')).toBeTruthy();
-    expect(runtime.querySelector('.flower-message-bubble-streaming')).toBeNull();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-model-status-indicator')).toBeNull();
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-streaming-cursor')).toBeNull();
     expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-block-stack-assistant')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-plain')?.textContent).toContain('Streaming partial answer');
+    expect(Array.from(runtime.querySelectorAll('[data-flower-message-role="assistant"] .flower-message-bubble-plain'))
+      .some((node) => node.textContent?.includes('Streaming partial answer'))).toBe(true);
     expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-message-bubble-framed')).toBeNull();
     expect(runtime.querySelector('[data-flower-message-role="user"] .flower-message-bubble-framed')).toBeTruthy();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
-    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-model-status-indicator')).toBeNull();
     expectModelStatusIndicator(runtime);
     expect(runtime.textContent).toContain('Streaming partial answer');
+  });
+
+  it('renders short model IO streaming phases before the same live batch clears them', async () => {
+    vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+      window.setTimeout(() => callback(performance.now()), 0);
+      return 1;
+    });
+
+    const runID = 'run-short-model-io';
+    const liveThread = thread({
+      thread_id: 'thread-short-model-io',
+      title: 'Short model IO',
+      created_at_ms: 5_300,
+      updated_at_ms: 5_320,
+      status: 'running',
+      messages: [
+        {
+          id: 'm-short-user',
+          role: 'user',
+          content: 'Run a short tool stream',
+          status: 'complete',
+          created_at_ms: 5_300,
+        },
+        {
+          id: 'm-short-assistant',
+          role: 'assistant',
+          content: '',
+          status: 'streaming',
+          created_at_ms: 5_320,
+          blocks: [
+            { type: 'markdown', content: '' },
+          ],
+        },
+      ],
+    });
+    const modelIOEvent = (
+      seq: number,
+      status: FlowerLiveEvent<'model_io.updated'>['payload']['status'],
+    ): FlowerLiveEvent<'model_io.updated'> => ({
+      schema_version: 1,
+      seq,
+      endpoint_id: 'test-runtime',
+      thread_id: liveThread.thread_id,
+      run_id: runID,
+      at_unix_ms: 5_300 + seq,
+      kind: 'model_io.updated',
+      payload: { status },
+    });
+    const shortBatch: readonly FlowerLiveEvent[] = [
+      {
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'test-runtime',
+        thread_id: liveThread.thread_id,
+        run_id: runID,
+        at_unix_ms: 5_301,
+        kind: 'run.started',
+        payload: {
+          run_id: runID,
+          message_id: 'm-short-assistant',
+          status: 'running',
+        },
+      },
+      modelIOEvent(2, {
+        phase: 'waiting_response',
+        run_id: runID,
+        step_index: 1,
+        updated_at_ms: 5_302,
+      }),
+      modelIOEvent(3, {
+        phase: 'streaming',
+        run_id: runID,
+        step_index: 1,
+        updated_at_ms: 5_303,
+      }),
+      modelIOEvent(4, {
+        phase: 'finalizing',
+        run_id: runID,
+        step_index: 1,
+        updated_at_ms: 5_304,
+      }),
+      modelIOEvent(5, null),
+    ];
+    const listThreadLiveEvents = vi.fn(async (_threadID: string, afterSeq: number) => (
+      afterSeq === 0
+        ? {
+            events: shortBatch,
+            next_cursor: 5,
+            retained_from_seq: 1,
+          }
+        : {
+            events: [],
+            next_cursor: afterSeq,
+            retained_from_seq: 1,
+          }
+    ));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [liveThread]),
+      loadThread: vi.fn(async () => liveBootstrap(liveThread, 0)),
+      listThreadLiveEvents,
+    });
+    const observedStatuses: string[] = [];
+    const recordModelStatus = () => {
+      const text = runtime.querySelector('.flower-model-status-text')?.textContent?.trim() ?? '';
+      if (text && observedStatuses.at(-1) !== text) {
+        observedStatuses.push(text);
+      }
+    };
+    const observer = new MutationObserver(recordModelStatus);
+    observer.observe(runtime, { childList: true, characterData: true, subtree: true });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-short-model-io"] button')));
+    (runtime.querySelector('[data-thread-id="thread-short-model-io"] button') as HTMLButtonElement).click();
+    await waitFor(() => listThreadLiveEvents.mock.calls.length > 0);
+
+    await waitFor(() => observedStatuses.includes('Thinking...'));
+    observer.disconnect();
+
+    expect(observedStatuses).toContain('Thinking...');
+
+    expect(runtime.textContent).not.toContain('Thinking...Thinking...');
   });
 
   it('shows preparing model status after completed tool activity before the next model request', async () => {

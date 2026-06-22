@@ -1287,6 +1287,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	s.broadcastThreadState(endpointID, threadID, runID, "running", "", "")
 	s.broadcastThreadSummary(endpointID, threadID)
 	r.ensureAssistantMessageStarted()
+	r.updateModelIOStatus(FlowerModelIOPhasePreparing, 0)
 
 	var persistedCopy *persistedUserMessage
 	if persisted != nil {
