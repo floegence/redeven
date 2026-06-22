@@ -71,23 +71,30 @@ describe('Flower model status indicator', () => {
     expect(css).not.toContain('flower-composer-submit-stop');
   });
 
-  it('keeps the scroll-to-latest dock control compact and interactive', () => {
+  it('keeps the scroll-to-latest dock control floating, compact, and interactive', () => {
     const css = flowerStyles();
-    const rowRule = cssRule(css, '.flower-scroll-to-latest-row');
+    const dockRule = cssRule(css, '.flower-chat-bottom-dock');
+    const floatRule = cssRule(css, '.flower-scroll-to-latest-float');
     const buttonRule = cssRule(css, '.flower-scroll-to-latest-button');
 
-    expect(rowRule).toContain('min-height: 2.35rem');
-    expect(rowRule).toContain('justify-content: center');
-    expect(rowRule).toContain('pointer-events: none');
+    expect(dockRule).toContain('overflow: visible');
+    expect(floatRule).toContain('position: absolute');
+    expect(floatRule).toContain('top: -3.05rem');
+    expect(floatRule).toContain('width: 2.1rem');
+    expect(floatRule).toContain('height: 2.1rem');
+    expect(floatRule).toContain('pointer-events: none');
     expect(buttonRule).toContain('width: 2.1rem');
     expect(buttonRule).toContain('height: 2.1rem');
     expect(buttonRule).toContain('flex: 0 0 2.1rem');
     expect(buttonRule).toContain('cursor: pointer');
     expect(buttonRule).toContain('pointer-events: auto');
     expect(buttonRule).toContain('border-radius: 9999px');
+    expect(buttonRule).toContain('animation: flower-scroll-to-latest-pop 130ms ease-out');
     expect(buttonRule).toContain('transition:');
     expect(css).toContain('.flower-scroll-to-latest-button:hover,');
     expect(css).toContain('.flower-scroll-to-latest-button:focus-visible');
-    expect(css).toContain('.flower-scroll-to-latest-button {\n    transition: none;');
+    expect(css).toContain('@keyframes flower-scroll-to-latest-pop');
+    expect(css).not.toContain('.flower-scroll-to-latest-row');
+    expect(css).toContain('.flower-scroll-to-latest-button {\n    animation: none;\n    transition: none;');
   });
 });
