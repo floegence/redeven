@@ -1384,9 +1384,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
 
   const selectedThreadThinking = createMemo(() => selectedThreadLiveStatus() === 'running');
+  const selectedThreadThinkingLabel = createMemo(() => (
+    trimString(copy().chat.thinkingIndicator) || DEFAULT_FLOWER_SURFACE_COPY.chat.thinkingIndicator
+  ));
   const streamingCursor = () => (
-    <div class="flower-streaming-cursor" role="status" aria-label={copy().chat.thinkingIndicator}>
-      <span class="flower-streaming-cursor-text" aria-hidden="true">{copy().chat.thinkingIndicator}</span>
+    <div class="flower-streaming-cursor">
+      <span class="flower-streaming-cursor-text" data-text={selectedThreadThinkingLabel()}>{selectedThreadThinkingLabel()}</span>
     </div>
   );
 

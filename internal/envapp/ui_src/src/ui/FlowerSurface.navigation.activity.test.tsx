@@ -17,6 +17,13 @@ import {
   waitFor,
 } from './FlowerSurface.navigation.testHarness';
 
+function expectThinkingIndicator(root: ParentNode, label = 'Thinking...'): void {
+  const indicator = root.querySelector('.flower-streaming-cursor-text');
+  expect(indicator?.textContent).toBe(label);
+  expect(indicator?.getAttribute('data-text')).toBe(label);
+  expect(root.querySelector('.flower-message-streaming-tail')?.textContent).toContain(label);
+}
+
 describe('FlowerSurface navigation activity', () => {
   it('renders file activity actions and unified patch lines inline', async () => {
     const previewFile = vi.fn(async () => {});
@@ -168,7 +175,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('[data-flower-message-role="user"] .flower-message-bubble-framed')).toBeTruthy();
     expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
     expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-streaming-cursor')).toBeNull();
-    expect(runtime.querySelector('.flower-message-streaming-tail')?.textContent).toContain('Thinking...');
+    expectThinkingIndicator(runtime);
     expect(runtime.textContent).toContain('Streaming partial answer');
   });
 
@@ -219,7 +226,8 @@ describe('FlowerSurface navigation activity', () => {
 
     expect(runtime.querySelector('[data-flower-activity-item-id="tool-gap-done"]')?.getAttribute('data-flower-activity-status')).toBe('success');
     expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
-    expect(runtime.querySelector('.flower-message-streaming-tail')?.textContent).toContain('Thinking...');
+    expect(runtime.querySelector('[data-flower-message-role="assistant"] .flower-streaming-cursor')).toBeNull();
+    expectThinkingIndicator(runtime);
   });
 
   it.each(['success', 'failed', 'canceled', 'waiting_approval', 'waiting_user'] as const)(

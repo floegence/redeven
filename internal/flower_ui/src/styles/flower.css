@@ -730,11 +730,6 @@ html.dark .flower-component-shell {
   line-height: 1.35;
 }
 
-.flower-message-streaming-tail-user {
-  align-self: flex-end;
-  padding-right: 0.22rem;
-}
-
 .flower-message-streaming-tail-assistant {
   align-self: flex-start;
 }
@@ -746,23 +741,32 @@ html.dark .flower-component-shell {
 }
 
 .flower-streaming-cursor-text {
+  position: relative;
   display: inline-block;
+  color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.flower-streaming-cursor-text::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
   color: transparent;
   background:
     linear-gradient(
       90deg,
-      color-mix(in srgb, var(--muted-foreground) 72%, transparent) 30%,
-      color-mix(in srgb, var(--foreground) 88%, var(--primary) 12%) 50%,
-      color-mix(in srgb, var(--muted-foreground) 72%, transparent) 70%
+      transparent 28%,
+      color-mix(in srgb, var(--foreground) 92%, var(--primary) 8%) 50%,
+      transparent 72%
     );
   background-size: 220% 100%;
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0;
-  white-space: nowrap;
   animation: flower-cursor-shimmer 2.4s ease-in-out infinite;
 }
 
@@ -3810,6 +3814,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 @media (prefers-reduced-motion: reduce) {
   .flower-streaming-cursor,
   .flower-streaming-cursor-text,
+  .flower-streaming-cursor-text::after,
   .flower-activity-inline-row-running .flower-activity-inline-button::before,
   .flower-activity-inline-loader-square,
   .flower-thread-warmup-card::after,
@@ -3823,7 +3828,12 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 
   .flower-streaming-cursor-text {
     color: var(--muted-foreground);
-    -webkit-text-fill-color: currentColor;
+  }
+
+  .flower-streaming-cursor-text::after {
+    content: none !important;
+    opacity: 0 !important;
+    background: none !important;
   }
 
   .flower-activity-inline-row-running .flower-activity-inline-button::before {

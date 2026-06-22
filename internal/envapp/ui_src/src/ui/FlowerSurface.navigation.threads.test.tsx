@@ -2044,5 +2044,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('[data-flower-message-id="message-active-streaming"] .flower-streaming-cursor')).toBeNull();
     expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
     expect(runtime.querySelector('.flower-message-streaming-tail')?.textContent).toContain('Thinking...');
+    expect(runtime.querySelector('.flower-streaming-cursor-text')?.textContent).toBe('Thinking...');
+    expect(runtime.querySelector('.flower-streaming-cursor-text')?.getAttribute('data-text')).toBe('Thinking...');
   });
 });

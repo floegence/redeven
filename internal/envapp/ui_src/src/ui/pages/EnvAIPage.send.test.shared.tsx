@@ -417,6 +417,8 @@ export function registerEnvAIPageSendTests() {
         await flush();
         expect(host.textContent).toContain('Live answer recovered from the event stream.');
         expect(host.querySelector('.flower-message-streaming-tail')?.textContent).toContain('Mock thinking...');
+        expect(host.querySelector('.flower-streaming-cursor-text')?.textContent).toBe('Mock thinking...');
+        expect(host.querySelector('.flower-streaming-cursor-text')?.getAttribute('data-text')).toBe('Mock thinking...');
       } finally {
         dispose();
       }

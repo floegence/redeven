@@ -20,30 +20,40 @@ function cssRule(css: string, selector: string): string {
 }
 
 describe('Flower streaming cursor', () => {
-  it('uses localized bottom text with a slow left-to-right shimmer', () => {
+  it('uses readable localized bottom text with a decorative left-to-right shimmer', () => {
     const css = flowerStyles();
     const cursorRule = cssRule(css, '.flower-streaming-cursor');
     const textRule = cssRule(css, '.flower-streaming-cursor-text');
+    const shimmerRule = cssRule(css, '.flower-streaming-cursor-text::after');
 
     expect(cursorRule).toContain('display: inline-flex');
     expect(cursorRule).toContain('align-items: center');
-    expect(textRule).toContain('color: transparent');
-    expect(textRule).toContain('90deg');
-    expect(textRule).toContain('background-size: 220% 100%');
-    expect(textRule).toContain('background-clip: text');
-    expect(textRule).toContain('-webkit-background-clip: text');
     expect(textRule).toContain('font-size: 0.75rem');
     expect(textRule).toContain('font-weight: 600');
     expect(textRule).toContain('white-space: nowrap');
-    expect(textRule).toContain('animation: flower-cursor-shimmer 2.4s ease-in-out infinite');
+    expect(textRule).toContain('color: color-mix(in srgb, var(--muted-foreground) 78%, var(--foreground) 22%)');
+    expect(textRule).not.toContain('color: transparent');
+    expect(textRule).not.toContain('-webkit-text-fill-color: transparent');
+    expect(shimmerRule).toContain('content: attr(data-text)');
+    expect(shimmerRule).toContain('position: absolute');
+    expect(shimmerRule).toContain('pointer-events: none');
+    expect(shimmerRule).toContain('color: transparent');
+    expect(shimmerRule).toContain('90deg');
+    expect(shimmerRule).toContain('background-size: 220% 100%');
+    expect(shimmerRule).toContain('background-clip: text');
+    expect(shimmerRule).toContain('-webkit-background-clip: text');
+    expect(shimmerRule).toContain('-webkit-text-fill-color: transparent');
+    expect(shimmerRule).toContain('animation: flower-cursor-shimmer 2.4s ease-in-out infinite');
     expect(css).toContain('@keyframes flower-cursor-shimmer');
     expect(css).toContain('background-position: -120% 0');
     expect(css).toContain('background-position: 180% 0');
-    expect(css).toContain('.flower-streaming-cursor-text,');
+    expect(css).toContain('.flower-streaming-cursor-text::after,');
     expect(css).toContain('.flower-streaming-cursor-text {\n    color: var(--muted-foreground);');
+    expect(css).toContain('.flower-streaming-cursor-text::after {\n    content: none !important;');
     expect(css).not.toContain('animation: flower-cursor-flow');
     expect(css).not.toContain('@keyframes flower-cursor-flow');
     expect(css).not.toContain('.flower-streaming-cursor::before');
+    expect(css).not.toContain('.flower-message-streaming-tail-user');
     expect(cursorRule).not.toContain('width: 1.65rem');
     expect(cursorRule).not.toContain('height: 0.82rem');
   });
