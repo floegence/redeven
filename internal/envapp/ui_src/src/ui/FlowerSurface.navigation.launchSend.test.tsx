@@ -772,6 +772,73 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
   });
 
+  it('shows the accepted run preparing status from launch bootstrap before live events arrive', async () => {
+    const acceptedThread = thread({
+      thread_id: 'thread-accepted-preparing',
+      title: 'Accepted preparing',
+      status: 'running',
+      model_io_status: modelIOStatus({
+        phase: 'preparing',
+        run_id: 'run-accepted-preparing',
+      }),
+      messages: [{
+        id: 'm-accepted-user',
+        role: 'user',
+        content: 'start the model request',
+        status: 'complete',
+        created_at_ms: 10,
+      }, {
+        id: 'm-accepted-assistant',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        active_cursor: true,
+        created_at_ms: 20,
+      }],
+    });
+    const reloadDeferred = deferred<FlowerLiveBootstrap>();
+    const launchTurn = vi.fn(async () => liveBootstrap(acceptedThread, 1));
+    const loadThread = vi.fn(() => reloadDeferred.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread,
+      launchTurn,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'start the model request';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
+
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+      thread_id: undefined,
+      prompt: 'start the model request',
+    }));
+    expect(loadThread).toHaveBeenCalledWith('thread-accepted-preparing');
+    expect(runtime.querySelector('.flower-model-status-text')?.textContent).toBe('Preparing model request...');
+    expect(runtime.querySelector('.flower-model-status-text')?.getAttribute('data-text')).toBe('Preparing model request...');
+    expect(runtime.querySelector('.flower-model-status-indicator')?.getAttribute('data-model-io-phase')).toBe('preparing');
+    expect(runtime.querySelector('[data-flower-message-id] .flower-model-status-indicator')).toBeNull();
+    expect(runtime.querySelector('.flower-chat-transcript .flower-model-status-indicator')).toBeNull();
+
+    reloadDeferred.resolve(liveBootstrap({
+      ...acceptedThread,
+      status: 'success',
+      model_io_status: null,
+      messages: acceptedThread.messages.map((message) => (
+        message.role === 'assistant'
+          ? { ...message, status: 'complete', active_cursor: false, content: 'done', blocks: [{ type: 'markdown', content: 'done' }] }
+          : message
+      )),
+    }, 2));
+    await waitFor(() => runtime.textContent?.includes('done') ?? false);
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+  });
+
   it('does not synthesize timeline rows while the handler is still resolving', async () => {
     const handlerDeferred = deferred<FlowerRouterDecision>();
     const sendDeferred = deferred<FlowerLiveBootstrap>();

@@ -125,6 +125,10 @@ const ASK_FLOWER_CONTEXT_SESSION_SOURCES = new Set([
   'region_sandbox',
 ]);
 
+function isModelIOPresentationBoundary(kind: string): boolean {
+  return kind === 'model_io.updated';
+}
+
 function emptyFlowerComposerSessionDraft(): FlowerComposerSessionDraft {
   return {
     chatDraft: '',
@@ -987,10 +991,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               nextReadSnapshot = result.thread.read_status.snapshot;
             }
             appliedSincePaint += 1;
-            if (appliedSincePaint >= LIVE_EVENT_RENDER_YIELD_SIZE) {
+            const modelIOBoundary = isModelIOPresentationBoundary(event.kind);
+            if (modelIOBoundary || appliedSincePaint >= LIVE_EVENT_RENDER_YIELD_SIZE) {
               commitLiveThreadState(threadState);
               appliedSincePaint = 0;
-              await yieldLiveEventRender();
+              if (modelIOBoundary) {
+                await yieldModelIOPresentationFrame();
+              } else {
+                await yieldLiveEventRenderFrame();
+              }
               if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
                 return;
               }
@@ -1307,11 +1316,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   });
 
-  const yieldLiveEventRender = async () => {
+  const yieldAnimationFrame = async () => {
     if (typeof window === 'undefined') return;
     await new Promise<void>((resolve) => {
       window.requestAnimationFrame(() => resolve());
     });
+  };
+  const yieldLiveEventRenderFrame = async () => {
+    await yieldAnimationFrame();
+  };
+  const yieldModelIOPresentationFrame = async () => {
+    await yieldAnimationFrame();
+    await yieldAnimationFrame();
   };
 
   const selectedTimelineEntries = createMemo(() => buildFlowerTimelineEntries(selectedThread()));
