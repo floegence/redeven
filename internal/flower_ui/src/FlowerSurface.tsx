@@ -104,6 +104,8 @@ const COMPOSER_STOP_THREAD_STATUSES = new Set<FlowerThreadStatus>(['running', 'w
 const PENDING_NEW_THREAD_ID = '__new_thread__';
 const LIVE_EVENT_RENDER_YIELD_SIZE = 8;
 const MESSAGE_COPY_RESET_MS = 1600;
+const TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX = 96;
+const TRANSCRIPT_SCROLL_TO_LATEST_MS = 220;
 const ASK_FLOWER_CONTEXT_TARGET_LOCALITIES = new Set(['auto', 'current_runtime', 'remote_runtime', 'local_model_remote_target']);
 const ASK_FLOWER_CONTEXT_SOURCE_SURFACES = new Set([
   'desktop_welcome_environment_card',
@@ -267,6 +269,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
   const [copiedMessageAction, setCopiedMessageAction] = createSignal('');
   const [transcriptNearBottomState, setTranscriptNearBottomState] = createSignal(true);
+  const [transcriptLayoutRevision, setTranscriptLayoutRevision] = createSignal(0);
   let threadLoadSequence = 0;
   let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
@@ -277,6 +280,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let renameInputRef: HTMLInputElement | undefined;
   let renameRestoreRef: HTMLElement | undefined;
   let transcriptNearBottom = true;
+  let transcriptMeasureFrame = 0;
+  let transcriptSmoothScrollFrame = 0;
+  let transcriptScrollToBottomInProgress = false;
   let backgroundThreadsRefreshInFlight = false;
   let composerFocusToken = 0;
   const [composerFocusRevision, setComposerFocusRevision] = createSignal(0);
@@ -291,6 +297,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const setTranscriptNearBottomValue = (nearBottom: boolean) => {
     transcriptNearBottom = nearBottom;
     setTranscriptNearBottomState(nearBottom);
+  };
+
+  const reducedMotionPreferred = (): boolean => (
+    typeof window !== 'undefined'
+    && typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
+
+  const requestTranscriptAnimationFrame = (callback: FrameRequestCallback): number => {
+    if (typeof window.requestAnimationFrame === 'function') {
+      return window.requestAnimationFrame(callback);
+    }
+    return window.setTimeout(() => callback(typeof performance !== 'undefined' ? performance.now() : Date.now()), 16);
+  };
+
+  const cancelTranscriptAnimationFrame = (handle: number) => {
+    if (typeof window.cancelAnimationFrame === 'function') {
+      window.cancelAnimationFrame(handle);
+      return;
+    }
+    window.clearTimeout(handle);
   };
 
   const selectedThread = createMemo(() => threads().find((thread) => thread.thread_id === selectedThreadID()) ?? null);
@@ -824,6 +851,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       setSelectedThreadID(thread.thread_id);
       setLoadingThreadID('');
+      setTranscriptLayoutRevision((revision) => revision + 1);
       requestComposerFocus();
     } catch (error) {
       if (sequence !== threadLoadSequence) return;
@@ -1289,33 +1317,98 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const transcriptIsNearBottom = (): boolean => {
     const node = transcriptRef;
     if (!node) return true;
-    return node.scrollHeight - node.scrollTop - node.clientHeight <= 96;
+    return node.scrollHeight - node.scrollTop - node.clientHeight <= TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX;
   };
 
   const updateTranscriptNearBottom = () => {
+    if (transcriptScrollToBottomInProgress) {
+      setTranscriptNearBottomValue(true);
+      return;
+    }
     setTranscriptNearBottomValue(transcriptIsNearBottom());
   };
 
-  const scrollTranscriptToBottom = () => {
+  const cancelTranscriptSmoothScroll = () => {
+    if (transcriptSmoothScrollFrame) {
+      cancelTranscriptAnimationFrame(transcriptSmoothScrollFrame);
+      transcriptSmoothScrollFrame = 0;
+    }
+    transcriptScrollToBottomInProgress = false;
+  };
+
+  const setTranscriptScrollTop = (node: HTMLDivElement, scrollTop: number) => {
+    node.scrollTop = scrollTop;
+  };
+
+  const scrollTranscriptToBottom = (options: Readonly<{ smooth?: boolean }> = {}) => {
     const node = transcriptRef;
     if (!node) return;
-    node.scrollTop = node.scrollHeight;
+    const targetScrollTop = Math.max(0, node.scrollHeight - node.clientHeight);
+    cancelTranscriptSmoothScroll();
+    if (!options.smooth || reducedMotionPreferred() || typeof performance === 'undefined') {
+      transcriptScrollToBottomInProgress = false;
+      setTranscriptScrollTop(node, targetScrollTop);
+      setTranscriptNearBottomValue(true);
+      return;
+    }
+    const startScrollTop = node.scrollTop;
+    const delta = targetScrollTop - startScrollTop;
+    if (Math.abs(delta) <= 1) {
+      setTranscriptScrollTop(node, targetScrollTop);
+      setTranscriptNearBottomValue(true);
+      return;
+    }
+    const startedAt = performance.now();
+    const step = (timestamp: number) => {
+      const progress = Math.min(1, (timestamp - startedAt) / TRANSCRIPT_SCROLL_TO_LATEST_MS);
+      const eased = 1 - ((1 - progress) ** 3);
+      setTranscriptScrollTop(node, startScrollTop + (delta * eased));
+      if (progress < 1) {
+        transcriptSmoothScrollFrame = requestTranscriptAnimationFrame(step);
+        return;
+      }
+      transcriptSmoothScrollFrame = 0;
+      transcriptScrollToBottomInProgress = false;
+      setTranscriptScrollTop(node, targetScrollTop);
+      setTranscriptNearBottomValue(true);
+    };
+    transcriptScrollToBottomInProgress = true;
+    transcriptSmoothScrollFrame = requestTranscriptAnimationFrame(step);
     setTranscriptNearBottomValue(true);
+  };
+
+  const measureTranscriptNearBottomAfterLayout = () => {
+    if (transcriptMeasureFrame) {
+      cancelTranscriptAnimationFrame(transcriptMeasureFrame);
+    }
+    transcriptMeasureFrame = requestTranscriptAnimationFrame(() => {
+      transcriptMeasureFrame = 0;
+      if (transcriptScrollToBottomInProgress) {
+        setTranscriptNearBottomValue(true);
+        return;
+      }
+      setTranscriptNearBottomValue(transcriptIsNearBottom());
+    });
   };
 
   let transcriptScrollFrame = 0;
   const scheduleTranscriptTailScroll = () => {
     if (!transcriptNearBottom || transcriptScrollFrame) return;
-    transcriptScrollFrame = window.requestAnimationFrame(() => {
+    transcriptScrollFrame = requestTranscriptAnimationFrame(() => {
       transcriptScrollFrame = 0;
       scrollTranscriptToBottom();
     });
   };
   onCleanup(() => {
+    if (transcriptMeasureFrame) {
+      cancelTranscriptAnimationFrame(transcriptMeasureFrame);
+      transcriptMeasureFrame = 0;
+    }
     if (transcriptScrollFrame) {
-      window.cancelAnimationFrame(transcriptScrollFrame);
+      cancelTranscriptAnimationFrame(transcriptScrollFrame);
       transcriptScrollFrame = 0;
     }
+    cancelTranscriptSmoothScroll();
     if (copiedMessageResetTimer !== undefined) {
       window.clearTimeout(copiedMessageResetTimer);
       copiedMessageResetTimer = undefined;
@@ -1413,6 +1506,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     (selectedThreadHasContent() || selectedThreadHasModelStatus())
     && !transcriptNearBottomState()
   ));
+  createEffect(() => {
+    selectedThreadID();
+    selectedThreadHasContent();
+    selectedThreadHasModelStatus();
+    pendingTurnForSelectedThread();
+    transcriptLayoutRevision();
+    measureTranscriptNearBottomAfterLayout();
+  });
   const modelStatusLabel = (phase: FlowerModelIOPhase): string => {
     const modelStatus = copy().chat.modelStatus;
     const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus;
@@ -2661,20 +2762,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </div>
         </div>
         <div class="flower-chat-bottom-dock flower-chat-bottom-dock">
+          <Show when={showScrollToLatestButton()}>
+            <div class="flower-scroll-to-latest-float">
+              <button
+                type="button"
+                class="flower-scroll-to-latest-button"
+                aria-label={copy().chat.scrollToLatest}
+                title={copy().chat.scrollToLatest}
+                onClick={() => scrollTranscriptToBottom({ smooth: true })}
+              >
+                <ChevronDown class="h-4 w-4" />
+              </button>
+            </div>
+          </Show>
           <div class="flower-chat-bottom-dock-track flower-chat-bottom-dock-track">
-            <Show when={showScrollToLatestButton()}>
-              <div class="flower-scroll-to-latest-row">
-                <button
-                  type="button"
-                  class="flower-scroll-to-latest-button"
-                  aria-label={copy().chat.scrollToLatest}
-                  title={copy().chat.scrollToLatest}
-                  onClick={scrollTranscriptToBottom}
-                >
-                  <ChevronDown class="h-4 w-4" />
-                </button>
-              </div>
-            </Show>
             <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
               <Show when={selectedThreadHasModelStatus()}>
                 {modelStatusIndicator()}

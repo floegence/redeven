@@ -2056,7 +2056,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('.flower-model-status-text')?.getAttribute('data-text')).toBe('Thinking...');
   });
 
-  it('shows a bottom-dock scroll control when the transcript is away from latest output', async () => {
+  it('shows a floating scroll control when the transcript is away from latest output', async () => {
     const selectedThread = thread({
       thread_id: 'thread-scroll-latest',
       title: 'Scroll latest',
@@ -2105,11 +2105,58 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => Boolean(runtime.querySelector('.flower-scroll-to-latest-button')));
     const button = runtime.querySelector('.flower-scroll-to-latest-button') as HTMLButtonElement;
     expect(button.getAttribute('aria-label')).toBe('Scroll to latest');
-    expect(runtime.querySelector('.flower-chat-bottom-dock-track .flower-scroll-to-latest-button')).toBe(button);
+    expect(runtime.querySelector('.flower-scroll-to-latest-float .flower-scroll-to-latest-button')).toBe(button);
+    expect(runtime.querySelector('.flower-chat-bottom-dock-track .flower-scroll-to-latest-button')).toBeNull();
 
     button.click();
 
-    expect(scrollTopValue).toBe(1400);
+    await waitFor(() => scrollTopValue === 1000);
     await waitFor(() => !runtime.querySelector('.flower-scroll-to-latest-button'));
+  });
+
+  it('measures a newly selected long thread and shows the scroll control after layout', async () => {
+    const clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function clientHeightMock(this: HTMLElement) {
+      return this.classList.contains('flower-chat-transcript') ? 400 : 0;
+    });
+    const scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function scrollHeightMock(this: HTMLElement) {
+      return this.classList.contains('flower-chat-transcript') ? 1800 : 0;
+    });
+    try {
+      const selectedThread = thread({
+        thread_id: 'thread-long-on-load',
+        title: 'Long on load',
+        messages: [
+          {
+            id: 'm-long-user',
+            role: 'user',
+            content: 'Start a long report',
+            status: 'complete',
+            created_at_ms: 1,
+          },
+          {
+            id: 'm-long-agent',
+            role: 'assistant',
+            content: 'Latest Agent output',
+            status: 'complete',
+            created_at_ms: 2,
+          },
+        ],
+      });
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [selectedThread]),
+        loadThread: vi.fn(async () => liveBootstrap(selectedThread)),
+      });
+
+      await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-long-on-load"] button')));
+      (runtime.querySelector('[data-thread-id="thread-long-on-load"] button') as HTMLButtonElement).click();
+      await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-long-agent"]')));
+
+      await waitFor(() => Boolean(runtime.querySelector('.flower-scroll-to-latest-button')));
+      expect(runtime.querySelector('.flower-scroll-to-latest-button')?.getAttribute('title')).toBe('Scroll to latest');
+    } finally {
+      clientHeightSpy.mockRestore();
+      scrollHeightSpy.mockRestore();
+    }
   });
 });

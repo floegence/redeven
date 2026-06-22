@@ -77,22 +77,28 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain('flower-streaming-cursor');
   });
 
-  it('renders the scroll-to-latest control in the bottom dock above the composer', () => {
+  it('renders the scroll-to-latest control as a floating dock affordance above the composer', () => {
     const src = surfaceSource();
-    const dockTrackIndex = src.indexOf('flower-chat-bottom-dock-track');
+    const dockIndex = src.indexOf('flower-chat-bottom-dock flower-chat-bottom-dock');
+    const floatIndex = src.indexOf('flower-scroll-to-latest-float');
     const scrollButtonIndex = src.indexOf('flower-scroll-to-latest-button');
+    const dockTrackIndex = src.indexOf('flower-chat-bottom-dock-track');
     const statusLaneIndex = src.indexOf('flower-model-status-lane');
     const composerIndex = src.indexOf('flower-composer flower-chat-input-floating');
 
-    expect(dockTrackIndex).toBeGreaterThanOrEqual(0);
-    expect(scrollButtonIndex).toBeGreaterThan(dockTrackIndex);
-    expect(statusLaneIndex).toBeGreaterThan(scrollButtonIndex);
+    expect(dockIndex).toBeGreaterThanOrEqual(0);
+    expect(floatIndex).toBeGreaterThan(dockIndex);
+    expect(scrollButtonIndex).toBeGreaterThan(floatIndex);
+    expect(dockTrackIndex).toBeGreaterThan(scrollButtonIndex);
+    expect(statusLaneIndex).toBeGreaterThan(dockTrackIndex);
     expect(composerIndex).toBeGreaterThan(statusLaneIndex);
     expect(src).toContain('const [transcriptNearBottomState, setTranscriptNearBottomState] = createSignal(true)');
+    expect(src).toContain('const [transcriptLayoutRevision, setTranscriptLayoutRevision] = createSignal(0)');
     expect(src).toContain('const showScrollToLatestButton = createMemo');
     expect(src).toContain('aria-label={copy().chat.scrollToLatest}');
     expect(src).toContain('title={copy().chat.scrollToLatest}');
-    expect(src).toContain('onClick={scrollTranscriptToBottom}');
+    expect(src).toContain('onClick={() => scrollTranscriptToBottom({ smooth: true })}');
+    expect(src).toContain('TRANSCRIPT_SCROLL_TO_LATEST_MS');
   });
 
   it('adds copy actions and user message time metadata to chat messages', () => {
