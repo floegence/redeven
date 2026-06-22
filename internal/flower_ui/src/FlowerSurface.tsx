@@ -30,6 +30,8 @@ import type {
   FlowerActivityStatus,
   FlowerLiveBootstrap,
   FlowerActivityApprovalState,
+  FlowerModelIOPhase,
+  FlowerModelIOStatus,
 } from './contracts/flowerSurfaceContracts';
 import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import {
@@ -1383,15 +1385,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     fallback: string,
   ): string => trimString(copy().chat[key]) || trimString(DEFAULT_FLOWER_SURFACE_COPY.chat[key]) || fallback;
 
-  const selectedThreadThinking = createMemo(() => selectedThreadLiveStatus() === 'running');
-  const selectedThreadThinkingLabel = createMemo(() => (
-    trimString(copy().chat.thinkingIndicator) || DEFAULT_FLOWER_SURFACE_COPY.chat.thinkingIndicator
-  ));
-  const streamingCursor = () => (
-    <div class="flower-streaming-cursor">
-      <span class="flower-streaming-cursor-text" data-text={selectedThreadThinkingLabel()}>{selectedThreadThinkingLabel()}</span>
-    </div>
-  );
+  const selectedModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => selectedThread()?.model_io_status ?? null);
+  const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null);
+  const modelStatusLabel = (phase: FlowerModelIOPhase): string => {
+    const modelStatus = copy().chat.modelStatus;
+    const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus;
+    const labels: Record<FlowerModelIOPhase, string> = {
+      preparing: trimString(modelStatus.preparing) || fallback.preparing,
+      waiting_response: trimString(modelStatus.waitingResponse) || fallback.waitingResponse,
+      streaming: trimString(modelStatus.streaming) || fallback.streaming,
+      retrying: trimString(modelStatus.retrying) || fallback.retrying,
+      finalizing: trimString(modelStatus.finalizing) || fallback.finalizing,
+    };
+    return labels[phase];
+  };
+  const selectedModelStatusLabel = createMemo(() => {
+    const status = selectedModelIOStatus();
+    return status ? modelStatusLabel(status.phase) : '';
+  });
+  const modelStatusIndicator = () => {
+    const label = selectedModelStatusLabel();
+    return (
+      <div class="flower-model-status-indicator" data-model-io-phase={selectedModelIOStatus()?.phase}>
+        <span class="flower-model-status-text" data-text={label}>{label}</span>
+      </div>
+    );
+  };
 
   const formatMessageTime = (createdAtMs: number): string => {
     const value = Math.floor(Number(createdAtMs ?? 0));
@@ -2359,18 +2378,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
-  const lastContentBlockKey = (blocks: readonly FlowerRenderableMessageBlock[]): string => {
-    for (let index = blocks.length - 1; index >= 0; index -= 1) {
-      const block = blocks[index];
-      if (block?.type === 'content') return block.key;
-    }
-    return '';
-  };
-
   const lastCopyableContentBlockKey = (blocks: readonly FlowerRenderableMessageBlock[]): string => {
     for (let index = blocks.length - 1; index >= 0; index -= 1) {
       const block = blocks[index];
       if (block?.type === 'content' && block.block_type !== 'thinking' && trimString(block.content)) return block.key;
+    }
+    return '';
+  };
+
+  const lastContentBlockKey = (blocks: readonly FlowerRenderableMessageBlock[]): string => {
+    for (let index = blocks.length - 1; index >= 0; index -= 1) {
+      const block = blocks[index];
+      if (block?.type === 'content') return block.key;
     }
     return '';
   };
@@ -2593,7 +2612,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {(message) => errorNotice(copy().chat.threadLoadErrorTitle, message())}
             </Show>
             <Show
-              when={selectedThreadHasContent() || pendingTurnForSelectedThread() || selectedThreadThinking()}
+              when={selectedThreadHasContent() || pendingTurnForSelectedThread() || selectedThreadHasModelStatus()}
                 fallback={selectedThreadLoading()
                   ? threadLoadingState()
                   : warmupCanReplaceTranscript()
@@ -2613,15 +2632,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 }}
               </For>
             </Show>
-            <Show when={selectedThreadThinking()}>
-              <div class="flower-message-streaming-tail flower-message-streaming-tail-assistant" role="status" aria-live="polite">
-                {streamingCursor()}
-              </div>
-            </Show>
           </div>
         </div>
         <div class="flower-chat-bottom-dock flower-chat-bottom-dock">
           <div class="flower-chat-bottom-dock-track flower-chat-bottom-dock-track">
+            <div class="flower-model-status-lane" role="status" aria-live="polite" aria-atomic="true">
+              <Show when={selectedThreadHasModelStatus()}>
+                {modelStatusIndicator()}
+              </Show>
+            </div>
             <div class="flower-composer flower-chat-input-floating chat-input-container p-3">
               {inputRequestPrompt(selectedInputRequest())}
               <Show

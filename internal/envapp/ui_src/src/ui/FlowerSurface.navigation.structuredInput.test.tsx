@@ -85,7 +85,7 @@ describe('FlowerSurface navigation structured input', () => {
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Staging');
     expect(runtime.querySelector('[data-flower-input-request-prompt]')?.textContent).toContain('Production');
     expect(runtime.querySelector('.flower-activity-inline')?.textContent).toContain('Requested input');
-    expect(runtime.querySelector('.flower-streaming-cursor')).toBeNull();
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
     expect(runtime.querySelectorAll('textarea')).toHaveLength(1);
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).placeholder).toBe('Choose an option to continue.');

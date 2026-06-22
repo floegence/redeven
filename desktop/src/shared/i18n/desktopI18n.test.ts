@@ -257,8 +257,71 @@ describe('Desktop shared i18n dictionaries', () => {
         expect(englishMatches, locale).toEqual([]);
       }
     }
-    expect(DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.chat.thinkingIndicator).toBe('正在思考...');
-    expect(DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.thinkingIndicator).toBe('Thinking...');
+    expect({
+      preparing: DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.modelStatusPreparing,
+      waitingResponse: DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.modelStatusWaitingResponse,
+      streaming: DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.modelStatusStreaming,
+      retrying: DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.modelStatusRetrying,
+      finalizing: DESKTOP_I18N_DICTIONARIES['en-US'].flowerSurface.chat.modelStatusFinalizing,
+    }).toEqual({
+      preparing: 'Preparing model request...',
+      waitingResponse: 'Waiting for model response...',
+      streaming: 'Thinking...',
+      retrying: 'Retrying model request...',
+      finalizing: 'Finalizing reply...',
+    });
+    expect({
+      preparing: DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.chat.modelStatusPreparing,
+      waitingResponse: DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.chat.modelStatusWaitingResponse,
+      streaming: DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.chat.modelStatusStreaming,
+      retrying: DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.chat.modelStatusRetrying,
+      finalizing: DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.chat.modelStatusFinalizing,
+    }).toEqual({
+      preparing: '正在准备模型请求...',
+      waitingResponse: '正在等待模型响应...',
+      streaming: '正在思考...',
+      retrying: '正在重试模型请求...',
+      finalizing: '正在整理回复...',
+    });
+    expect({
+      preparing: DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.chat.modelStatusPreparing,
+      waitingResponse: DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.chat.modelStatusWaitingResponse,
+      streaming: DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.chat.modelStatusStreaming,
+      retrying: DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.chat.modelStatusRetrying,
+      finalizing: DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.chat.modelStatusFinalizing,
+    }).toEqual({
+      preparing: '正在準備模型請求...',
+      waitingResponse: '正在等待模型回應...',
+      streaming: '正在思考...',
+      retrying: '正在重試模型請求...',
+      finalizing: '正在整理回覆...',
+    });
+    expect({
+      preparing: DESKTOP_I18N_DICTIONARIES['es-ES'].flowerSurface.chat.modelStatusPreparing,
+      waitingResponse: DESKTOP_I18N_DICTIONARIES['es-ES'].flowerSurface.chat.modelStatusWaitingResponse,
+      streaming: DESKTOP_I18N_DICTIONARIES['es-ES'].flowerSurface.chat.modelStatusStreaming,
+      retrying: DESKTOP_I18N_DICTIONARIES['es-ES'].flowerSurface.chat.modelStatusRetrying,
+      finalizing: DESKTOP_I18N_DICTIONARIES['es-ES'].flowerSurface.chat.modelStatusFinalizing,
+    }).toEqual({
+      preparing: 'Preparando solicitud al modelo...',
+      waitingResponse: 'Esperando respuesta del modelo...',
+      streaming: 'Pensando...',
+      retrying: 'Reintentando solicitud al modelo...',
+      finalizing: 'Finalizando respuesta...',
+    });
+    expect({
+      preparing: DESKTOP_I18N_DICTIONARIES['pt-BR'].flowerSurface.chat.modelStatusPreparing,
+      waitingResponse: DESKTOP_I18N_DICTIONARIES['pt-BR'].flowerSurface.chat.modelStatusWaitingResponse,
+      streaming: DESKTOP_I18N_DICTIONARIES['pt-BR'].flowerSurface.chat.modelStatusStreaming,
+      retrying: DESKTOP_I18N_DICTIONARIES['pt-BR'].flowerSurface.chat.modelStatusRetrying,
+      finalizing: DESKTOP_I18N_DICTIONARIES['pt-BR'].flowerSurface.chat.modelStatusFinalizing,
+    }).toEqual({
+      preparing: 'Preparando solicitação ao modelo...',
+      waitingResponse: 'Aguardando resposta do modelo...',
+      streaming: 'Pensando...',
+      retrying: 'Tentando novamente a solicitação ao modelo...',
+      finalizing: 'Finalizando resposta...',
+    });
     expect(DESKTOP_I18N_DICTIONARIES['zh-CN'].flowerSurface.emptyState.explainTitle).toBe('解释代码');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.emptyState.explainTitle).toBe('解釋程式碼');
     expect(DESKTOP_I18N_DICTIONARIES['zh-TW'].flowerSurface.threadList.refreshLabel).toBe('重新整理對話');
@@ -311,7 +374,7 @@ describe('Desktop shared i18n dictionaries', () => {
   });
 
   it('keeps literal translation keys used by Desktop source files present in the base dictionary', () => {
-    const sourceRoot = path.resolve(process.cwd(), 'src');
+    const sourceRoot = path.resolve(__dirname, '..', '..', 'welcome', 'flower');
     const keys = collectLiteralTranslationKeysFromSource(sourceRoot);
     const availableKeys = new Set(flattenDictionaryMessages(enUS).map((entry) => entry.path));
     const missing = [...keys.entries()]

@@ -47,6 +47,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r.recordFloretActivityEvent(ev)
 	switch ev.Type {
 	case floretEventProviderRequest:
+		r.updateModelIOStatus(FlowerModelIOPhaseWaitingResponse, ev.Step)
 		r.persistRunEvent("floret.provider.request", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index": ev.Step,
 			"provider":   strings.TrimSpace(ev.Provider),
@@ -54,12 +55,14 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"metadata":   ev.Metadata,
 		})
 	case floretEventProviderFinish:
+		r.updateModelIOStatus(FlowerModelIOPhaseFinalizing, ev.Step)
 		r.persistRunEvent("floret.provider.finish", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":    ev.Step,
 			"finish_reason": strings.TrimSpace(ev.FinishReason),
 			"metadata":      ev.Metadata,
 		})
 	case floretEventProviderRetry:
+		r.updateModelIOStatus(FlowerModelIOPhaseRetrying, ev.Step)
 		r.persistRunEvent("floret.provider.retry", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index": ev.Step,
 			"message":    strings.TrimSpace(ev.Message),
@@ -91,6 +94,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"metadata":   ev.Metadata,
 		})
 	case floretEventStepStart:
+		r.updateModelIOStatus(FlowerModelIOPhasePreparing, ev.Step)
 		r.touchActivity()
 	case floretEventStepEnd:
 		r.persistRunEvent("floret.step.end", RealtimeStreamKindLifecycle, map[string]any{
@@ -101,6 +105,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"metadata":            ev.Metadata,
 		})
 	case floretEventRunEnd:
+		r.clearModelIOStatus()
 		r.persistRunEvent("floret.run.end", RealtimeStreamKindLifecycle, map[string]any{
 			"finish_reason": strings.TrimSpace(ev.FinishReason),
 			"error":         strings.TrimSpace(ev.Error),
@@ -136,20 +141,26 @@ func (r *run) applyFloretStreamObservation(stream *flruntime.StreamObservation) 
 	}
 	switch stream.Type {
 	case flruntime.StreamObservationAssistantDelta:
+		r.updateModelIOStatus(FlowerModelIOPhaseStreaming, stream.Attempt)
 		if stream.Text != "" {
 			_ = r.appendTextDelta(stream.Text)
 		}
 	case flruntime.StreamObservationReasoningDelta:
+		r.updateModelIOStatus(FlowerModelIOPhaseStreaming, stream.Attempt)
 		if stream.Text != "" {
 			r.touchActivity()
 			_ = r.appendThinkingDelta(stream.Text)
 		}
+	case flruntime.StreamObservationToolCallStart, flruntime.StreamObservationToolCallDelta, flruntime.StreamObservationToolCallEnd:
+		r.updateModelIOStatus(FlowerModelIOPhaseStreaming, stream.Attempt)
 	case flruntime.StreamObservationModelRetry:
+		r.updateModelIOStatus(FlowerModelIOPhaseRetrying, stream.Attempt)
 		r.persistRunEvent("floret.provider.retry.stream", RealtimeStreamKindLifecycle, map[string]any{
 			"attempt": stream.Attempt,
 			"reason":  strings.TrimSpace(stream.Reason),
 		})
 	case flruntime.StreamObservationModelStreamDone:
+		r.updateModelIOStatus(FlowerModelIOPhaseFinalizing, stream.Attempt)
 		r.persistRunEvent("floret.provider.stream.done", RealtimeStreamKindLifecycle, map[string]any{
 			"attempt":              stream.Attempt,
 			"finish_reason":        strings.TrimSpace(stream.FinishReason),
@@ -158,6 +169,7 @@ func (r *run) applyFloretStreamObservation(stream *flruntime.StreamObservation) 
 			"stream_reason_detail": strings.TrimSpace(stream.Reason),
 		})
 	case flruntime.StreamObservationModelStreamAbort:
+		r.updateModelIOStatus(FlowerModelIOPhaseRetrying, stream.Attempt)
 		r.persistRunEvent("floret.provider.stream.abort", RealtimeStreamKindLifecycle, map[string]any{
 			"attempt": stream.Attempt,
 			"reason":  strings.TrimSpace(stream.Reason),

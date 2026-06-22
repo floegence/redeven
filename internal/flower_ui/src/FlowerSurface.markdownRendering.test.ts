@@ -50,25 +50,31 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain("case 'running':\n        return <Terminal");
   });
 
-  it('renders the running thinking indicator after timeline entries', () => {
+  it('renders the model status indicator in the bottom dock outside timeline entries', () => {
     const src = surfaceSource();
     const timelineListIndex = src.indexOf('<For each={visibleTimelineEntryKeys()}>');
-    const cursorTailIndex = src.indexOf('flower-message-streaming-tail');
+    const dockIndex = src.indexOf('flower-chat-bottom-dock-track');
+    const statusLaneIndex = src.indexOf('flower-model-status-lane');
+    const composerIndex = src.indexOf('flower-composer flower-chat-input-floating');
 
     expect(timelineListIndex).toBeGreaterThanOrEqual(0);
-    expect(cursorTailIndex).toBeGreaterThan(timelineListIndex);
-    expect(src).toContain('const selectedThreadThinking = createMemo(() => selectedThreadLiveStatus() === \'running\')');
-    expect(src).toContain('const selectedThreadThinkingLabel = createMemo(() => (');
-    expect(src).toContain('<Show when={selectedThreadThinking()}>');
-    expect(src).toContain('{streamingCursor()}');
+    expect(dockIndex).toBeGreaterThan(timelineListIndex);
+    expect(statusLaneIndex).toBeGreaterThan(dockIndex);
+    expect(composerIndex).toBeGreaterThan(statusLaneIndex);
+    expect(src).toContain('const selectedModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => selectedThread()?.model_io_status ?? null)');
+    expect(src).toContain('const selectedThreadHasModelStatus = createMemo(() => selectedModelIOStatus() != null)');
+    expect(src).toContain('<Show when={selectedThreadHasModelStatus()}>');
+    expect(src).toContain('{modelStatusIndicator()}');
     expect(src).toContain('role="status"');
     expect(src).toContain('aria-live="polite"');
-    expect(src).toContain('copy().chat.thinkingIndicator');
-    expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.thinkingIndicator');
-    expect(src).toContain('data-text={selectedThreadThinkingLabel()}');
-    expect(src).not.toContain('<div class="flower-streaming-cursor" role="status"');
-    expect(src).not.toContain('class="flower-streaming-cursor-text" data-text={selectedThreadThinkingLabel()} aria-hidden="true"');
-    expect(src).not.toContain('<Show when={activeCursor()}>\n              <div class={cn(\'flower-message-streaming-tail\'');
+    expect(src).toContain('aria-atomic="true"');
+    expect(src).toContain('copy().chat.modelStatus');
+    expect(src).toContain('DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus');
+    expect(src).toContain('data-text={label}');
+    expect(src).not.toContain('selectedThreadThinking');
+    expect(src).not.toContain('thinkingIndicator');
+    expect(src).not.toContain('flower-message-streaming-tail');
+    expect(src).not.toContain('flower-streaming-cursor');
   });
 
   it('adds copy actions and user message time metadata to chat messages', () => {

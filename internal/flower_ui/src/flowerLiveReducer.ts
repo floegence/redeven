@@ -7,6 +7,7 @@ import type {
   FlowerLiveBlock,
   FlowerLiveEvent,
   FlowerLiveThreadPatch,
+  FlowerModelIOStatus,
   FlowerThreadSnapshot,
   FlowerThreadStatus,
 } from './contracts/flowerSurfaceContracts';
@@ -107,17 +108,64 @@ function firstInputRequest(inputRequests: Readonly<Record<string, FlowerInputReq
   return Object.values(inputRequests).sort((left, right) => left.prompt_id.localeCompare(right.prompt_id))[0] ?? null;
 }
 
+function activeRunIDFromRuns(runs: FlowerLiveBootstrap['live_state']['runs']): string {
+  const active = Object.values(runs)
+    .filter((run) => !threadStatusHidesModelIO(runStatus(run.status)))
+    .sort((left, right) => trim(left.run_id).localeCompare(trim(right.run_id)))[0];
+  return trim(active?.run_id);
+}
+
+function threadStatusHidesModelIO(status: FlowerThreadStatus): boolean {
+  return status === 'waiting_approval'
+    || status === 'waiting_user'
+    || status === 'failed'
+    || status === 'success'
+    || status === 'canceled'
+    || status === 'idle';
+}
+
+function clearModelIOForRun(thread: FlowerThreadSnapshot, runID: string | undefined): FlowerThreadSnapshot {
+  const current = thread.model_io_status ?? null;
+  if (!current) return thread;
+  const targetRunID = trim(runID);
+  if (!targetRunID || trim(current.run_id) !== targetRunID) return thread;
+  return { ...thread, model_io_status: null };
+}
+
+function withoutModelIO(thread: FlowerThreadSnapshot): FlowerThreadSnapshot {
+  if (!thread.model_io_status && !thread.active_run_id) return thread;
+  return { ...thread, model_io_status: null, active_run_id: undefined };
+}
+
+function withModelIOStatus(thread: FlowerThreadSnapshot, status: FlowerModelIOStatus | null | undefined, runID?: string): FlowerThreadSnapshot {
+  if (!status) return clearModelIOForRun(thread, runID);
+  if (threadStatusHidesModelIO(thread.status)) return thread;
+  const statusRunID = trim(status.run_id || runID);
+  if (!statusRunID || trim(thread.active_run_id) !== statusRunID) return thread;
+  return { ...thread, model_io_status: status };
+}
+
 export function projectFlowerLiveBootstrap(bootstrap: FlowerLiveBootstrap): FlowerThreadSnapshot {
   let thread: FlowerThreadSnapshot = {
     ...bootstrap.thread,
     read_status: bootstrap.read_status,
     messages: [...bootstrap.timeline_messages],
+    model_io_status: bootstrap.live_state.model_io ?? null,
     approval_actions: approvalsFromRecord(bootstrap.live_state.approval_actions),
   };
   thread = applyThreadPatch(thread, bootstrap.live_state.thread_patch);
   const inputRequest = firstInputRequest(bootstrap.live_state.input_requests);
   if (inputRequest) {
     thread = { ...thread, status: 'waiting_user', input_request: inputRequest };
+  }
+  const activeRunID = activeRunIDFromRuns(bootstrap.live_state.runs);
+  if (activeRunID) {
+    thread = { ...thread, active_run_id: activeRunID };
+  }
+  if (threadStatusHidesModelIO(thread.status)) {
+    thread = withoutModelIO(thread);
+  } else if (thread.model_io_status && trim(thread.model_io_status.run_id) !== trim(thread.active_run_id)) {
+    thread = { ...thread, model_io_status: null };
   }
   return thread;
 }
@@ -176,11 +224,12 @@ function withApprovalAction(thread: FlowerThreadSnapshot, action: FlowerApproval
   if (action.status === 'pending' && action.state === 'requested') {
     next.push(action);
   }
-  return {
+  const updated = {
     ...thread,
     approval_actions: next.sort((left, right) => left.action_id.localeCompare(right.action_id)),
     status: action.status === 'pending' ? 'waiting_approval' : thread.status,
   };
+  return action.status === 'pending' ? clearModelIOForRun(updated, action.run_id) : updated;
 }
 
 export function applyFlowerLiveEvent(
@@ -202,7 +251,7 @@ export function applyFlowerLiveEvent(
 
   switch (event.kind) {
     case 'run.started':
-      next = { ...next, status: 'running' };
+      next = { ...next, status: 'running', active_run_id: trim(event.payload.run_id) || trim(event.run_id) || next.active_run_id };
       break;
     case 'run.status_changed':
       next = {
@@ -211,9 +260,20 @@ export function applyFlowerLiveEvent(
         ...(event.payload.waiting_prompt !== undefined ? { input_request: event.payload.waiting_prompt ?? null } : {}),
         ...(trim(event.payload.error) ? { error: { message: trim(event.payload.error), ...(trim(event.payload.error_code) ? { code: trim(event.payload.error_code) } : {}) } } : {}),
       };
+      if (threadStatusHidesModelIO(next.status)) {
+        next = clearModelIOForRun(next, event.payload.run_id);
+        if (trim(next.active_run_id) === trim(event.payload.run_id)) {
+          next = { ...next, active_run_id: undefined };
+        }
+      } else if (trim(event.payload.run_id)) {
+        next = { ...next, active_run_id: trim(event.payload.run_id) };
+      }
       break;
     case 'thread.patched':
       next = applyThreadPatch(next, event.payload.patch);
+      if (threadStatusHidesModelIO(next.status)) {
+        next = withoutModelIO(next);
+      }
       break;
     case 'message.started':
       break;
@@ -279,7 +339,7 @@ export function applyFlowerLiveEvent(
       break;
     case 'input.requested':
       if (event.payload.request) {
-        next = { ...next, status: 'waiting_user', input_request: event.payload.request };
+        next = clearModelIOForRun({ ...next, status: 'waiting_user', input_request: event.payload.request }, event.run_id);
       }
       break;
     case 'input.resolved':
@@ -291,6 +351,9 @@ export function applyFlowerLiveEvent(
         next = result.thread;
         resyncRequired = !result.ok;
       }
+      break;
+    case 'model_io.updated':
+      next = withModelIOStatus(next, event.payload.status ?? null, event.run_id);
       break;
     case 'usage.updated':
       break;

@@ -66,6 +66,18 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 				}
 				streamedReasoning.WriteString(ev.Text)
 				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventReasoning, Text: ev.Text})
+			case StreamEventToolCallStart:
+				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {
+					sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventToolCallStart, ToolCallStream: stream})
+				}
+			case StreamEventToolCallDelta:
+				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {
+					sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventToolCallDelta, ToolCallStream: stream})
+				}
+			case StreamEventToolCallEnd:
+				if stream := floretToolCallStreamFromFlower(ev.ToolCall); stream != nil {
+					sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventToolCallEnd, ToolCallStream: stream})
+				}
 			}
 		}
 		result, err := p.base.StreamTurn(ctx, turnReq, onEvent)
@@ -105,6 +117,21 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 		sendFloretProviderEvent(ctx, out, terminal)
 	}()
 	return out, nil
+}
+
+func floretToolCallStreamFromFlower(call *PartialToolCall) *flruntime.ModelToolCallStream {
+	if call == nil {
+		return nil
+	}
+	id := strings.TrimSpace(call.ID)
+	name := strings.TrimSpace(call.Name)
+	if id == "" || name == "" {
+		return nil
+	}
+	return &flruntime.ModelToolCallStream{
+		ID:   id,
+		Name: name,
+	}
 }
 
 func flowerSourcesToFloret(in []SourceRef) []flruntime.SourceRef {

@@ -174,6 +174,9 @@ func (r *run) recordObservationActivityEvent(ev observation.Event) {
 	if !shouldRecordObservationActivityEvent(ev) {
 		return
 	}
+	if modelIOEndsBeforeActivity(ev.Type) {
+		r.clearModelIOStatus()
+	}
 	if ev.RunID == "" {
 		ev.RunID = strings.TrimSpace(r.id)
 	}
@@ -228,6 +231,18 @@ func shouldRecordObservationActivityEvent(ev observation.Event) bool {
 	return message == string(observation.ActivityStatusWaiting) ||
 		message == string(observation.ActivityStatusCanceled) ||
 		message == "cancelled"
+}
+
+func modelIOEndsBeforeActivity(eventType string) bool {
+	switch strings.TrimSpace(eventType) {
+	case observation.EventTypeToolCall,
+		observation.EventTypeHostedToolCall,
+		observation.EventTypeToolApprovalRequested,
+		observation.EventTypeControlSignal:
+		return true
+	default:
+		return false
+	}
 }
 
 func (r *run) publishFinalActivityTimeline(timeline observation.ActivityTimeline) {

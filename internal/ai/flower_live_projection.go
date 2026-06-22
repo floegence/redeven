@@ -541,6 +541,7 @@ func emptyFlowerLiveMaterializedState() FlowerLiveMaterializedState {
 	return FlowerLiveMaterializedState{
 		Messages:        map[string]FlowerLiveMessageDraft{},
 		Runs:            map[string]FlowerLiveRunState{},
+		ModelIO:         nil,
 		ApprovalActions: map[string]FlowerApprovalAction{},
 		InputRequests:   map[string]RequestUserInputPrompt{},
 	}
@@ -879,6 +880,8 @@ func (s *Service) flowerLiveEventsFromStreamEvent(ev RealtimeEvent, base func(Fl
 			return nil
 		}
 		return []FlowerLiveEvent{base(FlowerLiveUsageUpdated, FlowerLiveUsageUpdatedPayload{Usage: cloneStringAnyMap(stream.Payload)})}
+	case streamEventModelIOStatus:
+		return []FlowerLiveEvent{base(FlowerLiveModelIOUpdated, FlowerLiveModelIOUpdatedPayload{Status: flowerModelIOStatusFromStream(stream, strings.TrimSpace(ev.RunID), ev.AtUnixMs)})}
 	default:
 		return nil
 	}
@@ -964,8 +967,21 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 			run.Error = strings.TrimSpace(payload.Error)
 			if flowerLiveRunStatusIsTerminal(run.Status) {
 				delete(state.Runs, payload.RunID)
+				clearFlowerModelIOForRun(state, payload.RunID)
 			} else {
 				state.Runs[payload.RunID] = run
+				if flowerLiveRunStatusHidesModelIO(run.Status) {
+					clearFlowerModelIOForRun(state, payload.RunID)
+				}
+			}
+		}
+	case FlowerLiveModelIOUpdated:
+		var payload FlowerLiveModelIOUpdatedPayload
+		if decodeFlowerPayload(event.Payload, &payload) {
+			if payload.Status == nil {
+				clearFlowerModelIOForRun(state, event.RunID)
+			} else if flowerModelIOStatusMatchesLiveRun(state, payload.Status) {
+				state.ModelIO = cloneFlowerModelIOStatus(payload.Status)
 			}
 		}
 	case FlowerLiveMessageStarted:
@@ -1021,6 +1037,9 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 	case FlowerLiveApprovalRequested, FlowerLiveApprovalResolved:
 		var payload FlowerLiveApprovalPayload
 		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.Action.ActionID) != "" {
+			if event.Kind == FlowerLiveApprovalRequested {
+				clearFlowerModelIOForRun(state, payload.Action.RunID)
+			}
 			action := payload.Action
 			if event.Kind == FlowerLiveApprovalRequested && action.ExpectedSeq <= 0 {
 				action.ExpectedSeq = event.Seq
@@ -1054,6 +1073,7 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 	case FlowerLiveInputRequested:
 		var payload FlowerLiveInputRequestedPayload
 		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.Request.PromptID) != "" {
+			clearFlowerModelIOForRun(state, event.RunID)
 			state.InputRequests[payload.Request.PromptID] = payload.Request
 		}
 	case FlowerLiveInputResolved:
@@ -1074,6 +1094,76 @@ func flowerLiveRunStatusIsTerminal(status string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func flowerLiveRunStatusHidesModelIO(status string) bool {
+	switch NormalizeRunState(status) {
+	case RunStateWaitingApproval, RunStateWaitingUser, RunStateSuccess, RunStateFailed, RunStateCanceled, RunStateTimedOut, RunStateIdle:
+		return true
+	default:
+		return false
+	}
+}
+
+func clearFlowerModelIOForRun(state *FlowerLiveMaterializedState, runID string) {
+	if state == nil || state.ModelIO == nil {
+		return
+	}
+	runID = strings.TrimSpace(runID)
+	if runID != "" && strings.TrimSpace(state.ModelIO.RunID) == runID {
+		state.ModelIO = nil
+	}
+}
+
+func flowerModelIOStatusMatchesLiveRun(state *FlowerLiveMaterializedState, status *FlowerModelIOStatus) bool {
+	if state == nil || status == nil {
+		return false
+	}
+	runID := strings.TrimSpace(status.RunID)
+	if runID == "" {
+		return false
+	}
+	run, ok := state.Runs[runID]
+	if !ok || strings.TrimSpace(run.RunID) != runID {
+		return false
+	}
+	return !flowerLiveRunStatusHidesModelIO(run.Status)
+}
+
+func flowerModelIOStatusFromStream(stream streamEventModelIOStatus, runID string, atUnixMs int64) *FlowerModelIOStatus {
+	phase := normalizeFlowerModelIOPhase(stream.Phase)
+	if phase == "" {
+		return nil
+	}
+	if atUnixMs <= 0 {
+		atUnixMs = time.Now().UnixMilli()
+	}
+	if stream.UpdatedAtMs > 0 {
+		atUnixMs = stream.UpdatedAtMs
+	}
+	return &FlowerModelIOStatus{
+		Phase:       phase,
+		RunID:       firstNonEmptyString(strings.TrimSpace(stream.RunID), strings.TrimSpace(runID)),
+		StepIndex:   stream.StepIndex,
+		UpdatedAtMs: atUnixMs,
+	}
+}
+
+func normalizeFlowerModelIOPhase(raw string) FlowerModelIOPhase {
+	switch FlowerModelIOPhase(strings.TrimSpace(raw)) {
+	case FlowerModelIOPhasePreparing:
+		return FlowerModelIOPhasePreparing
+	case FlowerModelIOPhaseWaitingResponse:
+		return FlowerModelIOPhaseWaitingResponse
+	case FlowerModelIOPhaseStreaming:
+		return FlowerModelIOPhaseStreaming
+	case FlowerModelIOPhaseRetrying:
+		return FlowerModelIOPhaseRetrying
+	case FlowerModelIOPhaseFinalizing:
+		return FlowerModelIOPhaseFinalizing
+	default:
+		return ""
 	}
 }
 
@@ -1468,6 +1558,7 @@ func cloneFlowerLiveMaterializedState(in FlowerLiveMaterializedState) FlowerLive
 		ThreadPatch:     cloneFlowerLiveThreadPatch(in.ThreadPatch),
 		Messages:        map[string]FlowerLiveMessageDraft{},
 		Runs:            map[string]FlowerLiveRunState{},
+		ModelIO:         cloneFlowerModelIOStatus(in.ModelIO),
 		ApprovalActions: map[string]FlowerApprovalAction{},
 		InputRequests:   map[string]RequestUserInputPrompt{},
 	}
@@ -1512,6 +1603,14 @@ func cloneFlowerLiveRunState(in FlowerLiveRunState) FlowerLiveRunState {
 		out.WaitingPrompt = &cp
 	}
 	return out
+}
+
+func cloneFlowerModelIOStatus(in *FlowerModelIOStatus) *FlowerModelIOStatus {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	return &out
 }
 
 func cloneStringAnyMap(in map[string]any) map[string]any {

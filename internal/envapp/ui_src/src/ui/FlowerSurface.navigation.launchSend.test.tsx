@@ -15,6 +15,7 @@ import {
   activityItem,
   activityTimeline,
   liveBootstrap,
+  modelIOStatus,
   renderSurfaceWithAdapter,
   thread,
   waitFor,
@@ -30,6 +31,7 @@ describe('FlowerSurface navigation launch/send', () => {
     const stoppedThread = thread({
       ...runningThread,
       status: 'canceled',
+      model_io_status: null,
     });
     const stopThread = vi.fn(async () => liveBootstrap(stoppedThread));
     const launchTurn = vi.fn(async () => liveBootstrap(stoppedThread));
@@ -78,6 +80,7 @@ describe('FlowerSurface navigation launch/send', () => {
     const stoppedThread = thread({
       ...runningThread,
       status: 'canceled',
+      model_io_status: null,
     });
     const stopDeferred = deferred<FlowerLiveBootstrap>();
     const stopThread = vi.fn(() => stopDeferred.promise);
@@ -114,6 +117,7 @@ describe('FlowerSurface navigation launch/send', () => {
     const stoppedThread = thread({
       ...runningThread,
       status: 'canceled',
+      model_io_status: null,
     });
     const launchedThread = thread({
       ...runningThread,
@@ -213,6 +217,7 @@ describe('FlowerSurface navigation launch/send', () => {
       thread_id: 'thread-running-enter-stop-send-activity-order',
       title: 'Running Enter activity order',
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       messages: [
         {
           id: 'm-first-user',
@@ -235,6 +240,7 @@ describe('FlowerSurface navigation launch/send', () => {
     const stoppedThread = thread({
       ...runningThread,
       status: 'canceled',
+      model_io_status: null,
       messages: runningThread.messages.map((message) => (
         message.id === 'm-first-assistant'
           ? { ...message, status: 'canceled', active_cursor: false }
@@ -293,7 +299,7 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(secondUserText).toContain('second request');
     expect(secondAssistantText).toContain('ENTER_B_DONE');
     expect(secondAssistantText).not.toContain('ENTER_A_DONE');
-    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
+    expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
   });
 
   it('ignores stale live poll snapshots that return after Enter stop plus send', async () => {
@@ -301,6 +307,7 @@ describe('FlowerSurface navigation launch/send', () => {
       thread_id: 'thread-running-enter-stop-send-stale-poll',
       title: 'Running stale poll',
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       messages: [
         {
           id: 'm-first-user',
@@ -323,6 +330,7 @@ describe('FlowerSurface navigation launch/send', () => {
     const stoppedThread = thread({
       ...runningThread,
       status: 'canceled',
+      model_io_status: null,
       messages: runningThread.messages.map((message) => (
         message.id === 'm-first-assistant'
           ? { ...message, status: 'canceled', active_cursor: false }
@@ -368,14 +376,14 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-enter-stop-send-stale-poll"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-enter-stop-send-stale-poll"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'second request';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
     stalePoll.resolve({
       events: [{
         schema_version: 1,
@@ -398,7 +406,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
     expect(ids).toEqual(['m-first-user', 'm-first-assistant', 'm-second-user', 'm-second-assistant']);
-    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
+    expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
   });
 
   it('ignores stale bootstrap reloads that return after stop plus send', async () => {
@@ -406,6 +414,7 @@ describe('FlowerSurface navigation launch/send', () => {
       thread_id: 'thread-running-stop-send-stale-bootstrap',
       title: 'Running stale bootstrap',
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       messages: [
         {
           id: 'm-first-user',
@@ -428,6 +437,7 @@ describe('FlowerSurface navigation launch/send', () => {
     const stoppedThread = thread({
       ...runningThread,
       status: 'canceled',
+      model_io_status: null,
       messages: runningThread.messages.map((message) => (
         message.id === 'm-first-assistant'
           ? { ...message, status: 'canceled', active_cursor: false }
@@ -471,7 +481,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-stop-send-stale-bootstrap"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-stop-send-stale-bootstrap"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'second request';
@@ -487,7 +497,7 @@ describe('FlowerSurface navigation launch/send', () => {
     const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
     expect(ids).toEqual(['m-first-user', 'm-first-assistant', 'm-second-user', 'm-second-assistant']);
     expect(runtime.querySelector('[data-flower-message-id="m-second-assistant"]')?.textContent).toContain('new answer');
-    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
+    expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
   });
 
   it('keeps the composer draft when stop fails before stop plus send', async () => {
@@ -532,6 +542,7 @@ describe('FlowerSurface navigation launch/send', () => {
     const stoppedThread = thread({
       ...runningThread,
       status: 'canceled',
+      model_io_status: null,
     });
     const stopThread = vi.fn(async () => liveBootstrap(stoppedThread));
     const launchTurn = vi.fn(async () => {
@@ -699,6 +710,7 @@ describe('FlowerSurface navigation launch/send', () => {
             thread_id: 'thread-canonical-send',
             title: 'Canonical send',
             status: 'running',
+            model_io_status: modelIOStatus({ run_id: 'run-1' }),
             messages: [{
               id: 'm-user-canonical',
               role: 'user',
@@ -732,13 +744,14 @@ describe('FlowerSurface navigation launch/send', () => {
     await waitFor(() => launchTurn.mock.calls.length > 0);
 
     expect(runtime.querySelector('[data-flower-message-role]')).toBeNull();
-    expect(runtime.querySelector('.flower-streaming-cursor')).toBeNull();
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
 
     sendDeferred.resolve(liveBootstrap(thread({
       thread_id: 'thread-canonical-send',
       title: 'Canonical send',
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       messages: [{
         id: 'm-user-canonical',
         role: 'user',
@@ -756,7 +769,7 @@ describe('FlowerSurface navigation launch/send', () => {
     })));
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-user-canonical"]')));
     expect(runtime.textContent).toContain('inspect the running turn');
-    expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
   });
 
   it('does not synthesize timeline rows while the handler is still resolving', async () => {
@@ -799,7 +812,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(runtime.querySelector('[data-flower-message-role]')).toBeNull();
-    expect(runtime.querySelector('.flower-streaming-cursor')).toBeNull();
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
     expect(launchTurn).not.toHaveBeenCalled();
 
     handlerDeferred.resolve(decision());
@@ -827,6 +840,7 @@ describe('FlowerSurface navigation launch/send', () => {
       thread_id: 'thread-stop-send-order',
       title: 'Stop send order',
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       messages: [{
         id: 'm-first-user',
         role: 'user',
@@ -845,6 +859,7 @@ describe('FlowerSurface navigation launch/send', () => {
     const stoppedThread = thread({
       ...runningThread,
       status: 'canceled',
+      model_io_status: null,
       messages: runningThread.messages.map((message) => (
         message.id === 'm-canceled-assistant'
           ? { ...message, status: 'canceled', active_cursor: false }
@@ -887,16 +902,16 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stop-send-order"] button')));
     (runtime.querySelector('[data-thread-id="thread-stop-send-order"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'second request';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
     const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
     expect(ids).toEqual(['m-first-user', 'm-canceled-assistant', 'm-second-user', 'm-second-assistant']);
-    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
+    expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
   });
 });

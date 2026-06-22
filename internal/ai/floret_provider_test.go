@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -74,11 +75,15 @@ type reasoningFlowerProvider struct {
 	resultText      string
 	omitResultText  bool
 	sources         []SourceRef
+	streamEvents    []StreamEvent
 }
 
 func (p reasoningFlowerProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
 	if p.streamReasoning != "" {
 		onEvent(StreamEvent{Type: StreamEventThinkingDelta, Text: p.streamReasoning})
+	}
+	for _, event := range p.streamEvents {
+		onEvent(event)
 	}
 	text := p.resultText
 	if text == "" && !p.omitResultText {
@@ -315,6 +320,54 @@ func TestFloretProviderAdapter_StreamsReasoningWithoutMutatingRun(t *testing.T) 
 	}
 	if len(runEvents) != 0 {
 		t.Fatalf("run events=%#v, want none for streamed reasoning", runEvents)
+	}
+}
+
+func TestFloretProviderAdapter_EmitsToolCallStreamEvents(t *testing.T) {
+	t.Parallel()
+
+	adapter, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+		resultText: "Final answer.",
+		streamEvents: []StreamEvent{
+			{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: "call-1", Name: "read_file"}},
+			{Type: StreamEventToolCallDelta, ToolCall: &PartialToolCall{ID: "call-1", Name: "read_file", ArgumentsJSON: `{"path":"secret.txt"}`}},
+			{Type: StreamEventToolCallEnd, ToolCall: &PartialToolCall{ID: "call-1", Name: "read_file"}},
+		},
+	})
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		Model:    "gpt-5-mini",
+		Messages: []flruntime.ModelMessage{{Role: "user", Content: "inspect"}},
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	got := make([]flruntime.ModelEventType, 0, 3)
+	for event := range stream {
+		switch event.Type {
+		case flruntime.ModelEventToolCallStart, flruntime.ModelEventToolCallDelta, flruntime.ModelEventToolCallEnd:
+			got = append(got, event.Type)
+			if event.ToolCallStream == nil || event.ToolCallStream.ID != "call-1" || event.ToolCallStream.Name != "read_file" {
+				t.Fatalf("tool call stream=%#v", event.ToolCallStream)
+			}
+		}
+	}
+	want := []flruntime.ModelEventType{
+		flruntime.ModelEventToolCallStart,
+		flruntime.ModelEventToolCallDelta,
+		flruntime.ModelEventToolCallEnd,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("tool call stream events=%#v, want %#v", got, want)
+	}
+	if len(r.assistantBlocks) != 0 || len(*events) != 0 {
+		t.Fatalf("provider adapter must not mutate run stream state: blocks=%#v events=%#v", r.assistantBlocks, *events)
+	}
+	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 20)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	if len(runEvents) != 0 {
+		t.Fatalf("run events=%#v, want none for tool call stream", runEvents)
 	}
 }
 

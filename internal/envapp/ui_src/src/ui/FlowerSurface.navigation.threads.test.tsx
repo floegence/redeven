@@ -16,6 +16,7 @@ import {
   flush,
   inputRequest,
   liveBootstrap,
+  modelIOStatus,
   readStatus,
   renderSurfaceWithAdapter,
   renderSurfaceWithFocusController,
@@ -903,6 +904,7 @@ describe('FlowerSurface navigation threads', () => {
       thread_id: 'thread-live-complete-read',
       title: 'Live complete read',
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       read_status: readStatus(false, 12_000, 'running'),
       updated_at_ms: 12_000,
       messages: [
@@ -921,6 +923,7 @@ describe('FlowerSurface navigation threads', () => {
     const finalThread = {
       ...runningThread,
       status: 'success' as const,
+      model_io_status: null,
       read_status: readStatus(false, 12_500, 'success'),
       messages: [
         {
@@ -949,7 +952,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-live-complete-read"] button')));
     (runtime.querySelector('[data-thread-id="thread-live-complete-read"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     liveEvents.resolve({
       events: [
@@ -974,7 +977,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(markThreadRead.mock.calls[0]?.[0]).toBe('thread-live-complete-read');
     expect(markThreadRead.mock.calls[0]?.[1]).toMatchObject(finalReadStatus.snapshot);
     expect(runtime.querySelector('[data-thread-id="thread-live-complete-read"]')?.getAttribute('data-flower-thread-unread')).toBe('false');
-    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(0);
+    expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(0);
   });
 
   it('keeps a clicked thread visually read across stale list refreshes until a newer version arrives', async () => {
@@ -1471,6 +1474,7 @@ describe('FlowerSurface navigation threads', () => {
       created_at_ms: 6_000,
       updated_at_ms: 6_100,
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       read_status: readStatus(false, 610, 'running'),
       messages: [
         {
@@ -1493,7 +1497,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-streaming-row"] button')));
     (runtime.querySelector('[data-thread-id="thread-streaming-row"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
     const messageRow = runtime.querySelector('[data-flower-message-id="message-streaming-row"]');
     expect(messageRow).toBeTruthy();
     expect(messageRow?.textContent).not.toContain('Real streamed answer');
@@ -1517,7 +1521,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => runtime.textContent?.includes('Real streamed answer') ?? false);
     expect(runtime.querySelector('[data-flower-message-id="message-streaming-row"]')).toBe(messageRow);
-    expect(runtime.querySelector('.flower-streaming-cursor')).toBeTruthy();
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
   });
 
   it('keeps committed markdown DOM stable when streaming appends to the tail', async () => {
@@ -1580,6 +1584,7 @@ describe('FlowerSurface navigation threads', () => {
       created_at_ms: 6_800,
       updated_at_ms: 6_900,
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       read_status: readStatus(false, 690, 'running'),
       messages: [
         {
@@ -1603,7 +1608,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-selection"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-selection"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
     const messageRow = runtime.querySelector('[data-flower-message-id="message-running-selection"]');
     const committedSegment = runtime.querySelector('.flower-chat-md-committed-segment');
     const textNode = committedSegment?.firstChild?.firstChild;
@@ -1644,6 +1649,7 @@ describe('FlowerSurface navigation threads', () => {
       created_at_ms: 7_000,
       updated_at_ms: 7_100,
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       read_status: readStatus(false, 710, 'running'),
       messages: [
         {
@@ -1667,7 +1673,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-commit-selection"] button')));
     (runtime.querySelector('[data-thread-id="thread-commit-selection"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
     const messageRow = runtime.querySelector('[data-flower-message-id="message-commit-selection"]');
     const committedSegment = runtime.querySelector('.flower-chat-md-committed-segment');
     const textNode = committedSegment?.firstChild?.firstChild;
@@ -1701,7 +1707,7 @@ describe('FlowerSurface navigation threads', () => {
       retained_from_seq: 1,
     });
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
     expect(runtime.querySelector('[data-flower-message-id="message-commit-selection"]')).toBe(messageRow);
     expect(runtime.querySelector('.flower-chat-md-committed-segment')).toBe(committedSegment);
     expect(runtime.textContent).toContain('Growing tail');
@@ -1748,6 +1754,7 @@ describe('FlowerSurface navigation threads', () => {
       created_at_ms: 7_200,
       updated_at_ms: 7_300,
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       read_status: readStatus(false, 730, 'running'),
       messages: [
         {
@@ -1774,7 +1781,7 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-running-activity"] button')));
     (runtime.querySelector('[data-thread-id="thread-running-activity"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
     const messageRow = runtime.querySelector('[data-flower-message-id="message-running-activity"]');
     const activityRow = runtime.querySelector('[data-flower-activity-item-id="tool-search"]');
     const committedSegment = runtime.querySelector('.flower-chat-md-committed-segment');
@@ -2003,13 +2010,14 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('[data-thread-id="thread-background-live"]')?.getAttribute('data-flower-thread-unread')).toBe('true');
   });
 
-  it('renders one bottom thinking indicator for a running thread with backend active cursor metadata', async () => {
+  it('renders one bottom model status indicator for a running thread with backend active cursor metadata', async () => {
     const runningThread = thread({
-      thread_id: 'thread-single-cursor',
-      title: 'Single cursor',
+      thread_id: 'thread-single-model-status',
+      title: 'Single model status',
       created_at_ms: 8_000,
       updated_at_ms: 8_100,
       status: 'running',
+      model_io_status: modelIOStatus({ run_id: 'run-1' }),
       read_status: readStatus(false, 810, 'running'),
       messages: [
         {
@@ -2036,15 +2044,15 @@ describe('FlowerSurface navigation threads', () => {
       loadThread: vi.fn(async () => liveBootstrap(runningThread)),
     });
 
-    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-single-cursor"] button')));
-    (runtime.querySelector('[data-thread-id="thread-single-cursor"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-single-model-status"] button')));
+    (runtime.querySelector('[data-thread-id="thread-single-model-status"] button') as HTMLButtonElement).click();
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-streaming-cursor')));
-    expect(runtime.querySelector('[data-flower-message-id="message-old-streaming"] .flower-streaming-cursor')).toBeNull();
-    expect(runtime.querySelector('[data-flower-message-id="message-active-streaming"] .flower-streaming-cursor')).toBeNull();
-    expect(runtime.querySelectorAll('.flower-streaming-cursor')).toHaveLength(1);
-    expect(runtime.querySelector('.flower-message-streaming-tail')?.textContent).toContain('Thinking...');
-    expect(runtime.querySelector('.flower-streaming-cursor-text')?.textContent).toBe('Thinking...');
-    expect(runtime.querySelector('.flower-streaming-cursor-text')?.getAttribute('data-text')).toBe('Thinking...');
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
+    expect(runtime.querySelector('[data-flower-message-id="message-old-streaming"] .flower-model-status-indicator')).toBeNull();
+    expect(runtime.querySelector('[data-flower-message-id="message-active-streaming"] .flower-model-status-indicator')).toBeNull();
+    expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
+    expect(runtime.querySelector('.flower-model-status-lane')?.textContent).toContain('Thinking...');
+    expect(runtime.querySelector('.flower-model-status-text')?.textContent).toBe('Thinking...');
+    expect(runtime.querySelector('.flower-model-status-text')?.getAttribute('data-text')).toBe('Thinking...');
   });
 });

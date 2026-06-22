@@ -107,6 +107,20 @@ export type FlowerThreadError = Readonly<{
   code?: string;
 }>;
 
+export type FlowerModelIOPhase =
+  | 'preparing'
+  | 'waiting_response'
+  | 'streaming'
+  | 'retrying'
+  | 'finalizing';
+
+export type FlowerModelIOStatus = Readonly<{
+  phase: FlowerModelIOPhase;
+  run_id?: string;
+  step_index?: number;
+  updated_at_ms: number;
+}>;
+
 export type FlowerActivityStatus =
   | 'pending'
   | 'running'
@@ -281,9 +295,11 @@ export type FlowerThreadSnapshot = Readonly<{
   created_at_ms: number;
   updated_at_ms: number;
   status: FlowerThreadStatus;
+  active_run_id?: string;
   source_label: string;
   target_labels: readonly string[];
   messages: readonly FlowerChatMessage[];
+  model_io_status?: FlowerModelIOStatus | null;
   approval_actions?: readonly FlowerApprovalAction[];
   input_request?: FlowerInputRequest | null;
   error?: FlowerThreadError | null;
@@ -335,6 +351,7 @@ export type FlowerLiveKind =
   | 'approval.resolved'
   | 'input.requested'
   | 'input.resolved'
+  | 'model_io.updated'
   | 'usage.updated'
   | 'timeline.replaced'
   | 'stream.resync_required';
@@ -379,6 +396,7 @@ export type FlowerLiveThreadPatch = Readonly<{
 export type FlowerLiveMaterializedState = Readonly<{
   thread_patch: FlowerLiveThreadPatch;
   runs: Readonly<Record<string, FlowerLiveRunState>>;
+  model_io?: FlowerModelIOStatus | null;
   approval_actions: Readonly<Record<string, FlowerApprovalAction>>;
   input_requests: Readonly<Record<string, FlowerInputRequest>>;
 }>;
@@ -454,6 +472,10 @@ export type FlowerLiveUsageUpdatedPayload = Readonly<{
   usage: Readonly<Record<string, unknown>>;
 }>;
 
+export type FlowerLiveModelIOUpdatedPayload = Readonly<{
+  status?: FlowerModelIOStatus | null;
+}>;
+
 export type FlowerLiveTimelineReplacedPayload = Readonly<{
   messages: readonly FlowerChatMessage[];
 }>;
@@ -497,6 +519,7 @@ export type FlowerLiveEventPayloadByKind = Readonly<{
   'approval.resolved': FlowerLiveApprovalPayload;
   'input.requested': FlowerLiveInputRequestedPayload;
   'input.resolved': FlowerLiveInputResolvedPayload;
+  'model_io.updated': FlowerLiveModelIOUpdatedPayload;
   'usage.updated': FlowerLiveUsageUpdatedPayload;
   'timeline.replaced': FlowerLiveTimelineReplacedPayload;
   'stream.resync_required': FlowerLiveResyncRequiredPayload;
